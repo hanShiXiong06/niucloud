@@ -1,0 +1,10 @@
+/.idea
+/.vscode
+*.log
+/runtime
+install.lock
+node_modules
+/dist
+*/public/admin
+*/public/web
+*/public/wap
