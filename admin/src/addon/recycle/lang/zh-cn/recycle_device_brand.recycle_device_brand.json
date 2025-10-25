@@ -1,0 +1,19 @@
+{
+      "id":"",
+      "idPlaceholder":"请输入",
+      "siteId":"站点ID",
+      "siteIdPlaceholder":"请输入站点ID",
+      "brandName":"品牌名称",
+      "brandNamePlaceholder":"请输入品牌名称",
+      "brandCode":"品牌编码",
+      "brandCodePlaceholder":"请输入品牌编码",
+      "status":"状态",
+      "statusPlaceholder":"请输入状态",
+      "sort":"排序",
+      "sortPlaceholder":"请输入排序",
+      "addRecycleDeviceBrand":"添加回收设备品牌",
+      "updateRecycleDeviceBrand":"编辑回收设备品牌",
+      "recycleDeviceBrandDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}

@@ -1,0 +1,60 @@
+/**
+ * 退回订单状态枚举
+ */
+export enum RETURN_ORDER_STATUS {
+  PENDING = 0, // 待处理
+  RETURNING = 1, // 退货中
+  COMPLETED = 2, // 已完成
+  CANCELLED = 3, // 已取消
+}
+
+/**
+ * 退回订单状态文本
+ */
+export const RETURN_ORDER_STATUS_TEXT = {
+  [RETURN_ORDER_STATUS.PENDING]: "待处理",
+  [RETURN_ORDER_STATUS.RETURNING]: "退货中",
+  [RETURN_ORDER_STATUS.COMPLETED]: "已完成",
+  [RETURN_ORDER_STATUS.CANCELLED]: "已取消",
+};
+
+/**
+ * 退回订单状态类型（用于标签颜色）
+ */
+export const RETURN_ORDER_STATUS_TYPE = {
+  [RETURN_ORDER_STATUS.PENDING]: "warning",
+  [RETURN_ORDER_STATUS.RETURNING]: "primary",
+  [RETURN_ORDER_STATUS.COMPLETED]: "success",
+  [RETURN_ORDER_STATUS.CANCELLED]: "danger",
+};
+
+/**
+ * 退回设备状态枚举
+ */
+export enum RETURN_DEVICE_STATUS {
+  PENDING = 0, // 待退货
+  RETURNING = 6, // 退货中
+  RETURNED = 7, // 已退货
+  CANCELLED = 8, // 已取消
+}
+
+/**
+ * 退回设备状态文本
+ */
+export const RETURN_DEVICE_STATUS_TEXT = {
+  [RETURN_DEVICE_STATUS.PENDING]: "待退货",
+  [RETURN_DEVICE_STATUS.RETURNING]: "退货中",
+  [RETURN_DEVICE_STATUS.RETURNED]: "已退货",
+  [RETURN_DEVICE_STATUS.CANCELLED]: "已取消",
+};
+
+/**
+ * 状态操作权限
+ * 定义在哪些状态下可以执行哪些操作
+ */
+export const STATUS_ACTION_PERMISSIONS = {
+  DELETE: [RETURN_ORDER_STATUS.CANCELLED, RETURN_ORDER_STATUS.COMPLETED],
+  CANCEL: [RETURN_ORDER_STATUS.PENDING, RETURN_ORDER_STATUS.RETURNING],
+  CONFIRM: [RETURN_ORDER_STATUS.PENDING],
+  COMPLETE: [RETURN_ORDER_STATUS.RETURNING],
+};

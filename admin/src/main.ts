@@ -11,6 +11,8 @@ import 'highlight.js/styles/stackoverflow-light.css';
 import hljs from 'highlight.js/lib/common'
 import hljsVuePlugin from '@highlightjs/vue-plugin'
 import VueUeditorWrap from 'vue-ueditor-wrap'
+import '@/addon/hsx_clipboard_upload/static/global-clipboard.js'
+import '@/addon/hsx_clipboard_upload/static/global-drag-upload.js'
 
 window.hl = hljs
 

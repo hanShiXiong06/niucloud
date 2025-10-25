@@ -1,0 +1,11 @@
+{
+  "title": "剪贴板图片上传",
+  "desc": "支持剪贴板快速上传图片的便捷工具",
+  "key": "hsx_clipboard_upload",
+  "version": "0.0.1",
+  "author": "hsx",
+  "type": "addon",
+  "support_app": "",
+  "compile":[],
+  "support_version": "1.1.2"
+}

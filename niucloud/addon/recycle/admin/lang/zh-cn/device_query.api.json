@@ -1,0 +1,23 @@
+{
+    "title": "API接口清单",
+    "listName": "清单名称",
+    "version": "版本号",
+    "status": "状态",
+    "enable": "启用",
+    "disable": "禁用",
+    "apiAddress": "接口地址",
+    "price": "价格",
+    "developingFeature": "功能开发中...",
+    "deleteConfirm": "确认删除该接口清单吗？",
+    "warning": "提示",
+    "confirmText": "确定",
+    "cancelText": "取消",
+    "deleteSuccess": "删除成功",
+    "initSuccess": "初始化成功",
+    "categories": {
+        "apple": "苹果设备",
+        "android": "安卓设备", 
+        "imei": "IMEI查询",
+        "other": "其他查询"
+    }
+} 
