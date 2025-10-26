@@ -1,0 +1,14 @@
+{
+    "title": "订单统计",
+    "todayOrders": "今日订单",
+    "monthOrders": "月订单",
+    "pendingService": "待服务订单",
+    "pendingAcceptance": "待验收订单",
+    "completedOrders": "已完成订单",
+    "orderDetails": "订单明细",
+    "completed": "已完成",
+    "refund": "退款/售后",
+    "cancelled": "已关闭",
+    "serviceType": "开锁服务",
+    "orderNumber": "订单编号："
+}

@@ -1,0 +1,23 @@
+{
+  "reSelect": "重新选择",
+  "selectOrderMember": "选择下单会员",
+  "allServices": "全部服务",
+  "goodsCategoryPlaceholder": "请选择服务分类",
+  "goodsNamePlaceholder": "请输入服务名称",
+  "emptyData": "暂无数据",
+  "goodsInfo": "服务信息",
+  "buy": "购买",
+  "select": "选择",
+  "priceText": "价格：￥",
+  "fullReduction": "满减送",
+  "memberPhone": "手机号：",
+  "availableBalance": "可用余额：",
+  "noteTitle": "注意事项：",
+  "note1": "1、代客下单中，允许使用余额支付、帮付等付款方式，订单来源为“代客下单”。",
+  "note2": "2、只能生成“普通订单”，无法创建“限时折扣”“积分商城”等活动订单。",
+  "note3": "3、订单金额按服务原价或会员价计算、满足一定条件后享受优惠券、满减送活动。",
+  "note4": "4、虚拟服务只能单独购买。",
+  "cancel": "取消",
+  "confirm": "确认",
+  "memberInfo":"会员信息"
+}

@@ -1,0 +1,22 @@
+{
+  "categoryName": "分类",
+  "ID": "ID",
+  "title": "标题",
+  "intro": "简介",
+  "summary": "摘要",
+  "image": "封面",
+  "author": "作者",
+  "content": "帮助内容",
+  "visit": "浏览量",
+  "visitVirtual": "初始浏览量",
+  "isShow": "是否显示",
+  "sort": "排序",
+  "createTime": "创建时间",
+  "updateTime": "更新时间",
+  "addhelp": "添加帮助",
+  "updatehelp": "编辑帮助",
+  "titlePlaceholder": "请输入帮助标题",
+  "categoryIdPlaceholder": "请选择帮助分类",
+  "helpDeleteTips": "确定要删除该帮助吗？"
+  
+}

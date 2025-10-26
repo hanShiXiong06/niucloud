@@ -1,0 +1,21 @@
+{
+  "pageTitle": "切换门店",
+  "filter": "筛选",
+  "sort": "排序",
+  "open": "营业中",
+  "closed": "已停业",
+  "defaultStore": "当前门店",
+  "waitService": "待分配",
+  "timeout": "超时",
+  "afterSale": "售后",
+  "todayOrders": "今日单量",
+  "monthIncome": "月收入",
+  "confirmSelection": "确认选择",
+  "noStoreData": "暂无门店数据",
+  "storeSwitchSuccess": "门店切换成功",
+  "storeSwitchFailed": "门店切换失败",
+  "getStoreListFailed": "获取门店列表失败",
+  "storeNamePlaceholder": "门店名称示意文字内容展示",
+  "addressPlaceholder": "山西省太原市小店区平阳路时代广场宇信感应产业大厦8层814",
+  "businessHoursPlaceholder": "05:00-22:00"
+}

@@ -1,0 +1,103 @@
+<?php
+// +----------------------------------------------------------------------
+// | Niucloud-admin 企业快速开发的多应用管理平台
+// +----------------------------------------------------------------------
+// | 官方网址：https://www.niucloud.com
+// +----------------------------------------------------------------------
+// | niucloud团队 版权所有 开源版本可自由商用
+// +----------------------------------------------------------------------
+// | Author: Niucloud Team
+// +----------------------------------------------------------------------
+namespace addon\home_service\app\job\coupon;
+
+use addon\home_service\app\dict\coupon\CouponDict;
+use addon\home_service\app\model\coupon\CouponSendRecord;
+use addon\home_service\app\service\core\coupon\CoreCouponMemberService;
+use app\model\member\Member;
+use core\base\BaseJob;
+use think\facade\Db;
+use think\facade\Log;
+
+/**
+ * 优惠券发送
+ */
+class CouponSend extends BaseJob
+{
+    /**
+     * 消费
+     * @return true
+     */
+    public function doJob($record_id, $site_id)
+    {
+        if (empty($record_id) || empty($site_id)) {
+            Log::write('CouponSend 参数为空 结束');
+            return true;
+        }
+        Log::write('CouponSend 发送优惠券开始');
+        //调整状态为进行中
+        (new CouponSendRecord())->where([
+            ['id', '=', $record_id], ['site_id', '=', $site_id]
+        ])->update([
+            'status' => CouponDict::SEND_STATUS_PROGRESS,
+        ]);
+        Db::startTrans();
+        try {
+            $records_info = (new CouponSendRecord())->where([
+                ['id', '=', $record_id], ['site_id', '=', $site_id]
+            ])->findOrEmpty()->toArray();
+            $memberIds = $this->getMemberIds($records_info['range_type'], $records_info['range_param'], $site_id);
+            Log::write("CouponSend 发送优惠券id {$record_id}  会员id数组：" . json_encode($memberIds, 256));
+            $success_num = (new CoreCouponMemberService())->sendCoupon($records_info['site_id'], $memberIds, $records_info['coupon_id'], $records_info['send_num']);
+            (new CouponSendRecord())->where([['id', '=', $record_id], ['site_id', '=', $site_id]])->update([
+                'status' => CouponDict::SEND_STATUS_FINISH,
+                'success_num' => $success_num,
+                'end_time' => time(),
+                'update_time' => time()
+            ]);
+            Db::commit();
+            return true;
+        } catch (\Exception $e) {
+            Log::error('CouponSend 发送优惠券失败' . $e->getMessage() . $e->getLine());
+            Db::rollback();
+            return false;
+        }
+    }
+
+    /**
+     * 获取发送用户数量
+     * @param $range_type
+     * @param $range_param
+     * @return array
+     * @throws \think\db\exception\DbException
+     */
+    public function getMemberIds($range_type, $range_param, $site_id)
+    {
+        switch ($range_type) {
+            case CouponDict::SEND_RANGE_ALL:
+                $member_ids = (new Member())->where([
+                    ['site_id', '=', $site_id]
+                ])->column('member_id');
+                break;
+            case CouponDict::SEND_RANGE_MEMBER:
+                $member_ids = $range_param['member_ids'];
+                break;
+            case CouponDict::SEND_RANGE_MEMBER_LEVEL:
+                $member_level = $range_param['member_level'];
+                $member_ids = (new Member())->where([
+                    ['member_level', 'in', implode(',', $member_level)],
+                    ['site_id', '=', $site_id]
+                ])->column('member_id');
+                break;
+            case CouponDict::SEND_RANGE_MEMBER_LABEL:
+                $member_label = $range_param['member_label'];
+                $member_ids = (new Member())->where([
+                    ['site_id', '=', $site_id]
+                ])->withSearch(['member_label'], ['member_label' => $member_label])->column('member_id');
+                break;
+            default:
+                $member_ids = 0;
+                break;
+        }
+        return array_values($member_ids ?? []) ?? [];
+    }
+}

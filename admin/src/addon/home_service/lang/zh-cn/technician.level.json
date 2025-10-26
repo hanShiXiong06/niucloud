@@ -1,0 +1,20 @@
+{
+	"addTechnicianLevel":"添加等级",
+	"edit": "编辑",
+	"operation": "操作",
+	"status": "状态",
+	"emptyData": "暂无数据",
+	"levelName":"等级名称",
+	"sharedCommission":"师傅分成",
+	"otherCommission":"增项分成",
+	"startLevel":"星级",
+	"levelConditional":"升级条件",
+	"delete":"删除",
+	"levelDeleteTips":"确定要删除该等级吗",
+	"levelSearch":"等级名称",
+	"levelSearchPlaceholder":"请输入搜索等级名称",
+	"levelID":"等级ID",
+	"levelWeight":"等级权重",
+	"levelPeople":"关联师傅数",
+	"createTime":"创建时间"
+}

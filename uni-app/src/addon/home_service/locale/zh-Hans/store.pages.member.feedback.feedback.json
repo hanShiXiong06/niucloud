@@ -1,0 +1,12 @@
+{
+  "feedbackTitle": "反馈标题",
+  "feedbackContent": "反馈内容",
+  "uploadImage": "上传图片（选填）",
+  "submitFeedback": "提交反馈",
+  "pleaseInputFeedbackTitle": "请输入反馈标题",
+  "pleaseDescribeIssue": "请详细描述您遇到的问题或建议",
+  "feedbackContentMinLength": "反馈内容请至少输入10个字符",
+  "feedbackSubmitSuccess": "反馈提交成功，感谢您的建议",
+  "feedbackSubmitFail": "反馈提交失败",
+  "networkError": "网络错误，请稍后重试"
+}

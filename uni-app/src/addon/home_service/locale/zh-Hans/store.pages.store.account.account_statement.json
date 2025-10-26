@@ -1,0 +1,11 @@
+{
+  "accountDetails": "账户明细",
+  "receiptStatistics": "收支统计",
+  "income": "收入",
+  "expense": "支出",
+  "noBillData": "暂无账单数据",
+  "refresh": "刷新",
+  "allTypes": "全部类型",
+  "allDates": "全部日期",
+  "paymentStatus": "到账情况"
+}

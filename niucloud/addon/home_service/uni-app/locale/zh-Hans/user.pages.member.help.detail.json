@@ -1,0 +1,9 @@
+{
+  "helpDetail": "帮助详情",
+  "loading": "加载中...",
+  "viewsCount": "浏览次数",
+  "updateTime": "更新时间",
+  "noData": "暂无数据",
+  "missingId": "缺少帮助文档ID",
+  "networkError": "网络错误，请稍后重试"
+}

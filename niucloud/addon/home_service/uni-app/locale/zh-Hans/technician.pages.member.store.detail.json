@@ -1,0 +1,18 @@
+{
+  "pageTitle": "门店资料",
+  "basicInfo": "基本信息",
+  "storeName": "门店名称",
+  "storeStaff": "门店人数",
+  "contactInfo": "联系方式",
+  "manager": "负责人",
+  "contactPhone": "联系电话",
+  "addressInfo": "地址信息",
+  "mapLoading": "地图加载中...",
+  "authenticationStatus": "认证状态",
+  "businessLicense": "营业执照",
+  "idAuthentication": "身份认证",
+  "addressAuthentication": "地址认证",
+  "completed": "已完成",
+  "uncompleted": "未完成",
+  "fetchFailed": "获取数据失败"
+}

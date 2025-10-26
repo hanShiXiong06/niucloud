@@ -1,0 +1,17 @@
+{
+  "enterOrderNo": "请输入订单编号",
+  "query": "查询",
+  "orderNo": "订单编号",
+  "settlementTime": "结算时间",
+  "settlementAmount": "结算金额",
+  "settlementStatus": "结算状态",
+  "settled": "已结算",
+  "unsettled": "未结算",
+  "exportDetail": "导出明细",
+  "viewDetail": "查看明细",
+  "exportingDetail": "明细导出中",
+  "viewingDetail": "查看明细中",
+  "export": "导出",
+  "pageName":"师傅结算详情",
+  "emptyData": "暂无数据"
+}

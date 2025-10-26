@@ -1,0 +1,20 @@
+{
+  "myAccount": "我的账户",
+  "accountBalance": "账户余额",
+  "withdraw": "提现",
+  "accountDetails": "账户明细",
+  "receiptStatistics": "收支统计",
+  "deposit": "保证金",
+  "bankCards": "银行卡",
+  "todayBill": "今日账单",
+  "dataDescription": "数据说明",
+  "dataDelayTip": "此处为预计收入，如数据延迟，不影响最终结算，可稍后查询",
+  "expectedIncome": "预计收入",
+  "expectedExpense": "预计支出",
+  "dailyCleaning": "日常保洁",
+  "deepCleaning": "深度清洁",
+  "cleaningIncome": "清洁收入-日常清洁",
+  "notArrived": "未到账",
+  "arrived": "已到账",
+  "yuan": "元"
+}

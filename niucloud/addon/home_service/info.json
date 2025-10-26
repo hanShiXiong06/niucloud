@@ -1,0 +1,11 @@
+{
+  "title": "上门家政",
+  "desc": "预约上门，家电维修，家政服务",
+  "key": "home_service",
+  "version": "1.0.0",
+  "author": "niucloud",
+  "url": "https://www.niucloud.com",
+  "type": "app",
+  "support_app": "",
+  "support_version": "1.1.7"
+}

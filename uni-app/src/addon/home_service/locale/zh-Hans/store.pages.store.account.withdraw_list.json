@@ -1,0 +1,17 @@
+{
+  "bankCardList": "银行卡列表",
+  "wechatCodeList": "微信收款码列表",
+  "alipayAccountList": "支付宝账号列表",
+  "bankCard": "银行卡",
+  "wechatCode": "微信收款码",
+  "alipayAccountNo": "支付宝账号",
+  "endNumber": "尾号",
+  "noAccountDesc": "暂无账户信息，点击下方按钮添加",
+  "noBankCard": "暂无银行卡",
+  "noWechatCode": "暂无微信收款码",
+  "noAlipayAccount": "暂无支付宝账号",
+  "addBankCard": "添加银行卡",
+  "addWechatCode": "添加微信收款码",
+  "addAlipayAccount": "添加支付宝账号",
+  "delete": "删除"
+}

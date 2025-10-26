@@ -1,0 +1,48 @@
+{
+  "invoice": {
+    "apply": "申请发票",
+    "list": "发票列表",
+    "detail": "发票详情"
+  },
+  "invoiceHeaderType": "抬头类型",
+  "enterprise": "企业",
+  "individual": "个人",
+  "invoiceHeader": "发票抬头",
+  "taxNumber": "税号",
+  "invoiceType": "发票类型",
+  "invoiceContent": "发票内容",
+  "invoiceAmount": "发票金额",
+  "email": "邮箱地址",
+  "remark": "备注信息",
+  "submit": "提交申请",
+  "telephone": "电话",
+  "address": "注册地址",
+  "bankName": "银行名称",
+  "bankCardNumber": "银行账号",
+  "moreInfo": "更多信息",
+  "remarkInfo": "备注信息",
+  "cancel": "取消",
+  "invoiceDetail": "开票详情",
+  "receiveMethod": "接收方式",
+  "submitElectronicInvoice": "提交电子发票",
+  "pleaseSelectContent": "请至少选择一项发票内容",
+  "invoiceAmountNote": "发票金额包含上门服务订单金额与附加费用总额，不包含交通费、高速费、停车费。",
+  "validation": {
+    "pleaseInputHeader": "请输入发票抬头",
+    "pleaseInputTaxNumber": "请输入税号",
+    "pleaseInputEmail": "请输入邮箱地址",
+    "invalidEmail": "请输入正确的邮箱地址",
+    "success": "申请成功",
+    "failed": "申请失败",
+    "networkError": "网络错误，请重试"
+  },
+  "placeholder": {
+    "inputHeader": "填写发票抬头",
+    "inputTaxNumber": "填写纳税人识别号",
+    "inputTelephone": "请输入电话（选填）",
+    "inputAddress": "请输入注册地址（选填）",
+    "inputBankName": "请输入银行名称（选填）",
+    "inputBankCardNumber": "请输入银行账号（选填）",
+    "inputEmail": "用于向您发送电子发票"
+  }
+}
