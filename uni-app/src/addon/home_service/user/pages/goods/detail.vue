@@ -94,18 +94,25 @@
 				</view>
 			</view>
 
-			<view class="mx-[24rpx] bg-[#ffffff] p-[24rpx] rounded-lg mb-[24rpx]">
-				<view class="text-[#333333] text-[30rpx] font-[600] ">{{ detail.goods.category_name }}</view>
-				<view class="flex flex-wrap">
-					<view
-						class="bg-[#F5FFF6] rounded--[10rpx] border-[1px] border-[#F5FFF6] rounded-[4rpx] mr-[24rpx] px-[15rpx] border-solid text-[26rpx] py-[10rpx] !rounded-[8rpx] mt-[24rpx]"
-						@click="toOrder(detail)"
-						:class="item.sku_name == detail.sku_name ? '!border-[var(--primary-color)] text-[var(--primary-color)] rounded-[10rpx]' : ''"
-						v-for="(item,index) in detail.skuList">
-						{{ item.sku_name }}
+			<!-- 跑腿业务判断 -->
+			<view v-if="isErrandBusiness" class="px-[24rpx]">
+				<errand-order-form :routes="errandRoutes" @submit="handleErrandSubmit" />
+			</view>
+
+			<!-- 原有服务业务 -->
+			<view v-else>
+				<view class="mx-[24rpx] bg-[#ffffff] p-[24rpx] rounded-lg mb-[24rpx]">
+					<view class="text-[#333333] text-[30rpx] font-[600] ">{{ detail.goods.category_name }}</view>
+					<view class="flex flex-wrap">
+						<view
+							class="bg-[#F5FFF6] rounded--[10rpx] border-[1px] border-[#F5FFF6] rounded-[4rpx] mr-[24rpx] px-[15rpx] border-solid text-[26rpx] py-[10rpx] !rounded-[8rpx] mt-[24rpx]"
+							@click="toOrder(detail)"
+							:class="item.sku_name == detail.sku_name ? '!border-[var(--primary-color)] text-[var(--primary-color)] rounded-[10rpx]' : ''"
+							v-for="(item,index) in detail.skuList">
+							{{ item.sku_name }}
+						</view>
 					</view>
 				</view>
-			</view>
 			<view class="px-[24rpx]">
 				<view class="rounded-lg bg-[#fff]">
 					<view @click="buyFn" v-if="detail.skuList && detail.skuList?.length>1"
@@ -490,6 +497,9 @@
 						@click="toOrder(detail)"></u-button>
 				</view>
 			</view>
+			<!-- 原有服务业务结束标签 -->
+			</view>
+
 			<share-poster ref="sharePosterRef" posterType="home_service_goods" :posterId="detail.goods.poster_id"
 				:posterParam="posterParam" :copyUrlParam="copyUrlParam" />
 
@@ -544,12 +554,54 @@
 	import sharePoster from '@/components/share-poster/share-poster.vue'
 	import { useShare } from '@/hooks/useShare'
 	import useSystemStore from '@/stores/system';
+	import ErrandOrderForm from '@/addon/home_service/user/components/errand-order-form/errand-order-form.vue'
 	const systemStore = useSystemStore()
 	const payRef = ref(null)
 	const detail = ref<Record<string, any>>({});
 	const loading = ref<boolean>(true);
 	const memberStore = useMemberStore()
 	const goodsSkuRef = ref(null)
+	
+	// 跑腿业务相关
+	const isErrandBusiness = computed(() => {
+		// 判断条件：商品的 goods_content 包含跑腿路线配置
+		return detail.value.goods?.errand_config !== undefined && detail.value.goods?.errand_config !== null
+	})
+	
+	const errandRoutes = computed(() => {
+		try {
+			if (detail.value.goods?.errand_config) {
+				const config = typeof detail.value.goods.errand_config === 'string' 
+					? JSON.parse(detail.value.goods.errand_config) 
+					: detail.value.goods.errand_config
+				return config.routes || []
+			}
+		} catch (e) {
+			console.error('解析跑腿配置失败:', e)
+		}
+		return []
+	})
+	
+	// 处理跑腿订单提交
+	const handleErrandSubmit = (errandData: any) => {
+		console.log('跑腿订单数据:', errandData)
+		
+		// 跳转到订单创建/支付页面，传递跑腿数据
+		uni.navigateTo({
+			url: '/addon/home_service/user/pages/order/payment',
+			success: (res) => {
+				// 通过 eventChannel 传递跑腿订单数据
+				res.eventChannel.emit('errandOrderData', {
+					goods_id: detail.value.goods_id,
+					goods_name: detail.value.goods.goods_name,
+					sku_id: detail.value.sku_id,
+					order_money: errandData.total_price,
+					member_message: JSON.stringify(errandData), // 核心：所有信息存到备注
+					errand_data: errandData
+				})
+			}
+		})
+	}
 	// 分享
 	const { setShare } = useShare()
 	// 会员信息
