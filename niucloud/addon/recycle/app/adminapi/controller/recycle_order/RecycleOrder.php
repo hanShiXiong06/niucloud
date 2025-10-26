@@ -70,6 +70,9 @@ class RecycleOrder extends BaseAdminController
             ['amount_min', ''],
             ['amount_max', ''],
             ['member_id', ''],
+            ['sign_at', []],
+            ['complete_at', []],
+            ['pay_time', []],
         ]);
 
 

@@ -112,8 +112,45 @@
                       class="w-full"
                     />
                   </el-form-item>
-
-                    
+                  <!-- 签收时间 -->
+                  <el-form-item label="签收时间">
+                    <el-date-picker
+                      v-model="advancedSearchForm.sign_at"
+                      type="daterange"
+                      range-separator="至"
+                      start-placeholder="开始日期"
+                      end-placeholder="结束日期"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <!-- 完成时间 -->
+                  <el-form-item label="质检时间">
+                    <el-date-picker
+                      v-model="advancedSearchForm.complete_at"
+                      type="daterange"
+                      range-separator="至"
+                      start-placeholder="开始日期"
+                      end-placeholder="结束日期"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <!-- 打款时间 -->
+                  <el-form-item label="打款时间">
+                    <el-date-picker
+                      v-model="advancedSearchForm.pay_time"
+                      type="daterange"
+                      range-separator="至"
+                      start-placeholder="开始日期"
+                      end-placeholder="结束日期"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      class="w-full"
+                    />
+                  </el-form-item>
 
                   <!-- 操作按钮 -->
                   <div class="flex justify-center pt-4 border-t border-orange-200">
@@ -442,7 +479,29 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="create_at" label="创建时间" width="180" />
+        <el-table-column prop="create_at" label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.create_at) }}
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="sign_at" label="签收时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.sign_at) }}
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="complete_at" label="完成时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.complete_at) }}
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="pay_time" label="打款时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.pay_time) }}
+          </template>
+        </el-table-column>
 
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
@@ -722,9 +781,11 @@ interface OrderDetail {
   express_company?: string;
   express_no?: string;
   device_count?: number;
-  pay_time?: number;
   create_at?: string;
   update_at?: string;
+  sign_at?: string;
+  complete_at?: string;
+  pay_time?: string;
   remark?: string;
   member?: {
     member_id: number | string;
@@ -754,6 +815,35 @@ const {
 const expandRowKeys = computed(() => {
   return expandedRows.value || [];
 });
+
+// 时间格式化函数
+const formatDateTime = (dateTime: string | number | null | undefined): string => {
+  if (!dateTime) return '-';
+  
+  // 如果是时间戳（数字）
+  if (typeof dateTime === 'number') {
+    const date = new Date(dateTime * 1000);
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(/\//g, '-');
+  }
+  
+  // 如果是字符串格式
+  if (typeof dateTime === 'string') {
+    // 如果已经是格式化的日期时间字符串，直接返回
+    if (dateTime.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return dateTime;
+    }
+  }
+  
+  return '-';
+};
 
 const orderDialogVisible = ref(false);
 const paymentDialogVisible = ref(false);
@@ -871,6 +961,9 @@ const advancedSearchForm = reactive({
   amount_max: null,
   create_time_range: [],
   update_time_range: [],
+  sign_at: [],
+  complete_at: [],
+  pay_time: [],
 });
 
 // 搜索显示控制
@@ -949,6 +1042,18 @@ const getList = async (page = 1) => {
     ) {
       params.update_time_start = advancedSearchForm.update_time_range[0];
       params.update_time_end = advancedSearchForm.update_time_range[1];
+    }
+    // 打款时间
+    if (advancedSearchForm.pay_time && advancedSearchForm.pay_time.length === 2) {
+      params.pay_time = advancedSearchForm.pay_time;
+    }
+    // 签收时间
+    if (advancedSearchForm.sign_at && advancedSearchForm.sign_at.length === 2) {
+      params.sign_at = advancedSearchForm.sign_at;
+    }
+    // 完成时间
+    if (advancedSearchForm.complete_at && advancedSearchForm.complete_at.length === 2) {
+      params.complete_at = advancedSearchForm.complete_at;
     }
 
     const res = await getRecycleOrderList(params);
@@ -1408,6 +1513,9 @@ const resetAdvancedSearchForm = () => {
   advancedSearchForm.amount_max = null;
   advancedSearchForm.create_time_range = [];
   advancedSearchForm.update_time_range = [];
+  advancedSearchForm.sign_at = [];
+  advancedSearchForm.complete_at = [];
+  advancedSearchForm.pay_time = [];
 };
 const handleMemberChange = (memberId: number | null, memberInfo: any) => {
   advancedSearchForm.member_id = memberId;

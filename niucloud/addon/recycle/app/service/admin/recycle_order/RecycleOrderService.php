@@ -69,105 +69,27 @@ class RecycleOrderService extends BaseAdminService
      * @throws DbException
      * @throws ModelNotFoundException
      */
+    /**
+     * 获取订单分页列表
+     * @param array $where 查询条件
+     * @return array
+     */
     public function getPage(array $where = []): array
     {
         $field = empty($field) ? '*' : $field;
         $order = empty($order) ? 'create_at desc' : $order;
         
-        // 处理前端传递的参数映射
-        $searchParams = [];
+        // 使用 Model 的参数映射方法
+        $searchParams = RecycleOrder::mapSearchParams($where);
         
-        // 订单号搜索 - 修复参数映射
-        if (!empty($where['order_no'])) {
-            $searchParams['order_no'] = $where['order_no'];
-        }
-        
-        // 订单ID搜索
-        if (!empty($where['order_id'])) {
-            $searchParams['id'] = $where['order_id'];
-        }
-        
-        // 快递单号搜索
-        if (!empty($where['express_no'])) {
-            $searchParams['express_no'] = $where['express_no'];
-        }
-        
-        // 备注搜索
-        if (!empty($where['remark'])) {
-            $searchParams['remark'] = $where['remark'];
-        }
-        
-        // 创建时间搜索 - 支持多种时间参数格式
-        if (!empty($where['create_time_start']) && !empty($where['create_time_end'])) {
-            $searchParams['create_at'] = [$where['create_time_start'], $where['create_time_end']];
-        } elseif (!empty($where['create_at']) && is_array($where['create_at']) && count($where['create_at']) == 2) {
-            $searchParams['create_at'] = $where['create_at'];
-        }
-        
-        // 状态搜索
-        if (isset($where['status']) && $where['status'] !== '') {
-            if (is_string($where['status']) && strpos($where['status'], ',') !== false) {
-                $searchParams['status'] = explode(',', $where['status']);
-            } else {
-                $searchParams['status'] = $where['status'];
-            }
-        }
-        
-        // 配送方式搜索
-        if (isset($where['delivery_type']) && $where['delivery_type'] !== '') {
-            if (is_string($where['delivery_type']) && strpos($where['delivery_type'], ',') !== false) {
-                $searchParams['delivery_type'] = explode(',', $where['delivery_type']);
-            } else {
-                $searchParams['delivery_type'] = $where['delivery_type'];
-            }
-        }
-        
-        // 设备IMEI搜索
-        if (!empty($where['device_imei'])) {
-            $searchParams['imei'] = $where['device_imei'];
-        }
-        
-        // 设备型号搜索
-        if (!empty($where['device_model'])) {
-            $searchParams['device_model'] = $where['device_model'];
-        }
-        
-        // 用户昵称搜索
-        if (!empty($where['user_nickname'])) {
-            $searchParams['customer_name'] = $where['user_nickname'];
-        }
-        
-        // 用户手机搜索
-        if (!empty($where['user_mobile'])) {
-            $searchParams['customer_phone'] = $where['user_mobile'];
-        }
-        
-        // 关键词综合搜索（支持订单号、用户昵称、手机号、IMEI）
-        if (!empty($where['keyword'])) {
-            $searchParams['keyword'] = $where['keyword'];
-        }
-        
-        // 通用搜索
-        if (!empty($where['search'])) {
-            $searchParams['search'] = $where['search'];
-        }
-        
-        if (!empty($where['member_id'])) {
-            $searchParams['member_id'] = $where['member_id'];
-        }
-
-        
+        // 构建查询
         $search_model = (new RecycleOrder())
-            ->withSearch([
-                'id', 'order_no', 'express_no', 'customer_name', 'customer_phone', 
-                'status', 'delivery_type', 'create_at', 'remark', 'imei', 
-                'device_model', 'search', 'keyword','member_id'
-            ], $searchParams)
+            ->withSearch(RecycleOrder::getSearchFields(), $searchParams)
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->with([
                 'devices' => function($query) {
                     $query->field('id,order_id,imei,model,initial_price,status,category_id,final_price')
-                        ->append(['status_name','category_name']);
+                        ->append(['status_name', 'category_name']);
                 },
                 'member' => function($query) {
                     $query->field('member_id,username,nickname,mobile,headimg');
@@ -610,6 +532,18 @@ class RecycleOrderService extends BaseAdminService
             'status' => $status,
             'update_at' => time()
         ];
+        
+        // 根据状态自动更新相关时间字段
+        switch ($status) {
+            case RecycleOrderDict::ORDER_STATUS_SIGNED:
+                // 签收状态：更新签收时间（使用时间戳）
+                $updateData['sign_at'] = time();
+                break;
+            case RecycleOrderDict::ORDER_STATUS_COMPLETED:
+                // 完成状态：更新完成时间（使用时间戳）
+                $updateData['complete_at'] = time();
+                break;
+        }
         
         // 如果 状态==10则追加datele_at
         if ($status == 10) {

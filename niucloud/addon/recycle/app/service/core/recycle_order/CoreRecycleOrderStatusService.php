@@ -50,6 +50,18 @@ class CoreRecycleOrderStatusService extends BaseCoreService
                 'update_at' => time()
             ];
 
+            // 根据状态自动更新相关时间字段
+            switch ($targetStatus) {
+                case RecycleOrderDict::ORDER_STATUS_SIGNED:
+                    // 签收状态：更新签收时间（使用时间戳）
+                    $updateData['sign_at'] = time();
+                    break;
+                case RecycleOrderDict::ORDER_STATUS_COMPLETED:
+                    // 完成状态：更新完成时间（使用时间戳）
+                    $updateData['complete_at'] = time();
+                    break;
+            }
+
             // 特殊状态处理
             if ($targetStatus == RecycleOrderDict::ORDER_STATUS_DELETE) {
                 $updateData['delete_at'] = time();
