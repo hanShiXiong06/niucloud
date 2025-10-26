@@ -7,7 +7,12 @@
         </template>
 
         <el-table :data="devices" border v-loading="loading">
-            <el-table-column label="IMEI|支持扫码枪直接输入，输入完成会自动跳转到型号输入">
+            <el-table-column >
+                <template #header>
+                    <span>IMEI</span>
+                    <span class="text-sm text-gray-500">支持扫码枪输入 </span>
+                </template>
+                <!-- |支持扫码枪直接输入，输入完成会自动跳转到型号输入 -->
                 <template #default="{ row }">
                     <div v-if="row.editing" class="imei-input-container">
                         <el-input 
@@ -90,7 +95,11 @@
         </el-table>
 
         <div v-if="devices.length === 0" class="empty-data ">
-            <el-empty description="暂无设备数据。Tips 请将设备清点完毕后，再进行确认。不支持签收后添加设备！" />
+            <el-empty>
+               <div>
+                  <div class="text-sm text-red-400">Tips 请将设备清点完毕后，再进行确认。</div>
+                </div>
+                </el-empty>
         </div>
 
         <template #footer>
@@ -106,7 +115,7 @@
 
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, toRaw, nextTick } from 'vue'
-import { Edit, Delete } from '@element-plus/icons-vue'
+import { Edit, Delete , Notification } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getImeiInfo } from '@/addon/recycle/api/recycle_order'
 

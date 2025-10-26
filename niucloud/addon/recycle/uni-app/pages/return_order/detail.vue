@@ -105,10 +105,14 @@
         </view>
 
         <!-- 确认收货弹窗 -->
-        <uni-popup ref="confirmPopup" type="dialog">
-            <uni-popup-dialog title="确认收货" content="确认已收到退回的设备吗？" :before-close="true" @confirm="confirmReceive"
-                @close="closeConfirmPopup"></uni-popup-dialog>
-        </uni-popup>
+        <up-modal 
+            :show="showConfirmModal" 
+            title="确认收货" 
+            content="确认已收到退回的设备吗？" 
+            :show-cancel-button="true"
+            @confirm="confirmReceive"
+            @cancel="closeConfirmPopup"
+        ></up-modal>
     </view>
 </template>
 
@@ -129,7 +133,8 @@ export default {
             orderId: 0,
             orderDetail: {},
             deviceList: [],
-            loading: true
+            loading: true,
+            showConfirmModal: false
         };
     },
     onLoad(options) {
@@ -234,16 +239,17 @@ export default {
 
         // 处理确认收货
         handleConfirmReceive() {
-            this.$refs.confirmPopup.open();
+            this.showConfirmModal = true;
         },
 
         // 关闭确认弹窗
         closeConfirmPopup() {
-            this.$refs.confirmPopup.close();
+            this.showConfirmModal = false;
         },
 
         // 确认收货
         async confirmReceive() {
+            this.showConfirmModal = false;
             try {
                 const res = await confirmReceiveReturnOrder(this.orderId, {});
 

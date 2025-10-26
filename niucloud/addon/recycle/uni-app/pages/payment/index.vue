@@ -287,7 +287,7 @@ import { getRecycleUserAddressInfo, addRecycleUserAddress, editRecycleUserAddres
 
 import { img } from '@/utils/common'
 import { uploadImage } from '@/app/api/system'
-import areaSelect from '@/components/area-select/area-select.vue'
+import areaSelect from './area-select.vue'
 
 // --- API Response Interface (from address.vue) ---
 interface ApiResponse<T = any> {
@@ -851,12 +851,23 @@ const getPayTypeIcon = (type: string) => {
 
 
 const handleAuthAreaSelectComplete = (event: any) => {
-	authFormData.province_id = event.province.id || 0;
-	authFormData.city_id = event.city.id || 0;
-	authFormData.district_id = event.district.id || 0;
-	authFormData.province_name = event.province.name || '';
-	authFormData.city_name = event.city.name || '';
-	authFormData.district_name = event.district.name || '';
+	authFormData.province_id = event.province?.id || 0;
+	authFormData.province_name = event.province?.name || '';
+	
+	// 处理直辖市的情况：直辖市没有city，district直接作为区县
+	if (event.city) {
+		// 普通城市：有省、市、区三级
+		authFormData.city_id = event.city.id || 0;
+		authFormData.city_name = event.city.name || '';
+	} else {
+		// 直辖市：只有省、区两级，province就是市
+		authFormData.city_id = event.province?.id || 0;
+		authFormData.city_name = event.province?.name || '';
+	}
+	
+	authFormData.district_id = event.district?.id || 0;
+	authFormData.district_name = event.district?.name || '';
+	
     // 清空地址
     authFormData.detail_address = '';
 

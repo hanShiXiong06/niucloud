@@ -96,4 +96,39 @@ export function getUserList() {
  */
 export function getUserDetailStats(params: Record<string, any>) {
     return request.get(`recycle/stats/getUserDetailStats`, { params })
+}
+
+/**
+ * 获取会员统计概览
+ */
+export function getMemberStatsOverview(params: Record<string, any>) {
+    return request.get(`recycle/stats/getMemberStatsOverview`, { params })
+}
+
+/**
+ * 获取会员注册趋势
+ */
+export function getMemberRegisterTrend(params: Record<string, any>) {
+    return request.get(`recycle/stats/getMemberRegisterTrend`, { params })
+}
+
+/**
+ * 获取会员注册渠道分布
+ */
+export function getMemberChannelStats(params: Record<string, any>) {
+    return request.get(`recycle/stats/getMemberChannelStats`, { params })
+}
+
+/**
+ * 获取拉新排行榜
+ */
+export function getMemberInviteRank(params: Record<string, any>) {
+    return request.get(`recycle/stats/getMemberInviteRank`, { params })
+}
+
+/**
+ * 获取会员活跃度统计
+ */
+export function getMemberActivityStats(params: Record<string, any>) {
+    return request.get(`recycle/stats/getMemberActivityStats`, { params })
 } 

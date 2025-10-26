@@ -1,5 +1,42 @@
 <template>
     <view class="order-detail bg-gray-100 min-h-screen pb-20">
+        <!-- 骨架屏加载状态 -->
+        <view v-if="loading" class="skeleton-container">
+            <!-- 状态卡片骨架 -->
+            <view class="bg-white rounded-lg shadow-sm mx-2 mt-2 mb-3 p-3">
+                <view class="skeleton-line h-10 w-full mb-3"></view>
+                <view class="skeleton-line h-4 w-1/3 mb-2"></view>
+                <view class="skeleton-line h-12 w-full"></view>
+            </view>
+            
+            <!-- 设备列表骨架 -->
+            <view class="mx-2">
+                <view class="skeleton-line h-6 w-1/4 mb-2"></view>
+                <view v-for="i in 3" :key="i" class="bg-white rounded-lg shadow-sm p-3 mb-2">
+                    <view class="skeleton-line h-4 w-3/4 mb-2"></view>
+                    <view class="skeleton-line h-4 w-1/2 mb-2"></view>
+                    <view class="skeleton-line h-4 w-2/3"></view>
+                </view>
+            </view>
+        </view>
+        
+        <!-- 空状态 -->
+        <view v-else-if="!loading && isEmpty" class="empty-container">
+            <view class="empty-content">
+                <view class="empty-icon flex justify-center items-center">
+                    <up-icon name="file-text" size="80" color="#d0d0d0"></up-icon>
+                </view>
+                <text class="empty-title">暂无订单信息</text>
+                <text class="empty-desc">请耐心等待订单处理</text>
+                <button class="empty-btn" @tap="goBack">
+                    <up-icon name="arrow-left" size="16" color="#fff" class="mr-1"></up-icon>
+                    返回订单列表
+                </button>
+            </view>
+        </view>
+        
+        <!-- 实际内容 -->
+        <view v-else>
         <!-- 订单状态卡片 -->
         <view class="status-card bg-white rounded-lg shadow-sm mx-2 mt-2 mb-3 overflow-hidden">
             <view class="p-3">
@@ -150,7 +187,7 @@
                                     <text class="text-gray-700">{{ device.check_status === 1 ? '已检测' : '未检测' }}</text>
                                 </view>
                                 <view class="flex justify-between mb-1 text-xs" v-if="device.check_result">
-                                    <text class="text-gray-500 w-[125rpx]">检测结果</text>
+                                    <text class="text-gray-500 w-[166rpx]">检测结果</text>
                                     <text class="text-gray-700">{{ device.check_result }}</text>
                                 </view>
                                 <view class="flex justify-between text-xs" v-if="device.check_at">
@@ -184,6 +221,7 @@
                 确认选中设备 ({{ selectedDevices.length }})
             </button>
         </view>
+        </view><!-- 结束实际内容 -->
     </view>
 </template>
 
@@ -195,6 +233,14 @@ import {  getRecycleUserAddressInfo } from '@/addon/recycle/api/return_order'
 import { getPaymentList} from '@/addon/recycle/api/payment'
 import { timeStampTurnTime as formatDate, redirect, img } from '@/utils/common'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
+
+// 加载状态
+const loading = ref(true)
+
+// 判断是否为空状态（订单存在但没有设备）
+const isEmpty = computed(() => {
+    return orderInfo.value.id > 0 && (!orderInfo.value.devices || orderInfo.value.devices.length === 0)
+})
 
 interface StatusResponse {
     device_status: Record<string, string>;
@@ -274,7 +320,6 @@ const orderInfo = ref<OrderInfo>({
     telphone: '',
 })
 
-const loading = ref(false)
 const expandedDevices = ref<number[]>([]) // 存储展开的设备ID
 const selectedDevices = ref<number[]>([]) // 存储选中的设备ID
 const selectedMap = ref<Record<number, boolean>>({}) // 用于绑定v-model的选中状态映射
@@ -639,6 +684,17 @@ const loadOrderDetail = async (id: string | number) => {
     }
 }
 
+// 返回上一页
+const goBack = () => {
+    uni.navigateBack({
+        delta: 1,
+        fail: () => {
+            // 如果返回失败（可能是第一个页面），跳转到订单列表
+            redirect({ url: '/addon/recycle/pages/order/list' })
+        }
+    })
+}
+
 // 预览图片
 const previewImage = (images: string[], current: number) => {
     // 处理图片路径
@@ -728,6 +784,102 @@ onMounted(() => {
 </script>
 
 <style lang="scss">
+/* 骨架屏样式 */
+.skeleton-container {
+    animation: skeleton-fade-in 0.3s ease-in-out;
+}
+
+.skeleton-line {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: 8rpx;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+@keyframes skeleton-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* 空状态样式 */
+.empty-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40rpx;
+}
+
+.empty-content {
+    text-align: center;
+    animation: empty-fade-in 0.5s ease-in-out;
+}
+
+.empty-icon {
+    margin-bottom: 40rpx;
+    opacity: 0.5;
+}
+
+.empty-title {
+    display: block;
+    font-size: 36rpx;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 20rpx;
+}
+
+.empty-desc {
+    display: block;
+    font-size: 28rpx;
+    color: #999;
+    margin-bottom: 60rpx;
+    line-height: 1.6;
+}
+
+.empty-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24rpx 48rpx;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 50rpx;
+    font-size: 28rpx;
+    font-weight: 500;
+    border: none;
+    box-shadow: 0 8rpx 24rpx rgba(102, 126, 234, 0.3);
+    transition: all 0.3s ease;
+    
+    &:active {
+        transform: scale(0.95);
+        box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.3);
+    }
+}
+
+@keyframes empty-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(20rpx);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* 状态背景色 */
 .status-bg-1 { background: linear-gradient(135deg, #ffa726, #fb8c00); }
 .status-bg-2 { background: linear-gradient(135deg, #42a5f5, #1e88e5); }

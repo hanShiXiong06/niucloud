@@ -451,7 +451,7 @@ class RecycleStatsService extends BaseAdminService
     }
 
     /**
-     * 获取用户列表
+     * 获取用户列表（获取当前站点的所有员工）
      * @return array
      */
     public function getUserList(): array
@@ -464,50 +464,28 @@ class RecycleStatsService extends BaseAdminService
             'site_id' => $this->site_id
         ]);
         
-        // 临时放宽权限：管理员后台登录的用户都可以访问
-        // if ($currentRole !== 'admin') {
-        //     Log::warning('getUserList权限不足:', ['role' => $currentRole]);
-        //     return [];
-        // }
+        // 获取当前站点的所有用户（通过 sys_user_role 表）
+        $siteUserIds = SysUserRole::where('site_id', $this->site_id)
+            ->column('uid');
         
-        // 获取在设备表中有质检或定价操作记录的用户
-        $checkUserIds = RecycleDevice::where('site_id', $this->site_id)
-            ->where('check_uid', '>', 0)
-            ->group('check_uid')
-            ->column('check_uid');
-            
-        $priceUserIds = RecycleDevice::where('site_id', $this->site_id)
-            ->where('price_uid', '>', 0)
-            ->group('price_uid')
-            ->column('price_uid');
-        
-        // 获取有打款操作记录的用户
-        $payUserIds = RecycleOrder::where('site_id', $this->site_id)
-            ->where('pay_uid', '>', 0)
-            ->group('pay_uid')
-            ->column('pay_uid');
-        
-        // 合并并去重
-        $allUserIds = array_unique(array_merge($checkUserIds, $priceUserIds, $payUserIds));
-        
-        // 过滤掉空值
-        $allUserIds = array_filter($allUserIds, function($id) {
-            return $id > 0;
-        });
-        
-        // 如果没有任何用户有操作记录，至少返回当前登录用户
-        if (empty($allUserIds)) {
-            Log::info('没有用户操作记录，返回当前登录用户', ['uid' => $this->uid]);
-            $allUserIds = [$this->uid];
+        if (empty($siteUserIds)) {
+            Log::info('当前站点没有关联用户，返回当前登录用户', ['uid' => $this->uid]);
+            $siteUserIds = [$this->uid];
         }
         
-        // 获取用户信息
-        $users = SysUser::where('uid', 'in', $allUserIds)
+        // 获取用户信息（排除已删除的用户）
+        $users = SysUser::where('uid', 'in', $siteUserIds)
+            ->where('delete_time', 0) // 排除已删除的用户
             ->field('uid, username, real_name')
+            ->order('uid asc')
             ->select()
             ->toArray();
         
-        Log::info('getUserList返回用户数量:', ['count' => count($users), 'users' => $users]);
+        Log::info('getUserList返回用户数量:', [
+            'count' => count($users), 
+            'site_id' => $this->site_id,
+            'users' => $users
+        ]);
         
         return $users;
     }

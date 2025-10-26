@@ -32,21 +32,8 @@ export function useDateFilter() {
         endDate = today
         break
       case 'week':
-        // 按照中国习惯：周一到周日为一周
-        // 如果今天是周日（getDay() = 0），统计上周（上周一到上周日）
-        const dayOfWeek = today.getDay()
         startDate = new Date(today)
-        endDate = new Date(today)
-        
-        if (dayOfWeek === 0) {
-          // 周日：统计上周（上周一到上周日）
-          startDate.setDate(today.getDate() - 6) // 上周一
-          endDate.setDate(today.getDate()) // 上周日（今天就是上周日）
-        } else {
-          // 周一到周六：统计本周（本周一到今天）
-          startDate.setDate(today.getDate() - (dayOfWeek - 1)) // 本周一
-          // endDate 已经是 today
-        }
+        startDate.setDate(today.getDate() - today.getDay())
         break
       case 'month':
         startDate = new Date(today.getFullYear(), today.getMonth(), 1)

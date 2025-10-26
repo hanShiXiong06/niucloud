@@ -30,8 +30,8 @@
                         </div>
                     </div>
 
-                    <div v-if="form.member_id && selectedMember" class="selected-member">
-                        <div class="flex items-center justify-between">
+                    <div v-if="form.member_id && selectedMember" class="selected-member transition-all duration-300">
+                        <div class="flex items-center justify-between transition-all duration-300">
                             <div class="flex items-center">
                                 <el-avatar :size="40" :src="selectedMember.headimg || ''" />
                                 <div class="member-info">
@@ -76,6 +76,10 @@
                     <span>准备扫码中，请对准条码...</span>
                 </div>
             </el-form-item>
+            <!-- 数量 -->
+            <el-form-item label="数量">
+                <el-input-number v-model="form.count" :min="1" :max="100" />
+            </el-form-item>
         </el-form>
 
         <template #footer>
@@ -117,7 +121,8 @@ const loading = ref(false)
 const form = ref({
     member_id: '',
     delivery_type: '1',
-    express_no: ''
+    express_no: '',
+    count : 1 as number
 })
 
 // 会员搜索相关
