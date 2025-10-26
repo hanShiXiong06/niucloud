@@ -1,8 +1,8 @@
 <template>
     <div class="flex border-t border-b main-wrap border-color w-full attachment-wrap" :class="scene == 'select' ? 'h-[546px]' : 'h-full'">
 
-        <!-- 分组 -->
-        <div class="group-wrap w-[180px] p-[15px] h-full border-r border-color flex flex-col">
+        <!-- 分组 移动端隐藏 -->
+        <div class="group-wrap w-[180px] p-[15px] h-full border-r border-color flex flex-col hidden md:block ">
 
             <el-input v-model="categoryParam.name" class="m-0" :placeholder="t('upload.attachmentCategoryPlaceholder')" clearable prefix-icon="Search" @input="getAttachmentCategoryList()" />
             <div class="group-list flex-1 my-[10px] h-0">
@@ -57,15 +57,15 @@
                     </div>
                 </el-col>
                 <el-col :span="14" class="text-right">
-                    <el-input v-model="attachmentParam.real_name" class="m-0 !w-[200px]" clearable :placeholder="t('upload.placeholder' + type + 'Name')" prefix-icon="Search" @input="getAttachmentList()" />
+                    <el-input v-model="attachmentParam.real_name" class="m-0 !w-[200px] " clearable :placeholder="t('upload.placeholder' + type + 'Name')" prefix-icon="Search" @input="getAttachmentList()" />
                 </el-col>
             </el-row>
             <div class="flex-1 my-[15px] h-0" v-loading="attachment.loading">
                 <el-scrollbar>
                     <!-- 选择弹出框 -->
                     <div class="flex flex-wrap" v-if="attachment.data.length && (operate === true || scene != 'attachment')">
-                        <div class="attachment-item mr-[10px]" :class="scene == 'select' ? 'w-[100px]' : 'w-[120px]'" v-for="(item, index) in attachment.data" :key="index">
-                            <div class="attachment-wrap w-full rounded cursor-pointer overflow-hidden relative flex items-center justify-center" :class="scene == 'select' ? 'h-[100px]' : 'h-[120px]'" @click="selectFile(item)">
+                        <div class="attachment-item mr-[10px]" :class="scene == 'select' ? 'w-[80px]' : 'w-[100px]'" v-for="(item, index) in attachment.data" :key="index">
+                            <div class="attachment-wrap w-full rounded cursor-pointer overflow-hidden relative flex items-center justify-center" :class="scene == 'select' ? 'h-[80px]' : 'h-[100px]'" @click="selectFile(item)">
 
                                 <el-image :src="img(item.thumb)" fit="contain" v-if="type == 'image'"/>
                                 <video :src="img(item.thumb)" v-else-if="type == 'video'"/>
@@ -110,8 +110,8 @@
 
                     <!-- 素材管理 -->
                     <div class="flex flex-wrap" v-else-if="attachment.data.length && operate === false">
-                        <div class="attachment-item mr-[10px] w-[120px]" v-for="(item, index) in attachment.data" :key="index">
-                            <div class="attachment-wrap w-full rounded cursor-pointer overflow-hidden relative flex items-center justify-center h-[120px]">
+                        <div class="attachment-item mr-[10px] w-[100px]" v-for="(item, index) in attachment.data" :key="index">
+                            <div class="attachment-wrap w-full rounded cursor-pointer overflow-hidden relative flex items-center justify-center h-[100px]">
                                 <el-image :src="img(item.thumb)" fit="contain" v-if="type == 'image'" :preview-src-list="item.image_list"/>
                                 <video :src="img(item.thumb)" v-else-if="type == 'video'" @click="previewVideo(index)"></video>
                                 <icon :name="item.url" size="24px" v-else-if="type == 'icon'"></icon>
@@ -126,7 +126,7 @@
                     </div>
                     <div class="flex absolute top-0 left-0 right-0 bottom-0 items-center justify-center" v-else>
                         <div class="flex flex-col items-center" v-if="!attachment.loading">
-                            <img src="@/app/assets/images/no_attachment.png" class="max-w-[160px] max-h-[120px] mb-[15px]">
+                            <img src="@/app/assets/images/no_attachment.png" class="max-w-[160px] max-h-[100px] mb-[15px]">
                             <span class="text-[var(--el-text-color-secondary)] text-[14px]">{{type == 'icon' ? t('upload.iconEmpty') : t('upload.attachmentEmpty')}}</span>
                         </div>
                     </div>

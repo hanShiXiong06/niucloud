@@ -280,8 +280,21 @@ import { useSubscribeMessage } from "@/hooks/useSubscribeMessage";
 // 引入 onshow
 import { onShow } from '@dcloudio/uni-app';
 
-// 新增 - 当前选中的标签页
-const currentTab = ref(0);
+// 缓存键名
+const TAB_CACHE_KEY = 'recycle_order_current_tab';
+
+// 新增 - 当前选中的标签页（从缓存中读取，默认为0）
+const getCachedTab = () => {
+    try {
+        const cached = uni.getStorageSync(TAB_CACHE_KEY);
+        return cached !== undefined && cached !== null ? Number(cached) : 0;
+    } catch (e) {
+        console.error('读取标签缓存失败:', e);
+        return 0;
+    }
+};
+
+const currentTab = ref(getCachedTab());
 
 // 新增 - 退货方式
 
@@ -321,9 +334,16 @@ const useDefaultAddress = ref(false);
 
 // 切换标签页
 const switchTab = (index) => {
-
     currentTab.value = index;
     form.value.delivery_type = index === 0 ? 1 : 2;
+    
+    // 保存到缓存
+    try {
+        uni.setStorageSync(TAB_CACHE_KEY, index);
+    } catch (e) {
+        console.error('保存标签缓存失败:', e);
+    }
+    
     // 切换到自送时清空快递单号
     if (index === 1) {
         form.value.express_no = '';

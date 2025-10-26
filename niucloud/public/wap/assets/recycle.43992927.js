@@ -1,1 +1,0 @@
-import{ao as e}from"./index-c3bd19d7.js";function c(){return e.get("recycle/recycle_category_tree")}function r(){return e.get("recycle/address_list")}function t(){return e.get("recycle/recycle_category/hot")}function n(){return e.get("recycle/recycle_device/count")}export{r as a,t as b,n as c,c as g};

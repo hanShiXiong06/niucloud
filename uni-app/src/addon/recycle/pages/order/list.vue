@@ -83,10 +83,10 @@
                 </view>
 
                 <!-- 订单内容 -->
-                <view class="order-content" @click="goDetail(item)">
+                <view class="order-content" @click="goDetail(item)" v-if='item.devices.length > 0'>
                     <!-- 设备信息 -->
                     <view class="device-info">
-                        <view class="device-list" v-if='item.devices.length > 0'>
+                        <view class="device-list" >
                             <view class="device-item" v-for="(device, dIndex) in showAllDevices[item.id] ? item.devices : item.devices.slice(0, 3)" :key="dIndex">
                                 <view>
                                     <view class="model">{{ device.model || '待识别' }}</view>
@@ -134,7 +134,7 @@
                 <!-- 订单底部 -->
                 <view class="order-footer" v-if="item.devices.length !== 0 && item.status != '1'">
                     <!-- <view class="total-info order-footer flex "> -->
-                        <text>共<text class='device-count'>{{ item.devices.length }}</text>台设备</text>
+                        <text>共<text class='device-count'>{{ item.count }}</text>台设备</text>
                         <text class="total-label flex ml-2 ">
                             <text class="text-xs mr-1">总价</text>                        
                             <text class="total-price">¥{{ calculateTotalPrice(item) }}</text>
