@@ -67,6 +67,7 @@ class GoodsCategoryService extends BaseApiService
     {
         $list = $this->model
             ->where([['site_id', '=', $this->site_id], ['is_show', '=', 1]])
+            ->field('category_id,category_name,image,pid,site_id,sort,errand_business')
             ->order("sort desc")->select()->toArray();
         $tree = list_to_tree($list, 'category_id', 'pid', 'children');
 

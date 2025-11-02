@@ -77,7 +77,7 @@ class GoodsService extends BaseApiService
             ->with(['category', 'goods_sku'=>function($query){
                 $query->where([['is_default', '=', 1]]);
             }])->order($order)
-            ->append(['goods_cover_thumb_small', 'goods_cover_thumb_mid', 'buy_type_name']);
+            ->append(['goods_cover_thumb_small', 'goods_cover_thumb_mid', 'buy_type_name', 'errand_business']);
         $list = $this->pageQuery($search_model);
         foreach ($list['data'] as $k => &$v) {
             if ($v['buy_type'] == GoodsDict::BUY) {
@@ -128,7 +128,7 @@ class GoodsService extends BaseApiService
             ->field($field)
             ->with([
                 'goods' => function ($query) {
-                    $query->with(['category']);
+                    $query->with(['category'])->append(['errand_business']);
                 },
                 'skuList' => function ($query) {
                     $query->field('sku_id, sku_name, sku_image, sku_no, goods_id, site_id, price, sku_unit,min_buy, is_default, member_price')->append(['sku_image_thumb_small', 'sku_image_thumb_mid']);
