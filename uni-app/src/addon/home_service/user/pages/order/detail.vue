@@ -163,7 +163,7 @@
 					</view>
 				</view>
 				<view class="m-[25rpx] p-[25rpx] bg-[#fff] rounded-lg">
-					<view class="order-goods-item flex"  v-if="detail.item?.length"
+					<view class="order-goods-item flex"  v-if="detail.item?.length && !detail.errand_items"
 						>
 						<view class="w-[160rpx] h-[160rpx] flex-2" @click="toDetail(detail.item[0])">
 							<up-image class="rounded-[10rpx] overflow-hidden" width="160rpx" height="160rpx"
@@ -174,14 +174,14 @@
 								</template>
 							</up-image>
 						</view>
-						<view class="ml-[20rpx] flex flex-1 flex-col justify-between" @click="toDetail( detail.item[0])">
+						<view class="ml-[20rpx] flex flex-1 flex-col justify-between" @click="toDetail( detail.item[0])" >
 							<view class="flex justify-between items-center">
 								<text
 									class="text-[28rpx] text-item  leading-[40rpx] max-h-[80rpx] w-[360rpx] multi-hidden">{{  detail.item[0]?.item_name }}</text>
 								<text class="text-right text-[24rpx]">x{{  detail.item[0]?.num }}</text>
 							</view>
 							<view class="text-[#999999] text-[24rpx]">{{ detail.item[0]?.sku_name}}</view>
-							<view class="text-[var(--price-text-color)] text-[28rpx] font-bold flex items-end">
+							<view class="text-[var(--price-text-color)] text-[28rpx] font-bold flex items-end" >
 								<text class="text-[24rpx] price-font">￥</text>
 								<text class="price-font text-[34rpx] leading-[1]">{{ Number(detail.item[0]?.price).toString().split('.')[0] }}</text>
 								<text
@@ -189,6 +189,21 @@
 							</view>
 						</view>
 					</view>
+
+					<view class=" mt-[25rpx] items-center" v-if=" detail.errand_items">
+						<view class="text-[30rpx] font-bold">跑腿订单</view>
+						<!-- 列表渲染 -->
+						<view class="flex flex-col mt-2" v-for="(item,index) in detail.errand_items" :key="index">
+							<view class="flex  justify-between items-center">
+								<view class="text-[#666666] text-[24rpx] leading-[35rpx]">{{item.sku_name}} <up-tag size="mini" :text="item.pickup_code"></up-tag></view>
+
+								<view class="text-[#666666] text-[24rpx] leading-[35rpx]"> ￥{{item.price}}</view>
+							</view>
+							
+						</view>
+						<view class="text-[#666666] text-[24rpx] leading-[35rpx] text-right mt-2">  共 {{detail.errand_items.length}} 件</view>
+					</view>
+
 					<view class="flex justify-between mt-[25rpx] items-center">
 						<view class="text-[#666666] text-[26rpx] leading-[35rpx]">订单留言</view>
 						<view class="flex-1 pl-[25rpx] text-[26rpx] leading-[35rpx] text-right">
@@ -196,6 +211,7 @@
 						</view>
 					</view>
 				</view>
+
 				<view class="mt-[30rpx]" v-if="detail.add_item_list && detail.add_item_list?.length">
 					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-lg">
 						<view class="flex justify-between">
@@ -544,7 +560,9 @@
 		check_photos: [],
 		finish_time: '',
 		take_photos_time: '',
-		add_item_list:[]
+		add_item_list:[],
+		errand_items:[]
+
 	})
 	const loading = ref(false)
 	const orderId = ref(0)

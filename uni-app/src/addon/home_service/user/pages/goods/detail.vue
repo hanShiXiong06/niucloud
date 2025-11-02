@@ -94,9 +94,9 @@
 				</view>
 			</view>
 
-			<!-- 跑腿业务判断 -->
-			<view v-if="isErrandBusiness" class="px-[24rpx]">
-				<errand-order-form :routes="errandRoutes" @submit="handleErrandSubmit" />
+		
+			<view v-if="isErrandBusiness" class="px-[12rpx]">
+				<errand-order-form :sku-list="detail.skuList" @submit="handleErrandSubmit" />
 			</view>
 
 			<!-- 原有服务业务 -->
@@ -499,7 +499,6 @@
 			</view>
 			<!-- 原有服务业务结束标签 -->
 			</view>
-
 			<share-poster ref="sharePosterRef" posterType="home_service_goods" :posterId="detail.goods.poster_id"
 				:posterParam="posterParam" :copyUrlParam="copyUrlParam" />
 
@@ -547,6 +546,7 @@
 	import { getCardDetail ,orderCreate} from '@/addon/home_service/user/api/card';
 	import { t } from '@/locale';
 	import nsGoodsSku from '@/addon/home_service/user/components/ns-goods-sku/ns-goods-sku.vue'
+	import ErrandOrderForm from '@/addon/home_service/user/components/errand-order-form/errand-order-form.vue'
 	import uniTable from '@/addon/home_service/user/components/uni-table/components/uni-table/uni-table.vue'
 	import uniTr from '@/addon/home_service/user/components/uni-table/components/uni-tr/uni-tr.vue'
 	import uniTh from '@/addon/home_service/user/components/uni-table/components/uni-th/uni-th.vue'
@@ -554,54 +554,12 @@
 	import sharePoster from '@/components/share-poster/share-poster.vue'
 	import { useShare } from '@/hooks/useShare'
 	import useSystemStore from '@/stores/system';
-	import ErrandOrderForm from '@/addon/home_service/user/components/errand-order-form/errand-order-form.vue'
 	const systemStore = useSystemStore()
 	const payRef = ref(null)
 	const detail = ref<Record<string, any>>({});
 	const loading = ref<boolean>(true);
 	const memberStore = useMemberStore()
 	const goodsSkuRef = ref(null)
-	
-	// 跑腿业务相关
-	const isErrandBusiness = computed(() => {
-		// 判断条件：商品的 goods_content 包含跑腿路线配置
-		return detail.value.goods?.errand_config !== undefined && detail.value.goods?.errand_config !== null
-	})
-	
-	const errandRoutes = computed(() => {
-		try {
-			if (detail.value.goods?.errand_config) {
-				const config = typeof detail.value.goods.errand_config === 'string' 
-					? JSON.parse(detail.value.goods.errand_config) 
-					: detail.value.goods.errand_config
-				return config.routes || []
-			}
-		} catch (e) {
-			console.error('解析跑腿配置失败:', e)
-		}
-		return []
-	})
-	
-	// 处理跑腿订单提交
-	const handleErrandSubmit = (errandData: any) => {
-		console.log('跑腿订单数据:', errandData)
-		
-		// 跳转到订单创建/支付页面，传递跑腿数据
-		uni.navigateTo({
-			url: '/addon/home_service/user/pages/order/payment',
-			success: (res) => {
-				// 通过 eventChannel 传递跑腿订单数据
-				res.eventChannel.emit('errandOrderData', {
-					goods_id: detail.value.goods_id,
-					goods_name: detail.value.goods.goods_name,
-					sku_id: detail.value.sku_id,
-					order_money: errandData.total_price,
-					member_message: JSON.stringify(errandData), // 核心：所有信息存到备注
-					errand_data: errandData
-				})
-			}
-		})
-	}
 	// 分享
 	const { setShare } = useShare()
 	// 会员信息
@@ -621,6 +579,13 @@
 	const topNav = ref(false);
 	let platform = systemStore.systemInfo.platform;
 	
+	// 跑腿业务相关
+	const isErrandBusiness = computed(() => {
+		// 判断条件：商品的 goods_content 包含跑腿路线配置
+		console.log(detail.value.errand_business);
+		
+		return detail.value.errand_business
+	})
 	// 导航栏内部盒子的样式
 	const navbarInnerStyle = computed(() => {
 		let style = '';

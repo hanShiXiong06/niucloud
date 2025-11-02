@@ -5,8 +5,8 @@
 		</u-navbar>
 			<!-- #endif -->
 	
-		<view class="bg-[#F6F8FA] min-h-screen overflow-hidden py-[20rpx] px-[24rpx]" :style="wxxcxstytle" v-if="orderData">
-			<!-- 上门地址 -->
+		<view class="bg-[#F6F8FA] min-h-screen overflow-hidden py-[20rpx] px-[24rpx]" :style="wxxcxstytle" v-if="orderData ">
+			<!-- 收货地址和服务时间 -->
 			<view class="bg-[#fff] rounded-lg py-[10rpx]">
 				<view class="flex items-center py-[24rpx] px-[24rpx]  border-bottom-style" @click="toSelectAddress">
 					<view class="flex-1 w-0 flex">
@@ -21,7 +21,9 @@
 								{{ orderData.delivery.take_address.full_address }}
 							</view>
 						</view>
-						<view v-else class="text-[28rpx]">{{ t('addHomeAddress') }}</view>
+						<view v-else class="text-[28rpx]">
+							{{ orderCreateData.sku.type === 'errand' ? '请选择收货地址' : t('addHomeAddress') }}
+						</view>
 					</view>
 					<text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[var(--text-color-light6)]"></text>
 				</view>
@@ -31,7 +33,9 @@
 						<view class="flex-align">
 							<text
 								class="text-[28rpx] text-[#4D4D4D] font-bold nc-iconfont nc-icon-a-shijianV6xx-36"></text>
-							<text class="text-[28rpx] ml-2">服务时间</text>
+							<text class="text-[28rpx] ml-2">
+								{{ orderCreateData.sku.type === 'errand' ? '取件时间' : '服务时间' }}
+							</text>
 						</view>
 						<view class="flex-align text-[#63676D]" @click="handleTime">
 							<view class="text-[28rpx] ml-2 text-right"
@@ -47,6 +51,7 @@
 
 			<ns-select-time ref="selectTime" :rules="service_time" :isQuantum="true" @change="getTime"
 				@getStamp="getStamp" v-if="Object.keys(service_time).length"></ns-select-time>
+			<template v-if="orderCreateData.sku.type !== 'errand'">
 			<view class="outline-border" v-for="(item, index) in orderData.goods_data"  @click="toDetail(item.sku_id)">
 				<up-image width="168rpx" height="168rpx" radius="5" class="rounded-[50%]" :src="img(item.sku_image)" model="aspectFill">
 					<template #error>
@@ -78,6 +83,35 @@
 					</view>
 				</view>
 			</view>
+			</template>	
+			<!-- 如果有 orderCreateData  则渲染其列表 -->
+			<view class="bg-[#fff] rounded-lg py-[10rpx] mt-3" v-else>
+			
+				<view class="flex items-center py-[14rpx] px-[24rpx]  border-bottom-style" v-for="(item, index) in orderCreateData.sku.items" :key="index">
+
+					<view class="flex-1 w-0 flex">
+						<view class="font-500 text-[30rpx] mb-[10rpx]">
+							{{ item.sku_name }}
+						</view>
+					</view>
+					<view class="flex-1 w-0 flex">
+						<view class="font-200 text-[24rpx] mb-[10rpx]">
+							{{ item.pickup_code }}
+						</view>
+					</view>
+					<view class="flex-1 w-0 flex">
+						<view class="font-200 text-[24rpx] mb-[10rpx]">
+							¥ {{ item.price }}
+						</view>
+					</view>
+				</view>
+
+					
+
+			</view>
+
+
+
 			<view class="bg-[#fff] px-3 mt-[-10rpx] pt-[10rpx] rounded-bl-22rpx rounded-br-22rpx" v-if="!createData.card_data?.member_card_item_id">
 				<!-- 备注 -->
 				<view class="flex justify-between items-center box-border py-[24rpx]">
@@ -89,6 +123,7 @@
 					</view>
 				</view>
 			</view>
+
 			<view class="mt-[20rpx] p-[24rpx] rounded-md bg-white" v-if="!createData.card_data?.member_card_item_id">
 				<view class="text-[30rpx] font-bold mb-[15rpx]">
 					{{t('priceDetail')}}
@@ -166,6 +201,11 @@
 	import { wechatSync } from '@/app/api/system'
 	import selectCoupon from '@/addon/home_service/user/components/select-coupon/select-coupon'
 	import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
+
+	// 从本地存储中获取订单创建数据
+	const orderCreateData = uni.getStorageSync('o2oCreateData')
+
+	
 	const loading = ref<boolean>(false)
 	const userList = ref([[]]); // 师傅列表
 	const userShow = ref(false) // 控制师傅列表
@@ -187,12 +227,26 @@
 			take_address_id: ''
 		}
 	})
+	// 从 storage 中获取订单数据（包含 sku.items）
 	uni.getStorageSync('o2oCreateData') && Object.assign(createData.value, uni.getStorageSync('o2oCreateData'))
 	const goodsId = ref('')
 	onLoad((option) => {
 		goodsId.value = option.id
 		getReserveConfigFn()
 	})
+	
+	// 页面每次显示时检查地址是否更新
+	onShow(() => {
+		// 选择地址之后跳转回来
+		const selectAddress = uni.getStorageSync('selectAddressCallback')
+		if (selectAddress) {
+			createData.value.delivery.take_address_id = selectAddress.address_id
+			uni.removeStorage({ key: 'selectAddressCallback' })
+			// 重新计算订单以更新地址信息
+			calculate()
+		}
+	})
+	
 	/**
 	 * 选择优惠券
 	 */
@@ -216,12 +270,6 @@ const toDetail = (sku_id) => {
 			service_time.value = res.data.reserve
 		})
 	}
-	// 选择地址之后跳转回来
-	const selectAddress = uni.getStorageSync('selectAddressCallback')
-	if (selectAddress) {
-		createData.value.delivery.take_address_id = selectAddress.address_id
-		uni.removeStorage({ key: 'selectAddressCallback' })
-	}
 
 	/**
 	 * 选择地址
@@ -241,7 +289,8 @@ const toDetail = (sku_id) => {
 	// 验证地址方法
 	const createVerify = () => {
 		if (!orderData.value.delivery.take_address) {
-			uni.showToast({ title: '请选择上门地址', icon: 'none' })
+			const addressText = orderCreateData.sku.type === 'errand' ? '收货地址' : '上门地址'
+			uni.showToast({ title: `请选择${addressText}`, icon: 'none' })
 			return false
 		}
 		return true
@@ -250,7 +299,8 @@ const toDetail = (sku_id) => {
 	// 验证上门时间
 	const timeVerify = () => {
 		if (!createData.value.reserve_service_time) {
-			uni.showToast({ title: '请选择上门时间', icon: 'none' })
+			const timeText = orderCreateData.sku.type === 'errand' ? '取件时间' : '上门时间'
+			uni.showToast({ title: `请选择${timeText}`, icon: 'none' })
 			return false
 		}
 		return true
@@ -285,6 +335,14 @@ const toDetail = (sku_id) => {
 		if (!createVerify() || !timeVerify() || createLoading.value) return
 		createLoading.value = true
 		let data = cloneDeep(createData.value)
+
+		if(orderCreateData.sku.type === 'errand'){
+			data.errand_items = orderCreateData.sku.items
+			delete data.sku.items;
+			delete data.total_price
+		}else{
+			data.sku = JSON.stringify(data.sku)
+		}
 		orderCreate(data).then(({ data }) => {
 			orderId = data.order_id
 			if(!createData.value.card_data?.member_card_item_id){

@@ -369,6 +369,7 @@ CREATE TABLE `{{prefix}}home_service_goods_category`
     `is_settled` int DEFAULT 0 COMMENT '是否支持入驻',
     `intro` varchar(1000) NOT NULL DEFAULT '' COMMENT '简介',
     `adv_image` varchar(1200) NOT NULL DEFAULT '' COMMENT '广告位图片',
+    `errand_business` int DEFAULT 0 COMMENT '是否跑腿服务 0是上门服务 1是跑腿服务',
     PRIMARY KEY (`category_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='(上门家政)商品分类';
 
