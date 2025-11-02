@@ -167,6 +167,9 @@ class GoodsService extends BaseApiService
             $info['goods']['guarantee_list'] = [];
         }
 
+        // 将跑腿业务标识提升到顶层，方便前端访问
+        $info['errand_business'] = $info['goods']['errand_business'] ?? false;
+
         return $info;
     }
 
