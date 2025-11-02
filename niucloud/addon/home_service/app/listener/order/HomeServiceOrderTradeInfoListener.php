@@ -16,10 +16,10 @@ use addon\home_service\app\model\order\Order;
 
 /**
  * 通过支付信息获取订单详情
- * Class O2oOrderTradeInfoListener
+ * Class HomeServiceOrderTradeInfoListener
  * @package addon\home_service\app\listener\order
  */
-class O2oOrderTradeInfoListener
+class HomeServiceOrderTradeInfoListener
 {
 
     public function handle($params)
@@ -42,7 +42,7 @@ class O2oOrderTradeInfoListener
                     }
                     $info[ 'item_list' ] = $item;//订单项列表
                     $info[ 'item_total' ] = '共' . count($order_info[ 'item' ]) . '种项目';//订单项总计
-                    $info[ 'detail_url' ] = '/addon/o2o/pages/order/detail?order_id=' . $params[ 'trade_id' ];//订单详情跳转路径
+                    $info[ 'detail_url' ] = '/addon/home_service/user/pages/order/detail?order_id=' . $params[ 'trade_id' ];//订单详情跳转路径
                 }
             }
             return $info;

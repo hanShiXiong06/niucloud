@@ -12,6 +12,7 @@
 namespace addon\home_service\app\model\store;
 
 use addon\home_service\app\dict\store\StoreDict;
+use app\dict\sys\FileDict;
 use app\model\member\Member;
 use core\base\BaseModel;
 use think\db\Query;
@@ -103,6 +104,52 @@ class StoreApplication extends BaseModel
     {
         return $this->hasOne(SysUser::class, 'uid', 'audit_user_id');
     }
+
+
+    /**
+     * 获取图片缩略图
+     */
+    public function getIdCardBackThumbMidAttr($value, $data)
+    {
+        if (isset($data['id_card_back']) && $data['id_card_back'] != '') {
+            return get_thumb_images($data['site_id'], $data['id_card_back'], FileDict::MID);
+        }
+        return [];
+    }
+
+    /**
+     * 获取图片缩略图
+     */
+    public function getIdCardFontThumbMidAttr($value, $data)
+    {
+        if (isset($data['id_card_front']) && $data['id_card_front'] != '') {
+            return get_thumb_images($data['site_id'], $data['id_card_front'], FileDict::MID);
+        }
+        return [];
+    }
+
+    /**
+     * 获取图片缩略图
+     */
+    public function getHeadimgThumbMidAttr($value, $data)
+    {
+        if (isset($data['headimg']) && $data['headimg'] != '') {
+            return get_thumb_images($data['site_id'], $data['headimg'], FileDict::MID);
+        }
+        return [];
+    }
+
+    /**
+     * 获取图片缩略图
+     */
+    public function getLicenseImgThumbMidAttr($value, $data)
+    {
+        if (isset($data['license_img']) && $data['license_img'] != '') {
+            return get_thumb_images($data['site_id'], $data['license_img'], FileDict::MID);
+        }
+        return [];
+    }
+
 
 
 }

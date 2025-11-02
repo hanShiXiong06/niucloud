@@ -1,5 +1,8 @@
 <template>
 	<view :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<view class="bg-[#f8f8f8] min-h-screen overflow-hidden" v-if="!loading && Object.keys(detail).length">
 			<!-- 主体内容 -->
 			<view class="p-[25rpx]">
@@ -97,22 +100,27 @@
 								class="w-[160rpx] h-[160rpx] mr-[20rpx] rounded-md"
 								:src="img(detail.order_item[0].item_image_thumb_small)" mode="aspectFill"
 								@error="handleServiceImageError" />
-							<view class="flex-1">
-								<view class="text-base font-medium mb-1">
-									{{ detail?.order_item?.[0]?.item_name || t('serviceItem') }}</view>
-								<!-- 调整SKU名称、数量和价格的布局 -->
-								<view class="flex justify-between items-center text-sm text-[#999999] mb-1">
-									<view>{{ detail?.order_item?.[0]?.sku_name || '' }}</view>
-									<view>×{{ detail?.order_item?.[0]?.num || 1 }}</view>
+							<view class="flex-1 h-[160rpx] flex flex-col justify-between">
+								<!-- 调整商品名称和数量在同一行 -->
+								<view class="flex justify-between items-center">
+									<view class="text-[28rpx] mb-1">
+										{{ detail.order_item[0].item_name || t('serviceItem') }}
+									</view>
+									<view class="text-sm text-[#999999]">×{{ detail.order_item[0].num || 1 }}</view>
 								</view>
-								<!-- 修复价格显示，添加小数点 -->
-								<view class="text-[#EF000C]">
-									<text class="text-base">{{ t('currency') }}</text>
+							
+								<!-- 服务时间单独成行 -->
+								<view class="text-[24rpx] text-[#999999] mb-1">时间：{{ detail.create_time || '' }}</view>
+							
+								<!-- 修复价格显示，添加小数点，并使实付款文本为黑色 -->
+								<view class="flex items-baseline">
+									<view class="text-[24rpx] text-black mr-1">实付款</view>
+									<text class="text-xs text-[#EF000C]">{{ t('currency') }}</text>
 									<text
-										class="text-base">{{ formatPriceBeforeDecimal(detail?.order_item?.[0]?.price || '0.00') }}</text>
-									<text class="text-base">.</text>
+										class="text-lg text-[#EF000C]">{{ formatPriceBeforeDecimal(detail.order_item[0].price || 0) }}</text>
+									<text class="text-xs text-[#EF000C]">.</text>
 									<text
-										class="text-sm">{{ formatPriceAfterDecimal(detail?.order_item?.[0]?.price || '0.00') }}</text>
+										class="text-xs text-[#EF000C]">{{ formatPriceAfterDecimal(detail.order_item[0].price || 0) }}</text>
 								</view>
 							</view>
 						</view>
@@ -151,6 +159,9 @@
 	import { t } from '@/locale'
 	import { img, redirect } from '@/utils/common';
 	import { getRefundDetail,cancelRefund, getRefundStatus } from '@/addon/home_service/user/api/refund';
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '售后详情', topStatusBar: { textColor: '#333' ,rollBgColor:"#ffffff"} })
 	const cancelRefundshow = ref(false);
 	const detail = ref<Object>({});
 	const loading = ref<boolean>(true);

@@ -32,15 +32,18 @@
 			<!-- #ifdef H5 -->
 			<mescroll-body ref="mescrollRef" :top="navHeight + 'px'" :down="{ use: false }" @init="mescrollInit"
 				@up="getListFn">
+				<view v-if="orderCurrent =='in_progress'" :style="{top:navHeight + 'px'}"
+					class="fixed z-index-99 h-[86rpx] leading-[86rpx] text-[24rpx] flex w-[100vw] left-0 items-center px-[20rpx] box-border justify-between bg-[#f6f6f6] py-[20rpx]">
 			<!-- #endif -->
-			<!-- #ifdef MP-WEIXIN -->
+			<!-- #ifndef H5 -->
 			<mescroll-body ref="mescrollRef" :top="(navHeight - 25) + 'px'" :down="{ use: false }" @init="mescrollInit"
 				@up="getListFn">
+				<view v-if="orderCurrent =='in_progress'" :style="{top:navHeight + 55 + 'px'}"
+					class="fixed h-[86rpx] leading-[86rpx] text-[24rpx] flex w-[100vw] left-0 items-center px-[20rpx] box-border justify-between bg-[#f6f6f6] py-[20rpx]">
 			<!-- #endif -->
-				<view v-if="orderCurrent =='in_progress'" :style="{top:navHeight + 'px'}"
-					class="fixed h-[86rpx] leading-[86rpx] text-[24rpx] flex w-full left-0 items-center px-[20rpx] box-border justify-between bg-[#f6f6f6] py-[20rpx]">
+				
 					<view class="flex items-center">
-						<view class="p-[25rpx] rounded-[46rpx] mr-[30rpx] bg-[#fff] flex items-center leading-1 border-1 border-[#fff] border-solid" @click="changeServiceActive(serviceIndex)" :class="serviceActiveIndex == serviceIndex ? 'serviceActive' : ''" v-for="(serviceItem,serviceIndex) in serviceStatus" :key="serviceIndex">
+						<view class="p-[25rpx] rounded-[46rpx] mr-[30rpx] bg-[#fff] flex items-center leading-1 border-1 border-[#fff] border-solid border-box" @click="changeServiceActive(serviceIndex)" :style="{borderColor:serviceActiveIndex == serviceIndex ? '#111' : ''}" v-for="(serviceItem,serviceIndex) in serviceStatus" :key="serviceIndex">
 							{{serviceItem.name}}
 						</view>
 					</view>

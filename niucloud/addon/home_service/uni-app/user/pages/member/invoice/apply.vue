@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden component-class" :style="themeColor()" v-if="!loading">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 第1个模块：开票详情 -->
 		<view class="bg-white m-[24rpx] rounded-lg">
 			<view class="px-[30rpx] py-[30rpx]">
@@ -10,12 +13,12 @@
 				<view class="flex items-center mb-[10rpx]">
 					<view class="text-[28rpx] w-[140rpx]">{{ t('invoiceHeaderType') }}</view>
 					<u-radio-group v-model="invoiceForm.header_type" class="flex-1 flex gap-[40rpx] ml-[20rpx]"
-						@change="handleHeaderTypeChange">
+						@change="handleHeaderTypeChange" >
 						<u-radio name="enterprise" :label="t('enterprise')" class="flex items-center"
-							active-color="var(--primary-color)" inactive-color="#e0e0e0">
+							active-color="var(--primary-color)" inactive-color="#e0e0e0"  size="15">
 						</u-radio>
 						<u-radio name="individual" :label="t('individual')" class="flex items-center"
-							active-color="var(--primary-color)" inactive-color="#e0e0e0">
+							active-color="var(--primary-color)" inactive-color="#e0e0e0"  size="15">
 						</u-radio>
 					</u-radio-group>
 				</view>
@@ -42,7 +45,7 @@
 					<view class="ml-[20rpx] flex-1">
 						<u-checkbox-group v-model="selectedContents" class="flex flex-col"
 							@change="handleContentChange">
-							<u-checkbox v-for="(content, index) in defaultContents" :key="index" :name="content.value"
+							<u-checkbox v-for="(content, index) in defaultContents" :key="index" :name="content.value" size="15"
 								class="border rounded-[8rpx] flex items-center !mt-0 !mb-[20rpx] !mr-[35rpx]"
 								:label="content.label" active-color="var(--primary-color)" inactive-color="#e0e0e0"
 								:class="{ 
@@ -145,6 +148,10 @@
 	import { onLoad } from '@dcloudio/uni-app'
 	import { t } from '@/locale'
 	import { createInvoice, getInvoiceTypes, getInvoiceContents, getInvoiceHeaderTypes } from '@/addon/home_service/user/api/invoice'
+	import { topTabar } from '@/utils/topTabbar';
+	// 系统状态管理
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '发票申请', topStatusBar: { textColor: '#333' } })
 	const loading = ref<boolean>(true)
 	// 表单数据
 	const invoiceForm = reactive({

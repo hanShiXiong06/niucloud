@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[#fff] min-h-screen overflow-hidden component-class" :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 账户余额卡片 -->
 		<view
 			class="balance-card bg-[var(--technician-bg-one)] mx-[24rpx] mt-[20rpx] rounded-lg p-[36rpx] text-white justify-between items-end flex ">
@@ -118,7 +121,9 @@
 	import { onPageScroll, onReachBottom } from '@dcloudio/uni-app'
 	import { getDayBillStat, getDayBillPage } from "@/addon/home_service/technician/api/account";
 	import { getTechnicianInfo } from "@/addon/home_service/technician/api/technician";
-
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '我的账户', topStatusBar: { textColor: '#333'} })
 	// 定义账单数据接口
 	interface BillItem {
 		id ?: number;
@@ -142,7 +147,7 @@
 		total_expense: 0
 	})
 
-	// 师傅佣金
+	// 技师佣金
 	const technicianInfo = ref({
 		commission: 0,
 	})
@@ -251,7 +256,7 @@
 		})
 	}
 
-	// 获取师傅信息
+	// 获取技师信息
 	const fetchTechnicianInfo = () => {
 		loading.value = true;
 		return getTechnicianInfo({}).then((res : any) => {

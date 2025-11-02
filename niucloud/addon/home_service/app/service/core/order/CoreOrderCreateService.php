@@ -65,8 +65,6 @@ class CoreOrderCreateService extends BaseCoreService
      */
     public function create(array $data)
     {
-
-     
         //参数赋值
         $this->setParam($data);
         $order_key = $this->param['order_key'] ?? '';
@@ -75,15 +73,6 @@ class CoreOrderCreateService extends BaseCoreService
         //校验错误
         $this->checkError();
         $this->getReserveServiceTimeStamp($data);
-        
-        // 解析 sku 参数（如果是字符串）
-        if (isset($data['sku']) && is_string($data['sku'])) {
-            $data['sku'] = json_decode($data['sku'], true);
-        }
-      
-        // 检测是否为跑腿业务
-        $is_errand_business = isset($data['sku']['type']) && $data['sku']['type'] === 'errand';
-      
         $order_data = [
             //订单整体
             'site_id' => $data['site_id'],
@@ -95,7 +84,7 @@ class CoreOrderCreateService extends BaseCoreService
             'order_money' => $this->basic['order_money'],
             'discount_money' => $this->basic['discount_money'] ?? 0,
             'pay_money' => $this->basic['pay_money'],
-            //地址相关（收货地址）
+            //地址相关
             'taker_name' => $this->delivery['take_address']['name'] ?? '',
             'taker_mobile' => $this->delivery['take_address']['mobile'] ?? '',
             'taker_province' => $this->delivery['take_address']['province_id'] ?? 0,
@@ -107,44 +96,38 @@ class CoreOrderCreateService extends BaseCoreService
             'taker_latitude' => $this->delivery['take_address']['lat'] ?? '',
             //附属信息
             'member_message' => $this->param['member_remark'] ?? '',//买家留言
-            'technician_id' => 0,//师傅
+            'technician_id' => 0,//技师
             'reserve_service_time' => date('Y-m-d H:i:s', $this->param['reserve_service_time_stamp']),//希望服务时间
             'create_time' => time(),
             'reserve_service_time_stamp' => $this->param['reserve_service_time_stamp'] ?? 0,
             'is_card_order' => $this->card_data['is_card_order'] ?? 0,
             'is_auto_refund' => $data['is_auto_refund'] ? 1 : 0,
-            'is_errand' => $is_errand_business ? 1 : 0, // 标记是否为跑腿业务
-            'errand_items' => $is_errand_business ? json_encode($data['errand_items'] ?? [], JSON_UNESCAPED_UNICODE) : '[]', // 跑腿包裹信息JSON，非跑腿业务为空数组
         ];
 
 
         $order_goods_data = [];
-        
         foreach ($this->goods_data as $v) {
-
-                // 普通业务，创建单个订单项
-                $order_goods_data[] = [
-                    'site_id' => $data['site_id'],
-                    'member_id' => $data['member_id'],
-                    'item_type' => $v['goods']['buy_type'],
-                    'goods_id' => $v['goods_id'],
-                    'item_id' => $v['sku_id'],
-                    'item_name' => $v['sku_name'],
-                    'item_image' => $v['sku_image'],
-                    'price' => $v['price'],
-                    'num' => $v['num'],
-                    'unit' => $v['sku_unit'],
-                    'item_money' => $v['goods_money'],
-                    'discount_money' => $v['discount_money'] ?? 0,
-                    'order_id' => &$this->order_id,
-                    'technician_id' => $order_data['technician_id'] ?? 0,
-                    'is_enable_refund' => $v['goods']['after_sales'] ? 0 : 1,
-                    'is_force_clock_in' => $v['goods']['is_force_clock_in'] ?? 0,
-                    'is_force_departure' => $v['goods']['is_force_departure'] ?? 0,
-                    'is_finish_photograph' => $v['goods']['is_finish_photograph'] ?? 0,
-                    'sku_name' => $v['sku_item_name'],
-                ];
-
+            $order_goods_data[] = [
+                'site_id' => $data['site_id'],
+                'member_id' => $data['member_id'],
+                'item_type' => $v['goods']['buy_type'],
+                'goods_id' => $v['goods_id'],
+                'item_id' => $v['sku_id'],
+                'item_name' => $v['sku_name'],
+                'item_image' => $v['sku_image'],
+                'price' => $v['price'],
+                'num' => $v['num'],
+                'unit' => $v['sku_unit'],
+                'item_money' => $v['goods_money'],
+                'discount_money' => $v['discount_money'] ?? 0,
+                'order_id' => &$this->order_id,
+                'technician_id' => $order_data['technician_id'] ?? 0,
+                'is_enable_refund' => $v['goods']['after_sales'] ? 0 : 1,
+                'is_force_clock_in' => $v['goods']['is_force_clock_in'] ?? 0,   //强制打卡
+                'is_force_departure' => $v['goods']['is_force_departure'] ?? 0,   //强制出发
+                'is_finish_photograph' => $v['goods']['is_finish_photograph'] ?? 0,  //强制完成拍照
+                'sku_name' => $v['sku_item_name'],
+            ];
             $order_data['is_grab'] = $v['goods']['grab_orders'] ?? 0;
             $order_data['buy_type'] = $v['goods']['buy_type'] ?? '';
             $order_data['category_id'] = $v['goods']['top_category'] ?? 0;
@@ -169,28 +152,13 @@ class CoreOrderCreateService extends BaseCoreService
         $this->setParam($data);
         $this->order_key = $this->param['order_key'] ?? '';
         $this->member_id = $this->param['member_id'] ?? 0;
-        
-        // 解析 sku 参数（前端会 JSON 序列化）
-        if (isset($this->param['sku']) && is_string($this->param['sku'])) {
-            $this->param['sku'] = json_decode($this->param['sku'], true);
-        }
-        
-        // 检测是否为跑腿业务
-        $is_errand_business = isset($this->param['sku']['type']) && $this->param['sku']['type'] === 'errand';
-        
-        //服务地址（跑腿业务也需要收货地址）
+        //服务地址
         if (empty($this->order_key)) {
             $this->selectTakeAddress();
             $this->confirm();
         }
         //获取订单数据的缓存
         $this->getOrderCache($this->order_key . '_basic');
-        
-        // 如果是跑腿业务，需要特殊处理商品数据
-        if ($is_errand_business) {
-            $this->handleErrandBusinessGoods();
-        }
-        
         //计算优惠和营销
         $this->calculateDiscount();
         $this->setOrderCache($this->order_key);
@@ -255,37 +223,21 @@ class CoreOrderCreateService extends BaseCoreService
         if (empty($sku_info)) throw new CommonException('HOME_SERVICE_GOODS_NOT_EXIST');//无效的数据
         $sku_info['sku_item_name'] = $sku_info['sku_name'];
         if ($sku_info['sku_name'] != $sku_info['goods']['goods_name']) $sku_info['sku_name'] = $sku_info['goods']['goods_name'] . ' ' . $sku_info['sku_name'];
-        
-        // 检测是否为跑腿业务
-        $is_errand_business = isset($this->param['sku']['type']) && $this->param['sku']['type'] === 'errand';
-        
         if (empty($this->card_data)) {
-            // 跑腿业务检查商品状态
-            if (!$is_errand_business && $sku_info['goods']['status'] != GoodsDict::UP) {
-                throw new CommonException('HOME_SERVICE_GOODS_NOT_EXIST');//无效的数据
-            }
+            if ($sku_info['goods']['status'] != GoodsDict::UP) throw new CommonException('HOME_SERVICE_GOODS_NOT_EXIST');//无效的数据
         }
         $goods_list = [];
         $total_num = $num = $this->param['sku']['num'] ?? 1;
-        
-        // 跑腿业务不检查最小购买数量
-        if (!$is_errand_business && $num < $sku_info['min_buy']) {
-            $this->setError('购买数量不能小于' . $sku_info['min_buy'] . $sku_info['sku_unit']);
-        }
-        
+        if ($num < $sku_info['min_buy']) $this->setError('购买数量不能小于' . $sku_info['min_buy'] . $sku_info['sku_unit']);
         //默认金额填充
         $sku_info['discount_money'] = 0;
         $sku_info['num'] = $num;
-        
         //先走策略业务
         if (!empty($this->card_data)) {
             $sku_info['price'] = $this->getCardPrice($sku_info);
         } else {
             $sku_info['price'] = $this->getMemberPrice($sku_info);
-            // 跑腿业务不使用城市策略价格，使用前端传递的实际价格
-            if (!$is_errand_business) {
-                $sku_info['price'] = (new  CoreCityStrategyService)->getStrategyPrice($sku_info['price'], $this->delivery['take_address']['city_id'] ?? 0, $this->site_id);
-            }
+            $sku_info['price'] = (new  CoreCityStrategyService)->getStrategyPrice($sku_info['price'], $this->delivery['take_address']['city_id'] ?? 0, $this->site_id, $sku_info);
         }
         $price = $sku_info['price'];
         $sku_info['goods_money'] = $price * $num;//小计
@@ -359,50 +311,6 @@ class CoreOrderCreateService extends BaseCoreService
         if ($card_item_info['num'] - $card_item_info['use_num'] < 1) throw new CommonException('HOME_SERVICE_CARD_ITEM_USABLE_NUM_INSUFFICIENT');
         $this->card_data['is_card_order'] = 1;
         return $card_item_info['price'] ?? $sku_info['price'];
-    }
-
-    /**
-     * 处理跑腿业务商品数据
-     * 跑腿业务有多个包裹，需要特殊处理
-     * @return void
-     */
-    public function handleErrandBusinessGoods()
-    {
-        $items = $this->param['sku']['items'] ?? [];
-        if (empty($items)) {
-            return;
-        }
-
-        // 获取主商品信息（第一个商品的 sku_id，用于优惠计算）
-        $main_sku_id = $this->param['sku']['sku_id'] ?? 0;
-        if (empty($this->goods_data[$main_sku_id])) {
-            return;
-        }
-
-        $main_sku_info = $this->goods_data[$main_sku_id];
-        
-        // 计算所有包裹的总价格
-        $total_goods_money = 0;
-        $total_num = count($items);
-        
-        foreach ($items as $item) {
-            $item_price = floatval($item['price'] ?? 0);
-            $total_goods_money += $item_price;
-        }
-
-        // 更新商品数据
-        $main_sku_info['num'] = $total_num;
-        $main_sku_info['goods_money'] = $total_goods_money;
-        $main_sku_info['errand_items'] = $items; // 保存跑腿详情
-
-        // 更新到商品列表
-        $this->goods_data[$main_sku_id] = $main_sku_info;
-        
-        // 更新基础数据
-        $this->basic['total_num'] = $total_num;
-        $this->basic['goods_money'] = $total_goods_money;
-        $this->basic['body'] = $main_sku_info['sku_name'] . ' x' . $total_num;
-        $this->basic['order_name'] = $main_sku_info['sku_name'] . ' x' . $total_num;
     }
 
 

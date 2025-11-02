@@ -1,16 +1,15 @@
 <template>
-	<!-- #ifdef MP-WEIXIN || APP-PLUS --> 
-		<u-navbar title="开票中心" autoBack :fixed="true" placeholder>
-		</u-navbar>
+	<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+	<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 	<!-- #endif -->
-	<view class="flex justify-between fixed w-full z-index-99 bg-[#fff] p-[24rpx] px-[56rpx] box-border" :style="themeColor()">
-		
-		
-		<view class="relative flex justify-center items-center flex-col" v-for="(item,index) in invoiceStateList"
+	<view class="flex justify-between fixed w-full z-index-99 bg-[#fff] p-[24rpx] px-[56rpx] box-border"
+		:style="themeColor()">
+		<view class="relative flex justify-center items-center flex-col !text-[28rpx] !leading-[2]" v-for="(item,index) in invoiceStateList"
 			:key="index" @click="invoiceStateFn(item)">
 			{{item.name}}
 			<view class="w-[40rpx] h-[6rpx] rounded-lg"
-				:class="item.status == currentState ? 'bg-[var(--primary-color)]' : 'bg-[#fff]'"></view>
+			:style="{backgroundColor:item.status == currentState ? 'var(--primary-color)' : '#fff'}"
+				></view>
 		</view>
 	</view>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()">
@@ -83,7 +82,7 @@
 				<view class="" v-else>
 					<view class="bg-[#fff] m-[24rpx] p-[24rpx] rounded-lg">
 						<view class="flex justify-between items-center border-b border-gray-100">
-							<view class="flex items-center text-sm text-[#111] flex-1">
+							<view class="flex items-center text-sm text-[#111] flex-1 text-[26rpx]">
 								<text>{{ item.type_name }}</text>
 								<text class="text-[26rpx] text-[#999999] ml-[15rpx]">{{ item.create_time }}</text>
 							</view>
@@ -91,15 +90,15 @@
 								{{ getOrderStatusText(item) }}
 							</view>
 						</view>
-						<view class="text-[30rpx] my-[15rpx]">
+						<view class="text-[28rpx] my-[25rpx] ">
 							{{item.header_name}}
 						</view>
-						<view class="flex justify-between items-center pt-[10rpx]">
+						<view class="flex justify-between items-center">
 							<view>
 								<view class="text-[#999999] text-[26rpx]">
 									发票代码
 								</view>
-								<view>
+								<view class="text-[28rpx] mt-[15rpx]">
 									{{currentState != 'processing' ? item.invoice_number :item.tax_number}}
 								</view>
 							</view>
@@ -156,7 +155,7 @@
 
 <script setup lang="ts">
 	import { ref, computed } from 'vue'
-	import { onLoad, onPageScroll, onReachBottom ,onShow} from '@dcloudio/uni-app'
+	import { onLoad, onPageScroll, onReachBottom, onShow } from '@dcloudio/uni-app'
 	import { t } from '@/locale'
 	import { img } from '@/utils/common'
 	import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue'
@@ -164,7 +163,10 @@
 	import useMescroll from '@/components/mescroll/hooks/useMescroll.js'
 	import useConfigStore from '@/stores/config'
 	import { getInvoiceOrderList, getInvoiceList } from '@/addon/home_service/user/api/invoice'
-
+	import { topTabar } from '@/utils/topTabbar';
+	// 系统状态管理
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '发票列表', topStatusBar: { textColor: '#333' } })
 	// 配置状态管理
 	const configStore = useConfigStore()
 
@@ -189,13 +191,13 @@
 
 
 
-  const totalPrice = computed(() => {
-    const sum = invoiceList.value
-        .filter(item => item.checked)
-        .reduce((acc, item) => acc + Number(item.pay_money), 0);
-    console.log(sum)
-    return sum.toFixed(2);
-  });
+	const totalPrice = computed(() => {
+		const sum = invoiceList.value
+			.filter(item => item.checked)
+			.reduce((acc, item) => acc + Number(item.pay_money), 0);
+		console.log(sum)
+		return sum.toFixed(2);
+	});
 
 	const uploadInvoice = (url : any) => {
 		url = img(url)
@@ -230,8 +232,8 @@
 		// 初始化时加载第一页数据
 		getInvoiceListFn({ num: 1, size: 10 })
 	})
-	onShow(()=>{
-		if(getMescroll()){
+	onShow(() => {
+		if (getMescroll()) {
 			getMescroll().resetUpScroll()
 		}
 	})
@@ -297,17 +299,17 @@
 		const params = {
 			page: mescroll.num,
 			limit: mescroll.size,
-			status:  currentState.value == 'processing' ? 0 : 1
+			status: currentState.value == 'processing' ? 0 : 1
 		}
 		const requestFn = currentState.value == 'pending' ? getInvoiceOrderList : getInvoiceList;
 		requestFn(params).then((res : any) => {
 			// 后续处理逻辑保持不变
 			if (res.code === 1 && res.data && res.data.data) {
-        const newData = res.data.data.map((item: any) => ({
-          ...item,
-          checked: false,
-          pay_money: Number(item.pay_money) // 强制转为数字
-        }));
+				const newData = res.data.data.map((item : any) => ({
+					...item,
+					checked: false,
+					pay_money: Number(item.pay_money) // 强制转为数字
+				}));
 				if (mescroll.num === 1) {
 					invoiceList.value = [];
 				}
@@ -356,34 +358,31 @@
 
 
 	// 价格格式化函数
-  // 价格格式化函数（保留原始兼容性，修复边界问题）
-  const formatPriceBeforeDecimal = (price: string | number) => {
-    // 处理空值或非有效值
-    if (price === null || price === undefined || price === '') {
-      return '0';
-    }
-    // 统一转为字符串（处理数字和字符串入参）
-    const priceStr = typeof price === 'number'
-        ? price.toFixed(2)
-        : (price.includes('.') ? price : `${price}.00`); // 确保有小数位
-    const [before] = priceStr.split('.');
-    return before || '0'; // 兜底防空
-  };
+	// 价格格式化函数（保留原始兼容性，修复边界问题）
+	const formatPriceBeforeDecimal = (price : string | number) => {
+		// 处理空值或非有效值
+		if (price === null || price === undefined || price === '') {
+			return '0';
+		}
+		// 统一转为字符串（处理数字和字符串入参）
+		const priceStr = typeof price === 'number'
+			? price.toFixed(2)
+			: (price.includes('.') ? price : `${price}.00`); // 确保有小数位
+		const [before] = priceStr.split('.');
+		return before || '0'; // 兜底防空
+	};
 
-  const formatPriceAfterDecimal = (price: string | number) => {
-    if (price === null || price === undefined || price === '') {
-      return '00';
-    }
-    const priceStr = typeof price === 'number'
-        ? price.toFixed(2)
-        : (price.includes('.') ? price : `${price}.00`);
-    const [, after] = priceStr.split('.');
-    // 确保小数位是2位（补零）
-    return after ? after.padEnd(2, '0').slice(0, 2) : '00';
-  };
-  
-
-
+	const formatPriceAfterDecimal = (price : string | number) => {
+		if (price === null || price === undefined || price === '') {
+			return '00';
+		}
+		const priceStr = typeof price === 'number'
+			? price.toFixed(2)
+			: (price.includes('.') ? price : `${price}.00`);
+		const [, after] = priceStr.split('.');
+		// 确保小数位是2位（补零）
+		return after ? after.padEnd(2, '0').slice(0, 2) : '00';
+	};
 </script>
 
 <style lang="scss" scoped>

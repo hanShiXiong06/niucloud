@@ -25,7 +25,7 @@ use think\model\relation\HasMany;
 use think\model\relation\HasOne;
 
 /**
- * 师傅模型
+ * 技师模型
  * Class Technician
  * @package app\model\o2o_technician
  */
@@ -231,7 +231,7 @@ class Technician extends BaseModel
     public function getCategoryNameAttr($value, $data)
     {
         if (!isset($data['category_id']) || empty($data['category_id'])) return [];
-        return (new GoodsCategory())->where([['category_id', 'in', $data['category_id']]])->field('category_name,category_id')->select()->toArray() ?? [];
+        return (new GoodsCategory())->where([['category_id', 'in', $data['category_id']]])->field('category_name,category_id, intro')->select()->toArray() ?? [];
     }
 
 
@@ -255,7 +255,7 @@ class Technician extends BaseModel
 
 
     /**
-     * 师傅等级关联 - 修复类名拼写错误（TechnicianLevel -> TechnicianLevel）
+     * 技师等级关联 - 修复类名拼写错误（TechnicianLevel -> TechnicianLevel）
      * @return HasOne
      */
     public function level()
@@ -264,7 +264,7 @@ class Technician extends BaseModel
     }
 
     /**
-     * 门店师傅分成比例关联
+     * 门店技师分成比例关联
      * @return HasOne
      */
     public function storeTechnician()

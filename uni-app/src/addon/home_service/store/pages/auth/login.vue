@@ -23,13 +23,13 @@
                     <view class="px-[30rpx] flex items-center">
                         <image :src="img('addon/home_service/store/auth/phone.png')" mode="scaleToFill"
                             class="w-[26.61rpx] h-[32.52rpx]" />
-                        <text class="text-[#111] text-[30rpx] ml-[19rpx] leading-[normal]">手机号</text>
+                        <text class="text-[#111] text-[30rpx] ml-[19rpx] leading-[normal]">{{ type == 'username' ? '账号' : '手机号' }}</text>
                     </view>
                     <view class="h-[88rpx] flex w-full items-center px-[30rpx]  box-border bg-[rgb(255,255,255,0)]"
                         style="border-bottom: 1px solid #CCCCCC;">
                         <u-form-item label="" prop="username" :border-bottom="false">
                             <u-input v-model="formData.username" border="none" maxlength="40"
-                                :placeholder="t('usernamePlaceholder')" autocomplete="off" class="!bg-transparent"
+                                placeholder="请输入账号" autocomplete="off" class="!bg-transparent"
                                 :disabled="real_name_input" fontSize="26rpx"
                                 placeholderClass="!text-[var(--text-color-light9)] text-[26rpx]">
                                 <template #suffix>
@@ -51,7 +51,7 @@
                         class="h-[88rpx] flex w-full items-center px-[30rpx]  box-border bg-[rgb(255,255,255,0)] " style="border-bottom: 1px solid #CCCCCC;">
                         <u-form-item label="" prop="password" :border-bottom="false">
                             <u-input v-model="formData.password" border="none" :password="isPassword" maxlength="40"
-                                :placeholder="t('passwordPlaceholder')" autocomplete="new-password"
+                                placeholder="请输入密码" autocomplete="new-password"
                                 class="!bg-transparent" :disabled="real_name_input" fontSize="26rpx"
                                 placeholderClass="!text-[var(--text-color-light9)] text-[26rpx]">
                                 <template #suffix>
@@ -75,7 +75,7 @@
                     <view class="h-[88rpx] flex w-full items-center px-[30rpx]   box-border bg-[rgb(255,255,255,0)]" style="border-bottom: 1px solid #CCCCCC;">
                         <u-form-item label="" prop="mobile" :border-bottom="false">
                             <u-input v-model="formData.mobile" type="number" maxlength="11" border="none"
-                                :placeholder="t('mobilePlaceholder')" autocomplete="off" class="!bg-transparent"
+                                placeholder="请输入手机号" autocomplete="off" class="!bg-transparent"
                                 :disabled="real_name_input" fontSize="26rpx"
                                 placeholderClass="!text-[var(--text-color-light9)] text-[26rpx]" />
                         </u-form-item>
@@ -90,7 +90,7 @@
                         <u-form-item label="" prop="mobile_code" :border-bottom="false">
                             <u-input v-model="formData.mobile_code" type="number" maxlength="4" border="none"
                                 class="!bg-transparent" fontSize="26rpx" :disabled="real_name_input"
-                                :placeholder="t('codePlaceholder')"
+                                placeholder="请输入验证码"
                                 placeholderClass="!text-[var(--text-color-light9)] text-[26rpx]">
                                 <template #suffix>
                                     <sms-code v-if="configStore.login.agreement_show" :mobile="formData.mobile"
@@ -113,20 +113,20 @@
                     </u-checkbox-group>
                     <view
                         class="text-[24rpx] text-[var(--text-color-light6)] flex items-center flex-wrap leading-[30rpx]">
-                        <text>{{ t('agreeTips') }}</text>
+                        <text>登录代表您同意</text>
                         <text @click.stop="redirect({ url: '/app/pages/auth/agreement?key=store_privacy' })"
-                            class="text-[var(--store-bg-one)]">《{{ t('privacyAgreement') }}》</text>
-                        <text>{{ t('and') }}</text>
+                            class="text-[var(--store-bg-one)]">《隐私协议》</text>
+                        <text>和</text>
                         <text @click.stop="redirect({ url: '/app/pages/auth/agreement?key=store_register' })"
-                            class="text-[var(--store-bg-one)]">《{{ t('userAgreement') }}》</text>
+                            class="text-[var(--store-bg-one)]">《用户协议》</text>
                     </view>
                 </view>
                 <button
                     class="w-full h-[80rpx] !bg-[var(--store-bg-one)] text-[26rpx] rounded-[40rpx] leading-[80rpx] font-500 !text-[#fff] !mx-[0]"
-                    :loadingText="t('logining')" @click="handleLogin">{{ t('login') }}</button>
+                    loadingText="登录中" @click="handleLogin">登录</button>
                 <view class="mt-[30rpx] flex justify-between items-center">
-                	<view class="text-[var(--store-bg-one)] text-[26rpx]">账号登录</view>
-                	<view><text class="text-[#111111] text-[26rpx]">没有账号 </text> <text class="text-[var(--store-bg-one)] text-[26rpx]" @click="redirect({ url: '/addon/home_service/store/pages/auth/register',param:{type} })">{{ t('toRegister') }}</text></view>
+                	<view class="text-[var(--store-bg-one)] text-[26rpx]" @click="setType">{{ type == 'username' ? '手机号登录' : '账号登录' }}</view>
+                	<view><text class="text-[#111111] text-[26rpx]">没有账号 </text> <text class="text-[var(--store-bg-one)] text-[26rpx]" @click="redirect({ url: '/addon/home_service/store/pages/auth/register',param:{type} })">去注册</text></view>
                 </view>
             </view>
         </view>
@@ -138,12 +138,12 @@
                 </view>
                 <view class="flex items-center mb-[20rpx] mt-[20rpx] py-[20rpx]" @click.stop="agreeChange">
                     <view class="text-[26rpx] text-[var(--store-bg-one)] flex items-center flex-wrap">
-                        <text>{{ t('agreeTips') }}</text>
+                        <text>登录代表您同意</text>
                         <text @click.stop="redirect({ url: '/app/pages/auth/agreement?key=store_privacy' })"
-                            class="text-[--store-bg-one]">《{{ t('privacyAgreement') }}》</text>
-                        <text>{{ t('and') }}</text>
+                            class="text-[var(--store-bg-one)]">《隐私协议》</text>
+                        <text>和</text>
                         <text @click.stop="redirect({ url: '/app/pages/auth/agreement?key=store_register' })"
-                            class="text-[--store-bg-one]">《{{ t('userAgreement') }}》</text>
+                            class="text-[var(--store-bg-one)]">《用户协议》</text>
                     </view>
                 </view>
                 <view>
@@ -156,8 +156,7 @@
                 </view>
             </view>
         </uni-popup>
-        <view class="footer w-full"
-            v-if="type == 'mobile' && configStore.login.is_username || type == 'username' && configStore.login.is_mobile || isShowQuickLogin">
+        <view class="footer w-full" v-if="false">
             <view class="text-[26rpx] leading-[36rpx] text-[#666] text-center mb-[30rpx] font-400">其他登录方式</view>
             <view class="flex justify-center gap-[40rpx]">
                 <text v-if="type == 'mobile' && configStore.login.is_username" @click="setType"
@@ -176,7 +175,6 @@ import { usernameLogin, mobileLogin } from '@/app/api/auth'
 import useMemberStore from '@/stores/member'
 import useConfigStore from '@/stores/config'
 import { useLogin } from '@/hooks/useLogin'
-import { t } from '@/locale'
 import { redirect, getToken, pxToRpx, isWeixinBrowser, img } from '@/utils/common'
 import { onLoad } from '@dcloudio/uni-app';
 import { topTabar } from '@/utils/topTabbar'
@@ -185,7 +183,7 @@ import smsCode from '@/addon/home_service/store/components/sms-code/sms-code.vue
 const systemStore = useSystemStore()
 /********* 自定义头部 - start ***********/
 const topTabarObj = topTabar()
-const param = topTabarObj.setTopTabbarParam({ title: '', topStatusBar: { bgColor: '#fff', textColor: '#333' } })
+const param = topTabarObj.setTopTabbarParam({ title: '机构登录', topStatusBar: { bgColor: '#fff', textColor: '#333' } })
 /********* 自定义头部 - end ***********/
 const headerHeight = computed(() => {
     return Object.keys(systemStore.menuButtonInfo).length ? pxToRpx(Number(systemStore.menuButtonInfo.height)) + pxToRpx(systemStore.menuButtonInfo.top) + pxToRpx(8) + 'rpx' : 'auto'
@@ -312,20 +310,20 @@ const rules = computed(() => {
         'username': {
             type: 'string',
             required: type.value == 'username',
-            message: t('usernamePlaceholder'),
+            message: '请输入账号',
             trigger: ['blur', 'change'],
         },
         'password': {
             type: 'string',
             required: type.value == 'username',
-            message: t('passwordPlaceholder'),
+            message: '请输入密码',
             trigger: ['blur', 'change']
         },
         'mobile': [
             {
                 type: 'string',
                 required: type.value == 'mobile',
-                message: t('mobilePlaceholder'),
+                message: '请输入手机号',
                 trigger: ['blur', 'change'],
             },
             {
@@ -333,14 +331,14 @@ const rules = computed(() => {
                     if (type.value != 'mobile') return true
                     else return uni.$u.test.mobile(value)
                 },
-                message: t('mobileError'),
+                message: '手机号格式错误',
                 trigger: ['change', 'blur'],
             }
         ],
         'mobile_code': {
             type: 'string',
             required: type.value == 'mobile',
-            message: t('codePlaceholder'),
+            message: '请输入验证码',
             trigger: ['blur', 'change']
         }
     }
@@ -437,3 +435,7 @@ const toResetpwd = () => {
     padding-bottom: calc(151rpx + env(safe-area-inset-bottom));
 }
 </style>
+<style lang="scss">
+@import '@/addon/home_service/store/style/index.scss';
+</style>
+

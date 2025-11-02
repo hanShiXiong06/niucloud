@@ -18,7 +18,7 @@
 					</view>
 					<view class="text-[26rpx] mt-[25rpx] flex justify-between items-center" @click="showImage = true"
 						v-if="detail.check_photos && detail.check_photos?.length"><text
-							class="">师傅服务完成时间:{{detail.service_finish_time}}</text><text
+							class="">技师服务完成时间:{{detail.service_finish_time}}</text><text
 							class="border-style px-[10rpx] text-[24rpx] py-[5rpx] rounded-[5rpx]"
 							>查看完成照片</text></view>
 					<u-steps inactiveColor="#b0b0b0" activeColor="#ffffff" class="my-[25rpx] w-[100vw] ml-[-20rpx]"
@@ -44,7 +44,7 @@
 									<text class="iconfont iconjishibenV6xx text-[26rpx] mr-[5rpx]">
 									</text>
 									<text class="text-[28rpx] font-bold mt-[10rpx] leading-[5rpx] line-feed">
-										师傅附加服务提交
+										技师附加服务提交
 									</text>
 								</view>
 							</view>
@@ -110,7 +110,7 @@
 						</view>
 					</view> -->
 					<view class="bg-[#fff] mx-3 px-[25rpx] py-[15rpx] rounded-lg mt-[20rpx]">
-						<view class="flex">
+						<view class="flex mb-[25rpx]">
 							<view class="flex flex-col">
 								<view class="flex items-center">
 									<u-icon name="map" size="19" class="mt-[8rpx] mr-[5rpx]"></u-icon>
@@ -150,10 +150,10 @@
 								</template>
 							</u--image>
 						</view>
-						<view class="mx-[20rpx]">
+						<view class="mx-[20rpx] text-[28rpx]">
 							{{detail.technician?.real_name}}
 						</view>
-						<view>
+						<view class="text-[28rpx]">
 							{{maskPhone(detail.technician?.mobile)}}
 						</view>
 					</view>
@@ -163,7 +163,7 @@
 					</view>
 				</view>
 				<view class="m-[25rpx] p-[25rpx] bg-[#fff] rounded-lg">
-					<view class="order-goods-item flex"  v-if="detail.item?.length && !detail.errand_items"
+					<view class="order-goods-item flex"  v-if="detail.item?.length"
 						>
 						<view class="w-[160rpx] h-[160rpx] flex-2" @click="toDetail(detail.item[0])">
 							<up-image class="rounded-[10rpx] overflow-hidden" width="160rpx" height="160rpx"
@@ -174,14 +174,14 @@
 								</template>
 							</up-image>
 						</view>
-						<view class="ml-[20rpx] flex flex-1 flex-col justify-between" @click="toDetail( detail.item[0])" >
+						<view class="ml-[20rpx] flex flex-1 flex-col justify-between" @click="toDetail( detail.item[0])">
 							<view class="flex justify-between items-center">
 								<text
 									class="text-[28rpx] text-item  leading-[40rpx] max-h-[80rpx] w-[360rpx] multi-hidden">{{  detail.item[0]?.item_name }}</text>
 								<text class="text-right text-[24rpx]">x{{  detail.item[0]?.num }}</text>
 							</view>
 							<view class="text-[#999999] text-[24rpx]">{{ detail.item[0]?.sku_name}}</view>
-							<view class="text-[var(--price-text-color)] text-[28rpx] font-bold flex items-end" >
+							<view class="text-[var(--price-text-color)] text-[28rpx] font-bold flex items-end">
 								<text class="text-[24rpx] price-font">￥</text>
 								<text class="price-font text-[34rpx] leading-[1]">{{ Number(detail.item[0]?.price).toString().split('.')[0] }}</text>
 								<text
@@ -189,21 +189,6 @@
 							</view>
 						</view>
 					</view>
-
-					<view class=" mt-[25rpx] items-center" v-if=" detail.errand_items">
-						<view class="text-[30rpx] font-bold">跑腿订单</view>
-						<!-- 列表渲染 -->
-						<view class="flex flex-col mt-2" v-for="(item,index) in detail.errand_items" :key="index">
-							<view class="flex  justify-between items-center">
-								<view class="text-[#666666] text-[24rpx] leading-[35rpx]">{{item.sku_name}} <up-tag size="mini" :text="item.pickup_code"></up-tag></view>
-
-								<view class="text-[#666666] text-[24rpx] leading-[35rpx]"> ￥{{item.price}}</view>
-							</view>
-							
-						</view>
-						<view class="text-[#666666] text-[24rpx] leading-[35rpx] text-right mt-2">  共 {{detail.errand_items.length}} 件</view>
-					</view>
-
 					<view class="flex justify-between mt-[25rpx] items-center">
 						<view class="text-[#666666] text-[26rpx] leading-[35rpx]">订单留言</view>
 						<view class="flex-1 pl-[25rpx] text-[26rpx] leading-[35rpx] text-right">
@@ -211,7 +196,6 @@
 						</view>
 					</view>
 				</view>
-
 				<view class="mt-[30rpx]" v-if="detail.add_item_list && detail.add_item_list?.length">
 					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-lg">
 						<view class="flex justify-between">
@@ -228,9 +212,9 @@
 						</view>
 						<view class="bg-[#F9F9F9] px-[25rpx] py-[20rpx] mt-[25rpx] rounded-lg mb-[25rpx]"
 							v-for="(item,index) in detail.add_item_list">
-							<view class="flex justify-between">
-								<view class="font-bold">订单{{index + 1}}</view>
-								<view>{{item.is_pay}}</view>
+							<view class="flex justify-between mb-[15rpx]">
+								<view class="font-bold text-[26rpx]">订单{{index + 1}}</view>
+								<view class="text-[26rpx]">{{item.is_pay}}</view>
 							</view>
 							<view class="flex mt-[15rpx] justify-between" v-if="item.item_list && item.item_list?.length > 0">
 								<view class="w-[77%] ">
@@ -248,17 +232,17 @@
 									</u-scroll-list>
 								</view>
 								<view class="w-[20%] flex flex-col  justify-center items-center pb-[20px]">
-									<view>
+									<view class="text-right w-[100%]">
 										<text class="text-[22rpx]">￥</text>
 										<text
 											class="text-[28rpx] text-[32rpx] price-font">{{item.item_money}}</text>
 									</view>
-									<view class="text-[26rpx] text-[#666666]">
+									<view class="text-[26rpx] text-right w-[100%] text-[#666666]">
 										共{{item.item_count}}件
 									</view>
 								</view>
 							</view>
-							<view class="flex justify-between items-center" v-if="item.service_fee && Number(item.service_fee)">
+							<view class="flex justify-between items-center mb-[10rpx]" v-if="item.service_fee && Number(item.service_fee)">
 								<view class="text-[26rpx]">
 									附加服务费
 								</view>
@@ -331,7 +315,7 @@
 				</view>
 
 				<view class="mt-[30rpx]">
-					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-[10rpx]">
+					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-lg">
 						<view class="text-[30rpx] font-bold">
 							其他信息
 						</view>
@@ -373,7 +357,7 @@
 					class="flex z-2 justify-end items-center bg-[#fff] fixed  py-[10rpx] left-0 right-0 bottom-0 min-h-[100rpx] px-1 flex-wrap pb-ios body-bottom">
 					<view  :customStyle="{marginRight:'15rpx',marginLeft:'15rpx',width:'auto'}"
 						size="" @click="handleOrderAction(detail, btnItem.key)"
-						class="flex-1 text-[26rpx] justify-center border-1  border-solid border-[#cccccc] p-[30rpx] flex items-center leading-1 rounded-[5rpx] mb-[10rpx] !rounded-[10rpx] flex-1 px-[25rpx] !mx-[20rpx]"
+						class="flex-1 text-[26rpx] justify-center border-1  border-solid border-[#999999] p-[30rpx] flex items-center leading-1 rounded-[5rpx] mb-[10rpx] !rounded-[10rpx] flex-1 px-[25rpx] !mx-[20rpx]"
 						:style="{borderColor:btnItem.color,color:btnItem.color}" 
 						v-for="(btnItem, btnIndex) in detail.order_status_info?.action"
 						:key="btnIndex">{{btnItem.name}}</view>
@@ -560,9 +544,7 @@
 		check_photos: [],
 		finish_time: '',
 		take_photos_time: '',
-		add_item_list:[],
-		errand_items:[]
-
+		add_item_list:[]
 	})
 	const loading = ref(false)
 	const orderId = ref(0)
@@ -733,7 +715,7 @@
 		}
 	}
 
-	// 联系师傅
+	// 联系技师
 	const callPhoto = (tel) => {
 		uni.makePhoneCall({
 			phoneNumber: tel
@@ -761,7 +743,7 @@
 
 <style lang="scss" scoped>
 	.bg-linear {
-		background: linear-gradient(360deg, #f8f8f8 0%, $u-primary 100%);
+		background: linear-gradient(360deg, #f8f8f8 0%, $u-primary 50%);
 	}
 
 	.task-steps :deep(.u-text) {

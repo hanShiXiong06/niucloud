@@ -41,7 +41,7 @@ class FeedbackService extends BaseAdminService
     {
         $field = 'feedback_id,site_id,source,title,images,content,related_id';
         $order = 'create_time desc';
-        $search_model = $this->model->where([['site_id', '=', $this->site_id]])->withSearch(["title",'source'], $where)->field($field)->order($order)->append(['source_name','related_name']);
+        $search_model = $this->model->where([['site_id', '=', $this->site_id]])->withSearch(["title",'source'], $where)->field($field)->order($order)->append(['source_name','related_name','images_thumb_mid']);
         $list = $this->pageQuery($search_model,function($item){
             $item['images'] = !empty($item['images']) ?  explode(',',$item['images']) : [];
         });

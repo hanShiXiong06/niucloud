@@ -59,7 +59,7 @@ class  CoreCardOrderCreateService extends BaseCoreService
         $card_info = $this->getGoodsInfo($data['site_id'], $data['card_id']);
 
         //先走策略业务
-        $card_info['price'] = (new  CoreCityStrategyService())->getStrategyPrice($card_info['price'], $data['city_id'] ?? 0, $data['site_id']);
+        $card_info['price'] = (new  CoreCityStrategyService())->getStrategyPrice($card_info['price'], $data['city_id'] ?? 0, $data['site_id'],$card_info);
 
         $original_price = 0;
         foreach($card_info['skuList'] as &$value){

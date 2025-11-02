@@ -16,7 +16,7 @@ use core\base\BaseApiController;
 
 
 /**
- * 师傅收藏控制器
+ * 技师收藏控制器
  * Class TechnicianCollect
  * @package addon\home_service\app\api\controller\member
  */
@@ -50,7 +50,7 @@ class TechnicianCollect extends BaseApiController
     public function cancelTechnicianCollect()
     {
         $data = $this->request->params([
-            [ 'technician_id', 0 ],
+            [ 'technician_ids', 0 ],
         ]);
         ( new TechnicianCollectService() )->cancelTechnicianCollect($data);
         return success('CANCEL_COLLECT_SUCCESS');

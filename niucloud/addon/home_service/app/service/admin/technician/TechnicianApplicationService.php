@@ -19,7 +19,7 @@ use addon\home_service\app\dict\technician\TechnicianDict;
 use think\facade\Db;
 
 /**
- * 师傅入驻服务层
+ * 技师入驻服务层
  * Class TechnicianService
  * @package app\service\admin\technician
  */
@@ -32,7 +32,7 @@ class TechnicianApplicationService extends BaseAdminService
     }
 
     /**
-     * 获取师傅入驻列表
+     * 获取技师入驻列表
      * @param array $where
      * @return array
      */
@@ -64,7 +64,7 @@ class TechnicianApplicationService extends BaseAdminService
             ])
             ->where($with_where)
             ->order($order)
-            ->append(['audit_status_name', 'category_name']);
+            ->append(['audit_status_name', 'category_name','id_card_back_thumb_mid','id_card_font_thumb_mid','headimg_thumb_mid']);
         $list = $this->pageQuery($search_model);
 
 
@@ -73,7 +73,7 @@ class TechnicianApplicationService extends BaseAdminService
 
 
     /**
-     * 获取师傅入驻申请信息
+     * 获取技师入驻申请信息
      * @param int $id
      * @return array
      */
@@ -95,7 +95,7 @@ class TechnicianApplicationService extends BaseAdminService
                     $query->field('username,uid');
                 }
             ])
-            ->append(['audit_status_name', 'category_name'])->findOrEmpty()->toArray();
+            ->append(['audit_status_name', 'category_name','id_card_back_thumb_mid','id_card_font_thumb_mid','headimg_thumb_mid'])->findOrEmpty()->toArray();
         return $info;
     }
 

@@ -67,6 +67,7 @@ class Category extends BaseAdminController
             ["is_show", 0],
             ["is_settled", 0],
             ["intro", 0],
+            ["errand_business", 0],
         ]);
         $this->validate($data, 'addon\home_service\app\validate\Category.add');
         $id = (new GoodsCategoryService())->add($data);
@@ -90,6 +91,7 @@ class Category extends BaseAdminController
             ["is_show", 0],
             ["is_settled", 0],
             ["intro", 0],
+            ["errand_business", 0],
         ]);
         $this->validate($data, 'addon\home_service\app\validate\Category.add');
         (new GoodsCategoryService())->edit($id, $data);

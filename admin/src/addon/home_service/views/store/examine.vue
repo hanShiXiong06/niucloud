@@ -21,7 +21,7 @@
 						<template #default="{ row }">
 							<div class="flex items-center cursor-pointer ">
 								<el-image style="width: 60px; height: 60px" class="mr-[10px] rounded-[50%] w-[50%]"
-									:src="img(row.headimg)" fit="contain" :preview-src-list="[img(row.headimg)]">
+									:src="img(row.headimg_thumb_mid)" fit="contain" :preview-src-list="[img(row.headimg_thumb_mid)]">
 									<template #error>
 										<div class="flex justify-center items-center w-full h-[60px]"><img
 												class="max-w-[60px]" src="@/app/assets/images/site_default.png" alt=""
@@ -50,8 +50,8 @@
 					<el-table-column :show-overflow-tooltip="true" :label="t('imageCard')" min-width="150"
 						align="left">
 						<template #default="{ row }">
-							<el-image style="width: 100px; height: 100px" :src="img(row.license_img)" fit="contain"
-								:preview-src-list="[img(row.license_img)]">
+							<el-image style="width: 100px; height: 100px" :src="img(row.license_img_thumb_mid)" fit="contain"
+								:preview-src-list="[img(row.license_img_thumb_mid)]">
 								<template #error>
 									<div class="flex justify-center items-center w-full h-[100px]"><img
 											class="max-w-[100px]" src="@/app/assets/images/error.png" alt=""
@@ -65,8 +65,8 @@
 						<template #default="{ row }">
 							<div class="flex items-center justify-between">
 								<div class="relative">
-									<el-image style="width: 100px; height: 81px" :src="img(row.id_card_front)"
-										fit="contain" :preview-src-list="[img(row.id_card_front)]">
+									<el-image style="width: 100px; height: 81px" :src="img(row.id_card_font_thumb_mid)"
+										fit="contain" :preview-src-list="[img(row.id_card_font_thumb_mid)]">
 										<template #error>
 											<div class="flex justify-center items-center w-full h-[81px]"><img
 													class="max-w-[81px]"
@@ -80,8 +80,8 @@
 									</div>
 								</div>
 								<div class="relative">
-									<el-image style="width: 100px; height: 81px" :src="img(row.id_card_back)"
-										fit="contain" :preview-src-list="[img(row.id_card_back)]">
+									<el-image style="width: 100px; height: 81px" :src="img(row.id_card_back_thumb_mid)"
+										fit="contain" :preview-src-list="[img(row.id_card_back_thumb_mid)]">
 										<template #error>
 											<div class="flex justify-center items-center w-full h-[81px]"><img
 													class="max-w-[81px]"

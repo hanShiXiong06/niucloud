@@ -61,7 +61,7 @@
 					<el-input v-model.trim="formData.id_number" clearable :placeholder="t('idNumberPlaceholder')"
 						class="input-width !w-[214px]" />
 				</el-form-item>
-				<el-form-item :label="t('idCardFront')" prop="id_card_front">
+				<el-form-item :label="t('idCardFront')" prop="id_card_font_thumb_mid">
 					<upload-image v-model="formData.id_card_front" />
 				</el-form-item>
 				<el-form-item :label="t('idCardBack')" prop="id_card_back">

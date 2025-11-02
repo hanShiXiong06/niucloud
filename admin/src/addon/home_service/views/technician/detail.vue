@@ -139,7 +139,7 @@
 									<div class="flex items-end text-[14px] w-[150px] mt-[15px]">
 										<div class="w-[150px] h-[150px] flex items-center justify-center rounded-[50%]">
 											<img class="w-[150px] max-h-[150px] inline-block rounded-[50%]"
-												v-if="detailInfo.headimg" :src="img(detailInfo.headimg)" alt="">
+												v-if="detailInfo.headimg_mid" :src="img(detailInfo.headimg_mid)" alt="">
 											<img class="w-[150px] max-h-[150px] inline-block rounded-full" v-else
 												src="@/app/assets/images/member_head.png" alt="">
 										</div>

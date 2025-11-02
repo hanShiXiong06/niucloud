@@ -121,10 +121,11 @@ class RefundService extends BaseApiService
             }
 
 
-            $order_config = (new CoreOrderConfigService)->getOrderRefundConfig($order->site_id)['refund_auto'];
-            if ($order_config && $order_config['is_check']) {
-                if ($order_config['refund_auto_length'] > 0) {
-                    $order->auto_refund_time = time() + $order_config['refund_auto_length'] * 60;
+            $order_refund_config = (new CoreOrderConfigService)->getOrderRefundConfig($order->site_id);
+            $refund_auto_config = $order_refund_config['refund_auto'];
+            if ($refund_auto_config && $refund_auto_config['is_check']) {
+                if ($refund_auto_config['refund_auto_length'] > 0) {
+                    $order->auto_refund_time = time() + $refund_auto_config['refund_auto_length'] * 60;
                 }
             }
             $order->refund_status = RefundDict::WAIT_REFUND;
@@ -262,7 +263,7 @@ class RefundService extends BaseApiService
         if (!empty($refundOrderInfo)) {
             $technician_info = (new Technician())->field('id,site_id,member_id,real_name,mobile,status')->where([['member_id', '=', $this->member_id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
             $technician_id = $technician_info['id'] ?? 0;
-            if (empty($technician_id)) throw new CommonException('师傅未找到');
+            if (empty($technician_id)) throw new CommonException('技师未找到');
 
             $orderInfo = (new Order())->where([['site_id', '=', $this->site_id], ['order_id', '=', $refundOrderInfo['order_id']], ['technician_id', '=', $technician_info['id']]])->findOrEmpty()->toArray();
             if (empty($orderInfo)) {

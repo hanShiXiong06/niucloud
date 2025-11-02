@@ -1,8 +1,7 @@
 <template>
     <view class="bg-gray-100 min-h-[100vh]" :style="themeColor()">
 		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-		<u-navbar title="次卡列表" autoBack :fixed="true" placeholder>
-		</u-navbar>
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 		<!-- #endif -->
 		<scroll-view :scroll-x="true" class="scroll-Y box-border px-[var(--sidebar-m)] bg-white" v-if="statusList.length">
 			<view class="flex whitespace-nowrap justify-around items-center h-[88rpx]">
@@ -62,10 +61,8 @@ const systemStore = useSystemStore()
 const statusList = ref([])
 const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
 import { topTabar } from '@/utils/topTabbar';
-
-/********* 自定义头部 - start ***********/
 const topTabarObj = topTabar()
-let topTabbarData = topTabarObj.setTopTabbarParam({ title: '项目列表', topStatusBar: { textColor: '#333' }})
+let topTabbarData = topTabarObj.setTopTabbarParam({ title: '次卡列表', topStatusBar: { textColor: '#333' }})
 /********* 自定义头部 - end ***********/
 const categoryList = ref<Array<Object>>([]);
 const cardList = ref<Array<any>>([]);

@@ -81,7 +81,7 @@ class HelpCategory extends BaseAdminController
             ["category_name", ""],
             ["sort", 0],
             ["is_show", 0],
-            ["is_default", 0],
+            ["is_default", ''],
         ]);
         (new HelpCategoryService())->edit($category_id, $data);
         return success('EDIT_SUCCESS');

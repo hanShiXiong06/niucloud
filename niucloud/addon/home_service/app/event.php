@@ -32,7 +32,7 @@ return [
         //订单 结算释放
         'SettlementOrderCommission' => ['addon\home_service\app\listener\order\SettlementOrderCommission'],
 
-        //师傅新增
+        //技师新增
         'AddHsTechnician' => ['addon\home_service\app\listener\technician\AddHsTechnician'],
         //门店新增
         'AddHsStore' => ['addon\home_service\app\listener\store\AddHsStore'],
@@ -40,8 +40,8 @@ return [
 
 
         //
-        //        //支付
-        //        'PayTradeInfo' => [ 'addon\home_service\app\listener\order\O2oOrderTradeInfoListener' ],   //订单交易信息
+        //支付
+        'PayTradeInfo' => [ 'addon\home_service\app\listener\order\HomeServiceOrderTradeInfoListener' ],   //订单交易信息
         'RefundSuccess' => ['addon\home_service\app\listener\pay\RefundSuccessListener'],
         //退款佣金计算
         'ComputeOrderRefundCommission' => ['addon\home_service\app\listener\order\ComputeOrderRefundCommission'],
@@ -69,7 +69,7 @@ return [
             'addon\home_service\app\listener\export\HomeServiceInvoiceExportTypeListener',
             //门店结算列表导出
             'addon\home_service\app\listener\export\HomeServiceStoreSettlementExportTypeListener',
-            //师傅结算列表导出
+            //技师结算列表导出
             'addon\home_service\app\listener\export\HomeServiceTechnicianSettlementExportTypeListener',
 
         ],
@@ -83,7 +83,7 @@ return [
             'addon\home_service\app\listener\export\HomeServiceInvoiceExportDataListener',
             //门店结算列表导出
             'addon\home_service\app\listener\export\HomeServiceStoreSettlementExportDataListener',
-            //师傅结算列表导出
+            //技师结算列表导出
             'addon\home_service\app\listener\export\HomeServiceTechnicianSettlementExportDataListener',
         ],
 
@@ -103,7 +103,7 @@ return [
         //转账成功
         'TransferSuccess' => [ 'addon\home_service\app\listener\cash_out\TransferSuccessListener' ],
 
-        //师傅升级检测
+        //技师升级检测
         'CheckTechnicianLevelUpgrade' => [ 'addon\home_service\app\listener\technician\CheckTechnicianLevelUpgradeListener' ],
 
         //协议类型加载

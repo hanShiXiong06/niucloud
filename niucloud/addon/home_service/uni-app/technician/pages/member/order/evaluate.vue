@@ -1,12 +1,10 @@
 <template>
+	<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+	<top-tabbar :data="topTabbarData" scrollBool="1" isBack />
+	<!-- #endif -->
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()" v-if="!loading">
-		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-		<u-navbar title="增项服务" bgColor="#ffffff" leftIconSize="15px" placeholder autoBack>
-		</u-navbar>
-		<!-- #endif -->
 		<!-- 评价类型和筛选条件合并到同一行 -->
-		<view
-			class="flex px-[30rpx] py-[20rpx] border-b border-[var(--border-color)] justify-between items-center">
+		<view class="flex px-[30rpx] py-[20rpx] border-b border-[var(--border-color)] box-border z-index-99 justify-between items-center fixed w-[100vw] bg-[#fff]" :style="{'top': systemStore.topTabbarInfo.fullHeight || 0}">
 			<view class="flex items-center">
 				<text class="text-[30rpx] font-bold text-[var(--technician-bg-one)]">{{ t('evaluated') }}</text>
 				<text class="ml-[10rpx] text-sm text-gray-500">({{ totalCount }})</text>
@@ -44,6 +42,7 @@
 
 		<!-- 评价列表 -->
 		<mescroll-body ref="mescrollRef" top="200rpx" @init="mescrollInit" :down="{ use: false }" @up="getEvaluateList">
+			<view class="pt-[100rpx]"></view>
 			<view class="bg-white mt-[20rpx] mb-[20rpx] mx-[25rpx] rounded-lg py-[10rpx]" v-for="(item, index) in evaluateList" :key="index">
 				<!-- 评分 - 使用图片替换Unicode符号 -->
 				<view class="flex items-center justify-between px-[30rpx] pt-[20rpx]">
@@ -58,12 +57,12 @@
 						class="w-[60rpx] h-[60rpx] mr-[18rpx] rounded-[8rpx]"
 						:src="img(item.order.item_image_thumb_small)" mode="aspectFill"
 						@error="handleServiceImageError(item)" />
-					<text v-if="item.order" class="text-base">{{ item.order.order_name }}</text>
+					<text v-if="item.order" class="text-[28rpx]">{{ item.order.order_name }}</text>
 				</view>
 
 				<!-- 评价内容 -->
 				<view class="px-[30rpx] py-[10rpx]">
-					<text class="text-base text-gray-600">{{ item.content }}</text>
+					<text class="text-[28rpx] text-gray-600">{{ item.content }}</text>
 				</view>
 				<!-- 评价图片 -->
 				<view v-if="item.image_mid && item.image_mid.length > 0"
@@ -90,6 +89,12 @@
 	import { img, goback } from '@/utils/common'
 	import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue'
 	import { getEvaluateList as getEvaluateListAPI } from '@/addon/home_service/technician/api/evaluate'
+	import useSystemStore from '@/stores/system';
+	const systemStore = useSystemStore()
+	import { topTabar } from '@/utils/topTabbar';
+	// 系统状态管理
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '评价管理', topStatusBar: { textColor: '#333' } })
 	// 返回上一页
 	const onBack = () => {
 		if (getCurrentPages().length > 1) {

@@ -1,57 +1,62 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 主体内容 -->
 		<view class="px-[25rpx] py-[25rpx]">
 			<!-- 服务信息 -->
-			<view class="bg-white rounded-lg p-[30rpx] mb-4">
-				<view class="flex items-center">
-					<image
-						v-if="orderInfo && orderInfo.item && orderInfo.item[0] && orderInfo.item[0].item_image_thumb_small"
-						class="w-[120rpx] h-[120rpx] mr-[20rpx] rounded-md"
-						:src="img(orderInfo.item[0].item_image_thumb_small)" mode="aspectFill"
-						@error="handleServiceImageError"  />
-					<view class="flex-1">
-						<view class="text-[28rpx] font-medium mb-1">
-							{{ orderInfo?.item?.[0]?.item_name || t('serviceItem') }}</view>
-						<!-- 调整SKU名称、数量和价格的布局 -->
-						<view class="flex justify-between items-center !text-[28rpx] text-[#999999] mb-1">
-							<view>{{ orderInfo?.item?.[0]?.sku_name || '' }}</view>
-							<view>×{{ orderInfo?.item?.[0]?.num || 1 }}</view>
+			<view class="bg-white rounded-lg p-[25rpx] mb-[25rpx]">
+				<view class="order-goods-item flex" v-for="(goodsItem, goodsIndex) in orderInfo?.item"
+					:key="goodsIndex" @click="toDetail(item)">
+					<view class="w-[160rpx] h-[160rpx] flex-2">
+						<up-image class="rounded-[10rpx] overflow-hidden" width="160rpx" height="160rpx"
+							:src="img(goodsItem.item_image_thumb_small ? goodsItem.item_image_thumb_small : '')"
+							model="aspectFit" shape="radius" radius="16rpx">
+							<template #error>
+								<u-icon name="photo" color="#999" size="50"></u-icon>
+							</template>
+						</up-image>
+					</view>
+					<view class="ml-[20rpx] flex flex-1 flex-col justify-between">
+						<view class="flex justify-between items-center">
+							<text
+								class="text-[28rpx] text-item  leading-[40rpx] max-h-[80rpx] w-[360rpx] multi-hidden">{{ goodsItem.item_name }}</text>
+							<text class="text-right text-[24rpx]">x{{ goodsItem.num }}</text>
 						</view>
-						<!-- 修复价格显示，添加小数点 -->
-						<view class="text-[#EF000C]">
-							<text class="text-base">{{ t('currency') }}</text>
+						<view class="text-[#999999] text-[24rpx]">{{goodsItem.sku_name}}</view>
+						<view class="text-[28rpx] ">
+							<text class="text-[22rpx] leading-[28rpx] ">订单金额：</text>
+							<text class="text-[20rpx] price-font text-[#ff0000]  font-bold">￥</text>
+							 
+							<text class="price-font text-[34rpx] leading-[1] text-[#ff0000]">{{ Number(orderInfo?.item?.[0]?.price).toString().split('.')[0] }}</text>
 							<text
-								class="text-base">{{ formatPriceBeforeDecimal(orderInfo?.item?.[0]?.price || '0.00') }}</text>
-							<text class="text-base">.</text>
-							<text
-								class="text-sm">{{ formatPriceAfterDecimal(orderInfo?.item?.[0]?.price || '0.00') }}</text>
+								class="price-font text-[24rpx] font-bold text-[#ff0000]">.{{ Number(orderInfo?.item?.[0]?.price).toFixed(2).split('.')[1] }}</text>
 						</view>
 					</view>
 				</view>
 			</view>
 
 			<!-- 星级评分改为一行显示并使用u-rate组件 -->
-			<view class="bg-white rounded-lg p-4 mb-4">
+			<view class="bg-white rounded-lg p-[25rpx] mb-[25rpx]">
 				<!-- 修改justify-between为flex-start，并调整评分部分布局 -->
 				<view class="flex items-center">
 					<view class="!text-[28rpx] mr-4">{{ t('serviceEvaluation') }}</view>
 					<view class="flex items-center flex: 1;">
 						<!-- 调整u-rate组件的样式，确保在一行显示 -->
-						<u-rate :count="5" v-model="scores" @change="setScore" size="20" gap="4"
-							style="margin-right: 4px; flex: 1;"></u-rate>
-
-						<view class="!text-[28rpx] text-gray-500 ml-2 whitespace-nowrap">{{ getScoreText(scores) }}
+						<u-rate :count="5" v-model="scores" @change="setScore" size="25" gap="4"
+							style="margin-right: 4px; flex: 1;margin-bottom: 5rpx;"></u-rate>
+						<view class="!text-[26rpx] font-bold text-[#999] ml-1 whitespace-nowrap">{{ getScoreText(scores) }}
 						</view>
 					</view>
 				</view>
 			</view>
 
 			<!-- 将评价内容、图片上传和匿名评价合并到一个div中 -->
-			<view class="bg-white rounded-lg p-[24rpx] mb-4">
+			<view class="bg-white rounded-lg p-[25rpx] mb-[25rpx]">
 				<!-- 评价内容 -->
 				<view class="mb-4">
-					<view class="text-[30rpx] mb-3">{{ t('pleaseInputComment') }}</view>
+					<view class="text-[28rpx] mb-3">{{ t('pleaseInputComment') }}</view>
 					<up-textarea
 					    class="border border-gray-200 rounded-md h-[200rpx] text-[28rpx] resize-none bg-[#f9f9f9] p-[24rpx] border-box"
 					    v-model="content"
@@ -62,33 +67,27 @@
 				</view>
 
 				<!-- 图片上传 - 使用系统标准upload-img组件 -->
-				<view class="mb-4">
+				<view class="mb-[25rpx]">
 					<text
-						class="text-base text-[30rpx] font-medium text-gray-800 block mb-[25rpx]">{{ t('addPhotos') }}</text>
+						class="text-base text-[28rpx] font-medium text-gray-800 block mb-[25rpx]">{{ t('addPhotos') }}</text>
 					<upload-img v-model="images" :max-count="maxImages" :multiple="true" />
 				</view>
 
 				<!-- 匿名评价 - 修复点击问题并改进样式 -->
-				<view class="py-[24rpx] border-b border-gray-100">
+				<view class="pb-[24rpx] border-b border-gray-100">
 					<!-- 修改匿名评价按钮部分 -->
-					<view class="flex items-center justify-end w-full" @tap="toggleAnonymous">
-						<view
-							class="w-[40rpx] h-[40rpx] border-2 border-[#999999] rounded-full flex items-center justify-center mr-1 bg-[#EEEEEE] transition-all duration-200"
-							:class="{
-        '!bg-[#004FFF]': isAnonymous,
-        '!border-[#004FFF]': isAnonymous
-      }">
-							<text v-if="isAnonymous" class="text-white text-xs font-bold">✓</text>
-						</view>
-						<view class="text-[28rpx]">{{ t('anonymousEvaluation') }}</view>
+					<view class="flex items-center justify-start w-full" @tap="toggleAnonymous">
+						<view v-if="isAnonymous" class="iconfont iconxuanze font-bold !text-[var(--primary-color)]"></view>
+						<view v-else class="iconfont iconcheckbox_nol !text-[var(--primary-color)]"></view>
+						<view class="text-[28rpx] ml-[15rpx]">{{ t('anonymousEvaluation') }}</view>
 					</view>
 				</view>
 			</view>
 		</view>
 
 		<!-- 底部提交按钮 - 减少高度 -->
-		<view class="fixed bottom-0 left-0 right-0 p-3">.
-			<u-button type="info" class="flex-1 mr-[25rpx] !bg-[#004FFF] !text-[#fff] !rounded-[15rpx]"
+		<view class="fixed bottom-0 left-0 right-0 p-[25rpx] bg-[#fff]">
+			<u-button type="info" class="flex-1 mr-[25rpx] !bg-[var(--primary-color)] !text-[#fff] !rounded-[15rpx]"
 				@tap="submitEvaluateForm" :disabled="submitting">
 				{{ submitting ? t('submitting') : t('submit') }}
 			</u-button>
@@ -105,7 +104,9 @@
 	import { submitEvaluate } from '@/addon/home_service/user/api/evaluate'
 	// 导入系统标准upload-img组件
 	import uploadImg from '@/addon/home_service/user/components/upload-img/upload-img.vue'
-
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '订单评价', topStatusBar: { textColor: '#333' ,rollBgColor:"#ffffff"} })
 	// 评分数据
 	const scores = ref<number>(5)
 	// 评价内容
@@ -218,7 +219,7 @@
 			return
 		}
 
-		// 获取师傅ID
+		// 获取技师ID
 		const technicianId = orderInfo.value?.technician_id || 0
 		const storeId = orderInfo.value?.store_id || 0
 		// 准备提交数据
@@ -263,11 +264,6 @@
 	})
 	onShow(() => {
 	})
-
-	// 主题颜色函数（与参考页面保持一致）
-	const themeColor = () => {
-		return {} // 可以根据项目需求返回主题颜色样式
-	}
 </script>
 
 <style lang="scss" scoped>

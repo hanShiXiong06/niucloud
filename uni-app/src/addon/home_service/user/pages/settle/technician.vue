@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[#fff] min-h-screen overflow-hidden" v-if="!loading" :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<view class="">
 			<view class="relative">
 				<image class="w-full h-[300rpx] block" mode="widthFix"
@@ -10,18 +13,20 @@
 			<view class="bg-white mt-[40rpx] min-h-[50rpx]">
 				<view class="flex">
 					<view
-						class="w-[10rpx] h-[35rpx] mr-[15rpx] bg-[var(--primary-color)] rounded-tr-[5rpx] rounded-br-[5rpx]">
+						class="w-[10rpx] h-[35rpx] mr-[15rpx] bg-[#004FFF] rounded-tr-[5rpx] rounded-br-[5rpx]">
 					</view>
 					<view class="text-[30rpx] mb-[30rpx]"><text class="font-bold">{{ t('selectSkillsTitle') }}</text>
-						<text class="">{{ t('multipleChoice') }}</text></view>
+						<text class="">{{ t('multipleChoice') }}</text>
+					</view>
 				</view>
 
 				<view class="flex flex-wrap px-[25rpx] mb-[15rpx] ">
 					<view v-for="(skill, index) in categoryList" :key="skill.category_id"
-						class="bg-[#f5f5f5] ] my-[15rpx]  rounded-[12rpx] text-[28rpx] flex flex-col items-center justify-center py-[10rpx] px-[45rpx] border-style mr-[25rpx]"
+						class="bg-[#f5f5f5] mb-[15rpx]  rounded-[12rpx] text-[28rpx] flex flex-col items-center justify-center py-[10rpx] px-[45rpx] border-style mr-[25rpx]"
 						:style="{background:selectedSkills.includes(skill.category_id) ? '#e9ffe1' : '',color:selectedSkills.includes(skill.category_id) ? 'var(--primary-color)' : '', borderColor:selectedSkills.includes(skill.category_id) ? 'var(--primary-color)' : ''}"
 						@click="toggleSkill(skill.category_id)">
-						<text class="text-center text-[26rpx] py-[25rpx] leading-1">{{ skill.category_name }}</text>
+						<text class="text-center text-[28rpx] py-[25rpx] leading-1">{{ skill.category_name }}</text>
+						<text class="text-[22rpx] text-[#999999] pb-[12rpx]">{{ skill.intro }}</text>
 					</view>
 				</view>
 			</view>
@@ -30,7 +35,7 @@
 			<view class="">
 				<view class="flex">
 					<view
-						class="w-[10rpx] h-[35rpx] mr-[15rpx] bg-[var(--primary-color)] rounded-tr-[5rpx] rounded-br-[5rpx]">
+						class="w-[10rpx] h-[35rpx] mr-[15rpx] bg-[#004FFF] rounded-tr-[5rpx] rounded-br-[5rpx]">
 					</view>
 					<view class="text-[30rpx] mb-[30rpx]"><text class="font-bold">{{ t('ourAdvantages') }}</text></view>
 				</view>
@@ -96,9 +101,10 @@
 			<view class="bg-white p-[40rpx] mt-[20rpx]">
 				<view class="flex ml-[-40rpx]">
 					<view
-						class="w-[10rpx] h-[35rpx] mr-[15rpx] bg-[var(--primary-color)] rounded-tr-[5rpx] rounded-br-[5rpx]">
+						class="w-[10rpx] h-[35rpx] mr-[15rpx] bg-[#004FFF] rounded-tr-[5rpx] rounded-br-[5rpx]">
 					</view>
-					<view class="text-[30rpx] mb-[30rpx]"><text class="font-bold">{{ t('settlementProcess') }}</text></view>
+					<view class="text-[30rpx] mb-[30rpx]"><text class="font-bold">{{ t('settlementProcess') }}</text>
+					</view>
 				</view>
 				<view class="flex items-center justify-between">
 					<!-- 步骤1 -->
@@ -142,7 +148,8 @@
 							<image class="w-[40rpx] h-[40rpx]" mode="aspectFit"
 								:src="img('addon/home_service/user/settle/settle3.png')"></image>
 						</view>
-						<view class="text-[24rpx] text-center text-[#666]  mt-[15rpx]">{{ t('settlementComplete') }}</view>
+						<view class="text-[24rpx] text-center text-[#666]  mt-[15rpx]">{{ t('settlementComplete') }}
+						</view>
 					</view>
 				</view>
 			</view>
@@ -166,9 +173,13 @@
 	import { ref } from 'vue'
 	import { t } from '@/locale'
 	import { img, redirect } from '@/utils/common'
-	import { onLoad,onShow } from '@dcloudio/uni-app'
+	import { onLoad, onShow } from '@dcloudio/uni-app'
 	import { getSettleCategoryList } from '@/addon/home_service/user/api/settle'
 	import { getTechnicianApply } from '@/addon/home_service/user/api/settle'
+	import { topTabar } from '@/utils/topTabbar';
+	// 系统状态管理
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '申请入驻', topStatusBar: { textColor: '#333' } })
 	const loading = ref<boolean>(true);
 	const categoryList = ref([])
 	const getSettleCategoryListFn = () => {
@@ -224,14 +235,14 @@
 		getTechnicianApply().then((res) => {
 			sbumitStatus.value = res.data.audit_status
 			if (sbumitStatus.value == 0 || sbumitStatus.value == 1 || sbumitStatus.value == -1) {
-				setTimeout(()=>{
+				setTimeout(() => {
 					loading.value = false;
-				},1000)
-				redirect({ url: '/addon/home_service/user/pages/settle/submit_success',mode:'reLaunch', param: { status: sbumitStatus.value, formType: 'technician' } })
+				}, 1000)
+				redirect({ url: '/addon/home_service/user/pages/settle/submit_success', mode: 'reLaunch', param: { status: sbumitStatus.value, formType: 'technician' } })
 			}
-			setTimeout(()=>{
+			setTimeout(() => {
 				loading.value = false;
-			},1000)
+			}, 1000)
 		})
 	}
 	onLoad(() => {
@@ -265,9 +276,10 @@
 	.active-bg-text {
 		background-color: #e9ffe1;
 		color: var(--primary-color);
-		border:2rpx solid var(--primary-color) !important;
+		border: 2rpx solid var(--primary-color) !important;
 	}
-	.border-style{
-		border:2rpx solid #ffffff;
+
+	.border-style {
+		border: 2rpx solid #ffffff;
 	}
 </style>

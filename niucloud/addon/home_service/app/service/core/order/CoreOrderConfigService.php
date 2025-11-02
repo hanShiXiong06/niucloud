@@ -176,7 +176,7 @@ class CoreOrderConfigService extends BaseCoreService
             $data['order_refund'] = [
                 'no_allow_refund' => true,
                 'refund_length' => 7,
-                'refund_expect_revenue_rate' => 30  //平台保价比例
+                'refund_expect_revenue_rate' => 100  //平台保价比例
             ];
 
             $data['order_auto_refund'] = [

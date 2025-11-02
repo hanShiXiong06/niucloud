@@ -22,7 +22,7 @@ class AfterHomeServiceCardOrderCreate extends BaseJob
      * @param $data
      * @return true
      */
-    protected function doJob(int $site_id, int $order_id, array $order_data,int $time)
+    public function doJob(int $site_id, int $order_id, array $order_data,int $time)
     {
         try {
             event('AfterHomeServiceCardOrderCreate', ['site_id' => $site_id, 'order_id' => $order_id, 'order_data' => $order_data, 'time' => $time]);

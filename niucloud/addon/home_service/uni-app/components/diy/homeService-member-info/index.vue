@@ -19,7 +19,7 @@
 					</view>
 			</view>
 			
-			<view v-else class="flex ml-[32rpx] mr-[52rpx]  items-center relative" @click="toLogin"  :style="styleey">
+			<view v-else class="flex ml-[32rpx] mr-[52rpx]  items-center relative" @click.stop="toLogin"  :style="styleey">
  					<u-avatar :src="img('static/resource/images/default_headimg.png')" size="55"   />
 
 					<view class="ml-[22rpx]">
@@ -28,7 +28,7 @@
 						</view>
 					</view>
 					<view class="set-icon flex items-center ml-[auto]"  >
-						<view @click="redirect({ url: '/app/pages/setting/index' })">
+						<view>
 							<text class="nc-iconfont nc-icon-shezhiV6xx-1 text-[40rpx] ml-[10rpx]" :style="{ color : diyComponent.textColor }"></text>
 						</view>
 					</view>

@@ -1,5 +1,8 @@
 <template>
 	<view :style="themeColor()" class="withdraw-page">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" isBack />
+		<!-- #endif -->
 		<!-- 顶部装饰背景 -->
 		<view class="top-decoration"></view>
 
@@ -182,8 +185,7 @@
 
 		<!-- 空状态 -->
 		<view v-else-if="!pageLoading && config.is_open == 0" class="empty-page mt-0">
-			<image class="mb-[10rpx]"
-				:src="img('addon/home_service/withdraw_close.png')" mode="widthFix"></image>
+			<image class="mb-[10rpx]" :src="img('addon/home_service/withdraw_close.png')" mode="widthFix"></image>
 			<text class="text-[30rpx] text-[#999]">提现设置未开启</text>
 		</view>
 	</view>
@@ -197,14 +199,17 @@
 
 	import { getTechnicianInfo } from '@/addon/home_service/technician/api/technician'
 	import { getCashOutConfig, getFirstCashOutAccountInfo, getCashoutAccountInfo, cashOutApply } from '@/addon/home_service/technician/api/account'
-
+	import { topTabar } from '@/utils/topTabbar';
+	// 系统状态管理
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '提现', topStatusBar: { textColor: '#333' } })
 	// 1. 替换 useRoute：用 ref 定义 query，在 onLoad 中接收参数（UniApp 原生方式）
 	const query = ref<any>({}) // 存储页面参数
 	// 页面加载状态
 	const pageLoading = ref(true)
 	const loading = ref(false)
 
-	// 师傅信息
+	// 技师信息
 	const technicianInfo = ref<any>(null)
 	// 使用computed属性获取可提现金额，优先从commission获取
 	const cashOutMoney = computed(() => {
@@ -384,7 +389,7 @@
 			cashOutApply(applyData.value).then((res : any) => {
 				loading.value = false
 				if (res.code === 1) {
-					// 提现成功后重新获取师傅信息以更新余额
+					// 提现成功后重新获取技师信息以更新余额
 					getTechnicianInfo().then((techRes : any) => {
 						if (techRes.code === 1 && techRes.data) {
 							technicianInfo.value = techRes.data
@@ -441,14 +446,14 @@
 			uni.showToast({ title: t('configError') || '获取提现配置失败', icon: 'none' })
 		})
 
-		// 获取师傅信息
+		// 获取技师信息
 		getTechnicianInfo().then((res : any) => {
 			if (res.code === 1 && res.data) {
 				technicianInfo.value = res.data
 				openId.value = res.data.openid || ''
 			}
 		}).catch(() => {
-			uni.showToast({ title: t('getInfoError') || '获取师傅信息失败', icon: 'none' })
+			uni.showToast({ title: t('getInfoError') || '获取技师信息失败', icon: 'none' })
 		})
 
 		// 获取各提现方式的账号信息（依赖 query 参数，需在 onLoad 后执行）
@@ -459,7 +464,7 @@
 
 	// 增强 onShow 事件，确保每次页面显示都能刷新数据
 	onShow(() => {
-		// 获取师傅信息
+		// 获取技师信息
 		getTechnicianInfo().then((res : any) => {
 			if (res.code === 1 && res.data) {
 				technicianInfo.value = res.data
@@ -730,5 +735,5 @@
 </style>
 
 <style lang="scss">
-@import '@/addon/home_service/technician/style/index.scss';
+	@import '@/addon/home_service/technician/style/index.scss';
 </style>

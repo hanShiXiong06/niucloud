@@ -1,24 +1,27 @@
 <template>
 	<view class="overflow-hidden component-class" :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<view class="fixed w-full z-index-99">
 			<!-- 标签切换 -->
-			<view class=" flex border-b border-[#EEEEEE] bg-white">
-				<view class="flex-1 py-[20rpx] text-center" :class="currentTab === 'detail' ? 'tab-active' : ''"
+			<view class=" flex bg-[#F9F9F9] border-b border-[#EEEEEE] bg-white">
+				<view class="flex-1 py-[20rpx] text-center"
 					@click="switchTab('detail')">
 					<text class="text-[32rpx]">{{ t('accountDetails') }}</text>
-					<view v-if="currentTab === 'detail'"
+					<view v-if="currentTab == 'detail'"
 						class="w-[40rpx] h-[6rpx] bg-[var(--store-bg-one)] rounded-full mx-auto mt-[12rpx]"></view>
 				</view>
-				<view class="flex-1 py-[20rpx] text-center" :class="currentTab === 'statistics' ? 'tab-active' : ''"
+				<view class="flex-1 py-[20rpx] text-center"
 					@click="switchTab('statistics')">
 					<text class="text-[32rpx]">{{ t('receiptStatistics') }}</text>
-					<view v-if="currentTab === 'statistics'"
+					<view v-if="currentTab == 'statistics'"
 						class="w-[40rpx] h-[6rpx] bg-[var(--store-bg-one)] rounded-full mx-auto mt-[12rpx]"></view>
 				</view>
 			</view>
 			<!-- 筛选条件区域 - 仅在账户明细tab显示 -->
 			<view v-if="currentTab == 'detail'"
-				class="filter-bar bg-white px-[24rpx] py-[20rpx] flex justify-between items-center border-b border-[#EEEEEE]">
+				class="filter-bar bg-[#F9F9F9] px-[24rpx] py-[20rpx] flex justify-between items-center border-b border-[#EEEEEE]">
 				<view class="filter-item flex items-center" @click="showTypeFilter = true">
 					<text class="text-[28rpx] text-[#333]">{{ typeValueName ? typeValueName : typeFilterText }}</text>
 					<image class="w-[35rpx] h-[35rpx] block"
@@ -39,8 +42,9 @@
 						mode="aspectFill" />
 				</view>
 			</view>
-			<view v-else>
-					<view class="flex justify-start py-3">
+			<!-- 日汇总/月汇总切换 - 仅在收支统计tab显示 -->
+			<view v-else class="bg-[#F9F9F9] px-[24rpx] py-[20rpx] border-b border-[#EEEEEE]">
+				<view class="flex justify-start">
 					<view class="flex">
 						<view
 							class="relative text-base py-2 pt-0 px-4 transition-all duration-200 flex items-center justify-center text-[28rpx]"
@@ -61,9 +65,9 @@
 			</view>
 		</view>
 		
-		<mescroll-body ref="mescrollRef" top="214rpx" @init="mescrollInit" :down="{ use: false }" @up="getBillList">
+		<mescroll-body ref="mescrollRef" top="170rpx" @init="mescrollInit" :down="{ use: false }" @up="getBillList"  v-if="currentTab == 'detail'" >
 			<!-- 账户明细内容 -->
-			<view v-if="currentTab == 'detail'">
+			<view v-if="currentTab == 'detail'" >
 				<!-- 账单列表 -->
 				<view v-if="groupedBillList.length > 0" class="bill-list">
 					<!-- 日期分组 -->
@@ -101,56 +105,51 @@
 				</view>
 
 				<!-- 使用mescroll-empty组件替代原有的暂无数据提示 -->
-				<mescroll-empty v-else-if="!loading" :option="{tip: t('noBillData'), btnText: t('refresh')}"
+				<mescroll-empty v-else-if="!loading" :option="{tip: t('noBillData'), btnText: t('refresh') }"
 					@emptyclick="refreshData"></mescroll-empty>
 
 				<!-- 底部空间 -->
 				<view class="h-[60rpx]"></view>
 			</view>
-
-			<!-- 收支统计内容 -->
-			<view v-else class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden px-[25rpx]">
-			
-
-				<!-- 统计图表区域 -->
-				<view class="bg-white mt-2 p-5 rounded-lg">
-					<text class="text-xs text-gray-500 mb-2 block">单位：千元</text>
-
-					<!-- 图表标题 -->
-					<view class="flex justify-between items-center mb-2">
-						<text class="text-sm font-medium"></text>
-						<view class="flex items-center space-x-6">
-							<view class="flex items-center">
-								<view class="w-3 h-3 bg-[#1890FF] rounded-sm mr-1"></view>
-								<text class="text-xs text-gray-500">收入</text>
-							</view>
-							<view class="flex items-center">
-								<view class="w-3 h-3 bg-[#91CB74] rounded-sm mr-1"></view>
-								<text class="text-xs text-gray-500">支出</text>
-							</view>
+		</mescroll-body>
+		<view v-if="currentTab != 'detail'" class="bg-[var(--page-bg-color)] overflow-hidden px-[25rpx] mt-[170rpx]">
+			<!-- 统计图表区域 -->
+			<view class="bg-white mt-2 p-5 rounded-lg">
+				<text class="text-xs text-gray-500 mb-2 block">单位：千元</text>
+		
+				<!-- 图表标题 -->
+				<view class="flex justify-between items-center mb-2">
+					<text class="text-sm font-medium"></text>
+					<view class="flex items-center space-x-6">
+						<view class="flex items-center">
+							<view class="w-3 h-3 bg-[#1890FF] rounded-sm mr-1"></view>
+							<text class="text-xs text-gray-500">收入</text>
+						</view>
+						<view class="flex items-center">
+							<view class="w-3 h-3 bg-[#91CB74] rounded-sm mr-1"></view>
+							<text class="text-xs text-gray-500">支出</text>
 						</view>
 					</view>
-
-					<!-- 使用uCharts柱状图 -->
-					<view class="charts-box">
-						<qiun-data-charts type="column" :opts="opts" :chartData="chartData" />
-					</view>
 				</view>
-
-				<!-- 今日收入区域 -->
-				<view class="bg-white mt-2 p-[25rpx] pt-[35rpx] rounded-lg">
-					<text class="text-[30rpx] font-bold mb-4 block">今日收入</text>
-					<text class="text-[40rpx] font-bold text-[var(--theme-color)] mb-4 block">+{{todayData.income || 0}}</text>
-				</view>
-
-				<!-- 今日支出区域 -->
-				<view class="bg-white mt-2 p-[25rpx] pt-[35rpx] mb-5 rounded-lg">
-					<text class="text-[30rpx] font-bold mb-4 block">今日支出</text>
-					<text class="text-[40rpx] font-bold text-red-500 mb-4 block">{{todayData.expense || 0}}</text>
+		
+				<!-- 使用uCharts柱状图 -->
+				<view class="charts-box">
+					<qiun-data-charts type="column" :opts="opts" :chartData="chartData" :reshow="reshowChart" v-show="chartVisible" />
 				</view>
 			</view>
-		</mescroll-body>
-
+		
+			<!-- 今日收入区域 -->
+			<view class="bg-white mt-2 p-[25rpx] pt-[35rpx] rounded-lg">
+				<text class="text-[30rpx] font-bold mb-4 block">今日收入</text>
+				<text class="text-[40rpx] font-bold text-[var(--store-bg-one)] mb-4 block">+{{todayData.income || 0}}</text>
+			</view>
+		
+			<!-- 今日支出区域 -->
+			<view class="bg-white mt-2 p-[25rpx] pt-[35rpx] mb-5 rounded-lg">
+				<text class="text-[30rpx] font-bold mb-4 block">今日支出</text>
+				<text class="text-[40rpx] font-bold text-red-500 mb-4 block">{{todayData.expense || 0}}</text>
+			</view>
+		</view>
 		<u-picker :show="showTypeFilter" :columns="typeColumns" keyName="label" @confirm="confrimType"
 			@cancel="closeFilter"></u-picker>
 		<!-- 时间选择器组件 - 确保只显示年月 -->
@@ -172,42 +171,42 @@
 	import useMescroll from '@/components/mescroll/hooks/useMescroll.js';
 	import { onPageScroll, onReachBottom } from '@dcloudio/uni-app';
 	import qiunDataCharts from '@/addon/home_service/store/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
-	// 使用绝对路径导入API
 	import { getAccountTypeList, getAccountStatusList, storeAccountList, getIncomeAndExpenseStatChart, getIncomeAndExpenseStat } from '@/addon/home_service/store/api/account';
-	
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '账户明细', topStatusBar: { textColor: '#333'} })
 	const pageLoading = ref(true)
-	
-	// 收支统计相关
 	const isDayView = ref(true)
 	const chartData = ref({})
 	const todayData = ref<any>({})
-	// 初始化 mescroll
 	const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
 	const mescrollRef = ref(null);
-	const typeColumns = ref<any[]>([[
-		// 将在onMounted中动态填充
-	]]);
-	const paymentColumns = ref<any[]>([[
-		// 将在onMounted中动态填充
-	]]);
-
-	// 新增加载状态
+	const typeColumns = ref<any[]>([[]])
+	const paymentColumns = ref<any[]>([[]])
 	const loading = ref(false);
-
-	// 标签页状态
 	const currentTab = ref('detail')
 	const timeValue = ref(Date.now())
 	const timeValueName = ref('')
 	const typeValue = ref('')
 	const typeValueName = ref('')
+	const paymentValue = ref()
+	const paymentValueName = ref('')
+	const showTypeFilter = ref(false)
+	const showDateFilter = ref(false)
+	const showStatusFilter = ref(false)
+	const typeFilterText = ref('全部类型')
+	const dateFilterText = ref('全部日期')
+	const statusFilterText = ref('到账情况')
+	const billList = ref<any[]>([])
+	const chartVisible  = ref(true)
+	const reshowChart = ref(false)
 	const confrimType = (e : any) => {
 		typeValue.value = e.value[0].value
 		typeValueName.value = e.value[0].label
 		getMescroll().resetUpScroll();
 		showTypeFilter.value = false
 	}
-	const paymentValue = ref()
-	const paymentValueName = ref('')
+
 	const confrimPayment = (e : any) => {
 		paymentValue.value = e.value[0].value
 		paymentValueName.value = e.value[0].label
@@ -215,37 +214,18 @@
 		showStatusFilter.value = false
 	}
 
-	// 时间确认函数 - 已经使用'Y-M'格式处理时间
 	const confrimTime = (e : any) => {
 		timeValue.value = e.value / 1000
 		timeValueName.value = timeStampTurnTime(timeValue.value, 'Y-m').split('-')[0] + '-' + timeStampTurnTime(timeValue.value, 'Y-m').split('-')[1] 
-		console.log(timeValueName.value)
 		showDateFilter.value = false
 		getMescroll().resetUpScroll();
 	}
 
-	// 筛选状态
-	const showTypeFilter = ref(false)
-	const showDateFilter = ref(false)
-	const showStatusFilter = ref(false)
-
-	// 筛选文本
-	const typeFilterText = ref(t('allTypes'))
-	const dateFilterText = ref(t('allDates'))
-	const statusFilterText = ref(t('paymentStatus'))
-
-	// 账单数据
-	const billList = ref<any[]>([])
-
-	// 按日期分组的账单数据
 	const groupedBillList = computed(() => {
 		const groups : any[] = []
 		const dateMap : Record<string, any> = {}
-
-		// 遍历所有账单，按日期分组
 		billList.value.forEach(item => {
-			// 从create_time中提取日期部分
-			const date = item.create_time.split(' ')[0] // 假设格式为 '2025-09-17 10:16:27'
+			const date = item.create_time.split(' ')[0]
 			if (!dateMap[date]) {
 				dateMap[date] = {
 					date: date,
@@ -255,10 +235,7 @@
 				}
 				groups.push(dateMap[date])
 			}
-
 			dateMap[date].items.push(item)
-
-			// 计算总收入和支出
 			const amount = parseFloat(item.account_data)
 			if (amount > 0) {
 				const currentIncome = parseFloat(dateMap[date].totalIncome)
@@ -268,49 +245,27 @@
 				dateMap[date].totalExpense = (currentExpense + Math.abs(amount)).toFixed(2)
 			}
 		})
-
-		// 按日期排序（最新的在前）
 		groups.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
 		return groups
 	})
 
-
-	// 返回上一页
-	const handleBack = () => {
-		redirect({
-			url: '/addon/home_service/store/pages/store/account/list'
-		})
-	}
-
-	// 跳转到收支统计页面
-	const navigateToIncomeExpenseSummary = () => {
-		redirect({
-			url: '/addon/home_service/store/pages/store/account/summary'
-		})
-	}
-
-	// 关闭筛选弹窗
 	const closeFilter = () => {
 		showTypeFilter.value = false
 		showDateFilter.value = false
 		showStatusFilter.value = false
 	}
 
-	// 获取账单列表
 	const getBillList = (mescroll : any) => {
 		loading.value = true;
 		const params: any = {
 			page: mescroll.num,
 			limit: mescroll.size
 		}
-
-		// 添加筛选条件
 		if (typeValue.value) {
 			params.from_type = typeValue.value
 		}
 		if (timeValueName.value) {
-			params.date = timeValueName.value.split('-').slice(0, 2).join('-') // 格式化为 YYYY-MM
+			params.date = timeValueName.value.split('-').slice(0, 2).join('-')
 		}
 		if (paymentValue.value) {
 			params.status = paymentValue.value
@@ -319,11 +274,10 @@
 		storeAccountList(params).then((res : any) => {
 			loading.value = false;
 			pageLoading.value = false
-			if (res.code === 1) {
+			if (res.code == 1) {
 				const newData = res.data || []
-				//设置列表数据
 				if (mescroll.num == 1) {
-					billList.value = []; //如果是第一页需手动制空列表
+					billList.value = [];
 				}
 				billList.value = billList.value.concat(newData)
 				mescroll.endSuccess(newData.length)
@@ -337,40 +291,35 @@
 		})
 	}
 
-	// 新增刷新数据函数
 	const refreshData = () => {
 		getMescroll()?.resetUpScroll();
 	}
 
-	// themeColor 函数
 	const themeColor = () => {
 		return {}
 	}
 
-	// Tab 切换函数
 	const switchTab = (tab: string) => {
 		currentTab.value = tab
 	}
 
-	// 图表配置
-	const opts = computed(() => ({
+	const opts = ref({
 		color: ["#1890FF", "#91CB74"],
 		padding: [15, 15, 30, 5],
 		enableScroll: true,
-		legend: {
-			show: false
-		},
+		legend: { show: false },
+		animation: false,
 		xAxis: {
-			itemCount: isDayView.value ? 8 : 12,
+			itemCount: 8,
 			gridColor: "#CCCCCC",
 			gridType: "solid",
 			dashLength: 4,
-			scrollShow: !isDayView.value,
+			scrollShow: false,
 			scrollAlign: "left",
 			scrollColor: "#A6A6A6",
 			scrollBackgroundColor: "#EFEBEF",
 			fontSize: 12,
-			rotateLabel: isDayView.value
+			rotateLabel: false
 		},
 		yAxis: {
 			disableGrid: false,
@@ -378,10 +327,7 @@
 			gridColor: '#f6f6f6',
 			dashLength: 2,
 			splitNumber: 5,
-			axisLineStyle: {
-				color: 'transparent',
-				width: 0
-			}
+			axisLineStyle: { color: 'transparent', width: 0 }
 		},
 		extra: {
 			column: {
@@ -393,95 +339,101 @@
 				minHeight: 5
 			}
 		}
-	}))
+	})
 
-	// 切换到日统计
+	const updateChartOpts = () => {
+		const o = opts.value
+		o.xAxis.itemCount = isDayView.value ? 8 : 6
+		o.xAxis.rotateLabel = false
+		o.xAxis.scrollShow = !isDayView.value
+		o.xAxis.fontSize = 12
+	}
+
+	let _chartDataFetchTimer : any = null
+
 	const switchToDay = () => {
 		isDayView.value = true
-		getServerData()
+		chartVisible.value = false
+		if (_chartDataFetchTimer) clearTimeout(_chartDataFetchTimer)
+		_chartDataFetchTimer = setTimeout(() => {
+			getServerData(true)
+		}, 0)
 	}
 
-	// 切换到月统计
 	const switchToMonth = () => {
 		isDayView.value = false
-		getServerData()
+		chartVisible.value = false
+		if (_chartDataFetchTimer) clearTimeout(_chartDataFetchTimer)
+		_chartDataFetchTimer = setTimeout(() => {
+			getServerData(true)
+		}, 0)
 	}
 
-	// 获取图表数据
-	const getServerData = () => {
-		let params = {
-			date_type: isDayView.value ? 'day' : 'month'
-		}
-		pageLoading.value = true
+	const getServerData = (silent = false) => {
+		let params = { date_type: isDayView.value ? 'day' : 'month' }
+		if (!silent) pageLoading.value = true
 		getIncomeAndExpenseStatChart(params).then((res: any) => {
-			pageLoading.value = false
-
-			if (!res.data || !res.data.xAxis || !res.data.series ||
-				!res.data.series.income || !res.data.series.expense) {
-				console.error('数据格式错误', res.data)
+			if (!silent) pageLoading.value = false
+			if (!res.data || !res.data.xAxis || !res.data.series || !res.data.series.income || !res.data.series.expense) {
+				chartVisible.value = true
+				reshowChart.value = true
+				setTimeout(() => { reshowChart.value = false }, 0)
 				return
 			}
-
+			updateChartOpts()
 			let formattedData = {
 				categories: res.data.xAxis || [],
 				series: [
 					{
 						name: t('income'),
 						data: res.data.series.income.map((item: any) => {
-							if (item === null || item === undefined || isNaN(Number(item))) {
-								return null
-							}
+							if (item === null || item === undefined || isNaN(Number(item))) return null
 							return Number(item) == 0 ? null : Number(item)
 						}),
 						color: '#1890FF',
-						label: {
-							show: true,
-							position: 'top',
-							fontSize: 10
-						}
+						label: { show: isDayView.value, position: 'top', fontSize: 10 }
 					},
 					{
 						name: t('expense'),
 						data: res.data.series.expense.map((item: any) => {
-							if (item === null || item === undefined || isNaN(Number(item))) {
-								return null
-							}
+							if (item === null || item === undefined || isNaN(Number(item))) return null
 							return Number(item) == 0 ? null : Number(item)
 						}),
 						color: '#91CB74',
-						label: {
-							show: true,
-							position: 'top',
-							fontSize: 10
-						}
+						label: { show: isDayView.value, position: 'top', fontSize: 10 }
 					}
 				]
 			}
-
+			opts.value.update = true
 			chartData.value = { ...formattedData };
-		}).catch((err: any) => {
-			pageLoading.value = false
-			console.error('获取图表数据失败:', err);
+			setTimeout(() => {
+				chartVisible.value = true
+				reshowChart.value = true
+				setTimeout(() => { reshowChart.value = false }, 0)
+			}, 30)
+		}).catch(() => {
+			if (!silent) pageLoading.value = false
+			chartVisible.value = true
+			reshowChart.value = true
+			setTimeout(() => { reshowChart.value = false }, 0)
 		})
 	}
 
-	// 获取今日收支数据
 	const getIncomeAndExpenseStatFn = () => {
 		getIncomeAndExpenseStat({}).then((res: any) => {
 			todayData.value = res.data
 			pageLoading.value = false
-		}).catch((err: any) => {
+		}).catch(() => {
 			pageLoading.value = false
 		})
 	}
 
 	onMounted(() => {
-		// 初始化收支统计数据
+		updateChartOpts()
 		getServerData();
 		getIncomeAndExpenseStatFn()
-		// 获取类型列表
 		getAccountTypeList().then((res : any) => {
-			if (res.code === 1 && res.data) {
+			if (res.code == 1 && res.data) {
 				const typeOptions = Object.entries(res.data).map(([key, value]) => ({
 					label: value,
 					value: key
@@ -489,10 +441,8 @@
 				typeColumns.value = [typeOptions]
 			}
 		})
-
-		// 获取状态列表
 		getAccountStatusList().then((res : any) => {
-			if (res.code === 1 && res.data) {
+			if (res.code == 1 && res.data) {
 				const statusOptions = res.data.map((status : string, index : number) => ({
 					label: status,
 					value: index.toString()
@@ -500,24 +450,19 @@
 				paymentColumns.value = [statusOptions]
 			}
 		})
-
-		// 获取当前月份
 		const now = new Date()
 		const year = now.getFullYear()
 		const month = String(now.getMonth() + 1).padStart(2, '0')
 		timeValueName.value = `${year}-${month}`
+		
 	})
-		import { onLoad,onShow } from "@dcloudio/uni-app";
+	import { onLoad,onShow } from "@dcloudio/uni-app";
 		onLoad((e) => {
 			if(e.type ==2){
 				currentTab.value = 'statistics'
 			}
 		})
 </script>
-
-<style lang="scss">
-@import '@/addon/home_service/store/style/index.scss';
-</style>
 
 <style lang="scss" scoped>
 	.header-bar {
@@ -578,13 +523,10 @@
 		border-radius: 30rpx;
 		background: #ffffff;
 	}
-
-	/* 自定义空数据刷新按钮样式 */
-	// :deep(.mescroll-empty .btn) {
-	// 	background-color: var(--store-bg-one) !important;
-	// 	color: #ffffff !important;
-	// 	border: none !important;
-	// 	padding: 10rpx 40rpx;
-	// 	border-radius: 50rpx;
-	// }
+	page{
+		background:#f6f6f6 !important;
+	}
+</style>
+<style lang="scss">
+@import '@/addon/home_service/store/style/index.scss';
 </style>

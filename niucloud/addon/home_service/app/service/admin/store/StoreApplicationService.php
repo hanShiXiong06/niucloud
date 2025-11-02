@@ -58,7 +58,7 @@ class StoreApplicationService extends BaseAdminService
             ])
             ->where($with_where)
             ->order($order)
-            ->append(['audit_status_name']);
+            ->append(['audit_status_name','id_card_back_thumb_mid','id_card_font_thumb_mid','headimg_thumb_mid','license_img_thumb_mid']);
         $list = $this->pageQuery($search_model);
         return $list;
     }
@@ -84,7 +84,7 @@ class StoreApplicationService extends BaseAdminService
                     $query->field('username,uid');
                 }
             ])
-            ->append(['audit_status_name'])->findOrEmpty()->toArray();
+            ->append(['audit_status_name','id_card_back_thumb_mid','id_card_font_thumb_mid','headimg_thumb_mid','license_img_thumb_mid'])->findOrEmpty()->toArray();
         return $info;
     }
 

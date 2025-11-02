@@ -1,8 +1,7 @@
 <template>
 	<view class="bg-[#f5f5f5] min-h-screen" v-if="!loading">
 		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-		<u-navbar title="门店入驻" bgColor="#ffffff" leftIconSize="15px" autoBack placeholder>
-		</u-navbar>
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 		<!-- #endif -->
 		<!-- 门店名称 -->
 		<view class="bg-white px-4 py-2 mt-3">
@@ -142,6 +141,9 @@
 	import { getAddressByLatlng } from '@/app/api/system'
 	import { onLoad } from '@dcloudio/uni-app'
 	import uploadImg from '@/addon/home_service/store/components/upload-img/upload-img.vue'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '机构入驻', topStatusBar: { textColor: '#333' }})
 	// 导入新增的API函数
 	import { getStoreApply, applyStore, reapplyStore } from '@/addon/home_service/store/api/store'
 
@@ -203,6 +205,7 @@
 				form.value.province_id = res.data.province_id != undefined ? res.data.province_id : 0;
 				form.value.city_id = res.data.city_id != undefined ? res.data.city_id : 0;
 				form.value.district_id = res.data.district_id != undefined ? res.data.district_id : 0;
+				form.value.address = res.data.full_address;
 			} else {
 				uni.showToast({ title: res.msg, icon: 'none' })
 			}
@@ -307,7 +310,7 @@
 			province_id: form.value.province_id || 0,
 			city_id: form.value.city_id || 0,
 			district_id: form.value.district_id || 0,
-			full_address: form.value.full_address || form.value.address || '',
+			full_address: form.value.address ,
 			lat: form.value.lat || '',
 			lng: form.value.lng || '',
 			
@@ -327,7 +330,7 @@
 		
 		submitPromise.then(() => {
 			uni.hideLoading()
-			uni.showToast({ title: t('submitSuccess') })
+			uni.showToast({ title: t('submitSuccess'),icon:'none' })
 			redirect({
 				url: '/addon/home_service/store/pages/store/submit_success',
 				param: { status: 0, formType: 'store' }
@@ -409,11 +412,12 @@
 	                }
 	                
 	                // 只有当有数据且不是重新申请时才重定向
-	                if(res.data.store_name && res.data.audit_status!=1 && !fromReapply){
+	                if(res.data.store_name && res.data.audit_status!=1 && !fromReapply && !addressStatus.value ){
 	                    redirect({
 	                        url: '/addon/home_service/store/pages/store/submit_success',
 	                        param: { status: res.data.audit_status, formType:'store' }
 	                    })
+						addressStatus.value =false
 	                }
 	            }
 	        } else {
@@ -425,6 +429,7 @@
 	        loading.value = false
 	    })
 	}
+	const addressStatus = ref(false)
 
 	// 页面加载时获取数据
 	onLoad((data : any) => {
@@ -438,6 +443,7 @@
 		if (data.name) {
 			form.value.address = data.name;
 			if (data.latng) {
+				addressStatus.value = true
 				getAddress(data.latng);
 				const tempArr = getQueryVariable('latng')?.split(',') || data.latng.split(',');
 				form.value.lat = tempArr[0];

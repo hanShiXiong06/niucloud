@@ -10,6 +10,7 @@ use addon\home_service\app\service\core\CoreGoodsSaleNumService;
 use addon\home_service\app\service\core\order\CoreOrderLogService;
 use addon\home_service\app\service\core\order\CoreOrderService;
 use addon\home_service\app\service\core\CoreStatService;
+use app\service\core\member\CoreMemberService;
 use app\service\core\notice\NoticeService;
 
 class AfterHomeServiceOrderPay
@@ -36,6 +37,14 @@ class AfterHomeServiceOrderPay
                 'sku_id' => $v['item_id']
             ]);
         }
+        $order_money = (new OrderItem())->where([['order_id', '=', $data['order_id']], ['pay_time', '>', 0]])->sum('item_money');
+        // 订单完成发放积分成长值
+        CoreMemberService::sendGrowth($order_data['site_id'], $order_data['member_id'], 'home_service_buy_goods', [
+            'order_money' => $order_money,
+            'from_type' => 'home_service_buy_goods',
+            'related_id' => $order_data['order_id']
+        ]);
+
         // 微信小程序 发货信息录入接口
         (new CoreOrderService())->orderShippingUploadShippingInfo($order_data['order_id']);
 

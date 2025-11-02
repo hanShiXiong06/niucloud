@@ -115,7 +115,7 @@ class StoreService extends BaseAdminService
                         $query->field('member_id,mobile,nickname, headimg');
                     },
                 ]
-            )->field($field)->append(['headimg_mid'])
+            )->field($field)->append(['headimg_mid','id_card_back_thumb_mid','id_card_font_thumb_mid','headimg_thumb_mid'])
             ->findOrEmpty()->toArray();
         return $info;
     }

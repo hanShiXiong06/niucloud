@@ -1,9 +1,8 @@
 <template>
-  <!-- #ifdef MP-WEIXIN -->
- 	<u-navbar title="师傅个人中心" :autoBack="false" bgColor="#ffffff" :placeholder="true" :left-arrow="false" left-icon="">
-	</u-navbar>
+  <!-- #ifdef MP-WEIXIN || APP-PLUS -->
+  <top-tabbar :data="topTabbarData" scrollBool="1" :isBack="false" />
   <!-- #endif -->
-	<view class=" bg-[#f6f6f6] bg-gradient-to-b from-[#ffffff] to-[#f6f6f6]" v-if="technicianInfo.id">
+	<view class=" bg-[#f6f6f6] bg-gradient-to-b from-[#ffffff] to-[#f6f6f6] h-[80vh]" v-if="technicianInfo.id">
 		<view class="py-[20rpx]  px-[30rpx]">
 			<view class="flex items-center justify-between">
 				<view class="mr-[24rpx] w-[96rpx]">
@@ -198,6 +197,9 @@
 	import { onShow, onPageScroll } from '@dcloudio/uni-app'
 	import { t } from '@/locale'
 	import { useLocation } from '@/hooks/useLocation'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '个人中心', topStatusBar: { textColor: '#333', rollBgColor: 'transparent' } })
 	const current  = ref(0)
 	const locationVal = useLocation(true);
 	const loading = ref<boolean>(true) //页面加载动画
@@ -213,7 +215,7 @@
 				getTechnicianTotadyInfoFn()
 			}else{
 				uni.showToast({
-					title:'您还未成为师傅，请先申请成为师傅',
+					title:'您还未成为技师，请先申请成为技师',
 					icon:'none'
 				})
 				setTimeout(()=>{
@@ -276,5 +278,11 @@
 	      color: #ffffff;
 	      font-size: 12px;
 	    }
+	  }
+	  :deep(.u-tabbar__placeholder){
+		  background:#f6f6f6 !important;
+	  }
+	  page{
+		  background:#f6f6f6 !important;
 	  }
 </style>

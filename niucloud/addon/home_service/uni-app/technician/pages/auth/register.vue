@@ -24,7 +24,7 @@
                 您好，
             </view>
             <view class="text-[36rpx] font-500 text-[#111] mt-[6rpx] leading-[normal]">
-                欢迎成为师傅
+                欢迎成为技师
             </view>
             <view class="mb-[80rpx] text-[#666] text-[26rpx] mt-[10rpx] leading-[normal]">
                 注册账号，即可开始使用
@@ -120,17 +120,17 @@
                 </view>
                 <button class="w-full h-[80rpx] !bg-[var(--technician-bg-one)] text-[26rpx] rounded-[40rpx] leading-[80rpx] font-500 !text-[#fff]" @click="handleRegister">{{ t('register') }}</button>
                 <view class="mt-[30rpx] flex justify-between items-center">
-					<view class="text-[var(--technician-bg-one)] text-[26rpx]">账号注册</view>
+					<view class="text-[var(--technician-bg-one)] text-[26rpx]" @click="setType">{{ type == 'username' ? t('mobileRegister') : t('usernameRegister') }}</view>
 					<view><text class="text-[#111111] text-[26rpx]">已有账号 </text> <text class="text-[var(--technician-bg-one)] text-[26rpx]" @click="redirect({ url: '/addon/home_service/technician/pages/auth/login',param:{type} })">{{ t('toLogin') }}</text></view>
                 </view>
             </view>
-            <view class="footer w-full" v-if="registerType.length > 1" :class="{'fixed bottom-0 left-0 right-0': type == 'mobile', 'pt-[60rpx]': type == 'username'}">
+            <!-- <view class="footer w-full" v-if="registerType.length > 1" :class="{'fixed bottom-0 left-0 right-0': type == 'mobile', 'pt-[60rpx]': type == 'username'}">
                 <view class="text-[26rpx] leading-[36rpx] text-[#666] text-center mb-[30rpx] font-400">其他注册方式</view>
                 <view class="flex justify-center gap-[40rpx]">
                     <text v-if="type == 'mobile' && configStore.login.is_mobile" @click="type = 'username'" class="w-[66rpx] h-[66rpx] flex items-center justify-center iconfont iconmima6Vmm border-[2rpx] rounded-[50%] border-solid border-[#ddd] !text-[26rpx]"></text>
                     <text v-if="type == 'username' && configStore.login.is_username"  @click="type = 'mobile'" class="w-[66rpx] h-[66rpx] flex items-center justify-center iconfont iconshouji6Vmm border-[2rpx] rounded-[50%] border-solid border-[#ddd] !text-[26rpx]"></text>
                 </view>
-            </view>
+            </view> -->
         </view>
         <uni-popup ref="popupRef" type="dialog">
             <view class="bg-[#fff] flex flex-col justify-between w-[600rpx] min-h-[280rpx] rounded-[var(--rounded-big)] box-border px-[35rpx] pt-[35rpx] pb-[8rpx] relative">
@@ -171,7 +171,7 @@ import smsCode from '@/addon/home_service/technician/components/sms-code/sms-cod
 const systemStore = useSystemStore()
 /********* 自定义头部 - start ***********/
 const topTabarObj = topTabar()
-let param = topTabarObj.setTopTabbarParam({ title: '', topStatusBar: { bgColor: '#fff', textColor: '#333' } })
+let param = topTabarObj.setTopTabbarParam({ title: '师傅注册', topStatusBar: { bgColor: '#fff', textColor: '#333' } })
 /********* 自定义头部 - end ***********/
 const headerHeight = computed(() => {
     return Object.keys(systemStore.menuButtonInfo).length ? pxToRpx(Number(systemStore.menuButtonInfo.height)) + pxToRpx(systemStore.menuButtonInfo.top) + pxToRpx(8) + 'rpx' : 'auto'
@@ -250,6 +250,14 @@ const loading = ref(false)
 const type = ref('')
 const agreeChange = () => {
     isAgree.value = !isAgree.value
+}
+
+const setType = () => {
+    if (type.value == 'username' && (configStore.login.is_mobile || configStore.login.is_bind_mobile)) {
+        type.value = 'mobile'
+    } else if (type.value == 'mobile' && configStore.login.is_username) {
+        type.value = 'username'
+    }
 }
 const registerType = computed(() => {
     const value = []

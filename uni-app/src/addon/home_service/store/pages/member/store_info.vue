@@ -1,9 +1,10 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] overflow-hidden component-class" :style="themeColor()" v-if="!loading">
-		<u-navbar title="门店资料" :autoBack="true" leftIconSize="0" bgColor="var(--page-bg-color)"
-			placeholder></u-navbar>
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 主体内容区域 -->
-		<view class="" >
+		<view class="">
 			<!-- 基本信息 -->
 			<view class="p-[25rpx] bg-white m-[24rpx] rounded-lg pb-[10rpx]">
 				<view class="flex items-center">
@@ -62,7 +63,8 @@
 					</view>
 					<!-- 地图展示 - 使用uni-app地图组件 -->
 					<view class="h-[200px] w-full">
-						<map class="map-body w-full h-[600rpx]" :latitude="storeInfo.lat" :longitude="storeInfo.lng" :markers="covers"></map>
+						<map class="map-body w-full h-[600rpx]" :latitude="storeInfo.lat" :longitude="storeInfo.lng"
+							:markers="covers"></map>
 					</view>
 				</view>
 			</view>
@@ -142,10 +144,12 @@
 				<view class="pl-[25rpx]">
 					<u--form :model="tempContactInfo" ref="formRef" :rules="rules">
 						<u-form-item :label="t('manager')" prop="manager" labelWidth="80" required>
-							<u-input v-model="tempContactInfo.manager" :placeholder="t('inputManagerPlaceholder')"></u-input>
+							<u-input v-model="tempContactInfo.manager"
+								:placeholder="t('inputManagerPlaceholder')"></u-input>
 						</u-form-item>
 						<u-form-item :label="t('contactPhone')" prop="phone" labelWidth="80" required>
-							<u-input v-model="tempContactInfo.phone" type="number" :placeholder="t('inputPhonePlaceholder')"></u-input>
+							<u-input v-model="tempContactInfo.phone" type="number"
+								:placeholder="t('inputPhonePlaceholder')"></u-input>
 						</u-form-item>
 					</u--form>
 				</view>
@@ -164,6 +168,9 @@
 	import { t } from '@/locale'
 	import { redirect, img } from '@/utils/common'
 	import { getStoreInfo, updateStoreContact } from '@/addon/home_service/store/api/store'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '机构资料', topStatusBar: { textColor: '#333' } })
 	const loading = ref<boolean>(true);
 	// 门店信息数据
 	const storeInfo = ref<any>({
@@ -290,7 +297,7 @@
 </script>
 
 <style lang="scss">
-@import '@/addon/home_service/store/style/index.scss';
+	@import '@/addon/home_service/store/style/index.scss';
 </style>
 
 <style lang="scss" scoped>

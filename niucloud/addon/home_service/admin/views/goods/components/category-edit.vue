@@ -22,19 +22,22 @@
             <el-form-item :label="t('sort')" prop="sort">
                 <el-input v-model.trim="formData.sort" clearable :placeholder="t('sortPlaceholder')" class="input-width" @keyup="filterNumber($event)"  maxlength="8" />
             </el-form-item>
+            <el-form-item label="分类描述" prop="intro">
+                <el-input v-model.trim="formData.intro" clearable placeholder="请输入分类描述" class="input-width" maxlength="10" show-word-limit />
+            </el-form-item>
 
-			<el-form-item :label="t('showCategory')" prop="sort">
-			    <el-radio-group v-model="formData.is_show">
-			      <el-radio :label="1">{{ t('open') }}</el-radio>
-			      <el-radio :label="0">{{ t('close') }}</el-radio>
-			    </el-radio-group>
-			</el-form-item>
-			<el-form-item :label="t('settledCategory')" prop="sort">
-			    <el-radio-group v-model="formData.is_settled">
-			      <el-radio :label="1">{{ t('settled') }}</el-radio>
-			      <el-radio :label="0">{{ t('nosettled') }}</el-radio>
-			    </el-radio-group>
-			</el-form-item>
+            <el-form-item :label="t('showCategory')" prop="sort">
+            <el-radio-group v-model="formData.is_show">
+            <el-radio :label="1">{{ t('open') }}</el-radio>
+            <el-radio :label="0">{{ t('close') }}</el-radio>
+            </el-radio-group>
+            </el-form-item>
+            <el-form-item :label="t('settledCategory')" prop="sort">
+            <el-radio-group v-model="formData.is_settled">
+            <el-radio :label="1">{{ t('settled') }}</el-radio>
+            <el-radio :label="0">{{ t('nosettled') }}</el-radio>
+            </el-radio-group>
+            </el-form-item>
         </el-form>
 
         <template #footer>
@@ -63,11 +66,12 @@ const initialFormData = {
     category_id: 0,
     category_name: '',
     image: '',
-      adv_image: '',
+    adv_image: '',
     sort: 0,
     pid: 0,
-	is_show:1,
-	is_settled:1
+    is_show: 1,
+    is_settled: 1,
+    intro: ''
 }
 
 const formData: Record<string, any> = reactive({ ...initialFormData })
@@ -78,15 +82,17 @@ const formRef = ref<FormInstance>()
 const formRules = computed(() => {
     return {
         category_name: [
-            { required: true, message: t('categoryNamePlaceholder'), trigger: 'blur' }
+            { required: true, message: '请输入分类名称', trigger: 'blur' }
         ],
-      image: [
-          { required: true, message: t('imagePlaceholder'), trigger: 'blur' }
+        image: [
+            { required: true, message: '请上传分类图片', trigger: 'blur' }
         ],
-      adv_image: [
-        { required: true, message: t('advimagePlaceholder'), trigger: 'blur' }
-      ],
-
+        adv_image: [
+            { required: true, message: '请上传广告图片', trigger: 'blur' }
+        ],
+        intro: [
+            { required: true, message: '请输入分类描述', trigger: 'blur' }
+        ]
     }
 })
 

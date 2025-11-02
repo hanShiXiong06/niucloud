@@ -66,8 +66,8 @@
 								class="price-font text-[24rpx]">.{{ Number(goodsPrice).toFixed(2).split('.')[1] }}</text>
 							<text v-if="detail.sku_unit">/{{ detail.sku_unit }}</text>
 							<text class="price-font text-[24rpx] text-[#999] line-through font-400 ml-[10rpx]"
-								v-if="detail.price != goodsPrice"><text
-									class="text-[24rpx] price-font">￥</text>{{ Number(detail.price).toFixed(2) }}</text>
+								v-if="detail.goods_original_price && detail.goods_original_price != goodsPrice"><text
+									class="text-[24rpx] price-font">￥</text>{{ Number(detail.goods_original_price).toFixed(2) }}</text>
 							<!-- <image v-if="priceType == 'member_price'" class="h-[28rpx] ml-[12rpx] w-[60rpx]"
 								:src="img('addon/home_service/VIP.png')" mode="heightFix" /> -->
 						</view>
@@ -98,19 +98,19 @@
 				<view class="text-[#333333] text-[30rpx] font-[600] ">{{ detail.goods.category_name }}</view>
 				<view class="flex flex-wrap">
 					<view
-						class="bg-[#F5FFF6] rounded--[10rpx] border-[1px] border-[#F5FFF6] rounded-[4rpx] mr-[24rpx] px-[15rpx] border-solid text-[26rpx] py-[10rpx] !rounded-[8rpx] mt-[24rpx]"
+						class="bg-[#F6F6F6] rounded-[10rpx] rounded--[10rpx] border-[1px] border-[#F5FFF6] rounded-[4rpx] mr-[24rpx] px-[15rpx] border-solid text-[26rpx] py-[10rpx] !rounded-[8rpx] mt-[24rpx]"
 						@click="toOrder(detail)"
-						:class="item.sku_name == detail.sku_name ? '!border-[var(--primary-color)] text-[var(--primary-color)] rounded-[10rpx]' : ''"
+						:style="{borderColor: item.sku_name == detail.sku_name ? 'var(--primary-color)' : '#F5FFF6',color: item.sku_name == detail.sku_name ? 'var(--primary-color)' : '#333',backgroundColor: item.sku_name == detail.sku_name ? '#F5FFF6' : '#F6F6F6'}"
 						v-for="(item,index) in detail.skuList">
 						{{ item.sku_name }}
 					</view>
 				</view>
 			</view>
 			<view class="px-[24rpx]">
-				<view class="rounded-lg bg-[#fff]">
+				<view class="rounded-lg bg-[#fff] mb-[20rpx]">
 					<view @click="buyFn" v-if="detail.skuList && detail.skuList?.length>1"
 						class="flex items-center h-[88rpx] px-[20rpx]  ">
-						<text class=" text-[30rpx] leading-[42rpx] font-500 mr-[20rpx]">{{ t('selected') }}</text>
+						<text class=" text-[26rpx] leading-[42rpx] font-500 mr-[20rpx]">{{ t('selected') }}</text>
 						<view class="flex-1 text-[#343434] text-sm leading-[42rpx] font-500 text-right mr-[10rpx] ">
 							{{ detail.sku_name }}
 						</view>
@@ -118,7 +118,7 @@
 					</view>
 					<view @click="openServicesSafePopup" v-if="detail.goods?.guarantee_list?.length > 1"
 						class="flex items-center h-[88rpx] px-[20rpx] mb-[20rpx]">
-						<text class=" text-[30rpx] leading-[42rpx] font-500 mr-[20rpx]">{{ t('serviceSafe') }}</text>
+						<text class=" text-[26rpx] leading-[42rpx] font-500 mr-[20rpx]">{{ t('serviceSafe') }}</text>
 						<view class="flex-1 text-[#343434] text-sm leading-[42rpx] font-500 text-right mr-[10rpx] ">
 							{{ detail.goods?.guarantee_list[0].guarantee_title }}
 						</view>
@@ -128,7 +128,7 @@
 				<view class="rounded-lg bg-[#fff] mb-[24rpx] px-[25rpx] pt-[30rpx] pb-[6rpx]" v-if="detail.goods.buy_type == 'reservation' && detail.goods?.price_list?.length"
 					>
 					<view class="flex justify-between items-center mb-[25rpx]">
-						<view class="text-[32rpx] font-bold">价目表</view>
+						<view class="text-[30rpx] font-bold">价目表</view>
 					</view>
 					<view class="my-[15rpx]">
 						<view class="scheduling-content mt-2">
@@ -236,8 +236,8 @@
 						<u-scroll-list :indicator="false">
 							<view v-for="(item, index) in recommendPackages" :key="index"
 								class="mr-[30rpx] bg-[#F5FFF6] p-[24rpx] rounded-lg">
-								<view class="flex w-[360rpx] items-center justify-between">
-									<view class="font-bold text-[32rpx] mr-[5rpx]">{{item.card_name}}
+								<view class="flex w-[400rpx] items-center ">
+									<view class="font-bold text-[32rpx] leading-[1.5] truncate mr-[5rpx] max-w-[260rpx]">{{item.card_name}}
 									</view>
 									<view class="text-[20rpx] bg-[#FF0F00] p-[6rpx] text-[#fff] rounded-[5rpx] ">
 										省{{item.discount_price}}元
@@ -255,9 +255,9 @@
 											class="text-[#999999] text-[24rpx] line-through ml-[10rpx]">¥{{item.original_price}}</text>
 									</view>
 									<view class="text-[#999999] text-[24rpx] mb-[20rpx]">{{item.valid_type_name}}</view>
-									<u-button
-										class="!text-[var(--primary-color)] !border-[var(--primary-color)] !text-[26rpx] !rounded-[8rpx] !h-[50rpx] !line-height-[50rpx]"
-										@click="buyPackage(item)">立即抢购</u-button>
+									<view
+										class="!text-[var(--primary-color)] w-[100%] bg-[#fff] text-center flex items-center justify-center h-[50rpx] border-style !text-[26rpx] !rounded-[8rpx]"
+										@click="buyPackage(item)">立即抢购</view>
 								</view>
 							</view>
 						</u-scroll-list>
@@ -288,7 +288,7 @@
 													{{item.member?.nickname}}
 												</view>
 												<view class="mt-[10rpx]">
-													<u-rate v-model="item.scores" size="14"
+													<u-rate v-model="item.scores" size="10"
 														readonly></u-rate>
 												</view>
 											</view>
@@ -440,25 +440,6 @@
 						</view>
 					</view>
 				</view>
-				<view class="chunk-wrap pt-[34rpx] pb-[24rpx] scheduling rounded-lg">
-					<view class="text-[30rpx] text-[#111] mb-[25rpx]">
-						{{t('detailText')}}
-					</view>
-					<view class="mt-[24rpx]">
-						<view class="scheduling-content mt-2">
-							<u-parse :content="detail.goods.goods_content" :tagStyle="{img: 'vertical-align: top;'}"
-								v-if="detail.goods.goods_content"></u-parse>
-							<view v-else class="h-[380rpx] flex">
-								<view class="mx-auto">
-									<image class="w-[280rpx] h-[280rpx]"
-										:src="img('addon/home_service/goods/empty01.png')" />
-									<view class="text-center text-[#c1c1c1] text-[24rpx]">{{ t('noProjectInt') }}</view>
-								</view>
-							</view>
-						</view>
-					</view>
-				</view>
-				<view class="h-[148rpx] w-screen"></view>
 				<view class="flex justify-between bg-white px-3 py-2 fixed bottom-0 left-0 right-0 body-bottom">
 					<view class="flex items-center">
 						<view class="flex flex-col items-center mr-[44rpx]"
@@ -490,6 +471,27 @@
 						@click="toOrder(detail)"></u-button>
 				</view>
 			</view>
+			<view class=" pt-[34rpx] pb-[24rpx] rounded-lg">
+				<view class="text-[30rpx] text-[#111] mb-[25rpx] flex items-center justify-center">
+					<image :src="img('/addon/home_service/goods/goods_content_left.png')" class="w-[50rpx]" mode="widthFix"></image>
+					<text class="text-[36rpx]">{{t('detailText')}}</text>
+					<image :src="img('/addon/home_service/goods/goods_content_right.png')" class="w-[50rpx]" mode="widthFix"></image>
+				</view>
+				<view class="mt-[24rpx]">
+					<view class="scheduling-content mt-2">
+						<u-parse :content="detail.goods?.goods_content" :tagStyle="{img: 'vertical-align: top;'}"
+							v-if="detail.goods?.goods_content"></u-parse>
+						<view v-else class="h-[380rpx] flex">
+							<view class="mx-auto">
+								<image class="w-[280rpx] h-[280rpx]"
+									:src="img('addon/home_service/goods/empty01.png')" />
+								<view class="text-center text-[#c1c1c1] text-[24rpx]">{{ t('noProjectInt') }}</view>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+			<view class="h-[148rpx] w-screen"></view>
 			<share-poster ref="sharePosterRef" posterType="home_service_goods" :posterId="detail.goods.poster_id"
 				:posterParam="posterParam" :copyUrlParam="copyUrlParam" />
 
@@ -1112,5 +1114,12 @@
 	.position-style{
 		background-size: 100%;
 		background-repeat: no-repeat;
+	}
+	.footer {
+		padding-bottom: calc( constant(safe-area-inset-bottom)) !important;
+		padding-bottom: calc( env(safe-area-inset-bottom)) !important;
+	}
+	.border-style{
+		border: 1rpx solid var(--primary-color)
 	}
 </style>

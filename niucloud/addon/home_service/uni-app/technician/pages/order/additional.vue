@@ -1,8 +1,7 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden component-class" :style="themeColor()">
 		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-		<u-navbar title="增项服务" bgColor="#ffffff" leftIconSize="15px" placeholder autoBack>
-		</u-navbar>
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 		<!-- #endif -->
 		<u-tabs :list="orderStatus" @click="click" keyName="label" @change="changeTabs"></u-tabs>
 		<view class="m-[25rpx]" v-if="!loading">
@@ -156,6 +155,9 @@
 	import { onLoad } from '@dcloudio/uni-app'
 	import { img, redirect, copy } from '@/utils/common'
 	import { t } from '@/locale'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '增项服务', topStatusBar: { textColor: '#333' } })
 	const loading = ref<boolean>(true);
 	const chooseNum = ref(0)
 	const goodsItem = ref([])

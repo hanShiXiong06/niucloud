@@ -1,5 +1,8 @@
 <template>
   <view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden component-class" v-if="!loading">
+	  <!-- #ifdef MP-WEIXIN || APP-PLUS -->
+	  <top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+	  <!-- #endif -->
     <!-- 日历部分 -->
     <view class="bg-white p-4 m-[24rpx] rounded-lg">
       <view class="mb-2">
@@ -120,6 +123,9 @@
 	import { t } from '@/locale'
 	import { getTechnicianRestRecords, submitTechnicianRestRecord, cancelTechnicianRestRecord, getTechnicianRestReasons } from '@/addon/home_service/technician/api/technician'
 	const loading = ref<boolean>(true);
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '排班管理', topStatusBar: { textColor: '#333'} })
 	// 定义休息记录接口
 	interface RestRecord {
 		date : string

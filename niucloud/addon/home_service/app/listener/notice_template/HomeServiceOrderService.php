@@ -23,12 +23,12 @@ class HomeServiceOrderService extends BaseNoticeTemplate
                 return $this->toReturn(
                     [
                         '__wechat_page' => get_wap_domain($order['site_id']) . '/addon/home_service/user/pages/order/detail?order_id=' . $order['order_id'],//模板消息链接
-//                        '__weapp_page' => 'addon/home_service/user/pages/order/detail?order_id=' . $order['order_id'],//小程序链接
+                        '__weapp_page' => 'addon/home_service/user/pages/order/detail?order_id=' . $order['order_id'],//小程序链接
                         'goods_name' => $order['order_name'],
                         'order_no' => $order['order_no'],
                         'order_money' => $order['order_money'], //交易流水号
                         'create_time' => $order['create_time'],//创建时间
-                        'technician' => $technician_info['real_name'],//师傅
+                        'technician' => $technician_info['real_name'],//技师
                         'mobile' => $technician_info['mobile'],//电话
                     ],
                     [

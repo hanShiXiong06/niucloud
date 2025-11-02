@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden component-class">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 日期切换标签 -->
 		<view class="px-4 py-3">
 			<view class="flex space-x-6 font-bold">
@@ -55,17 +58,17 @@
 					<template v-if="isTodayView">
 						<view class="flex-1 text-center">
 							<text 
-								class="text-white text-2xl font-bold block mb-1">{{ todayOrderStats.wait_service_count }}</text>
+								class="text-white text-2xl font-bold block mb-1">{{ todayOrderStats.wait_service_count || 0}}</text>
 							<text class="text-white text-sm">{{ t('pendingService') }}</text>
 						</view>
 						<view class="flex-1 text-center">
 							<text 
-								class="text-white text-2xl font-bold block mb-1">{{ todayOrderStats.wait_check_count }}</text>
+								class="text-white text-2xl font-bold block mb-1">{{ todayOrderStats.wait_check_count || 0}}</text>
 							<text class="text-white text-sm">{{ t('pendingAcceptance') }}</text>
 						</view>
 						<view class="flex-1 text-center">
 							<text 
-								class="text-white text-2xl font-bold block mb-1">{{ todayOrderStats.finish_count }}</text>
+								class="text-white text-2xl font-bold block mb-1">{{ todayOrderStats.finish_count || 0}}</text>
 							<text class="text-white text-sm">{{ t('completedOrders') }}</text>
 						</view>
 					</template>
@@ -74,17 +77,17 @@
 					<template v-else>
 						<view class="flex-1 text-center">
 							<text 
-								class="text-white text-2xl font-bold block mb-1">{{ monthOrderStats.finish_count }}</text>
+								class="text-white text-2xl font-bold block mb-1">{{ monthOrderStats.finish_count || 0}}</text>
 							<text class="text-white text-sm">{{ t('completedOrders') }}</text>
 						</view>
 						<view class="flex-1 text-center">
 							<text 
-								class="text-white text-2xl font-bold block mb-1">{{ monthOrderStats.close_count }}</text>
+								class="text-white text-2xl font-bold block mb-1">{{ monthOrderStats.close_count || 0}}</text>
 							<text class="text-white text-sm">{{ t('cancelled') }}</text>
 						</view>
 						<view class="flex-1 text-center">
 							<text 
-								class="text-white text-2xl font-bold block mb-1">{{ monthOrderStats.refund_count }}</text>
+								class="text-white text-2xl font-bold block mb-1">{{ monthOrderStats.refund_count || 0}}</text>
 							<text class="text-white text-sm">{{ t('refund') }}</text>
 						</view>
 					</template>
@@ -161,7 +164,9 @@
 	import { onPageScroll, onReachBottom } from '@dcloudio/uni-app'
 	import { img, redirect} from '@/utils/common'
 	import { t } from '@/locale'
-
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '订单统计', topStatusBar: { textColor: '#333'} })
 	// 类型定义
 	interface OrderStats {
 		wait_service_count : number

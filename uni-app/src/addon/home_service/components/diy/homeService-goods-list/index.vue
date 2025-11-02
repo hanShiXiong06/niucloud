@@ -42,6 +42,9 @@
 												    <text class="text-[24rpx] font-400">￥</text>
 												    <text class="text-[40rpx] font-500">{{ parseFloat(item.member_price|| item.price).toFixed(2).split('.')[0] }}</text>
 												    <text class="text-[24rpx] font-500">.{{ parseFloat(item.member_price || item.price).toFixed(2).split('.')[1] }}</text>
+													<text class="price-font text-[24rpx] text-[#999] line-through font-400 ml-[10rpx]"
+														v-if="item.goods_original_price && item.goods_original_price != item.member_price"><text
+															class="text-[24rpx] price-font">￥</text>{{ Number(item.goods_original_price).toFixed(2) }}</text>
 												</view>
                                                 <image v-if="diyGoods.priceType(item) == 'member_price'" class="max-w-[50rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/home_service/VIP.png')" mode="heightFix" />
 												<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'"  class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/home_service/newcomer.png')" mode="heightFix" />
@@ -92,6 +95,9 @@
                                                     <text class="text-[24rpx] font-400">￥</text>
                                                     <text class="text-[40rpx] font-500">{{ parseFloat(item.member_price || item.price).toFixed(2).split('.')[0] }}</text>
                                                     <text class="text-[24rpx] font-500">.{{ parseFloat(item.member_price ||item.price).toFixed(2).split('.')[1] }}</text>
+													<text class="price-font text-[24rpx] text-[#999] line-through font-400 ml-[10rpx]"
+														v-if="item.goods_original_price && item.goods_original_price != item.member_price"><text
+															class="text-[24rpx] price-font">￥</text>{{ Number(item.goods_original_price).toFixed(2) }}</text>
                                                 </view>
 												<image v-if="diyGoods.priceType(item) == 'member_price'" class="max-w-[50rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/home_service/VIP.png')" mode="heightFix" />
 												<image v-else-if="diyGoods.priceType(item) == 'newcomer_price'"  class="max-w-[60rpx] h-[28rpx] ml-[6rpx]" :src="img('addon/home_service/newcomer.png')" mode="heightFix" />

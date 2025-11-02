@@ -1,6 +1,6 @@
 <template>
 	<view :style="themeColor()" v-if="!loading">
-		<view class="bg-[#f7f7f7] min-h-screen overflow-hidden">
+		<view class="bg-[#f7f7f7] min-h-screen overflow-hidden body-bottom">
 			<!-- 自定义头部 -->
 			<view class="flex items-center left-0 right-0 z-10 bg-transparent detail-head" :class="{'!bg-[#fff]' :detailHeadBgChange, 'fixed': true}" :style="navbarInnerStyle">
 				<view class="flex-center h-[60rpx] rounded-[30rpx] box-border arrow-left px-[40rpx] leading-[1]" :style="navbarInnerArrowStyle">
@@ -62,22 +62,22 @@
 			<view class="px-[24rpx]">
 				<view class="rounded-lg bg-[#fff]">
 					<view class="flex items-center h-[88rpx] px-[20rpx]  ">
-						<text class=" text-[30rpx] leading-[42rpx] font-500 mr-[20rpx] text-[#666]">须知</text>
-						<view class="flex-1 text-[#343434] text-sm leading-[42rpx] font-500 text-right mr-[10rpx] ">
+						<text class=" text-[26rpx] leading-[42rpx] font-500 mr-[20rpx] text-[#666]">须知</text>
+						<view class="flex-1 text-[#343434]  text-[26rpx]  leading-[42rpx] font-500 text-right mr-[10rpx] ">
 							部分使用后不可退款，服务期内随时可用
 						</view>
 					</view>
 					<view class="flex items-center h-[88rpx] px-[20rpx]  ">
-						<text class=" text-[30rpx] leading-[42rpx] font-500 mr-[20rpx] text-[#666]">方式</text>
-						<view class="flex-1 text-[#343434] text-sm leading-[42rpx] font-500 text-right mr-[10rpx] ">
+						<text class=" text-[26rpx] leading-[42rpx] font-500 mr-[20rpx] text-[#666]">方式</text>
+						<view class="flex-1 text-[#343434]  text-[26rpx]  leading-[42rpx] font-500 text-right mr-[10rpx] ">
 							提前预约
 						</view>
 					</view>
 					<view @click="openServicesSafePopup" v-if="detail.guarantee_list?.length >= 1"
 						class="flex items-center h-[88rpx] px-[20rpx] mb-[20rpx]">
 						<text
-							class=" text-[30rpx] leading-[42rpx] font-500 mr-[20rpx] text-[#666]">{{ t('serviceSafe') }}</text>
-						<view class="flex-1 text-[#343434] text-sm leading-[42rpx] font-500 text-right mr-[10rpx] ">
+							class=" text-[26rpx] leading-[42rpx] font-500 mr-[20rpx] text-[#666]">{{ t('serviceSafe') }}</text>
+						<view class="flex-1 text-[#343434]  text-[26rpx]  leading-[42rpx] font-500 text-right mr-[10rpx] ">
 							{{ detail.guarantee_list[0].guarantee_title }}
 						</view>
 						<text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[var(--text-color-light6)]"></text>
@@ -90,7 +90,7 @@
 						服务详情
 					</view>
 					<view @click="buyFn" v-for="(item,index) in detail.skuList" class="flex items-center mt-[20rpx]">
-						<view class=" text-[30rpx] leading-[42rpx] font-500 mr-[20rpx] flex items-center">
+						<view class=" text-[26rpx] leading-[42rpx] mr-[20rpx] flex items-center">
 							<view class="w-[10rpx] h-[10rpx] rounded-[50%] mr-[15rpx] bg-[#848484]"></view>
 							{{ item.sku_name }}
 						</view>
@@ -322,7 +322,7 @@
 					</view>
 				</view>
 				<view class="h-[148rpx] w-screen"></view>
-				<view class="flex justify-between bg-white px-3 py-2 fixed bottom-0 left-0 right-0">
+				<view class="flex justify-between bg-white px-3 py-2 fixed bottom-0 left-0 right-0 body-bottom">
 					<view class="flex items-center">
 						<view class="flex flex-col items-center mr-[44rpx]"
 							@click="redirect({ url: '/addon/home_service/user/pages/index', mode: 'reLaunch' })">
@@ -786,5 +786,9 @@
 	.cf-arrow-left{
 		background: rgba(17, 17, 17, 0.50);
 	    border: 0.03125rem solid rgba(0, 0, 0, 0.1);
+	}
+	.body-bottom {
+		padding-bottom: calc( 20rpx + env(safe-area-inset-bottom, 0));
+		padding-bottom: calc(20rpx + constant(safe-area-inset-bottom, 0));
 	}
 </style>

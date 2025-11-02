@@ -15,6 +15,7 @@ use addon\home_service\app\model\help_feedback\HelpCategory;
 use addon\home_service\app\model\technician\TechnicianLevel;
 use addon\home_service\app\model\goods\Guarantee;
 use app\service\core\poster\CorePosterService;
+use app\service\admin\diy\DiyService;
 
 /**
  * 站点添加之后
@@ -38,7 +39,39 @@ class AddSiteAfter
                 'is_default' => 1
             ]);
 
-            //师傅默认等级
+            // 创建首页自定义页面
+            $addon_flag = 'DIY_HOME_SERVICE_INDEX';
+            $diy_service = new DiyService();
+            $addon_index_template = $diy_service->getFirstPageData($addon_flag, 'home_service');
+            $diy_service->add([
+                'page_title' => $addon_index_template['title'],
+                "title" => $addon_index_template['title'],
+                "name" => $addon_flag,
+                "type" => $addon_flag,
+                "template" => $addon_index_template['template'],
+                "mode" => $addon_index_template['mode'],
+                "value" => json_encode($addon_index_template['data']),
+                "is_default" => 1,
+                "is_change" => 0
+            ]);
+
+            // 创建个人中心
+            $addon_flag = 'DIY_HOME_SERVICE_MEMBER_INDEX';
+            $diy_service = new DiyService();
+            $addon_index_template = $diy_service->getFirstPageData($addon_flag, 'home_service');
+            $diy_service->add([
+                'page_title' => $addon_index_template['title'],
+                "title" => $addon_index_template['title'],
+                "name" => $addon_flag,
+                "type" => $addon_flag,
+                "template" => $addon_index_template['template'],
+                "mode" => $addon_index_template['mode'],
+                "value" => json_encode($addon_index_template['data']),
+                "is_default" => 1,
+                "is_change" => 0
+            ]);
+
+            //技师默认等级
             $technician_level = [
                 'site_id' => $site_id,
                 'level_num' => 0,

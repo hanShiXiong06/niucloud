@@ -28,13 +28,14 @@ class HomeServiceStoreDispatch extends BaseNoticeTemplate
             if (!empty($order)) {
                 return $this->toReturn(
                     [
-                        '__wechat_page' => get_wap_domain($order['site_id']) . '/addon/home_service/user/pages/order/detail?order_id=' . $order['order_id'],//模板消息链接
-//                        '__weapp_page' => 'addon/home_service/user/pages/order/refund/detail?refund_no=' . $order_refund['refund_id'],//小程序链接
+                        '__wechat_page' => get_wap_domain($order['site_id']) . '/addon/home_service/technician/pages/order/detail?order_id=' . $order['order_id'],//模板消息链接
+                        '__weapp_page' => 'addon/home_service/technician/pages/order/detail?order_id=' . $order['order_id'],//小程序链接
                         'store_name' => $order['store']['store_name'] ?? '',
                         'goods_name' => $order['order_name'],
                         'taker_name' => $order['taker_name'],
                         'taker_mobile' => $order['taker_mobile'],
                         'taker_full_address' => $order['taker_address'],
+                        'reserve_service_time' => $order['reserve_service_time'],
                     ],
                     [
                         'member_id' => $order['technician']['member_id'],

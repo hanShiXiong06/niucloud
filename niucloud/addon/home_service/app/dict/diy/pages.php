@@ -38,6 +38,14 @@ return [
                     'bottomTabBar' => [
                         'control' => true,
                         'isShow' => true,
+                        'designNav' => [
+                            'title' => '',
+                            'key' => ''
+                        ]
+                    ],
+                    "copyright" => [
+                        'control' => true,
+                        'isShow' => false
                     ],
                     'popWindow' => [
                         'imgUrl' => '',
@@ -908,6 +916,14 @@ return [
                     'bottomTabBar' => [
                         'control' => true,
                         'isShow' => true,
+                        'designNav' => [
+                            'title' => '',
+                            'key' => ''
+                        ]
+                    ],
+                    "copyright" => [
+                        'control' => true,
+                        'isShow' => false
                     ],
                     'template' => [
                         'textColor' => '#303133',
@@ -1213,9 +1229,9 @@ return [
                         'pageStyle' => 'padding-top:2rpx;padding-bottom:0rpx;padding-right:24rpx;padding-left:24rpx;',
                         'componentIsShow' => true,
                         'fontSize' => 12,
-                        'leftText' => '师傅管理',
+                        'leftText' => '技师管理',
                         'rightText' => '门店管理',
-                        'leftDesc' => '全量师傅信息总览',
+                        'leftDesc' => '全量技师信息总览',
                         'rightDesc' => '门店日常运营规范',
                     ],
                     [
@@ -1332,14 +1348,14 @@ return [
                         'list' => [
                             [
                                 'id' => '3yytuqlcknu0',
-                                'title' => '师傅入驻',
+                                'title' => '技师入驻',
                                 'imageUrl' => 'addon/home_service/diy/member/diy_img/technician.png',
                                 'imgWidth' => 92,
                                 'imgHeight' => 92,
                                 'link' => [
                                     'parent' => 'DIY_LINK',
                                     'url' => '/addon/home_service/user/pages/settle/technician',
-                                    'title' => '师傅入驻',
+                                    'title' => '技师入驻',
                                     'name' => 'DIY_LINK',
                                     'action' => '',
                                 ],

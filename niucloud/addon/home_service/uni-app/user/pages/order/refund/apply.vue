@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 主体内容 -->
 		<view class="m-[24rpx]">
 			<!-- 服务信息 -->
@@ -13,18 +16,18 @@
 					<view class="flex-1">
 						<!-- 调整商品名称和数量在同一行 -->
 						<view class="flex justify-between items-center">
-							<view class="text-base mb-1">
+							<view class="text-[28rpx] mb-1">
 								{{ orderInfo?.item?.[0]?.item_name || t('serviceItem') }}
 							</view>
 							<view class="text-sm text-[#999999]">×{{ orderInfo?.item?.[0]?.num || 1 }}</view>
 						</view>
 
 						<!-- 服务时间单独成行 -->
-						<view class="text-sm text-[#999999] mb-1">{{ orderInfo?.create_time || '' }}</view>
+						<view class="text-[24rpx] text-[#999999] mb-1">时间：{{ orderInfo?.create_time || '' }}</view>
 
 						<!-- 修复价格显示，添加小数点，并使实付款文本为黑色 -->
 						<view class="flex items-baseline">
-							<view class="text-sm text-black mr-1">实付款</view>
+							<view class="text-[24rpx] text-black mr-1">实付款</view>
 							<text class="text-xs text-[#EF000C]">{{ t('currency') }}</text>
 							<text
 								class="text-lg text-[#EF000C]">{{ formatPriceBeforeDecimal(orderInfo?.pay_money || 0) }}</text>
@@ -38,11 +41,11 @@
 
 			<!-- 选择退款原因 - 使用uView的radio组件 -->
 			<view class="bg-white rounded-lg p-[24rpx] mb-4">
-				<view class="text-base mb-[24rpx]">{{ t('selectRefundReason') }}</view>
+				<view class="text-[30rpx] mb-[24rpx]">{{ t('selectRefundReason') }}</view>
 				<u-radio-group v-model="refundReason" class="refund-reason-group">
 					<view v-for="(reason, index) in refundReasons" :key="index" class="reason-item">
 						<text class="reason-text">{{ reason.label }}</text>
-						<u-radio :name="reason.value" active-color="var(--primary-color)" inactive-color="#999999" size="32rpx" shape="circle"></u-radio>
+						<u-radio :name="reason.value" active-color="var(--primary-color)" inactive-color="#999999"  shape="circle" size="15"></u-radio>
 					</view>
 				</u-radio-group>
 			</view>
@@ -51,16 +54,16 @@
 			<view class="bg-white rounded-lg p-[24rpx] mb-[24rpx]">
 				<!-- 补充说明 -->
 				<view class="mb-[24rpx]">
-					<view class="text-base mb-3">补充描述</view>
+					<view class="text-[30rpx] mb-3">补充描述</view>
 					<textarea
-						class="w-[100%] p-[24rpx] box-border border-style rounded-md h-[200rpx] text-base resize-none text-[26rpx]"
+						class="w-[100%] p-[24rpx] box-border border-style rounded-md h-[200rpx] text-[30rpx] resize-none text-[26rpx]"
 						v-model="description" :placeholder="t('descriptionPlaceholder')" maxlength="200"></textarea>
 					<view class="text-right text-sm text-gray-400 mt-1">{{ description.length }}/200</view>
 				</view>
 				<!-- 凭证上传 -->
 				<view>
 					<text
-						class="text-base text-[30rpx] font-medium text-gray-800 block mb-[25rpx]">{{ t('uploadProof') }}</text>
+						class="text-[30rpx] text-[30rpx] font-medium text-gray-800 block mb-[25rpx]">{{ t('uploadProof') }}</text>
 					<upload-img v-model="images" :max-count="maxImages" :multiple="true" />
 					<view class="text-sm text-gray-400 mt-2">最多上传6张图片</view>
 				</view>
@@ -72,7 +75,7 @@
 			<view
 				class="pb-[35rpx] px-[var(--sidebar-m)] bg-[#fff] footer w-full fixed bottom-0 left-0 right-0 box-border">
 				<button hover-class="none"
-					class=" !text-[#fff] !rounded-lg  !text-[#fff] !bg-[var(--primary-color)] h-[80rpx] leading-[80rpx] rounded-[10rpx] text-[26rpx] font-500"
+					class=" !text-[#fff] !rounded-lg  !text-[#fff] !bg-[var(--primary-color)] h-[80rpx] !leading-[80rpx] rounded-[10rpx] !text-[26rpx] font-500"
 					@click="submitRefundForm" :disabled="btnDisabled" :loading="operateLoading"
 					:class="{'opacity-50': btnDisabled}">
 					{{ submitting ? t('submitting') : t('submitRefundApply') }}
@@ -94,7 +97,9 @@
 	// 导入系统标准upload-img组件
 	import uploadImg from '@/addon/home_service/user/components/upload-img/upload-img.vue'
 	// 导入uView的radio组件
-
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '申请售后', topStatusBar: { textColor: '#333' ,rollBgColor:"#ffffff"} })
 	// 订单信息
 	const orderInfo = ref<any>(null)
 	// 退款原因（绑定radio-group的值）
@@ -237,11 +242,6 @@
 			operateLoading.value = false
 			btnDisabled.value = false
 		})
-	}
-
-	// 主题颜色函数
-	const themeColor = () => {
-		return {} // 可以根据项目需求返回主题颜色样式
 	}
 </script>
 

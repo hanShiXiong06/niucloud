@@ -1,15 +1,20 @@
 <template>
 	<view :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<template v-if="!loading">
 			<view v-if="detail" class="bg-[#f7f7f7] min-h-screen overflow-hidden">
 				<view class="h-[800rpx] w-full">
-					<map class="map-body w-full h-[800rpx]" :latitude="detail.taker_latitude" :longitude="detail.taker_longitude" :markers="covers"></map>
+					<map class="map-body w-full h-[800rpx]" :latitude="detail.taker_latitude"
+						:longitude="detail.taker_longitude" :markers="covers"></map>
 				</view>
-				<view class="bg-[#fff] my-[30rpx] mx-[30rpx] rounded-[16rpx] p-[30rpx] mt-[-60rpx] relative z-index-999"
-					>
+				<view
+					class="bg-[#fff] my-[30rpx] mx-[30rpx] rounded-[16rpx] p-[30rpx] mt-[-60rpx] relative z-index-999">
 					<view class="flex justify-between mb-[10rpx]">
 						<view class="flex items-center">
-							<view class="flex items-center rounded-l-[50rpx] rounded-r-[6rpx] mr-[10rpx]" v-if="detail.buy_type == 'reservation' || detail.is_abnormal == 1 || detail.is_card_order == 1">
+							<view class="flex items-center rounded-l-[50rpx] rounded-r-[6rpx] mr-[10rpx]"
+								v-if="detail.buy_type == 'reservation' || detail.is_abnormal == 1 || detail.is_card_order == 1">
 								<view class="flex items-center mr-[5rpx]" v-if="detail.buy_type == 'reservation'">
 									<image :src="img('/addon/home_service/technician/yuyue-icon.png')"
 										class="w-[70rpx] mr-[5rpx]" mode="widthFix"></image>
@@ -105,10 +110,12 @@
 							<view class="text-[30rpx] font-bold">{{ t('serviceItems') }}</view>
 							<view class="flex justify-between items-end text-[26rpx]">
 								<view class="text-[22rpx] price-font pb-[2rpx]">
-									{{ t('realMoney') }}</view>
+									{{ t('realMoney') }}
+								</view>
 								<view
 									class="text-[32rpx] font-bold leading-[20rpx] text-[var(--price-text-color)] price-font">
-									<text class="!text-[22rpx]">￥</text>{{ detail.pay_money }}</view>
+									<text class="!text-[22rpx]">￥</text>{{ detail.pay_money }}
+								</view>
 							</view>
 						</view>
 						<!-- <view
@@ -117,15 +124,13 @@
 							<view class="text-[var(--price-text-color)] price-font"><text
 									class="!text-[24rpx]">￥</text>{{ detail?.item[0].item_money }}</view>
 						</view> -->
-						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] text-[#999999] my-[24rpx] rounded-[10rpx]"
-							>
+						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] text-[#999999] my-[24rpx] rounded-[10rpx]">
 							{{ t('remarkPrefix') }}{{detail.member_message || '暂无信息'}}
 						</view>
 						<view v-if="detail.discount_money && Number(detail.discount_money)"
 							class="flex justify-between text-[26rpx] pt-[0rpx] border-top-[2rpx] border-[solid] border-[#f1f1f1]">
 							<view>{{ t('couponMoney') }}</view>
-							<view class=" price-font"><text
-									class="!text-[24rpx]">￥</text>{{ detail.discount_money }}
+							<view class=" price-font"><text class="!text-[24rpx]">￥</text>{{ detail.discount_money }}
 							</view>
 						</view>
 					</view>
@@ -138,11 +143,11 @@
 							<view class="flex justify-between items-end text-[26rpx]">
 								<view
 									class="text-[32rpx] font-bold leading-[35rpx]  text-[var(--price-text-color)] price-font">
-									<text class="!text-[22rpx]">￥</text>{{ detail.technician_commission }}</view>
+									<text class="!text-[22rpx]">￥</text>{{ detail.technician_commission }}
+								</view>
 							</view>
 						</view>
-						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] text-[#999999] mt-[24rpx] rounded-[10rpx]"
-							>
+						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] text-[#999999] mt-[24rpx] rounded-[10rpx]">
 							{{ t('serviceFeeDesc') }}
 						</view>
 						<view v-if="detail?.order_status == 'in_service'"
@@ -151,7 +156,8 @@
 							<view>{{ t('additionalService') }}</view>
 							<view
 								class="text-[var(--price-text-color)] price-font text-[24rpx] text-[#999999] font-bold">
-								<text class="iconfont iconarrow-right  text-[26rpx]"></text></view>
+								<text class="iconfont iconarrow-right  text-[26rpx]"></text>
+							</view>
 						</view>
 					</view>
 				</view>
@@ -183,15 +189,14 @@
 			<view class="w-screen h-screen flex flex-col justify-center items-center" v-else>
 				<u-empty :icon="img('static/resource/images/order_empty.png')" :text="t('orderInfoNotObtained')" />
 			</view>
-			
+
 			<!-- 提交按钮 -->
 			<view class="w-full footer bg-[#fff]">
 				<view
 					class="py-[var(--top-m)] px-[var(--sidebar-m)] footer w-full bg-[#fff] fixed bottom-0 left-0 right-0 box-border">
 					<button hover-class="none"
 						class=" !text-[#fff] !bg-[var(--technician-bg-one)] h-[80rpx] leading-[80rpx] rounded-[10rpx] text-[26rpx] font-500"
-						@click="submitOrder(detail)"
-						:class="{'opacity-50': btnDisabled}">我要抢单
+						@click="submitOrder(detail)" :class="{'opacity-50': btnDisabled}">我要抢单
 					</button>
 				</view>
 			</view>
@@ -210,9 +215,8 @@
 				</view>
 			</view>
 		</u-popup>
-		<order-popup :show="popupState.visible" :order="popupState.order"
-			:action-key="popupState.actionKey" @close="closePopup()"
-			@confirm="handlePopupConfirm"></order-popup>
+		<order-popup :show="popupState.visible" :order="popupState.order" :action-key="popupState.actionKey"
+			@close="closePopup()" @confirm="handlePopupConfirm"></order-popup>
 		<loading-page :loading="loading"></loading-page>
 	</view>
 </template>
@@ -221,13 +225,16 @@
 	import { ref, computed, onMounted, onUnmounted } from 'vue'
 	import { onLoad, onShow } from '@dcloudio/uni-app'
 	import { img, redirect, copy } from '@/utils/common'
-	import { grabgrapOrderDetail,grabOrder  } from '@/addon/home_service/technician/api/order'
+	import { grabgrapOrderDetail, grabOrder } from '@/addon/home_service/technician/api/order'
 	import { t } from '@/locale'
 	import OrderMethods from '@/addon/home_service/technician/pages/order/js/orderMethods';
 	import orderPopup from '@/addon/home_service/technician/components/orderPopup/orderPopup.vue';
-import { popupState, closePopup, confirmPopup } from '@/addon/home_service/technician/pages/order/js/popupStatus'
+	import { popupState, closePopup, confirmPopup } from '@/addon/home_service/technician/pages/order/js/popupStatus'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '抢单', topStatusBar: { textColor: '#333'} })
 	const showImage = ref(false)
-	const  covers =ref([])
+	const covers = ref([])
 	// 处理订单按钮点击
 	const handleOrderAction = (order : any, key : string) => {
 		OrderMethods.orderClickFunction(
@@ -236,18 +243,18 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 			() => getOrderDetailFu(), // 刷新列表的回调
 		);
 	};
-	const submitOrder = (e:any) =>{
+	const submitOrder = (e : any) => {
 		uni.showModal({
-			title:'抢单提示',
-			content:`订单服务时间为${e.reserve_service_time},请提前合理安排工作时间，避免超时！`,
-			confirmText:'立即抢单',
+			title: '抢单提示',
+			content: `订单服务时间为${e.reserve_service_time},请提前合理安排工作时间，避免超时！`,
+			confirmText: '立即抢单',
 			success: function (res) {
 				loading.value = true
 				if (res.confirm) {
-					grabOrder(e.order_id).then((res)=>{
-						redirect({url:'/addon/home_service/technician/pages/order/index'})
+					grabOrder(e.order_id).then((res) => {
+						redirect({ url: '/addon/home_service/technician/pages/order/index' })
 						loading.value = false
-					}).catch((err)=>{
+					}).catch((err) => {
 						loading.value = false
 					})
 				} else if (res.cancel) {
@@ -364,17 +371,17 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 				timeOutOrder.value.about_to_timeout_count = detail.value.about_to_timeout_count
 			}
 			covers.value = [
-			  {
-				id: 1,
-				latitude: detail.value.taker_latitude,
-				longitude: detail.value.taker_longitude,
-				// 自定义标记点图标
-				iconPath: '/static/images/marker.png',
-				width: 20,
-				height: 28
-				// 移除价格标签配置
-			  }
-	]
+				{
+					id: 1,
+					latitude: detail.value.taker_latitude,
+					longitude: detail.value.taker_longitude,
+					// 自定义标记点图标
+					iconPath: '/static/images/marker.png',
+					width: 20,
+					height: 28
+					// 移除价格标签配置
+				}
+			]
 			// 根据订单状态控制定时器
 			const isInService = detail.value?.order_status === 'in_service'
 			controlTimer(isInService)
@@ -382,7 +389,7 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 			// 1. 转换为时间戳
 			const timestampMs = timeStrToTimestamp(targetTime); // 毫秒级时间戳（如 1753582453000）
 			const timestampS = timeStrToTimestamp(targetTime, true); // 秒级时间戳（如 1753582453）
-			
+
 			passedTime.value = calcPassedTime(targetTime);
 			loading.value = false
 			getStatus()
@@ -558,7 +565,7 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 		}
 	}
 
-	// 联系师傅
+	// 联系技师
 	const callPhoto = (tel) => {
 		if (!tel) return
 		uni.makePhoneCall({
@@ -600,7 +607,7 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 	onUnmounted(() => {
 		controlTimer(false)
 	})
-	
+
 	/**
 	 * 1. 将时间字符串转为时间戳（支持毫秒级/秒级）
 	 * @param {string} timeStr - 目标时间字符串（格式：YYYY-MM-DD HH:mm:ss）
@@ -608,76 +615,76 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 	 * @returns {number|null} 时间戳（转换失败返回 null）
 	 */
 	function timeStrToTimestamp(timeStr, isSecond = false) {
-	  // 生成 Date 对象（解析 "YYYY-MM-DD HH:mm:ss" 格式）
-	  const targetDate = new Date(timeStr);
-	  
-	  // 校验日期是否有效（避免 Invalid Date 情况）
-	  if (isNaN(targetDate.getTime())) {
-	    console.error("时间格式错误，请使用 'YYYY-MM-DD HH:mm:ss' 格式");
-	    return null;
-	  }
-	  
-	  // 返回毫秒级或秒级时间戳
-	  return isSecond ? Math.floor(targetDate.getTime() / 1000) : targetDate.getTime();
+		// 生成 Date 对象（解析 "YYYY-MM-DD HH:mm:ss" 格式）
+		const targetDate = new Date(timeStr);
+
+		// 校验日期是否有效（避免 Invalid Date 情况）
+		if (isNaN(targetDate.getTime())) {
+			console.error("时间格式错误，请使用 'YYYY-MM-DD HH:mm:ss' 格式");
+			return null;
+		}
+
+		// 返回毫秒级或秒级时间戳
+		return isSecond ? Math.floor(targetDate.getTime() / 1000) : targetDate.getTime();
 	}
-	
+
 	/**
 	 * 2. 计算目标时间到现在已过去的时间（返回易读格式）
 	 * @param {string} timeStr - 目标时间字符串（格式：YYYY-MM-DD HH:mm:ss）
 	 * @returns {string} 已过去时间（如 "1天2小时3分钟4秒"、"目标时间尚未到达"）
 	 */
 	function calcPassedTime(timeStr) {
-	  // 1. 获取目标时间戳（毫秒级）和当前时间戳
-	  const targetTimestamp = timeStrToTimestamp(timeStr);
-	  const nowTimestamp = new Date().getTime();
-	  
-	  // 校验时间戳是否有效
-	  if (targetTimestamp === null) return "时间解析失败";
-	  
-	  // 2. 计算时间差（毫秒）
-	  const timeDiff = nowTimestamp - targetTimestamp;
-	  
-	  // 3. 处理目标时间在未来的情况
-	  if (timeDiff < 0) {
-	    // 计算未来还需多久（可选逻辑，按需保留）
-	    const futureDiff = Math.abs(timeDiff);
-	    const futureStr = formatTimeDiff(futureDiff);
-	    return `目标时间尚未到达，还需 ${futureStr}`;
-	  }
-	  
-	  // 4. 处理时间差为 0 的情况
-	  if (timeDiff === 0) return "刚刚";
-	  
-	  // 5. 格式化时间差（转为天、时、分、秒）
-	  return `${formatTimeDiff(timeDiff)}前发布`;
+		// 1. 获取目标时间戳（毫秒级）和当前时间戳
+		const targetTimestamp = timeStrToTimestamp(timeStr);
+		const nowTimestamp = new Date().getTime();
+
+		// 校验时间戳是否有效
+		if (targetTimestamp === null) return "时间解析失败";
+
+		// 2. 计算时间差（毫秒）
+		const timeDiff = nowTimestamp - targetTimestamp;
+
+		// 3. 处理目标时间在未来的情况
+		if (timeDiff < 0) {
+			// 计算未来还需多久（可选逻辑，按需保留）
+			const futureDiff = Math.abs(timeDiff);
+			const futureStr = formatTimeDiff(futureDiff);
+			return `目标时间尚未到达，还需 ${futureStr}`;
+		}
+
+		// 4. 处理时间差为 0 的情况
+		if (timeDiff === 0) return "刚刚";
+
+		// 5. 格式化时间差（转为天、时、分、秒）
+		return `${formatTimeDiff(timeDiff)}前发布`;
 	}
-	
+
 	/**
 	 * 辅助函数：将毫秒级时间差转为 "天时分秒" 格式
 	 * @param {number} timeDiff - 时间差（毫秒）
 	 * @returns {string} 格式化后的时间差
 	 */
 	function formatTimeDiff(timeDiff) {
-	  // 定义时间单位（毫秒换算）
-	  const second = 1000;       // 1秒 = 1000毫秒
-	  const minute = second * 60; // 1分钟 = 60秒
-	  const hour = minute * 60;   // 1小时 = 60分钟
-	  const day = hour * 24;      // 1天 = 24小时
-	  
-	  // 计算各单位的数值
-	  const days = Math.floor(timeDiff / day);
-	  const hours = Math.floor((timeDiff % day) / hour);
-	  const minutes = Math.floor((timeDiff % hour) / minute);
-	  const seconds = Math.floor((timeDiff % minute) / second);
-	  
-	  // 拼接结果（只保留非 0 的单位，避免 "0天0小时3分钟" 这类冗余）
-	  const parts = [];
-	  if (days > 0) parts.push(`${days}天`);
-	  if (hours > 0) parts.push(`${hours}小时`);
-	  if (minutes > 0) parts.push(`${minutes}分钟`);
-	  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}秒`); // 若前面都是 0，至少显示秒
-	  
-	  return parts.join("");
+		// 定义时间单位（毫秒换算）
+		const second = 1000;       // 1秒 = 1000毫秒
+		const minute = second * 60; // 1分钟 = 60秒
+		const hour = minute * 60;   // 1小时 = 60分钟
+		const day = hour * 24;      // 1天 = 24小时
+
+		// 计算各单位的数值
+		const days = Math.floor(timeDiff / day);
+		const hours = Math.floor((timeDiff % day) / hour);
+		const minutes = Math.floor((timeDiff % hour) / minute);
+		const seconds = Math.floor((timeDiff % minute) / second);
+
+		// 拼接结果（只保留非 0 的单位，避免 "0天0小时3分钟" 这类冗余）
+		const parts = [];
+		if (days > 0) parts.push(`${days}天`);
+		if (hours > 0) parts.push(`${hours}小时`);
+		if (minutes > 0) parts.push(`${minutes}分钟`);
+		if (seconds > 0 || parts.length === 0) parts.push(`${seconds}秒`); // 若前面都是 0，至少显示秒
+
+		return parts.join("");
 	}
 </script>
 
@@ -713,7 +720,7 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 	.border-style {
 		border: 2rpx solid #4a6bff;
 	}
-	
+
 	// 底部安全区域适配
 	.footer {
 		height: calc(100rpx + var(--top-m) + var(--top-m) + constant(safe-area-inset-bottom)) !important;
@@ -721,5 +728,5 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 	}
 </style>
 <style lang="scss">
-@import '@/addon/home_service/technician/style/index.scss';
+	@import '@/addon/home_service/technician/style/index.scss';
 </style>

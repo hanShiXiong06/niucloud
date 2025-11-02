@@ -388,7 +388,7 @@
 													<el-tooltip
 														content="
 															用于计算订单增项项目的基础佣金比例 <br>
-															增项佣金 = 增项金额 × 增项佣金比例 × 门店 / 师傅分成比例
+															增项佣金 = 增项金额 × 增项佣金比例 × 门店 / 技师分成比例
 														"
 														raw-content
 														>
@@ -434,15 +434,20 @@
 										</template>
 									</el-table-column>
 								</el-table>
-								<el-button type="primary" @click="onAddItemorder()"
-									class="mt-[15px]">{{ t('addItem') }}</el-button>
+							<div class="pt-[10px]">
+								<div>
+									<el-alert type="warning" show-icon :closable="false">
+									<template #title>
+										<span class="!text-[14px]">订单提交后，增项服务将显示在订单详情；接单师傅可按实际情况下单增项产品或调整相关服务费用。</span>
+									</template>
+                					</el-alert>
+								</div>
+								<el-button type="primary" @click="onAddItemorder()" class="mt-[15px]">{{ t('addItem') }}</el-button>
+							</div>
+								
 								<!-- <p class="text-[12px] text-[#a9a9a9]">价目表显示在项目详情作为参考，价格透明，有助于客户下单，预约后实际支付按照师傅报价结算</p> -->
 							</div>
 						</el-form-item>
-
-
-
-
 					</el-form>
 				</el-tab-pane>
 				<el-tab-pane :label="t('goodsDescTab')" name="detail">

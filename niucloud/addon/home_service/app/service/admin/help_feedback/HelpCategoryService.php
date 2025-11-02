@@ -73,10 +73,12 @@ class HelpCategoryService extends BaseAdminService
         $data['update_time'] = time();
         if ($data['is_default'] == 1){
             $this->model->where([['site_id', '=', $this->site_id]])->update(['is_default' => 0]);
-        }else{
+        }
+        if($data['is_default'] === 0 ){
             $info = $this->model->where([['category_id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty();
             if ($info->is_default == 1) throw new AdminException('MUST_HAVE_DEFAULT_CATEGORY');
         }
+
         $this->model->where([['category_id', '=', $id], ['site_id', '=', $this->site_id]])->update($data);
         return true;
     }

@@ -4,20 +4,19 @@
 		<view class="flex px-[25rpx] items-center py-[20rpx]">
 			<view class="flex flex-1 items-center bg-[#f6f6f6] rounded-[50rpx] px-[25rpx] py-[15rpx]">
 				<u-icon name="search" size="20" color="#999" class="mr-2"></u-icon>
-				<input type="text" :placeholder="t('searchPlaceholder')" v-model="searchName"
-					@blur="searchTechnican" class="flex-1 bg-transparent text-[26rpx]" />
+				<input type="text" :placeholder="t('searchPlaceholder')" v-model="searchName" @blur="searchTechnican"
+					class="flex-1 bg-transparent text-[26rpx]" />
 			</view>
 			<view class="ml-[35rpx]" @click="statusShow = true"><text
-					class="iconfont icona-shaixuan-36V6xx-36 pr-[5rpx] text-[26rpx]"></text> <text
-					class=" text-[26rpx]" @click="handleFilter">{{ t('filter') }}</text></view>
+					class="iconfont icona-shaixuan-36V6xx-36 pr-[5rpx] text-[26rpx]"></text> <text class=" text-[26rpx]"
+					@click="handleFilter">{{ t('filter') }}</text></view>
 		</view>
 		<u-tabs :list="categoryList" keyName="category_name" @change="changeTabs"></u-tabs>
 	</u-sticky>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden component-class" :style="themeColor()">
 		<!-- 仅在小程序端显示导航栏 -->
-		<!-- #ifdef MP-WEIXIN -->
-		<u-navbar :title="t('pageHeaderTitle')" leftIconSize="0" :autoBack="true">
-		</u-navbar>
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="false" />
 		<!-- #endif -->
 
 
@@ -25,11 +24,11 @@
 		<u-picker :show="statusShow" :columns="statusList" keyName="label" @confirm="statusConfrim"
 			@cancel="statusShow = false"></u-picker>
 
-		<!-- 师傅列表内容区域 - 调整mescroll-body的样式和位置 -->
+		<!-- 技师列表内容区域 - 调整mescroll-body的样式和位置 -->
 		<mescroll-body ref="mescrollRef" :down="{ use: false }" :top="getMescrollTop()" @init="mescrollInit"
 			@up="getTechnicianListFn" class="custom-mescroll-body">
 			<view class="mt-2 mx-[25rpx]" v-if="technicianList.length">
-				<!-- 师傅项 -->
+				<!-- 技师项 -->
 				<view class="bg-white p-[24rpx] mb-[25rpx] rounded-lg" v-for="(technician, index) in technicianList"
 					:key="index" @click.stop="goDetail(technician.technician_id)">
 					<view class="flex">
@@ -49,7 +48,7 @@
 							</text>
 						</view>
 
-						<!-- 师傅信息 -->
+						<!-- 技师信息 -->
 						<view class="flex-1">
 							<view class="flex items-center justify-between">
 								<view class="flex items-center">
@@ -141,14 +140,9 @@
 				</view>
 				<view class="flex my-[40rpx] items-center border-bottom">
 					<view class="">分佣比例：</view>
-					<input type="number" inputmode="decimal"
-					pattern="\d+(\.\d+)?" 
-					maxlength="5" 
-					v-model="ratoNumber"
-					class="rounded-[20rpx] p-1 px-3 flex items-center w-[280rpx]"
-					placeholder="请输入0-100的比例"
-					@input="handleRatoInput" 
-					/>
+					<input type="number" inputmode="decimal" pattern="\d+(\.\d+)?" maxlength="5" v-model="ratoNumber"
+						class="rounded-[20rpx] p-1 px-3 flex items-center w-[280rpx]" placeholder="请输入0-100的比例"
+						@input="handleRatoInput" />
 					<span class="ml-[15rpx]">%</span> <!-- 增加百分比符号，引导用户理解 -->
 				</view>
 				<view>
@@ -174,9 +168,11 @@
 	import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue';
 	import useMescroll from '@/components/mescroll/hooks/useMescroll.js';
 	import { onPageScroll, onReachBottom } from '@dcloudio/uni-app';
-	import { getTechnicianList, getCategoryList, getTechnicianStatus,setRate } from '@/addon/home_service/store/api/technician'
+	import { getTechnicianList, getCategoryList, getTechnicianStatus, setRate } from '@/addon/home_service/store/api/technician'
 	import useSystemStore from '@/stores/system';
-
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '机构师傅', topStatusBar: { textColor: '#333' } })
 	const systemStore = useSystemStore()
 	const platform = systemStore.systemInfo.platform;
 	const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
@@ -184,7 +180,7 @@
 	// 1. 小程序菜单按钮（胶囊）信息：用于计算适配距离
 	const menuButtonInfo = ref({});
 	menuButtonInfo.value = systemStore.menuButtonInfo
-	
+
 	// 2. 导航栏核心适配数据
 	// 导航栏总高度（小程序：胶囊高度 + 胶囊top；H5：0）
 	const navHeight = computed(() => {
@@ -198,35 +194,35 @@
 	const settechnicianRato = ref({})
 	const showPopup = (technician : any) => {
 		settechnicianRato.value = technician
-		ratoNumber.value= technician.order_rate
+		ratoNumber.value = technician.order_rate
 		showratoPopup.value = true
 	}
 	// 实时校验分佣比例输入
 	const handleRatoInput = () => {
-	  // 1. 先过滤掉非数字和多余小数点（如 12.3.4 会变成 12.34）
-	  const filteredValue = ratoNumber.value.replace(/[^0-9.]/g, '').replace(/\.{2,}/g, '.');
-	  // 2. 限制只保留1位小数（可选，根据需求调整）
-	  const decimalIndex = filteredValue.indexOf('.');
-	  if (decimalIndex !== -1 && filteredValue.length > decimalIndex + 2) {
-	    ratoNumber.value = filteredValue.slice(0, decimalIndex + 2);
-	  } else {
-	    ratoNumber.value = filteredValue;
-	  }
-	
-	  // 3. 转成数字判断范围
-	  const num = Number(ratoNumber.value);
-	  if (num > 100) {
-	    uni.showToast({ title: '比例不能超过100%', icon: 'none', duration: 1000 });
-	    ratoNumber.value = '100'; // 超过100时强制设为100
-	  } else if (num < 0 && ratoNumber.value) {
-	    uni.showToast({ title: '比例不能小于0%', icon: 'none', duration: 1000 });
-	    ratoNumber.value = '0'; // 小于0时强制设为0
-	  }
+		// 1. 先过滤掉非数字和多余小数点（如 12.3.4 会变成 12.34）
+		const filteredValue = ratoNumber.value.replace(/[^0-9.]/g, '').replace(/\.{2,}/g, '.');
+		// 2. 限制只保留1位小数（可选，根据需求调整）
+		const decimalIndex = filteredValue.indexOf('.');
+		if (decimalIndex !== -1 && filteredValue.length > decimalIndex + 2) {
+			ratoNumber.value = filteredValue.slice(0, decimalIndex + 2);
+		} else {
+			ratoNumber.value = filteredValue;
+		}
+
+		// 3. 转成数字判断范围
+		const num = Number(ratoNumber.value);
+		if (num > 100) {
+			uni.showToast({ title: '比例不能超过100%', icon: 'none', duration: 1000 });
+			ratoNumber.value = '100'; // 超过100时强制设为100
+		} else if (num < 0 && ratoNumber.value) {
+			uni.showToast({ title: '比例不能小于0%', icon: 'none', duration: 1000 });
+			ratoNumber.value = '0'; // 小于0时强制设为0
+		}
 	};
 	// 修复getMescrollTop函数，确保内容区域正确显示在固定头部下方
 	const getMescrollTop = () => {
 		// #ifdef MP-WEIXIN
-		return (navHeight.value || 0) + 'px';
+		return 0 + 'px';
 		// #endif
 		// #ifndef MP-WEIXIN
 		// 公众号模式下设置为0，确保内容紧贴顶部固定区域
@@ -250,17 +246,17 @@
 		}
 
 		// 3. 校验通过，执行后续逻辑（如接口请求）
-		let params ={
-			technician_id:settechnicianRato.value.technician_id,
-			order_rate:ratoNumber.value
+		let params = {
+			technician_id: settechnicianRato.value.technician_id,
+			order_rate: ratoNumber.value
 		}
-		setRate(params).then((res)=>{
-			uni.showToast({ title: '分佣比例设置成功' ,icon:'none'});
+		setRate(params).then((res) => {
+			uni.showToast({ title: '分佣比例设置成功', icon: 'none' });
 			showratoPopup.value = false; // 关闭弹窗
 			ratoNumber.value = ''; // 清空输入框
 			getMescroll().resetUpScroll()
 		})
-	
+
 
 	};
 	const statusList = ref([[{ label: '全部', value: '' }]])
@@ -365,7 +361,7 @@
 </script>
 
 <style lang="scss">
-@import '@/addon/home_service/store/style/index.scss';
+	@import '@/addon/home_service/store/style/index.scss';
 </style>
 
 <style lang="scss" scoped>
@@ -401,7 +397,8 @@
 	.border-bottom {
 		border-bottom: 2rpx solid #efefef;
 	}
-	:deep(.u-tabbar--fixed){
-		z-index:99 !important;
+
+	:deep(.u-tabbar--fixed) {
+		z-index: 99 !important;
 	}
 </style>

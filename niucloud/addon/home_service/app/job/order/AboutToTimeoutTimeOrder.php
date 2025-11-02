@@ -27,7 +27,7 @@ class AboutToTimeoutTimeOrder extends BaseJob
      * 处理异常订单
      * @return true
      */
-    protected function doJob()
+    public function doJob()
     {
         try {
             $orderConfig = (new CoreOrderConfigService())->getOrderConfig($data['site_id'] ?? 0) ?? [];

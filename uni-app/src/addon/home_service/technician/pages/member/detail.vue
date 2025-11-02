@@ -2,14 +2,13 @@
 	<view class="bg-[var(--page-bg-color)] overflow-hidden position-size" v-if="!loading"
 		:style="{backgroundImage:'url(' + img('addon/home_service/store/technician/detail-bg.png') + ')'}">
 		<view :style="themeColor()">
-			<u-navbar :title="t('technicianDetail')" :autoBack="true" leftIconSize="0"
-				:bgColor="scrollTop > 50 ? '#ffffff' : 'transparent'" placeholder>
-			</u-navbar>
-
-			<!-- 师傅基本信息区 - 正确实现背景图片 -->
+			<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+			<top-tabbar :data="topTabbarData" scrollBool="1" isBack />
+			<!-- #endif -->
+			<!-- 技师基本信息区 - 正确实现背景图片 -->
 			<view class="relative pt-[15rpx] px-[25rpx]">
 				<view class="relative z-10 flex items-start">
-					<!-- 师傅照片 -->
+					<!-- 技师照片 -->
 					<u--image :src="img(technician?.headimg || '')" width="210rpx" height="210rpx" radius="100rpx"
 						mode="aspectFill">
 						<template #error>
@@ -19,7 +18,7 @@
 						</template>
 					</u--image>
 
-					<!-- 师傅基本信息 -->
+					<!-- 技师基本信息 -->
 					<view class="ml-[15px] flex-1">
 						<!-- 姓名与状态 -->
 						<view class="flex items-center mb-[10rpx]">
@@ -101,7 +100,7 @@
 					<!-- 基本信息项 -->
 					<!-- 基本信息项 -->
 					<view class="personal-info-container">
-						<!-- 师傅基本信息 -->
+						<!-- 技师基本信息 -->
 						<view class="mb-[15px]">
 							<view class="py-[10px] border-b border-gray-100">
 								<text class="text-[30rpx] text-gray-700 block mb-[5px]">{{t('name')}}</text>
@@ -155,7 +154,10 @@
 							<view class="bg-[#F6FCFF] p-[25rpx] rounded-lg "
 								v-for="(skillItem, index) in technician?.category_name || []" :key="index">
 								<text
-									class="text-sm !font-bold text-[#1773FF] skill-name">{{ skillItem?.category_name || '' }}</text>
+									class="text-[30rpx] !font-bold text-[#1773FF] skill-name">{{ skillItem?.category_name || '' }}</text>
+									<view class="text-[26rpx] text-[#A0A4A6] pt-[15rpx]">{{ skillItem.intro || '' }}</view>
+							</view>
+							<view>
 							</view>
 						</view>
 					</view>
@@ -165,7 +167,7 @@
 	</view>
 	<loading-page :loading="loading"></loading-page>
 
-	<!-- 编辑师傅信息弹窗 -->
+	<!-- 编辑技师信息弹窗 -->
 	<u-popup :show="isDialogVisible" mode="center" :closeable="true" :mask-close-able="false" round="5" @close="isDialogVisible = false" zIndex="999">
 		<view class=" bg-white rounded-xl p-[25rpx] w-[80vw]">
 			<view class="text-lg font-bold text-center mb-5">{{t('editTechnicianInfo')}}</view>
@@ -174,20 +176,20 @@
 			<view class="flex flex-col items-center mb-5">
 				<upload-img v-model="editForm.headimg" bgUrl="" :max-count="1" :multiple="false" />
 			</view>
-
-			<!-- 表单 - 修复语法错误 -->
-			<u-form :model="editForm" ref="formRef" :rules="rules" labelWidth="80" required class="ml-[30rpx]">
-				<u-form-item :label="t('name')" prop="name" required>
-					<u-input v-model="editForm.name" :placeholder="t('pleaseEnterName')"></u-input>
-				</u-form-item>
-				<u-form-item :label="t('phone')" prop="phone" required>
-					<u-input v-model="editForm.phone" type="number" :placeholder="t('pleaseEnterPhone')"></u-input>
-				</u-form-item>
-				<!-- <u-form-item :label="t('selfIntroduction')" prop="introduction" required>
-					<u-input v-model="editForm.introduction" type="textarea" :rows="3" 
-						:placeholder="t('pleaseEnterIntroduction')"></u-input>
-				</u-form-item> -->
-			</u-form>
+			<view class="w-[100%]">
+				<u-form :model="editForm" ref="formRef" :rules="rules" labelWidth="60" required >
+					<u-form-item :label="t('name')" prop="name" required>
+						<u-input v-model="editForm.name" :placeholder="t('pleaseEnterName')"></u-input>
+					</u-form-item>
+					<u-form-item :label="t('phone')" prop="phone" required>
+						<u-input v-model="editForm.phone" type="number" :placeholder="t('pleaseEnterPhone')"></u-input>
+					</u-form-item>
+					<!-- <u-form-item :label="t('selfIntroduction')" prop="introduction" required>
+						<u-input v-model="editForm.introduction" type="textarea" :rows="3" 
+							:placeholder="t('pleaseEnterIntroduction')"></u-input>
+					</u-form-item> -->
+				</u-form>
+			</view>
 
 			<!-- 按钮 -->
 			<view class="flex mt-6">
@@ -207,9 +209,13 @@
 	import { getTechnicianInfo, editTechnicianInfo } from '@/addon/home_service/technician/api/technician'
 	import uploadImg from '@/addon/home_service/technician/components/upload-img/upload-img.vue'
 	// 导入u-popup组件
-
+	import { topTabar } from '@/utils/topTabbar';
+	// 系统状态管理
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '师傅资料', topStatusBar: { textColor: '#333',rollBgColor:'#ffffff'} })
+	// let topTabbarData = topTabarObj.setTopTabbarParam({ title: '师傅资料', topStatusBar: { textColor: '#333',rollBgColor:scrollTop.value >= 20 ? '#ffffff' : 'transparent' } })
 	const technician_id = ref('')
-	// 师傅详情数据 - 改为ref对象
+	// 技师详情数据 - 改为ref对象
 	const loading = ref<boolean>(true);
 	const technician = ref({
 		real_name: '',
@@ -225,7 +231,7 @@
 		status: '1'
 	})
 
-	// 获取师傅详情方法
+	// 获取技师详情方法
 	const getTechnicianDetailFn = () => {
 		loading.value = true
 		getTechnicianInfo(technician_id.value).then((res : any) => {
@@ -285,7 +291,7 @@
 	// 处理编辑按钮点击事件 - 简化实现
 	const handleEdit = () => {
 		try {
-			console.log('编辑按钮被点击，当前师傅数据：', technician.value);
+			console.log('编辑按钮被点击，当前技师数据：', technician.value);
 			// 打开弹窗前设置临时数据
 			editForm.value = {
 				name: technician.value?.real_name || '',
@@ -435,6 +441,9 @@
 
 	.position-size {
 		background-size: 100%;
+	}
+	:deep(.u-form){
+		margin-left: 30rpx;
 	}
 </style>
 

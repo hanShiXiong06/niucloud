@@ -21,7 +21,7 @@ use core\exception\ApiException;
 
 
 /**
- * 师傅收藏收藏层
+ * 技师收藏收藏层
  * Class TechnicianCollectService
  * @package addon\home_service\app\service\api\goods
  */
@@ -86,13 +86,13 @@ class TechnicianCollectService extends BaseApiService
      */
     public function cancelTechnicianCollect($data)
     {
-        $res = $this->model->where([['technician_id', '=', $data['technician_id']], ['member_id', '=', $this->member_id], ['site_id', '=', $this->site_id]])->delete();
+        $res = $this->model->where([['technician_id', '=', $data['technician_ids']], ['member_id', '=', $this->member_id], ['site_id', '=', $this->site_id]])->delete();
         return $res;
     }
 
 
     /**
-     * 师傅是否收藏
+     * 技师是否收藏
      */
     public function getTechnicianIsCollect($technician_id): int
     {

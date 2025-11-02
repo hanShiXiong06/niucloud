@@ -1,13 +1,11 @@
 <template>
 	<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-		<u-navbar :title="t('myEvaluate')" autoBack :fixed="true" placeholder>
-		</u-navbar>
+	<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 	<!-- #endif -->
-	
+
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()" v-if="!loading">
 		<!-- 评价类型和筛选条件合并到同一行 -->
-		<view
-			class="flex px-[30rpx] py-[20rpx] border-b border-[var(--border-color)] justify-between items-center">
+		<view class="flex px-[30rpx] py-[20rpx] border-b border-[var(--border-color)] box-border z-index-99 justify-between items-center fixed w-[100vw] bg-[#fff]" :style="{'top': systemStore.topTabbarInfo.fullHeight || 0}">
 			<view class="flex items-center">
 				<text class="text-[30rpx] font-bold text-[var(--primary-color)]">已评价</text>
 				<text class="ml-[10rpx] text-sm text-gray-500">({{ totalCount }})</text>
@@ -24,7 +22,8 @@
 					</text>
 				</view>
 				<!-- 时间筛选按钮 -->
-				<view class="flex items-center justify-center w-[90rpx] py-[8rpx] rounded-[16rpx] border-[2rpx] px-[10rpx] border-style"
+				<view
+					class="flex items-center justify-center w-[90rpx] py-[8rpx] rounded-[16rpx] border-[2rpx] px-[10rpx] border-style"
 					:class="currentFilter === 'time' ? 'active-background active-border' : 'bg-transparent border-transparent'"
 					@click="switchFilter('time')">
 					<text class="!text-[26rpx]"
@@ -40,32 +39,36 @@
 		</view>
 
 		<!-- 评价列表 -->
-		<mescroll-body ref="mescrollRef" top="200rpx" @init="mescrollInit" :down="{ use: false }" @up="getEvaluateList">
-			<view class="bg-white mt-[20rpx] mb-[20rpx] mx-[25rpx] rounded-lg py-[10rpx]" v-for="(item, index) in evaluateList" :key="index">
+		<mescroll-body ref="mescrollRef" top="" @init="mescrollInit" :down="{ use: false }" @up="getEvaluateList">
+			<view class="pt-[100rpx]"></view>
+			<view class="bg-white mt-[20rpx] mb-[20rpx] mx-[25rpx] rounded-lg py-[10rpx] "
+				v-for="(item, index) in evaluateList" :key="index">
 				<!-- 评分 - 使用图片替换Unicode符号 -->
 				<view class="flex items-center justify-between px-[30rpx] pt-[20rpx]">
 					<u-rate :count="5" v-model="item.scores"></u-rate>
 					<text class=" text-[24rpx] text-[#999999]">发布于{{ item.create_time }}</text>
-					<text  class="text-[24rpx] text-[#999999]">{{item.anonymous_name}}</text>
+					<text class="text-[24rpx] text-[#999999]">{{item.anonymous_name}}</text>
 				</view>
 
 				<!-- 服务信息 -->
-				<view class="px-[30rpx] py-[25rpx] flex items-center bg-[#F4F8FF] mx-[25rpx] rounded-lg my-[15rpx]" @click="toDetail(item.goods_id)">
+				<view class="px-[30rpx] py-[25rpx] flex items-center bg-[#F4F8FF] mx-[25rpx] rounded-lg my-[15rpx]"
+					@click="toDetail(item.goods_id)">
 					<image v-if="item.order && item.order.item_image_thumb_small"
 						class="w-[60rpx] h-[60rpx] mr-[18rpx] rounded-[8rpx]"
 						:src="img(item.order.item_image_thumb_small)" mode="aspectFill"
-						@error="handleServiceImageError(item)"/>
-					<text v-if="item.order" class="text-base">{{ item.order.order_name }}</text>
+						@error="handleServiceImageError(item)" />
+					<text v-if="item.order" class="text-[28rpx]">{{ item.order.order_name }}</text>
 				</view>
 
 				<!-- 评价内容 -->
 				<view class="px-[30rpx] py-[10rpx]">
-					<text class="text-base text-gray-600">{{ item.content }}</text>
+					<text class="text-[28rpx] text-gray-600">{{ item.content }}</text>
 				</view>
 				<!-- 评价图片 -->
 				<view v-if="item.image_mid && item.image_mid.length > 0"
 					class="px-[30rpx] py-[10rpx] pb-[20rpx]  grid grid-cols-4 gap-4">
-					<view v-for="(imageUrl, imgIndex) in item.image_mid" :key="imgIndex" @click="previewImage(item,imgIndex)">
+					<view v-for="(imageUrl, imgIndex) in item.image_mid" :key="imgIndex"
+						@click="previewImage(item,imgIndex)">
 						<u--image :src="img(imageUrl)" width="140rpx" height="140rpx" radius="10rpx">
 							<view slot="error" style="font-size: 24rpx;">加载失败</view>
 						</u--image>
@@ -84,9 +87,14 @@
 	import { ref, onMounted } from 'vue'  // 导入onMounted
 	import { onShow } from '@dcloudio/uni-app'
 	import { t } from '@/locale'
-  import {img, goback, redirect} from '@/utils/common'
+	import { img, goback, redirect } from '@/utils/common'
 	import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue'
 	import { getEvaluateList as getEvaluateListAPI } from '@/addon/home_service/user/api/evaluate'
+	import useSystemStore from '@/stores/system';
+	const systemStore = useSystemStore()
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '订单评价', topStatusBar: { textColor: '#333', rollBgColor: "#ffffff" } })
 	// 返回上一页
 	const onBack = () => {
 		if (getCurrentPages().length > 1) {
@@ -96,9 +104,9 @@
 		}
 	}
 
-  const toDetail = (id: string | number) => {
-    redirect({ url: '/addon/home_service/user/pages/goods/detail', param: { goods_id: id }, mode: 'navigateTo' })
-  }
+	const toDetail = (id : string | number) => {
+		redirect({ url: '/addon/home_service/user/pages/goods/detail', param: { goods_id: id }, mode: 'navigateTo' })
+	}
 
 	// 评价数据接口定义
 	interface OrderItem {
@@ -280,10 +288,10 @@
 		// return
 		uni.previewImage({
 			urls: urls,
-			current:index,
+			current: index,
 			indicator: 'none'
 		})
-	 }
+	}
 </script>
 
 <style lang="scss" scoped>
@@ -297,11 +305,13 @@
 	}
 
 	.active-border {
-		border: 2rpx solid #004FFF;
+		border: 2rpx solid var(--primary-color);
 	}
+
 	.active-background {
 		background-color: #F6FEF7;
 	}
+
 	.active-color {
 		color: var(--primary-color)
 	}

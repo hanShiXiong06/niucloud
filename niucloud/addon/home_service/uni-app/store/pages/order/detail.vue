@@ -2,8 +2,7 @@
 	<view :style="themeColor()">
 		<template v-if="!loading">
 			<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-			<u-navbar title="订单详情" bgColor="#ffffff" leftIconSize="15px" autoBack placeholder>
-			</u-navbar>
+			<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 			<!-- #endif -->
 			<view v-if="detail" class="bg-[#f7f7f7] min-h-screen overflow-hidden">
 				<view class="px-3 pt-5">
@@ -16,19 +15,29 @@
 							<u-icon name="person-delete-fill" color="#999999" class="mr-[5rpx]"></u-icon>{{ t('orderNotStarted') }}
 						</view>
 						<view v-else>
-							<view class="text-[24rpx] text-[#999999] flex items-center mb-[10rpx]">
+							<view class="text-[24rpx] text-[#999999] flex items-center mb-[15rpx]" v-if="detail?.take_photos && detail?.take_photos.length">
 								<u-icon name="car" color="#999999" class="mr-[5rpx]"></u-icon>{{ t('servicePersonDeparted') }}
 							</view>
 							<view class="text-[24rpx] text-[#999999] flex items-center justify-between mb-[10rpx]"
-								v-if="detail?.take_photos && detail?.take_photos.length">
-								<view class="flex items-center">
-									<u-icon name="camera" color="#999999" class="mr-[5rpx]"></u-icon>{{ t('servicePersonCheckedIn') }}
+									v-if="detail?.take_photos && detail?.take_photos.length">
+									<view class="flex items-center">
+										<u-icon name="camera" color="#999999" class="mr-[5rpx]"></u-icon>{{ t('servicePersonCheckedIn') }}
+									</view>
+									<view class="border-style text-[#4a83ff] px-[15rpx] py-[10rpx] rounded-5rpx"
+										@click="showImage = true">
+										{{ t('viewCheckInPhotos') }}
+									</view>
 								</view>
-								<view class="border-style text-[#4a83ff] px-[15rpx] py-[10rpx] rounded-5rpx"
-									@click="showImage = true">
-									{{ t('viewCheckInPhotos') }}
+								<view class="text-[24rpx] text-[#999999] flex items-center justify-between mb-[10rpx]"
+									v-if="detail?.check_photos && detail?.check_photos.length">
+									<view class="flex items-center">
+										<u-icon name="camera" color="#999999" class="mr-[5rpx]"></u-icon>完成照片
+									</view>
+									<view class="border-style text-[#4a83ff] px-[15rpx] py-[10rpx] rounded-5rpx"
+										@click="openCheckPhotos">
+										查看完成图片
+									</view>
 								</view>
-							</view>
 
 						</view>
 					</view>
@@ -48,13 +57,13 @@
 											</u--image>
 										</view>
 										<view class="mx-[20rpx]">
-											{{detail.member?.nickname}}
+											{{detail.technician?.real_name}}
 										</view>
 										<view>
-											{{maskPhone(detail.member?.mobile)}}
+											{{maskPhone(detail.technician?.mobile)}}
 										</view>
 									</view>
-									<view @click="callPhone(detail?.taker_mobile)" v-if="detail.order_status_info.status != 'finish'">
+									<view @click="callPhone(detail?.technician?.mobile)" v-if="detail.order_status_info.status != 'finish'">
 										<image :src="img('/addon/home_service/technician/call-phone.png')" class="w-[25rpx]"
 											mode="widthFix"></image>
 									</view>
@@ -285,9 +294,20 @@
 				{{ t('checkInPhotos') }}
 			</view>
 			<view class="px-[30rpx] py-[30rpx] pb-[20rpx]  grid grid-cols-4 gap-4 ">
-				<view v-for="(imageUrl, imgIndex) in detail.take_photos" :key="imgIndex" class=" rounded-lg">
+				<view v-for="(imageUrl, imgIndex) in detail.take_photos" :key="imgIndex" class=" rounded-lg mb-[20rpx]">
 					<u--image :src="img(imageUrl)" width="140rpx" height="140rpx" radius="10rpx"
 						@click="imgListPreview(imageUrl, imgIndex)">
+						<view slot="error" style="font-size: 24rpx;">{{ t('loadFailed') }}</view>
+					</u--image>
+				</view>
+			</view>
+		</u-popup>
+		<!-- 完成照片弹窗 -->
+		<u-popup :show="showCheckImage" @close="showCheckImage = false" @open="showCheckImage = true" mode="center" zIndex="9" round="15">
+			<view class="text-[32rpx] font-bold text-center pt-[30rpx]">完成照片</view>
+			<view class="px-[30rpx] py-[30rpx] pb-[20rpx]  grid grid-cols-4 gap-4 ">
+				<view v-for="(imageUrl, imgIndex) in detail.check_photos" :key="imgIndex" class=" rounded-lg  mb-[20rpx]">
+					<u--image :src="img(imageUrl)" width="140rpx" height="140rpx" radius="10rpx" @click="imgListPreview(imageUrl, imgIndex)">
 						<view slot="error" style="font-size: 24rpx;">{{ t('loadFailed') }}</view>
 					</u--image>
 				</view>
@@ -310,8 +330,13 @@
 	import OrderMethods from '@/addon/home_service/store/pages/order/js/OrderMethods';
 	import orderPopup from '@/addon/home_service/technician/components/orderPopup/orderPopup.vue';
 	import useSystemStore from '@/stores/system';
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '订单详情', topStatusBar: { textColor: '#333' } })
 	const systemStore = useSystemStore()
 	const showImage = ref(false)
+	// 新增完成照片弹窗状态
+	const showCheckImage = ref(false)
 	// 处理订单按钮点击
 	const handleOrderAction = (order : any, key : string) => {
 		console.log(key)
@@ -620,7 +645,7 @@ const deleteFn = (data : any) => {
 		}
 	}
 
-	// 联系师傅
+	// 联系技师
 	const callPhoto = (tel) => {
 		if (!tel) return
 		uni.makePhoneCall({
@@ -662,6 +687,11 @@ const deleteFn = (data : any) => {
 	onUnmounted(() => {
 		controlTimer(false)
 	})
+
+	// 预览完成照片入口：打开弹窗
+	const openCheckPhotos = () => {
+		showCheckImage.value = true
+	}
 </script>
 
 <style lang="scss">

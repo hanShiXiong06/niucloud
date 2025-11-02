@@ -70,7 +70,7 @@ class Config extends BaseAdminController
         $data = $this->request->params([
             ["no_allow_refund", true],
             ["refund_length", 7],
-            ["refund_expect_revenue_rate", 30],
+            ["refund_expect_revenue_rate", 100],
             ["is_auto_refund", false],
             ["is_check", true],
             ["refund_auto_length", 1445],

@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[#ffffff] min-h-screen flex flex-col items-center justify-center px-[40rpx]">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" :customBack="()=>{ redirect({ url: '/addon/home_service/store/pages/member/index'}) }"/>
+		<!-- #endif -->
 		<!-- 成功图标 -->
 		<view class="w-[260rpx] h-[260rpx] rounded-full flex items-center justify-center mb-[60rpx]">
 			<image class="w-[260rpx] h-[260rpx]" mode="aspectFit" v-if="submitStatus == 0"
@@ -41,7 +44,8 @@
 				</view>
 			</view>
 
-			<view class="bg-[#F6F6F6] rounded-[100rpx] flex items-center justify-between p-[35rpx] w-[80%]"  v-if="submitStatus != 0" >
+			<view class="bg-[#F6F6F6] rounded-[100rpx] flex items-center justify-between p-[35rpx] w-[80%]"
+				v-if="submitStatus != 0">
 				<view class="flex items-center mr-[35rpx]">
 					<image class="w-[30rpx] h-[30rpx] mr-[15rpx]" mode="aspectFit" v-if="submitStatus != 0"
 						:src="img('addon/home_service/user/settle/submit-success-dui.png')">
@@ -73,67 +77,70 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { t } from '@/locale'
-import { img, redirect, timeStampTurnTime } from '@/utils/common'
-import { onLoad } from '@dcloudio/uni-app'
-import { getStoreApply } from '@/addon/home_service/store/api/store'
-const submitStatus = ref(2)
-const infoData = ref({})
-const btnDisabled = ref(false)
+	import { ref } from 'vue'
+	import { t } from '@/locale'
+	import { img, redirect, timeStampTurnTime } from '@/utils/common'
+	import { onLoad } from '@dcloudio/uni-app'
+	import { getStoreApply } from '@/addon/home_service/store/api/store'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '审核通知', topStatusBar: { textColor: '#333' } })
+	const submitStatus = ref(2)
+	const infoData = ref({})
+	const btnDisabled = ref(false)
 
-// 返回首页或重新申请
-const goBack = () => {
-	if (submitStatus.value == -1) {
-		// 审核被拒绝时，跳转到settle页面重新申请，并添加一个特殊参数
-		redirect({
-			url: '/addon/home_service/store/pages/store/settle', // 修改为在pages.json中注册的路径
-			param: { fromReapply: true }
-		})
-		return false;
-	} else {
-		// 其他情况（待审核、审核通过）返回会员首页
-		redirect({ url: '/addon/home_service/store/pages/member/index' }) // 同样修改为注册路径
+	// 返回首页或重新申请
+	const goBack = () => {
+		if (submitStatus.value == -1) {
+			// 审核被拒绝时，跳转到settle页面重新申请，并添加一个特殊参数
+			redirect({
+				url: '/addon/home_service/store/pages/store/settle', // 修改为在pages.json中注册的路径
+				param: { fromReapply: true }
+			})
+			return false;
+		} else {
+			// 其他情况（待审核、审核通过）返回会员首页
+			redirect({ url: '/addon/home_service/store/pages/member/index' }) // 同样修改为注册路径
+		}
 	}
-}
 
-// 页面显示时执行
-onLoad((data: any) => {
-  // 先使用URL参数中的状态作为初始值
-  submitStatus.value = data.status
-  // 调用门店接口获取最新数据
-  getStoreApply().then((res) => {
-    infoData.value = res.data
-    // 从接口返回的数据中更新状态，确保显示最新的审核状态
-    if (res.data && res.data.audit_status !== undefined) {
-      submitStatus.value = res.data.audit_status
-    }
-  })
-})
+	// 页面显示时执行
+	onLoad((data : any) => {
+		// 先使用URL参数中的状态作为初始值
+		submitStatus.value = data.status
+		// 调用门店接口获取最新数据
+		getStoreApply().then((res) => {
+			infoData.value = res.data
+			// 从接口返回的数据中更新状态，确保显示最新的审核状态
+			if (res.data && res.data.audit_status !== undefined) {
+				submitStatus.value = res.data.audit_status
+			}
+		})
+	})
 </script>
 
 <style lang="scss">
-@import '@/addon/home_service/store/style/index.scss';
+	@import '@/addon/home_service/store/style/index.scss';
 </style>
 
 <style lang="scss" scoped>
-// 样式
+	// 样式
 
-// 适配安全区域
-page {
-	padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
-	padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-}
+	// 适配安全区域
+	page {
+		padding-bottom: calc(20rpx + constant(safe-area-inset-bottom));
+		padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+	}
 
-// 审核提示区域样式
-.tips-card {
-	background: #fff;
-	border-radius: 20rpx;
-	box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
-}
+	// 审核提示区域样式
+	.tips-card {
+		background: #fff;
+		border-radius: 20rpx;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+	}
 
-.footer {
-	height: calc(100rpx + var(--top-m) + var(--top-m) + constant(safe-area-inset-bottom)) !important;
-	height: calc(100rpx + var(--top-m) + var(--top-m) + env(safe-area-inset-bottom)) !important;
-}
+	.footer {
+		height: calc(100rpx + var(--top-m) + var(--top-m) + constant(safe-area-inset-bottom)) !important;
+		height: calc(100rpx + var(--top-m) + var(--top-m) + env(safe-area-inset-bottom)) !important;
+	}
 </style>

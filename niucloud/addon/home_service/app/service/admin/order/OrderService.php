@@ -257,7 +257,9 @@ class OrderService extends BaseAdminService
                 , 'goodsCategory' => function ($query) {
                     $query->field('category_name,category_id');
                 },
-                'evaluate'
+                'evaluate' => function($query){
+                    $query->append(['image_mid']);
+                }
                 , 'orderfollow' => function ($query) {
                     // 关联获取订单项，并包含对应的支付数据
                     $query->append(['fee_situation_name', 'result_feedback_name', 'follow_time'])
@@ -496,7 +498,7 @@ class OrderService extends BaseAdminService
 
 
     /**
-     * 选择师傅
+     * 选择技师
      */
     public function selecttechnician($order_id = 0,$data=[])
     {

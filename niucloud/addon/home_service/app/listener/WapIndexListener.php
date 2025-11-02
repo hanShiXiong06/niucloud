@@ -25,15 +25,15 @@ class WapIndexListener
             $site_id = $params[ 'site_id' ];
         }
         $site_addon = ( new CoreSiteService() )->getAddonKeysBySiteId($site_id);
-        if (!in_array('o2o', $site_addon)) return;
+        if (!in_array('home_service', $site_addon)) return;
 
         return [
             [
-                'key' => 'o2o',
-                "title" => get_lang("dict_wap_index.o2o"),
-                'desc' => get_lang("dict_wap_index.o2o_desc"),
-                "url" => "/addon/o2o/pages/index",
-                'icon' => 'addon/o2o/icon.png'
+                'key' => 'home_service',
+                "title" => get_lang("dict_wap_index.home_service"),
+                'desc' => get_lang("dict_wap_index.home_service_desc"),
+                "url" => "/addon/home_service/user/pages/index",
+                'icon' => 'addon/home_service/icon.png'
             ],
         ];
     }

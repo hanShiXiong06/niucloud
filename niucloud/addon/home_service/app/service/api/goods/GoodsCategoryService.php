@@ -34,7 +34,7 @@ class GoodsCategoryService extends BaseApiService
      */
     public function getPage(array $where = [])
     {
-        $field = 'category_name,image,category_id,site_id';
+        $field = 'category_name,image,category_id,site_id,errand_business';
         $order = '';
 
         $search_model = $this->model->where([['site_id', '=', $this->site_id]])->withSearch(["category_name", "create_time"], $where)->field($field)->order($order)->append(['image_thumb_small']);
@@ -50,6 +50,7 @@ class GoodsCategoryService extends BaseApiService
     public function getInfo(int $id)
     {
         $field = 'category_name,image,category_id,pid';
+        
 
         $info = $this->model->field($field)->where([['category_id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->append(['image_thumb_small'])->toArray();
         return $info;

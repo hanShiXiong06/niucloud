@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[#f8f8f8] min-h-screen overflow-hidden" :style="themeColor()" v-if="memberStore.info">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<view class="fixed left-0 top-0 right-0 z-10">
 			<scroll-view :scroll-x="true" class="scroll-Y box-border px-[var(--sidebar-m)] bg-white">
 				<view class="flex whitespace-nowrap justify-around items-center h-[88rpx]">
@@ -23,7 +26,7 @@
 			</scroll-view>
 		</view>
 
-		<mescroll-body ref="mescrollRef" top="176rpx" @init="mescrollInit" :down="{ use: false }"
+		<mescroll-body ref="mescrollRef" top="" @init="mescrollInit" :down="{ use: false }"
 			@up="getMyCouponListFn">
 			<view class="py-[var(--top-m)] px-[var(--sidebar-m)]" v-if="list.length">
 				<template v-for="(item, index) in list">
@@ -130,7 +133,9 @@
 	import useMescroll from '@/components/mescroll/hooks/useMescroll.js'
 	import { onLoad, onPageScroll, onReachBottom } from '@dcloudio/uni-app'
 	import { t } from '@/locale'
-
+	import { topTabar } from '@/utils/topTabbar'
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '我的优惠券', topStatusBar: { textColor: '#333' } })
 	const memberStore = useMemberStore()
 	const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom)
 	const list = ref<Array<Object>>([]);

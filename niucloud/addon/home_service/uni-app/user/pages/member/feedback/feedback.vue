@@ -1,6 +1,6 @@
 <template>
 	<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-	<top-tabbar :data="topTabbarData" scrollBool="1" isBack />
+	<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 	<!-- #endif -->
 	<view class="bg-[#f5f5f5] min-h-screen" v-if="!loading" :style="themeColor()">
 		<!-- 内容区域 -->

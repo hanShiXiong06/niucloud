@@ -1,13 +1,10 @@
 <template>
-	
 	<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-	<u-navbar :title="t('pageTitle')" autoBack :fixed="true" placeholder>
-	</u-navbar>
+	<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 	<!-- #endif -->
-	
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden component-class" :style="themeColor()">
 		<!-- 顶部导航栏 -->
-		<view class="sticky top-0 z-10 bg-white shadow-sm">
+		<view class="fixed top-0 z-10 bg-white shadow-sm w-[100vw]" :style="{'top': systemStore.topTabbarInfo.fullHeight || 0}">
 			<!-- 分类切换 -->
 			<view class="flex border-b border-[#f0f0f0]">
 				<view v-for="(tab, index) in tabs" :key="index" class="flex-1 py-[28rpx] text-center relative"
@@ -25,14 +22,14 @@
 
 		<!-- 主体内容区域 -->
 		<mescroll-body ref="mescrollRef" top="0" @init="mescrollInit" :down="{ use: false }" @up="getGoodsCollectList" v-if="currentTab==0">
-			<view class="py-[var(--top-m)] px-[30rpx]" v-if="goodsList.length">
+			<view class="py-[var(--top-m)] px-[30rpx] pt-[130rpx]" v-if="goodsList.length">
 				<!-- 商品列表 -->
 				<u-swipe-action ref="swipeActive">
 					<template v-for="(item, index) in goodsList" :key="item.id">
-						<view class="mb-[20rpx] rounded-lg overflow-hidden w-full" @click.stop="redirect({url:'/addon/home_service/user/pages/goods/detail',param:{goods_id:item.goods_id}})">
-							<u-swipe-action-item :options="swipeOptions" @click.stop="handleSwipeAction(item)">
+						<view class="mb-[20rpx] rounded-lg overflow-hidden w-full" >
+							<u-swipe-action-item :options="swipeOptions" @click="handleSwipeAction(item)">
 								<!-- 增加padding使白色背景比循环体大一些 -->
-								<view class="flex bg-white rounded-[26rpx] overflow-hidden p-[20rpx]">
+								<view class="flex bg-white rounded-[26rpx] overflow-hidden p-[20rpx]" @click.stop="redirect({url:'/addon/home_service/user/pages/goods/detail',param:{goods_id:item.goods_id}})">
 									<!-- 商品图片 -->
 									<image class="w-[200rpx] h-[200rpx] rounded-lg"
 										:src="img(item.goods.goods_cover || 'static/resource/images/diy/shop_default.jpg')"
@@ -61,6 +58,10 @@
 													<text class="text-xs">.</text>
 													<text
 														class="text-xs">{{ formatPriceAfterDecimal(item.member_price || item.price) }}</text>
+														<text class="price-font text-[24rpx] text-[#999] line-through font-400 ml-[10rpx]"
+															v-if="item.goods_original_price && item.goods_original_price != item.member_price"><text
+																class="text-[24rpx] price-font">￥</text>{{ Number(item.goods_original_price).toFixed(2) }}</text>
+																
 												</view>
 												<view class="text-[24rpx] text-[var(--text-color-light6)]">
 													{{ t('sold') }}{{ item.goods?.sale_num || 0 }}+
@@ -76,16 +77,18 @@
 			</view>
 
 			<!-- 空状态 -->
-			<mescroll-empty v-else :icon="'none'" :loading="loading" />
+			<view class="pt-[110rpx]" v-else>
+				<mescroll-empty  :icon="'none'" :loading="loading" />
+			</view>
 		</mescroll-body>
 		
-		<!-- 师傅收藏列表 Tab -->
+		<!-- 技师收藏列表 Tab -->
 		<mescroll-body ref="mescrollRef" top="0" @init="mescrollInit" :down="{ use: false }" @up="getTechnicianCollectListFn" v-else-if="currentTab==1">
-			<view class="py-[var(--top-m)] px-[30rpx]" v-if="technicianList.length">
+			<view class="py-[var(--top-m)] px-[30rpx] pt-[130rpx]" v-if="technicianList.length">
 				<u-swipe-action ref="swipeActive">
 					<template v-for="(item, index) in technicianList" :key="item.id">
 						<view class="mb-[20rpx] bg-white rounded-lg overflow-hidden w-full">
-							<u-swipe-action-item :options="swipeOptions" @click.stop="handleTechnicianSwipeAction(index)">
+							<u-swipe-action-item :options="swipeOptions" @click="handleTechnicianSwipeAction(index)">
 								<view class="flex overflow-hidden p-[20rpx]">
 									<view class="relative mr-[20rpx] z-20">
 										<image class="w-[120rpx] h-[120rpx] rounded-full"
@@ -124,7 +127,9 @@
 					</template>
 				</u-swipe-action>
 			</view>
-			<mescroll-empty v-else :icon="'none'" :loading="loading" />
+			<view class="pt-[110rpx]" v-else>
+				<mescroll-empty  :icon="'none'" :loading="loading" />
+			</view>
 		</mescroll-body>
 
 	</view>
@@ -141,6 +146,9 @@
 	import { onPageScroll, onReachBottom } from '@dcloudio/uni-app'
 	import useSystemStore from '@/stores/system';
 	const systemStore = useSystemStore()
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '我的收藏', topStatusBar: { textColor: '#333',rollBgColor:"#ffffff" } })
 	// 价格格式化函数 - 处理整数部分
 	const formatPriceBeforeDecimal = (price : string | number) : string => {
 		if (!price) return '0'
@@ -166,8 +174,8 @@
 
 	// 标签页数据
 	const tabs = ref([
-		{ name: t('goodsCollect'), type: 'goods' },
-		{ name: t('technicianCollect'), type: 'technician' }
+		{ name: '服务收藏', type: 'goods' },
+		{ name: '师傅收藏', type: 'technician' }
 	])
 	const currentTab = ref(0)
 
@@ -229,7 +237,7 @@
 				if (index !== -1) {
 					goodsList.value.splice(index, 1)
 				}
-				uni.showToast({ title: t('cancelCollectSuccess'), icon: 'success' })
+				uni.showToast({ title: t('cancelCollectSuccess'), icon: 'none' })
 			} else {
 				uni.showToast({ title: res.msg || t('cancelCollectFail'), icon: 'none' })
 			}
@@ -240,7 +248,7 @@
 		})
 	}
 
-	// 获取师傅收藏列表
+	// 获取技师收藏列表
 	const getTechnicianCollectListFn = (mescroll : any) => {
 		loading.value = false;
 		let data : object = {
@@ -264,7 +272,7 @@
 		})
 	}
 
-	// 处理师傅滑动操作 - 取消师傅收藏
+	// 处理技师滑动操作 - 取消技师收藏
 	const handleTechnicianSwipeAction = (index : number) => {
 		if (optionLoading.value) return
 		optionLoading.value = true
@@ -283,7 +291,7 @@
 		uni.navigateBack()
 	}
 
-	// 重置列表（拆分为商品/师傅）
+	// 重置列表（拆分为商品/技师）
 	const resetGoodsList = () => {
 		goodsList.value = []
 		if (getMescroll()) {

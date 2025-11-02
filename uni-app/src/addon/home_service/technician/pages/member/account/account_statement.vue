@@ -1,8 +1,11 @@
 <template>
-	<view class="overflow-hidden component-class" :style="themeColor()">
+	<view class="overflow-hidden component-class bg-[#f6f6f6]" :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<view class="fixed w-full z-index-99">
 			<!-- 标签切换 -->
-			<view class=" flex border-b border-[#EEEEEE] bg-white">
+			<view class=" flex bg-[#F9F9F9] border-b border-[#EEEEEE] bg-white">
 				<view class="flex-1 py-[20rpx] text-center"
 					@click="switchTab('detail')">
 					<text class="text-[32rpx]">{{ t('accountDetails') }}</text>
@@ -18,7 +21,7 @@
 			</view>
 			<!-- 筛选条件区域 - 仅在账户明细tab显示 -->
 			<view v-if="currentTab == 'detail'"
-				class="filter-bar bg-white px-[24rpx] py-[20rpx] flex justify-between items-center border-b border-[#EEEEEE]">
+				class="filter-bar bg-[#F9F9F9] px-[24rpx] py-[20rpx] flex justify-between items-center border-b border-[#EEEEEE]">
 				<view class="filter-item flex items-center" @click="showTypeFilter = true">
 					<text class="text-[28rpx] text-[#333]">{{ typeValueName ? typeValueName : typeFilterText }}</text>
 					<image class="w-[35rpx] h-[35rpx] block"
@@ -40,7 +43,7 @@
 				</view>
 			</view>
 			<!-- 日汇总/月汇总切换 - 仅在收支统计tab显示 -->
-			<view v-else class="bg-white px-[24rpx] py-[20rpx] border-b border-[#EEEEEE]">
+			<view v-else class="bg-[#F9F9F9] px-[24rpx] py-[20rpx] border-b border-[#EEEEEE]">
 				<view class="flex justify-start">
 					<view class="flex">
 						<view
@@ -62,9 +65,9 @@
 			</view>
 		</view>
 		
-		<mescroll-body ref="mescrollRef" top="214rpx" @init="mescrollInit" :down="{ use: false }" @up="getBillList">
+		<mescroll-body ref="mescrollRef" top="170rpx" @init="mescrollInit" :down="{ use: false }" @up="getBillList" v-if="currentTab == 'detail'" >
 			<!-- 账户明细内容 -->
-			<view v-if="currentTab == 'detail'">
+			<view >
 				<!-- 账单列表 -->
 				<view v-if="groupedBillList.length > 0" class="bill-list">
 					<!-- 日期分组 -->
@@ -108,48 +111,45 @@
 				<!-- 底部空间 -->
 				<view class="h-[60rpx]"></view>
 			</view>
-
-			<!-- 收支统计内容 -->
-			<view v-else class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden px-[25rpx]">
-				<!-- 统计图表区域 -->
-				<view class="bg-white mt-2 p-5 rounded-lg">
-					<text class="text-xs text-gray-500 mb-2 block">单位：千元</text>
-
-					<!-- 图表标题 -->
-					<view class="flex justify-between items-center mb-2">
-						<text class="text-sm font-medium"></text>
-						<view class="flex items-center space-x-6">
-							<view class="flex items-center">
-								<view class="w-3 h-3 bg-[#1890FF] rounded-sm mr-1"></view>
-								<text class="text-xs text-gray-500">收入</text>
-							</view>
-							<view class="flex items-center">
-								<view class="w-3 h-3 bg-[#91CB74] rounded-sm mr-1"></view>
-								<text class="text-xs text-gray-500">支出</text>
-							</view>
+		</mescroll-body>
+		<view v-if="currentTab != 'detail'" class="bg-[var(--page-bg-color)] overflow-hidden px-[25rpx] mt-[170rpx]">
+			<!-- 统计图表区域 -->
+			<view class="bg-white mt-2 p-5 rounded-lg">
+				<text class="text-xs text-gray-500 mb-2 block">单位：千元</text>
+		
+				<!-- 图表标题 -->
+				<view class="flex justify-between items-center mb-2">
+					<text class="text-sm font-medium"></text>
+					<view class="flex items-center space-x-6">
+						<view class="flex items-center">
+							<view class="w-3 h-3 bg-[#1890FF] rounded-sm mr-1"></view>
+							<text class="text-xs text-gray-500">收入</text>
+						</view>
+						<view class="flex items-center">
+							<view class="w-3 h-3 bg-[#91CB74] rounded-sm mr-1"></view>
+							<text class="text-xs text-gray-500">支出</text>
 						</view>
 					</view>
-
-					<!-- 使用uCharts柱状图 -->
-					<view class="charts-box">
-						<qiun-data-charts type="column" :opts="opts" :chartData="chartData" />
-					</view>
 				</view>
-
-				<!-- 今日收入区域 -->
-				<view class="bg-white mt-2 p-[25rpx] pt-[35rpx] rounded-lg">
-					<text class="text-[30rpx] font-bold mb-4 block">今日收入</text>
-					<text class="text-[40rpx] font-bold text-[var(--theme-color)] mb-4 block">+{{todayData.income || 0}}</text>
-				</view>
-
-				<!-- 今日支出区域 -->
-				<view class="bg-white mt-2 p-[25rpx] pt-[35rpx] mb-5 rounded-lg">
-					<text class="text-[30rpx] font-bold mb-4 block">今日支出</text>
-					<text class="text-[40rpx] font-bold text-red-500 mb-4 block">{{todayData.expense || 0}}</text>
+		
+				<!-- 使用uCharts柱状图 -->
+				<view class="charts-box">
+					<qiun-data-charts type="column" :opts="opts" :chartData="chartData" :reshow="reshowChart" v-show="chartVisible" style="z-index: 1;" />
 				</view>
 			</view>
-		</mescroll-body>
-
+		
+			<!-- 今日收入区域 -->
+			<view class="bg-white mt-2 p-[25rpx] pt-[35rpx] rounded-lg">
+				<text class="text-[30rpx] font-bold mb-4 block">今日收入</text>
+				<text class="text-[40rpx] font-bold text-[var(--theme-color)] mb-4 block">+{{todayData.income || 0}}</text>
+			</view>
+		
+			<!-- 今日支出区域 -->
+			<view class="bg-white mt-2 p-[25rpx] pt-[35rpx] mb-5 rounded-lg">
+				<text class="text-[30rpx] font-bold mb-4 block">今日支出</text>
+				<text class="text-[40rpx] font-bold text-red-500 mb-4 block">{{todayData.expense || 0}}</text>
+			</view>
+		</view>
 		<u-picker :show="showTypeFilter" :columns="typeColumns" keyName="label" @confirm="confrimType"
 			@cancel="closeFilter"></u-picker>
 		<!-- 时间选择器组件 - 确保只显示年月 -->
@@ -172,7 +172,9 @@
 	import { onPageScroll, onReachBottom } from '@dcloudio/uni-app';
 	import qiunDataCharts from '@/addon/home_service/technician/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
 	import { getAccountTypeList, getAccountStatusList, getTechnicianAccountList, getTechnicianincomeAndExpenseStatChartt, getTechnicIanincomeAndExpenseStat } from '@/addon/home_service/technician/api/account';
-	
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '账户明细', topStatusBar: { textColor: '#333'} })
 	const pageLoading = ref(true)
 	const isDayView = ref(true)
 	const chartData = ref({})
@@ -196,7 +198,8 @@
 	const dateFilterText = ref('全部日期')
 	const statusFilterText = ref('到账情况')
 	const billList = ref<any[]>([])
-
+	const chartVisible  = ref(true)
+	const reshowChart = ref(false)
 	const confrimType = (e : any) => {
 		typeValue.value = e.value[0].value
 		typeValueName.value = e.value[0].label
@@ -300,22 +303,24 @@
 		currentTab.value = tab
 	}
 
-	const opts = computed(() => ({
+	const opts = ref({
 		color: ["#1890FF", "#91CB74"],
 		padding: [15, 15, 30, 5],
 		enableScroll: true,
 		legend: { show: false },
+		animation: false,
+		canvas2d: true,
 		xAxis: {
-			itemCount: isDayView.value ? 8 : 12,
+			itemCount: 8,
 			gridColor: "#CCCCCC",
 			gridType: "solid",
 			dashLength: 4,
-			scrollShow: !isDayView.value,
+			scrollShow: false,
 			scrollAlign: "left",
 			scrollColor: "#A6A6A6",
 			scrollBackgroundColor: "#EFEBEF",
 			fontSize: 12,
-			rotateLabel: isDayView.value
+			rotateLabel: false
 		},
 		yAxis: {
 			disableGrid: false,
@@ -335,26 +340,49 @@
 				minHeight: 5
 			}
 		}
-	}))
+	})
+
+	const updateChartOpts = () => {
+		const o = opts.value
+		o.xAxis.itemCount = isDayView.value ? 8 : 6 // 月汇总仅显示 6 项，更多项滚动
+		o.xAxis.rotateLabel = false // 不旋转标签，使用滚动避免重叠
+		o.xAxis.scrollShow = !isDayView.value // 月汇总开启滚动
+		o.xAxis.fontSize = 12 // 统一字号，避免切换时抖动
+	}
+
+	let _chartDataFetchTimer : any = null
 
 	const switchToDay = () => {
 		isDayView.value = true
-		getServerData()
+		chartVisible.value = false
+		if (_chartDataFetchTimer) clearTimeout(_chartDataFetchTimer)
+		_chartDataFetchTimer = setTimeout(() => {
+			getServerData(true)
+		}, 0)
 	}
 
 	const switchToMonth = () => {
 		isDayView.value = false
-		getServerData()
+		chartVisible.value = false
+		if (_chartDataFetchTimer) clearTimeout(_chartDataFetchTimer)
+		_chartDataFetchTimer = setTimeout(() => {
+			getServerData(true)
+		}, 0)
 	}
 
-	const getServerData = () => {
+	const getServerData = (silent = false) => {
 		let params = { date_type: isDayView.value ? 'day' : 'month' }
-		pageLoading.value = true
+		if (!silent) pageLoading.value = true
 		getTechnicianincomeAndExpenseStatChartt(params).then((res: any) => {
-			pageLoading.value = false
+			if (!silent) pageLoading.value = false
 			if (!res.data || !res.data.xAxis || !res.data.series || !res.data.series.income || !res.data.series.expense) {
+				chartVisible.value = true
+				reshowChart.value = true
+				setTimeout(() => { reshowChart.value = false }, 0)
 				return
 			}
+			// 更新坐标配置在数据就绪后，避免旧数据+新坐标的中间态
+			updateChartOpts()
 			let formattedData = {
 				categories: res.data.xAxis || [],
 				series: [
@@ -365,7 +393,7 @@
 							return Number(item) == 0 ? null : Number(item)
 						}),
 						color: '#1890FF',
-						label: { show: true, position: 'top', fontSize: 10 }
+						label: { show: isDayView.value, position: 'top', fontSize: 10 }
 					},
 					{
 						name: t('expense'),
@@ -374,13 +402,23 @@
 							return Number(item) == 0 ? null : Number(item)
 						}),
 						color: '#91CB74',
-						label: { show: true, position: 'top', fontSize: 10 }
+						label: { show: isDayView.value, position: 'top', fontSize: 10 }
 					}
 				]
 			}
+			opts.value.update = true
 			chartData.value = { ...formattedData };
+			// 数据与配置同步到位后再显示，避免旧图闪现，并触发重绘
+			setTimeout(() => {
+				chartVisible.value = true
+				reshowChart.value = true
+				setTimeout(() => { reshowChart.value = false }, 0)
+			}, 30)
 		}).catch(() => {
-			pageLoading.value = false
+			if (!silent) pageLoading.value = false
+			chartVisible.value = true
+			reshowChart.value = true
+			setTimeout(() => { reshowChart.value = false }, 0)
 		})
 	}
 
@@ -394,6 +432,7 @@
 	}
 
 	onMounted(() => {
+		updateChartOpts()
 		getServerData();
 		getTechnicIanincomeAndExpenseStatFn()
 		getAccountTypeList().then((res : any) => {
@@ -486,6 +525,9 @@
 		height: 400rpx;
 		border-radius: 30rpx;
 		background: #ffffff;
+	}
+	page{
+		background:#f6f6f6 !important;
 	}
 </style>
 <style lang="scss">

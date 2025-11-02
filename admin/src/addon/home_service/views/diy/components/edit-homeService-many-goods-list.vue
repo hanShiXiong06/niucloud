@@ -29,9 +29,9 @@
                     <div ref="goodsBoxRef">
                         <div v-for="(item,index) in diyStore.editComponent.list" :key="item.id"
                              class="item-wrap p-[10px] pb-0 relative border border-dashed border-gray-300 mb-[16px]">
-							 <el-form-item :label="t('swiperImage')">
-								 <upload-image v-model="item.bgUrl" :limit="4"/>
-							 </el-form-item>
+                                 <el-form-item label="图片内容">
+                                     <upload-image v-model="item.bgUrl" :limit="4"/>
+                                 </el-form-item>
                             <el-form-item :label="t('manyGoodsListCategoryName')">
                                 <el-input v-model.trim="item.title" clearable maxlength="4" show-word-limit />
                             </el-form-item>

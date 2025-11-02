@@ -1,6 +1,11 @@
 <?php
 
 return [
+    'dict_wap_index' => [
+        'home_service' => '上门家政',
+        'home_service_desc' => '预约上门，家电维修，家政服务',
+    ],
+
     'dict_home_service_card_valid' => [
         'monthly_card' => '月卡',
         'season_card' => '季卡',
@@ -27,7 +32,7 @@ return [
         'default' => '默认',
         'customize' => '自定义',
     ],
-    //师傅来源
+    //技师来源
     'dict_home_service_technician_source_name' => [
         'internal' => '内部',
         'application' => '入驻',
@@ -61,7 +66,7 @@ return [
         'action_dispatch' => '派单',
         'action_transfer' => '重新派单',
         'again_check' => '确认验收',  // 会员 +  系统
-        'action_contact_technician' => '联系师傅',
+        'action_contact_technician' => '联系技师',
         'action_pay' => '去支付',
         'action_cancel' => '取消订单',
         'action_delete' => '删除订单',
@@ -97,8 +102,8 @@ return [
         'order_cancel' => '订单已取消',
         'order_dispatch' => '订单派单',
         'order_grab' => '订单抢单',
-        'order_depart' => '师傅出发',
-        'order_photo_taken' => '师傅拍照',
+        'order_depart' => '技师出发',
+        'order_photo_taken' => '技师拍照',
         'order_service' => '订单开始服务',
         'order_save_check' => '订单提交验收',
         'order_check' => '订单验收',
@@ -264,13 +269,13 @@ return [
     'dict_home_service_help_type' => [
         'member' => '会员端',
         'store' => '门店端',
-        'technician' => '师傅端',
+        'technician' => '技师端',
     ],
 
     'dict_home_service_feedback_type' => [
         'member' => '会员端',
         'store' => '门店端',
-        'technician' => '师傅端',
+        'technician' => '技师端',
     ],
 
     'dict_home_service_follow_result' => [
@@ -285,7 +290,7 @@ return [
 
     'dict_home_service_cash_out_source' => [
         "store" => '门店',
-        "technician" => '师傅',
+        "technician" => '技师',
     ],
 
     'dict_home_service_cash_out' => [
@@ -314,17 +319,11 @@ return [
         'home_service_link_card_list' => '次卡列表',
         'home_service_link_technician_entrance' => '服务人员登陆入口',
         'home_service_link_store_entrance' => '服务机构登陆入口',
-
-
-        'o2o_link_index' => '上门服务首页',
-        'o2o_link_goods_list' => '项目列表',
-        'o2o_link_technician_list' => '师傅列表',
-        'o2o_link_order_refund_list' => '退款列表',
-        'o2o_link_address_list' => '地址列表',
-        'o2o_link_master_stat_index' => '师傅中心',
-        'o2o_goods_select' => '服务项目',
-        'o2o_goods_category_select' => '项目分类',
-        'o2o_technician_select' => '选择师傅',
+        'home_service_goods_select' => '服务项目',
+        'home_service_goods_category_select' => '项目分类',
+        'home_service_card_select' => '次卡套餐',
+        'home_service_link_settle_store' => '机构入驻',
+        'home_service_link_settle_technician' => '师傅入驻',
     ],
 
 

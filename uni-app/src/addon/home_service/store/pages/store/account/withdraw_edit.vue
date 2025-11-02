@@ -1,5 +1,8 @@
 <template>
 	<view class="w-screen h-screen bg-[var(--page-bg-color)] overflow-hidden" :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<scroll-view scroll-y="true">
 			<view class="sidebar-margin card-template top-mar account pb-[20rpx]">
 				<template v-if="formData.account_type == 'bank'">
@@ -142,6 +145,9 @@
 	import { t } from '@/locale'
 	import { uploadImage } from '@/app/api/system'
 	import { redirect, img } from '@/utils/common'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '提现账户', topStatusBar: { textColor: '#333' } })
 
 	const loading = ref(false)
 	const formRef : any = ref(null)

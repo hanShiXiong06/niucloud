@@ -1,7 +1,6 @@
 <template>
 	<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-	<u-navbar title="我的足迹" autoBack :fixed="true" placeholder>
-	</u-navbar>
+	<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 	<!-- #endif -->
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden component-class" :style="themeColor()">
 		<!-- 顶部导航栏 -->
@@ -59,6 +58,9 @@
 										<text class="text-[22rpx]">.</text>
 										<text
 											class="text-[22rpx]">{{ formatPriceAfterDecimal(item.member_price || item.price || item.goods?.price || '0.00') }}</text>
+											<text class="price-font text-[22rpx] text-[#999] line-through font-400 ml-[10rpx]"
+												v-if="item.goods_original_price && item.goods_original_price != item.member_price"><text
+													class="text-[22rpx] price-font">￥</text>{{ Number(item.goods_original_price).toFixed(2) }}</text>
 									</view>
 								</view>
 							</view>
@@ -184,7 +186,9 @@
 	import { img, redirect } from '@/utils/common'
 	import useSystemStore from '@/stores/system';
 	const systemStore = useSystemStore()
-	
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '我的足迹', topStatusBar: { textColor: '#333' ,rollBgColor:"#ffffff"} })
 	const menuButtonInfo = ref({});
 	menuButtonInfo.value = systemStore.menuButtonInfo
 	// 计算 top 样式：区分 H5 和 小程序

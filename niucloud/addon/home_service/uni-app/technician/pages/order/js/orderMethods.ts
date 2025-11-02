@@ -1,7 +1,7 @@
-import { departOrder, photoTaken, startService, saveCheck,editServiceTime } from '@/addon/home_service/technician/api/order'
+import { departOrder, photoTaken, startService, saveCheck, editServiceTime } from '@/addon/home_service/technician/api/order'
 import useSystemStore from '@/stores/system';
 import { uploadImage } from '@/app/api/system'
-import { img, redirect, copy,timeStampTurnTime } from '@/utils/common'
+import { img, redirect, copy, timeStampTurnTime } from '@/utils/common'
 import { openPopup, closePopup } from './popupStatus'
 
 const systemStore = useSystemStore()
@@ -135,13 +135,13 @@ class OrderMethods {
 				}
 			});
 		}
-		
+
 		/**
 		 * 增值服务
 		 */
-		if(key == 'action_order_item'){
+		if (key == 'action_order_item') {
 			uni.navigateTo({
-				url:'/addon/home_service/technician/pages/order/additional?order_id=' +  data.order_id
+				url: '/addon/home_service/technician/pages/order/additional?order_id=' + data.order_id
 			})
 		}
 		/**
@@ -155,27 +155,32 @@ class OrderMethods {
 				actionKey: key,
 				onConfirm: async (popupData : any) => {
 					console.log(popupData.reserve_service_time)
-					try {
-						if (!popupData || !popupData.reserve_service_time) {
-							uni.showToast({ title: '请选择服务时间', icon: 'none' });
-							return;
-						}
-
-						const params = {
-							order_id: data.order_id,
-							reserve_service_time: timeStampTurnTime(popupData.reserve_service_time / 1000)
-						};
-
-						const res = await editServiceTime(params);
-						uni.showToast({ title: res.msg, icon: 'none' });
-						if (callback && typeof callback === 'function') {
-							callback(); // 触发刷新
-						}
-					} catch (err : any) {
-						uni.showToast({ title: err.msg || '操作失败', icon: 'none' });
-					} finally {
-						closePopup();
+					if (!popupData || !popupData.reserve_service_time) {
+						uni.showToast({ title: '请选择服务时间', icon: 'none' });
+						return;
 					}
+					const date = new Date(popupData.reserve_service_time);
+					// 获取年、月、日（月和日需补0）
+					const year = date.getFullYear();
+					const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份从0开始，+1后补0
+					const day = String(date.getDate()).padStart(2, '0');
+
+					// 获取时、分、秒（均需补0）
+					const hours = String(date.getHours()).padStart(2, '0');
+					const minutes = String(date.getMinutes()).padStart(2, '0');
+					const seconds = String(date.getSeconds()).padStart(2, '0');
+
+					const params = {
+						order_id: data.order_id,
+						reserve_service_time: `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+					};
+					const res = await editServiceTime(params);
+					uni.showToast({ title: res.msg, icon: 'none' });
+					if (callback && typeof callback === 'function') {
+						callback(); // 触发刷新
+					}
+					console.log(3)
+					closePopup();
 				}
 			});
 		}

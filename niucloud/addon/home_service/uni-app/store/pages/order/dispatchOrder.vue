@@ -2,15 +2,15 @@
 	<view :style="themeColor()">
 		<template v-if="!loading">
 			<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-			<u-navbar title="派单" bgColor="#ffffff" leftIconSize="15px" autoBack placeholder>
-			</u-navbar>
+			<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 			<!-- #endif -->
 			<view v-if="detail" class="bg-[#f7f7f7] min-h-screen overflow-hidden">
 				<view class="h-[800rpx] w-full">
-					<map class="map-body w-full h-[800rpx]" :latitude="detail.taker_latitude" :longitude="detail.taker_longitude" :markers="covers"></map>
+					<map class="map-body w-full h-[800rpx]" :latitude="detail.taker_latitude"
+						:longitude="detail.taker_longitude" :markers="covers"></map>
 				</view>
-				<view class="bg-[#fff] my-[30rpx] mx-[30rpx] rounded-[16rpx] p-[30rpx] mt-[-60rpx] relative z-index-999"
-					>
+				<view
+					class="bg-[#fff] my-[30rpx] mx-[30rpx] rounded-[16rpx] p-[30rpx] mt-[-60rpx] relative z-index-999">
 					<view class="flex justify-between mb-[10rpx]">
 						<view class="flex items-center">
 							<view class="flex items-center rounded-l-[50rpx] rounded-r-[6rpx] mr-[10rpx]">
@@ -27,7 +27,7 @@
 										class="w-[70rpx] mr-[5rpx]" mode="widthFix"></image>
 								</view>
 							</view>
-					
+
 							<view class="text-[26rpx] text-[#666666] flex items-center pt-[2rpx]">
 								{{detail?.reserve_service_time}}
 							</view>
@@ -106,10 +106,12 @@
 							<view class="text-[30rpx] font-bold">{{ t('serviceItems') }}</view>
 							<view class="flex justify-between items-end text-[26rpx]">
 								<view class="text-[22rpx] text-[var(--price-text-color)] price-font">
-									{{ t('realMoney') }}</view>
+									{{ t('realMoney') }}
+								</view>
 								<view
 									class="text-[32rpx] font-bold leading-[35rpx] text-[var(--price-text-color)] price-font">
-									<text class="!text-[22rpx]">￥</text>{{ detail.pay_money }}</view>
+									<text class="!text-[22rpx]">￥</text>{{ detail.pay_money }}
+								</view>
 							</view>
 						</view>
 						<view
@@ -118,15 +120,13 @@
 							<view class="price-font"><text
 									class="!text-[24rpx]">￥</text>{{ detail?.item[0]?.item_money }}</view>
 						</view>
-						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] my-[24rpx] rounded-[10rpx]"
-							>
+						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] my-[24rpx] rounded-[10rpx]">
 							{{ t('remarkPrefix') }}{{detail.member_message || '暂无备注信息'}}
 						</view>
 						<view
 							class="flex justify-between text-[26rpx] pt-[30rpx] border-top-[2rpx] border-[solid] border-[#f1f1f1]">
 							<view>{{ t('couponMoney') }}</view>
-							<view class="price-font"><text
-									class="!text-[24rpx]">￥</text>{{ detail.discount_money }}
+							<view class="price-font"><text class="!text-[24rpx]">￥</text>{{ detail.discount_money }}
 							</view>
 						</view>
 					</view>
@@ -139,11 +139,11 @@
 							<view class="flex justify-between items-end text-[26rpx]">
 								<view
 									class="text-[32rpx] font-bold leading-[35rpx]  text-[var(--price-text-color)] price-font">
-									<text class="!text-[22rpx]">￥</text>{{ detail.store_commission }} </view>
+									<text class="!text-[22rpx]">￥</text>{{ detail.store_commission }}
+								</view>
 							</view>
 						</view>
-						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] text-[#999999] mt-[24rpx] rounded-[10rpx]"
-							>
+						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] text-[#999999] mt-[24rpx] rounded-[10rpx]">
 							{{ t('serviceFeeDesc') }}
 						</view>
 					</view>
@@ -176,15 +176,14 @@
 			<view class="w-screen h-screen flex flex-col justify-center items-center" v-else>
 				<u-empty :icon="img('static/resource/images/order_empty.png')" :text="t('orderInfoNotObtained')" />
 			</view>
-			
+
 			<!-- 提交按钮 -->
 			<view class="w-full footer bg-[#fff]">
 				<view
 					class="py-[var(--top-m)] px-[var(--sidebar-m)] footer w-full bg-[#fff] fixed bottom-0 left-0 right-0 box-border">
 					<button hover-class="none"
 						class=" !text-[#fff] !text-[#fff] !bg-[#00CB7A] h-[80rpx] leading-[80rpx] rounded-[10rpx] text-[26rpx] font-500"
-						@click="submitOrder(detail)"
-						:class="{'opacity-50': btnDisabled}">去派单
+						@click="submitOrder(detail)" :class="{'opacity-50': btnDisabled}">去派单
 					</button>
 				</view>
 			</view>
@@ -211,13 +210,16 @@
 	import { ref, computed, onMounted, onUnmounted } from 'vue'
 	import { onLoad, onShow } from '@dcloudio/uni-app'
 	import { img, redirect, copy } from '@/utils/common'
-	import { getGrapOrderDetail} from '@/addon/home_service/store/api/order'
-	import { dispatchOrder  } from '@/addon/home_service/store/api/order'
+	import { getGrapOrderDetail } from '@/addon/home_service/store/api/order'
+	import { dispatchOrder } from '@/addon/home_service/store/api/order'
 	import { t } from '@/locale'
 	import useSystemStore from '@/stores/system';
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '派单', topStatusBar: { textColor: '#333' } })
 	const systemStore = useSystemStore()
 	const showImage = ref(false)
-	const  covers =ref([])
+	const covers = ref([])
 	// 处理订单按钮点击
 	const handleOrderAction = (order : any, key : string) => {
 		OrderMethods.orderClickFunction(
@@ -226,8 +228,8 @@
 			() => getOrderDetailFu(), // 刷新列表的回调
 		);
 	};
-	const submitOrder = (e:any) =>{
-		redirect({url:'/addon/home_service/store/pages/order/dispatchTechnician',param:{key:orderKey.value,order_id:orderId,reserve_service_time_stamp:detail.value.reserve_service_time_stamp,category_id:detail.value.category_id}})
+	const submitOrder = (e : any) => {
+		redirect({ url: '/addon/home_service/store/pages/order/dispatchTechnician', param: { key: orderKey.value, order_id: orderId, reserve_service_time_stamp: detail.value.reserve_service_time_stamp, category_id: detail.value.category_id } })
 	}
 	// 弹窗确认回调
 	const handlePopupConfirm = (popupData ?: any) => {
@@ -348,7 +350,7 @@
 				targetTime.value = new Date().getTime()
 			}
 			covers.value = [
-				  {
+				{
 					id: 1,
 					latitude: detail.value.taker_latitude,
 					longitude: detail.value.taker_longitude,
@@ -357,7 +359,7 @@
 					width: 20,
 					height: 28
 					// 移除价格标签配置
-				  }
+				}
 			]
 			// 根据订单状态控制定时器
 			const isInService = detail.value?.order_status === 'in_service'
@@ -537,7 +539,7 @@
 		}
 	}
 
-	// 联系师傅
+	// 联系技师
 	const callPhoto = (tel) => {
 		if (!tel) return
 		uni.makePhoneCall({
@@ -584,7 +586,7 @@
 </script>
 
 <style lang="scss">
-@import '@/addon/home_service/store/style/index.scss';
+	@import '@/addon/home_service/store/style/index.scss';
 </style>
 
 <style lang="scss" scoped>
@@ -619,7 +621,7 @@
 	.border-style {
 		border: 2rpx solid #4a6bff;
 	}
-	
+
 	// 底部安全区域适配
 	.footer {
 		height: calc(100rpx + var(--top-m) + var(--top-m) + constant(safe-area-inset-bottom)) !important;

@@ -26,7 +26,7 @@ class OrderAutoRefund extends BaseJob
      * @param $data
      * @return true
      */
-    protected function doJob()
+    public function doJob()
     {
         try {
             $list = (new Order())->where([

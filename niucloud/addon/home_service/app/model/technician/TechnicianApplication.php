@@ -12,6 +12,7 @@
 namespace addon\home_service\app\model\technician;
 
 use addon\home_service\app\dict\technician\TechnicianDict;
+use app\dict\sys\FileDict;
 use app\model\member\Member;
 use core\base\BaseModel;
 use think\db\Query;
@@ -22,7 +23,7 @@ use  app\model\sys\SysArea;
 
 
 /**
- * 师傅入驻模型
+ * 技师入驻模型
  * Class Technician
  * @package app\model\o2o_technician
  */
@@ -152,5 +153,38 @@ class TechnicianApplication extends BaseModel
     {
         /**获取商品表中未删除且使用该分类的数据条数**/
         return $this->whereRaw("FIND_IN_SET(?, category_id)", [$category_id])->count();
+    }
+
+    /**
+     * 获取图片缩略图
+     */
+    public function getIdCardBackThumbMidAttr($value, $data)
+    {
+        if (isset($data['id_card_back']) && $data['id_card_back'] != '') {
+            return get_thumb_images($data['site_id'], $data['id_card_back'], FileDict::MID);
+        }
+        return [];
+    }
+
+    /**
+     * 获取图片缩略图
+     */
+    public function getIdCardFontThumbMidAttr($value, $data)
+    {
+        if (isset($data['id_card_front']) && $data['id_card_front'] != '') {
+            return get_thumb_images($data['site_id'], $data['id_card_front'], FileDict::MID);
+        }
+        return [];
+    }
+
+    /**
+     * 获取图片缩略图
+     */
+    public function getHeadimgThumbMidAttr($value, $data)
+    {
+        if (isset($data['headimg']) && $data['headimg'] != '') {
+            return get_thumb_images($data['site_id'], $data['headimg'], FileDict::MID);
+        }
+        return [];
     }
 }

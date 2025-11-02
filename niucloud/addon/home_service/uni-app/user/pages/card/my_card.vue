@@ -3,9 +3,9 @@
 	<u-navbar :title="t('myCard')" :fixed="true" placeholder @leftClick="rightClick">
 	</u-navbar>
 	<!-- #endif -->
-	<view :style="themeColor()">
+	<view :style="themeColor()" >
 		<view class="flex justify-between fixed w-full z-index-99 bg-[#fff] p-[24rpx] px-[56rpx] box-border"
-			v-if="!loading">
+			v-if="cardStateList?.length">
 			<view class="relative flex justify-center items-center flex-col leading-[1.8] text-[26rpx]"
 				v-for="(item,index) in cardStateList" :key="index" @click="cardStateFn(item)"
 				:style="{color:item.status == currentState ? 'var(--primary-color)' : ''}">

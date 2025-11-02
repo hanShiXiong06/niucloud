@@ -35,11 +35,11 @@
 						<view class="bg-[#f6f6f6] p-[25rpx] rounded-lg mt-[10rpx]" v-if="item.take_photos">
 							<view class="text-[26rpx] flex items-center">
 								<u-icon name="camera-fill" class="mr-[5rpx]"></u-icon>
-								<text>师傅已打卡 <text class="text-[var(--primary-color)]"></text></text>
+								<text>技师已打卡 <text class="text-[var(--primary-color)]"></text></text>
 							</view>
 							<view class="flex justify-between text-[#999999] text-[26rpx] mt-[20rpx]">
 								<view>
-									师傅：{{item.technician?.real_name}}
+									技师：{{item.technician?.real_name}}
 								</view>
 								<view>
 									{{item.take_photos_time}}
@@ -50,11 +50,11 @@
 							<view class="bg-[#f6f6f6] p-[25rpx] rounded-lg mt-[10rpx]" v-if="item.technician?.real_name">
 								<view class="text-[26rpx] flex items-center">
 									<u-icon name="file-text" class="mr-[5rpx]"></u-icon>
-									<text>师傅已接单 <text class="text-[var(--primary-color)]"></text></text>
+									<text>技师已接单 <text class="text-[var(--primary-color)]"></text></text>
 								</view>
 								<view class="flex justify-between text-[#999999] text-[26rpx] mt-[20rpx]">
 									<view>
-										师傅：{{item.technician?.real_name}}
+										技师：{{item.technician?.real_name}}
 									</view>
 									<view>
 										{{item.reserve_service_time}}
@@ -71,7 +71,7 @@
 						</view>
 						<view class="flex justify-between text-[#999999] text-[26rpx] mt-[20rpx]">
 							<view>
-								师傅：{{item.technician?.real_name}}
+								技师：{{item.technician?.real_name}}
 							</view>
 							<view>
 							</view>
@@ -85,7 +85,7 @@
 						</view>
 						<view class="flex justify-between text-[#999999] text-[26rpx] mt-[20rpx]">
 							<view>
-								师傅：{{item.technician?.real_name}}
+								技师：{{item.technician?.real_name}}
 							</view>
 							<view>
 							</view>
@@ -166,7 +166,7 @@
 	import { t } from '@/locale'
 	import useConfigStore from "@/stores/config";
 	import { topTabar } from '@/utils/topTabbar';
-import { popupState, closePopup, confirmPopup } from '@/addon/home_service/user/pages/order/js/popupStatus'
+	import { popupState, closePopup, confirmPopup } from '@/addon/home_service/user/pages/order/js/popupStatus'
 	// 系统状态管理
 	const topTabarObj = topTabar()
 	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '订单列表', topStatusBar: { textColor: '#333' } })
@@ -360,6 +360,9 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/user/
 	/* #ifdef H5 */
 	.u-sticky {
 		top: 0 !important;
+	}
+	:deep(.empty-page){
+		border-radius:0.5rem !important;
 	}
 	/* #endif */
 </style>

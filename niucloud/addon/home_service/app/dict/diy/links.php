@@ -72,62 +72,37 @@ return [
                         'is_share' => 0,
                         'action' => ''
                     ],
-
-
-//                    [
-//                        'name' => 'HOME_SERVICE_GOODS_LIST',
-//                        'title' => get_lang('dict_diy.o2o_link_goods_list'),
-//                        'url' => '/addon/o2o/pages/goods/list',
-//                        'is_share' => 1,
-//                        'action' => ''
-//                    ],
-//
-//
-//                    [
-//                        'name' => 'HOME_SERVICE_REFUND_LIST',
-//                        'title' => get_lang('dict_diy.o2o_link_order_refund_list'),
-//                        'url' => '/addon/o2o/pages/refund/list',
-//                        'is_share' => 0,
-//                        'action' => ''
-//                    ],
-//                    [
-//                        'name' => 'HOME_SERVICE_TECHNICIAN_LIST',
-//                        'title' => get_lang('dict_diy.o2o_link_technician_list'),
-//                        'url' => '/addon/o2o/pages/technician/list',
-//                        'is_share' => 1,
-//                        'action' => ''
-//                    ],
-//                    [
-//                        'name' => 'HOME_SERVICE_ADDRESS_LIST',
-//                        'title' => get_lang('dict_diy.o2o_link_address_list'),
-//                        'url' => '/addon/o2o/pages/address/index',
-//                        'is_share' => 0,
-//                        'action' => ''
-//                    ],
-//                    [
-//                        'name' => 'HOME_SERVICE_LINK_MASTER_STAT_INDEX',
-//                        'title' => get_lang('dict_diy.o2o_link_master_stat_index'),
-//                        'url' => '/addon/o2o/pages/master/statistics/index',
-//                        'is_share' => 1,
-//                        'action' => ''
-//                    ],
+                    [
+                        'name' => 'HOME_SERVICE_SETTLE_STORE',
+                        'title' => get_lang('dict_diy.home_service_link_settle_store'),
+                        'url' => '/addon/home_service/user/pages/settle/store',
+                        'is_share' => 0,
+                        'action' => ''
+                    ],
+                    [
+                        'name' => 'HOME_SERVICE_SETTLE_TECHNICIAN',
+                        'title' => get_lang('dict_diy.home_service_link_settle_technician'),
+                        'url' => '/addon/home_service/user/pages/settle/technician',
+                        'is_share' => 0,
+                        'action' => ''
+                    ],
                 ]
             ],
-//            [
-//                'name' => 'HOME_SERVICE_GOODS_SELECT',
-//                'title' => get_lang('dict_diy.o2o_goods_select'),
-//                'component' => '/src/addon/o2o/views/goods/components/goods-select-content.vue'
-//            ],
-//            [
-//                'name' => 'HOME_SERVICE_GOODS_CATEGORY_SELECT',
-//                'title' => get_lang('dict_diy.o2o_goods_category_select'),
-//                'component' => '/src/addon/o2o/views/goods/components/category-select-content.vue'
-//            ],
-//            [
-//                'name' => 'HOME_SERVICE_TECHNICIAN_SELECT',
-//                'title' => get_lang('dict_diy.o2o_technician_select'),
-//                'component' => '/src/addon/o2o/views/technician/components/technician-select-content.vue'
-//            ],
+            [
+                'name' => 'HOME_SERVICE_GOODS_SELECT',
+                'title' => get_lang('dict_diy.home_service_goods_select'),
+                'component' => '/src/addon/home_service/views/diy/components/link-select-goods.vue'
+            ],
+            [
+                'name' => 'HOME_SERVICE_GOODS_CATEGORY_SELECT',
+                'title' => get_lang('dict_diy.home_service_goods_category_select'),
+                'component' => '/src/addon/home_service/views/diy/components/link-select-category.vue'
+            ],
+            [
+                'name' => 'HOME_SERVICE_CARD_SELECT',
+                'title' => get_lang('dict_diy.home_service_card_select'),
+                'component' => '/src/addon/home_service/views/diy/components/link-select-card.vue'
+            ],
 
         ]
     ],

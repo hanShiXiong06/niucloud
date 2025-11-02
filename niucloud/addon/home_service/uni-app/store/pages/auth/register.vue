@@ -24,7 +24,7 @@
                 您好，
             </view>
             <view class="text-[48rpx] font-500 text-[#111] mt-[6rpx] leading-[normal]">
-                欢迎登录师傅端
+                欢迎登录技师端
             </view> -->
             <!-- <view class="mb-[80rpx] text-[#333333] text-[26rpx] mt-[10rpx] leading-[normal]">
                 登录账号，开始您的职业生涯
@@ -153,7 +153,7 @@
                 </view>
                 <button class="w-full h-[80rpx] !bg-[var(--store-bg-one)] text-[26rpx] rounded-[40rpx] leading-[80rpx] font-500 !text-[#fff]" @click="handleRegister">{{ t('register') }}</button>
 				<view class="mt-[30rpx] flex justify-between items-center">
-					<view class="text-[var(--store-bg-one)] text-[26rpx]">账号注册</view>
+					<view class="text-[var(--store-bg-one)] text-[26rpx]" @click="setType">{{ type == 'username' ? t('mobileRegister') : t('usernameRegister') }}</view>
 					<view><text class="text-[#111111] text-[26rpx]">已有账号 </text> <text class="text-[var(--store-bg-one)] text-[26rpx]" @click="redirect({ url: '/addon/home_service/store/pages/auth/login',param:{type} })">{{ t('toLogin') }}</text></view>
 				</view>
             </view>
@@ -204,7 +204,7 @@ import smsCode from '@/addon/home_service/store/components/sms-code/sms-code.vue
 const systemStore = useSystemStore()
 /********* 自定义头部 - start ***********/
 const topTabarObj = topTabar()
-let param = topTabarObj.setTopTabbarParam({ title: '', topStatusBar: { bgColor: '#fff', textColor: '#333' } })
+let param = topTabarObj.setTopTabbarParam({ title: '机构注册', topStatusBar: { bgColor: '#fff', textColor: '#333' } })
 /********* 自定义头部 - end ***********/
 const headerHeight = computed(() => {
     return Object.keys(systemStore.menuButtonInfo).length ? pxToRpx(Number(systemStore.menuButtonInfo.height)) + pxToRpx(systemStore.menuButtonInfo.top) + pxToRpx(8) + 'rpx' : 'auto'
@@ -283,6 +283,13 @@ const loading = ref(false)
 const type = ref('')
 const agreeChange = () => {
     isAgree.value = !isAgree.value
+}
+const setType = () => {
+    if (type.value == 'username' && (configStore.login.is_mobile || configStore.login.is_bind_mobile)) {
+        type.value = 'mobile'
+    } else if (type.value == 'mobile' && configStore.login.is_username) {
+        type.value = 'username'
+    }
 }
 const registerType = computed(() => {
     const value = []

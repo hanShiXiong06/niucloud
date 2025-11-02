@@ -1,15 +1,14 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" v-if="!loading">
 		<!-- 门店列表 -->
-		<!-- #ifdef MP-WEIXIN -->
-		 	<u-navbar title="切换账号" autoBack bgColor="#ffffff" :placeholder="true">
-			</u-navbar>
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 		<!-- #endif -->
 		<view class="mescroll-body bg-[#f5f5f5] safe-area-padding">
 			<view class="py-3">
 				<!-- 门店卡片 -->
 				<view v-for="(store, index) in storeList" :key="store.store_id"
-				:class="store.is_default === 1 ? 'border-style-active' : 'border-style'"
+					:class="store.is_default === 1 ? 'border-style-active' : 'border-style'"
 					class="bg-white mx-4 mb-4 rounded-lg overflow-hidden relative store-card"
 					@tap="switchStore(store.store_id)">
 					<!-- 卡片头部 -->
@@ -141,29 +140,32 @@
 	import { getStoreList, storeSwitch } from '@/addon/home_service/store/api/store'
 	import useSystemStore from '@/stores/system'
 	import { getStoreInfo } from '@/addon/home_service/store/api/store'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '切换机构', topStatusBar: { textColor: '#333' } })
 	const storeInfo = ref({})
-	const getStoreInfoFn = () =>{
-		getStoreInfo().then((res)=>{
+	const getStoreInfoFn = () => {
+		getStoreInfo().then((res) => {
 			storeInfo.value = res.data
 			getStoreListFn()
-			if(res.data && res.data.store_id){
-			}else{
+			if (res.data && res.data.store_id) {
+			} else {
 				uni.showToast({
-					title:'您还未申请门店，请先申请入驻门店',
-					icon:'none'
+					title: '您还未申请门店，请先申请入驻门店',
+					icon: 'none'
 				})
-				setTimeout(()=>{
-					redirect({url:'/addon/home_service/user/pages/settle/store'})
-				},1500)
+				setTimeout(() => {
+					redirect({ url: '/addon/home_service/user/pages/settle/store' })
+				}, 1500)
 			}
-		}).catch((err)=>{
+		}).catch((err) => {
 			uni.showToast({
-				title:'您还未申请门店，请先申请入驻门店',
-				icon:'none'
+				title: '您还未申请门店，请先申请入驻门店',
+				icon: 'none'
 			})
-			setTimeout(()=>{
-				redirect({url:'/addon/home_service/user/pages/settle/store'})
-			},1500)
+			setTimeout(() => {
+				redirect({ url: '/addon/home_service/user/pages/settle/store' })
+			}, 1500)
 		})
 	}
 	getStoreInfoFn()
@@ -188,7 +190,7 @@
 		let param = {
 			lng: storeInfo.value?.lng,
 			lat: storeInfo.value?.lat,
-			store_name:''
+			store_name: ''
 		}
 		getStoreList(param).then((res : any) => {
 			loading.value = false
@@ -263,7 +265,7 @@
 </script>
 
 <style lang="scss">
-@import '@/addon/home_service/store/style/index.scss';
+	@import '@/addon/home_service/store/style/index.scss';
 </style>
 
 <style lang="scss" scoped>
@@ -304,10 +306,12 @@
 		padding-bottom: constant(safe-area-inset-bottom);
 		padding-bottom: env(safe-area-inset-bottom);
 	}
-	.border-style-active{
+
+	.border-style-active {
 		border: 2rpx solid var(--store-bg-one);
 	}
-	.border-style{
+
+	.border-style {
 		border: 2rpx solid #fff;
 	}
 </style>

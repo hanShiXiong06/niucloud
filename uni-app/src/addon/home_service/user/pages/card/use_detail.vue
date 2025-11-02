@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()" v-if="!loading">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<view class="m-[25rpx]">
 			<view class="flex justify-between items-center">
 				<view>
@@ -10,7 +13,7 @@
 						有效期至：{{cardInfo.expire_time}}
 					</view>
 				</view>
-				<view class="text-[var(--primary-color)]">
+				<view class="text-[#ff0000] text-[26rpx] font-bold">
 					{{cardInfo.total_use_num}}/{{cardInfo.total_num}}
 				</view>
 			</view>
@@ -21,7 +24,7 @@
 							:src="img(cardInfo.card?.card_image)" />
 					</view>
 					<view class="flex flex-col justify-between ml-[25rpx]">
-						<view class="font-bold">
+						<view class="font-bold text-[28rpx]">
 							{{cardInfo.card?.card_name}}
 						</view>
 						<view class="flex items-center justify-between">
@@ -65,7 +68,7 @@
 							</view>
 							<view v-if="item.order?.technician_name">
 								<view class="text-[#999999] text-[26rpx]">
-									服务师傅：
+									服务技师：
 								</view>
 								<view class="text-[28rpx] mt-[24rpx]">
 									{{item.order?.technician_name}}
@@ -96,6 +99,9 @@
 	import useMescroll from '@/components/mescroll/hooks/useMescroll.js'
 	import useConfigStore from '@/stores/config'
 	import { getCardUseList } from '@/addon/home_service/user/api/card'
+	import { topTabar } from '@/utils/topTabbar'
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '使用详情', topStatusBar: { textColor: '#333' } })
 	// 价格格式化函数 - 处理小数部分
 	const formatPriceAfterDecimal = (price : string | number) : string => {
 		if (!price) return '00'

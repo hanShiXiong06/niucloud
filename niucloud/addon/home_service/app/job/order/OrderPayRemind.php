@@ -23,7 +23,7 @@ class OrderPayRemind extends BaseJob
      * @param $data
      * @return true
      */
-    protected function doJob(int $site_id, int $order_id)
+    public function doJob(int $site_id, int $order_id)
     {
         try {
             (new NoticeService())->send($site_id, 'o2o_order_pay_remind', ['order_id' => $order_id ]);

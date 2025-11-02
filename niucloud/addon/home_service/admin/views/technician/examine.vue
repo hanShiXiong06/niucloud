@@ -21,8 +21,8 @@
 								<template #default="{ row }">
 									<div class="flex items-center cursor-pointer ">
 										<el-image style="width: 70px; height: 70px"
-											class="mr-[10px] rounded-[50%] w-[50%]" :src="img(row.headimg)"
-											fit="contain" :preview-src-list="[img(row.headimg)]">
+											class="mr-[10px] rounded-[50%] w-[50%]" :src="img(row.headimg_thumb_mid)"
+											fit="contain" :preview-src-list="[img(row.headimg_thumb_mid)]">
 											<template #error>
 												<div class="flex justify-center items-center w-full h-[70px]"><img
 														class="max-w-[70px]" src="@/app/assets/images/member_head.png"
@@ -80,8 +80,8 @@
 								<template #default="{ row }">
 									<div class="flex items-center justify-between">
 										<div class="relative">
-											<el-image style="width: 100px; height: 81px" :src="img(row.id_card_front)"
-												fit="contain" :preview-src-list="[img(row.id_card_front)]">
+											<el-image style="width: 100px; height: 81px" :src="img(row.id_card_font_thumb_mid)"
+												fit="contain" :preview-src-list="[img(row.id_card_font_thumb_mid)]">
 												<template #error>
 													<div class="flex justify-center items-center w-full h-[81px]"><img
 															class="max-w-[81px]"
@@ -95,8 +95,8 @@
 											</div>
 										</div>
 										<div class="relative">
-											<el-image style="width: 100px; height: 81px" :src="img(row.id_card_back)"
-												fit="contain" :preview-src-list="[img(row.id_card_back)]">
+											<el-image style="width: 100px; height: 81px" :src="img(row.id_card_back_thumb_mid)"
+												fit="contain" :preview-src-list="[img(row.id_card_back_thumb_mid)]">
 												<template #error>
 													<div class="flex justify-center items-center w-full h-[81px]"><img
 															class="max-w-[81px]"

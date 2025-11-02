@@ -819,7 +819,7 @@
 		return {
 			real_name: [{ required: true, message: t('technicianNamePlaceholder'), trigger: 'blur' }],
 			headimg: [{ required: true, message: t('headimgPlaceholder'), trigger: 'change' }],
-			certificate: [{ required: true, message: t('certificatePlaceholder'), trigger: 'change' }],
+			certificate: [{ required: false, message: t('certificatePlaceholder'), trigger: 'change' }],
 			mobile: [{ required: true, validator: validatePhone, trigger: 'blur' }],
 			level_id: [{ required: true, message: t('levelPlaceholder'), trigger: 'blur' }],
 			store_id: [{ required: true, message: t('storePlaceholder'), trigger: 'blur' }],

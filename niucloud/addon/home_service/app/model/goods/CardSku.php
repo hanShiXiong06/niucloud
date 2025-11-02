@@ -11,6 +11,7 @@
 
 namespace addon\home_service\app\model\goods;
 
+use app\dict\sys\FileDict;
 use core\base\BaseModel;
 
 
@@ -59,6 +60,17 @@ class CardSku extends BaseModel
             ->joinType('left')
             ->withField('card_id, poster_id, member_discount, site_id, card_name, goods_cover, goods_image, sale_num + virtually_sale as sale_num, status,goods_content')
             ->append(['goods_cover_thumb_small', 'goods_cover_thumb_mid', 'goods_image_thumb_small', 'goods_image_thumb_mid', 'goods_image_thumb_big', 'buy_type_name']);
+    }
+
+    /**
+     * 获取图片缩略图
+     */
+    public function getCardSkuImageThumbMidAttr($value, $data)
+    {
+        if (isset($data['sku_image']) && $data['sku_image'] != '') {
+            return get_thumb_images($data['site_id'], $data['sku_image'], FileDict::MID);
+        }
+        return [];
     }
 
 }

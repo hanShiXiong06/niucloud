@@ -1,37 +1,8 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()" v-if="!loading">
-		<!-- 评价类型和筛选条件合并到同一行 -->
-		<!-- <view class="flex px-[30rpx] py-[20rpx] border-b border-[var(--border-color)] justify-between items-center">
-			<view class="flex items-center">
-				<text class="text-[30rpx] font-bold text-[var(--primary-color)]">已评价</text>
-				<text class="ml-[10rpx] text-sm text-gray-500">({{ totalCount }})</text>
-			</view>
-			<view class="flex flex-nowrap">
-				<view
-					class="flex items-center justify-center mr-[20rpx] w-[90rpx] py-[5rpx] rounded-[16rpx] border-[2rpx] border-style box-border"
-					:class="currentFilter === 'comprehensive' ? 'bg-[#F6FEF7] active-border' : 'bg-transparent border-transparent'"
-					@click="switchFilter('comprehensive')">
-					<text class="!text-[26rpx]"
-						:class="currentFilter === 'comprehensive' ? 'text-[var(--primary-color)]' : 'text-gray-500'">
-						综合
-					</text>
-				</view>
-				<view
-					class="flex items-center justify-center w-[90rpx] py-[8rpx] rounded-[16rpx] border-[2rpx] px-[10rpx] border-style"
-					:class="currentFilter === 'time' ? 'bg-[#F6FEF7] active-border' : 'bg-transparent border-transparent'"
-					@click="switchFilter('time')">
-					<text class="!text-[26rpx]"
-						:class="currentFilter === 'time' ? 'text-[var(--primary-color)]' : 'text-gray-500'">时间</text>
-					<view class="ml-[8rpx] text-sm transition-transform duration-300 flex flex-col">
-						<text class="iconfont iconshangjiantou text-[20rpx] mb-[-5rpx]"
-							:class="sortDirection == 'desc' && currentFilter === 'time' ? 'text-[var(--primary-color)] ' : 'text-[#999999]'"></text>
-						<text class="iconfont iconxiajiantou text-[20rpx]"
-							:class="sortDirection == 'asc' && currentFilter === 'time' ? 'text-[var(--primary-color)]' : ' text-[#999999]'"></text>
-					</view>
-				</view>
-			</view>
-		</view> -->
-
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 评价列表 -->
 		<mescroll-body ref="mescrollRef" top="200rpx" @init="mescrollInit" :down="{ use: false }" @up="getEvaluateListFn">
 			<view class="bg-white mt-[20rpx] mb-[20rpx] mx-[25rpx] rounded-lg py-[10rpx]"
@@ -78,6 +49,9 @@
 	import { img, goback } from '@/utils/common'
 	import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue'
 	import {getEvaluateList } from '@/addon/home_service/user/api/goods';
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '服务评价', topStatusBar: { textColor: '#333' } })
 	// 返回上一页
 	const onBack = () => {
 		if (getCurrentPages().length > 1) {

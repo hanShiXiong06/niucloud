@@ -1,5 +1,8 @@
 <template>
 	<view :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<template v-if="!loading">
 			<view v-if="detail" class="bg-[#f7f7f7] min-h-screen overflow-hidden">
 				<view class="h-[800rpx] w-full">
@@ -215,6 +218,9 @@
 	import { t } from '@/locale'
 	import OrderMethods from '@/addon/home_service/store/pages/order/js/OrderMethods';
 	import useSystemStore from '@/stores/system';
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '抢单', topStatusBar: { textColor: '#333' } })
 	const passedTime = ref('')
 	const systemStore = useSystemStore()
 	const showImage = ref(false)
@@ -555,7 +561,7 @@
 		}
 	}
 
-	// 联系师傅
+	// 联系技师
 	const callPhoto = (tel) => {
 		if (!tel) return
 		uni.makePhoneCall({

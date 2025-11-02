@@ -25,7 +25,7 @@ class AbnormalOrder extends BaseJob
      * 处理异常订单
      * @return true
      */
-    protected function doJob()
+    public function doJob()
     {
         try {
             $list = (new Order())->where([

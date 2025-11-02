@@ -22,7 +22,7 @@
 			     您好，
 			 </view>
 			 <view class="text-[36rpx] font-500 text-[#111] mt-[6rpx] leading-[normal]">
-			     欢迎登录师傅端
+			     欢迎登录技师端
 			 </view>
 			 <view class="mb-[80rpx] text-[#666] text-[26rpx] mt-[10rpx] leading-[normal]">
 			     登录账号，开始您的职业生涯
@@ -94,7 +94,7 @@
                 </view>
                 <button class="w-full h-[80rpx] !bg-[var(--technician-bg-one)] text-[26rpx] rounded-[40rpx] leading-[80rpx] font-500 !text-[#fff] !mx-[0]" :loadingText="t('logining')" @click="handleLogin">{{ t('login') }}</button>
 				<view class="mt-[30rpx] flex justify-between items-center">
-					<view class="text-[var(--technician-bg-one)] text-[26rpx]">账号登录</view>
+					<view class="text-[var(--technician-bg-one)] text-[26rpx]" @click="setType">{{ type == 'username' ? t('mobileLogin') : t('accountLogin') }}</view>
 					<view><text class="text-[#111111] text-[26rpx]">没有账号 </text> <text class="text-[var(--technician-bg-one)] text-[26rpx]" @click="redirect({ url: '/addon/home_service/technician/pages/auth/register',param:{type} })">{{ t('toRegister') }}</text></view>
 				</view>
             </view>
@@ -118,14 +118,14 @@
                 </view>
             </view>
         </uni-popup>
-        <view class="footer w-full" v-if="type == 'mobile' && configStore.login.is_username || type == 'username' && configStore.login.is_mobile || isShowQuickLogin">
+        <!-- <view class="footer w-full" v-if="type == 'mobile' && configStore.login.is_username || type == 'username' && configStore.login.is_mobile || isShowQuickLogin">
             <view class="text-[26rpx] leading-[36rpx] text-[#666] text-center mb-[30rpx] font-400">其他登录方式</view>
             <view class="flex justify-center gap-[40rpx]">
                 <text v-if="type == 'mobile' && configStore.login.is_username"  @click="setType" class="w-[66rpx] h-[66rpx] flex items-center justify-center iconfont iconmima6Vmm border-[2rpx] rounded-[50%] border-solid border-[#ddd] !text-[26rpx]"></text>
                 <text v-if="type == 'username' && configStore.login.is_mobile" @click="setType" class="w-[66rpx] h-[66rpx] flex items-center justify-center iconfont iconshouji6Vmm border-[2rpx] rounded-[50%] border-solid border-[#ddd] !text-[26rpx]"></text>
                 <text v-if="isShowQuickLogin" @click="toLink" class="w-[66rpx] h-[66rpx] !text-[#1AAB37] flex items-center justify-center iconfont iconweixinV6mm1 border-[2rpx] rounded-[50%] border-solid border-[#ddd] !text-[26rpx]"></text>
             </view>
-        </view>
+        </view> -->
     </view>
 </template>
 <script setup lang="ts">
@@ -143,7 +143,7 @@ import smsCode from '@/addon/home_service/technician/components/sms-code/sms-cod
 const systemStore = useSystemStore()
 /********* 自定义头部 - start ***********/
 const topTabarObj = topTabar()
-const param = topTabarObj.setTopTabbarParam({ title: '', topStatusBar: { bgColor: '#fff', textColor: '#333' } })
+const param = topTabarObj.setTopTabbarParam({ title: '师傅登录', topStatusBar: { bgColor: '#fff', textColor: '#333' } })
 /********* 自定义头部 - end ***********/
 const headerHeight = computed(() => {
     return Object.keys(systemStore.menuButtonInfo).length ? pxToRpx(Number(systemStore.menuButtonInfo.height)) + pxToRpx(systemStore.menuButtonInfo.top) + pxToRpx(8) + 'rpx' : 'auto'

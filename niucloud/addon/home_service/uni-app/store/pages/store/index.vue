@@ -1,7 +1,6 @@
 <template>
-	<!-- #ifdef MP-WEIXIN -->
-	 	<u-navbar title="门店首页" :autoBack="false" bgColor="#ffffff" :placeholder="true" :left-arrow="false" left-icon="">
-	 	</u-navbar>
+	<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+	<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="false" />
 	<!-- #endif -->
 	<view class=" bg-[#f6f6f6] bg-gradient-to-b from-[#ffffff] to-[#f6f6f6]" v-if="!loading">
 		<view class="py-[20rpx]  px-[30rpx]">
@@ -217,7 +216,7 @@
 					<qiun-data-charts class="ring-chart" type="ring" :opts="chartOpts" :chartData="chartData"
 						:canvas2d="true" />
 					<view class="chart-text">
-						师傅状态分布
+						技师状态分布
 					</view>
 				</view>
 				<!-- 右侧其他内容区域（留空，供后续添加） -->
@@ -275,6 +274,9 @@
 	import { ref, computed, onMounted } from 'vue'
 	import { onLoad } from '@dcloudio/uni-app'
 	import { t } from '@/locale'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '机构首页', topStatusBar: { textColor: '#333' ,rollBgColor:'#ffffff'}})
 	const loading = ref<boolean>(true);
 	const list5 = ref([
 		img('/addon/home_service/technician/sehzhi.png'),

@@ -42,23 +42,22 @@ class GoodsCollectService extends BaseApiService
             ['goods.delete_time', '=', 0]
         ])
             ->withJoin([
-                'goods' => [
-                    'goods_subtitle', 'site_id', 'goods_id', 'goods_name',
-                    'goods_cover', 'status', 'member_discount', 'sale_num', 'buy_type'
-                ]
+                'goods' =>function($query){
+                    $query->field('goods_subtitle, goods.site_id, goods.goods_id, goods_cover, member_discount, sale_num, buy_type, goods_category');
+                }
             ])
             ->with(['goodsSku'])
-            ->append(['goods_cover_thumb_mid'])
+            ->append(['goods_cover_thumb_mid', 'category_name'])
             ->order('create_time desc');
 
         return $this->pageQuery($query, function ($item) use ($memberInfo,$where) {
 
             if ($item['goods']['buy_type'] == GoodsDict::BUY) {
                 // 查询会员价
-                $member_price = $this->getMemberPrice($memberInfo, $item['goods']['member_discount'], $item['goods']['member_price'], $item['price']);
+                $member_price = $this->getMemberPrice($memberInfo, $item['goods']['member_discount'], $item['goods']['member_price'], $item['price'], $item);
             }else{
                 $cityStrategyService = new CoreCityStrategyService();
-                $member_price = $cityStrategyService->getStrategyPrice($item['price'], $where['city_id'], $this->site_id);
+                $member_price = $cityStrategyService->getStrategyPrice($item['price'], $where['city_id'], $this->site_id,$item);
             }
             $item['goods']['member_price'] = $member_price;
             $item['price'] = $member_price;
@@ -127,7 +126,7 @@ class GoodsCollectService extends BaseApiService
      * @return int|string
      */
 
-    public function getMemberPrice($member_info, $member_discount, $member_price, $price)
+    public function getMemberPrice($member_info, $member_discount, $member_price, $price, &$v)
     {
         // 获取城市ID并确保为整数
         $city_id = (int)request()->get('city_id', 0);
@@ -135,7 +134,7 @@ class GoodsCollectService extends BaseApiService
         // 处理无需会员折扣的情况
         if (empty($member_discount) || empty($member_info) ||
             (!empty($member_info) && empty($member_info['member_level']))) {
-            return $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id);
+            return $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id, $v);
         }
         // 根据员折扣类型计算价格
         if ($member_discount === 'discount') {
@@ -159,7 +158,7 @@ class GoodsCollectService extends BaseApiService
             }
         }
         // 应用城市策略并格式化价格
-        $finalPrice = $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id);
+        $finalPrice = $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id, $v);
         return number_format($finalPrice, 2, '.', '');
     }
 

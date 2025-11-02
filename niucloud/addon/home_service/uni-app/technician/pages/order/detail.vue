@@ -1,9 +1,8 @@
 <template>
-	<view :style="themeColor()">
+	<view :style="themeColor()" class="pb-[100rpx]">
 		<template v-if="!loading">
 			<!-- #ifdef MP-WEIXIN || APP-PLUS -->
-			<u-navbar title="订单详情" bgColor="#ffffff" leftIconSize="15px" autoBack placeholder>
-			</u-navbar>
+			<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 			<!-- #endif -->
 			<view v-if="detail" class="bg-[#f7f7f7] min-h-screen overflow-hidden pt-[25rpx]">
 				<view class="px-3 pt-5">
@@ -13,20 +12,33 @@
 					<view class="py-[20rpx]">
 						<view class="text-[24rpx] text-[#999999] flex items-center mb-[10rpx]"
 							v-if="detail?.order_status == 'wait_service'">
-							<u-icon name="person-delete-fill" color="#999999" class="mr-[5rpx]"></u-icon>{{ t('orderNotStarted') }}
+							<u-icon name="person-delete-fill" color="#999999"
+								class="mr-[5rpx]"></u-icon>{{ t('orderNotStarted') }}
 						</view>
 						<view v-else>
-							<view class="text-[24rpx] text-[#999999] flex items-center mb-[10rpx]">
-								<u-icon name="car" color="#999999" class="mr-[5rpx]"></u-icon>{{ t('servicePersonDeparted') }}
+							<view class="text-[24rpx] text-[#999999] flex items-center mb-[15rpx]" v-if="detail?.take_photos && detail?.take_photos.length">
+								<u-icon name="car" color="#999999"
+									class="mr-[5rpx]"></u-icon>{{ t('servicePersonDeparted') }}
 							</view>
 							<view class="text-[24rpx] text-[#999999] flex items-center justify-between mb-[10rpx]"
 								v-if="detail?.take_photos && detail?.take_photos.length">
 								<view class="flex items-center">
-									<u-icon name="camera" color="#999999" class="mr-[5rpx]"></u-icon>{{ t('servicePersonCheckedIn') }}
+									<u-icon name="camera" color="#999999"
+										class="mr-[5rpx]"></u-icon>{{ t('servicePersonCheckedIn') }}
 								</view>
-								<view class="border-style text-[#4a83ff] px-[15rpx] py-[10rpx] rounded-5rpx"
+								<view class="border-style text-[#4a83ff] px-[15rpx] py-[5rpx] rounded-5rpx"
 									@click="showImage = true">
 									{{ t('viewCheckInPhotos') }}
+								</view>
+							</view>
+							<view class="text-[24rpx] text-[#999999] flex items-center justify-between mb-[10rpx]"
+								v-if="detail?.check_photos && detail?.check_photos.length">
+								<view class="flex items-center">
+									<u-icon name="photo" color="#999999" class="mr-[5rpx]"></u-icon>服务已完成，完成拍照
+								</view>
+								<view class="border-style text-[#4a83ff] px-[15rpx] py-[5rpx] rounded-5rpx"
+									@click="openCheckPhotos">
+									查看完成图片
 								</view>
 							</view>
 						</view>
@@ -36,7 +48,8 @@
 				<!-- 实时计时显示区域 -->
 				<view class="text-[26rpx] mb-[30rpx] mt-[15rpx]" v-if="detail?.order_status == 'in_service'">
 					<view class="text-[#fff] flex justify-center">
-						<view v-for="(item,index) in formattedElapsedTime.split(':')" :key="index" class="flex justify-enter items-center">
+						<view v-for="(item,index) in formattedElapsedTime.split(':')" :key="index"
+							class="flex justify-enter items-center">
 							<view
 								class="bg-[#FF000D] text-[45rpx] font-bold mx-[15rpx] min-w-[60rpx] text-center flex items-center justify-center h-[60rpx] px-[14rpx] py-[8rpx] rounded-lg">
 								{{item}}
@@ -50,8 +63,7 @@
 					</view>
 				</view>
 
-				<view class="bg-[#fff] my-[30rpx] mx-[30rpx] rounded-[16rpx] p-[30rpx] mt-[0rpx]"
-					>
+				<view class="bg-[#fff] my-[30rpx] mx-[30rpx] rounded-[16rpx] p-[30rpx] mt-[0rpx]">
 					<view class="flex justify-between mb-[10rpx]">
 						<view class="flex items-center">
 							<view class="flex items-center bg-[#00CE2D] rounded-l-[50rpx] rounded-r-[6rpx] mr-[20rpx]"
@@ -138,20 +150,22 @@
 				<view class="mt-[30rpx]">
 					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-lg">
 						<view class="flex justify-between">
-								<view class="text-[30rpx] font-bold">{{ t('serviceItems') }}</view>
-								<view class="flex justify-between items-end text-[26rpx]">
-									<view class="text-[22rpx] text-[var(--price-text-color)] price-font">{{ t('realMoney') }}</view>
-									<view class="text-[32rpx] font-bold leading-[35rpx] text-[var(--price-text-color)] price-font"><text
-											class="!text-[22rpx]">￥</text>{{ detail.pay_money }}</view>
-								</view>
+							<view class="text-[30rpx] font-bold">{{ t('serviceItems') }}</view>
+							<view class="flex justify-between items-end text-[26rpx]">
+								<view class="text-[22rpx] text-[var(--price-text-color)] price-font">
+									{{ t('realMoney') }}</view>
+								<view
+									class="text-[32rpx] font-bold leading-[35rpx] text-[var(--price-text-color)] price-font">
+									<text class="!text-[22rpx]">￥</text>{{ detail.pay_money }}</view>
 							</view>
+						</view>
 						<view v-if="detail.item && detail.item?.length"
 							class="flex justify-between text-[26rpx] pt-[30rpx] border-top-[2rpx] border-[solid] border-[#f1f1f1]">
 							<view>{{ detail.item[0].item_name}}</view>
-							<view class="price-font"><text class="!text-[24rpx]">￥</text>{{  detail?.item[0].item_money }}</view>
+							<view class="price-font"><text
+									class="!text-[24rpx]">￥</text>{{ detail?.item[0].item_money }}</view>
 						</view>
-						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] my-[24rpx] rounded-[10rpx]"
-							>
+						<view class="bg-[#F6F6F6] p-[30rpx] text-[24rpx] my-[24rpx] rounded-[10rpx]">
 							{{ t('remarkPrefix') }}{{detail.member_message ||'暂无备注'}}
 						</view>
 						<view v-if="detail.discount_money && Number(detail.discount_money)"
@@ -166,42 +180,48 @@
 				<view class="mt-[30rpx]">
 					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-lg">
 						<view class="flex justify-between">
-								<view class="text-[30rpx] font-bold">{{ t('orderIncome') }}</view>
-								<view class="flex justify-between items-end text-[26rpx]">
-									<view class="text-[32rpx] font-bold leading-[35rpx]  text-[var(--price-text-color)] price-font"><text
-											class="!text-[22rpx]">￥</text>{{ detail.technician_sum_commission }}</view>
-								</view>
+							<view class="text-[30rpx] font-bold">{{ t('orderIncome') }}</view>
+							<view class="flex justify-between items-end text-[26rpx]">
+								<view
+									class="text-[32rpx] font-bold leading-[35rpx]  text-[var(--price-text-color)] price-font">
+									<text class="!text-[22rpx]">￥</text>{{ detail.technician_sum_commission }}</view>
 							</view>
+						</view>
 						<view v-if="detail?.order_status == 'in_service'"
 							@click="redirect({url:'/addon/home_service/technician/pages/order/additional',param:{order_id:orderId}})"
 							class="flex justify-between text-[26rpx] pt-[30rpx] border-top-[2rpx] border-[solid] border-[#f1f1f1]">
 							<view>{{ t('additionalService') }}</view>
-							<view class="text-[var(--price-text-color)] price-font text-[24rpx] text-[#999999] font-bold"><text
-									class="iconfont iconarrow-right  text-[26rpx]"></text></view>
+							<view
+								class="text-[var(--price-text-color)] price-font text-[24rpx] text-[#999999] font-bold">
+								<text class="iconfont iconarrow-right  text-[26rpx]"></text></view>
 						</view>
 						<view
 							class="flex justify-between text-[26rpx] pt-[30rpx] border-top-[2rpx] border-[solid] border-[#f1f1f1]">
 							<view>{{ t('serviceFee') }}</view>
-							<view class=" price-font"><text class="!text-[24rpx]">￥</text>{{ detail.technician_commission }}</view>
+							<view class=" price-font"><text
+									class="!text-[24rpx]">￥</text>{{ detail.technician_commission }}</view>
 						</view>
 						<view v-if="detail?.technician_additional_commission>0"
 							class="flex justify-between text-[26rpx] pt-[30rpx] border-top-[2rpx] border-[solid] border-[#f1f1f1]">
 							<view>{{ t('additionalServiceFee') }}</view>
-							<view class="price-font"><text class="!text-[24rpx]" v-if="detail.technician_additional_commission">￥</text>{{ detail.technician_additional_commission }}</view>
+							<view class="price-font"><text class="!text-[24rpx]"
+									v-if="detail.technician_additional_commission">￥</text>{{ detail.technician_additional_commission }}
+							</view>
 						</view>
 						<view class="bg-[#F6F6F6] p-[25rpx] text-[24rpx] my-[24rpx] rounded-[10rpx]">
-				<view>{{ t('serviceFeeDescription') }}</view>
-				<view class="mt-[15rpx]" v-if="detail?.order_status == 'in_service'">{{ t('additionalServiceFeeDescription') }}
-				</view>
-			</view>
+							<view>{{ t('serviceFeeDescription') }}</view>
+							<view class="mt-[15rpx]" v-if="detail?.order_status == 'in_service'">
+								{{ t('additionalServiceFeeDescription') }}
+							</view>
+						</view>
 					</view>
 				</view>
 
 				<view class="mt-[30rpx]">
 					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-[10rpx]">
 						<view class="text-[30rpx] font-bold">
-				{{ t('otherInformation') }}
-			</view>
+							{{ t('otherInformation') }}
+						</view>
 						<view
 							class="flex justify-between text-[26rpx] border-top-[2rpx] border-[solid] border-[#f1f1f1] mt-[30rpx]">
 							<view>{{ t('onOrder') }}</view>
@@ -255,8 +275,8 @@
 			<view class="text-[32rpx] font-bold text-center py-[30rpx]">
 				{{ t('checkInPhotos') }}
 			</view>
-			<view class="px-[30rpx] py-[30rpx] pb-[20rpx]  grid grid-cols-4 gap-4 ">
-				<view v-for="(imageUrl, imgIndex) in detail.take_photos" :key="imgIndex" class=" rounded-lg">
+			<view class="px-[30rpx] py-[30rpx] pb-[20rpx] !pb-[40rpx] grid grid-cols-4 gap-4 ">
+				<view v-for="(imageUrl, imgIndex) in detail.take_photos" :key="imgIndex" class=" rounded-lg mb-[24rpx]">
 					<u--image :src="img(imageUrl)" width="140rpx" height="140rpx" radius="10rpx"
 						@click="imgListPreview(imageUrl, imgIndex)">
 						<view slot="error" style="font-size: 24rpx;">{{ t('loadFailed') }}</view>
@@ -264,9 +284,23 @@
 				</view>
 			</view>
 		</u-popup>
-		<order-popup :show="popupState.visible" :order="popupState.order"
-			:action-key="popupState.actionKey" @close="closePopup()"
-			@confirm="handlePopupConfirm"></order-popup>
+		<u-popup :show="showCheckImage" @close="showCheckImage = false" @open="showCheckImage = true" mode="center"
+			zIndex="9" round="15">
+			<view class="text-[32rpx] font-bold text-center py-[30rpx]">
+				完成照片
+			</view>
+			<view class="px-[30rpx] py-[30rpx] pb-[20rpx] grid grid-cols-4 gap-4 ">
+				<view v-for="(imageUrl, imgIndex) in detail.check_photos" :key="imgIndex"
+					class=" rounded-lg mb-[24rpx]">
+					<u--image :src="img(imageUrl)" width="140rpx" height="140rpx" radius="10rpx"
+						@click="imgListPreview(imageUrl, imgIndex)">
+						<view slot="error" style="font-size: 24rpx;">{{ t('loadFailed') }}</view>
+					</u--image>
+				</view>
+			</view>
+		</u-popup>
+		<order-popup :show="popupState.visible" :order="popupState.order" :action-key="popupState.actionKey"
+			@close="closePopup()" @confirm="handlePopupConfirm"></order-popup>
 		<pay ref="payRef"></pay>
 		<loading-page :loading="loading"></loading-page>
 	</view>
@@ -275,15 +309,19 @@
 <script setup lang="ts">
 	import { ref, computed, onMounted, onUnmounted } from 'vue'
 	import { onLoad, onShow } from '@dcloudio/uni-app'
-	import { img, redirect, copy,timeStampTurnTime } from '@/utils/common'
+	import { img, redirect, copy, timeStampTurnTime } from '@/utils/common'
 	import { grabOrderDetail } from '@/addon/home_service/technician/api/order'
 	import { t } from '@/locale'
 	import OrderMethods from '@/addon/home_service/technician/pages/order/js/orderMethods';
 	import orderPopup from '@/addon/home_service/technician/components/orderPopup/orderPopup.vue';
 	import useSystemStore from '@/stores/system';
 	const systemStore = useSystemStore()
-import { popupState, closePopup, confirmPopup } from '@/addon/home_service/technician/pages/order/js/popupStatus'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '订单详情', topStatusBar: { textColor: '#333' } })
+	import { popupState, closePopup, confirmPopup } from '@/addon/home_service/technician/pages/order/js/popupStatus'
 	const showImage = ref(false)
+	const showCheckImage = ref(false)
 	// 处理订单按钮点击
 	const handleOrderAction = (order : any, key : string) => {
 		OrderMethods.orderClickFunction(
@@ -292,12 +330,12 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 			() => getOrderDetailFu(), // 刷新列表的回调
 		);
 	};
-	
+
 	// 弹窗确认回调
 	const handlePopupConfirm = (popupData ?: any) => {
 		confirmPopup(popupData);
 	};
-	
+
 	// 订单ID
 	let orderId = 0
 	//预览图片
@@ -496,7 +534,7 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 	const cancel = (item : any) => {
 		uni.showModal({
 			title: t('prompt'),
-					content: t('confirmCancelOrder'),
+			content: t('confirmCancelOrder'),
 			confirmColor: useConfigStore().themeColor['--primary-color'],
 			success: (res) => {
 				if (res.confirm) {
@@ -588,7 +626,7 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 		}
 	}
 
-	// 联系师傅
+	// 联系技师
 	const callPhoto = (tel) => {
 		if (!tel) return
 		uni.makePhoneCall({
@@ -630,6 +668,11 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 	onUnmounted(() => {
 		controlTimer(false)
 	})
+
+	// 预览完成照片
+	const openCheckPhotos = () => {
+		showCheckImage.value = true
+	}
 </script>
 
 <style lang="scss" scoped>
@@ -666,5 +709,5 @@ import { popupState, closePopup, confirmPopup } from '@/addon/home_service/techn
 	}
 </style>
 <style lang="scss">
-@import '@/addon/home_service/technician/style/index.scss';
+	@import '@/addon/home_service/technician/style/index.scss';
 </style>

@@ -58,12 +58,16 @@ class OrderCreate extends BaseApiController
      */
     public function create()
     {
+
         $data = $this->request->params([
             ['order_key', ''],
             ['member_remark', ''],
             ['reserve_service_time', ''],
-            ['reserve_service_time_stamp', '']
+            ['reserve_service_time_stamp', ''],
+            ['errand_items', []],
+            ['sku', []],
         ]);
+
         $this->validate($data, 'addon\home_service\app\validate\Order.create');
         return success('SUCCESS', (new OrderCreateService())->create($data));
     }

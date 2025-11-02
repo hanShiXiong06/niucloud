@@ -17,16 +17,16 @@ use core\base\BaseAdminController;
 
 
 /**
- * 师傅控制器
- * @description 师傅
+ * 技师控制器
+ * @description 技师
  * Class Reserve
  * @package app\adminapi\controller\reserve
  */
 class Technician extends BaseAdminController
 {
     /**
-     * 获取师傅分页列表
-     * @description 获取师傅分页列表
+     * 获取技师分页列表
+     * @description 获取技师分页列表
      * @return \think\Response
      */
     public function pages()
@@ -56,7 +56,7 @@ class Technician extends BaseAdminController
 
 
     /**
-     * 师傅分成方式
+     * 技师分成方式
      * @description 获取会员
      */
     public function getDistributeType()
@@ -65,7 +65,7 @@ class Technician extends BaseAdminController
     }
 
     /**
-     * 师傅入驻方式
+     * 技师入驻方式
      * @description 获取会员
      */
     public function getSource()
@@ -75,7 +75,7 @@ class Technician extends BaseAdminController
 
 
     /**
-     * 师傅状态
+     * 技师状态
      * @description 获取会员
      */
     public function getTechnicianStatus()
@@ -85,8 +85,8 @@ class Technician extends BaseAdminController
 
 
     /**
-     * 添加师傅
-     * @description 添加师傅
+     * 添加技师
+     * @description 添加技师
      * @return \think\Response
      */
     public function add()
@@ -97,7 +97,7 @@ class Technician extends BaseAdminController
             ["status", 1],
             ["member_id", 0],
             ["headimg", ""],
-            ["certificate", 0],
+            ["certificate", ""],
             ["province_id", ""],
             ["city_id", ''],
             ['district_id', ''],
@@ -120,8 +120,8 @@ class Technician extends BaseAdminController
 
 
     /**
-     * 师傅详情
-     * @description 师傅详情
+     * 技师详情
+     * @description 技师详情
      * @param int $id
      * @return \think\Response
      */
@@ -132,8 +132,8 @@ class Technician extends BaseAdminController
 
 
     /**
-     * 修改 师傅状态
-     * @description 修改 师傅状态
+     * 修改 技师状态
+     * @description 修改 技师状态
      */
     public function status($id)
     {
@@ -146,9 +146,9 @@ class Technician extends BaseAdminController
 
 
     /**
-     * 师傅编辑
-     * @description 师傅编辑
-     * @param $id  师傅id
+     * 技师编辑
+     * @description 技师编辑
+     * @param $id  技师id
      * @return \think\Response
      */
     public function edit($id)
@@ -159,7 +159,7 @@ class Technician extends BaseAdminController
             ["status", 1],
             ["headimg", ""],
             ["member_id", 0],
-            ["certificate", 0],
+            ["certificate", ""],
             ["province_id", ""],
             ["city_id", ''],
             ['district_id', ''],
@@ -180,8 +180,8 @@ class Technician extends BaseAdminController
 
 
     /**
-     * 获取师傅列表（用于弹框选择）   (待考虑)
-     * @description 获取师傅列表（用于弹框选择）
+     * 获取技师列表（用于弹框选择）   (待考虑)
+     * @description 获取技师列表（用于弹框选择）
      * @return \think\Response
      */
     public function select()

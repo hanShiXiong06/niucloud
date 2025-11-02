@@ -1,14 +1,14 @@
 <template>
 	<view :style="themeColor()">
-		<!-- #ifdef MP-WEIXIN || APP-PLUS --> 
-		<u-navbar   title="待付款订单"   leftIconSize="15px" autoBack  :fixed="true" placeholder>
-		</u-navbar>
-			<!-- #endif -->
-	
-		<view class="bg-[#F6F8FA] min-h-screen overflow-hidden py-[20rpx] px-[24rpx]" :style="wxxcxstytle" v-if="orderData">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
+
+		<view class="bg-[#F6F8FA] min-h-screen overflow-hidden py-[20rpx] px-[24rpx]" :style="wxxcxstytle"
+			v-if="orderData">
 			<!-- 上门地址 -->
 			<view class="bg-[#fff] rounded-lg py-[10rpx]">
-				<view class="flex items-center py-[24rpx] px-[24rpx]  border-bottom-style" @click="toSelectAddress">
+				<view class="flex items-center py-[24rpx] px-[24rpx]  " @click="toSelectAddress">
 					<view class="flex-1 w-0 flex">
 						<text class="nc-iconfont nc-icon-dingweiV6xx-1 text-[28rpx] mr-[20rpx]"></text>
 						<view v-if="!$u.test.isEmpty(orderData.delivery.take_address)">
@@ -25,6 +25,7 @@
 					</view>
 					<text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[var(--text-color-light6)]"></text>
 				</view>
+				<view class="border-bottom-style"></view>
 				<!-- 预约时间 -->
 				<view class="flex items-center px-[24rpx]">
 					<view class="flex justify-between items-center box-border py-[24rpx] w-[100%]">
@@ -47,8 +48,9 @@
 
 			<ns-select-time ref="selectTime" :rules="service_time" :isQuantum="true" @change="getTime"
 				@getStamp="getStamp" v-if="Object.keys(service_time).length"></ns-select-time>
-			<view class="outline-border" v-for="(item, index) in orderData.goods_data"  @click="toDetail(item.sku_id)">
-				<up-image width="168rpx" height="168rpx" radius="5" class="rounded-[50%]" :src="img(item.sku_image)" model="aspectFill">
+			<view class="outline-border" v-for="(item, index) in orderData.goods_data" @click="toDetail(item.sku_id)">
+				<up-image width="168rpx" height="168rpx" radius="5" class="rounded-[50%]" :src="img(item.sku_image)"
+					model="aspectFill">
 					<template #error>
 						<u-icon name="photo" color="#999" size="50"></u-icon>
 					</template>
@@ -70,15 +72,15 @@
 						<view class="text-[var(--price-text-color)] text-[28rpx] font-bold flex items-end">
 							<text class="text-[22rpx] price-font  !leading-[1.2]">￥</text>
 							<text
-								class="price-font text-[36rpx] !leading-[1] ">{{ Number( moneyFormat(item.price)).toString().split('.')[0] }}</text>
+								class="price-font text-[32rpx] !leading-[1] ">{{ Number( moneyFormat(item.price)).toString().split('.')[0] }}</text>
 							<text
-								class="price-font text-[24rpx] !leading-[1.1]">.{{ Number( moneyFormat(item.price)).toFixed(2).split('.')[1] }}</text>
-							<text v-if="item.sku_unit" class="!text-[26rpx] ml-[5rpx]">/{{ item.sku_unit }}</text>
+								class="price-font text-[22rpx] !leading-[1.1]">.{{ Number( moneyFormat(item.price)).toFixed(2).split('.')[1] }}</text>
 						</view>
 					</view>
 				</view>
 			</view>
-			<view class="bg-[#fff] px-3 mt-[-10rpx] pt-[10rpx] rounded-bl-22rpx rounded-br-22rpx" v-if="!createData.card_data?.member_card_item_id">
+			<view class="bg-[#fff] px-3 mt-[-10rpx] pt-[10rpx] rounded-bl-22rpx rounded-br-22rpx"
+				v-if="!createData.card_data?.member_card_item_id">
 				<!-- 备注 -->
 				<view class="flex justify-between items-center box-border py-[24rpx]">
 					<text class="text-[28rpx]">{{ t('buysMessage') }}</text>
@@ -96,7 +98,7 @@
 				<view class="flex  py-[10rpx] items-center">
 					<view class="text-[28rpx]">{{ t('goodsMoney') }}</view>
 					<view class="flex-1 w-0 text-right  price-font">
-						<text class="text-[24rpx]">￥</text>
+						<text class="text-[28rpx]">￥</text>
 						<text>{{ moneyFormat(orderData.basic.goods_money) }}</text>
 					</view>
 				</view>
@@ -106,11 +108,13 @@
 						@click="couponRef.open(createData.discount.coupon_id)" v-if="couponList.length">
 						<view v-if="orderData.discount && orderData.discount.coupon"
 							class="text-[var(--price-text-color)] text-[28rpx] truncate flex items-center justify-end">
-							<view class="bg-[var(--price-text-color)] text-[#fff] text-[20rpx] px-[15rpx] py-[10rpx] rounded-[10rpx] mb-[2rpx]">
+							<view
+								class="bg-[var(--price-text-color)] text-[#fff] text-[20rpx] px-[15rpx] py-[10rpx] rounded-[10rpx] mb-[2rpx]">
 								{{ orderData.discount.coupon.title }}
 							</view>
-							<view class="text-[26rpx] ml-[10rpx] " v-if="orderData.basic.discount_money">	-￥{{moneyFormat(orderData.basic.discount_money)}}</view>
-							</view>
+							<view class="text-[28rpx] ml-[10rpx] " v-if="orderData.basic.discount_money">
+								-￥{{moneyFormat(orderData.basic.discount_money)}}</view>
+						</view>
 						<text class="text-[28rpx] text-gray-subtitle" v-else>请选择优惠券</text>
 						<text
 							class="nc-iconfont nc-icon-youV6xx -mb-[2rpx] text-[26rpx] text-[var(--text-color-light9)] ml-[5rpx]"></text>
@@ -120,9 +124,8 @@
 				<view class="flex  py-[10rpx] items-center">
 					<view class="text-[28rpx]">{{ t('payMoney') }}</view>
 					<view class="flex-1 w-0 text-right price-font text-[var(--price-text-color)]">
-						<text class="text-[24rpx]">￥</text>
-						<text
-							class="">{{ moneyFormat(orderData.basic.pay_money) }}</text>
+						<text class="text-[28rpx]">￥</text>
+						<text class="">{{ moneyFormat(orderData.basic.pay_money) }}</text>
 					</view>
 				</view>
 			</view>
@@ -130,14 +133,16 @@
 			<view class="h-[148rpx] w-screen"></view>
 			<u-tabbar :fixed="true" :placeholder="true" :safeAreaInsetBottom="true">
 				<view class="flex-1 flex items-center justify-between">
-					<view class="whitespace-nowrap px-[30rpx] flex items-end" v-if="!createData.card_data?.member_card_item_id">
-						<text class="text-[#333333] text-[26rpx] mr-[10rpx] flex items-end h-[36rpx]">{{ t('payAll') }}</text>
+					<view class="whitespace-nowrap px-[30rpx] flex items-end"
+						v-if="!createData.card_data?.member_card_item_id">
+						<text
+							class="text-[#333333] text-[26rpx] mr-[10rpx] flex items-end h-[36rpx]">{{ t('payAll') }}</text>
 						<view class="text-[var(--price-text-color)] flex items-end">
 							<text class="text-[22rpx] price-font h-[36rpx] flex items-end">￥</text>
+							<text class="price-font text-[44rpx] flex items-end align-bottom"
+								style="margin-bottom: -2rpx;">{{ Number(moneyFormat(orderData.basic.order_money)).toString().split('.')[0] }}</text>
 							<text
-								class="price-font text-[36rpx] flex items-end align-bottom" style="margin-bottom: -2rpx;">{{ Number(moneyFormat(orderData.basic.order_money)).toString().split('.')[0] }}</text>
-							<text
-								class="price-font text-[24rpx] h-[36rpx] flex items-end">.{{ Number(moneyFormat(orderData.basic.order_money)).toFixed(2).split('.')[1] }}</text>
+								class="price-font text-[26rpx] h-[36rpx] flex items-end">.{{ Number(moneyFormat(orderData.basic.order_money)).toFixed(2).split('.')[1] }}</text>
 						</view>
 					</view>
 					<button
@@ -166,9 +171,12 @@
 	import { wechatSync } from '@/app/api/system'
 	import selectCoupon from '@/addon/home_service/user/components/select-coupon/select-coupon'
 	import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '待付款订单', topStatusBar: { textColor: '#333', rollBgColor: "#ffffff" } })
 	const loading = ref<boolean>(false)
-	const userList = ref([[]]); // 师傅列表
-	const userShow = ref(false) // 控制师傅列表
+	const userList = ref([[]]); // 技师列表
+	const userShow = ref(false) // 控制技师列表
 	const service_time = ref({}) //获取配置时间
 	const orderData = ref(null)
 	const couponRef = ref()
@@ -179,10 +187,10 @@
 		technician_id: '',
 		reserve_service_time: '',
 		reserve_service_time_stamp: '',
-		card_data:{
+		card_data: {
 		},
 		member_remark: '',
-		discount:{},
+		discount: {},
 		delivery: {
 			take_address_id: ''
 		}
@@ -206,9 +214,9 @@
 	})
 
 
-const toDetail = (sku_id) => {
-    redirect({ url: '/addon/home_service/user/pages/goods/detail', param: { sku_id: sku_id }, mode: 'navigateTo' })
-}
+	const toDetail = (sku_id) => {
+		redirect({ url: '/addon/home_service/user/pages/goods/detail', param: { sku_id: sku_id }, mode: 'navigateTo' })
+	}
 
 	// 获取选择时间计算
 	const getReserveConfigFn = () => {
@@ -233,7 +241,7 @@ const toDetail = (sku_id) => {
 				back: `/addon/home_service/user/pages/order/payment?id=${goodsId.value}`
 			},
 			success() {
-				redirect({ url: '/addon/home_service/user/pages/address/index' })
+				redirect({ url: '/addon/home_service/user/pages/address/index', param: { is_order_address: 1 } })
 			}
 		})
 	}
@@ -266,12 +274,12 @@ const toDetail = (sku_id) => {
 			orderData.value = res.data
 			createData.value.order_key = res.data.order_key
 		}).catch((err) => {
-		  if(err?.data?.message=='HOME_SERVICE_GOODS_NOT_EXIST'){
-		    setTimeout(()=>{
-          redirect({ url: '/addon/home_service/user/pages/index'})
-        },1500);
-      }
-    })
+			if (err?.data?.message == 'HOME_SERVICE_GOODS_NOT_EXIST') {
+				setTimeout(() => {
+					redirect({ url: '/addon/home_service/user/pages/index' })
+				}, 1500);
+			}
+		})
 	}
 	calculate()
 
@@ -287,15 +295,15 @@ const toDetail = (sku_id) => {
 		let data = cloneDeep(createData.value)
 		orderCreate(data).then(({ data }) => {
 			orderId = data.order_id
-			if(!createData.value.card_data?.member_card_item_id){
+			if (!createData.value.card_data?.member_card_item_id) {
 				if (orderData.value.basic.order_money == 0) {
 					redirect({ url: '/addon/home_service/user/pages/order/detail', param: { order_id: orderId }, mode: 'redirectTo' })
 				} else {
 					payRef.value?.open(data.trade_type, data.order_id, `/addon/home_service/user/pages/order/detail?order_id=${data.order_id}`)
 					useSubscribeMessage().request('home_service_order_service')
 				}
-			}else{
-				redirect({ url: '/addon/home_service/user/pages/order/list'})
+			} else {
+				redirect({ url: '/addon/home_service/user/pages/order/list' })
 			}
 		}).catch(() => {
 			createLoading.value = false
@@ -386,6 +394,11 @@ const toDetail = (sku_id) => {
 	}
 
 	.border-bottom-style {
-		border-bottom: 2rpx solid #efefef;
+		height: 1rpx;
+		/* 虚线高度，对应原 border 宽度 */
+		background-image: linear-gradient(to right, #EEEEEE 8rpx, transparent 8rpx);
+		background-size: 18rpx 100%;
+		/* 总长度 = 线段长 + 间隔（8+10=18） */
+		background-repeat: repeat-x;
 	}
 </style>

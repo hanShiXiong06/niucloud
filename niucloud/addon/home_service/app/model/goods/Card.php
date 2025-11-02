@@ -154,8 +154,8 @@ class Card extends BaseModel
      */
     public function getCardCoverThumbMidAttr($value, $data)
     {
-        if (isset($data['card_cover']) && $data['card_cover'] != '') {
-            return get_thumb_images($data['site_id'], $data['card_cover'], FileDict::MID);
+        if (isset($data['card_image']) && $data['card_image'] != '') {
+            return get_thumb_images($data['site_id'], $data['card_image'], FileDict::MID);
         }
         return [];
     }

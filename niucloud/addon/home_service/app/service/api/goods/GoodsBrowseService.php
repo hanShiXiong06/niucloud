@@ -54,10 +54,10 @@ class GoodsBrowseService extends BaseApiService
             foreach ($list[ 'data' ] as &$v) {
                 if ($v['goods']['buy_type'] == GoodsDict::BUY) {
                     // 查询会员价
-                    $member_price = $this->getMemberPrice($memberInfo, $v['goods']['member_discount'], $v['member_price'], $v['price']);
+                    $member_price = $this->getMemberPrice($memberInfo, $v['goods']['member_discount'], $v['member_price'], $v['price'], $v);
                 }else{
                     $cityStrategyService = new CoreCityStrategyService();
-                    $member_price = $cityStrategyService->getStrategyPrice($v['price'], $data['city_id'], $this->site_id);
+                    $member_price = $cityStrategyService->getStrategyPrice($v['price'], $data['city_id'], $this->site_id, $v);
                 }
                 $v['price'] = $member_price;
                 $v['member_price'] = $member_price;
@@ -137,7 +137,7 @@ class GoodsBrowseService extends BaseApiService
      * @return int|string
      */
 
-    public function getMemberPrice($member_info, $member_discount, $member_price, $price)
+    public function getMemberPrice($member_info, $member_discount, $member_price, $price, &$v)
     {
         // 获取城市ID并确保为整数
         $city_id = (int)request()->get('city_id', 0);
@@ -145,7 +145,7 @@ class GoodsBrowseService extends BaseApiService
         // 处理无需会员折扣的情况
         if (empty($member_discount) || empty($member_info) ||
             (!empty($member_info) && empty($member_info['member_level']))) {
-            return $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id);
+            return $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id, $v);
         }
         // 根据员折扣类型计算价格
         if ($member_discount === 'discount') {
@@ -169,7 +169,7 @@ class GoodsBrowseService extends BaseApiService
             }
         }
         // 应用城市策略并格式化价格
-        $finalPrice = $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id);
+        $finalPrice = $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id, $v);
         return number_format($finalPrice, 2, '.', '');
     }
 

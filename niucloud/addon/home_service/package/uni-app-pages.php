@@ -5,7 +5,7 @@ return [
 		{
 			"root": "addon/home_service/technician",
 			"pages": [
-				// *********************************** 师傅端 ***********************************
+				// *********************************** 技师端 ***********************************
 				{
 				    "path": "pages/index",
 				    "style": {
@@ -76,6 +76,9 @@ return [
 				{
 				    "path": "pages/member/account/account_statement",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.technician.member.account.account_statement%"
 				    },
 					"needLogin": true
@@ -83,6 +86,9 @@ return [
 				{
 				    "path": "pages/member/account/list",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.technician.member.account.list%"
 				    },
 					"needLogin": true
@@ -90,6 +96,9 @@ return [
 				{
 				    "path": "pages/member/order/statistics",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.technician.member.order.statistics%"
 				    },
 					"needLogin": true
@@ -97,6 +106,9 @@ return [
 				{
 				    "path": "pages/member/rest/index",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.technician.member.rest.index%"
 				    },
 					"needLogin": true
@@ -135,7 +147,9 @@ return [
 				{
 				    "path": "pages/member/feedback/feedback",
 				    "style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.technician.pages.member.feedback.feedback%"
 				    },
 					"needLogin": true
@@ -143,7 +157,7 @@ return [
 				{
 				    "path": "pages/member/account/withdraw",
 				    "style": {
-						// #ifdef H5
+						// #ifndef H5
 						"navigationStyle": "custom",
 						// #endif
 				        "navigationBarTitleText": "%home_service.technician.pages.member.account.withdraw%"
@@ -153,7 +167,7 @@ return [
 				{
 				    "path": "pages/member/account/withdraw_list",
 				    "style": {
-						// #ifdef H5
+						// #ifndef H5
 						"navigationStyle": "custom",
 						// #endif
 				        "navigationBarTitleText": "%home_service.technician.pages.member.account.withdraw_list%"
@@ -163,7 +177,7 @@ return [
 				{
 				    "path": "pages/member/account/withdraw_edit",
 				    "style": {
-						// #ifdef H5
+						// #ifndef H5
 						"navigationStyle": "custom",
 						// #endif
 				        "navigationBarTitleText": "%home_service.technician.pages.member.account.withdraw_edit%"
@@ -203,6 +217,9 @@ return [
 				{
 				    "path": "pages/member/cash/cash_out",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.technician.pages.member.cash.cash_out%"
 				    },
 					"needLogin": true
@@ -276,6 +293,9 @@ return [
                 {
 				    "path": "pages/store/submit_success",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.store.submit_success%"
 				    },
 				    "needLogin": true
@@ -295,7 +315,9 @@ return [
 				{
 				    "path": "pages/technician/index",
 				    "style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.technician.index%"
 				    },
 					"needLogin": true
@@ -343,6 +365,9 @@ return [
 				{
 				    "path": "pages/store/account/account_statement",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.store.account.account_statement%"
 				    },
 					"needLogin": true
@@ -350,6 +375,9 @@ return [
 				{
 				    "path": "pages/store/account/list",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.store.account.list%"
 				    },
 					"needLogin": true
@@ -357,6 +385,9 @@ return [
 				{
 				    "path": "pages/store/account/order_statistics",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.store.account.order_statistics%"
 				    },
 					"needLogin": true
@@ -365,6 +396,9 @@ return [
 				{
 				    "path": "pages/store/account/withdraw",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.store.account.withdraw%"
 				    },
 					"needLogin": true
@@ -372,7 +406,7 @@ return [
 				{
 				    "path": "pages/store/account/withdraw_list",
 				    "style": {
-						// #ifdef H5
+						// #ifndef H5
 						"navigationStyle": "custom",
 						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.store.account.withdraw_list%"
@@ -382,6 +416,9 @@ return [
 				{
 				    "path": "pages/store/account/withdraw_edit",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.store.account.withdraw_edit%"
 				    },
 					"needLogin": true
@@ -400,7 +437,9 @@ return [
 				{
 				    "path": "pages/member/help/help",
 				    "style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.member.help.help%"
 				    },
 					"needLogin": true
@@ -408,7 +447,9 @@ return [
               {
 				    "path": "pages/member/feedback/feedback",
 				    "style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.member.feedback.feedback%"
 				    },
 					"needLogin": true
@@ -466,6 +507,9 @@ return [
 				{
 				    "path": "pages/member/cash/cash_out",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.store.pages.member.cash.cash_out%"
 				    },
 					"needLogin": true
@@ -547,7 +591,9 @@ return [
 				{
 				    "path": "pages/goods/evaluate",
 				    "style": {
-
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.goods.evaluate%"
 				    }
 				},
@@ -560,7 +606,6 @@ return [
 				        "navigationBarTitleText": "%home_service.user.pages.member.index%"
 				    }
 				},
-
                  {
 				    "path": "pages/member/collect/goods",
 				    "style": {
@@ -571,14 +616,6 @@ return [
 				    },
 					"needLogin": true
 				},
-                //  {
-				//     "path": "pages/member/collect/technician",
-				//     "style": {
-				//         "navigationBarTitleText": "%home_service.user.pages.member.collect.technician%"
-				//     },
-				// 	"needLogin": true
-				// },
-
 				{
 				    "path": "pages/member/history",
 				    "style": {
@@ -589,24 +626,11 @@ return [
 				    }
 				},
 				{
-				    "path": "pages/technician/list",
+				    "path": "pages/order/payment",
 				    "style": {
 				        // #ifndef H5
 				        "navigationStyle": "custom",
 				        // #endif
-				        "navigationBarTitleText": "%home_service.user.pages.technician.list%"
-				    }
-				},
-				{
-				    "path": "pages/technician/detail",
-				    "style": {
-				        "navigationBarTitleText": "%home_service.user.pages.technician.detail%"
-				    }
-				},
-				{
-				    "path": "pages/order/payment",
-				    "style": {
-				        "navigationStyle": "custom",
 				        "navigationBarTitleText": "%home_service.user.pages.order.payment%"
 				    },
 				    "needLogin": true
@@ -614,7 +638,9 @@ return [
 				{
 				    "path": "pages/order/list",
 				    "style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.order.list%"
 				    },
 				    "needLogin": true
@@ -622,7 +648,9 @@ return [
 				{
 				    "path": "pages/order/detail",
 				    "style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.order.detail%"
 				    },
 				    "needLogin": true
@@ -630,6 +658,9 @@ return [
 				{
 				    "path": "pages/order/evaluate/evaluate",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.order.evaluate.evaluate%"
 				    },
 				    "needLogin": true
@@ -648,6 +679,9 @@ return [
 				{
 				    "path": "pages/order/refund/list",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.order.refund.list%"
 				    },
 				    "needLogin": true
@@ -655,6 +689,9 @@ return [
 {
 				    "path": "pages/order/refund/apply",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.order.refund.apply%"
 				    },
 				    "needLogin": true
@@ -663,6 +700,9 @@ return [
 				{
 				    "path": "pages/order/refund/detail",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.order.refund.detail%"
 				    },
 				    "needLogin": true
@@ -682,6 +722,9 @@ return [
 				{
 				    "path": "pages/address/address_edit",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.address.address_edit%"
 				    },
 				    "needLogin": true
@@ -689,7 +732,7 @@ return [
                 {
 				    "path": "pages/member/help/help",
 				    "style": {
-                        // #ifndef H5
+						// #ifndef H5
 						"navigationStyle": "custom",
 						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.member.help.help%"
@@ -699,6 +742,9 @@ return [
                 {
 				    "path": "pages/member/help/detail",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.member.help.detail%"
 				    },
 				    "needLogin": true
@@ -706,7 +752,9 @@ return [
                 {
 				    "path": "pages/member/feedback/feedback",
 				    "style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.member.feedback.feedback%"
 				    },
 				    "needLogin": true
@@ -724,6 +772,9 @@ return [
                 {
 				    "path": "pages/member/invoice/apply",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.member.invoice.apply%"
 				    },
 				    "needLogin": true
@@ -731,6 +782,9 @@ return [
 				{
 				    "path": "pages/settle/technician",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.settle.technician%"
 				    },
 				    "needLogin": true
@@ -738,7 +792,9 @@ return [
 				{
 				    "path": "pages/settle/store",
 				    "style": {
-
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.settle.store%"
 				    },
 				    "needLogin": true
@@ -746,7 +802,7 @@ return [
 				{
 				    "path": "pages/settle/store_form",
 				    "style": {
-                        // #ifdef H5
+                        // #ifndef H5
 				        "navigationStyle": "custom",
                         // #endif
 				        "navigationBarTitleText": "%home_service.user.pages.settle.store_form%"
@@ -756,7 +812,7 @@ return [
 				{
 				    "path": "pages/settle/technician_form",
 				    "style": {
-                        // #ifdef H5
+                        // #ifndef H5
 				        "navigationStyle": "custom",
                         // #endif
 				        "navigationBarTitleText": "%home_service.user.pages.settle.technician_form%"
@@ -766,6 +822,9 @@ return [
 				{
 				    "path": "pages/settle/submit_success",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.settle.submit_success%"
 				    },
 				    "needLogin": true
@@ -774,7 +833,9 @@ return [
                 {
 				    "path": "pages/coupon/coupon",
 				    "style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.coupon.coupon%"
 				    },
 				    "needLogin": true
@@ -782,6 +843,9 @@ return [
                  {
 				    "path": "pages/coupon/member_coupon",
 				    "style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 				        "navigationBarTitleText": "%home_service.user.pages.coupon.member_coupon%"
 				    },
 				    "needLogin": true
@@ -799,7 +863,9 @@ return [
 				{
 					"path": "pages/card/detail",
 					"style": {
+						// #ifndef H5
 						"navigationStyle": "custom",
+						// #endif
 						"navigationBarTitleText": "%home_service.user.pages.card.detail%"
 					},
 					"needLogin": true
@@ -817,6 +883,9 @@ return [
 				{
 					"path": "pages/card/use_detail",
 					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 						"navigationBarTitleText": "%home_service.user.pages.card.use_detail%"
 					},
 					"needLogin": true
@@ -824,6 +893,9 @@ return [
 				{
 					"path": "pages/card/use_card",
 					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 						"navigationBarTitleText": "%home_service.user.pages.card.use_card%"
 					},
 					"needLogin": true
@@ -834,7 +906,10 @@ return [
             "root": "addon/home_service/components",
             "pages": []
         },
-
+		{
+		    "root": "addon/home_service/locale",
+		    "pages": []
+		},
 		// PAGE_END
 EOT
 ];

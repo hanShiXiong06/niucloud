@@ -108,6 +108,7 @@ class EvaluateService extends BaseAdminService
         if (isset($where['technician_name']) && $where['technician_name'] != '') $join_where[] = ['technician.real_name', 'like', "%" . $where['technician_name'] . "%"];
         if (isset($where['store_name']) && $where['store_name'] != '') $join_where[] = ['store.store_name', 'like', "%" . $where['store_name'] . "%"];
         if (isset($where['technician_id']) && $where['technician_id'] != '') $join_where[] = ['evaluate.technician_id', '=', $where['technician_id']];
+        if (isset($where['order_no']) && $where['order_no'] != '') $join_where[] = ['order.order_no', 'like', "%" . $where['order_no'] . "%"];
         $search_model = $this->model
             ->where([
                 ['evaluate.site_id', '=', $this->site_id]]
@@ -122,7 +123,7 @@ class EvaluateService extends BaseAdminService
                     'technician' => ['real_name'],
                     'store' => ['store_name', 'mobile', 'store_id'],
                 ], 'left')
-            ->order($order)->append(['audit_name']);
+            ->order($order)->append(['audit_name','image_mid']);
         $list = $this->pageQuery($search_model, function ($item, $key) {
         });
         return $list;

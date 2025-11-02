@@ -65,7 +65,9 @@ class CardService extends BaseAdminService
                 'cardSku' => ['sku_id', 'goods_id', 'price'],
             ], 'left')
             ->with([
-                'skuList'
+                'skuList' => function($query){
+                    $query->append(['card_sku_image_thumb_mid']);
+                }
             ])
             ->where($sku_where)
             ->order($order)

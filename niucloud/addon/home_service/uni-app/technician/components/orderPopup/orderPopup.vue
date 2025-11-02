@@ -52,7 +52,7 @@
 				<view class="text-[28rpx] my-[25rpx]">
 					拍照打卡：
 				</view>
-				<view class="flex flex-wrap gap-3 mb-[30rpx]">
+				<view class="flex flex-wrap gap-3 ">
 					<view class="relative w-[120rpx] !h-[120rpx] layout-one-content " v-for="(item,index) in imgList"
 						:key="index">
 						<image class="w-[100%] h-[100%] rounded-[14rpx]" :src="img(item)" mode="aspectFill" />
@@ -74,7 +74,6 @@
 					</block>
 				</view>
 			</template>
-
 
 			<template v-if="actionKey === 'action_save_check'">
 				<view class="text-center mb-[20rpx] text-[32rpx] font-bold">
@@ -83,7 +82,7 @@
 				<view class="text-[28rpx] my-[25rpx]">
 					完成拍照：
 				</view>
-				<view class="flex flex-wrap gap-3 mb-[30rpx]">
+				<view class="flex flex-wrap gap-3">
 					<view class="relative w-[120rpx] !h-[120rpx] layout-one-content " v-for="(item,index) in imgList"
 						:key="index">
 						<image class="w-[100%] h-[100%] rounded-[14rpx]" :src="img(item)" mode="aspectFill" />
@@ -105,7 +104,7 @@
 					</block>
 				</view>
 			</template>
-			<view class="w-full footer bg-[#fff]">
+			<view class="w-full h-[120rpx] bg-[#fff]">
 				<view
 					class="py-[var(--top-m)] px-[var(--sidebar-m)] footer w-full fixed bottom-0 left-0 right-0 box-border flex">
 					<u-button type="info" class="flex-1 mr-[25rpx]" @click="$emit('close')" shape="circle">
@@ -244,5 +243,13 @@
 	.footer {
 		height: calc(100rpx + var(--top-m) + var(--top-m) + constant(safe-area-inset-bottom)) !important;
 		height: calc(100rpx + var(--top-m) + var(--top-m) + env(safe-area-inset-bottom)) !important;
+	}
+	.body-bottom{
+		/* #ifdef H5 */
+		padding-bottom:calc(150rpx + env(safe-area-inset-bottom)) !important;
+		/* #endif */
+		/* #ifdef MP-WEIXIN */
+		padding-bottom:calc(80rpx + env(safe-area-inset-bottom)) !important;
+		/* #endif */
 	}
 </style>

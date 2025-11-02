@@ -24,7 +24,7 @@ class HomeServiceRefund extends BaseNoticeTemplate
                 return $this->toReturn(
                     [
                         '__wechat_page' => get_wap_domain($order_refund['site_id']) . '/addon/home_service/user/pages/order/refund/detail?refund_no=' . $order_refund['refund_id'],//模板消息链接
-//                        '__weapp_page' => 'addon/home_service/user/pages/order/refund/detail?refund_no=' . $order_refund['refund_id'],//小程序链接
+                        '__weapp_page' => 'addon/home_service/user/pages/order/refund/detail?refund_no=' . $order_refund['refund_id'],//小程序链接
                         'order_no' => $order_refund->orderMain->order_no,
                         'goods_name' => $order_refund->orderMain->order_name,
                         'money' => $order_refund->money,

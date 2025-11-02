@@ -1,27 +1,26 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-[100vh] overflow-hidden" :style="themeColor()" >
-		<!-- #ifdef MP-WEIXIN || APP-PLUS --> 
-				 <u-navbar   title="优惠券"  autoBack  :fixed="true" placeholder bgColor="#FF2426" :titleStyle ="{'color':'#fff'}">
-			</u-navbar>
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
 		<!-- #endif -->
 	
 		<!-- 头部背景区域 -->
-		<view class="header-background relative">
+		<view class="header-background relative" >
 			<image :src="img('addon/home_service/user/coupon/bg1.png')" class="header-image" mode="aspectFill"></image>
 			<!-- 我的券包入口 - 替换为图片 -->
-			<view class="my-coupons-btn absolute top-[180rpx] right-[0rpx]" @click="navigateToMyCoupons">
+			<view class="my-coupons-btn absolute top-[50rpx] right-[0rpx]" @click="navigateToMyCoupons">
 				<image :src="img('addon/home_service/user/coupon/m_coupon.png')" class="w-[180rpx] h-[70rpx]"
 					mode="aspectFit"></image>
 			</view>
 		</view>
 
 		<!-- 合并成一个div，结构上也成为一体 -->
-		<mescroll-body ref="mescrollRef" @init="mescrollInit" :down="{ use: false, callback: downCallback }"
+		<mescroll-body ref="mescrollRef" @init="mescrollInit" :down="{ use: false, callback: downCallback }"  
 			height="auto" @up="getShopCouponListFn" :top="0" class=" rounded-lg !bg-[#f6f6f6]" style="margin-top:-150rpx">
 			<!-- 优惠券类型筛选栏 -->
-			<view class="type-filter-bar sticky top-0 z-10000" >
-				<scroll-view scroll-x="true" class="w-full whitespace-nowrap">
-					<view class="flex items-center justify-between w-[100%] py-[24rpx] px-[var(--sidebar-m)]">
+			<view class="z-index-999 bg-[#ffffff] w-[100vw]" :class="is_fixed ? 'fixed' : ''" :style="{top:systemStore.topTabbarInfo.fullHeight || 0}" v-if="typeList.length">
+				<scroll-view scroll-x="true" class="w-full whitespace-nowrap ">
+					<view class="flex items-center justify-between w-[100%] py-[24rpx] px-[var(--sidebar-m)] box-border">
 						<view
 							class="flex-shrink-0 text-[28rpx] leading-[68rpx] text-center px-[36rpx] transition-all duration-300 relative"
 							v-for="(item,index) in typeList" :key="index" @click="typeClick(index,item.value)">
@@ -33,14 +32,16 @@
 					</view>
 				</scroll-view>
 			</view>
-
+			<view class="w-[100vw] h-[58px]" v-if="is_fixed">
+				
+			</view>
 			<!-- 内容保持不变 -->
-			<view class="pt-[30rpx] pb-[var(--top-m)] mx-[25rpx] " v-if="list.length>0">
+			<view class=" pb-[var(--top-m)] mx-[25rpx] " >
 				<!-- 优惠券列表容器，添加圆角 -->
 				<view class="rounded-[var(--rounded-big)] overflow-hidden">
 					<template v-for="(item, index) in list">
 						<view v-if="item.btnType === 'collected'"
-							class="flex items-center relative mb-[25rpx] w-[100%] py-[30rpx] px-[20rpx] mb-[1px] coupon-item"
+							class="flex items-center relative mt-[25rpx] w-[100%] py-[30rpx] px-[20rpx] coupon-item"
 							:style="{ backgroundImage: 'url(' + img('addon/home_service/coupon/coupn_loot.png') + ')'}"
 							@click="toDetail(item.id)">
 							<view
@@ -150,7 +151,7 @@
 				</view>
 			</view>
 
-			<mescroll-empty v-if="!list.length && !loading" :option="{tip : '暂无优惠券'}" style="margin-top: 30rpx!important;"
+			<mescroll-empty v-if="!list.length && !loading" :option="{tip : '暂无优惠券'}" 
 				@emptyclick="redirect({ url: '/addon/home_service/user/pages/goods/list' })"></mescroll-empty>
 		</mescroll-body>
 		<loading-page :loading="loading"></loading-page>
@@ -160,7 +161,6 @@
 <script setup lang="ts">
 	import { ref, computed, nextTick, getCurrentInstance, watch } from 'vue'
 	import { img, redirect, pxToRpx, getToken } from '@/utils/common'
-	import { topTabar } from '@/utils/topTabbar'
 	import { getCouponList, receiveCoupon, getCouponType } from '@/addon/home_service/user/api/coupon'
 	import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue'
 	import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue'
@@ -170,7 +170,9 @@
 	import { useLogin } from '@/hooks/useLogin'
 	import { t } from '@/locale'
 	import useSystemStore from "@/stores/system";
-
+	import { topTabar } from '@/utils/topTabbar'
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '优惠券', topStatusBar: { rollTextColor: '#ffffff' ,titleTextColor:'#ffffff',rollBgColor:'#ff1a1a'} })
 	const systemStore = useSystemStore()
 	// 修复useMescroll使用方式，确保downCallback被正确绑定
 	const { mescrollInit, downCallback, upCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom)
@@ -181,7 +183,14 @@
 	const loading = ref<boolean>(false);
 	const memberStore = useMemberStore()
 	const userInfo = computed(() => memberStore.info)
-
+	const is_fixed = ref(false)
+	onPageScroll((e:any)=>{
+		if(e.scrollTop >= 175){
+			is_fixed.value = true
+		}else{
+			is_fixed.value = false
+		}
+	})
 	// 优惠劵
 	const price = ref('');
 	const create_time = ref('');
@@ -190,12 +199,6 @@
 	const subActive = ref<number>(0)
 	const curType = ref('')
 	const typeList = ref<Array<Object>>([])
-
-	// 自定义头部 - start
-	const topTabarObj = topTabar()
-	let param = topTabarObj.setTopTabbarParam({ title: '优惠券列表' })
-	// 自定义头部 - end
-
 	// 头部图片的高度
 	const headStyle = computed(() => {
 		// #ifdef MP
@@ -395,9 +398,6 @@
 		background-size: 27%;
 	}
 
-	:deep(.mescroll-empty) {
-		margin-top: 100rpx !important;
-	}
 
 	/* 头部样式 */
 	.header-background {
@@ -444,7 +444,7 @@
 	.coupon-item {
 		transition: transform 0.2s ease;
 		border-radius: var(--rounded-big);
-		margin-bottom: 20rpx;
+		margin-top: 20rpx;
 		background-color: #fff;
 		box-sizing: border-box;
 		/* 添加这一行，确保内边距和边框包含在宽度内 */
@@ -461,12 +461,11 @@
 	.mescroll-body {
 		padding-bottom: env(safe-area-inset-bottom, 0) !important;
 	}
-	
-	:deep(.mescroll-empty) {
-		margin-top: 0px !important;
-	}
 	:deep(.mescroll-body) {
 		margin-top: -150rpx !important;
 		background: #f6f6f6 !important;
+	}
+	:deep(.u-icon__icon){
+		coloe:#ffffff !important;
 	}
 </style>

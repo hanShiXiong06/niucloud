@@ -335,7 +335,7 @@ class Order extends BaseModel
     }
 
     /**
-     * 师傅筛选
+     * 技师筛选
      * @param $query
      * @param $value
      * @param $data
@@ -616,7 +616,7 @@ class Order extends BaseModel
     }
 
     /**
-     * 师傅名称
+     * 技师名称
      * @return \think\model\relation\HasOne
      */
     public function getTechnicianNameAttr($value, $data)
@@ -637,7 +637,7 @@ class Order extends BaseModel
 
     public function item()
     {
-        return $this->hasMany(OrderItem::class, 'order_id', 'order_id')->append(['item_image_thumb_small', 'refund_status_name']);
+        return $this->hasMany(OrderItem::class, 'order_id', 'order_id')->append(['item_image_thumb_small', 'refund_status_name', 'item_image_thumb_mid']);
     }
 
     /**
@@ -659,7 +659,7 @@ class Order extends BaseModel
     }
 
     /**
-     * 师傅
+     * 技师
      * @return \think\model\relation\HasMany
      */
     public function technician()

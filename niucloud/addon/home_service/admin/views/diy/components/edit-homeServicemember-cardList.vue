@@ -2,9 +2,9 @@
 	<!-- 内容 -->
 	<div class="content-wrap" v-show="diyStore.editTab == 'content'">
 		<div class="edit-attr-item-wrap">
-			<h3 class="mb-[10px]">{{ t('activeCubeBlockContentImage') }}</h3>
+			<h3 class="mb-[10px]">板块图片</h3>
 			<el-form label-width="80px" class="px-[10px]">
-				<el-form-item :label="t('swiperImage')">
+				<el-form-item label="图片内容">
 					<upload-image v-model="diyStore.editComponent.leftBg" :limit="1" />
 				</el-form-item>
 			</el-form>
@@ -12,14 +12,7 @@
 			    <diy-link v-model="diyStore.editComponent.linkUrl" />
 			</el-form-item> -->
 		</div>
-		<div class="edit-attr-item-wrap">
-			<h3 class="mb-[10px]">{{ t('activeCubeBlockContent') }}</h3>
-			<el-form label-width="80px" class="px-[10px]">
-				<el-form-item :label="t('bgUrl')">
-					<upload-image v-model="diyStore.editComponent.bgUrl" :limit="1" />
-				</el-form-item>
-			</el-form>
-		</div>
+
 		<div class="edit-attr-item-wrap">
 			<h3 class="mb-[10px]">{{ t("selectSource") }}</h3>
 			

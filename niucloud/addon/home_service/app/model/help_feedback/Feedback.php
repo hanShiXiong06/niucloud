@@ -15,6 +15,7 @@ use addon\home_service\app\dict\help_feedback\FeedbackDict;
 use addon\home_service\app\model\Member;
 use addon\home_service\app\model\store\Store;
 use addon\home_service\app\model\technician\Technician;
+use app\dict\sys\FileDict;
 use core\base\BaseModel;
 
 /**
@@ -83,5 +84,19 @@ class Feedback extends BaseModel
             }
         }
          return $name;
+    }
+
+    /**
+     * 获取图片缩略图（中）
+     */
+    public function getImagesThumbMidAttr($value, $data)
+    {
+        $thumb_arr = [];
+        if ($data['images'] != '') {
+            foreach ($data['images'] as $item) {
+                $thumb_arr[] = get_thumb_images($data['site_id'], $item, FileDict::MID);
+            }
+        }
+        return $thumb_arr;
     }
 }

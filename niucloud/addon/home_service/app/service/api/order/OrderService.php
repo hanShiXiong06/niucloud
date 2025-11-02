@@ -57,21 +57,21 @@ class OrderService extends BaseApiService
      */
     public function getPage(array $where)
     {
-        $field = 'order_id, order_type, site_id, member_id, order_from, order_type, order_no, out_trade_no, order_status, refund_status, ip, create_time, pay_time, close_time, auto_close_time, is_enable_refund, delete_time, order_money, pay_money, taker_longitude, taker_latitude, check_photos,technician_id,take_photos,take_photos_time,reserve_service_time_stamp,is_evaluate,sub_status,is_card_order,errand_items';
+        $field = 'order_id, order_type, site_id, member_id, order_from, order_type, order_no, out_trade_no, order_status, refund_status, ip, create_time, pay_time, close_time, auto_close_time, is_enable_refund, delete_time, order_money, pay_money, taker_longitude, taker_latitude, check_photos,technician_id,take_photos,take_photos_time,reserve_service_time_stamp,is_evaluate,sub_status,is_card_order';
         $order = 'create_time desc';
         $search_model = $this->model->where([['site_id', '=', $this->site_id], ['member_id', '=', $this->member_id]])
             ->withSearch(['order_status', 'order_id'], $where)->field($field)
             ->with(
                 [
                     'item' => function ($query) {
-                        $query->field('order_id, item_id, item_name, item_image, pay_time,price, num, item_money,order_item_id, site_id, item_images, is_force_clock_in, is_force_departure, is_finish_photograph, item_type,is_pay,batch_id,create_time,is_service_fee')->with(['goods_sku']);
+                        $query->field('order_id, item_id, item_name, item_image, pay_time,price, num, item_money,order_item_id, site_id, item_images, is_force_clock_in, is_force_departure, is_finish_photograph, item_type,is_pay,batch_id,create_time,is_service_fee')->with(['goods_sku'])->append(['item_image_thumb_small', 'item_image_thumb_mid']);;
                     },
                     'technician' => function ($query) {
-                         $query->field('real_name,id,mobile,order_num,headimg');
+                        $query->field('real_name,id,mobile,order_num,headimg');
                     }
                 ])
             ->order($order)
-            ->append(['order_status_info', 'item.item_image_thumb_small']);
+            ->append(['order_status_info']);
         $list = $this->pageQuery($search_model);
         foreach ($list['data'] as $k => $v) {
             $list['data'][$k]['total_money'] = number_format(array_sum(array_column($v['item'], 'item_money')), 2, '.', '');
@@ -157,10 +157,10 @@ class OrderService extends BaseApiService
      */
     public function getDetail($order_id)
     {
-        $field = 'service_finish_time,take_photos_time,store_id,order_id, check_code,site_id, reserve_service_time,member_message,order_type, member_id, order_from, order_type, order_no, out_trade_no, order_status, refund_status, ip, create_time, pay_time, close_time, auto_close_time, is_enable_refund, delete_time, order_money, pay_money, taker_name,taker_mobile,taker_province,taker_city,taker_district,taker_address,taker_full_address,taker_longitude,taker_latitude,technician_id,service_time,dispatch_time,finish_time,is_evaluate,sub_status,take_photos,take_photos_time,depart_time,check_photos,is_card_order,errand_items';
+        $field = 'service_finish_time,take_photos_time,store_id,order_id, check_code,site_id, reserve_service_time,member_message,order_type, member_id, order_from, order_type, order_no, out_trade_no, order_status, refund_status, ip, create_time, pay_time, close_time, auto_close_time, is_enable_refund, delete_time, order_money, pay_money, taker_name,taker_mobile,taker_province,taker_city,taker_district,taker_address,taker_full_address,taker_longitude,taker_latitude,technician_id,service_time,dispatch_time,finish_time,is_evaluate,sub_status,take_photos,take_photos_time,depart_time,check_photos,is_card_order';
         $info = $this->model->where([['site_id', '=', $this->site_id], ['member_id', '=', $this->member_id], ['order_id|out_trade_no', '=', $order_id]])->field($field)
             ->with(['item' => function ($query) {
-                $query->field('order_id, item_name, sku_name,goods_id,item_id,order_item_id, item_type, is_refund, item_image,price, num, item_money, site_id, out_trade_no,pay_time,is_enable_refund, refund_status, refund_no, item_images, is_force_clock_in, is_force_departure, is_finish_photograph, batch_id, is_pay, create_time, is_service_fee, discount_money')->append(['item_image_thumb_small', 'item_type_name', 'item_images_thumb_mid', 'item_images_thumb_small']);
+                $query->field('order_id, item_name, sku_name,goods_id,item_id,order_item_id, item_type, is_refund, item_image,price, num, item_money, site_id, out_trade_no,pay_time,is_enable_refund, refund_status, refund_no, item_images, is_force_clock_in, is_force_departure, is_finish_photograph, batch_id, is_pay, create_time, is_service_fee, discount_money')->append(['item_image_thumb_small', 'item_image_thumb_mid', 'item_type_name', 'item_images_thumb_mid', 'item_images_thumb_small']);
             }, 'pay' => function ($query) {
                 $query->field('main_id, out_trade_no, type, pay_time, status')->append(['type_name']);
             }, 'order_log' => function ($query) {
@@ -254,20 +254,6 @@ class OrderService extends BaseApiService
 
             if (!empty($info['check_photos'])) {
                 $info['check_photos'] = explode(',', $info['check_photos']);
-            }
-
-            // 解析跑腿业务的包裹信息
-            if (!empty($info['errand_items'])) {
-                // 如果是字符串，需要解析；如果已经是数组或对象，直接转为数组
-                if (is_string($info['errand_items'])) {
-                    $info['errand_items'] = json_decode($info['errand_items'], true);
-                } elseif (is_object($info['errand_items'])) {
-                    $info['errand_items'] = json_decode(json_encode($info['errand_items']), true);
-                } elseif (!is_array($info['errand_items'])) {
-                    $info['errand_items'] = [];
-                }
-            } else {
-                $info['errand_items'] = [];
             }
 
             //获取退款信息

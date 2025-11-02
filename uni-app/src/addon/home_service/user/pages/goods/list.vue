@@ -1,17 +1,17 @@
 <template>
     <view class="bg-gray-100 min-h-[100vh]" :style="themeColor()">
-        <!-- #ifdef MP-WEIXIN || APP-PLUS -->
-        <top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
-        <!-- #endif -->
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
         <view class="fixed left-0 right-0 top-0 product-warp bg-[#f3f4f6] px-[24rpx]" :style="{'top': systemStore.topTabbarInfo.fullHeight || 0}">
             <view class="flex items-center h-[106rpx] box-border py-[24rpx]">
                 <view class="bg-[#fff]  flex items-center justify-between h-[66rpx] rounded-[33rpx] flex-1 pl-[20rpx] mr-[40rpx]">
                     <input class="uni-input text-[24rpx] flex-1" maxlength="50" v-model="goods_name" @confirm="searchTypeFn('all')" :placeholder="t('searchPlaceholder')" />
                     <text class="nc-iconfont nc-icon-sousuoV6xx text-[30rpx] mr-[18rpx]" @click="searchTypeFn('all')"></text>
                 </view>
-                <text :class="['iconfont text-[44rpx]', listType ? 'icona-yingyongzhongxinV6xx-32' : 'icona-yingyongliebiaoV6xx-32']" @click="listIconBtn"></text>
+                <text :class="['iconfont text-[38rpx]', listType ? 'icona-yingyongzhongxinV6xx-32' : 'icona-yingyongliebiaoV6xx-32']" @click="listIconBtn"></text>
             </view>
-            <view class="pb-3 pt-1 flex items-center justify-between">
+            <view class="pb-3 pt-1 flex px-2 items-center justify-between">
                 <text :class="['text-sm', { 'text-color': searchType == 'all' }]" @click="searchTypeFn('all')">{{ t('synthesis') }}</text>
                 <view class="flex items-center" :class="[{ 'text-color': searchType == 'sale_num' }]" @click="searchTypeFn('sale_num')">
                     <text class="text-sm mr-[4rpx]">{{ t('sales') }}</text>
@@ -36,7 +36,7 @@
             </view>
         </u-popup>
         <mescroll-body ref="mescrollRef" bottom="50px" @init="mescrollInit" :down="{ use: false }" @up="getAllAppListFn">
-            <view :class="['p-[24rpx] pt-[200rpx] !pb-0', !listType ? 'flex justify-between flex-wrap' : '']">
+            <view :class="['p-[24rpx] pt-[180rpx] !pb-0', !listType ? 'flex justify-between flex-wrap' : '']">
                 <template v-for="(item, index) in articleList">
                     <template v-if="listType">
                         <view class="bg-white flex p-[20rpx] rounded-[16rpx]" :class="{ 'mt-[20rpx]': index }" @click="toDetail(item.goods_id)">
@@ -51,15 +51,20 @@
                                     <view class="flex flex-col">
                                         <text class="text-[28rpx] text-[var(--price-text-color)] price-font">
                                             ￥{{ goodsPrice(item) }}
+											<text class="price-font text-[20rpx] text-[#999] line-through font-400"
+												v-if="item.goods_sku?.goods_original_price && item.goods_sku?.goods_original_price != item.member_price"><text
+													class="text-[20rpx] price-font">￥</text>{{ Number(item.goods_sku?.goods_original_price).toFixed(2) }}</text>
+                                            <image v-if="item.member_discount !='' && getToken()" class="h-[24rpx] ml-[14rpx] w-[60rpx]" :src="img('addon/home_service/VIP.png')" mode="heightFix" />
                                         </text>
                                     </view>
+									
                                     <text class="text--[24rpx] text-[var(--text-color-light6)]">已售{{ item.sale_num }}</text>
                                 </view>
                             </view>
                         </view>
                     </template>
                     <template v-else>
-                        <view class="w-[342rpx] bg-[#fff] box-border rounded-[10rpx] overflow-hidden mt-[20rpx]" @click="toDetail(item.goods_id)">
+                        <view class="w-[342rpx] bg-[#fff] box-border rounded-[10rpx] overflow-hidden mb-[20rpx]" @click="toDetail(item.goods_id)">
                             <up-image width="342rpx" height="342rpx" :src="img(item.goods_cover_thumb_small ? item.goods_cover_thumb_small : '')" mode="aspectFill">
                                 <template #error>
                                     <u-icon name="photo" color="#999" size="50"></u-icon>
@@ -95,14 +100,11 @@ import useMescroll from '@/components/mescroll/hooks/useMescroll.js';
 import { onLoad, onShow, onPageScroll, onReachBottom } from '@dcloudio/uni-app';
 import useSystemStore from '@/stores/system';
 const systemStore = useSystemStore()
-
-const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
+import { useLogin } from '@/hooks/useLogin';
 import { topTabar } from '@/utils/topTabbar';
-
-/********* 自定义头部 - start ***********/
 const topTabarObj = topTabar()
-let topTabbarData = topTabarObj.setTopTabbarParam({ title: '项目列表', topStatusBar: { textColor: '#333' }})
-/********* 自定义头部 - end ***********/
+let topTabbarData = topTabarObj.setTopTabbarParam({ title: '服务列表', topStatusBar: { textColor: '#333' , rollBgColor: "#f6f6f6"} })
+const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
 const categoryList = ref<Array<Object>>([]);
 const articleList = ref<Array<any>>([]);
 const coupon_id = ref<number | string>('');
@@ -119,6 +121,10 @@ const searchType = ref('all');
 const listType = ref(true)
 const goods_ids = ref('');
 onLoad(async(option) => {
+	if (!getToken()) {
+		useLogin().setLoginBack({ url: '/addon/home_service/user/pages/goods/list'})
+		return false;
+	}
     currGoodsCategory.value = option.curr_goods_category || ''
     goods_name.value = option.goods_name || ''
     coupon_id.value = option.coupon_id || ''

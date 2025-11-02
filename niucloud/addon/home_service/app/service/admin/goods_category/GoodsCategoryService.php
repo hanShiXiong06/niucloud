@@ -36,7 +36,7 @@ class GoodsCategoryService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'sort,category_name,adv_image,image,category_id,site_id,is_show,is_settled,intro';
+        $field = 'sort,category_name,adv_image,image,category_id,site_id,is_show,is_settled,intro,errand_business';
         $order = 'sort desc';
         $search_model = $this->model->where([['site_id', '=', $this->site_id]])->withSearch(["category_name", "create_time"], $where)->field($field)->order($order)->append(['image_thumb_small']);
         $list = $this->pageQuery($search_model);
@@ -50,7 +50,7 @@ class GoodsCategoryService extends BaseAdminService
      */
     public function getInfo(int $id)
     {
-        $field = 'adv_image,category_name,image,category_id,pid,site_id,sort,is_show,is_settled,intro';
+        $field = 'adv_image,category_name,image,category_id,pid,site_id,sort,is_show,is_settled,intro,errand_business';
         $info = $this->model->field($field)->where([['category_id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->append(['image_thumb_small'])->toArray();
         return $info;
     }
@@ -148,7 +148,7 @@ class GoodsCategoryService extends BaseAdminService
      */
     public function getTree()
     {
-        $list = $this->model->where([['site_id', '=', $this->site_id]])->field("sort,category_id,pid, category_name, image,is_show,is_settled, intro")->order("sort desc")->select()->toArray();
+        $list = $this->model->where([['site_id', '=', $this->site_id]])->field("sort,category_id,pid, category_name, image,is_show,is_settled, intro,errand_business")->order("sort desc")->select()->toArray();
         $tree = list_to_tree($list, 'category_id', 'pid', 'children');
         return $tree;
     }

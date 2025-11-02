@@ -61,5 +61,16 @@ class GoodsCollect extends BaseModel
         return $this->hasOne(GoodsSku::class, 'goods_id', 'goods_id')->joinType('left')->withField('goods_id,sku_id,sku_name,price,member_price')->bind(['sku_id', 'sku_name', 'price', 'member_price', 'sale_price']);
     }
 
+    /**
+     * 分类
+     * @param $value
+     * @return mixed
+     */
+    public function getCategoryNameAttr($value, $data)
+    {
+        if (isset($data['goods_category'])) {
+            return (new GoodsCategory())->where([['category_id', '=', $data['goods_category']]])->value('category_name');
+        }
+    }
 
 }

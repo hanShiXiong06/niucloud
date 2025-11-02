@@ -1,6 +1,8 @@
-// 修改标签切换的定义和相关逻辑
 <template>
 	<view class="ranking-list-container">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 头部背景区域 -->
 		<view class="header-background">
 			<image :src="img('addon/home_service/technician/member/ranking_list/bj.png')" class="header-image"
@@ -53,7 +55,7 @@
 							</template>
 						</view>
 
-						<!-- 师傅信息 -->
+						<!-- 技师信息 -->
 						<view class="technician-info">
 							<image
 								:src="item.headimg ? img(item.headimg) : img('static/resource/images/diy/shop_default.jpg')"
@@ -86,7 +88,9 @@
 	import { img } from '@/utils/common'
 	import { getTechnicianRank, getTechnicianInfo } from '@/addon/home_service/technician/api/technician'
 	import { t } from '@/locale'
-
+	import { topTabar } from '@/utils/topTabbar';
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '排行榜', topStatusBar: { textColor: '#333' } })
 	// 切换标签状态
 	const activeTab = ref<'region' | 'store'>('region')
 
@@ -99,7 +103,7 @@
 	const rankingList = ref<any[]>([])
 	const loading = ref(false)
 
-	// 师傅信息数据
+	// 技师信息数据
 	const technicianInfo = ref<any>(null)
 
 	// 获取排行榜数据
@@ -148,15 +152,15 @@
 		})
 	}
 
-	// 获取师傅信息（包含分类信息） - 删除硬编码的57参数
+	// 获取技师信息（包含分类信息） - 删除硬编码的57参数
 	const fetchTechnicianInfo = () => {
 		// 不传递特定ID，使用空参数调用API
 		getTechnicianInfo({}).then((res : any) => {
-			console.log('师傅信息API返回数据:', res)
+			console.log('技师信息API返回数据:', res)
 
 			// 根据API返回格式调整数据处理逻辑
 			if (res && res.data) {
-				// API返回的直接是师傅信息对象
+				// API返回的直接是技师信息对象
 				technicianInfo.value = res.data
 
 				// 从接口获取分类信息 - 不再包含'全部'
@@ -177,7 +181,7 @@
 				}
 			}
 		}).catch((error : any) => {
-			console.error('获取师傅信息失败:', error)
+			console.error('获取技师信息失败:', error)
 			// 出错时保持默认分类
 			console.log('使用默认分类数据')
 		})

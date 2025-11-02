@@ -26,11 +26,11 @@ class StoreOrderTimeoutNotAssigned extends BaseJob
      * 处理门店超时未派订单
      * @return true
      */
-    protected function doJob()
+    public function doJob()
     {
         try {
             (new Order())->where([
-                ['order_status', '=', OrderDict::WAIT_SERVICE],
+                ['order_status', '=', OrderDict::WAIT_DISPATCH],
                 ['store_id', '>', 0],
                 ['dispatch_timeout_time', '>', 0],
                 ['dispatch_timeout_time', '<', time()],

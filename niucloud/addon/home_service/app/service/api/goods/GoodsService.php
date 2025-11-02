@@ -77,16 +77,16 @@ class GoodsService extends BaseApiService
             ->with(['category', 'goods_sku'=>function($query){
                 $query->where([['is_default', '=', 1]]);
             }])->order($order)
-            ->append(['goods_cover_thumb_small', 'buy_type_name']);
+            ->append(['goods_cover_thumb_small', 'goods_cover_thumb_mid', 'buy_type_name']);
         $list = $this->pageQuery($search_model);
         foreach ($list['data'] as $k => &$v) {
             if ($v['buy_type'] == GoodsDict::BUY) {
                 // 查询会员价
                 $member_info = $this->getMemberInfo();
-                $v['goods_sku']['member_price'] = $this->getMemberPrice($member_info, $v['member_discount'], $v['goods_sku']['member_price'], $v['goods_sku']['price']);
+                $v['goods_sku']['member_price'] = $this->getMemberPrice($member_info, $v['member_discount'], $v['goods_sku']['member_price'], $v['goods_sku']['price'],$v['goods_sku']);
             }else{
                 $cityStrategyService = new CoreCityStrategyService();
-                $v['goods_sku']['member_price'] =  $cityStrategyService->getStrategyPrice($v['goods_sku']['price'], $where['city_id'], $this->site_id);
+                $v['goods_sku']['member_price'] =  $cityStrategyService->getStrategyPrice($v['goods_sku']['price'], $where['city_id'], $this->site_id,$v['goods_sku']);
             }
         }
         return $list;
@@ -131,7 +131,7 @@ class GoodsService extends BaseApiService
                     $query->with(['category']);
                 },
                 'skuList' => function ($query) {
-                    $query->field('sku_id, sku_name, sku_image, sku_no, goods_id, site_id, price, sku_unit,min_buy, is_default, member_price');
+                    $query->field('sku_id, sku_name, sku_image, sku_no, goods_id, site_id, price, sku_unit,min_buy, is_default, member_price')->append(['sku_image_thumb_small', 'sku_image_thumb_mid']);
                 }
             ])
             ->append(['sku_image_thumb_small', 'sku_image_thumb_mid', 'sku_image_thumb_big'])
@@ -141,15 +141,15 @@ class GoodsService extends BaseApiService
             // 查询会员价
             $member_info = $this->getMemberInfo();
             $member_price = $info['member_price'];
-            $info['member_price'] = $this->getMemberPrice($member_info, $info['goods']['member_discount'], $member_price, $info['price']);
+            $info['member_price'] = $this->getMemberPrice($member_info, $info['goods']['member_discount'], $member_price, $info['price'],$info);
             foreach ($info['skuList'] as &$value){
-                $value['member_price'] =  $this->getMemberPrice($member_info, $info['goods']['member_discount'], $value['member_price'], $value['price']);
+                $value['member_price'] =  $this->getMemberPrice($member_info, $info['goods']['member_discount'], $value['member_price'], $value['price'], $value);
             }
         }else{
             $cityStrategyService = new CoreCityStrategyService();
-            $info['member_price'] = $cityStrategyService->getStrategyPrice($info['price'], $data['city_id'], $this->site_id);
+            $info['member_price'] = $cityStrategyService->getStrategyPrice($info['price'], $data['city_id'], $this->site_id, $info);
             foreach ($info['skuList'] as &$value){
-                $value['member_price'] = $cityStrategyService->getStrategyPrice($value['price'], $data['city_id'], $this->site_id);
+                $value['member_price'] = $cityStrategyService->getStrategyPrice($value['price'], $data['city_id'], $this->site_id, $value);
             }
 
         }
@@ -223,12 +223,12 @@ class GoodsService extends BaseApiService
             if ($v['buy_type'] == GoodsDict::BUY) {
                 // 查询会员价
                 $member_info = $this->getMemberInfo();
-                $v['member_price'] = $this->getMemberPrice($member_info, $v['member_discount'], $v['goodsSku']['member_price'], $v['price']);
-                $v['goodsSku']['member_price'] = $this->getMemberPrice($member_info, $v['member_discount'], $v['goodsSku']['member_price'], $v['goodsSku']['price']);
+                $v['member_price'] = $this->getMemberPrice($member_info, $v['member_discount'], $v['goodsSku']['member_price'], $v['price'],$v);
+                $v['goodsSku']['member_price'] = $this->getMemberPrice($member_info, $v['member_discount'], $v['goodsSku']['member_price'], $v['goodsSku']['price'],$v['goodsSku']);
             }else{
                 $cityStrategyService = new CoreCityStrategyService();
-                $v['member_price'] = $cityStrategyService->getStrategyPrice($v['price'], $where['city_id'], $this->site_id);
-                $v['goodsSku']['member_price'] =  $cityStrategyService->getStrategyPrice($v['goodsSku']['price'], $where['city_id'], $this->site_id);
+                $v['member_price'] = $cityStrategyService->getStrategyPrice($v['price'], $where['city_id'], $this->site_id,$v);
+                $v['goodsSku']['member_price'] =  $cityStrategyService->getStrategyPrice($v['goodsSku']['price'], $where['city_id'], $this->site_id, $v['goodsSku']);
             }
         }
 
@@ -263,16 +263,16 @@ class GoodsService extends BaseApiService
      * @return int|string
      */
 
-    public function getMemberPrice($member_info, $member_discount, $member_price, $price)
+    public function getMemberPrice($member_info, $member_discount, $member_price, $price, &$v)
     {
         // 获取城市ID并确保为整数
         $city_id = (int)request()->get('city_id', 0);
         $cityStrategyService = new CoreCityStrategyService();
-        // 处理无需会员折扣的情况
         if (empty($member_discount) || empty($member_info) ||
             (!empty($member_info) && empty($member_info['member_level']))) {
-            return $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id);
+            return $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id,$v);
         }
+
         // 根据员折扣类型计算价格
         if ($member_discount === 'discount') {
             // 按照会员等级折扣计算
@@ -295,7 +295,7 @@ class GoodsService extends BaseApiService
             }
         }
         // 应用城市策略并格式化价格
-        $finalPrice = $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id);
+        $finalPrice = $cityStrategyService->getStrategyPrice($price, $city_id, $this->site_id,$v);
         return number_format($finalPrice, 2, '.', '');
     }
 

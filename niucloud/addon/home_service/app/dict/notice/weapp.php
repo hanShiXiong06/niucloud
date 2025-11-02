@@ -15,7 +15,7 @@ return [
         'tid' => '31397',
         'content' => [
             ['门店名称', '{store_name}', 'thing16'],
-            ['服务项目', '{order_name}', 'thing8'],
+            ['服务项目', '{goods_name}', 'thing8'],
             ['客户姓名', '{taker_name}', 'thing3'],
             ['联系方式', '{taker_mobile}', 'phone_number4'],
             ['客户地址', '{taker_full_address}', 'thing5'],

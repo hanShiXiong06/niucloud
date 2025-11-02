@@ -1,7 +1,8 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] overflow-hidden component-class" :style="themeColor()" v-if="!loading">
-		<u-navbar title="门店资料" :autoBack="true" leftIconSize="0" bgColor="var(--page-bg-color)" 
-			placeholder></u-navbar>
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" isBack />
+		<!-- #endif -->
 		<!-- 主体内容区域 -->
 		<view class="" >
 			<!-- 基本信息 -->
@@ -140,6 +141,10 @@
 	import { t } from '@/locale'
 	import { redirect, img } from '@/utils/common'
 	import { getMyStore } from '@/addon/home_service/technician/api/store'
+	import { topTabar } from '@/utils/topTabbar';
+	// 系统状态管理
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '机构资料', topStatusBar: { textColor: '#333' } })
 	const loading = ref<boolean>(true);
 	// 门店信息数据
 	const storeInfo = ref<any>({

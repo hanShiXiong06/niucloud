@@ -86,7 +86,8 @@ class CardService extends BaseApiService
             $item['price'] = (new CoreCityStrategyService)->getStrategyPrice(
                 $item['price'],
                 $city_id,
-                $this->site_id
+                $this->site_id,
+                $item
             );
             $item['discount_price'] = bcsub($item['original_price'], $item['price'], 2);
         });
@@ -179,12 +180,14 @@ class CardService extends BaseApiService
         $info['price'] = (new CoreCityStrategyService)->getStrategyPrice(
             $info['price'],
             $city_id,
-            $this->site_id
+            $this->site_id,
+            $info
         );
         $info['original_price'] = (new CoreCityStrategyService)->getStrategyPrice(
             $info['original_price'],
             $city_id,
-            $this->site_id
+            $this->site_id,
+            $info
         );
         $info['discount_price'] = bcsub($info['original_price'], $info['price'], 2);
 
@@ -232,7 +235,8 @@ class CardService extends BaseApiService
                 $item['price'] = (new CoreCityStrategyService)->getStrategyPrice(
                     $item['price'],
                     $city_id,
-                    $this->site_id
+                    $this->site_id,
+                    $item
                 );
             }
         }

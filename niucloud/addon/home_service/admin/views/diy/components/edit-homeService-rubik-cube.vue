@@ -2,7 +2,7 @@
 	<!-- 内容 -->
 	<div class="content-wrap" v-show="diyStore.editTab == 'content'">
 		<div class="edit-attr-item-wrap">
-			<h3 class="mb-[10px]">{{ t('topImagebG') }}</h3>
+			<h3 class="mb-[10px]">顶部图片</h3>
 			<el-form label-width="80px" class="px-[10px]">
 				<el-form-item :label="t('bgUrl')">
 					<upload-image v-model="diyStore.editComponent.topBgUrl" :limit="1" />
@@ -13,7 +13,7 @@
 			</el-form>
 		</div>
 		<div class="edit-attr-item-wrap">
-			<h3 class="mb-[10px]">{{ t('bottomLeftBg') }}</h3>
+			<h3 class="mb-[10px]">左侧图片</h3>
 			<el-form label-width="80px" class="px-[10px]">
 				<el-form-item :label="t('bgUrl')">
 					<upload-image v-model="diyStore.editComponent.bottomLeftBgUrl" :limit="1" />
@@ -24,7 +24,7 @@
 			</el-form>
 		</div>
 		<div class="edit-attr-item-wrap">
-			<h3 class="mb-[10px]">{{ t('bottomRight') }}</h3>
+			<h3 class="mb-[10px]">右侧图片</h3>
 			<el-form label-width="80px" class="px-[10px]">
 				<el-form-item :label="t('bgUrl')">
 					<upload-image v-model="diyStore.editComponent.bottomRightBgUrl" :limit="1" />
@@ -48,7 +48,7 @@
 			</el-form>
 		</div>
 		<div class="edit-attr-item-wrap">
-			<h3 class="mb-[10px]">{{ t('topTitleColor') }}</h3>
+			<h3 class="mb-[10px]">标题颜色</h3>
 			<el-form label-width="80px" class="px-[10px]">
 				<el-form-item :label="t('textColor')">
 					<el-color-picker v-model="diyStore.editComponent.textColor" />

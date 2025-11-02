@@ -32,6 +32,9 @@
 				</view>
 				<view class="text-[28rpx] text-[var(--price-text-color)] price-font block my-[15rpx] size-style">
 					￥{{item.member_price|| item.price}}
+					<text class="price-font text-[24rpx] text-[#999] line-through font-400 ml-[10rpx]"
+						v-if="item.goods_original_price && item.goods_original_price != item.member_price"><text
+							class="text-[24rpx] price-font">￥</text>{{ Number(item.goods_original_price).toFixed(2) }}</text>
 				</view>
 			</view>
 		</view>

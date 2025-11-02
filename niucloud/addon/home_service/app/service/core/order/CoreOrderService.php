@@ -19,6 +19,7 @@ use addon\home_service\app\model\order\OrderItem;
 use addon\home_service\app\model\technician\Technician;
 use app\dict\pay\PayDict;
 use app\model\pay\Pay;
+use app\service\core\member\CoreMemberService;
 use app\service\core\notice\NoticeService;
 use app\service\core\pay\CorePayService;
 use app\service\core\weapp\CoreWeappDeliveryService;
@@ -116,7 +117,7 @@ class  CoreOrderService extends BaseCoreService
 
 
     /**
-     * 师傅选择
+     * 技师选择
      * @param array $data
      * @return bool
      */
@@ -480,19 +481,12 @@ class  CoreOrderService extends BaseCoreService
                 'technician_id' => $order->technician_id,
                 'site_id' => $order->site_id,
             ]);
+
+            CoreMemberService::sendGrowth($order->site_id,  $order->member_id, 'home_service_buy_order',[
+                'from_type' => 'home_service_buy_order',
+                'related_id' => $order['order_id']
+            ]);
             Db::commit();
-            // todo 师傅升级业务
-            //            $order_money = (new OrderItem())->where([['order_id', '=', $data['order_id']], ['pay_time', '>', 0]])->sum('item_money');
-            //            // 订单完成发放积分成长值
-            //            CoreMemberService::sendGrowth($order->site_id, $order->member_id, 'o2o_buy_goods', [
-            //                'order_money' => $order_money,
-            //                'from_type' => 'o2o_buy_order',
-            //                'related_id' => $order['order_id']
-            //            ]);
-            //            CoreMemberService::sendGrowth($order->site_id, $order->member_id, 'o2o_buy_order', [
-            //                'from_type' => 'o2o_buy_order',
-            //                'related_id' => $order['order_id']
-            //            ]);
             return true;
         } catch (\Exception $e) {
             throw new CommonException($e->getMessage());

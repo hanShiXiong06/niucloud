@@ -1,11 +1,24 @@
 <template>
 	<div class="main-container">
 		<el-card class="box-card !border-none" shadow="never">
+			
 			<div class="flex mb-4 justify-between items-center">
 				<span class="text-lg">{{ t('cityStrategy') }}</span>
 				<el-button type="primary" @click="handleAdd">{{ t('add') }}</el-button>
 			</div>
-
+			<div class="my-[15px]">
+				<el-alert type="warning" show-icon :closable="false">
+				<template #title>
+					<span class="!text-[14px]">
+					策略为加（+）：地区实际价格 = 基准价格 + 策略加价;
+					示例：基准价格a=100元，策略加价50元，则实际价格=100+50=150元。
+					<br/>
+					策略为乘（*）：地区实际价格 = 基准价格 × (1 + 策略系数);
+					示例：基准价格a=100元，策略系数20%（即0.2），则实际价格=100×(1+0.2)=120元。
+					</span>
+				</template>
+				</el-alert>
+			</div>
 			<!-- 策略表格 -->
 			<el-table :data="tableData" row-key="id" size="large" v-loading="loading">
 				<el-table-column prop="provinceName" :label="t('province')" min-width="120" />

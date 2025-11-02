@@ -16,12 +16,13 @@
 						<span>{{ !o2oGoodsCategoryTable.loading ? t('emptyData') : '' }}</span>
 					</template>
 					<el-table-column prop="category_name" :label="t('categoryName')" min-width="120" />
-					<el-table-column :label="t('image')" min-width="100" align="left">
-						<template #default="{ row }">
-							<el-avatar v-if="row.image" :src="img(row.image)" />
-							<img v-else class="w-[50px] h-[50px]" src="@/app/assets/images/category_default.png" />
-						</template>
-					</el-table-column>
++                   <el-table-column prop="intro" label="分类描述" min-width="120" />
+                    <el-table-column :label="t('image')" min-width="100" align="left">
+                        <template #default="{ row }">
+                            <el-avatar v-if="row.image" :src="img(row.image)" />
+                            <img v-else class="w-[50px] h-[50px]" src="@/app/assets/images/category_default.png" />
+                        </template>
+                    </el-table-column>
 					<el-table-column prop="sort" :label="t('sort')" min-width="120" sortable="custom">
 						<template #default="{ row }">
 							<el-input v-model="row.sort" class="!w-[70px]" maxlength="10"

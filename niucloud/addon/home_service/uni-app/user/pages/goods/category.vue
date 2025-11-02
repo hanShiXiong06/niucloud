@@ -17,11 +17,10 @@
 				</view>
 				<view class="fixed bg-[#fff] z-index-99 w-[100vw] h-[130rpx]" :style="addresstabBoxCss">
 					<view class="px-[20rpx] pb-[15rpx] pt-[10rpx]  box-border flex items-center" @click.stop="locationVal.reposition()">
-						<view class="nc-iconfont nc-icon-dingweiV6xx-1 text-[28rpx]">
-						</view>
-						<text class="pl-[10rpx] text-[28rpx]">{{systemStore.diyAddressInfo?.community || '去选择定位'}}</text>
+						<u-icon name="map" size="22" ></u-icon>
+						<text class="text-[28rpx]">{{systemStore.diyAddressInfo?.community || '去选择定位'}}</text>
 					</view>
-					<scroll-view scroll-x="true" class="many-goods-list-head flex "  :scroll-into-view="'a' + cateIndex" >
+					<scroll-view scroll-x="true" class="many-goods-list-head flex "  :scroll-into-view="topScrollIntoView" scroll-with-animation="true">
 						<view v-for="(item, index) in tabsData" class="scroll-item"
 							  :class="[{ active: index == cateIndex }]" :id="'a' + index" :key="index"
 							  :style="{paddingLeft: index == 0 ? '0' : ''}"
@@ -98,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-	import { ref, computed } from 'vue'
+	import { ref, computed, watch, nextTick } from 'vue'
 	import { img, redirect, getToken } from '@/utils/common'
 	import { getGoodsList, getCategory } from '@/addon/home_service/user/api/goods'
 	import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue'
@@ -115,7 +114,7 @@
 	const lineBg = img('/addon/home_service/diy/index/manygoodslist_active.png');
 	/********* 自定义头部 - start ***********/
 	const topTabarObj = topTabar()
-	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '项目分类', topStatusBar: { textColor: '#333' } })
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '服务分类', topStatusBar: { textColor: '#333' } })
 	/********* 自定义头部 - end ***********/
 
 	const list = ref<Array<Object>>([])
@@ -123,6 +122,10 @@
 	const category_id = ref('')
 	const loading = ref<boolean>(true) //页面加载动画
 	const listLoading = ref<boolean>(false) //列表加载动画
+	// 新增：用于解析 category_path 的父链
+	const categoryPath = ref<Array<number | string>>([])
+	// 新增：顶部一级分类滚动定位 id
+	const topScrollIntoView = ref('')
 	const homeCategoryList = ref([
 		{
 			name: "热门服务",
@@ -242,8 +245,33 @@
 	}
 	const currGoodsPid = ref(0)
 	onLoad((option) => {
-		category_id.value = option.curr_goods_category || ''
-		currGoodsPid.value = option.pid || 0
+		// 若带参进入，为了让底部tabbar选中，改为：写入存储并跳转到纯路径
+		const hasQuery = option && (option.goods_category || option.curr_goods_category || option.category_id || option.pid || option.parent_category_id || option.category_path)
+		if (hasQuery) {
+			const payload:any = {
+				goods_category: option.goods_category || option.curr_goods_category || option.category_id || '',
+				pid: option.pid || option.parent_category_id || 0,
+				category_path: option.category_path || ''
+			}
+			uni.setStorageSync('home_service_category_jump', payload)
+			// 跳到纯路径以保证底部tabbar高亮
+			redirect({ url: '/addon/home_service/user/pages/goods/category', mode: 'reLaunch' })
+			return
+		}
+		// 无参进入，尝试从存储读取并清理
+		const jump:any = uni.getStorageSync('home_service_category_jump')
+		if (jump && (jump.goods_category || jump.category_path || jump.pid)) {
+			category_id.value = jump.goods_category || ''
+			categoryPath.value = jump.category_path ? String(jump.category_path).split(',').filter(Boolean) : []
+			currGoodsPid.value = jump.pid || (categoryPath.value.length ? categoryPath.value[0] : 0)
+			uni.removeStorage({ key: 'home_service_category_jump' })
+			getCategoryData()
+			return
+		}
+		// 兜底：原有参数解析（无参或外部跳转场景）
+		category_id.value = option.goods_category || option.curr_goods_category || option.category_id || ''
+		categoryPath.value = option.category_path ? String(option.category_path).split(',').filter(Boolean) : []
+		currGoodsPid.value = option.pid || option.parent_category_id || (categoryPath.value.length ? categoryPath.value[0] : 0)
 		getCategoryData()
 	})
 
@@ -257,13 +285,19 @@
 			tabsData.value = res.data
 			// 有从onload中传入分类id
 			if (category_id.value) {
+				// 计算一级父类ID：优先用 currGoodsPid，其次用 categoryPath 的首元素
+				const topId : any = currGoodsPid.value || (categoryPath.value.length ? categoryPath.value[0] : null)
 				for (let i = 0; i < tabsData.value.length; i++) {
-					// 表示选中的是二级分类
-					if (currGoodsPid.value && currGoodsPid.value == tabsData.value[i].category_id) {
+					// 表示选中的是二级分类（或通过父链传入）
+					if (topId && topId == tabsData.value[i].category_id) {
+						// 修正：同时设置一级顶部高亮索引
 						tabActive.value = i
-						if (tabsData.value[i]) {
+						cateIndex.value = i
+						// 目标子级ID：若 category_path 带有第二个元素则优先选中该二级，否则用 goods_category
+						const targetChildId : any = categoryPath.value.length >= 2 ? categoryPath.value[1] : category_id.value
+						if (tabsData.value[i] && tabsData.value[i].children && tabsData.value[i].children.length) {
 							tabsData.value[i].children.forEach((item : any, index : number) => {
-								if (item.category_id == category_id.value) {
+								if (item.category_id == targetChildId) {
 									subMenuClick(index, item)
 									return false;
 								}
@@ -271,11 +305,10 @@
 						}
 						return false;
 					} else if (tabsData.value[i].category_id == category_id.value) {
-						firstLevelClick(i, tabsData.value[i])
+						firstLevelClick(tabsData.value[i], i)
 						return false;
 					}
 				}
-
 			} else {
 				if (res.data[0].children && res.data[0].children.length) {
 					category_id.value = res.data[0].children[0].category_id
@@ -353,6 +386,12 @@
 		}
 		return parseFloat(price).toFixed(2)
 	}
+	// 新增：监听一级选中索引，联动顶部滚动到对应位置
+	watch(cateIndex, (newIndex) => {
+		nextTick(() => {
+			topScrollIntoView.value = 'a' + newIndex
+		})
+	})
 </script>
 
 <style lang="scss" scoped>

@@ -1,5 +1,8 @@
 <template>
 	<view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()">
+		<!-- #ifdef MP-WEIXIN || APP-PLUS -->
+		<top-tabbar :data="topTabbarData" scrollBool="1" :isBack="true" />
+		<!-- #endif -->
 		<!-- 主体内容区域 -->
 		<mescroll-body ref="mescrollRef" @init="mescrollInit" :down="{ use: false }" @up="getcardListFn"
 			class="mescroll-body">
@@ -92,7 +95,9 @@
 	import useMescroll from '@/components/mescroll/hooks/useMescroll.js'
 	import useConfigStore from '@/stores/config'
 	import { getCardItem} from '@/addon/home_service/user/api/card'
-
+	import { topTabar } from '@/utils/topTabbar'
+	const topTabarObj = topTabar()
+	let topTabbarData = topTabarObj.setTopTabbarParam({ title: '使用次卡', topStatusBar: { textColor: '#333' } })
 	// 配置状态管理
 	const configStore = useConfigStore()
 	onShow(()=>{
