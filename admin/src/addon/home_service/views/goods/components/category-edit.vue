@@ -38,6 +38,12 @@
             <el-radio :label="0">{{ t('nosettled') }}</el-radio>
             </el-radio-group>
             </el-form-item>
+            <el-form-item label="业务类型" prop="errand_business">
+            <el-radio-group v-model="formData.errand_business">
+            <el-radio :label="0">上门服务</el-radio>
+            <el-radio :label="1">跑腿服务</el-radio>
+            </el-radio-group>
+            </el-form-item>
         </el-form>
 
         <template #footer>
@@ -71,7 +77,8 @@ const initialFormData = {
     pid: 0,
     is_show: 1,
     is_settled: 1,
-    intro: ''
+    intro: '',
+    errand_business: 0
 }
 
 const formData: Record<string, any> = reactive({ ...initialFormData })
