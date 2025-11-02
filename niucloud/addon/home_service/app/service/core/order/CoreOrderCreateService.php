@@ -106,7 +106,7 @@ class CoreOrderCreateService extends BaseCoreService
             'is_card_order' => $this->card_data['is_card_order'] ?? 0,
             'is_auto_refund' => $data['is_auto_refund'] ? 1 : 0,
             'is_errand' => $is_errand_business ? 1 : 0, // 标记是否为跑腿业务
-            'errand_items' => $is_errand_business ? json_encode($data['errand_items'] ?? [], JSON_UNESCAPED_UNICODE) : '[]', // 跑腿包裹信息JSON，非跑腿业务为空数组
+            'errand_items' => $is_errand_business ? json_encode($data['sku']['items'] ?? [], JSON_UNESCAPED_UNICODE) : '[]', // 跑腿包裹信息JSON，从sku.items获取
         ];
 
 
