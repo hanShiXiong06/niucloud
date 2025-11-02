@@ -70,7 +70,7 @@ class Goods extends BaseModel
     public function category()
     {
         return $this->hasOne(GoodsCategory::class, 'category_id', 'goods_category')
-            ->joinType('left')->withField('category_id, category_name')->bind(['category_name' => 'category_name']);
+            ->joinType('left')->withField('category_id, category_name, errand_business')->bind(['category_name' => 'category_name', 'category_errand_business' => 'errand_business']);
     }
 
     /**
@@ -107,6 +107,21 @@ class Goods extends BaseModel
         if (isset($data['buy_type'])) {
             return GoodsDict::getBuyType($data['buy_type'])['name'] ?? '';
         }
+    }
+
+    /**
+     * 获取跑腿业务标识（从分类获取）
+     * @param $value
+     * @param $data
+     * @return bool
+     */
+    public function getErrandBusinessAttr($value, $data)
+    {
+        // 优先使用绑定的分类字段
+        if (isset($data['category_errand_business'])) {
+            return (bool)$data['category_errand_business'];
+        }
+        return false;
     }
 
     /**
