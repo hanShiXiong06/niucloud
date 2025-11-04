@@ -27,6 +27,10 @@ Route::group('recycle', function() {
      // 获取热门分类
      Route::get('recycle_category/hot', 'addon\recycle\app\api\controller\recycle_category\RecycleCategory@hot');
      Route::get('recycle_category_tree', 'addon\recycle\app\api\controller\recycle_category\RecycleCategory@tree');
+     
+     // 报价查询（移动端）
+     Route::get('quotation_price/lists', 'addon\recycle\app\api\controller\quotation\QuotationPrice@lists');
+     Route::get('quotation_price/types', 'addon\recycle\app\api\controller\quotation\QuotationPrice@getPriceTypes');
 
 })->middleware(ApiChannel::class)
 ->middleware(ApiCheckToken::class, false) //false表示不验证登录

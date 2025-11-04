@@ -289,7 +289,7 @@ async function loadPriceData() {
 	loading.value = true
 
 	try {
-		const res = await uni.$u.http.get('/addon/recycle/quotation_data/all', {
+		const res = await uni.$u.http.get('/api/recycle/quotation_price/lists', {
 			params: {
 				quotation_id: priceTypeId.value,
 				is_current: 1,
