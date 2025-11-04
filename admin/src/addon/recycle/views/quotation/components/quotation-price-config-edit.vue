@@ -1,6 +1,9 @@
 <template>
     <el-dialog v-model="showDialog" :title="formData.id ? '编辑价格配置' : '添加价格配置'" width="80%" class="diy-dialog-wrap" :destroy-on-close="true">
         <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRules" class="page-form" v-loading="loading">
+            <el-form-item label="标题" prop="title">
+                <el-input v-model="formData.title"  clearable placeholder="请输入标题" class="input-width" />
+            </el-form-item>
             <el-form-item label="配置类型" prop="config_type">
                 <el-select
                     v-model="formData.config_type"
@@ -159,9 +162,7 @@
                 </el-form-item>
             </template>
 
-            <el-form-item label="备注" prop="remark">
-                <el-input v-model="formData.remark" type="textarea" :rows="3" clearable placeholder="请输入备注" class="input-width" />
-            </el-form-item>
+       
 
             <el-form-item label="调整类型" prop="adjustment_type">
                 <el-select v-model="formData.adjustment_type" clearable placeholder="请选择调整类型" class="input-width">
@@ -237,7 +238,7 @@ const initialFormData = {
     adjustment_value: '',
     is_enable: 1,
     sku_list: null,
-    remark: ''
+    title: ''
 }
 const formData: Record<string, any> = reactive({ ...initialFormData })
 
@@ -578,13 +579,15 @@ const confirm = async (formEl: FormInstance | undefined) => {
                         skus,
                         adjustment_type: formData.adjustment_type,
                         adjustment_value: formData.adjustment_value,
-                        is_enable: formData.is_enable
+                        is_enable: formData.is_enable,
+                        title: formData.title
                     })
 
                     const conflictInfo = result.data?.conflict_info || {}
                     const removedConfigs = conflictInfo.removed_from_configs || []
                     const duplicateSkus = conflictInfo.duplicate_skus || []
                     const newSkus = conflictInfo.new_skus || []
+                    
 
                     // 构建提示信息
                     let message = `成功为 ${selectedSkuKeys.value.length} 个SKU创建价格配置`

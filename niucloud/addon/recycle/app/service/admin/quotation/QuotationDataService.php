@@ -286,20 +286,9 @@ class QuotationDataService extends BaseAdminService
         // 注意：prices 字段在数据导入时已经应用了价格配置，这里只需要转换格式
         foreach ($list as &$item) {
             $prices = json_decode($item['prices'], true) ?: [];
-            $finalPrices = [];
-            
-            foreach ($prices as $configItemName => $price) {
-                // prices 存储的已经是最终价格（导入时应用了配置）
-                $finalPrices[$configItemName] = [
-                    'original_price' => $price,
-                    'final_price' => $price,
-                    'price_status' => 0,  // 价格未变化
-                    'price_difference' => 0,
-                    'price_diff_percent' => 0,
-                ];
-            }
-            
-            $item['price_detail'] = $finalPrices;
+           
+            $item['prices'] = $prices;
+
         }
         
         return $list;
@@ -345,21 +334,8 @@ class QuotationDataService extends BaseAdminService
         
         $list = $this->pageQuery($search_model, function ($item) {
             $prices = json_decode($item['prices'], true) ?: [];
-            $finalPrices = [];
-            
-            // prices 字段在数据导入时已经应用了价格配置，这里只需要转换格式
-            foreach ($prices as $configItemName => $price) {
-                $finalPrices[$configItemName] = [
-                    'original_price' => $price,
-                    'final_price' => $price,
-                    'price_status' => 0,  // 价格未变化
-                    'price_difference' => 0,
-                    'price_diff_percent' => 0,
-                ];
-            }
-            
-            $item['price_detail'] = $finalPrices;
-            return $item;
+           
+            return $prices;
         });
 
         // 设置缓存（使用tag）
@@ -479,21 +455,10 @@ class QuotationDataService extends BaseAdminService
         // 转换 prices 为 price_detail 格式
         // prices 字段在数据导入时已经应用了价格配置
         $prices = json_decode($info['prices'], true) ?: [];
-        $finalPrices = [];
-        
-        foreach ($prices as $configItemName => $price) {
-            $finalPrices[$configItemName] = [
-                'original_price' => $price,
-                'final_price' => $price,
-                'price_status' => 0,
-                'price_difference' => 0,
-                'price_diff_percent' => 0,
-            ];
-        }
-        
-        $info['price_detail'] = $finalPrices;
 
-        return $info;
+        // $info['price_detail'] = $finalPrices;
+
+        return $prices;
     }
 
     /**

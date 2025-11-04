@@ -111,68 +111,97 @@
             <!-- 空数据提示 -->
             <el-empty v-if="tableData.length === 0 && !loading" description="暂无数据" />
 
-            <!-- Excel风格表格 -->
-            <div v-else class="excel-table-wrapper">
-                <table class="excel-table">
-                    <thead>
-                        <tr>
-                            <th class="fixed-col col-model">型号</th>
-                            <th class="fixed-col col-capacity">容量</th>
-                            <th
-                                v-for="configName in configColumns"
-                                :key="configName"
-                                class="col-price"
+            <!-- 多表格展示 -->
+            <div v-else class="multi-tables-container">
+                <div
+                    v-for="(table, tableIdx) in groupedTables"
+                    :key="table.id"
+                    class="table-group"
+                >
+                    <!-- 表格标题 -->
+                    <div class="table-group-header">
+                        <div class="table-title">
+                            <span class="title-text">配置组 {{ tableIdx + 1 }}</span>
+                            <span class="title-meta">
+                                {{ table.modelCount }} 个型号 · {{ table.rows.length }} 条数据 · {{ table.configColumns.length }} 个配置项
+                            </span>
+                        </div>
+                        <div class="config-tags">
+                            <el-tag
+                                v-for="config in table.configColumns"
+                                :key="config"
+                                size="small"
+                                type="info"
                             >
-                                {{ configName }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="row in processedTableData" :key="row.id">
-                            <td
-                                v-if="row.showModel"
-                                class="fixed-col col-model model-merged"
-                                :rowspan="row.modelRowspan"
-                            >
-                                {{ row.goods_name }}
-                            </td>
-                            <td class="fixed-col col-capacity">{{ row.capacity }}</td>
-                            <td
-                                v-for="configName in configColumns"
-                                :key="configName"
-                                class="col-price"
-                            >
-                                <div v-if="row.prices[configName]" class="price-cell">
-                                    <!-- 查看模式 -->
-                                    <div v-if="!editMode" class="price-view">
-                                        <span class="price-value">¥{{ row.prices[configName] }}</span>
-                                    </div>
+                                {{ config }}
+                            </el-tag>
+                        </div>
+                    </div>
 
-                                    <!-- 编辑模式 -->
-                                    <div v-else class="price-edit">
-                                        <el-input
-                                            v-model="row.editPrices[configName]"
-                                            type="number"
-                                            size="small"
-                                            :min="0"
-                                            @input="onPriceChange(row, configName)"
-                                        >
-                                            <template #prefix>¥</template>
-                                        </el-input>
-                                        <div
-                                            v-if="isPriceChanged(row, configName)"
-                                            class="price-diff"
-                                            :class="getPriceDiffClass(row, configName)"
-                                        >
-                                            {{ getPriceDiff(row, configName) }}
+                    <!-- Excel风格表格 -->
+                    <div class="excel-table-wrapper">
+                        <table class="excel-table">
+                            <thead>
+                                <tr>
+                                    <th class="fixed-col col-model">型号</th>
+                                    <th class="fixed-col col-capacity">容量</th>
+                                    <th
+                                        v-for="configName in table.configColumns"
+                                        :key="configName"
+                                        class="col-price"
+                                    >
+                                        {{ configName }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="row in table.rows" :key="row.id">
+                                    <td
+                                        v-if="row.showModel"
+                                        class="fixed-col col-model model-merged"
+                                        :rowspan="row.modelRowspan"
+                                    >
+                                        {{ row.goods_name }}
+                                    </td>
+                                    <td class="fixed-col col-capacity">{{ row.capacity }}</td>
+                                    <td
+                                        v-for="configName in table.configColumns"
+                                        :key="configName"
+                                        class="col-price"
+                                    >
+                                        <div v-if="row.prices[configName]" class="price-cell">
+                                            <!-- 查看模式 -->
+                                            <div v-if="!editMode" class="price-view">
+                                                <span class="price-value">¥{{ row.prices[configName] }}</span>
+                                            </div>
+
+                                            <!-- 编辑模式 -->
+                                            <div v-else class="price-edit">
+                                                <el-input
+                                                    v-model="row.editPrices[configName]"
+                                                    type="number"
+                                                    size="small"
+                                                    :min="0"
+                                                    @input="onPriceChange(row, configName)"
+                                                >
+                                                    <template #prefix>¥</template>
+                                                </el-input>
+                                                <div
+                                                    v-if="isPriceChanged(row, configName)"
+                                                    class="price-diff"
+                                                    :class="getPriceDiffClass(row, configName)"
+                                                >
+                                                    {{ getPriceDiff(row, configName) }}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
-                                <span v-else class="empty-cell">-</span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                        <span v-else class="empty-cell">-</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- 加载状态 -->
@@ -213,63 +242,86 @@ const priceChanges = ref<Record<string, any>>({})
 
 // ==================== 计算属性 ====================
 
-// 配置项列（所有唯一的配置项名称）
-const configColumns = computed(() => {
-    const columns = new Set<string>()
-    tableData.value.forEach(row => {
-        if (row.prices) {
-            Object.keys(row.prices).forEach(key => columns.add(key))
-        }
-    })
-    return Array.from(columns)
-})
-
 // 修改数量
 const changedCount = computed(() => {
     return Object.keys(priceChanges.value).length
 })
 
-// 处理后的表格数据（带跨行信息）
-const processedTableData = computed(() => {
+// 按配置项组合分组的表格数据
+const groupedTables = computed(() => {
     const data = tableData.value
     if (data.length === 0) return []
 
-    const result: any[] = []
-    let currentModel = ''
-    let modelStartIndex = 0
+    // 1. 按配置项组合分组
+    const configGroupMap = new Map<string, any[]>()
 
-    data.forEach((row, index) => {
-        const processedRow = { ...row }
+    data.forEach(row => {
+        if (row.prices) {
+            // 获取该行的配置项列表（排序后生成唯一key）
+            const configKeys = Object.keys(row.prices).sort()
+            const configKey = configKeys.join('|||')
 
-        // 如果是新的型号
-        if (row.goods_name !== currentModel) {
-            // 计算上一个型号的跨行数
-            if (modelStartIndex < index) {
-                for (let i = modelStartIndex; i < index; i++) {
-                    result[i].modelRowspan = index - modelStartIndex
-                }
+            if (!configGroupMap.has(configKey)) {
+                configGroupMap.set(configKey, [])
             }
-
-            currentModel = row.goods_name
-            modelStartIndex = index
-            processedRow.showModel = true
-            processedRow.modelRowspan = 1
-        } else {
-            processedRow.showModel = false
-            processedRow.modelRowspan = 0
+            configGroupMap.get(configKey)!.push(row)
         }
-
-        result.push(processedRow)
     })
 
-    // 处理最后一个型号的跨行
-    if (modelStartIndex < result.length) {
-        for (let i = modelStartIndex; i < result.length; i++) {
-            result[i].modelRowspan = result.length - modelStartIndex
-        }
-    }
+    // 2. 为每个分组生成表格数据
+    const tables: any[] = []
+    let tableIndex = 0
 
-    return result
+    configGroupMap.forEach((rows, configKey) => {
+        tableIndex++
+        const configColumns = configKey.split('|||')
+
+        // 处理跨行合并
+        const processedRows: any[] = []
+        let currentModel = ''
+        let modelStartIndex = 0
+
+        rows.forEach((row, index) => {
+            const processedRow = { ...row }
+
+            // 如果是新的型号
+            if (row.goods_name !== currentModel) {
+                // 计算上一个型号的跨行数
+                if (modelStartIndex < index) {
+                    for (let i = modelStartIndex; i < index; i++) {
+                        processedRows[i].modelRowspan = index - modelStartIndex
+                    }
+                }
+
+                currentModel = row.goods_name
+                modelStartIndex = index
+                processedRow.showModel = true
+                processedRow.modelRowspan = 1
+            } else {
+                processedRow.showModel = false
+                processedRow.modelRowspan = 0
+            }
+
+            processedRows.push(processedRow)
+        })
+
+        // 处理最后一个型号的跨行
+        if (modelStartIndex < processedRows.length) {
+            for (let i = modelStartIndex; i < processedRows.length; i++) {
+                processedRows[i].modelRowspan = processedRows.length - modelStartIndex
+            }
+        }
+
+        tables.push({
+            id: tableIndex,
+            configColumns,
+            rows: processedRows,
+            modelCount: new Set(rows.map(r => r.goods_name)).size
+        })
+    })
+
+    // 3. 按型号数量降序排序（让数据多的表格在前面）
+    return tables.sort((a, b) => b.rows.length - a.rows.length)
 })
 
 // ==================== 方法 ====================
@@ -335,13 +387,10 @@ async function loadData () {
 
 // 提取报价类型选项
 function extractPriceTypes (data: any[]) {
-    const types = new Set<string>()
-    data.forEach(item => {
-        if (item.price_name) {
-            types.add(item.price_name)
-        }
-    })
-    priceTypeOptions.value = Array.from(types)
+    // 提取报价类型选项
+    // 1. 花机/内爆
+    // 2. 靓机/小花
+    priceTypeOptions.value = ['花机/内爆', '靓机/小花']
 }
 
 // 搜索
@@ -531,10 +580,61 @@ onMounted(() => {
     height: 400px;
 }
 
+// 多表格容器
+.multi-tables-container {
+    padding: 20px;
+}
+
+.table-group {
+    margin-bottom: 40px;
+
+    &:last-child {
+        margin-bottom: 0;
+    }
+}
+
+.table-group-header {
+    margin-bottom: 16px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 8px 8px 0 0;
+    color: white;
+
+    .table-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+
+        .title-text {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .title-meta {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+    }
+
+    .config-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+
+        :deep(.el-tag) {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+            color: white;
+        }
+    }
+}
+
 // Excel表格样式
 .excel-table-wrapper {
     overflow-x: auto;
-    padding: 20px;
+    border: 1px solid #e5e7eb;
+    border-radius: 0 0 8px 8px;
 }
 
 .excel-table {

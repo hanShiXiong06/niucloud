@@ -61,7 +61,7 @@ class QuotationPriceConfig extends BaseAdminController
             ['adjustment_type', 1],
             ['adjustment_value', 0],
             ['is_enable', 1],
-            ['remark', ''],
+            ['title', ''],
         ]);
         $this->validate($data, 'addon\recycle\app\validate\quotation\QuotationPriceConfig.add');
         $id = (new QuotationPriceConfigService())->add($data);
@@ -85,7 +85,7 @@ class QuotationPriceConfig extends BaseAdminController
             ['adjustment_type', 1],
             ['adjustment_value', 0],
             ['is_enable', 1],
-            ['remark', ''],
+            ['title', ''],
         ]);
         $this->validate($data, 'addon\recycle\app\validate\quotation\QuotationPriceConfig.edit');
         (new QuotationPriceConfigService())->edit($id, $data);
@@ -169,4 +169,6 @@ class QuotationPriceConfig extends BaseAdminController
         (new QuotationPriceConfigService())->clearAll();
         return success('DELETE_SUCCESS');
     }
+
+   
 }

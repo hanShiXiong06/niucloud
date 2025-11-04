@@ -212,5 +212,15 @@ export function batchUpdateQuotationPrice(params: {
     return request.post(`recycle/quotation_data/batch_update_price`, params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
+/**
+ * modifyQuotationPriceConfigStatus
+ * 修改价格配置状态
+ * @param id
+ * @param params
+ * @returns
+*/
+export function modifyQuotationPriceConfigStatus(id: number, params: Record<string, any>) {
+    return request.put(`recycle/quotation_price_config/${id}/modify_status`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
 // USER_CODE_END -- quotation
 

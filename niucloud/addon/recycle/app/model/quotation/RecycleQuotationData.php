@@ -50,6 +50,17 @@ class RecycleQuotationData extends BaseModel
      */
     protected $updateTime = 'update_at';
 
+    // json字段
+
+    // protected $json = ['config_selected'];
+    // protected $json = ['config_items'];
+    // protected $json = ['add_value_info'];
+    // protected $json = ['prices'];
+
+
+    // json字段自动转换
+    protected $jsonAssoc = true;
+
     /**
      * 搜索器:报价单ID
      * @param $query

@@ -505,6 +505,7 @@ Route::group('recycle', function () {
     Route::post('quotation_price_config/batch_add_sku', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@batchAddSku');
     Route::post('quotation_price_config/batch_del', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@batchDel');
     Route::post('quotation_price_config/clear_all', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@clearAll');
+    Route::put('quotation_price_config/:id/modify_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@modifyStatus');
 
 })->middleware([
     AdminCheckToken::class,

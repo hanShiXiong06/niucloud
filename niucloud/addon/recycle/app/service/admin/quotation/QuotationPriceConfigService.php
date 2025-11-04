@@ -36,7 +36,7 @@ class QuotationPriceConfigService extends BaseAdminService
      */
     public function getPage(array $where = []): array
     {
-        $field = 'pc.id,pc.site_id,pc.config_type,pc.goods_id,pc.capacity,pc.capacity_answer_id,pc.config_item_name,pc.group_key,pc.sku_list,pc.adjustment_type,pc.adjustment_value,pc.is_enable,pc.remark,pc.create_at,pc.update_at';
+        $field = 'pc.id,pc.site_id,pc.config_type,pc.goods_id,pc.capacity,pc.capacity_answer_id,pc.config_item_name,pc.group_key,pc.sku_list,pc.adjustment_type,pc.adjustment_value,pc.is_enable,pc.title,pc.create_at,pc.update_at';
         
         // 关联查询型号表获取型号名称
         $search_model = $this->model->alias('pc')
@@ -666,6 +666,18 @@ class QuotationPriceConfigService extends BaseAdminService
                 Log::warning('清除缓存失败：' . $e2->getMessage());
             }
         }
+    }
+
+    /**
+     * 修改价格配置状态
+     * modifyStatus
+    */
+    public function modifyStatus(int $id, int $status): bool
+    {
+        $result = $this->model
+            ->where([['site_id', '=', $this->site_id], ['id', '=', $id]])
+            ->update(['is_enable' => $status]);
+        return $result !== false;
     }
 }
 

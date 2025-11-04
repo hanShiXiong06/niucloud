@@ -16,170 +16,14 @@
                 </div>
             </div>
 
-            <!-- 报价单和型号选择区域 + 批量配置表单 -->
-            <el-card class="box-card !border-none my-[10px]" shadow="never">
-                <div class="flex flex-col gap-4">
-                    <div class="flex items-center gap-4">
-                        <span class="font-medium">选择报价单：</span>
-                        <el-select
-                            v-model="selectedQuotationId"
-                            placeholder="请选择报价单"
-                            style="width: 300px"
-                            @change="handleQuotationChange"
-                        >
-                            <el-option
-                                v-for="quotation in quotationList"
-                                :key="quotation.id"
-                                :label="`${quotation.quotation_id} - ${quotation.price_name}`"
-                                :value="quotation.id"
-                            >
-                                <div>
-                                    <div>{{ quotation.quotation_id }} - {{ quotation.price_name }}</div>
-                                    <div style="font-size: 12px; color: #909399;">{{ quotation.config_name || '未命名配置' }}</div>
-                                </div>
-                            </el-option>
-                        </el-select>
-                    </div>
-                    
-                    <!-- 批量配置表单 -->
-                    <div v-if="selectedQuotationId" class="border-t pt-4">
-                        <div class="flex items-center gap-4 mb-4">
-                            <span class="font-medium">选择型号：</span>
-                            <el-select
-                                v-model="selectedModelIds"
-                                multiple
-                                filterable
-                                placeholder="请选择型号（可多选）"
-                                style="width: 400px"
-                                :loading="modelListLoading"
-                                @change="handleModelChange"
-                            >
-                                <el-option
-                                    v-for="model in modelList"
-                                    :key="model.goods_id"
-                                    :label="model.goods_name"
-                                    :value="model.goods_id"
-                                />
-                            </el-select>
-                            <el-button v-if="selectedModelIds.length > 0" @click="clearSelection">清空选择</el-button>
-                        </div>
-                        
-                        <!-- SKU选择区域 -->
-                        <div v-if="selectedModelIds.length > 0" class="border-t pt-4">
-                            <div class="mb-4">
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="font-medium">选择SKU（型号+内存+规格）：</span>
-                                    <div class="flex gap-2">
-                                        <el-button size="small" @click="selectAllSkus">全选</el-button>
-                                        <el-button size="small" @click="clearSkuSelection">清空</el-button>
-                                    </div>
-                                </div>
-                                <div v-loading="skuListLoading" class="max-h-[400px] overflow-y-auto border rounded p-4">
-                                    <el-checkbox-group v-model="selectedSkus" @change="handleSkuChange">
-                                        <div v-for="sku in skuList" :key="sku.key" class="mb-2">
-                                            <el-checkbox :label="sku.key">
-                                                <span class="font-medium">{{ sku.goods_name }}</span>
-                                                <span class="mx-2 text-gray-500">/</span>
-                                                <span>{{ sku.capacity }}</span>
-                                                <span v-if="sku.config_item_name" class="mx-2 text-gray-500">/</span>
-                                                <span v-if="sku.config_item_name" class="text-blue-600">{{ sku.config_item_name }}</span>
-                                            </el-checkbox>
-                                        </div>
-                                    </el-checkbox-group>
-                                    <div v-if="skuList.length === 0 && !skuListLoading" class="text-center text-gray-400 py-4">
-                                        暂无SKU数据
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 配置规则表单 -->
-                        <div v-if="selectedSkus.length > 0" class="border-t pt-4">
-                            <el-form :model="batchConfigForm" label-width="120px" ref="batchConfigFormRef" :rules="batchConfigRules">
-                                <el-form-item label="调整类型" prop="adjustment_type">
-                                    <el-select v-model="batchConfigForm.adjustment_type" placeholder="请选择调整类型" style="width: 300px">
-                                        <el-option label="固定金额" :value="1">
-                                            <span>固定金额（正数增加，负数减少）</span>
-                                        </el-option>
-                                        <el-option label="百分比" :value="2">
-                                            <span>百分比（正数增加，负数减少）</span>
-                                        </el-option>
-                                        <el-option label="直接覆盖" :value="3">
-                                            <span>直接覆盖（直接设置为指定价格）</span>
-                                        </el-option>
-                                    </el-select>
-                                </el-form-item>
-                                
-                                <el-form-item label="调整值" prop="adjustment_value">
-                                    <el-input-number 
-                                        v-model="batchConfigForm.adjustment_value" 
-                                        :precision="2" 
-                                        :min="batchConfigForm.adjustment_type === 2 ? -100 : undefined"
-                                        :max="batchConfigForm.adjustment_type === 2 ? 100 : undefined"
-                                        placeholder="请输入调整值" 
-                                        style="width: 300px"
-                                    >
-                                        <template #append v-if="batchConfigForm.adjustment_type === 2">%</template>
-                                        <template #append v-else-if="batchConfigForm.adjustment_type !== 2">元</template>
-                                    </el-input-number>
-                                    <div class="text-xs text-gray-500 mt-1">
-                                        <span v-if="batchConfigForm.adjustment_type === 1">固定金额：正数增加价格，负数减少价格</span>
-                                        <span v-else-if="batchConfigForm.adjustment_type === 2">百分比：正数增加百分比，负数减少百分比（范围：-100% ~ 100%）</span>
-                                        <span v-else-if="batchConfigForm.adjustment_type === 3">直接覆盖：直接将价格设置为该值</span>
-                                    </div>
-                                </el-form-item>
-                                
-                                <el-form-item label="是否启用" prop="is_enable">
-                                    <el-switch v-model="batchConfigForm.is_enable" :active-value="1" :inactive-value="0" />
-                                </el-form-item>
-                                
-                                <el-form-item>
-                                    <el-button type="primary" @click="saveBatchConfig" :loading="batchSaving">
-                                        批量保存配置（{{ selectedSkus.length }}个SKU）
-                                    </el-button>
-                                    <el-button @click="resetBatchConfig">重置表单</el-button>
-                                </el-form-item>
-                            </el-form>
-                            
-                            <!-- 已选SKU列表 -->
-                            <div class="mt-4">
-                                <div class="text-sm text-gray-600 mb-2">已选择 {{ selectedSkus.length }} 个SKU：</div>
-                                <div class="flex flex-wrap gap-2">
-                                    <el-tag 
-                                        v-for="skuKey in selectedSkus" 
-                                        :key="skuKey"
-                                        closable
-                                        @close="removeSku(skuKey)"
-                                    >
-                                        {{ getSkuDisplayName(skuKey) }}
-                                    </el-tag>
-                                </div>
-                            </div>
-                            
-                            <!-- 配置预览 -->
-                            <div v-if="selectedSkus.length > 0 && batchConfigForm.adjustment_type && batchConfigForm.adjustment_value !== 0" class="mt-4 p-4 bg-gray-50 rounded">
-                                <div class="text-sm font-medium text-gray-700 mb-2">配置预览：</div>
-                                <div class="text-sm text-gray-600">
-                                    <div>将为以下 {{ selectedSkus.length }} 个SKU应用配置：</div>
-                                    <div class="mt-2">
-                                        <span class="font-medium">调整类型：</span>
-                                        <span>{{ getAdjustmentTypeText(batchConfigForm.adjustment_type) }}</span>
-                                    </div>
-                                    <div class="mt-1">
-                                        <span class="font-medium">调整值：</span>
-                                        <span>{{ batchConfigForm.adjustment_type === 2 ? batchConfigForm.adjustment_value + '%' : '¥' + batchConfigForm.adjustment_value }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </el-card>
+          
 
             <!-- 配置列表视图：始终显示 -->
             <div class="mt-[10px]">
                 <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                     <el-form :inline="true" :model="table.searchParam" ref="searchFormRef">
+
+                        
                         <el-form-item label="配置类型" prop="config_type">
                             <el-select v-model="table.searchParam.config_type" clearable placeholder="请选择配置类型">
                                 <el-option label="全部" value=""></el-option>
@@ -226,7 +70,9 @@
                             <span>{{ !table.loading ? '暂无数据' : '' }}</span>
                         </template>
                         <el-table-column type="selection" width="55" />
+                       
                         <el-table-column prop="id" label="ID" min-width="80" />
+                        <el-table-column prop="title" label="标题" min-width="120" />
                         <el-table-column prop="config_type" label="配置类型" min-width="120">
                             <template #default="{ row }">
                                 {{ getConfigTypeText(row.config_type) }}
@@ -780,6 +626,15 @@ const editEvent = (data: any) => {
     editDialog.value?.setFormData(data)
     editDialog.value!.showDialog = true
 }
+/**
+ * 禁用/开启
+*/
+const modifyStatusEvent = (row: any) => {
+    const status = row.is_enable === 1 ? 0 : 1
+    modifyQuotationPriceConfigStatus(row.id, { is_enable: status }).then(() => {
+        loadList()
+    }).catch(() => {})
+}
 
 /**
  * 表格选择变化
@@ -852,7 +707,6 @@ const deleteEvent = (id: number) => {
         type: 'warning',
     }).then(() => {
         deleteQuotationPriceConfig(id).then(() => {
-            ElMessage.success('删除成功')
             loadList()
         }).catch(() => {})
     }).catch(() => {})
