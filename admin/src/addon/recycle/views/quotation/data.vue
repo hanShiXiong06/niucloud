@@ -152,6 +152,7 @@
                                     >
                                         {{ configName }}
                                     </th>
+                                    <th class="col-remark">备注说明</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -196,6 +197,15 @@
                                             </div>
                                         </div>
                                         <span v-else class="empty-cell">-</span>
+                                    </td>
+                                    <td
+                                        v-if="row.showRemark"
+                                        class="col-remark remark-merged"
+                                        :rowspan="row.remarkRowspan"
+                                    >
+                                        <div class="remark-content">
+                                            {{ row.add_value_info || '-' }}
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>
@@ -258,7 +268,8 @@ const groupedTables = computed(() => {
     data.forEach(row => {
         if (row.prices) {
             // 获取该行的配置项列表（排序后生成唯一key）
-            const configKeys = Object.keys(row.prices).sort()
+            const configKeys = Object.keys(row.prices)
+            // .sort()
             const configKey = configKeys.join('|||')
 
             if (!configGroupMap.has(configKey)) {
@@ -276,15 +287,17 @@ const groupedTables = computed(() => {
         tableIndex++
         const configColumns = configKey.split('|||')
 
-        // 处理跨行合并
+        // 处理跨行合并（型号和备注）
         const processedRows: any[] = []
         let currentModel = ''
         let modelStartIndex = 0
+        let currentRemark = ''
+        let remarkStartIndex = 0
 
         rows.forEach((row, index) => {
             const processedRow = { ...row }
 
-            // 如果是新的型号
+            // 处理型号跨行
             if (row.goods_name !== currentModel) {
                 // 计算上一个型号的跨行数
                 if (modelStartIndex < index) {
@@ -302,6 +315,25 @@ const groupedTables = computed(() => {
                 processedRow.modelRowspan = 0
             }
 
+            // 处理备注跨行
+            const remark = row.add_value_info || ''
+            if (remark !== currentRemark) {
+                // 计算上一个备注的跨行数
+                if (remarkStartIndex < index) {
+                    for (let i = remarkStartIndex; i < index; i++) {
+                        processedRows[i].remarkRowspan = index - remarkStartIndex
+                    }
+                }
+
+                currentRemark = remark
+                remarkStartIndex = index
+                processedRow.showRemark = true
+                processedRow.remarkRowspan = 1
+            } else {
+                processedRow.showRemark = false
+                processedRow.remarkRowspan = 0
+            }
+
             processedRows.push(processedRow)
         })
 
@@ -309,6 +341,13 @@ const groupedTables = computed(() => {
         if (modelStartIndex < processedRows.length) {
             for (let i = modelStartIndex; i < processedRows.length; i++) {
                 processedRows[i].modelRowspan = processedRows.length - modelStartIndex
+            }
+        }
+
+        // 处理最后一个备注的跨行
+        if (remarkStartIndex < processedRows.length) {
+            for (let i = remarkStartIndex; i < processedRows.length; i++) {
+                processedRows[i].remarkRowspan = processedRows.length - remarkStartIndex
             }
         }
 
@@ -321,7 +360,7 @@ const groupedTables = computed(() => {
     })
 
     // 3. 按型号数量降序排序（让数据多的表格在前面）
-    return tables.sort((a, b) => b.rows.length - a.rows.length)
+    return tables
 })
 
 // ==================== 方法 ====================
@@ -352,18 +391,19 @@ async function loadData () {
 
         if (res.data && Array.isArray(res.data)) {
             // 排序：按商品名称和容量排序，确保相同型号的记录在一起
-            const sortedData = res.data.sort((a, b) => {
-                // 先按商品名称排序
-                if (a.goods_name !== b.goods_name) {
-                    return a.goods_name.localeCompare(b.goods_name, 'zh-CN')
-                }
-                // 再按容量排序（提取数字部分）
-                const getCapacityValue = (capacity: string) => {
-                    const match = capacity.match(/(\d+)/)
-                    return match ? parseInt(match[1]) : 0
-                }
-                return getCapacityValue(a.capacity) - getCapacityValue(b.capacity)
-            })
+            const sortedData = res.data
+            // .sort((a, b) => {
+            //     // 先按商品名称排序
+            //     if (a.goods_name !== b.goods_name) {
+            //         return a.goods_name.localeCompare(b.goods_name, 'zh-CN')
+            //     }
+            //     // 再按容量排序（提取数字部分）
+            //     const getCapacityValue = (capacity: string) => {
+            //         const match = capacity.match(/(\d+)/)
+            //         return match ? parseInt(match[1]) : 0
+            //     }
+            //     return getCapacityValue(a.capacity) - getCapacityValue(b.capacity)
+            // })
 
             // 处理数据：添加编辑用的价格字段
             tableData.value = sortedData.map(item => ({
@@ -638,7 +678,7 @@ onMounted(() => {
 }
 
 .excel-table {
-    width: 100%;
+
     border-collapse: collapse;
     background: white;
     font-size: 14px;
@@ -679,7 +719,7 @@ onMounted(() => {
 
         &.col-model {
             left: 0;
-            min-width: 200px;
+            width: 200px;
             font-weight: 500;
             color: #303133;
 
@@ -694,7 +734,7 @@ onMounted(() => {
 
         &.col-capacity {
             left: 200px;
-            min-width: 100px;
+            width: 100px;
             font-weight: 500;
         }
     }
@@ -703,9 +743,31 @@ onMounted(() => {
         min-width: 150px;
     }
 
+    .col-remark {
+        min-width: 300px;
+        max-width: 400px;
+        background: #fffbf0;
+
+        &.remark-merged {
+            vertical-align: top;
+            padding: 16px;
+        }
+    }
+
     .empty-cell {
         color: #c0c4cc;
     }
+}
+
+// 备注内容
+.remark-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.8;
+    font-size: 13px;
+    color: #606266;
+    text-align: left;
+    padding: 4px 0;
 }
 
 // 价格单元格
