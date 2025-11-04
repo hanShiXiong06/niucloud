@@ -22,7 +22,7 @@ class QuotationModelService extends BaseAdminService
     {
         $field = 'id,site_id,goods_id,goods_name,status,create_at,update_at';
         $order = 'id desc';
-        $list = $this->model->where($where)->field($field)->order($order)->select()->toArray();
+        $list = $this->model->field($field)->order($order)->select()->toArray();
         return $list;
     }
 }

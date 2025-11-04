@@ -75,6 +75,8 @@ class DeductionConfigService extends BaseAdminService
         $data['site_id'] = $this->site_id;
         $data['create_at'] = time();
         $data['update_at'] = time();
+        $data['model_id'] = implode(',', $data['model_id']);
+        $data['price_id'] = implode(',', $data['price_id']);
         // remark_text
         $data['remark_text'] = $data['remark_text'];
 
@@ -91,8 +93,11 @@ class DeductionConfigService extends BaseAdminService
      */
     public function edit(int $id, array $data)
     {
+
         $data['update_at'] = time();
         $data['remark_text'] = $data['remark_text'];
+        $data['model_id'] = $data['model_id'] ?? ''; 
+        $data['price_id'] = $data['price_id'] ?? '';
 
         $this->model->where([
             ['id', '=', $id],

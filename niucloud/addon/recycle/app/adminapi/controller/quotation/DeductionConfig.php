@@ -18,8 +18,8 @@ class DeductionConfig extends BaseAdminController
     {
         $data = $this->request->params([
             ['config_name', ''],
-            ['goods_series', ''],
-            ['price_type', ''],
+            ['model_id', ''],
+            ['price_id', ''],
             ['is_enable', '']
         ]);
 
@@ -32,8 +32,8 @@ class DeductionConfig extends BaseAdminController
     public function lists()
     {
         $data = $this->request->params([
-            ['goods_series', ''],
-            ['price_type', '']
+            ['model_id', ''],
+            ['price_id', '']
         ]);
 
         return success((new DeductionConfigService())->getList($data));
@@ -55,6 +55,8 @@ class DeductionConfig extends BaseAdminController
         $data = $this->request->params([
             ['config_name', ''],
             ['remark_text', ''],
+            ['model_id', ''],
+            ['price_id', ''],
             ['sort', 0],
             ['is_enable', 1]
         ]);
@@ -75,6 +77,8 @@ class DeductionConfig extends BaseAdminController
         $data = $this->request->params([
             ['config_name', ''],
             ['remark_text', ''],
+            ['model_id', ''],
+            ['price_id', ''],   
             ['sort', 0],
             ['is_enable', 1]
         ]);

@@ -72,16 +72,10 @@
                         </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column prop="price_id" label="报价类型" min-width="150">
+                <el-table-column prop="price_id" label="报价类型" min-width="120">
                     <template #default="{ row }">
-                        <el-tag
-                            v-for="(id, idx) in row.price_id.split(',')"
-                            :key="idx"
-                            size="small"
-                            type="success"
-                            class="mr-1"
-                        >
-                            {{ id.trim() === '114' ? '靓机/小花' : id.trim() === '115' ? '花机/内爆' : id.trim() }}
+                        <el-tag size="small" type="success">
+                            {{ row.price_id === '114' ? '靓机/小花' : row.price_id === '115' ? '花机/内爆' : row.price_id }}
                         </el-tag>
                     </template>
                 </el-table-column>
@@ -136,9 +130,9 @@
                     <el-input v-model="formData.config_name" placeholder="请输入配置名称" />
                 </el-form-item>
 
-                <el-form-item label="适用型号" prop="model_ids">
+                <el-form-item label="适用型号" prop="model_id">
                     <el-select
-                        v-model="formData.model_ids"
+                        v-model="formData.model_id"
                         multiple
                         filterable
                         placeholder="请选择适用的型号"
@@ -154,10 +148,9 @@
                     <div class="form-tip">可选择多个型号，此配置将应用于所选的所有型号</div>
                 </el-form-item>
 
-                <el-form-item label="报价类型" prop="price_ids">
+                <el-form-item label="报价类型" prop="price_id">
                     <el-select
-                        v-model="formData.price_ids"
-                        multiple
+                        v-model="formData.price_id"
                         placeholder="请选择报价类型"
                         style="width: 100%"
                     >
@@ -168,7 +161,7 @@
                             :value="item.value"
                         />
                     </el-select>
-                    <div class="form-tip">可选择多个报价类型，此配置将应用于所选的所有类型</div>
+                    <div class="form-tip">只能选择一个报价类型（114-靓机/小花 或 115-花机/内爆）</div>
                 </el-form-item>
 
                 <el-form-item label="备注说明" prop="remark_text">
@@ -237,10 +230,8 @@ const formRef = ref<FormInstance>()
 const formData = reactive({
     id: 0,
     config_name: '',
-    model_id: '',
     price_id: '',
-    model_ids: [] as number[], // 用于选择器的数组
-    price_ids: [] as string[], // 用于选择器的数组
+    model_id: [] as number[], // 用于选择器的数组
     remark_text: '',
     sort: 0,
     is_enable: 1
@@ -258,8 +249,8 @@ const priceTypeOptions = [
 // 表单验证规则
 const formRules: FormRules = {
     config_name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
-    model_ids: [{ required: true, message: '请选择型号', trigger: 'change', type: 'array', min: 1 }],
-    price_ids: [{ required: true, message: '请选择报价类型', trigger: 'change', type: 'array', min: 1 }],
+    model_id: [{ required: true, message: '请选择型号', trigger: 'change', type: 'array', min: 1 }],
+    price_id: [{ required: true, message: '请选择报价类型', trigger: 'change' }],
     remark_text: [{ required: true, message: '请输入备注说明', trigger: 'blur' }]
 }
 
@@ -317,10 +308,10 @@ const handleAdd = () => {
     Object.assign(formData, {
         id: 0,
         config_name: '',
-        model_id: '',
+
         price_id: '',
-        model_ids: [],
-        price_ids: [],
+        model_id: [],
+
         remark_text: '',
         sort: 0,
         is_enable: 1
@@ -336,11 +327,14 @@ const handleEdit = async (row: any) => {
 
     try {
         const res = await getDeductionConfigInfo(row.id)
-        Object.assign(formData, res.data)
+        const data = res.data
 
-        // 将字符串转换为数组用于选择器回显
-        formData.model_ids = formData.model_id ? formData.model_id.split(',').map((id: string) => parseInt(id.trim())) : []
-        formData.price_ids = formData.price_id ? formData.price_id.split(',').map((id: string) => id.trim()) : []
+        // 将后端返回的字符串转换为表单需要的格式
+        Object.assign(formData, {
+            ...data,
+            model_id: data.model_id ? data.model_id.split(',').map((id: string) => parseInt(id.trim())) : [],
+            price_id: data.price_id || ''
+        })
     } catch (error) {
         ElMessage.error('加载配置详情失败')
         dialogVisible.value = false
@@ -360,8 +354,8 @@ const handleSubmit = async () => {
                 // 将数组转换为逗号分隔的字符串
                 const submitData = {
                     ...formData,
-                    model_id: formData.model_ids.join(','),
-                    price_id: formData.price_ids.join(',')
+                    model_id: formData.model_id.join(','),
+                    price_id: formData.price_id
                 }
 
                 if (formData.id) {
