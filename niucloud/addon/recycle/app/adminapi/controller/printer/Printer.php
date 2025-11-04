@@ -78,8 +78,12 @@ class Printer extends BaseAdminController
             'user_key' => 'require',
         ]);
         
+        try {
         $res = $this->service->bindPrinter($data);
         return success('绑定成功', $res);
+        } catch (\Exception $e) {
+            return fail('绑定失败：' . $e->getMessage());
+        }
     }
 
     /**
@@ -88,8 +92,12 @@ class Printer extends BaseAdminController
      */
     public function unbindPrinter()
     {
+        try {
         $res = $this->service->unbindPrinter();
         return success('解绑成功', $res);
+        } catch (\Exception $e) {
+            return fail('解绑失败：' . $e->getMessage());
+        }
     }
 
     /**
@@ -112,7 +120,25 @@ class Printer extends BaseAdminController
             'user_key' => 'require',
         ]);
         
-        return success($this->service->testPrint($data));
+        try {
+            $result = $this->service->testPrint($data);
+            if ($result['code'] == 0) {
+                return success($result['message'], $result);
+            } else {
+                // 服务层已记录日志，直接返回错误
+                return fail($result['message']);
+            }
+        } catch (\Exception $e) {
+            $errorMsg = '测试失败：' . $e->getMessage();
+            \think\facade\Log::error('【测试打印控制器】' . $errorMsg, [
+                'data' => $data,
+                'exception_message' => $e->getMessage(),
+                'exception_file' => $e->getFile(),
+                'exception_line' => $e->getLine(),
+                'exception_trace' => $e->getTraceAsString()
+            ]);
+            return fail($errorMsg);
+        }
     }
     
     /**
@@ -132,7 +158,25 @@ class Printer extends BaseAdminController
             ['copies', 1]
         ]);
         
-        return success($this->service->printLabel($data));
+        try {
+            $result = $this->service->printLabel($data);
+            if ($result['code'] == 0) {
+                return success($result['message'], $result);
+            } else {
+                // 服务层已记录日志，直接返回错误
+                return fail($result['message']);
+            }
+        } catch (\Exception $e) {
+            $errorMsg = '打印失败：' . $e->getMessage();
+            \think\facade\Log::error('【打印标签控制器】' . $errorMsg, [
+                'data' => $data,
+                'exception_message' => $e->getMessage(),
+                'exception_file' => $e->getFile(),
+                'exception_line' => $e->getLine(),
+                'exception_trace' => $e->getTraceAsString()
+            ]);
+            return fail($errorMsg);
+        }
     }
 
     /**
@@ -142,7 +186,12 @@ class Printer extends BaseAdminController
      */
     public function printDeviceLabel(int $id)
     {
-        return success($this->service->printDeviceLabel($id));
+        $result = $this->service->printDeviceLabel($id);
+        if ($result['success']) {
+            return success($result);
+        } else {
+            return fail($result['message']);
+        }
     }
 
     /**
@@ -151,7 +200,34 @@ class Printer extends BaseAdminController
      */
     public function lists()
     {
-        return success($this->service->lists());
+        // 获取是否查询状态的参数
+        $withStatus = $this->request->param('with_status', false);
+        $withStatus = filter_var($withStatus, FILTER_VALIDATE_BOOLEAN);
+        
+        return success($this->service->lists($withStatus));
+    }
+    
+    /**
+     * 批量查询打印机状态
+     * @return Response
+     */
+    public function batchQueryStatus()
+    {
+        $data = $this->request->params([
+            ['printer_ids', []]
+        ]);
+        
+        // 验证参数
+        if (empty($data['printer_ids']) || !is_array($data['printer_ids'])) {
+            return fail('请提供打印机ID列表');
+        }
+        
+        try {
+            $result = $this->service->batchQueryStatus($data['printer_ids']);
+            return success('查询成功', $result);
+        } catch (\Exception $e) {
+            return fail('查询失败：' . $e->getMessage());
+        }
     }
 
     /**
@@ -179,7 +255,21 @@ class Printer extends BaseAdminController
             ['user_key', ''],
             ['type', 'label']
         ]);
-        return success($this->service->add($data));
+        
+        // 验证参数
+        $this->validate($data, [
+            'printer_name' => 'require',
+            'sn' => 'require',
+            'user_name' => 'require',
+            'user_key' => 'require',
+        ]);
+        
+        try {
+            $result = $this->service->add($data);
+            return success('添加成功', $result);
+        } catch (\Exception $e) {
+            return fail('添加失败：' . $e->getMessage());
+        }
     }
 
     /**
@@ -206,8 +296,12 @@ class Printer extends BaseAdminController
             'user_key' => 'require',
         ]);
         
+        try {
         $this->service->edit($id, $data);
         return success('更新成功');
+        } catch (\Exception $e) {
+            return fail('更新失败：' . $e->getMessage());
+        }
     }
 
     /**
@@ -217,8 +311,12 @@ class Printer extends BaseAdminController
      */
     public function del(int $id)
     {
+        try {
         $this->service->del($id);
         return success('删除成功');
+        } catch (\Exception $e) {
+            return fail('删除失败：' . $e->getMessage());
+        }
     }
 
     /**
@@ -232,7 +330,26 @@ class Printer extends BaseAdminController
             ['status', 1]
         ]);
         
+        try {
         $this->service->toggleStatus($id, (int)$data['status']);
         return success($data['status'] ? '打印机已激活' : '打印机已停用');
+        } catch (\Exception $e) {
+            return fail('操作失败：' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 查询打印机状态
+     * @param int $id 打印机ID
+     * @return Response
+     */
+    public function queryPrinterStatus(int $id)
+    {
+        try {
+            $result = $this->service->queryPrinterStatus($id);
+            return success($result);
+        } catch (\Exception $e) {
+            return fail('查询失败：' . $e->getMessage());
+        }
     }
 } 

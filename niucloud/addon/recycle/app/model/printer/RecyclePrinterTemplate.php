@@ -127,36 +127,4 @@ class RecyclePrinterTemplate extends BaseModel
         ];
         return $is_default[$data['is_default']] ?? '';
     }
-
-    /**
-     * 保存前的钩子 - 调试content字段
-     * @param $data
-     */
-    public static function onBeforeInsert($data)
-    {
-        // 确保$data是数组类型
-        $dataArray = is_array($data) ? $data : $data->toArray();
-        
-        \think\facade\Log::info('模型保存前钩子 - INSERT', [
-            'content' => $dataArray['content'] ?? '无content字段',
-            'content_length' => isset($dataArray['content']) ? strlen($dataArray['content']) : 0,
-            'all_fields' => array_keys($dataArray)
-        ]);
-    }
-    
-    /**
-     * 保存前的钩子 - 调试content字段
-     * @param $data
-     */
-    public static function onBeforeUpdate($data)
-    {
-        // 确保$data是数组类型
-        $dataArray = is_array($data) ? $data : $data->toArray();
-        
-        \think\facade\Log::info('模型保存前钩子 - UPDATE', [
-            'content' => $dataArray['content'] ?? '无content字段',
-            'content_length' => isset($dataArray['content']) ? strlen($dataArray['content']) : 0,
-            'all_fields' => array_keys($dataArray)
-        ]);
-    }
 } 

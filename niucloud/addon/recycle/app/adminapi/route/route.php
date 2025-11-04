@@ -251,6 +251,8 @@ Route::group('recycle', function () {
     Route::get('printer/brand_list', 'addon\recycle\app\adminapi\controller\printer\Printer@getBrandList');
     // 获取打印机列表
     Route::get('printer/lists', 'addon\recycle\app\adminapi\controller\printer\Printer@lists');
+    // 批量查询打印机状态
+    Route::post('printer/batch_status', 'addon\recycle\app\adminapi\controller\printer\Printer@batchQueryStatus');
     // 获取打印机详情
     Route::get('printer/:id', 'addon\recycle\app\adminapi\controller\printer\Printer@info');
     // 添加打印机
@@ -261,6 +263,8 @@ Route::group('recycle', function () {
     Route::delete('printer/:id', 'addon\recycle\app\adminapi\controller\printer\Printer@del');
     // 切换打印机状态
     Route::post('printer/user/toggle/:id', 'addon\recycle\app\adminapi\controller\printer\Printer@toggleStatus');
+    // 查询打印机状态
+    Route::get('printer/status/:id', 'addon\recycle\app\adminapi\controller\printer\Printer@queryPrinterStatus');
     
     // 获取用户绑定的打印机
     Route::get('printer/user', 'addon\recycle\app\adminapi\controller\printer\Printer@getUserPrinter');
@@ -292,16 +296,24 @@ Route::group('recycle', function () {
     Route::post('printer_template/default/:id', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@setDefault');
     // 预览模板
     Route::get('printer_template/preview/:id', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@preview');
+    // 验证模板数据
+    Route::post('printer_template/validate', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@validateTemplate');
+    // 验证XML格式
+    Route::post('printer_template/validate_xml', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@validateXml');
+    // 提取模板变量
+    Route::post('printer_template/extract_variables', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@extractVariables');
+    // 渲染模板
+    Route::post('printer_template/render', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@render');
     // 测试打印模板
     Route::post('printer_template/test_print/:id', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@testPrint');
     // 获取模板类型列表
     Route::get('printer_template/type_list', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@getTypeList');
     // 获取默认模板
     Route::get('printer_template/default', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@getDefaultTemplate');
-    // 测试JSON格式
-    Route::post('printer_template/test_json_format', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@testJsonFormat');
-    // 调试变量映射
-    // 获取可用变量列表
+    // 获取设备打印数据
+    Route::get('printer_template/device_print_data/:device_id', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@getDevicePrintData');
+    // 打印设备标签
+    Route::post('printer_template/print_device_label/:device_id', 'addon\recycle\app\adminapi\controller\printer\PrinterTemplate@printDeviceLabel');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,
@@ -460,4 +472,44 @@ Route::group('recycle', function () {
     AdminLog::class
 ]);
 // USER_CODE_END -- recycle_price_image
+
+// USER_CODE_BEGIN -- recycle_quotation
+Route::group('recycle', function () {
+    // 报价单配置管理
+    Route::get('quotation_config', 'addon\recycle\app\adminapi\controller\quotation\QuotationConfig@lists');
+    Route::get('quotation_config/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationConfig@info');
+    Route::post('quotation_config', 'addon\recycle\app\adminapi\controller\quotation\QuotationConfig@add');
+    Route::put('quotation_config/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationConfig@edit');
+    Route::delete('quotation_config/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationConfig@del');
+    Route::put('quotation_config/:id/modify_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationConfig@modifyStatus');
+    
+    // 报价请求管理
+    Route::get('quotation_request', 'addon\recycle\app\adminapi\controller\quotation\QuotationRequest@lists');
+    Route::get('quotation_request/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationRequest@info');
+    Route::post('quotation_request/send_request', 'addon\recycle\app\adminapi\controller\quotation\QuotationRequest@sendRequest');
+    
+    // 报价数据管理
+    Route::get('quotation_data', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@lists');
+    Route::get('quotation_data/all', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@getAll');
+    Route::get('quotation_data/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@info');
+    Route::get('quotation_data/cascade_options', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@getCascadeOptions');
+    Route::post('quotation_data/batch_update_price', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@batchUpdatePrice');
+    
+    // 价格配置管理
+    Route::get('quotation_price_config', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@lists');
+    Route::get('quotation_price_config/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@info');
+    Route::post('quotation_price_config', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@add');
+    Route::put('quotation_price_config/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@edit');
+    Route::delete('quotation_price_config/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@del');
+    Route::put('quotation_price_config/:id/modify_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@modifyStatus');
+    Route::post('quotation_price_config/batch_add_sku', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@batchAddSku');
+    Route::post('quotation_price_config/batch_del', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@batchDel');
+    Route::post('quotation_price_config/clear_all', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@clearAll');
+
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+// USER_CODE_END -- recycle_quotation
 

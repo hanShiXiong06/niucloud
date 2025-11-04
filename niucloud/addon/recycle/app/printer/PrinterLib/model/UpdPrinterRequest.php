@@ -1,6 +1,9 @@
 <?php
 
 namespace Xpyun\model;
+
+use addon\recycle\app\printer\PrinterLib\model\RestRequest;
+
 class UpdPrinterRequest extends RestRequest
 {
 
