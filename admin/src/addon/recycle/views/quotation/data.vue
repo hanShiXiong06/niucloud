@@ -252,6 +252,42 @@ const priceChanges = ref<Record<string, any>>({})
 
 // ==================== 计算属性 ====================
 
+// 配置项排序优先级
+const CONFIG_SORT_ORDER = [
+    // 第一组：全套充新系列
+    ['全套充新    橙色', '全套充新    白色', '全套充新    蓝色'],
+    // 第二组：靓机-单机系列
+    ['靓机-单机100🔋在保100+', '高保靓充50次内在保280+', '小花电池95+保修无要求', '靓机-单机 95电池＋在保60+'],
+    // 第三组：保靓充系列
+    ['高保靓充100次内在保250+', '中保靓充100🔋在保100+', '靓机', '小花'],
+    // 第四组：靓机/小花
+    ['小花', '靓机'],
+    // 第五组：花机/内爆
+    ['花机', '内爆可测']
+].flat()
+
+// 配置项排序函数
+function sortConfigItems (configItems: string[]): string[] {
+    return configItems.sort((a, b) => {
+        const indexA = CONFIG_SORT_ORDER.indexOf(a)
+        const indexB = CONFIG_SORT_ORDER.indexOf(b)
+
+        // 两者都在排序列表中
+        if (indexA !== -1 && indexB !== -1) {
+            return indexA - indexB
+        }
+
+        // 只有a在排序列表中，a优先
+        if (indexA !== -1) return -1
+
+        // 只有b在排序列表中，b优先
+        if (indexB !== -1) return 1
+
+        // 都不在排序列表中，按字母排序
+        return a.localeCompare(b, 'zh-CN')
+    })
+}
+
 // 修改数量
 const changedCount = computed(() => {
     return Object.keys(priceChanges.value).length
@@ -267,9 +303,8 @@ const groupedTables = computed(() => {
 
     data.forEach(row => {
         if (row.prices) {
-            // 获取该行的配置项列表（排序后生成唯一key）
-            const configKeys = Object.keys(row.prices)
-            // .sort()
+            // 获取该行的配置项列表并按自定义顺序排序
+            const configKeys = sortConfigItems(Object.keys(row.prices))
             const configKey = configKeys.join('|||')
 
             if (!configGroupMap.has(configKey)) {
