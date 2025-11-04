@@ -90,48 +90,47 @@
 										<!-- 型号列（跨行） -->
 										<view 
 											class="body-cell col-model model-merged"
-											:style="{ height: `${modelGroup.rows.length * 80}rpx` }"
+											
 										>
 											<text class="cell-text">{{ modelGroup.modelName }}</text>
 										</view>
 
-										<!-- 每一行的数据 -->
-										<view class="rows-container">
+									<!-- 每一行的数据 -->
+									<view class="rows-container">
+										<view
+											v-for="(row, rowIdx) in modelGroup.rows"
+											:key="rowIdx"
+											class="data-row"
+										>
+											<!-- 容量列 -->
+											<view class="body-cell col-capacity">
+												<text class="cell-text">{{ row.capacity }}</text>
+											</view>
+
+											<!-- 价格列 -->
 											<view
-												v-for="(row, rowIdx) in modelGroup.rows"
-												:key="rowIdx"
-												class="data-row"
+												v-for="config in table.configColumns"
+												:key="config"
+												class="body-cell col-price"
 											>
-												<!-- 容量列 -->
-												<view class="body-cell col-capacity">
-													<text class="cell-text">{{ row.capacity }}</text>
-												</view>
-
-												<!-- 价格列 -->
-												<view
-													v-for="config in table.configColumns"
-													:key="config"
-													class="body-cell col-price"
-												>
-													<view v-if="row.prices[config]" class="price-box">
-														<!-- <view class="price-item original">
-															<text class="price-label">原价：</text>
-															<text class="price-value">¥{{ row.prices[config].original || '-' }}</text>
-														</view> -->
-														<view class="price-item final">
-
-															<text class="price-value">¥{{ row.prices[config].final || '-' }}</text>
-														</view>
+												<view v-if="row.prices[config]" class="price-box">
+													<view class="price-item final">
+														<text class="price-value">{{ row.prices[config].final || '-' }}</text>
 													</view>
-													<text v-else class="empty-cell">-</text>
 												</view>
+												<text v-else class="empty-cell">-</text>
+											</view>
 
-												<!-- 备注列 -->
-												<view class="body-cell col-remark">
-													<text class="remark-text">{{ row.value_info || '-' }}</text>
-												</view>
+											<!-- 备注列（条件显示 + 动态高度） -->
+											<view
+												v-if="row.showRemark"
+												class="body-cell col-remark remark-merged"
+												:style="{ height: `${row.remarkRowspan * 80}rpx` }"
+											>
+												<text class="remark-text">{{ row.value_info || '-' }}</text>
 											</view>
 										</view>
+									</view>
 									</view>
 								</view>
 							</view>
@@ -291,6 +290,8 @@ function getModelGroups(rows: any[]) {
 		if (row.goods_name !== currentModelName) {
 			// 新的型号，创建新组
 			if (currentGroup) {
+				// 处理上一组的备注跨行
+				processRemarkRowspan(currentGroup.rows)
 				groups.push(currentGroup)
 			}
 			currentModelName = row.goods_name
@@ -306,10 +307,47 @@ function getModelGroups(rows: any[]) {
 
 	// 添加最后一组
 	if (currentGroup) {
+		processRemarkRowspan(currentGroup.rows)
 		groups.push(currentGroup)
 	}
 
 	return groups
+}
+
+// 处理备注列的跨行逻辑
+function processRemarkRowspan(rows: any[]) {
+	let currentRemark = ''
+	let remarkStartIndex = 0
+
+	rows.forEach((row, index) => {
+		const remark = row.value_info || ''
+		
+		if (remark !== currentRemark) {
+			// 备注内容变化，更新之前的跨行数
+			if (remarkStartIndex < index) {
+				for (let i = remarkStartIndex; i < index; i++) {
+					rows[i].remarkRowspan = index - remarkStartIndex
+				}
+			}
+			
+			// 开始新的备注组
+			currentRemark = remark
+			remarkStartIndex = index
+			row.showRemark = true
+			row.remarkRowspan = 1
+		} else {
+			// 相同备注，不显示
+			row.showRemark = false
+			row.remarkRowspan = 0
+		}
+	})
+
+	// 处理最后一组备注
+	if (remarkStartIndex < rows.length) {
+		for (let i = remarkStartIndex; i < rows.length; i++) {
+			rows[i].remarkRowspan = rows.length - remarkStartIndex
+		}
+	}
 }
 
 // 加载报价数据
@@ -325,7 +363,7 @@ async function loadPriceData() {
 	loading.value = true
 
 	try {
-		const res = await getQuotationPriceList({
+		const res: any = await getQuotationPriceList({
 			quotation_id: priceTypeId.value,
 			is_current: 1,
 			// price_date: new Date().toISOString().split('T')[0]
@@ -635,6 +673,7 @@ onLoad((options: any) => {
 	.col-model {
 		width: 160rpx;
 		flex-shrink: 0;
+        padding: 10rpx;
 		background: #fafafa;
 	}
 
@@ -645,7 +684,7 @@ onLoad((options: any) => {
 
 	.col-price {
 		flex: 1;
-		min-width: 160rpx;
+		min-width: 100rpx;
 	}
 
 	.col-remark {
@@ -655,8 +694,15 @@ onLoad((options: any) => {
 	}
 
 	.model-merged {
-		align-items: flex-start;
+		align-items: center;
 		padding-top: 20rpx;
+	}
+
+	.remark-merged {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-bottom: 1rpx solid #e8e8e8;
 	}
 
 	.cell-text {
