@@ -72,10 +72,16 @@
                         </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column prop="price_id" label="报价ID" min-width="120">
+                <el-table-column prop="price_id" label="报价类型" min-width="150">
                     <template #default="{ row }">
-                        <el-tag v-for="(id, idx) in row.price_id.split(',')" :key="idx" size="small" type="success" class="mr-1">
-                            {{ id.trim() }}
+                        <el-tag
+                            v-for="(id, idx) in row.price_id.split(',')"
+                            :key="idx"
+                            size="small"
+                            type="success"
+                            class="mr-1"
+                        >
+                            {{ id.trim() === '114' ? '靓机/小花' : id.trim() === '115' ? '花机/内爆' : id.trim() }}
                         </el-tag>
                     </template>
                 </el-table-column>
@@ -130,24 +136,39 @@
                     <el-input v-model="formData.config_name" placeholder="请输入配置名称" />
                 </el-form-item>
 
-                <el-form-item label="型号ID" prop="model_id">
-                    <el-input 
-                        v-model="formData.model_id" 
-                        type="textarea"
-                        :rows="2"
-                        placeholder="请输入型号ID，多个用逗号分隔，如：8454,8455,8456" 
-                    />
-                    <div class="form-tip">支持多个型号ID，用英文逗号分隔</div>
+                <el-form-item label="适用型号" prop="model_ids">
+                    <el-select
+                        v-model="formData.model_ids"
+                        multiple
+                        filterable
+                        placeholder="请选择适用的型号"
+                        style="width: 100%"
+                    >
+                        <el-option
+                            v-for="item in modelOptions"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                        />
+                    </el-select>
+                    <div class="form-tip">可选择多个型号，此配置将应用于所选的所有型号</div>
                 </el-form-item>
 
-                <el-form-item label="报价ID" prop="price_id">
-                    <el-input 
-                        v-model="formData.price_id" 
-                        type="textarea"
-                        :rows="2"
-                        placeholder="请输入报价ID，多个用逗号分隔，如：113,114,115" 
-                    />
-                    <div class="form-tip">支持多个报价ID，用英文逗号分隔</div>
+                <el-form-item label="报价类型" prop="price_ids">
+                    <el-select
+                        v-model="formData.price_ids"
+                        multiple
+                        placeholder="请选择报价类型"
+                        style="width: 100%"
+                    >
+                        <el-option
+                            v-for="item in priceTypeOptions"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                        />
+                    </el-select>
+                    <div class="form-tip">可选择多个报价类型，此配置将应用于所选的所有类型</div>
                 </el-form-item>
 
                 <el-form-item label="备注说明" prop="remark_text">
@@ -186,9 +207,10 @@ import {
     getDeductionConfigInfo,
     addDeductionConfig,
     editDeductionConfig,
-    delDeductionConfig,
+    // delDeductionConfig,
     modifyDeductionConfigStatus
 } from '@/addon/recycle/api/deduction'
+import { getQuotationModelList } from '@/addon/recycle/api/quotation'
 
 // 搜索表单
 const searchForm = reactive({
@@ -217,17 +239,41 @@ const formData = reactive({
     config_name: '',
     model_id: '',
     price_id: '',
+    model_ids: [] as number[], // 用于选择器的数组
+    price_ids: [] as string[], // 用于选择器的数组
     remark_text: '',
     sort: 0,
     is_enable: 1
 })
 
+// 型号选项
+const modelOptions = ref<any[]>([])
+
+// 报价类型选项（固定）
+const priceTypeOptions = [
+    { label: '靓机/小花', value: '114' },
+    { label: '花机/内爆', value: '115' }
+]
+
 // 表单验证规则
 const formRules: FormRules = {
     config_name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
-    model_id: [{ required: true, message: '请输入型号ID', trigger: 'blur' }],
-    price_id: [{ required: true, message: '请输入报价ID', trigger: 'blur' }],
+    model_ids: [{ required: true, message: '请选择型号', trigger: 'change', type: 'array', min: 1 }],
+    price_ids: [{ required: true, message: '请选择报价类型', trigger: 'change', type: 'array', min: 1 }],
     remark_text: [{ required: true, message: '请输入备注说明', trigger: 'blur' }]
+}
+
+// 加载型号列表
+const loadModelOptions = async () => {
+    try {
+        const res = await getQuotationModelList({})
+        modelOptions.value = res.data.map((item: any) => ({
+            label: `${item.goods_name} (ID: ${item.goods_id})`,
+            value: item.goods_id
+        }))
+    } catch (error) {
+        console.error('加载型号列表失败:', error)
+    }
 }
 
 // 加载数据
@@ -273,6 +319,8 @@ const handleAdd = () => {
         config_name: '',
         model_id: '',
         price_id: '',
+        model_ids: [],
+        price_ids: [],
         remark_text: '',
         sort: 0,
         is_enable: 1
@@ -289,6 +337,10 @@ const handleEdit = async (row: any) => {
     try {
         const res = await getDeductionConfigInfo(row.id)
         Object.assign(formData, res.data)
+
+        // 将字符串转换为数组用于选择器回显
+        formData.model_ids = formData.model_id ? formData.model_id.split(',').map((id: string) => parseInt(id.trim())) : []
+        formData.price_ids = formData.price_id ? formData.price_id.split(',').map((id: string) => id.trim()) : []
     } catch (error) {
         ElMessage.error('加载配置详情失败')
         dialogVisible.value = false
@@ -305,11 +357,18 @@ const handleSubmit = async () => {
         if (valid) {
             formLoading.value = true
             try {
+                // 将数组转换为逗号分隔的字符串
+                const submitData = {
+                    ...formData,
+                    model_id: formData.model_ids.join(','),
+                    price_id: formData.price_ids.join(',')
+                }
+
                 if (formData.id) {
-                    await editDeductionConfig(formData.id, formData)
+                    await editDeductionConfig(formData.id, submitData)
                     ElMessage.success('编辑成功')
                 } else {
-                    await addDeductionConfig(formData)
+                    await addDeductionConfig(submitData)
                     ElMessage.success('添加成功')
                 }
                 dialogVisible.value = false
@@ -330,7 +389,7 @@ const handleDelete = async (row: any) => {
             type: 'warning'
         })
 
-        await delDeductionConfig(row.id)
+        // await delDeductionConfig(row.id)
         ElMessage.success('删除成功')
         loadData()
     } catch (error: any) {
@@ -355,6 +414,7 @@ const handleStatusChange = async (row: any) => {
 
 onMounted(() => {
     loadData()
+    loadModelOptions()
 })
 </script>
 

@@ -516,6 +516,10 @@ Route::group('recycle', function () {
     Route::delete('deduction_config/:id', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@del');
     Route::put('deduction_config/modify_status', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@modifyStatus');
 
+    // 报价型号
+    Route::get('quotation_model/lists', 'addon\recycle\app\adminapi\controller\quotation\QuotationModel@lists');
+
+
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,

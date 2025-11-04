@@ -222,5 +222,11 @@ export function batchUpdateQuotationPrice(params: {
 export function modifyQuotationPriceConfigStatus(id: number, params: Record<string, any>) {
     return request.put(`recycle/quotation_price_config/${id}/modify_status`, params, { showErrorMessage: true, showSuccessMessage: true })
 }
+
+
+//quotation_model/lists
+export function getQuotationModelList(params: Record<string, any>) {
+    return request.get(`recycle/quotation_model/lists`, { params })
+}
 // USER_CODE_END -- quotation
 
