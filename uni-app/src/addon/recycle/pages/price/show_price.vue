@@ -1,22 +1,26 @@
 <template>
 	<view class="show-price-page">
 		<!-- 顶部导航栏 -->
-		<u-navbar
-			:title="pageTitle"
-			:safeAreaInsetTop="true"
-			:placeholder="true"
-			:autoBack="true"
-		></u-navbar>
+		<view class="custom-navbar">
+			<view class="navbar-content">
+				<view class="navbar-left" @click="goBack">
+					<text class="iconfont icon-left"></text>
+				</view>
+				<view class="navbar-title">{{ pageTitle }}</view>
+				<view class="navbar-right"></view>
+			</view>
+		</view>
 
 		<!-- 加载状态 -->
 		<view v-if="loading" class="loading-container">
-			<u-loading mode="circle" size="50"></u-loading>
+			<view class="loading-spinner"></view>
 			<text class="loading-text">加载中...</text>
 		</view>
 
 		<!-- 空状态 -->
 		<view v-else-if="!loading && groupedTables.length === 0" class="empty-container">
-			<u-empty mode="data" text="暂无报价数据"></u-empty>
+			<view class="empty-icon">📋</view>
+			<text class="empty-text">暂无报价数据</text>
 		</view>
 
 		<!-- 报价数据 -->
@@ -334,6 +338,11 @@ function formatTime(timestamp: number): string {
 	return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
+// 返回上一页
+function goBack() {
+	uni.navigateBack()
+}
+
 // 页面加载
 onLoad((options: any) => {
 	if (options.id) {
@@ -354,26 +363,103 @@ onLoad((options: any) => {
 	background: #f5f5f5;
 }
 
+// 自定义导航栏
+.custom-navbar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 999;
+	background: #fff;
+	border-bottom: 1rpx solid #f0f0f0;
+
+	.navbar-content {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		height: 88rpx;
+		padding: 0 32rpx;
+		padding-top: env(safe-area-inset-top);
+
+		.navbar-left {
+			width: 80rpx;
+			display: flex;
+			align-items: center;
+
+			.iconfont {
+				font-size: 40rpx;
+				color: #333;
+			}
+		}
+
+		.navbar-title {
+			flex: 1;
+			text-align: center;
+			font-size: 32rpx;
+			font-weight: 600;
+			color: #333;
+		}
+
+		.navbar-right {
+			width: 80rpx;
+		}
+	}
+}
+
 .loading-container {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 200rpx 0;
+	padding: 300rpx 0;
+
+	.loading-spinner {
+		width: 80rpx;
+		height: 80rpx;
+		border: 6rpx solid #f3f3f3;
+		border-top-color: #409eff;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+	}
 
 	.loading-text {
-		margin-top: 20rpx;
+		margin-top: 24rpx;
 		font-size: 28rpx;
 		color: #999;
 	}
 }
 
+@keyframes spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
 .empty-container {
-	padding: 200rpx 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 300rpx 0;
+
+	.empty-icon {
+		font-size: 120rpx;
+		margin-bottom: 24rpx;
+	}
+
+	.empty-text {
+		font-size: 28rpx;
+		color: #999;
+	}
 }
 
 .price-content {
 	padding: 20rpx;
+	padding-top: calc(88rpx + env(safe-area-inset-top) + 20rpx);
+}
+
+.loading-container,
+.empty-container {
+	padding-top: calc(88rpx + env(safe-area-inset-top) + 100rpx);
 }
 
 .price-header {
