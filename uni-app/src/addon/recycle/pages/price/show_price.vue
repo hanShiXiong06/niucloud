@@ -81,58 +81,66 @@
 							<!-- 表体 -->
 							<view class="table-body">
 								<!-- 型号分组 -->
-								<view
-									v-for="(modelGroup, modelIdx) in getModelGroups(table.rows)"
-									:key="modelIdx"
-									class="model-group"
-								>
-									<view class="model-group-row">
-										<!-- 型号列（跨行） -->
-										<view 
-											class="body-cell col-model model-merged"
-											
-										>
-											<text class="cell-text">{{ modelGroup.modelName }}</text>
-										</view>
-
-									<!-- 每一行的数据 -->
-									<view class="rows-container">
-										<view
-											v-for="(row, rowIdx) in modelGroup.rows"
-											:key="rowIdx"
-											class="data-row"
-										>
-											<!-- 容量列 -->
-											<view class="body-cell col-capacity">
-												<text class="cell-text">{{ row.capacity }}</text>
-											</view>
-
-											<!-- 价格列 -->
-											<view
-												v-for="config in table.configColumns"
-												:key="config"
-												class="body-cell col-price"
-											>
-												<view v-if="row.prices[config]" class="price-box">
-													<view class="price-item final">
-														<text class="price-value">{{ row.prices[config].final || '-' }}</text>
-													</view>
-												</view>
-												<text v-else class="empty-cell">-</text>
-											</view>
-
-											<!-- 备注列（条件显示 + 动态高度） -->
-											<view
-												v-if="row.showRemark"
-												class="body-cell col-remark remark-merged"
-												:style="{ height: `${row.remarkRowspan * 80}rpx` }"
-											>
-												<text class="remark-text">{{ row.value_info || '-' }}</text>
-											</view>
-										</view>
+							<view
+								v-for="(modelGroup, modelIdx) in getModelGroups(table.rows)"
+								:key="modelIdx"
+								class="model-group"
+							>
+								<view class="model-group-row">
+									<!-- 型号列（跨行） -->
+									<view class="body-cell col-model model-merged">
+										<text class="cell-text">{{ modelGroup.modelName }}</text>
 									</view>
+
+									<!-- 数据区域（容量 + 价格 + 备注） -->
+									<view class="data-area">
+										<!-- 容量和价格列区域 -->
+										<view class="data-columns">
+											<view
+												v-for="(row, rowIdx) in modelGroup.rows"
+												:key="rowIdx"
+												class="data-row"
+											>
+												<!-- 容量列 -->
+												<view class="body-cell col-capacity">
+													<text class="cell-text">{{ row.capacity }}</text>
+												</view>
+
+												<!-- 价格列 -->
+												<view
+													v-for="config in table.configColumns"
+													:key="config"
+													class="body-cell col-price"
+												>
+													<view v-if="row.prices[config]" class="price-box">
+														<view class="price-item final">
+															<text class="price-value">{{ row.prices[config].final || '-' }}</text>
+														</view>
+													</view>
+													<text v-else class="empty-cell">-</text>
+												</view>
+											</view>
+										</view>
+
+										<!-- 备注列区域（独立，使用绝对定位实现跨行） -->
+										<view class="remark-column">
+											<view
+												v-for="(row, rowIdx) in modelGroup.rows"
+												:key="rowIdx"
+												class="remark-cell-wrapper"
+											>
+												<view
+													v-if="row.showRemark"
+													class="body-cell col-remark remark-merged"
+													:style="{ height: `${row.remarkRowspan * 80}rpx` }"
+												>
+													<text class="remark-text">{{ row.displayRemark || '-' }}</text>
+												</view>
+											</view>
+										</view>
 									</view>
 								</view>
+							</view>
 							</view>
 						</view>
 					</scroll-view>
@@ -320,7 +328,8 @@ function processRemarkRowspan(rows: any[]) {
 	let remarkStartIndex = 0
 
 	rows.forEach((row, index) => {
-		const remark = row.value_info || ''
+		// 标准化备注：空值统一处理为空字符串（显示时会变成 '-'）
+		const remark = row.value_info?.trim() || ''
 		
 		if (remark !== currentRemark) {
 			// 备注内容变化，更新之前的跨行数
@@ -335,6 +344,8 @@ function processRemarkRowspan(rows: any[]) {
 			remarkStartIndex = index
 			row.showRemark = true
 			row.remarkRowspan = 1
+			// 保存处理后的备注值（用于显示）
+			row.displayRemark = remark || '-'
 		} else {
 			// 相同备注，不显示
 			row.showRemark = false
@@ -626,7 +637,13 @@ onLoad((options: any) => {
 				display: flex;
 			}
 
-			.rows-container {
+			.data-area {
+				flex: 1;
+				display: flex;
+				position: relative;
+			}
+
+			.data-columns {
 				flex: 1;
 				display: flex;
 				flex-direction: column;
@@ -640,6 +657,19 @@ onLoad((options: any) => {
 				&:last-child {
 					border-bottom: none;
 				}
+			}
+
+			.remark-column {
+				width: 240rpx;
+				flex-shrink: 0;
+				display: flex;
+				flex-direction: column;
+				position: relative;
+			}
+
+			.remark-cell-wrapper {
+				min-height: 80rpx;
+				position: relative;
 			}
 		}
 	}
@@ -702,7 +732,12 @@ onLoad((options: any) => {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border-bottom: 1rpx solid #e8e8e8;
+		border-bottom: 1rpx solid #f0f0f0;
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		width: 100%;
 	}
 
 	.cell-text {
