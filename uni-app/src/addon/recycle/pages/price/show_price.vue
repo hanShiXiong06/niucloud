@@ -120,7 +120,7 @@
 										class="body-cell col-remark remark-merged"
 										:style="{ height: getCellHeight(row.remarkRowspan) }"
 									>
-										<text class="remark-text">{{ row.add_value_info || '-' }}</text>
+										<text class="remark-text">{{ row.value_info || '-' }}</text>
 									</view>
 								</view>
 							</view>
@@ -138,17 +138,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { img } from '@/utils/common'
+import { getQuotationPriceList, type QuotationPriceData } from '@/addon/recycle/api/quotation'
 
 // 页面参数
-const priceTypeId = ref('') // 报价类型ID（通过可视化配置传入）
+const priceTypeId = ref<string>('')
 const pageTitle = ref('报价查询')
 
 // 数据状态
 const loading = ref(false)
-const tableData = ref<any[]>([])
+const tableData = ref<QuotationPriceData[]>([])
 const priceTypeName = ref('')
 const updateTime = ref('')
 
@@ -228,7 +228,7 @@ const groupedTables = computed(() => {
 			}
 
 			// 处理备注跨行
-			const remark = row.value_info || row.add_value_info || ''
+			const remark = row.value_info || ''
 			if (remark !== currentRemark) {
 				if (remarkStartIndex < index) {
 					for (let i = remarkStartIndex; i < index; i++) {
@@ -289,12 +289,10 @@ async function loadPriceData() {
 	loading.value = true
 
 	try {
-		const res = await uni.$u.http.get('/api/recycle/quotation_price/lists', {
-			params: {
-				quotation_id: priceTypeId.value,
-				is_current: 1,
-				price_date: new Date().toISOString().split('T')[0]
-			}
+		const res = await getQuotationPriceList({
+			quotation_id: priceTypeId.value,
+			is_current: 1,
+			price_date: new Date().toISOString().split('T')[0]
 		})
 
 		if (res.code === 1 && res.data) {
@@ -317,7 +315,7 @@ async function loadPriceData() {
 	} catch (error: any) {
 		console.error('加载报价数据失败:', error)
 		uni.showToast({
-			title: '加载失败',
+			title: error.msg || '加载失败',
 			icon: 'none'
 		})
 	} finally {
@@ -595,4 +593,3 @@ onLoad((options: any) => {
 	}
 }
 </style>
-
