@@ -284,6 +284,7 @@ class QuotationDataService extends BaseAdminService
         
         $search_model = $this->dataModel->where([['site_id', '=', $this->site_id]])
             ->withSearch(['quotation_id', 'price_name', 'goods_id', 'goods_name', 'capacity', 'price_date', 'is_current'], $where)
+            ->with(['deductionConfig'])  // 加载关联的扣费配置
             ->field($field)
             ->order('id asc');
         
@@ -336,6 +337,7 @@ class QuotationDataService extends BaseAdminService
         
         $search_model = $this->dataModel->where([['site_id', '=', $this->site_id]])
             ->withSearch(['quotation_id', 'price_name', 'goods_id', 'goods_name', 'capacity', 'price_date', 'is_current'], $where)
+            ->with(['deductionConfig'])  // 加载关联的扣费配置
             ->field($field)
             ->order('id asc');
         
@@ -452,6 +454,7 @@ class QuotationDataService extends BaseAdminService
                 ['id', '=', $id],
                 ['site_id', '=', $this->site_id]
             ])
+            ->with(['deductionConfig'])  // 加载关联的扣费配置
             ->findOrEmpty()
             ->toArray();
 

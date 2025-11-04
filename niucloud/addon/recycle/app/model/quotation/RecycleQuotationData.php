@@ -12,6 +12,7 @@
 namespace addon\recycle\app\model\quotation;
 
 use core\base\BaseModel;
+use addon\recycle\app\model\quotation\RecycleDeductionConfig;
 
 /**
  * 报价数据模型
@@ -172,4 +173,15 @@ class RecycleQuotationData extends BaseModel
             $query->where("site_id", $value);
         }
     }
+    /**
+     * 关联扣费配置表
+     * 本表字段: add_value_info (int) 存储 deduction_config 的 id
+     * 关联表: recycle_deduction_config
+     */
+    public function deductionConfig()
+    {
+        return $this->belongsTo(RecycleDeductionConfig::class, 'add_value_info', 'id')
+            ->bind(['value_info' => 'remark_text']);
+    }
+    
 }

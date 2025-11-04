@@ -22,11 +22,11 @@ class DeductionConfigService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'id, site_id, config_name, goods_series, price_type, sort, is_enable, create_at, update_at';
+        $field = 'id, site_id, config_name,remark_text, sort, is_enable, create_at, update_at';
         $order = 'sort asc, id desc';
 
         $searchModel = $this->model->where([['site_id', '=', $this->site_id]])
-            ->withSearch(['config_name', 'goods_series', 'price_type', 'is_enable'], $where)
+            ->withSearch(['config_name', 'is_enable'], $where)
             ->field($field)
             ->order($order);
 
@@ -39,11 +39,11 @@ class DeductionConfigService extends BaseAdminService
      */
     public function getList(array $where = [])
     {
-        $field = 'id, site_id, config_name, goods_series, price_type, deduction_items, remark_text, sort, is_enable';
+        $field = 'id, site_id, config_name,remark_text,  remark_text, sort, is_enable';
         $order = 'sort asc, id desc';
 
         $list = $this->model->where([['site_id', '=', $this->site_id], ['is_enable', '=', 1]])
-            ->withSearch(['goods_series', 'price_type'], $where)
+            ->withSearch($where)
             ->field($field)
             ->order($order)
             ->select()
@@ -57,7 +57,7 @@ class DeductionConfigService extends BaseAdminService
      */
     public function getInfo(int $id)
     {
-        $field = 'id, site_id, config_name, goods_series, price_type, deduction_items, remark_text, sort, is_enable';
+        $field = 'id, site_id, config_name,remark_text,  remark_text, sort, is_enable';
 
         $info = $this->model->where([
             ['id', '=', $id],
@@ -75,11 +75,8 @@ class DeductionConfigService extends BaseAdminService
         $data['site_id'] = $this->site_id;
         $data['create_at'] = time();
         $data['update_at'] = time();
-
-        // 生成remark_text
-        if (!empty($data['deduction_items'])) {
-            $data['remark_text'] = $this->generateRemarkText($data['deduction_items'], $data['config_name']);
-        }
+        // remark_text
+        $data['remark_text'] = $data['remark_text'];
 
         $res = $this->model->create($data);
         
@@ -95,11 +92,7 @@ class DeductionConfigService extends BaseAdminService
     public function edit(int $id, array $data)
     {
         $data['update_at'] = time();
-
-        // 生成remark_text
-        if (!empty($data['deduction_items'])) {
-            $data['remark_text'] = $this->generateRemarkText($data['deduction_items'], $data['config_name']);
-        }
+        $data['remark_text'] = $data['remark_text'];
 
         $this->model->where([
             ['id', '=', $id],
@@ -144,57 +137,9 @@ class DeductionConfigService extends BaseAdminService
         return true;
     }
 
-    /**
-     * 根据商品系列获取扣费配置
-     */
-    public function getByGoodsSeries(string $goodsSeries, string $priceType = '')
-    {
-        $cacheKey = 'deduction_config_' . $this->site_id . '_' . md5($goodsSeries . '_' . $priceType);
-        
-        return Cache::remember($cacheKey, function () use ($goodsSeries, $priceType) {
-            $where = [
-                ['site_id', '=', $this->site_id],
-                ['is_enable', '=', 1]
-            ];
+   
 
-            // 模糊匹配商品系列
-            $config = $this->model->where($where)
-                ->where(function ($query) use ($goodsSeries) {
-                    $query->where('goods_series', 'like', '%' . $goodsSeries . '%')
-                          ->whereOr('goods_series', '=', '');
-                })
-                ->where(function ($query) use ($priceType) {
-                    if (!empty($priceType)) {
-                        $query->where('price_type', '=', $priceType)
-                              ->whereOr('price_type', '=', '');
-                    }
-                })
-                ->order('sort asc')
-                ->findOrEmpty()
-                ->toArray();
-
-            return $config['remark_text'] ?? '';
-        }, 3600);
-    }
-
-    /**
-     * 生成备注文本
-     */
-    private function generateRemarkText(array $deductionItems, string $configName = '')
-    {
-        $text = $configName ? $configName . "：\n" : '';
-        
-        foreach ($deductionItems as $item) {
-            $itemName = $item['item'] ?? '';
-            $deduction = $item['deduction'] ?? '';
-            
-            if (!empty($itemName) && !empty($deduction)) {
-                $text .= $itemName . $deduction . "\n";
-            }
-        }
-
-        return trim($text);
-    }
+  
 
     /**
      * 清除缓存

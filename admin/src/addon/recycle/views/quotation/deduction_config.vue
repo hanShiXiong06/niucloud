@@ -68,15 +68,8 @@
             <el-table v-loading="loading" :data="tableData" border>
                 <el-table-column prop="id" label="ID" width="80" align="center" />
                 <el-table-column prop="config_name" label="配置名称" min-width="180" />
-                <el-table-column prop="goods_series" label="商品系列" min-width="150" />
-                <el-table-column prop="price_type" label="报价类型" width="120" align="center">
-                    <template #default="{ row }">
-                        <el-tag v-if="row.price_type" type="primary" size="small">
-                            {{ row.price_type }}
-                        </el-tag>
-                        <el-tag v-else type="info" size="small">全部</el-tag>
-                    </template>
-                </el-table-column>
+                <el-table-column prop="remark_text" label="配置信息" min-width="180" />
+               
                 <el-table-column prop="sort" label="排序" width="80" align="center" />
                 <el-table-column prop="is_enable" label="状态" width="100" align="center">
                     <template #default="{ row }">
@@ -135,75 +128,11 @@
                     />
                 </el-form-item>
 
-                <el-form-item label="商品系列" prop="goods_series">
-                    <el-input
-                        v-model="formData.goods_series"
-                        placeholder="如：iPhone 16 Pro"
-                        maxlength="100"
-                    />
-                    <div class="form-tip">支持模糊匹配，如 "iPhone 16 Pro" 可匹配 "iPhone 16 Pro Max"</div>
-                </el-form-item>
-
-                <el-form-item label="报价类型" prop="price_type">
-                    <el-select
-                        v-model="formData.price_type"
-                        placeholder="请选择报价类型"
-                        clearable
-                        style="width: 100%"
-                    >
-                        <el-option label="花机/内爆" value="花机/内爆" />
-                        <el-option label="靓机/小花" value="靓机/小花" />
-                        <el-option label="全部类型" value="" />
-                    </el-select>
-                    <div class="form-tip">留空表示适用所有报价类型</div>
-                </el-form-item>
-
-                <el-form-item label="扣费项目" prop="deduction_items">
-                    <div class="deduction-items-container">
-                        <div
-                            v-for="(item, index) in formData.deduction_items"
-                            :key="index"
-                            class="deduction-item"
-                        >
-                            <el-input
-                                v-model="item.item"
-                                placeholder="扣费项"
-                                style="width: 180px"
-                            />
-                            <el-input
-                                v-model="item.deduction"
-                                placeholder="扣费金额"
-                                style="width: 150px"
-                            />
-                            <el-input
-                                v-model="item.unit"
-                                placeholder="单位"
-                                style="width: 80px"
-                            />
-                            <el-button
-                                type="danger"
-                                icon="Delete"
-                                circle
-                                @click="removeDeductionItem(index)"
-                            />
-                        </div>
-                        <el-button
-                            type="primary"
-                            icon="Plus"
-                            plain
-                            @click="addDeductionItem"
-                        >
-                            添加扣费项
-                        </el-button>
-                    </div>
-                </el-form-item>
-
                 <el-form-item label="备注预览">
                     <el-input
-                        :model-value="remarkPreview"
+                        v-model="formData.remark_text"
                         type="textarea"
                         :rows="8"
-                        readonly
                         placeholder="根据扣费项自动生成"
                     />
                 </el-form-item>
@@ -253,8 +182,6 @@ import {
 // 搜索表单
 const searchForm = reactive({
     config_name: '',
-    goods_series: '',
-    price_type: '',
     is_enable: null as number | null
 })
 
@@ -279,9 +206,7 @@ const saving = ref(false)
 const formData = reactive({
     id: 0,
     config_name: '',
-    goods_series: '',
-    price_type: '',
-    deduction_items: [] as Array<{ item: string; deduction: string; unit: string }>,
+    remark_text: '',
     sort: 0,
     is_enable: 1
 })
@@ -290,24 +215,8 @@ const formData = reactive({
 const formRules: FormRules = {
     config_name: [
         { required: true, message: '请输入配置名称', trigger: 'blur' }
-    ],
-    goods_series: [
-        { required: true, message: '请输入商品系列', trigger: 'blur' }
     ]
 }
-
-// 备注预览
-const remarkPreview = computed(() => {
-    if (formData.deduction_items.length === 0) return ''
-
-    let text = formData.config_name ? formData.config_name + '：\n' : ''
-    formData.deduction_items.forEach(item => {
-        if (item.item && item.deduction) {
-            text += item.item + item.deduction + '\n'
-        }
-    })
-    return text.trim()
-})
 
 // 加载数据
 async function loadData () {
@@ -323,7 +232,7 @@ async function loadData () {
         const res = await getDeductionConfigPages(params)
 
         if (res.data) {
-            tableData.value = res.data.list || []
+            tableData.value = res.data.data || []
             pager.total = res.data.total || 0
         }
     } catch (error) {
@@ -343,8 +252,6 @@ function handleSearch () {
 // 重置
 function handleReset () {
     searchForm.config_name = ''
-    searchForm.goods_series = ''
-    searchForm.price_type = ''
     searchForm.is_enable = null
     pager.page = 1
     loadData()
@@ -362,9 +269,7 @@ function handleEdit (row: any) {
     dialogTitle.value = '编辑扣费配置'
     formData.id = row.id
     formData.config_name = row.config_name
-    formData.goods_series = row.goods_series
-    formData.price_type = row.price_type || ''
-    formData.deduction_items = row.deduction_items ? [...row.deduction_items] : []
+    formData.remark_text = row.remark_text
     formData.sort = row.sort
     formData.is_enable = row.is_enable
     dialogVisible.value = true
@@ -404,19 +309,9 @@ async function handleStatusChange (row: any) {
     }
 }
 
-// 添加扣费项
-function addDeductionItem () {
-    formData.deduction_items.push({
-        item: '',
-        deduction: '',
-        unit: '元'
-    })
-}
 
-// 删除扣费项
-function removeDeductionItem (index: number) {
-    formData.deduction_items.splice(index, 1)
-}
+
+
 
 // 提交表单
 async function handleSubmit () {
@@ -430,9 +325,7 @@ async function handleSubmit () {
 
             const params = {
                 config_name: formData.config_name,
-                goods_series: formData.goods_series,
-                price_type: formData.price_type,
-                deduction_items: formData.deduction_items,
+                remark_text: formData.remark_text,
                 sort: formData.sort,
                 is_enable: formData.is_enable
             }
@@ -457,9 +350,7 @@ async function handleSubmit () {
 function resetForm () {
     formData.id = 0
     formData.config_name = ''
-    formData.goods_series = ''
-    formData.price_type = ''
-    formData.deduction_items = []
+    formData.remark_text = ''
     formData.sort = 0
     formData.is_enable = 1
 }

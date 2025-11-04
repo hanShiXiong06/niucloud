@@ -54,16 +54,13 @@ class DeductionConfig extends BaseAdminController
     {
         $data = $this->request->params([
             ['config_name', ''],
-            ['goods_series', ''],
-            ['price_type', ''],
-            ['deduction_items', []],
+            ['remark_text', ''],
             ['sort', 0],
             ['is_enable', 1]
         ]);
 
         $this->validate($data, [
             'config_name' => 'require',
-            'goods_series' => 'require'
         ]);
 
         $id = (new DeductionConfigService())->add($data);
@@ -77,16 +74,14 @@ class DeductionConfig extends BaseAdminController
     {
         $data = $this->request->params([
             ['config_name', ''],
-            ['goods_series', ''],
-            ['price_type', ''],
-            ['deduction_items', []],
+            ['remark_text', ''],
             ['sort', 0],
             ['is_enable', 1]
         ]);
 
         $this->validate($data, [
             'config_name' => 'require',
-            'goods_series' => 'require'
+
         ]);
 
         (new DeductionConfigService())->edit($id, $data);

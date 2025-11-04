@@ -204,7 +204,7 @@
                                         :rowspan="row.remarkRowspan"
                                     >
                                         <div class="remark-content">
-                                            {{ row.add_value_info || '-' }}
+                                            {{ row.value_info || '-' }}
                                         </div>
                                     </td>
                                 </tr>

@@ -40,6 +40,12 @@ class RecycleDeductionConfig extends BaseModel
     protected $jsonAssoc = true;
 
     /**
+     * 追加属性
+     * @var array
+     */
+    protected $append = ['remark_text'];
+
+    /**
      * 创建时间字段
      * @var string
      */
@@ -57,6 +63,35 @@ class RecycleDeductionConfig extends BaseModel
     public function getStatusTextAttr($value, $data)
     {
         return $data['is_enable'] == 1 ? '启用' : '禁用';
+    }
+
+    /**
+     * 获取器: 生成备注文本
+     * 将 deduction_items 转换为易读的文本格式
+     */
+    public function getRemarkTextAttr($value, $data)
+    {
+        if (empty($data['deduction_items'])) {
+            return '';
+        }
+
+        $items = is_string($data['deduction_items']) 
+            ? json_decode($data['deduction_items'], true) 
+            : $data['deduction_items'];
+
+        if (empty($items) || !is_array($items)) {
+            return '';
+        }
+
+        $lines = [];
+        foreach ($items as $item) {
+            if (!empty($item['item']) && !empty($item['deduction'])) {
+                $unit = $item['unit'] ?? '';
+                $lines[] = $item['item'] . '：' . $item['deduction'] . $unit;
+            }
+        }
+
+        return implode("\n", $lines);
     }
 
     /**
