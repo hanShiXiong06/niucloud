@@ -16,12 +16,16 @@ use core\base\BaseAdminController;
 
 /**
  * 报价型号控制器
- * Class QuotationModelController
+ * Class QuotationModel
  * @package addon\recycle\app\adminapi\controller\quotation
  */
-class QuotationModelController extends BaseAdminController{
-    // getList
-    public function getList()
+class QuotationModel extends BaseAdminController
+{
+    /**
+     * 获取型号列表
+     * @return \think\Response
+     */
+    public function lists()
     {
         $data = $this->request->params([
             ['goods_id', ''],
