@@ -143,13 +143,18 @@ class DeductionConfigService extends BaseAdminService
     }
 
     /**
-     * 根据型号ID和报价ID查找匹配的扣费配置
+     * 根据型号ID和报价类型ID查找匹配的扣费配置
      * @param int $goodsId 型号ID
-     * @param int $quotationId 报价ID
+     * @param string $priceTypeId 报价类型ID（114 或 115）
      * @return int|null 返回匹配的配置ID，没有则返回null
      */
-    public function getMatchingConfigId(int $goodsId, int $quotationId): ?int
+    public function getMatchingConfigId(int $goodsId, string $priceTypeId): ?int
     {
+        // 如果报价类型ID为空，直接返回null
+        if (empty($priceTypeId)) {
+            return null;
+        }
+
         // 查询所有启用的配置
         $configs = $this->model->where([
             ['site_id', '=', $this->site_id],
@@ -164,12 +169,11 @@ class DeductionConfigService extends BaseAdminService
             $modelIds = array_filter(array_map('trim', explode(',', $config['model_id'])));
             $modelMatch = in_array((string)$goodsId, $modelIds);
 
-            // 检查 price_id 是否匹配（支持逗号分隔的多个ID）
-            $priceIds = array_filter(array_map('trim', explode(',', $config['price_id'])));
-            $priceMatch = in_array((string)$quotationId, $priceIds);
+            // 检查 price_id 是否匹配（报价类型ID：114 或 115）
+            $priceTypeMatch = trim($config['price_id']) === $priceTypeId;
 
             // 两者都匹配则返回该配置ID
-            if ($modelMatch && $priceMatch) {
+            if ($modelMatch && $priceTypeMatch) {
                 return $config['id'];
             }
         }

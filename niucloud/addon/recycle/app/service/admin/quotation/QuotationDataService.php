@@ -169,16 +169,19 @@ class QuotationDataService extends BaseAdminService
                     \think\facade\Log::write("[最终保存] prices=" . json_encode($prices, JSON_UNESCAPED_UNICODE), 'info');
                 }
 
-                // 根据型号ID和报价ID查找匹配的扣费配置
+                // 根据报价类型名称获取报价类型ID
+                $priceTypeId = $this->getPriceTypeId($priceName);
+                
+                // 根据型号ID和报价类型ID查找匹配的扣费配置
                 $addValueInfo = 0; // 默认为0，表示未配置
                 $deductionService = new DeductionConfigService();
-                $configId = $deductionService->getMatchingConfigId($goodsId, $quotationId);
+                $configId = $deductionService->getMatchingConfigId($goodsId, $priceTypeId);
                 
                 if ($configId !== null) {
                     $addValueInfo = $configId; // 存储配置ID
-                    \think\facade\Log::write("[扣费配置匹配] goods_id={$goodsId}, quotation_id={$quotationId}, config_id={$configId}", 'info');
+                    \think\facade\Log::write("[扣费配置匹配] goods_id={$goodsId}, price_name={$priceName}, price_type_id={$priceTypeId}, config_id={$configId}", 'info');
                 } else {
-                    \think\facade\Log::write("[扣费配置未匹配] goods_id={$goodsId}, quotation_id={$quotationId}", 'info');
+                    \think\facade\Log::write("[扣费配置未匹配] goods_id={$goodsId}, price_name={$priceName}, price_type_id={$priceTypeId}", 'info');
                 }
 
                 $batchData[] = [
@@ -407,6 +410,36 @@ class QuotationDataService extends BaseAdminService
         } else {
             return QuotationDict::PRICE_STATUS_LOW;
         }
+    }
+
+    /**
+     * 根据报价类型名称获取报价类型ID
+     * @param string $priceName 报价类型名称
+     * @return string 报价类型ID（114 或 115），如果未匹配返回空字符串
+     */
+    private function getPriceTypeId(string $priceName): string
+    {
+        // 报价类型名称到ID的映射
+        $priceTypeMap = [
+            '靓机/小花' => '114',
+            '花机/内爆' => '115',
+        ];
+
+        // 完全匹配
+        if (isset($priceTypeMap[$priceName])) {
+            return $priceTypeMap[$priceName];
+        }
+
+        // 模糊匹配（兼容性处理）
+        foreach ($priceTypeMap as $name => $id) {
+            if (strpos($priceName, $name) !== false || strpos($name, $priceName) !== false) {
+                return $id;
+            }
+        }
+
+        // 未匹配到，返回空字符串
+        \think\facade\Log::write("[报价类型ID映射失败] price_name={$priceName}，未找到对应的报价类型ID", 'warning');
+        return '';
     }
 
     /**
