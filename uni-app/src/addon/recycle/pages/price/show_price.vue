@@ -80,51 +80,58 @@
 
 							<!-- 表体 -->
 							<view class="table-body">
+								<!-- 型号分组 -->
 								<view
-									v-for="(row, rowIdx) in table.rows"
-									:key="rowIdx"
-									class="table-row"
+									v-for="(modelGroup, modelIdx) in getModelGroups(table.rows)"
+									:key="modelIdx"
+									class="model-group"
 								>
-									<!-- 型号列（支持跨行） -->
-									<view
-										v-if="row.showModel"
-										class="body-cell col-model model-merged"
-										:style="{ height: getCellHeight(row.modelRowspan) }"
-									>
-										<text class="cell-text">{{ row.goods_name }}</text>
-									</view>
+									<view class="model-group-row">
+										<!-- 型号列（跨行） -->
+										<view 
+											class="body-cell col-model model-merged"
+											:style="{ height: `${modelGroup.rows.length * 80}rpx` }"
+										>
+											<text class="cell-text">{{ modelGroup.modelName }}</text>
+										</view>
 
-									<!-- 容量列 -->
-									<view class="body-cell col-capacity">
-										<text class="cell-text">{{ row.capacity }}</text>
-									</view>
+										<!-- 每一行的数据 -->
+										<view class="rows-container">
+											<view
+												v-for="(row, rowIdx) in modelGroup.rows"
+												:key="rowIdx"
+												class="data-row"
+											>
+												<!-- 容量列 -->
+												<view class="body-cell col-capacity">
+													<text class="cell-text">{{ row.capacity }}</text>
+												</view>
 
-									<!-- 价格列 -->
-									<view
-										v-for="config in table.configColumns"
-										:key="config"
-										class="body-cell col-price"
-									>
-										<view v-if="row.prices[config]" class="price-box">
-											<view class="price-item original">
-												<text class="price-label">原价：</text>
-												<text class="price-value">¥{{ row.prices[config].original || '-' }}</text>
-											</view>
-											<view class="price-item final">
-												<text class="price-label">现价：</text>
-												<text class="price-value">¥{{ row.prices[config].final || '-' }}</text>
+												<!-- 价格列 -->
+												<view
+													v-for="config in table.configColumns"
+													:key="config"
+													class="body-cell col-price"
+												>
+													<view v-if="row.prices[config]" class="price-box">
+														<!-- <view class="price-item original">
+															<text class="price-label">原价：</text>
+															<text class="price-value">¥{{ row.prices[config].original || '-' }}</text>
+														</view> -->
+														<view class="price-item final">
+
+															<text class="price-value">¥{{ row.prices[config].final || '-' }}</text>
+														</view>
+													</view>
+													<text v-else class="empty-cell">-</text>
+												</view>
+
+												<!-- 备注列 -->
+												<view class="body-cell col-remark">
+													<text class="remark-text">{{ row.value_info || '-' }}</text>
+												</view>
 											</view>
 										</view>
-										<text v-else class="empty-cell">-</text>
-									</view>
-
-									<!-- 备注列（支持跨行） -->
-									<view
-										v-if="row.showRemark"
-										class="body-cell col-remark remark-merged"
-										:style="{ height: getCellHeight(row.remarkRowspan) }"
-									>
-										<text class="remark-text">{{ row.value_info || '-' }}</text>
 									</view>
 								</view>
 							</view>
@@ -274,10 +281,35 @@ const groupedTables = computed(() => {
 	return tables
 })
 
-// 计算跨行单元格高度
-function getCellHeight(rowspan: number): string {
-	const baseHeight = 80 // 基础行高 rpx
-	return `${baseHeight * rowspan}rpx`
+// 按型号分组数据（用于实现跨行显示）
+function getModelGroups(rows: any[]) {
+	const groups: any[] = []
+	let currentModelName = ''
+	let currentGroup: any = null
+
+	rows.forEach(row => {
+		if (row.goods_name !== currentModelName) {
+			// 新的型号，创建新组
+			if (currentGroup) {
+				groups.push(currentGroup)
+			}
+			currentModelName = row.goods_name
+			currentGroup = {
+				modelName: row.goods_name,
+				rows: [row]
+			}
+		} else {
+			// 同一型号，添加到当前组
+			currentGroup.rows.push(row)
+		}
+	})
+
+	// 添加最后一组
+	if (currentGroup) {
+		groups.push(currentGroup)
+	}
+
+	return groups
 }
 
 // 加载报价数据
@@ -296,7 +328,7 @@ async function loadPriceData() {
 		const res = await getQuotationPriceList({
 			quotation_id: priceTypeId.value,
 			is_current: 1,
-			price_date: new Date().toISOString().split('T')[0]
+			// price_date: new Date().toISOString().split('T')[0]
 		})
 
 		if (res.code === 1 && res.data) {
@@ -539,17 +571,39 @@ onLoad((options: any) => {
 .excel-table {
 	min-width: 100%;
 
-	.table-header,
-	.table-row {
-		display: flex;
-		border-bottom: 1rpx solid #e8e8e8;
-	}
-
 	.table-header {
+		display: flex;
 		background: #fafafa;
+		border-bottom: 1rpx solid #e8e8e8;
 		position: sticky;
 		top: 0;
 		z-index: 10;
+	}
+
+	.table-body {
+		.model-group {
+			border-bottom: 1rpx solid #e8e8e8;
+
+			.model-group-row {
+				display: flex;
+			}
+
+			.rows-container {
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+			}
+
+			.data-row {
+				display: flex;
+				border-bottom: 1rpx solid #f0f0f0;
+				min-height: 80rpx;
+
+				&:last-child {
+					border-bottom: none;
+				}
+			}
+		}
 	}
 
 	.header-cell,
@@ -600,8 +654,7 @@ onLoad((options: any) => {
 		background: #fffbf0;
 	}
 
-	.model-merged,
-	.remark-merged {
+	.model-merged {
 		align-items: flex-start;
 		padding-top: 20rpx;
 	}
