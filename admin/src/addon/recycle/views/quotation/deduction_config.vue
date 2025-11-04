@@ -11,25 +11,22 @@
                     />
                 </el-form-item>
 
-                <el-form-item label="商品系列">
+                <el-form-item label="型号ID">
                     <el-input
-                        v-model="searchForm.goods_series"
-                        placeholder="请输入商品系列"
+                        v-model="searchForm.model_id"
+                        placeholder="请输入型号ID"
                         clearable
                         style="width: 200px"
                     />
                 </el-form-item>
 
-                <el-form-item label="报价类型">
-                    <el-select
-                        v-model="searchForm.price_type"
-                        placeholder="请选择报价类型"
+                <el-form-item label="报价ID">
+                    <el-input
+                        v-model="searchForm.price_id"
+                        placeholder="请输入报价ID"
                         clearable
                         style="width: 200px"
-                    >
-                        <el-option label="花机/内爆" value="花机/内爆" />
-                        <el-option label="靓机/小花" value="靓机/小花" />
-                    </el-select>
+                    />
                 </el-form-item>
 
                 <el-form-item label="状态">
@@ -67,9 +64,22 @@
 
             <el-table v-loading="loading" :data="tableData" border>
                 <el-table-column prop="id" label="ID" width="80" align="center" />
-                <el-table-column prop="config_name" label="配置名称" min-width="180" />
-                <el-table-column prop="remark_text" label="配置信息" min-width="180" />
-               
+                <el-table-column prop="config_name" label="配置名称" min-width="150" />
+                <el-table-column prop="model_id" label="型号ID" min-width="120">
+                    <template #default="{ row }">
+                        <el-tag v-for="(id, idx) in row.model_id.split(',')" :key="idx" size="small" class="mr-1">
+                            {{ id.trim() }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="price_id" label="报价ID" min-width="120">
+                    <template #default="{ row }">
+                        <el-tag v-for="(id, idx) in row.price_id.split(',')" :key="idx" size="small" type="success" class="mr-1">
+                            {{ id.trim() }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="remark_text" label="备注说明" min-width="250" show-overflow-tooltip />
                 <el-table-column prop="sort" label="排序" width="80" align="center" />
                 <el-table-column prop="is_enable" label="状态" width="100" align="center">
                     <template #default="{ row }">
@@ -81,25 +91,20 @@
                         />
                     </template>
                 </el-table-column>
-                <el-table-column prop="create_at" label="创建时间" width="180" align="center" />
-                <el-table-column label="操作" width="200" align="center" fixed="right">
+                <el-table-column label="操作" width="150" align="center" fixed="right">
                     <template #default="{ row }">
-                        <el-button type="primary" link @click="handleEdit(row)">
-                            编辑
-                        </el-button>
-                        <el-button type="danger" link @click="handleDelete(row)">
-                            删除
-                        </el-button>
+                        <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+                        <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
                     </template>
                 </el-table-column>
             </el-table>
 
-            <div class="pagination">
+            <div class="pagination-container">
                 <el-pagination
-                    v-model:current-page="pager.page"
-                    v-model:page-size="pager.limit"
+                    v-model:current-page="page"
+                    v-model:page-size="limit"
+                    :total="total"
                     :page-sizes="[10, 20, 50, 100]"
-                    :total="pager.total"
                     layout="total, sizes, prev, pager, next, jumper"
                     @size-change="loadData"
                     @current-change="loadData"
@@ -111,101 +116,107 @@
         <el-dialog
             v-model="dialogVisible"
             :title="dialogTitle"
-            width="800px"
+            width="600px"
             :close-on-click-modal="false"
         >
             <el-form
                 ref="formRef"
                 :model="formData"
                 :rules="formRules"
-                label-width="120px"
+                label-width="100px"
+                v-loading="formLoading"
             >
                 <el-form-item label="配置名称" prop="config_name">
-                    <el-input
-                        v-model="formData.config_name"
-                        placeholder="请输入配置名称"
-                        maxlength="100"
-                    />
+                    <el-input v-model="formData.config_name" placeholder="请输入配置名称" />
                 </el-form-item>
 
-                <el-form-item label="备注预览">
+                <el-form-item label="型号ID" prop="model_id">
+                    <el-input 
+                        v-model="formData.model_id" 
+                        type="textarea"
+                        :rows="2"
+                        placeholder="请输入型号ID，多个用逗号分隔，如：8454,8455,8456" 
+                    />
+                    <div class="form-tip">支持多个型号ID，用英文逗号分隔</div>
+                </el-form-item>
+
+                <el-form-item label="报价ID" prop="price_id">
+                    <el-input 
+                        v-model="formData.price_id" 
+                        type="textarea"
+                        :rows="2"
+                        placeholder="请输入报价ID，多个用逗号分隔，如：113,114,115" 
+                    />
+                    <div class="form-tip">支持多个报价ID，用英文逗号分隔</div>
+                </el-form-item>
+
+                <el-form-item label="备注说明" prop="remark_text">
                     <el-input
                         v-model="formData.remark_text"
                         type="textarea"
                         :rows="8"
-                        placeholder="根据扣费项自动生成"
+                        placeholder="请输入完整的备注文本，用于前端显示"
                     />
+                    <div class="form-tip">此内容将显示在报价数据的备注列中</div>
                 </el-form-item>
 
                 <el-form-item label="排序" prop="sort">
-                    <el-input-number
-                        v-model="formData.sort"
-                        :min="0"
-                        :max="9999"
-                        controls-position="right"
-                    />
-                    <div class="form-tip">数字越小越靠前</div>
+                    <el-input-number v-model="formData.sort" :min="0" :max="9999" />
                 </el-form-item>
 
                 <el-form-item label="是否启用" prop="is_enable">
-                    <el-switch
-                        v-model="formData.is_enable"
-                        :active-value="1"
-                        :inactive-value="0"
-                    />
+                    <el-switch v-model="formData.is_enable" :active-value="1" :inactive-value="0" />
                 </el-form-item>
             </el-form>
 
             <template #footer>
                 <el-button @click="dialogVisible = false">取消</el-button>
-                <el-button type="primary" :loading="saving" @click="handleSubmit">
-                    确定
-                </el-button>
+                <el-button type="primary" :loading="formLoading" @click="handleSubmit">确定</el-button>
             </template>
         </el-dialog>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus } from '@element-plus/icons-vue'
 import {
     getDeductionConfigPages,
+    getDeductionConfigInfo,
     addDeductionConfig,
     editDeductionConfig,
-    deleteDeductionConfig,
+    delDeductionConfig,
     modifyDeductionConfigStatus
 } from '@/addon/recycle/api/deduction'
 
 // 搜索表单
 const searchForm = reactive({
     config_name: '',
-    is_enable: null as number | null
+    model_id: '',
+    price_id: '',
+    is_enable: ''
 })
 
 // 表格数据
-const tableData = ref<any[]>([])
 const loading = ref(false)
-
-// 分页
-const pager = reactive({
-    page: 1,
-    limit: 10,
-    total: 0
-})
+const tableData = ref([])
+const page = ref(1)
+const limit = ref(20)
+const total = ref(0)
 
 // 对话框
 const dialogVisible = ref(false)
-const dialogTitle = ref('')
+const dialogTitle = ref('添加配置')
+const formLoading = ref(false)
 const formRef = ref<FormInstance>()
-const saving = ref(false)
 
 // 表单数据
 const formData = reactive({
     id: 0,
     config_name: '',
+    model_id: '',
+    price_id: '',
     remark_text: '',
     sort: 0,
     is_enable: 1
@@ -213,30 +224,24 @@ const formData = reactive({
 
 // 表单验证规则
 const formRules: FormRules = {
-    config_name: [
-        { required: true, message: '请输入配置名称', trigger: 'blur' }
-    ]
+    config_name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
+    model_id: [{ required: true, message: '请输入型号ID', trigger: 'blur' }],
+    price_id: [{ required: true, message: '请输入报价ID', trigger: 'blur' }],
+    remark_text: [{ required: true, message: '请输入备注说明', trigger: 'blur' }]
 }
 
 // 加载数据
-async function loadData () {
+const loadData = async () => {
+    loading.value = true
     try {
-        loading.value = true
-
-        const params = {
-            ...searchForm,
-            page: pager.page,
-            limit: pager.limit
-        }
-
-        const res = await getDeductionConfigPages(params)
-
-        if (res.data) {
-            tableData.value = res.data.data || []
-            pager.total = res.data.total || 0
-        }
+        const res = await getDeductionConfigPages({
+            page: page.value,
+            limit: limit.value,
+            ...searchForm
+        })
+        tableData.value = res.data.data
+        total.value = res.data.total
     } catch (error) {
-        console.error('加载数据失败:', error)
         ElMessage.error('加载数据失败')
     } finally {
         loading.value = false
@@ -244,175 +249,142 @@ async function loadData () {
 }
 
 // 搜索
-function handleSearch () {
-    pager.page = 1
+const handleSearch = () => {
+    page.value = 1
     loadData()
 }
 
 // 重置
-function handleReset () {
-    searchForm.config_name = ''
-    searchForm.is_enable = null
-    pager.page = 1
-    loadData()
+const handleReset = () => {
+    Object.assign(searchForm, {
+        config_name: '',
+        model_id: '',
+        price_id: '',
+        is_enable: ''
+    })
+    handleSearch()
 }
 
 // 添加
-function handleAdd () {
-    dialogTitle.value = '添加扣费配置'
-    resetForm()
+const handleAdd = () => {
+    dialogTitle.value = '添加配置'
+    Object.assign(formData, {
+        id: 0,
+        config_name: '',
+        model_id: '',
+        price_id: '',
+        remark_text: '',
+        sort: 0,
+        is_enable: 1
+    })
     dialogVisible.value = true
 }
 
 // 编辑
-function handleEdit (row: any) {
-    dialogTitle.value = '编辑扣费配置'
-    formData.id = row.id
-    formData.config_name = row.config_name
-    formData.remark_text = row.remark_text
-    formData.sort = row.sort
-    formData.is_enable = row.is_enable
+const handleEdit = async (row: any) => {
+    dialogTitle.value = '编辑配置'
+    formLoading.value = true
     dialogVisible.value = true
+
+    try {
+        const res = await getDeductionConfigInfo(row.id)
+        Object.assign(formData, res.data)
+    } catch (error) {
+        ElMessage.error('加载配置详情失败')
+        dialogVisible.value = false
+    } finally {
+        formLoading.value = false
+    }
 }
 
-// 删除
-function handleDelete (row: any) {
-    ElMessageBox.confirm('确定要删除该配置吗？', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-    }).then(async () => {
-        try {
-            await deleteDeductionConfig(row.id)
-            ElMessage.success('删除成功')
-            loadData()
-        } catch (error) {
-            console.error('删除失败:', error)
+// 提交表单
+const handleSubmit = async () => {
+    if (!formRef.value) return
+
+    await formRef.value.validate(async (valid) => {
+        if (valid) {
+            formLoading.value = true
+            try {
+                if (formData.id) {
+                    await editDeductionConfig(formData.id, formData)
+                    ElMessage.success('编辑成功')
+                } else {
+                    await addDeductionConfig(formData)
+                    ElMessage.success('添加成功')
+                }
+                dialogVisible.value = false
+                loadData()
+            } catch (error: any) {
+                ElMessage.error(error.message || '操作失败')
+            } finally {
+                formLoading.value = false
+            }
         }
-    }).catch(() => {
-        // 取消删除
     })
 }
 
-// 状态改变
-async function handleStatusChange (row: any) {
+// 删除
+const handleDelete = async (row: any) => {
     try {
-        await modifyDeductionConfigStatus({
-            id: row.id,
-            is_enable: row.is_enable
+        await ElMessageBox.confirm('确定要删除该配置吗？', '提示', {
+            type: 'warning'
         })
+
+        await delDeductionConfig(row.id)
+        ElMessage.success('删除成功')
+        loadData()
+    } catch (error: any) {
+        if (error !== 'cancel') {
+            ElMessage.error(error.message || '删除失败')
+        }
+    }
+}
+
+// 修改状态
+const handleStatusChange = async (row: any) => {
+    try {
+        await modifyDeductionConfigStatus({ id: row.id, is_enable: row.is_enable })
         ElMessage.success('状态修改成功')
-    } catch (error) {
-        console.error('状态修改失败:', error)
+        loadData()
+    } catch (error: any) {
+        ElMessage.error(error.message || '状态修改失败')
         // 恢复原状态
         row.is_enable = row.is_enable === 1 ? 0 : 1
     }
 }
 
-
-
-
-
-// 提交表单
-async function handleSubmit () {
-    if (!formRef.value) return
-
-    await formRef.value.validate(async (valid) => {
-        if (!valid) return
-
-        try {
-            saving.value = true
-
-            const params = {
-                config_name: formData.config_name,
-                remark_text: formData.remark_text,
-                sort: formData.sort,
-                is_enable: formData.is_enable
-            }
-
-            if (formData.id) {
-                await editDeductionConfig(formData.id, params)
-            } else {
-                await addDeductionConfig(params)
-            }
-
-            dialogVisible.value = false
-            loadData()
-        } catch (error) {
-            console.error('保存失败:', error)
-        } finally {
-            saving.value = false
-        }
-    })
-}
-
-// 重置表单
-function resetForm () {
-    formData.id = 0
-    formData.config_name = ''
-    formData.remark_text = ''
-    formData.sort = 0
-    formData.is_enable = 1
-}
-
-// 初始化
 onMounted(() => {
     loadData()
 })
 </script>
 
-<style scoped lang="scss">
+<style lang="scss" scoped>
 .deduction-config-page {
-    padding: 20px;
-    background: #f5f7fa;
-    min-height: 100vh;
-}
-
-.search-card {
-    margin-bottom: 20px;
-
-    :deep(.el-card__body) {
-        padding: 20px;
+    .search-card {
+        margin-bottom: 16px;
     }
-}
 
-.search-form {
-    :deep(.el-form-item) {
-        margin-bottom: 0;
+    .table-card {
+        .table-toolbar {
+            margin-bottom: 16px;
+        }
+
+        .pagination-container {
+            margin-top: 16px;
+            display: flex;
+            justify-content: flex-end;
+        }
     }
-}
 
-.table-card {
-    :deep(.el-card__body) {
-        padding: 0;
+    .form-tip {
+        font-size: 12px;
+        color: #909399;
+        margin-top: 4px;
     }
-}
 
-.table-toolbar {
-    padding: 16px 20px;
-    border-bottom: 1px solid #ebeef5;
-}
-
-.pagination {
-    padding: 20px;
-    display: flex;
-    justify-content: flex-end;
-}
-
-.deduction-items-container {
-    width: 100%;
-
-    .deduction-item {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        margin-bottom: 10px;
+    .mr-1 {
+        margin-right: 4px;
+        margin-bottom: 4px;
     }
-}
-
-.form-tip {
-    font-size: 12px;
-    color: #909399;
-    margin-top: 5px;
 }
 </style>

@@ -169,20 +169,16 @@ class QuotationDataService extends BaseAdminService
                     \think\facade\Log::write("[最终保存] prices=" . json_encode($prices, JSON_UNESCAPED_UNICODE), 'info');
                 }
 
-                // 解析加/扣钱项说明 - 从扣费配置表获取
-                $addValueInfo = '';
-                // 优先从扣费配置表获取
+                // 根据型号ID和报价ID查找匹配的扣费配置
+                $addValueInfo = 0; // 默认为0，表示未配置
                 $deductionService = new DeductionConfigService();
-                $deductionConfig = $deductionService->getByGoodsSeries($goodsName, $priceName);
+                $configId = $deductionService->getMatchingConfigId($goodsId, $quotationId);
                 
-                if (!empty($deductionConfig)) {
-                    $addValueInfo = $deductionConfig;
-                } else if (!empty($item['add_value_attr'])) {
-                    // 如果配置表没有，则使用API返回的原始数据
-                    foreach ($item['add_value_attr'] as $addValue) {
-                        $addValueInfo = $addValue['answer_name'] ?? '';
-                        break;
-                    }
+                if ($configId !== null) {
+                    $addValueInfo = $configId; // 存储配置ID
+                    \think\facade\Log::write("[扣费配置匹配] goods_id={$goodsId}, quotation_id={$quotationId}, config_id={$configId}", 'info');
+                } else {
+                    \think\facade\Log::write("[扣费配置未匹配] goods_id={$goodsId}, quotation_id={$quotationId}", 'info');
                 }
 
                 $batchData[] = [

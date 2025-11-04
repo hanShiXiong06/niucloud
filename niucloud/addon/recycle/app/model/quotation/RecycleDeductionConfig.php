@@ -28,22 +28,10 @@ class RecycleDeductionConfig extends BaseModel
     protected $autoWriteTimestamp = true;
 
     /**
-     * JSON字段
-     * @var array
-     */
-    protected $json = ['deduction_items'];
-
-    /**
      * JSON字段自动转换为数组
      * @var bool
      */
     protected $jsonAssoc = true;
-
-    /**
-     * 追加属性
-     * @var array
-     */
-    protected $append = ['remark_text'];
 
     /**
      * 创建时间字段
@@ -63,35 +51,6 @@ class RecycleDeductionConfig extends BaseModel
     public function getStatusTextAttr($value, $data)
     {
         return $data['is_enable'] == 1 ? '启用' : '禁用';
-    }
-
-    /**
-     * 获取器: 生成备注文本
-     * 将 deduction_items 转换为易读的文本格式
-     */
-    public function getRemarkTextAttr($value, $data)
-    {
-        if (empty($data['deduction_items'])) {
-            return '';
-        }
-
-        $items = is_string($data['deduction_items']) 
-            ? json_decode($data['deduction_items'], true) 
-            : $data['deduction_items'];
-
-        if (empty($items) || !is_array($items)) {
-            return '';
-        }
-
-        $lines = [];
-        foreach ($items as $item) {
-            if (!empty($item['item']) && !empty($item['deduction'])) {
-                $unit = $item['unit'] ?? '';
-                $lines[] = $item['item'] . '：' . $item['deduction'] . $unit;
-            }
-        }
-
-        return implode("\n", $lines);
     }
 
     /**
@@ -115,22 +74,22 @@ class RecycleDeductionConfig extends BaseModel
     }
 
     /**
-     * 搜索器: 商品系列
+     * 搜索器: 型号ID
      */
-    public function searchGoodsSeriesAttr($query, $value, $data)
+    public function searchModelIdAttr($query, $value, $data)
     {
         if ($value) {
-            $query->where('goods_series', 'like', '%' . $value . '%');
+            $query->where('model_id', 'like', '%' . $value . '%');
         }
     }
 
     /**
-     * 搜索器: 报价类型
+     * 搜索器: 报价ID
      */
-    public function searchPriceTypeAttr($query, $value, $data)
+    public function searchPriceIdAttr($query, $value, $data)
     {
         if ($value) {
-            $query->where('price_type', $value);
+            $query->where('price_id', 'like', '%' . $value . '%');
         }
     }
 

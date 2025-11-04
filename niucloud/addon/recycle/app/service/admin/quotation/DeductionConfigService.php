@@ -22,11 +22,11 @@ class DeductionConfigService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'id, site_id, config_name,remark_text, sort, is_enable, create_at, update_at';
+        $field = 'id, site_id, config_name, model_id, price_id, remark_text, sort, is_enable, create_at, update_at';
         $order = 'sort asc, id desc';
 
         $searchModel = $this->model->where([['site_id', '=', $this->site_id]])
-            ->withSearch(['config_name', 'is_enable'], $where)
+            ->withSearch(['config_name', 'model_id', 'price_id', 'is_enable'], $where)
             ->field($field)
             ->order($order);
 
@@ -39,7 +39,7 @@ class DeductionConfigService extends BaseAdminService
      */
     public function getList(array $where = [])
     {
-        $field = 'id, site_id, config_name,remark_text,  remark_text, sort, is_enable';
+        $field = 'id, site_id, config_name, model_id, price_id, remark_text, sort, is_enable';
         $order = 'sort asc, id desc';
 
         $list = $this->model->where([['site_id', '=', $this->site_id], ['is_enable', '=', 1]])
@@ -57,7 +57,7 @@ class DeductionConfigService extends BaseAdminService
      */
     public function getInfo(int $id)
     {
-        $field = 'id, site_id, config_name,remark_text,  remark_text, sort, is_enable';
+        $field = 'id, site_id, config_name, model_id, price_id, remark_text, sort, is_enable';
 
         $info = $this->model->where([
             ['id', '=', $id],
@@ -137,9 +137,40 @@ class DeductionConfigService extends BaseAdminService
         return true;
     }
 
-   
+    /**
+     * 根据型号ID和报价ID查找匹配的扣费配置
+     * @param int $goodsId 型号ID
+     * @param int $quotationId 报价ID
+     * @return int|null 返回匹配的配置ID，没有则返回null
+     */
+    public function getMatchingConfigId(int $goodsId, int $quotationId): ?int
+    {
+        // 查询所有启用的配置
+        $configs = $this->model->where([
+            ['site_id', '=', $this->site_id],
+            ['is_enable', '=', 1]
+        ])
+        ->field('id, model_id, price_id')
+        ->select()
+        ->toArray();
 
-  
+        foreach ($configs as $config) {
+            // 检查 model_id 是否匹配（支持逗号分隔的多个ID）
+            $modelIds = array_filter(array_map('trim', explode(',', $config['model_id'])));
+            $modelMatch = in_array((string)$goodsId, $modelIds);
+
+            // 检查 price_id 是否匹配（支持逗号分隔的多个ID）
+            $priceIds = array_filter(array_map('trim', explode(',', $config['price_id'])));
+            $priceMatch = in_array((string)$quotationId, $priceIds);
+
+            // 两者都匹配则返回该配置ID
+            if ($modelMatch && $priceMatch) {
+                return $config['id'];
+            }
+        }
+
+        return null;
+    }
 
     /**
      * 清除缓存
