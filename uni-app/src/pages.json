@@ -296,12 +296,19 @@
 					"style": {
 						"navigationBarTitleText": "回收主页"
 					}
-				},{
+				},				{
 					"path": "pages/price",
 					"style": {
 						"navigationBarTitleText": "二手机回收报价单"
 					},
 					"needLogin": true
+				},
+				{
+					"path": "pages/price/show_price",
+					"style": {
+						"navigationStyle": "custom",
+						"navigationBarTitleText": "报价查询"
+					}
 				},
 				{
 					"path": "pages/order/order",

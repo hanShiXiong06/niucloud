@@ -748,7 +748,7 @@ onMounted(() => {
     }
 
     .fixed-col {
-        position: sticky;
+        // position: sticky;
         background: white;
         z-index: 1;
 
@@ -775,11 +775,11 @@ onMounted(() => {
     }
 
     .col-price {
-        min-width: 150px;
+        min-width: 100px;
     }
 
     .col-remark {
-        min-width: 300px;
+        min-width: 150px;
         max-width: 400px;
         background: #fffbf0;
 
