@@ -169,9 +169,16 @@ class QuotationDataService extends BaseAdminService
                     \think\facade\Log::write("[最终保存] prices=" . json_encode($prices, JSON_UNESCAPED_UNICODE), 'info');
                 }
 
-                // 解析加/扣钱项说明
+                // 解析加/扣钱项说明 - 从扣费配置表获取
                 $addValueInfo = '';
-                if (!empty($item['add_value_attr'])) {
+                // 优先从扣费配置表获取
+                $deductionService = new DeductionConfigService();
+                $deductionConfig = $deductionService->getByGoodsSeries($goodsName, $priceName);
+                
+                if (!empty($deductionConfig)) {
+                    $addValueInfo = $deductionConfig;
+                } else if (!empty($item['add_value_attr'])) {
+                    // 如果配置表没有，则使用API返回的原始数据
                     foreach ($item['add_value_attr'] as $addValue) {
                         $addValueInfo = $addValue['answer_name'] ?? '';
                         break;

@@ -507,6 +507,15 @@ Route::group('recycle', function () {
     Route::post('quotation_price_config/clear_all', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@clearAll');
     Route::put('quotation_price_config/:id/modify_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@modifyStatus');
 
+    // 扣费配置
+    Route::get('deduction_config/pages', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@pages');
+    Route::get('deduction_config/lists', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@lists');
+    Route::get('deduction_config/:id', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@info');
+    Route::post('deduction_config', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@add');
+    Route::put('deduction_config/:id', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@edit');
+    Route::delete('deduction_config/:id', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@del');
+    Route::put('deduction_config/modify_status', 'addon\recycle\app\adminapi\controller\quotation\DeductionConfig@modifyStatus');
+
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,
