@@ -14,6 +14,7 @@ namespace addon\recycle\app\service\api\quotation;
 use addon\recycle\app\model\quotation\RecycleQuotationData;
 use addon\recycle\app\dict\quotation\QuotationDict;
 use core\base\BaseApiService;
+use think\facade\Cache;
 
 /**
  * 报价查询服务（移动端）
@@ -47,6 +48,16 @@ class QuotationPriceService extends BaseApiService
             $where['price_date'] = date('Y-m-d');
         }
 
+        // 生成缓存key
+        $cacheKey = 'quotation_price_api:' . $this->site_id . ':' . md5(json_encode($where));
+        $cacheTag = 'quotation_data_' . $this->site_id;
+        
+        // 尝试从缓存获取
+        $cacheData = Cache::get($cacheKey);
+        if ($cacheData !== null) {
+            return $cacheData;
+        }
+
         $field = 'id,quotation_id,price_name,goods_id,goods_name,capacity,prices,add_value_info,price_date,create_at,update_at';
         
         $list = $this->model
@@ -54,7 +65,7 @@ class QuotationPriceService extends BaseApiService
             ->withSearch(['quotation_id', 'price_name', 'goods_name', 'capacity', 'price_date', 'is_current'], $where)
             ->with(['deductionConfig'])  // 加载关联的扣费配置
             ->field($field)
-            ->order('goods_name asc, capacity asc')
+            ->order('')
             ->select()
             ->toArray();
 
@@ -75,6 +86,10 @@ class QuotationPriceService extends BaseApiService
             }
             $item['prices'] = $formattedPrices;
         }
+
+        // 设置缓存（使用tag，当天数据24小时，历史数据1小时）
+        $cacheTime = isset($where['price_date']) && $where['price_date'] == date('Y-m-d') ? 86400 : 3600;
+        Cache::tag($cacheTag)->set($cacheKey, $list, $cacheTime);
 
         return $list;
     }
