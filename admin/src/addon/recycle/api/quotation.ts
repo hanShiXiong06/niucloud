@@ -102,6 +102,7 @@ export function getQuotationDataList(params: Record<string, any>) {
  * @returns
  */
 export function getQuotationDataAll(params: Record<string, any>) {
+    // params.quotation_id = 114
     return request.get(`recycle/quotation_data/all`, { params })
 }
 
@@ -196,23 +197,6 @@ export function clearAllQuotationPriceConfig() {
 }
 
 /**
- * 批量修改报价数据（调价）
- * @param params
- * @returns
- */
-export function batchUpdateQuotationPrice(params: {
-    items: Array<{
-        id: number
-        goods_id: number
-        capacity: string
-        config_name: string
-        new_price: number
-    }>
-}) {
-    return request.post(`recycle/quotation_data/batch_update_price`, params, { showErrorMessage: true, showSuccessMessage: true })
-}
-
-/**
  * modifyQuotationPriceConfigStatus
  * 修改价格配置状态
  * @param id
@@ -228,5 +212,51 @@ export function modifyQuotationPriceConfigStatus(id: number, params: Record<stri
 export function getQuotationModelList(params: Record<string, any>) {
     return request.get(`recycle/quotation_model/lists`, { params })
 }
+
+// ==================== 规格管理 ====================
+// 型号管理
+export function getQuotationSpecModelList(params: Record<string, any>) {
+    return request.get(`recycle/quotation_spec/model/lists`, { params })
+}
+
+export function setQuotationSpecModelSyncStatus(id: number, params: { sync_enable: number }) {
+    return request.put(`recycle/quotation_spec/model/${id}/sync_status`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+export function batchSetQuotationSpecModelSyncStatus(params: { ids: number[], sync_enable: number }) {
+    return request.post(`recycle/quotation_spec/model/batch_sync_status`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+// 内存管理
+export function getQuotationSpecCapacityList(params: Record<string, any>) {
+    return request.get(`recycle/quotation_spec/capacity/lists`, { params })
+}
+
+export function setQuotationSpecCapacitySyncStatus(id: number, params: { sync_enable: number }) {
+    return request.put(`recycle/quotation_spec/capacity/${id}/sync_status`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+export function batchSetQuotationSpecCapacitySyncStatus(params: { ids: number[], sync_enable: number }) {
+    return request.post(`recycle/quotation_spec/capacity/batch_sync_status`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+// 等级规格管理
+export function getQuotationSpecGradeSpecList(params: Record<string, any>) {
+    return request.get(`recycle/quotation_spec/grade_spec/lists`, { params })
+}
+
+export function setQuotationSpecGradeSpecSyncStatus(id: number, params: { sync_enable: number }) {
+    return request.put(`recycle/quotation_spec/grade_spec/${id}/sync_status`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+export function batchSetQuotationSpecGradeSpecSyncStatus(params: { ids: number[], sync_enable: number }) {
+    return request.post(`recycle/quotation_spec/grade_spec/batch_sync_status`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+// 同步统计
+export function getQuotationSpecSyncStats() {
+    return request.get(`recycle/quotation_spec/sync_stats`)
+}
+
 // USER_CODE_END -- quotation
 

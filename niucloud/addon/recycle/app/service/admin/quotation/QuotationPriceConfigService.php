@@ -194,21 +194,25 @@ class QuotationPriceConfigService extends BaseAdminService
             throw new CommonException('配置不存在');
         }
 
-        // 如果是 SKU 级别配置且有 sku_list，保留原有的 sku_list（如果前端没有传递）
-        if (($data['config_type'] ?? 0) == QuotationDict::CONFIG_TYPE_SKU && empty($data['sku_list'])) {
-            // 如果原来有 sku_list，保留它
-            if (!empty($info->sku_list)) {
+        // 处理 sku_list：如果是字符串，需要先解码；如果是数组，直接使用
+        if (isset($data['sku_list'])) {
+            if (is_string($data['sku_list'])) {
+                $data['sku_list'] = json_decode($data['sku_list'], true) ?: [];
+            }
+            // 如果明确传递了sku_list（即使是空数组），使用传递的值
+            // 如果传递的是null，转换为空数组
+            if ($data['sku_list'] === null) {
+                $data['sku_list'] = [];
+            }
+        } else {
+            // 如果没有传递sku_list字段，且是SKU级别配置，保留原有的sku_list
+            if (($data['config_type'] ?? 0) == QuotationDict::CONFIG_TYPE_SKU && !empty($info->sku_list)) {
                 $data['sku_list'] = $info->sku_list;
             }
         }
 
         // 验证配置类型和数据完整性
         $this->validateConfigData($data);
-
-        // 处理 sku_list：如果是数组，模型会自动编码；如果是字符串，需要先解码
-        if (isset($data['sku_list']) && is_string($data['sku_list'])) {
-            $data['sku_list'] = json_decode($data['sku_list'], true) ?: [];
-        }
 
         $result = $info->save($data);
         
@@ -508,26 +512,26 @@ class QuotationPriceConfigService extends BaseAdminService
             $rawData = $config->getData();
             $skuListRawValue = $rawData['sku_list'] ?? null;
             
-            \think\facade\Log::write("[SKU匹配-原始] 配置ID={$config->id}, getData中sku_list类型=" . gettype($skuListRawValue) . ", 值=" . (is_string($skuListRawValue) ? substr($skuListRawValue, 0, 200) : json_encode($skuListRawValue)), 'info');
+           
             
             // sku_list 字段在模型中已设置为 JSON 字段，会自动转换为数组
             $skuListRaw = $config->sku_list ?? null;
-            \think\facade\Log::write("[SKU匹配-模型] 配置ID={$config->id}, sku_list类型=" . gettype($skuListRaw) . ", 值=" . (is_string($skuListRaw) ? substr($skuListRaw, 0, 200) : json_encode($skuListRaw)), 'info');
+            
             
             // 如果模型自动转换失败，手动解析原始值
             $skuList = $skuListRaw;
             if (!is_array($skuList) && is_string($skuListRawValue)) {
-                \think\facade\Log::write("[SKU匹配] 模型转换失败，尝试手动解析JSON", 'info');
+
                 $skuList = json_decode($skuListRawValue, true);
                 if (!is_array($skuList)) {
-                    \think\facade\Log::write("[SKU匹配] JSON解析失败: " . json_last_error_msg(), 'info');
+
                     $skuList = [];
                 }
             } else if (!is_array($skuList)) {
                 $skuList = [];
             }
             
-            \think\facade\Log::write("[SKU匹配-最终] 配置ID={$config->id}, SKU数量=" . count($skuList), 'info');
+
             
             // 检查SKU是否在列表中
             foreach ($skuList as $index => $sku) {

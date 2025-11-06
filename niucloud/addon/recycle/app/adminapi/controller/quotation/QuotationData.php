@@ -82,15 +82,4 @@ class QuotationData extends BaseAdminController
         return success((new QuotationDataService())->getCascadeOptions($quotationId, $priceName));
     }
 
-    /**
-     * 批量修改报价数据（调价）
-     * @return \think\Response
-     */
-    public function batchUpdatePrice()
-    {
-        $data = $this->request->params([
-            ['items', []],
-        ]);
-        return success('批量修改成功', (new QuotationDataService())->batchUpdatePrice($data['items']));
-    }
 }

@@ -51,6 +51,12 @@ class RecycleQuotationModel extends BaseModel
     protected $updateTime = 'update_at';
 
     /**
+     * JSON字段自动转换
+     * @var bool
+     */
+    protected $jsonAssoc = true;
+
+    /**
      * 搜索器:商品ID
      * @param $query
      * @param $value

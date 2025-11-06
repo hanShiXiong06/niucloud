@@ -86,6 +86,7 @@ class QuotationPriceConfig extends BaseAdminController
             ['adjustment_value', 0],
             ['is_enable', 1],
             ['title', ''],
+            ['sku_list', []],
         ]);
         $this->validate($data, 'addon\recycle\app\validate\quotation\QuotationPriceConfig.edit');
         (new QuotationPriceConfigService())->edit($id, $data);

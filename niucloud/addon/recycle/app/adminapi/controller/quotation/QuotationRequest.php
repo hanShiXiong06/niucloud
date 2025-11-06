@@ -52,10 +52,12 @@ class QuotationRequest extends BaseAdminController
      */
     public function sendRequest()
     {
+        
         $data = $this->request->params([
             ['config_id', 0],
         ]);
         
+
         if (empty($data['config_id'])) {
             throw new CommonException('请选择报价单配置');
         }

@@ -72,11 +72,12 @@ class DeductionConfigService extends BaseAdminService
      */
     public function add(array $data)
     {
+
         $data['site_id'] = $this->site_id;
         $data['create_at'] = time();
         $data['update_at'] = time();
-        $data['model_id'] = implode(',', $data['model_id']);
-        $data['price_id'] = implode(',', $data['price_id']);
+        $data['model_id'] = $data['model_id'];
+        $data['price_id'] = $data['price_id'];
         // remark_text
         $data['remark_text'] = $data['remark_text'];
 
@@ -179,6 +180,43 @@ class DeductionConfigService extends BaseAdminService
         }
 
         return null;
+    }
+
+    /**
+     * 根据型号表的model_id和goods_id查找匹配的扣费配置备注信息
+     * @param int $modelId 型号表的id（recycle_quotation_model表的id）
+     * @param int $goodsId 商品ID（用于匹配）
+     * @return array 返回匹配的配置信息数组，包含 remark_text，如果没有匹配则返回空数组
+     */
+    public function getMatchingConfigsByModelId(int $modelId, int $goodsId): array
+    {
+        // 查询所有启用的配置
+        $configs = $this->model->where([
+            ['site_id', '=', $this->site_id],
+            ['is_enable', '=', 1]
+        ])
+        ->field('id, model_id, price_id, remark_text')
+        ->select()
+        ->toArray();
+
+        $matchedConfigs = [];
+        foreach ($configs as $config) {
+            // 检查 model_id 是否匹配（支持逗号分隔的多个ID）
+            // model_id 存储的是型号表的id（如 "8181,1819,8199"）
+            $modelIds = array_filter(array_map('trim', explode(',', $config['model_id'] ?? '')));
+            $modelMatch = in_array((string)$modelId, $modelIds);
+
+            if ($modelMatch) {
+                $matchedConfigs[] = [
+                    'id' => $config['id'],
+                    'model_id' => $config['model_id'],
+                    'price_id' => $config['price_id'],
+                    'remark_text' => $config['remark_text'] ?? ''
+                ];
+            }
+        }
+
+        return $matchedConfigs;
     }
 
     /**

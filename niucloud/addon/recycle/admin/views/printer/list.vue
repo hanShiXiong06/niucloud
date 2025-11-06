@@ -4,7 +4,17 @@
       <template #header>
         <div class="card-header">
           <span>打印机管理</span>
-          <el-button type="primary" @click="handleAdd">添加打印机</el-button>
+          <div style="display: flex; gap: 8px;">
+            <!-- <el-button 
+              type="info" 
+              :loading="batchQueryLoading"
+              @click="handleBatchQueryStatus"
+              :disabled="printerList.length === 0"
+            >
+              批量查询状态
+            </el-button> -->
+            <el-button type="primary" @click="handleAdd">添加打印机</el-button>
+          </div>
         </div>
       </template>
 
@@ -32,8 +42,9 @@
         
         <el-table-column prop="sn" label="序列号" min-width="150" />
         
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column prop="status" label="状态" width="120">
           <template #default="{ row }">
+            <div style="display: flex; align-items: center; gap: 8px;">
             <el-switch
               v-model="row.status"
               :active-value="1"
@@ -41,6 +52,30 @@
               @change="handleStatusChange(row)"
               :loading="row.statusLoading"
             />
+              <el-button 
+                v-if="row.status" 
+                type="info" 
+                size="small" 
+                text 
+                @click="handleQueryStatus(row)"
+                :loading="row.queryLoading"
+              >
+                查询状态
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="printer_status_text" label="在线状态" width="100">
+          <template #default="{ row }">
+            <el-tag 
+              v-if="row.printer_status !== undefined" 
+              :type="getStatusTagType(row.printer_status)"
+              size="small"
+            >
+              {{ row.printer_status_text || '未知' }}
+            </el-tag>
+            <span v-else style="color: #999;">未查询</span>
           </template>
         </el-table-column>
         
@@ -78,16 +113,19 @@ import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { 
-  getUserPrinterList, 
-  deleteUserPrinter, 
+  getPrinterList, 
+  deletePrinter, 
   togglePrinterStatus, 
-  testPrinter 
+  testPrinter,
+  queryPrinterStatus,
+  batchQueryPrinterStatus
 } from '@/addon/recycle/api/printer';
 
 const router = useRouter();
 const printerList = ref([]);
 const loading = ref(false);
 const testLoading = ref(false);
+const batchQueryLoading = ref(false);
 const testDialogVisible = ref(false);
 const currentTestPrinter = ref(null);
 const testForm = ref({
@@ -99,16 +137,19 @@ const testForm = ref({
                     </PAGE`
 });
 
-// 获取用户的所有打印机列表
+// 获取打印机列表
 const fetchPrinterList = async () => {
   try {
     loading.value = true;
-    const res = await getUserPrinterList();
+    const res = await getPrinterList();
   
     if (res.code === 1 && res.data && res.data.data) {
       printerList.value = res.data.data.map(item => ({
         ...item,
-        statusLoading: false
+        statusLoading: false,
+        queryLoading: false,
+        printer_status: undefined,
+        printer_status_text: ''
       }));
     }
   } catch (error) {
@@ -141,7 +182,7 @@ const handleDelete = (row) => {
   ).then(async () => {
     try {
       loading.value = true;
-      const res = await deleteUserPrinter(row.printer_id);
+      const res = await deletePrinter(row.printer_id);
       
       if (res.code === 1) {
         await fetchPrinterList();
@@ -213,6 +254,96 @@ const submitTest = async () => {
     console.error('测试打印失败', error);
   } finally {
     testLoading.value = false;
+  }
+};
+
+// 查询单个打印机状态
+const handleQueryStatus = async (row) => {
+  try {
+    row.queryLoading = true;
+    const res = await queryPrinterStatus(row.printer_id);
+    
+    if (res.code === 1 && res.data) {
+      row.printer_status = res.data.status;
+      row.printer_status_text = res.data.status_text || '未知';
+      
+      if (res.data.status === 0) {
+        ElMessage.warning('打印机离线');
+      } else if (res.data.status === 2) {
+        ElMessage.warning('打印机状态异常（可能缺纸）');
+      } else {
+        ElMessage.success('打印机在线正常');
+      }
+    }
+  } catch (error) {
+    console.error('查询打印机状态失败', error);
+  } finally {
+    row.queryLoading = false;
+  }
+};
+
+// 批量查询所有打印机状态
+const handleBatchQueryStatus = async () => {
+  if (printerList.value.length === 0) {
+    ElMessage.warning('没有可查询的打印机');
+    return;
+  }
+  
+  // 只查询已激活的打印机
+  const activePrinters = printerList.value.filter(p => p.status === 1);
+  if (activePrinters.length === 0) {
+    ElMessage.warning('没有已激活的打印机');
+    return;
+  }
+  
+  try {
+    batchQueryLoading.value = true;
+    const printerIds = activePrinters.map(p => p.printer_id);
+    const res = await batchQueryPrinterStatus(printerIds);
+    
+    if (res.code === 1 && res.data) {
+      // 创建状态映射
+      const statusMap = {};
+      res.data.forEach(item => {
+        statusMap[item.printer_id] = {
+          status: item.status,
+          status_text: item.status_text
+        };
+      });
+      
+      // 更新列表中的状态
+      printerList.value.forEach(printer => {
+        if (statusMap[printer.printer_id]) {
+          printer.printer_status = statusMap[printer.printer_id].status;
+          printer.printer_status_text = statusMap[printer.printer_id].status_text;
+        }
+      });
+      
+      // 统计结果
+      const onlineCount = res.data.filter(item => item.status === 1).length;
+      const offlineCount = res.data.filter(item => item.status === 0).length;
+      const abnormalCount = res.data.filter(item => item.status === 2).length;
+      
+      ElMessage.success(`查询完成：在线正常 ${onlineCount} 台，离线 ${offlineCount} 台，异常 ${abnormalCount} 台`);
+    }
+  } catch (error) {
+    console.error('批量查询打印机状态失败', error);
+  } finally {
+    batchQueryLoading.value = false;
+  }
+};
+
+// 获取状态标签类型
+const getStatusTagType = (status) => {
+  switch (status) {
+    case 0:
+      return 'danger'; // 离线
+    case 1:
+      return 'success'; // 在线正常
+    case 2:
+      return 'warning'; // 在线不正常
+    default:
+      return 'info';
   }
 };
 

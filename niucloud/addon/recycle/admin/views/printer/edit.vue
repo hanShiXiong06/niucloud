@@ -73,7 +73,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { 
   getPrinterBrands, 
   getPrinterInfo, 
-  updateUserPrinter, 
+  updatePrinter, 
   testPrinter 
 } from '@/addon/recycle/api/printer';
 
@@ -133,7 +133,7 @@ const fetchPrinterInfo = async () => {
     
 
     // 从URL参数获取打印机ID
-    printerId.value = route.params.printer_id;
+    printerId.value = route.params.id || route.params.printer_id;
     if (!printerId.value) {
       ElMessage.error('打印机ID不存在');
       goBack();
@@ -185,10 +185,10 @@ const submitForm = async () => {
         type: form.type
       };
       
-      const res = await updateUserPrinter(submitData);
+      const res = await updatePrinter(submitData);
       
       if (res.code === 1) {
-
+        ElMessage.success('修改成功');
         router.push('/recycle/printer/list');
       }
     } catch (error) {
@@ -214,7 +214,9 @@ const testPrinterHandler = async () => {
       user_key: form.user_key
     });
     
-    
+    if (res.code === 1) {
+      ElMessage.success('测试打印成功');
+    }
   } catch (error) {
     console.error('测试打印失败', error);
   } finally {

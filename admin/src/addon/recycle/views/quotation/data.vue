@@ -85,27 +85,6 @@
                 <div class="toolbar-left">
                     <span class="data-count">共 {{ tableData.length }} 条数据</span>
                 </div>
-                <div class="toolbar-right">
-                    <el-button
-                        v-if="!editMode"
-                        type="primary"
-                        @click="enterEditMode"
-                        :disabled="tableData.length === 0"
-                    >
-                        <el-icon><Edit /></el-icon>
-                        批量修改价格
-                    </el-button>
-                    <template v-else>
-                        <el-button type="success" @click="saveChanges" :loading="saving">
-                            <el-icon><Check /></el-icon>
-                            保存修改 ({{ changedCount }})
-                        </el-button>
-                        <el-button @click="cancelEdit">
-                            <el-icon><Close /></el-icon>
-                            取消
-                        </el-button>
-                    </template>
-                </div>
             </div>
 
             <!-- 空数据提示 -->
@@ -170,30 +149,9 @@
                                         :key="configName"
                                         class="col-price"
                                     >
-                                        <div v-if="row.prices[configName]" class="price-cell">
-                                            <!-- 查看模式 -->
-                                            <div v-if="!editMode" class="price-view">
-                                                <span class="price-value">¥{{ row.prices[configName] }}</span>
-                                            </div>
-
-                                            <!-- 编辑模式 -->
-                                            <div v-else class="price-edit">
-                                                <el-input
-                                                    v-model="row.editPrices[configName]"
-                                                    type="number"
-                                                    size="small"
-                                                    :min="0"
-                                                    @input="onPriceChange(row, configName)"
-                                                >
-                                                    <template #prefix>¥</template>
-                                                </el-input>
-                                                <div
-                                                    v-if="isPriceChanged(row, configName)"
-                                                    class="price-diff"
-                                                    :class="getPriceDiffClass(row, configName)"
-                                                >
-                                                    {{ getPriceDiff(row, configName) }}
-                                                </div>
+                                        <div v-if="getPriceValue(row.prices, configName)" class="price-cell">
+                                            <div class="price-view">
+                                                <span class="price-value">¥{{ getPriceValue(row.prices, configName) }}</span>
                                             </div>
                                         </div>
                                         <span v-else class="empty-cell">-</span>
@@ -222,16 +180,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Edit, Check, Close } from '@element-plus/icons-vue'
-import { getQuotationDataAll, batchUpdateQuotationPrice } from '@/addon/recycle/api/quotation'
+import { ElMessage } from 'element-plus'
+import { Search, Refresh } from '@element-plus/icons-vue'
+import { getQuotationDataAll } from '@/addon/recycle/api/quotation'
 
 // ==================== 响应式数据 ====================
 
 // 搜索表单
 const searchForm = reactive({
     quotation_id: '',
-    price_name: '花机/内爆',
+    price_name: '靓机/小花',
     goods_name: '',
     capacity: '',
     price_date: getCurrentDate(),
@@ -245,11 +203,6 @@ const priceTypeOptions = ref<string[]>([])
 const tableData = ref<any[]>([])
 const loading = ref(false)
 
-// 编辑模式
-const editMode = ref(false)
-const saving = ref(false)
-const priceChanges = ref<Record<string, any>>({})
-
 // ==================== 计算属性 ====================
 
 // 配置项排序优先级
@@ -257,7 +210,7 @@ const CONFIG_SORT_ORDER = [
     // 第一组：全套充新系列
     ['全套充新    橙色', '全套充新    白色', '全套充新    蓝色'],
     // 第二组：靓机-单机系列
-    ['靓机-单机100🔋在保100+', '高保靓充50次内在保280+', '靓机-单机 95电池＋在保60+','小花电池95+保修无要求'],
+    ['靓机-单机100🔋在保100+', '高保靓充50次内在保280+', '靓机-单机 95电池＋在保60+', '小花电池95+保修无要求'],
     // 第三组：保靓充系列
     ['高保靓充100次内在保250+', '中保靓充100🔋在保100+', '靓机', '小花'],
     // 第四组：靓机/小花
@@ -288,11 +241,6 @@ function sortConfigItems (configItems: string[]): string[] {
     })
 }
 
-// 修改数量
-const changedCount = computed(() => {
-    return Object.keys(priceChanges.value).length
-})
-
 // 按配置项组合分组的表格数据
 const groupedTables = computed(() => {
     const data = tableData.value
@@ -300,11 +248,12 @@ const groupedTables = computed(() => {
 
     // 1. 按配置项组合分组
     const configGroupMap = new Map<string, any[]>()
-
+    // price: [{id: 2025, name: '靓机', price: 3500}, {id: 2026, name: '小花', price: 3250}] => ['靓机', '小花']
     data.forEach(row => {
         if (row.prices) {
             // 获取该行的配置项列表并按自定义顺序排序
-            const configKeys = sortConfigItems(Object.keys(row.prices))
+            const configKeys = sortConfigItems(row.prices.map((item: any) => item.name))
+
             const configKey = configKeys.join('|||')
 
             if (!configGroupMap.has(configKey)) {
@@ -409,6 +358,13 @@ function getCurrentDate () {
     return `${year}-${month}-${day}`
 }
 
+// 从 prices 数组中根据配置名称获取价格值
+function getPriceValue (prices: any[], configName: string) {
+    if (!Array.isArray(prices)) return undefined
+    const priceObj = prices.find((item: any) => item.name === configName)
+    return priceObj ? priceObj.price : undefined
+}
+
 // 加载数据
 async function loadData () {
     try {
@@ -440,11 +396,8 @@ async function loadData () {
             //     return getCapacityValue(a.capacity) - getCapacityValue(b.capacity)
             // })
 
-            // 处理数据：添加编辑用的价格字段
-            tableData.value = sortedData.map(item => ({
-                ...item,
-                editPrices: { ...item.prices } // 复制一份用于编辑
-            }))
+            // 处理数据
+            tableData.value = sortedData
 
             // 提取报价类型选项
             extractPriceTypes(res.data)
@@ -482,109 +435,6 @@ function handleReset () {
     searchForm.price_date = getCurrentDate()
     searchForm.is_current = 1
     loadData()
-}
-
-// 进入编辑模式
-function enterEditMode () {
-    editMode.value = true
-    priceChanges.value = {}
-
-    // 重置所有编辑价格为原始价格
-    tableData.value.forEach(row => {
-        row.editPrices = { ...row.prices }
-    })
-}
-
-// 取消编辑
-function cancelEdit () {
-    ElMessageBox.confirm('确定要取消修改吗？未保存的数据将会丢失', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-    }).then(() => {
-        editMode.value = false
-        priceChanges.value = {}
-
-        // 恢复原始价格
-        tableData.value.forEach(row => {
-            row.editPrices = { ...row.prices }
-        })
-    }).catch(() => {
-        // 取消操作
-    })
-}
-
-// 价格变化
-function onPriceChange (row: any, configName: string) {
-    const newPrice = parseFloat(row.editPrices[configName])
-    const originalPrice = row.prices[configName]
-
-    const changeKey = `${row.id}_${configName}`
-
-    if (!isNaN(newPrice) && newPrice !== originalPrice && newPrice >= 0) {
-        priceChanges.value[changeKey] = {
-            id: row.id,
-            goods_id: row.goods_id,
-            capacity: row.capacity,
-            config_name: configName,
-            new_price: newPrice,
-            original_price: originalPrice
-        }
-    } else {
-        delete priceChanges.value[changeKey]
-    }
-}
-
-// 判断价格是否改变
-function isPriceChanged (row: any, configName: string) {
-    const changeKey = `${row.id}_${configName}`
-    return changeKey in priceChanges.value
-}
-
-// 获取价格差异
-function getPriceDiff (row: any, configName: string) {
-    const newPrice = parseFloat(row.editPrices[configName])
-    const originalPrice = row.prices[configName]
-    const diff = newPrice - originalPrice
-    const percent = ((diff / originalPrice) * 100).toFixed(1)
-
-    const arrow = diff > 0 ? '↑' : '↓'
-    return `${arrow} ¥${Math.abs(diff)} (${Math.abs(parseFloat(percent))}%)`
-}
-
-// 获取价格差异样式
-function getPriceDiffClass (row: any, configName: string) {
-    const newPrice = parseFloat(row.editPrices[configName])
-    const originalPrice = row.prices[configName]
-    return newPrice > originalPrice ? 'price-up' : 'price-down'
-}
-
-// 保存修改
-async function saveChanges () {
-    if (changedCount.value === 0) {
-        ElMessage.warning('没有需要保存的修改')
-        return
-    }
-
-    try {
-        saving.value = true
-
-        const items = Object.values(priceChanges.value)
-        await batchUpdateQuotationPrice({ items })
-
-        ElMessage.success(`成功修改 ${items.length} 条价格`)
-
-        editMode.value = false
-        priceChanges.value = {}
-
-        // 重新加载数据
-        await loadData()
-    } catch (error) {
-        console.error('保存失败:', error)
-        ElMessage.error('保存失败，请重试')
-    } finally {
-        saving.value = false
-    }
 }
 
 // ==================== 生命周期 ====================
@@ -645,10 +495,6 @@ onMounted(() => {
         }
     }
 
-    .toolbar-right {
-        display: flex;
-        gap: 10px;
-    }
 }
 
 .loading-wrapper {
@@ -818,27 +664,6 @@ onMounted(() => {
         font-size: 16px;
         font-weight: 600;
         color: #409eff;
-    }
-}
-
-.price-edit {
-    width: 100%;
-
-    :deep(.el-input) {
-        width: 100%;
-    }
-
-    .price-diff {
-        font-size: 12px;
-        font-weight: 500;
-
-        &.price-up {
-            color: #f56c6c;
-        }
-
-        &.price-down {
-            color: #67c23a;
-        }
     }
 }
 </style>

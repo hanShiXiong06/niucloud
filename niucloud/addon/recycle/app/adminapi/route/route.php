@@ -493,7 +493,6 @@ Route::group('recycle', function () {
     Route::get('quotation_data/all', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@getAll');
     Route::get('quotation_data/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@info');
     Route::get('quotation_data/cascade_options', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@getCascadeOptions');
-    Route::post('quotation_data/batch_update_price', 'addon\recycle\app\adminapi\controller\quotation\QuotationData@batchUpdatePrice');
     
     // 价格配置管理
     Route::get('quotation_price_config', 'addon\recycle\app\adminapi\controller\quotation\QuotationPriceConfig@lists');
@@ -518,6 +517,22 @@ Route::group('recycle', function () {
 
     // 报价型号
     Route::get('quotation_model/lists', 'addon\recycle\app\adminapi\controller\quotation\QuotationModel@lists');
+
+    // 规格管理
+    // 型号管理
+    Route::get('quotation_spec/model/lists', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@modelLists');
+    Route::put('quotation_spec/model/:id/sync_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@setModelSyncStatus');
+    Route::post('quotation_spec/model/batch_sync_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@batchSetModelSyncStatus');
+    // 内存管理
+    Route::get('quotation_spec/capacity/lists', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@capacityLists');
+    Route::put('quotation_spec/capacity/:id/sync_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@setCapacitySyncStatus');
+    Route::post('quotation_spec/capacity/batch_sync_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@batchSetCapacitySyncStatus');
+    // 等级规格管理
+    Route::get('quotation_spec/grade_spec/lists', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@gradeSpecLists');
+    Route::put('quotation_spec/grade_spec/:id/sync_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@setGradeSpecSyncStatus');
+    Route::post('quotation_spec/grade_spec/batch_sync_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@batchSetGradeSpecSyncStatus');
+    // 同步统计
+    Route::get('quotation_spec/sync_stats', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@getSyncStats');
 
 
 })->middleware([

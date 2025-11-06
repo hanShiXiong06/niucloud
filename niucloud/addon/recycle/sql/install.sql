@@ -460,3 +460,193 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_deduction_config` (
   KEY `idx_price_id` (`price_id`),
   KEY `idx_is_enable` (`is_enable`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='扣费配置表';
+
+-- -------------------------------------------------------------
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_deduction_config`;
+CREATE TABLE `{{prefix}}recycle_deduction_config` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `config_name` varchar(100) NOT NULL DEFAULT '' COMMENT '配置名称',
+  `model_id` varchar(100) NOT NULL DEFAULT '',
+  `price_id` varchar(50) NOT NULL DEFAULT '' COMMENT '适用报价类型（如：113,114）',
+  `remark_text` text COMMENT '完整的备注文本（用于显示）',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序（数字越小越靠前）',
+  `is_enable` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用 1=启用 0=禁用',
+  `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_id` (`site_id`),
+  KEY `idx_is_enable` (`is_enable`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='扣费配置表';
+
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_quotation_request`;
+CREATE TABLE `{{pre}}recycle_quotation_request` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `quotation_id` int NOT NULL DEFAULT '0' COMMENT '报价单ID',
+  `price_name` varchar(100) NOT NULL DEFAULT '' COMMENT '价格名称',
+  `default_price_value` int NOT NULL DEFAULT '0' COMMENT '默认价格值',
+  `default_percentage_value` int NOT NULL DEFAULT '0' COMMENT '默认百分比值',
+  `price_adjustment_type` tinyint NOT NULL DEFAULT '0' COMMENT '价格调整类型',
+  `price_adjustment_value` int NOT NULL DEFAULT '0' COMMENT '价格调整值',
+  `quotation_background_color` varchar(255) NOT NULL DEFAULT '' COMMENT '报价单背景色',
+  `quotation_text_color` varchar(50) NOT NULL DEFAULT '' COMMENT '报价单文字颜色',
+  `request_url` text COMMENT '完整请求URL',
+  `request_headers` json DEFAULT NULL COMMENT '请求头信息',
+  `response_data` json DEFAULT NULL COMMENT '接口返回的原始数据',
+  `request_status` tinyint NOT NULL DEFAULT '0' COMMENT '请求状态：0-待请求，1-请求成功，2-请求失败',
+  `error_message` text COMMENT '错误信息',
+  `request_time` int NOT NULL DEFAULT '0' COMMENT '请求时间',
+  `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_id` (`site_id`),
+  KEY `idx_quotation_id` (`quotation_id`),
+  KEY `idx_request_time` (`request_time`),
+  KEY `idx_request_status` (`request_status`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='报价请求记录表';
+
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_quotation_config`;
+CREATE TABLE `{{prefix}}recycle_quotation_config` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `quotation_id` int NOT NULL DEFAULT '0' COMMENT '报价单ID',
+  `price_name` varchar(100) NOT NULL DEFAULT '' COMMENT '价格名称',
+  `config_name` varchar(100) NOT NULL DEFAULT '' COMMENT '配置名称（用于管理）',
+  `default_price_value` int NOT NULL DEFAULT '0' COMMENT '默认价格值',
+  `default_percentage_value` int NOT NULL DEFAULT '0' COMMENT '默认百分比值',
+  `price_adjustment_type` tinyint NOT NULL DEFAULT '0' COMMENT '价格调整类型',
+  `price_adjustment_value` int NOT NULL DEFAULT '0' COMMENT '价格调整值',
+  `quotation_background_color` varchar(255) NOT NULL DEFAULT '' COMMENT '报价单背景色',
+  `quotation_text_color` varchar(50) NOT NULL DEFAULT '' COMMENT '报价单文字颜色',
+  `authorization_token` varchar(500) NOT NULL DEFAULT '' COMMENT 'Authorization Token（加密存储）',
+  `open_id` varchar(100) NOT NULL DEFAULT '' COMMENT 'OpenId（加密存储）',
+  `is_enable` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用：1-启用，0-禁用',
+  `auto_request` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否自动请求：1-是，0-否',
+  `request_time` varchar(10) NOT NULL DEFAULT '00:00' COMMENT '自动请求时间（格式：HH:mm）',
+  `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
+  `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_quotation_price` (`site_id`,`quotation_id`,`price_name`),
+  KEY `idx_is_enable` (`is_enable`),
+  KEY `idx_auto_request` (`auto_request`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='报价单配置表';
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_quotation_data`;
+CREATE TABLE `{{prefix}}recycle_quotation_data` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `request_id` int NOT NULL DEFAULT '0' COMMENT '请求记录ID',
+  `quotation_id` int NOT NULL DEFAULT '0' COMMENT '报价单ID',
+  `price_name` varchar(100) NOT NULL DEFAULT '' COMMENT '价格名称',
+  `model_id` int NOT NULL DEFAULT '0' COMMENT '型号ID（关联recycle_quotation_model.id）',
+  `capacity_id` int NOT NULL DEFAULT '0' COMMENT '内存ID（关联recycle_quotation_capacity.id）',
+  `grade_spec_id` int NOT NULL DEFAULT '0' COMMENT '等级规格ID（关联recycle_quotation_grade_spec.id）',
+  `deduction_config_id` int DEFAULT NULL COMMENT '扣费配置ID（关联recycle_deduction_config.id）',
+  `goods_id` int NOT NULL DEFAULT '0' COMMENT '商品ID（冗余字段，用于查询）',
+  `goods_name` varchar(100) NOT NULL DEFAULT '' COMMENT '商品名称（冗余字段，用于查询）',
+  `capacity` varchar(50) NOT NULL DEFAULT '' COMMENT '容量（冗余字段，用于查询）',
+  `grade_spec_name` varchar(100) NOT NULL DEFAULT '' COMMENT '等级规格名称（冗余字段，用于查询）',
+  `price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '价格',
+  `price_date` date NOT NULL COMMENT '价格日期',
+  `is_current` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否当前价格：1-是，0-否',
+  `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_id` (`site_id`),
+  KEY `idx_request_id` (`request_id`),
+  KEY `idx_quotation_id` (`quotation_id`),
+  KEY `idx_model_id` (`model_id`),
+  KEY `idx_capacity_id` (`capacity_id`),
+  KEY `idx_grade_spec_id` (`grade_spec_id`),
+  KEY `idx_goods_id` (`goods_id`),
+  KEY `idx_price_date` (`price_date`),
+  KEY `idx_is_current` (`is_current`),
+  UNIQUE KEY `uk_site_model_capacity_spec_current` (`site_id`,`model_id`,`capacity_id`,`grade_spec_id`,`quotation_id`,`price_name`,`price_date`,`is_current`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='报价数据表';
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_quotation_model`;
+CREATE TABLE `{{prefix}}recycle_quotation_model` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `goods_id` int NOT NULL DEFAULT '0' COMMENT '商品ID（外部接口）',
+  `goods_name` varchar(100) NOT NULL DEFAULT '' COMMENT '商品名称（型号名称）',
+  `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态：1-启用，0-禁用',
+  `sync_enable` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否同步价格：1-同步，0-不同步',
+  `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_goods` (`site_id`,`goods_id`),
+  KEY `idx_goods_name` (`goods_name`),
+  KEY `idx_status` (`status`),
+  KEY `idx_sync_enable` (`sync_enable`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='报价型号表';
+
+-- 报价内存表
+DROP TABLE IF EXISTS `{{prefix}}recycle_quotation_capacity`;
+CREATE TABLE `{{prefix}}recycle_quotation_capacity` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `model_id` int NOT NULL DEFAULT '0' COMMENT '型号ID（关联recycle_quotation_model.id）',
+  `goods_id` int NOT NULL DEFAULT '0' COMMENT '商品ID（外部接口，冗余字段）',
+  `capacity` varchar(50) NOT NULL DEFAULT '' COMMENT '内存容量（如：256G、512G）',
+  `capacity_answer_id` int NOT NULL DEFAULT '0' COMMENT '容量答案ID（从接口数据中获取）',
+  `sync_enable` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否同步价格：1-同步，0-不同步',
+  `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_model_capacity` (`site_id`,`model_id`,`capacity_answer_id`),
+  KEY `idx_model_id` (`model_id`),
+  KEY `idx_goods_id` (`goods_id`),
+  KEY `idx_sync_enable` (`sync_enable`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='报价内存表';
+
+-- 报价等级规格表
+DROP TABLE IF EXISTS `{{prefix}}recycle_quotation_grade_spec`;
+CREATE TABLE `{{prefix}}recycle_quotation_grade_spec` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `spec_name` varchar(100) NOT NULL DEFAULT '' COMMENT '规格名称（如：全套充新 橙色、花机、内爆可测）',
+  `spec_code` varchar(50) NOT NULL DEFAULT '' COMMENT '规格编码（用于标识，可空）',
+  `sync_enable` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否同步价格：1-同步，0-不同步',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_spec_name` (`site_id`,`spec_name`),
+  KEY `idx_sync_enable` (`sync_enable`),
+  KEY `idx_sort` (`sort`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='报价等级规格表';
+
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_quotation_price_config`;
+CREATE TABLE `{{prefix}}recycle_quotation_price_config` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '' COMMENT '配置标题',
+  `config_type` tinyint NOT NULL DEFAULT '1' COMMENT '配置类型：1-SKU级别(型号+内存+配置项)，2-批量管理(型号+内存)，3-按型号，4-按分组',
+  `goods_id` int NOT NULL DEFAULT '0' COMMENT '商品ID（兼容旧数据，SKU级别配置时为空）',
+  `capacity` varchar(50) NOT NULL DEFAULT '' COMMENT '内存容量（兼容旧数据，SKU级别配置时为空）',
+  `capacity_answer_id` int NOT NULL DEFAULT '0' COMMENT '容量答案ID（从接口数据中获取）',
+  `config_item_name` varchar(100) NOT NULL DEFAULT '' COMMENT '配置项名称（兼容旧数据，SKU级别配置时为空）',
+  `group_key` int NOT NULL DEFAULT '0' COMMENT '分组key（config_type=4时使用）',
+  `sku_list` json DEFAULT NULL COMMENT 'SKU列表（JSON数组，存储多个SKU信息，格式：[{"goods_id":1,"goods_name":"xxx","capacity":"256G","capacity_answer_id":1,"config_item_name":"花机"},...]，仅config_type=1时使用）',
+  `adjustment_type` tinyint NOT NULL DEFAULT '1' COMMENT '调整方式：1-固定金额，2-百分比，3-固定价格覆盖',
+  `adjustment_value` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '调整值（正数为加，负数为减）',
+  `is_enable` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用：1-启用，0-禁用',
+  `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_id` (`site_id`),
+  KEY `idx_config_type` (`config_type`),
+  KEY `idx_goods_id` (`goods_id`),
+  KEY `idx_capacity` (`capacity`),
+  KEY `idx_group_key` (`group_key`),
+  KEY `idx_is_enable` (`is_enable`),
+  KEY `idx_goods_capacity` (`goods_id`,`capacity`),
+  KEY `idx_goods_capacity_config` (`goods_id`,`capacity`,`config_item_name`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='价格配置表';

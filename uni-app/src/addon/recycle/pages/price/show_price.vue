@@ -33,7 +33,7 @@
 				</view>
 				<view class="header-item">
 					<text class="label">更新时间：</text>
-					<text class="value">{{ updateTime }}</text>
+					<text class="value">{{ createAt }}</text>
 				</view>
 			</view>
 
@@ -45,13 +45,13 @@
 					class="table-container"
 				>
 					<!-- 表格标题 -->
-					<view class="table-title">
+					<!-- <view class="table-title">
 						<text class="title-text">配置组 {{ tableIdx + 1 }}</text>
 						<text class="title-meta">{{ table.modelCount }}个型号 · {{ table.configColumns.length }}项配置</text>
-					</view>
+					</view> -->
 
 					<!-- 配置标签 -->
-					<view class="config-tags">
+					<!-- <view class="config-tags">
 						<view
 							v-for="config in table.configColumns"
 							:key="config"
@@ -59,7 +59,7 @@
 						>
 							{{ config }}
 						</view>
-					</view>
+					</view> -->
 
 					<!-- Excel样式表格 -->
 					<scroll-view scroll-x="false" class="table-scroll">
@@ -68,10 +68,13 @@
 							<view class="table-header">
 								<view class="header-cell col-model">型号</view>
 								<view class="header-cell col-capacity">容量</view>
+                                <!-- 根据表头文字的长度，设置宽度 -->
 								<view
 									v-for="config in table.configColumns"
 									:key="config"
 									class="header-cell col-price"
+                                    
+                                    :style="{ width: `${config.length * 20}rpx` }"
 								>
 									{{ config }}
 								</view>
@@ -114,7 +117,7 @@
 												>
 													<view v-if="row.prices[config]" class="price-box">
 														<view class="price-item final">
-															<text class="price-value">{{ row.prices[config].final || '-' }}</text>
+															<text class="price-value">{{ row.prices[config] || '-' }}</text>
 														</view>
 													</view>
 													<text v-else class="empty-cell">-</text>
@@ -170,13 +173,19 @@ const tableData = ref<QuotationPriceData[]>([])
 const priceTypeName = ref('')
 const updateTime = ref('')
 
-// 配置项排序规则
+// 配置项排序规则（与管理端保持一致）
 const CONFIG_SORT_ORDER = [
+	// 第一组：全套充新系列
 	'全套充新    橙色', '全套充新    白色', '全套充新    蓝色',
+	// 第二组：靓机-单机系列
 	'靓机-单机100🔋在保100+', '高保靓充50次内在保280+', '靓机-单机 95电池＋在保60+', '小花电池95+保修无要求',
+	// 第三组：保靓充系列
 	'高保靓充100次内在保250+', '中保靓充100🔋在保100+', '靓机', '小花',
+	// 第四组：靓机/小花
+	'小花', '靓机',
+	// 第五组：花机/内爆
 	'花机', '内爆可测'
-]
+].flat()
 
 // 配置项排序函数
 function sortConfigItems(configItems: string[]): string[] {
@@ -245,8 +254,8 @@ const groupedTables = computed(() => {
 				processedRow.modelRowspan = 0
 			}
 
-			// 处理备注跨行
-			const remark = row.value_info || ''
+			// 处理备注跨行（优先使用 value_info，如果没有则使用 add_value_info）
+			const remark = row.value_info || row.add_value_info || ''
 			if (remark !== currentRemark) {
 				if (remarkStartIndex < index) {
 					for (let i = remarkStartIndex; i < index; i++) {
@@ -329,7 +338,8 @@ function processRemarkRowspan(rows: any[]) {
 
 	rows.forEach((row, index) => {
 		// 标准化备注：空值统一处理为空字符串（显示时会变成 '-'）
-		const remark = row.value_info?.trim() || ''
+		// 优先使用 value_info，如果没有则使用 add_value_info
+		const remark = (row.value_info || row.add_value_info || '').trim()
 		
 		if (remark !== currentRemark) {
 			// 备注内容变化，更新之前的跨行数
@@ -386,10 +396,7 @@ async function loadPriceData() {
 			// 设置报价类型名称和更新时间
 			if (tableData.value.length > 0) {
 				priceTypeName.value = tableData.value[0].price_name || ''
-				const createTime = tableData.value[0].create_at
-				if (createTime) {
-					updateTime.value = formatTime(createTime)
-				}
+
 			}
 		} else {
 			uni.showToast({
@@ -408,16 +415,10 @@ async function loadPriceData() {
 	}
 }
 
-// 格式化时间
-function formatTime(timestamp: number): string {
-	const date = new Date(timestamp * 1000)
-	const year = date.getFullYear()
-	const month = String(date.getMonth() + 1).padStart(2, '0')
-	const day = String(date.getDate()).padStart(2, '0')
-	const hours = String(date.getHours()).padStart(2, '0')
-	const minutes = String(date.getMinutes()).padStart(2, '0')
-	return `${year}-${month}-${day} ${hours}:${minutes}`
-}
+// create_at 获取第一条的 create_at
+const createAt = computed(() => {
+	return tableData.value[0].create_at
+})
 
 // 返回上一页
 function goBack() {
@@ -442,6 +443,7 @@ onLoad((options: any) => {
 .show-price-page {
 	min-height: 100vh;
 	background: #f5f5f5;
+    line-height: 1.4;
 }
 
 // 自定义导航栏
@@ -534,7 +536,7 @@ onLoad((options: any) => {
 }
 
 .price-content {
-	padding: 20rpx;
+	// padding: 20rpx;
 	padding-top: calc(88rpx + env(safe-area-inset-top) + 20rpx);
 }
 
@@ -548,6 +550,10 @@ onLoad((options: any) => {
 	border-radius: 16rpx;
 	padding: 24rpx;
 	margin-bottom: 20rpx;
+    width: 100%;
+    position: sticky;
+    top: calc(88rpx + env(safe-area-inset-top));
+    z-index:99;
 
 	.header-item {
 		display: flex;
@@ -574,8 +580,8 @@ onLoad((options: any) => {
 .tables-wrapper {
 	.table-container {
 		background: #fff;
-		border-radius: 16rpx;
-		margin-bottom: 20rpx;
+		// border-radius: 16rpx;
+		// margin-bottom: 20rpx;
 		overflow: hidden;
 
 		.table-title {
@@ -660,11 +666,13 @@ onLoad((options: any) => {
 			}
 
 			.remark-column {
-				width: 240rpx;
+				width: 200rpx;
 				flex-shrink: 0;
 				display: flex;
 				flex-direction: column;
 				position: relative;
+                border-left: 1px solid #f1f2f5;
+                border-bottom: 1px solid #f1f2f5;
 			}
 
 			.remark-cell-wrapper {
@@ -692,7 +700,9 @@ onLoad((options: any) => {
 
 	.header-cell {
 		font-weight: 600;
+        font-size: 24rpx;
 		color: #333;
+
 	}
 
 	.body-cell {
@@ -701,7 +711,7 @@ onLoad((options: any) => {
 	}
 
 	.col-model {
-		width: 160rpx;
+		width: 150rpx;
 		flex-shrink: 0;
         padding: 10rpx;
 		background: #fafafa;
@@ -714,11 +724,11 @@ onLoad((options: any) => {
 
 	.col-price {
 		flex: 1;
-		min-width: 100rpx;
+		min-width: 127rpx;
 	}
 
 	.col-remark {
-		width: 240rpx;
+		min-width: 200rpx;
 		flex-shrink: 0;
 		background: #fffbf0;
 	}
@@ -751,7 +761,7 @@ onLoad((options: any) => {
 		.price-item {
 			display: flex;
 			align-items: center;
-			justify-content: space-between;
+			justify-content: center;
 			padding: 6rpx 0;
 
 			&.original {
@@ -794,9 +804,9 @@ onLoad((options: any) => {
 	}
 
 	.remark-text {
-		font-size: 22rpx;
+		font-size: 20rpx;
 		color: #666;
-		line-height: 1.6;
+		line-height: 1;
 		word-break: break-all;
 		white-space: pre-wrap;
 		text-align: left;

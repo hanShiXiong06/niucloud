@@ -78,4 +78,23 @@ ALTER TABLE `{{prefix}}recycle_device` ADD COLUMN `category_id` int NOT NULL DEF
 ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_category_id` (`category_id`);
 
 -- 将已签收状态的订单设置签收时间为更新时间（临时数据修复）
-UPDATE `{{prefix}}recycle_order` SET `sign_at` = `update_at` WHERE `status` >= 2 AND `sign_at` = 0; 
+UPDATE `{{prefix}}recycle_order` SET `sign_at` = `update_at` WHERE `status` >= 2 AND `sign_at` = 0;
+
+-- 为报价型号表添加关联字段（存储该型号关联的内存ID和规格ID）
+ALTER TABLE `{{prefix}}recycle_quotation_model` ADD COLUMN `capacity_ids` json COMMENT '关联的内存ID数组' AFTER `goods_name`;
+ALTER TABLE `{{prefix}}recycle_quotation_model` ADD COLUMN `grade_spec_ids` json COMMENT '关联的规格ID数组' AFTER `capacity_ids`;
+
+-- 为报价数据表添加关联字段（重构后使用关联方式存储数据）
+-- 注意：如果字段已存在，执行时会报错，请先检查表结构
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `model_id` int NOT NULL DEFAULT '0' COMMENT '型号ID（关联recycle_quotation_model表）' AFTER `price_name`;
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `capacity_id` int NOT NULL DEFAULT '0' COMMENT '内存ID（关联recycle_quotation_capacity表）' AFTER `model_id`;
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `grade_spec_id` int NOT NULL DEFAULT '0' COMMENT '等级规格ID（关联recycle_quotation_grade_spec表）' AFTER `capacity_id`;
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `deduction_config_id` int NOT NULL DEFAULT '0' COMMENT '扣费配置ID（关联recycle_deduction_config表）' AFTER `grade_spec_id`;
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '价格（冗余字段，方便查询）' AFTER `deduction_config_id`;
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `grade_spec_name` varchar(100) NOT NULL DEFAULT '' COMMENT '等级规格名称（冗余字段，方便查询）' AFTER `grade_spec_id`;
+
+-- 为新增字段添加索引
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD KEY `idx_model_id` (`model_id`);
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD KEY `idx_capacity_id` (`capacity_id`);
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD KEY `idx_grade_spec_id` (`grade_spec_id`);
+ALTER TABLE `{{prefix}}recycle_quotation_data` ADD KEY `idx_deduction_config_id` (`deduction_config_id`); 

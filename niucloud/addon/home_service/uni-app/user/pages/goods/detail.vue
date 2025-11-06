@@ -94,7 +94,13 @@
 				</view>
 			</view>
 
-			<view class="mx-[24rpx] bg-[#ffffff] p-[24rpx] rounded-lg mb-[24rpx]">
+			<!-- 跑腿业务 -->
+			<view v-if="isErrandBusiness" class="px-[12rpx]">
+				<errand-order-form :sku-list="detail.skuList" @submit="handleErrandSubmit" />
+			</view>
+
+			<!-- 原有服务业务 -->
+			<view v-else class="mx-[24rpx] bg-[#ffffff] p-[24rpx] rounded-lg mb-[24rpx]">
 				<view class="text-[#333333] text-[30rpx] font-[600] ">{{ detail.goods.category_name }}</view>
 				<view class="flex flex-wrap">
 					<view
@@ -542,6 +548,7 @@
 	import uniTable from '@/addon/home_service/user/components/uni-table/components/uni-table/uni-table.vue'
 	import uniTr from '@/addon/home_service/user/components/uni-table/components/uni-tr/uni-tr.vue'
 	import uniTh from '@/addon/home_service/user/components/uni-table/components/uni-th/uni-th.vue'
+	import ErrandOrderForm from '@/addon/home_service/user/components/errand-order-form/errand-order-form.vue'
 	import uniTd from '@/addon/home_service/user/components/uni-table/components/uni-td/uni-td.vue'
 	import sharePoster from '@/components/share-poster/share-poster.vue'
 	import { useShare } from '@/hooks/useShare'
@@ -887,6 +894,19 @@
 			num: 1,
 			sku_id: ''
 		}
+	}
+
+	// 跑腿业务相关
+	const isErrandBusiness = computed(() => {
+		// 判断条件：商品的 goods_content 包含跑腿路线配置
+		console.log(detail.value.errand_business);
+		
+		return detail.value.errand_business
+	})
+	
+	const handleErrandSubmit = () => {
+		// 跑腿订单提交由 errand-order-form 组件内部处理
+		// 这里保留方法以防后续需要自定义逻辑
 	}
 
 	// 跳转订单预约

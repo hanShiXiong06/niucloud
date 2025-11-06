@@ -65,25 +65,32 @@ class QuotationRequestService extends BaseAdminService
             throw new CommonException('OpenId为空，请检查配置');
         }
         
-        Log::info('准备发送报价请求', [
-            'config_id' => $configId,
-            'quotation_id' => $config['quotation_id'],
-            'price_name' => $config['price_name'],
-            'token_length' => strlen($tokens['authorization_token']),
-            'openid_length' => strlen($tokens['open_id']),
-            'price_adjustment_type_raw' => $config['price_adjustment_type'] ?? '未设置',
-            'price_adjustment_type_type' => gettype($config['price_adjustment_type'] ?? null),
-            'default_price_value_raw' => $config['default_price_value'] ?? '未设置',
-            'default_percentage_value_raw' => $config['default_percentage_value'] ?? '未设置',
-        ]);
+    
+        /*
+     'https://dhmall.chaoniu.top/api/v1/quotation/detail?
+     // quotation_id=114&
+     // price_name=%E9%9D%93%E6%9C%BA%2F%E5%B0%8F%E8%8A%B1&
+     // default_price_value=200&
+     // default_percentage_value=3&
+     // price_adjustment_type=2&
+     // price_adjustment_value=-200&
+     // quotation_background_color=linear-gradient%28%2090deg%2C%20%23000000%200%25%2C%20%23666666%20100%25%29&
+     // quotation_text_color=%23ffffff' \*/ 
+
 
         // 创建请求记录
         $requestData = [
-            'site_id' => $this->site_id,
+
             'quotation_id' => $config['quotation_id'],
             'price_name' => $config['price_name'],
-            'request_status' => QuotationDict::REQUEST_STATUS_PENDING,
-            'request_time' => time(),
+            'default_price_value'=>200,
+            'default_percentage_value'=>3,
+            'price_adjustment_type'=>2,
+            'price_adjustment_value'=>200,
+            'quotation_background_color'=>'linear-gradient( 90deg, #000000 0%, #666666 100%)',
+            'quotation_text_color'=>'#ffffff',
+            // 'request_status' => QuotationDict::REQUEST_STATUS_PENDING,
+            // 'request_time' => time(),69除
         ];
 
         Db::startTrans();
@@ -94,40 +101,52 @@ class QuotationRequestService extends BaseAdminService
             // 构建请求URL（按照curl命令的原始参数）
             $baseUrl = 'https://dhmall.chaoniu.top/api/v1/quotation/detail';
             
-            // 获取参数值，如果配置中没有值或者是0，使用curl命令中的默认值
-            // 注意：price_adjustment_type=0也是无效值，应该使用默认值2
-            $defaultPriceValue = !empty($config['default_price_value']) && $config['default_price_value'] !== null
+            // 构建URL参数 - 所有必传参数
+            // 1. quotation_id: 报价单ID（114或115），从配置表中获取
+            $quotationId = isset($config['quotation_id']) && $config['quotation_id'] !== '' && $config['quotation_id'] !== null
+                ? intval($config['quotation_id']) : 0;
+            
+            if ($quotationId == 0) {
+                throw new CommonException('报价单ID不能为空，请在配置中设置quotation_id（114或115）');
+            }
+            
+            // 2. price_name: 价格名称，从配置中获取
+            $priceName = isset($config['price_name']) && $config['price_name'] !== '' && $config['price_name'] !== null
+                ? $config['price_name'] : '';
+            
+            if (empty($priceName)) {
+                throw new CommonException('价格名称不能为空，请在配置中设置price_name');
+            }
+            
+            // 3. default_price_value: 默认价格值，从配置中获取，默认200
+            $defaultPriceValue = isset($config['default_price_value']) && $config['default_price_value'] !== '' && $config['default_price_value'] !== null
                 ? intval($config['default_price_value']) : 200;
-            $defaultPercentageValue = !empty($config['default_percentage_value']) && $config['default_percentage_value'] !== null
+            
+            // 4. default_percentage_value: 默认百分比值，从配置中获取，默认3
+            $defaultPercentageValue = isset($config['default_percentage_value']) && $config['default_percentage_value'] !== '' && $config['default_percentage_value'] !== null
                 ? intval($config['default_percentage_value']) : 3;
-            // price_adjustment_type如果为0或未设置，使用默认值2
-            // 修复：确保price_adjustment_type必须是1或2，不能是0
+            
+            // 5. price_adjustment_type: 价格调整类型，从配置中获取，默认2
+            // 确保price_adjustment_type必须是1或2，不能是0
             $priceAdjustmentTypeRaw = $config['price_adjustment_type'] ?? null;
             $priceAdjustmentTypeInt = intval($priceAdjustmentTypeRaw);
             $priceAdjustmentType = ($priceAdjustmentTypeInt == 1 || $priceAdjustmentTypeInt == 2) ? $priceAdjustmentTypeInt : 2;
             
+            // 6. price_adjustment_value: 价格调整值，从配置中获取，默认-200
             $priceAdjustmentValue = isset($config['price_adjustment_value']) && $config['price_adjustment_value'] !== '' && $config['price_adjustment_value'] !== null
                 ? intval($config['price_adjustment_value']) : -200;
             
-            // 记录参数处理过程
-            Log::info('参数处理过程', [
-                'price_adjustment_type_raw' => $priceAdjustmentTypeRaw,
-                'price_adjustment_type_int' => $priceAdjustmentTypeInt,
-                'price_adjustment_type_final' => $priceAdjustmentType,
-            ]);
-            
             // 根据price_adjustment_type确保必填字段有值
-            // 错误提示："1-比例 2-金额为必填字段"
-            // 可能是接口要求：无论price_adjustment_type是什么，两个参数都必须不为0
+            // 接口要求：无论price_adjustment_type是什么，两个参数都必须不为0
             // 当price_adjustment_type=1时，default_percentage_value必须不为0
             // 当price_adjustment_type=2时，default_price_value必须不为0
-            // 但为了保险起见，我们确保两个参数都不为0
+            // 为了保险起见，确保两个参数都不为0
             if ($priceAdjustmentType == 1) {
                 // 比例类型，确保default_percentage_value不为0
                 if ($defaultPercentageValue == 0) {
                     $defaultPercentageValue = 3;
                 }
-                // 同时确保default_price_value也不为0（即使不是主要类型）
+                // 同时确保default_price_value也不为0
                 if ($defaultPriceValue == 0) {
                     $defaultPriceValue = 200;
                 }
@@ -136,7 +155,7 @@ class QuotationRequestService extends BaseAdminService
                 if ($defaultPriceValue == 0) {
                     $defaultPriceValue = 200;
                 }
-                // 同时确保default_percentage_value也不为0（即使不是主要类型）
+                // 同时确保default_percentage_value也不为0
                 if ($defaultPercentageValue == 0) {
                     $defaultPercentageValue = 3;
                 }
@@ -150,39 +169,32 @@ class QuotationRequestService extends BaseAdminService
                 }
             }
             
-            // 构建URL参数（所有参数都必须传递）
+            // 7. quotation_background_color: 报价单背景颜色，从配置中获取，默认渐变
+            $quotationBackgroundColor = !empty($config['quotation_background_color']) 
+                ? $config['quotation_background_color'] 
+                : 'linear-gradient( 90deg, #000000 0%, #666666 100%)';
+            
+            // 8. quotation_text_color: 报价单文字颜色，从配置中获取，默认白色
+            $quotationTextColor = !empty($config['quotation_text_color']) 
+                ? $config['quotation_text_color'] 
+                : '#ffffff';
+            
+            // 构建所有必传参数
             $params = [
-                'quotation_id' => $config['quotation_id'],
-                'price_name' => $config['price_name'],
+                'quotation_id' => $quotationId,
+                'price_name' => $priceName,
                 'default_price_value' => $defaultPriceValue,
                 'default_percentage_value' => $defaultPercentageValue,
                 'price_adjustment_type' => $priceAdjustmentType,
                 'price_adjustment_value' => $priceAdjustmentValue,
-                'quotation_background_color' => !empty($config['quotation_background_color']) 
-                    ? $config['quotation_background_color'] 
-                    : 'linear-gradient( 90deg, #000000 0%, #666666 100%)',
-                'quotation_text_color' => !empty($config['quotation_text_color']) 
-                    ? $config['quotation_text_color'] 
-                    : '#ffffff',
+                'quotation_background_color' => $quotationBackgroundColor,
+                'quotation_text_color' => $quotationTextColor,
             ];
             
             // 使用http_build_query会自动进行URL编码
             $requestUrl = $baseUrl . '?' . http_build_query($params);
             
-            // 记录请求参数用于调试
-            Log::info('构建请求URL参数', [
-                'config_id' => $configId,
-                'config_default_price_value' => $config['default_price_value'] ?? '未设置',
-                'config_default_percentage_value' => $config['default_percentage_value'] ?? '未设置',
-                'config_price_adjustment_type' => $config['price_adjustment_type'] ?? '未设置',
-                'config_price_adjustment_value' => $config['price_adjustment_value'] ?? '未设置',
-                'final_default_price_value' => $defaultPriceValue,
-                'final_default_percentage_value' => $defaultPercentageValue,
-                'final_price_adjustment_type' => $priceAdjustmentType,
-                'final_price_adjustment_value' => $priceAdjustmentValue,
-                'params' => $params,
-                'request_url' => $requestUrl,
-            ]);
+          
 
             // 构建请求头
             $headers = [
@@ -226,14 +238,7 @@ class QuotationRequestService extends BaseAdminService
                 throw new CommonException('响应数据解析失败：' . json_last_error_msg());
             }
             
-            // 记录响应信息用于调试
-            Log::info('报价请求响应', [
-                'request_id' => $requestId,
-                'response_code' => $responseCode,
-                'response_body' => $responseBody,
-                'response_data' => $responseData,
-            ]);
-            
+          
             // 更新请求记录
             if ($responseCode == 200 && isset($responseData['code']) && $responseData['code'] == 200) {
                 $requestRecord->save([
@@ -248,11 +253,7 @@ class QuotationRequestService extends BaseAdminService
 
                 Db::commit();
 
-                Log::info('报价请求成功', [
-                    'request_id' => $requestId,
-                    'quotation_id' => $config['quotation_id'],
-                    'price_name' => $config['price_name'],
-                ]);
+              
 
                 return [
                     'request_id' => $requestId,
