@@ -76,7 +76,7 @@ class  CoreGrabOrderService extends BaseCoreService
      */
     public function getPage(array $where, $site_id = 0)
     {
-        $field = 'order_id, order_no,site_id,store_id, order_status, create_time, order_money, pay_money, taker_longitude, taker_latitude, member_message, buy_type, reserve_service_time_stamp, taker_address, taker_full_address';
+        $field = 'order_id, order_no,site_id,store_id, order_status, create_time, order_money, pay_money, taker_longitude, taker_latitude, member_message, buy_type, reserve_service_time_stamp, taker_address, taker_full_address,errand_items';
         $order = 'create_time desc';
         $search_model = $this->model->where([['site_id', '=', $site_id], ['pay_time', '>', 0], ['store_id', '=', 0], ['is_grab', '=', 1], ['order_status', '=', OrderDict::DISPATCH]])
             ->withSearch(['order_status', 'category_id'], $where)
@@ -88,6 +88,11 @@ class  CoreGrabOrderService extends BaseCoreService
             ->order($order)
             ->append([]);
         $list = $this->pageQuery($search_model);
+        // 将 errand_items {}  转为  [] 数组 --hsx
+        foreach ($list['data'] as &$team) {
+            $team['errand_items'] = json_decode($team['errand_items'], true);
+        }
+        
         return $list;
     }
 

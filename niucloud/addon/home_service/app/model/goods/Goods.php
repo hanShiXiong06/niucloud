@@ -138,6 +138,20 @@ class Goods extends BaseModel
         }
         return $thumb_arr;
     }
+    // /** goods_image_thumb_mid */
+    // public function getGoodsImageThumbMidAttr($value, $data)
+    // {
+    //     $thumb_arr = [];
+    //     if ($data['goods_image'] != '') {
+    //         $img_arr = explode(",", $data['goods_image']);
+    //         foreach ($img_arr as $item) {
+    //             $thumb_arr[] = get_thumb_images($data['site_id'], $item, FileDict::MID);
+    //         }
+    //     }
+    //     return $thumb_arr;
+    // }
+
+   
 
     /**
      * 获取图片缩略图（大）

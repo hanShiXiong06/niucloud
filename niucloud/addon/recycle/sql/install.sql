@@ -553,6 +553,7 @@ CREATE TABLE `{{prefix}}recycle_quotation_data` (
   `grade_spec_name` varchar(100) NOT NULL DEFAULT '' COMMENT '等级规格名称（冗余字段，用于查询）',
   `price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '价格',
   `price_date` date NOT NULL COMMENT '价格日期',
+  `add_value_info` int,
   `is_current` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否当前价格：1-是，0-否',
   `create_at` int NOT NULL DEFAULT '0' COMMENT '创建时间',
   `update_at` int NOT NULL DEFAULT '0' COMMENT '更新时间',

@@ -311,6 +311,8 @@ const toDetail = (sku_id) => {
 	 */
 	const calculate = () => {
 		let data = cloneDeep(createData.value)
+
+		
 		data.sku = JSON.stringify(data.sku)
 		orderCalculate(data).then((res) => {
 			orderData.value = res.data

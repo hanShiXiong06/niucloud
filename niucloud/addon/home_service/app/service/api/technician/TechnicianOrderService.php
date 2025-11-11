@@ -135,7 +135,7 @@ class TechnicianOrderService extends BaseApiService
      */
     public function getPage(array $where)
     {
-        $field = 'auto_check_time,service_time,sub_status,order_id, order_type, site_id, member_id, order_no, out_trade_no, order_status,auto_refund_time, refund_status, create_time, pay_time, is_enable_refund, order_money, pay_money, is_abnormal, buy_type, reserve_service_time_stamp, taker_name, taker_mobile, taker_address, taker_full_address, member_message, technician_commission,technician_additional_commission, is_card_order, store_id, taker_longitude, taker_latitude,discount_money';
+        $field = 'auto_check_time,service_time,sub_status,order_id, order_type, site_id, member_id, order_no, out_trade_no, order_status,auto_refund_time, refund_status, create_time, pay_time, is_enable_refund, order_money, pay_money, is_abnormal, buy_type, reserve_service_time_stamp, taker_name, taker_mobile, taker_address, taker_full_address, member_message, technician_commission,technician_additional_commission, is_card_order, store_id, taker_longitude, taker_latitude,discount_money , errand_items';
         $order = 'create_time desc';
         $search_model = $this->model->where([['site_id', '=', $this->site_id], ['pay_time', '>', 0], ['technician_id', '=', $this->technician_id]])
             ->withSearch(['order_status','order_id'], $where)->field($field)
@@ -157,6 +157,12 @@ class TechnicianOrderService extends BaseApiService
             $team['technician_sum_commission'] = bcadd($team['technician_additional_commission'], $team['technician_commission'], 2);
             $team['reserve_service_time'] = Order::formatTime($team['reserve_service_time_stamp']);
         }
+
+        // 将 errand_items {}  转为  [] 数组 --hsx
+        foreach ($list['data'] as &$team) {
+            $team['errand_items'] = json_decode($team['errand_items'], true);
+        }
+
         return $list;
     }
 
@@ -168,7 +174,7 @@ class TechnicianOrderService extends BaseApiService
      */
     public function getDetail(int $order_id)
     {
-        $field = 'sub_status,order_id, member_message,site_id, reserve_service_time,member_id, order_from, order_no, out_trade_no, order_status, refund_status, ip, create_time, pay_time, close_time, auto_close_time, is_enable_refund, delete_time, order_money, pay_money,taker_name,taker_mobile,taker_province,taker_city,taker_district,taker_address,taker_full_address,taker_longitude,taker_latitude,technician_id,service_time,dispatch_time,finish_time, buy_type, reserve_service_time_stamp, technician_commission,technician_additional_commission,is_card_order,is_abnormal,take_photos,discount_money,check_photos';
+        $field = 'sub_status,order_id, member_message,site_id, reserve_service_time,member_id, order_from, order_no, out_trade_no, order_status, refund_status, ip, create_time, pay_time, close_time, auto_close_time, is_enable_refund, delete_time, order_money, pay_money,taker_name,taker_mobile,taker_province,taker_city,taker_district,taker_address,taker_full_address,taker_longitude,taker_latitude,technician_id,service_time,dispatch_time,finish_time, buy_type, reserve_service_time_stamp, technician_commission,technician_additional_commission,is_card_order,is_abnormal,take_photos,discount_money,check_photos,errand_items';
         $detail = $this->model->where([['site_id', '=', $this->site_id], ['order_id', '=', $order_id], ['technician_id', '=', $this->technician_id]])->field($field)->with(['item' => function ($query) {
             $query->field('order_id, item_id, item_name,order_item_id, item_type, is_refund, item_image,price, num, item_money, site_id, out_trade_no,pay_time,is_enable_refund,item_images,refund_no,refund_status,is_force_clock_in,is_force_departure,is_finish_photograph')->append(['item_image_thumb_small', 'item_images_thumb_mid', 'item_images_thumb_small', 'item_type_name']);
         }, 'member' => function ($query) {
@@ -182,6 +188,12 @@ class TechnicianOrderService extends BaseApiService
             $detail['take_photos'] = $detail['take_photos'] ? explode(',',$detail['take_photos']) : [];
             (new Notice())->where([['site_id', '=', $this->site_id],['order_id','=',$order_id]])->update(['unread_count'=>0]);
             $detail['check_photos'] = $detail['check_photos'] ? explode(',', $detail['check_photos']) : [];
+        }
+        // 将 errand_items {}  转为  [] 数组 --hsx
+        if(!empty($detail['errand_items'])){
+            $detail['errand_items'] = json_decode($detail['errand_items'], true);
+        }else{
+            $detail['errand_items'] = [];
         }
         return $detail;
     }

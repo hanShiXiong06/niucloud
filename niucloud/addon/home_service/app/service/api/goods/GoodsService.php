@@ -136,6 +136,10 @@ class GoodsService extends BaseApiService
             ])
             ->append(['sku_image_thumb_small', 'sku_image_thumb_mid', 'sku_image_thumb_big'])
             ->findOrEmpty()->toArray();
+            // goods_image_thumb_mid  = goods_image 
+            if ($info['goods']['goods_image'] != '') {
+                $info['goods']['goods_image_thumb_mid'] = explode(",", $info['goods']['goods_image']);
+            }
         if (empty($info['goods'])) throw new CommonException('HOME_SERVICE_GOODS_NOT_EXIST');//商品不存在
         if ($info['goods']['buy_type'] == GoodsDict::BUY) {
             // 查询会员价

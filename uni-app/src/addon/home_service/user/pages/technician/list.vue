@@ -51,6 +51,7 @@
                             </view>
                         </view>
                     </view>
+                    
                 </view>
             </template>
             <mescroll-empty :option="{'icon': img('static/resource/images/empty.png'),'tip': t('nothingMore')}"

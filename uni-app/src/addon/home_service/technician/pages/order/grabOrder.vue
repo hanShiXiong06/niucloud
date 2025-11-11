@@ -104,6 +104,22 @@
 					</view>
 				</view>
 
+				<!-- errand_items 渲染 -->
+				<view class="mt-[30rpx]" v-if="detail.errand_items.length > 0">
+					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-lg">
+						<view class="flex justify-between">
+							<view class="text-[30rpx] font-bold">跑腿订单</view>
+						</view>
+						<view class="flex flex-col mt-2" v-for="(item,index) in detail.errand_items" :key="index">
+							<view class="flex  justify-between items-center">
+								<view class="text-[#666666] text-[24rpx] leading-[35rpx]">{{item.sku_name}}  取件码: <up-tag size="mini" :text="item.pickup_code"></up-tag></view>
+
+								<view class="text-[#666666] text-[24rpx] leading-[35rpx]"> ￥{{item.price}}</view>
+							</view>
+						</view>
+					</view>
+				</view>
+
 				<view class="mt-[30rpx]">
 					<view class="bg-[#fff] mx-[30rpx] p-[30rpx] mt-[30rpx] rounded-lg">
 						<view class="flex justify-between">

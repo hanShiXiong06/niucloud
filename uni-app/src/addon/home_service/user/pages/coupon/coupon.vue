@@ -466,6 +466,6 @@
 		background: #f6f6f6 !important;
 	}
 	:deep(.u-icon__icon){
-		coloe:#ffffff !important;
+		color:#ffffff !important;
 	}
 </style>

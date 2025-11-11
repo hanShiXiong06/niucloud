@@ -75,7 +75,7 @@ class GrabOrderService extends BaseApiService
      */
     public function getDetail(int $order_id)
     {
-        $field = 'sub_status,order_id, member_message,site_id, reserve_service_time,member_id, order_from, order_no, out_trade_no, order_status, refund_status, ip, create_time, pay_time, close_time, auto_close_time, is_enable_refund, delete_time, order_money, pay_money,taker_name,taker_mobile,taker_province,taker_city,taker_district,taker_address,taker_full_address,taker_longitude,taker_latitude,technician_id,service_time,dispatch_time,finish_time, buy_type, reserve_service_time_stamp, technician_commission,technician_additional_commission,is_card_order,is_abnormal,take_photos,discount_money,store_id';
+        $field = 'sub_status,order_id, member_message,site_id, reserve_service_time,member_id, order_from, order_no, out_trade_no, order_status, refund_status, ip, create_time, pay_time, close_time, auto_close_time, is_enable_refund, delete_time, order_money, pay_money,taker_name,taker_mobile,taker_province,taker_city,taker_district,taker_address,taker_full_address,taker_longitude,taker_latitude,technician_id,service_time,dispatch_time,finish_time, buy_type, reserve_service_time_stamp, technician_commission,technician_additional_commission,is_card_order,is_abnormal,take_photos,discount_money,store_id,errand_items';
         $detail = $this->model->where([['site_id', '=', $this->site_id], ['order_id', '=', $order_id]])->field($field)->with(['item' => function ($query) {
             $query->field('order_id, item_id, item_name,order_item_id, item_type, is_refund, item_image,price, num, item_money, site_id, out_trade_no,pay_time,is_enable_refund,item_images,refund_no,refund_status')->append(['item_image_thumb_small', 'item_images_thumb_mid', 'item_images_thumb_small', 'item_type_name']);
         }, 'member' => function ($query) {
@@ -88,6 +88,13 @@ class GrabOrderService extends BaseApiService
             $detail['reserve_service_time'] = Order::formatTime($detail['reserve_service_time_stamp']);
             $detail['take_photos'] = $detail['take_photos'] ? explode(',',$detail['take_photos']) : [];
 
+        }
+
+        // 将 errand_items {}  转为  [] 数组 --hsx
+        if(!empty($detail['errand_items'])){
+            $detail['errand_items'] = json_decode($detail['errand_items'], true);
+        }else{
+            $detail['errand_items'] = [];
         }
         return $detail;
     }

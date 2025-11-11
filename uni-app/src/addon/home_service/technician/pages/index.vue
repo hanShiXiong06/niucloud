@@ -77,12 +77,13 @@
 							</view>
 							<view class="">
 								<view class="text-[30rpx] font-bold truncate w-72 leading-[50rpx]">
-									{{item.item[0]?.item_name}}
+									{{ item.errand_items.length!= 0 ? '跑腿服务 '+ item.errand_items.length+' 件' :item.item[0]?.item_name }}
 								</view>
 								<view class="text-[24rpx] text-[#666666] mt-[10rpx] truncate w-72 ">
 									{{item.member_message || '暂无备注信息'}}
 								</view>
 							</view>
+
 						</view>
 					</view>
 					

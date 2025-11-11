@@ -45,30 +45,20 @@
 							<text class="label-text">服务类型</text>
 							<text class="required">*</text>
 						</view>
-						<picker :range="skuList" range-key="sku_name" @change="handleSkuChange($event, index)">
-							<view class="picker" :class="{ 'picker-selected': item.sku_id, 'picker-error': item.showError && !item.sku_id }">
-								<text class="picker-text" :class="{ 'picker-placeholder': !item.sku_name }">
-									{{ item.sku_name || '请选择服务类型' }}
-								</text>
-								<text class="nc-iconfont nc-icon-youV6xx picker-icon"></text>
+					<picker :range="displaySkuList" range-key="display_name" @change="handleSkuChange($event, index)">
+						<view class="picker" :class="{ 'picker-selected': item.sku_id, 'picker-error': item.showError && !item.sku_id }">
+							<view class="picker-content" v-if="item.sku_name">
+								<text class="picker-name">{{ item.sku_name }}</text>
+								<text class="picker-price">{{ item.price }}元</text>
 							</view>
-						</picker>
+							<text class="picker-text picker-placeholder" v-else>请选择服务类型</text>
+							<text class="nc-iconfont nc-icon-youV6xx picker-icon"></text>
+						</view>
+					</picker>
 						<view class="error-tip" v-if="item.showError && !item.sku_id">请选择服务类型</view>
 					</view>
 
-					<!-- 价格显示 -->
-					<view class="form-item" v-if="item.sku_id">
-						<view class="price-display">
-							<view class="price-left">
-								<text class="price-label">服务费用</text>
-								<text class="price-tag">实时计费</text>
-							</view>
-							<view class="price-right">
-								<text class="price-symbol">¥</text>
-								<text class="price-value">{{ item.price }}</text>
-							</view>
-						</view>
-					</view>
+					
 
 					<!-- 取件码 -->
 					<view class="form-item" v-if="item.sku_id">
@@ -190,6 +180,14 @@
 		return total.toFixed(2)
 	})
 
+	// 为弹窗显示创建带价格的列表
+	const displaySkuList = computed(() => {
+		return props.skuList.map(sku => ({
+			...sku,
+			display_name: `${sku.sku_name}  ${sku.price}元`
+		}))
+	})
+
 	// 提交按钮文字
 	const submitBtnText = computed(() => {
 		if (orderItems.value.length === 0) {
@@ -205,7 +203,7 @@
 	// 处理 SKU 选择
 	const handleSkuChange = (event : any, index : number) => {
 		const selectedIndex = event.detail.value
-		const sku = props.skuList[selectedIndex]
+		const sku = displaySkuList.value[selectedIndex]
 		
 		orderItems.value[index].sku_id = sku.sku_id
 		orderItems.value[index].sku_name = sku.sku_name
@@ -536,6 +534,32 @@
 				border-color: #FF4444;
 			}
 
+			.picker-content {
+				flex: 1;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				min-width: 0;
+			}
+
+			.picker-name {
+				font-size: 28rpx;
+				color: #333;
+				flex: 1;
+				min-width: 0;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.picker-price {
+				font-size: 28rpx;
+				color: #FF6B00;
+				font-weight: 600;
+				margin-left: 16rpx;
+				flex-shrink: 0;
+			}
+
 			.picker-text {
 				font-size: 28rpx;
 				color: #333;
@@ -549,6 +573,7 @@
 			.picker-icon {
 				font-size: 24rpx;
 				color: #999;
+				margin-left: 16rpx;
 			}
 		}
 
