@@ -51,6 +51,17 @@ class QuotationDataService extends BaseAdminService
     }
 
     /**
+     * 手动设置站点ID，兼容任务或脚本场景
+     * @param int|null $siteId
+     * @return static
+     */
+    public function setSiteId(?int $siteId)
+    {
+        $this->site_id = $siteId;
+        return $this;
+    }
+
+    /**
      * 解析并存储接口返回的数据
      * @param int $requestId 请求记录ID
      * @param array $data 接口返回的data数据
@@ -128,8 +139,8 @@ class QuotationDataService extends BaseAdminService
             if (!empty($model['goods_id']) && $model['goods_id'] > 0 && !empty($model['id']) && $model['id'] > 0) {
                 $goodsIdToModelId[$model['goods_id']] = $model['id'];
                 $modelIdToModel[$model['id']] = $model;
+                }
             }
-        }
         
 
 
@@ -217,7 +228,7 @@ class QuotationDataService extends BaseAdminService
                 
                 // 根据型号ID和报价类型ID查找匹配的扣费配置
                 $deductionConfigId = null;
-                $deductionService = new DeductionConfigService();
+                $deductionService = (new DeductionConfigService())->setSiteId($this->site_id);
                 $configId = $deductionService->getMatchingConfigId($goodsId, $priceTypeId);
                 if ($configId !== null) {
                     $deductionConfigId = $configId;
@@ -258,14 +269,14 @@ class QuotationDataService extends BaseAdminService
                             $diff = $finalPrice - $originalPrice;
                             $diffPercent = $originalPrice > 0 ? round(($diff / $originalPrice) * 100, 2) : 0;
 
-                    }
-
+                        }
+                        
                     // 再次验证关键字段，确保数据完整性
                     if (empty($modelId) || $modelId <= 0) {
                         
                         continue;
-                    }
-                    
+                }
+
                     // 创建价格记录（使用关联方式）
                 $batchData[] = [
                     'site_id' => $this->site_id,
@@ -450,7 +461,7 @@ class QuotationDataService extends BaseAdminService
                         if (isset($price['name']) && $price['name'] === $item['grade_spec_name']) {
                             $priceItem = $price;
                             break;
-                        }
+    }
                     }
                     
                     // 如果没有找到，创建一个新的价格项
@@ -577,7 +588,7 @@ class QuotationDataService extends BaseAdminService
         $list = array_values($mergedData);
         
         // 获取扣费配置服务实例，填充 add_value_info
-        $deductionService = new DeductionConfigService();
+        $deductionService = (new DeductionConfigService())->setSiteId($this->site_id);
         foreach ($list as &$item) {
             // 根据 model_id 和 goods_id 查找匹配的扣费配置，填充 add_value_info
             $modelId = $item['model_id'] ?? 0;
@@ -630,11 +641,11 @@ class QuotationDataService extends BaseAdminService
         // 设置缓存（使用tag，当天数据24小时，历史数据1小时）
         $cacheTime = isset($where['price_date']) && $where['price_date'] == date('Y-m-d') ? 86400 : 3600;
         Cache::tag($cacheTag)->set($cacheKey, $list, $cacheTime);
-        
+
         return $list;
     }
 
-  
+
     /**
      * 计算最终价格（应用价格配置）
      * @param int $goodsId
@@ -858,8 +869,8 @@ class QuotationDataService extends BaseAdminService
                     foreach ($gradeSpecIds as $gradeSpecId) {
                         if (!in_array($gradeSpecId, $allGradeSpecIds)) {
                             $allGradeSpecIds[] = $gradeSpecId;
-                        }
-                    }
+                }
+            }
                 }
             }
         } else {
@@ -876,7 +887,7 @@ class QuotationDataService extends BaseAdminService
                 }
             }
         }
-        
+
         // 去重
         $allCapacityIds = array_unique($allCapacityIds);
         $allGradeSpecIds = array_unique($allGradeSpecIds);
@@ -902,30 +913,30 @@ class QuotationDataService extends BaseAdminService
                 ->order('sort asc, id asc')
                 ->select()
                 ->toArray();
-        }
+                        }
         
         // 按ID建立索引
         $capacityMapById = []; // capacity_id => capacity_info
         foreach ($capacities as $capacity) {
             $capacityMapById[$capacity['id'] ?? 0] = $capacity;
-        }
-        
+            }
+            
         $gradeSpecMapById = []; // grade_spec_id => grade_spec_info
         foreach ($gradeSpecs as $gradeSpec) {
             $gradeSpecMapById[$gradeSpec['id'] ?? 0] = $gradeSpec;
-        }
-        
+    }
+
         // 组织成级联结构：型号 -> 内存 -> 规格
         $modelMap = []; // goods_id => model_info
         $cascadeOptions = [];
-        
+
         foreach ($models as $model) {
             $goodsId = $model['goods_id'] ?? 0;
             $modelId = $model['id'] ?? 0;
             if ($goodsId <= 0) {
-                continue;
-            }
-            
+                    continue;
+                }
+
             $modelMap[$goodsId] = $model;
             
             // 确定该型号下需要显示的内存和规格
@@ -939,23 +950,23 @@ class QuotationDataService extends BaseAdminService
                 foreach ($modelCapacityIds as $capacityId) {
                     $modelCapacityMap[$capacityId] = $model['grade_spec_ids'] ?? [];
                 }
-            }
-            
+                }
+                
             $modelCapacities = [];
             foreach ($modelCapacityMap as $capacityId => $gradeSpecIds) {
                 if (!isset($capacityMapById[$capacityId])) {
                     continue;
                 }
-                
+
                 $capacity = $capacityMapById[$capacityId];
                 
                 // 获取该型号+内存组合下的规格
                     $configItems = [];
                 foreach ($gradeSpecIds as $gradeSpecId) {
                     if (!isset($gradeSpecMapById[$gradeSpecId])) {
-                        continue;
-                    }
-                    
+                    continue;
+                }
+
                     $gradeSpec = $gradeSpecMapById[$gradeSpecId];
                             $configItems[] = [
                         'value' => $gradeSpec['spec_name'] ?? '',

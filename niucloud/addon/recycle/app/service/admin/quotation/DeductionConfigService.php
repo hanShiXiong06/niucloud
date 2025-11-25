@@ -18,6 +18,15 @@ class DeductionConfigService extends BaseAdminService
     }
 
     /**
+     * 任务等场景需要手动指定站点
+     */
+    public function setSiteId(?int $siteId): self
+    {
+        $this->site_id = $siteId;
+        return $this;
+    }
+
+    /**
      * 获取扣费配置分页列表
      */
     public function getPage(array $where = [])

@@ -246,7 +246,7 @@ class QuotationPriceService extends BaseApiService
         $list = array_values($mergedData);
         
         // 获取扣费配置服务实例，填充 add_value_info
-        $deductionService = new DeductionConfigService();
+        $deductionService = (new DeductionConfigService())->setSiteId($this->site_id);
         foreach ($list as &$item) {
             // 根据 model_id 和 goods_id 查找匹配的扣费配置，填充 add_value_info
             $modelId = $item['model_id'] ?? 0;
