@@ -1,0 +1,2 @@
+ALTER TABLE aiimage_model
+    ADD COLUMN model VARCHAR(255) DEFAULT NULL COMMENT '模型';

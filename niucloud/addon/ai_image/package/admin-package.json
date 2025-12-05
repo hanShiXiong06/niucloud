@@ -1,0 +1,5 @@
+{
+	"dependencies": {
+		"vue3-colorpicker": "^2.2.3"
+	}
+}

@@ -207,6 +207,18 @@
                 <template v-if="component.componentName == 'PhoneShopSearch'">
                    <diy-phone-shop-search ref="diyPhoneShopSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopSearch" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'AiImageHelp'">
+                   <diy-ai-image-help ref="diyAiImageHelpRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiImageHelp" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'AiImageMember'">
+                   <diy-ai-image-member ref="diyAiImageMemberRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiImageMember" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'AiImageMemberInfo'">
+                   <diy-ai-image-member-info ref="diyAiImageMemberInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiImageMemberInfo" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'AiImageModel'">
+                   <diy-ai-image-model ref="diyAiImageModelRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiImageModel" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 </view>
             </view>
         </template>
@@ -249,6 +261,10 @@
    import diyPhoneShopMemberInfo from '@/addon/phone_shop/components/diy/phone-shop-member-info/index.vue';
    import diyPhoneShopOrderInfo from '@/addon/phone_shop/components/diy/phone-shop-order-info/index.vue';
    import diyPhoneShopSearch from '@/addon/phone_shop/components/diy/phone-shop-search/index.vue';
+   import diyAiImageHelp from '@/addon/ai_image/components/diy/ai-image-help/index.vue';
+   import diyAiImageMember from '@/addon/ai_image/components/diy/ai-image-member/index.vue';
+   import diyAiImageMemberInfo from '@/addon/ai_image/components/diy/ai-image-member-info/index.vue';
+   import diyAiImageModel from '@/addon/ai_image/components/diy/ai-image-model/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';

@@ -1,0 +1,16 @@
+{
+      "siteId":"站点ID",
+      "catId":"分类",
+      "title":"名称",
+      "titlePlaceholder":"请输入名称",
+      "image":"封面",
+      "desc":"描述",
+      "content":"详情",
+      "viewNum":"浏览量",
+      "sort":"排序",
+      "addAiimageHelp":"添加帮助中心",
+      "updateAiimageHelp":"编辑帮助中心",
+      "aiimageHelpDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}
