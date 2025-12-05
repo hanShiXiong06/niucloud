@@ -1,0 +1,11 @@
+{
+  "title": "hsx_cms",
+  "desc": "",
+  "key": "hsx_cms",
+  "version": "1.0.0",
+  "author": "hsx",
+  "type": "app",
+  "support_app": "",
+  "compile":[],
+  "support_version": "1.1.8"
+}

@@ -64,13 +64,18 @@ class QuotationConfigService extends BaseAdminService
      * @param int $id
      * @return array
      */
-    public function getInfo(int $id): array
+    public function getInfo(int $id, ?int $siteId = null): array
     {
+        $where = [['id', '=', $id]];
+        
+        // 如果指定了siteId，使用指定的；否则使用当前服务的site_id（兼容Job调用）
+        $targetSiteId = $siteId ?? $this->site_id;
+        if (!empty($targetSiteId)) {
+            $where[] = ['site_id', '=', $targetSiteId];
+        }
+        
         $info = $this->model
-            ->where([
-                ['id', '=', $id],
-                ['site_id', '=', $this->site_id]
-            ])
+            ->where($where)
             ->findOrEmpty()
             ->toArray();
 

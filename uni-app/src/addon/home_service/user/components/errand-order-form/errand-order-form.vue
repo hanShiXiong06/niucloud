@@ -46,15 +46,15 @@
 							<text class="required">*</text>
 						</view>
 					<picker :range="displaySkuList" range-key="display_name" @change="handleSkuChange($event, index)">
-						<view class="picker" :class="{ 'picker-selected': item.sku_id, 'picker-error': item.showError && !item.sku_id }">
+							<view class="picker" :class="{ 'picker-selected': item.sku_id, 'picker-error': item.showError && !item.sku_id }">
 							<view class="picker-content" v-if="item.sku_name">
 								<text class="picker-name">{{ item.sku_name }}</text>
 								<text class="picker-price">{{ item.price }}元</text>
 							</view>
 							<text class="picker-text picker-placeholder" v-else>请选择服务类型</text>
-							<text class="nc-iconfont nc-icon-youV6xx picker-icon"></text>
-						</view>
-					</picker>
+								<text class="nc-iconfont nc-icon-youV6xx picker-icon"></text>
+							</view>
+						</picker>
 						<view class="error-tip" v-if="item.showError && !item.sku_id">请选择服务类型</view>
 					</view>
 

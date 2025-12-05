@@ -1,0 +1,11 @@
+{
+  "title": "二手商城系统",
+  "desc": "实物虚拟商品，订单，物流同城配送，门店自提",
+  "key": "phone_shop",
+  "version": "1.3.3",
+  "author": "hsx&&niucloud",
+  "type": "app",
+  "support_app": "",
+  "compile":[],
+  "support_version": "1.1.0"
+}

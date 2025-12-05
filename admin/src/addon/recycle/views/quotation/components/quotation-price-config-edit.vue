@@ -46,11 +46,11 @@
                                     class="flex items-center justify-between text-sm text-gray-600 p-2 bg-white rounded border"
                                 >
                                     <div class="flex items-center">
-                                        <span class="font-medium">{{ sku.goods_name || ('型号ID: ' + sku.goods_id) }}</span>
-                                        <span class="mx-2 text-gray-400">/</span>
-                                        <span>{{ sku.capacity || '-' }}</span>
-                                        <span v-if="sku.config_item_name" class="mx-2 text-gray-400">/</span>
-                                        <span v-if="sku.config_item_name" class="text-blue-600">{{ sku.config_item_name }}</span>
+                                    <span class="font-medium">{{ sku.goods_name || ('型号ID: ' + sku.goods_id) }}</span>
+                                    <span class="mx-2 text-gray-400">/</span>
+                                    <span>{{ sku.capacity || '-' }}</span>
+                                    <span v-if="sku.config_item_name" class="mx-2 text-gray-400">/</span>
+                                    <span v-if="sku.config_item_name" class="text-blue-600">{{ sku.config_item_name }}</span>
                                     </div>
                                     <el-button
                                         type="danger"
@@ -735,14 +735,14 @@ const confirm = async (formEl: FormInstance | undefined) => {
                             }
                             // 如果有sku_list，清空其他字段
                             if (data.sku_list && Array.isArray(data.sku_list) && data.sku_list.length > 0) {
-                                data.goods_id = 0
-                                data.capacity = ''
-                                data.config_item_name = ''
+                        data.goods_id = 0
+                        data.capacity = ''
+                        data.config_item_name = ''
                             }
                         } else {
                             // 添加模式：如果没有选择SKU，清空sku_list
                             if (!selectedSkuKeys.value || selectedSkuKeys.value.length === 0) {
-                                data.sku_list = null
+                        data.sku_list = null
                             }
                         }
                     } else {

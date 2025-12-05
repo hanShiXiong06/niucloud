@@ -117,7 +117,7 @@
 												>
 													<view v-if="row.prices[config]" class="price-box">
 														<view class="price-item final">
-															<text class="price-value">{{ row.prices[config] || '-' }}</text>
+															<text class="price-value">{{ row.prices[config].final || '-' }}</text>
 														</view>
 													</view>
 													<text v-else class="empty-cell">-</text>
@@ -173,19 +173,13 @@ const tableData = ref<QuotationPriceData[]>([])
 const priceTypeName = ref('')
 const updateTime = ref('')
 
-// 配置项排序规则（与管理端保持一致）
+// 配置项排序规则
 const CONFIG_SORT_ORDER = [
-	// 第一组：全套充新系列
 	'全套充新    橙色', '全套充新    白色', '全套充新    蓝色',
-	// 第二组：靓机-单机系列
 	'靓机-单机100🔋在保100+', '高保靓充50次内在保280+', '靓机-单机 95电池＋在保60+', '小花电池95+保修无要求',
-	// 第三组：保靓充系列
 	'高保靓充100次内在保250+', '中保靓充100🔋在保100+', '靓机', '小花',
-	// 第四组：靓机/小花
-	'小花', '靓机',
-	// 第五组：花机/内爆
 	'花机', '内爆可测'
-].flat()
+]
 
 // 配置项排序函数
 function sortConfigItems(configItems: string[]): string[] {
@@ -254,8 +248,8 @@ const groupedTables = computed(() => {
 				processedRow.modelRowspan = 0
 			}
 
-			// 处理备注跨行（优先使用 value_info，如果没有则使用 add_value_info）
-			const remark = row.value_info || row.add_value_info || ''
+			// 处理备注跨行
+			const remark = row.value_info || ''
 			if (remark !== currentRemark) {
 				if (remarkStartIndex < index) {
 					for (let i = remarkStartIndex; i < index; i++) {
@@ -338,8 +332,7 @@ function processRemarkRowspan(rows: any[]) {
 
 	rows.forEach((row, index) => {
 		// 标准化备注：空值统一处理为空字符串（显示时会变成 '-'）
-		// 优先使用 value_info，如果没有则使用 add_value_info
-		const remark = (row.value_info || row.add_value_info || '').trim()
+		const remark = row.value_info?.trim() || ''
 		
 		if (remark !== currentRemark) {
 			// 备注内容变化，更新之前的跨行数
@@ -728,7 +721,7 @@ onLoad((options: any) => {
 	}
 
 	.col-remark {
-		min-width: 200rpx;
+		width: 200rpx;
 		flex-shrink: 0;
 		background: #fffbf0;
 	}
@@ -804,7 +797,7 @@ onLoad((options: any) => {
 	}
 
 	.remark-text {
-		font-size: 20rpx;
+		font-size: 22rpx;
 		color: #666;
 		line-height: 1;
 		word-break: break-all;

@@ -183,12 +183,40 @@
                 <template v-if="component.componentName == 'HomeServiceTechnician'">
                    <diy-homeService-technician ref="diyHomeServiceTechnicianRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceTechnician" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'PhoneGoodsCoupon'">
+                   <diy-phone-goods-coupon ref="diyPhoneGoodsCouponRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneGoodsCoupon" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneGoodsList'">
+                   <diy-phone-goods-list ref="diyPhoneGoodsListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneGoodsList" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneManyGoodsList'">
+                   <diy-phone-many-goods-list ref="diyPhoneManyGoodsListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneManyGoodsList" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopExchangeGoods'">
+                   <diy-phone-shop-exchange-goods ref="diyPhoneShopExchangeGoodsRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopExchangeGoods" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopExchangeInfo'">
+                   <diy-phone-shop-exchange-info ref="diyPhoneShopExchangeInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopExchangeInfo" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopMemberInfo'">
+                   <diy-phone-shop-member-info ref="diyPhoneShopMemberInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopMemberInfo" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopOrderInfo'">
+                   <diy-phone-shop-order-info ref="diyPhoneShopOrderInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopOrderInfo" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopSearch'">
+                   <diy-phone-shop-search ref="diyPhoneShopSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopSearch" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 </view>
             </view>
         </template>
+        <template v-if="diyStore.mode == '' && data.global && diyGroup.showCopyright.value && data.global.copyright && data.global.copyright.isShow">
+           <copy-right />
+        </template>
+
         <template v-if="diyStore.mode == '' && data.global && data.global.bottomTabBar && data.global.bottomTabBar.isShow">
             <view class="pt-[20rpx]"></view>
-            <tabbar />
+            <tabbar :addon="data.global.bottomTabBar.designNav.key" />
         </template>
     </view>
 </template>
@@ -213,6 +241,14 @@
    import diyHomeServiceSettle from '@/addon/home_service/components/diy/homeService-settle/index.vue';
    import diyHomeServiceSubguarantee from '@/addon/home_service/components/diy/homeService-subguarantee/index.vue';
    import diyHomeServiceTechnician from '@/addon/home_service/components/diy/homeService-technician/index.vue';
+   import diyPhoneGoodsCoupon from '@/addon/phone_shop/components/diy/phone-goods-coupon/index.vue';
+   import diyPhoneGoodsList from '@/addon/phone_shop/components/diy/phone-goods-list/index.vue';
+   import diyPhoneManyGoodsList from '@/addon/phone_shop/components/diy/phone-many-goods-list/index.vue';
+   import diyPhoneShopExchangeGoods from '@/addon/phone_shop/components/diy/phone-shop-exchange-goods/index.vue';
+   import diyPhoneShopExchangeInfo from '@/addon/phone_shop/components/diy/phone-shop-exchange-info/index.vue';
+   import diyPhoneShopMemberInfo from '@/addon/phone_shop/components/diy/phone-shop-member-info/index.vue';
+   import diyPhoneShopOrderInfo from '@/addon/phone_shop/components/diy/phone-shop-order-info/index.vue';
+   import diyPhoneShopSearch from '@/addon/phone_shop/components/diy/phone-shop-search/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';

@@ -291,6 +291,7 @@ class QuotationDataService extends BaseAdminService
                         // 'goods_name' => $goodsName, // 冗余字段
                         // 'capacity' => $capacity, // 冗余字段
                         // 'grade_spec_name' => $configName, // 冗余字段
+                        'prices' => $originalPrice,
                         'price' => $finalPrice,
                     'add_value_info' => $deductionConfigId,
                     'price_date' => $priceDate,
@@ -418,6 +419,9 @@ class QuotationDataService extends BaseAdminService
         
         foreach ($list as $item) {
             $processedCount++;
+            $rawPriceValue = isset($item['original_price']) && $item['original_price'] !== null
+                ? floatval($item['original_price'])
+                : null;
             // 使用 quotation_id + price_name + goods_id + capacity_answer_id 作为合并键
             // 注意：如果 capacity_answer_id 为 0，使用 capacity_id 作为备用，确保合并键的唯一性
             $capacityKey = $item['capacity_answer_id'] ?? 0;
@@ -459,18 +463,18 @@ class QuotationDataService extends BaseAdminService
                     $priceItem = null;
                     foreach ($item['prices'] as $price) {
                         if (isset($price['name']) && $price['name'] === $item['grade_spec_name']) {
-                            $priceItem = $price;
+                            $priceItem = $this->normalizePriceEntry($price, $rawPriceValue);
                             break;
-    }
+                        }
                     }
                     
                     // 如果没有找到，创建一个新的价格项
                     if ($priceItem === null) {
-                        $priceItem = [
+                        $priceItem = $this->normalizePriceEntry([
                             'id' => $item['id'],
                             'name' => $item['grade_spec_name'],
-                            'price' => floatval($item['price'])
-                        ];
+                            'price' => floatval($item['price']),
+                        ], $rawPriceValue);
                     }
                     
                     $mergedData[$mergeKey]['prices'][] = $priceItem;
@@ -478,7 +482,9 @@ class QuotationDataService extends BaseAdminService
                 } else {
                     // 如果没有 grade_spec_name，直接使用 item 的 prices 数组
                     if (!empty($item['prices']) && is_array($item['prices'])) {
-                        $mergedData[$mergeKey]['prices'] = $item['prices'];
+                        $mergedData[$mergeKey]['prices'] = array_map(function ($price) use ($rawPriceValue) {
+                            return $this->normalizePriceEntry($price, $rawPriceValue);
+                        }, $item['prices']);
                     }
                     
                     // 记录缺少 grade_spec_name 或 price 的记录
@@ -515,24 +521,27 @@ class QuotationDataService extends BaseAdminService
                         
                         // 更新价格
                         $mergedData[$mergeKey]['prices'][$existingIndex]['price'] = floatval($item['price']);
+                        if ($rawPriceValue !== null) {
+                            $mergedData[$mergeKey]['prices'][$existingIndex]['original_price'] = $rawPriceValue;
+                        }
                     } elseif ($existingIndex === null) {
                         // 如果不存在，添加新的价格项
                         // 从 item 的 prices 数组中查找对应的配置项，如果没有则创建新的
                         $priceItem = null;
                         foreach ($item['prices'] as $price) {
                             if (isset($price['name']) && $price['name'] === $item['grade_spec_name']) {
-                                $priceItem = $price;
+                                $priceItem = $this->normalizePriceEntry($price, $rawPriceValue);
                                 break;
                             }
                         }
                         
                         // 如果没有找到，创建一个新的价格项
                         if ($priceItem === null) {
-                            $priceItem = [
+                            $priceItem = $this->normalizePriceEntry([
                                 'id' => $item['id'] ,
                                 'name' => $item['grade_spec_name'],
                                 'price' => floatval($item['price'])
-                            ];
+                            ], $rawPriceValue);
                         }
                         
                         $mergedData[$mergeKey]['prices'][] = $priceItem;
@@ -553,7 +562,7 @@ class QuotationDataService extends BaseAdminService
                                     }
                                 }
                                 if (!$exists) {
-                                    $mergedData[$mergeKey]['prices'][] = $price;
+                                    $mergedData[$mergeKey]['prices'][] = $this->normalizePriceEntry($price, $rawPriceValue);
                                 }
                             }
                         }
@@ -657,7 +666,7 @@ class QuotationDataService extends BaseAdminService
     protected function calculateFinalPrice(int $goodsId, string $capacity, string $configItemName, float $originalPrice): float
     {
         // 按优先级查询配置
-        $priceConfigService = new QuotationPriceConfigService();
+        $priceConfigService = (new QuotationPriceConfigService())->setSiteId($this->site_id);
         $config = $priceConfigService->getMatchingConfig($goodsId, $capacity, $configItemName);
         
         if (empty($config) || $config['is_enable'] != QuotationDict::STATUS_ENABLED) {
@@ -684,6 +693,28 @@ class QuotationDataService extends BaseAdminService
             default:
                 return $originalPrice;
         }
+    }
+
+    /**
+     * 规范化价格条目，补充原始价格信息
+     * @param array|float|int $price
+     * @param float|null $rawPrice
+     * @return array
+     */
+    protected function normalizePriceEntry($price, ?float $rawPrice = null): array
+    {
+        if (!is_array($price)) {
+            $price = [
+                'price' => is_numeric($price) ? floatval($price) : $price
+            ];
+        }
+        if (isset($price['price'])) {
+            $price['price'] = floatval($price['price']);
+        }
+        if (!isset($price['original_price'])) {
+            $price['original_price'] = $rawPrice ?? ($price['price'] ?? null);
+        }
+        return $price;
     }
 
     /**

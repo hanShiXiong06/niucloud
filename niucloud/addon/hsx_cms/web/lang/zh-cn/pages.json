@@ -1,0 +1,9 @@
+{
+    "pages": {
+        "hsx_cms": {
+            "hello_world": {
+                "index": "hello_world"
+            }
+        }
+    }
+}

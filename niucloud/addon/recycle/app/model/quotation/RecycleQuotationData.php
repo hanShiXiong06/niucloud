@@ -219,20 +219,24 @@ class RecycleQuotationData extends BaseModel
     public function formatPrices(array $item): array
     {
         // 解析 prices JSON
-        // 支持两种情况：
-        // 1. prices 是 JSON 字符串（需要解析）
-        // 2. prices 已经是数组（ThinkPHP 可能自动解析了 JSON 字段）
-        $pricesRaw = $item['prices'] ?? null;
-        $prices = [];
-        
-        if ($pricesRaw !== null && $pricesRaw !== '') {
-            if (is_string($pricesRaw)) {
-                // 如果是字符串，尝试解析 JSON
-                $prices = json_decode($pricesRaw, true) ?: [];
-            } elseif (is_array($pricesRaw)) {
-                // 如果已经是数组，直接使用
-                $prices = $pricesRaw;
-            }
+        $pricesJson = $item['prices'] ?? '';
+
+        // 如果字段是数值，表示存储的是原始价格
+        if ($pricesJson !== '' && !is_array($pricesJson) && is_numeric($pricesJson)) {
+            $priceValue = floatval($pricesJson);
+            $pricesArray[] = [
+                'id' => $item['grade_spec_id'] ?? ($item['id'] * 1000 + 1),
+                'name' => $item['grade_spec_name'] ?? ($item['price_name'] ?? '默认配置'),
+                'price' => isset($item['price']) ? floatval($item['price']) : $priceValue,
+                'original_price' => $priceValue
+            ];
+            return $pricesArray;
+        }
+
+        if (empty($pricesJson) || !is_string($pricesJson)) {
+            $prices = [];
+        } else {
+            $prices = json_decode($pricesJson, true) ?: [];
         }
         
         // 将 prices 从键值对格式转换为对象数组格式
@@ -266,7 +270,8 @@ class RecycleQuotationData extends BaseModel
                 $pricesArray[] = [
                     'id' => $configId,
                     'name' => $configName,
-                    'price' => floatval($price)
+                    'price' => floatval($price),
+                    'original_price' => floatval($price)
                 ];
                 $index++;
             }
@@ -326,8 +331,10 @@ class RecycleQuotationData extends BaseModel
         
         // 格式化数据：优先使用关联表的数据，如果没有关联数据则使用冗余字段（兼容旧数据）
         foreach ($list as &$item) {
+            $rawPriceValue = $item['prices'];
             // 格式化 prices
             $item['prices'] = $this->formatPrices($item);
+            $item['original_price'] = is_numeric($rawPriceValue) ? floatval($rawPriceValue) : null;
             
             // 优先使用关联表的数据覆盖冗余字段
             if (!empty($item['model'])) {

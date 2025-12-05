@@ -543,6 +543,10 @@ CREATE TABLE `{{prefix}}recycle_quotation_data` (
   `request_id` int NOT NULL DEFAULT '0' COMMENT '请求记录ID',
   `quotation_id` int NOT NULL DEFAULT '0' COMMENT '报价单ID',
   `price_name` varchar(100) NOT NULL DEFAULT '' COMMENT '价格名称',
+  `group_key` int not null DEFAULT 0 COMMENT '价格分组',
+  `capacity_answer_id`  int not null DEFAULT 0 COMMENT ' 内存id ',
+  `config_items`  json comment ' 配置项 ',
+  `config_selected` json COMMENT '配置项名称数组',
   `model_id` int NOT NULL DEFAULT '0' COMMENT '型号ID（关联recycle_quotation_model.id）',
   `capacity_id` int NOT NULL DEFAULT '0' COMMENT '内存ID（关联recycle_quotation_capacity.id）',
   `grade_spec_id` int NOT NULL DEFAULT '0' COMMENT '等级规格ID（关联recycle_quotation_grade_spec.id）',
@@ -552,6 +556,7 @@ CREATE TABLE `{{prefix}}recycle_quotation_data` (
   `capacity` varchar(50) NOT NULL DEFAULT '' COMMENT '容量（冗余字段，用于查询）',
   `grade_spec_name` varchar(100) NOT NULL DEFAULT '' COMMENT '等级规格名称（冗余字段，用于查询）',
   `price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '价格',
+  `prices` int NOT NULL DEFAULT 0 COMMENT '价格',
   `price_date` date NOT NULL COMMENT '价格日期',
   `add_value_info` int,
   `is_current` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否当前价格：1-是，0-否',
@@ -567,8 +572,7 @@ CREATE TABLE `{{prefix}}recycle_quotation_data` (
   KEY `idx_goods_id` (`goods_id`),
   KEY `idx_price_date` (`price_date`),
   KEY `idx_is_current` (`is_current`),
-  UNIQUE KEY `uk_site_model_capacity_spec_current` (`site_id`,`model_id`,`capacity_id`,`grade_spec_id`,`quotation_id`,`price_name`,`price_date`,`is_current`)
-) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='报价数据表';
+  ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='报价数据表';
 
 DROP TABLE IF EXISTS `{{prefix}}recycle_quotation_model`;
 CREATE TABLE `{{prefix}}recycle_quotation_model` (

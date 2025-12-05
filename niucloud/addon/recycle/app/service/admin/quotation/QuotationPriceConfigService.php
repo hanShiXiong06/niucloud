@@ -30,6 +30,17 @@ class QuotationPriceConfigService extends BaseAdminService
     }
 
     /**
+     * 手动设置站点ID（兼容脚本/任务）
+     * @param int|null $siteId
+     * @return static
+     */
+    public function setSiteId(?int $siteId)
+    {
+        $this->site_id = $siteId;
+        return $this;
+    }
+
+    /**
      * 获取价格配置列表
      * @param array $where
      * @return array

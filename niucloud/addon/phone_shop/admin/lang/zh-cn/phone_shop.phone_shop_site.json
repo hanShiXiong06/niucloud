@@ -1,0 +1,13 @@
+{
+      "id":"站点id",
+      "idPlaceholder":"全部",
+      "name":"商户名",
+      "namePlaceholder":"请输入商户名",
+      "client":"商户身份",
+      "clientPlaceholder":"请输入商户身份",
+      "addPhoneShopSite":"添加二手机商户信息",
+      "updatePhoneShopSite":"编辑二手机商户信息",
+      "phoneShopSiteDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}

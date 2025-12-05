@@ -1,0 +1,12 @@
+{
+  "tabMemory": "内存规格",
+  "tabMemoryGroup": "内存规格分组",
+  "groupName": "分组名称",
+  "groupNamePlaceholder": "请输入分组名称",
+  "sort": "排序",
+  "sortPlaceholder": "请输入排序",
+  "addMemory": "添加内存规格",
+  "updateMemory": "编辑内存规格分组",
+  "sortTips": "排序号格式输入错误",
+  "memoryGroupDeleteTips": "确定要删除该数据吗？"
+}

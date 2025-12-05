@@ -78,7 +78,7 @@ ALTER TABLE `{{prefix}}recycle_device` ADD COLUMN `category_id` int NOT NULL DEF
 ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_category_id` (`category_id`);
 
 -- 将已签收状态的订单设置签收时间为更新时间（临时数据修复）
-UPDATE `{{prefix}}recycle_order` SET `sign_at` = `update_at` WHERE `status` >= 2 AND `sign_at` = 0;
+UPDATE `{{prefix}}recycle_order` SET `sign_at` = `update_at` WHERE `status` >= 2 AND `sign_at` = 0; 
 
 -- 为报价型号表添加关联字段（存储该型号关联的内存ID和规格ID）
 ALTER TABLE `{{prefix}}recycle_quotation_model` ADD COLUMN `capacity_ids` json COMMENT '关联的内存ID数组' AFTER `goods_name`;
