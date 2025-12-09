@@ -54,30 +54,27 @@ class QuotationRequestService extends BaseAdminService
         $requestUrl = $this->buildRequestUrl($quotationParams);
         $requestData = $this->buildRequestData($quotationParams, $targetSiteId);
 
-        Db::startTrans();
-        try {
-            $requestRecord = $this->requestModel->create($requestData);
-            $requestId = $requestRecord->id;
+        // 创建请求记录（缩小事务范围）
+        $requestRecord = $this->requestModel->create($requestData);
+        $requestId = $requestRecord->id;
 
+        try {
             $headerMap = $this->defaultHeaderMap($tokens);
             $this->persistRequestMeta($requestRecord, $requestUrl, $headerMap);
 
+            // HTTP请求在事务外执行，避免长时间锁表
             [$responseCode, $responseData] = $this->sendHttpRequest($requestUrl, $headerMap);
-            $result = $this->handleResponse($requestRecord, $responseCode, $responseData);
 
-            Db::commit();
+            // 处理响应时才开启事务
+            $result = $this->handleResponse($requestRecord, $responseCode, $responseData);
 
             return $result;
         } catch (\Exception $e) {
-            Db::rollback();
-            
             // 更新请求记录为失败状态
-            if (isset($requestId)) {
-                $this->requestModel->where('id', $requestId)->update([
-                    'request_status' => QuotationDict::REQUEST_STATUS_FAILED,
-                    'error_message' => $e->getMessage(),
-                ]);
-            }
+            $this->requestModel->where('id', $requestId)->update([
+                'request_status' => QuotationDict::REQUEST_STATUS_FAILED,
+                'error_message' => $e->getMessage(),
+            ]);
 
             Log::error('报价请求异常', [
                 'config_id' => $configId,
@@ -311,20 +308,29 @@ class QuotationRequestService extends BaseAdminService
     private function handleResponse(RecycleQuotationRequest $requestRecord, int $responseCode, array $responseData): array
     {
         if ($responseCode == 200 && isset($responseData['code']) && $responseData['code'] == 200) {
-            $requestRecord->save([
-                'request_status' => QuotationDict::REQUEST_STATUS_SUCCESS,
-                'response_code' => $responseCode,
-                'response_data' => json_encode($responseData, JSON_UNESCAPED_UNICODE),
-            ]);
+            // 成功响应时开启事务处理数据
+            Db::startTrans();
+            try {
+                $requestRecord->save([
+                    'request_status' => QuotationDict::REQUEST_STATUS_SUCCESS,
+                    'response_code' => $responseCode,
+                    'response_data' => json_encode($responseData, JSON_UNESCAPED_UNICODE),
+                ]);
 
-            $dataService = (new QuotationDataService())->setSiteId($this->site_id);
-            $dataService->parseAndSaveData($requestRecord->id, $responseData['data']);
+                $dataService = (new QuotationDataService())->setSiteId($this->site_id);
+                $dataService->parseAndSaveData($requestRecord->id, $responseData['data']);
 
-            return [
-                'request_id' => $requestRecord->id,
-                'status' => QuotationDict::REQUEST_STATUS_SUCCESS,
-                'message' => '请求成功',
-            ];
+                Db::commit();
+
+                return [
+                    'request_id' => $requestRecord->id,
+                    'status' => QuotationDict::REQUEST_STATUS_SUCCESS,
+                    'message' => '请求成功',
+                ];
+            } catch (\Exception $e) {
+                Db::rollback();
+                throw $e;
+            }
         }
 
         $errorMessage = $responseData['msg'] ?? '请求失败';
