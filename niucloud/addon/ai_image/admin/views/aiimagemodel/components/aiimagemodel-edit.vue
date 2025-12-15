@@ -16,7 +16,7 @@
                     </el-form-item>
 
                     <el-form-item :label="t('logo')" prop="logo">
-                        <upload-image v-model="formData.logo" />
+                        <upload-image v-model="formData.logo" limit="2" />
                     </el-form-item>
 
                     <el-form-item :label="t('desc')">

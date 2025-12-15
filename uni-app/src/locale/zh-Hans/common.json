@@ -156,6 +156,8 @@
     "shop_giftcard.actualPayment": "实付款",
     "shop_giftcard.orderClose": "关闭订单",
     "shop_giftcard.orderNo": "订单号",
+    "onceCard": "次卡",
+    "cardUnit": "张",
     "home_service.reserveBtn": "去抢购",
     "home_service.noHomeAddress": "没有更多内容啦~",
     "home_service.soldOut": "已售",

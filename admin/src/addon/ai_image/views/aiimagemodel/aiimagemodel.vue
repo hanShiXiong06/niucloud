@@ -44,10 +44,10 @@
                     </template>
                     <el-table-column prop="name" :label="t('name')" min-width="120" :show-overflow-tooltip="true" />
 
-                    <el-table-column :label="t('logo')" width="100" align="left">
+                    <el-table-column :label="t('logo')" width="200" align="left">
                         <template #default="{ row }">
-                            <el-avatar v-if="row.logo" :src="img(row.logo)" />
-                            <el-avatar v-else icon="UserFilled" />
+                            <el-avatar v-for="logo in row.logo" :key="logo" :src="img(logo)" />
+
                         </template>
                     </el-table-column>
                     <el-table-column prop="desc" :label="t('desc')" min-width="120" :show-overflow-tooltip="true" />
@@ -120,6 +120,8 @@ const asyncModelFn = () => {
     asyncModel().then(() => {
         asyncLoading.value = false
         loadAiimageModelList()
+    }).catch(() => {
+        asyncLoading.value = false
     })
 }
 let aiimageModelTable = reactive({
@@ -158,6 +160,16 @@ const loadAiimageModelList = (page: number = 1) => {
         aiimageModelTable.loading = false
         aiimageModelTable.data = res.data.data
         aiimageModelTable.total = res.data.total
+
+        // 循环判断 data 中的 item 的 logo中是否有逗号分割的图片， 仅保留第一张图片
+        aiimageModelTable.data.forEach(item => {
+            if (item.logo && item.logo.includes(',')) {
+                item.logo = item.logo.split(',')
+            }else{
+                // 直接转换为数组
+                item.logo = [item.logo]
+            }
+        })
     }).catch(() => {
         aiimageModelTable.loading = false
     })

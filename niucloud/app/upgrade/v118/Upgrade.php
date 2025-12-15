@@ -79,7 +79,7 @@ class Upgrade
                     $diy_data['global']['copyright'] = [
                         'control' => true,
                         'isShow' => false
-                    ]; 
+                    ];
                 }
                 if (!isset($diy_data['global']['bottomTabBar']['designNav'])) {
                     $diy_data['global']['bottomTabBar']['designNav'] =  ['title'=>'','key'=>''];

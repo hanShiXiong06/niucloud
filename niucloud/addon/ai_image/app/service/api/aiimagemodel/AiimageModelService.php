@@ -36,7 +36,7 @@ class AiimageModelService extends BaseApiService
      */
     public function getPage(array $where = [])
     {
-        $field = 'id,site_id,name,logo,desc,prompt,sort,demo_image,status,point,is_vip,create_time,is_upload_image,is_prompt';
+        $field = 'id,site_id,name,logo,desc,prompt,sort,demo_image,status,point,is_vip,create_time,is_upload_image,is_prompt,model';
         $order = 'sort desc';
 
         $search_model = $this->model->where([ [ 'site_id' ,"=", $this->site_id ] ])->withSearch(["name","status","is_vip"], $where)->field($field)->order($order);

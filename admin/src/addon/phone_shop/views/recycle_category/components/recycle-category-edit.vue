@@ -40,7 +40,7 @@ import { t } from '@/lang'
 import type { FormInstance } from 'element-plus'
 // import { addCategory, editCategory, getCategoryInfo, getCategoryList } from '@/addon/phone_shop_price/api/goods'
 
-import { addRecycleCategory, editRecycleCategory, getRecycleCategoryInfo, getCategoryList } from '@/addon/phone_shop_price/api/recycle_category'
+import { addRecycleCategory, editRecycleCategory, getRecycleCategoryInfo, getCategoryList } from '@/addon/phone_shop/api/recycle_category'
 
 const showDialog = ref(false)
 const loading = ref(false)

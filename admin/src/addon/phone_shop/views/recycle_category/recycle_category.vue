@@ -8,8 +8,8 @@
                     {{ t('addCategory') }}
                 </el-button>
             </div>
-            <el-tabs class="demo-tabs" model-value="/phone_shop_price/goods/category" @tab-change="handleClick">
-                <el-tab-pane :label="t('tabGoodsCategory')" name="/phone_shop_price/goods/category" />
+            <el-tabs class="demo-tabs" model-value="/phone_shop/goods/category" @tab-change="handleClick">
+                <el-tab-pane :label="t('tabGoodsCategory')" name="/phone_shop/goods/category" />
 
             </el-tabs>
             <div class="mt-[10px]">
@@ -31,7 +31,7 @@
                                     <template #error>
                                         <div class="image-slot">
                                             <img class="w-[30px] h-[30px]"
-                                                src="@/addon/phone_shop_price/assets/category_default.png" />
+                                                src="@/addon/phone_shop/assets/category_default.png" />
                                         </div>
                                     </template>
                                 </el-image>
@@ -68,7 +68,7 @@
                                     <template #error>
                                         <div class="image-slot">
                                             <img class="w-[30px] h-[30px]"
-                                                src="@/addon/phone_shop_price/assets/category_default.png" />
+                                                src="@/addon/phone_shop/assets/category_default.png" />
                                         </div>
                                     </template>
                                 </el-image>
@@ -108,11 +108,11 @@ import { reactive, ref, onMounted, nextTick } from 'vue'
 import { t } from '@/lang'
 // import { updateCategory, editCategory } from '@/addon/phone_shop_price/api/goods'
 
-import { getCategoryTree, deleteRecycleCategory, editRecycleCategory } from '@/addon/phone_shop_price/api/recycle_category'
+import { getCategoryTree, deleteRecycleCategory, editRecycleCategory } from '@/addon/phone_shop/api/recycle_category'
 
 import { img } from '@/utils/common'
 import { ElMessageBox } from 'element-plus'
-import categoryEdit from '@/addon/phone_shop_price/views/recycle_category/components/recycle-category-edit.vue'
+import categoryEdit from '@/addon/phone_shop/views/recycle_category/components/recycle-category-edit.vue'
 
 import { useRoute, useRouter } from 'vue-router'
 import Sortable from 'sortablejs'

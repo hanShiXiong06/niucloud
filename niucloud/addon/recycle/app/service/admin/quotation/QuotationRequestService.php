@@ -18,7 +18,7 @@ use think\facade\Log;
  */
 class QuotationRequestService extends BaseAdminService
 {
-    private const REQUEST_BASE_URL = 'https://dhmall.chaoniu.top/api/v1/quotation/detail';
+    private const REQUEST_BASE_URL = 'https://daheng.chaoniu.top/api/v1/quotation/detail';
 
     /**
      * @var RecycleQuotationRequest
