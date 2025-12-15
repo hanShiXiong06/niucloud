@@ -1,8 +1,8 @@
 <template>
 	<view :style="warpCss" class="agent-diy-container">
 		<view :style="maskLayer"></view>
-		<!-- 双列布局 -->
-		<view v-if="isTwoColumn" class="agent-list-container layout-two-column">
+		<!-- style2: 单列大图 -->
+		<view v-if="isSingleColumn" class="agent-list-container layout-one-column">
 			<view v-for="(item, index) in listData" :key="index"
 				@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
 				class="agent-item-card card-two-column"
@@ -10,33 +10,36 @@
 					background: diyComponent.bgcolor,
 					...getCardStyle()
 				}">
+
 				<view class="agent-item-image-wrapper">
 					<image-swiper 
-						:logo="item.logo" 
-						:width="'80rpx'"
-						:height="'80rpx'"
+						:logo="limitImages(item.logo)" 
+						:width="'100%'"
+						:max-images="maxImages"
 					></image-swiper>
 					<!-- Gemini模型标识 -->
 					<view v-if="item.model === 'gemini-3-pro-image-preview'" class="model-badge">
 						<text class="banana-icon">🍌</text>
 					</view>
 				</view>
-				<view class="agent-item-content">
+				<view class="agent-item-content" :style="getContentStyle()">
 					<view class="agent-item-header">
 						<view class="agent-item-title" :style="{ 
 							color: diyComponent.titlecolor,
-							fontSize: (diyComponent.titleSize || 30) + 'rpx'
+							fontSize: (diyComponent.titleSize || 30) + 'rpx',
+							textAlign: diyComponent.textAlign || 'center'
 						}">{{ item.name }}
 						</view>
 					</view>
 					<view class="agent-item-desc" :style="{ 
 						color: diyComponent.desccolor,
-						fontSize: (diyComponent.descSize || 22) + 'rpx'
+						fontSize: (diyComponent.descSize || 22) + 'rpx',
+						textAlign: diyComponent.textAlign || 'center'
 					}">{{ item.desc }}</view>
 				</view>
 			</view>
 		</view>
-		<!-- 瀑布流布局（单列） -->
+		<!-- style1: 双列瀑布流 -->
 		<view v-else class="waterfall-container" :style="{ gap: (diyComponent.cardGap || 12) + 'rpx' }">
 			<view class="waterfall-column" :style="{ gap: (diyComponent.cardGap || 12) + 'rpx' }">
 				<view v-for="(item, index) in leftList" :key="index"
@@ -48,26 +51,29 @@
 					}">
 					<view class="agent-item-image-wrapper waterfall-image-wrapper">
 						<image-swiper 
-							:logo="item.logo" 
+							:logo="limitImages(item.logo)" 
 							:width="'100%'"
+							:max-images="maxImages"
 						></image-swiper>
 						<!-- Gemini模型标识 -->
 						<view v-if="item.model === 'gemini-3-pro-image-preview'" class="model-badge">
 							<text class="banana-icon">🍌</text>
 						</view>
 					</view>
-					<view class="agent-item-content waterfall-content">
+					<view class="agent-item-content waterfall-content" :style="getContentStyle()">
 						<view class="agent-item-header">
 							<view class="agent-item-title" :style="{ 
 								color: diyComponent.titlecolor,
-								fontSize: (diyComponent.titleSize || 30) + 'rpx'
+								fontSize: (diyComponent.titleSize || 30) + 'rpx',
+								textAlign: diyComponent.textAlign || 'left'
 							}">{{ item.name }}
 							</view>
 						</view>
 						<view class="agent-item-footer">
 							<view class="agent-item-stats" :style="{ 
 								color: diyComponent.desccolor || 'rgba(203, 213, 225, 0.6)',
-								fontSize: (diyComponent.descSize || 22) + 'rpx'
+								fontSize: (diyComponent.descSize || 22) + 'rpx',
+								textAlign: diyComponent.textAlign || 'left'
 							}">
 								{{ diyComponent.statsText || 'xx万人在使用' }}
 							</view>
@@ -98,17 +104,22 @@
 							<text class="banana-icon">🍌</text>
 						</view>
 					</view>
-					<view class="agent-item-content waterfall-content">
+					<view class="agent-item-content waterfall-content" :style="getContentStyle()">
 						<view class="agent-item-header">
 							<view class="agent-item-title" :style="{ 
 								color: diyComponent.titlecolor,
-								fontSize: (diyComponent.titleSize || 30) + 'rpx'
+								fontSize: (diyComponent.titleSize || 30) + 'rpx',
+								textAlign: diyComponent.textAlign || 'left'
 							}">{{ item.name }}
 							</view>
 						</view>
 						<view class="agent-item-footer">
-							<view class="agent-item-stats" :style="{ color: diyComponent.desccolor }">
-								xx万人在使用
+							<view class="agent-item-stats" :style="{ 
+								color: diyComponent.desccolor,
+								textAlign: diyComponent.textAlign || 'left',
+								fontSize: (diyComponent.descSize || 22) + 'rpx'
+							}">
+								{{ diyComponent.statsText || 'xx万人在使用' }}
 							</view>
 							<view class="agent-item-button" 
 								:style="getButtonStyle()"
@@ -170,7 +181,7 @@ const getModelListFn = () => {
 		isRefreshing.value = false;
 		
 		// 如果不是双列布局，处理瀑布流
-		if (!isTwoColumn.value) {
+		if (!isSingleColumn.value) {
 			curLimitList.value = newArr;
 			loadWaterfallData();
 		}
@@ -220,6 +231,9 @@ const diyComponent = computed(() => {
 		return props.component;
 	}
 })
+
+// 控制项
+const maxImages = computed(() => diyComponent.value.maxImages || 3);
 
 const warpCss = computed(() => {
 	var style = '';
@@ -287,7 +301,8 @@ const instance = getCurrentInstance();
 const height = ref(0);
 
 // 判断是否为双列布局（通过 diyComponent.layout 或 styleType 控制，默认单列）
-const isTwoColumn = computed(() => {
+const isSingleColumn = computed(() => {
+	// style2: 单列大图；其他为 style1 瀑布流
 	return diyComponent.value.style === 'style2';
 });
 
@@ -306,6 +321,22 @@ const getButtonStyle = () => {
 		fontSize: `${buttonSize}rpx`,
 		background: `linear-gradient(135deg, ${buttonColor}, ${buttonColor.replace('0.9', '0.8')})`,
 	};
+};
+
+// 内容区域样式
+const getContentStyle = () => {
+	const padding = diyComponent.value.contentPadding;
+	return {
+		padding: `${padding !== undefined ? padding : 16}rpx`,
+		textAlign: diyComponent.value.textAlign || 'left'
+	};
+};
+
+// 限制图片数量（单张/多张控制）
+const limitImages = (logo: string) => {
+	if (!logo) return '';
+	const arr = logo.includes(',') ? logo.split(',') : [logo];
+	return arr.slice(0, maxImages.value).join(',');
 };
 
 // 获取卡片样式
@@ -416,6 +447,16 @@ const rebalanceWaterfall = () => {
 	padding: 12rpx;
 }
 
+.agent-list-container.layout-one-column {
+	display: grid;
+	grid-template-columns: 1fr;
+	box-sizing: border-box;
+	// 单行
+	.agent-item-card{
+		width: 100%;
+		margin-bottom: 12rpx;
+	}
+}
 /* 双列布局容器 */
 .agent-list-container.layout-two-column {
 	display: flex;
@@ -424,6 +465,7 @@ const rebalanceWaterfall = () => {
 	padding: 12rpx;
 	box-sizing: border-box;
 }
+
 
 /* 瀑布流容器 */
 .waterfall-container {
@@ -571,7 +613,7 @@ const rebalanceWaterfall = () => {
 	flex-direction: column;
 	width: calc((100% - 12rpx) / 2);
 	min-width: 0;
-	max-width: calc((100% - 12rpx) / 2);
+	// max-width: calc((100% - 12rpx) / 2);
 	margin-bottom: 12rpx;
 	padding: 16rpx;
 	gap: 12rpx;
