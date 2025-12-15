@@ -36,10 +36,12 @@ class AiimageModelService extends BaseApiService
      */
     public function getPage(array $where = [])
     {
-        $field = 'id,site_id,name,logo,desc,prompt,sort,demo_image,status,point,is_vip,create_time,is_upload_image,is_prompt,model';
+        $field = 'id,site_id,name,logo,desc,prompt,sort,demo_image,status,point,is_vip,create_time,is_upload_image,is_prompt';
         $order = 'sort desc';
 
-        $search_model = $this->model->where([ [ 'site_id' ,"=", $this->site_id ] ])->withSearch(["name","status","is_vip"], $where)->field($field)->order($order);
+        $search_model = $this->model->where([['site_id', "=", $this->site_id]])
+            ->where(['status' => 1])
+            ->withSearch(["name", "is_vip"], $where)->field($field)->order($order);
         $list = $this->pageQuery($search_model);
         return $list;
     }
@@ -79,7 +81,7 @@ class AiimageModelService extends BaseApiService
     public function edit(int $id, array $data)
     {
 
-        $this->model->where([['id', '=', $id],['site_id', '=', $this->site_id]])->update($data);
+        $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->update($data);
         return true;
     }
 
@@ -90,9 +92,9 @@ class AiimageModelService extends BaseApiService
      */
     public function del(int $id)
     {
-        $model = $this->model->where([['id', '=', $id],['site_id', '=', $this->site_id]])->find();
+        $model = $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->find();
         $res = $model->delete();
         return $res;
     }
-    
+
 }

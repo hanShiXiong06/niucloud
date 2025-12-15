@@ -116,7 +116,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useDictionary } from '@/app/api/dict'
 import { t } from '@/lang'
 import type { FormInstance } from 'element-plus'
@@ -149,47 +149,68 @@ const formData: Record<string, any> = reactive({ ...initialFormData })
 const formRef = ref<FormInstance>()
 
 // 表单验证规则
-const formRules = {
-    name: [
-        { required: true, message: t('namePlaceholder'), trigger: 'blur' },
-    ],
-    logo: [
-        { required: true, message: t('logoPlaceholder'), trigger: 'blur' },
-    ],
-    desc: [
-        { required: true, message: t('descPlaceholder'), trigger: 'blur' },
-    ],
-    prompt: [
-        { required: true, message: t('promptPlaceholder'), trigger: 'blur' },
-    ],
-    sort: [
-        { required: true, message: t('sortPlaceholder'), trigger: 'blur' },
-    ],
-    demo_image: [
-        { required: true, message: t('demoImagePlaceholder'), trigger: 'blur' },
-    ],
-    status: [
-        { required: true, message: t('statusPlaceholder'), trigger: 'blur' },
-    ],
-    point: [
-        { required: true, message: t('pointPlaceholder'), trigger: 'blur' },
-    ],
-    is_vip: [
-        { required: true, message: t('isVipPlaceholder'), trigger: 'blur' },
-    ],
-    is_upload_image: [
-        { required: true, message: t('选择是否需要上传图像'), trigger: 'blur' },
-    ],
-    is_prompt: [
-        { required: true, message: t('选择是否需要填写提示词'), trigger: 'blur' },
-    ],
-    limit_image: [
-        { required: true, message: t('上传张数'), trigger: 'blur' },
-    ],
-    model: [
-        { required: true, message: t('请选择模型'), trigger: 'blur' },
-    ]
-}
+const formRules = computed(() => {
+    return {
+        name: [
+            { required: true, message: t('namePlaceholder'), trigger: 'blur' },
+
+        ]
+        ,
+        logo: [
+            { required: true, message: t('logoPlaceholder'), trigger: 'blur' },
+
+        ]
+        ,
+        desc: [
+            { required: true, message: t('descPlaceholder'), trigger: 'blur' },
+
+        ]
+        ,
+        prompt: [
+            { required: true, message: t('promptPlaceholder'), trigger: 'blur' },
+
+        ]
+        ,
+        sort: [
+            { required: true, message: t('sortPlaceholder'), trigger: 'blur' },
+
+        ]
+        ,
+        demo_image: [
+            { required: true, message: t('demoImagePlaceholder'), trigger: 'blur' },
+
+        ]
+        ,
+        status: [
+            { required: true, message: t('statusPlaceholder'), trigger: 'blur' },
+
+        ]
+        ,
+        point: [
+            { required: true, message: t('pointPlaceholder'), trigger: 'blur' },
+
+        ]
+        ,
+        is_vip: [
+            { required: true, message: t('isVipPlaceholder'), trigger: 'blur' },
+
+        ],
+        is_upload_image: [
+            { required: true, message: t('选择是否需要上传图像'), trigger: 'blur' },
+        ],
+        is_prompt: [
+            { required: true, message: t('选择是否需要填写提示词'), trigger: 'blur' },
+        ],
+        limit_image: [
+            { required: true, message: t('上传张数'), trigger: 'blur' },
+        ],
+        model: [
+            { required: true, message: t('请选择模型'), trigger: 'blur' },
+        ]
+
+
+    }
+})
 
 const emit = defineEmits(['complete'])
 
@@ -234,6 +255,41 @@ const setFormData = async (row: any = null) => {
     loading.value = false
 }
 
+// 验证手机号格式
+const mobileVerify = (rule: any, value: any, callback: any) => {
+    if (value && !/^1[3-9]\d{9}$/.test(value)) {
+        callback(new Error(t('generateMobile')))
+    } else {
+        callback()
+    }
+}
+
+// 验证身份证号
+const idCardVerify = (rule: any, value: any, callback: any) => {
+    if (value && !/^[1-9]\d{5}[1-9]\d{3}((0\d)|(1[0-2]))(([0|1|2]\d)|3[0-1])\d{3}([0-9]|X)$/.test(value)) {
+        callback(new Error(t('generateIdCard')))
+    } else {
+        callback()
+    }
+}
+
+// 验证邮箱号
+const emailVerify = (rule: any, value: any, callback: any) => {
+    if (value && !/\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*/.test(value)) {
+        callback(new Error(t('generateEmail')))
+    } else {
+        callback()
+    }
+}
+
+// 验证请输入整数
+const numberVerify = (rule: any, value: any, callback: any) => {
+    if (!Number.isInteger(value)) {
+        callback(new Error(t('generateNumber')))
+    } else {
+        callback()
+    }
+}
 
 defineExpose({
     showDialog,

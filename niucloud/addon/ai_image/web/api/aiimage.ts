@@ -2,6 +2,9 @@
 import request from '@/utils/request'
 
 /***************************************************** AI设计 ****************************************************/
+export function getPcMenu() {
+    return request.get(`ai_image/config/getpcmenu`)
+}
 export function getConfig() {
     return request.get(`ai_image/config/getconfig`)
 }

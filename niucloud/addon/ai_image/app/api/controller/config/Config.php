@@ -23,5 +23,10 @@ class Config extends BaseApiController
     public function getStat()
     {
         return success((new AiimageCreateService())->getStat());
+
+    }
+    public function getPcMenu()
+    {
+        return success((new ConfigService())->getPcMenu());
     }
 }

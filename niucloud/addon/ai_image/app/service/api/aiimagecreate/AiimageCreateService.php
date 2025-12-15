@@ -98,7 +98,7 @@ class AiimageCreateService extends BaseApiService
         $result = (new DuomiService($config))->query($info['task_id']);
         if ($result['code'] == 200 && $info['status'] == 0) {
             if ($result['data']['state'] == 'succeeded') {
-               $url= (new FetchService())
+                $url = (new FetchService())
                     ->save(
                         $result['data']['data']['images'][0]['url'],
                         $this->site_id,
@@ -111,10 +111,14 @@ class AiimageCreateService extends BaseApiService
                     ]);
             }
             if ($result['data']['state'] == 'error') {
+                if ($info['point'] > 0 && $info['is_refund'] != 1) {
+                    (new CoreMemberAccountService())->addLog($info['site_id'], $info['member_id'], MemberAccountTypeDict::POINT, $info['point'], 'ai_image_refund', 'AI设计创作失败返回', '');
+                }
                 $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])
                     ->update([
                         'state' => 'error',
                         'status' => 2,
+                        'is_refund' => 1,
                         'msg' => $result['data']['msg']
                     ]);
             }
@@ -139,8 +143,8 @@ class AiimageCreateService extends BaseApiService
             $model = (new AiimageModel())->where([['id', '=', $data['model_id']]])->findOrEmpty();
             if ($model->isEmpty()) throw new CommonException('模型不存在');
             $data['point'] = $model['point'];
-            $data['channel']=$model['model'];
-            $data['platform']='duomi';
+            $data['channel'] = $model['model'];
+            $data['platform'] = 'duomi';
             if ($model['is_prompt'] == 0) {
                 $data['prompt'] = $model['prompt'];
             }
@@ -149,7 +153,7 @@ class AiimageCreateService extends BaseApiService
             }
         } else {
             $data['point'] = $config['create_point'];
-            $data['channel']='';
+            $data['channel'] = '';
         }
         if ($data['image_urls']) {
             foreach ($data['image_urls'] as $key => $value) {

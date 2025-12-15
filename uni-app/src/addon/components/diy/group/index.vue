@@ -223,7 +223,7 @@
             </view>
         </template>
         <template v-if="diyStore.mode == '' && data.global && diyGroup.showCopyright.value && data.global.copyright && data.global.copyright.isShow">
-           <copy-right />
+           <copy-right :textColor="data.global.copyright.textColor" />
         </template>
 
         <template v-if="diyStore.mode == '' && data.global && data.global.bottomTabBar && data.global.bottomTabBar.isShow">

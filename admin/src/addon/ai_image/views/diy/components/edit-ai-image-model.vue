@@ -47,6 +47,23 @@
 				<el-form-item label="统计文字">
 					<el-input v-model="diyStore.editComponent.statsText" placeholder="如：xx万人在使用" clearable />
 				</el-form-item>
+
+				<el-form-item label="图片数量">
+					<el-slider v-model="diyStore.editComponent.maxImages" :min="1" :max="6" show-input size="small"
+						class="ml-[10px] horz-blank-slider" />
+				</el-form-item>
+
+				<el-form-item label="文字对齐">
+					<el-radio-group v-model="diyStore.editComponent.textAlign">
+						<el-radio label="left">居左</el-radio>
+						<el-radio label="center">居中</el-radio>
+					</el-radio-group>
+				</el-form-item>
+
+				<el-form-item label="内容内边距">
+					<el-slider v-model="diyStore.editComponent.contentPadding" :min="0" :max="40" show-input size="small"
+						class="ml-[10px] horz-blank-slider" />
+				</el-form-item>
 			</el-form>
 		</div>
 
@@ -130,6 +147,15 @@ const ensureDefaultValues = () => {
 	}
 	if (!diyStore.editComponent.statsText) {
 		diyStore.editComponent.statsText = 'xx万人在使用';
+	}
+	if (!diyStore.editComponent.maxImages) {
+		diyStore.editComponent.maxImages = 3;
+	}
+	if (!diyStore.editComponent.textAlign) {
+		diyStore.editComponent.textAlign = 'center';
+	}
+	if (diyStore.editComponent.contentPadding === undefined) {
+		diyStore.editComponent.contentPadding = 16;
 	}
 
 	// 样式设置默认值

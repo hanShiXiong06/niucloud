@@ -28,6 +28,14 @@ return [
             //是否减少
             'dec' => 1,
         ],
+        'ai_image_refund' => [
+            //名称
+            'name' => 'AI设计创作失败退回',
+            //是否增加
+            'inc' => 1,
+            //是否减少
+            'dec' => 1,
+        ],
         'ai_image_share' => [
             //名称
             'name' => 'AI设计邀请新用户',

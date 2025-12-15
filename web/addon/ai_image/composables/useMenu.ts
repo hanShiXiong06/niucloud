@@ -1,4 +1,5 @@
 import { ref, onMounted } from 'vue'
+import useMenuStore from '@/addon/ai_image/stores/memu'
 
 export interface MenuItem {
     name: string
@@ -10,73 +11,11 @@ export interface MenuItem {
 }
 
 export const useMenu = () => {
+    const menuStore = useMenuStore()
     const route = useRoute()
-    const menuItems = ref<MenuItem[]>([
-        {
-            name: '首页',
-            path: '/ai_image/index',
-            icon: 'document',
-            external: false,
-            badge: null
-        },
-        // {
-        //     name: '图生图',
-        //     path: '/ai_image/image/image',
-        //     icon: 'video',
-        //     external: false,
-        //     badge: 'NEW'
-        // },
 
-        {
-            name: '创作历史',
-            path: '/ai_image/history/image',
-            icon: 'history',
-            external: false,
-            badge: null
-        },
-        {
-            name: '卡密列表',
-            path: '/ai_image/card/card',
-            icon: 'history',
-            external: false,
-            badge: null
-        },
-        {
-            name: '卡密兑换',
-            path: '/ai_image/card/verify',
-            icon: 'history',
-            external: false,
-            badge: null
-        },
-        {
-            name: '套餐中心',
-            path: '/ai_image/package/index',
-            icon: 'history',
-            external: false,
-            badge: null
-        },
-        {
-            name: '套餐订单',
-            path: '/ai_image/package/order',
-            icon: 'history',
-            external: false,
-            badge: null
-        },
-        {
-            name: '日志记录',
-            path: '/ai_image/member/point',
-            icon: 'document',
-            external: false,
-            badge: null
-        },
-        {
-            name: '帮助中心',
-            path: '/ai_image/help/index',
-            icon: 'help-circle',
-            external: false,
-            badge: null
-        }
-    ])
+    // 使用 computed 从 store 中获取菜单数据
+    const menuItems = computed(() => menuStore.menu)
 
     // 检查菜单项是否为当前页面
     const isActive = (item: MenuItem) => {
@@ -84,21 +23,12 @@ export const useMenu = () => {
         return route.path === item.path
     }
 
-    // 在客户端异步加载菜单配置
-    const loadMenu = async () => {
-        try {
-            const menuData = await $fetch('/addon/ai_image/menu/menu.json')
-            if (menuData && Array.isArray(menuData)) {
-                menuItems.value = menuData
-            }
-        } catch (error) {
-            console.warn('Failed to load menu configuration, using default menu')
-        }
-    }
-
     // 在组件挂载时加载菜单
-    onMounted(() => {
-        loadMenu()
+    onMounted(async () => {
+        // 如果菜单为空，则加载菜单
+        if (menuStore.menu.length === 0) {
+            await menuStore.getPcMenuFn()
+        }
     })
 
     return {

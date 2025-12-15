@@ -1,13 +1,8 @@
 <?php
 
 namespace addon\ai_image\app\service\core;
-
-use addon\ai_music\app\service\core\music\BaseMusic;
-use addon\tk_sora\app\dict\config\ConfigDict;
-use app\service\core\sys\CoreConfigService;
 use core\base\BaseApiService;
 use core\exception\CommonException;
-use DateTime;
 use Exception;
 
 /**

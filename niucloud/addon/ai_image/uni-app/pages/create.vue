@@ -590,6 +590,7 @@ onLoad((options: any) => {
     if (options?.model_id) {
         getModelInfo(options.model_id).then((res: any) => {
             model.value = res.data
+            formData.value.prompt = model.value.prompt
             formData.value.model_id = res.data.id
         })
         getConfigFn()

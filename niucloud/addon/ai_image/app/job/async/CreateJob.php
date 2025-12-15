@@ -1,12 +1,12 @@
 <?php
 
 namespace addon\ai_image\app\job\async;
-
-use addon\ai_image\app\adminapi\controller\aiimagemodel\AiimageModel;
 use addon\ai_image\app\model\aiimagecreate\AiimageCreate;
 use addon\ai_image\app\service\core\ConfigService;
 use addon\ai_image\app\service\core\DuomiService;
 use addon\ai_image\app\service\core\FetchService;
+use app\dict\member\MemberAccountTypeDict;
+use app\service\core\member\CoreMemberAccountService;
 use core\base\BaseJob;
 use think\Exception;
 use think\facade\Log;
@@ -52,10 +52,14 @@ class CreateJob extends BaseJob
                         ]);
                 }
                 if ($result['data']['state'] == 'error') {
+                    if ($info['point'] > 0 && $info['is_refund'] != 1) {
+                        (new CoreMemberAccountService())->addLog($info['site_id'], $info['member_id'], MemberAccountTypeDict::POINT, $info['point'], 'ai_image_refund', 'AI设计创作失败返回', '');
+                    }
                     $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])
                         ->update([
                             'state' => 'error',
                             'status' => 2,
+                            'is_refund' => 1,
                             'msg' => $result['data']['msg']
                         ]);
                 }

@@ -1,11 +1,11 @@
 export default [
-    {
-        path: "/",
-        component: () => import('~/addon/ai_image/pages/index/index.vue'),
-        meta: {
-            layout: "aiimage"
-        }
-    },
+    // {
+    //     path: "/",
+    //     component: () => import('~/addon/ai_image/pages/index/index.vue'),
+    //     meta: {
+    //         layout: "aiimage"
+    //     }
+    // },
 
     {
         path: "/ai_image/index",

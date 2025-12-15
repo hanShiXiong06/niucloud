@@ -30,7 +30,8 @@ Route::group('ai_image', function() {
     Route::get('aiimagehelp/:id', 'addon\ai_image\app\adminapi\controller\aiimagehelp\AiimageHelp@info');
     //获取数据统计
     Route::get('getstat', 'addon\ai_image\app\api\controller\config\Config@getStat');
-
+    //获取PC菜单
+    Route::get('config/getpcmenu', 'addon\ai_image\app\api\controller\config\Config@getPcMenu');
 })->middleware(ApiChannel::class)
     ->middleware(ApiCheckToken::class, false) //false表示不验证登录
     ->middleware(ApiLog::class);

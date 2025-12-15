@@ -2,6 +2,7 @@
 
 namespace addon\ai_image\app\service\core;
 
+use app\service\core\site\CoreSiteService;
 use app\service\core\sys\CoreSysConfigService;
 use core\base\BaseAdminService;
 use app\service\core\sys\CoreConfigService;
@@ -17,7 +18,14 @@ class ConfigService extends BaseAdminService
         parent::__construct();
 
     }
-
+    public function isTkPoint()
+    {
+        $addons = (new CoreSiteService())->getAddonKeysBySiteId($this->site_id);
+        if (in_array('tk_point', $addons)) {
+            return true;
+        }
+        return false;
+    }
     public function getSxfConfig()
     {
         $info = (new CoreConfigService())->getConfig(0, 'sxf_config_admin');

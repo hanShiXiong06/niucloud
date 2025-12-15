@@ -1,6 +1,7 @@
 <?php
 
 namespace addon\ai_image\app\service\api\config;
+
 use app\model\member\Member;
 use core\base\BaseApiService;
 use app\service\core\sys\CoreConfigService;
@@ -17,6 +18,12 @@ class ConfigService extends BaseApiService
 
     }
 
+    public function getPcMenu()
+    {
+        $menu = include root_path() . '/addon/ai_image/app/dict/pc/menu.php';
+        return $menu;
+    }
+
     /**
      * 获取配置信息
      * @param $site_id
@@ -31,11 +38,11 @@ class ConfigService extends BaseApiService
             $info['value']['ai_host'] = '';
             $info['value']['api_key'] = '';
         }
-        $point=(new Member())->where([['member_id', '=', $this->member_id]])->value('point')??0;
-        $data=[
+        $point = (new Member())->where([['member_id', '=', $this->member_id]])->value('point') ?? 0;
+        $data = [
             'alias_name' => '积分',
-            'point'=>$point??0,
-            'chat_point'=>$info['value']['chat_point']??0,
+            'point' => $point ?? 0,
+            'chat_point' => $info['value']['chat_point'] ?? 0,
             'notice' => $info['value']['notice'] ?? 'AI创作',
             'ios_pay' => $info['value']['ios_pay'] ?? 1,
             'ios_notice' => $info['value']['ios_notice'] ?? '',
