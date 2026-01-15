@@ -1,162 +1,142 @@
 <template>
-	<view :style="warpCss" class="agent-diy-container">
+	<view :style="warpCss" class="ai-image-model-container">
 		<view :style="maskLayer"></view>
-		<!-- style2: 单列大图 -->
-		<view v-if="isSingleColumn" class="agent-list-container layout-one-column">
-			<view v-for="(item, index) in listData" :key="index"
-				@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
-				class="agent-item-card card-two-column"
-				:style="{ 
-					background: diyComponent.bgcolor,
-					...getCardStyle()
-				}">
 
-				<view class="agent-item-image-wrapper">
-					<image-swiper 
-						:logo="limitImages(item.logo)" 
-						:width="'100%'"
-						:max-images="maxImages"
-					></image-swiper>
-					<!-- Gemini模型标识 -->
-					<view v-if="item.model === 'gemini-3-pro-image-preview'" class="model-badge">
-						<text class="banana-icon">🍌</text>
-					</view>
-				</view>
-				<view class="agent-item-content" :style="getContentStyle()">
-					<view class="agent-item-header">
-						<view class="agent-item-title" :style="{ 
-							color: diyComponent.titlecolor,
-							fontSize: (diyComponent.titleSize || 30) + 'rpx',
-							textAlign: diyComponent.textAlign || 'center'
-						}">{{ item.name }}
-						</view>
-					</view>
-					<view class="agent-item-desc" :style="{ 
-						color: diyComponent.desccolor,
-						fontSize: (diyComponent.descSize || 22) + 'rpx',
-						textAlign: diyComponent.textAlign || 'center'
-					}">{{ item.desc }}</view>
-				</view>
-			</view>
-		</view>
-		<!-- style1: 双列瀑布流 -->
-		<view v-else class="waterfall-container" :style="{ gap: (diyComponent.cardGap || 12) + 'rpx' }">
-			<view class="waterfall-column" :style="{ gap: (diyComponent.cardGap || 12) + 'rpx' }">
-				<view v-for="(item, index) in leftList" :key="index"
+		<!-- style1: 单列布局 -->
+		<template v-if="diyComponent.style === 'style1'">
+			<view class="single-column-container">
+				<view
+					v-for="(item, index) in listData"
+					:key="index"
 					@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
-					class="agent-item-card waterfall-card"
-					:style="{ 
-						background: diyComponent.bgcolor,
-						...getCardStyle()
-					}">
-					<view class="agent-item-image-wrapper waterfall-image-wrapper">
-						<image-swiper 
-							:logo="limitImages(item.logo)" 
-							:width="'100%'"
-							:max-images="maxImages"
-						></image-swiper>
-						<!-- Gemini模型标识 -->
-						<view v-if="item.model === 'gemini-3-pro-image-preview'" class="model-badge">
-							<text class="banana-icon">🍌</text>
-						</view>
+					class="model-item-card"
+					:style="{ background: diyComponent.bgcolor }">
+					<view class="model-item-image-wrapper" :style="getItemImageStyle(item)">
+					
+						<up-image
+							:src="img(item.logo)"
+							width="100%"
+							mode="widthFix"
+							class="model-item-image">
+						</up-image>
 					</view>
-					<view class="agent-item-content waterfall-content" :style="getContentStyle()">
-						<view class="agent-item-header">
-							<view class="agent-item-title" :style="{ 
-								color: diyComponent.titlecolor,
-								fontSize: (diyComponent.titleSize || 30) + 'rpx',
-								textAlign: diyComponent.textAlign || 'left'
-							}">{{ item.name }}
-							</view>
+					<view class="model-item-content">
+						<view class="model-item-title" :style="{ color: diyComponent.titlecolor }">
+							{{ item.name }}
 						</view>
-						<view class="agent-item-footer">
-							<view class="agent-item-stats" :style="{ 
-								color: diyComponent.desccolor || 'rgba(203, 213, 225, 0.6)',
-								fontSize: (diyComponent.descSize || 22) + 'rpx',
-								textAlign: diyComponent.textAlign || 'left'
-							}">
-								{{ diyComponent.statsText || 'xx万人在使用' }}
-							</view>
-							<view class="agent-item-button" 
-								:style="getButtonStyle()"
-								@click.stop="handleSameStyle(item)">
-								{{ diyComponent.buttonText || '同款' }}
+						<view class="model-item-desc" :style="{ color: diyComponent.desccolor }">
+							{{ item.desc }}
+						</view>
+						<view class="model-item-actions">
+							<view
+								class="same-style-btn"
+								@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
+							>
+								做同款
 							</view>
 						</view>
 					</view>
 				</view>
 			</view>
-			<view class="waterfall-column" :style="{ gap: (diyComponent.cardGap || 12) + 'rpx' }">
-				<view v-for="(item, index) in rightList" :key="index"
-					@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
-					class="agent-item-card waterfall-card"
-					:style="{ 
-						background: diyComponent.bgcolor,
-						...getCardStyle()
-					}">
-					<view class="agent-item-image-wrapper waterfall-image-wrapper">
-						<image-swiper 
-							:logo="item.logo" 
-							:width="'100%'"
-						></image-swiper>
-						<!-- Gemini模型标识 -->
-						<view v-if="item.model === 'gemini-3-pro-image-preview'" class="model-badge">
-							<text class="banana-icon">🍌</text>
+		</template>
+
+		<!-- style2: 双列瀑布流 -->
+		<template v-else-if="diyComponent.style === 'style2'">
+			<view class="waterfall-container" v-if="listData.length">
+				<!-- 左列 -->
+				<view class="waterfall-column">
+					<view
+						v-for="(item, index) in leftList"
+						:key="'left-' + index"
+						@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
+						class="model-item-card waterfall-card"
+						:style="{ background: diyComponent.bgcolor }">
+						<view class="model-item-image-wrapper" :style="getItemImageStyle(item)">
+							<up-image
+								:src="img(item.logo)"
+								width="100%"
+								height="100%"
+								mode="widthFix"
+								class="model-item-image">
+							</up-image>
+						</view>
+						<view class="model-item-content">
+							<view class="model-item-title" :style="{ color: diyComponent.titlecolor }">
+								{{ item.name }}
+							</view>
+							<view class="model-item-desc" :style="{ color: diyComponent.desccolor }">
+								{{ item.desc }}
+							</view>
+							<view class="model-item-actions">
+								<view
+									class="same-style-btn"
+									@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
+								>
+									做同款
+								</view>
+							</view>
 						</view>
 					</view>
-					<view class="agent-item-content waterfall-content" :style="getContentStyle()">
-						<view class="agent-item-header">
-							<view class="agent-item-title" :style="{ 
-								color: diyComponent.titlecolor,
-								fontSize: (diyComponent.titleSize || 30) + 'rpx',
-								textAlign: diyComponent.textAlign || 'left'
-							}">{{ item.name }}
-							</view>
+				</view>
+
+				<!-- 右列 -->
+				<view class="waterfall-column">
+					<view
+						v-for="(item, index) in rightList"
+						:key="'right-' + index"
+						@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
+						class="model-item-card waterfall-card"
+						:style="{ background: diyComponent.bgcolor }">
+						<view class="model-item-image-wrapper" :style="getItemImageStyle(item)">
+							<up-image
+								:src="img(item.logo)"
+								width="100%"
+								height="100%"
+								mode="widthFix"
+								class="model-item-image">
+							</up-image>
 						</view>
-						<view class="agent-item-footer">
-							<view class="agent-item-stats" :style="{ 
-								color: diyComponent.desccolor,
-								textAlign: diyComponent.textAlign || 'left',
-								fontSize: (diyComponent.descSize || 22) + 'rpx'
-							}">
-								{{ diyComponent.statsText || 'xx万人在使用' }}
+						<view class="model-item-content">
+							<view class="model-item-title" :style="{ color: diyComponent.titlecolor }">
+								{{ item.name }}
 							</view>
-							<view class="agent-item-button" 
-								:style="getButtonStyle()"
-								@click.stop="handleSameStyle(item)">
-								{{ diyComponent.buttonText || '同款' }}
+							<view class="model-item-desc" :style="{ color: diyComponent.desccolor }">
+								{{ item.desc }}
+							</view>
+							<view class="model-item-actions">
+								<view
+									class="same-style-btn"
+									@click.stop="redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` })"
+								>
+									做同款
+								</view>
 							</view>
 						</view>
 					</view>
 				</view>
 			</view>
-		</view>
+		</template>
 	</view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick, getCurrentInstance } from 'vue';
-// @ts-ignore - 忽略模块类型声明错误
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
+// @ts-ignore
 import useDiyStore from '@/app/stores/diy';
-// @ts-ignore - 忽略模块类型声明错误
+// @ts-ignore
 import { img, redirect } from '@/utils/common';
-// @ts-ignore - 忽略模块类型声明错误
+// @ts-ignore
 import { getModelList } from '@/addon/ai_image/api/aiimage';
-// 导入图片轮播组件
-import ImageSwiper from './image-swiper.vue';
 
 // 分页数据
 const page = ref(1);
 const pageSize = ref(10);
 const listData = ref<any[]>([]);
+const leftList = ref<any[]>([]);
+const rightList = ref<any[]>([]);
 const loading = ref<boolean>(false);
 const hasMore = ref<boolean>(true);
 const isRefreshing = ref<boolean>(false);
-
-// 瀑布流数据
-const leftList = ref<any[]>([]);
-const rightList = ref<any[]>([]);
-const curLimitList = ref<any[]>([]);
 
 // 获取列表数据
 const getModelListFn = () => {
@@ -179,17 +159,173 @@ const getModelListFn = () => {
 		hasMore.value = newArr.length >= pageSize.value;
 		loading.value = false;
 		isRefreshing.value = false;
-		
-		// 如果不是双列布局，处理瀑布流
-		if (!isSingleColumn.value) {
-			curLimitList.value = newArr;
-			loadWaterfallData();
+
+		// 如果是瀑布流布局，需要获取图片尺寸后再计算左右列
+		if (diyComponent.value.style === 'style2') {
+			loadImagesSize(newArr).then(() => {
+				loadWaterfallData();
+			});
 		}
 	}).catch((e) => {
-		console.log('error', e);
 		loading.value = false;
 		isRefreshing.value = false;
 	});
+};
+
+// 批量获取图片尺寸
+const loadImagesSize = (items: any[]) => {
+	return Promise.all(
+		items.map((item: any) => {
+			return new Promise((resolve) => {
+				// 如果已经有尺寸信息，直接跳过
+				if (item.logo_width && item.logo_height) {
+					resolve(item);
+					return;
+				}
+
+				uni.getImageInfo({
+					src: img(item.logo),
+					success: (imageInfo: any) => {
+						item.logo_width = imageInfo.width;
+						item.logo_height = imageInfo.height;
+						resolve(item);
+					},
+					fail: (err: any) => {
+						// 获取失败时使用默认值
+						item.logo_width = 512;
+						item.logo_height = 512;
+						resolve(item);
+					}
+				});
+			});
+		})
+	);
+};
+
+// 瀑布流每列宽度（rpx），用于根据图片真实尺寸计算渲染高度
+const WATERFALL_COLUMN_WIDTH = 172.5;
+
+// 统一封装：根据图片原始尺寸和列宽，计算当前卡片应占高度（rpx）
+const getWaterfallItemHeight = (item: any, columnWidth: number) => {
+	// 如果有图片尺寸信息，使用实际比例计算；否则使用默认比例 1:1
+	if (item.logo_width && item.logo_height) {
+		item.height = parseFloat(item.logo_height) * (columnWidth / parseFloat(item.logo_width));
+	} else {
+		// 默认正方形图片
+		item.height = columnWidth;
+	}
+	const h = parseFloat(item.height.toFixed(2));
+	return h;
+};
+
+// 加载瀑布流数据 - 参考 sow_community
+const loadWaterfallData = () => {
+	if (listData.value.length === 0) {
+		leftList.value = [];
+		rightList.value = [];
+		return;
+	}
+
+
+
+	// 初始化左右列表
+	if ((leftList.value.length + rightList.value.length) === 0) {
+		leftList.value = listData.value.filter((_item: any, index: number) => index % 2 === 0);
+		rightList.value = listData.value.filter((_item: any, index: number) => index % 2 === 1);
+	}
+
+	// 计算左右列高度并平衡 - 参考 sow_community 的实现
+	let leftHeight = 0;
+	let rightHeight = 0;
+	const columnWidth = WATERFALL_COLUMN_WIDTH; // 双列布局，每列宽度约为 172.5rpx (根据容器宽度750rpx计算)
+	const textHeight = 80; // 底部文字区域的预估高度（标题+描述+padding）
+
+	let iteration = 0; // 迭代次数
+	while (true) {
+		iteration++;
+		// 计算左列总高度
+		leftHeight = leftList.value.map((item: any, idx: number) => {
+			const h = getWaterfallItemHeight(item, columnWidth);
+			if (idx < 2) {
+
+			}
+			return h;
+		}).reduce((pre: number, next: number) => {
+			return parseFloat(pre.toFixed(2)) + parseFloat(next.toFixed(2)) + textHeight;
+		}, 0);
+
+		// 计算右列总高度
+		rightHeight = rightList.value.map((item: any, idx: number) => {
+			const h = getWaterfallItemHeight(item, columnWidth);
+			return h;
+		}).reduce((pre: number, next: number) => {
+			return parseFloat(pre.toFixed(2)) + parseFloat(next.toFixed(2)) + textHeight;
+		}, 0);
+
+
+
+		// 左列更高，尝试将左列最后一项移到右列
+		if ((leftHeight - rightHeight) > 0) {
+			const last = leftList.value[leftList.value.length - 1];
+			if (!last) {
+
+				break;
+			}
+
+			const lastHeight = last.logo_width && last.logo_height
+				? parseFloat((parseFloat(last.logo_height) * (columnWidth / parseFloat(last.logo_width))).toFixed(2))
+				: columnWidth;
+
+
+
+			if ((leftHeight - rightHeight) > lastHeight) {
+				const lastItem = leftList.value.pop();
+				if (lastItem) {
+					rightList.value.push(lastItem);
+
+				}
+			} else {
+
+				break;
+			}
+		}
+		// 右列更高，尝试将右列最后一项移到左列
+		else if ((leftHeight - rightHeight) < 0) {
+			const last = rightList.value[rightList.value.length - 1];
+			if (!last) {
+
+				break;
+			}
+
+			const lastHeight = last.logo_width && last.logo_height
+				? parseFloat((parseFloat(last.logo_height) * (columnWidth / parseFloat(last.logo_width))).toFixed(2))
+				: columnWidth;
+
+
+
+			if ((rightHeight - leftHeight) > lastHeight) {
+				const lastItem = rightList.value.pop();
+				if (lastItem) {
+					leftList.value.push(lastItem);
+
+				}
+			} else {
+
+			}
+		}
+		// 高度相等，结束
+		else {
+
+			break;
+		}
+
+		if (iteration > 50) {
+
+			break;
+		}
+	}
+
+
 };
 
 // 加载更多
@@ -204,23 +340,10 @@ const refresh = () => {
 	isRefreshing.value = true;
 	page.value = 1;
 	hasMore.value = true;
-	// 清空瀑布流数据
 	leftList.value = [];
 	rightList.value = [];
-	curLimitList.value = [];
 	getModelListFn();
-
-	// 如果使用diyStore，同时刷新高度
-	nextTick(() => {
-		const query = uni.createSelectorQuery().in(instance);
-		query.select('.scroll-view').boundingClientRect((data: any) => {
-			if (data) {
-				height.value = data.height;
-			}
-		}).exec();
-	});
 };
-
 
 const props = defineProps(['component', 'index', 'pullDownRefreshCount']);
 const diyStore = useDiyStore();
@@ -230,17 +353,16 @@ const diyComponent = computed(() => {
 	} else {
 		return props.component;
 	}
-})
-
-// 控制项
-const maxImages = computed(() => diyComponent.value.maxImages || 3);
+});
 
 const warpCss = computed(() => {
 	var style = '';
 	style += 'position:relative;';
 	if (diyComponent.value.componentStartBgColor) {
-		if (diyComponent.value.componentStartBgColor && diyComponent.value.componentEndBgColor) style += `background:linear-gradient(${diyComponent.value.componentGradientAngle},${diyComponent.value.componentStartBgColor},${diyComponent.value.componentEndBgColor});`;
-		else style += 'background-color:' + diyComponent.value.componentStartBgColor + ';';
+		if (diyComponent.value.componentStartBgColor && diyComponent.value.componentEndBgColor)
+			style += `background:linear-gradient(${diyComponent.value.componentGradientAngle},${diyComponent.value.componentStartBgColor},${diyComponent.value.componentEndBgColor});`;
+		else
+			style += 'background-color:' + diyComponent.value.componentStartBgColor + ';';
 	}
 
 	if (diyComponent.value.componentBgUrl) {
@@ -253,15 +375,14 @@ const warpCss = computed(() => {
 	if (diyComponent.value.bottomRounded) style += 'border-bottom-left-radius:' + diyComponent.value.bottomRounded * 2 + 'rpx;';
 	if (diyComponent.value.bottomRounded) style += 'border-bottom-right-radius:' + diyComponent.value.bottomRounded * 2 + 'rpx;';
 	return style;
-})
+});
 
 // 背景图加遮罩层
 const maskLayer = computed(() => {
 	var style = '';
 	if (diyComponent.value.componentBgUrl) {
-		style += 'position:absolute;top:0;width:100%;';
+		style += 'position:absolute;top:0;left:0;width:100%;height:100%;';
 		style += `background: rgba(0,0,0,${diyComponent.value.componentBgAlpha / 10});`;
-		style += `height:${height.value}px;`;
 
 		if (diyComponent.value.topRounded) style += 'border-top-left-radius:' + diyComponent.value.topRounded * 2 + 'rpx;';
 		if (diyComponent.value.topRounded) style += 'border-top-right-radius:' + diyComponent.value.topRounded * 2 + 'rpx;';
@@ -274,13 +395,23 @@ const maskLayer = computed(() => {
 
 watch(
 	() => props.pullDownRefreshCount,
-	(newValue, oldValue) => {
+	(newValue, _oldValue) => {
 		// 处理下拉刷新业务
-		if (newValue !== oldValue) {
+		if (newValue !== _oldValue) {
 			refresh();
 		}
 	}
-)
+);
+
+watch(
+	() => diyComponent.value.style,
+	(newValue) => {
+		// 当布局样式改变时，重新加载数据
+		if (newValue === 'style2') {
+			loadWaterfallData();
+		}
+	}
+);
 
 onMounted(() => {
 	refresh();
@@ -288,580 +419,187 @@ onMounted(() => {
 	if (diyStore.mode == 'decorate') {
 		watch(
 			() => diyComponent.value,
-			(newValue, oldValue) => {
-				if (newValue && newValue.componentName == 'RichText') {
+			(newValue) => {
+				if (newValue && newValue.componentName == 'AiImageModel') {
 					refresh();
 				}
 			}
-		)
+		);
 	}
 });
 
-const instance = getCurrentInstance();
-const height = ref(0);
-
-// 判断是否为双列布局（通过 diyComponent.layout 或 styleType 控制，默认单列）
-const isSingleColumn = computed(() => {
-	// style2: 单列大图；其他为 style1 瀑布流
-	return diyComponent.value.style === 'style2';
-});
-
-// 处理"同款"按钮点击
-const handleSameStyle = (item: any) => {
-	// 跳转到创建页面，使用当前模型
-	redirect({ url: `/addon/ai_image/pages/create?model_id=${item.id}` });
-};
-
-// 获取按钮样式
-const getButtonStyle = () => {
-	const buttonColor = diyComponent.value.buttonColor || 'rgba(34, 211, 238, 0.9)';
-	const buttonSize = diyComponent.value.buttonSize || 24;
+// 根据列表项的图片尺寸，计算具体渲染高度，并让图片在容器中“以图片为中心”展示
+const getItemImageStyle = (item: any) => {
+	// 只有样式2（瀑布流）才需要精确控制高度
+	if (diyComponent.value.style !== 'style2') return {};
 	
-	return {
-		fontSize: `${buttonSize}rpx`,
-		background: `linear-gradient(135deg, ${buttonColor}, ${buttonColor.replace('0.9', '0.8')})`,
-	};
-};
-
-// 内容区域样式
-const getContentStyle = () => {
-	const padding = diyComponent.value.contentPadding;
-	return {
-		padding: `${padding !== undefined ? padding : 16}rpx`,
-		textAlign: diyComponent.value.textAlign || 'left'
-	};
-};
-
-// 限制图片数量（单张/多张控制）
-const limitImages = (logo: string) => {
-	if (!logo) return '';
-	const arr = logo.includes(',') ? logo.split(',') : [logo];
-	return arr.slice(0, maxImages.value).join(',');
-};
-
-// 获取卡片样式
-const getCardStyle = () => {
-	const cardRadius = diyComponent.value.cardRadius || 24;
-	return {
-		borderRadius: `${cardRadius}rpx`,
-	};
-};
-
-// 瀑布流数据加载
-const loadWaterfallData = () => {
-	if ((leftList.value.length + rightList.value.length) === 0) {
-		// 初始加载，使用当前页数据按索引分配
-		leftList.value = curLimitList.value.filter((item: any, index: number) => index % 2 === 0);
-		rightList.value = curLimitList.value.filter((item: any, index: number) => index % 2 === 1);
-	} else {
-		// 追加数据，使用当前页数据
-		leftList.value = leftList.value.concat(curLimitList.value.filter((item: any, index: number) => index % 2 === 0));
-		rightList.value = rightList.value.concat(curLimitList.value.filter((item: any, index: number) => index % 2 === 1));
+	if (item.logo_width && item.logo_height) {
+		// 这里的高度单位是 rpx，WATERFALL_COLUMN_WIDTH 也是 rpx
+		const h = parseFloat(item.logo_height) * (WATERFALL_COLUMN_WIDTH / parseFloat(item.logo_width));
+		return {
+			height: h * 1.9 + 'rpx'
+		};
 	}
-	
-	// 高度平衡算法
-	nextTick(() => {
-		balanceWaterfallHeight();
-	});
-};
 
-// 瀑布流高度平衡算法
-const balanceWaterfallHeight = () => {
-	// 由于图片高度是动态的，我们需要等待图片加载完成后再计算
-	// 这里先使用一个基础估算值，实际高度会在图片加载后自动调整
-	nextTick(() => {
-		setTimeout(() => {
-			// 延迟执行，等待图片加载完成
-			rebalanceWaterfall();
-		}, 500);
-	});
-};
-
-// 重新平衡瀑布流高度（基于实际渲染后的高度）
-const rebalanceWaterfall = () => {
-	// 这里可以获取实际DOM高度进行更精确的平衡
-	// 由于uni-app的限制，我们使用估算值
-	let leftHeight = 0;
-	let rightHeight = 0;
-	
-	// 计算左右两列的总高度（使用估算值）
-	const calculateItemHeight = (item: any) => {
-		// 基础高度：图片估算高度（根据常见比例） + padding 32rpx + 内容区域估算高度
-		// 假设图片宽高比约为 4:3，宽度为 345rpx（(750-40-12)/2），高度约为 260rpx
-		// 标题约 42rpx，描述约 78rpx（两行），间距 16rpx
-		const baseHeight = 260 + 32 + 42 + 78 + 16; // 约 428rpx
-		return baseHeight;
-	};
-	
-	leftHeight = leftList.value.reduce((sum: number, item: any) => {
-		return sum + calculateItemHeight(item);
-	}, 0);
-	
-	rightHeight = rightList.value.reduce((sum: number, item: any) => {
-		return sum + calculateItemHeight(item);
-	}, 0);
-	
-	// 平衡高度
-	while (Math.abs(leftHeight - rightHeight) > 50) { // 50rpx 的容差
-		if (leftHeight > rightHeight) {
-			// 左侧较高，移动最后一个元素到右侧
-			if (leftList.value.length > 0) {
-				const lastItem = leftList.value.pop();
-				if (lastItem) {
-					rightList.value.push(lastItem);
-					leftHeight -= calculateItemHeight(lastItem);
-					rightHeight += calculateItemHeight(lastItem);
-				} else {
-					break;
-				}
-			} else {
-				break;
-			}
-		} else {
-			// 右侧较高，移动最后一个元素到左侧
-			if (rightList.value.length > 0) {
-				const lastItem = rightList.value.pop();
-				if (lastItem) {
-					leftList.value.push(lastItem);
-					rightHeight -= calculateItemHeight(lastItem);
-					leftHeight += calculateItemHeight(lastItem);
-				} else {
-					break;
-				}
-			} else {
-				break;
-			}
-		}
-	}
+	return {};
 };
 </script>
 
 <style lang="scss" scoped>
-/* 代理DIY容器 */
-.agent-diy-container {
+/* AI图像模型容器 */
+.ai-image-model-container {
 	position: relative;
-}
-
-/* 代理列表容器 */
-.agent-list-container {
-	padding: 12rpx;
-}
-
-.agent-list-container.layout-one-column {
-	display: grid;
-	grid-template-columns: 1fr;
+	padding: 20rpx;
 	box-sizing: border-box;
-	// 单行
-	.agent-item-card{
-		width: 100%;
-		margin-bottom: 12rpx;
-	}
 }
-/* 双列布局容器 */
-.agent-list-container.layout-two-column {
+
+/* 单列布局容器 */
+.single-column-container {
 	display: flex;
-	flex-wrap: wrap;
-	justify-content: space-between;
-	padding: 12rpx;
-	box-sizing: border-box;
+	flex-direction: column;
+	gap: 20rpx;
 }
 
-
-/* 瀑布流容器 */
+/* 瀑布流容器 - 参考 sow_community */
 .waterfall-container {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
-	box-sizing: border-box;
+	grid-gap: 20rpx;
 }
 
-/* 瀑布流列 */
 .waterfall-column {
 	display: flex;
 	flex-direction: column;
+	gap: 20rpx;
 }
 
-/* 瀑布流卡片 */
+/* 模型项卡片 */
+.model-item-card {
+	display: flex;
+	flex-direction: column;
+	background: rgba(255, 255, 255, 0.05);
+	border-radius: 24rpx;
+	overflow: hidden;
+	box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
+	transition: all 0.3s ease;
+	cursor: pointer;
+	position: relative;
+
+	&:active {
+		transform: scale(0.98);
+		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
+	}
+
+	/* #ifdef H5 */
+	&:hover {
+		box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.12);
+		transform: translateY(-4rpx);
+	}
+	/* #endif */
+}
+
+/* 瀑布流卡片样式 */
 .waterfall-card {
 	width: 100%;
 	margin-bottom: 0;
 }
 
-/* 瀑布流图片容器 - 图片优先，占据主要空间 */
-.waterfall-image-wrapper {
-	width: 100%;
-	order: 1;
-	display: flex;
-	align-items: flex-start;
-	justify-content: center;
-	overflow: hidden;
-	border-radius: 16rpx 16rpx 0 0;
-	position: relative;
-}
-
-/* 瀑布流内容区域 - 文字在图片下方 */
-.waterfall-content {
-	order: 2;
-	width: 100%;
-	padding-top: 0;
-}
-
-/* 模型标识徽章 */
-.model-badge {
-	position: absolute;
-	top: 12rpx;
-	right: 12rpx;
-	z-index: 10;
-	background: rgba(0, 0, 0, 0.6);
-	backdrop-filter: blur(8rpx);
-	border-radius: 50%;
-	width: 56rpx;
-	height: 56rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border: 2rpx solid rgba(255, 255, 255, 0.3);
-	box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3), 0 0 0 2rpx rgba(255, 193, 7, 0.4);
-	animation: pulse 2s ease-in-out infinite;
-}
-
-.banana-icon {
-	font-size: 32rpx;
-	line-height: 1;
-	display: block;
-	filter: drop-shadow(0 1rpx 2rpx rgba(0, 0, 0, 0.3));
-}
-
-/* 双列布局下的模型标识 */
-.card-two-column .model-badge {
-	top: 8rpx;
-	right: 8rpx;
-	width: 48rpx;
-	height: 48rpx;
-}
-
-.card-two-column .banana-icon {
-	font-size: 28rpx;
-}
-
-/* 脉冲动画 */
-@keyframes pulse {
-	0%, 100% {
-		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3), 0 0 0 2rpx rgba(255, 193, 7, 0.4);
-	}
-	50% {
-		box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.4), 0 0 0 4rpx rgba(255, 193, 7, 0.6);
-	}
-}
-
-/* 代理项卡片 - 参考 agent.vue 的样式 */
-.agent-item-card {
-	display: flex;
-	gap: 24rpx;
-	padding: 24rpx;
-	margin-bottom: 20rpx;
-	background: rgba(30, 41, 59, 0.6);
-	border: 1rpx solid rgba(34, 211, 238, 0.2);
-	box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.12), 0 0 0 1rpx rgba(34, 211, 238, 0.05);
-	backdrop-filter: blur(10rpx);
-	transition: all 0.3s ease;
-	cursor: pointer;
-	position: relative;
-	overflow: hidden;
-	box-sizing: border-box;
-
-	&::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		height: 2rpx;
-		background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.3), transparent);
-		opacity: 0;
-		transition: opacity 0.3s ease;
-	}
-
-	&:active {
-		transform: scale(0.98);
-		border-color: rgba(34, 211, 238, 0.4);
-		box-shadow: 0 4rpx 12rpx rgba(34, 211, 238, 0.15), 0 0 0 1rpx rgba(34, 211, 238, 0.1);
-	}
-
-	/* #ifdef H5 */
-	&:hover {
-		border-color: rgba(34, 211, 238, 0.3);
-		box-shadow: 0 6rpx 16rpx rgba(34, 211, 238, 0.12), 0 0 0 1rpx rgba(34, 211, 238, 0.15);
-
-		&::before {
-			opacity: 1;
-		}
-	}
-
-	/* #endif */
-}
-
-/* 瀑布流卡片样式 - 纵向布局，图片优先 */
-.agent-item-card.waterfall-card {
-	flex-direction: column;
-	gap: 16rpx;
-	padding: 16rpx;
-	margin-bottom: 0;
-}
-
-/* 双列布局卡片样式 */
-.agent-item-card.card-two-column {
-	flex-direction: column;
-	width: calc((100% - 12rpx) / 2);
-	min-width: 0;
-	// max-width: calc((100% - 12rpx) / 2);
-	margin-bottom: 12rpx;
-	padding: 16rpx;
-	gap: 12rpx;
-	align-items: center;
-	text-align: center;
-	box-sizing: border-box;
-	flex-shrink: 0;
-}
-
 /* 图片容器 */
-.agent-item-image-wrapper {
-	flex-shrink: 0;
-	position: relative;
-	box-sizing: border-box;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-/* 双列布局下的图片容器 */
-.card-two-column .agent-item-image-wrapper {
+.model-item-image-wrapper {
 	width: 100%;
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	flex-shrink: 0;
-}
-
-.agent-item-image {
-	border-radius: 16rpx;
+	position: relative;
 	overflow: hidden;
-	background: rgba(51, 65, 85, 0.6);
-	border: 1rpx solid rgba(34, 211, 238, 0.15);
-	box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.1);
-	transition: all 0.3s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
-.agent-item-card:active .agent-item-image {
-	border-color: rgba(34, 211, 238, 0.25);
-	box-shadow: 0 3rpx 8rpx rgba(34, 211, 238, 0.12);
+.model-item-image {
+	width: 100%;
+	display: block;
+	border-radius: 0;
 }
-
-/* #ifdef H5 */
-.agent-item-card:hover .agent-item-image {
-	border-color: rgba(34, 211, 238, 0.25);
-	box-shadow: 0 3rpx 8rpx rgba(34, 211, 238, 0.12);
-}
-
-/* #endif */
 
 :deep(.up-image) {
-	border-radius: 16rpx;
+	display: block;
+	width: 100%;
 }
 
 /* 内容区域 */
-.agent-item-content {
-	flex: 1;
-	min-width: 0;
+.model-item-content {
+	padding: 24rpx;
 	display: flex;
 	flex-direction: column;
 	gap: 12rpx;
-	padding: 16rpx;
-	box-sizing: border-box;
-}
-
-/* 双列布局下的内容区域 */
-.card-two-column .agent-item-content {
-	width: 100%;
-	min-width: 0;
-	align-items: center;
-	gap: 8rpx;
 	flex: 1;
-	display: flex;
-	flex-direction: column;
-	justify-content: flex-start;
-}
-
-/* 头部区域 - 标题和箭头 */
-.agent-item-header {
-	display: flex;
-	align-items: flex-start;
-	justify-content: space-between;
-	gap: 16rpx;
-	width: 100%;
-}
-
-/* 双列布局下的头部区域 */
-.card-two-column .agent-item-header {
-	flex-direction: column;
-	align-items: center;
-	gap: 6rpx;
-	width: 100%;
-	min-width: 0;
 }
 
 /* 标题 */
-.agent-item-title {
-	flex: 1;
-	font-size: 30rpx;
+.model-item-title {
+	font-size: 28rpx;
 	font-weight: 600;
-	color: #e2e8f0;
+	color: #333;
 	line-height: 1.4;
-	-webkit-font-smoothing: antialiased;
-	min-width: 0;
 	display: -webkit-box;
-	-webkit-line-clamp: 1;
-	line-clamp: 1;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
 	text-overflow: ellipsis;
-}
-
-/* 双列布局下的标题 */
-.card-two-column .agent-item-title {
-	flex: none;
-	font-size: 26rpx;
-	text-align: center;
-	width: 100%;
-	min-width: 0;
 	word-break: break-all;
-	word-wrap: break-word;
-	overflow-wrap: break-word;
-	max-width: 100%;
-	box-sizing: border-box;
 }
-
-/* 箭头图标 */
-.agent-item-arrow {
-	flex-shrink: 0;
-	margin-top: 4rpx;
-	transition: transform 0.3s ease;
-	opacity: 0.8;
-}
-
-/* 双列布局下的箭头图标 */
-.card-two-column .agent-item-arrow {
-	margin-top: 0;
-}
-
-.agent-item-card:active .agent-item-arrow {
-	transform: translateX(6rpx);
-	opacity: 1;
-}
-
-/* #ifdef H5 */
-.agent-item-card:hover .agent-item-arrow {
-	transform: translateX(6rpx);
-	opacity: 1;
-}
-
-/* #endif */
 
 /* 描述 */
-.agent-item-desc {
-	font-size: 26rpx;
-	color: #cbd5e1;
+.model-item-desc {
+	font-size: 24rpx;
+	color: #666;
 	line-height: 1.6;
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-	-webkit-box-orient: vertical;
+	// 超出 ...
 	overflow: hidden;
 	text-overflow: ellipsis;
-	-webkit-font-smoothing: antialiased;
-	flex: 1;
+	flex-wrap: nowrap;
+
+	white-space: nowrap;
+
 }
 
-/* 底部区域 - 统计和按钮 */
-.agent-item-footer {
+/* 操作区域 */
+.model-item-actions {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	width: 100%;
-	margin-top: 8rpx;
-	gap: 16rpx;
+	justify-content: flex-end;
 }
 
-/* 统计文字 - 淡化显示 */
-.agent-item-stats {
-	font-size: 22rpx;
-	color: rgba(203, 213, 225, 0.6);
-	line-height: 1.4;
-	flex: 1;
-	opacity: 0.7;
-}
-
-/* 同款按钮 */
-.agent-item-button {
-	flex-shrink: 0;
-	padding: 8rpx 24rpx;
-	background: linear-gradient(135deg, rgba(34, 211, 238, 0.9), rgba(59, 130, 246, 0.9));
-	border-radius: 20rpx;
+/* “做同款”按钮 - 吸睛样式 */
+.same-style-btn {
+	padding: 10rpx 26rpx;
+	border-radius: 999rpx;
+	background: linear-gradient(135deg, #ff4b4b, #ff7a00);
+	color: #fff;
 	font-size: 24rpx;
-	font-weight: 500;
-	color: #ffffff;
-	line-height: 1.2;
-	box-shadow: 0 2rpx 8rpx rgba(34, 211, 238, 0.3);
-	transition: all 0.3s ease;
-	cursor: pointer;
-	position: relative;
-	overflow: hidden;
+	font-weight: 600;
+	box-shadow: 0 6rpx 14rpx rgba(255, 122, 0, 0.35);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	letter-spacing: 2rpx;
 }
 
-.agent-item-button::before {
-	content: '';
-	position: absolute;
-	top: 0;
-	left: -100%;
-	width: 100%;
-	height: 100%;
-	background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-	transition: left 0.5s ease;
+.same-style-btn:active {
+	opacity: 0.85;
+	transform: scale(0.96);
 }
 
-.agent-item-button:active {
-	transform: scale(0.95);
-	box-shadow: 0 1rpx 4rpx rgba(34, 211, 238, 0.4);
+/* 瀑布流布局下的样式调整 */
+.waterfall-card .model-item-content {
+	padding: 16rpx;
+	gap: 8rpx;
 }
 
-.agent-item-button:active::before {
-	left: 100%;
-}
-
-/* #ifdef H5 */
-.agent-item-button:hover {
-	background: linear-gradient(135deg, rgba(34, 211, 238, 1), rgba(59, 130, 246, 1));
-	box-shadow: 0 4rpx 12rpx rgba(34, 211, 238, 0.4);
-	transform: translateY(-2rpx);
-}
-
-.agent-item-button:hover::before {
-	left: 100%;
-}
-/* #endif */
-
-/* 双列布局下的描述 */
-.card-two-column .agent-item-desc {
-	font-size: 22rpx;
-	text-align: center;
-	width: 100%;
-	min-width: 0;
+.waterfall-card .model-item-title {
+	font-size: 26rpx;
 	-webkit-line-clamp: 2;
 	line-clamp: 2;
-	word-break: break-all;
-	word-wrap: break-word;
-	overflow-wrap: break-word;
-	max-width: 100%;
-	box-sizing: border-box;
-	line-height: 1.5;
 }
+
+
 </style>
