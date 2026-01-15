@@ -1,0 +1,320 @@
+{
+	"pages": [ // pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+		{
+			"path": "app/pages/index/index",
+			"style": {
+				// #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+				"navigationBarTitleText": "%pages.index.index%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/index/menu",
+			"style": {
+				"navigationBarTitleText": "%pages.index.menu%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/index",
+			"style": {
+				"navigationBarTitleText": "%pages.site.index%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/account",
+			"style": {
+				"navigationBarTitleText": "%pages.site.account%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/about",
+			"style": {
+				"navigationBarTitleText": "%pages.site.about%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/setting",
+			"style": {
+				"navigationBarTitleText": "%pages.site.setting%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/info",
+			"style": {
+				"navigationBarTitleText": "%pages.site.info%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/store",
+			"style": {
+				"navigationBarTitleText": "%pages.site.store%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/index",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.index%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/verify",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.verify%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/detail",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.detail%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/record",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.record%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/manual",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.manual%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/member/index",
+			"style": {
+				"navigationBarTitleText": "%pages.member.index%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/member/detail",
+			"style": {
+				"navigationBarTitleText": "%pages.member.detail%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/member/coupon",
+			"style": {
+				"navigationBarTitleText": "%pages.member.coupon%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/auth/login",
+			"style": {
+				// #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+				"navigationBarTitleText": "%pages.auth.login%"
+			}
+		},
+		{
+			"path": "app/pages/auth/register",
+			"style": {
+				// #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+				"navigationBarTitleText": "%pages.auth.register%"
+			}
+		},
+		{
+			"path": "app/pages/auth/updatepwd",
+			"style": {
+				
+				"navigationBarTitleText": "%pages.auth.updatepwd%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/webview/index",
+			"style": {
+				"navigationBarTitleText": "%pages.webview.index%"
+			}
+		},
+		{
+			"path": "app/pages/weapp/order_shipping",
+			"style": {
+				"navigationBarTitleText": "%pages.weapp.order_shipping%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/article/list",
+			"style": {
+				"navigationBarTitleText": "%pages.article.list%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/article/detail",
+			"style": {
+				"navigationBarTitleText": "%pages.article.detail%"
+			},
+			"needLogin": true
+
+		}
+
+	],
+	"subPackages": [
+		// {{ PAGE_BEGAIN }}
+        // MALL_PAGE_BEGIN
+		{
+			"root": "addon/mall",
+			"pages": [
+				// *********************************** 商城 ***********************************
+				{
+					"path": "pages/goods/list",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.goods.list%"
+					},
+					"needLogin": true
+				},{
+					"path": "pages/goods/album",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.goods.album%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/goods/edit",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.goods.edit%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/goods/spec",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.goods.spec%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/goods/content",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.goods.content%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/detail",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "%mall.pages.order.detail%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/list",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.order.list%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/adjust_price",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.order.adjust_price%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/edit_address",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.order.edit_address%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/delivery",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.order.delivery%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/refund/list",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.refund.list%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/refund/detail",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.refund.detail%"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/refund/log",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.refund.log%"
+					},
+					"needLogin": true
+				}
+			]
+            
+		},
+		// MALL_PAGE_END
+		// {{ PAGE_BEGAIN }}
+        // MALL_PAGE_BEGIN
+		{
+			"root": "addon/recycle",
+			"pages": [
+				// *********************************** 商城 ***********************************
+				{
+					"path": "pages/index",
+					"style": {
+						"navigationBarTitleText": "%mall.pages.goods.list%"
+					},
+					"needLogin": true
+				}
+			]
+		}
+		// MALL_PAGE_END
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "",
+		"navigationBarBackgroundColor": "#ffffff",
+		"backgroundColor": "#F6F6F6",
+		"backgroundColorTop": "#F6F6F6",
+		"backgroundColorBottom": "#F6F6F6"
+	},
+	"tabBar": {
+		"list": [{
+				"pagePath": "app/pages/index/index"
+			},
+			{
+				"pagePath": "app/pages/site/index"
+			}
+		]
+	},
+	"uniIdRouter": {},
+	"easycom": {
+		"custom": {
+			"^u-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^up-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^u-([^-].*)": "uview-plus/components/u-$1/u-$1.vue"
+		}
+	}
+}
