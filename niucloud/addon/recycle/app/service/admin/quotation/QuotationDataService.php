@@ -96,14 +96,36 @@ class QuotationDataService extends BaseAdminService
 
         // 如果当天已有请求，将旧数据标记为非当前
         if (!empty($existingRequests)) {
-            $this->dataModel
-                ->where([
-                    ['quotation_id', '=', $quotationId],
-                    ['price_name', '=', $priceName],
-                    ['price_date', '=', $priceDate],
-                    ['is_current', '=', QuotationDict::IS_CURRENT_YES],
-                ])
-                ->update(['is_current' => QuotationDict::IS_CURRENT_NO]);
+            try {
+                // 使用小事务更新旧数据状态
+                Db::startTrans();
+                try {
+                    $affectedRows = $this->dataModel
+                        ->where([
+                            ['quotation_id', '=', $quotationId],
+                            ['price_name', '=', $priceName],
+                            ['price_date', '=', $priceDate],
+                            ['is_current', '=', QuotationDict::IS_CURRENT_YES],
+                        ])
+                        ->update(['is_current' => QuotationDict::IS_CURRENT_NO]);
+
+                    Db::commit();
+
+                    Log::info('旧报价数据已标记为非当前', [
+                        'affected_rows' => $affectedRows,
+                        'quotation_id' => $quotationId,
+                        'price_name' => $priceName,
+                    ]);
+                } catch (\Exception $e) {
+                    Db::rollback();
+                    Log::error('更新旧报价数据状态失败', [
+                        'error' => $e->getMessage(),
+                    ]);
+                    throw $e;
+                }
+            } catch (\Exception $e) {
+                throw new CommonException('更新旧数据状态失败: ' . $e->getMessage());
+            }
         }
 
         // 解析sku数据
@@ -303,36 +325,117 @@ class QuotationDataService extends BaseAdminService
             }
         }
 
-        // 批量插入数据
+        // 分批插入数据,避免长时间锁表
         if (!empty($batchData)) {
-            $this->dataModel->insertAll($batchData);
-            $stats['data_saved'] = count($batchData);
+            $totalCount = count($batchData);
+            $chunkSize = 100; // 每批插入100条
+            $chunks = array_chunk($batchData, $chunkSize);
+
+            Log::info('开始分批插入报价数据', [
+                'total_count' => $totalCount,
+                'chunk_size' => $chunkSize,
+                'chunk_count' => count($chunks),
+            ]);
+
+            foreach ($chunks as $index => $chunk) {
+                try {
+                    // 使用带重试的数据库操作,处理死锁等临时性错误
+                    DatabaseHelper::executeWithRetry(function() use ($chunk, $index) {
+                        // 每批数据使用独立的小事务
+                        Db::startTrans();
+                        try {
+                            $this->dataModel->insertAll($chunk);
+                            Db::commit();
+
+                            Log::info("批次插入成功", [
+                                'batch_index' => $index + 1,
+                                'batch_size' => count($chunk),
+                            ]);
+                        } catch (\Exception $e) {
+                            Db::rollback();
+                            Log::error("批次插入失败", [
+                                'batch_index' => $index + 1,
+                                'error' => $e->getMessage(),
+                            ]);
+                            throw $e;
+                        }
+                    }, 3, 100); // 最多重试3次,初始延迟100ms
+
+                    // 每批插入后稍微延迟,释放数据库压力
+                    if ($index < count($chunks) - 1) {
+                        usleep(10000); // 延迟10毫秒
+                    }
+                } catch (\Exception $e) {
+                    Log::error('批量插入数据失败', [
+                        'batch_index' => $index + 1,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw new CommonException('数据插入失败: ' . $e->getMessage());
+                }
+            }
+
+            $stats['data_saved'] = $totalCount;
         }
 
-        // 更新型号表的关联ID字段
-        foreach ($modelRelations as $modelId => $relations) {
-            $capacityIds = array_unique($relations['capacity_ids']);
-            $gradeSpecIds = array_unique($relations['grade_spec_ids']);
-            
-            // 获取当前型号的关联ID（如果已存在）
-            $model = $this->modelModel->where('id', $modelId)->findOrEmpty();
-            if (!$model->isEmpty()) {
-                $existingCapacityIds = $model->capacity_ids ?? [];
-                $existingGradeSpecIds = $model->grade_spec_ids ?? [];
-                
-                // 合并已存在的ID（去重）
-                $capacityIds = array_unique(array_merge($existingCapacityIds, $capacityIds));
-                $gradeSpecIds = array_unique(array_merge($existingGradeSpecIds, $gradeSpecIds));
+        // 优化型号表更新:一次性查询所有需要更新的型号,减少数据库往返
+        if (!empty($modelRelations)) {
+            $modelIds = array_keys($modelRelations);
+
+            // 一次性查询所有需要更新的型号
+            $models = $this->modelModel->whereIn('id', $modelIds)->select()->toArray();
+            $existingModels = [];
+            foreach ($models as $model) {
+                $existingModels[$model['id']] = $model;
             }
-            
-            // 更新型号表的关联ID
-            $this->modelModel->where('id', $modelId)->update([
-                'capacity_ids' => $capacityIds,
-                'grade_spec_ids' => $gradeSpecIds,
-                'update_at' => time()
-            ]);
-            
-          
+
+            // 批量更新型号关联ID
+            $updateBatch = [];
+            foreach ($modelRelations as $modelId => $relations) {
+                $capacityIds = array_unique($relations['capacity_ids']);
+                $gradeSpecIds = array_unique($relations['grade_spec_ids']);
+
+                // 如果型号已存在,合并已有的ID
+                if (isset($existingModels[$modelId])) {
+                    $existingCapacityIds = $existingModels[$modelId]['capacity_ids'] ?? [];
+                    $existingGradeSpecIds = $existingModels[$modelId]['grade_spec_ids'] ?? [];
+
+                    $capacityIds = array_unique(array_merge($existingCapacityIds, $capacityIds));
+                    $gradeSpecIds = array_unique(array_merge($existingGradeSpecIds, $gradeSpecIds));
+                }
+
+                $updateBatch[] = [
+                    'id' => $modelId,
+                    'capacity_ids' => $capacityIds,
+                    'grade_spec_ids' => $gradeSpecIds,
+                    'update_at' => time()
+                ];
+            }
+
+            // 使用小事务批量更新型号表
+            if (!empty($updateBatch)) {
+                Db::startTrans();
+                try {
+                    foreach ($updateBatch as $updateData) {
+                        $this->modelModel->where('id', $updateData['id'])->update([
+                            'capacity_ids' => $updateData['capacity_ids'],
+                            'grade_spec_ids' => $updateData['grade_spec_ids'],
+                            'update_at' => $updateData['update_at']
+                        ]);
+                    }
+                    Db::commit();
+
+                    Log::info('型号表批量更新成功', [
+                        'update_count' => count($updateBatch),
+                    ]);
+                } catch (\Exception $e) {
+                    Db::rollback();
+                    Log::error('型号表更新失败', [
+                        'error' => $e->getMessage(),
+                    ]);
+                    throw $e;
+                }
+            }
         }
 
         // 清除相关缓存

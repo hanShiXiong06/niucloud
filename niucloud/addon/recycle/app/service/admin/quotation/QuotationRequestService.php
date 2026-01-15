@@ -45,6 +45,14 @@ class QuotationRequestService extends BaseAdminService
      */
     public function sendRequest(int $configId, ?int $siteId = null): array
     {
+        // 设置数据库连接超时参数,防止长时间执行导致连接超时
+        DatabaseHelper::setConnectionTimeout(600, 600); // 设置为10分钟
+
+        // 检查数据库连接状态
+        if (!DatabaseHelper::reconnectIfNeeded()) {
+            throw new CommonException('数据库连接失败');
+        }
+
         $config = $this->fetchConfig($configId, $siteId);
         $targetSiteId = $this->resolveSiteId($config, $siteId);
         $this->site_id = $targetSiteId;
@@ -83,6 +91,9 @@ class QuotationRequestService extends BaseAdminService
             ]);
 
             throw new CommonException('请求失败：' . $e->getMessage());
+        } finally {
+            // 执行完成后显式关闭数据库连接,确保连接被正确释放
+            DatabaseHelper::closeConnection();
         }
     }
 
@@ -308,8 +319,7 @@ class QuotationRequestService extends BaseAdminService
     private function handleResponse(RecycleQuotationRequest $requestRecord, int $responseCode, array $responseData): array
     {
         if ($responseCode == 200 && isset($responseData['code']) && $responseData['code'] == 200) {
-            // 成功响应时开启事务处理数据
-            Db::startTrans();
+            // 先更新请求记录状态(事务外执行,避免长时间锁表)
             try {
                 $requestRecord->save([
                     'request_status' => QuotationDict::REQUEST_STATUS_SUCCESS,
@@ -317,18 +327,34 @@ class QuotationRequestService extends BaseAdminService
                     'response_data' => json_encode($responseData, JSON_UNESCAPED_UNICODE),
                 ]);
 
+                // 数据解析和保存在独立的事务中处理,减少锁持有时间
                 $dataService = (new QuotationDataService())->setSiteId($this->site_id);
-                $dataService->parseAndSaveData($requestRecord->id, $responseData['data']);
+                $stats = $dataService->parseAndSaveData($requestRecord->id, $responseData['data']);
 
-                Db::commit();
+                Log::info('报价数据导入成功', [
+                    'request_id' => $requestRecord->id,
+                    'stats' => $stats,
+                ]);
 
                 return [
                     'request_id' => $requestRecord->id,
                     'status' => QuotationDict::REQUEST_STATUS_SUCCESS,
                     'message' => '请求成功',
+                    'stats' => $stats,
                 ];
             } catch (\Exception $e) {
-                Db::rollback();
+                // 如果数据保存失败,更新请求记录状态
+                $requestRecord->save([
+                    'request_status' => QuotationDict::REQUEST_STATUS_FAILED,
+                    'error_message' => '数据保存失败: ' . $e->getMessage(),
+                ]);
+
+                Log::error('报价数据保存异常', [
+                    'request_id' => $requestRecord->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+
                 throw $e;
             }
         }

@@ -1,8 +1,8 @@
 {
       "id":"",
       "idPlaceholder":"请输入",
-      "brandId":"品牌ID",
-      "brandIdPlaceholder":"请输入品牌ID",
+      "brandId":"等级ID",
+      "brandIdPlaceholder":"请输入等级ID",
       "modelName":"型号名称",
       "modelNamePlaceholder":"请输入型号名称",
       "networkModel":"网络型号",
