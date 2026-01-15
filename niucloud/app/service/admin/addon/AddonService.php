@@ -239,4 +239,11 @@ class AddonService extends BaseAdminService
     {
         return $this->model->where([ [ 'key', '=', $key ] ])->field('title, icon, key, desc, status, cover')->findOrEmpty()->toArray();
     }
+    /**
+     * 查询已安装应用
+     * @return array
+     */
+    public function getAddonCache(){
+        return (new CoreAddonService())->getAddonCache();
+    }
 }

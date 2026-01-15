@@ -301,5 +301,53 @@ class CoreAddonService extends CoreAddonBaseService
     {
         return (new CoreModuleService())->getIndexModuleList($label_id)['data'] ?? [];
     }
+    /**
+     * 查询所有已安装的应用和插件
+     * @return array
+     */
+    public function getAddonCache()
+    {
+        $cache_name = 'installed_addon_cache';
+        return cache_remember(
+            $cache_name,
+            function() {
+                return (new Addon())->where([ ['status', '=', AddonDict::ON] ])->column('key');
+            },
+            self::$cache_tag_name
+        );
+    }
+
+    /**
+     * 查询所有已安装的应用
+     * @return array
+     */
+    public function getAddonAppCache()
+    {
+        $cache_name = 'installed_addon_app_cache';
+        return cache_remember(
+            $cache_name,
+            function() {
+                return (new Addon())->where([ ['status', '=', AddonDict::ON], ['type', '=', AddonDict::APP] ])->column('key');
+            },
+            self::$cache_tag_name
+        );
+    }
+
+    
+     /**
+     * 查询所有已安装的插件
+     * @return array
+     */
+    public function getAddonAddonCache()
+    {
+        $cache_name = 'installed_addon_addon_cache';
+        return cache_remember(
+            $cache_name,
+            function() {
+                return (new Addon())->where([ ['status', '=', AddonDict::ON], ['type', '=', AddonDict::ADDON] ])->column('key');
+            },
+            self::$cache_tag_name
+        );
+    }
 
 }
