@@ -276,7 +276,7 @@
 		},
 		// MALL_PAGE_END
 		// {{ PAGE_BEGAIN }}
-        // MALL_PAGE_BEGIN
+        // RECYCLE_PAGE_BEGIN
 		{
 			"root": "addon/recycle",
 			"pages": [
@@ -284,13 +284,13 @@
 				{
 					"path": "pages/index",
 					"style": {
-						"navigationBarTitleText": "%mall.pages.goods.list%"
+						"navigationBarTitleText": "首页"
 					},
 					"needLogin": true
 				}
 			]
 		}
-		// MALL_PAGE_END
+		// RECYCLE_PAGE_END
 	],
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
