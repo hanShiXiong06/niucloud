@@ -1,0 +1,20 @@
+{
+     
+      "username":"登录账户",
+      "usernamePlaceholder":"请输入易达账户登录用户名",
+      "privateKey":"账户密钥",
+      "privateKeyPlaceholder":"请输入易达账户api密钥",
+      "floatWay":"浮动方式",
+      "floatWayFixed":"按照固定金额",
+      "floatWayRate":"按照百分比",
+      "floatWayBetwn":"首重+续重",
+      "floatAmount":"固定金额",
+      "floatAmountPlaceholder":"请输入固定金额",
+      "floatRate":"按百分比",
+      "floatRatePlaceholder":"请输入数字",
+      "amapKey":"高德地图key",
+      "amapKeyPlaceholder":"请输入高德地图Key",
+      "bindMobile":"绑定手机",
+      "bindMobilePlaceholder":"请输入易达账户绑定手机号"
+
+}

@@ -1,0 +1,37 @@
+{
+  "id": "4386057",
+  "name": "聚合快递",
+  "font_family": "tk_jhkd",
+  "css_prefix_text": "jhkd-",
+  "description": "",
+  "glyphs": [
+    {
+      "icon_id": "18517152",
+      "name": "包装",
+      "font_class": "0-15",
+      "unicode": "e605",
+      "unicode_decimal": 58885
+    },
+    {
+      "icon_id": "21302922",
+      "name": "快递",
+      "font_class": "kuaidi",
+      "unicode": "e693",
+      "unicode_decimal": 59027
+    },
+    {
+      "icon_id": "27401800",
+      "name": "快递",
+      "font_class": "kuaidi1",
+      "unicode": "ed9f",
+      "unicode_decimal": 60831
+    },
+    {
+      "icon_id": "35505116",
+      "name": "快递",
+      "font_class": "kuaidi2",
+      "unicode": "e672",
+      "unicode_decimal": 58994
+    }
+  ]
+}

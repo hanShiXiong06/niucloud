@@ -1,0 +1,16 @@
+{
+      "title":"通知标题",
+      "image":"通知封面",
+      "content":"通知内容",
+      "status":"是否启用",
+      "addon":"所属插件",
+      "titlePlaceholder":"请输入标题",
+      "imagePlaceholder":"请上传封面",
+      "contentPlaceholder":"请输入内容",
+      "statusPlaceholder":"请输入是否启用",
+      "addonPlaceholder":"请输入所属插件",
+      "addTkjhkdNotice":"添加聚合快递通知列表",
+      "updateTkjhkdNotice":"编辑聚合快递通知列表",
+      "tkjhkdNoticeDeleteTips":"确定要删除该聚合快递通知列表吗？",
+      "addNotice":"添加通知"
+}

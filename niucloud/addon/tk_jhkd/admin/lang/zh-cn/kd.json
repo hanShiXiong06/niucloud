@@ -1,0 +1,23 @@
+{
+      "id":"主键",
+      "idPlaceholder":"请输入主键",
+      "siteId":"站点id",
+      "siteIdPlaceholder":"请输入站点id",
+      "deliveryType":"类型",
+      "deliveryTypePlaceholder":"请输入类型",
+      "name":"名称",
+      "namePlaceholder":"请输入名称",
+      "logo":"logo",
+      "logoPlaceholder":"请输入logo",
+      "status":"是否启用 1启用 0不启用",
+      "statusPlaceholder":"请输入是否启用 1启用 0不启用",
+      "createTime":"创建时间",
+      "createTimePlaceholder":"请输入创建时间",
+      "updateTime":"修改时间",
+      "updateTimePlaceholder":"请输入修改时间",
+      "addon":"所属插件",
+      "addonPlaceholder":"请输入所属插件",
+      "addTkjhkdBrand":"添加聚合快递品牌列表",
+      "updateTkjhkdBrand":"编辑聚合快递品牌列表",
+      "alert":"温馨提示:本列表中支持快递仅供参考，具体支持快递由发件地址和收件地址决定"
+}

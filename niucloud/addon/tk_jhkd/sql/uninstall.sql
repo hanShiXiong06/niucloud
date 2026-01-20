@@ -1,0 +1,17 @@
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_brand`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_help`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_notice`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_order`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_order_add`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_order_delivery`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_order_delivery_real`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_order_discount`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_order_log`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_shop_order`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_fenxiao_order`;
+DROP TABLE IF EXISTS `{{prefix}}tkjhkd_fenxiao_member`;
+DELETE FROM `{{prefix}}sys_dict` WHERE `key` = 'jhkd_is_send';
+DELETE FROM `{{prefix}}sys_dict` WHERE `key` = 'jhkd_is_pick';
+DELETE FROM `{{prefix}}sys_dict` WHERE `key` = 'jhkd_order_status';
+DELETE FROM `{{prefix}}sys_dict` WHERE `key` = 'jhkd_refund_status';
+DELETE FROM `{{prefix}}sys_dict` WHERE `key` = 'jhkd_is_refund';

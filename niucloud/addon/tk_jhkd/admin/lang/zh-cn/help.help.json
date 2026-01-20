@@ -1,0 +1,13 @@
+{
+      "id":"",
+      "idPlaceholder":"请输入",
+      "title":"问题名称",
+      "titlePlaceholder":"请输入问题名称",
+      "content":"解决方案",
+      "contentPlaceholder":"请输入解决方案",
+      "addHelp":"添加帮助中心",
+      "updateHelp":"编辑帮助中心",
+      "helpDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}

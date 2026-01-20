@@ -1,0 +1,19 @@
+{
+      "title":"通知标题",
+      "titlePlaceholder":"请输入标题",
+      "image":"通知封面",
+      "content":"通知内容",
+      "status":"是否启用",
+      "statusIsOpen":"启用",
+      "statusNoOpen":"不启用",
+      "statusPlaceholder":"请选泽是否启用",
+      "createTime":"创建时间",
+      "createTimePlaceholder":"请输入创建时间",
+      "updateTime":"修改时间",
+      "updateTimePlaceholder":"请输入修改时间",
+      "addon":"所属插件",
+      "addonPlaceholder":"请输入所属插件",
+      "addTkjhkdNotice":"添加聚合快递通知列表",
+      "updateTkjhkdNotice":"编辑聚合快递通知列表",
+      "tkjhkdNoticeDeleteTips":"确定要删除该聚合快递通知列表吗？"
+}

@@ -166,5 +166,21 @@
     "sow_community.pages.create": "发布内容",
     "sow_community.pages.follow": "关注列表",
     "sow_community.pages.sow_show": "种草秀",
-    "sow_community.pages.topic_list": "话题列表"
+    "sow_community.pages.topic_list": "话题列表",
+    "tk_jhkd.pages.address.address": "地址",
+    "tk_jhkd.pages.address.address_detail": "地址详情",
+    "tk_jhkd.pages.coupon.list": "优惠券列表",
+    "tk_jhkd.pages.coupon.detail": "优惠券详情",
+    "tk_jhkd.pages.fenxiao.index": "分销中心",
+    "tk_jhkd.pages.fenxiao.member": "分销会员",
+    "tk_jhkd.pages.fenxiao.self": "自购订单",
+    "tk_jhkd.pages.fenxiao.order": "分销订单",
+    "tk_jhkd.pages.agreement": "协议",
+    "tk_jhkd.pages.help": "帮助中心",
+    "tk_jhkd.pages.index": "首页",
+    "tk_jhkd.pages.member": "会员中心",
+    "tk_jhkd.pages.orderlist": "订单列表",
+    "tk_jhkd.pages.orderdetail": "订单详情",
+    "tk_jhkd.pages.orderaddlist": "补差价订单",
+    "tk_jhkd.pages.ordersubmit": "快递下单"
 }

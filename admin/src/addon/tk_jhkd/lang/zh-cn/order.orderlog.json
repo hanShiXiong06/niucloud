@@ -1,0 +1,23 @@
+{
+      "id":"",
+      "idPlaceholder":"请输入",
+      "orderId":"订单id",
+      "orderIdPlaceholder":"请输入订单id",
+      "action":"操作",
+      "actionPlaceholder":"请输入操作",
+      "mainType":"操作身份",
+      "mainTypePlaceholder":"请输入操作身份",
+      "mainId":"身份id",
+      "mainIdPlaceholder":"请输入身份id",
+      "nickName":"昵称",
+      "nickNamePlaceholder":"请输入昵称",
+      "orderStatus":"订单状态",
+      "orderStatusPlaceholder":"请输入订单状态",
+      "createTime":"创建时间",
+      "createTimePlaceholder":"请输入创建时间",
+      "addOrderLog":"添加订单日志",
+      "updateOrderLog":"编辑订单日志",
+      "orderLogDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}

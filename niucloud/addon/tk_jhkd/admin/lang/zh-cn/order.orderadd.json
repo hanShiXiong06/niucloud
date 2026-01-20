@@ -1,0 +1,16 @@
+{
+      "memberId":"会员id",
+      "memberIdPlaceholder":"全部",
+      "orderId":"订单id",
+      "orderIdPlaceholder":"请输入订单id",
+      "orderStatus":"订单状态",
+      "orderStatusPlaceholder":"请输入订单状态",
+      "createTime":"创建时间",
+      "createTimePlaceholder":"请输入创建时间",
+      "ip":"会员ip",
+      "addOrderAdd":"添加订单列",
+      "updateOrderAdd":"编辑订单列",
+      "orderAddDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}
