@@ -87,17 +87,18 @@ class RecycleOrder extends BaseApiController
     public function store()
     {
         $data = $this->request->params([
-            ["delivery_type", ""],    // 配送方式：1快递，2自送
-            ["count", ""],            // 数量
-           
-            ["express_no", ""],       // 快递单号
-            ["remark", ""],           // 备注
-            ["devices", []]           // 设备列表
+            ["delivery_type", ""],         // 配送方式：1快递，2自送
+            ["count", ""],                 // 数量
+            ["express_no", ""],            // 快递单号
+            ["remark", ""],                // 备注
+            ["devices", []],               // 设备列表
+            ["use_platform_delivery", 0],  // 是否使用平台快递
+            ["platform_delivery", []]      // 平台快递信息
         ]);
 
         $this->validate($data, [
             'delivery_type' => 'require|in:1,2',
-            
+
             // 'devices' => 'require|array|min:1',
             // 'devices.*.imei' => 'require|length:15',
             // 'devices.*.model' => 'require',
@@ -116,8 +117,24 @@ class RecycleOrder extends BaseApiController
             'devices.*.initial_price.min' => '预估价格必须大于0',
         ]);
 
-        if ($data['delivery_type'] == 1 && empty($data['express_no'])) {
-            return error('', '请输入快递单号');
+        // 如果使用平台快递，验证平台快递信息
+        if ($data['use_platform_delivery']) {
+            $platformDelivery = $data['platform_delivery'];
+            if (empty($platformDelivery['sender_name'])) {
+                return fail('请输入寄件人姓名');
+            }
+            if (empty($platformDelivery['sender_mobile'])) {
+                return fail('请输入寄件人手机号');
+            }
+            if (empty($platformDelivery['sender_province']) || empty($platformDelivery['sender_city']) || empty($platformDelivery['sender_district'])) {
+                return fail('请选择寄件人所在地区');
+            }
+            if (empty($platformDelivery['sender_address'])) {
+                return fail('请输入寄件人详细地址');
+            }
+        } elseif ($data['delivery_type'] == 1 && empty($data['express_no'])) {
+            // 如果不使用平台快递，且配送方式是快递，则需要快递单号
+            return fail('请输入快递单号');
         }
 
         return success($this->service->add($data));

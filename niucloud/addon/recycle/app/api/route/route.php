@@ -97,6 +97,13 @@ Route::group('recycle', function() {
     Route::get('excel/brands', 'addon\recycle\app\adminapi\controller\recycle_category\RecycleExcelController@getBrandList');
     Route::get('excel/statistics', 'addon\recycle\app\adminapi\controller\recycle_category\RecycleExcelController@getStatistics');
    
+    // ---------------------------------------------------------------------------------------------------------------
+    // 安果快递相关接口
+    Route::get('anguo_delivery/pickup_times', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@getPickupTimes');
+    Route::post('anguo_delivery/create', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@create');
+    Route::post('anguo_delivery/cancel', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@cancel');
+    Route::post('anguo_delivery/sync_status', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@syncStatus');
+
 
 })->middleware(ApiChannel::class)
     ->middleware(ApiCheckToken::class, true) //改为 true 表示需要验证登录

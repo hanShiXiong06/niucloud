@@ -12,6 +12,7 @@ class DeliveryDict
     public const YIDA = 'yida';
     public  const YUNYANG = 'yunyang';
     public const XINDA='xinda';
+    public const ANGUO = 'anguo';
     public static function getType()
     {
         return [
@@ -38,6 +39,14 @@ class DeliveryDict
                 'params' => [
                     'username' => '账户',
                     'secretkey' => '密钥',
+                ]
+            ],
+            self::ANGUO => [
+                'name' => '安果ERP',
+                //配置参数
+                'params' => [
+                    'base_url' => 'API地址',
+                    'express_company_id' => '快递公司ID',
                 ]
             ]
 

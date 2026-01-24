@@ -207,7 +207,6 @@ class RecycleOrderService extends BaseApiService
      */
     public function getInfo(int $id)
     {
-        
         $field = 'id,order_no,site_id,member_id,delivery_type,express_no,customer_name,customer_phone,remark,status,create_at,update_at';
 
         $info = $this->model
@@ -243,7 +242,7 @@ class RecycleOrderService extends BaseApiService
      * @throws \Exception
      */
 
-     
+
     public function add(array $data)
     {
         try {
@@ -252,9 +251,48 @@ class RecycleOrderService extends BaseApiService
             $data['member_id'] = $this->member_id;
             $data['status'] = RecycleOrderDict::ORDER_STATUS_PENDING_SIGN;
             $data['order_no'] = $this->generateOrderNo();
-            // 创建订单
-           
-            $order = $this->model->create($data);
+
+            // 如果使用平台快递，先调用安国API下单
+            if (!empty($data['use_platform_delivery']) && !empty($data['platform_delivery'])) {
+                $anguoService = new \addon\recycle\app\service\core\recycle_order\RecycleAnguoDeliveryService($this->site_id);
+
+                // 暂时保存订单信息用于安国API调用
+                $tempOrder = $this->model->create($data);
+
+                try {
+                    // 调用安国API下单
+                    $platformDelivery = $data['platform_delivery'];
+                    $senderAddress = [
+                        'name' => $platformDelivery['sender_name'],
+                        'mobile' => $platformDelivery['sender_mobile'],
+                        'province' => $platformDelivery['sender_province'],
+                        'city' => $platformDelivery['sender_city'],
+                        'district' => $platformDelivery['sender_district'],
+                        'address' => $platformDelivery['sender_address']
+                    ];
+
+                    $pickupTime = $platformDelivery['pickup_time'] ?? '';
+                    $weight = floatval($platformDelivery['weight'] ?? 1.0);
+
+                    $deliveryResult = $anguoService->createDeliveryOrder(
+                        $tempOrder->id,
+                        $senderAddress,
+                        $pickupTime,
+                        $weight
+                    );
+
+                    // 安国API调用成功，订单已经在createDeliveryOrder中更新了express_no等字段
+                    $order = $tempOrder;
+
+                } catch (\Exception $e) {
+                    // 安国API调用失败，删除已创建的订单
+                    $tempOrder->delete();
+                    throw new ApiException('快递下单失败：' . $e->getMessage());
+                }
+            } else {
+                // 不使用平台快递，直接创建订单
+                $order = $this->model->create($data);
+            }
 
             // 如果有设备列表，创建设备
             if (!empty($data['devices'])) {
@@ -288,9 +326,6 @@ class RecycleOrderService extends BaseApiService
      */
     public function edit(int $id, array $data)
     {
-        // 根据 edit 
-        //["action", ""], 客户要执行的操作
-        //["status", ""]  客户当前的状态
 
         $data['action'] = $data['action'] ?? '';
         $data['status'] = $data['status'] ?? '';
@@ -312,7 +347,7 @@ class RecycleOrderService extends BaseApiService
         $data['update_at'] = time();
         
         // 讲 status = 客户要执行的操作id 和 dict 中的状态对应
-// var_dump($data['action']);
+
         $data['status'] = RecycleOrderDict::getOrderStatusId($data['action']);
         
         // 判断客户是否一键确认 如果不是  则只能修改订单状态
@@ -449,7 +484,7 @@ class RecycleOrderService extends BaseApiService
      * @return array
      */
     // RecycleOrderService 服务层
-// RecycleOrderService.php
+
 
 
 
