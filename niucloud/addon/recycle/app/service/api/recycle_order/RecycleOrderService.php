@@ -332,9 +332,9 @@ class RecycleOrderService extends BaseApiService
         
 
       
-        if ( $data['action'] == 'cancel' && $data['status'] !== RecycleOrderDict::ORDER_STATUS_PENDING_SIGN ) {
-            throw new ApiException('取消订单失败：当前订单状态不支持取消');
-        }
+        // if ( $data['action'] == 'cancel' && $data['status'] !== RecycleOrderDict::ORDER_STATUS_PENDING_SIGN ) {
+        //     throw new ApiException('取消订单失败：当前订单状态不支持取消');
+        // }
         // 客户要删除订单 只有 status == 8 || 9 才允许删除
         if ( $data['action'] == 'delete' && $data['status'] == RecycleOrderDict::ORDER_STATUS_CLOSED || $data['status'] == RecycleOrderDict::ORDER_STATUS_CANCELLED) {
             throw new ApiException('删除订单失败：当前订单状态不支持删除');

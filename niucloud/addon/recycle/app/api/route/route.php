@@ -44,7 +44,7 @@ Route::group('recycle', function() {
      //二手机分类列表
      
     
-         // recycle/recycle_address_list 获取商家的回收地址
+    // recycle/recycle_address_list 获取商家的回收地址
      Route::get('address_list','addon\recycle\app\api\controller\recycle_category\RecycleCategory@address_list');
     // Banner相关接口
     Route::get('recycle_banner', 'addon\recycle\app\api\controller\recycle_category\RecycleBanner@lists');
@@ -103,7 +103,10 @@ Route::group('recycle', function() {
     Route::post('anguo_delivery/create', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@create');
     Route::post('anguo_delivery/cancel', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@cancel');
     Route::post('anguo_delivery/sync_status', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@syncStatus');
-
+    
+    // 获取快递信息
+    // Route::get('device_query_api/express', 'addon\recycle\app\adminapi\controller\DeviceQueryApiController@getExpress');
+    Route::get('device_query_api/express', 'addon\recycle\app\api\controller\recycle\DeviceQueryApiController@getExpress');
 
 })->middleware(ApiChannel::class)
     ->middleware(ApiCheckToken::class, true) //改为 true 表示需要验证登录
