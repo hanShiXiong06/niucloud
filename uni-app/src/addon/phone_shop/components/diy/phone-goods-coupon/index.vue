@@ -17,8 +17,7 @@
 									<text class="text-[26rpx] font-500">￥</text>
 									<text class="text-[36rpx] truncate font-500">{{ parseFloat(item.price) }}</text>
 								</view>
-								<view class="text-[#303133] text-[20rpx] mt-[12rpx]">{{ item.min_condition_money ==
-									'0.00' ? '无门槛' : ('满' + parseFloat(item.min_condition_money) +'元可用') }}</view>
+								<view class="text-[#303133] text-[20rpx] mt-[12rpx]">{{ item.min_condition_money =='0.00' ? '无门槛' : ('满' + parseFloat(item.min_condition_money) +'元可用') }}</view>
 								<view
 									class="mt-[auto] rounded-b-[12rpx] text-[#f2333c] text-[20rpx] w-[100%] h-[36rpx] flex items-center justify-center bg-[#fff5f2]">
 									{{ item.type_name }}</view>
@@ -44,8 +43,7 @@
 											class="ml-[4rpx] text-[#f2333c] max-w-[184rpx] truncate">{{ item.title }}</text>
 									</view>
 									<view class="text-[#f2333c] text-[32rpx] font-bold mt-[10rpx] w-[270rpx] truncate">
-										{{ item.min_condition_money == '0.00' ? '无门槛' :
-											('消费满' + parseFloat(item.min_condition_money) +'元可用') }}</view>
+										{{ item.min_condition_money == '0.00' ? '无门槛' :('消费满' + parseFloat(item.min_condition_money) +'元可用') }}</view>
 								</view>
 							</view>
 						</block>
@@ -75,8 +73,7 @@
 							<text class="text-[38rpx] font-bold truncate">{{ parseFloat(item.price) }}</text>
 						</view>
 						<view class="text-[#303133] text-[20rpx] truncate max-w-[120rpx] mt-[12rpx]">
-							{{ item.min_condition_money == '0.00' ? '无门槛' :
-								('满' + parseFloat(item.min_condition_money) +'元可用') }}</view>
+							{{ item.min_condition_money == '0.00' ? '无门槛' :('满' + parseFloat(item.min_condition_money) +'元可用') }}</view>
 						<view
 							class="mt-[auto] rounded-b-[12rpx] text-[#f2333c] text-[20rpx] w-[100%] h-[36rpx] flex items-center justify-center bg-[#fff5f2]">
 							{{ item.type_name }}</view>

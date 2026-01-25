@@ -5,9 +5,12 @@
 			<view class="flex items-center fixed left-0 right-0 z-10 bg-transparent detail-head"
 				:class="{ '!bg-[#fff]': detailHeadBgChange }" :style="navbarInnerStyle">
 				<text class="nc-iconfont nc-icon-zuoV6xx" :style="navbarInnerArrowStyle" @click="goback()"></text>
-				<view
-					class="ml-auto !pt-[12rpx] !pb-[8rpx] p-[10rpx] bg-[rgba(255,255,255,.4)] rounded-full border-[2rpx] border-solid border-transparent box-border nc-iconfont nc-icon-fenxiangV6xx font-bold text-[#303133] text-[36rpx]"
-					:class="{ 'border-[#d8d8d8]': detailHeadBgChange }" @click="openShareFn"></view>
+				<view class="flex items-center ml-auto gap-[12rpx]">
+					<!-- <view
+						class="!pt-[12rpx] !pb-[8rpx] p-[10rpx] bg-[rgba(255,255,255,.4)] rounded-full border-[2rpx] border-solid border-transparent box-border nc-iconfont nc-icon-fenxiangV6xx font-bold text-[#303133] text-[36rpx]"
+						:class="{ 'border-[#d8d8d8]': detailHeadBgChange }" @click="openShareFn"></view> -->
+					
+				</view>
 			</view>
 
 			<view class="swiper-box">
@@ -39,192 +42,139 @@
 					</view>
 				</view>
 			</view>
-			<view class="bg-[#f6f6f6] rounded-[16rpx] -mt-[26rpx] relative">
-				<view class="relative mx-[30rpx] rounded-[16rpx]"
-					:class="{ 'pt-[30rpx]': priceType == 'discount_price', 'pt-[20rpx]': priceType != 'discount_price' }">
-					<view class="text-[var(--price-text-color)] flex items-baseline mb-[16rpx]"
-						v-if="priceType != 'discount_price'">
-						<text class="text-[32rpx] font-medium price-font">￥</text>
-						<text class="text-[48rpx] price-font">{{ parseFloat(goodsPrice).toFixed(2).split('.')[0]
-							}}</text>
+			<view class="  rounded-[16rpx] -mt-[26rpx] relative">
+			<!-- 商品信息卡片 - 莫兰迪风格 -->
+			<view class="relative bg-white mx-[24rpx] rounded-[24rpx] shadow-sm overflow-hidden"
+				:class="{ 'pt-[32rpx]': priceType == 'discount_price', 'pt-[28rpx]': priceType != 'discount_price' }">
 
-						<text class="text-[32rpx] mr-[10rpx] price-font">.{{
-							parseFloat(goodsPrice).toFixed(2).split('.')[1] }}</text>
-						<image v-if="priceType == 'member_price'" class="h-[34rpx] mr-[12rpx] w-[80rpx]"
+				<!-- 价格区域 -->
+				<view class="px-[28rpx] pb-[24rpx] border-b border-[#f0f0f0]">
+					<view class="flex items-baseline mb-[20rpx]" v-if="priceType != 'discount_price'">
+						<text class="text-[28rpx] font-semibold price-font text-[#e85d75]">￥</text>
+						<text class="text-[56rpx] font-bold price-font text-[#e85d75]">{{ parseFloat(goodsPrice).toFixed(2).split('.')[0] }}</text>
+						<text class="text-[32rpx] font-semibold price-font text-[#e85d75] mr-[12rpx]">.{{ parseFloat(goodsPrice).toFixed(2).split('.')[1] }}</text>
+						<image v-if="priceType == 'member_price'" class="h-[38rpx] w-[84rpx]"
 							:src="img('addon/phone_shop/VIP.png')" mode="heightFix" />
-
 					</view>
-					<!-- <view class="font-medium text-[32rpx] multi-hidden leading-[40rpx]">
-						{{ goodsDetail.goods.goods_name }}
-					</view> -->
-					<view class="font-medium text-[32rpx] multi-hidden leading-[40rpx]">
-						<view class="flex">
-							<!-- hsx - start -->
-							<view class="flex">
-								<up-tag size="mini" :text="goodsDetail.brand_info.brand_name"
-									v-if="goodsDetail.brand_info" type="warning"></up-tag>
+
+					<!-- 商品标题 -->
+					<view class="mb-[16rpx]">
+						<view class="flex items-start gap-[12rpx] mb-[12rpx]">
+							<view v-if="goodsDetail.brand_info"
+								class="inline-flex items-center px-[16rpx] py-[6rpx] rounded-[8rpx]"
+								style="background: linear-gradient(135deg, #c9ada7 0%, #9a8c98 100%);">
+								<text class="text-[22rpx] text-white font-medium">{{ goodsDetail.brand_info.brand_name }}</text>
 							</view>
-							{{ goodsDetail.goods.goods_name }}
+							<text class="text-[32rpx] font-semibold text-[#22223b] leading-[44rpx] flex-1">{{ goodsDetail.goods.goods_name }}</text>
 						</view>
-						<view class="flex justify-between">
-							<view>
-								<view class=" max-h-[80rpx] text-[20rpx] leading-[40rpx]  truncate"> {{
-									goodsDetail.goods.sub_title }}</view>
-								<view class=" max-h-[80rpx] text-[20rpx] leading-[40rpx]  truncate"
-									v-if="goodsDetail.sku_no"> sn: {{ goodsDetail.sku_no }}</view>
 
+						<!-- 副标题和串号 -->
+						<view class="flex flex-col gap-[8rpx]">
+							<view v-if="goodsDetail.goods.sub_title" class="text-[24rpx] text-[#6c757d] leading-[36rpx] line-clamp-2">
+								{{ goodsDetail.goods.sub_title }}
 							</view>
-							<!-- hsx - end -->
-
+							<view v-if="goodsDetail.sku_no" class="inline-flex items-center gap-[8rpx]">
+								<text class="text-[22rpx] text-[#9a8c98] bg-[#f2e9e4] px-[12rpx] py-[4rpx] rounded-[6rpx]">SN: {{ goodsDetail.sku_no }}</text>
+							</view>
 						</view>
 					</view>
-					<view class="flex items-start mt-[12rpx] pb-[10rpx]">
-						<view class="flex flex-wrap" v-if="goodsDetail.label_info && goodsDetail.label_info.length">
+
+					<!-- 标签和销量信息 -->
+					<view class="flex items-center justify-between gap-[16rpx] mt-[16rpx]">
+						<!-- 商品标签 -->
+						<view class="flex flex-wrap gap-[8rpx] flex-1" v-if="goodsDetail.label_info && goodsDetail.label_info.length">
 							<view v-for="item in goodsDetail.label_info" :key="item.label_id"
-								class="text-[#FA6400] mb-[10rpx] leading-[36rpx] text-[22rpx] h-[40rpx] px-[10rpx] border-[2rpx] border-solid border-[#FA6400] rounded-[4rpx] mr-[15rpx] box-border truncate">
-								{{ item.label_name }}
+								class="inline-flex items-center px-[12rpx] py-[6rpx] rounded-[8rpx] bg-[#fff4e6] border border-[#ffd8a8]">
+								<text class="text-[20rpx] text-[#d4a574] font-medium">{{ item.label_name }}</text>
 							</view>
 						</view>
-						<view class="text-[26rpx] mt-[6rpx] text-[#666] flex items-baseline ml-auto">
-							<text class="whitespace-nowrap">销量:</text>
-							<text class="mx-[2rpx]">{{ goodsDetail.goods.sale_num }}</text>
-							<text>{{ goodsDetail.goods.unit }}</text>
-							|
-							<text class="whitespace-nowrap">库存</text>
-							<text class="mx-[2rpx]">{{ goodsDetail.goods.stock }}</text>
-							<text>{{ goodsDetail.goods.unit }}</text>
-						</view>
-					</view>
-				</view>
 
-				<view class="mt-[20rpx] bg-white sidebar-marign rounded-[16rpx] px-[20rpx] py-[16rpx]"
-					v-if="isGoodsPropertyTemp">
-					<view @click="servicesDataShow = !servicesDataShow"
-						v-if="goodsDetail.service && goodsDetail.service.length" class="flex items-center h-[64rpx]">
-						<text class="text-[#666] text-[26rpx] leading-[30rpx] font-400 shrink-0">服务</text>
-						<view class="text-[#343434] text-[26rpx] leading-[30rpx] font-400 truncate ml-auto">
-							{{ goodsDetail.service[0].service_name }}
-						</view>
-						<text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[#666]"></text>
-					</view>
-					<view @click="buyFn" v-if="goodsDetail.goodsSpec && goodsDetail.goodsSpec.length"
-						class="flex items-center h-[64rpx]">
-						<text class="text-[#666] text-[26rpx] leading-[30rpx] font-400 shrink-0 mr-[20rpx]">已选</text>
-						<view
-							class="ml-auto text-right truncate flex-1 text-[#343434] text-[26rpx] leading-[30rpx] font-400">
-							{{ goodsDetail.sku_spec_format }}
-						</view>
-						<text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[#666]"></text>
-					</view>
-					<view class="flex items-center h-[64rpx]" @click="distributionDataOpen"
-						v-if="goodsDetail.goods.goods_type == 'real' && goodsDetail.delivery_type_list && goodsDetail.delivery_type_list.length">
-						<text class="text-[#666] text-[26rpx] leading-[30rpx] font-400 shrink-0">配送</text>
-						<view class="ml-auto flex items-center text-[#343434] text-[26rpx] leading-[30rpx] font-400">
-							{{ goodsDetail.delivery_type_list[selectDeliveryType] }}
-						</view>
-						<text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[#666]"></text>
-					</view>
-					<view @click="couponListShow = true" v-if="couponList.length" class="flex items-center h-[64rpx]">
-						<text class="text-[#666] text-[26rpx] leading-[30rpx] font-400 shrink-0 mr-[20rpx]">领券</text>
-						<view
-							class="ml-auto flex-1 flex-nowrap flex items-center overflow-hidden h-[44rpx] content-between">
-							<block v-for="(item, index) in couponList" :key="index">
-								<text v-if="index < 3"
-									class="text-xs whitespace-nowrap rounded-sm border-[2rpx] px-[6rpx] py-[2rpx] border-solid border-[var(--primary-color)] text-[var(--primary-color)] mt-[4rpx]"
-									:class="{ 'mr-[8rpx]': couponList.length != (index + 1) && index < 2, 'ml-auto': index == 0 }">
-									{{ item.title }}
-								</text>
-							</block>
-						</view>
-						<text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[#666]"></text>
-					</view>
-
-				</view>
-
-				<view class="mt-[20rpx] bg-white sidebar-marign rounded-[16rpx] px-[20rpx]">
-					<view class="flex items-center justify-between h-[80rpx]">
-						<text class="text-[28rpx] text-[#303133] font-bold">宝贝评价({{ evaluate.count }})</text>
-						<view v-if="evaluate.count" class="h-[80rpx] flex items-center"
-							@click="toLink(goodsDetail.goods_id)">
-							<text class="text-[24rpx] text-[#666]">查看全部</text>
-							<text class="nc-iconfont nc-icon-youV6xx text-[26rpx] text-[#666]"></text>
-						</view>
-						<text v-if="!evaluate.count" class="text-[24rpx] text-[#666]">暂无评价</text>
-					</view>
-					<view>
-						<view class="pb-[20rpx]" v-for="(item, index) in evaluate.list" :key="index">
-							<view class="flex items-center w-full">
-								<u-avatar :default-url="img('static/resource/images/default_headimg.png')"
-									:src="img(item.member_head)" :size="'30rpx'" leftIcon="none"></u-avatar>
-								<text class="ml-[10rpx] text-[22rpx] text-[#999]">{{ item.member_name }}</text>
-							</view>
-							<view class="flex justify-between w-full mt-[10rpx]">
-								<view
-									class="flex-1 w-[540rpx] text-[26rpx] text-[#303133] max-h-[72rpx] leading-[36rpx] multi-hidden mr-[50rpx]">
-									{{ item.content }}</view>
-								<view class="w-[80rpx] shrink-0">
-									<u--image v-if="item.image_mid && item.image_mid.length" width="80rpx"
-										height="80rpx" radius="8rpx" :src="img(item.image_mid[0])" model="aspectFill"
-										@click="imgListPreview(item.images[0])">
-										<template #error>
-											<u-icon name="photo" color="#999" size="50"></u-icon>
-										</template>
-									</u--image>
-								</view>
+						<!-- 销量库存 -->
+						<view class="flex items-center gap-[12rpx] shrink-0">
+							
+							<view class="flex items-center gap-[4rpx] px-[12rpx] py-[6rpx] rounded-[8rpx] bg-[#f8f9fa]">
+								<text class="text-[22rpx] text-[#6c757d]">库存</text>
+								<text class="text-[22rpx] text-[#4a4e69] font-medium">{{ goodsDetail.goods.stock }}</text>
 							</view>
 						</view>
 					</view>
 				</view>
+			</view>
 
-				<view class="my-[20rpx] bg-black text-[#fff] sidebar-marign rounded-[16rpx] px-[20rpx] pb-[20rpx]"
-					v-if="goodsDetail.goods && goodsDetail.goods.attr_format && Object.keys(goodsDetail.goods.attr_format).length">
-					<view class="text-[30rpx] h-[80rpx] leading-[80rpx] font-bold text-center text-[#fff]">官方验机报告</view>
+			<!-- 商品属性卡片 -->
+			<view class="mt-[20rpx] mx-[24rpx] bg-white rounded-[24rpx] shadow-sm overflow-hidden"
+				v-if="isGoodsPropertyTemp">
 
-
-					<view class="border-[2rpx] container rounded border-solid border-[#f1f1f1] border-b-0">
-						<block v-for="(item, index) in goodsDetail.goods.attr_format" :key="index">
-							<view v-if="index < 4 || isAttrFormatShow"
-								class="flex border-0 border-solid border-[#f1f1f1] border-b-[2rpx]  border-r-[2rpx] item">
-								<view
-									class="w-[50%] px-[18rpx]  py-[8rpx] text-[24rpx] min-h-[70rpx] break-all box-border flex items-center border-0 border-solid border-[#f1f1f1] border-r-[2rpx] ">
-									{{ item.attr_value_name }}</view>
-
-								<view
-									class="w-[50%] px-[18rpx] py-[8rpx] text-[24rpx] min-h-[70rpx] break-all flex items-center box-border ">
-									<!-- {{ Array.isArray(item.attr_child_value_name) ? item.attr_child_value_name.join(',')
-										:
-										item.attr_child_value_name }} -->
-
-									<text :style='"color:" + item.attr_child_value_color'
-										v-if="!Array.isArray(item.attr_child_value_name)">{{
-											item.attr_child_value_name }} </text>
-									<view v-else>
-										<text class="mr-1" :style='"color:" + items.color'
-											v-for="items in item.attr_child_value_name">{{
-												items.name }} </text>
-									</view>
-								</view>
-
-							</view>
-						</block>
-
+				<!-- 服务选项 -->
+				<view @click="servicesDataShow = !servicesDataShow"
+					v-if="goodsDetail.service && goodsDetail.service.length"
+					class="flex items-center px-[28rpx] py-[24rpx] border-b border-[#f5f5f5] active:bg-[#fafafa] transition-colors">
+					<view class="flex items-center gap-[12rpx]">
+						<view class="w-[6rpx] h-[28rpx] rounded-full" style="background: linear-gradient(180deg, #c9ada7 0%, #9a8c98 100%);"></view>
+						<text class="text-[26rpx] text-[#4a4e69] font-medium">服务</text>
 					</view>
-					<view v-if="goodsDetail.goods.attr_format.length > 4"
-						class="flex items-center bg-[#fff] text-[#999] justify-center h-[70rpx] border-0 border-solid border-[#f1f1f1] border-b-[2rpx]"
-						@click="isAttrFormatShow = !isAttrFormatShow">
-						<text class="text-[24rpx]  mr-[10rpx]">{{ !isAttrFormatShow ? '展开' : '收起' }}</text>
-						<text class="nc-iconfont !text-[22rpx]"
-							:class="{ 'nc-icon-xiaV6xx': !isAttrFormatShow, 'nc-icon-shangV6xx-1': isAttrFormatShow }"></text>
+					<view class="flex-1 text-right truncate mx-[20rpx]">
+						<text class="text-[26rpx] text-[#6c757d]">{{ goodsDetail.service[0].service_name }}</text>
 					</view>
+					<text class="nc-iconfont nc-icon-youV6xx text-[24rpx] text-[#adb5bd]"></text>
 				</view>
 
-				<view class="my-[20rpx] bg-white sidebar-marign rounded-[16rpx] px-[20rpx] pb-[20rpx]">
-					<view class="text-[28rpx] h-[80rpx] leading-[80rpx] font-bold">商品详情</view>
-					<view class="u-content">
-						<u-parse :content="goodsDetail.goods.goods_desc"
-							:tagStyle="{ img: 'vertical-align: top;', p: 'overflow: hidden;word-break:break-word;' }"></u-parse>
+				<!-- 规格选择 -->
+				<view @click="buyFn" v-if="goodsDetail.goodsSpec && goodsDetail.goodsSpec.length"
+					class="flex items-center px-[28rpx] py-[24rpx] border-b border-[#f5f5f5] active:bg-[#fafafa] transition-colors">
+					<view class="flex items-center gap-[12rpx]">
+						<view class="w-[6rpx] h-[28rpx] rounded-full" style="background: linear-gradient(180deg, #c9ada7 0%, #9a8c98 100%);"></view>
+						<text class="text-[26rpx] text-[#4a4e69] font-medium">已选</text>
 					</view>
+					<view class="flex-1 text-right truncate mx-[20rpx]">
+						<text class="text-[26rpx] text-[#6c757d]">{{ goodsDetail.sku_spec_format }}</text>
+					</view>
+					<text class="nc-iconfont nc-icon-youV6xx text-[24rpx] text-[#adb5bd]"></text>
 				</view>
+
+				<!-- 配送方式 -->
+				<view class="flex items-center px-[28rpx] py-[24rpx] border-b border-[#f5f5f5] active:bg-[#fafafa] transition-colors"
+					@click="distributionDataOpen"
+					v-if="goodsDetail.goods.goods_type == 'real' && goodsDetail.delivery_type_list && goodsDetail.delivery_type_list.length">
+					<view class="flex items-center gap-[12rpx]">
+						<view class="w-[6rpx] h-[28rpx] rounded-full" style="background: linear-gradient(180deg, #c9ada7 0%, #9a8c98 100%);"></view>
+						<text class="text-[26rpx] text-[#4a4e69] font-medium">配送</text>
+					</view>
+					<view class="flex-1 text-right mx-[20rpx]">
+						<text class="text-[26rpx] text-[#6c757d]">{{ goodsDetail.delivery_type_list[selectDeliveryType] }}</text>
+					</view>
+					<text class="nc-iconfont nc-icon-youV6xx text-[24rpx] text-[#adb5bd]"></text>
+				</view>
+
+				<!-- 优惠券 -->
+				<view @click="couponListShow = true" v-if="couponList.length"
+					class="flex items-center px-[28rpx] py-[24rpx] active:bg-[#fafafa] transition-colors">
+					<view class="flex items-center gap-[12rpx]">
+						<view class="w-[6rpx] h-[28rpx] rounded-full" style="background: linear-gradient(180deg, #c9ada7 0%, #9a8c98 100%);"></view>
+						<text class="text-[26rpx] text-[#4a4e69] font-medium">领券</text>
+					</view>
+					<view class="flex-1 flex items-center justify-end gap-[8rpx] mx-[20rpx] overflow-hidden">
+						<view v-for="(item, index) in couponList.slice(0, 3)" :key="index"
+							class="inline-flex items-center px-[12rpx] py-[4rpx] rounded-[8rpx] border border-[#ffd8a8]"
+							style="background: linear-gradient(135deg, #fff4e6 0%, #ffe8cc 100%);">
+							<text class="text-[20rpx] text-[#d4a574] font-medium whitespace-nowrap">{{ item.title }}</text>
+						</view>
+					</view>
+					<text class="nc-iconfont nc-icon-youV6xx text-[24rpx] text-[#adb5bd]"></text>
+				</view>
+			</view>
+
+			<!-- 商品详情卡片 -->
+			<view class="my-[20rpx] mx-[24rpx] bg-white rounded-[24rpx] shadow-sm overflow-hidden">
+				<view class="flex items-center gap-[12rpx] px-[28rpx] py-[28rpx] border-b border-[#f5f5f5]">
+					<view class="w-[6rpx] h-[32rpx] rounded-full" style="background: linear-gradient(180deg, #c9ada7 0%, #9a8c98 100%);"></view>
+					<text class="text-[30rpx] text-[#22223b] font-bold">商品详情</text>
+				</view>
+				<view class="u-content px-[28rpx] py-[24rpx]">
+					<u-parse :content="goodsDetail.goods.goods_desc"
+						:tagStyle="{ img: 'vertical-align: top; border-radius: 12rpx;', p: 'overflow: hidden; word-break: break-word; line-height: 1.8; color: #495057;' }"></u-parse>
+				</view>
+			</view>
 
 				<view class="my-[20rpx] bg-white mx-[20rpx] rounded-[16rpx]  pd-[10px]">
 					<view class="text-[28rpx] h-[80rpx] leading-[80rpx] font-bold px-[20rpx]">同类推荐</view>
@@ -347,6 +297,7 @@
 						</view>
 					</view>
 					<view class="flex" v-if="goodsDetail.goods.status == 1">
+						
 					<!--	<button-->
 					<!--		v-if="goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')"-->
 					<!--		class="!w-[200rpx] !h-[72rpx] text-[26rpx] !text-[#fff] !m-0 !mr-[20rpx] leading-[72rpx] rounded-full remove-border"-->
@@ -404,6 +355,10 @@
 					<!-- #endif -->
 				</view>
 				<view class="flex" v-if="goodsDetail.goods.status == 1">
+					<share-download :goodsItem="goodsDetail" type="grid" >
+						<up-icon name="moments" color="#fff" size="28"></up-icon>
+						<text>一键转发朋友圈</text>
+					</share-download>
 					<!--<button-->
 					<!--	v-if="goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')"-->
 					<!--	class="!w-[200rpx] !h-[72rpx] text-[26rpx] !text-[#fff] !m-0 !mr-[20rpx] leading-[72rpx] rounded-full remove-border"-->
@@ -490,14 +445,11 @@
 										<text class="text-[28rpx]">￥</text>
 										<text class="text-[48rpx]">{{ item.price }}</text>
 									</view>
-									<text class="text-xs mt-[12rpx]">{{ Number(item.min_condition_money) ? ('满' +
-										item.min_condition_money + '元可以使用') : '无门槛优惠券' }}</text>
+									<text class="text-xs mt-[12rpx]">{{ Number(item.min_condition_money) ? ('满' +item.min_condition_money + '元可以使用') : '无门槛优惠券' }}</text>
 								</view>
 								<view class="ml-[20rpx] flex-1 flex flex-col py-[20rpx]">
 									<text class="text-xs">{{ item.title }}</text>
-									<text class="text-xs text-[#ABABAB] mt-[12rpx]">{{ item.valid_type == 1 &&
-										('领取之日起' + item.length + '天内有效') || item.valid_type == 2 &&
-										('领取之日起至' + item.valid_end_time) }}</text>
+									<text class="text-xs text-[#ABABAB] mt-[12rpx]">{{ item.valid_type == 1 &&('领取之日起' + item.length + '天内有效') || item.valid_type == 2 &&('领取之日起至' + item.valid_end_time) }}</text>
 								</view>
 								<text v-if="item.btnType === 'collecting'"
 									class="bg-[var(--primary-color)] rounded-2xl text-[#fff] text-xs mr-[20rpx] py-[8rpx] px-[16rpx]"
@@ -552,6 +504,7 @@ import sharePoster from '@/components/share-poster/share-poster.vue'
 import MescrollEmpty from "@/components/mescroll/mescroll-empty/mescroll-empty.vue";
 import MescrollBody from "@/components/mescroll/mescroll-body/mescroll-body.vue";
 import BindMobile from '@/components/bind-mobile/bind-mobile.vue'
+import ShareDownload from '@/addon/phone_shop/components/share-download/share-download.vue';
 
 // 分享
 const { setShare } = useShare()

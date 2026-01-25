@@ -4,6 +4,7 @@ return [
         'menu_name' => '聚合快递',
         'menu_key' => 'tk_jhkd_admin',
         'menu_short_name' => '聚合快递',
+        'parent_select_key' => '',
         'parent_key' => '',
         'menu_type' => '1',
         'icon' => 'iconfont-iconyingyongshichang',

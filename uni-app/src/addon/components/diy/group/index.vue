@@ -156,18 +156,7 @@
                 <template v-if="component.componentName == 'PhoneShopSearch'">
                    <diy-phone-shop-search ref="diyPhoneShopSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopSearch" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'Brand'">
-                   <diy-brand ref="diyBrandRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.Brand" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'Jhkd'">
-                   <diy-jhkd ref="diyJhkdRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.Jhkd" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'KdCoupon'">
-                   <diy-kd-coupon ref="diyKdCouponRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.KdCoupon" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'KdGz'">
-                   <diy-kd-gz ref="diyKdGzRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.KdGz" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
+
                 </view>
             </view>
         </template>
@@ -193,10 +182,6 @@
    import diyPhoneShopMemberInfo from '@/addon/phone_shop/components/diy/phone-shop-member-info/index.vue';
    import diyPhoneShopOrderInfo from '@/addon/phone_shop/components/diy/phone-shop-order-info/index.vue';
    import diyPhoneShopSearch from '@/addon/phone_shop/components/diy/phone-shop-search/index.vue';
-   import diyBrand from '@/addon/tk_jhkd/components/diy/brand/index.vue';
-   import diyJhkd from '@/addon/tk_jhkd/components/diy/jhkd/index.vue';
-   import diyKdCoupon from '@/addon/tk_jhkd/components/diy/kd-coupon/index.vue';
-   import diyKdGz from '@/addon/tk_jhkd/components/diy/kd-gz/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';
