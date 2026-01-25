@@ -42,7 +42,8 @@ Route::group('recycle', function() {
     /***************************************************** hello world ****************************************************/
     Route::get('hello_world', 'addon\recycle\app\api\controller\hello_world\Index@index');
      //二手机分类列表
-     
+    Route::get('dict/:id', 'addon\recycle\app\api\controller\hello_world\Dict@getDict');
+    
     
     // recycle/recycle_address_list 获取商家的回收地址
      Route::get('address_list','addon\recycle\app\api\controller\recycle_category\RecycleCategory@address_list');

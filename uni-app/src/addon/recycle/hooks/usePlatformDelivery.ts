@@ -11,7 +11,7 @@ export function usePlatformDelivery() {
   const { parseAddressInfo } = useAddressParser()
 
   // 是否使用平台快递
-  const enablePlatformDelivery = ref(true)
+  const enablePlatformDelivery = ref(false)
 
   // 预约时间选项列表
   const pickupTimeOptions = ref<Array<{ label: string; value: string }>>([])
@@ -48,40 +48,6 @@ export function usePlatformDelivery() {
     } catch (error) {
       console.error('加载默认地址失败：', error)
     }
-  }
-
-  // 跳转到地址选择页面
-  const goToSelectAddress = () => {
-    // 设置回调信息（在跳转后再设置，避免被 onLoad 清除）
-    const callbackData = {
-      back: '/addon/recycle/pages/order/order',
-      delivery: 'express',
-      address_id: 0
-    }
-
-    console.log('准备跳转到地址列表，回调数据：', callbackData)
-
-    // 先跳转，然后在 onLoad 之后通过其他方式传递回调
-    // 注意：不传 source 参数，避免地址被过滤
-    uni.navigateTo({
-      url: '/app/pages/member/address',
-      success() {
-        console.log('跳转成功')
-        // 延迟设置回调数据，确保在 onLoad 清除之后设置
-        setTimeout(() => {
-          uni.setStorage({
-            key: 'selectAddressCallback',
-            data: callbackData,
-            success() {
-              console.log('回调数据已保存（延迟）')
-            }
-          })
-        }, 100)
-      },
-      fail(err) {
-        console.error('跳转失败：', err)
-      }
-    })
   }
 
   /**
@@ -274,7 +240,6 @@ export function usePlatformDelivery() {
     enablePlatformDelivery,
     platformDeliveryForm,
     pickupTimeOptions,
-    goToSelectAddress,
     fillAddressFromSelected,
     handlePlatformDeliveryToggle,
     loadPickupTime,

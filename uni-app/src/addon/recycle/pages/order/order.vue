@@ -50,7 +50,7 @@
         @update:use-platform-delivery="handlePlatformDeliveryChange"
         @update:express-no="form.express_no = $event"
         @update:platform-delivery-form="platformDeliveryForm = $event"
-        @select-address="goToSelectAddress"
+        @select-address="fillAddressFromSelected"
         @scan-express="scanCode"
       />
 
@@ -134,7 +134,6 @@ const {
   enablePlatformDelivery,
   platformDeliveryForm,
   pickupTimeOptions,
-  goToSelectAddress,
   fillAddressFromSelected,
   handlePlatformDeliveryToggle,
   resetPlatformDeliveryForm
@@ -269,23 +268,6 @@ onShow(async () => {
 
   // 检查收款信息
   await checkPaymentInfo()
-  // 处理地址选择回调
-  const selectAddressCallback = uni.getStorageSync('selectAddressCallback')
-  if (selectAddressCallback && selectAddressCallback.address_id) {
-    try {
-      const res: any = await getAddressList({})
-      const selectedAddress = res.data.find((addr: any) => addr.id === selectAddressCallback.address_id)
-
-      if (selectedAddress) {
-        fillAddressFromSelected(selectedAddress)
-      }
-    } catch (error) {
-      console.error('获取地址详情失败：', error)
-    }
-
-    // 清除回调数据
-    uni.removeStorageSync('selectAddressCallback')
-  }
 })
 
 // 页面挂载时获取商家信息

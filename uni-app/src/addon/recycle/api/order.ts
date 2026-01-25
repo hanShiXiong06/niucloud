@@ -145,3 +145,8 @@ export function syncAnguoDeliveryStatus(order_id: number) {
 export function getExpress(express_code: string = '', mobile: string = '') {
   return request.get('recycle/device_query_api/express',  { express_code, mobile })
 }
+
+// 获取收货渠道字典
+export function getReceivingChannels() {
+  return request.get('recycle/dict/29')
+}

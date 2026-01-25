@@ -9,26 +9,31 @@
     <up-row customStyle="margin-bottom: 12px">
       <up-col span="12">
         <view class="delivery-mode-toggle">
+          <!-- 动态渲染平台快递渠道（从字典获取） -->
           <view
-            :class="['toggle-item', usePlatformDelivery ? 'active' : '']"
-            @click="handlePlatformToggle"
+            v-for="channel in channels"
+            :key="channel.value"
+            :class="['toggle-item', usePlatformDelivery && currentChannelValue === channel.value ? 'active' : '']"
+            @click="handleChannelClick(channel)"
           >
             <view class="flex items-center justify-center gap-1">
-              <text>顺丰快递</text>
-              <view class="free-tag">
-                <text class="free-tag-text">限时包邮</text>
+              <text>{{ channel.name.split('｜')[0] }}</text>
+              <view v-if="channel.name.includes('｜')" class="free-tag">
+                <text class="free-tag-text">{{ channel.name.split('｜')[1] }}</text>
               </view>
             </view>
           </view>
+
+          <!-- 固定的快递单号选项（始终显示） -->
           <view
-          class="flex items-center justify-center gap-1"
+            class="flex items-center justify-center gap-1"
             :class="['toggle-item', !usePlatformDelivery ? 'active' : '']"
             @click="handleManualToggle"
           >
             <text>快递单号</text>
             <view class="free-tag">
-                <text class="free-tag-text">手动输入</text>
-              </view>
+              <text class="free-tag-text">手动输入</text>
+            </view>
           </view>
         </view>
       </up-col>
@@ -64,7 +69,7 @@
       <view
         v-if="platformDeliveryForm.sender_name"
         class="address-card-clickable"
-        @click="$emit('select-address')"
+        @click="showAddressPopup = true"
       >
         <view class="address-compact">
           <view class="flex items-center justify-between">
@@ -89,7 +94,7 @@
       </view>
 
       <!-- 未选择地址 - 显示选择按钮 -->
-      <view v-else class="select-address-row" @click="$emit('select-address')">
+      <view v-else class="select-address-row" @click="showAddressPopup = true">
         <view class="flex items-center gap-2">
           <up-icon name="map" size="16" color="#3b82f6"></up-icon>
           <text class="text-sm" style="color: #64748b;">请选择寄件地址</text>
@@ -127,11 +132,20 @@
     @confirm="handlePickupTimeConfirm"
     @cancel="showPickupTimePicker = false"
   ></u-picker>
+
+  <!-- 地址选择弹窗 -->
+  <AddressSelectPopup
+    :show="showAddressPopup"
+    @update:show="showAddressPopup = $event"
+    @select="handleAddressSelect"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import type { PlatformDeliveryForm } from '../../../types/order'
+import AddressSelectPopup from './AddressSelectPopup.vue'
+import { getReceivingChannels } from '../../../api/order'
 
 interface Props {
   usePlatformDelivery: boolean
@@ -145,16 +159,90 @@ const props = defineProps<Props>()
 // 预约时间选择器显示状态
 const showPickupTimePicker = ref(false)
 
+// 地址选择弹窗显示状态
+const showAddressPopup = ref(false)
+
+// 渠道配置
+interface ChannelItem {
+  name: string
+  value: string
+  sort: number
+  memo: string
+}
+
+const channels = ref<ChannelItem[]>([])
+const loading = ref(false)
+
+// 加载渠道配置
+const loadChannels = async () => {
+  try {
+    loading.value = true
+    const res: any = await getReceivingChannels()
+    if (res.code === 1 && res.data && res.data.dictionary) {
+      // 按 sort 降序排序（sort 值越大优先级越高）
+      channels.value = res.data.dictionary.sort((a: ChannelItem, b: ChannelItem) => b.sort - a.sort)
+
+      // 如果有渠道，默认选中第一个（sort 最大的）
+      if (channels.value.length > 0) {
+        const defaultChannel = channels.value[0]
+        if (defaultChannel.value === '1') {
+          // 默认选中顺丰快递
+          emit('update:usePlatformDelivery', true)
+        } else {
+          // 默认选中其他渠道（手动输入）
+          emit('update:usePlatformDelivery', false)
+        }
+      } else {
+        // 如果没有任何渠道配置，默认选中"快递单号"（手动输入）
+        emit('update:usePlatformDelivery', false)
+      }
+    } else {
+      // 如果接口返回失败或没有数据，也默认选中"快递单号"
+      channels.value = []
+      emit('update:usePlatformDelivery', false)
+    }
+  } catch (error) {
+    console.error('加载渠道配置失败：', error)
+    // 加载失败时，默认选中"快递单号"
+    channels.value = []
+    emit('update:usePlatformDelivery', false)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 组件挂载时加载渠道配置
+onMounted(() => {
+  loadChannels()
+})
+
+// 计算当前选中的渠道
+const currentChannelValue = computed(() => {
+  return props.usePlatformDelivery ? '1' : '0'
+})
+
+// 根据 value 获取渠道信息
+const getChannelByValue = (value: string) => {
+  return channels.value.find(ch => ch.value === value)
+}
+
 const emit = defineEmits<{
   'update:usePlatformDelivery': [value: boolean]
   'update:expressNo': [value: string]
   'update:platformDeliveryForm': [form: PlatformDeliveryForm]
-  'select-address': []
+  'select-address': [address?: any]
   'scan-express': []
 }>()
 
-const handlePlatformToggle = () => {
-  emit('update:usePlatformDelivery', true)
+// 处理渠道点击
+const handleChannelClick = (channel: ChannelItem) => {
+  // 如果点击的是平台快递渠道（value 为 "1"），则设置为 true
+  if (channel.value === '1') {
+    emit('update:usePlatformDelivery', true)
+  } else {
+    // 其他渠道暂时也设置为 false（手动输入）
+    emit('update:usePlatformDelivery', false)
+  }
 }
 
 const handleManualToggle = () => {
@@ -172,6 +260,11 @@ const handlePickupTimeConfirm = (e: any) => {
     pickup_time: selectedOption.value
   })
   showPickupTimePicker.value = false
+}
+
+// 处理地址选择
+const handleAddressSelect = (address: any) => {
+  emit('select-address', address)
 }
 </script>
 
@@ -329,5 +422,16 @@ const handlePickupTimeConfirm = (e: any) => {
       }
     }
   }
+}
+
+.loading-hint,
+.no-channel-hint {
+  padding: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-bottom: 12px;
 }
 </style>
