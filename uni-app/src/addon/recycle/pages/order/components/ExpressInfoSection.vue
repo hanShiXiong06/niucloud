@@ -142,10 +142,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { PlatformDeliveryForm } from '../../../types/order'
 import AddressSelectPopup from './AddressSelectPopup.vue'
-import { getReceivingChannels } from '../../../api/order'
+import { useReceivingChannels, type ChannelItem } from '../../../hooks/useReceivingChannels'
 
 interface Props {
   usePlatformDelivery: boolean
@@ -162,69 +162,13 @@ const showPickupTimePicker = ref(false)
 // 地址选择弹窗显示状态
 const showAddressPopup = ref(false)
 
-// 渠道配置
-interface ChannelItem {
-  name: string
-  value: string
-  sort: number
-  memo: string
-}
-
-const channels = ref<ChannelItem[]>([])
-const loading = ref(false)
-
-// 加载渠道配置
-const loadChannels = async () => {
-  try {
-    loading.value = true
-    const res: any = await getReceivingChannels()
-    if (res.code === 1 && res.data && res.data.dictionary) {
-      // 按 sort 降序排序（sort 值越大优先级越高）
-      channels.value = res.data.dictionary.sort((a: ChannelItem, b: ChannelItem) => b.sort - a.sort)
-
-      // 如果有渠道，默认选中第一个（sort 最大的）
-      if (channels.value.length > 0) {
-        const defaultChannel = channels.value[0]
-        if (defaultChannel.value === '1') {
-          // 默认选中顺丰快递
-          emit('update:usePlatformDelivery', true)
-        } else {
-          // 默认选中其他渠道（手动输入）
-          emit('update:usePlatformDelivery', false)
-        }
-      } else {
-        // 如果没有任何渠道配置，默认选中"快递单号"（手动输入）
-        emit('update:usePlatformDelivery', false)
-      }
-    } else {
-      // 如果接口返回失败或没有数据，也默认选中"快递单号"
-      channels.value = []
-      emit('update:usePlatformDelivery', false)
-    }
-  } catch (error) {
-    console.error('加载渠道配置失败：', error)
-    // 加载失败时，默认选中"快递单号"
-    channels.value = []
-    emit('update:usePlatformDelivery', false)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 组件挂载时加载渠道配置
-onMounted(() => {
-  loadChannels()
-})
-
-// 计算当前选中的渠道
-const currentChannelValue = computed(() => {
-  return props.usePlatformDelivery ? '1' : '0'
-})
-
-// 根据 value 获取渠道信息
-const getChannelByValue = (value: string) => {
-  return channels.value.find(ch => ch.value === value)
-}
+// 使用收货渠道 hook
+const {
+  channels,
+  loading,
+  defaultChannelValue,
+  getDefaultPlatformDeliveryState
+} = useReceivingChannels()
 
 const emit = defineEmits<{
   'update:usePlatformDelivery': [value: boolean]
@@ -233,6 +177,24 @@ const emit = defineEmits<{
   'select-address': [address?: any]
   'scan-express': []
 }>()
+
+// 监听渠道加载完成后设置默认值
+watch(
+  () => loading.value,
+  (isLoading) => {
+    if (!isLoading && defaultChannelValue.value !== undefined) {
+      // 渠道加载完成，设置默认状态
+      const defaultState = getDefaultPlatformDeliveryState()
+      emit('update:usePlatformDelivery', defaultState)
+    }
+  },
+  { immediate: true }
+)
+
+// 计算当前选中的渠道 value
+const currentChannelValue = computed(() => {
+  return props.usePlatformDelivery ? '1' : '0'
+})
 
 // 处理渠道点击
 const handleChannelClick = (channel: ChannelItem) => {

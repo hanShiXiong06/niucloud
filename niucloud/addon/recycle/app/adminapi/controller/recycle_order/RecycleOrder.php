@@ -4,11 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle\app\adminapi\controller\recycle_order;
 
 use addon\recycle\app\service\admin\recycle_order\RecycleOrderService;
-use addon\recycle\app\service\admin\order\RecycleOrderSignService;
-use addon\recycle\app\service\admin\order\RecycleOrderCheckService;
-use addon\recycle\app\service\admin\order\RecycleOrderPriceService;
-use addon\recycle\app\service\admin\order\RecycleOrderPaymentService;
-use addon\recycle\app\service\admin\order\RecycleOrderCloseService;
+use addon\recycle\app\service\admin\order\RecycleOrderService as OrderFlowService;
 use addon\recycle\app\validate\RecycleOrderValidate;
 use core\base\BaseAdminController;
 use core\exception\CommonException;
@@ -27,6 +23,11 @@ class RecycleOrder extends BaseAdminController
     protected $service;
 
     /**
+     * @var OrderFlowService
+     */
+    protected $flowService;
+
+    /**
      * @var RecycleOrderValidate
      */
     protected $validate;
@@ -35,6 +36,7 @@ class RecycleOrder extends BaseAdminController
     {
         parent::__construct($app);
         $this->service = new RecycleOrderService();
+        $this->flowService = new OrderFlowService();
         $this->validate = new RecycleOrderValidate();
     }
 
@@ -133,8 +135,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('sign')->check(array_merge(['id' => $id], $data));
 
-        $signService = new RecycleOrderSignService();
-        return success($signService->sign($id, $data));
+        return success($this->flowService->sign($id, $data));
     }
 
     /**
@@ -152,8 +153,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('check')->check(array_merge(['id' => $id], $data));
 
-        $checkService = new RecycleOrderCheckService();
-        return success($checkService->startCheck($id, $data));
+        return success($this->flowService->startCheck($id, $data));
     }
 
     /**
@@ -171,8 +171,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('check')->check(array_merge(['id' => $id], $data));
 
-        $checkService = new RecycleOrderCheckService();
-        return success($checkService->completeCheck($id, $data));
+        return success($this->flowService->completeCheck($id, $data));
     }
 
     /**
@@ -195,8 +194,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('price')->check(array_merge(['id' => $id], $data));
 
-        $priceService = new RecycleOrderPriceService();
-        return success($priceService->confirmPrice($id, $data));
+        return success($this->flowService->setPrice($id, $data));
     }
 
     /**
@@ -218,8 +216,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
-        $paymentService = new RecycleOrderPaymentService();
-        return success($paymentService->payment($id, $data));
+        return success($this->flowService->payment($id, $data));
     }
 
     /**
@@ -241,8 +238,7 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
-        $paymentService = new RecycleOrderPaymentService();
-        return success($paymentService->confirmPayment($id, $data));
+        return success($this->flowService->payment($id, $data));
     }
 
     /**
@@ -260,8 +256,11 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('close')->check(array_merge(['id' => $id], $data));
 
-        $closeService = new RecycleOrderCloseService();
-        return success($closeService->close($id, $data));
+        // 将close_reason映射为reason，因为flow service期望reason字段
+        $data['reason'] = $data['close_reason'];
+        unset($data['close_reason']);
+
+        return success($this->flowService->close($id, $data));
     }
 
     /**
@@ -279,7 +278,11 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('cancel')->check(array_merge(['id' => $id], $data));
 
-        return success($this->service->cancel($id, $data));
+        // 将cancel_reason映射为reason，因为flow service期望reason字段
+        $data['reason'] = $data['cancel_reason'];
+        unset($data['cancel_reason']);
+
+        return success($this->flowService->cancel($id, $data));
     }
 
     /**

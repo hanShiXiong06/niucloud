@@ -60,12 +60,13 @@ import { computed } from 'vue'
 
 interface StatusOption {
   label: string
-  value: number
+  value: string  // 支持字符串类型: 'all', '1', '2', '3', '4', '5', '6', '7', '8', '9'
   count?: number
+  actions?: number[]
 }
 
 interface Props {
-  currentStatus: number
+  currentStatus: string  // 改为字符串类型
   deliveryType: number
   searchKeyword: string
   statusOptions: Array<StatusOption>
@@ -75,7 +76,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  'update:currentStatus': [value: number]
+  'update:currentStatus': [value: string]  // 改为字符串类型
   'update:deliveryType': [value: number]
   'update:searchKeyword': [value: string]
   'search': []

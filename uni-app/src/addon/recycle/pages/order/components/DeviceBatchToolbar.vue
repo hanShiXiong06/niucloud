@@ -4,7 +4,12 @@
     <view class="flex items-center gap-3">
       <!-- 全选 -->
       <view class="flex items-center" @tap.stop="$emit('toggle-all')">
-        <up-checkbox :checked="isAllSelected" shape="square"></up-checkbox>
+        <up-checkbox-group
+            placement="column"
+            @change="$emit('toggle-all')"
+        >
+        <up-checkbox :checked="isAllSelected"  shape="square"></up-checkbox>
+        </up-checkbox-group>
         <text class="ml-1 text-xs">{{ isAllSelected ? '取消全选' : '全选' }}</text>
       </view>
 

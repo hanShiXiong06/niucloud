@@ -9,7 +9,7 @@
     </view>
 
     <!-- 根据订单状态显示不同操作按钮 -->
-    <!-- 待签收：可以取消订单 -->
+    <!-- 状态1-待签收：可以取消订单 -->
     <view
       v-if="order.status === 1"
       class="action-btn danger"
@@ -18,7 +18,7 @@
       <text>取消订单</text>
     </view>
 
-    <!-- 待检测：确认收货 -->
+    <!-- 状态2-已签收：确认收货 -->
     <view
       v-if="order.status === 2"
       class="action-btn primary"
@@ -27,9 +27,9 @@
       <text>确认收货</text>
     </view>
 
-    <!-- 已取消/已完成：可以删除订单 -->
+    <!-- 状态7-已完成、状态8-已关闭、状态9-已取消：可以删除订单 -->
     <view
-      v-if="order.status === 4 || order.status === -1"
+      v-if="order.status === 7 || order.status === 8 || order.status === 9"
       class="action-btn danger"
       @click="$emit('delete')"
     >

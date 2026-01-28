@@ -1,5 +1,5 @@
 <template>
-  <view class="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-3">
+  <view class=" bg-gradient-to-b from-gray-50 to-gray-100 p-3">
     <!-- 顶部导航栏 -->
     <DeliveryModeToggle
       v-model="currentTab"
@@ -60,7 +60,7 @@
         @copy="copyShopInfo"
         @open-location="openLocation"
       />
-      <view class="mt-2 flex  bottom-14 bg-[#fff] rounded  shadow-md p-2 items-center justify-between">
+      <view class="mt-2 flex bg-[#fff] rounded  shadow-md p-2 items-center justify-between">
        
       <!-- 回收协议 -->
         <AgreementCheckbox

@@ -10,13 +10,9 @@ use addon\recycle\app\model\RecycleOrderLog;
 use core\base\BaseAdminService;
 use app\service\core\notice\NoticeService;
 use core\exception\CommonException;
-use addon\recycle\app\service\admin\order\RecycleOrderSignService;
-use addon\recycle\app\service\admin\order\RecycleOrderCloseService;
-use addon\recycle\app\service\admin\order\RecycleOrderCheckService;
-use addon\recycle\app\service\admin\order\RecycleOrderPriceService;
-use addon\recycle\app\service\admin\order\RecycleOrderPaymentService;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderService;
 use addon\recycle\app\service\admin\recycle_order\RecycleDeviceService;
+use addon\recycle\app\service\admin\order\RecycleOrderService as OrderFlowService;
 
 use think\facade\Db;
 use think\facade\Log;
@@ -34,12 +30,18 @@ class RecycleOrderService extends BaseAdminService
     protected $model;
 
     /**
+     * @var OrderFlowService
+     */
+    protected $flowService;
+
+    /**
      * 构造函数
      */
     public function __construct()
     {
         parent::__construct();
         $this->model = new RecycleOrder();
+        $this->flowService = new OrderFlowService();
     }
 
     /**
@@ -302,8 +304,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function sign(int $id, array $devices = [], string $remark = ''): bool
     {
-        $signService = new RecycleOrderSignService();
-        return $signService->sign($id, [
+        return $this->flowService->sign($id, [
             'devices' => $devices,
             'remark' => $remark
         ]);
@@ -319,8 +320,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function startCheck(int $id, array $devices = [], string $remark = ''): bool
     {
-        $checkService = new RecycleOrderCheckService();
-        return $checkService->startCheck($id, [
+        return $this->flowService->startCheck($id, [
             'devices' => $devices,
             'remark' => $remark
         ]);
@@ -359,8 +359,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function completeCheck(int $id, array $data): bool
     {
-        $checkService = new RecycleOrderCheckService();
-        return $checkService->completeCheck($id, $data);
+        return $this->flowService->completeCheck($id, $data);
     }
 
     /**
@@ -372,8 +371,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function confirmPrice(int $id, array $data): bool
     {
-        $priceService = new RecycleOrderPriceService();
-        return $priceService->confirmPrice($id, $data);
+        return $this->flowService->setPrice($id, $data);
     }
 
     /**
@@ -385,8 +383,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function payment(int $id, array $data): bool
     {
-        $paymentService = new RecycleOrderPaymentService();
-        return $paymentService->payment($id, $data);
+        return $this->flowService->payment($id, $data);
     }
 
     /**
@@ -422,8 +419,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function paymentConfirm(int $id, array $data): bool
     {
-        $paymentService = new RecycleOrderPaymentService();
-        return $paymentService->confirmPayment($id, $data);
+        return $this->flowService->payment($id, $data);
     }
 
     /**
@@ -435,8 +431,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function close(int $id, array $data): bool
     {
-        $closeService = new RecycleOrderCloseService();
-        return $closeService->close($id, $data);
+        return $this->flowService->close($id, $data);
     }
 
     /**
@@ -448,22 +443,7 @@ class RecycleOrderService extends BaseAdminService
      */
     public function cancel(int $id, array $data): bool
     {
-        // 开启事务
-        Db::startTrans();
-        try {
-            // 更新订单状态
-            $updateData = [
-                'cancel_reason' => $data['cancel_reason'] ?? ''
-            ];
-            
-            $this->updateStatus($id, RecycleOrderDict::ORDER_STATUS_CANCELLED, $data['remark'] ?? '', $updateData);
-            
-            Db::commit();
-            return true;
-        } catch (\Exception $e) {
-            Db::rollback();
-            throw new CommonException($e->getMessage());
-        }
+        return $this->flowService->cancel($id, $data);
     }
 
     /**

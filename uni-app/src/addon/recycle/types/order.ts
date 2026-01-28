@@ -119,7 +119,7 @@ export interface OrderListItem {
 
 // 订单筛选条件
 export interface OrderFilters {
-  status: number  // 0-全部 1-待签收 2-待检测 3-待确认 4-已完成 -1-已取消
+  status: string  // 订单状态: 'all'-全部, '1'-待签收, '2'-已签收, '3'-质检中, '4'-已质检, '5'-待确认, '6'-待打款, '7'-已完成, '8'-已关闭, '9'-已取消
   delivery_type: number  // 0-全部 1-邮寄 2-自送
   search_keyword: string
 }

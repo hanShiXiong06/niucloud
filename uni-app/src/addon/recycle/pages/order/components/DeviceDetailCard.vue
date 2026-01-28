@@ -1,5 +1,5 @@
 <template>
-  <view class="bg-white rounded-lg shadow-sm overflow-hidden mb-2">
+  <view class="bg-white rounded-lg shadow-sm overflow-hidden mb-2 ">
     <!-- 设备基本信息 -->
     <view class="p-2 flex items-start border-b border-gray-100 relative">
       <!-- 选择框 -->
@@ -52,9 +52,9 @@
         </view>
       </view>
     </view>
-
+    <up-line ></up-line>
     <!-- 设备详细信息（直接显示，不折叠） -->
-    <view class="p-2 bg-gray-50">
+    <view class="p-2 bg-[#fff] ">
       <!-- 检测图片 -->
       <view v-if="device.check_images" class="mb-2">
         <text class="text-xs font-medium text-gray-700 mb-1 block">检测图片</text>
@@ -177,29 +177,41 @@ const formatTime = (timestamp: number) => {
 </script>
 
 <style scoped lang="scss">
-/* 设备状态文本颜色 */
+/* 设备状态文本颜色 - 统一使用与 useOrderStatus 一致的配色 */
+/* 设备状态: 1-待质检, 2-质检中, 3-已质检, 4-待确认, 5-已回收, 6-已退回, 7-已定价 */
+
 .status-text-1 {
-  background: rgba(255, 152, 0, 0.1);
-  color: #f57c00;
+  background: rgba(245, 158, 11, 0.1);  /* 橙色 - 待质检 */
+  color: #f59e0b;
 }
+
 .status-text-2 {
-  background: rgba(33, 150, 243, 0.1);
-  color: #1976d2;
+  background: rgba(59, 130, 246, 0.1);  /* 蓝色 - 质检中 */
+  color: #3b82f6;
 }
+
 .status-text-3 {
-  background: rgba(76, 175, 80, 0.1);
-  color: #388e3c;
+  background: rgba(99, 102, 241, 0.1);  /* 靛蓝 - 已质检 */
+  color: #6366f1;
 }
+
 .status-text-4 {
-  background: rgba(255, 64, 0, 0.146);
-  color: #f52d00;
+  background: rgba(139, 92, 246, 0.1);  /* 紫色 - 待确认 */
+  color: #8b5cf6;
 }
+
 .status-text-5 {
-  background: rgba(33, 243, 103, 0.1);
-  color: #15c02c;
+  background: rgba(16, 185, 129, 0.1);  /* 绿色 - 已回收 */
+  color: #10b981;
 }
+
 .status-text-6 {
-  background: rgba(244, 67, 54, 0.1);
-  color: #d32f2f;
+  background: rgba(239, 68, 68, 0.1);  /* 红色 - 已退回 */
+  color: #ef4444;
+}
+
+.status-text-7 {
+  background: rgba(6, 182, 212, 0.1);  /* 青色 - 已定价 */
+  color: #06b6d4;
 }
 </style>

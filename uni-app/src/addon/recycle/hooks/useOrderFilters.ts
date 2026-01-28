@@ -2,13 +2,22 @@ import { ref, computed, onMounted } from 'vue'
 import type { OrderFilters } from '../types/order'
 import { getOrderStatusCount } from '../api/order'
 
+// 状态选项接口
+interface StatusOption {
+  key: string
+  text: string
+  count: number
+  actions?: number[]
+}
+
 /**
  * 订单筛选管理
  * 管理状态筛选、配送方式筛选、搜索关键词
+ * 状态数据从接口动态获取: recycle/recycle_order/status_count
  */
 export function useOrderFilters() {
-  // 当前选中的状态 0-全部 1-待签收 2-待检测 3-待确认 4-已完成 -1-已取消
-  const currentStatus = ref(0)
+  // 当前选中的状态 ('all', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+  const currentStatus = ref('all')
 
   // 配送方式 0-全部 1-邮寄 2-自送
   const deliveryType = ref(0)
@@ -16,18 +25,24 @@ export function useOrderFilters() {
   // 搜索关键词
   const searchKeyword = ref('')
 
-  // 状态计数
-  const statusCounts = ref<Record<number, number>>({})
+  // 从接口获取的状态列表
+  const statusList = ref<StatusOption[]>([])
 
-  // 状态选项列表（带计数）
-  const statusOptions = computed(() => [
-    { label: '全部', value: 0, count: statusCounts.value[0] },
-    { label: '待签收', value: 1, count: statusCounts.value[1] },
-    { label: '待检测', value: 2, count: statusCounts.value[2] },
-    { label: '待确认', value: 3, count: statusCounts.value[3] },
-    { label: '已完成', value: 4, count: statusCounts.value[4] },
-    { label: '已取消', value: -1, count: statusCounts.value[-1] }
-  ])
+  // 状态字典（设备状态和订单状态）
+  const statusDict = ref<{
+    device?: Record<string, string>
+    order?: Record<string, string>
+  }>({})
+
+  // 状态选项列表（从接口动态生成）
+  const statusOptions = computed(() =>
+    statusList.value.map(item => ({
+      label: item.text,
+      value: item.key,
+      count: item.count,
+      actions: item.actions || []
+    }))
+  )
 
   // 配送方式选项
   const deliveryOptions = [
@@ -46,10 +61,12 @@ export function useOrderFilters() {
   // 获取订单状态统计
   const fetchStatusCounts = async () => {
     try {
-      const res = await getOrderStatusCount()
+      const res: any = await getOrderStatusCount()
       if (res.code === 1 && res.data) {
-        // 更新状态计数
-        statusCounts.value = res.data
+        // 更新状态列表
+        statusList.value = res.data.list || []
+        // 更新状态字典
+        statusDict.value = res.data.status_dict || {}
       }
     } catch (error) {
       console.error('获取订单状态统计失败：', error)
@@ -57,7 +74,7 @@ export function useOrderFilters() {
   }
 
   // 切换状态
-  const switchStatus = (status: number) => {
+  const switchStatus = (status: string) => {
     currentStatus.value = status
   }
 
@@ -73,14 +90,14 @@ export function useOrderFilters() {
 
   // 重置筛选条件
   const resetFilters = () => {
-    currentStatus.value = 0
+    currentStatus.value = 'all'
     deliveryType.value = 0
     searchKeyword.value = ''
   }
 
   // 检查是否有筛选条件
   const hasFilters = computed(() => {
-    return currentStatus.value !== 0 ||
+    return currentStatus.value !== 'all' ||
            deliveryType.value !== 0 ||
            searchKeyword.value !== ''
   })
@@ -95,6 +112,7 @@ export function useOrderFilters() {
     deliveryType,
     searchKeyword,
     statusOptions,
+    statusDict,
     deliveryOptions,
     filters,
     switchStatus,

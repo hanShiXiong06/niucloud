@@ -107,7 +107,7 @@ const statusDescription = computed(() => {
 .status-bg-4 { background: linear-gradient(135deg, #66bb6a, #43a047); }
 .status-bg-5 { background: linear-gradient(135deg, #66bb6a, #43a047); }
 .status-bg-6 { background: linear-gradient(135deg, #ec407a, #d81b60); }
-.status-bg-7 { background: linear-gradient(135deg, #7e57c2, #5e35b1); }
+.status-bg-7 { background: linear-gradient(135deg, #12b981);  }
 .status-bg-8 { background: linear-gradient(135deg, #ef5350, #e53935); }
 .status-bg-9 { background: linear-gradient(135deg, #78909c, #546e7a); }
 </style>

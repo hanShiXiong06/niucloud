@@ -64,7 +64,7 @@ export function useOrderList() {
       }
 
       // 添加筛选条件
-      if (filters.status !== 0) {
+      if (filters.status !== 'all') {
         params.status = filters.status
       }
       if (filters.delivery_type !== 0) {
@@ -74,7 +74,7 @@ export function useOrderList() {
         params.keyword = filters.search_keyword
       }
 
-      const res = await getOrderList(params)
+      const res: any = await getOrderList(params)
 
       if (res.code === 1) {
         const list = res.data.data || []  // API 返回的是 res.data.data 不是 res.data.list
