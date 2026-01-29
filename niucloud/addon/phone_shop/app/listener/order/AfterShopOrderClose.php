@@ -10,6 +10,7 @@ use addon\phone_shop\app\model\order\OrderGoods;
 use addon\phone_shop\app\service\core\coupon\CoreCouponMemberService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsSaleNumService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStockService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsSyncService;
 use addon\phone_shop\app\service\core\order\CoreInvoiceService;
 use addon\phone_shop\app\service\core\order\CoreOrderLogService;
 use think\facade\Log;
@@ -48,28 +49,80 @@ class AfterShopOrderClose
                 ['order_id', '=', $order_data['order_id']]
             );
             $order_goods_data = (new OrderGoods())->where($order_goods_where)->select()->toArray();
+
+            // 判断是否为线下订单的未付款状态(只锁定了库存)
+            $isOfflineUnpaid = ($order_data['order_type'] === 'hsx_offline' && $order_data['status'] == OrderDict::WAIT_PAY);
+
+            // 判断是否为线下订单的挂单状态(已扣减库存)
+            $isOfflineHold = ($order_data['order_type'] === 'hsx_offline' && $order_data['status'] == OrderDict::HOLD);
+
             //返还商品库存
-            $core_goods_stock_service = new CoreGoodsStockService();
-            foreach ($order_goods_data as $v) {
-                $core_goods_stock_service->inc([
-                    'num' => $v['num'],
-                    'goods_id' => $v['goods_id'],
-                    'sku_id' => $v['sku_id']
-                ]);
-                 // 获取 当前的商品的 skuId 
-                $skuId = $v['sku_id'];
-                 // 将商品重新上架
-                $sku = GoodsSku::find($skuId);
-                Log::write('-------------------------sku_stock-----------------------------------------------------------------');
-                 
-                Log::write($sku->stock .'-------$num'. $v['num'] .'--------'.$sku->goods);
-                Log::write('------------------------------------------------------------------------------------------');
-                if ($sku && $sku->stock <= 0 || $sku->stock <= $v['num']  ) {
-                    // 这里假设 GoodsSku 模型有一个关联到 Goods 模型的关联方法 `goods()`
-                    $goods = $sku->goods;
-                    if ($goods && $goods->status != '1') {
-                        $goods->status = '1'; // 假设状态字段为 'status'，下架状态为 'unlisted'
-                        $goods->save();
+            if ($isOfflineUnpaid) {
+                // 线下未付款订单：释放锁定库存
+                foreach ($order_goods_data as $v) {
+                    GoodsSku::where('sku_id', $v['sku_id'])
+                        ->dec('locked_stock', $v['num'])
+                        ->update();
+                    Log::write('线下未付款订单关闭-释放锁定库存: sku_id=' . $v['sku_id'] . ', num=' . $v['num']);
+                }
+            } elseif ($isOfflineHold) {
+                // 线下挂单订单：返还正常库存(商品退回)
+                $core_goods_stock_service = new CoreGoodsStockService();
+                foreach ($order_goods_data as $v) {
+                    $core_goods_stock_service->inc([
+                        'num' => $v['num'],
+                        'goods_id' => $v['goods_id'],
+                        'sku_id' => $v['sku_id']
+                    ]);
+                    Log::write('线下挂单订单关闭-返还库存: goods_id=' . $v['goods_id'] . ', sku_id=' . $v['sku_id'] . ', num=' . $v['num']);
+
+                    // 获取当前的商品的 skuId
+                    $skuId = $v['sku_id'];
+                    // 将商品重新上架
+                    $sku = GoodsSku::find($skuId);
+                    if ($sku && $sku->stock <= 0 || $sku->stock <= $v['num']) {
+                        $goods = $sku->goods;
+                        if ($goods && $goods->status != '1') {
+                            $goods->status = '1';
+                            $goods->save();
+                            Log::write('商品重新上架: goods_id=' . $goods->goods_id);
+
+                            // 跨站点同步：将其他站点的相同商品也上架
+                            if (!empty($goods->goods_no)) {
+                                (new CoreGoodsSyncService())->syncGoodsOnline($goods->goods_no, $goods->site_id);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 普通订单或已付款订单：返还正常库存
+                $core_goods_stock_service = new CoreGoodsStockService();
+                foreach ($order_goods_data as $v) {
+                    $core_goods_stock_service->inc([
+                        'num' => $v['num'],
+                        'goods_id' => $v['goods_id'],
+                        'sku_id' => $v['sku_id']
+                    ]);
+                     // 获取 当前的商品的 skuId
+                    $skuId = $v['sku_id'];
+                     // 将商品重新上架
+                    $sku = GoodsSku::find($skuId);
+                    Log::write('-------------------------sku_stock-----------------------------------------------------------------');
+
+                    Log::write($sku->stock .'-------$num'. $v['num'] .'--------'.$sku->goods);
+                    Log::write('------------------------------------------------------------------------------------------');
+                    if ($sku && $sku->stock <= 0 || $sku->stock <= $v['num']  ) {
+                        // 这里假设 GoodsSku 模型有一个关联到 Goods 模型的关联方法 `goods()`
+                        $goods = $sku->goods;
+                        if ($goods && $goods->status != '1') {
+                            $goods->status = '1'; // 假设状态字段为 'status'，下架状态为 'unlisted'
+                            $goods->save();
+
+                            // 跨站点同步：将其他站点的相同商品也上架
+                            if (!empty($goods->goods_no)) {
+                                (new CoreGoodsSyncService())->syncGoodsOnline($goods->goods_no, $goods->site_id);
+                            }
+                        }
                     }
                 }
             }
