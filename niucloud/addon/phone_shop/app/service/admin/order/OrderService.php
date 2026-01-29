@@ -69,7 +69,9 @@ class OrderService extends BaseAdminService
                 'pay' => function(Query $query) use ($pay_where) {
                     $query->where($pay_where);
                 },
-                'member'
+                // 'member'=>function(Query $query) {
+                //     $query->field('username, mobile, headimg');
+                // },
             ], 'left')
             ->with([
                 'order_goods' => function($query) {
@@ -128,6 +130,7 @@ class OrderService extends BaseAdminService
             $info[ 'pay' ] = ( new Pay() )->where([ [ 'out_trade_no', '=', $info[ 'out_trade_no' ] ] ])
                 ->field('out_trade_no, type, pay_time')->append([ 'type_name' ])->findOrEmpty()->toArray();
         }
+      
 
         return $info;
     }

@@ -52,6 +52,7 @@
             <el-tabs v-model="activeName" class="demo-tabs" @tab-change="handleClick">
                 <el-tab-pane :label="t('all')" name=""></el-tab-pane>
                 <el-tab-pane :label="t('toBePaid')" name="1"></el-tab-pane>
+                <el-tab-pane label="挂单" name="10"></el-tab-pane>
                 <el-tab-pane :label="t('toBeShipped')" name="2"></el-tab-pane>
                 <el-tab-pane :label="t('shipped')" name="3"></el-tab-pane>
                 <el-tab-pane :label="t('completed')" name="5"></el-tab-pane>
@@ -156,7 +157,7 @@
                                         <template #default>
                                             <div class="flex flex-col">
                                                 <span class="text-[12px] text-primary cursor-pointer"
-                                                    @click="memberEvent(item.member.member_id)">{{ item.member.nickname
+                                                    @click="memberEvent(item.member.member_id)">{{ item.member?.nickname
                                                     }}</span>
                                                 <span class="text-[12px] mt-[5px]">{{ item.taker_name }} {{
                                                     item.taker_mobile }}</span>
@@ -183,6 +184,10 @@
                                                     t('editPrice') }}</el-button>
                                                 <el-button type="primary" v-if="item.delivery_type != 'virtual'" link
                                                     @click="orderEditAddressFn(item)">{{ t('editAddress') }}</el-button>
+                                            </template>
+                                            <template v-if="item.status == 10">
+                                                <el-button type="primary" link @click="close(item)">{{ t('orderClose')
+                                                    }}</el-button>
                                             </template>
                                             <el-button type="primary" link @click="delivery(item)"
                                                 v-if="item.status == 2">{{ t('sendOutGoods') }}</el-button>

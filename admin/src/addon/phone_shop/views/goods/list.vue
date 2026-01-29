@@ -47,9 +47,6 @@
                                 :value="item.label_id" />
                         </el-select>
                     </el-form-item>
-
-
-
                     <el-form-item :label="t('skuPrice')" prop="sku_price">
                         <div class="region-input">
                             <input type="text" :placeholder="t('startPricePlaceholder')" maxlength="10"
@@ -58,10 +55,6 @@
                             <input type="text" :placeholder="t('endPricePlaceholder')" maxlength="10"
                                 v-model.trim="goodsTable.searchParam.end_price" @keyup="filterDigit($event)">
                         </div>
-                    </el-form-item>
-                    <!-- 只看自己 -->
-                    <el-form-item>
-                        <el-checkbox v-model="goodsTable.searchParam.only_self" :label="t('只看自己')" />
                     </el-form-item>
 
                     <el-form-item>
@@ -198,10 +191,11 @@
                         </template>
                     </el-table-column>
 
-                    <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
+                    <el-table-column :label="t('operation')" fixed="right" align="right" min-width="150">
                         <template #default="{ row }">
-                            <div v-if="siteId == row.site_id">
+
                                 <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
+                                <el-button type="success" link @click="offlineSaleEvent(row)" v-if="row.status == 1 && row.stock > 0">销售</el-button>
                                 <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods')
                                     }}</el-button>
 
@@ -214,7 +208,7 @@
                                 <el-button type="primary" v-if="row.status != 1" link
                                     @click="deleteEvent(row.goods_id)">{{
                                         t('delete') }}</el-button>
-                            </div>
+
                             <div v-else>
                                 <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods')
                                     }}</el-button>
@@ -253,6 +247,9 @@
 
         <!-- 会员价弹出框 -->
         <goods-member-price-popup ref="memberPricePopupRef" @load="loadGoodsList" />
+
+        <!-- 线下销售弹出框 -->
+        <goods-offline-order-popup ref="offlineSalePopupRef" @success="loadGoodsList" />
     </div>
 </template>
 
@@ -267,7 +264,8 @@ import goodsMemberPricePopup from '@/addon/phone_shop/views/goods/components/goo
 import goodsStockEditPopup from '@/addon/phone_shop/views/goods/components/goods-stock-edit-popup.vue'
 import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods-price-edit-popup.vue'
 import goodsSpreadPopup from '@/addon/phone_shop/views/goods/components/goods-spread-popup.vue'
-import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods, syncGoodsList } from '@/addon/phone_shop/api/goods'
+import goodsOfflineOrderPopup from '@/addon/phone_shop/views/goods/components/goods-offline-order-popup.vue'
+import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods } from '@/addon/phone_shop/api/goods'
 import { getMemberLevelAll } from '@/app/api/member'
 import { usePaginationStore } from '@/stores/modules/paginationStore'
 import userStore from '@/stores/modules/user'
@@ -278,8 +276,7 @@ const route = useRoute()
 const pageName = route.meta.title
 const repeat = ref(false)
 const paginationStore = usePaginationStore();
-// 获取当前站点
-const siteId = userStore().siteInfo?.site_id
+
 
 
 const goodsTable = reactive({
@@ -717,6 +714,16 @@ const memberPriceEvent = (data: any) => {
 }
 /** ***************** 会员价-end *************************/
 
+/** ***************** 线下销售-start *************************/
+// 线下销售弹窗
+const offlineSalePopupRef: any = ref(null)
+const offlineSaleEvent = (data: any) => {
+
+    
+    offlineSalePopupRef.value.show(data)
+}
+/** ***************** 线下销售-end *************************/
+
 // 复制商品
 const copyEvent = (data: any) => {
     ElMessageBox.confirm(t('goodsCopyTips'), t('warning'),
@@ -776,27 +783,7 @@ const resetForm = (formEl: FormInstance | undefined) => {
     loadGoodsList()
 }
 
-// hsx----
-const syncGoods = () => {
-    goodsTable.loading = true;
 
-    // 创建提示框，duration 为 0 表示不会自动消失
-    const messageInstance = ElMessage({
-        message: '同步中...',
-        type: 'warning',
-        duration: 0 // 提示框不自动消失
-    })
-
-    syncGoodsList().then(res => {
-        if (res.code == 1) {
-            loadGoodsList()
-        }
-    }).finally(() => {
-        // 请求完成后，手动关闭提示框和 loading 状态
-        goodsTable.loading = false
-        messageInstance.close()
-    })
-}
 
 </script>
 

@@ -179,7 +179,12 @@ class Order extends BaseAdminController
      */
     public function getOrderFrom()
     {
-        return success(ChannelDict::getType());
+        // 追加一个 后台操作 : admin
+        $data = [
+            'admin' => '后台操作',
+        ];
+        return success(array_merge(ChannelDict::getType(), $data));
+
     }
 
     /**

@@ -31,6 +31,9 @@ class OrderDict
     //已完成
     const FINISH = 5;
 
+    //挂单(商品已取走,待付款)
+    const HOLD = 10;
+
     //已关闭
     const CLOSE = -1;
 
@@ -131,6 +134,19 @@ class OrderDict
                 'is_refund' => 0,
                 'action' => [],
                 'member_action' => [
+                ],
+            ],
+            self::HOLD => [
+                'name' => '挂单',//挂单(商品已取走,待付款)
+                'status' => self::HOLD,
+                'is_refund' => 0,
+                'action' => [],
+                'member_action' => [
+                    [
+                        'name' => '支付',
+                        'class' => '',
+                        'params' => ''
+                    ],
                 ],
             ],
             self::CLOSE => [

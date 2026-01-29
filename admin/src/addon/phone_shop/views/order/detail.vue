@@ -28,7 +28,7 @@
 						<el-form-item :label="t('deliveryType')">
 							<div class="input-width">{{ formData.delivery_type_name }}</div>
 						</el-form-item>
-						<div v-if="formData.delivery_type == 'express' || formData.delivery_type == 'local_delivery'">
+						<div v-if="formData.delivery_type == 'express' || formData.delivery_type == 'local_delivery'  ">
 							<el-form-item :label="t('takerName')">
 								<div class="input-width">{{ formData.taker_name }}</div>
 							</el-form-item>
@@ -40,8 +40,17 @@
 							</el-form-item>
 						</div>
 						<div v-if="formData.delivery_type == 'store'">
+							<el-form-item :label="t('takerName')">
+								<div class="input-width">{{ formData.taker_name }}</div>
+							</el-form-item>
+							<el-form-item :label="t('takerMobile')">
+								<div class="input-width">{{ formData.taker_mobile }}</div>
+							</el-form-item>
+						</div>
+						<div v-if="formData.delivery_type == 'store' && false  " >
+						
 							<el-form-item :label="t('storeName')">
-								<div class="input-width">{{ formData.store.store_name }}</div>
+								<div class="input-width">{{ !!formData.store.store_name }}</div>
 							</el-form-item>
 							<el-form-item :label="t('storeAddress')">
 								<div class="input-width">{{ formData.store.full_address }}</div>

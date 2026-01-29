@@ -8,9 +8,11 @@ use addon\phone_shop\app\dict\order\OrderDeliveryDict;
 use addon\phone_shop\app\dict\order\OrderDict;
 use addon\phone_shop\app\dict\order\OrderLogDict;
 use addon\phone_shop\app\model\goods\Goods;
+use addon\phone_shop\app\model\goods\GoodsSku;
 use addon\phone_shop\app\model\order\OrderGoods;
 use addon\phone_shop\app\service\admin\marketing\DiscountService;
 use addon\phone_shop\app\service\core\CoreStatService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsStockService;
 use addon\phone_shop\app\service\core\order\CoreInvoiceService;
 use addon\phone_shop\app\service\core\order\CoreOrderDeliveryService;
 use addon\phone_shop\app\service\core\order\CoreOrderLogService;
@@ -25,6 +27,34 @@ class AfterShopOrderPay
         Log::write('订单AfterShopOrderPay' . json_encode($data));
         try {
             $order_data = $data[ 'order_data' ];
+
+            // 处理线下订单的锁定库存转换
+            if (isset($order_data['order_type']) && $order_data['order_type'] === 'hsx_offline') {
+                $order_goods_list = ( new OrderGoods() )->where([ 'order_id' => $data[ 'order_id' ] ])->select();
+                if (!empty($order_goods_list)) {
+                    $core_goods_stock_service = new CoreGoodsStockService();
+                    foreach ($order_goods_list as $goods) {
+                        // 检查该SKU是否有锁定库存
+                        $sku = GoodsSku::where('sku_id', $goods['sku_id'])->find();
+                        if ($sku && $sku['locked_stock'] > 0) {
+                            // unpaid订单支付：释放锁定库存并减少实际库存
+                            GoodsSku::where('sku_id', $goods['sku_id'])
+                                ->dec('locked_stock', $goods['num'])
+                                ->update();
+                            $core_goods_stock_service->dec([
+                                'num' => $goods['num'],
+                                'goods_id' => $goods['goods_id'],
+                                'sku_id' => $goods['sku_id']
+                            ]);
+                            Log::write('线下未付款订单支付: 释放锁定库存并减少实际库存 sku_id=' . $goods['sku_id'] . ', num=' . $goods['num']);
+                        } else {
+                            // hold订单支付：库存已扣减，无需处理
+                            Log::write('线下挂单订单支付: 库存已扣减，无需处理 sku_id=' . $goods['sku_id'] . ', num=' . $goods['num']);
+                        }
+                    }
+                }
+            }
+
             //活动或会员购买赠送.....
             //发票改变状态........
             ( new CoreInvoiceService() )->open($order_data[ 'invoice_id' ]);

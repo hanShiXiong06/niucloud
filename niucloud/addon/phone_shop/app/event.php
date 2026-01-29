@@ -60,6 +60,7 @@ return [
         'BottomNavigation' => [ 'addon\phone_shop\app\listener\BottomNavigationListener' ],
 
         //支付
+        'PayType' => [ 'addon\phone_shop\app\listener\pay\OfflinePayType' ],
         'PayCreate' => [ 'addon\phone_shop\app\listener\pay\PayCreateListener' ],
         'PaySuccess' => [ 'addon\phone_shop\app\listener\pay\PaySuccessListener' ],
         'PayTradeInfo' => [ 'addon\phone_shop\app\listener\order\ShopOrderTradeInfoListener' ],   //订单交易信息
