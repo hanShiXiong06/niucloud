@@ -124,7 +124,9 @@ const handleRowClick = (row: any) => {
         sku_name: row.goodsSku.sku_name,
         goods_cover: row.goods_cover,
         price: row.goodsSku.price,
-        stock: row.stock
+        market_price: row.goodsSku.market_price || row.goodsSku.price,  // 会员价格
+        stock: row.stock,
+        sku_no: row.goodsSku.sku_no || ''  // SKU编号
     })
     showDialog.value = false
 }

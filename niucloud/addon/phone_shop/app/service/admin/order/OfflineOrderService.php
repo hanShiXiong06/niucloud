@@ -21,6 +21,7 @@ use addon\phone_shop\app\model\order\Order;
 use addon\phone_shop\app\model\order\OrderGoods;
 use addon\phone_shop\app\model\order\OrderLog;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStockService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsSyncService;
 use addon\phone_shop\app\service\core\order\CoreOrderEventService;
 use app\model\sys\SysUser;
 use core\base\BaseAdminService;
@@ -80,10 +81,25 @@ class OfflineOrderService extends BaseAdminService
             $this->addOrderLog($orderId, $data, $priceInfo);
 
             // 11. 触发订单创建事件
+            // 将order_id添加到orderData中，供事件监听器使用
+            $orderData['order_id'] = $orderId;
             CoreOrderEventService::orderCreateAfter([
                 'order_id' => $orderId,
                 'site_id' => $this->site_id,
-                'member_id' => $data['member_id']
+                'member_id' => $data['member_id'],
+                'order_data' => $orderData,
+                'order_goods_data' => [], // 线下订单不需要处理购物车商品
+                'cart_ids' => [],
+                'basic' => [
+                    'discount_money' => 0,
+                    'delivery_money' => 0,
+                    'goods_money' => $priceInfo['goods_money'],
+                    'order_money' => $priceInfo['order_money'],
+                    'invoice' => [], // 线下订单暂不支持发票
+                ],
+                'main_type' => OrderLogDict::STORE,
+                'main_id' => $this->uid,
+                'time' => time()
             ]);
 
             Db::commit();
@@ -321,6 +337,8 @@ class OfflineOrderService extends BaseAdminService
                         'goods_id' => $goodsId,
                         'sku_id' => $skuId
                     ]);
+                    // 检查库存并同步下架
+                    $this->checkAndSyncGoodsOffline($skuId, $goodsId, $num);
                     break;
 
                 case 'unpaid':
@@ -339,7 +357,41 @@ class OfflineOrderService extends BaseAdminService
                         'goods_id' => $goodsId,
                         'sku_id' => $skuId
                     ]);
+                    // 检查库存并同步下架
+                    $this->checkAndSyncGoodsOffline($skuId, $goodsId, $num);
                     break;
+            }
+        }
+    }
+
+    /**
+     * 检查库存并同步商品下架状态
+     * @param int $skuId SKU ID
+     * @param int $goodsId 商品ID
+     * @param int $num 购买数量
+     */
+    private function checkAndSyncGoodsOffline(int $skuId, int $goodsId, int $num): void
+    {
+        // 重新查询SKU的最新库存
+        $sku = GoodsSku::find($skuId);
+        if (!$sku) {
+            return;
+        }
+
+        // 如果库存为0或不足，下架商品并同步
+        if ($sku->stock <= 0) {
+            $goods = Goods::find($goodsId);
+            if ($goods && $goods->status != '0') {
+                // 下架商品
+                $goods->status = '0';
+                $goods->save();
+                \think\facade\Log::write("线下订单-商品下架: goods_id={$goodsId}, goods_no={$goods->goods_no}, 库存不足");
+
+                // 同步下架到其他站点
+                if (!empty($goods->goods_no)) {
+                    $syncService = new CoreGoodsSyncService();
+                    $syncService->syncGoodsOffline((string)$goods->goods_no, $this->site_id);
+                }
             }
         }
     }
@@ -398,6 +450,181 @@ class OfflineOrderService extends BaseAdminService
     private function generateOrderNo(): string
     {
         return 'OFF' . date('YmdHis') . str_pad((string)mt_rand(0, 9999), 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * 挂单确认收款 - 逐步推进订单状态
+     * 用于财务人员确认挂单客户已付款，并逐步推进订单状态
+     *
+     * 状态流转：
+     * 1. HOLD(10) → WAIT_DELIVERY(2) - 确认收款
+     * 2. WAIT_DELIVERY(2) → WAIT_TAKE(3) - 确认发货
+     * 3. WAIT_TAKE(3) → FINISH(5) - 确认收货
+     *
+     * @param array $data
+     * @return array
+     * @throws CommonException
+     */
+    public function confirmHoldOrderPayment(array $data): array
+    {
+        // 1. 参数校验
+        if (empty($data['order_id'])) {
+            throw new CommonException('订单ID不能为空');
+        }
+
+        // 2. 查询订单
+        $order = $this->model->where([
+            ['order_id', '=', $data['order_id']],
+            ['site_id', '=', $this->site_id]
+        ])->findOrEmpty();
+
+        if ($order->isEmpty()) {
+            throw new CommonException('订单不存在');
+        }
+
+        Db::startTrans();
+        try {
+            $currentStatus = $order->status;
+            $newStatus = null;
+            $logAction = '';
+            $logContent = '';
+
+            // 3. 根据当前状态决定下一步操作
+            switch ($currentStatus) {
+                case OrderDict::HOLD:
+                    // 挂单 → 已支付(待发货)
+                    if (empty($data['pay_type'])) {
+                        throw new CommonException('请选择支付方式');
+                    }
+                    if (empty($data['offline_pay_account'])) {
+                        throw new CommonException('请选择收款账户');
+                    }
+
+                    $newStatus = OrderDict::WAIT_DELIVERY;
+                    $logAction = '确认收款';
+
+                    // 计算新的订单总金额（如果传递了order_goods数组）
+                    $newOrderMoney = null;
+                    if (!empty($data['order_goods']) && is_array($data['order_goods'])) {
+                        $newOrderMoney = 0;
+                        foreach ($data['order_goods'] as $goodsItem) {
+                            // 累加商品金额（只累加未删除的商品）
+                            if (isset($goodsItem['goods_money']) && (!isset($goodsItem['is_deleted']) || $goodsItem['is_deleted'] == 0)) {
+                                $newOrderMoney += floatval($goodsItem['goods_money']);
+                            }
+                        }
+                    }
+
+                    // 更新订单支付信息
+                    $order->status = $newStatus;
+                    $order->pay_time = time();
+                    $order->pay_type = $data['pay_type'];
+                    $order->offline_pay_account = $data['offline_pay_account'];
+
+                    // 如果计算了新的订单金额，则更新订单金额
+                    if ($newOrderMoney !== null && $newOrderMoney > 0) {
+                        $order->goods_money = $newOrderMoney;
+                        $order->order_money = $newOrderMoney;
+                        $order->pay_money = $newOrderMoney;
+                    } else {
+                        $order->pay_money = $order->order_money;
+                    }
+
+                    $order->save();
+
+                    // 更新订单商品的配送状态、退款权限、价格和删除状态
+                    if (!empty($data['order_goods']) && is_array($data['order_goods'])) {
+                        foreach ($data['order_goods'] as $goodsItem) {
+                            $updateData = [
+                                'delivery_status' => OrderDeliveryDict::WAIT_DELIVERY,
+                                'is_enable_refund' => 1
+                            ];
+
+                            // 如果传递了价格，则更新价格
+                            if (isset($goodsItem['price'])) {
+                                $updateData['price'] = $goodsItem['price'];
+                            }
+
+                            // 如果传递了删除状态，则更新删除状态
+                            if (isset($goodsItem['is_deleted'])) {
+                                $updateData['is_deleted'] = $goodsItem['is_deleted'];
+                            }
+
+                            // 如果传递了商品金额，则更新商品金额
+                            if (isset($goodsItem['goods_money'])) {
+                                $updateData['goods_money'] = $goodsItem['goods_money'];
+                            }
+
+                            OrderGoods::where('order_goods_id', $goodsItem['order_goods_id'])
+                                ->update($updateData);
+                        }
+                    } else {
+                        // 如果没有传递order_goods数组，则使用原来的批量更新方式
+                        OrderGoods::where('order_id', $data['order_id'])
+                            ->update([
+                                'delivery_status' => OrderDeliveryDict::WAIT_DELIVERY,
+                                'is_enable_refund' => 1
+                            ]);
+                    }
+
+                    $logContent = sprintf(
+                        '财务确认收款，支付方式：%s，收款账户：%s，订单金额：%.2f元',
+                        $data['pay_type'],
+                        $data['offline_pay_account'],
+                        $order->order_money
+                    );
+                    break;
+                    // 已发货 → 已完成
+                    $newStatus = OrderDict::FINISH;
+                    $logAction = '确认收货';
+
+                    $order->status = $newStatus;
+                    $order->finish_time = time();
+                    $order->save();
+
+                    $logContent = '财务确认收货，订单已完成';
+                    break;
+
+                default:
+                    throw new CommonException('当前订单状态不支持此操作');
+            }
+
+            // 4. 记录操作日志
+            $operator = SysUser::where('uid', $this->uid)->find();
+            $operatorName = $operator ? $operator->username : '未知操作员';
+
+            $orderLog = new OrderLog();
+            $orderLog->save([
+                'site_id' => $this->site_id,
+                'order_id' => $data['order_id'],
+                'action' => $logAction,
+                'main_type' => OrderLogDict::STORE,
+                'main_id' => $this->uid,
+                'create_time' => time(),
+                'content' => sprintf('操作人：%s，%s', $operatorName, $logContent),
+                'remark' => sprintf(
+                    '操作员ID：%d，操作员：%s，操作时间：%s，%s',
+                    $this->uid,
+                    $operatorName,
+                    date('Y-m-d H:i:s'),
+                    $logContent
+                ),
+            ]);
+
+            Db::commit();
+
+            return [
+                'order_id' => $data['order_id'],
+                'old_status' => $currentStatus,
+                'new_status' => $newStatus,
+                'action' => $logAction,
+                'message' => $logContent
+            ];
+
+        } catch (\Exception $e) {
+            Db::rollback();
+            throw new CommonException($e->getMessage());
+        }
     }
 
     /**

@@ -43,7 +43,9 @@ class Goods extends BaseAdminController
             [ 'order', '' ],
             [ 'sort', '' ],
             [ 'sku_no',''],
-            [ 'only_self', 0 ]
+            // [ 'only_self', 0 ]
+            ['source',''],
+            [ 'inventory_age', '' ]
         ]);
        
 

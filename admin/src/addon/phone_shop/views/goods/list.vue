@@ -57,6 +57,17 @@
                         </div>
                     </el-form-item>
 
+                    <!--  库龄筛选 -->
+                    <el-form-item :label="t('库龄')" prop="inventory_age">
+                        <el-select v-model="goodsTable.searchParam.inventory_age" :placeholder="t('请选择库龄')"
+                            clearable>
+                            <el-option label="0-10天" value="0-10" />
+                            <el-option label="11-30天" value="11-30" />
+                            <el-option label="30-50天" value="30-50" />
+                            <el-option label="50天以上" value="50+" />
+                        </el-select>
+                    </el-form-item>
+
                     <el-form-item>
                         <el-button type="primary" @click="loadGoodsList()">{{ t('search') }}</el-button>
                         <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
@@ -209,11 +220,7 @@
                                     @click="deleteEvent(row.goods_id)">{{
                                         t('delete') }}</el-button>
 
-                            <div v-else>
-                                <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods')
-                                    }}</el-button>
-
-                            </div>
+         
 
                         </template>
                     </el-table-column>
@@ -243,7 +250,7 @@
         <goods-price-edit-popup ref="goodsPriceEditPopupRef" @load="loadGoodsList" />
 
         <!-- 商品推广弹出框 -->
-        <goods-spread-popup ref="goodsSpreadPopupRef" />
+        <spread-popup ref="spreadPopupRef" />
 
         <!-- 会员价弹出框 -->
         <goods-member-price-popup ref="memberPricePopupRef" @load="loadGoodsList" />
@@ -263,7 +270,7 @@ import { cloneDeep } from 'lodash-es'
 import goodsMemberPricePopup from '@/addon/phone_shop/views/goods/components/goods-member-price-popup.vue'
 import goodsStockEditPopup from '@/addon/phone_shop/views/goods/components/goods-stock-edit-popup.vue'
 import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods-price-edit-popup.vue'
-import goodsSpreadPopup from '@/addon/phone_shop/views/goods/components/goods-spread-popup.vue'
+import spreadPopup from '@/components/spread-popup/index.vue'
 import goodsOfflineOrderPopup from '@/addon/phone_shop/views/goods/components/goods-offline-order-popup.vue'
 import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods } from '@/addon/phone_shop/api/goods'
 import { getMemberLevelAll } from '@/app/api/member'
@@ -298,7 +305,8 @@ const goodsTable = reactive({
         status: route.query.status || '1',
         order: '',
         sort: '',
-        sku_no: ''
+        sku_no: '',
+        inventory_age: ''
     }
 })
 
@@ -692,10 +700,17 @@ const editStockEvent = (data: any) => {
 }
 
 // 商品推广
-const goodsSpreadPopupRef: any = ref(null)
+const spreadPopupRef = ref(null)
+
 
 const spreadEvent = (data: any) => {
-    goodsSpreadPopupRef.value.show(data)
+    const pagePath = '/addon/shop/pages/goods/detail'
+    const paramsArr = [
+        { name: 'goods_id', value: data.goods_id },
+    ];
+    const title = '商品推广'
+    const folder = 'goods'
+    spreadPopupRef.value?.show(pagePath, paramsArr, title, folder);
 }
 
 /** ***************** 会员价-start *************************/
@@ -778,7 +793,10 @@ const resetForm = (formEl: FormInstance | undefined) => {
     goodsTable.searchParam.end_price = ''
     goodsTable.searchParam.start_sale_num = ''
     goodsTable.searchParam.end_sale_num = ''
-    goodsTable.searchParam.only_self = 0
+    goodsTable.searchParam.sku_no=''
+    goodsTable.searchParam.goods_name=''
+    goodsTable.searchParam.inventory_age=''
+
 
     loadGoodsList()
 }

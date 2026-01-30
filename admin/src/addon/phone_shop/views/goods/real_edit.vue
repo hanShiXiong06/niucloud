@@ -168,10 +168,7 @@
                                 <el-radio label="0">{{ t('statusOff') }}</el-radio>
                             </el-radio-group>
                         </el-form-item>
-                        <el-form-item :label="t('代理')" prop="is_proxy">
-                            <el-switch v-model="goodsEdit.formData.is_proxy" 
-                                :active-value="1" :inactive-value="0" />
-                        </el-form-item>
+                      
                         <el-form-item :label="t('unit')" prop="unit">
                             <el-input v-model.trim="goodsEdit.formData.unit" clearable
                                 :placeholder="t('unitPlaceholder')" class="input-width" show-word-limit maxlength="6" />

@@ -658,6 +658,9 @@ Route::group('phone_shop', function () {
     Route::post('offline_order/create', 'addon\phone_shop\app\adminapi\controller\order\OfflineOrder@create');
     Route::get('offline_order/lists', 'addon\phone_shop\app\adminapi\controller\order\OfflineOrder@lists');
 
+    // 挂单确认收款 - 逐步推进订单状态
+    Route::post('offlineorder/confirm_payment', 'addon\phone_shop\app\adminapi\controller\order\OfflineOrder@confirmPayment');
+
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,

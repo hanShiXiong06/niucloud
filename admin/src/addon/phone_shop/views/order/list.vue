@@ -83,6 +83,7 @@
                                     class="flex items-center justify-between bg-[#f7f8fa] mt-[10px] border-[#e4e7ed] border-solid border-b-[1px] px-3 h-[35px] text-[12px] text-[#666]">
                                     <div>
                                         <span>{{ t('orderNo') }}：{{ (item as any).order_no }}</span>
+                                        <el-tag v-if="hasDeletedItems(item)" type="warning" size="small" class="ml-2">有返还商品</el-tag>
                                         <span class="ml-5">{{ t('createTime') }}：{{ (item as any).create_time }}</span>
                                         <!-- <span class="ml-5">{{ t('orderFrom') }}：{{ (item as any).order_form_name }}</span> -->
                                         <span class="ml-5" v-if="item.pay">{{ t('payType') }}：{{ (item as
@@ -107,7 +108,7 @@
                                     <el-table-column type="selection" width="40" :selectable="selectable" />
                                     <el-table-column align="left" min-width="200">
                                         <template #default="{ row }">
-                                            <div class="flex cursor-pointer">
+                                            <div class="flex cursor-pointer" :class="{ 'deleted-item': row.is_deleted }">
                                                 <div class="flex items-center min-w-[50px] mr-[10px]">
                                                     <img class="w-[50px] h-[50px]" v-if="row.goods_image"
                                                         :src="img(row.goods_image)" alt="">
@@ -119,6 +120,7 @@
                                                         }}</span>
                                                     <span v-if='row.sku_no' class="text-[12px] text-[#999]">{{ t('商品编号')
                                                         }}: {{ row.sku_no }} </span>
+                                                    <el-tag v-if="row.is_deleted" type="info" size="small" class="mt-1">已返还</el-tag>
                                                 </div>
                                             </div>
                                         </template>
@@ -186,14 +188,19 @@
                                                     @click="orderEditAddressFn(item)">{{ t('editAddress') }}</el-button>
                                             </template>
                                             <template v-if="item.status == 10">
+                                                <el-button type="primary" link @click="confirmPayment(item)">确认收款</el-button>
                                                 <el-button type="primary" link @click="close(item)">{{ t('orderClose')
                                                     }}</el-button>
                                             </template>
-                                            <el-button type="primary" link @click="delivery(item)"
-                                                v-if="item.status == 2">{{ t('sendOutGoods') }}</el-button>
-                                            <el-button type="primary" link @click="finish(item)"
-                                                v-if="item.status == 3">{{ t('confirmTakeDelivery')
-                                                }}</el-button>
+                                            <template v-if="item.status == 2">
+
+                                                <el-button type="primary" link @click="delivery(item)">{{ t('sendOutGoods') }}</el-button>
+                                            </template>
+                                            <template v-if="item.status == 3">
+
+                                                <el-button type="primary" link @click="finish(item)">{{ t('confirmTakeDelivery')
+                                                    }}</el-button>
+                                            </template>
                                             <el-button type="primary"
                                                 v-if="item.is_refund_show && item.status != 1 && item.status != -1" link
                                                 @click="refundEvent(item)">{{ t('voluntaryRefund') }}</el-button>
@@ -228,13 +235,14 @@
         <order-edit-address ref="orderEditAddressDialog" @complete="loadOrderList" />
         <electronic-sheet-print ref="electronicSheetPrintDialog" @complete="electronicSheetPrintComplete" />
         <shop-active-refund ref="shopActiveRefundDialog" @complete="loadOrderList" />
+        <confirm-payment-dialog ref="confirmPaymentDialog" @complete="loadOrderList" />
     </div>
 </template>
 
 <script lang="ts" setup>
 import { reactive, ref } from 'vue'
 import { t } from '@/lang'
-import { getOrderList, getOrderStatus, orderClose, orderFinish, getOrderPayType, getOrderFrom } from '@/addon/phone_shop/api/order'
+import { getOrderList, getOrderStatus, orderClose, orderFinish, getOrderPayType, getOrderFrom, confirmHoldOrderPayment } from '@/addon/phone_shop/api/order'
 import { printTicket } from '@/app/api/printer'
 import DeliveryAction from '@/addon/phone_shop/views/order/components/delivery-action.vue'
 import OrderNotes from '@/addon/phone_shop/views/order/components/order-notes.vue'
@@ -243,6 +251,7 @@ import orderEditAddress from '@/addon/phone_shop/views/order/components/order-ed
 import AdjustMoney from '@/addon/phone_shop/views/order/components/adjust-money.vue'
 import electronicSheetPrint from '@/addon/phone_shop/views/order/components/electronic-sheet-print.vue'
 import ShopActiveRefund from '@/addon/phone_shop/views/order/components/shop-active-refund.vue'
+import ConfirmPaymentDialog from '@/addon/phone_shop/views/order/components/confirm-payment-dialog.vue'
 import { img } from '@/utils/common'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
@@ -518,6 +527,14 @@ const finish = (data: any) => {
     })
 }
 
+// 挂单确认收款/发货/收货
+const confirmPaymentDialog: Record<string, any> | null = ref(null)
+const confirmPayment = (data: any) => {
+
+
+    confirmPaymentDialog.value.show(data)
+}
+
 const resetForm = (formEl: FormInstance | undefined) => {
     if (!formEl) return
     formEl.resetFields()
@@ -627,6 +644,16 @@ const refundEvent = (data: any) => {
     shopActiveRefundDialog.value.setFormData(data)
     shopActiveRefundDialog.value.showDialog = true
 }
+
+/**
+ * 检查订单是否有返还商品
+ */
+const hasDeletedItems = (order: any) => {
+    if (!order.order_goods || !Array.isArray(order.order_goods)) {
+        return false
+    }
+    return order.order_goods.some((item: any) => item.is_deleted == 1)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -650,5 +677,13 @@ const refundEvent = (data: any) => {
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+}
+
+/* 已删除/返还的商品样式 */
+.deleted-item {
+    opacity: 0.6;
+    background-color: #f5f5f5;
+    padding: 5px;
+    border-radius: 4px;
 }
 </style>

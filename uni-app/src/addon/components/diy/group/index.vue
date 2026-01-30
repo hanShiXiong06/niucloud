@@ -156,7 +156,6 @@
                 <template v-if="component.componentName == 'PhoneShopSearch'">
                    <diy-phone-shop-search ref="diyPhoneShopSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopSearch" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-
                 </view>
             </view>
         </template>

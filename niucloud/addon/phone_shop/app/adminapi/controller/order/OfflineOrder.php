@@ -57,4 +57,29 @@ class OfflineOrder extends BaseAdminController
 
         return success((new OfflineOrderService())->getPage($where));
     }
+
+    /**
+     * 挂单确认收款 - 逐步推进订单状态
+     * 用于财务人员确认挂单客户已付款，并逐步推进订单状态
+     *
+     * 状态流转：
+     * 1. HOLD(10) → WAIT_DELIVERY(2) - 确认收款
+     * 2. WAIT_DELIVERY(2) → WAIT_TAKE(3) - 确认发货
+     * 3. WAIT_TAKE(3) → FINISH(5) - 确认收货
+     *
+     * @return Response
+     */
+    public function confirmPayment()
+    {
+        $data = $this->request->params([
+            ['order_id', 0],
+            ['order_money', ''],        // 订单金额(可修改)
+            ['pay_type', ''],           // 支付方式(仅在HOLD→WAIT_DELIVERY时需要)
+            ['offline_pay_account', ''], // 收款账户(仅在HOLD→WAIT_DELIVERY时需要)
+            ['order_goods', []],        // 订单商品价格列表(可修改单价)
+        ]);
+
+        $result = (new OfflineOrderService())->confirmHoldOrderPayment($data);
+        return success($result['message'], $result);
+    }
 }

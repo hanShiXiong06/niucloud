@@ -360,8 +360,7 @@
 					"path": "pages/goods/list",
 					"style": {
 				
-						"navigationBarTitleText": "%shop.pages.goods.list%",
-                        "navigationStyle": "custom"
+						"navigationBarTitleText": "%shop.pages.goods.list%"
 						
 					}
 				},

@@ -16,3 +16,12 @@ ALTER TABLE `phone_shop_order`
 ADD COLUMN `offline_pay_account` varchar(100) DEFAULT NULL COMMENT '线下收款账户名称(如:微信1、支付宝1)' AFTER `pay_type`;
 
 -- 注意: 执行此脚本前请备份数据库
+
+-- 添加 is_deleted 字段到订单商品表
+-- 用于标识在挂单确认收款时，客户返还的商品
+ALTER TABLE `phone_shop_order_goods`
+ADD COLUMN `is_deleted` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否已删除/返还：0-正常，1-已删除' AFTER `is_enable_refund`;
+
+-- 为 is_deleted 字段添加索引以提高查询性能
+ALTER TABLE `phone_shop_order_goods`
+ADD INDEX `idx_is_deleted` (`is_deleted`);

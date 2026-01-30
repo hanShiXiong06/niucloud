@@ -75,7 +75,7 @@ class OrderService extends BaseAdminService
             ], 'left')
             ->with([
                 'order_goods' => function($query) {
-                    $query->field('extend,order_goods_id, order_id, member_id, goods_id, sku_id,sku_no, goods_name, sku_name, goods_image, sku_image, price, num, goods_money, is_enable_refund, goods_type, delivery_status, status,discount_money,site_id,delivery_id')->append([ 'delivery_status_name', 'status_name', 'goods_image_thumb_small' ]);
+                    $query->field('extend,order_goods_id, order_id, member_id, goods_id, sku_id,sku_no, goods_name, sku_name, goods_image, sku_image, price, num, goods_money, is_enable_refund, goods_type, delivery_status, status,discount_money,site_id,delivery_id,is_deleted')->append([ 'delivery_status_name', 'status_name', 'goods_image_thumb_small' ]);
                 }
             ])->order($order)->append([ 'order_from_name', 'order_type_name', 'status_name', 'delivery_type_name' ]);
         $order_status_list = OrderDict::getStatus();
@@ -101,7 +101,7 @@ class OrderService extends BaseAdminService
             ->with(
                 [
                     'order_goods' => function($query) {
-                        $query->field('extend,order_goods_id, order_id, member_id, goods_id, sku_id,sku_no, goods_name, sku_name, goods_image, sku_image, price, num, goods_money, is_enable_refund, goods_type, delivery_status, status,discount_money,delivery_id')->append([ 'delivery_status_name', 'status_name' ]);
+                        $query->field('extend,order_goods_id, order_id, member_id, goods_id, sku_id,sku_no, goods_name, sku_name, goods_image, sku_image, price, num, goods_money, is_enable_refund, goods_type, delivery_status, status,discount_money,delivery_id,is_deleted')->append([ 'delivery_status_name', 'status_name' ]);
                     },
                     'member' => function($query) {
                         $query->field('member_id, nickname, mobile, headimg');

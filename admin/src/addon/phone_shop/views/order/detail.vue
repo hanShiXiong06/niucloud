@@ -12,7 +12,10 @@
 				<el-row class="row-bg px-[30px] mb-[20px]" :gutter="20">
 					<el-col :span="8">
 						<el-form-item :label="t('orderNo')">
-							<div class="input-width">{{ formData.order_no }}</div>
+							<div class="input-width">
+								{{ formData.order_no }}
+								<el-tag v-if="hasDeletedItems()" type="warning" size="small" class="ml-2">有返还商品</el-tag>
+							</div>
 						</el-form-item>
 						<el-form-item :label="t('orderForm')">
 							<div class="input-width">{{ formData.order_from_name }}</div>
@@ -128,7 +131,7 @@
 				<el-table :data="formData.order_goods" size="large">
 					<el-table-column :label="t('goodsName')" align="left" width="300">
 						<template #default="{ row }">
-							<div class="flex">
+							<div class="flex" :class="{ 'deleted-item': row.is_deleted }">
 								<div class="flex items-center shrink-0">
 									<img class="w-[50px] h-[50px] mr-[10px]" :src="img(row.goods_image)" />
 								</div>
@@ -137,6 +140,7 @@
 									<span class="text-[12px] text-[#999]">{{ row.sku_name }}</span>
 									<span v-if='row.sku_no' class="text-[12px] text-[#999]">{{ t('商品编号') }}:
 										{{ row.sku_no }} </span>
+								<el-tag v-if="row.is_deleted" type="info" size="small" class="mt-1">已返还</el-tag>
 								</div>
 							</div>
 						</template>
@@ -228,7 +232,7 @@
 		<delivery-action ref="deliveryActionDialog" @complete="setFormData(orderId)" />
 		<order-notes ref="orderNotesDialog" @complete="setFormData(orderId)" />
 		<delivery-package ref="packageDialog" />
-		<electronic-sheet-print ref="electronicSheetPrintDialog" @complete="loadOrderList" />
+		<electronic-sheet-print ref="electronicSheetPrintDialog" @complete="setFormData(orderId)" />
 	</div>
 </template>
 
@@ -245,6 +249,7 @@ import electronicSheetPrint from '@/addon/phone_shop/views/order/components/elec
 import { useRoute, useRouter } from 'vue-router'
 import { img } from '@/utils/common'
 import { ElMessageBox } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { cloneDeep } from 'lodash-es'
 
 const route = useRoute()
@@ -365,6 +370,16 @@ const printTicketEvent = () => {
 		repeat.value = false
 	})
 }
+
+/**
+ * 检查订单是否有返还商品
+ */
+const hasDeletedItems = () => {
+	if (!formData.value || !formData.value.order_goods || !Array.isArray(formData.value.order_goods)) {
+		return false
+	}
+	return formData.value.order_goods.some((item: any) => item.is_deleted == 1)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -380,5 +395,13 @@ const printTicketEvent = () => {
 
 .line-feed {
 	word-wrap: break-word;
+}
+
+/* 已删除/返还的商品样式 */
+.deleted-item {
+	opacity: 0.6;
+	background-color: #f5f5f5;
+	padding: 5px;
+	border-radius: 4px;
 }
 </style>

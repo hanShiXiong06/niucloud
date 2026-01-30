@@ -1687,6 +1687,11 @@ export function useGoodsEdit(params: any = {}) {
 
       const ranges = recyclerPriceConfig.value.price_ranges;
 
+      // 如果没有价格区间配置，则不处理
+      if (!ranges || !Array.isArray(ranges)) {
+        return;
+      }
+
       // 查找匹配的价格区间
       const matchedRange = ranges.find((range: PriceRange) => {
         const minPrice = parseFloat(range.min_price);

@@ -258,7 +258,7 @@ class GoodsSku extends BaseModel
     {
         return $this->hasOne(Goods::class, 'goods_id', 'goods_id')
             ->joinType('left')
-            ->withField('goods_id, is_discount, site_id, goods_name, goods_type, sub_title,memory_ids , goods_cover, goods_image,goods_desc,brand_id,label_ids,service_ids, unit, stock, sale_num + virtual_sale_num as sale_num, status, is_free_shipping, fee_type, delivery_type, delivery_money, delivery_template_id, goods_category,attr_id,attr_format,member_discount,is_discount')
+            ->withField('goods_id, goods_no, is_discount, site_id, goods_name, goods_type, sub_title,memory_ids , goods_cover, goods_image,goods_desc,brand_id,label_ids,service_ids, unit, stock, sale_num + virtual_sale_num as sale_num, status, is_free_shipping, fee_type, delivery_type, delivery_money, delivery_template_id, goods_category,attr_id,attr_format,member_discount,is_discount')
             ->append([ 'goods_type_name', 'goods_cover_thumb_small', 'goods_cover_thumb_mid', 'goods_cover_thumb_big', 'delivery_type_list', 'goods_image_thumb_small', 'goods_image_thumb_mid', 'goods_image_thumb_big' ]);
     }
 

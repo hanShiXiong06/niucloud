@@ -31,8 +31,8 @@ $system = [
     // 默认规则
     'rules' => [
         'image' => [
-            'ext' => ['jpg', 'jpeg', 'png', 'gif'],
-            'mime' => ['image/jpeg', 'image/gif', 'image/png'],
+            'ext' => ['jpg', 'jpeg', 'png', 'gif','webp','avif'],
+            'mime' => ['image/jpeg', 'image/gif', 'image/png', 'image/webp','image/avif'],
             'size' => 10485760
         ],
         'video' => [

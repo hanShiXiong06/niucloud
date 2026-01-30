@@ -27,6 +27,11 @@ class AfterShopOrderCreate
     {
         Log::write('订单AfterShopOrderCreate' . json_encode($data));
         try {
+            // 检查必要的数据是否存在
+            if (!isset($data['basic']) || !isset($data['order_data'])) {
+                Log::write('订单AfterShopOrderCreate数据不完整，跳过处理');
+                return;
+            }
             $basic = $data[ 'basic' ];
             $order_data = $data[ 'order_data' ];
             $order_goods_data = $data[ 'order_goods_data' ] ?? [];

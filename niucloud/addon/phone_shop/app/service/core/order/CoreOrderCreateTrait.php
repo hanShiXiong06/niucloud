@@ -25,6 +25,7 @@ use addon\phone_shop\app\service\core\delivery\CoreDeliveryService;
 use addon\phone_shop\app\service\core\delivery\CoreExpressService;
 use addon\phone_shop\app\service\core\delivery\CoreLocalDeliveryService;
 use addon\phone_shop\app\service\core\delivery\CoreStoreService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsSyncService;
 use app\service\core\member\CoreMemberAddressService;
 use core\exception\CommonException;
 use Exception;
@@ -155,6 +156,12 @@ trait CoreOrderCreateTrait
             if ($goods && $goods->status != '0') {
                 $goods->status = '0'; // 假设状态字段为 'status'，下架状态为 'unlisted'
                 $goods->save();
+                
+                // 同步下架到其他站点
+                if (!empty($goods->goods_no) && !empty($this->site_id)) {
+                    $syncService = new CoreGoodsSyncService();
+                    $syncService->syncGoodsOffline((string)$goods->goods_no, $this->site_id);
+                }
             }
         }
     }

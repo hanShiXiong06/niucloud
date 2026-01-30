@@ -34,11 +34,11 @@ class CoreGoodsSyncService extends BaseCoreService
     /**
      * 同步商品上架状态到其他站点
      *
-     * @param int $goods_no 商品编号
+     * @param string $goods_no 商品编号
      * @param int $site_id 当前站点ID
      * @return bool
      */
-    public function syncGoodsOnline(int $goods_no, int $site_id): bool
+    public function syncGoodsOnline(string $goods_no, int $site_id): bool
     {
         try {
             // 只有主站点(100005)的商品状态变化才触发同步
@@ -82,11 +82,11 @@ class CoreGoodsSyncService extends BaseCoreService
     /**
      * 同步商品下架状态到其他站点
      *
-     * @param int $goods_no 商品编号
+     * @param string $goods_no 商品编号
      * @param int $site_id 当前站点ID
      * @return bool
      */
-    public function syncGoodsOffline(int $goods_no, int $site_id): bool
+    public function syncGoodsOffline(string $goods_no, int $site_id): bool
     {
         try {
             // 只有主站点(100005)的商品状态变化才触发同步

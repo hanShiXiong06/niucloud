@@ -171,7 +171,6 @@ class GoodsService extends BaseAdminService
              $sku_where[] = ['goodsSku.price', '<=', $where['end_price']];
          }
      
-     
          // 排序处理
          if (!empty($where['order'])) {
              if($where['order'] == '_time') {
@@ -194,7 +193,7 @@ class GoodsService extends BaseAdminService
                 $sku_where[] = ['goodsSku.sku_no', 'like', '%' . $skuNoTrimmed . '%'];
             }
         }
-    
+
         // 构建查询模型
         $search_model = $this->model
             ->withSearch(["goods_name", "goods_type", "brand_id", "goods_category", "label_ids", 'service_ids', "sale_num", "status"], $where)
@@ -208,7 +207,33 @@ class GoodsService extends BaseAdminService
             ->where($sku_where)
             ->order($order)
             ->append(['goods_type_name', 'brand_name', 'site_name', 'goods_edit_path', 'goods_cover_thumb_small']);
-        
+
+        // 库龄查询
+        if (!empty($where['inventory_age'])) {
+            $current_time = time();
+            $age_range = $where['inventory_age'];
+
+            if ($age_range === '50+') {
+                // 50天以上：create_time < (当前时间 - 50天)
+                $end_time = $current_time - (50 * 24 * 3600);
+                $search_model->where('goods.create_time', '<', $end_time);
+            } else {
+                // 解析范围，如 "0-10", "11-30", "30-50"
+                $days = explode('-', $age_range);
+                $start_days = intval($days[0]);
+                $end_days = intval($days[1]);
+
+                // 计算时间戳范围
+                // 0-10天：create_time >= (当前时间 - 10天) AND create_time <= 当前时间
+                // 11-30天：create_time >= (当前时间 - 30天) AND create_time < (当前时间 - 11天)
+                $start_time = $current_time - ($end_days * 24 * 3600);
+                $end_time = $start_days > 0 ? $current_time - ($start_days * 24 * 3600) : $current_time;
+
+                $search_model->where('goods.create_time', '>=', $start_time)
+                             ->where('goods.create_time', $start_days > 0 ? '<' : '<=', $end_time);
+            }
+        }
+
         // 执行查询
         $list = $this->pageQuery($search_model);
         

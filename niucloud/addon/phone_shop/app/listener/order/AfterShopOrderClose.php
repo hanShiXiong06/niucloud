@@ -89,7 +89,7 @@ class AfterShopOrderClose
 
                             // 跨站点同步：将其他站点的相同商品也上架
                             if (!empty($goods->goods_no)) {
-                                (new CoreGoodsSyncService())->syncGoodsOnline($goods->goods_no, $goods->site_id);
+                                (new CoreGoodsSyncService())->syncGoodsOnline((string)$goods->goods_no, $goods->site_id);
                             }
                         }
                     }
@@ -120,7 +120,7 @@ class AfterShopOrderClose
 
                             // 跨站点同步：将其他站点的相同商品也上架
                             if (!empty($goods->goods_no)) {
-                                (new CoreGoodsSyncService())->syncGoodsOnline($goods->goods_no, $goods->site_id);
+                                (new CoreGoodsSyncService())->syncGoodsOnline((string)$goods->goods_no, $goods->site_id);
                             }
                         }
                     }
