@@ -76,8 +76,9 @@
             </el-card>
 
             <div class="mt-[10px]">
-
+{{ userStore().siteInfo.site_id }}
                 <el-tabs v-model="goodsTable.searchParam.status" class="goods-tabs" @tab-click="tabHandleClick">
+                    <el-tab-pane  v-if="userStore().siteInfo.site_id != '100005'" :label="t('自营')" name="2"></el-tab-pane>
                     <el-tab-pane :label="t('statusOn')" name="1"></el-tab-pane>
                     <el-tab-pane :label="t('statusOff')" name="0"></el-tab-pane>
                     <el-tab-pane :label="t('statusAll')" name=""></el-tab-pane>
@@ -306,7 +307,8 @@ const goodsTable = reactive({
         order: '',
         sort: '',
         sku_no: '',
-        inventory_age: ''
+        inventory_age: '',
+        source: ''  // 商品来源站点筛选
     }
 })
 
@@ -401,7 +403,20 @@ initData()
 
 // 当前选中tab页面
 const tabHandleClick = (tab: any, event: Event) => {
-    goodsTable.searchParam.status = tab.props.name
+    const tabName = tab.props.name
+    
+    // 如果点击的是 "source" 标签（name="2"）
+    if (tabName === '2') {
+        // 设置 source 为当前站点的 site_id
+        goodsTable.searchParam.source = userStore().siteInfo.site_id
+        // status 设为空，不按状态筛选（或者设为 '1' 只显示上架的）
+        goodsTable.searchParam.status = '1'
+    } else {
+        // 其他标签清空 source 筛选
+        goodsTable.searchParam.source = ''
+        goodsTable.searchParam.status = tabName
+    }
+    
     loadGoodsList()
 }
 

@@ -311,6 +311,18 @@ class Goods extends BaseModel
         }
     }
 
+    // public function searchSourceAttr($query, $value, $data)
+    // {
+    //     // source  
+    //     // 默认 是空  如果有数据 则 等于 数据
+    //     // source 如果是自己的站 数据是 空 所以需要 等于 空
+    //     if ($value) {
+    //         $query->where("source", '=', $value);
+    //     } else if ($value == '') {
+    //         $query->where("source", '=', '');
+    //     }
+    // }
+
     /**
      * 搜索器:商品标签组
      * @param $value

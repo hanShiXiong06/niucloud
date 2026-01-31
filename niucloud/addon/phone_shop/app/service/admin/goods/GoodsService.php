@@ -179,6 +179,14 @@ class GoodsService extends BaseAdminService
                  $order = $where['order'] . ' ' . $where['sort'];
              }
          }
+         // 商品来源站点筛选
+         // 如果 source 的值 有值的时候 筛 source != 100005 的
+         if (!empty($where['source'])) {
+            $sku_where[] = ['goods.source', '<>', 100005];
+         }else{
+            // 等于100005 或者等于空
+              $sku_where[] = ['goods.source', 'in', [100005, '']];
+         }
    
         // SKU编号查询：支持多个精确查询（空格分隔）或单个模糊查询
         if (!empty($where['sku_no'])) {
@@ -196,7 +204,7 @@ class GoodsService extends BaseAdminService
 
         // 构建查询模型
         $search_model = $this->model
-            ->withSearch(["goods_name", "goods_type", "brand_id", "goods_category", "label_ids", 'service_ids', "sale_num", "status"], $where)
+            ->withSearch(["goods_name", "goods_type", "brand_id", "goods_category", "label_ids", 'service_ids', "sale_num", "status" , 'source'], $where)
             ->field($field)
             ->withJoin([
                 'goodsSku' => function($query) {
@@ -230,7 +238,10 @@ class GoodsService extends BaseAdminService
                 $end_time = $start_days > 0 ? $current_time - ($start_days * 24 * 3600) : $current_time;
 
                 $search_model->where('goods.create_time', '>=', $start_time)
-                             ->where('goods.create_time', $start_days > 0 ? '<' : '<=', $end_time);
+                             ->where('goods.create_time', $start_days > 0 ? '<' : '<=', $end_time)
+                             // 状态 =1
+                             ->where('goods.status', '=', 1);
+
             }
         }
 
@@ -814,14 +825,59 @@ class GoodsService extends BaseAdminService
                 throw new AdminException('SHOP_GOODS_PARTICIPATE_IN_ACTIVE_DISABLED_EDIT');
             }
         }
-        return $this->model->where([
+        
+        $result = $this->model->where([
             [ 'goods_id', 'in', $data[ 'goods_ids' ] ],
             [ 'site_id', '=', $this->site_id ]
         ])->update([
             'status' => $data[ 'status' ],
             'update_time' => time()
         ]);
-          }
+        
+        // 跨站点同步商品上下架状态
+        $this->syncGoodsStatus($data[ 'goods_ids' ], $data[ 'status' ]);
+        
+        return $result;
+    }
+    
+    /**
+     * 同步商品上下架状态到其他站点
+     * @param array|string $goods_ids 商品ID数组或逗号分隔字符串
+     * @param int|string $status 状态 1上架 0下架
+     */
+    private function syncGoodsStatus($goods_ids, $status)
+    {
+        // 将goods_ids转换为数组
+        if (is_string($goods_ids)) {
+            $goods_ids = explode(',', $goods_ids);
+        }
+        
+        // 查询这些商品的goods_no
+        $goodsList = $this->model->where([
+            [ 'goods_id', 'in', $goods_ids ],
+            [ 'site_id', '=', $this->site_id ]
+        ])->column('goods_no', 'goods_id');
+        
+        if (empty($goodsList)) {
+            return;
+        }
+        
+        $syncService = new \addon\phone_shop\app\service\core\goods\CoreGoodsSyncService();
+        
+        foreach ($goodsList as $goods_id => $goods_no) {
+            if (empty($goods_no)) {
+                continue;
+            }
+            
+            if ($status == 1) {
+                // 上架同步
+                $syncService->syncGoodsOnline((string)$goods_no, $this->site_id);
+            } else {
+                // 下架同步
+                $syncService->syncGoodsOffline((string)$goods_no, $this->site_id);
+            }
+        }
+    }
 
     /**
      * 复制商品
@@ -1302,164 +1358,6 @@ class GoodsService extends BaseAdminService
         ])->count();
         return $active_goods_count;
     }
-
- 
-/**
- * 同步SKU价格
- * @param int|null $siteId 目标站点ID
- * @return string
- */
-public function syncGoodsList($siteId = null)
-{
-     
-    try {
-        // 定义当前站点ID
-         $siteId = $siteId ?: $this->site_id;
-       
-        // 获取所有client=1的站点（源站点）
-        $source_sites = (new Site())->where([
-            ['client', '=', 1]
-        ])->select()->toArray();
-        
-        if (empty($source_sites)) {
-            return '没有找到源站点';
-        }
-
-        $total_update = 0;
-        $total_sync = 0;
-        $messages = [];
-
-        foreach ($source_sites as $source_site) {
-            // 检查代理关系
-            $site_agent = (new SiteAgent())->where([
-                ['site_id', '=', $source_site['site_id']],
-                ['agent_site_id', '=', $siteId],
-                ['status', '=', 1]
-            ])->find();
-
-            if (empty($site_agent)) {
-                $messages[] = "站点 {$siteId} 没有代理 {$source_site['site_id']} 的权限";
-                continue;
-            }
-
-            // 获取所有商品的SKU（源站点的价格）
-            $goodsSkuModel = new GoodsSku();
-            
-            
-            $source_skus = $goodsSkuModel->where([
-                ['site_id', '=', $source_site['site_id']]
-            ])->select()->toArray();
-
-            $current_update = 0;  // 当前源站点的更新计数
-            $current_sync = 0;    // 当前源站点的同步计数
-
-            foreach ($source_skus as $sku) {
-                // 检查目标站点是否已有该商品的价格记录
-                $exists = $goodsSkuModel->where([
-                    ['goods_id', '=', $sku['goods_id']],
-                    ['sku_no', '=', $sku['sku_no']],
-                    ['site_id', '=', $siteId]
-                ])->find();
-                return  $sku;
-                // 使用 market_price 作为基准价格
-                $base_price = $sku['market_price'];
-                // 计算代理价格
-                $proxy_price = $this->calculateProxyPrice($base_price);
-
-                if ($exists) {
-                    // 只更新价格相关字段
-                    $goodsSkuModel->where([
-                        ['goods_id', '=', $sku['goods_id']],
-                        ['sku_no', '=', $sku['sku_no']],
-                        ['site_id', '=', $siteId]
-                    ])->update([
-                        'cost_price' => $base_price,
-                        'price' => $proxy_price,
-                        'market_price' => $sku['market_price']+100,
-                        'sale_price' => $base_price,
-                        'stock' => $sku['stock'],
-                    ]);
-                    $current_update++;
-                } else {
-                    // 插入新的价格记录
-                    $goodsSkuModel->insert([
-                        'site_id' => $siteId,
-                        'goods_id' => $sku['goods_id'], // 使用原商品ID
-                        'sku_no' => $sku['sku_no'],
-                        'sku_name' => $sku['sku_name'],
-                        'sku_image' => $sku['sku_image'],
-                        'sku_spec_format' => $sku['sku_spec_format'],
-                        'cost_price' => $base_price,
-                        'price' => $proxy_price,
-                        'sale_price' => $base_price,
-                        'market_price' => $sku['market_price'],
-                        'weight' => $sku['weight'],
-                        'volume' => $sku['volume'],
-                        'is_default' => $sku['is_default'],
-                    ]);
-                    $current_sync++;
-                }
-            }
-
-            $total_update += $current_update;
-            $total_sync += $current_sync;
-            $messages[] = "源站点 {$source_site['site_id']} 更新: {$current_update} 条，同步: {$current_sync} 条";
-        }
-
-        return implode("\n", $messages) . "\n总计更新: {$total_update} 条，同步: {$total_sync} 条";
-
-    } catch (\Exception $e) {
-        return "同步出错：" . $e->getMessage();
-    }
-}
-
-/**
- * 计算代理价格
- * @param float $base_price 基础价格
- * @return float
- */
-
-private function calculateProxyPrice($base_price)
-{
-    try {
-        // 查询当前站点的价格配置
-        $price_config = (new PhoneShopRecyclePriceConfig())->where([
-            'site_id' => $this->site_id
-        ])->find();
-
-        // 如果没有配置，直接返回基础价格+100
-        if (empty($price_config)) {
-            return $base_price + 200;
-        }
-        //  Log::write('站点配置信息 ' . $price_config['price_type'] );
-        // 价格类型1：固定加价
-        if ($price_config['price_type'] == 1) {
-            return $base_price + $price_config['member_markup'];
-        }
-
-        // 价格类型2：区间加价
-        if ($price_config['price_type'] == 2) {
-            // 查询符合当前价格的区间
-            $price_range = (new PhoneShopRecyclerPriceRange())->where([
-                'config_id' => $price_config['id']
-            ])->where('min_price', '<=', $base_price)
-              ->where('max_price', '>', $base_price)
-              ->find();
-
-            // 如果找到对应区间，使用区间的加价规则
-            if ($price_range) {
-                return $base_price + $price_range['member_markup'];
-            }
-        }
-
-        // 如果都没有匹配到，返回基础价格+100
-        return $base_price + 200;
-
-    } catch (\Exception $e) {
-        // 发生异常时返回基础价格+100
-        return $base_price + 200;
-    }
-}
 
 
 
