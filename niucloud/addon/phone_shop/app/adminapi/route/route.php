@@ -619,7 +619,12 @@ Route::group('phone_shop', function() {
 
       // 一键同步商品 
       Route::get('goods/sync_goods_list', 'addon\phone_shop\app\adminapi\controller\goods\Goods@syncGoodsList');
+  /************************************************** 小程序 Short Link *****************************************************/
+    // 生成单个 Short Link
+    Route::post('sys/short_link/generate', 'addon\\phone_shop\\app\\adminapi\\controller\\sys\\ShortLink@generate');
 
+    // 批量生成商品 Short Link
+    Route::post('sys/short_link/batch_generate', 'addon\\phone_shop\\app\\adminapi\\controller\\sys\\ShortLink@batchGenerate');
       
 
 })->middleware([

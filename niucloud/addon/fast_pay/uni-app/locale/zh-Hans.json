@@ -1,0 +1,15 @@
+{
+    "pages.business.index": "首页",
+    "pages.business.list": "列表",
+    "pages.business.pay": "支付",
+    "pages.business.result": "支付结果",
+    "pages.partner.index": "首页",
+    "pages.partner.list": "列表",
+    "pages.partner.pay": "支付",
+    "pages.partner.result": "支付结果",
+    "pages.pay.index": "首页",
+    "pages.pay.list": "列表",
+    "pages.pay.pay": "支付",
+    "pages.pay.result": "支付结果",
+    "pages.pay.browser": "支付浏览"
+}

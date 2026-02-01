@@ -1,0 +1,19 @@
+{
+      "siteId":"站点id",
+      "siteIdPlaceholder":"请输入站点id",
+      "businessId":"商户ID",
+      "businessIdPlaceholder":"全部",
+      "memberId":"活动名称",
+      "memberIdPlaceholder":"全部",
+      "level":"等级",
+      "levelPlaceholder":"请输入等级",
+      "balance":"余额",
+      "balancePlaceholder":"请输入余额",
+      "createTime":"创建时间",
+      "createTimePlaceholder":"请输入创建时间",
+      "addBusinessMember":"添加商户会员",
+      "updateBusinessMember":"编辑商户会员",
+      "businessMemberDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}

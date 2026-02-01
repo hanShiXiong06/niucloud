@@ -76,7 +76,6 @@
             </el-card>
 
             <div class="mt-[10px]">
-{{ userStore().siteInfo.site_id }}
                 <el-tabs v-model="goodsTable.searchParam.status" class="goods-tabs" @tab-click="tabHandleClick">
                     <el-tab-pane  v-if="userStore().siteInfo.site_id != '100005'" :label="t('自营')" name="2"></el-tab-pane>
                     <el-tab-pane :label="t('statusOn')" name="1"></el-tab-pane>
@@ -92,6 +91,7 @@
                     <el-button @click="batchGoodsStatus(0)" size="small" v-if="goodsTable.searchParam.status != '0'">{{
                         t('batchOffGoods') }}</el-button>
                     <el-button @click="batchDeleteGoods" size="small">{{ t('batchDeleteGoods') }}</el-button>
+                    <el-button @click="batchShareGoods" size="small" type="success">批量分享</el-button>
                 </div>
 
                 <el-table :data="goodsTable.data" size="large" v-loading="goodsTable.loading" ref="goodsListTableRef"
@@ -265,15 +265,17 @@
 import { reactive, ref ,watch } from 'vue'
 import { t } from '@/lang'
 import { debounce, img, filterDigit } from '@/utils/common'
-import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
+import { ElMessage, ElMessageBox, ElLoading, FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { cloneDeep } from 'lodash-es'
+import { useClipboard } from '@vueuse/core'
 import goodsMemberPricePopup from '@/addon/phone_shop/views/goods/components/goods-member-price-popup.vue'
 import goodsStockEditPopup from '@/addon/phone_shop/views/goods/components/goods-stock-edit-popup.vue'
 import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods-price-edit-popup.vue'
 import spreadPopup from '@/components/spread-popup/index.vue'
 import goodsOfflineOrderPopup from '@/addon/phone_shop/views/goods/components/goods-offline-order-popup.vue'
 import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods } from '@/addon/phone_shop/api/goods'
+import { batchGenerateShortLink } from '@/addon/phone_shop/api/shortlink'
 import { getMemberLevelAll } from '@/app/api/member'
 import { usePaginationStore } from '@/stores/modules/paginationStore'
 import userStore from '@/stores/modules/user'
@@ -816,7 +818,106 @@ const resetForm = (formEl: FormInstance | undefined) => {
     loadGoodsList()
 }
 
+// 初始化剪贴板功能
+const { copy, isSupported } = useClipboard()
 
+/**
+ * 批量分享商品
+ */
+const batchShareGoods = async () => {
+    // 1. 检查是否有选中商品
+    if (multipleSelection.value.length == 0) {
+        ElMessage({
+            type: 'warning',
+            message: '请先选择要分享的商品'
+        })
+        return
+    }
+
+    // 2. 显示加载提示
+    const loading = ElLoading.service({
+        lock: true,
+        text: `正在生成 ${multipleSelection.value.length} 个商品的分享链接...`,
+        background: 'rgba(0, 0, 0, 0.7)'
+    })
+
+    try {
+        // 3. 准备商品列表数据
+        const goodsList = multipleSelection.value.map((item: any) => ({
+            goods_id: item.goods_id,
+            goods_name: item.goods_name,
+            sub_title: item.sub_title || ''
+        }))
+
+        // 4. 调用批量生成 API
+        const res = await batchGenerateShortLink({
+            goods_list: goodsList
+        })
+
+        loading.close()
+
+        if (res.code !== 1) {
+            ElMessage({
+                type: 'error',
+                message: res.msg || '生成分享链接失败'
+            })
+            return
+        }
+
+        // 5. 处理返回结果
+        const successList = res.data.filter((item: any) => item.success)
+
+        if (successList.length === 0) {
+            ElMessage({
+                type: 'error',
+                message: '所有商品的分享链接生成失败，请稍后重试'
+            })
+            return
+        }
+
+        // 6. 格式化分享文本
+        // 格式：商品名称(含sub_title) #小程序://xxx/xxxx
+        const shareLines = successList.map((item: any) => {
+            let title = item.goods_name
+            if (item.sub_title) {
+                title += ' ' + item.sub_title
+            }
+            return `${title} ${item.short_link}`
+        })
+
+        const shareText = shareLines.join('\n')
+
+        // 7. 复制到剪贴板
+        if (isSupported.value) {
+            copy(shareText)
+
+            const failedCount = res.data.length - successList.length
+            let message = `已成功生成 ${successList.length} 个分享链接并复制到剪贴板`
+            if (failedCount > 0) {
+                message += `，${failedCount} 个失败`
+            }
+
+            ElMessage({
+                type: 'success',
+                message: message,
+                duration: 3000
+            })
+        } else {
+            // 如果不支持复制，显示弹窗让用户手动复制
+            ElMessageBox.alert(shareText, '分享链接（请手动复制）', {
+                confirmButtonText: '关闭',
+                type: 'success'
+            })
+        }
+
+    } catch (error: any) {
+        loading.close()
+        ElMessage({
+            type: 'error',
+            message: '生成分享链接失败：' + (error.message || '未知错误')
+        })
+    }
+}
 
 </script>
 
