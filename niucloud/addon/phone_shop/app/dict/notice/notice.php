@@ -54,5 +54,20 @@ return [
             'order_no' => '订单编号',
             'refund_money' => '退款金额',
         ]
+    ],
+    'phone_shop_new_goods' => [
+        'addon' => 'phone_shop',
+        'key' => 'phone_shop_new_goods',
+        'receiver_type' => 1,
+        'name' => '新品上架通知',
+        'title' => '每日新品上架时通知用户',
+        'async' => true,
+        'variable' => [
+            'goods_count' => '商品数量',
+            'goods_names' => '商品名称',
+            'update_time' => '更新时间',
+            'site_name' => '站点名称',
+            'url' => '商品列表链接'
+        ],
     ]
 ];

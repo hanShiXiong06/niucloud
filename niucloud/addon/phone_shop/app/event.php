@@ -72,6 +72,7 @@ return [
             'addon\phone_shop\app\listener\notice_template\OrderDelivery',
             'addon\phone_shop\app\listener\notice_template\RefundAgree',
             'addon\phone_shop\app\listener\notice_template\RefundRefuse',
+            'addon\phone_shop\app\listener\notice_template\NewGoods',
         ],
         //优惠券
         'CouponReceiveType' => [ 'addon\phone_shop\app\listener\coupon\CouponReceiveListener' ],

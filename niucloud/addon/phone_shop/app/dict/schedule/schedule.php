@@ -89,16 +89,29 @@ return [
         'class' => 'addon\phone_shop\app\job\marketing\ActiveEnd',
         'function' => ''
     ],
-    // 同步商品
     [
-        'key' => 'phone_shop_sync_goods',
-        'name' => '同步100005店铺商品',
-        'desc' => '',
+        'key' => 'phone_shop_daily_new_goods_notice',
+        'name' => '每日新品通知',
+        'desc' => '每天定时推送新品上架通知给关注公众号的用户',
         'time' => [
-            'type' => 'hour',
-            'min' => 1
+            'type' => 'day',
+            'day' => 1,
+            'hour' => 9,
+            'min' => 0
         ],
-        'class' => 'addon\phone_shop\app\job\goods\SyncGoods',
-        'function' => ''
-    ],
+        'class' => 'addon\phone_shop\app\job\DailyNewGoodsNotice',
+        'function' => 'doJob'
+    ]
+    // 同步商品
+    // [
+    //     'key' => 'phone_shop_sync_goods',
+    //     'name' => '同步100005店铺商品',
+    //     'desc' => '',
+    //     'time' => [
+    //         'type' => 'hour',
+    //         'min' => 1
+    //     ],
+    //     'class' => 'addon\phone_shop\app\job\goods\SyncGoods',
+    //     'function' => ''
+    // ],
 ];
