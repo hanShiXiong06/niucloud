@@ -3,13 +3,9 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\api;
 
-use addon\recycle\app\model\DeviceQueryConfig;
-use addon\recycle\app\model\DeviceQueryApi;
-use addon\recycle\app\model\DeviceQueryResult;
+use addon\recycle\app\model\third_party\DeviceQueryConfig;
 use core\base\BaseApiService;
 use think\facade\Cache;
-
-use core\exception\CommonException;
 
 /**
  * 设备查询服务类

@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\api\recycle_order;
 
 use addon\recycle\app\dict\order\RecycleOrderDict;
-use addon\recycle\app\model\RecycleOrder;
-use addon\recycle\app\model\RecycleDevice;
+use addon\recycle\app\model\order\RecycleDevice;
+use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
 use app\model\member\Member;
 use core\base\BaseApiService;
-use core\exception\CommonException;
 use core\exception\ApiException;
+use core\exception\CommonException;
 
 /**
  * 回收订单服务（API端 - 使用流程引擎）
@@ -142,6 +142,8 @@ class RecycleOrderService extends BaseApiService
         if (!empty($where['search']) && trim($where['search']) !== '') {
             $search_model = $this->buildSearchQuery($search_model, $where['search']);
         }
+        // 查询的订单状态不能是 10
+        $search_model = $search_model->where('status', '<>', 10);
 
         // 设置查询字段、关联、排序和附加属性
         $search_model = $search_model
@@ -169,7 +171,8 @@ class RecycleOrderService extends BaseApiService
         $conditions = [
             ['site_id', '=', $this->site_id],
             ['member_id', '=', $this->member_id],
-            ['status', '<>', 10]
+            ['status', '<>', 10],
+            ['delete_at', '=', 0]
         ];
 
         // 动态添加查询条件
@@ -484,7 +487,8 @@ class RecycleOrderService extends BaseApiService
     {
         $where = [
             ['site_id', '=', $this->site_id],
-            ['member_id', '=', $this->member_id]
+            ['member_id', '=', $this->member_id],
+            ['delete_at', '=', 0]
         ];
 
         $counts = $this->model->where($where)

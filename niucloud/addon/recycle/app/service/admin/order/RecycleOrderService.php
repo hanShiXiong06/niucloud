@@ -4,12 +4,9 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\admin\order;
 
 use addon\recycle\app\dict\order\RecycleOrderDict;
-use addon\recycle\app\model\RecycleOrder;
-use addon\recycle\app\model\RecycleDevice;
-use addon\recycle\app\model\RecycleOrderLog;
+use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderService;
-use addon\recycle\app\service\admin\recycle_order\RecycleDeviceService;
 use app\service\core\notice\NoticeService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -373,11 +370,16 @@ class RecycleOrderService extends BaseAdminService
             switch ($data['action']) {
                 case 'order_cancel':
                     return $this->cancel($id, $data);
+                
+                // 签收
+                case 'order_sign':
+                    return $this->sign($id, $data);
+               
                 default:
                     break;
             }
         }
-
+        
         // 更新订单基本信息
         $update_data = [];
         if (isset($data['remark'])) {
@@ -389,7 +391,7 @@ class RecycleOrderService extends BaseAdminService
         if (isset($data['express_company'])) {
             $update_data['express_company'] = $data['express_company'];
         }
-
+      
         if (!empty($update_data)) {
             $this->model->where([['id', '=', $id]])->update($update_data);
         }
@@ -550,7 +552,7 @@ class RecycleOrderService extends BaseAdminService
     public function getMerchantPayInfo(int $id)
     {
        // 通过$id 查询商户的收款信息
-       $payment_service = new \addon\recycle\app\service\admin\payment\PaymentService();
+       $payment_service = new \addon\recycle\app\service\admin\address\PaymentService();
        return $payment_service->getList($id);
     }
 }

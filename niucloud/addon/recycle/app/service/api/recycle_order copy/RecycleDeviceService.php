@@ -3,14 +3,14 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\api\recycle_order;
 
-use addon\recycle\app\model\RecycleDevice;
-use addon\recycle\app\model\RecycleOrder;
 use addon\recycle\app\dict\order\RecycleOrderDict;
+use addon\recycle\app\model\order\RecycleDevice;
+use addon\recycle\app\model\order\RecycleDeviceLog;
+use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleDeviceService;
 use core\base\BaseApiService;
 use core\exception\ApiException;
 use think\facade\Log;
-use addon\recycle\app\model\RecycleDeviceLog;
 
 /**
  * 回收订单设备服务层 - 接口端

@@ -13,7 +13,7 @@ return [
 				},{
 					"path": "pages/price",
 					"style": {
-						"navigationBarTitleText": "二手机回收报价单"
+						"navigationBarTitleText": "回收报价单"
 					},
 					"needLogin": true
 				},
@@ -41,7 +41,7 @@ return [
 				{
 					"path": "pages/payment/index",
 					"style": {
-						"navigationBarTitleText": "收款方式"
+						"navigationBarTitleText": "收款管理"
 					},
 					"needLogin": true
 				},

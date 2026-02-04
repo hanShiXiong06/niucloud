@@ -5,14 +5,14 @@ namespace addon\recycle\app\service\admin\printer;
 
 use addon\recycle\app\model\printer\RecyclePrinterTemplate;
 use addon\recycle\app\service\admin\printer\template\TemplateConverterService;
-use addon\recycle\app\service\admin\printer\template\TemplatePrintService;
-use addon\recycle\app\service\admin\printer\template\VariableReplaceService;
 use addon\recycle\app\service\admin\printer\template\TemplatePreviewService;
-use addon\recycle\app\service\admin\printer\template\TemplateValidatorService;
+use addon\recycle\app\service\admin\printer\template\TemplatePrintService;
 use addon\recycle\app\service\admin\printer\template\TemplateRenderService;
+use addon\recycle\app\service\admin\printer\template\TemplateValidatorService;
+use addon\recycle\app\service\admin\printer\template\VariableReplaceService;
 use core\base\BaseAdminService;
-use core\exception\CommonException;
 use core\exception\AdminException;
+use core\exception\CommonException;
 
 /**
  * 回收打印模板服务类
@@ -662,7 +662,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
     {
        
         // 查询设备数据，使用with关联查询质检员和定价员信息
-        $device_model = new \addon\recycle\app\model\RecycleDevice();
+        $device_model = new \addon\recycle\app\model\order\RecycleDevice();
         $device = $device_model->with(['checkUser', 'priceUser'])->where([
             ['id', '=', $device_id],
             ['site_id', '=', $this->site_id]
@@ -675,7 +675,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
         }
         
         // 获取订单信息（如果需要）
-        $order_model = new \addon\recycle\app\model\RecycleOrder();
+        $order_model = new \addon\recycle\app\model\order\RecycleOrder();
         $order = [];
         if (!empty($device['order_id'])) {
             $order = $order_model->where([

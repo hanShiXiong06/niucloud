@@ -25,9 +25,8 @@ Route::group('tk_vip', function() {
     ->middleware(ApiLog::class);
 Route::group('recycle', function() {
      // 获取热门分类
-     Route::get('recycle_category/hot', 'addon\recycle\app\api\controller\recycle_category\RecycleCategory@hot');
-     Route::get('recycle_category_tree', 'addon\recycle\app\api\controller\recycle_category\RecycleCategory@tree');
-     
+     Route::get('recycle_category/hot', 'addon\recycle\app\api\controller\category\RecycleCategory@hot');
+     Route::get('recycle_category_tree', 'addon\recycle\app\api\controller\category\RecycleCategory@tree');
      // 报价查询（移动端）
      Route::get('quotation_price/lists', 'addon\recycle\app\api\controller\quotation\QuotationPrice@lists');
      Route::get('quotation_price/types', 'addon\recycle\app\api\controller\quotation\QuotationPrice@getPriceTypes');
@@ -44,11 +43,8 @@ Route::group('recycle', function() {
      //二手机分类列表
     Route::get('dict/:id', 'addon\recycle\app\api\controller\hello_world\Dict@getDict');
     
-    
     // recycle/recycle_address_list 获取商家的回收地址
-     Route::get('address_list','addon\recycle\app\api\controller\recycle_category\RecycleCategory@address_list');
-    // Banner相关接口
-    Route::get('recycle_banner', 'addon\recycle\app\api\controller\recycle_category\RecycleBanner@lists');
+     Route::get('address_list','addon\recycle\app\api\controller\category\RecycleCategory@address_list');
     // device_status/list 获取设备状态
     Route::get('device_status/list', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@getDeviceStatus');
 
@@ -58,21 +54,20 @@ Route::group('recycle', function() {
     Route::get('recycle_device/count', 'addon\recycle\app\api\controller\recycle_order\RecycleDevice@getCount');
 
     // 回收订单相关接口
-    // 获取请求用户的所有回收订单
     Route::get('recycle_order', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@lists');
     // 获取单条订单详情
     Route::get('recycle_order/:id', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@show');
     // 创建回收订单
     Route::post('recycle_order', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@store');
 
-    // Route::put('recycle_order/:id', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@update');
+     //Route::put('recycle_order/:id', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@update');
     // 删除订单
     Route::delete('recycle_order/:id', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@delete');
     // 取消订单 (未完成)
     Route::put('recycle_order/:id/cancel', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@cancel');
     // 获取订单的状态
     Route::get('recycle_order/status', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@getStatus');
-    // 更改订单的状态 recycle_order/update_status/:id
+    // 更改订单的状态
     Route::put('recycle_order/update_status/:id', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@updateStatus');
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -86,20 +81,17 @@ Route::group('recycle', function() {
     // 批量确认设备
     Route::put('recycle_device/all_confirm', 'addon\recycle\app\api\controller\recycle_order\RecycleDevice@deviceAllConfirm');
     // 获取用户退货地址
-    Route::get('recycle_user_address', 'addon\recycle\app\api\controller\recycle_user_address\RecycleUserAddress@info');
+    Route::get('recycle_user_address', 'addon\recycle\app\api\controller\address\RecycleUserAddress@info');
     // 添加用户退货地址
-    Route::post('recycle_user_address', 'addon\recycle\app\api\controller\recycle_user_address\RecycleUserAddress@add');
+    Route::post('recycle_user_address', 'addon\recycle\app\api\controller\address\RecycleUserAddress@add');
     // 编辑用户退货地址
-    Route::put('recycle_user_address/:id', 'addon\recycle\app\api\controller\recycle_user_address\RecycleUserAddress@edit');
+    Route::put('recycle_user_address/:id', 'addon\recycle\app\api\controller\address\RecycleUserAddress@edit');
     // 删除用户退货地址
-    Route::delete('recycle_user_address/:id', 'addon\recycle\app\api\controller\recycle_user_address\RecycleUserAddress@del');
+    Route::delete('recycle_user_address/:id', 'addon\recycle\app\api\controller\address\RecycleUserAddress@del');
 
-    Route::get('excel/lists', 'addon\recycle\app\adminapi\controller\recycle_category\RecycleExcelController@lists');
-    Route::get('excel/brands', 'addon\recycle\app\adminapi\controller\recycle_category\RecycleExcelController@getBrandList');
-    Route::get('excel/statistics', 'addon\recycle\app\adminapi\controller\recycle_category\RecycleExcelController@getStatistics');
-   
+
     // ---------------------------------------------------------------------------------------------------------------
-    // 安果快递相关接口
+    // 爱果快递相关接口
     Route::get('anguo_delivery/pickup_times', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@getPickupTimes');
     Route::post('anguo_delivery/create', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@create');
     Route::post('anguo_delivery/cancel', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@cancel');
@@ -114,7 +106,9 @@ Route::group('recycle', function() {
     ->middleware(ApiLog::class);
 
 
-
+/**
+ * 用户收款方式相关接口
+ * */ 
 Route::group('recycle_price', function() {
     // 收款方式管
     Route::get('payment/list', 'addon\recycle\app\api\controller\payment\Payment@lists');

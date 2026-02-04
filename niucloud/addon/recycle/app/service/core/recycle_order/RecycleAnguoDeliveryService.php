@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\core\recycle_order;
 
 use addon\recycle\app\service\core\delivery\Anguo;
-use addon\recycle\app\model\RecycleOrder;
+use addon\recycle\app\model\order\RecycleOrder;
 use think\facade\Log;
 use think\facade\Db;
 use core\exception\CommonException;

@@ -12,7 +12,7 @@
 namespace addon\recycle\app\service\core\recycle_order\handler;
 
 use addon\recycle\app\dict\order\RecycleOrderDict;
-use addon\recycle\app\service\admin\recycle_order\RecycleDeviceService;
+use addon\recycle\app\service\admin\order\RecycleDeviceService;
 use core\exception\CommonException;
 
 /**

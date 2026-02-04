@@ -11,7 +11,7 @@
 
 namespace addon\recycle\app\service\api\recycle_user_address;
 
-use addon\recycle\app\model\recycle_user_address\RecycleUserAddress;
+use addon\recycle\app\model\address\RecycleUserAddress;
 
 
 use core\base\BaseApiService;

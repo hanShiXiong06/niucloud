@@ -11,12 +11,12 @@
 
 namespace addon\recycle\app\service\api\recycle_category;
 
-use addon\recycle\app\model\recycle_category\RecycleCategory;
-use addon\recycle\app\service\core\RecycleCategory\CoreRecycleCategoryService;
-use addon\recycle\app\model\ShopAddress;
-use addon\recycle\app\model\recycle_category\RecycleCategoryConfig;
-use core\base\BaseApiService;
+use addon\recycle\app\model\address\ShopAddress;
+use addon\recycle\app\model\category\RecycleCategory;
+use addon\recycle\app\model\category\RecycleCategoryConfig;
+use addon\recycle\app\service\core\category\CoreRecycleCategoryService;
 use app\model\member\Member;
+use core\base\BaseApiService;
 
 /**
  * 二手机分类服务层

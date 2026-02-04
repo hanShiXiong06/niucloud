@@ -1,0 +1,733 @@
+简要描述
+从平台获取对接需要的appid和appSecret，配置请求ip白名单，如需推送服务可配置推送地址
+请求URL
+请向我们索要请求地址替换{{host}}
+统一请求方式
+POST
+统一请求类型
+application/json
+统一Header参数
+参数名	必选	类型	说明
+appid	是	string	商户appid
+version	是	string	接口版本，如无特殊要求统一默认”V1.0”
+timestamp	是	string	时间戳 毫秒值 请求6分钟内有效
+sign	是	string	加密签名 详见签名规则
+统一响应参数
+参数名	必选	类型	说明
+code	是	Int	状态码 0为成功
+msg	是	string	状态说明
+data	否	Object	响应数据
+响应示例
+{
+  "code": 0,
+  "msg": "成功",
+  "data": null
+  }
+
+保价
+部分快递和渠道暂不支持保价， 将返回”不支持保价”。
+不支持保价的快递： 极兔 以及其他快递部分渠道
+部分渠道有强制保价请联系客服确认
+保费如存在小数 则向上取整
+取消订单
+目前仅支持待取件状态订单取消， 如其他订单状态取消请联系客服
+重货订单，1小时内禁止取消，如需取消请联系快递员处理
+未生成（回传/推送）快递单号的订单禁止取消， 如需取消请联系客服处理。
+
+签名规则
+将appid, version, timeStamp, secretKey四个字符串参数依照此顺序拼接，得到的长字符串进行md5（32位）加密生成签名sign。appSecret只参与加签过程，不参与请求传输，请妥善保管。
+签名示例
+public static String getSign(String appid, String version, String timeStamp, String appSecret) {
+    StringBuilder sb = new StringBuilder(appid).append(version).append(timeStamp).append(appSecret);
+    return  SecureUtil.md5(sb.toString());
+}
+
+-产品代码是推送时返回，包含在pushType = 2 计费变更中
+
+快递公司	产品代码(productCode)	产品名称(productName)
+京东快递	1	特惠送
+京东快递	2	特快送
+京东快递	16	生鲜特快
+京东快递	17	生鲜特惠
+京东快递	20	京东文件
+京东物流	5	特惠重货
+京东物流	6	特快零担
+京东物流	25	特快重货
+德邦快递	PACKAGE	标准快递
+德邦快递	RCP	大件快递3.60
+德邦快递	TZKJC	特快专递
+德邦物流	NZBRH	重包入户
+德邦物流	HK_JZKY	精准空运
+德邦物流	QC_JZKH	精准卡航
+德邦物流	QC_JZQYC	精准汽运
+跨越速运	10	省外当天达
+跨越速运	20	省外次日达
+跨越速运	30	省外隔日达
+跨越速运	40	省外陆运件
+跨越速运	50	同城次日
+跨越速运	160	省内次日
+跨越速运	220	专运
+顺心捷达	1	顺心包裹
+顺心捷达	2	顺心零担
+顺丰快递	1	顺丰特快
+顺丰快递	2	顺丰标快
+顺丰快递	255	顺丰卡航快递产品列表(新)
+产品编号可直接用于查价、下单，代替旧快递列表的3值type、deliveryType、promiseTimeType；
+如果需求的快递产品不在该列表，可尝试直接使用以上3值查询或咨询我们；
+产品名	productCode
+产品编号	expressType
+快递类型
+申通快递	1	快递
+圆通快递	2	快递
+德邦快递	3	快递
+顺丰(标快)	5	快递
+极兔速递	10	快递
+中通快递	11	快递
+韵达快递	12	快递
+京东快递	13	快递
+德邦物流(卡航)	21	重货
+顺心捷达(60公斤内)	23	重货
+顺丰快运	24	重货
+京东物流(重货)	25	重货
+京东得物	28	得物
+德邦得物	29	得物
+顺丰得物	30	得物
+京东物流(重货)	32	得物
+德邦物流(卡航)	34	得物
+顺丰快运	35	得物
+菜鸟裹裹	36	快递
+中通快运(70公斤内)	39	重货
+百世快运	40	重货
+跨越陆运	42	重货
+跨越专运	97	重货
+EMS特快	47	快递
+壹米滴答	48	重货
+顺心捷达(60公斤以上)	53	重货
+中通快运(60公斤以上)	67	重货
+顺心捷达(8000抛)	68	重货
+安能物流	71	重货
+京东快递(电池)	76	快递
+百世快运(70公斤以上)	86	重货
+京东得物(封控区域)	88	得物
+安能小件	95	快递
+京东重货(电池)	101	重货
+百世快运(电池)	102	重货
+壹米滴答(电动车)	103	重货
+
+
+简要描述
+允许商户通过此接口获取运费
+接口状态
+已完成
+请求URL
+{{host}}/openApi/getPrice
+请求方式
+post
+Header
+字段名	示例值	必选	类型	说明
+version	V1.0	是	string	无
+appid	{{appid}}	是	string	无
+timestamp	{{timestamp}}	是	string	无
+sign	{{sign}}	是	string	无
+请求参数示例
+{
+  "productCode": 5,
+  "sendPhone": "18050000000",
+  "goods": "鞋服配",
+  "sendAddress": "福建省厦门市思明区软件园二期",
+  "receiveAddress": "福建省厦门市思明区软件园二期",
+  "weight": 5,
+  "packageNum": 1,
+  "goodsValue": 0,
+  "length": 1,
+  "width": 1,
+  "height": 1,
+  "volume": 0,
+
+}
+请求json字段说明
+字段名	必选	类型	说明
+productCode	是	int	产品编号—详见快递产品列表
+sendPhone	是	string	寄件人手机号
+sendAddress	是	string	寄件人地址
+receiveAddress	是	string	收件人地址
+weight	是	int	下单重量
+packageNum	是	int	包裹数
+goodsValue	否	int	保价金额
+length	否	int	长(厘米)
+width	否	int	宽(厘米)
+height	否	int	高(厘米)
+payMethod	否	int	废弃—-支付方式(默认3) 线下寄付:1 线下到付:2 线上寄付:3
+volume	否	number	总体积m³ 和长宽高换算的体积做比较，使用较大的值
+goods	否	string	品名
+成功返回示例
+{
+  "code": 0,
+  "msg": "成功",
+  "data": {
+    "channelFee": 9.36,
+    "serviceCharge": 0.5,
+    "originalFee": 12,
+    "guarantFee": 0,
+    "type": 8,
+    "typeName": "顺丰(标快)",
+    "isInsured": true,
+    "channelName": "SF-全国顺丰-ASDT(老)",
+    "bulk": 12000,
+    "limitWeight": 20,
+    "genre": 2,
+    "priceA": 0,
+    "priceB": 0,
+    "discount": 7.8,
+    "incrementFee": 0,
+    "volume": 1,
+    "volumeWeight": 1,
+    "billWeight": 1,
+    "productCode": 5,
+    "promiseTimeType": 1
+  }
+}
+成功返回示例的参数说明
+参数名	类型	说明
+channelFee	number	基础运费
+serviceCharge	number	服务费
+originalFee	number	官方原价(折扣渠道必传)
+guarantFee	number	保价费用 ，根据保价金额，自动计算
+type	int	快递列表
+typeName	string	快递名称
+isInsured	boolean	是否可以保价
+channelName	string	渠道名称
+bulk	int	体积抛比
+limitWeight	int	限重
+genre	int	1.通票 2.折扣 3.抽水 4.返现（寄付、到付）
+priceA	number	首重价格
+priceB	number	续重价格
+discount	number	折扣
+incrementFee	number	增值服务费
+volume	number	体积 立方厘米
+volumeWeight	int	体积重量
+billWeight	int	计费重量
+productCode	int	产品编号
+promiseTimeType	int	快递列表
+deliveryType	int	快递列表
+失败返回示例
+{
+  "msg": "暂不支持此区间下单,请检查地址是否正确!!!",
+  "code": 500
+}
+备注
+
+
+简要描述
+允许商户户通过此接口下单
+接口状态
+已完成
+请求URL
+{{host}}/openApi/doOrder
+请求方式
+post
+Header
+字段名	示例值	必选	类型	说明
+version	V1.0	是	string	无
+appid	{{appid}}	是	string	无
+timestamp	{{timestamp}}	是	string	无
+sign	{{sign}}	是	string	无
+请求参数示例
+{
+  "productCode": 5,
+  "senderPhone": "13799555666",
+  "senderName": "姜先生",
+"guaranteeValueAmount":1000,
+  "senderAddress": "河南省驻马店市汝南县宿鸭湖街道汝宁街道湖滨新城1101",
+  "receiveAddress": "广东省广州市白云区鹤龙街道员村云尚中心603",
+  "receivePhone": "13799666888",
+  "receiveName": "小胡",
+  "goods": "1",
+  "packageNum": 1,
+  "volume":0.004,
+  "weight": 1
+}
+请求json字段说明
+字段名	必选	类型	说明
+productCode	是	string	产品编号—详见快递产品列表
+senderPhone	是	string	寄件人手机号
+senderName	是	string	寄件人姓名
+senderAddress	是	string	寄件人地址
+receivePhone	是	string	收件人手机号
+receiveName	是	string	收件人姓名
+receiveAddress	是	string	收件人地址
+goods	是	string	物品信息
+weight	是	int	下单重量(kg)
+packageNum	是	int	包裹数
+guaranteeValueAmount	否	int	保价金额(元)
+length	否	int	长(厘米)
+width	否	int	宽(厘米)
+height	否	int	高(厘米)
+payMethod	否	int	支付方式(默认3) 线下寄付:1 线下到付:2 线上寄付:3
+remark	否	string	运单备注
+thirdOrderNo	是	string	商户系统内部订单号
+orderSendTime	否	string	预约时间yyyy-MM-dd HH:mm:ss
+volume	否	number	总体积m³ 和长宽高换算的体积做比较，使用较大的值 中通快运、百世快运、顺心捷达强制强制输入
+images	否	string	包裹图片url.多张图片使用英文逗号分隔 中通快运、百世快运、顺心捷达强制输入
+addressId	否	number	得物地址id 下单得物必传
+shipMethod	否	number	德邦物流：0：送货(不含上楼) ；1：送货上楼
+顺心捷达： 111：送货上楼(无电梯) 112：自提 339：送货上楼(有电梯) 554：送货(不含上楼)
+成功返回示例
+{
+  "code": 0,
+  "msg": "成功",
+  "data": {
+    "orderNo": "SFKD167653737435303",
+    "typeName": "顺丰快递",
+    "type": 8,
+    "waybillNo": "TEST167653737517300"
+  }
+}
+成功返回示例的参数说明
+参数名	类型	说明
+orderNo	string	平台订单号
+typeName	string	快递名称
+type	int	详见快递列表
+waybillNo	string	快递运单号 部分快递不会马上返回 将通过推送通知
+失败返回示例
+{
+  "msg": "暂不支持此区间下单,请检查地址是否正确!!!",
+  "code": 500
+}
+备注
+快递运单号(waybillNo)如果没有马上返回，将10秒内按状态变更进行异步推送，
+部分快递需要等到揽收才会提供
+
+取消拦截运单
+简要描述
+允许商户通过此接口取消运单
+接口状态
+已完成
+请求URL
+{{host}}/openApi/doCancel
+请求方式
+post
+请求参数示例
+{
+  "genre": 1,
+  "thirdOrderNo": "1217752501201407033233368018"
+}
+请求json字段说明
+字段名	必选	类型	说明
+genre	是	int	固定值 1取消 3：拦截（仅支持京东快递和顺丰快递）
+thirdOrderNo	否	string	商户系统内部订单号 三选一
+waybillNo	否	string	快递运单号 三选一
+orderNo	否	string	平台订单号 三选一
+成功返回示例
+{
+  "code": 0,
+  "msg": "成功"
+}
+失败返回示例
+{
+  "msg": "运单不存在!!!",
+  "code": 500
+}
+备注
+
+
+运单修改
+简要描述
+允许商户通过此接口修改运单包裹数、预约时间，目前只支持：京东 德邦
+接口状态
+开发中
+请求URL
+{{host}}/openApi/doModify
+请求方式
+post
+请求参数示例
+{
+  "waybillNo": "TEST166858450071220"
+}
+请求json字段说明
+字段名	必选	类型	说明
+thirdOrderNo	否	string	商户系统内部订单号 三选一
+waybillNo	否	string	快递运单号 三选一
+orderNo	否	string	平台订单号 三选一
+packageNum	否	int	包裹数量 （和预约时间不能同时为空）
+orderSendTime	否	string	预约时间（和包裹数不能同时为空），格式：2025-03-11 14:00:00
+成功返回示例
+{"code":0,"msg":"成功","data":"123123"}
+失败返回示例
+{
+  "msg": "运单不存在!!!",
+  "code": 500
+}
+备注
+目前只支持：京东 德邦
+
+
+运单详情
+简要描述
+允许商户通过此接口获取运单详情
+接口状态
+已完成
+请求URL
+{{host}}/openApi/getOrderDetail
+请求方式
+post
+请求参数示例
+{
+  "thirdOrderNo": "1217752501201407033233368018"
+}
+请求json字段说明
+字段名	必选	类型	说明
+thirdOrderNo	否	string	商户系统内部订单号 三选一
+waybillNo	否	string	快递运单号 三选一
+orderNo	否	string	平台订单号 三选一
+成功返回示例
+{
+  "code": 0,
+  "msg": "成功",
+  "data": {
+    "type": 6,
+    "goods": "日用品",
+    "packageNum": 1,
+    "volume": 1000,
+    "volumeWeight": 0.13,
+    "volumeRemark": "立方厘米/8000",
+    "weight": 1,
+    "weightActual": 0,
+    "weightBill": 0,
+    "insuranceFee": 0,
+    "consumeFee": 0,
+    "overWeightStatus": 0,
+    "changeFee": 0,
+    "otherFee": 0,
+    "incrementFee": 0,
+    "serviceCharge": 0,
+    "senderName": "张",
+    "senderPhone": "18050000000",
+    "senderAddress": "福建省厦门市思明区软件园二期",
+    "receiveName": "张",
+    "receivePhone": "18050000000",
+    "receiveAddress": "福建省厦门市思明区软件园二期",
+    "soliciter": null,
+    "guaranteeValueAmount": 0,
+    "createDate": "2022-11-16 15:41:41",
+    "status": 1,
+    "statusName": "待取件",
+    "isForward": false,
+    "isLimit": false,
+    "yuanjia": 5.36,
+    "copyText": "运单号：TEST166858450071220\n寄件人：张(18050000000)\n地址：福建省厦门市思明区软件园二期\n收件人：张(18050000000)\n地址：福建省厦门市思明区软件园二期\n物品：日用品(1KG)，包裹数: 1\n有任何售后问题，一定要必须联系\"下单员\"进行处理，感谢您的配合!!!",
+    "originalFee": 0,
+    "images": null,
+    "payFee": 5.36,
+    "orderCode": "TEST166858450071220",
+    "payMethod": 3,
+    "payType": 1,
+    "payMethodName": "线上寄付",
+    "trackingNum": "TEST166858450071220",
+    "senderCity": "厦门市",
+    "receiveCity": "厦门市",
+    "traceList": [
+      {
+        "opeRemark": "您的订单已被收件员揽收,【北京丰台区大瓦窑经营分部】库存中",
+        "opeTime": "11-07 17:57",
+        "opeTimeAll": "2022-11-07 17:57:15"
+      },
+      {
+        "opeRemark": "运输中，离开【北京丰台区大瓦窑经营分部】，下一部门【北京丰台区万泽龙运作部】",
+        "opeTime": "11-07 18:50",
+        "opeTimeAll": "2022-11-07 18:50:55"
+      }
+    ]
+  }
+}
+成功返回示例的参数说明
+参数名	类型	说明
+type	string	详见快递列表
+goods	string	物品信息
+packageNum	int	包裹数
+volume	int	体积(立方厘米)
+volumeWeight	number	体积重量
+volumeRemark	string	体积说明
+weight	number	下单重量
+weightActual	number	实际重量
+weightBill	number	计费重量
+insuranceFee	number	保价费
+consumeFee	number	包装费
+overWeightStatus	int	超重状态 0未超重 1超重/耗材/保价/转寄/加长 2超重/耗材/保价/转寄/加长已处理 3超轻 4重量异常
+changeFee	number	转寄费
+otherFee	number	其他费
+incrementFee	number	增值服务费
+serviceCharge	number	技术服务费
+senderName	string	寄件人
+senderPhone	string	寄件电话
+senderAddress	string	寄件地址
+receiveName	string	收件人
+receivePhone	string	收件电话
+receiveAddress	string	收件地址
+soliciter	object	快递员信息
+guaranteeValueAmount	number	保价金额
+createDate	string	下单时间
+status	int	订单状态 0：预下单 1：待取件 2：运输中 5：已签收 6：取消订单 7：终止揽收 8：特殊关闭 9：已退款
+statusName	string	订单状态描述
+isForward	boolean	是否转寄单(转寄单额外收取50%运费)
+isLimit	string	是否超限
+yuanjia	number	基础运费
+copyText	string	复制内容
+originalFee	number	官方原价
+images	string	运单图片
+payFee	number	实际支付费用
+orderCode	string	平台订单号
+payMethod	int	支付方式 1：线下寄付 2：线下到付 3：线上寄付
+payType	int	付款方式 1：余额支付 2：微信支付 3：支付宝支付 4：微信分
+payMethodName	string	支付方式名称
+trackingNum	string	运单号
+senderCity	string	寄件城市
+receiveCity	string	收件城市
+traceList	array	轨迹列表
+traceList.opeRemark	string	轨迹内容
+traceList.opeTime	string	轨迹时间 MM-dd HH:mm
+traceList.opeTimeAll	string	轨迹时间 yyyy-MM-dd HH:mm:ss
+失败返回示例
+{
+  "msg": "运单不存在!!!",
+  "code": 500
+}
+备注
+
+
+面单Pdf(支持顺丰|京东)
+简要描述
+允许商户通过此接口获取运单的面单PDF
+接口状态
+已完成
+请求URL
+{{host}}/openApi/getWaybillPdf
+请求方式
+post
+Header
+字段名	示例值	必选	类型	说明
+version	V1.0	是	string	无
+appid	{{appid}}	是	string	无
+timestamp	{{timestamp}}	是	string	无
+sign	{{sign}}	是	string	无
+请求参数示例
+{
+  "thirdOrderNo": "A000210321200",
+  "temCode":"113"
+}
+请求json字段说明
+字段名	必选	类型	说明
+thirdOrderNo	否	string	商户系统内部订单号 三选一
+waybillNo	否	string	快递运单号 三选一
+orderNo	否	string	平台订单号 三选一
+temCode	否	string	模板编号
+顺丰可选(默认150)
+150:标准模板100 X 150;
+180:标准模板100 X 180;
+210:标准模板100 X 210;
+京东快递可选(默认113)
+105:标准模板76 X 105;
+130:标准模板76 X 130;
+113:标准模板100 X 113;
+150:标准模板100 X 150;
+京东快运可选(默认113)
+105:标准模板76 X 105;
+130:标准模板76 X 130;
+113:标准模板100 X 113;
+成功返回示例
+{
+  "code": 0,
+  "msg": "成功",
+  "data": {
+    "pdfData":"文件的Base64",
+    "dataFormat":2
+
+    }
+
+}
+
+或者
+
+{
+  "code": 0,
+  "msg": "成功",
+  "data": {
+    "pdfData":"http://xxx.xxx.com/xxx.pdf",
+    "dataFormat":1
+
+    }
+
+}
+成功返回示例的参数说明
+参数名	类型	说明
+dataFormat	int	数据类型 1：url地址 2：文件的Base64
+pdfData	string	url地址或者文件的Base64
+失败返回示例
+{
+  "msg": "运单不存在!!!",
+  "code": 500
+}
+备注
+
+
+资金信息
+简要描述
+允许商户通过此接口获取资金信息
+接口状态
+已完成
+请求URL
+{{host}}/openApi/fund
+请求方式
+post
+成功返回示例
+{
+  "code": 0,
+  "msg": "成功",
+  "data": {
+    "balance": 6.66,
+    "commission": 6.66,
+    "integral": 666
+  }
+}
+成功返回示例的参数说明
+参数名	类型	说明
+balance	number	会员钱包
+commission	number	推广费
+integral	int	积分
+失败返回示例
+{
+  "msg": "账号异常",
+  "code": 500
+}
+备注
+
+
+推送接口
+简要描述
+物流信息变更时通知商户，商户可做相应操作
+回调URL
+商户可将回调地址发给我们进行配置
+请求类型
+application/json
+回调方式
+POST
+回调参数
+参数名	必选	类型	说明
+thirdOrderNo	是	string	商户订单号
+waybillNo	是	string	快递运单号，下单时没有的将通过状态变更通知，实际状态不一定有变更
+orderNo	是	string	平台订单号
+type	是	string	详见快递列表
+pushType	是	string	推送类型 1状态变更 2计费变更 3快递员变更 4订单变更
+data	是	object	推送信息对象, 根据推送类型决定
+data-状态变更	-	-	-
+status	是	string	订单状态 1：待取件 2：运输中 5：已签收 6：取消订单 7：终止揽收 8：特殊关闭 9：已退款
+desc	是	string	订单描述
+data-计费变更	-	-	-
+originalFee	是	number	官方原价
+weightFinal	是	number	真实重量(kg)
+weightFee	是	number	计费重量 (kg)
+volume	是	number	体积 (立方米)
+productCode	是	string	快递公司产品代码 详见快递公司产品
+productName	是	string	快递产品代码名称
+ifOriginalFee	是	boolean	是否按原价计费(否false,是true)
+totalFee	是	number	总费用(元)
+等于费用类型的
+(1+2+…+8)-9
+feeList	是	array	费用明细
+feeList.type	是	int	费用类型 1运费,2真实保价费用,
+3耗材费,4技术服务费,
+5转寄费,6加重费,
+7加长费,8其他费
+9退款费用(退款给用户，金额是正数)
+feeList.name	是	string	费用名称
+feeList.fee	是	number	费用金额(元)
+data-快递员变更	-	-	-
+courierInfo	是	string	揽收信息，不同订单类型格式不同，请自行解析
+courierPhone	是	string	揽收员电话
+data-订单变更	-	-	-
+newWaybillNo	是	string	新运单号，不会覆盖原订单号，原订单号依然可查询
+返回说明
+接收到信息后请在2秒内返回字符串”SUCCESS”,大写，否则视为失败
+
+"SUCCESS"
+回调示例
+ //状态变更-运单号异步获取的推送的消息
+{
+  "thirdOrderNo": "1217752501201407033233368018",
+  "waybillNo": "775630083911592",
+  "orderNo": "STKD167368090945739",
+  "type": 5,
+  "pushType": 1,
+  "data": {
+    "status": 1,
+    "desc": "待取件"
+  }
+}
+ //状态变更
+{
+  "thirdOrderNo": "1217752501201407033233368018",
+  "waybillNo": "775630083911592",
+  "orderNo": "STKD167368090945739",
+  "type": 5,
+  "pushType": 1,
+  "data": {
+    "status": 2,
+    "desc": "运输中"
+  }
+}
+
+ //计费变更
+{
+  "thirdOrderNo": "1217752501201407033233368018",
+  "waybillNo": "775630083911592",
+  "orderNo": "STKD167368090945739",
+  "type": 5,
+  "pushType": 2,
+  "data": {
+    "totalFee": 14,
+    "feeList": [
+      {
+        "type": 1,
+        "name": "运费",
+        "fee": 11
+      },
+      {
+        "type": 2,
+        "name": "真实保价费用",
+        "fee": 2
+      },
+      {
+        "type": 3,
+        "name": "耗材费",
+        "fee": 1
+      }
+    ]
+  }
+}
+
+ //快递员变更
+{
+  "thirdOrderNo": "1217752501201407033233368018",
+  "waybillNo": "775630083911592",
+  "orderNo": "STKD167368090945739",
+  "type": 5,
+  "pushType": 3,
+  "data": {
+    "courierInfo": "杨月清==>电话：15857099050==>取件码：345567",
+    "courierPhone": "15857099050"
+  }
+}
+
+ //订单变更
+{
+  "thirdOrderNo": "1217752501201407033233368018",
+  "waybillNo": "775630083911592",
+  "orderNo": "STKD167368090945739",
+  "type": 5,
+  "pushType": 4,
+  "data": {
+    "newWaybillNo": "772014522366730"
+  }
+}
+推送机制
+我方接收到以上返回将认为接入方已处理完成，不会再进行回调。若返回其他的一律认为没有收到应答，将继续回调，回调频率按照 5s/10s 重新推送2次

@@ -10,12 +10,11 @@
 // +----------------------------------------------------------------------
 namespace addon\recycle\app\job\printer;
 
+use addon\recycle\app\service\admin\order\RecycleDeviceService;
+use addon\recycle\app\service\admin\printer\RecyclePrinterService;
+use addon\recycle\app\service\admin\printer\RecyclePrinterTemplateService;
 use core\base\BaseJob;
 use think\facade\Log;
-use addon\recycle\app\service\admin\printer\RecyclePrinterTemplateService;
-use addon\recycle\app\service\admin\recycle_order\RecycleDeviceService;
-use addon\recycle\app\model\printer\RecyclePrinterTemplate;
-use addon\recycle\app\service\admin\printer\RecyclePrinterService;
 
 /**
  * 质检完成后打印标签事件

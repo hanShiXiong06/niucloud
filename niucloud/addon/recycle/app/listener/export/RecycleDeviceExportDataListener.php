@@ -2,8 +2,6 @@
 
 namespace addon\recycle\app\listener\export;
 
-use addon\recycle\app\model\RecycleDevice;
-
 /**
  * 回收设备导出数据监听器
  */

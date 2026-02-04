@@ -3,14 +3,13 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\admin\stats;
 
-use addon\recycle\app\model\RecycleDevice;
-use addon\recycle\app\model\RecycleOrder;
-use core\base\BaseAdminService;
-use app\service\admin\auth\AuthService;
-use app\service\admin\user\UserRoleService;
-use app\model\sys\SysUserRole;
-use app\model\sys\SysUser;
+use addon\recycle\app\model\order\RecycleDevice;
+use addon\recycle\app\model\order\RecycleOrder;
 use app\model\member\Member;
+use app\model\sys\SysUser;
+use app\model\sys\SysUserRole;
+use app\service\admin\user\UserRoleService;
+use core\base\BaseAdminService;
 use think\facade\Db;
 use think\facade\Log;
 

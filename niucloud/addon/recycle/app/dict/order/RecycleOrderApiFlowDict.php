@@ -126,7 +126,15 @@ class RecycleOrderApiFlowDict
         RecycleOrderDict::ORDER_STATUS_CANCELLED => [
             'status_name' => '已取消',
             'actions' => [],
-            'transitions' => []
+            'transitions' => [
+                // 'delete' => [
+                //     'to_status' => RecycleOrderDict::ORDER_STATUS_DELETE,
+                //     'handler' => 'DeleteHandler',
+                //     'validate' => [],
+                //     'event_after' => 'orderDeleteAfter',
+                //     'description' => '用户删除订单'
+                // ]
+            ]
         ]
     ];
 

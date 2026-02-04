@@ -1,7 +1,7 @@
 <?php
 namespace addon\recycle\app\service\api\payment;
 
-use addon\recycle\app\model\PhoneShopPaymentInfo;
+use addon\recycle\app\model\address\PhoneShopPaymentInfo;
 use core\base\BaseService;
 use think\facade\Db;
 

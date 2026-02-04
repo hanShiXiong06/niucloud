@@ -11,7 +11,7 @@
 
 namespace addon\recycle\app\service\core\recycle_order\handler;
 
-use addon\recycle\app\model\RecycleOrder;
+use addon\recycle\app\model\order\RecycleOrder;
 
 /**
  * 用户确认收货处理器

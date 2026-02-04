@@ -11,8 +11,8 @@
 
 namespace addon\recycle\app\service\core\recycle_order\handler;
 
-use addon\recycle\app\model\RecycleDevice;
-use addon\recycle\app\model\RecycleOrder;
+use addon\recycle\app\model\order\RecycleDevice;
+use addon\recycle\app\model\order\RecycleOrder;
 use core\exception\CommonException;
 
 /**

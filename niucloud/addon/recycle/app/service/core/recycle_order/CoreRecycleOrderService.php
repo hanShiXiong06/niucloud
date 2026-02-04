@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\core\recycle_order;
 
-use addon\recycle\app\model\RecycleOrder;
-use addon\recycle\app\model\RecycleDevice;
 use addon\recycle\app\dict\order\RecycleOrderDict;
+use addon\recycle\app\model\order\RecycleDevice;
+use addon\recycle\app\model\order\RecycleOrder;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
 use think\facade\Db;

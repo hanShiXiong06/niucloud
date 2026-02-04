@@ -11,8 +11,8 @@
 
 namespace addon\recycle\app\service\core\recycle_order\handler;
 
-use addon\recycle\app\model\RecycleDevice;
-use addon\recycle\app\model\RecycleOrder;
+use addon\recycle\app\model\order\RecycleDevice;
+use addon\recycle\app\model\order\RecycleOrder;
 use core\exception\CommonException;
 
 /**
@@ -54,8 +54,8 @@ class PaymentHandler extends BaseFlowHandler
 
         // 3. 记录打款信息
         $paymentInfo = [
-            'payment_time' => time(),
-            'payment_amount' => $totalAmount,
+            'pay_time' => time(),
+            'pay_account' => $totalAmount,
             'payment_method' => $data['payment_info']['method'] ?? 'transfer',
             'transaction_no' => $data['payment_info']['transaction_no'] ?? '',
             'operator_id' => $this->getOperatorId($context),
@@ -64,8 +64,8 @@ class PaymentHandler extends BaseFlowHandler
 
         // 4. 更新订单打款信息（这里可以扩展为更新订单表的打款字段）
         RecycleOrder::where('id', $order['id'])->update([
-            'payment_time' => $paymentInfo['payment_time'],
-            'payment_amount' => $paymentInfo['payment_amount'],
+            'pay_time' => $paymentInfo['pay_time'],
+            'total_amount' => $paymentInfo['pay_account'],
             'update_at' => time()
         ]);
 

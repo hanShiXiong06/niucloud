@@ -4,8 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\core\recycle_device;
 
 use addon\recycle\app\dict\order\RecycleOrderDict;
-use addon\recycle\app\model\RecycleDeviceLog;
-use app\service\core\sys\CoreSysConfigService;
+use addon\recycle\app\model\order\RecycleDeviceLog;
 use core\base\BaseAdminService;
 
 /**

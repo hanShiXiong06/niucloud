@@ -12,8 +12,8 @@
 namespace addon\recycle\app\job\order_event;
 
 use addon\recycle\app\dict\order\RecycleReturnOrderDict;
-use addon\recycle\app\model\RecycleReturnOrder;
-use addon\recycle\app\service\core\RecycleReturnOrderService;
+use addon\recycle\app\model\order\RecycleReturnOrder;
+use addon\recycle\app\service\core\recycle_order\RecycleReturnOrderService;
 use core\base\BaseJob;
 use think\facade\Log;
 

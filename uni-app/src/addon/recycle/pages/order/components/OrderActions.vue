@@ -24,7 +24,7 @@
       class="action-btn primary"
       @click="$emit('confirm')"
     >
-      <text>确认收货</text>
+      <text>一键确认</text>
     </view>
 
     <!-- 状态7-已完成、状态8-已关闭、状态9-已取消：可以删除订单 -->

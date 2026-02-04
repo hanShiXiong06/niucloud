@@ -11,7 +11,7 @@
 
 namespace addon\recycle\app\service\api\recycle_category;
 
-use addon\recycle\app\model\recycle_category\RecycleBanner;
+use addon\recycle\app\model\category\RecycleBanner;
 use core\base\BaseApiService;
 
 /**

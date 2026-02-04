@@ -3,31 +3,31 @@
 return [
     'RECYCLE_LINK' => [
         'key' => 'recycle',
-        'addon_title' => '产品报价查看',
+        'addon_title' => '回收报价系统',
         'title' => '产品报价',
         'child_list' => [
             [
                 'name' => 'recycle_INDEX',
-                'title' => '报价系统',
+                'title' => '回收主页',
                 'url' => '/addon/recycle/pages/index',
                 'is_share' => 1,
                 'action' => 'decorate'
             ], [
                 'name' => 'recycle_ORDER',
-                'title' => '回收下单',
+                'title' => '立即下单',
                 'url' => '/addon/recycle/pages/order/order',
                 'is_share' => 1,
                 'action' => ''
             ], [
                 'name' => 'recycle_ORDER_LIST',
-                'title' => '回收订单列表',
+                'title' => '订单列表',
                 'url' => '/addon/recycle/pages/order/list',
                 'is_share' => 1,
                 'action' => ''
             ],
             [
                 'name' => 'recycle_price',
-                'title' => '回收报价',
+                'title' => '回收报价单',
                 'url' => '/addon/recycle/pages/price',
                 'is_share' => 1,
                 'action' => ''
@@ -44,7 +44,16 @@ return [
                 'url' => '/addon/recycle/pages/payment/index',
                 'is_share' => 1,
                 'action' => ''
-            ]
+            ],
+            // pages/return_order/list
+            [
+                'name' => 'recycle_return_order_list',
+                'title' => '退货订单列表',
+                'url' => '/addon/recycle/pages/return_order/list',
+                'is_share' => 1,
+                'action' => ''
+            ],
+
         ]
     ]
 ];

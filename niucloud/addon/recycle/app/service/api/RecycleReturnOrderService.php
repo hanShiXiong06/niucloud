@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\api;
 
-use addon\recycle\app\model\RecycleReturnOrder;
-use addon\recycle\app\service\core\RecycleReturnOrderService as CoreRecycleReturnOrderService;
+use addon\recycle\app\model\order\RecycleReturnOrder;
+use addon\recycle\app\service\core\recycle_order\RecycleReturnOrderService as CoreRecycleReturnOrderService;
 use core\base\BaseApiService;
 
 /**

@@ -13,7 +13,7 @@ namespace addon\recycle\app\service\core\recycle_order;
 
 use addon\recycle\app\dict\order\RecycleOrderApiFlowDict;
 use addon\recycle\app\dict\order\RecycleOrderAdminFlowDict;
-use addon\recycle\app\model\RecycleOrder;
+use addon\recycle\app\model\order\RecycleOrder;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -80,6 +80,7 @@ class CoreRecycleOrderFlowService extends BaseCoreService
 
             // 4. 获取转换配置
             $transitionConfig = $this->getTransitionConfig($order['status'], $action, $flowConfig);
+            $data['payment_info']='测试';
 
             // 5. 验证必需数据
             $this->validateRequiredData($data, $transitionConfig);

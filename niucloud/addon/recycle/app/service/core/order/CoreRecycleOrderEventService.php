@@ -15,7 +15,7 @@ use addon\recycle\app\job\order_event\OrderSignAfter;
 use addon\recycle\app\job\order_event\OrderAddAfter;
 use addon\recycle\app\job\order_event\OrderAgreeAfter;
 use addon\recycle\app\job\order_event\OrderPayAfter;
-use addon\recycle\app\model\RecycleOrder;
+use addon\recycle\app\model\order\RecycleOrder;
 use core\base\BaseCoreService;
 use think\facade\Log;
 

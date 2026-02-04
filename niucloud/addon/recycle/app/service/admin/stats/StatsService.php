@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\admin\stats;
 
-use addon\recycle\app\model\RecycleDevice;
-use app\model\sys\SysUser; // 确认 SysUser 模型路径
+use addon\recycle\app\model\order\RecycleDevice;
+use app\model\sys\SysUser;
 use core\base\BaseAdminService;
-use think\db\Query;
+
+// 确认 SysUser 模型路径
 
 class StatsService extends BaseAdminService
 {
