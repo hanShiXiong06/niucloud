@@ -1,15 +1,42 @@
 <?php
 return [
-
-    'recycle_order_sign' => [
-        'temp_key' => '57446',
+    // 用户下单成功通知
+    'recycle_order_add' => [
+        'temp_key' => '6XQJPzJJXRv1glROD6iB60DvpkIlNobwJNSLhBSYaZo',
         'content' => [
-            // 'content' => [
-                ['快速公司', '{delivery_type}', 'thing7'],
-                ['快递单号', '{delivery_id}', 'character_string1'],
-            // ],
+            ['订单号', '{order_no}', 'character_string1'],
+            ['下单门店', '{shop_name}', 'thing6'],
+            ['收货地址', '{address}', 'thing7'],
+            ['下单时间', '{create_time}', 'time9'],
         ],
-        'keyword_name_list' => ["快递公司", "快递单号"],
-        'tips' => '使用该消息请将微信公众号服务类目选择为：物流服务——>查件'
+        'keyword_name_list' => ["订单号", "下单门店", "收货地址", "下单时间"],
+        'tips' => '使用该消息请将微信公众号服务类目选择为：百货/超市/便利店'
+    ],
+
+    // 收款成功通知
+    'recycle_order_pay' => [
+        'temp_key' => 'DaS8vgCtMTWeKRaI-Ah4QyjCC_9TONB2Ps0c4JahflI',
+        'content' => [
+            ['订单编号', '{order_no}', 'character_string4'],
+            ['收款共计', '{pay_amount}', 'amount10'],
+            ['门店', '{shop_name}', 'thing13'],
+            ['支付时间', '{pay_time}', 'time3'],
+        ],
+        'keyword_name_list' => ["订单编号", "收款共计", "门店", "支付时间"],
+        'tips' => '使用该消息请将微信公众号服务类目选择为：百货/超市/便利店'
+    ],
+
+    // 订单验收通知（待确认）
+    'recycle_order_agree' => [
+        'temp_key' => 'jKHMGLar2jjrD9uGdHdXPBu1UKMJkHRUKe8fdNl0B5s',
+        'content' => [
+            ['订单编号', '{order_no}', 'character_string1'],
+            ['商品名称', '{goods_name}', 'thing13'],
+            ['订单金额', '{order_amount}', 'amount11'],
+            ['创建时间', '{create_time}', 'time6'],
+            ['审核人员', '{auditor}', 'thing15'],
+        ],
+        'keyword_name_list' => ["订单编号", "商品名称", "订单金额", "创建时间", "审核人员"],
+        'tips' => '使用该消息请将微信公众号服务类目选择为：软件/建站/技术开发'
     ],
 ];

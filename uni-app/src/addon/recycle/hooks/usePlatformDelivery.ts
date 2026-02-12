@@ -2,6 +2,7 @@ import { ref, onMounted } from 'vue'
 import type { PlatformDeliveryForm, AddressInfo } from '../types/order'
 import { useAddressParser } from './useAddressParser'
 import { getPickupTimes } from '../api/order'
+import { checkExpressEnabled } from '../api/express'
 import { getAddressList } from '@/app/api/member'
 
 /**
@@ -13,8 +14,14 @@ export function usePlatformDelivery() {
   // 是否使用平台快递
   const enablePlatformDelivery = ref(false)
 
+  // 当前激活的服务商: 'yisu' | 'anguo' | ''
+  const activeProvider = ref('')
+
   // 预约时间选项列表
   const pickupTimeOptions = ref<Array<{ label: string; value: string }>>([])
+
+  // 是否需要显示预约时间（仅安果需要）
+  const needPickupTime = ref(false)
 
   // 平台快递表单数据
   const platformDeliveryForm = ref<PlatformDeliveryForm>({
@@ -28,6 +35,24 @@ export function usePlatformDelivery() {
     pickup_time: '',
     weight: '1.0'
   })
+
+  /**
+   * 检测当前启用的快递服务商
+   */
+  const detectProvider = async () => {
+    try {
+      const res: any = await checkExpressEnabled()
+      if (res.code === 1 && res.data) {
+        activeProvider.value = res.data.provider || ''
+        // 仅安果模式需要预约取件时间
+        needPickupTime.value = activeProvider.value === 'anguo'
+      }
+    } catch (error) {
+      console.error('检测快递服务商失败：', error)
+      activeProvider.value = ''
+      needPickupTime.value = false
+    }
+  }
 
   /**
    * 加载默认地址
@@ -87,18 +112,23 @@ export function usePlatformDelivery() {
   const handlePlatformDeliveryToggle = async () => {
     enablePlatformDelivery.value = true
 
+    // 先检测服务商（如果还没检测过）
+    if (!activeProvider.value) {
+      await detectProvider()
+    }
+
     // 切换到平台快递时，如果没有地址则加载默认地址
     if (!platformDeliveryForm.value.sender_name) {
       await loadDefaultAddress()
     }
 
-    // 如果没有预约时间则加载
-    if (!platformDeliveryForm.value.pickup_time) {
+    // 仅安果模式需要加载预约时间
+    if (needPickupTime.value && !platformDeliveryForm.value.pickup_time) {
       await loadPickupTime()
     }
   }
 
-  // 加载预约时间
+  // 加载预约时间（安果专用）
   const loadPickupTime = async () => {
     try {
       uni.showLoading({ title: '加载中...' })
@@ -162,7 +192,7 @@ export function usePlatformDelivery() {
           const timeStr = String(hour).padStart(2, '0') + ':00'
           options.push({
             label: `${datePrefix} ${timeStr}前`,
-            value: `${year}-${month}-${day} ${timeStr}:00` // 标准格式: 2026-01-24 08:00:00
+            value: `${year}-${month}-${day} ${timeStr}:00`
           })
         }
       } else {
@@ -174,7 +204,7 @@ export function usePlatformDelivery() {
           const timeStr = String(hour).padStart(2, '0') + ':00'
           options.push({
             label: `${datePrefix} ${timeStr}前`,
-            value: `${year}-${month}-${day} ${timeStr}:00` // 标准格式
+            value: `${year}-${month}-${day} ${timeStr}:00`
           })
         }
       }
@@ -191,7 +221,7 @@ export function usePlatformDelivery() {
           const timeStr = String(hour).padStart(2, '0') + ':00'
           options.push({
             label: `明天 ${timeStr}前`,
-            value: `${tomorrowYear}-${tomorrowMonth}-${tomorrowDay} ${timeStr}:00` // 标准格式
+            value: `${tomorrowYear}-${tomorrowMonth}-${tomorrowDay} ${timeStr}:00`
           })
         }
       }
@@ -210,13 +240,17 @@ export function usePlatformDelivery() {
     }
   }
 
-  // 初始化：默认加载地址和预约时间
+  // 初始化：检测服务商 + 加载地址
   onMounted(async () => {
+    // 始终检测服务商，以便子组件能知道是否需要显示预约时间
+    await detectProvider()
+
     if (enablePlatformDelivery.value) {
-      await Promise.all([
-        loadDefaultAddress(),
-        loadPickupTime()
-      ])
+      const tasks: Promise<void>[] = [loadDefaultAddress()]
+      if (needPickupTime.value) {
+        tasks.push(loadPickupTime())
+      }
+      await Promise.all(tasks)
     }
   })
 
@@ -238,6 +272,8 @@ export function usePlatformDelivery() {
 
   return {
     enablePlatformDelivery,
+    activeProvider,
+    needPickupTime,
     platformDeliveryForm,
     pickupTimeOptions,
     fillAddressFromSelected,

@@ -8,6 +8,7 @@ use addon\recycle\app\model\express\ExpressOrderRecord;
 use addon\recycle\app\model\yisu\YisuProductConfig;
 use addon\recycle\app\service\core\third_party\CoreThirdPartyService;
 use core\exception\CommonException;
+use think\facade\Log;
 
 /**
  * 快递服务类
@@ -45,10 +46,10 @@ class ExpressOrderService
 
         // 调用第三方服务获取所有报价
         $result = $this->thirdPartyService->call(
-            $siteId,
             'express_order',  // 服务类型
             'preOrder',       // 方法：获取报价
-            $params
+            $params,
+            $siteId
         );
 
         if (!$result['success']) {
@@ -98,10 +99,10 @@ class ExpressOrderService
 
         // 调用第三方服务
         $result = $this->thirdPartyService->call(
-            $siteId,
             'express_order',
             'sendOrder',      // 方法：下单
-            $params
+            $params,
+            $siteId
         );
 
         if (!$result['success']) {
@@ -201,7 +202,7 @@ class ExpressOrderService
             ExpressOrderRecord::createRecord($recordData);
         } catch (\Exception $e) {
             // 记录失败不影响主流程，只记录日志
-            trace_log('创建快递订单记录失败: ' . $e->getMessage(), 'error');
+            Log::error('创建快递订单记录失败: ' . $e->getMessage());
         }
     }
 
@@ -215,10 +216,10 @@ class ExpressOrderService
     public function cancelOrder(int $siteId, string $orderNo): bool
     {
         $result = $this->thirdPartyService->call(
-            $siteId,
             'express_order',
             'cancelOrder',    // 方法：取消订单
-            ['order_no' => $orderNo]
+            ['order_no' => $orderNo],
+            $siteId
         );
 
         if (!$result['success']) {
@@ -229,7 +230,7 @@ class ExpressOrderService
         try {
             ExpressOrderRecord::updateStatus($orderNo, 'cancelled', '用户取消订单');
         } catch (\Exception $e) {
-            trace_log('更新快递订单记录状态失败: ' . $e->getMessage(), 'error');
+            Log::error('更新快递订单记录状态失败: ' . $e->getMessage());
         }
 
         return true;
@@ -245,10 +246,10 @@ class ExpressOrderService
     public function trackOrder(int $siteId, string $deliveryId): array
     {
         $result = $this->thirdPartyService->call(
-            $siteId,
             'express_order',
             'track',          // 方法：轨迹查询
-            ['delivery_id' => $deliveryId]
+            ['delivery_id' => $deliveryId],
+            $siteId
         );
 
         if (!$result['success']) {
@@ -267,10 +268,10 @@ class ExpressOrderService
     public function getBalance(int $siteId): float
     {
         $result = $this->thirdPartyService->call(
-            $siteId,
             'express_order',
             'balance',        // 方法：余额查询
-            []
+            [],
+            $siteId
         );
 
         if (!$result['success']) {

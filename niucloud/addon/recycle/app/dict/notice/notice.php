@@ -1,59 +1,51 @@
 <?php
 return [
-    'recycle_order_sign' => [
-        'addon' => 'recycle',
-        'key' => 'recycle_order_sign',
-        'receiver_type' => 1,
-        'name' => '快件签收',
-        'title' => '快件签收',
-        'async' => true,
-        'variable' => [
-            'remark' => '温馨提示',
-            'order_no' => '订单编号',
-        ],
-    ],
+    // 用户下单成功通知
     'recycle_order_add' => [
         'addon' => 'recycle',
         'key' => 'recycle_order_add',
         'receiver_type' => 1,
-        'name' => '回收订单下单',
-        'title' => '回收订单下单',
-        'async' => true,
-        'variable' => [ 
-            'order_no' => '订单编号',
-            'status_name' => '订单状态',
-            'create_time' => '创建时间',
-            'address' => '邮寄地址',
-            'remark' => '温馨提示',
-        ],
-    ],
-    'recycle_order_agree' => [
-        'addon' => 'recycle',
-        'key' => 'recycle_order_agree',
-        'receiver_type' => 1,
-        'name' => '回收订单同意',
-        'title' => '回收订单同意',
+        'name' => '用户下单成功通知',
+        'title' => '用户下单成功通知',
         'async' => true,
         'variable' => [
-            'order_no' => '订单编号',
-            'time' => '时间',
-            'status' => '状态',
+            'order_no' => '订单号',
+            'shop_name' => '下单门店',
+            'address' => '收货地址',
+            'create_time' => '下单时间',
         ],
     ],
+
+    // 收款成功通知
     'recycle_order_pay' => [
         'addon' => 'recycle',
         'key' => 'recycle_order_pay',
         'receiver_type' => 1,
-        'name' => '回收订单打款',
-        'title' => '回收订单打款',
+        'name' => '收款成功通知',
+        'title' => '收款成功通知',
         'async' => true,
         'variable' => [
-            'goods_name' => '商品名',
             'order_no' => '订单编号',
-            'pay_type' => '收款方式',
-            'pay_account' => '收款账号',
-            'pay_result' => '打款结果',
+            'pay_amount' => '收款共计',
+            'shop_name' => '门店',
+            'pay_time' => '支付时间',
         ],
     ],
-    
+
+    // 订单验收通知（待确认）
+    'recycle_order_agree' => [
+        'addon' => 'recycle',
+        'key' => 'recycle_order_agree',
+        'receiver_type' => 1,
+        'name' => '订单验收通知',
+        'title' => '订单验收通知',
+        'async' => true,
+        'variable' => [
+            'order_no' => '订单编号',
+            'goods_name' => '商品名称',
+            'order_amount' => '订单金额',
+            'create_time' => '创建时间',
+            'auditor' => '审核人员',
+        ],
+    ],
 ];

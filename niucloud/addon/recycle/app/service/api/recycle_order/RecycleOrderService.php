@@ -339,8 +339,40 @@ class RecycleOrderService extends BaseApiService
             $data['status'] = RecycleOrderDict::ORDER_STATUS_PENDING_SIGN;
             $data['order_no'] = $this->generateOrderNo();
 
-            // 如果使用平台快递，先调用安国API下单
-            if (!empty($data['use_platform_delivery']) && !empty($data['platform_delivery'])) {
+            // ========== 统一快递服务（新逻辑）==========
+            if (!empty($data['use_express']) && !empty($data['express_config'])) {
+                // 先创建回收订单
+                $order = $this->model->create($data);
+
+                try {
+                    // 调用统一快递服务下单
+                    $expressService = new \addon\recycle\app\service\core\express\RecycleExpressService();
+
+                    $operatorInfo = [
+                        'uid' => 0,
+                        'username' => '',
+                        'source' => 'user',
+                        'member_id' => $this->member_id,
+                    ];
+
+                    $expressResult = $expressService->createOrder(
+                        $this->site_id,
+                        $order->id,
+                        $data['express_config'],
+                        $operatorInfo
+                    );
+
+                    // 刷新订单数据（快递服务内部已更新了订单字段）
+                    $order->refresh();
+
+                } catch (\Exception $e) {
+                    // 快递下单失败，删除已创建的订单
+                    $order->delete();
+                    throw new ApiException('快递下单失败：' . $e->getMessage());
+                }
+
+            // ========== 兼容旧的安果平台快递逻辑 ==========
+            } elseif (!empty($data['use_platform_delivery']) && !empty($data['platform_delivery'])) {
                 $anguoService = new \addon\recycle\app\service\core\recycle_order\RecycleAnguoDeliveryService($this->site_id);
 
                 // 暂时保存订单信息用于安国API调用
@@ -377,7 +409,7 @@ class RecycleOrderService extends BaseApiService
                     throw new ApiException('快递下单失败：' . $e->getMessage());
                 }
             } else {
-                // 不使用平台快递，直接创建订单
+                // 不使用平台快递，直接创建订单（自填快递号 或 自送到店）
                 $order = $this->model->create($data);
             }
 
@@ -416,13 +448,29 @@ class RecycleOrderService extends BaseApiService
         $data['action'] = $data['action'] ?? '';
         $data['status'] = $data['status'] ?? '';
 
-        // 客户要删除订单 只有 status == 8 || 9 才允许删除
-        if ( $data['action'] == 'delete' && $data['status'] == RecycleOrderDict::ORDER_STATUS_CLOSED || $data['status'] == RecycleOrderDict::ORDER_STATUS_CANCELLED) {
-            throw new ApiException('删除订单失败：当前订单状态不支持删除');
+        // 客户要删除订单 只有 status == 8（已关闭） || 9（已取消） 才允许软删除
+        if ($data['action'] == 'delete') {
+            if (!in_array((int)$data['status'], [RecycleOrderDict::ORDER_STATUS_CLOSED, RecycleOrderDict::ORDER_STATUS_CANCELLED])) {
+                throw new ApiException('删除订单失败：当前订单状态不支持删除');
+            }
+            // 软删除：设置 delete_at 时间戳，列表查询已通过 delete_at=0 过滤
+            $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->update([
+                'delete_at' => time(),
+                'update_at' => time(),
+            ]);
+            return true;
         }
         // 只有 status == 5 的时候才能一键确认
         if ( $data['action'] == 'confirm' && $data['status'] == RecycleOrderDict::ORDER_STATUS_PENDING_CONFIRM) {
             throw new ApiException('确认订单失败：当前订单状态不支持确认');
+        }
+
+        // 取消订单走流程引擎，以触发快递拦截等业务逻辑
+        if ($data['action'] == 'cancel') {
+            return $this->cancel($id, [
+                'reason' => $data['reason'] ?? '用户取消订单',
+                'remark' => $data['remark'] ?? '',
+            ]);
         }
 
         $data['update_at'] = time();

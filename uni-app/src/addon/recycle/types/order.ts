@@ -61,6 +61,21 @@ export interface SubmitOrderParams {
   isAgreeRecycle: boolean
 }
 
+// 快递配置（统一快递服务）
+export interface ExpressConfig {
+  sender_name: string
+  sender_mobile: string
+  sender_province: string
+  sender_city: string
+  sender_district: string
+  sender_address: string
+  product_code?: string
+  weight?: number
+  package_count?: number
+  pickup_time?: string
+  estimated_cost?: number
+}
+
 // 地址信息（从地址选择页返回）
 export interface AddressInfo {
   id: number

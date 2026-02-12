@@ -12,7 +12,9 @@
 namespace addon\recycle\app\service\core\recycle_order\handler;
 
 use addon\recycle\app\model\order\RecycleOrder;
+use addon\recycle\app\service\core\express\RecycleExpressService;
 use core\exception\CommonException;
+use think\facade\Log;
 
 /**
  * 订单取消处理器
@@ -44,7 +46,10 @@ class CancelHandler extends BaseFlowHandler
             throw new CommonException('请填写取消原因');
         }
 
-        // 2. 记录取消信息
+        // 2. 如果订单有平台快递，自动取消快递
+        $this->cancelExpressIfNeeded($order, $context);
+
+        // 3. 记录取消信息
         $cancelInfo = [
             'cancel_time' => time(),
             'cancel_reason' => $data['reason'],
@@ -52,7 +57,7 @@ class CancelHandler extends BaseFlowHandler
             'remark' => $data['remark'] ?? ''
         ];
 
-        // 3. 更新订单取消信息
+        // 4. 更新订单取消信息
         RecycleOrder::where('id', $order['id'])->update([
             'cancel_time' => $cancelInfo['cancel_time'],
             'cancel_reason' => $cancelInfo['cancel_reason'],
@@ -62,5 +67,40 @@ class CancelHandler extends BaseFlowHandler
         return $this->success('订单已取消', [
             'cancel_info' => $cancelInfo
         ]);
+    }
+
+    /**
+     * 取消关联的平台快递（如果有）
+     *
+     * @param array $order 订单信息
+     * @param array $context 上下文信息
+     * @return void
+     */
+    private function cancelExpressIfNeeded(array $order, array $context): void
+    {
+        // 没有快递单号 或 快递状态不允许取消（已签收=3、已取消=4），跳过
+        if (empty($order['express_no']) || empty($order['delivery_status']) || $order['delivery_status'] >= 3) {
+            return;
+        }
+
+        try {
+            $siteId = $order['site_id'] ?? 0;
+            $expressService = new RecycleExpressService();
+
+            $operatorInfo = [
+                'uid' => 0,
+                'username' => '',
+                'source' => $context['flow_type'] ?? 'user',
+                'member_id' => $this->getOperatorId($context),
+            ];
+
+            $expressService->cancelOrder($siteId, (int)$order['id'], $operatorInfo);
+
+            Log::info("订单{$order['id']}取消时自动取消快递成功，运单号：{$order['express_no']}");
+
+        } catch (\Exception $e) {
+            // 快递取消失败不阻断订单取消，仅记录日志
+            Log::error("订单{$order['id']}自动取消快递失败：" . $e->getMessage());
+        }
     }
 }

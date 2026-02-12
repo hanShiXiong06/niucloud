@@ -102,8 +102,8 @@
         <up-icon name="arrow-right" size="14" color="#94a3b8"></up-icon>
       </view>
 
-      <!-- 预约时间 -->
-      <up-row customStyle="margin-bottom: 8px">
+      <!-- 预约时间（仅安果模式需要） -->
+      <up-row v-if="needPickupTime" customStyle="margin-bottom: 8px">
         <up-col span="3">
           <view class="label">预约时间</view>
         </up-col>
@@ -124,8 +124,9 @@
     </view>
   </view>
 
-  <!-- 预约时间选择器 -->
+  <!-- 预约时间选择器（仅安果模式需要） -->
   <u-picker
+    v-if="needPickupTime"
     :show="showPickupTimePicker"
     :columns="[pickupTimeOptions]"
     keyName="label"
@@ -152,6 +153,7 @@ interface Props {
   expressNo: string
   platformDeliveryForm: PlatformDeliveryForm
   pickupTimeOptions: Array<{ label: string; value: string }>
+  needPickupTime: boolean
 }
 
 const props = defineProps<Props>()

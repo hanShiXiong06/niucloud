@@ -425,12 +425,43 @@ Route::group('recycle', function () {
     Route::post('express_order/cancel', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@cancel');
     Route::get('express_order/track', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@track');
     Route::get('express_order/balance', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@balance');
+    // 统一快递服务 - 为回收订单创建/取消/查询快递
+    Route::post('express_order/create_for_order', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@createForOrder');
+    Route::post('express_order/cancel_for_order', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@cancelForOrder');
+    Route::get('express_order/track_for_order', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@trackForOrder');
+    Route::post('express_order/unified_quote', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@unifiedQuote');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,
     AdminLog::class
 ]);
 // USER_CODE_END -- express_order
+
+// ✅  USER_CODE_BEGIN -- express_provider_config
+/**
+ * 快递服务商配置管理接口
+*/
+Route::group('recycle', function () {
+    // 服务商配置列表
+    Route::get('express_provider_config/lists', 'addon\recycle\app\adminapi\controller\express\ExpressProviderConfig@lists');
+    // 服务商配置详情
+    Route::get('express_provider_config/:id', 'addon\recycle\app\adminapi\controller\express\ExpressProviderConfig@info');
+    // 编辑服务商配置
+    Route::put('express_provider_config/:id', 'addon\recycle\app\adminapi\controller\express\ExpressProviderConfig@edit');
+    // 设置默认服务商
+    Route::put('express_provider_config/set_default/:id', 'addon\recycle\app\adminapi\controller\express\ExpressProviderConfig@setDefault');
+    // 切换启用状态
+    Route::put('express_provider_config/toggle_status/:id', 'addon\recycle\app\adminapi\controller\express\ExpressProviderConfig@toggleStatus');
+    // 获取当前启用的服务商
+    Route::get('express_provider_config/active', 'addon\recycle\app\adminapi\controller\express\ExpressProviderConfig@getActiveProvider');
+    // 检查快递服务状态
+    Route::get('express_provider_config/check_status', 'addon\recycle\app\adminapi\controller\express\ExpressProviderConfig@checkStatus');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+// USER_CODE_END -- express_provider_config
 
 // ✅  USER_CODE_BEGIN -- yisu_product
 /**

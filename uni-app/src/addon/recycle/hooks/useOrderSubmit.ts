@@ -90,10 +90,11 @@ export function useOrderSubmit() {
     params.form.devices = params.phoneList
 
     // 如果使用平台快递，将快递信息添加到订单数据中
+    // 使用统一快递服务（use_express + express_config）
     const orderData: any = { ...params.form }
     if (params.currentTab === 0 && params.usePlatformDelivery) {
-      orderData.use_platform_delivery = true
-      orderData.platform_delivery = {
+      orderData.use_express = 1
+      orderData.express_config = {
         sender_name: params.platformDeliveryForm.sender_name,
         sender_mobile: params.platformDeliveryForm.sender_mobile,
         sender_province: params.platformDeliveryForm.province,

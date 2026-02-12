@@ -92,8 +92,10 @@ class RecycleOrder extends BaseApiController
             ["express_no", ""],            // 快递单号
             ["remark", ""],                // 备注
             ["devices", []],               // 设备列表
-            ["use_platform_delivery", 0],  // 是否使用平台快递
-            ["platform_delivery", []]      // 平台快递信息
+            ["use_platform_delivery", 0],  // 是否使用平台快递(兼容旧参数)
+            ["platform_delivery", []],     // 平台快递信息(兼容旧参数)
+            ["use_express", 0],            // 是否使用统一快递服务
+            ["express_config", []],        // 快递配置(use_express=1时必填)
         ]);
 
         $this->validate($data, [
@@ -117,8 +119,23 @@ class RecycleOrder extends BaseApiController
             'devices.*.initial_price.min' => '预估价格必须大于0',
         ]);
 
-        // 如果使用平台快递，验证平台快递信息
-        if ($data['use_platform_delivery']) {
+        // 如果使用统一快递服务（新逻辑）
+        if ($data['use_express']) {
+            $expressConfig = $data['express_config'];
+            if (empty($expressConfig['sender_name'])) {
+                return fail('请输入寄件人姓名');
+            }
+            if (empty($expressConfig['sender_mobile'])) {
+                return fail('请输入寄件人手机号');
+            }
+            if (empty($expressConfig['sender_province']) || empty($expressConfig['sender_city'])) {
+                return fail('请选择寄件人所在地区');
+            }
+            if (empty($expressConfig['sender_address'])) {
+                return fail('请输入寄件人详细地址');
+            }
+        // 兼容旧的平台快递逻辑
+        } elseif ($data['use_platform_delivery']) {
             $platformDelivery = $data['platform_delivery'];
             if (empty($platformDelivery['sender_name'])) {
                 return fail('请输入寄件人姓名');

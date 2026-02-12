@@ -47,6 +47,7 @@
         :express-no="form.express_no"
         :platform-delivery-form="platformDeliveryForm"
         :pickup-time-options="pickupTimeOptions"
+        :need-pickup-time="needPickupTime"
         @update:use-platform-delivery="handlePlatformDeliveryChange"
         @update:express-no="form.express_no = $event"
         @update:platform-delivery-form="platformDeliveryForm = $event"
@@ -132,6 +133,7 @@ const { phoneList, addDevices, scanIMEI } = useDeviceManagement()
 // 平台快递管理
 const {
   enablePlatformDelivery,
+  needPickupTime,
   platformDeliveryForm,
   pickupTimeOptions,
   fillAddressFromSelected,
