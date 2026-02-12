@@ -1291,16 +1291,35 @@ const handleAction = async (row, action) => {
     // 根据操作类型执行不同的操作
     if (action.key === "order_cancel") {
       // 取消订单
-      await ElMessageBox.confirm("确定要取消该订单吗？", "提示", {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      });
+      try {
+        const { value: reason } = await ElMessageBox.prompt(
+          "请输入取消原因",
+          "取消订单",
+          {
+            confirmButtonText: "确定",
+            cancelButtonText: "取消",
+            inputPlaceholder: "请输入取消原因",
+            inputValidator: (value) => {
+              if (!value || !value.trim()) {
+                return "取消原因不能为空";
+              }
+              return true;
+            },
+          }
+        );
 
-      // 使用action.key作为操作标识
-      await updateRecycleOrder(row.id, { action: "order_cancel" });
-      ElMessage.success("订单已取消");
-      await getList(pagination.value.page); // 刷新列表，保持当前页
+        // 使用action.key作为操作标识
+        await updateRecycleOrder(row.id, {
+          action: "order_cancel",
+          reason: reason,
+        });
+        ElMessage.success("订单已取消");
+        await getList(pagination.value.page); // 刷新列表，保持当前页
+      } catch (error) {
+        if (error !== "cancel") {
+          throw error;
+        }
+      }
     } else if (action.key === "order_delete") {
       // 删除订单
       await ElMessageBox.confirm("确定要删除该订单吗？", "提示", {
