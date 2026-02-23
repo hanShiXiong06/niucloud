@@ -15,25 +15,38 @@ class OrderAdd extends BaseNoticeTemplate
 
     public function handle(array $params)
     {
-        if ($this->key == $params['key']) {
-            $order = (new CoreRecycleOrderService())->getInfo($params['data']['order_id']);
-            if (!empty($order)) {
-                $wap_domain = get_wap_domain($order['site_id']);
-                return $this->toReturn(
-                    [
-                        '__wechat_page' => $wap_domain . '/addon/recycle/pages/order/detail?id=' . $order['order_id'],
-                        '__weapp_page' => 'addon/recycle/pages/order/detail?id=' . $order['order_id'],
-                        'order_no' => $order['order_no'],
-                        'status_name' => $order['status_name'] ?? '待审核',
-                        'create_time' => $order['create_time'],
-                        'address' => $order['address'] ?? '暂无地址信息',
-                        'remark' => '您的回收订单已提交，请等待工作人员联系。'
-                    ],
-                    [
-                        'member_id' => $order['member_id']
-                    ]
-                );
-            }
+        if ($this->key !== ($params['key'] ?? '')) {
+            return null;
         }
+
+        $orderId = (int)($params['data']['order_id'] ?? 0);
+        if ($orderId <= 0) {
+            return null;
+        }
+
+        $order = (new CoreRecycleOrderService())->getInfo($orderId);
+        if (empty($order)) {
+            return null;
+        }
+
+        $siteId = (int)($order['site_id'] ?? 0);
+        $memberId = (int)($order['member_id'] ?? 0);
+        $pageOrderId = (int)($order['id'] ?? $orderId);
+        $wapDomain = get_wap_domain($siteId);
+
+        return $this->toReturn(
+            [
+                '__wechat_page' => $wapDomain . '/addon/recycle/pages/order/detail?id=' . $pageOrderId,
+                '__weapp_page' => 'addon/recycle/pages/order/detail?id=' . $pageOrderId,
+                'order_no' => $order['order_no'] ?? '',
+                'shop_name' => $params['data']['shop_name'] ?? '回收中心',
+                'create_time' => $order['create_at'] ?? date('Y-m-d H:i:s'),
+                'address' => $params['data']['address'] ?? ($order['address'] ?? '待确认'),
+                'remark' => '您的回收订单已提交，请等待工作人员联系。'
+            ],
+            [
+                'member_id' => $memberId
+            ]
+        );
     }
 }

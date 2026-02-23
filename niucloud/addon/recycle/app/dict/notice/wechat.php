@@ -2,20 +2,28 @@
 return [
     // 用户下单成功通知
     'recycle_order_add' => [
-        'temp_key' => '6XQJPzJJXRv1glROD6iB60DvpkIlNobwJNSLhBSYaZo',
+        'temp_key' => '46624',
         'content' => [
             ['订单号', '{order_no}', 'character_string1'],
             ['下单门店', '{shop_name}', 'thing6'],
-            ['收货地址', '{address}', 'thing7'],
+            ['商品名称', '{address}', 'thing2'],
             ['下单时间', '{create_time}', 'time9'],
         ],
-        'keyword_name_list' => ["订单号", "下单门店", "收货地址", "下单时间"],
+        'keyword_name_list' => ["订单号", "下单门店", "商品名称", "下单时间"],
         'tips' => '使用该消息请将微信公众号服务类目选择为：百货/超市/便利店'
     ],
-
+    /*
+    订单号
+{{character_string1.DATA}}
+下单时间
+{{time9.DATA}}
+下单门店
+{{thing6.DATA}}
+商品名称
+{{thing2.DATA}}*/
     // 收款成功通知
     'recycle_order_pay' => [
-        'temp_key' => 'DaS8vgCtMTWeKRaI-Ah4QyjCC_9TONB2Ps0c4JahflI',
+        'temp_key' => '47568',
         'content' => [
             ['订单编号', '{order_no}', 'character_string4'],
             ['收款共计', '{pay_amount}', 'amount10'],
@@ -28,7 +36,7 @@ return [
 
     // 订单验收通知（待确认）
     'recycle_order_agree' => [
-        'temp_key' => 'jKHMGLar2jjrD9uGdHdXPBu1UKMJkHRUKe8fdNl0B5s',
+        'temp_key' => '49839',
         'content' => [
             ['订单编号', '{order_no}', 'character_string1'],
             ['商品名称', '{goods_name}', 'thing13'],

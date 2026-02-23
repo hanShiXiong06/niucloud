@@ -7,7 +7,6 @@ use addon\recycle\app\dict\order\RecycleOrderDict;
 use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderService;
-use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use app\service\core\notice\NoticeService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -218,16 +217,6 @@ class RecycleOrderService extends BaseAdminService
         $coreService = new CoreRecycleOrderService();
         $order = $coreService->create($data);
 
-        // 发送下单通知给客户
-        if (!empty($data['member_id'])) {
-            $notifyService = new CoreRecycleOrderNotifyService();
-            $notifyService->orderAddNotify([
-                'order_id' => $order->id,
-                'site_id' => $this->site_id,
-                'shop_name' => $data['shop_name'] ?? '回收中心',
-            ]);
-        }
-
         return ['id' => $order->id, 'order_no' => $order->order_no];
     }
 
@@ -395,6 +384,9 @@ class RecycleOrderService extends BaseAdminService
         if (isset($data['action'])) {
             switch ($data['action']) {
                 case 'order_cancel':
+                    if (empty($data['reason']) && !empty($data['cancel_reason'])) {
+                        $data['reason'] = trim((string)$data['cancel_reason']);
+                    }
                     return $this->cancel($id, $data);
                 
                 // 签收

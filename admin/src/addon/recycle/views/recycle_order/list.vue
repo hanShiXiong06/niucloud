@@ -1308,10 +1308,13 @@ const handleAction = async (row, action) => {
           }
         );
 
+        const cancelReason = reason.trim();
+
         // 使用action.key作为操作标识
         await updateRecycleOrder(row.id, {
           action: "order_cancel",
-          reason: reason,
+          cancel_reason: cancelReason,
+          reason: cancelReason,
         });
         ElMessage.success("订单已取消");
         await getList(pagination.value.page); // 刷新列表，保持当前页

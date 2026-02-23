@@ -61,7 +61,7 @@
         @copy="copyShopInfo"
         @open-location="openLocation"
       />
-      <view class="mt-2 flex bg-[#fff] rounded  shadow-md p-2 items-center justify-between">
+      <view class="mt-2  bg-[#fff] rounded  shadow-md p-2 ">
        
       <!-- 回收协议 -->
         <AgreementCheckbox
@@ -72,10 +72,11 @@
         />
 
         <!-- 提交按钮 -->
-        <view class="">
+       
+      </view>
+       <view class="mt-2">
           <up-button type="primary" @click="handleSubmitOrder" text="确认发货"></up-button>
         </view>
-      </view>
     </u-form>
 
     <!-- 设备输入弹窗 -->
@@ -96,6 +97,7 @@ import { ref, watch, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getAddressList } from '@/app/api/member'
 import { getPaymentList } from '@/addon/recycle/api/payment'
+import { getReceivingChannels } from '@/addon/recycle/api/order'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 
 // 导入组件
@@ -212,8 +214,60 @@ const handlePlatformDeliveryChange = async (value: boolean) => {
   }
 }
 
+interface DictItem {
+  name?: string
+  value?: string
+  memo?: string
+}
+
+interface ReceivingChannelsResponse {
+  code: number
+  msg?: string
+  data?: {
+    dictionary?: DictItem[]
+    memo?: string
+  }
+}
+
+const showPlatformDeliveryMemoConfirm = (content: string): Promise<boolean> => {
+  return new Promise(resolve => {
+    uni.showModal({
+      title: '平台快递提示',
+      content,
+      confirmText: '继续下单',
+      cancelText: '我再看看',
+      success: (res) => resolve(!!res.confirm),
+      fail: () => resolve(false)
+    })
+  })
+}
+
+const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
+  // 仅在邮寄模式且启用平台快递时提示
+  if (currentTab.value !== 0 || !enablePlatformDelivery.value) return true
+
+  try {
+    const res = await getReceivingChannels() as ReceivingChannelsResponse
+    if (res.code !== 1 || !res.data) return true
+
+    // 优先使用字典项 value=1 的 memo，其次使用字典根级 memo
+    const platformChannel = res.data.dictionary?.find(item => item.value === '1')
+    const memo = (platformChannel?.memo || res.data.memo || '').trim()
+
+    if (!memo) return true
+    return await showPlatformDeliveryMemoConfirm(memo)
+  } catch (error) {
+    console.error('获取平台快递提示信息失败：', error)
+    // 获取提示失败时不阻断下单流程
+    return true
+  }
+}
+
 // 提交订单
 const handleSubmitOrder = async () => {
+  const canSubmit = await shouldContinueWithPlatformPrompt()
+  if (!canSubmit) return
+
   await submitOrder({
     form: form.value,
     phoneList: phoneList.value,

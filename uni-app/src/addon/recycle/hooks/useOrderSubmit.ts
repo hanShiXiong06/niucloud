@@ -124,7 +124,7 @@ export function useOrderSubmit() {
 
       if (orderRes.code !== 1) {
         uni.showToast({
-          title: orderRes.msg || '下单失败,请重试!',
+          title: orderRes.message || '下单失败,请重试!',
           icon: 'none'
         })
         return
@@ -150,7 +150,7 @@ export function useOrderSubmit() {
     } catch (error) {
       console.error('提交订单失败：', error)
       uni.showToast({
-        title: '下单失败,请重试!',
+        title: error.msg || '下单失败,请重试!',
         icon: 'none'
       })
     } finally {

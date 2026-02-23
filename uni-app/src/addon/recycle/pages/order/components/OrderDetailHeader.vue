@@ -38,7 +38,7 @@
           ></path>
         </svg>
       </view>
-      <text class="text-xs text-gray-500">共 {{ deviceCount }} 台</text>
+      <text class="text-xs text-gray-500" v-if="deviceCount > 0">共 {{ deviceCount }} 台</text>
     </view>
 
     <!-- 快递单号 (如果有) -->

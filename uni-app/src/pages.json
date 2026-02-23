@@ -225,8 +225,10 @@
 					"style": {
 						"navigationBarTitleText": "回收主页"
 					}
-				},{
-					"path": "pages/price",
+				},
+                // /addon/recycle/pages/price/show_price
+                {
+					"path": "pages/price/show_price",
 					"style": {
 						"navigationBarTitleText": "二手机回收报价单"
 					},

@@ -59,7 +59,8 @@ const {
   searchKeyword,
   statusOptions,
   deliveryOptions,
-  filters
+  filters,
+  fetchStatusCounts
 } = useOrderFilters()
 
 // 订单列表管理
@@ -95,6 +96,9 @@ const handleSearch = () => {
 const handleActionSuccess = (action: string) => {
   // 刷新列表
   refreshList()
+
+  // 删除订单后，同步刷新筛选栏中的远程统计数量
+    fetchStatusCounts()
 }
 </script>
 

@@ -92,8 +92,8 @@ const statusDescription = computed(() => {
     case 5: return '您已确认部分设备价格，等待确认剩余设备'
     case 6: return '价格已确认，等待商家打款'
     case 7: return '交易已完成，感谢您的使用'
-    case 8: return '订单已取消'
-    case 9: return '订单已删除'
+    // case 8: return '订单已取消'
+    case 9: return '订单已取消'
     default: return '订单状态未知'
   }
 })

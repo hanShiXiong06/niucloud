@@ -108,6 +108,51 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
     }
 
     /**
+     * 订单签收通知
+     * @param array $data
+     * @return void
+     */
+    public function orderSignNotify(array $data): void
+    {
+        try {
+            Log::info('【回收通知】订单签收通知', $data);
+
+            if (empty($data['order_id']) || empty($data['site_id'])) {
+                Log::error('【回收通知】订单签收通知参数不完整', $data);
+                return;
+            }
+
+            $coreService = new CoreRecycleOrderService();
+            $orderInfo = $coreService->getInfo((int)$data['order_id']);
+
+            if (empty($orderInfo)) {
+                Log::error('【回收通知】订单不存在: ' . $data['order_id']);
+                return;
+            }
+
+            $signTime = date('Y-m-d H:i:s');
+            if (!empty($orderInfo['sign_at'])) {
+                $rawSignAt = (int)$orderInfo['sign_at'];
+                if ($rawSignAt > 0) {
+                    $signTime = date('Y-m-d H:i:s', $rawSignAt);
+                }
+            }
+
+            $this->noticeService->send((int)$data['site_id'], 'recycle_order_sign', [
+                'order_id' => (int)$data['order_id'],
+                'member_id' => (int)($orderInfo['member_id'] ?? 0),
+                'order_no' => $orderInfo['order_no'] ?? '',
+                'sign_time' => $signTime,
+                '__weapp_page' => $this->getWeappOrderPage((int)$data['order_id']),
+            ]);
+
+            Log::info('【回收通知】订单签收通知发送成功: ' . $data['order_id']);
+        } catch (\Exception $e) {
+            Log::error('【回收通知】订单签收通知发送失败: ' . $e->getMessage(), $data);
+        }
+    }
+
+    /**
      * 订单支付通知
      * @param array $data
      * @return void

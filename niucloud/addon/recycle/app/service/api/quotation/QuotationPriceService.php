@@ -48,15 +48,15 @@ class QuotationPriceService extends BaseApiService
                        (!empty($where['price_date']) && $where['price_date'] !== '') || 
                        (isset($where['is_current']) && $where['is_current'] !== '');
         
-        if (!$hasAnyFilter) {
-            // 没有任何筛选条件时，默认只查询最新价格
-            $where['is_current'] = QuotationDict::IS_CURRENT_YES;
-        }
+        // if (!$hasAnyFilter) {
+        //     // 没有任何筛选条件时，默认只查询最新价格
+        //     $where['is_current'] = QuotationDict::IS_CURRENT_YES;
+        // }
 
-        // 如果没有指定日期，查询今天的报价
-        if (empty($where['price_date'])) {
-            $where['price_date'] = date('Y-m-d');
-        }
+        // // 如果没有指定日期，查询今天的报价
+        // if (empty($where['price_date'])) {
+        //     $where['price_date'] = date('Y-m-d');
+        // }
 
         // 生成缓存key
         $cacheKey = 'quotation_price_api:' . $this->site_id . ':' . md5(json_encode($where));

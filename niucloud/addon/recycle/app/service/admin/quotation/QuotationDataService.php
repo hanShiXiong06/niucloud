@@ -80,52 +80,40 @@ class QuotationDataService extends BaseAdminService
         $quotationId = $requestInfo['quotation_id'];
         $priceName = $requestInfo['price_name'];
         $priceDate = date('Y-m-d');
-        $today = date('Y-m-d');
 
-        // 检查当天是否已有请求
-        $existingRequests = $requestModel
-            ->where([
-                ['quotation_id', '=', $quotationId],
-                ['price_name', '=', $priceName],
-                ['request_time', '>=', strtotime($today . ' 00:00:00')],
-                ['request_time', '<', strtotime($today . ' 23:59:59')],
-                ['id', '<>', $requestId]
-            ])
-            ->select()
-            ->toArray();
-
-        // 如果当天已有请求，将旧数据标记为非当前
-        if (!empty($existingRequests)) {
+        // 每次爬取新数据前，都将旧的当前记录置为非当前
+        try {
+            Db::startTrans();
             try {
-                // 使用小事务更新旧数据状态
-                Db::startTrans();
-                try {
-                    $affectedRows = $this->dataModel
-                        ->where([
-                            ['quotation_id', '=', $quotationId],
-                            ['price_name', '=', $priceName],
-                            ['price_date', '=', $priceDate],
-                            ['is_current', '=', QuotationDict::IS_CURRENT_YES],
-                        ])
-                        ->update(['is_current' => QuotationDict::IS_CURRENT_NO]);
+                $affectedRows = $this->dataModel
+                    ->where([
+                        ['site_id', '=', $this->site_id],
+                        ['quotation_id', '=', $quotationId],
+                        ['price_name', '=', $priceName],
+                        ['is_current', '=', QuotationDict::IS_CURRENT_YES],
+                    ])
+                    ->update(['is_current' => QuotationDict::IS_CURRENT_NO]);
 
-                    Db::commit();
+                Db::commit();
 
-                    Log::info('旧报价数据已标记为非当前', [
-                        'affected_rows' => $affectedRows,
-                        'quotation_id' => $quotationId,
-                        'price_name' => $priceName,
-                    ]);
-                } catch (\Exception $e) {
-                    Db::rollback();
-                    Log::error('更新旧报价数据状态失败', [
-                        'error' => $e->getMessage(),
-                    ]);
-                    throw $e;
-                }
+                Log::info('旧报价数据已标记为非当前', [
+                    'affected_rows' => $affectedRows,
+                    'site_id' => $this->site_id,
+                    'quotation_id' => $quotationId,
+                    'price_name' => $priceName,
+                ]);
             } catch (\Exception $e) {
-                throw new CommonException('更新旧数据状态失败: ' . $e->getMessage());
+                Db::rollback();
+                Log::error('更新旧报价数据状态失败', [
+                    'site_id' => $this->site_id,
+                    'quotation_id' => $quotationId,
+                    'price_name' => $priceName,
+                    'error' => $e->getMessage(),
+                ]);
+                throw $e;
             }
+        } catch (\Exception $e) {
+            throw new CommonException('更新旧数据状态失败: ' . $e->getMessage());
         }
 
         // 解析sku数据
@@ -1135,4 +1123,3 @@ class QuotationDataService extends BaseAdminService
     }
 
 }
-
