@@ -1,5 +1,12 @@
 <template>
-    <el-dialog v-model="dialogVisible" title="" width="600px" :destroy-on-close="true" class="price-form-dialog">
+    <el-dialog
+        v-model="dialogVisible"
+        title=""
+        :width="isMobile ? '95vw' : '600px'"
+        top="4vh"
+        :destroy-on-close="true"
+        class="price-form-dialog"
+    >
         <template #header>
             <div class="flex justify-between items-center p-4 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-t-lg">
                 <div class="flex items-center space-x-3">
@@ -39,7 +46,7 @@
                 
                 <div class="p-4">
                     <!-- 设备基本信息 -->
-                    <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div class="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-2">
                         <div class="bg-gray-50 rounded-md p-2">
                             <div class="text-xs text-gray-500">设备型号</div>
                             <div class="text-sm font-medium text-gray-900 truncate">{{ deviceData.model || '未知型号' }}</div>
@@ -147,6 +154,27 @@
                             </div>
                         </div>
 
+                        <!-- 卖货价格输入 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <svg class="w-4 h-4 inline mr-1 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd"/>
+                                </svg>
+                                卖货价格
+                            </label>
+                            <el-input-number
+                                v-model="deviceForm.sell_price"
+                                placeholder="请输入卖货价格"
+                                :step="10"
+                                :min="0"
+                                style="width: 100%;"
+                                class="w-full"
+                            />
+                            <div class="mt-1 text-xs text-gray-500">
+                                可选填写，支持在质检和定价阶段维护该字段
+                            </div>
+                        </div>
+
                         <!-- 价格备注 -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -197,19 +225,19 @@
         </div>
 
         <template #footer>
-            <div class="flex justify-end space-x-3 px-4 pb-4">
-                <el-button 
-                    @click="handleCancel" 
-                    class="px-4 py-2"
-                >
-                    取消
-                </el-button>
-                <el-button 
-                    type="primary" 
-                    @click="handleConfirm" 
-                    :disabled="!isFormValid"
-                    class="px-6 py-2"
-                >
+                <div :class="isMobile ? 'flex flex-col gap-2 px-4 pb-4' : 'flex justify-end space-x-3 px-4 pb-4'">
+                    <el-button 
+                        @click="handleCancel" 
+                        :class="isMobile ? '!ml-0 w-full px-4 py-2' : 'px-4 py-2'"
+                    >
+                        取消
+                    </el-button>
+                    <el-button 
+                        type="primary" 
+                        @click="handleConfirm" 
+                        :disabled="!isFormValid"
+                        :class="isMobile ? '!ml-0 w-full px-6 py-2' : 'px-6 py-2'"
+                    >
                     <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
                     </svg>
@@ -221,7 +249,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch, computed, reactive } from 'vue'
+import { ref, defineProps, defineEmits, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 
 // 定义设备信息接口
@@ -232,6 +260,7 @@ interface DeviceInfo {
     before_price?: string | number;
     check_result?: string;
     final_price?: string | number;
+    sell_price?: string | number;
     remark?: string;
     status?: number;
     [key: string]: any;
@@ -253,14 +282,21 @@ const emit = defineEmits(['update:visible', 'confirm', 'cancel'])
 // 内部状态
 const dialogVisible = ref(props.visible)
 const deviceData = ref<DeviceInfo>({ ...props.device })
+const isMobile = ref(false)
 const deviceForm = reactive<{
     final_price: number | undefined;
+    sell_price: number | undefined;
     remark: string;
 }>({
     final_price: typeof props.device.final_price === 'number'
         ? props.device.final_price
         : typeof props.device.final_price === 'string'
             ? parseFloat(props.device.final_price) || undefined
+            : undefined,
+    sell_price: typeof props.device.sell_price === 'number'
+        ? props.device.sell_price
+        : typeof props.device.sell_price === 'string'
+            ? parseFloat(props.device.sell_price) || undefined
             : undefined,
     remark: props.device.remark || ''
 })
@@ -272,6 +308,10 @@ const isFormValid = computed(() => {
 
 // 计算价格变化比较的样式类
 const priceChangeClass = ref('')
+
+const updateResponsiveState = () => {
+    isMobile.value = window.innerWidth <= 768
+}
 
 const updatePriceClass = () => {
     const initialPrice = typeof deviceData.value.before_price === 'string'
@@ -320,6 +360,11 @@ watch(() => props.device, (newVal) => {
         : typeof newVal.final_price === 'string'
             ? parseFloat(newVal.final_price) || undefined
             : undefined
+    deviceForm.sell_price = typeof newVal.sell_price === 'number'
+        ? newVal.sell_price
+        : typeof newVal.sell_price === 'string'
+            ? parseFloat(newVal.sell_price) || undefined
+            : undefined
     deviceForm.remark = newVal.remark || ''
    
     deviceData.value.status = 4
@@ -348,10 +393,20 @@ const handleConfirm = () => {
     emit('confirm', {
         id: deviceData.value.id,
         final_price: deviceForm.final_price,
+        sell_price: deviceForm.sell_price,
         status: deviceData.value.status,
         remark: deviceForm.remark
     })
 }
+
+onMounted(() => {
+    updateResponsiveState()
+    window.addEventListener('resize', updateResponsiveState)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateResponsiveState)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -445,5 +500,13 @@ const handleConfirm = () => {
 
 .bg-white:nth-child(4) {
     animation-delay: 0.3s;
+}
+
+@media (max-width: 768px) {
+    .price-form-dialog {
+        :deep(.el-dialog) {
+            width: 95vw !important;
+        }
+    }
 }
 </style>

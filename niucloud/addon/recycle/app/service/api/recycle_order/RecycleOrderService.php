@@ -417,10 +417,19 @@ class RecycleOrderService extends BaseApiService
             if (!empty($data['devices'])) {
                 $devices = [];
                 foreach ($data['devices'] as $device) {
+                    $categoryId = (int)($device['category_id'] ?? 1);
+                    $categoryPath = $device['category_path'] ?? [];
+                    if (!is_array($categoryPath) || empty($categoryPath)) {
+                        $categoryPath = [ $categoryId ];
+                    }
+
                     $devices[] = [
                         'site_id' => $this->site_id,
                         'order_id' => $order->id,
-                        'category_id' => $device['category_id'] ?? 1,
+                        'category_id' => $categoryId,
+                        'info' => [
+                            'goods_category' => array_values(array_map('strval', $categoryPath))
+                        ],
                         'imei' => $device['imei'] ?? '',
                         'model' => $device['model'] ?? '',
                         'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,

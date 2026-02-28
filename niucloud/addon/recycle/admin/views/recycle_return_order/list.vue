@@ -173,13 +173,36 @@
                         <el-option v-for="item in expressCompanyOptions" :key="item.value" :label="item.label"
                             :value="item.value" />
                     </el-select>
-                </el-form-item> 
-                
-                
+                </el-form-item>
+
+                <!-- 易速快递选项 -->
+                <el-form-item label="使用易速快递">
+                    <el-switch v-model="confirmForm.use_yisu_express" />
+                    <span style="margin-left: 10px; font-size: 12px; color: #909399;">
+                        开启后将自动下单易速快递
+                    </span>
+                </el-form-item>
+
+                <el-form-item v-if="confirmForm.use_yisu_express" label="快递产品" prop="yisu_product_code"
+                    :rules="[{ required: confirmForm.use_yisu_express, message: '请选择快递产品', trigger: 'change' }]">
+                    <el-select v-model="confirmForm.yisu_product_code" placeholder="请选择快递产品"
+                        :loading="yisuProductsLoading" clearable>
+                        <el-option v-for="item in yisuProducts" :key="item.product_code"
+                            :label="`${item.product_name} (${item.product_code})`"
+                            :value="item.product_code">
+                            <span>{{ item.product_name }}</span>
+                            <span style="float: right; color: #8492a6; font-size: 13px;">{{ item.product_code }}</span>
+                        </el-option>
+                    </el-select>
+                </el-form-item>
+
                 <el-form-item v-if="confirmForm.express_company !=='物流车/自取'" label="快递单号" prop="express_no"
-                    :rules="[{ required:confirmForm.express_company !=='物流车/自取' , message: '请输入快递单号', trigger: 'blur' }]">
+                    :rules="[{ required: confirmForm.express_company !=='物流车/自取' && !confirmForm.use_yisu_express, message: '请输入快递单号', trigger: 'blur' }]">
                     <el-input v-model="confirmForm.express_no" placeholder="请输入或扫描快递单号" clearable ref="expressNoInput"
-                        @focus="focusInput" />
+                        @focus="focusInput" :disabled="confirmForm.use_yisu_express" />
+                    <span v-if="confirmForm.use_yisu_express" style="font-size: 12px; color: #909399;">
+                        使用易速快递时，快递单号将自动生成
+                    </span>
                 </el-form-item>
               
 
@@ -324,6 +347,8 @@ import {
     checkExistingReturnOrder,
     appendToReturnOrder
 } from '../../api/recycle_return_order'
+import { getEnabledYisuProducts } from '../../api/yisu'
+import { createExpressOrder } from '../../api/express'
 import { IReturnOrderListParams, IReturnOrder, IStatusCount } from '../../interface/recycle_return_order'
 import {
     RETURN_ORDER_STATUS,
@@ -450,10 +475,16 @@ const confirmForm = reactive({
     express_company: '',
     remark: '',
     is_append: false,
-    return_order_id: 0
+    return_order_id: 0,
+    use_yisu_express: false,
+    yisu_product_code: ''
 })
 const confirmFormRef = ref<FormInstance>()
 const expressNoInput = ref<HTMLInputElement>()
+
+// 易速快递产品列表
+const yisuProducts = ref<any[]>([])
+const yisuProductsLoading = ref(false)
 
 // 快递公司选项
 const expressCompanyOptions = ref([
@@ -791,6 +822,19 @@ const handleConfirm = async (id: number) => {
 
         return_user_address.value = res.data?.memberAddress || {}
 
+        // 查询已启用的易速快递产品
+        yisuProductsLoading.value = true
+        try {
+            const yisuRes = await getEnabledYisuProducts()
+            if (yisuRes && yisuRes.data) {
+                yisuProducts.value = yisuRes.data || []
+            }
+        } catch (error) {
+            console.error('获取易速产品失败:', error)
+            yisuProducts.value = []
+        } finally {
+            yisuProductsLoading.value = false
+        }
 
         if (handleApiResponse(res, '', '获取设备信息失败')) {
             const deviceInfo = res.data?.data || res.data || {}
@@ -803,6 +847,8 @@ const handleConfirm = async (id: number) => {
             confirmForm.remark = ''
             confirmForm.is_append = false
             confirmForm.return_order_id = 0
+            confirmForm.use_yisu_express = false
+            confirmForm.yisu_product_code = ''
 
             // 检查是否已有该订单的退货单
             if (deviceInfo.order_id) {
@@ -863,6 +909,45 @@ const submitConfirm = async () => {
 
         try {
             let res
+            let expressOrderNo = confirmForm.express_no
+
+            // 如果启用了易速快递，先创建快递订单
+            if (confirmForm.use_yisu_express && confirmForm.yisu_product_code) {
+                try {
+                    const expressRes = await createExpressOrder({
+                        product_code: confirmForm.yisu_product_code,
+                        sender_name: return_user_address.value.name,
+                        sender_mobile: return_user_address.value.mobile,
+                        sender_address: return_user_address.value.address,
+                        sender_province: '',
+                        sender_city: '',
+                        sender_district: '',
+                        receiver_name: '回收中心',
+                        receiver_mobile: '13800138000',
+                        receiver_address: '回收中心地址',
+                        receiver_province: '',
+                        receiver_city: '',
+                        receiver_district: '',
+                        goods: '回收设备',
+                        weight: 1,
+                        package_count: 1,
+                        remark: confirmForm.remark
+                    })
+
+                    if (expressRes && expressRes.data && expressRes.data.express_no) {
+                        expressOrderNo = expressRes.data.express_no
+                        ElMessage.success('易速快递订单创建成功')
+                    } else {
+                        throw new Error('快递订单创建失败')
+                    }
+                } catch (error) {
+                    console.error('创建易速快递订单失败:', error)
+                    ElMessage.error('创建易速快递订单失败，请重试')
+                    operationLoading.value = false
+                    activeOperationId.value = null
+                    return
+                }
+            }
 
             if (confirmForm.is_append) {
                 // 如果是追加到现有退货单
@@ -880,13 +965,13 @@ const submitConfirm = async () => {
             } else {
                 // 创建新退货单
                 res = await confirmReturnOrder(confirmForm.id, {
-                    express_no: confirmForm.express_no,
+                    express_no: expressOrderNo,
                     express_company: confirmForm.express_company,
                     remark: confirmForm.remark,
                     order_id: confirmForm.order_id, // 传递订单ID，便于后端关联
                     member_mobile: return_user_address.value.mobile,
                     member_name: return_user_address.value.name,
-                    return_address:return_user_address.value.address, 
+                    return_address:return_user_address.value.address,
                 })
 
                 if (handleApiResponse(res, '确认退货成功', '确认退货失败')) {

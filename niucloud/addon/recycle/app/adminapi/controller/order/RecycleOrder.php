@@ -111,6 +111,7 @@ class RecycleOrder extends BaseAdminController
             ['express_company', ''],
             ['delivery_type', 1],
             ['remark', ''],
+            ['count', 1],
             ['devices', []]
         ]);
 
@@ -224,15 +225,18 @@ class RecycleOrder extends BaseAdminController
      * @param int $id
      * @return mixed
      */
-    public function paymentConfirm(int $id)
+    public function paymentConfirm($id)
     {
+        $id = intval($id);
         $data = $this->request->params([
             ['pay_account', ''],
             ['pay_type', ''],
             ['pay_name', ''],
             ['pay_remark', ''],
             ['pay_url', ''],
-            ['remark', '']
+            ['remark', ''],
+            ['account', ''],           // 收款账号
+            ['payment_images', '']     // 打款凭证图片
         ]);
 
         // 参数验证

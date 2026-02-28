@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle\app\model\order;
 
 use addon\recycle\app\dict\order\RecycleOrderDict;
+use addon\phone_shop\app\model\goods\Category as PhoneShopGoodsCategory;
 use addon\recycle\app\model\order\RecycleOrder;
 use app\model\member\Member;
 use app\model\sys\SysUser;
@@ -83,6 +84,18 @@ class RecycleDevice extends BaseModel
      */
     public function getCategoryNameAttr($value, $data)
     {
+        $categoryId = (int)($data['category_id'] ?? 0);
+        if ($categoryId > 0 && class_exists(PhoneShopGoodsCategory::class)) {
+            try {
+                $name = (new PhoneShopGoodsCategory())->where('category_id', $categoryId)->value('category_name');
+                if (!empty($name)) {
+                    return $name;
+                }
+            } catch (\Throwable $e) {
+                // ignore query error and fallback to legacy map
+            }
+        }
+
         $categories = [
             1 => '手机',
             2 => '平板',
@@ -90,7 +103,7 @@ class RecycleDevice extends BaseModel
             4 => '手表',
             5 => '其他'
         ];
-        return $categories[$data['category_id'] ?? 1] ?? '手机';
+        return $categories[$categoryId ?: 1] ?? '手机';
     }
 
     /**
@@ -143,6 +156,46 @@ class RecycleDevice extends BaseModel
      * @return string
      */
     public function setCheckImagesAttr($value)
+    {
+        return is_array($value) ? implode(',', $value) : $value;
+    }
+
+    /**
+     * 卖家可见质检图片获取器
+     * @param $value
+     * @return string
+     */
+    public function getCheckImagesSellerAttr($value)
+    {
+        return '' . $value;
+    }
+
+    /**
+     * 卖家可见质检图片修改器
+     * @param $value
+     * @return string
+     */
+    public function setCheckImagesSellerAttr($value)
+    {
+        return is_array($value) ? implode(',', $value) : $value;
+    }
+
+    /**
+     * 买家可见质检图片获取器
+     * @param $value
+     * @return string
+     */
+    public function getCheckImagesBuyerAttr($value)
+    {
+        return '' . $value;
+    }
+
+    /**
+     * 买家可见质检图片修改器
+     * @param $value
+     * @return string
+     */
+    public function setCheckImagesBuyerAttr($value)
     {
         return is_array($value) ? implode(',', $value) : $value;
     }

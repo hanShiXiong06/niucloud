@@ -102,6 +102,7 @@ export function getQuotationDataList(params: Record<string, any>) {
  * @returns
  */
 export function getQuotationDataAll(params: Record<string, any>) {
+    // params.quotation_id = 114
     return request.get(`recycle/quotation_data/all`, { params })
 }
 

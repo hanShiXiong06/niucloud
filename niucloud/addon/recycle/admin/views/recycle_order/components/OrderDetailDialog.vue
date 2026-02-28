@@ -30,9 +30,34 @@
 
                 <el-descriptions-item label="打款时间">
                     {{ orderData.pay_time ? new Date(orderData.pay_time * 1000).toLocaleString() : '暂无' }}
-                </el-descriptions-item>             
+                </el-descriptions-item>
+                <el-descriptions-item label="收款账号">{{ orderData.pay_account || '暂无' }}</el-descriptions-item>
                 <el-descriptions-item label="备注" :span="2">{{ orderData.remark || '暂无备注' }}</el-descriptions-item>
             </el-descriptions>
+
+            <!-- 打款凭证图片 -->
+            <template v-if="paymentImageList.length > 0">
+                <el-divider />
+                <h3>📸 打款凭证</h3>
+                <div class="payment-images">
+                    <el-image
+                        v-for="(img, index) in paymentImageList"
+                        :key="index"
+                        :src="img"
+                        fit="cover"
+                        class="payment-image"
+                        @click="handlePreview(index)"
+                    />
+                </div>
+                <!-- 单独的图片预览器 -->
+                <el-image-viewer
+                    v-if="showImageViewer"
+                    :url-list="paymentImageList"
+                    :initial-index="previewIndex"
+                    @close="showImageViewer = false"
+                    teleported
+                />
+            </template>
 
             <!-- 设备列表 -->
             <el-divider />
@@ -65,6 +90,7 @@
 
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, computed } from 'vue'
+import { ElImageViewer } from 'element-plus'
 
 // 定义接口
 interface OrderDetail {
@@ -74,6 +100,8 @@ interface OrderDetail {
     customer_name?: string;
     customer_phone?: string;
     pay_type?: string;
+    pay_account?: string;
+    payment_images?: string;
     total_amount?: number | string;
     delivery_type_name?: string;
     express_company?: string;
@@ -134,6 +162,23 @@ const totalAmount = computed(() => {
     }, 0).toFixed(2)
 })
 
+// 计算打款凭证图片列表
+const paymentImageList = computed(() => {
+    if (!orderData.value || !orderData.value.payment_images) return []
+    // payment_images 是逗号分隔的字符串
+    return orderData.value.payment_images.split(',').filter(img => img.trim())
+})
+
+// 图片预览状态
+const showImageViewer = ref(false)
+const previewIndex = ref(0)
+
+// 点击图片预览
+const handlePreview = (index: number) => {
+    previewIndex.value = index
+    showImageViewer.value = true
+}
+
 // 监听visible属性变化
 watch(() => props.visible, (newVal) => {
     dialogVisible.value = newVal
@@ -164,5 +209,26 @@ watch(() => props.orderDetail, (newVal) => {
 .dialog-footer {
     display: flex;
     justify-content: flex-end;
+}
+
+.payment-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 0;
+
+    .payment-image {
+        width: 120px;
+        height: 120px;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        cursor: pointer;
+        transition: transform 0.2s;
+
+        &:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+    }
 }
 </style>

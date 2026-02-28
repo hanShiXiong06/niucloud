@@ -50,13 +50,19 @@ class AddDeviceHandler extends BaseFlowHandler
         $deviceIds = [];
 
         foreach ($devices as $device) {
+            $categoryId = (int)($device['category_id'] ?? 1);
+            $categoryPath = $this->normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
+
             // 添加新设备
             $deviceData = [
                 'order_id' => $order['id'],
                 'imei' => $device['imei'] ?? '',
                 'model' => $device['model'] ?? '',
                 'initial_price' => $device['initial_price'] ?? 0,
-                'category_id' => $device['category_id'] ?? 1,
+                'category_id' => $categoryId,
+                'info' => [
+                    'goods_category' => $categoryPath
+                ],
                 'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK, // 1-待质检
                 'create_at' => time(),
                 'update_at' => time(),
@@ -71,5 +77,29 @@ class AddDeviceHandler extends BaseFlowHandler
             'device_ids' => $deviceIds,
             'device_count' => count($deviceIds)
         ]);
+    }
+
+    /**
+     * 规范化分类路径，统一存储为字符串数组
+     * @param mixed $categoryPath
+     * @param int $categoryId
+     * @return array
+     */
+    private function normalizeCategoryPath($categoryPath, int $categoryId): array
+    {
+        if (is_string($categoryPath) && $categoryPath !== '') {
+            $decoded = json_decode($categoryPath, true);
+            if (is_array($decoded)) {
+                $categoryPath = $decoded;
+            } else {
+                $categoryPath = array_filter(array_map('trim', explode(',', $categoryPath)));
+            }
+        }
+
+        if (!is_array($categoryPath) || empty($categoryPath)) {
+            $categoryPath = [ $categoryId ];
+        }
+
+        return array_values(array_map('strval', $categoryPath));
     }
 }

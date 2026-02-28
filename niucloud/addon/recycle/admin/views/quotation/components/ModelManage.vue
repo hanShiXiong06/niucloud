@@ -83,7 +83,7 @@ import {
     setQuotationSpecModelSyncStatus,
     batchSetQuotationSpecModelSyncStatus,
     sendQuotationRequest,
-
+    getQuotationConfigList,
 } from '@/addon/recycle/api/quotation'
 import { ElMessage } from 'element-plus'
 
@@ -175,13 +175,22 @@ const requestModel = async () => {
 
 // 加载报价单配置列表
 const loadQuotationConfigList = async () => {
-        quotationConfigList.value =  [
-            { id:113,  config_name: '配置1', price_name: '价格1' },
-            { id:114,  config_name: '配置2', price_name: '价格2' },
-       
-        ]
+    try {
+        const res = await getQuotationConfigList({ limit: 100 })
+        quotationConfigList.value = res.data.data || []
         
-
+        // 如果还有更多数据，继续获取
+        if (res.data.total > 100) {
+            const totalPages = Math.ceil(res.data.total / 100)
+            for (let page = 2; page <= totalPages; page++) {
+                const nextRes = await getQuotationConfigList({ limit: 100, page })
+                quotationConfigList.value.push(...(nextRes.data.data || []))
+            }
+        }
+    } catch (error) {
+        console.error('加载报价单配置列表失败:', error)
+        ElMessage.error('加载报价单配置列表失败')
+    }
 }
 
 // 确认请求

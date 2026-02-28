@@ -105,9 +105,10 @@
         <template #footer>
             <div class="dialog-footer">
                 <el-button type="success" @click="handleAddDevice">添加设备</el-button>
+               
                 <el-button type="primary" @click="handleConfirm" :loading="submitting">
                     确认并签收
-                </el-button> 
+                </el-button>
             </div>
         </template>
     </el-dialog>
@@ -180,7 +181,8 @@ const emit = defineEmits([
     'cancel',
     'add-device',
     'edit-device',
-    'remove-device'
+    'remove-device',
+    'save-draft'
 ])
 
 // 内部状态
@@ -188,6 +190,7 @@ const dialogVisible = ref(props.visible)
 const devices = ref<Device[]>([])
 const loading = ref(false)
 const submitting = ref(false)
+const savingDraft = ref(false)
 // 保存原始设备列表，用于取消操作
 const originalDeviceList = ref<Device[]>([])
 // 输入框引用
@@ -443,7 +446,7 @@ const handleConfirm = async () => {
         ElMessage.warning('请填写完整的设备信息（IMEI和型号）')
         return
     }
-    
+
     // 验证设备分类
     const invalidCategoryDevice = devices.value.find(device => !device.category || device.category === 0)
     if (invalidCategoryDevice) {

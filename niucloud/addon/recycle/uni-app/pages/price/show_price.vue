@@ -1,149 +1,123 @@
 <template>
 	<view class="show-price-page">
+		<view class="page-bg"></view>
+
 		<!-- 顶部导航栏 -->
 		<view class="custom-navbar">
 			<view class="navbar-content">
 				<view class="navbar-left" @click="goBack">
 					<text class="iconfont icon-left"></text>
 				</view>
-				<view class="navbar-title">{{ pageTitle }}</view>
-				<view class="navbar-right"></view>
+				<view class="navbar-title"> {{ priceTypeName }}{{  pageTitle }}</view>
+				<view class="navbar-right" @click="loadPriceData">
+					<text class="refresh-text">刷新</text>
+				</view>
 			</view>
 		</view>
 
 		<!-- 加载状态 -->
 		<view v-if="loading" class="loading-container">
-			<view class="loading-spinner"></view>
-			<text class="loading-text">加载中...</text>
+			<view class="skeleton-card"></view>
+			<view class="skeleton-card"></view>
+			<view class="skeleton-table"></view>
+			<text class="loading-text">报价数据加载中...</text>
 		</view>
 
 		<!-- 空状态 -->
-		<view v-else-if="!loading && groupedTables.length === 0" class="empty-container">
-			<view class="empty-icon">📋</view>
-			<text class="empty-text">暂无报价数据</text>
+		<view v-else-if="groupedTables.length === 0" class="empty-container">
+			<view class="empty-badge">暂无数据</view>
+			<text class="empty-title">没有可展示的报价</text>
+			<text class="empty-desc">你可以点击刷新重新拉取最新报价</text>
+			<view class="empty-action" @click="loadPriceData">重新加载</view>
 		</view>
 
 		<!-- 报价数据 -->
 		<view v-else class="price-content">
-			<!-- 报价信息头部 -->
-			<view class="price-header">
-				<view class="header-item">
-					<text class="label">报价类型：</text>
-					<text class="value">{{ priceTypeName }}</text>
+			<!-- 报价概览卡片 -->
+			<view class="summary-card">
+				<view class="summary-top">
+					<text class="summary-tag">实时价格</text>
+					<text class="summary-meta">报价日期 {{ priceDateDisplay }}</text>
 				</view>
-				<view class="header-item">
-					<text class="label">更新时间：</text>
-					<text class="value">{{ createAt }}</text>
-				</view>
+				
 			</view>
 
 			<!-- 多表格展示 -->
 			<view class="tables-wrapper">
 				<view
-					v-for="(table, tableIdx) in groupedTables"
+					v-for="table in groupedTables"
 					:key="table.id"
+					:id="`table-${table.id}`"
 					class="table-container"
 				>
-					<!-- 表格标题 -->
-					<!-- <view class="table-title">
-						<text class="title-text">配置组 {{ tableIdx + 1 }}</text>
-						<text class="title-meta">{{ table.modelCount }}个型号 · {{ table.configColumns.length }}项配置</text>
-					</view> -->
-
-					<!-- 配置标签 -->
-					<!-- <view class="config-tags">
-						<view
-							v-for="config in table.configColumns"
-							:key="config"
-							class="config-tag"
-						>
-							{{ config }}
-						</view>
-					</view> -->
-
-					<!-- Excel样式表格 -->
-					<scroll-view scroll-x="false" class="table-scroll">
+					<scroll-view scroll-x="false" class="table-scroll" show-scrollbar="false">
 						<view class="excel-table">
-							<!-- 表头 -->
 							<view class="table-header">
-								<view class="header-cell col-model">型号</view>
-								<view class="header-cell col-capacity">容量</view>
-                                <!-- 根据表头文字的长度，设置宽度 -->
+								<view class="header-cell col-model" :style="{ width: `${fixedColWidths.model}rpx` }">型号</view>
+								<view class="header-cell col-capacity" :style="{ width: `${fixedColWidths.capacity}rpx` }">容量</view>
 								<view
 									v-for="config in table.configColumns"
 									:key="config"
 									class="header-cell col-price"
-                                    
-                                    :style="{ width: `${config.length * 20}rpx` }"
 								>
-									{{ config }}
+									<text class="header-config-text">{{ config }}</text>
 								</view>
 								<view class="header-cell col-remark">备注</view>
 							</view>
 
-							<!-- 表体 -->
 							<view class="table-body">
-								<!-- 型号分组 -->
-							<view
-								v-for="(modelGroup, modelIdx) in getModelGroups(table.rows)"
-								:key="modelIdx"
-								class="model-group"
-							>
-								<view class="model-group-row">
-									<!-- 型号列（跨行） -->
-									<view class="body-cell col-model model-merged">
-										<text class="cell-text">{{ modelGroup.modelName }}</text>
-									</view>
-
-									<!-- 数据区域（容量 + 价格 + 备注） -->
-									<view class="data-area">
-										<!-- 容量和价格列区域 -->
-										<view class="data-columns">
-											<view
-												v-for="(row, rowIdx) in modelGroup.rows"
-												:key="rowIdx"
-												class="data-row"
-											>
-												<!-- 容量列 -->
-												<view class="body-cell col-capacity">
-													<text class="cell-text">{{ row.capacity }}</text>
-												</view>
-
-												<!-- 价格列 -->
-												<view
-													v-for="config in table.configColumns"
-													:key="config"
-													class="body-cell col-price"
-												>
-													<view v-if="row.prices[config]" class="price-box">
-														<view class="price-item final">
-															<text class="price-value">{{ row.prices[config].final || '-' }}</text>
-														</view>
-													</view>
-													<text v-else class="empty-cell">-</text>
-												</view>
-											</view>
+								<view
+									v-for="(modelGroup, modelIdx) in getModelGroups(table.rows)"
+									:key="modelIdx"
+									class="model-group"
+								>
+									<view class="model-group-row">
+										<view class="body-cell col-model model-merged" :style="{ width: `${fixedColWidths.model}rpx` }">
+											<text class="cell-text model-name">{{ modelGroup.modelName }}</text>
 										</view>
 
-										<!-- 备注列区域（独立，使用绝对定位实现跨行） -->
-										<view class="remark-column">
-											<view
-												v-for="(row, rowIdx) in modelGroup.rows"
-												:key="rowIdx"
-												class="remark-cell-wrapper"
-											>
+										<view class="data-area">
+											<view class="data-columns">
 												<view
-													v-if="row.showRemark"
-													class="body-cell col-remark remark-merged"
-													:style="{ height: `${row.remarkRowspan * 80}rpx` }"
+													v-for="(row, rowIdx) in modelGroup.rows"
+													:key="rowIdx"
+													class="data-row"
 												>
-													<text class="remark-text">{{ row.displayRemark || '-' }}</text>
+													<view class="body-cell col-capacity" :style="{ width: `${fixedColWidths.capacity}rpx` }">
+														<text class="cell-text">{{ row.capacity || '--' }}</text>
+													</view>
+
+													<view
+														v-for="config in table.configColumns"
+														:key="config"
+														class="body-cell col-price"
+													>
+														<view v-if="hasPriceValue(row.prices?.[config])" class="price-box">
+															<text class="price-value">{{ formatPrice(row.prices?.[config]) }}</text>
+														</view>
+														<text v-else class="empty-cell">--</text>
+													</view>
+												</view>
+											</view>
+
+											<view class="remark-column">
+												<view
+													v-for="(row, rowIdx) in modelGroup.rows"
+													:key="rowIdx"
+													class="remark-cell-wrapper"
+												>
+													<view
+														v-if="row.showRemark"
+														class="body-cell col-remark remark-merged"
+														:style="{ height: `${row.remarkRowspan * ROW_HEIGHT_RPX}rpx` }"
+													>
+														<text class="remark-text">{{ row.displayRemark || '--' }}</text>
+													</view>
 												</view>
 											</view>
 										</view>
 									</view>
 								</view>
-							</view>
 							</view>
 						</view>
 					</scroll-view>
@@ -151,157 +125,115 @@
 			</view>
 		</view>
 
-		<!-- 底部提示 -->
-		<view v-if="!loading && groupedTables.length > 0" class="footer-tip">
-			<text class="tip-text">数据仅供参考，实际价格以最终评估为准</text>
+		<view v-if="!loading" class="action-bar">
+			<view class="action-bar-inner">
+				<text class="action-tip">数据仅供参考，实际价格以最终评估为准</text>
+				<view class="order-btn" @click="goToOrder">去下单</view>
+			</view>
 		</view>
 	</view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getQuotationPriceList, type QuotationPriceData } from '@/addon/recycle/api/quotation'
 
-// 页面参数
-const priceTypeId = ref<string>('')
-const pageTitle = ref('报价查询')
+interface EnhancedPriceRow extends QuotationPriceData {
+	showRemark?: boolean
+	remarkRowspan?: number
+	displayRemark?: string
+}
 
-// 数据状态
+interface GroupedTable {
+	id: number
+	configColumns: string[]
+	rows: EnhancedPriceRow[]
+}
+
+interface PricePageOptions {
+	id?: string
+	title?: string
+}
+
+interface PriceListResponse {
+	code: number
+	msg?: string
+	data?: QuotationPriceData[]
+}
+
+const ROW_HEIGHT_RPX = 88
+const ORDER_PAGE_URL = '/addon/recycle/pages/order/order'
+
+const priceTypeId = ref('')
+const pageTitle = ref('报价查询')
 const loading = ref(false)
 const tableData = ref<QuotationPriceData[]>([])
 const priceTypeName = ref('')
-const updateTime = ref('')
 
-// 配置项排序规则
-const CONFIG_SORT_ORDER = [
-	'全套充新    橙色', '全套充新    白色', '全套充新    蓝色',
-	'靓机-单机100🔋在保100+', '高保靓充50次内在保280+', '靓机-单机 95电池＋在保60+', '小花电池95+保修无要求',
-	'高保靓充100次内在保250+', '中保靓充100🔋在保100+', '靓机', '小花',
-	'花机', '内爆可测'
-]
+const groupedTables = computed<GroupedTable[]>(() => {
+	if (tableData.value.length === 0) return []
 
-// 配置项排序函数
-function sortConfigItems(configItems: string[]): string[] {
-	return configItems.sort((a, b) => {
-		const indexA = CONFIG_SORT_ORDER.indexOf(a)
-		const indexB = CONFIG_SORT_ORDER.indexOf(b)
+	const configGroupMap = new Map<string, QuotationPriceData[]>()
 
-		if (indexA !== -1 && indexB !== -1) {
-			return indexA - indexB
+	for (const row of tableData.value) {
+		if (!row.prices) continue
+
+		// 完全按接口返回顺序渲染，不做前端排序
+		const configColumns = Object.keys(row.prices)
+		const groupKey = configColumns.join('|||')
+
+		if (!configGroupMap.has(groupKey)) {
+			configGroupMap.set(groupKey, [])
 		}
-		if (indexA !== -1) return -1
-		if (indexB !== -1) return 1
-		return a.localeCompare(b, 'zh-CN')
-	})
-}
+		configGroupMap.get(groupKey)!.push(row)
+	}
 
-// 按配置项分组并处理跨行逻辑
-const groupedTables = computed(() => {
-	const data = tableData.value
-	if (data.length === 0) return []
+	const tables: GroupedTable[] = []
+	let idx = 1
 
-	const configGroupMap = new Map<string, any[]>()
-
-	// 按配置项组合分组
-	data.forEach(row => {
-		if (row.prices) {
-			const configKeys = sortConfigItems(Object.keys(row.prices))
-			const configKey = configKeys.join('|||')
-
-			if (!configGroupMap.has(configKey)) {
-				configGroupMap.set(configKey, [])
-			}
-			configGroupMap.get(configKey)!.push(row)
-		}
-	})
-
-	const tables: any[] = []
-	let tableIndex = 0
-
-	configGroupMap.forEach((rows, configKey) => {
-		tableIndex++
-		const configColumns = configKey.split('|||')
-
-		const processedRows: any[] = []
-		let currentModel = ''
-		let modelStartIndex = 0
-		let currentRemark = ''
-		let remarkStartIndex = 0
-
-		rows.forEach((row, index) => {
-			const processedRow = { ...row }
-
-			// 处理型号跨行
-			if (row.goods_name !== currentModel) {
-				if (modelStartIndex < index) {
-					for (let i = modelStartIndex; i < index; i++) {
-						processedRows[i].modelRowspan = index - modelStartIndex
-					}
-				}
-				currentModel = row.goods_name
-				modelStartIndex = index
-				processedRow.showModel = true
-				processedRow.modelRowspan = 1
-			} else {
-				processedRow.showModel = false
-				processedRow.modelRowspan = 0
-			}
-
-			// 处理备注跨行
-			const remark = row.value_info || ''
-			if (remark !== currentRemark) {
-				if (remarkStartIndex < index) {
-					for (let i = remarkStartIndex; i < index; i++) {
-						processedRows[i].remarkRowspan = index - remarkStartIndex
-					}
-				}
-				currentRemark = remark
-				remarkStartIndex = index
-				processedRow.showRemark = true
-				processedRow.remarkRowspan = 1
-			} else {
-				processedRow.showRemark = false
-				processedRow.remarkRowspan = 0
-			}
-
-			processedRows.push(processedRow)
-		})
-
-		// 处理最后一组跨行
-		if (modelStartIndex < processedRows.length) {
-			for (let i = modelStartIndex; i < processedRows.length; i++) {
-				processedRows[i].modelRowspan = processedRows.length - modelStartIndex
-			}
-		}
-		if (remarkStartIndex < processedRows.length) {
-			for (let i = remarkStartIndex; i < processedRows.length; i++) {
-				processedRows[i].remarkRowspan = processedRows.length - remarkStartIndex
-			}
-		}
+	configGroupMap.forEach((rows, key) => {
+		const normalizedRows = rows.map(row => ({ ...row }))
 
 		tables.push({
-			id: tableIndex,
-			configColumns,
-			rows: processedRows,
-			modelCount: new Set(rows.map(r => r.goods_name)).size
+			id: idx++,
+			configColumns: key ? key.split('|||') : [],
+			rows: normalizedRows
 		})
 	})
 
 	return tables
 })
 
-// 按型号分组数据（用于实现跨行显示）
-function getModelGroups(rows: any[]) {
-	const groups: any[] = []
+const fixedColWidths = {
+	model: 180,
+	capacity: 85
+}
+
+const priceDateDisplay = computed(() => {
+	const dateList = tableData.value
+		.map(item => (item.price_date || '').trim())
+		.filter(Boolean)
+
+	if (dateList.length > 0) {
+		// price_date 为 YYYY-MM-DD，按字符串排序即可得到最新日期
+		return [...new Set(dateList)].sort().at(-1) || '--'
+	}
+
+	// 兜底：若接口未返回 price_date，则回退到 create_at
+	const raw = tableData.value[0]?.create_at
+	if (!raw) return '--'
+	return formatDate(raw)
+})
+
+function getModelGroups(rows: EnhancedPriceRow[]): Array<{ modelName: string; rows: EnhancedPriceRow[] }> {
+	const groups: Array<{ modelName: string; rows: EnhancedPriceRow[] }> = []
 	let currentModelName = ''
-	let currentGroup: any = null
+	let currentGroup: { modelName: string; rows: EnhancedPriceRow[] } | null = null
 
 	rows.forEach(row => {
 		if (row.goods_name !== currentModelName) {
-			// 新的型号，创建新组
 			if (currentGroup) {
-				// 处理上一组的备注跨行
 				processRemarkRowspan(currentGroup.rows)
 				groups.push(currentGroup)
 			}
@@ -311,12 +243,10 @@ function getModelGroups(rows: any[]) {
 				rows: [row]
 			}
 		} else {
-			// 同一型号，添加到当前组
-			currentGroup.rows.push(row)
+			currentGroup?.rows.push(row)
 		}
 	})
 
-	// 添加最后一组
 	if (currentGroup) {
 		processRemarkRowspan(currentGroup.rows)
 		groups.push(currentGroup)
@@ -325,38 +255,29 @@ function getModelGroups(rows: any[]) {
 	return groups
 }
 
-// 处理备注列的跨行逻辑
-function processRemarkRowspan(rows: any[]) {
+function processRemarkRowspan(rows: EnhancedPriceRow[]) {
 	let currentRemark = ''
 	let remarkStartIndex = 0
 
 	rows.forEach((row, index) => {
-		// 标准化备注：空值统一处理为空字符串（显示时会变成 '-'）
 		const remark = row.value_info?.trim() || ''
-		
 		if (remark !== currentRemark) {
-			// 备注内容变化，更新之前的跨行数
 			if (remarkStartIndex < index) {
 				for (let i = remarkStartIndex; i < index; i++) {
 					rows[i].remarkRowspan = index - remarkStartIndex
 				}
 			}
-			
-			// 开始新的备注组
 			currentRemark = remark
 			remarkStartIndex = index
 			row.showRemark = true
 			row.remarkRowspan = 1
-			// 保存处理后的备注值（用于显示）
-			row.displayRemark = remark || '-'
+			row.displayRemark = remark || '--'
 		} else {
-			// 相同备注，不显示
 			row.showRemark = false
 			row.remarkRowspan = 0
 		}
 	})
 
-	// 处理最后一组备注
 	if (remarkStartIndex < rows.length) {
 		for (let i = remarkStartIndex; i < rows.length; i++) {
 			rows[i].remarkRowspan = rows.length - remarkStartIndex
@@ -364,43 +285,83 @@ function processRemarkRowspan(rows: any[]) {
 	}
 }
 
-// 加载报价数据
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null
+}
+
+function parsePriceValue(value: unknown): number | null {
+	if (value === null || value === undefined || value === '') return null
+
+	if (typeof value === 'number' || typeof value === 'string') {
+		const num = Number(value)
+		return Number.isFinite(num) ? num : null
+	}
+
+	if (isRecord(value)) {
+		const candidates = [value.final, value.price, value.value, value.current, value.original]
+		for (const candidate of candidates) {
+			if (candidate === null || candidate === undefined || candidate === '') continue
+			const num = Number(candidate)
+			if (Number.isFinite(num)) return num
+		}
+	}
+
+	return null
+}
+
+function hasPriceValue(value: unknown): boolean {
+	return parsePriceValue(value) !== null
+}
+
+function formatPrice(value: unknown): string {
+	const num = parsePriceValue(value)
+	if (num === null) return '--'
+
+	// 按需求去掉小数点，仅显示整数价格
+	return `${Math.trunc(num)}`
+}
+
+function formatDate(timestamp: number | string): string {
+	if (!timestamp) return '--'
+	const raw = Number(timestamp)
+	const ms = String(raw).length === 10 ? raw * 1000 : raw
+	const date = new Date(ms)
+	if (Number.isNaN(date.getTime())) return '--'
+
+	const year = date.getFullYear()
+	const month = `${date.getMonth() + 1}`.padStart(2, '0')
+	const day = `${date.getDate()}`.padStart(2, '0')
+	const hour = `${date.getHours()}`.padStart(2, '0')
+	const minute = `${date.getMinutes()}`.padStart(2, '0')
+
+	return `${year}-${month}-${day} ${hour}:${minute}`
+}
+
 async function loadPriceData() {
 	if (!priceTypeId.value) {
-		uni.showToast({
-			title: '参数错误',
-			icon: 'none'
-		})
+		uni.showToast({ title: '参数错误', icon: 'none' })
 		return
 	}
 
 	loading.value = true
-
 	try {
-		const res: any = await getQuotationPriceList({
+		const res = (await getQuotationPriceList({
 			quotation_id: priceTypeId.value,
-			is_current: 1,
-			// price_date: new Date().toISOString().split('T')[0]
-		})
+			is_current: 1
+		})) as PriceListResponse
 
 		if (res.code === 1 && res.data) {
 			tableData.value = res.data || []
-			
-			// 设置报价类型名称和更新时间
 			if (tableData.value.length > 0) {
 				priceTypeName.value = tableData.value[0].price_name || ''
-
 			}
 		} else {
-			uni.showToast({
-				title: res.msg || '加载失败',
-				icon: 'none'
-			})
+			uni.showToast({ title: res.msg || '加载失败', icon: 'none' })
 		}
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error('加载报价数据失败:', error)
 		uni.showToast({
-			title: error.msg || '加载失败',
+			title: getErrorMessage(error),
 			icon: 'none'
 		})
 	} finally {
@@ -408,208 +369,268 @@ async function loadPriceData() {
 	}
 }
 
-// create_at 获取第一条的 create_at
-const createAt = computed(() => {
-	return tableData.value[0].create_at
-})
+function goToOrder() {
+	const query = priceTypeId.value ? `?quotation_id=${encodeURIComponent(priceTypeId.value)}` : ''
+	uni.navigateTo({ url: `${ORDER_PAGE_URL}${query}` })
+}
 
-// 返回上一页
 function goBack() {
 	uni.navigateBack()
 }
 
-// 页面加载
-onLoad((options: any) => {
-	if (options.id) {
-		priceTypeId.value = options.id
-		loadPriceData()
-	} else {
-		uni.showToast({
-			title: '缺少参数',
-			icon: 'none'
-		})
+function safeDecode(value: string): string {
+	try {
+		return decodeURIComponent(value)
+	} catch (error) {
+		return value
 	}
+}
+
+function getErrorMessage(error: unknown): string {
+	if (isRecord(error) && typeof error.msg === 'string' && error.msg.trim()) {
+		return error.msg
+	}
+	return '加载失败'
+}
+
+onLoad((options: PricePageOptions) => {
+	if (options?.id) {
+		priceTypeId.value = options.id
+		pageTitle.value = options?.title ? safeDecode(options.title) : '报价查询'
+		loadPriceData()
+		return
+	}
+
+	uni.showToast({
+		title: '缺少参数',
+		icon: 'none'
+	})
 })
 </script>
 
 <style lang="scss" scoped>
 .show-price-page {
+	--bg-main: #f3f4f6;
+	--bg-card: #ffffff;
+	--bg-soft: #f7f7f8;
+	--line: #e5e7eb;
+	--text-main: #1f2937;
+	--text-sub: #6b7280;
+	--brand: #3b82f6;
+	--brand-deep: #4f46e5;
+	--price: #2563eb;
+	--warning-bg: #eff6ff;
+	--radius: 20rpx;
+	--shadow: 0 10rpx 24rpx rgba(31, 41, 55, 0.08);
+	--table-font-size: 22rpx;
+	--table-price-font-size: 24rpx;
+	--table-remark-font-size: 0.44rem;
+	--table-row-height: 88rpx;
+	--table-cell-padding-y: 8rpx;
+	--table-cell-padding-x: 2rpx;
+	--table-remark-padding: 0.08rem 0.12rem;
 	min-height: 100vh;
-	background: #f5f5f5;
-    line-height: 1.4;
+	background: var(--bg-main);
+	font-family: 'DIN Alternate', 'PingFang SC', 'Helvetica Neue', sans-serif;
+	color: var(--text-main);
+	position: relative;
 }
 
-// 自定义导航栏
+.page-bg {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 420rpx;
+	background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 70%, rgba(243, 244, 246, 0) 100%);
+	z-index: 0;
+	pointer-events: none;
+}
+
 .custom-navbar {
 	position: fixed;
 	top: 0;
 	left: 0;
 	right: 0;
 	z-index: 999;
-	background: #fff;
-	border-bottom: 1rpx solid #f0f0f0;
+	backdrop-filter: blur(8px);
+	background: rgba(255, 255, 255, 0.9);
+	border-bottom: 1rpx solid rgba(59, 130, 246, 0.16);
 
 	.navbar-content {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		height: 88rpx;
-		padding: 0 32rpx;
-		padding-top: env(safe-area-inset-top);
+		padding: env(safe-area-inset-top) 24rpx 0;
+	}
 
-		.navbar-left {
-			width: 80rpx;
-			display: flex;
-			align-items: center;
+	.navbar-left,
+	.navbar-right {
+		width: 96rpx;
+		height: 64rpx;
+		display: flex;
+		align-items: center;
+	}
 
-			.iconfont {
-				font-size: 40rpx;
-				color: #333;
-			}
-		}
-
-		.navbar-title {
-			flex: 1;
-			text-align: center;
-			font-size: 32rpx;
-			font-weight: 600;
-			color: #333;
-		}
-
-		.navbar-right {
-			width: 80rpx;
+	.navbar-left {
+		.iconfont {
+			font-size: 40rpx;
+			color: var(--text-main);
 		}
 	}
+
+	.navbar-right {
+		justify-content: flex-end;
+
+		.refresh-text {
+			font-size: 24rpx;
+			color: var(--brand);
+			padding: 10rpx 14rpx;
+			background: rgba(59, 130, 246, 0.12);
+			border-radius: 999rpx;
+		}
+	}
+
+	.navbar-title {
+		flex: 1;
+		text-align: center;
+		font-size: 32rpx;
+		font-weight: 700;
+		letter-spacing: 1rpx;
+	}
+}
+
+.price-content,
+.loading-container,
+.empty-container {
+	position: relative;
+	z-index: 1;
+	padding: calc(88rpx + env(safe-area-inset-top) + 24rpx) 20rpx calc(160rpx + env(safe-area-inset-bottom));
 }
 
 .loading-container {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	padding: 300rpx 0;
+	gap: 20rpx;
 
-	.loading-spinner {
-		width: 80rpx;
-		height: 80rpx;
-		border: 6rpx solid #f3f3f3;
-		border-top-color: #409eff;
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
+	.skeleton-card,
+	.skeleton-table {
+		border-radius: var(--radius);
+		background: linear-gradient(100deg, #eef1f4 30%, #f8f9fb 45%, #eef1f4 60%);
+		background-size: 260% 100%;
+		animation: skeleton-shimmer 1.2s linear infinite;
+		border: 1rpx solid #e5e7eb;
+	}
+
+	.skeleton-card {
+		height: 176rpx;
+	}
+
+	.skeleton-table {
+		height: 720rpx;
 	}
 
 	.loading-text {
-		margin-top: 24rpx;
-		font-size: 28rpx;
-		color: #999;
+		font-size: 24rpx;
+		color: var(--text-sub);
+		text-align: center;
+		margin-top: 12rpx;
 	}
-}
-
-@keyframes spin {
-	0% { transform: rotate(0deg); }
-	100% { transform: rotate(360deg); }
 }
 
 .empty-container {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	justify-content: center;
-	padding: 300rpx 0;
+	padding-top: calc(88rpx + env(safe-area-inset-top) + 120rpx);
 
-	.empty-icon {
-		font-size: 120rpx;
-		margin-bottom: 24rpx;
+	.empty-badge {
+		font-size: 22rpx;
+		color: var(--brand-deep);
+		padding: 10rpx 22rpx;
+		border-radius: 999rpx;
+		background: rgba(59, 130, 246, 0.12);
+		margin-bottom: 28rpx;
 	}
 
-	.empty-text {
+	.empty-title {
+		font-size: 36rpx;
+		font-weight: 700;
+		color: var(--text-main);
+		margin-bottom: 10rpx;
+	}
+
+	.empty-desc {
+		font-size: 26rpx;
+		color: var(--text-sub);
+	}
+
+	.empty-action {
+		margin-top: 36rpx;
+		background: linear-gradient(120deg, #4f46e5, #3b82f6, #0ea5e9);
+		color: #fff;
 		font-size: 28rpx;
-		color: #999;
+		font-weight: 600;
+		padding: 18rpx 56rpx;
+		border-radius: 999rpx;
+		box-shadow: 0 10rpx 20rpx rgba(59, 130, 246, 0.28);
 	}
 }
 
-.price-content {
-	// padding: 20rpx;
-	padding-top: calc(88rpx + env(safe-area-inset-top) + 20rpx);
-}
+.summary-card {
+	padding: 26rpx;
+	border-radius: 22rpx;
+	background: #ffffff;
+	box-shadow: var(--shadow);
+	border: 1rpx solid rgba(59, 130, 246, 0.16);
 
-.loading-container,
-.empty-container {
-	padding-top: calc(88rpx + env(safe-area-inset-top) + 100rpx);
-}
+	animation: rise-in 320ms ease-out;
 
-.price-header {
-	background: #fff;
-	border-radius: 16rpx;
-	padding: 24rpx;
-	margin-bottom: 20rpx;
-    width: 100%;
-    position: sticky;
-    top: calc(88rpx + env(safe-area-inset-top));
-    z-index:99;
-
-	.header-item {
+	.summary-top {
 		display: flex;
 		align-items: center;
-		margin-bottom: 12rpx;
-
-		&:last-child {
-			margin-bottom: 0;
-		}
-
-		.label {
-			font-size: 28rpx;
-			color: #666;
-		}
-
-		.value {
-			font-size: 28rpx;
-			color: #333;
-			font-weight: 500;
-		}
+		justify-content: space-between;
 	}
+
+	.summary-tag {
+		padding: 8rpx 20rpx;
+		border-radius: 999rpx;
+		background: rgba(59, 130, 246, 0.12);
+		color: var(--brand-deep);
+		font-size: 22rpx;
+		font-weight: 600;
+	}
+
+	.summary-meta {
+		font-size: 22rpx;
+		color: var(--text-sub);
+	}
+
+	.summary-title {
+		font-size: 40rpx;
+		font-weight: 700;
+		line-height: 1.25;
+		margin-top: 20rpx;
+		color: var(--text-main);
+	}
+
 }
 
 .tables-wrapper {
-	.table-container {
-		background: #fff;
-		// border-radius: 16rpx;
-		// margin-bottom: 20rpx;
-		overflow: hidden;
+	margin-top: 12rpx;
+	display: flex;
+	flex-direction: column;
+	gap: 10rpx;
+}
 
-		.table-title {
-			padding: 24rpx;
-			border-bottom: 1rpx solid #f0f0f0;
-
-			.title-text {
-				font-size: 32rpx;
-				font-weight: 600;
-				color: #333;
-			}
-
-			.title-meta {
-				display: block;
-				font-size: 24rpx;
-				color: #999;
-				margin-top: 8rpx;
-			}
-		}
-
-		.config-tags {
-			display: flex;
-			flex-wrap: wrap;
-			padding: 16rpx 24rpx;
-			gap: 12rpx;
-
-			.config-tag {
-				background: #f0f2f5;
-				color: #666;
-				font-size: 22rpx;
-				padding: 8rpx 16rpx;
-				border-radius: 8rpx;
-			}
-		}
-	}
+.table-container {
+	background: var(--bg-card);
+	border: 1rpx solid rgba(59, 130, 246, 0.14);
+	border-radius: 18rpx;
+	overflow: hidden;
+	box-shadow: 0 8rpx 22rpx rgba(31, 41, 55, 0.06);
+	animation: rise-in 360ms ease-out;
 }
 
 .table-scroll {
@@ -617,202 +638,272 @@ onLoad((options: any) => {
 }
 
 .excel-table {
-	min-width: 100%;
-
-	.table-header {
-		display: flex;
-		background: #fafafa;
-		border-bottom: 1rpx solid #e8e8e8;
-		position: sticky;
-		top: 0;
-		z-index: 10;
-	}
-
-	.table-body {
-		.model-group {
-			border-bottom: 1rpx solid #e8e8e8;
-
-			.model-group-row {
-				display: flex;
-			}
-
-			.data-area {
-				flex: 1;
-				display: flex;
-				position: relative;
-			}
-
-			.data-columns {
-				flex: 1;
-				display: flex;
-				flex-direction: column;
-			}
-
-			.data-row {
-				display: flex;
-				border-bottom: 1rpx solid #f0f0f0;
-				min-height: 80rpx;
-
-				&:last-child {
-					border-bottom: none;
-				}
-			}
-
-			.remark-column {
-				width: 200rpx;
-				flex-shrink: 0;
-				display: flex;
-				flex-direction: column;
-				position: relative;
-                border-left: 1px solid #f1f2f5;
-                border-bottom: 1px solid #f1f2f5;
-			}
-
-			.remark-cell-wrapper {
-				min-height: 80rpx;
-				position: relative;
-			}
-		}
-	}
-
-	.header-cell,
-	.body-cell {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 16rpx 8rpx;
-		font-size: 24rpx;
-		box-sizing: border-box;
-		border-right: 1rpx solid #e8e8e8;
-		word-break: break-all;
-
-		&:last-child {
-			border-right: none;
-		}
-	}
-
-	.header-cell {
-		font-weight: 600;
-        font-size: 24rpx;
-		color: #333;
-
-	}
-
-	.body-cell {
-		color: #666;
-		min-height: 80rpx;
-	}
-
-	.col-model {
-		width: 150rpx;
-		flex-shrink: 0;
-        padding: 10rpx;
-		background: #fafafa;
-	}
-
-	.col-capacity {
-		width: 100rpx;
-		flex-shrink: 0;
-	}
-
-	.col-price {
-		flex: 1;
-		min-width: 127rpx;
-	}
-
-	.col-remark {
-		width: 200rpx;
-		flex-shrink: 0;
-		background: #fffbf0;
-	}
-
-	.model-merged {
-		align-items: center;
-		padding-top: 20rpx;
-	}
-
-	.remark-merged {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-bottom: 1rpx solid #f0f0f0;
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		width: 100%;
-	}
-
-	.cell-text {
-		word-break: break-all;
-		text-align: center;
-	}
-
-	.price-box {
-		width: 100%;
-
-		.price-item {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			padding: 6rpx 0;
-
-			&.original {
-				.price-label {
-					color: #999;
-				}
-
-				.price-value {
-					color: #999;
-					text-decoration: line-through;
-				}
-			}
-
-			&.final {
-				.price-label {
-					color: #333;
-					font-weight: 500;
-				}
-
-				.price-value {
-					color: #ff6b00;
-					font-weight: 600;
-					font-size: 26rpx;
-				}
-			}
-
-			.price-label {
-				font-size: 22rpx;
-			}
-
-			.price-value {
-				font-size: 24rpx;
-			}
-		}
-	}
-
-	.empty-cell {
-		color: #ddd;
-		font-size: 32rpx;
-	}
-
-	.remark-text {
-		font-size: 22rpx;
-		color: #666;
-		line-height: 1;
-		word-break: break-all;
-		white-space: pre-wrap;
-		text-align: left;
-	}
+	width: 100%;
 }
 
-.footer-tip {
-	padding: 40rpx 20rpx;
+.table-header {
+	display: flex;
+	background: #eff6ff;
+	border-bottom: 1rpx solid var(--line);
+	position: sticky;
+	top: 0;
+	z-index: 9;
+}
+
+.table-body .model-group {
+	border-bottom: 1rpx solid #eceff3;
+}
+
+.table-body .model-group:last-child {
+	border-bottom: none;
+}
+
+.model-group-row {
+	display: flex;
+	align-items: stretch;
+}
+
+.data-area {
+	flex: 1;
+	display: flex;
+	position: relative;
+}
+
+.data-columns {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+
+.data-row {
+	display: flex;
+	height: var(--table-row-height);
+	min-height: var(--table-row-height);
+	border-bottom: 1rpx solid #eef1f4;
+	background: #fff;
+}
+
+.data-row:nth-child(2n) {
+	background: #fafbfc;
+}
+
+.data-row:last-child {
+	border-bottom: none;
+}
+
+.remark-column {
+	width: 5rem;
+	min-width: 5rem;
+	max-width: 5rem;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+
+	background: #fff;
+}
+
+.remark-cell-wrapper {
+	height: var(--table-row-height);
+	min-height: var(--table-row-height);
+	position: relative;
+}
+
+.header-cell,
+.body-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
+	font-size: var(--table-font-size);
+	box-sizing: border-box;
+	border-right: 1rpx solid #eceff3;
+	word-break: break-word;
+	white-space: normal;
 	text-align: center;
+}
 
-	.tip-text {
-		font-size: 24rpx;
-		color: #999;
+.header-cell:last-child,
+.body-cell:last-child {
+	border-right: none;
+}
+
+.header-cell {
+	font-weight: 700;
+	font-size: var(--table-font-size);
+	color: #374151;
+}
+
+.body-cell {
+	color: #4b5563;
+	min-height: var(--table-row-height);
+	height: auto;
+}
+
+.data-row > .body-cell {
+	height: 100%;
+	min-height: 100%;
+}
+
+.col-model {
+	flex-shrink: 0;
+	background: #fafafa;
+}
+
+.col-capacity {
+	flex-shrink: 0;
+}
+
+.col-price {
+	flex: 1 1 0;
+	min-width: 2.2em;
+	max-width: 150rpx;
+}
+
+.col-remark {
+	width: 5rem;
+	min-width: 5rem;
+	max-width: 5rem;
+	flex-shrink: 0;
+	background: var(--warning-bg);
+}
+
+.model-merged {
+	display: flex;
+	align-self: stretch;
+	align-items: center;
+	justify-content: center;
+	height: auto;
+	min-height: 100%;
+	padding: 0;
+}
+
+.model-name {
+	display: block;
+	width: 100%;
+	text-align: center;
+	font-weight: 700;
+	line-height: 1.35;
+}
+
+.remark-merged {
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-start;
+	border-bottom: 1rpx solid #ebe4e2;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	width: 100%;
+	padding: var(--table-remark-padding);
+	background: var(--warning-bg);
+	box-sizing: border-box;
+	overflow: hidden;
+}
+
+.cell-text {
+	word-break: break-word;
+}
+
+.price-box {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.price-value {
+	font-size: var(--table-price-font-size);
+	font-weight: 700;
+	color: var(--price);
+	line-height: 1.2;
+	white-space: nowrap;
+	word-break: normal;
+	text-align: center;
+}
+
+.empty-cell {
+	color: #94a3b8;
+	font-size: 24rpx;
+}
+
+.remark-text {
+	font-size: var(--table-remark-font-size);
+	line-height: 1.45;
+	color: #6b7280;
+	word-break: break-word;
+	white-space: pre-wrap;
+	text-align: left;
+}
+
+.header-config-text {
+	display: block;
+	width: 100%;
+	min-width: 2em;
+	white-space: normal;
+	word-break: break-all;
+	line-height: 1.3;
+	text-align: center;
+}
+
+.action-bar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1000;
+	padding: 12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));
+	background: rgba(255, 255, 255, 0.95);
+	backdrop-filter: blur(8px);
+	border-top: 1rpx solid rgba(59, 130, 246, 0.16);
+	box-shadow: 0 -6rpx 20rpx rgba(31, 41, 55, 0.08);
+}
+
+.action-bar-inner {
+	display: flex;
+	align-items: center;
+	gap: 16rpx;
+}
+
+.action-tip {
+	flex: 1;
+	font-size: 22rpx;
+	color: var(--text-sub);
+}
+
+.order-btn {
+	flex-shrink: 0;
+	min-width: 190rpx;
+	height: 72rpx;
+	line-height: 72rpx;
+	text-align: center;
+	font-size: 28rpx;
+	font-weight: 700;
+	color: #fff;
+	border-radius: 999rpx;
+	background: linear-gradient(120deg, #4f46e5, #3b82f6, #0ea5e9);
+	box-shadow: 0 8rpx 18rpx rgba(59, 130, 246, 0.32);
+}
+
+@keyframes skeleton-shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -60% 0;
 	}
 }
+
+@keyframes rise-in {
+	0% {
+		opacity: 0;
+		transform: translateY(14rpx);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
 </style>

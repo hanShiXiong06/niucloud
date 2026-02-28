@@ -45,9 +45,8 @@
                             </el-tag>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="response_code" label="响应码" min-width="100" />
-                    <el-table-column prop="error_message" label="错误信息" min-width="200" show-overflow-tooltip />
-                    <el-table-column prop="create_time" label="创建时间" min-width="180" />
+                    <el-table-column prop="create_at" label="创建时间" min-width="200" show-overflow-tooltip />
+                    <el-table-column prop="update_at" label="更新时间" min-width="180" />
                     <el-table-column label="操作" fixed="right" min-width="120">
                         <template #default="{ row }">
                             <el-button type="primary" link @click="viewInfoEvent(row)">查看详情</el-button>
@@ -72,7 +71,6 @@
                             {{ infoData.request_status === 1 ? '成功' : '失败' }}
                         </el-tag>
                     </el-descriptions-item>
-                    <el-descriptions-item label="响应码">{{ infoData.response_code }}</el-descriptions-item>
                     <el-descriptions-item label="请求URL" show-overflow-tooltip :span="2" >
                         <el-tooltip :content="infoData.request_url" placement="top">
                             <div class="break-all">
@@ -88,7 +86,7 @@
                         <json-preview :data="infoData.response_data" label="响应数据" />
                     </el-descriptions-item>
                     <el-descriptions-item label="错误信息" :span="2">{{ infoData.error_message || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="创建时间">{{ infoData.create_time }}</el-descriptions-item>
+                    <el-descriptions-item label="创建时间">{{ infoData.create_at }}</el-descriptions-item>
                 </el-descriptions>
             </el-dialog>
 

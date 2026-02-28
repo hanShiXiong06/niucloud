@@ -1,6 +1,19 @@
 <template>
-    <el-dialog v-model="dialogVisible" title="代客户下单" width="600px" :destroy-on-close="true" @closed="handleClosed">
-        <el-form ref="formRef" :model="form" label-width="100px">
+    <el-dialog
+        v-model="dialogVisible"
+        title="代客户下单"
+        :width="isMobile ? '95vw' : '600px'"
+        top="4vh"
+        class="add-order-dialog"
+        :destroy-on-close="true"
+        @closed="handleClosed"
+    >
+        <el-form
+            ref="formRef"
+            :model="form"
+            :label-width="isMobile ? '80px' : '100px'"
+            :label-position="isMobile ? 'top' : 'right'"
+        >
             <el-form-item label="选择会员" required>
                 <div class="member-select">
                     <el-input v-model="memberSearch" placeholder="输入会员手机号/昵称/用户名搜索" clearable
@@ -83,10 +96,10 @@
         </el-form>
 
         <template #footer>
-            <span class="dialog-footer">
-                <el-button @click="dialogVisible = false">取消</el-button>
-                <el-button type="primary" @click="handleConfirm" :loading="loading">确定</el-button>
-            </span>
+            <div :class="isMobile ? 'dialog-footer mobile-footer' : 'dialog-footer'">
+                <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="dialogVisible = false">取消</el-button>
+                <el-button type="primary" :class="isMobile ? '!ml-0 w-full' : ''" @click="handleConfirm" :loading="loading">确定</el-button>
+            </div>
         </template>
     </el-dialog>
 </template>
@@ -122,7 +135,7 @@ const form = ref({
     member_id: '',
     delivery_type: '1',
     express_no: '',
-    count : 1 as number
+    count: 1 as number
 })
 
 // 会员搜索相关
@@ -133,12 +146,17 @@ const memberPageSize = ref(10)
 const hasMoreMembers = ref(false)
 const selectedMember = ref<Member | null>(null)
 const searchTimer = ref<number | null>(null)
+const isMobile = ref(false)
 
 // 扫码相关
 const expressInput = ref(null)
 const isScanMode = ref(false)
 const scanBuffer = ref('')
 const scanTimer = ref(null)
+
+const updateResponsiveState = () => {
+    isMobile.value = window.innerWidth <= 768
+}
 
 // 监听visible属性变化
 watch(() => props.visible, (newVal) => {
@@ -271,11 +289,14 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
 // 生命周期钩子
 onMounted(() => {
+    updateResponsiveState()
+    window.addEventListener('resize', updateResponsiveState)
     // 添加全局键盘事件监听
     window.addEventListener('keydown', handleKeyDown)
 })
 
 onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateResponsiveState)
     // 移除全局键盘事件监听
     window.removeEventListener('keydown', handleKeyDown)
 
@@ -318,7 +339,8 @@ const handleConfirm = async () => {
         const params = {
             member_id: form.value.member_id,
             delivery_type: form.value.delivery_type,
-            express_no: form.value.delivery_type === '1' ? form.value.express_no : ''
+            express_no: form.value.delivery_type === '1' ? form.value.express_no : '',
+            count: Number(form.value.count) || 1
         }
 
         const res = await createRecycleOrder(params)
@@ -344,7 +366,8 @@ const resetForm = () => {
     form.value = {
         member_id: '',
         delivery_type: '1',
-        express_no: ''
+        express_no: '',
+        count: 1
     }
     selectedMember.value = null
     memberSearch.value = ''
@@ -462,5 +485,24 @@ if (props.visible) {
     margin-top: 5px;
     color: #409eff;
     font-size: 12px;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+@media (max-width: 768px) {
+    .mobile-footer {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .express-input-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
 }
 </style>

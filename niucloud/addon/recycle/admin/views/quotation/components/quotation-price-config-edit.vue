@@ -33,41 +33,42 @@
 
             <!-- SKU级别配置：支持批量SKU选择 -->
             <template v-if="formData.config_type === 1">
-                <!-- 编辑模式：显示已有的SKU列表 -->
+                <!-- 编辑模式：显示已有的SKU列表（可删除） -->
                 <div v-if="formData.id && formData.sku_list && Array.isArray(formData.sku_list) && formData.sku_list.length > 0" class="mb-4">
-                    <el-alert
-                        type="info"
-                        :closable="false"
-                        class="mb-4"
-                    >
-                        <template #title>
-                            <span>此配置使用SKU列表（{{ formData.sku_list.length }}个SKU），无法在此处编辑SKU信息。如需修改SKU，请使用批量配置功能。</span>
-                        </template>
-                    </el-alert>
-
-                    <!-- SKU列表展示 -->
-                    <div class="border rounded p-4 bg-gray-50">
-                        <div class="text-sm font-medium text-gray-700 mb-3">包含的SKU列表：</div>
+                    <el-divider content-position="left">当前SKU列表（{{ formData.sku_list.length }}个）</el-divider>
+                    <div class="border rounded p-4 bg-gray-50 mb-4">
+                        <div class="text-sm font-medium text-gray-700 mb-3">已配置的SKU：</div>
                         <div class="max-h-[300px] overflow-y-auto">
                             <div class="grid grid-cols-1 gap-2">
                                 <div
                                     v-for="(sku, index) in formData.sku_list"
-                                    :key="index"
-                                    class="flex items-center text-sm text-gray-600 p-2 bg-white rounded border"
+                                    :key="`existing-${index}`"
+                                    class="flex items-center justify-between text-sm text-gray-600 p-2 bg-white rounded border"
                                 >
+                                    <div class="flex items-center">
                                     <span class="font-medium">{{ sku.goods_name || ('型号ID: ' + sku.goods_id) }}</span>
                                     <span class="mx-2 text-gray-400">/</span>
                                     <span>{{ sku.capacity || '-' }}</span>
                                     <span v-if="sku.config_item_name" class="mx-2 text-gray-400">/</span>
                                     <span v-if="sku.config_item_name" class="text-blue-600">{{ sku.config_item_name }}</span>
+                                    </div>
+                                    <el-button
+                                        type="danger"
+                                        size="small"
+                                        text
+                                        @click="removeSkuFromList(index)"
+                                        :icon="Delete"
+                                    >
+                                        删除
+                                    </el-button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 添加模式或编辑模式但无sku_list：显示批量SKU选择 -->
-                <div v-else class="mb-4">
+                <!-- SKU选择区域（添加模式或编辑模式添加新SKU） -->
+                <div class="mb-4">
                     <el-divider content-position="left">批量SKU选择</el-divider>
 
                     <!-- 报价单选择 -->
@@ -118,21 +119,30 @@
                     <!-- SKU选择区域 -->
                     <div v-if="selectedModelIds.length > 0" class="mb-4">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="font-medium">选择SKU（型号+内存+规格）：</span>
+                            <span class="font-medium">{{ formData.id ? '添加新SKU（型号+内存+规格）' : '选择SKU（型号+内存+规格）' }}：</span>
                             <div class="flex gap-2">
                                 <el-button size="small" @click="selectAllSkus">全选</el-button>
                                 <el-button size="small" @click="clearSkuSelection">清空</el-button>
+                                <el-button
+                                    v-if="formData.id && selectedSkuKeys.length > 0"
+                                    type="primary"
+                                    size="small"
+                                    @click="addSkusToList"
+                                >
+                                    添加到列表
+                                </el-button>
                             </div>
                         </div>
                         <div v-loading="skuListLoading" class="max-h-[300px] overflow-y-auto border rounded p-4">
                             <el-checkbox-group v-model="selectedSkuKeys" @change="handleSkuChange">
                                 <div v-for="sku in skuList" :key="sku.key" class="mb-2">
-                                    <el-checkbox :label="sku.key">
+                                    <el-checkbox :label="sku.key" :disabled="isSkuInList(sku)">
                                         <span class="font-medium">{{ sku.goods_name }}</span>
                                         <span class="mx-2 text-gray-500">/</span>
                                         <span>{{ sku.capacity }}</span>
                                         <span v-if="sku.config_item_name" class="mx-2 text-gray-500">/</span>
                                         <span v-if="sku.config_item_name" class="text-blue-600">{{ sku.config_item_name }}</span>
+                                        <span v-if="isSkuInList(sku)" class="ml-2 text-xs text-gray-400">(已添加)</span>
                                     </el-checkbox>
                                 </div>
                             </el-checkbox-group>
@@ -142,6 +152,7 @@
                         </div>
                         <div v-if="selectedSkuKeys.length > 0" class="mt-2 text-sm text-gray-600">
                             已选择 {{ selectedSkuKeys.length }} 个SKU
+                            <span v-if="formData.id" class="ml-2 text-blue-600">（点击"添加到列表"按钮将SKU添加到配置中）</span>
                         </div>
                     </div>
                 </div>
@@ -161,8 +172,6 @@
                     <el-input v-model="formData.group_key" clearable placeholder="请输入分组标识" class="input-width" />
                 </el-form-item>
             </template>
-
-       
 
             <el-form-item label="调整类型" prop="adjustment_type">
                 <el-select v-model="formData.adjustment_type" clearable placeholder="请选择调整类型" class="input-width">
@@ -217,7 +226,8 @@
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
 import type { FormInstance } from 'element-plus'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete } from '@element-plus/icons-vue'
 import { addQuotationPriceConfig, editQuotationPriceConfig, getQuotationPriceConfigInfo, batchAddSkuPriceConfig, getQuotationConfigList, getQuotationDataCascadeOptions } from '@/addon/recycle/api/quotation'
 
 const showDialog = ref(false)
@@ -515,6 +525,97 @@ const clearModelSelection = () => {
 }
 
 /**
+ * 检查SKU是否已在列表中
+ */
+const isSkuInList = (sku: any): boolean => {
+    if (!formData.sku_list || !Array.isArray(formData.sku_list)) {
+        return false
+    }
+    return formData.sku_list.some((item: any) => {
+        return item.goods_id === sku.goods_id &&
+               item.capacity === sku.capacity &&
+               (item.config_item_name || '') === (sku.config_item_name || '')
+    })
+}
+
+/**
+ * 从列表中移除SKU
+ */
+const removeSkuFromList = async (index: number) => {
+    try {
+        await ElMessageBox.confirm(
+            '确定要删除这个SKU吗？',
+            '确认删除',
+            {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }
+        )
+
+        if (!formData.sku_list || !Array.isArray(formData.sku_list)) {
+            return
+        }
+
+        formData.sku_list.splice(index, 1)
+
+        // 如果列表为空，清空sku_list
+        if (formData.sku_list.length === 0) {
+            formData.sku_list = null
+        }
+
+        ElMessage.success('删除成功')
+    } catch {
+        // 用户取消删除
+    }
+}
+
+/**
+ * 添加SKU到列表（编辑模式使用）
+ */
+const addSkusToList = () => {
+    if (selectedSkuKeys.value.length === 0) {
+        ElMessage.warning('请先选择要添加的SKU')
+        return
+    }
+
+    // 确保sku_list是数组
+    if (!formData.sku_list || !Array.isArray(formData.sku_list)) {
+        formData.sku_list = []
+    }
+
+    let addedCount = 0
+    selectedSkuKeys.value.forEach(skuKey => {
+        const sku = skuList.value.find(s => s.key === skuKey)
+        if (!sku) return
+
+        // 检查是否已存在
+        if (isSkuInList(sku)) {
+            return
+        }
+
+        // 添加到列表
+        formData.sku_list.push({
+            goods_id: sku.goods_id,
+            goods_name: sku.goods_name,
+            capacity: sku.capacity,
+            capacity_answer_id: sku.capacity_answer_id,
+            config_item_name: sku.config_item_name
+        })
+        addedCount++
+    })
+
+    // 清空选择
+    selectedSkuKeys.value = []
+
+    if (addedCount > 0) {
+        ElMessage.success(`成功添加 ${addedCount} 个SKU到列表`)
+    } else {
+        ElMessage.warning('所选SKU已存在于列表中')
+    }
+}
+
+/**
  * 配置类型变化时的处理
  */
 const onConfigTypeChange = () => {
@@ -579,15 +680,13 @@ const confirm = async (formEl: FormInstance | undefined) => {
                         skus,
                         adjustment_type: formData.adjustment_type,
                         adjustment_value: formData.adjustment_value,
-                        is_enable: formData.is_enable,
-                        title: formData.title
+                        is_enable: formData.is_enable
                     })
 
                     const conflictInfo = result.data?.conflict_info || {}
                     const removedConfigs = conflictInfo.removed_from_configs || []
                     const duplicateSkus = conflictInfo.duplicate_skus || []
                     const newSkus = conflictInfo.new_skus || []
-                    
 
                     // 构建提示信息
                     let message = `成功为 ${selectedSkuKeys.value.length} 个SKU创建价格配置`
@@ -626,14 +725,28 @@ const confirm = async (formEl: FormInstance | undefined) => {
                     if (!data.group_key) data.group_key = 0
                     if (!data.capacity_answer_id) data.capacity_answer_id = 0
 
-                    // 如果是SKU级别且有sku_list，保留sku_list；否则清空sku_list
-                    if (data.config_type === 1 && data.sku_list && Array.isArray(data.sku_list) && data.sku_list.length > 0) {
+                    // 如果是SKU级别配置
+                    if (data.config_type === 1) {
+                        // 编辑模式：如果有sku_list且不为空，使用sku_list；否则清空
+                        if (formData.id) {
+                            // 编辑模式：如果sku_list为空数组或null，设置为null
+                            if (!data.sku_list || (Array.isArray(data.sku_list) && data.sku_list.length === 0)) {
+                                data.sku_list = null
+                            }
+                            // 如果有sku_list，清空其他字段
+                            if (data.sku_list && Array.isArray(data.sku_list) && data.sku_list.length > 0) {
                         data.goods_id = 0
                         data.capacity = ''
                         data.config_item_name = ''
-                    } else if (data.config_type === 1 && (!data.sku_list || (Array.isArray(data.sku_list) && data.sku_list.length === 0))) {
+                            }
+                        } else {
+                            // 添加模式：如果没有选择SKU，清空sku_list
+                            if (!selectedSkuKeys.value || selectedSkuKeys.value.length === 0) {
                         data.sku_list = null
+                            }
+                        }
                     } else {
+                        // 非SKU级别配置，清空sku_list
                         data.sku_list = null
                     }
 

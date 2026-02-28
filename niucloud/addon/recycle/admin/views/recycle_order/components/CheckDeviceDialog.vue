@@ -1,99 +1,96 @@
 <template>
-  <el-dialog 
-    v-model="dialogVisible" 
-    title="设备质检" 
-    width="960px" 
-    :destroy-on-close="true" 
+  <el-dialog
+    v-model="dialogVisible"
+    title="设备质检"
+    width="960px"
+    :destroy-on-close="true"
     class="check-device-dialog"
     align-center
   >
-    <!-- 设备信息条 - 紧凑型 -->
+    <!-- 设备信息条 -->
     <div class="device-info-bar">
       <div class="device-basic">
         <div class="device-icon">📱</div>
         <div class="device-details">
           <h3 class="device-model">{{ deviceData.model || "未知型号" }}</h3>
           <div class="device-meta">
-            <span v-if="!showImeiEdit" class="imei-display">IMEI: {{ deviceForm.imei || '未录入' }}</span>
-            <el-input 
-            v-else
-            v-model="deviceForm.imei" 
-            placeholder="请输入15位IMEI或使用扫码枪"
-            size="default"
-            clearable
-            maxlength="15"
-            show-word-limit
-            @input="handleImeiInput"
-            @blur="showImeiEdit = false"
-            ref="imeiInputRef"
-          >
-            <template #prefix>
-              <el-icon><Postcard /></el-icon>
+            <template v-if="!showImeiEdit">
+              <span class="imei-display">IMEI: {{ deviceForm.imei || '未录入' }}</span>
             </template>
-            <template #append>
-              <el-button @click="focusImeiInput">
-                <el-icon><Aim /></el-icon>
-                扫码
-              </el-button>
-            </template>
-          </el-input>
+            <el-input
+              v-else
+              v-model="deviceForm.imei"
+              placeholder="请输入15位IMEI或使用扫码枪"
+              size="default"
+              clearable
+              maxlength="15"
+              show-word-limit
+              ref="imeiInputRef"
+              @input="handleImeiInput"
+              @blur="showImeiEdit = false"
+            >
+              <template #prefix>
+                <el-icon><Postcard /></el-icon>
+              </template>
+              <template #append>
+                <el-button @click="focusImeiInput">
+                  <el-icon><Aim /></el-icon>
+                  扫码
+                </el-button>
+              </template>
+            </el-input>
           </div>
         </div>
       </div>
       <div class="quick-actions">
-        <el-button size="small" type="primary" @click="toggleImeiEdit" v-if="!showImeiEdit">
+        <el-button v-if="!showImeiEdit" size="small" type="primary" @click="toggleImeiEdit">
           <el-icon><Edit /></el-icon>
           修改IMEI
         </el-button>
       </div>
     </div>
 
-
-
     <!-- 智能质检面板 -->
     <div class="smart-check-panel">
       <div class="panel-header">
         <span>🔍 智能质检</span>
         <div class="header-actions">
-          <el-button 
-          size="small" 
-          text
-          @click="fetchCoverage" 
-          :loading="loadingCoverage"
-          :disabled="!deviceForm.imei"
-        >
-          <el-icon v-if="!loadingCoverage"><Headset /></el-icon>
-          {{ loadingCoverage ? '查询中...' : '查询保修' }}
-        </el-button>
-        
-                 <el-button 
-           text 
-           size="small" 
-           @click="fetchActivationlock" 
-           :loading="loadingActivationLock"
-           :disabled="!deviceForm.imei"
-         >
-           <el-icon v-if="!loadingActivationLock"><Lock /></el-icon>
-           {{ loadingActivationLock ? '查询中...' : '查询激活锁' }}
-         </el-button>
-                 <el-button 
-           text 
-           size="small" 
-           @click="fetchMdm" 
-           :loading="loadingMdm"
-           :disabled="!deviceForm.imei"
-         >
-           <el-icon v-if="!loadingMdm"><Monitor /></el-icon>
-           {{ loadingMdm ? '查询中...' : '查询监管锁' }}
-         </el-button>
-        |
+          <el-button
+            size="small"
+            text
+            :loading="loadingCoverage"
+            :disabled="!deviceForm.imei"
+            @click="fetchCoverage"
+          >
+            <el-icon v-if="!loadingCoverage"><Headset /></el-icon>
+            {{ loadingCoverage ? '查询中...' : '查询保修' }}
+          </el-button>
+          <el-button
+            size="small"
+            text
+            :loading="loadingActivationLock"
+            :disabled="!deviceForm.imei"
+            @click="fetchActivationlock"
+          >
+            <el-icon v-if="!loadingActivationLock"><Lock /></el-icon>
+            {{ loadingActivationLock ? '查询中...' : '查询激活锁' }}
+          </el-button>
+          <el-button
+            size="small"
+            text
+            :loading="loadingMdm"
+            :disabled="!deviceForm.imei"
+            @click="fetchMdm"
+          >
+            <el-icon v-if="!loadingMdm"><Monitor /></el-icon>
+            {{ loadingMdm ? '查询中...' : '查询监管锁' }}
+          </el-button>
+          <span class="divider">|</span>
           <el-button size="small" text @click="clearAllSelections">清空</el-button>
           <el-button size="small" text @click="fillCommonResult">常用模板</el-button>
-          
         </div>
       </div>
-      
-      
+
       <!-- 保修信息显示区域 -->
       <el-collapse-transition>
         <div v-if="warrantyInfo" class="warranty-display-panel">
@@ -104,212 +101,187 @@
               清除
             </el-button>
           </div>
-
           <WarrantyInfoDisplay :warrantyData="warrantyInfo" />
         </div>
       </el-collapse-transition>
-      
+
       <!-- 快速质检选项 - 卡片式布局 -->
       <div class="check-grid">
-        <!-- 电池状态 -->
-        <div class="check-card battery-card">
-          <div class="card-header">
-            <el-icon class="header-icon"><Lightning /></el-icon>
-            <span>电池状态</span>
+        <!-- 电池状态卡片 -->
+        <CheckCard title="电池状态" icon="Lightning">
+          <div class="input-row">
+            <span class="label">健康度</span>
+            <el-input-number
+              v-model="templateSelections.battery"
+              :min="0"
+              :max="100"
+              :step="1"
+              size="small"
+              @change="updateCheckResult"
+            />
+            <span class="unit">%</span>
           </div>
-          <div class="card-content">
-            <div class="input-row">
-              <span class="label">健康度</span>
-              <el-input-number 
-                v-model="templateSelections.battery" 
-                :min="0" :max="100" :step="1"
-                size="small" @change="updateCheckResult"
-              />
-              <span class="unit">%</span>
-            </div>
-            <div class="input-row">
-              <span class="label">循环</span>
-              <el-input
-                type="number"
-                v-model="templateSelections.battery_num" 
-                :min="0" :max="9999" :step="50"
-                size="small" @change="updateCheckResult"
-              />
-              <span class="unit">次</span>
-            </div>
-            <div class="input-row">
-              <span class="label">激活锁</span>
-              <el-switch 
-                v-model="templateSelections.activationLock"
-                style="--el-switch-on-color: #ff4949 ;--el-switch-off-color: #13ce66;"
-                active-text="on"
-                inactive-text="off"
-                size="small"
-                @change="updateCheckResult"
-              />
-            </div>
-            <div class="input-row">
-              <span class="label">监管锁</span>
-              <el-switch 
-                v-model="templateSelections.mdmLock"
-                 style="--el-switch-on-color: #ff4949 ; --el-switch-off-color:  #13ce66;"
-                active-text="on"
-                inactive-text="off"
-                size="small"
-                @change="updateCheckResult"
-              />
-            </div>
+          <div class="input-row">
+            <span class="label">循环</span>
+            <el-input
+              v-model="templateSelections.battery_num"
+              type="number"
+              size="small"
+              @change="updateCheckResult"
+            />
+            <span class="unit">次</span>
           </div>
-        </div>
+          <div class="input-row">
+            <span class="label">激活锁</span>
+            <el-switch
+              v-model="templateSelections.activationLock"
+              active-text="on"
+              inactive-text="off"
+              size="small"
+              style="--el-switch-on-color: #ff4949; --el-switch-off-color: #13ce66"
+              @change="updateCheckResult"
+            />
+          </div>
+          <div class="input-row">
+            <span class="label">监管锁</span>
+            <el-switch
+              v-model="templateSelections.mdmLock"
+              active-text="on"
+              inactive-text="off"
+              size="small"
+              style="--el-switch-on-color: #ff4949; --el-switch-off-color: #13ce66"
+              @change="updateCheckResult"
+            />
+          </div>
+        </CheckCard>
 
-        <!-- 屏幕状态 -->
-        <div class="check-card screen-card">
-          <div class="card-header">
-            <el-icon class="header-icon"><Monitor /></el-icon>
-            <span>屏幕状态</span>
+        <!-- 屏幕状态卡片 -->
+        <CheckCard title="屏幕状态" icon="Monitor">
+          <div class="tag-grid">
+            <el-tag
+              v-for="option in dictOptions.screenLabels()"
+              :key="option"
+              :type="templateSelections.screen === option ? 'primary' : undefined"
+              :effect="templateSelections.screen === option ? 'dark' : 'plain'"
+              size="small"
+              class="check-tag"
+              @click="selectScreenOption(option)"
+            >
+              {{ option }}
+            </el-tag>
           </div>
-          <div class="card-content">
-            <div class="tag-grid">
-              <el-tag 
-                v-for="option in screenOptions" 
-                :key="option"
-                :type="templateSelections.screen === option ? 'primary' : undefined"
-                :effect="templateSelections.screen === option ? 'dark' : 'plain'"
-                size="small"
-                class="check-tag"
-                @click="selectScreenOption(option)"
-              >
-                {{ option }}
-              </el-tag>
-            </div>
-          </div>
-        </div>
+        </CheckCard>
 
-        <!-- 外观状态 -->
-        <div class="check-card appearance-card">
-          <div class="card-header">
-            <el-icon class="header-icon"><Picture /></el-icon>
-            <span>外观状态</span>
+        <!-- 外观状态卡片 -->
+        <CheckCard title="外观状态" icon="Picture">
+          <div class="tag-grid">
+            <el-tag
+              v-for="option in dictOptions.appearanceLabels()"
+              :key="option"
+              :type="templateSelections.appearance === option ? 'primary' : undefined"
+              :effect="templateSelections.appearance === option ? 'dark' : 'plain'"
+              size="small"
+              class="check-tag"
+              @click="selectAppearanceOption(option)"
+            >
+              {{ option }}
+            </el-tag>
           </div>
-          <div class="card-content">
-            <div class="tag-grid">
-              <el-tag 
-                v-for="option in appearanceOptions" 
-                :key="option"
-                :type="templateSelections.appearance === option ? 'primary' : undefined"
-                :effect="templateSelections.appearance === option ? 'dark' : 'plain'"
-                size="small"
-                class="check-tag"
-                @click="selectAppearanceOption(option)"
-              >
-                {{ option }}
-              </el-tag>
-            </div>
-          </div>
-        </div>
+        </CheckCard>
 
-        <!-- 功能测试 -->
-        <div class="check-card function-card">
-          <div class="card-header">
-            <el-icon class="header-icon"><Setting /></el-icon>
-            <span>功能异常</span>
+        <!-- 功能异常卡片 -->
+        <CheckCard title="功能异常" icon="Setting">
+          <div class="tag-grid">
+            <el-tag
+              v-for="option in dictOptions.functionLabels()"
+              :key="option"
+              :type="templateSelections.function.includes(option) ? 'danger' : undefined"
+              :effect="templateSelections.function.includes(option) ? 'dark' : 'plain'"
+              size="small"
+              class="check-tag"
+              @click="toggleFunctionOption(option)"
+            >
+              {{ option }}
+            </el-tag>
           </div>
-          <div class="card-content">
-            <div class="tag-grid">
-              <el-tag 
-                v-for="option in functionOptions" 
-                :key="option"
-                :type="templateSelections.function.includes(option) ? 'danger' : undefined"
-                :effect="templateSelections.function.includes(option) ? 'dark' : 'plain'"
-                size="small"
-                class="check-tag"
-                @click="toggleFunctionOption(option)"
-              >
-                {{ option }}
-              </el-tag>
-            </div>
-          </div>
-        </div>
+        </CheckCard>
       </div>
     </div>
 
     <!-- 核心信息表单 -->
-    <el-form :model="deviceForm" :rules="rules" ref="formRef" label-position="top" class="core-form">
-      <!-- 质检结果 -->
-      <div class="row-result">
-        
-      <el-form-item class="flex-column" label="📋 质检结果" prop="check_result">
-        <el-input 
-          type="textarea" 
-          v-model="deviceForm.check_result" 
-          :rows="4" 
-          placeholder="详细描述设备状态，或使用上方快速选择..."
-          maxlength="100" 
-          show-word-limit 
-          class="result-textarea"
-        />
-      </el-form-item>
-      <el-form-item class="flex-direction-column" label="📋 扣费说明" prop="remark">
-            <el-input 
-              type="textarea" 
-              v-model="deviceForm.remark" 
-              :rows="4" 
-              placeholder="扣费说明、特殊情况备注等..." 
-              maxlength="200"
-              class="result-textarea"
-              show-word-limit 
-            />
-          </el-form-item>
-        <el-form-item class="flex-direction-column price-item" label="💰 最终价格" prop="final_price" >
-          <el-input-number 
-            v-model="deviceForm.final_price" 
-            :step="10" 
-            :precision="2" 
+    <el-form
+      ref="formRef"
+      :model="deviceForm"
+      :rules="rules"
+      label-position="top"
+      class="core-form"
+    >
+      <div class="form-row">
+        <el-form-item label="📋 质检结果" prop="check_result">
+          <el-input
+            v-model="deviceForm.check_result"
+            type="textarea"
+            :rows="4"
+            placeholder="详细描述设备状态，或使用上方快速选择..."
+            maxlength="100"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="📋 扣费说明" prop="remark">
+          <el-input
+            v-model="deviceForm.remark"
+            type="textarea"
+            :rows="4"
+            placeholder="扣费说明、特殊情况备注等..."
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="💰 最终价格" prop="final_price" class="price-item">
+          <el-input-number
+            v-model="deviceForm.final_price"
+            :step="10"
+            :precision="2"
             :min="0"
             :max="99999"
             placeholder="定价"
             class="price-input"
           />
         </el-form-item>
-</div>
-      <!-- 关键信息行 -->
-      <div class="key-info-row  align-center">
-        <!-- 最终价格 -->
-       
-
-        <!-- 质检图片 -->
-        <el-form-item label="📸 质检图片" class="upload-item">
-          <div class="upload-wrapper">
-            <upload-image v-model="deviceForm.check_images" :limit="6" />
-            <div class="qr-quick-scan" v-if="code">
-
-              <img :src="code" class="qr-mini" alt="扫码上传" />
-               <!-- 通过qrcode 生产二维码 -->
-
-              <span>手机扫码上传</span>
-            </div>
-          </div>
-        </el-form-item>
       </div>
 
-    
+      <el-form-item label="📸 质检图片">
+        <div class="upload-wrapper">
+          <upload-image v-model="deviceForm.check_images" :limit="6" />
+          <div v-if="qrCode" class="qr-quick-scan">
+            <img :src="qrCode" class="qr-mini" alt="扫码上传" />
+            <span>手机扫码上传</span>
+          </div>
+        </div>
+      </el-form-item>
     </el-form>
 
     <!-- 底部操作栏 -->
     <template #footer>
       <div class="action-bar">
         <div class="action-info">
-          <span class="check-count">已检测项目: {{ getCheckedCount() }}</span>
+          <span class="check-count">已检测项目: {{ checkedCount }}</span>
         </div>
         <div class="action-buttons">
-          <el-button size="large" @click="handleCancel">
-            取消
+          <el-button size="large" @click="handleCancel">取消</el-button>
+          <el-button
+            type="warning"
+            size="large"
+            :loading="savingDraft"
+            @click="handleSaveDraft"
+          >
+            {{ savingDraft ? '暂存中...' : '暂存质检' }}
           </el-button>
-          <el-button 
-            type="primary" 
-            size="large" 
-            @click="handleConfirm" 
+          <el-button
+            type="primary"
+            size="large"
             :loading="submitting"
+            @click="handleConfirm"
           >
             <el-icon v-if="!submitting"><Check /></el-icon>
             {{ submitting ? '提交中...' : '完成质检' }}
@@ -321,264 +293,87 @@
 </template>
 
 <script setup lang="ts">
+import { ref, reactive, watch, computed, onMounted } from 'vue'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
-  ref,
-  defineProps,
-  defineEmits,
-  watch,
-  reactive,
-  computed
-} from "vue";
+  Edit, Postcard, Aim, Monitor, Check, Headset, Close, Lock
+} from '@element-plus/icons-vue'
+import QRCode from 'qrcode'
+
+// API
 import { getCoverage, getActivationlock, getMdm } from '@/addon/recycle/api/device_query_api'
 
-import  QRCode  from "qrcode";
+// Composables
+import { useCheckDeviceDict } from '@/addon/recycle/hooks/useCheckDeviceDict'
 
-import { ElMessage, FormInstance, FormRules } from "element-plus";
-import { 
-  Edit, Postcard, Aim, Lightning, Monitor, Picture, Setting, 
-  Check, InfoFilled, Headset, Close, Lock
-} from '@element-plus/icons-vue';
-import { useRoute, useRouter } from 'vue-router'
+// Components
 import WarrantyInfoDisplay from '@/addon/recycle/components/WarrantyInfoDisplay.vue'
+import CheckCard from './CheckCard.vue'
 
-const route = useRoute()
-const router = useRouter()
-
-// 定义设备信息接口
+// ==================== 类型定义 ====================
 interface DeviceInfo {
-  id?: string | number;
-  model?: string;
-  imei?: string;
-  initial_price?: string | number;
-  final_price?: string | number;
-  check_result?: string;
-  check_images?: string;
-  check_status?: number;
-  remark?: string;
-  status?: number;
-  [key: string]: any;
-  info?: any;
+  id?: string | number
+  model?: string
+  imei?: string
+  initial_price?: string | number
+  final_price?: string | number
+  check_result?: string
+  check_images?: string
+  check_status?: number
+  remark?: string
+  status?: number
+  info?: any
+  [key: string]: any
 }
 
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false,
-  },
-  device: {
-    type: Object as () => DeviceInfo,
-    default: () => ({}),
-  },
-});
+// ==================== Props & Emits ====================
+const props = defineProps<{
+  visible: boolean
+  device: DeviceInfo
+}>()
 
-function extractBrand(productName:string, brandList:string[]) {
-  // 将品牌列表转换为正则表达式，不区分大小写
-  const brandRegex = new RegExp(`^(${brandList.join('|')})`, 'i');
-  const match = productName.match(brandRegex);
-  return match ? match[0] : '';
-}
+const emit = defineEmits<{
+  'update:visible': [value: boolean]
+  'confirm': [data: any]
+  'cancel': []
+  'save-draft': [data: any]
+}>()
 
-// 品牌列表（注意顺序很重要，长的品牌名应该放在前面）
-const brands = [
-  '华为', '荣耀', '小米', 'OPPO', 'vivo', 
-  '三星', 'realme', '努比亚', 'moto', '中兴','HUAWEI','Xiaomi','OPPO','vivo','Samsung','Realme','Nubia','Moto','ZTE','摩托'
-];
+// ==================== 字典数据 ====================
+const dictOptions = useCheckDeviceDict()
 
-// 保修查询
-const fetchCoverage = async () => {
-  if (!deviceForm.imei) {
-    ElMessage.warning('请先输入IMEI号码');
-    return;
-  }
-  
-  
+// ==================== 状态管理 ====================
+const dialogVisible = ref(props.visible)
+const deviceData = ref<DeviceInfo>({ ...props.device })
+const submitting = ref(false)
+const savingDraft = ref(false)
+const formRef = ref<FormInstance>()
+const imeiInputRef = ref()
+const showImeiEdit = ref(false)
+const qrCode = ref('')
 
-  loadingCoverage.value = true;
-  try {
+// 查询状态
+const loadingCoverage = ref(false)
+const loadingActivationLock = ref(false)
+const loadingMdm = ref(false)
 
-    const res = await getCoverage({imei:deviceForm.imei, brand: extractBrand(deviceData.value.model, brands)});
+// 查询结果
+const warrantyInfo = ref<any>(null)
+const activationLockInfo = ref<any>(null)
+const mdmInfo = ref<any>(null)
 
-    if (res.data  && res.data.model) {
-      // 直接返回保修数据对象的格式：{ sn: '...', model: '...', ... }
-      warrantyInfo.value = res.data;
-      deviceData.value.model = res.data.model +' '+ res.data.capacity +' '+ res.data.color;
-      deviceForm.info = res.data;
-      ElMessage.success('保修信息查询成功');
-    } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-      // 处理数组格式的错误返回
-      ElMessage.error('保修查询失败：' + (res.data[0] || '未知错误'));
-    } else if (res.data && res.data.msg) {
-      // 处理有错误消息的情况
-      ElMessage.error('保修查询失败：' + res.data.msg);
-    } else {
+// 原始质检结果（用于拼接）
+const originalCheckResult = ref(props.device.check_result || '')
 
-      ElMessage.warning('未查询到保修信息');
-    }
-  } catch (error) {
-    console.error('保修查询失败:', error);
-    ElMessage.error('保修查询失败，请稍后重试');
-  } finally {
-    loadingCoverage.value = false;
-  }
-};
-
-// 清除保修信息
-const clearWarrantyInfo = () => {
-  warrantyInfo.value = null;
-};
-
-// 激活锁查询
-const fetchActivationlock = async () => {
-  if (!deviceForm.imei) {
-    ElMessage.warning('请先输入IMEI号码');
-    return;
-  }
-  
-  loadingActivationLock.value = true;
-  try {
-    const res = await getActivationlock(deviceForm.imei);
-    
-    if (res.data && res.data.sn) {
-      // 直接返回激活锁数据对象的格式
-      activationLockInfo.value = res.data;
-      
-      // 更新激活锁状态到模板选择中
-      templateSelections.activationLock = res.data.locked === true || res.data.fmi === 'On';
-      
-      // 更新质检结果
-      updateCheckResult();
-      
-      ElMessage.success('激活锁信息查询成功');
-    } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-      // 处理数组格式的错误返回
-      ElMessage.error('激活锁查询失败：' + (res.data[0] || '未知错误'));
-    } else if (res.data && res.data.msg) {
-      // 处理有错误消息的情况
-      ElMessage.error('激活锁查询失败：' + res.data.msg);
-    } else {
-      ElMessage.warning('未查询到激活锁信息');
-    }
-  } catch (error) {
-    console.error('激活锁查询失败:', error);
-    ElMessage.error('激活锁查询失败，请稍后重试');
-  } finally {
-    loadingActivationLock.value = false;
-  }
-};
-
-// 清除激活锁信息
-const clearActivationLockInfo = () => {
-  activationLockInfo.value = null;
-  templateSelections.activationLock = false;
-  updateCheckResult();
-};
-
-// 监管锁查询
-const fetchMdm = async () => {
-  if (!deviceForm.imei) {
-    ElMessage.warning('请先输入IMEI号码');
-    return;
-  }
-  
-  loadingMdm.value = true;
-  try {
-    const res = await getMdm(deviceForm.imei);
-    
-    if (res.data && res.data.sn) {
-      // 直接返回监管锁数据对象的格式
-      mdmInfo.value = res.data;
-      
-      // 更新监管锁状态到模板选择中
-      // MDM锁通常通过特定字段判断，这里假设有locked或mdm字段
-      templateSelections.mdmLock = res.data.locked === true || res.data.mdm === 'On' || res.data.mdm === true;
-      
-      // 更新质检结果
-      updateCheckResult();
-      
-      ElMessage.success('监管锁信息查询成功');
-    } else if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-      // 处理数组格式的错误返回
-      ElMessage.error('监管锁查询失败：' + (res.data[0] || '未知错误'));
-    } else if (res.data && res.data.msg) {
-      // 处理有错误消息的情况
-      ElMessage.error('监管锁查询失败：' + res.data.msg);
-    } else {
-      ElMessage.warning('未查询到监管锁信息');
-    }
-  } catch (error) {
-    console.error('监管锁查询失败:', error);
-    ElMessage.error('监管锁查询失败，请稍后重试');
-  } finally {
-    loadingMdm.value = false;
-  }
-};
-
-// 清除监管锁信息
-const clearMdmInfo = () => {
-  mdmInfo.value = null;
-  templateSelections.mdmLock = false;
-  updateCheckResult();
-};
-
-const emit = defineEmits(["update:visible", "confirm", "cancel"]);
-
-// 内部状态
-const dialogVisible = ref(props.visible);
-const deviceData = ref<DeviceInfo>({ ...props.device });
-const submitting = ref(false);
-const formRef = ref<FormInstance>();
-const imeiInputRef = ref();
-const showImeiEdit = ref(false);
-const activeCollapse = ref([]);
-const code = ref(''); // 二维码数据 当前域名+/site/diy/attachment
-const loadingCoverage = ref(false); // 保修查询加载状态
-const warrantyInfo = ref<any>(null); // 保修信息数据
-const loadingActivationLock = ref(false); // 激活锁查询加载状态
-const activationLockInfo = ref<any>(null); // 激活锁信息数据
-const loadingMdm = ref(false); // 监管锁查询加载状态
-const mdmInfo = ref<any>(null); // 监管锁信息数据
-
-// 表单验证规则
-const rules = reactive<FormRules>({
-  check_result: [
-    { required: true, message: "请输入质检结果", trigger: "blur" },
-    { min: 5, message: "质检结果至少5个字符", trigger: "blur" },
-  ],
-});
-
-
-// 生成二维码
-const generateQrCode = async () => {
-  
- code.value = await QRCode.toDataURL(window.location.origin + '/site/diy/attachment' ,  { errorCorrectionLevel: 'L', margin: 0, width: 100 });
-};
-generateQrCode()
-
-// 表单数据
-const deviceForm = reactive<{
-  check_result: string;
-  check_images: string;
-  final_price: number | undefined;
-  remark: string;
-  imei: string;
-  info?: any;
-}>({
-  check_result: props.device.check_result || "",
-  check_images: props.device.check_images || "",
-  final_price:
-    typeof props.device.final_price === "number"
-      ? props.device.final_price
-      : typeof props.device.final_price === "string"
-        ? parseFloat(props.device.final_price) || undefined
-        : undefined,
-  remark: props.device.remark || "",
-  imei: props.device.imei || "",
-});
-
-// 质检模板选项 - 精简
-const screenOptions = [ '无划痕','细微划痕','小划痕','明显划痕','硬划痕','外爆','内爆','未知部件','官方提示'];
-const appearanceOptions = ['无磕碰','细微划痕','轻微氧化','中度磨损','重度磨损','严重损坏','组装壳','组装后玻璃'];
-const functionOptions = ['通话','充电','指纹','面容','WiFi','蓝牙','指南针','NFC','振动','重力','wifi','距离感应','光线感应','闪光','触摸','主麦','前麦','后麦','扬声器','听筒','网络锁','按键','前摄','后摄'];
+// ==================== 表单数据 ====================
+const deviceForm = reactive({
+  check_result: props.device.check_result || '',
+  check_images: props.device.check_images || '',
+  final_price: parsePrice(props.device.final_price),
+  remark: props.device.remark || '',
+  imei: props.device.imei || '',
+  info: undefined as any
+})
 
 // 模板选择状态
 const templateSelections = reactive({
@@ -587,203 +382,302 @@ const templateSelections = reactive({
   screen: '',
   appearance: '',
   function: [] as string[],
-  activationLock: false, // 激活锁状态：false=关闭(绿色)，true=开启(红色)
-  mdmLock: false, // 监管锁状态：false=关闭(绿色)，true=开启(红色)
-});
+  activationLock: false,
+  mdmLock: false
+})
 
-// 计算已检测项目数量
-const getCheckedCount = () => {
-  let count = 0;
-  if (templateSelections.battery) count++;
-  if (templateSelections.battery_num) count++;
-  if (templateSelections.screen) count++;
-  if (templateSelections.appearance) count++;
-  count += templateSelections.function.length;
-  return count;
-};
+// 表单验证规则
+const rules = reactive<FormRules>({
+  check_result: [
+    { required: true, message: '请输入质检结果', trigger: 'blur' },
+    { min: 5, message: '质检结果至少5个字符', trigger: 'blur' }
+  ]
+})
 
-// 选择屏幕状态
-const selectScreenOption = (option: string) => {
-  templateSelections.screen = templateSelections.screen === option ? '' : option;
-  updateCheckResult();
-};
+// ==================== 计算属性 ====================
+const checkedCount = computed(() => {
+  let count = 0
+  if (templateSelections.battery) count++
+  if (templateSelections.battery_num) count++
+  if (templateSelections.screen) count++
+  if (templateSelections.appearance) count++
+  count += templateSelections.function.length
+  return count
+})
 
-// 选择外观状态
-const selectAppearanceOption = (option: string) => {
-  templateSelections.appearance = templateSelections.appearance === option ? '' : option;
-  updateCheckResult();
-};
+// ==================== 工具函数 ====================
+function parsePrice(value: any): number | undefined {
+  if (typeof value === 'number') return value
+  if (typeof value === 'string') return parseFloat(value) || undefined
+  return undefined
+}
 
-// 切换功能选项（可多选）
-const toggleFunctionOption = (option: string) => {
-  const index = templateSelections.function.indexOf(option);
-  if (index > -1) {
-    templateSelections.function.splice(index, 1);
-  } else {
-    templateSelections.function.push(option);
-  }
-  updateCheckResult();
-};
+// ==================== 二维码生成 ====================
+const generateQrCode = async () => {
+  qrCode.value = await QRCode.toDataURL(
+    window.location.origin + '/site/diy/attachment',
+    { errorCorrectionLevel: 'L', margin: 0, width: 100 }
+  )
+}
 
-// 更新质检结果
-const updateCheckResult = () => {
-  const results = [];
-  
-  // 电池
-  if (templateSelections.battery) {
-    results.push(`电池健康度${templateSelections.battery}%`);
-  }
-  
-  if (templateSelections.battery_num) {
-    results.push(`循环${templateSelections.battery_num}次`);
-  }
-  
-  // 激活锁
-  if (templateSelections.activationLock) {
-    results.push('激活锁开启');
-  }
-  
-  // 监管锁
-  if (templateSelections.mdmLock) {
-    results.push('监管锁开启');
-  }
-
-  // 屏幕
-  if (templateSelections.screen) {
-    results.push(`屏幕${templateSelections.screen}`);
-  }
-  
-  // 外观
-  if (templateSelections.appearance) {
-    results.push(`外观${templateSelections.appearance}`);
-  }
-  
-  // 功能异常
-  if (templateSelections.function.length > 0) {
-    results.push(`功能异常: ${templateSelections.function.join('、')}`);
-  }
-  
-  deviceForm.check_result = results.join('; ');
-};
-
-// 清空所有选择
-const clearAllSelections = () => {
-  templateSelections.battery = undefined;
-  templateSelections.battery_num = undefined;
-  templateSelections.activationLock = false;
-  templateSelections.mdmLock = false;
-  templateSelections.screen = '';
-  templateSelections.appearance = '';
-  templateSelections.function = [];
-  deviceForm.check_result = '';
-};
-
-// 填充常用结果
-const fillCommonResult = () => {
-  templateSelections.battery = 85;
-  templateSelections.screen = '完好';
-  templateSelections.appearance = '轻微磨损';
-  updateCheckResult();
-};
-
-// 切换IMEI编辑
+// ==================== IMEI 相关 ====================
 const toggleImeiEdit = () => {
-  showImeiEdit.value = !showImeiEdit.value;
+  showImeiEdit.value = !showImeiEdit.value
   if (showImeiEdit.value) {
-    setTimeout(() => {
-      imeiInputRef.value?.focus();
-    }, 100);
+    setTimeout(() => imeiInputRef.value?.focus(), 100)
   }
-};
+}
 
-// 监听visible属性变化
-watch(
-  () => props.visible,
-  (newVal) => {
-    dialogVisible.value = newVal;
+const handleImeiInput = (value: string) => {
+  deviceForm.imei = value.replace(/[^0-9]/g, '')
+}
+
+const focusImeiInput = () => {
+  imeiInputRef.value?.focus()
+}
+
+// ==================== 质检选项操作 ====================
+const selectScreenOption = (option: string) => {
+  templateSelections.screen = templateSelections.screen === option ? '' : option
+  updateCheckResult()
+}
+
+const selectAppearanceOption = (option: string) => {
+  templateSelections.appearance = templateSelections.appearance === option ? '' : option
+  updateCheckResult()
+}
+
+const toggleFunctionOption = (option: string) => {
+  const index = templateSelections.function.indexOf(option)
+  if (index > -1) {
+    templateSelections.function.splice(index, 1)
+  } else {
+    templateSelections.function.push(option)
   }
-);
+  updateCheckResult()
+}
 
-// 监听device属性变化
-watch(
-  () => props.device,
-  (newVal) => {
-    deviceData.value = { ...newVal };
-    deviceForm.check_result = newVal.check_result || "";
-    deviceForm.check_images = newVal.check_images || "";
-    deviceForm.final_price =
-      typeof newVal.final_price === "number"
-        ? newVal.final_price
-        : typeof newVal.final_price === "string"
-          ? parseFloat(newVal.final_price) || undefined
-          : undefined;
-    deviceForm.remark = newVal.remark || "";
-    deviceForm.imei = newVal.imei || "";
-  },
-  { deep: true }
-);
+const updateCheckResult = () => {
+  const results: string[] = []
 
-// 监听内部visible状态变化，同步到父组件
-watch(dialogVisible, (newVal) => {
-  emit("update:visible", newVal);
-});
+  if (templateSelections.battery) {
+    results.push(`电池健康度${templateSelections.battery}%`)
+  }
+  if (templateSelections.battery_num) {
+    results.push(`循环${templateSelections.battery_num}次`)
+  }
+  if (templateSelections.activationLock) {
+    results.push('激活锁开启')
+  }
+  if (templateSelections.mdmLock) {
+    results.push('监管锁开启')
+  }
+  if (templateSelections.screen) {
+    results.push(`屏幕${templateSelections.screen}`)
+  }
+  if (templateSelections.appearance) {
+    results.push(`外观${templateSelections.appearance}`)
+  }
+  if (templateSelections.function.length > 0) {
+    results.push(`功能异常: ${templateSelections.function.join('、')}`)
+  }
 
-// 处理取消操作
-const handleCancel = () => {
-  dialogVisible.value = false;
-  emit("cancel");
-};
+  const templateResult = results.join('; ')
+  if (originalCheckResult.value && templateResult) {
+    deviceForm.check_result = originalCheckResult.value + '; ' + templateResult
+  } else if (templateResult) {
+    deviceForm.check_result = templateResult
+  }
+}
 
-// 处理确认操作
-const handleConfirm = async () => {
-  if (!formRef.value) return;
+const clearAllSelections = () => {
+  templateSelections.battery = undefined
+  templateSelections.battery_num = undefined
+  templateSelections.activationLock = false
+  templateSelections.mdmLock = false
+  templateSelections.screen = ''
+  templateSelections.appearance = ''
+  templateSelections.function = []
+  deviceForm.check_result = ''
+}
 
-  await formRef.value.validate(async (valid, fields) => {
-    if (!valid) {
-      return;
+const fillCommonResult = () => {
+  templateSelections.battery = 85
+  templateSelections.screen = '完好'
+  templateSelections.appearance = '轻微磨损'
+  updateCheckResult()
+}
+
+// ==================== 查询功能 ====================
+const fetchCoverage = async () => {
+  if (!deviceForm.imei) {
+    ElMessage.warning('请先输入IMEI号码')
+    return
+  }
+
+  loadingCoverage.value = true
+  try {
+    const brand = dictOptions.extractBrand(deviceData.value.model || '')
+    const res = await getCoverage({ imei: deviceForm.imei, brand })
+
+    if (res.data?.model) {
+      warrantyInfo.value = res.data
+      deviceData.value.model = `${res.data.model} ${res.data.capacity} ${res.data.color}`
+      deviceForm.info = res.data
+      ElMessage.success('保修信息查询成功')
+    } else if (res.data?.msg) {
+      ElMessage.error('保修查询失败：' + res.data.msg)
+    } else {
+      ElMessage.warning('未查询到保修信息')
     }
+  } catch (error) {
+    console.error('保修查询失败:', error)
+    ElMessage.error('保修查询失败，请稍后重试')
+  } finally {
+    loadingCoverage.value = false
+  }
+}
 
-    submitting.value = true;
+const clearWarrantyInfo = () => {
+  warrantyInfo.value = null
+}
+
+const fetchActivationlock = async () => {
+  if (!deviceForm.imei) {
+    ElMessage.warning('请先输入IMEI号码')
+    return
+  }
+
+  loadingActivationLock.value = true
+  try {
+    const res = await getActivationlock(deviceForm.imei)
+
+    if (res.data?.sn) {
+      activationLockInfo.value = res.data
+      templateSelections.activationLock = res.data.locked === true || res.data.fmi === 'On'
+      updateCheckResult()
+      ElMessage.success('激活锁信息查询成功')
+    } else if (res.data?.msg) {
+      ElMessage.error('激活锁查询失败：' + res.data.msg)
+    } else {
+      ElMessage.warning('未查询到激活锁信息')
+    }
+  } catch (error) {
+    console.error('激活锁查询失败:', error)
+    ElMessage.error('激活锁查询失败，请稍后重试')
+  } finally {
+    loadingActivationLock.value = false
+  }
+}
+
+const fetchMdm = async () => {
+  if (!deviceForm.imei) {
+    ElMessage.warning('请先输入IMEI号码')
+    return
+  }
+
+  loadingMdm.value = true
+  try {
+    const res = await getMdm(deviceForm.imei)
+
+    if (res.data?.sn) {
+      mdmInfo.value = res.data
+      templateSelections.mdmLock = res.data.locked === true || res.data.mdm === 'On' || res.data.mdm === true
+      updateCheckResult()
+      ElMessage.success('监管锁信息查询成功')
+    } else if (res.data?.msg) {
+      ElMessage.error('监管锁查询失败：' + res.data.msg)
+    } else {
+      ElMessage.warning('未查询到监管锁信息')
+    }
+  } catch (error) {
+    console.error('监管锁查询失败:', error)
+    ElMessage.error('监管锁查询失败，请稍后重试')
+  } finally {
+    loadingMdm.value = false
+  }
+}
+
+// ==================== 表单操作 ====================
+const handleCancel = () => {
+  dialogVisible.value = false
+  emit('cancel')
+}
+
+const handleConfirm = async () => {
+  if (!formRef.value) return
+
+  await formRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    submitting.value = true
     try {
-      // 准备提交的数据
-      const submitData = {
+      emit('confirm', {
         id: deviceData.value.id,
         check_result: deviceForm.check_result,
         check_images: deviceForm.check_images,
         remark: deviceForm.remark,
-        check_status: 1, // 已质检
+        check_status: 1,
         final_price: deviceForm.final_price,
-        action: "check", // 标识这是质检操作
+        action: 'check',
         imei: deviceForm.imei,
         model: deviceData.value.model,
-        info: deviceForm.info,
-      };
-      emit("confirm", submitData);
-      dialogVisible.value = false;
+        info: deviceForm.info
+      })
+      dialogVisible.value = false
     } finally {
-      submitting.value = false;
+      submitting.value = false
     }
-  });
-};
+  })
+}
 
-// IMEI输入相关方法
-const handleImeiInput = (value: string) => {
-  // 过滤非数字字符，IMEI通常只包含数字
-  const filteredValue = value.replace(/[^0-9]/g, '');
-  if (filteredValue !== value) {
-    deviceForm.imei = filteredValue;
+const handleSaveDraft = async () => {
+  savingDraft.value = true
+  try {
+    emit('save-draft', {
+      id: deviceData.value.id,
+      check_result: deviceForm.check_result,
+      check_images: deviceForm.check_images,
+      remark: deviceForm.remark,
+      final_price: deviceForm.final_price,
+      imei: deviceForm.imei,
+      model: deviceData.value.model,
+      info: deviceForm.info,
+      action: 'save_draft'
+    })
+    dialogVisible.value = false
+  } finally {
+    savingDraft.value = false
   }
-};
+}
 
-const focusImeiInput = () => {
-  if (imeiInputRef.value) {
-    imeiInputRef.value.focus();
-  }
-};
+// ==================== 监听器 ====================
+watch(() => props.visible, (val) => {
+  dialogVisible.value = val
+})
+
+watch(() => props.device, (val) => {
+  deviceData.value = { ...val }
+  deviceForm.check_result = val.check_result || ''
+  deviceForm.check_images = val.check_images || ''
+  deviceForm.final_price = parsePrice(val.final_price)
+  deviceForm.remark = val.remark || ''
+  deviceForm.imei = val.imei || ''
+  originalCheckResult.value = val.check_result || ''
+}, { deep: true })
+
+watch(dialogVisible, (val) => {
+  emit('update:visible', val)
+})
+
+// ==================== 生命周期 ====================
+onMounted(() => {
+  generateQrCode()
+  dictOptions.loadDictionary()
+})
 </script>
 
 <style lang="scss" scoped>
-// 主对话框样式
 .check-device-dialog {
   :deep(.el-dialog) {
     border-radius: 12px;
@@ -793,23 +687,22 @@ const focusImeiInput = () => {
   :deep(.el-dialog__header) {
     padding: 20px 24px 12px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
     border: none;
-    
+
     .el-dialog__title {
       font-size: 18px;
       font-weight: 600;
       color: white;
     }
   }
-  
+
   :deep(.el-dialog__body) {
     padding: 20px 24px;
     background-color: #fafbfc;
     max-height: 70vh;
     overflow-y: auto;
   }
-  
+
   :deep(.el-dialog__footer) {
     padding: 16px 24px;
     background-color: white;
@@ -827,12 +720,12 @@ const focusImeiInput = () => {
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 16px;
-  
+
   .device-basic {
     display: flex;
     align-items: center;
     gap: 12px;
-    
+
     .device-icon {
       font-size: 24px;
       width: 40px;
@@ -843,7 +736,7 @@ const focusImeiInput = () => {
       background: #f3f4f6;
       border-radius: 8px;
     }
-    
+
     .device-details {
       .device-model {
         font-size: 16px;
@@ -851,42 +744,15 @@ const focusImeiInput = () => {
         margin: 0 0 4px 0;
         color: #111827;
       }
-      
+
       .device-meta {
         display: flex;
         align-items: center;
         gap: 16px;
         font-size: 13px;
         color: #6b7280;
-        
-        .price-display {
-          color: #f59e0b;
-          font-weight: 600;
-        }
       }
     }
-  }
-}
-
-// IMEI编辑面板
-.imei-edit-panel {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  
-  .panel-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid #e2e8f0;
-    font-weight: 500;
-    color: #374151;
-  }
-  
-  .imei-input-group {
-    padding: 16px;
   }
 }
 
@@ -896,45 +762,34 @@ const focusImeiInput = () => {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   margin-bottom: 16px;
-  
+
   .panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px;
+    padding: 12px 16px;
     border-bottom: 1px solid #e5e7eb;
     font-weight: 600;
     color: #111827;
-    
+
     .header-actions {
       display: flex;
+      align-items: center;
       gap: 8px;
-    }
-  }
-  
-  .panel-content {
-    padding: 8px;
-    display: flex;
-    gap: 12px;
-    
-    .el-button {
-      border-radius: 6px;
-      transition: all 0.2s ease;
-      
-      &:hover {
-        transform: translateY(-1px);
+
+      .divider {
+        color: #d1d5db;
+        margin: 0 4px;
       }
     }
   }
-  
-  // 保修信息显示区域
+
   .warranty-display-panel {
     margin: 16px;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     overflow: hidden;
-    background: #ffffff;
-    
+
     .warranty-header {
       display: flex;
       justify-content: space-between;
@@ -944,105 +799,55 @@ const focusImeiInput = () => {
       border-bottom: 1px solid #e5e7eb;
       font-weight: 600;
       color: #374151;
-      
-      span {
-        font-size: 14px;
-      }
-    }
-    
-    // 重写保修信息组件在这里的样式
-    :deep(.warranty-info-display) {
-      padding: 16px;
-      background: #ffffff;
-      min-height: auto;
-      
-      .device-basic-card,
-      .info-cards-grid,
-      .additional-info-card,
-      .brightstar-card {
-        margin-bottom: 12px;
-        
-        &:last-child {
-          margin-bottom: 0;
-        }
-      }
-      
-      .info-cards-grid {
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 12px;
-      }
     }
   }
-  
+
   .check-grid {
     display: grid;
-    grid-template-columns:  1fr 1fr 1fr 2fr;
-    gap: 8px;
-    padding: 8px;
+    grid-template-columns: 1fr 1fr 1fr 2fr;
+    gap: 12px;
+    padding: 16px;
   }
-  
-  .check-card {
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    overflow: hidden;
-    
-    .card-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px;
-      background: #f9fafb;
-      border-bottom: 1px solid #e5e7eb;
-      font-size: 14px;
-      font-weight: 500;
-      color: #374151;
-      
-      .header-icon {
-        color: #6366f1;
-      }
+}
+
+// 标签网格
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  .check-tag {
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+
+    &:hover {
+      transform: translateY(-1px);
     }
-    
-    .card-content {
-      padding: 12px;
-      
-      .input-row {
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        margin-bottom: 8px;
-        
-        &:last-child {
-          margin-bottom: 0;
-        }
-        
-        .label {
-          width: 60px;
-          font-size: 12px;
-          color: #6b7280;
-        }
-        
-        .unit {
-          font-size: 12px;
-          color: #9ca3af;
-        }
-      }
-      
-      .tag-grid {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        
-        .check-tag {
-          cursor: pointer;
-          font-size: 12px;
-          transition: all 0.2s;
-          
-          &:hover {
-            transform: translateY(-1px);
-          }
-        }
-      }
-    }
+  }
+}
+
+// 输入行
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  .label {
+    width: 60px;
+    font-size: 12px;
+    color: #6b7280;
+    flex-shrink: 0;
+  }
+
+  .unit {
+    font-size: 12px;
+    color: #9ca3af;
   }
 }
 
@@ -1052,74 +857,41 @@ const focusImeiInput = () => {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 20px;
-  
-  .result-textarea {
-    :deep(.el-textarea__inner) {
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-  }
-  .row-result{
+
+  .form-row {
     display: grid;
-    gap: 24px;
     grid-template-columns: 1fr 1fr 1fr;
-  }
-  .key-info-row {
-    display: grid;
-    // grid-template-columns: 1fr 2fr;
     gap: 24px;
-    margin-top: 16px;
-    align-items: center;
-    
-    .price-item {
-      .price-input {
-        width: 100%;
-      }
-    }
-    
-    .upload-item {
-      .upload-wrapper {
-        display: flex;
-        align-items: flex-start;
-        gap: 16px;
-        
-        .qr-quick-scan {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 4px;
-          
-          .qr-mini {
-            width: 50px;
-            height: 50px;
-            border-radius: 4px;
-            border: 1px solid #e5e7eb;
-          }
-          
-          span {
-            font-size: 12px;
-            color: #6b7280;
-          }
-        }
-      }
+  }
+
+  .price-item {
+    .price-input {
+      width: 100%;
     }
   }
-  
-  .remark-collapse {
-    margin-top: 16px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    
-    :deep(.el-collapse-item__header) {
-      background: #f9fafb;
-      padding: 12px 16px;
-      font-size: 14px;
-      color: #374151;
-    }
-    
-    :deep(.el-collapse-item__content) {
-      padding: 16px;
+
+  .upload-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+
+    .qr-quick-scan {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+
+      .qr-mini {
+        width: 50px;
+        height: 50px;
+        border-radius: 4px;
+        border: 1px solid #e5e7eb;
+      }
+
+      span {
+        font-size: 12px;
+        color: #6b7280;
+      }
     }
   }
 }
@@ -1129,7 +901,7 @@ const focusImeiInput = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  
+
   .action-info {
     .check-count {
       font-size: 13px;
@@ -1139,38 +911,36 @@ const focusImeiInput = () => {
       border-radius: 4px;
     }
   }
-  
+
   .action-buttons {
     display: flex;
     gap: 12px;
   }
 }
 
-// 响应式设计
+// 响应式
 @media (max-width: 768px) {
   .check-device-dialog {
     :deep(.el-dialog) {
       width: 95vw !important;
-      max-height: 90vh;
     }
   }
-  
-  .check-grid {
-    grid-template-columns: 1fr  1fr !important;
+
+  .smart-check-panel .check-grid {
+    grid-template-columns: 1fr 1fr;
   }
-  
-  .key-info-row {
-    grid-template-columns: 1fr !important;
-    gap: 16px !important;
+
+  .core-form .form-row {
+    grid-template-columns: 1fr;
   }
-  
+
   .action-bar {
     flex-direction: column;
     gap: 12px;
-    
+
     .action-buttons {
       width: 100%;
-      
+
       .el-button {
         flex: 1;
       }

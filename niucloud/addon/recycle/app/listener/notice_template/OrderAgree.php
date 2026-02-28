@@ -8,7 +8,7 @@ use app\listener\notice_template\BaseNoticeTemplate;
 use think\facade\Log;
 
 /**
- * 订单同意通知
+ * 订单验收通知（待确认通知）
  */
 class OrderAgree extends BaseNoticeTemplate
 {
@@ -16,37 +16,37 @@ class OrderAgree extends BaseNoticeTemplate
 
     public function handle(array $params)
     {
-        
-        if ($this->key == $params['key']) {
-            $order_id = $params['data']['order_id'] ?? 0;
-            $order = (new CoreRecycleOrderService())->getInfo($order_id);
-            
-            Log::record('【回收通知】OrderAgree->handle 获取订单信息: ' . json_encode($order), 'notice');
-            
-            // 使用获取到的订单数据，但对于关键空字段使用静态数据
-            $site_id = $order['site_id'] ?? 0;
-            $member_id = $order['member_id'] ?? 0;
-            
-            Log::record('【回收通知】member_id  信息: ' .$member_id, 'notice');
-            Log::record('【回收通知】site_id  信息: ' .$site_id, 'notice');
-            
-
-            
-            $wap_domain = get_wap_domain($site_id);
-            return $this->toReturn(
-                [
-                    '__wechat_page' => $wap_domain . '/addon/recycle/pages/order/detail?id=' . $order_id,
-                    '__weapp_page' => 'addon/recycle/pages/order/detail?id=' . $order_id,
-                    'order_no' => $order['order_no'],
-                    'time' => date('Y-m-d H:i:s'),
-                    'status' => '待确认'
-                ],
-                [
-                    'member_id' => $member_id
-                ]
-            );
+        if ($this->key !== ($params['key'] ?? '')) {
+            return null;
         }
-        
-        return null;
+
+        $orderId = (int)($params['data']['order_id'] ?? 0);
+        if ($orderId <= 0) {
+            Log::error('【回收通知】OrderAgree 订单ID为空');
+            return null;
+        }
+
+        $order = (new CoreRecycleOrderService())->getInfo($orderId);
+        if (empty($order)) {
+            Log::error('【回收通知】OrderAgree 订单不存在: ' . $orderId);
+            return null;
+        }
+
+        $siteId = (int)($order['site_id'] ?? 0);
+        $memberId = (int)($order['member_id'] ?? 0);
+        $wapDomain = get_wap_domain($siteId);
+
+        return $this->toReturn(
+            [
+                '__wechat_page' => $wapDomain . '/addon/recycle/pages/order/detail?id=' . $orderId,
+                '__weapp_page' => 'addon/recycle/pages/order/detail?id=' . $orderId,
+                'order_no' => $order['order_no'] ?? '',
+                'time' => date('Y-m-d H:i:s'),
+                'status' => '待确认',
+            ],
+            [
+                'member_id' => $memberId
+            ]
+        );
     }
 }

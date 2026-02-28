@@ -92,6 +92,9 @@ class SignHandler extends BaseFlowHandler
         $deviceIds = [];
 
         foreach ($devices as $device) {
+            $categoryId = (int)($device['category_id'] ?? 1);
+            $categoryPath = $this->normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
+
             // 检查是否有设备ID并且该ID是否在现有设备中
             if (!empty($device['id']) && isset($existingDevices[$device['id']])) {
                 // 设备已存在，执行更新操作
@@ -99,7 +102,8 @@ class SignHandler extends BaseFlowHandler
                     'imei' => $device['imei'] ?? '',
                     'model' => $device['model'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
-                    'category_id' => $device['category_id'] ?? 1,
+                    'category_id' => $categoryId,
+                    'info' => $this->buildDeviceInfo($existingDevices[$device['id']]['info'] ?? [], $categoryPath),
                     'update_at' => time()
                 ];
                 $deviceService->signUpdate((int)$device['id'], $deviceData);
@@ -111,7 +115,8 @@ class SignHandler extends BaseFlowHandler
                     'imei' => $device['imei'] ?? '',
                     'model' => $device['model'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
-                    'category_id' => $device['category_id'] ?? 1,
+                    'category_id' => $categoryId,
+                    'info' => $this->buildDeviceInfo([], $categoryPath),
                     'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
                     'create_at' => time(),
                     'update_at' => time(),
@@ -124,5 +129,50 @@ class SignHandler extends BaseFlowHandler
         }
 
         return $deviceIds;
+    }
+
+    /**
+     * 规范化分类路径，统一存储为字符串数组
+     * @param mixed $categoryPath
+     * @param int $categoryId
+     * @return array
+     */
+    private function normalizeCategoryPath($categoryPath, int $categoryId): array
+    {
+        if (is_string($categoryPath) && $categoryPath !== '') {
+            $decoded = json_decode($categoryPath, true);
+            if (is_array($decoded)) {
+                $categoryPath = $decoded;
+            } else {
+                $categoryPath = array_filter(array_map('trim', explode(',', $categoryPath)));
+            }
+        }
+
+        if (!is_array($categoryPath) || empty($categoryPath)) {
+            $categoryPath = [ $categoryId ];
+        }
+
+        return array_values(array_map('strval', $categoryPath));
+    }
+
+    /**
+     * 合并设备info信息，补充商城分类路径
+     * @param mixed $originInfo
+     * @param array $categoryPath
+     * @return array
+     */
+    private function buildDeviceInfo($originInfo, array $categoryPath): array
+    {
+        if (is_string($originInfo) && $originInfo !== '') {
+            $decoded = json_decode($originInfo, true);
+            $originInfo = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($originInfo)) {
+            $originInfo = [];
+        }
+
+        $originInfo['goods_category'] = $categoryPath;
+        return $originInfo;
     }
 }

@@ -32,7 +32,9 @@ class PaymentHandler extends BaseFlowHandler
      *
      * @param array $order 订单信息
      * @param array $data 操作数据，包含：
-     *   - payment_info: 打款信息（支付方式、交易号等）
+     *   - pay_type: 支付方式
+     *   - account: 收款账号
+     *   - payment_images: 打款凭证图片
      *   - remark: 备注（可选）
      * @param array $context 上下文信息
      * @return array 处理结果
@@ -47,25 +49,24 @@ class PaymentHandler extends BaseFlowHandler
             throw new CommonException('订单金额为0，无法打款');
         }
 
-        // 2. 验证打款信息
-        if (empty($data['payment_info'])) {
-            throw new CommonException('缺少打款信息');
-        }
-
-        // 3. 记录打款信息
+        // 2. 记录打款信息
         $paymentInfo = [
             'pay_time' => time(),
             'pay_account' => $totalAmount,
-            'payment_method' => $data['payment_info']['method'] ?? 'transfer',
-            'transaction_no' => $data['payment_info']['transaction_no'] ?? '',
+            'pay_type' => $data['pay_type'] ?? '',
+            'account' => $data['account'] ?? '',
+            'payment_images' => $data['payment_images'] ?? '',
             'operator_id' => $this->getOperatorId($context),
             'remark' => $data['remark'] ?? ''
         ];
 
-        // 4. 更新订单打款信息（这里可以扩展为更新订单表的打款字段）
+        // 3. 更新订单打款信息
         RecycleOrder::where('id', $order['id'])->update([
             'pay_time' => $paymentInfo['pay_time'],
             'total_amount' => $paymentInfo['pay_account'],
+            'pay_type' => $paymentInfo['pay_type'],
+            'pay_account' => $paymentInfo['account'],
+            'payment_images' => $paymentInfo['payment_images'],
             'update_at' => time()
         ]);
 

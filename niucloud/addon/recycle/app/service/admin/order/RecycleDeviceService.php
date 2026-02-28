@@ -538,10 +538,11 @@ class RecycleDeviceService extends BaseAdminService
      * @param int $id 设备ID
      * @param float $price 价格
      * @param string $remark 备注
+     * @param float|null $sellPrice 卖货价格
      * @return bool
      * @throws CommonException
      */
-    public function confirmPrice(int $id, float $price, string $remark = ''): bool
+    public function confirmPrice(int $id, float $price, string $remark = '', ?float $sellPrice = null): bool
     {
        
      
@@ -567,6 +568,9 @@ class RecycleDeviceService extends BaseAdminService
             $old_status = $device->status;
             $oldPrice = $device->final_price;
             $device->final_price = $price;
+            if ($sellPrice !== null) {
+                $device->sell_price = $sellPrice;
+            }
             $device->remark = $remark;
             $device->price_uid = $this->uid;
             $device->price_at = time(); // 添加定价时间
@@ -1500,13 +1504,13 @@ class RecycleDeviceService extends BaseAdminService
     public function printDeviceLabel(int $id)
     {
         // 查询和这个设备相关的所有信息
-        $device = RecycleDevice::where('id', $id) 
+        $device = RecycleDevice::where('id', $id)
         ->with('checkUser')
         ->find();
         if (!$device) {
             throw new CommonException('设备不存在');
         }
-        
+
         // 使用简化版打印服务
         $printerService = new \addon\recycle\app\service\admin\printer\RecyclePrinterService();
         return $printerService->printDeviceLabel($id);

@@ -37,6 +37,12 @@ class CoreRecycleOrderService extends BaseCoreService
         try {
             Db::startTrans();
 
+            $devicesPayload = $data['devices'] ?? [];
+            if (empty($devicesPayload)) {
+                $count = max(1, (int)($data['count'] ?? 1));
+                $devicesPayload = array_fill(0, $count, []);
+            }
+
             // 创建订单
             $order = RecycleOrder::create([
                 'site_id' => $data['site_id'],
@@ -48,21 +54,30 @@ class CoreRecycleOrderService extends BaseCoreService
                 'express_company' => $data['express_company'] ?? '',
                 'express_no' => $data['express_no'] ?? '',
                 'status' => RecycleOrderDict::ORDER_STATUS_PENDING_SIGN,
-                'device_count' => count($data['devices'] ?? []),
+                'device_count' => count($devicesPayload),
                 'remark' => $data['remark'] ?? '',
                 'create_at' => time(),
                 'update_at' => time(),
             ]);
 
             // 创建设备
-            if (!empty($data['devices'])) {
+            if (!empty($devicesPayload)) {
                 $devices = [];
-                foreach ($data['devices'] as $device) {
+                foreach ($devicesPayload as $device) {
+                    $categoryId = (int)($device['category_id'] ?? 1);
+                    $categoryPath = $device['category_path'] ?? [];
+                    if (!is_array($categoryPath) || empty($categoryPath)) {
+                        $categoryPath = [ $categoryId ];
+                    }
+
                     $devices[] = [
                         'site_id' => $data['site_id'],
                         'order_id' => $order->id,
                         'member_id' => $data['member_id'] ?? 0,
-                        'category_id' => $device['category_id'] ?? 1,
+                        'category_id' => $categoryId,
+                        'info' => [
+                            'goods_category' => array_values(array_map('strval', $categoryPath))
+                        ],
                         'imei' => $device['imei'] ?? '',
                         'model' => $device['model'] ?? '',
                         'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,

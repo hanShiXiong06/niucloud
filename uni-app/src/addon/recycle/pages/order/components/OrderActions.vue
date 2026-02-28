@@ -18,15 +18,7 @@
       <text>取消订单</text>
     </view>
 
-    <!-- 状态2-已签收：确认收货 -->
-    <view
-      v-if="order.status === 2"
-      class="action-btn primary"
-      @click="$emit('confirm')"
-    >
-      <text>一键确认</text>
-    </view>
-
+  
     <!-- 状态7-已完成、状态8-已关闭、状态9-已取消：可以删除订单 -->
     <view
       v-if="order.status === 7 || order.status === 8 || order.status === 9"

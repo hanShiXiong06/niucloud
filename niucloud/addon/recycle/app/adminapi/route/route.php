@@ -594,5 +594,16 @@ Route::group('recycle', function () {
 ]);
 // USER_CODE_END -- recycle_quotation
 
+// ✅ 小程序分享短链接
+Route::group('recycle', function () {
+    // 生成通用 Short Link
+    Route::post('sys/short_link/generate', 'addon\recycle\app\adminapi\controller\sys\ShortLink@generate');
+    // 生成回收订单分享链接
+    Route::post('sys/short_link/order', 'addon\recycle\app\adminapi\controller\sys\ShortLink@generateOrderLink');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
 
-// yisu 
+// yisu

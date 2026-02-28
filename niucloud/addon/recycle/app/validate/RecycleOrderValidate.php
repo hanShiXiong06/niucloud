@@ -39,6 +39,7 @@ class RecycleOrderValidate extends BaseValidate
         'device_id' => 'integer|gt:0',
         'order_id' => 'integer|gt:0',
         'reason' => 'max:500'
+        ,'count' => 'integer|between:1,100'
     ];
 
     protected $message = [
@@ -78,12 +79,14 @@ class RecycleOrderValidate extends BaseValidate
         'order_id.integer' => '订单ID必须为整数',
         'order_id.gt' => '订单ID必须大于0',
         'reason.max' => '操作原因不能超过500个字符'
+        ,'count.integer' => '数量必须为整数'
+        ,'count.between' => '数量必须在1-100之间'
     ];
 
     protected $scene = [
         'list' => ['page', 'limit'],
         'detail' => ['id'],
-        'create' => ['member_id', 'customer_name', 'customer_phone', 'express_no', 'express_company', 'delivery_type', 'remark', 'devices'],
+        'create' => ['member_id', 'customer_name', 'customer_phone', 'express_no', 'express_company', 'delivery_type', 'remark', 'count', 'devices'],
         'sign' => ['id', 'devices', 'remark'],
         'check' => ['id', 'devices', 'remark'],
         'price' => ['id', 'devices', 'pay_account', 'pay_type', 'pay_name', 'pay_remark', 'pay_url', 'remark'],

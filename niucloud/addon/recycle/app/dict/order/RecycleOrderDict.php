@@ -143,7 +143,6 @@ class RecycleOrderDict
                 'name' => '已签收',
                 'status' => self::ORDER_STATUS_SIGNED,
                 'action' => [
-                    ['key' => self::ORDER_SIGN, 'value' => '修改订单', 'id' => self::ORDER_STATUS_SIGNED],
                     ['key' => self::ORDER_CANCEL, 'value' => '取消订单', 'id' => self::ORDER_STATUS_CANCELLED]
                 ],
             ],

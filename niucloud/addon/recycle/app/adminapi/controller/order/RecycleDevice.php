@@ -122,11 +122,28 @@ class RecycleDevice extends BaseAdminController
             $checkData = [
                 'check_result' => $data['data']['check_result'] ?? '',
                 'check_images' => $data['data']['check_images'] ?? '',
+                'check_result_seller' => $data['data']['check_result_seller'] ?? '',
+                'check_result_buyer' => $data['data']['check_result_buyer'] ?? '',
+                'check_images_seller' => $data['data']['check_images_seller'] ?? '',
+                'check_images_buyer' => $data['data']['check_images_buyer'] ?? '',
             ];
+
+            // 向后兼容：如果只提交了 seller 字段，兼容填充旧字段
+            if (empty($checkData['check_result']) && !empty($checkData['check_result_seller'])) {
+                $checkData['check_result'] = $checkData['check_result_seller'];
+            }
+            if (empty($checkData['check_images']) && !empty($checkData['check_images_seller'])) {
+                $checkData['check_images'] = $checkData['check_images_seller'];
+            }
             
             // 如果有最终价格，添加到质检数据中
             if (isset($data['data']['final_price']) && $data['data']['final_price'] > 0) {
                 $checkData['final_price'] = $data['data']['final_price'];
+            }
+
+            // 卖货价格支持在质检阶段录入（允许为0）
+            if (array_key_exists('sell_price', $data['data']) && $data['data']['sell_price'] !== '' && $data['data']['sell_price'] !== null) {
+                $checkData['sell_price'] = $data['data']['sell_price'];
             }
             
             // 如果有check_status，添加到质检数据中
@@ -195,6 +212,7 @@ class RecycleDevice extends BaseAdminController
         $data = $this->request->params([
             ['check_data', []],
             ['final_price', 0],
+            ['sell_price', ''],
             ['remark', '']
         ]);
 
@@ -205,6 +223,9 @@ class RecycleDevice extends BaseAdminController
         $checkData = $data['check_data'];
         if (isset($data['final_price']) && $data['final_price'] > 0) {
             $checkData['final_price'] = $data['final_price'];
+        }
+        if ($data['sell_price'] !== '' && $data['sell_price'] !== null) {
+            $checkData['sell_price'] = $data['sell_price'];
         }
 
         return success($this->service->completeCheck($id, $checkData, $data['remark']));
@@ -219,13 +240,15 @@ class RecycleDevice extends BaseAdminController
     {
         $data = $this->request->params([
             ['final_price', ''],
+            ['sell_price', ''],
             ['remark', '']
         ]);
       
         // 参数验证
         $this->validate->scene('price')->check(array_merge(['id' => $id], $data));
 
-        return success($this->service->confirmPrice($id, $data['final_price'], $data['remark']));
+        $sellPrice = ($data['sell_price'] === '' || $data['sell_price'] === null) ? null : (float)$data['sell_price'];
+        return success($this->service->confirmPrice($id, (float)$data['final_price'], $data['remark'], $sellPrice));
     }
 
     /**

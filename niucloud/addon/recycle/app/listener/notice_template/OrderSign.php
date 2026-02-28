@@ -16,44 +16,37 @@ class OrderSign extends BaseNoticeTemplate
 
     public function handle(array $params)
     {
-        
-        
-        if ($this->key == $params['key']) {
-            $order_id = $params['data']['order_id'] ?? 0;
-            
-         
-            
-            // 2. 如果params中没有member_id，再从订单中获取
-           
-            $order = (new CoreRecycleOrderService())->getInfo($order_id);
-            
-            // 从订单中获取site_id和member_id
-            $site_id = $order['site_id'] ?? 0;
-            $member_id = $order['member_id'] ?? 0;
-            
-           
-            
-            // 3. 生成一个静态的订单编号（如果需要可以从订单中获取）
-            $order_no =  $order_id = $params['data']['order_id'] ?? 0;
-            
-            // 4. 获取域名
-            $wap_domain = get_wap_domain($site_id);
-            
-            
-            return $this->toReturn(
-                [
-                    '__wechat_page' => $wap_domain . '/addon/recycle/pages/order/detail?id=' . $order_id,
-                    '__weapp_page' => 'addon/recycle/pages/order/detail?id=' . $order_id,
-                    'order_no' => $order_no,
-                    'remark' => '您的回收订单已签收，请等待工作人员审核。',
-
-                ],
-                [
-                    'member_id' => $member_id
-                ]
-            );
+        if ($this->key !== ($params['key'] ?? '')) {
+            return null;
         }
-        
-        return null;
+
+        $orderId = (int)($params['data']['order_id'] ?? 0);
+        if ($orderId <= 0) {
+            Log::error('【回收通知】OrderSign 订单ID为空');
+            return null;
+        }
+
+        $order = (new CoreRecycleOrderService())->getInfo($orderId);
+        if (empty($order)) {
+            Log::error('【回收通知】OrderSign 订单不存在: ' . $orderId);
+            return null;
+        }
+
+        $siteId = (int)($order['site_id'] ?? 0);
+        $memberId = (int)($order['member_id'] ?? 0);
+        $wapDomain = get_wap_domain($siteId);
+
+        return $this->toReturn(
+            [
+                '__wechat_page' => $wapDomain . '/addon/recycle/pages/order/detail?id=' . $orderId,
+                '__weapp_page' => 'addon/recycle/pages/order/detail?id=' . $orderId,
+                'order_no' => $order['order_no'] ?? '',
+                'sign_time' => date('Y-m-d H:i:s'),
+                'remark' => '您的回收订单已签收，请等待工作人员审核。',
+            ],
+            [
+                'member_id' => $memberId
+            ]
+        );
     }
 }

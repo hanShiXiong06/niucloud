@@ -1,14 +1,4 @@
 <?php
-// +----------------------------------------------------------------------
-// | Niucloud-admin 企业快速开发的多应用管理平台
-// +----------------------------------------------------------------------
-// | 官方网址：https://www.niucloud.com
-// +----------------------------------------------------------------------
-// | niucloud团队 版权所有 开源版本可自由商用
-// +----------------------------------------------------------------------
-// | Author: Niucloud Team
-// +----------------------------------------------------------------------
-
 declare(strict_types=1);
 
 namespace addon\recycle\app\service\core\recycle_order;
@@ -66,39 +56,37 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
             }
 
             $coreService = new CoreRecycleOrderService();
-            $orderInfo = $coreService->getInfo($data['order_id']);
+            $orderInfo = $coreService->getInfo((int)$data['order_id']);
 
             if (empty($orderInfo)) {
                 Log::error('【回收通知】订单不存在: ' . $data['order_id']);
                 return;
             }
 
-            // 构建收货地址
-            $address = '';
-            if (!empty($orderInfo['province'])) {
-                $address .= $orderInfo['province'];
-            }
-            if (!empty($orderInfo['city'])) {
-                $address .= $orderInfo['city'];
-            }
-            if (!empty($orderInfo['district'])) {
-                $address .= $orderInfo['district'];
-            }
-            if (!empty($orderInfo['address'])) {
-                $address .= $orderInfo['address'];
-            }
-            if (empty($address)) {
-                $address = '待确认';
+            $memberId = (int)($orderInfo['member_id'] ?? 0);
+            if ($memberId <= 0) {
+                Log::error('【回收通知】订单创建通知 member_id 为空，跳过通知');
+                return;
             }
 
-            $this->noticeService->send($data['site_id'], 'recycle_order_add', [
-                'order_id' => $data['order_id'],
-                'member_id' => $orderInfo['member_id'] ?? 0,
+            // 构建收货地址
+            $address = '';
+            if (!empty($orderInfo['province'])) $address .= $orderInfo['province'];
+            if (!empty($orderInfo['city'])) $address .= $orderInfo['city'];
+            if (!empty($orderInfo['district'])) $address .= $orderInfo['district'];
+            if (!empty($orderInfo['address'])) $address .= $orderInfo['address'];
+            if (empty($address)) $address = '待确认';
+
+            $this->noticeService->send((int)$data['site_id'], 'recycle_order_add', [
+                'order_id' => (int)$data['order_id'],
+                'member_id' => $memberId,
                 'order_no' => $orderInfo['order_no'] ?? '',
                 'shop_name' => $data['shop_name'] ?? '回收中心',
                 'address' => $address,
-                'create_time' => $orderInfo['create_at'] ?? date('Y-m-d H:i:s'),
-                '__weapp_page' => $this->getWeappOrderPage($data['order_id']),
+                'create_time' => date('Y-m-d H:i:s', (int)($orderInfo['create_at'] ?? time())),
+                'status_name' => '待签收',
+                'remark' => '您的回收订单已提交，请等待工作人员联系。',
+                '__weapp_page' => $this->getWeappOrderPage((int)$data['order_id']),
             ]);
 
             Log::info('【回收通知】订单创建通知发送成功: ' . $data['order_id']);
@@ -130,6 +118,12 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
                 return;
             }
 
+            $memberId = (int)($orderInfo['member_id'] ?? 0);
+            if ($memberId <= 0) {
+                Log::error('【回收通知】订单签收通知 member_id 为空，跳过通知');
+                return;
+            }
+
             $signTime = date('Y-m-d H:i:s');
             if (!empty($orderInfo['sign_at'])) {
                 $rawSignAt = (int)$orderInfo['sign_at'];
@@ -140,9 +134,10 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
 
             $this->noticeService->send((int)$data['site_id'], 'recycle_order_sign', [
                 'order_id' => (int)$data['order_id'],
-                'member_id' => (int)($orderInfo['member_id'] ?? 0),
+                'member_id' => $memberId,
                 'order_no' => $orderInfo['order_no'] ?? '',
                 'sign_time' => $signTime,
+                'remark' => '您的设备已签收，正在为您质检中',
                 '__weapp_page' => $this->getWeappOrderPage((int)$data['order_id']),
             ]);
 
@@ -153,48 +148,54 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
     }
 
     /**
-     * 订单支付通知
+     * 订单打款通知
+     * 变量与 OrderPay listener 和模板定义保持一致：order_no, pay_type, pay_account, pay_result
      * @param array $data
      * @return void
      */
     public function orderPayNotify(array $data): void
     {
         try {
-            Log::info('【回收通知】订单支付通知', $data);
+            Log::info('【回收通知】订单打款通知', $data);
 
             if (empty($data['order_id']) || empty($data['site_id'])) {
-                Log::error('【回收通知】订单支付通知参数不完整', $data);
+                Log::error('【回收通知】订单打款通知参数不完整', $data);
                 return;
             }
 
             $coreService = new CoreRecycleOrderService();
-            $orderInfo = $coreService->getInfo($data['order_id']);
+            $orderInfo = $coreService->getInfo((int)$data['order_id']);
 
             if (empty($orderInfo)) {
                 Log::error('【回收通知】订单不存在: ' . $data['order_id']);
                 return;
             }
 
-            $payAmount = $this->calculateTotalAmount($orderInfo['devices'] ?? []);
+            $memberId = (int)($orderInfo['member_id'] ?? 0);
+            if ($memberId <= 0) {
+                Log::error('【回收通知】订单打款通知 member_id 为空，跳过通知');
+                return;
+            }
 
-            $this->noticeService->send($data['site_id'], 'recycle_order_pay', [
-                'order_id' => $data['order_id'],
-                'member_id' => $orderInfo['member_id'] ?? 0,
+            $this->noticeService->send((int)$data['site_id'], 'recycle_order_pay', [
+                'order_id' => (int)$data['order_id'],
+                'member_id' => $memberId,
                 'order_no' => $orderInfo['order_no'] ?? '',
-                'pay_amount' => $payAmount . '元',
-                'shop_name' => $data['shop_name'] ?? '回收中心',
-                'pay_time' => date('Y-m-d H:i:s'),
-                '__weapp_page' => $this->getWeappOrderPage($data['order_id']),
+                'pay_type' => $orderInfo['pay_type_name'] ?? '线下支付',
+                'pay_account' => $orderInfo['pay_account'] ?? '请查看订单详情',
+                'pay_result' => '打款成功',
+                '__weapp_page' => $this->getWeappOrderPage((int)$data['order_id']),
             ]);
 
-            Log::info('【回收通知】订单支付通知发送成功: ' . $data['order_id']);
+            Log::info('【回收通知】订单打款通知发送成功: ' . $data['order_id']);
         } catch (\Exception $e) {
-            Log::error('【回收通知】订单支付通知发送失败: ' . $e->getMessage(), $data);
+            Log::error('【回收通知】订单打款通知发送失败: ' . $e->getMessage(), $data);
         }
     }
 
     /**
      * 订单确认通知（通知用户确认报价）
+     * 变量与 OrderAgree listener 和模板定义保持一致：order_no, time, status
      * @param array $data
      * @return void
      */
@@ -209,33 +210,26 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
             }
 
             $coreService = new CoreRecycleOrderService();
-            $orderInfo = $coreService->getInfo($data['order_id']);
+            $orderInfo = $coreService->getInfo((int)$data['order_id']);
 
             if (empty($orderInfo)) {
                 Log::error('【回收通知】订单不存在: ' . $data['order_id']);
                 return;
             }
 
-            $totalAmount = $this->calculateTotalAmount($orderInfo['devices'] ?? []);
-
-            // 获取商品名称（取第一个设备的名称）
-            $goodsName = '回收设备';
-            if (!empty($orderInfo['devices']) && !empty($orderInfo['devices'][0]['device_name'])) {
-                $goodsName = $orderInfo['devices'][0]['device_name'];
-                if (count($orderInfo['devices']) > 1) {
-                    $goodsName .= '等' . count($orderInfo['devices']) . '件';
-                }
+            $memberId = (int)($orderInfo['member_id'] ?? 0);
+            if ($memberId <= 0) {
+                Log::error('【回收通知】订单确认通知 member_id 为空，跳过通知');
+                return;
             }
 
-            $this->noticeService->send($data['site_id'], 'recycle_order_agree', [
-                'order_id' => $data['order_id'],
-                'member_id' => $orderInfo['member_id'] ?? 0,
+            $this->noticeService->send((int)$data['site_id'], 'recycle_order_agree', [
+                'order_id' => (int)$data['order_id'],
+                'member_id' => $memberId,
                 'order_no' => $orderInfo['order_no'] ?? '',
-                'goods_name' => $goodsName,
-                'order_amount' => $totalAmount . '元',
-                'create_time' => $orderInfo['create_at'] ?? date('Y-m-d H:i:s'),
-                'auditor' => $data['auditor'] ?? '客服',
-                '__weapp_page' => $this->getWeappOrderPage($data['order_id']),
+                'time' => date('Y-m-d H:i:s'),
+                'status' => '待确认',
+                '__weapp_page' => $this->getWeappOrderPage((int)$data['order_id']),
             ]);
 
             Log::info('【回收通知】订单确认通知发送成功: ' . $data['order_id']);
@@ -243,19 +237,4 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
             Log::error('【回收通知】订单确认通知发送失败: ' . $e->getMessage(), $data);
         }
     }
-
-    /**
-     * 计算订单总金额
-     * @param array $devices
-     * @return float
-     */
-    private function calculateTotalAmount(array $devices): float
-    {
-        $total = 0;
-        foreach ($devices as $device) {
-            $total += $device['final_price'] ?? 0;
-        }
-        return $total;
-    }
-
 }

@@ -1,17 +1,24 @@
 <template>
-    <el-dialog v-model="dialogVisible" title="订单详情" width="800" class="diy-dialog-wrap" :destroy-on-close="true">
+    <el-dialog
+        v-model="dialogVisible"
+        title="订单详情"
+        :width="isMobile ? '95vw' : '800px'"
+        top="4vh"
+        class="diy-dialog-wrap order-detail-dialog"
+        :destroy-on-close="true"
+    >
         <div v-if="orderData" class="order-detail">
             <!-- 订单基本信息 -->
                <!-- 会员信息 -->
           
-            <el-descriptions title="会员信息" :column="2" border v-if="orderData.member">
+            <el-descriptions title="会员信息" :column="isMobile ? 1 : 2" border v-if="orderData.member">
                 <el-descriptions-item label="会员ID">{{ orderData.member.member_id }}</el-descriptions-item>
                 <el-descriptions-item label="用户名">{{ orderData.member.username || '暂无' }}</el-descriptions-item>
                 <el-descriptions-item label="昵称">{{ orderData.member.nickname || '暂无' }}</el-descriptions-item>
                 <el-descriptions-item label="手机号">{{ orderData.member.mobile || '暂无' }}</el-descriptions-item>
             </el-descriptions>
             <el-divider />
-            <el-descriptions title="订单信息" :column="2" border>
+            <el-descriptions title="订单信息" :column="isMobile ? 1 : 2" border>
                 <el-descriptions-item label="订单编号">{{ orderData.id || '暂无' }}</el-descriptions-item>
                 <el-descriptions-item label="订单状态">
                     <el-tag :type="orderData.status === 7 ? 'success' : 'info'">{{ orderData.status_name }}</el-tag>
@@ -30,14 +37,39 @@
 
                 <el-descriptions-item label="打款时间">
                     {{ orderData.pay_time ? new Date(orderData.pay_time * 1000).toLocaleString() : '暂无' }}
-                </el-descriptions-item>             
+                </el-descriptions-item>
+                <el-descriptions-item label="收款账号">{{ orderData.pay_account || '暂无' }}</el-descriptions-item>
                 <el-descriptions-item label="备注" :span="2">{{ orderData.remark || '暂无备注' }}</el-descriptions-item>
             </el-descriptions>
+
+            <!-- 打款凭证图片 -->
+            <template v-if="paymentImageList.length > 0">
+                <el-divider />
+                <h3>📸 打款凭证</h3>
+                <div class="payment-images">
+                    <el-image
+                        v-for="(img, index) in paymentImageList"
+                        :key="index"
+                        :src="img"
+                        fit="cover"
+                        class="payment-image"
+                        @click="handlePreview(index)"
+                    />
+                </div>
+                <!-- 单独的图片预览器 -->
+                <el-image-viewer
+                    v-if="showImageViewer"
+                    :url-list="paymentImageList"
+                    :initial-index="previewIndex"
+                    @close="showImageViewer = false"
+                    teleported
+                />
+            </template>
 
             <!-- 设备列表 -->
             <el-divider />
             <h3>设备清单</h3>
-            <el-table :data="orderData.devices" style="width: 100%" border stripe>
+            <el-table v-if="!isMobile" :data="orderData.devices" style="width: 100%" border stripe>
                 <el-table-column prop="id" label="ID" width="60" />
                 <el-table-column prop="imei" label="IMEI" min-width="120" />
                 <el-table-column prop="model" label="型号" min-width="120" />
@@ -54,17 +86,37 @@
                     </template>
                 </el-table-column>
             </el-table>
+            <div v-else class="mt-2 space-y-2">
+                <div
+                    v-for="device in orderData.devices || []"
+                    :key="device.id"
+                    class="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                >
+                    <div class="mb-1 flex items-start justify-between gap-2">
+                        <div class="text-sm font-semibold text-gray-800">{{ device.model || '未知型号' }}</div>
+                        <el-tag size="small" :type="device.status === 6 ? 'danger' : 'success'">
+                            {{ device.status_name }}
+                        </el-tag>
+                    </div>
+                    <div class="text-xs text-gray-500 break-all">IMEI：{{ device.imei || '暂无' }}</div>
+                    <div class="mt-2 flex items-center justify-between">
+                        <span class="text-xs text-gray-500">设备ID：{{ device.id }}</span>
+                        <span class="text-sm font-semibold text-orange-500">¥{{ device.final_price }}</span>
+                    </div>
+                </div>
+            </div>
         </div>
         <template #footer>
-            <span class="dialog-footer">
-                <el-button @click="dialogVisible = false">关闭</el-button>
-            </span>
+            <div :class="isMobile ? 'dialog-footer mobile-footer' : 'dialog-footer'">
+                <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="dialogVisible = false">关闭</el-button>
+            </div>
         </template>
     </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch, computed } from 'vue'
+import { ref, defineProps, defineEmits, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ElImageViewer } from 'element-plus'
 
 // 定义接口
 interface OrderDetail {
@@ -74,6 +126,8 @@ interface OrderDetail {
     customer_name?: string;
     customer_phone?: string;
     pay_type?: string;
+    pay_account?: string;
+    payment_images?: string;
     total_amount?: number | string;
     delivery_type_name?: string;
     express_company?: string;
@@ -117,6 +171,11 @@ const emit = defineEmits(['update:visible'])
 // 内部状态
 const dialogVisible = ref(props.visible)
 const orderData = ref<OrderDetail | null>(props.orderDetail)
+const isMobile = ref(false)
+
+const updateResponsiveState = () => {
+    isMobile.value = window.innerWidth <= 768
+}
 
 // 计算设备总数量
 const deviceCount = computed(() => {
@@ -134,6 +193,23 @@ const totalAmount = computed(() => {
     }, 0).toFixed(2)
 })
 
+// 计算打款凭证图片列表
+const paymentImageList = computed(() => {
+    if (!orderData.value || !orderData.value.payment_images) return []
+    // payment_images 是逗号分隔的字符串
+    return orderData.value.payment_images.split(',').filter(img => img.trim())
+})
+
+// 图片预览状态
+const showImageViewer = ref(false)
+const previewIndex = ref(0)
+
+// 点击图片预览
+const handlePreview = (index: number) => {
+    previewIndex.value = index
+    showImageViewer.value = true
+}
+
 // 监听visible属性变化
 watch(() => props.visible, (newVal) => {
     dialogVisible.value = newVal
@@ -147,6 +223,15 @@ watch(dialogVisible, (newVal) => {
 // 监听orderDetail变化
 watch(() => props.orderDetail, (newVal) => {
     orderData.value = newVal
+})
+
+onMounted(() => {
+    updateResponsiveState()
+    window.addEventListener('resize', updateResponsiveState)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateResponsiveState)
 })
 </script>
 
@@ -164,5 +249,45 @@ watch(() => props.orderDetail, (newVal) => {
 .dialog-footer {
     display: flex;
     justify-content: flex-end;
+}
+
+.mobile-footer {
+    width: 100%;
+}
+
+.payment-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 0;
+
+    .payment-image {
+        width: 120px;
+        height: 120px;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        cursor: pointer;
+        transition: transform 0.2s;
+
+        &:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+    }
+}
+
+@media (max-width: 768px) {
+    .order-detail {
+        padding: 6px;
+    }
+
+    .payment-images {
+        gap: 8px;
+
+        .payment-image {
+            width: 92px;
+            height: 92px;
+        }
+    }
 }
 </style>

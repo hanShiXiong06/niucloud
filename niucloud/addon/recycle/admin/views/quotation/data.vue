@@ -149,9 +149,9 @@
                                         :key="configName"
                                         class="col-price"
                                     >
-                                        <div v-if="row.prices[configName]" class="price-cell">
+                                        <div v-if="getPriceValue(row.prices, configName)" class="price-cell">
                                             <div class="price-view">
-                                                <span class="price-value">¥{{ row.prices[configName] }}</span>
+                                                <span class="price-value">¥{{ getPriceValue(row.prices, configName) }}</span>
                                             </div>
                                         </div>
                                         <span v-else class="empty-cell">-</span>
@@ -189,7 +189,7 @@ import { getQuotationDataAll } from '@/addon/recycle/api/quotation'
 // 搜索表单
 const searchForm = reactive({
     quotation_id: '',
-    price_name: '花机/内爆',
+    price_name: '靓机/小花',
     goods_name: '',
     capacity: '',
     price_date: getCurrentDate(),
@@ -203,7 +203,6 @@ const priceTypeOptions = ref<string[]>([])
 const tableData = ref<any[]>([])
 const loading = ref(false)
 
-
 // ==================== 计算属性 ====================
 
 // 配置项排序优先级
@@ -211,8 +210,8 @@ const CONFIG_SORT_ORDER = [
     // 第一组：全套充新系列
     ['全套充新    橙色', '全套充新    白色', '全套充新    蓝色'],
     // 第二组：靓机-单机系列
-    ['靓机-单机100🔋在保100+', '高保靓充50次内在保280+', '靓机-单机 95电池＋在保60+','小花电池95+保修无要求'],
     // 第三组：保靓充系列
+    ['高保靓充50次内在保280+', '靓机-单机100🔋在保100+', '靓机-单机 95电池＋在保60+', '小花电池95+保修无要求'],
     ['高保靓充100次内在保250+', '中保靓充100🔋在保100+', '靓机', '小花'],
     // 第四组：靓机/小花
     ['小花', '靓机'],
@@ -249,11 +248,12 @@ const groupedTables = computed(() => {
 
     // 1. 按配置项组合分组
     const configGroupMap = new Map<string, any[]>()
-
+    // price: [{id: 2025, name: '靓机', price: 3500}, {id: 2026, name: '小花', price: 3250}] => ['靓机', '小花']
     data.forEach(row => {
         if (row.prices) {
             // 获取该行的配置项列表并按自定义顺序排序
-            const configKeys = sortConfigItems(Object.keys(row.prices))
+            const configKeys = sortConfigItems(row.prices.map((item: any) => item.name))
+
             const configKey = configKeys.join('|||')
 
             if (!configGroupMap.has(configKey)) {
@@ -358,6 +358,13 @@ function getCurrentDate () {
     return `${year}-${month}-${day}`
 }
 
+// 从 prices 数组中根据配置名称获取价格值
+function getPriceValue (prices: any[], configName: string) {
+    if (!Array.isArray(prices)) return undefined
+    const priceObj = prices.find((item: any) => item.name === configName)
+    return priceObj ? priceObj.price : undefined
+}
+
 // 加载数据
 async function loadData () {
     try {
@@ -389,6 +396,7 @@ async function loadData () {
             //     return getCapacityValue(a.capacity) - getCapacityValue(b.capacity)
             // })
 
+            // 处理数据
             tableData.value = sortedData
 
             // 提取报价类型选项
@@ -487,10 +495,6 @@ onMounted(() => {
         }
     }
 
-    .toolbar-right {
-        display: flex;
-        gap: 10px;
-    }
 }
 
 .loading-wrapper {
@@ -662,5 +666,4 @@ onMounted(() => {
         color: #409eff;
     }
 }
-
 </style>

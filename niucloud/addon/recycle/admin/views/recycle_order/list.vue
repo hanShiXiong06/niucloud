@@ -4,177 +4,173 @@
       <div class="flex justify-between items-center mb-4">
         <span class="text-xl font-semibold text-gray-800">📱 回收订单管理</span>
         <div class="btn-wrap">
-          <el-button type="primary" :icon="Plus" @click="showAddOrderDialog"
-            >代下单</el-button
-          >
+          <el-button type="primary" :icon="Plus" @click="showAddOrderDialog">代下单</el-button>
         </div>
       </div>
 
       <!-- 🔍 智能搜索系统 - 吸顶固定显示 -->
-      <div class="mb-3 sticky top-30 z-50 bg-white/95 backdrop-blur-sm shadow-lg rounded-lg p-2 -mx-2">
-     
+      <div
+        class="mb-3 sticky top-30 z-50 bg-white/95 backdrop-blur-sm shadow-lg rounded-lg p-2 -mx-2"
+      >
+        <!-- 搜索表单 -->
+        <div class="p-2">
+          <el-form :inline="true" :model="advancedSearchForm">
+            <!-- 第一行：订单信息 -->
+            <el-form-item label="订单编号">
+              <el-input
+                v-model="advancedSearchForm.order_id"
+                placeholder="输入精确订单号"
+                clearable
+                class="w-full"
+              />
+            </el-form-item>
 
+            <el-form-item label="快递单号">
+              <el-input
+                v-model="advancedSearchForm.express_no"
+                placeholder="输入快递单号"
+                clearable
+                class="w-full"
+              />
+            </el-form-item>
 
-              <!-- 搜索表单 -->
-              <div class="p-2">
-                <el-form :inline="true" :model="advancedSearchForm">
-                  <!-- 第一行：订单信息 -->
-                  <el-form-item label="订单编号">
-                    <el-input
-                        v-model="advancedSearchForm.order_id"
-                        placeholder="输入精确订单号"
-                        clearable
-                        class="w-full"
-                      />
-                  </el-form-item>
+            <el-form-item label="订单状态">
+              <el-select
+                v-model="advancedSearchForm.status"
+                placeholder="选择状态"
+                clearable
+                multiple
+                collapse-tags
+                class="w-full"
+              >
+                <el-option
+                  v-for="(status, key) in orderStatusMap"
+                  :key="key"
+                  :label="status.name"
+                  :value="status.status"
+                >
+                </el-option>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="用户搜索">
+              <member-select
+                v-model="advancedSearchForm.member_id"
+                placeholder="🔍 输入用户昵称、手机号或用户编号"
+                @change="handleMemberChange"
+                class="w-full"
+              />
+            </el-form-item>
+            <el-form-item label="用户手机号">
+              <el-input
+                v-model="advancedSearchForm.user_mobile"
+                placeholder="输入用户手机号"
+                clearable
+                class="w-full"
+              />
+            </el-form-item>
 
-                  <el-form-item label="快递单号">
-                    <el-input
-                        v-model="advancedSearchForm.express_no"
-                        placeholder="输入快递单号"
-                        clearable
-                        class="w-full"
-                      />
-                  </el-form-item>
-                  
-                  <el-form-item label="订单状态">
-                    <el-select
-                        v-model="advancedSearchForm.status"
-                        placeholder="选择状态"
-                        clearable
-                        multiple
-                        collapse-tags
-                        class="w-full"
-                      >
-                        <el-option
-                          v-for="(status, key) in orderStatusMap"
-                          :key="key"
-                          :label="status.name"
-                          :value="status.status"
-                        >
-                        </el-option>  
-                      </el-select>
-                  </el-form-item>
-                  <el-form-item label="用户搜索">
-                    <member-select
-                      v-model="advancedSearchForm.member_id"
-                      placeholder="🔍 输入用户昵称、手机号或用户编号"
-                      @change="handleMemberChange"
-                      class="w-full"
-                    />
-                  </el-form-item> 
-                  <el-form-item label="用户手机号">
-                    <el-input
-                      v-model="advancedSearchForm.user_mobile"
-                      placeholder="输入用户手机号"
-                      clearable
-                      class="w-full"
-                    />
-                  </el-form-item>
+            <el-form-item label="配送方式">
+              <el-select
+                v-model="advancedSearchForm.delivery_type"
+                placeholder="选择配送方式"
+                clearable
+                multiple
+                class="w-full"
+              >
+                <el-option label="📦 快递配送" value="1" />
+                <el-option label="🚗 自送到店" value="2" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="设备IMEI">
+              <el-input
+                v-model="advancedSearchForm.device_imei"
+                placeholder="输入设备IMEI号"
+                clearable
+                class="w-full"
+              />
+            </el-form-item>
+            <el-form-item label="设备型号">
+              <el-input
+                v-model="advancedSearchForm.device_model"
+                placeholder="输入设备型号"
+                clearable
+                class="w-full"
+              />
+            </el-form-item>
+            <el-form-item label="创建时间">
+              <el-date-picker
+                v-model="advancedSearchForm.create_time_range"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                class="w-full"
+              />
+            </el-form-item>
+            <!-- 签收时间 -->
+            <el-form-item label="签收时间">
+              <el-date-picker
+                v-model="advancedSearchForm.sign_at"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                class="w-full"
+              />
+            </el-form-item>
+            <!-- 完成时间 -->
+            <el-form-item label="质检时间">
+              <el-date-picker
+                v-model="advancedSearchForm.complete_at"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                class="w-full"
+              />
+            </el-form-item>
+            <!-- 打款时间 -->
+            <el-form-item label="打款时间">
+              <el-date-picker
+                v-model="advancedSearchForm.pay_time"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                class="w-full"
+              />
+            </el-form-item>
 
-                  <el-form-item label="配送方式">
-                    <el-select
-                      v-model="advancedSearchForm.delivery_type"
-                      placeholder="选择配送方式"
-                      clearable
-                      multiple
-                      class="w-full"
-                    >
-                      <el-option label="📦 快递配送" value="1" />
-                      <el-option label="🚗 自送到店" value="2" />
-                    </el-select>
-                  </el-form-item>
-                  <el-form-item label="设备IMEI">
-                    <el-input
-                      v-model="advancedSearchForm.device_imei"
-                      placeholder="输入设备IMEI号"
-                      clearable
-                      class="w-full"
-                    />
-                  </el-form-item>
-                  <el-form-item label="设备型号">
-                    <el-input
-                      v-model="advancedSearchForm.device_model"
-                      placeholder="输入设备型号"
-                      clearable
-                      class="w-full"
-                    />
-                  </el-form-item>
-                  <el-form-item label="创建时间">
-                    <el-date-picker
-                      v-model="advancedSearchForm.create_time_range"
-                      type="daterange"
-                      range-separator="至"
-                      start-placeholder="开始日期"
-                      end-placeholder="结束日期"
-                      format="YYYY-MM-DD"
-                      value-format="YYYY-MM-DD"
-                      class="w-full"
-                    />
-                  </el-form-item>
-                  <!-- 签收时间 -->
-                  <el-form-item label="签收时间">
-                    <el-date-picker
-                      v-model="advancedSearchForm.sign_at"
-                      type="daterange"
-                      range-separator="至"
-                      start-placeholder="开始日期"
-                      end-placeholder="结束日期"
-                      format="YYYY-MM-DD"
-                      value-format="YYYY-MM-DD"
-                      class="w-full"
-                    />
-                  </el-form-item>
-                  <!-- 完成时间 -->
-                  <el-form-item label="质检时间">
-                    <el-date-picker
-                      v-model="advancedSearchForm.complete_at"
-                      type="daterange"
-                      range-separator="至"
-                      start-placeholder="开始日期"
-                      end-placeholder="结束日期"
-                      format="YYYY-MM-DD"
-                      value-format="YYYY-MM-DD"
-                      class="w-full"
-                    />
-                  </el-form-item>
-                  <!-- 打款时间 -->
-                  <el-form-item label="打款时间">
-                    <el-date-picker
-                      v-model="advancedSearchForm.pay_time"
-                      type="daterange"
-                      range-separator="至"
-                      start-placeholder="开始日期"
-                      end-placeholder="结束日期"
-                      format="YYYY-MM-DD"
-                      value-format="YYYY-MM-DD"
-                      class="w-full"
-                    />
-                  </el-form-item>
-
-                  <!-- 操作按钮 -->
-                  <div class="flex justify-center pt-4 border-t border-orange-200">
-                    <div class="flex gap-3">
-                      <el-button
-                        type="primary"
-                        :icon="Search"
-                        @click="advancedSearch"
-                        class="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 border-0 shadow-sm px-6"
-                      >
-                        执行高级搜索
-                      </el-button>
-                      <el-button 
-                        :icon="Refresh" 
-                        @click="resetAdvancedSearch"
-                        class="border-gray-300 text-gray-600 hover:border-gray-400 px-6"
-                      >
-                        重置所有条件
-                      </el-button>
-                    </div>
-                  </div>
-                </el-form>
+            <!-- 操作按钮 -->
+            <div class="flex justify-center pt-4 border-t border-orange-200">
+              <div class="flex gap-3">
+                <el-button
+                  type="primary"
+                  :icon="Search"
+                  @click="advancedSearch"
+                  class="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 border-0 shadow-sm px-6"
+                >
+                  执行高级搜索
+                </el-button>
+                <el-button
+                  :icon="Refresh"
+                  @click="resetAdvancedSearch"
+                  class="border-gray-300 text-gray-600 hover:border-gray-400 px-6"
+                >
+                  重置所有条件
+                </el-button>
               </div>
-
+            </div>
+          </el-form>
+        </div>
       </div>
 
       <!-- 状态标签页 -->
@@ -188,7 +184,6 @@
             <div class="flex items-center">
               <el-icon class="mr-1"><Document /></el-icon>
               <span>全部</span>
-             
             </div>
           </template>
         </el-tab-pane>
@@ -204,7 +199,7 @@
               </el-icon>
               <span>{{ item.name }}</span>
               <el-badge
-              v-if="item.status<7"
+                v-if="item.status < 7"
                 :value="getStatusCount(item.status)"
                 class="ml-1"
                 :type="getStatusBadgeType(item.status)"
@@ -214,7 +209,6 @@
         </el-tab-pane>
       </el-tabs>
 
-   
       <!-- 列表 -->
       <el-table
         ref="orderTable"
@@ -244,7 +238,6 @@
                 "
                 class="device-table"
               >
-             
                 <el-table-column type="selection" width="55" />
 
                 <el-table-column prop="imei" label="IMEI" min-width="150" />
@@ -396,18 +389,24 @@
               </div>
               <div v-if="row.delivery_type === '1'" class="info-row">
                 <span class="text-gray-500 text-xs min-w-16">快递单号：</span>
-                <span 
+                <span
                   class="flex-1 cursor-pointer transition-all duration-300 ease-in-out rounded px-1 py-0.5 hover:bg-blue-50 hover:text-blue-600 text-gray-800 text-sm break-all"
                   @click="handleExpressHover(row)"
                   @mouseleave="handleExpressLeave"
                 >
-                  <span v-if="!expressLoading[row.id]" class="font-mono font-medium">
+                  <span
+                    v-if="!expressLoading[row.id]"
+                    class="font-mono font-medium"
+                  >
                     {{ row.express_no || "暂无" }}
                   </span>
                   <el-icon v-else class="animate-spin text-blue-500">
                     <Loading />
                   </el-icon>
-                  <el-icon v-if="row.express_no && !expressLoading[row.id]" class="ml-1 text-gray-400 text-xs">
+                  <el-icon
+                    v-if="row.express_no && !expressLoading[row.id]"
+                    class="ml-1 text-gray-400 text-xs"
+                  >
                     <Search />
                   </el-icon>
                 </span>
@@ -449,17 +448,19 @@
         </el-table-column>
 
         <el-table-column width="140" align="center">
-            <template #header>
-                <div class="text-xs">提交数量/签收数量</div>
-            </template>
+          <template #header>
+            <div class="text-xs">提交数量/签收数量</div>
+          </template>
           <template #default="{ row }">
-        
-            <el-tag v-if="row.count == getDeviceCount(row.devices) " type="success" class="device-count-tag">
-                {{ row.count  }}/
-              {{ getDeviceCount(row.devices) }}台
+            <el-tag
+              v-if="row.count == getDeviceCount(row.devices)"
+              type="success"
+              class="device-count-tag"
+            >
+              {{ row.count }}/ {{ getDeviceCount(row.devices) }}台
             </el-tag>
             <el-tag v-else type="danger" class="device-count-tag">
-              {{ row.count ? row.count : '1' }}/
+              {{ row.count ? row.count : "1" }}/
               {{ getDeviceCount(row.devices) }}台
             </el-tag>
           </template>
@@ -484,19 +485,19 @@
             {{ formatDateTime(row.create_at) }}
           </template>
         </el-table-column>
-        
+
         <el-table-column prop="sign_at" label="签收时间" width="180">
           <template #default="{ row }">
             {{ formatDateTime(row.sign_at) }}
           </template>
         </el-table-column>
-        
+
         <el-table-column prop="complete_at" label="完成时间" width="180">
           <template #default="{ row }">
             {{ formatDateTime(row.complete_at) }}
           </template>
         </el-table-column>
-        
+
         <el-table-column prop="pay_time" label="打款时间" width="180">
           <template #default="{ row }">
             {{ formatDateTime(row.pay_time) }}
@@ -526,7 +527,7 @@
         <div class="text-sm text-gray-500">
           共 {{ pagination.total }} 条记录，当前第 {{ pagination.page }} 页
         </div>
-     
+
         <el-pagination
           v-model:current-page="pagination.page"
           :page-sizes="[15, 30, 50, 100]"
@@ -563,6 +564,7 @@
       v-model:visible="checkDeviceLogVisible"
       :device="checkDeviceLogForm"
       @confirm="submitDeviceCheck"
+      @save-draft="handleCheckDeviceSaveDraft"
     />
 
     <PriceFormDialog
@@ -587,13 +589,14 @@
     <PaymentMethodDialog
       v-model:visible="paymentDialogVisible"
       :payment-info="paymentInfo"
+      :order-id="currentOrderId"
       @payment-confirmed="handlePaymentConfirm"
     />
 
     <!-- 快递信息弹出框 -->
-    <el-dialog 
-      v-model="expressPopoverVisible" 
-      title="快递物流信息" 
+    <el-dialog
+      v-model="expressPopoverVisible"
+      title="快递物流信息"
       width="600px"
       :destroy-on-close="true"
     >
@@ -602,10 +605,14 @@
         <div class="express-header mb-4">
           <div class="flex items-center justify-between">
             <div>
-              <h3 class="text-lg font-medium">{{ expressInfo.logisticsCompanyName }}</h3>
-              <p class="text-sm text-gray-600">运单号：{{ expressInfo.mailNo }}</p>
+              <h3 class="text-lg font-medium">
+                {{ expressInfo.logisticsCompanyName }}
+              </h3>
+              <p class="text-sm text-gray-600">
+                运单号：{{ expressInfo.mailNo }}
+              </p>
             </div>
-            <el-tag 
+            <el-tag
               :type="getExpressStatusType(expressInfo.logisticsStatus)"
               size="large"
             >
@@ -641,10 +648,8 @@
           </el-timeline>
         </div>
       </div>
-      
-      <div v-else class="text-center py-8 text-gray-500">
-        暂无快递信息
-      </div>
+
+      <div v-else class="text-center py-8 text-gray-500">暂无快递信息</div>
     </el-dialog>
   </div>
 </template>
@@ -731,7 +736,6 @@ import DeviceDetailDialog from "./components/DeviceDetailDialog.vue";
 
 import MemberSelect from "@/addon/recycle/components/member-select/index.vue";
 
-
 // 引入图片预览工具
 import { img, debounce } from "@/utils/common";
 
@@ -817,32 +821,36 @@ const expandRowKeys = computed(() => {
 });
 
 // 时间格式化函数
-const formatDateTime = (dateTime: string | number | null | undefined): string => {
-  if (!dateTime) return '-';
-  
+const formatDateTime = (
+  dateTime: string | number | null | undefined
+): string => {
+  if (!dateTime) return "-";
+
   // 如果是时间戳（数字）
-  if (typeof dateTime === 'number') {
+  if (typeof dateTime === "number") {
     const date = new Date(dateTime * 1000);
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    }).replace(/\//g, '-');
+    return date
+      .toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      })
+      .replace(/\//g, "-");
   }
-  
+
   // 如果是字符串格式
-  if (typeof dateTime === 'string') {
+  if (typeof dateTime === "string") {
     // 如果已经是格式化的日期时间字符串，直接返回
     if (dateTime.match(/^\d{4}-\d{2}-\d{2}/)) {
       return dateTime;
     }
   }
-  
-  return '-';
+
+  return "-";
 };
 
 const orderDialogVisible = ref(false);
@@ -923,7 +931,6 @@ const removeDevice = async (row: any) => {
     currentDevices.value = currentDevices.value.filter(
       (item) => item !== row && item.id !== row.id
     );
-
   } catch (error: any) {
     console.error("删除设备失败：", error);
     ElMessage.error("删除失败：" + (error.message || "未知错误"));
@@ -1044,7 +1051,10 @@ const getList = async (page = 1) => {
       params.update_time_end = advancedSearchForm.update_time_range[1];
     }
     // 打款时间
-    if (advancedSearchForm.pay_time && advancedSearchForm.pay_time.length === 2) {
+    if (
+      advancedSearchForm.pay_time &&
+      advancedSearchForm.pay_time.length === 2
+    ) {
       params.pay_time = advancedSearchForm.pay_time;
     }
     // 签收时间
@@ -1052,7 +1062,10 @@ const getList = async (page = 1) => {
       params.sign_at = advancedSearchForm.sign_at;
     }
     // 完成时间
-    if (advancedSearchForm.complete_at && advancedSearchForm.complete_at.length === 2) {
+    if (
+      advancedSearchForm.complete_at &&
+      advancedSearchForm.complete_at.length === 2
+    ) {
       params.complete_at = advancedSearchForm.complete_at;
     }
 
@@ -1073,7 +1086,7 @@ const getList = async (page = 1) => {
     statusCounts.value = res.data.status_counts;
 
     setPagination({
-      total
+      total,
     });
 
     // 不需要手动展开行了，因为我们使用了:expand-row-keys绑定
@@ -1099,7 +1112,6 @@ const handleCurrentChange = (val: number) => {
   setPagination({
     page: val,
     limit: pagination.value.limit,
-
   });
   getList(val);
 };
@@ -1184,7 +1196,7 @@ const getStatusIcon = (status: number) => {
       return "CircleCheckFilled";
     case 8:
       return "CircleClose";
-  
+
     default:
       return "QuestionFilled";
   }
@@ -1262,7 +1274,7 @@ const handlePushNotify = async (row: any) => {
 
     // 调用推送通知API
     await pushOrderNotify(row.id);
-    
+
     loading.close();
     ElMessage.success("推送通知已发送");
   } catch (error: any) {
@@ -1279,16 +1291,38 @@ const handleAction = async (row, action) => {
     // 根据操作类型执行不同的操作
     if (action.key === "order_cancel") {
       // 取消订单
-      await ElMessageBox.confirm("确定要取消该订单吗？", "提示", {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      });
+      try {
+        const { value: reason } = await ElMessageBox.prompt(
+          "请输入取消原因",
+          "取消订单",
+          {
+            confirmButtonText: "确定",
+            cancelButtonText: "取消",
+            inputPlaceholder: "请输入取消原因",
+            inputValidator: (value) => {
+              if (!value || !value.trim()) {
+                return "取消原因不能为空";
+              }
+              return true;
+            },
+          }
+        );
 
-      // 使用action.key作为操作标识
-      await updateRecycleOrder(row.id, { action: "order_cancel" });
-      ElMessage.success("订单已取消");
-      await getList(pagination.value.page); // 刷新列表，保持当前页
+        const cancelReason = reason.trim();
+
+        // 使用action.key作为操作标识
+        await updateRecycleOrder(row.id, {
+          action: "order_cancel",
+          cancel_reason: cancelReason,
+          reason: cancelReason,
+        });
+        ElMessage.success("订单已取消");
+        await getList(pagination.value.page); // 刷新列表，保持当前页
+      } catch (error) {
+        if (error !== "cancel") {
+          throw error;
+        }
+      }
     } else if (action.key === "order_delete") {
       // 删除订单
       await ElMessageBox.confirm("确定要删除该订单吗？", "提示", {
@@ -1329,7 +1363,7 @@ const handleAction = async (row, action) => {
     } else if (action.key == "order_payment") {
       // 确认打款 前 将用户的收款方式 弹出来 展示给财务看 , 财务打完款后 点击确定按钮 , 完成打款
       // row.member_id 需携带
-
+      currentOrderId.value = row.id;
       paymentDialogVisible.value = true;
 
       const res = await getMerchantPayInfo(row.member_id);
@@ -1648,6 +1682,37 @@ const submitDeviceCheck = async (formData) => {
   }
 };
 
+// 暂存质检信息
+const handleCheckDeviceSaveDraft = async (formData) => {
+  const loading = ElLoading.service({
+    lock: true,
+    text: "正在暂存...",
+    background: "rgba(0, 0, 0, 0.7)",
+  });
+
+  try {
+    await updateDevice(formData.id, {
+      check_result: formData.check_result,
+      check_images: formData.check_images,
+      remark: formData.remark,
+      final_price: formData.final_price,
+      imei: formData.imei,
+      info: formData.info,
+      model: formData.model,
+      action: "save_draft",
+    });
+
+    ElMessage.success("质检信息已暂存");
+    checkDeviceLogVisible.value = false;
+    await getList(pagination.value.page);
+  } catch (error) {
+    console.error("暂存质检信息失败：", error);
+    ElMessage.error(error.response?.data?.message || "暂存失败，请重试");
+  } finally {
+    loading.close();
+  }
+};
+
 // 提交设备定价
 const submitDevicePrice = async (formData) => {
   try {
@@ -1709,9 +1774,6 @@ const batchReturnDevice = async (deviceId) => {
         inputPlaceholder: "请输入拒绝回收原因",
       }
     );
-
-   
-    
 
     const loading = ElLoading.service({
       lock: true,
@@ -1894,9 +1956,18 @@ const handleTabClick = (tab: any) => {
 // 处理支付确认
 const handlePaymentConfirm = async (paymentData) => {
   try {
+    // 使用传入的 orderId，如果为空则使用 currentOrderId
+    const orderId = paymentData.orderId || currentOrderId.value;
+    if (!orderId) {
+      ElMessage.error("订单ID不能为空");
+      return;
+    }
+
     // 调用确认打款API
-    await paymentConfirm(paymentData.orderId, {
+    await paymentConfirm(orderId, {
       pay_type: paymentData.payType,
+      account: paymentData.account,
+      payment_images: paymentData.paymentImages,
       remark: "财务已确认打款",
     });
 
@@ -2030,52 +2101,56 @@ const queryExpress = async (express_code: string, mobile: string) => {
     const res = await getExpress(express_code, mobile);
     return res.data;
   } catch (error) {
-    console.error('查询快递信息失败:', error);
+    console.error("查询快递信息失败:", error);
     throw error;
   }
 };
 
 // 处理快递单号悬停
 const handleExpressHover = async (row: any) => {
-  if (!row.express_no || row.express_no === '暂无') return;
-  
+  if (!row.express_no || row.express_no === "暂无") return;
+
   // 清除之前的计时器
   if (hoverTimer.value) {
     clearTimeout(hoverTimer.value);
   }
-  
+
   // 设置延迟查询
   hoverTimer.value = setTimeout(async () => {
     try {
       // 设置loading状态
       expressLoading.value[row.id] = true;
-      
+
       // 获取用户手机号后4位
-      const mobile = row.member?.mobile || row.recycleUserAddress?.mobile || '';
+      const mobile = row.member?.mobile || row.recycleUserAddress?.mobile || "";
       const mobileLast4 = mobile.slice(-4);
-      
+
       if (!mobileLast4) {
-        ElMessage.warning('无法获取用户手机号，无法查询快递信息');
+        ElMessage.warning("无法获取用户手机号，无法查询快递信息");
         return;
       }
-      
+
       // 查询快递信息
       const expressData = await queryExpress(row.express_no, mobileLast4);
-      
+
       // 检查是否有有效的快递数据
-      if (!expressData || !expressData.data || !expressData.data.logisticsTraceDetailList || expressData.data.logisticsTraceDetailList.length === 0) {
-        ElMessage.info('暂无物流信息');
+      if (
+        !expressData ||
+        !expressData.data ||
+        !expressData.data.logisticsTraceDetailList ||
+        expressData.data.logisticsTraceDetailList.length === 0
+      ) {
+        ElMessage.info("暂无物流信息");
         return;
       }
-      
+
       // 设置快递信息并显示弹出框
       expressInfo.value = expressData.data;
       currentExpressRow.value = row;
       expressPopoverVisible.value = true;
-      
     } catch (error) {
-      console.error('查询快递信息失败:', error);
-      ElMessage.error('查询快递信息失败');
+      console.error("查询快递信息失败:", error);
+      ElMessage.error("查询快递信息失败");
     } finally {
       // 清除loading状态
       expressLoading.value[row.id] = false;
@@ -2094,19 +2169,19 @@ const handleExpressLeave = () => {
 // 获取快递状态类型
 const getExpressStatusType = (status: string) => {
   switch (status) {
-    case 'ACCEPT':
-      return 'info';
-    case 'TRANSPORT':
-      return 'warning';
-    case 'DELIVER':
-      return 'primary';
-    case 'SIGN':
-      return 'success';
-    case 'REJECT':
-    case 'EXCEPTION':
-      return 'danger';
+    case "ACCEPT":
+      return "info";
+    case "TRANSPORT":
+      return "warning";
+    case "DELIVER":
+      return "primary";
+    case "SIGN":
+      return "success";
+    case "REJECT":
+    case "EXCEPTION":
+      return "danger";
     default:
-      return 'info';
+      return "info";
   }
 };
 
@@ -2137,7 +2212,6 @@ const getStatusDesc = (status: number) => {
       return "未知状态";
   }
 };
-
 </script>
 
 <style lang="scss" scoped>
@@ -2252,7 +2326,6 @@ const getStatusDesc = (status: number) => {
     padding: 20px;
     background-color: #fafbfc;
     border-radius: 6px;
-
 
     .panel-header {
       display: flex;
@@ -2461,7 +2534,6 @@ const getStatusDesc = (status: number) => {
 /* 搜索系统完全使用 Tailwind CSS 重构，删除旧样式 */
 </style>
 
-
 <style scoped>
 .express-no-container {
   cursor: pointer;
@@ -2476,7 +2548,7 @@ const getStatusDesc = (status: number) => {
 }
 
 .express-no {
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   font-weight: 500;
 }
 
@@ -2499,18 +2571,15 @@ const getStatusDesc = (status: number) => {
   padding-bottom: 16px;
 }
 
+.trace-item .trace-location {
+  font-weight: 500;
+  color: #303133;
+  margin-bottom: 4px;
+}
 
-.trace-item  .trace-location {
-    font-weight: 500;
-    color: #303133;
-    margin-bottom: 4px;
-  }
-  
-.trace-item   .trace-desc {
-    color: #606266;
-    font-size: 14px;
-    line-height: 1.5;
-  }
-
+.trace-item .trace-desc {
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.5;
+}
 </style>
-

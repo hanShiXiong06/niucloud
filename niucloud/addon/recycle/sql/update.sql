@@ -77,6 +77,17 @@ ALTER TABLE `{{prefix}}recycle_order` ADD COLUMN `sign_at` int NOT NULL DEFAULT 
 ALTER TABLE `{{prefix}}recycle_device` ADD COLUMN `category_id` int NOT NULL DEFAULT '1' COMMENT '设备分类ID' AFTER `order_id`;
 ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_category_id` (`category_id`);
 
+-- 为设备表增加买家/卖家可见的质检结果与质检图片字段
+ALTER TABLE `{{prefix}}recycle_device`
+ADD COLUMN `check_result_seller` text COMMENT '卖家可见质检结果' AFTER `check_result`,
+ADD COLUMN `check_result_buyer` text COMMENT '买家可见质检结果' AFTER `check_result_seller`,
+ADD COLUMN `check_images_seller` text COMMENT '卖家可见质检图片 逗号 , 隔开' AFTER `check_images`,
+ADD COLUMN `check_images_buyer` text COMMENT '买家可见质检图片 逗号 , 隔开' AFTER `check_images_seller`;
+
+-- 为设备表增加卖货价格字段
+ALTER TABLE `{{prefix}}recycle_device`
+ADD COLUMN `sell_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '卖货价格' AFTER `final_price`;
+
 -- 将已签收状态的订单设置签收时间为更新时间（临时数据修复）
 UPDATE `{{prefix}}recycle_order` SET `sign_at` = `update_at` WHERE `status` >= 2 AND `sign_at` = 0; 
 
