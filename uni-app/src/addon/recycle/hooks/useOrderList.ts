@@ -23,7 +23,7 @@ export function useOrderList() {
       num: 0,  // 当前页码
       size: 10  // 每页数量
     },
-    noMoreSize: 5,  // 如果列表已无数据,可设置列表的总数量要大于等于5条才显示无更多数据
+    noMoreSize: 3,  // 列表总数大于等于3条时才显示无更多数据
     empty: {
       tip: '暂无订单数据'
     }
@@ -87,13 +87,8 @@ export function useOrderList() {
         // 追加数据
         orderList.value = [...orderList.value, ...list]
 
-        // 数据加载完成
+        // 数据加载完成, endSuccess 内部会自动判断是否还有下一页
         mescroll.endSuccess(list.length)
-
-        // 判断是否还有更多数据
-        if (list.length < mescroll.size) {
-          mescroll.endUpScroll(false)  // 没有更多数据
-        }
       } else {
         // 加载失败
         mescroll.endErr()

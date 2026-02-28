@@ -37,7 +37,7 @@ const GlobalOption = {
 			},
 			up: {
 				textLoading: '加载中 ...', // 加载中的提示文本
-				textNoMore: '', // 没有更多数据的提示文本
+				textNoMore: '— 没有更多了 —', // 没有更多数据的提示文本
 				empty: {
 					tip: '暂无相关数据' // 空提示
 				}
