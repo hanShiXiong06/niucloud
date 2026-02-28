@@ -180,6 +180,14 @@ class RecycleReturnOrder extends BaseModel
         }
     }
 
+    // 搜索器 本表 order_id 精确匹配
+    public function searchOrderIdAttr($query, $value, $data)
+    {
+        if (!empty($value)) {
+            $query->where('order_id', $value);
+        }
+    }
+
     // 搜索器 本表 delete_at 不等于 0
     public function searchDeleteAtAttr($query, $value, $data)
     {

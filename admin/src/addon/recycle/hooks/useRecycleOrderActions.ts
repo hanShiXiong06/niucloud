@@ -170,9 +170,13 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
         cancelButtonText: '取消',
         type: 'warning'
       })
-      await deleteRecycleOrder(row.id)
-      ElMessage.success('订单已删除')
-      await refreshCurrentPage()
+      try {
+        await deleteRecycleOrder(row.id)
+        ElMessage.success('订单已删除')
+        await refreshCurrentPage()
+      } catch {
+        // 后端错误由请求拦截器统一提示，此处不再重复
+      }
     },
     order_complete: async (row: any) => {
       await ElMessageBox.confirm('确定要完成该订单吗？', '提示', {

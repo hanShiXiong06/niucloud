@@ -85,8 +85,6 @@ export function usePlatformDelivery() {
       return
     }
 
-    console.log('开始填充地址数据：', address)
-
     // 填充基本信息
     platformDeliveryForm.value.sender_name = address.name || ''
     platformDeliveryForm.value.sender_mobile = address.mobile || ''
@@ -99,8 +97,6 @@ export function usePlatformDelivery() {
     platformDeliveryForm.value.district = addressParts.district
     platformDeliveryForm.value.area_text = addressParts.areaText
     platformDeliveryForm.value.detail_address = addressParts.detailAddress
-
-    console.log('填充后的表单数据：', platformDeliveryForm.value)
 
     uni.showToast({
       title: '地址已选择',

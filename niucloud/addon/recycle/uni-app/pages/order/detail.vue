@@ -64,6 +64,21 @@
         :mobile="orderInfo.member?.mobile"
       />
 
+      <!-- 查看退货信息按钮 -->
+      <view v-if="returnOrderList.length > 0" class="mx-3 mt-3">
+        <view
+          class="bg-white rounded-lg shadow-sm p-3 flex items-center justify-between"
+          @tap="goToReturnOrderDetail"
+        >
+          <view class="flex items-center">
+            <up-icon name="order" size="20" color="#ef4444" class="mr-2"></up-icon>
+            <text class="text-sm font-medium text-gray-800">查看退货信息</text>
+            <text class="text-xs text-gray-400 ml-2">({{ returnOrderList.length }}条退货记录)</text>
+          </view>
+          <up-icon name="arrow-right" size="16" color="#9ca3af"></up-icon>
+        </view>
+      </view>
+
       <!-- 无设备提示 -->
       <view v-if="hasNoDevices" class="mx-3 mt-4">
         <view class="bg-white rounded-lg shadow-sm p-4 text-center ">
@@ -121,11 +136,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 import { useOrderDetail } from '../../hooks/useOrderDetail'
 import { useDeviceSelection } from '../../hooks/useDeviceSelection'
+import { getReturnOrderByOrderId } from '../../api/return_order'
 import OrderStatusProgress from './components/OrderStatusProgress.vue'
 import OrderDetailHeader from './components/OrderDetailHeader.vue'
 import DeviceBatchToolbar from './components/DeviceBatchToolbar.vue'
@@ -143,6 +159,35 @@ const {
   confirmDevices,
   negotiate
 } = useOrderDetail()
+
+// 退货订单列表
+const returnOrderList = ref<any[]>([])
+
+// 加载退货订单数据
+const loadReturnOrders = async (orderId: number | string) => {
+  try {
+    const res = await getReturnOrderByOrderId(Number(orderId))
+    const data = res.data || []
+    returnOrderList.value = Array.isArray(data) ? data : []
+  } catch (e) {
+    returnOrderList.value = []
+  }
+}
+
+// 跳转退货订单详情
+const goToReturnOrderDetail = () => {
+  if (returnOrderList.value.length === 1) {
+    // 只有一条退货记录，直接跳转详情
+    uni.navigateTo({
+      url: `/addon/recycle/pages/return_order/detail?id=${returnOrderList.value[0].id}`
+    })
+  } else if (returnOrderList.value.length > 1) {
+    // 多条退货记录，跳转列表（带order_id过滤）
+    uni.navigateTo({
+      url: `/addon/recycle/pages/return_order/list?order_id=${orderInfo.value.id}`
+    })
+  }
+}
 
 // 创建devices的computed ref
 const devicesRef = computed(() => orderInfo.value.devices)
@@ -189,6 +234,13 @@ const goBack = () => {
     }
   })
 }
+
+// 当订单数据加载完成后，查询退货订单
+watch(() => orderInfo.value.id, (newId) => {
+  if (newId) {
+    loadReturnOrders(newId)
+  }
+})
 
 // 页面加载
 onLoad((options?: Record<string, any>) => {

@@ -186,6 +186,7 @@
         </div>
 
         <template #footer>
+            
             <div :class="isMobile ? 'flex w-full flex-col gap-2' : 'dialog-footer'">
                 <el-button type="primary" :class="isMobile ? '!ml-0 w-full' : ''" @click="handleConfirm" :loading="submitting">
                     确认并签收

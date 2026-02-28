@@ -199,7 +199,7 @@ export default {
         // 跳转到详情页
         goToDetail(id) {
             uni.navigateTo({
-                url: `/addon/recycle/pages/return-order/detail?id=${id}`
+                url: `/addon/recycle/pages/return_order/detail?id=${id}`
             });
         },
 

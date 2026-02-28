@@ -1,480 +1,223 @@
 <template>
-    <view class="return-order-list">
-        <!-- 顶部导航栏 -->
-        <view class="nav-bar">
-            <view class="nav-back" @click="goBack">
-                <text class="iconfont iconarrow-left"></text>
-            </view>
-            <view class="nav-title">退回订单</view>
+  <view class="min-h-screen bg-gray-50">
+    <!-- 状态筛选标签 -->
+    <up-sticky bgColor="#fff" class="!top-0 !z-10">
+      <scroll-view scroll-x class="bg-white border-b border-gray-100">
+        <view class="flex h-11">
+          <view
+            v-for="tab in statusTabs"
+            :key="tab.value"
+            class="flex items-center justify-center px-4 relative flex-shrink-0"
+            :class="currentStatus === tab.value ? 'text-blue-500 font-bold' : 'text-gray-500'"
+            @tap="handleStatusChange(tab.value)"
+          >
+            <text class="text-sm">{{ tab.text }}</text>
+            <view
+              v-if="currentStatus === tab.value"
+              class="absolute bottom-0 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded bg-blue-500"
+            ></view>
+          </view>
         </view>
+      </scroll-view>
+    </up-sticky>
 
-        <!-- 状态筛选 -->
-        <scroll-view scroll-x class="status-scroll" :scroll-left="scrollLeft">
-            <view class="status-tabs">
-                <view v-for="(item, index) in statusList" :key="index" class="status-tab"
-                    :class="{ active: currentStatus === item.value }" @click="handleStatusChange(item.value)">
-                    <text>{{ item.text }}</text>
-                    <text v-if="statusCount[getStatusCountKey(item.value)]" class="status-count">
-                        {{ statusCount[getStatusCountKey(item.value)] }}
-                    </text>
-                </view>
+    <!-- 退货订单列表 -->
+    <mescroll-body
+      ref="mescrollRef"
+      @down="mescrollDown"
+      @up="mescrollUp"
+      :up="upOption"
+      :down="downOption"
+    >
+      <view class="px-3 pt-3">
+        <view
+          v-for="item in orderList"
+          :key="item.id"
+          class="bg-white rounded-lg shadow-sm mb-3 overflow-hidden"
+          @tap="goToDetail(item.id)"
+        >
+          <!-- 订单头部 -->
+          <view class="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+            <view class="flex items-center gap-1 text-sm text-gray-500">
+              <up-icon name="order" size="14" color="#94a3b8"></up-icon>
+              <text>{{ item.order_no }}</text>
             </view>
-        </scroll-view>
-
-        <!-- 订单列表 -->
-        <view class="order-list" v-if="orderList.length > 0">
-            <view class="order-item" v-for="(item, index) in orderList" :key="index" @click="goToDetail(item.id)">
-                <view class="order-header">
-                    <view class="order-no">订单编号：{{ item.order_no }}</view>
-                    <view class="order-status" :class="'status-' + item.status">
-                        {{ getStatusText(item.status) }}
-                    </view>
-                </view>
-                <view class="order-content">
-                    <view class="device-info">
-                        <view class="device-count">
-                            退回设备：{{ item.returnDevices ? item.returnDevices.length : 0 }}台
-                        </view>
-                        <view class="express-info" v-if="item.express_company">
-                            <text>{{ item.express_company }}</text>
-                            <text v-if="item.express_no">：{{ item.express_no }}</text>
-                        </view>
-                    </view>
-                    <view class="order-time">{{ item.create_at }}</view>
-                </view>
-                <view class="order-footer" v-if="item.status === 1">
-                    <button class="btn-confirm" @click.stop="handleConfirmReceive(item.id)">确认收货</button>
-                </view>
+            <view
+              class="text-xs px-2 py-0.5 rounded-full font-medium"
+              :style="{ color: getStatusColor(item.status), background: getStatusBg(item.status) }"
+            >
+              {{ item.status_name || getStatusText(item.status) }}
             </view>
+          </view>
+
+          <!-- 订单内容 -->
+          <view class="px-4 py-3 space-y-2">
+            <view class="flex items-center justify-between">
+              <view class="flex items-center gap-1 text-sm text-gray-700">
+                <up-icon name="gift" size="14" color="#64748b"></up-icon>
+                <text>退回设备：{{ getDeviceCount(item) }}台</text>
+              </view>
+              <text class="text-xs text-gray-400">{{ item.create_at }}</text>
+            </view>
+
+            <!-- 快递信息 -->
+            <view v-if="item.express_company" class="flex items-center gap-1 text-xs text-gray-400">
+              <up-icon name="car" size="12" color="#94a3b8"></up-icon>
+              <text>{{ item.express_company }}</text>
+              <text v-if="item.express_no">：{{ item.express_no }}</text>
+            </view>
+
+            <!-- 备注 -->
+            <view v-if="item.remark" class="text-xs text-gray-400 truncate">
+              备注：{{ item.remark }}
+            </view>
+          </view>
+
+          <!-- 底部操作 -->
+          <view class="flex items-center justify-end gap-2 px-4 py-2.5 border-t border-gray-50">
+            <view
+              class="text-xs px-3 py-1 rounded-full border border-gray-200 text-gray-500 bg-white"
+              @tap.stop="goToDetail(item.id)"
+            >
+              查看详情
+            </view>
+          </view>
         </view>
+      </view>
 
-        <!-- 空状态 -->
-        <view class="empty-state" v-else>
-            <image class="empty-image" src="/static/images/empty-order.png" mode="aspectFit"></image>
-            <text class="empty-text">暂无退回订单</text>
-        </view>
-
-        <!-- 加载更多 -->
-        <uni-load-more :status="loadMoreStatus" :content-text="contentText"></uni-load-more>
-
-        <!-- 确认收货弹窗 -->
-        <up-modal 
-            :show="showConfirmModal" 
-            title="确认收货" 
-            content="确认已收到退回的设备吗？" 
-            :show-cancel-button="true"
-            @confirm="confirmReceive"
-            @cancel="closeConfirmPopup"
-        ></up-modal>
-    </view>
+      <!-- 空状态 -->
+      <view v-if="orderList.length === 0 && !loading" class="flex items-center justify-center" style="padding-top: 200rpx;">
+        <up-empty
+          mode="data"
+          icon="http://cdn.uviewui.com/uview/empty/data.png"
+          text="暂无退货订单"
+          textColor="#999999"
+          textSize="15"
+        ></up-empty>
+      </view>
+    </mescroll-body>
+  </view>
 </template>
 
-<script>
-import { getReturnOrderList, getReturnOrderStatusCount, getReturnOrderStatusList, confirmReceiveReturnOrder } from '../../api/return_order';
-// import uniLoadMore from '@/components/uni-load-more/uni-load-more.vue';
-// import uniPopup from '@/components/uni-popup/uni-popup.vue';
-// import uniPopupDialog from '@/components/uni-popup/uni-popup-dialog.vue';
+<script setup lang="ts">
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue'
+import { getReturnOrderList } from '../../api/return_order'
+import { getReturnOrderStatusInfo, RETURN_ORDER_STATUS } from '../../utils/theme'
 
-export default {
-    components: {
-        // uniLoadMore,
-        // uniPopup,
-        // uniPopupDialog
-    },
-    data() {
-        return {
-            statusList: [],
-            currentStatus: -1,
-            scrollLeft: 0,
-            orderList: [],
-            page: 1,
-            limit: 10,
-            hasMore: true,
-            loadMoreStatus: 'more',
-            contentText: {
-                contentdown: '上拉加载更多',
-                contentrefresh: '加载中...',
-                contentnomore: '没有更多数据了'
-            },
-            statusCount: {
-                all: 0,
-                pending: 0,
-                returning: 0,
-                completed: 0,
-                cancelled: 0
-            },
-            confirmOrderId: 0,
-            showConfirmModal: false
-        };
-    },
-    onLoad() {
-        this.statusList = getReturnOrderStatusList();
-        this.getStatusCount();
-        this.getOrderList(true);
-    },
-    onPullDownRefresh() {
-        this.page = 1;
-        this.hasMore = true;
-        this.loadMoreStatus = 'more';
-        this.getStatusCount();
-        this.getOrderList(true, () => {
-            uni.stopPullDownRefresh();
-        });
-    },
-    onReachBottom() {
-        if (this.hasMore) {
-            this.loadMoreStatus = 'loading';
-            this.page++;
-            this.getOrderList();
-        }
-    },
-    methods: {
-        // 获取订单列表
-        async getOrderList(reset = false, callback) {
-            if (reset) {
-                this.page = 1;
-                this.orderList = [];
-            }
+// ============ 状态筛选 ============
+const statusTabs = [
+  { text: '全部', value: -1 },
+  { text: '待处理', value: 0 },
+  { text: '退货中', value: 1 },
+  { text: '已完成', value: 2 },
+  { text: '已取消', value: 3 },
+]
 
-            try {
-                const params = {
-                    page: this.page,
-                    limit: this.limit
-                };
+const currentStatus = ref(-1)
+const orderId = ref<number | null>(null)
 
-                if (this.currentStatus !== -1) {
-                    params.status = this.currentStatus;
-                }
+// ============ 列表数据 ============
+const orderList = ref<any[]>([])
+const loading = ref(false)
+const mescrollRef = ref<any>(null)
 
-                const res = await getReturnOrderList(params);
+// mescroll 配置
+const upOption = {
+  auto: true,
+  page: { num: 0, size: 10 },
+  noMoreSize: 3,
+  empty: { tip: '暂无退货订单' }
+}
 
-                if (res.data.code === 200) {
-                    const { list, count } = res.data.data;
+const downOption = {
+  auto: false,
+  textInOffset: '下拉刷新',
+  textOutOffset: '释放更新',
+  textLoading: '加载中...'
+}
 
-                    if (reset) {
-                        this.orderList = list;
-                    } else {
-                        this.orderList = [...this.orderList, ...list];
-                    }
+// ============ 状态辅助 ============
+const getStatusColor = (status: number) => getReturnOrderStatusInfo(status).color
+const getStatusBg = (status: number) => getReturnOrderStatusInfo(status).bgColor
+const getStatusText = (status: number) => getReturnOrderStatusInfo(status).text
+const getDeviceCount = (item: any) => (item.return_devices || item.returnDevices || []).length
 
-                    this.hasMore = this.orderList.length < count;
-                    this.loadMoreStatus = this.hasMore ? 'more' : 'noMore';
-                } else {
-                    uni.showToast({
-                        title: res.data.message || '获取订单列表失败',
-                        icon: 'none'
-                    });
-                }
-            } catch (error) {
-                console.error(error);
-                uni.showToast({
-                    title: '获取订单列表失败',
-                    icon: 'none'
-                });
-            } finally {
-                if (typeof callback === 'function') {
-                    callback();
-                }
-            }
-        },
+// ============ 列表操作 ============
+const mescrollDown = (mescroll: any) => {
+  mescroll.resetUpScroll()
+}
 
-        // 获取状态统计
-        async getStatusCount() {
-            try {
-                const res = await getReturnOrderStatusCount();
-
-                if (res.data.code === 200) {
-                    this.statusCount = res.data.data;
-                }
-            } catch (error) {
-                console.error(error);
-            }
-        },
-
-        // 返回上一页
-        goBack() {
-            uni.navigateBack();
-        },
-
-        // 跳转到详情页
-        goToDetail(id) {
-            uni.navigateTo({
-                url: `/addon/recycle/pages/return-order/detail?id=${id}`
-            });
-        },
-
-        // 处理状态切换
-        handleStatusChange(status) {
-            if (this.currentStatus === status) return;
-
-            this.currentStatus = status;
-            this.page = 1;
-            this.hasMore = true;
-            this.loadMoreStatus = 'more';
-            this.getOrderList(true);
-        },
-
-        // 获取状态文本
-        getStatusText(status) {
-            const statusMap = {
-                0: '待处理',
-                1: '退货中',
-                2: '已完成',
-                3: '已取消'
-            };
-            return statusMap[status] || '未知状态';
-        },
-
-        // 获取状态统计键名
-        getStatusCountKey(status) {
-            const keyMap = {
-                '-1': 'all',
-                0: 'pending',
-                1: 'returning',
-                2: 'completed',
-                3: 'cancelled'
-            };
-            return keyMap[status] || 'all';
-        },
-
-        // 处理确认收货
-        handleConfirmReceive(id) {
-            this.confirmOrderId = id;
-            this.showConfirmModal = true;
-        },
-
-        // 关闭确认弹窗
-        closeConfirmPopup() {
-            this.showConfirmModal = false;
-        },
-
-        // 确认收货
-        async confirmReceive() {
-            this.showConfirmModal = false;
-            try {
-                const res = await confirmReceiveReturnOrder(this.confirmOrderId, {});
-
-                if (res.data.code === 200) {
-                    uni.showToast({
-                        title: '确认收货成功',
-                        icon: 'success'
-                    });
-
-                    // 刷新列表和统计
-                    this.getStatusCount();
-                    this.getOrderList(true);
-                } else {
-                    uni.showToast({
-                        title: res.data.message || '确认收货失败',
-                        icon: 'none'
-                    });
-                }
-            } catch (error) {
-                console.error(error);
-                uni.showToast({
-                    title: '确认收货失败',
-                    icon: 'none'
-                });
-            }
-        }
+const mescrollUp = async (mescroll: any) => {
+  try {
+    loading.value = true
+    const params: any = {
+      page: mescroll.num,
+      limit: mescroll.size
     }
-};
+
+    // 状态筛选
+    if (currentStatus.value !== -1) {
+      params.status = currentStatus.value
+    }
+
+    // 按原订单ID筛选
+    if (orderId.value) {
+      params.order_id = orderId.value
+    }
+
+    const res: any = await getReturnOrderList(params)
+
+    if (res.code === 1) {
+      const list = res.data?.data || res.data?.list || []
+
+      if (mescroll.num === 1) {
+        orderList.value = []
+      }
+
+      orderList.value = [...orderList.value, ...list]
+      mescroll.endSuccess(list.length)
+
+      if (list.length < mescroll.size) {
+        mescroll.endUpScroll(false)
+      }
+    } else {
+      mescroll.endErr()
+      uni.showToast({ title: res.msg || '加载失败', icon: 'none' })
+    }
+  } catch (error) {
+    console.error('加载退货订单列表失败：', error)
+    mescroll.endErr()
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  } finally {
+    loading.value = false
+  }
+}
+
+const refreshList = () => {
+  if (mescrollRef.value?.mescroll) {
+    mescrollRef.value.mescroll.resetUpScroll()
+  }
+}
+
+// ============ 导航 ============
+const goToDetail = (id: number) => {
+  uni.navigateTo({
+    url: `/addon/recycle/pages/return_order/detail?id=${id}`
+  })
+}
+
+const handleStatusChange = (status: number) => {
+  if (currentStatus.value === status) return
+  currentStatus.value = status
+  refreshList()
+}
+
+// ============ 页面加载 ============
+onLoad((options?: Record<string, any>) => {
+  if (options?.order_id) {
+    orderId.value = Number(options.order_id)
+  }
+})
 </script>
-
-<style lang="scss" scoped>
-.return-order-list {
-    min-height: 100vh;
-    background-color: #f5f5f5;
-}
-
-.nav-bar {
-    display: flex;
-    align-items: center;
-    height: 90rpx;
-    background-color: #ffffff;
-    padding: 0 30rpx;
-    position: relative;
-
-    .nav-back {
-        width: 60rpx;
-        height: 60rpx;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        .iconfont {
-            font-size: 36rpx;
-            color: #333;
-        }
-    }
-
-    .nav-title {
-        position: absolute;
-        left: 0;
-        right: 0;
-        text-align: center;
-        font-size: 32rpx;
-        font-weight: bold;
-        color: #333;
-    }
-}
-
-.status-scroll {
-    background-color: #ffffff;
-    white-space: nowrap;
-    height: 90rpx;
-    border-bottom: 1rpx solid #f0f0f0;
-
-    .status-tabs {
-        display: flex;
-        height: 100%;
-
-        .status-tab {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            padding: 0 30rpx;
-            font-size: 28rpx;
-            color: #666;
-            position: relative;
-
-            &.active {
-                color: #2979ff;
-                font-weight: bold;
-
-                &::after {
-                    content: '';
-                    position: absolute;
-                    bottom: 0;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    width: 40rpx;
-                    height: 4rpx;
-                    background-color: #2979ff;
-                    border-radius: 2rpx;
-                }
-            }
-
-            .status-count {
-                margin-left: 6rpx;
-                font-size: 22rpx;
-                background-color: #ff4d4f;
-                color: #fff;
-                border-radius: 20rpx;
-                padding: 0 10rpx;
-                min-width: 30rpx;
-                text-align: center;
-                line-height: 30rpx;
-            }
-        }
-    }
-}
-
-.order-list {
-    padding: 20rpx;
-
-    .order-item {
-        background-color: #ffffff;
-        border-radius: 12rpx;
-        margin-bottom: 20rpx;
-        overflow: hidden;
-        box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
-
-        .order-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20rpx 30rpx;
-            border-bottom: 1rpx solid #f5f5f5;
-
-            .order-no {
-                font-size: 26rpx;
-                color: #666;
-            }
-
-            .order-status {
-                font-size: 26rpx;
-                font-weight: bold;
-
-                &.status-0 {
-                    color: #faad14;
-                }
-
-                &.status-1 {
-                    color: #1890ff;
-                }
-
-                &.status-2 {
-                    color: #52c41a;
-                }
-
-                &.status-3 {
-                    color: #999;
-                }
-            }
-        }
-
-        .order-content {
-            padding: 20rpx 30rpx;
-
-            .device-info {
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 15rpx;
-
-                .device-count {
-                    font-size: 28rpx;
-                    color: #333;
-                }
-
-                .express-info {
-                    font-size: 26rpx;
-                    color: #666;
-                }
-            }
-
-            .order-time {
-                font-size: 24rpx;
-                color: #999;
-            }
-        }
-
-        .order-footer {
-            padding: 20rpx 30rpx;
-            border-top: 1rpx solid #f5f5f5;
-            display: flex;
-            justify-content: flex-end;
-
-            .btn-confirm {
-                background-color: #2979ff;
-                color: #ffffff;
-                font-size: 26rpx;
-                padding: 0 30rpx;
-                height: 60rpx;
-                line-height: 60rpx;
-                border-radius: 30rpx;
-            }
-        }
-    }
-}
-
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 100rpx 0;
-
-    .empty-image {
-        width: 200rpx;
-        height: 200rpx;
-        margin-bottom: 20rpx;
-    }
-
-    .empty-text {
-        font-size: 28rpx;
-        color: #999;
-    }
-}
-</style>

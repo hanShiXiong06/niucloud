@@ -323,16 +323,23 @@ class RecycleOrderService extends BaseAdminService
         try {
             // 检查订单状态
             $order = $this->getInfo($id);
+
+            // 已完成的订单不允许删除
+            if ($order['status'] == RecycleOrderDict::ORDER_STATUS_COMPLETED) {
+                throw new CommonException('已完成的订单不允许删除');
+            }
+
+            // 只有已关闭或已取消的订单才能删除
             if (!in_array($order['status'], [
-                RecycleOrderDict::ORDER_STATUS_COMPLETED,
                 RecycleOrderDict::ORDER_STATUS_CLOSED,
                 RecycleOrderDict::ORDER_STATUS_CANCELLED
             ])) {
-                throw new CommonException('CANNOT_DELETE_ORDER');
+                throw new CommonException('当前订单状态不允许删除');
             }
 
-            // 更新订单状态为已删除
+            // 软删除：更新状态和删除时间
             $this->model->where([['id', '=', $id]])->update([
+                'status' => RecycleOrderDict::ORDER_STATUS_DELETE,
                 'delete_at' => time(),
                 'update_at' => time()
             ]);

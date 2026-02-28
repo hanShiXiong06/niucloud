@@ -92,4 +92,12 @@ export function editRecycleUserAddress(id: number, data: {
  */
 export function deleteRecycleUserAddress(id: number) {
   return request.delete(`recycle/recycle_user_address/${id}`);
+}
+
+/**
+ * 根据原订单ID查询退货订单列表
+ * @param orderId 原订单ID
+ */
+export function getReturnOrderByOrderId(orderId: number) {
+  return request.get(`recycle/recycle_return_order/by_order/${orderId}`);
 } 

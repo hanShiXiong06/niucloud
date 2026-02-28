@@ -6,9 +6,11 @@ export interface DictOptionItem {
 }
 
 export interface CheckOptionsGroup {
-  screen: DictOptionItem[]
-  appearance: DictOptionItem[]
-  function: DictOptionItem[]
+  screen: DictOptionItem[]      // 外屏规格 (recycle_display)
+  indisplay: DictOptionItem[]   // 内屏规格 (recycle_indisplay)
+  appearance: DictOptionItem[]  // 中框规格 (recycle_appearance)
+  function: DictOptionItem[]    // 功能规格 (recycle_function)
+  fix: DictOptionItem[]         // 维修规格 (recycle_fix)
 }
 
 export interface CheckMetaPayload {
@@ -16,8 +18,10 @@ export interface CheckMetaPayload {
   battery?: number
   battery_num?: number
   screen_id?: string
+  indisplay_id?: string
   appearance_id?: string
   function_ids: string[]
+  fix_ids: string[]
   activation_lock: boolean
   mdm_lock: boolean
 }
@@ -42,8 +46,10 @@ interface TemplateSelections {
   battery: number | undefined
   battery_num: number | undefined
   screenId: string
+  indisplayId: string
   appearanceId: string
   functionIds: string[]
+  fixIds: string[]
   activationLock: boolean
   mdmLock: boolean
 }
@@ -79,11 +85,15 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     battery: undefined,
     battery_num: undefined,
     screenId: '',
+    indisplayId: '',
     appearanceId: '',
     functionIds: [],
+    fixIds: [],
     activationLock: false,
     mdmLock: false
   })
+
+  // ==================== 字典映射 ====================
 
   const optionNameById = computed(() => {
     const createMap = (options: DictOptionItem[]) => {
@@ -96,8 +106,10 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
 
     return {
       screen: createMap(dictOptions.value.screen),
+      indisplay: createMap(dictOptions.value.indisplay),
       appearance: createMap(dictOptions.value.appearance),
-      function: createMap(dictOptions.value.function)
+      function: createMap(dictOptions.value.function),
+      fix: createMap(dictOptions.value.fix)
     }
   })
 
@@ -112,29 +124,39 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
 
     return {
       screen: createMap(dictOptions.value.screen),
+      indisplay: createMap(dictOptions.value.indisplay),
       appearance: createMap(dictOptions.value.appearance),
-      function: createMap(dictOptions.value.function)
+      function: createMap(dictOptions.value.function),
+      fix: createMap(dictOptions.value.fix)
     }
   })
+
+  // ==================== 计数 ====================
 
   const checkedCount = computed(() => {
     let count = 0
     if (templateSelections.battery !== undefined) count++
     if (templateSelections.battery_num !== undefined) count++
     if (templateSelections.screenId) count++
+    if (templateSelections.indisplayId) count++
     if (templateSelections.appearanceId) count++
     count += templateSelections.functionIds.length
+    count += templateSelections.fixIds.length
     return count
   })
 
+  // ==================== 构建 / 提交 ====================
+
   const buildCheckMeta = (): CheckMetaPayload => {
     return {
-      version: 1,
+      version: 2,
       battery: toOptionalNumber(templateSelections.battery),
       battery_num: toOptionalNumber(templateSelections.battery_num),
       screen_id: templateSelections.screenId || undefined,
+      indisplay_id: templateSelections.indisplayId || undefined,
       appearance_id: templateSelections.appearanceId || undefined,
       function_ids: templateSelections.functionIds.map((item) => toStringValue(item)),
+      fix_ids: templateSelections.fixIds.map((item) => toStringValue(item)),
       activation_lock: !!templateSelections.activationLock,
       mdm_lock: !!templateSelections.mdmLock
     }
@@ -148,14 +170,20 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     }
   }
 
+  // ==================== 结果文本生成 ====================
+
   const updateCheckResult = () => {
     const checkMeta = buildCheckMeta()
     const results: string[] = []
 
     const screenName = checkMeta.screen_id ? optionNameById.value.screen[checkMeta.screen_id] : ''
+    const indisplayName = checkMeta.indisplay_id ? optionNameById.value.indisplay[checkMeta.indisplay_id] : ''
     const appearanceName = checkMeta.appearance_id ? optionNameById.value.appearance[checkMeta.appearance_id] : ''
     const functionNames = checkMeta.function_ids
       .map((id) => optionNameById.value.function[id])
+      .filter(Boolean)
+    const fixNames = checkMeta.fix_ids
+      .map((id) => optionNameById.value.fix[id])
       .filter(Boolean)
 
     if (checkMeta.battery !== undefined) {
@@ -171,25 +199,35 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       results.push('监管锁开启')
     }
     if (screenName) {
-      results.push(`屏幕${screenName}`)
+      results.push(`外屏${screenName}`)
+    }
+    if (indisplayName) {
+      results.push(`内屏${indisplayName}`)
     }
     if (appearanceName) {
-      results.push(`外观${appearanceName}`)
+      results.push(`中框${appearanceName}`)
     }
     if (functionNames.length > 0) {
       results.push(`功能异常: ${functionNames.join('、')}`)
     }
+    if (fixNames.length > 0) {
+      results.push(`维修记录: ${fixNames.join('、')}`)
+    }
 
-    deviceForm.check_result = results.join('; ')
+    deviceForm.check_result = results.join(';\n')
     deviceForm.info = getSubmitInfo()
   }
+
+  // ==================== 重置 / 清空 ====================
 
   const resetTemplateSelections = () => {
     templateSelections.battery = undefined
     templateSelections.battery_num = undefined
     templateSelections.screenId = ''
+    templateSelections.indisplayId = ''
     templateSelections.appearanceId = ''
     templateSelections.functionIds = []
+    templateSelections.fixIds = []
     templateSelections.activationLock = false
     templateSelections.mdmLock = false
   }
@@ -200,12 +238,18 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     deviceForm.info = getSubmitInfo()
   }
 
+  // ==================== 从元数据恢复 ====================
+
   const applyCheckMeta = (meta: CheckMetaPayload) => {
     templateSelections.battery = toOptionalNumber(meta.battery)
     templateSelections.battery_num = toOptionalNumber(meta.battery_num)
     templateSelections.screenId = toStringValue(meta.screen_id)
+    templateSelections.indisplayId = toStringValue(meta.indisplay_id)
     templateSelections.appearanceId = toStringValue(meta.appearance_id)
     templateSelections.functionIds = (meta.function_ids || [])
+      .map((item) => toStringValue(item))
+      .filter(Boolean)
+    templateSelections.fixIds = (meta.fix_ids || [])
       .map((item) => toStringValue(item))
       .filter(Boolean)
     templateSelections.activationLock = !!meta.activation_lock
@@ -231,13 +275,19 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       ? (parsed.function_ids ?? parsed.functionIds).map((item: any) => toStringValue(item)).filter(Boolean)
       : []
 
+    const fixIds = Array.isArray(parsed.fix_ids ?? parsed.fixIds)
+      ? (parsed.fix_ids ?? parsed.fixIds).map((item: any) => toStringValue(item)).filter(Boolean)
+      : []
+
     return {
       version: Number(parsed.version) || 1,
       battery: toOptionalNumber(parsed.battery),
       battery_num: toOptionalNumber(parsed.battery_num ?? parsed.batteryNum),
       screen_id: toStringValue(parsed.screen_id ?? parsed.screenId) || undefined,
+      indisplay_id: toStringValue(parsed.indisplay_id ?? parsed.indisplayId) || undefined,
       appearance_id: toStringValue(parsed.appearance_id ?? parsed.appearanceId) || undefined,
       function_ids: functionIds,
+      fix_ids: fixIds,
       activation_lock: !!(parsed.activation_lock ?? parsed.activationLock),
       mdm_lock: !!(parsed.mdm_lock ?? parsed.mdmLock)
     }
@@ -252,6 +302,8 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
 
     return null
   }
+
+  // ==================== 旧文本结果兼容解析 ====================
 
   const applyLegacyCheckResult = (resultText: string): boolean => {
     if (!resultText) return false
@@ -280,18 +332,34 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       matched = true
     }
 
-    const matchedScreenName = Object.keys(optionIdByName.value.screen).find((name) => resultText.includes(`屏幕${name}`))
+    // 兼容旧版 "屏幕xxx" 和新版 "外屏xxx" 格式
+    const matchedScreenName = Object.keys(optionIdByName.value.screen).find(
+      (name) => resultText.includes(`外屏${name}`) || resultText.includes(`屏幕${name}`)
+    )
     if (matchedScreenName) {
       templateSelections.screenId = optionIdByName.value.screen[matchedScreenName]
       matched = true
     }
 
-    const matchedAppearanceName = Object.keys(optionIdByName.value.appearance).find((name) => resultText.includes(`外观${name}`))
+    // 内屏规格
+    const matchedIndisplayName = Object.keys(optionIdByName.value.indisplay).find(
+      (name) => resultText.includes(`内屏${name}`)
+    )
+    if (matchedIndisplayName) {
+      templateSelections.indisplayId = optionIdByName.value.indisplay[matchedIndisplayName]
+      matched = true
+    }
+
+    // 兼容旧版 "外观xxx" 和新版 "中框xxx" 格式
+    const matchedAppearanceName = Object.keys(optionIdByName.value.appearance).find(
+      (name) => resultText.includes(`中框${name}`) || resultText.includes(`外观${name}`)
+    )
     if (matchedAppearanceName) {
       templateSelections.appearanceId = optionIdByName.value.appearance[matchedAppearanceName]
       matched = true
     }
 
+    // 功能异常
     const functionIds = Object.entries(optionIdByName.value.function)
       .filter(([name]) => resultText.includes(name))
       .map(([, id]) => id)
@@ -300,8 +368,19 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       matched = true
     }
 
+    // 维修规格
+    const fixIds = Object.entries(optionIdByName.value.fix)
+      .filter(([name]) => resultText.includes(name))
+      .map(([, id]) => id)
+    if (fixIds.length) {
+      templateSelections.fixIds = fixIds
+      matched = true
+    }
+
     return matched
   }
+
+  // ==================== 从设备数据恢复 ====================
 
   const restoreFromDevice = (device: DeviceCheckMetaSource) => {
     const checkMeta = resolveCheckMeta(device)
@@ -320,9 +399,17 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     deviceForm.info = getSubmitInfo()
   }
 
+  // ==================== 单选/多选操作 ====================
+
   const selectScreenOption = (option: string | number) => {
     const optionId = toStringValue(option)
     templateSelections.screenId = templateSelections.screenId === optionId ? '' : optionId
+    updateCheckResult()
+  }
+
+  const selectIndisplayOption = (option: string | number) => {
+    const optionId = toStringValue(option)
+    templateSelections.indisplayId = templateSelections.indisplayId === optionId ? '' : optionId
     updateCheckResult()
   }
 
@@ -343,11 +430,26 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     updateCheckResult()
   }
 
+  const toggleFixOption = (option: string | number) => {
+    const optionId = toStringValue(option)
+    const index = templateSelections.fixIds.indexOf(optionId)
+    if (index > -1) {
+      templateSelections.fixIds.splice(index, 1)
+    } else {
+      templateSelections.fixIds.push(optionId)
+    }
+    updateCheckResult()
+  }
+
+  // ==================== 常用模板 ====================
+
   const fillCommonResult = () => {
     templateSelections.battery = 85
     const preferredScreenId = optionIdByName.value.screen['完好'] || toStringValue(dictOptions.value.screen[0]?.value)
+    const preferredIndisplayId = optionIdByName.value.indisplay['正常'] || toStringValue(dictOptions.value.indisplay[0]?.value)
     const preferredAppearanceId = optionIdByName.value.appearance['轻微磨损'] || toStringValue(dictOptions.value.appearance[0]?.value)
     templateSelections.screenId = preferredScreenId
+    templateSelections.indisplayId = preferredIndisplayId
     templateSelections.appearanceId = preferredAppearanceId
     updateCheckResult()
   }
@@ -362,7 +464,9 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     fillCommonResult,
     restoreFromDevice,
     selectScreenOption,
+    selectIndisplayOption,
     selectAppearanceOption,
-    toggleFunctionOption
+    toggleFunctionOption,
+    toggleFixOption
   }
 }

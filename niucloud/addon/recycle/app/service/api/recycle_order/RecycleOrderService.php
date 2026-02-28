@@ -513,9 +513,32 @@ class RecycleOrderService extends BaseApiService
      */
     public function del(int $id)
     {
-        $model = $this->model->where([['id', '=', $id],['site_id', '=', $this->site_id]])->find();
-        $res = $model->delete();
-        return $res;
+        $model = $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->find();
+        if (empty($model)) {
+            throw new CommonException('ORDER_NOT_FOUND');
+        }
+
+        // 已完成的订单不允许删除
+        if ($model['status'] == RecycleOrderDict::ORDER_STATUS_COMPLETED) {
+            throw new CommonException('已完成的订单不允许删除');
+        }
+
+        // 只有已关闭或已取消的订单才能删除
+        if (!in_array($model['status'], [
+            RecycleOrderDict::ORDER_STATUS_CLOSED,
+            RecycleOrderDict::ORDER_STATUS_CANCELLED
+        ])) {
+            throw new CommonException('当前订单状态不允许删除');
+        }
+
+        // 软删除：标记删除时间，更新状态
+        $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->update([
+            'status' => RecycleOrderDict::ORDER_STATUS_DELETE,
+            'delete_at' => time(),
+            'update_at' => time()
+        ]);
+
+        return true;
     }
 
     /**

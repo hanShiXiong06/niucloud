@@ -8,7 +8,15 @@
       <text>查看详情</text>
     </view>
 
-    <!-- 根据订单状态显示不同操作按钮 -->
+    <!-- 退货信息按钮 -->
+    <view
+      v-if="hasReturnOrder"
+      class="action-btn return-info"
+      @click="goToReturnOrder(order.id)"
+    >
+      <text>退货信息</text>
+    </view>
+
     <!-- 状态1-待签收：可以取消订单 -->
     <view
       v-if="order.status === 1"
@@ -18,10 +26,9 @@
       <text>取消订单</text>
     </view>
 
-  
-    <!-- 状态7-已完成、状态8-已关闭、状态9-已取消：可以删除订单 -->
+    <!-- 状态9-已取消：可以删除订单 -->
     <view
-      v-if="order.status === 7 || order.status === 8 || order.status === 9"
+      v-if="order.status === 9"
       class="action-btn danger"
       @click="$emit('delete')"
     >
@@ -31,13 +38,15 @@
 </template>
 
 <script setup lang="ts">
+import { watch } from 'vue'
 import type { OrderListItem } from '../../../types/order'
+import { useReturnOrder } from '../../../hooks/useReturnOrder'
 
 interface Props {
   order: OrderListItem
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 defineEmits<{
   'view-detail': []
@@ -45,6 +54,16 @@ defineEmits<{
   'confirm': []
   'delete': []
 }>()
+
+const { hasReturnOrder, goToReturnOrder, checkReturnOrderByDevices } = useReturnOrder()
+
+watch(
+  () => props.order,
+  (order) => {
+    checkReturnOrderByDevices(order.id, order.devices)
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped lang="scss">
@@ -83,6 +102,16 @@ defineEmits<{
 
     &:active {
       background: #fef2f2;
+    }
+  }
+
+  &.return-info {
+    background: #fff;
+    color: #f59e0b;
+    border-color: #fde68a;
+
+    &:active {
+      background: #fffbeb;
     }
   }
 }

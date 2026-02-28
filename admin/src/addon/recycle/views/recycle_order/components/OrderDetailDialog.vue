@@ -10,7 +10,7 @@
         <div v-if="orderData" class="order-detail">
             <!-- 订单基本信息 -->
                <!-- 会员信息 -->
-          
+
             <el-descriptions title="会员信息" :column="isMobile ? 1 : 2" border v-if="orderData.member">
                 <el-descriptions-item label="会员ID">{{ orderData.member.member_id }}</el-descriptions-item>
                 <el-descriptions-item label="用户名">{{ orderData.member.username || '暂无' }}</el-descriptions-item>
@@ -32,7 +32,7 @@
                 <el-descriptions-item label="快递单号">{{ orderData.express_no || '暂无' }}</el-descriptions-item>
 
                 <el-descriptions-item label="设备数量">{{ deviceCount }}</el-descriptions-item>
-               
+
                 <el-descriptions-item label="创建时间">{{ orderData.create_at || '暂无' }}</el-descriptions-item>
 
                 <el-descriptions-item label="打款时间">
@@ -73,7 +73,7 @@
                 <el-table-column prop="id" label="ID" width="60" />
                 <el-table-column prop="imei" label="IMEI" min-width="120" />
                 <el-table-column prop="model" label="型号" min-width="120" />
-              
+
                 <el-table-column prop="final_price" label="最终价格" width="100">
                     <template #default="scope">
                         <span style="color: #ff6b00; font-weight: bold;">¥{{ scope.row.final_price }}</span>
@@ -105,6 +105,55 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 退货信息 -->
+            <template v-if="returnOrderList.length > 0">
+                <el-divider />
+                <h3>退货信息</h3>
+                <div v-for="returnOrder in returnOrderList" :key="returnOrder.id" class="return-order-card">
+                    <el-descriptions :column="isMobile ? 1 : 2" border size="small">
+                        <el-descriptions-item label="退货单号">{{ returnOrder.order_no }}</el-descriptions-item>
+                        <el-descriptions-item label="退货状态">
+                            <el-tag size="small" :type="returnOrderStatusType(returnOrder.status)">{{ returnOrder.status_name }}</el-tag>
+                        </el-descriptions-item>
+                        <el-descriptions-item label="快递公司">{{ returnOrder.express_company || '暂无' }}</el-descriptions-item>
+                        <el-descriptions-item label="快递单号">{{ returnOrder.express_no || '暂无' }}</el-descriptions-item>
+                        <el-descriptions-item label="退货地址" :span="2">{{ returnOrder.return_address || '暂无' }}</el-descriptions-item>
+                        <el-descriptions-item label="备注" :span="2">{{ returnOrder.remark || returnOrder.comment || '暂无' }}</el-descriptions-item>
+                        <el-descriptions-item label="创建时间">{{ returnOrder.create_at || '暂无' }}</el-descriptions-item>
+                        <el-descriptions-item label="完成时间">{{ returnOrder.over_at || '暂无' }}</el-descriptions-item>
+                    </el-descriptions>
+                    <!-- 退货设备列表 -->
+                    <div v-if="returnOrder.return_devices && returnOrder.return_devices.length > 0" class="mt-2">
+                        <div class="text-sm font-semibold text-gray-700 mb-1">退货设备</div>
+                        <el-table v-if="!isMobile" :data="returnOrder.return_devices" size="small" border stripe>
+                            <el-table-column label="IMEI" min-width="120">
+                                <template #default="scope">{{ scope.row.device?.imei || '暂无' }}</template>
+                            </el-table-column>
+                            <el-table-column label="型号" min-width="100">
+                                <template #default="scope">{{ scope.row.device?.model || '暂无' }}</template>
+                            </el-table-column>
+                            <el-table-column label="状态" width="100">
+                                <template #default="scope">
+                                    <el-tag size="small">{{ scope.row.status_name || '暂无' }}</el-tag>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                        <div v-else class="space-y-1">
+                            <div
+                                v-for="rd in returnOrder.return_devices"
+                                :key="rd.id"
+                                class="rounded border border-gray-200 bg-gray-50 p-2 text-xs"
+                            >
+                                <div>IMEI：{{ rd.device?.imei || '暂无' }} | 型号：{{ rd.device?.model || '暂无' }}</div>
+                                <div class="mt-1">
+                                    <el-tag size="small">{{ rd.status_name || '暂无' }}</el-tag>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
         </div>
         <template #footer>
             <div :class="isMobile ? 'dialog-footer mobile-footer' : 'dialog-footer'">
@@ -117,6 +166,7 @@
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElImageViewer } from 'element-plus'
+import { getReturnOrderList } from '@/addon/recycle/api/recycle_return_order'
 
 // 定义接口
 interface OrderDetail {
@@ -172,6 +222,7 @@ const emit = defineEmits(['update:visible'])
 const dialogVisible = ref(props.visible)
 const orderData = ref<OrderDetail | null>(props.orderDetail)
 const isMobile = ref(false)
+const returnOrderList = ref<any[]>([])
 
 const updateResponsiveState = () => {
     isMobile.value = window.innerWidth <= 768
@@ -210,6 +261,28 @@ const handlePreview = (index: number) => {
     showImageViewer.value = true
 }
 
+// 退货订单状态标签类型
+const returnOrderStatusType = (status: number) => {
+    const map: Record<number, string> = {
+        0: 'warning',
+        1: '',
+        2: 'success',
+        3: 'info'
+    }
+    return map[status] || 'info'
+}
+
+// 加载退货订单数据
+const loadReturnOrders = async (orderId: number | string) => {
+    try {
+        const res = await getReturnOrderList({ order_id: orderId })
+        const data = res.data || []
+        returnOrderList.value = Array.isArray(data) ? data : (data.data || [])
+    } catch (e) {
+        returnOrderList.value = []
+    }
+}
+
 // 监听visible属性变化
 watch(() => props.visible, (newVal) => {
     dialogVisible.value = newVal
@@ -223,6 +296,10 @@ watch(dialogVisible, (newVal) => {
 // 监听orderDetail变化
 watch(() => props.orderDetail, (newVal) => {
     orderData.value = newVal
+    returnOrderList.value = []
+    if (newVal && newVal.id) {
+        loadReturnOrders(newVal.id)
+    }
 })
 
 onMounted(() => {
@@ -276,6 +353,14 @@ onBeforeUnmount(() => {
     }
 }
 
+.return-order-card {
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
 @media (max-width: 768px) {
     .order-detail {
         padding: 6px;
@@ -288,6 +373,11 @@ onBeforeUnmount(() => {
             width: 92px;
             height: 92px;
         }
+    }
+
+    .return-order-card {
+        padding: 8px;
+        margin-bottom: 10px;
     }
 }
 </style>

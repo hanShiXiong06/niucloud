@@ -1,59 +1,46 @@
 <template>
-  <view class="bg-white rounded-lg shadow-sm mx-3 mb-2 p-3">
-    <!-- 订单号 -->
-    <view class="flex items-center justify-between mb-2">
-      <view class="flex items-center gap-1">
-        <text class="text-xs text-gray-500">订单号:</text>
-        <text class="text-xs font-medium text-gray-800">{{ orderNo }}</text>
-        <svg
-          @click="handleCopyOrderNo"
-          t="1769239435828"
-          class="icon"
-          viewBox="0 0 1024 1024"
-          version="1.1"
-          xmlns="http://www.w3.org/2000/svg"
-          p-id="13345"
-          width="16"
-          height="16"
-        >
-          <path
-            d="M857.373005 65.290005 469.604424 65.290005c-34.211173 0-62.044078 27.832905-62.044078 62.043055l0 10.340509-63.076594 0c-25.993001 0-48.228421 16.346293-57.001225 39.293935L166.626995 176.967504c-34.21015 0-62.043055 27.832905-62.043055 62.043055l0 657.655358c0 34.21015 27.832905 62.043055 62.043055 62.043055l550.115086 0c34.21015 0 62.043055-27.832905 62.043055-62.043055l0-49.634444 78.587869 0c34.21015 0 62.043055-27.832905 62.043055-62.043055L919.41606 127.33306C919.41606 93.122911 891.583155 65.290005 857.373005 65.290005zM344.483752 179.035606l194.402595 0c10.833743 0 19.646456 8.813736 19.646456 19.646456 0 10.833743-8.813736 19.646456-19.646456 19.646456L344.483752 218.328517c-10.833743 0-19.646456-8.813736-19.646456-19.646456C324.836273 187.849342 333.650009 179.035606 344.483752 179.035606zM737.423099 896.665917c0 11.402701-9.278317 20.681018-20.681018 20.681018L166.626995 917.346935c-11.403724 0-20.681018-9.278317-20.681018-20.681018L145.945977 239.010559c0-11.402701 9.277294-20.681018 20.681018-20.681018l120.111588 0c8.197706 24.02723 30.977525 41.362037 57.744145 41.362037l194.402595 0c26.767644 0 49.54644-17.334807 57.744145-41.362037l120.111588 0c11.402701 0 20.681018 9.278317 20.681018 20.681018L737.422076 896.665917zM878.054023 784.988418c0 11.402701-9.278317 20.681018-20.681018 20.681018l-78.587869 0L778.785136 239.010559c0-34.21015-27.832905-62.043055-62.043055-62.043055L595.886549 176.967504c-8.771781-22.947641-31.007201-39.293935-57.001225-39.293935l-89.963964 0L448.921359 127.33306c0-11.403724 9.278317-20.681018 20.683065-20.681018l387.768581 0c11.402701 0 20.681018 9.277294 20.681018 20.681018L878.054023 784.988418z"
-            fill="#94a3b8"
-            p-id="13346"
-          ></path>
-          <path
-            d="M620.597347 334.252737 260.748652 334.252737c-11.422144 0-20.681018 9.259898-20.681018 20.681018s9.258874 20.681018 20.681018 20.681018l359.849718 0c11.42112 0 20.681018-9.259898 20.681018-20.681018S632.018467 334.252737 620.597347 334.252737z"
-            fill="#94a3b8"
-            p-id="13347"
-          ></path>
-          <path
-            d="M620.597347 454.201619 260.748652 454.201619c-11.422144 0-20.681018 9.259898-20.681018 20.681018 0 11.42112 9.258874 20.681018 20.681018 20.681018l359.849718 0c11.42112 0 20.681018-9.259898 20.681018-20.681018C641.278365 463.46254 632.018467 454.201619 620.597347 454.201619z"
-            fill="#94a3b8"
-            p-id="13348"
-          ></path>
-          <path
-            d="M440.673511 574.151525 260.748652 574.151525c-11.422144 0-20.681018 9.259898-20.681018 20.681018 0 11.42112 9.258874 20.681018 20.681018 20.681018l179.924859 0c11.42112 0 20.681018-9.259898 20.681018-20.681018C461.35453 583.411423 452.093609 574.151525 440.673511 574.151525z"
-            fill="#94a3b8"
-            p-id="13349"
-          ></path>
-        </svg>
-      </view>
-      <text class="text-xs text-gray-500" v-if="deviceCount > 0">共 {{ deviceCount }} 台</text>
+  <view class="bg-white rounded-lg shadow-sm mx-3 mb-3 overflow-hidden">
+    <!-- 区块标题 -->
+    <view class="flex items-center gap-1.5 px-4 pt-3 pb-2">
+      <view class="w-1 h-4 rounded" :style="{ background: BRAND.primary }"></view>
+      <text class="text-base font-bold text-gray-800">订单信息</text>
     </view>
 
-    <!-- 快递单号 (如果有) -->
-    <view v-if="expressNo" class="flex items-center justify-between mb-2">
-      <text class="text-xs text-gray-500">快递单号:</text>
-      <view class="flex items-center gap-1" @tap="handleShowExpressTracking">
-        <text class="text-xs font-medium text-blue-500">{{ expressNo }}</text>
-        <up-icon name="arrow-right" size="12" color="#3b82f6"></up-icon>
+    <view class="px-4 pb-3 space-y-2.5">
+      <!-- 订单号 -->
+      <view class="flex items-center justify-between">
+        <text class="text-sm text-gray-400">订单号</text>
+        <view class="flex items-center gap-1.5">
+          <text class="text-sm text-gray-800 font-medium">{{ orderNo }}</text>
+          <view
+            class="w-5 h-5 flex items-center justify-center rounded bg-gray-100 active:bg-gray-200"
+            @tap="handleCopyOrderNo"
+          >
+            <up-icon name="file-text" size="12" color="#94a3b8"></up-icon>
+          </view>
+        </view>
       </view>
-    </view>
 
-    <!-- 总价值 -->
-    <view class="flex items-center justify-between">
-      <text class="text-xs text-gray-500">订单总价</text>
-      <text class="text-lg font-bold text-primary">¥{{ totalPrice }}</text>
+      <!-- 设备数量 -->
+      <view v-if="deviceCount > 0" class="flex items-center justify-between">
+        <text class="text-sm text-gray-400">设备数量</text>
+        <text class="text-sm text-gray-800">{{ deviceCount }} 台</text>
+      </view>
+
+      <!-- 快递单号 -->
+      <view v-if="expressNo" class="flex items-center justify-between">
+        <text class="text-sm text-gray-400">快递单号</text>
+        <view class="flex items-center gap-1.5" @tap="handleShowExpressTracking">
+          <text class="text-sm text-blue-500 font-medium">{{ expressNo }}</text>
+          <up-icon name="arrow-right" size="12" color="#3b82f6"></up-icon>
+        </view>
+      </view>
+
+      <!-- 总价值 -->
+      <view class="flex items-center justify-between pt-1 border-t border-gray-50">
+        <text class="text-sm text-gray-400">订单总价</text>
+        <text class="text-lg font-bold" style="color: #ff6b00;">¥{{ totalPrice }}</text>
+      </view>
     </view>
 
     <!-- 物流跟踪弹窗 -->
@@ -67,6 +54,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { BRAND } from '../../../utils/theme'
+import { copyOrderNo } from '../../../utils/clipboard'
 import ExpressTrackingModal from './ExpressTrackingModal.vue'
 
 interface Props {
@@ -81,23 +70,9 @@ const props = defineProps<Props>()
 
 const showExpressModal = ref(false)
 
-const handleCopyOrderNo = () => {
-  uni.setClipboardData({
-    data: props.orderNo,
-    success: () => {
-      uni.showToast({
-        title: '已复制订单号',
-        icon: 'success'
-      })
-    }
-  })
-}
+const handleCopyOrderNo = () => copyOrderNo(props.orderNo)
 
 const handleShowExpressTracking = () => {
   showExpressModal.value = true
 }
 </script>
-
-<style scoped lang="scss">
-// 使用 Windi CSS，无需额外样式
-</style>

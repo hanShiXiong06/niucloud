@@ -11,8 +11,8 @@ export function useOrderForm(currentTab: any) {
   const form = ref<OrderForm>({
     count: 1,
     express_no: '',
-    customer_name: '测试',
-    customer_phone: '13122220000',
+    customer_name: '',
+    customer_phone: '',
     telphone: useMemberStore()?.info?.mobile || '',
     comment: '',
     delivery_type: (currentTab.value + 1), // 1-邮寄 2-自送
@@ -41,8 +41,8 @@ export function useOrderForm(currentTab: any) {
     form.value = {
       count: 1,
       express_no: '',
-      customer_name: '测试',
-      customer_phone: '13122220000',
+      customer_name: '',
+      customer_phone: '',
       telphone: useMemberStore()?.info?.mobile || '',
       comment: '',
       delivery_type: (currentTab.value + 1),

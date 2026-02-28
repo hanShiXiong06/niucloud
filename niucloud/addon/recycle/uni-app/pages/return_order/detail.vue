@@ -1,20 +1,13 @@
 <template>
-    <view class="return-order-detail">
-        <!-- 顶部导航栏 -->
-        <view class="nav-bar">
-            <view class="nav-back" @click="goBack">
-                <text class="iconfont iconarrow-left"></text>
-            </view>
-            <view class="nav-title">退回订单详情</view>
-        </view>
-
+    <view class="min-h-screen bg-gray-50 pb-20">
         <!-- 加载中 -->
-        <view class="loading-container" v-if="loading">
-            <uni-load-more status="loading" :content-text="{ contentdown: '加载中...' }"></uni-load-more>
+        <view v-if="loading" class="loading-container">
+            <up-loading-icon mode="circle" size="40"></up-loading-icon>
+            <text class="text-sm text-gray-500 mt-2">加载中...</text>
         </view>
 
         <!-- 订单内容 -->
-        <view class="order-content" v-else>
+        <view v-else-if="orderDetail.id" class="order-content">
             <!-- 订单状态 -->
             <view class="status-card">
                 <view class="status-text">{{ getStatusText(orderDetail.status) }}</view>
@@ -25,7 +18,7 @@
             <view class="info-card">
                 <view class="card-title">订单信息</view>
                 <view class="info-item">
-                    <text class="label">订单编号：</text>
+                    <text class="label">退货单号：</text>
                     <text class="value">{{ orderDetail.order_no }}</text>
                 </view>
                 <view class="info-item">
@@ -35,6 +28,10 @@
                 <view class="info-item" v-if="orderDetail.over_at">
                     <text class="label">完成时间：</text>
                     <text class="value">{{ orderDetail.over_at }}</text>
+                </view>
+                <view class="info-item" v-if="orderDetail.remark">
+                    <text class="label">备注：</text>
+                    <text class="value">{{ orderDetail.remark }}</text>
                 </view>
                 <view class="info-item" v-if="orderDetail.comment">
                     <text class="label">备注信息：</text>
@@ -60,17 +57,24 @@
                     <text class="label">退回地址：</text>
                     <text class="value">{{ orderDetail.return_address }}</text>
                 </view>
+                <!-- 查看物流按钮 -->
+                <view v-if="orderDetail.express_no" class="track-btn-wrapper">
+                    <button class="btn-track" @click="showExpressTracking = true">
+                        <up-icon name="car" size="16" color="#2979ff" class="mr-1"></up-icon>
+                        查看物流
+                    </button>
+                </view>
             </view>
 
             <!-- 设备列表 -->
-            <view class="device-card">
+            <view class="info-card">
                 <view class="card-title">退回设备</view>
                 <view class="device-list">
                     <view class="device-item" v-for="(item, index) in deviceList" :key="index">
                         <view class="device-header">
                             <text class="device-title">设备 #{{ index + 1 }}</text>
                             <text class="device-status" :class="'status-' + (item.device ? item.device.status : 0)">
-                                {{ getDeviceStatusText(item.device ? item.device.status : 0) }}
+                                {{ item.status_name || getDeviceStatusText(item.device ? item.device.status : 0) }}
                             </text>
                         </view>
                         <view class="device-info" v-if="item.device">
@@ -82,13 +86,9 @@
                                 <text class="info-label">型号：</text>
                                 <text class="info-value">{{ item.device.model || '-' }}</text>
                             </view>
-                            <view class="info-row">
-                                <text class="info-label">初始价格：</text>
-                                <text class="info-value">{{ formatPrice(item.device.initial_price) }}</text>
-                            </view>
                             <view class="info-row" v-if="item.device.final_price">
-                                <text class="info-label">最终价格：</text>
-                                <text class="info-value">{{ formatPrice(item.device.final_price) }}</text>
+                                <text class="info-label">价格：</text>
+                                <text class="info-value price">¥{{ Number(item.device.final_price).toFixed(2) }}</text>
                             </view>
                         </view>
                         <view class="device-empty" v-else>
@@ -97,236 +97,138 @@
                     </view>
                 </view>
             </view>
-
-            <!-- 操作按钮 -->
-            <view class="action-bar" v-if="orderDetail.status === 1">
-                <button class="btn-confirm" @click="handleConfirmReceive">确认收货</button>
-            </view>
         </view>
 
-        <!-- 确认收货弹窗 -->
-        <up-modal 
-            :show="showConfirmModal" 
-            title="确认收货" 
-            content="确认已收到退回的设备吗？" 
-            :show-cancel-button="true"
-            @confirm="confirmReceive"
-            @cancel="closeConfirmPopup"
-        ></up-modal>
+        <!-- 空状态 -->
+        <view v-else class="empty-container">
+            <up-empty
+                mode="data"
+                icon="http://cdn.uviewui.com/uview/empty/data.png"
+                text="退货订单不存在"
+                textColor="#999999"
+                textSize="15"
+            ></up-empty>
+        </view>
+
+        <!-- 物流查询弹窗 -->
+        <ExpressTrackingModal
+            :visible="showExpressTracking"
+            :expressNo="orderDetail.express_no || ''"
+            :mobile="orderDetail.member_mobile || ''"
+            @update:visible="showExpressTracking = $event"
+        />
     </view>
 </template>
 
-<script>
-import { getReturnOrderDetail, confirmReceiveReturnOrder } from '../../api/return_order';
-// import uniLoadMore from '@/components/uni-load-more/uni-load-more.vue';
-// import uniPopup from '@/components/uni-popup/uni-popup.vue';
-// import uniPopupDialog from '@/components/uni-popup/uni-popup-dialog.vue';
+<script setup lang="ts">
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import { getReturnOrderDetail } from '../../api/return_order'
+import ExpressTrackingModal from '../order/components/ExpressTrackingModal.vue'
 
-export default {
-    components: {
-        // uniLoadMore,
-        // uniPopup,
-        // uniPopupDialog
-    },
-    data() {
-        return {
-            orderId: 0,
-            orderDetail: {},
-            deviceList: [],
-            loading: true,
-            showConfirmModal: false
-        };
-    },
-    onLoad(options) {
-        if (options.id) {
-            this.orderId = options.id;
-            this.getOrderDetail();
+// 状态
+const loading = ref(true)
+const orderDetail = ref<any>({})
+const deviceList = ref<any[]>([])
+const showExpressTracking = ref(false)
+
+// 获取订单详情
+const loadDetail = async (id: number | string) => {
+    loading.value = true
+    try {
+        const res = await getReturnOrderDetail(Number(id))
+        if (res.code === 1 && res.data) {
+            orderDetail.value = res.data
+            deviceList.value = res.data.return_devices || res.data.returnDevices || []
         } else {
-            this.goBack();
+            orderDetail.value = {}
+            deviceList.value = []
         }
-    },
-    methods: {
-        // 获取订单详情
-        async getOrderDetail() {
-            this.loading = true;
-            try {
-                const res = await getReturnOrderDetail(this.orderId);
-
-                if (res.data.code === 200) {
-                    this.orderDetail = res.data.data;
-                    this.deviceList = res.data.data.returnDevices || [];
-                } else {
-                    uni.showToast({
-                        title: res.data.message || '获取订单详情失败',
-                        icon: 'none'
-                    });
-                    setTimeout(() => {
-                        this.goBack();
-                    }, 1500);
-                }
-            } catch (error) {
-                console.error(error);
-                uni.showToast({
-                    title: '获取订单详情失败',
-                    icon: 'none'
-                });
-                setTimeout(() => {
-                    this.goBack();
-                }, 1500);
-            } finally {
-                this.loading = false;
-            }
-        },
-
-        // 返回上一页
-        goBack() {
-            uni.navigateBack();
-        },
-
-        // 获取状态文本
-        getStatusText(status) {
-            const statusMap = {
-                0: '待处理',
-                1: '退货中',
-                2: '已完成',
-                3: '已取消'
-            };
-            return statusMap[status] || '未知状态';
-        },
-
-        // 获取状态描述
-        getStatusDesc(status) {
-            const statusMap = {
-                0: '商家正在处理您的退货申请',
-                1: '商家已确认退货，请尽快寄回设备',
-                2: '退货已完成',
-                3: '退货已取消'
-            };
-            return statusMap[status] || '';
-        },
-
-        // 获取设备状态文本
-        getDeviceStatusText(status) {
-            const statusMap = {
-                0: '待检测',
-                1: '检测中',
-                2: '已回收',
-                3: '已退回',
-                4: '已取消',
-                6: '已退回'
-            };
-            return statusMap[status] || '未知状态';
-        },
-
-        // 格式化价格
-        formatPrice(price) {
-            if (!price) return '¥0.00';
-            return `¥${Number(price).toFixed(2)}`;
-        },
-
-        // 复制文本
-        copyText(text) {
-            uni.setClipboardData({
-                data: text,
-                success: () => {
-                    uni.showToast({
-                        title: '复制成功',
-                        icon: 'success'
-                    });
-                }
-            });
-        },
-
-        // 处理确认收货
-        handleConfirmReceive() {
-            this.showConfirmModal = true;
-        },
-
-        // 关闭确认弹窗
-        closeConfirmPopup() {
-            this.showConfirmModal = false;
-        },
-
-        // 确认收货
-        async confirmReceive() {
-            this.showConfirmModal = false;
-            try {
-                const res = await confirmReceiveReturnOrder(this.orderId, {});
-
-                if (res.data.code === 200) {
-                    uni.showToast({
-                        title: '确认收货成功',
-                        icon: 'success'
-                    });
-
-                    // 刷新详情
-                    this.getOrderDetail();
-                } else {
-                    uni.showToast({
-                        title: res.data.message || '确认收货失败',
-                        icon: 'none'
-                    });
-                }
-            } catch (error) {
-                console.error(error);
-                uni.showToast({
-                    title: '确认收货失败',
-                    icon: 'none'
-                });
-            }
-        }
+    } catch (error) {
+        console.error('获取退货订单详情失败:', error)
+        orderDetail.value = {}
+        deviceList.value = []
+    } finally {
+        loading.value = false
     }
-};
+}
+
+// 获取状态文本
+const getStatusText = (status: number) => {
+    const statusMap: Record<number, string> = {
+        0: '待处理',
+        1: '退货中',
+        2: '已完成',
+        3: '已取消'
+    }
+    return statusMap[status] || '未知状态'
+}
+
+// 获取状态描述
+const getStatusDesc = (status: number) => {
+    const statusMap: Record<number, string> = {
+        0: '商家正在处理您的退货申请',
+        1: '商家已确认退货，设备退回中',
+        2: '退货已完成',
+        3: '退货已取消'
+    }
+    return statusMap[status] || ''
+}
+
+// 获取设备状态文本
+const getDeviceStatusText = (status: number) => {
+    const statusMap: Record<number, string> = {
+        0: '待检测',
+        1: '检测中',
+        2: '已回收',
+        3: '已退回',
+        4: '已取消',
+        6: '已退回'
+    }
+    return statusMap[status] || '未知状态'
+}
+
+// 复制文本
+const copyText = (text: string) => {
+    uni.setClipboardData({
+        data: text,
+        success: () => {
+            uni.showToast({
+                title: '复制成功',
+                icon: 'success'
+            })
+        }
+    })
+}
+
+// 页面加载
+onLoad((options?: Record<string, any>) => {
+    if (options?.id) {
+        loadDetail(options.id)
+    }
+})
 </script>
 
 <style lang="scss" scoped>
-.return-order-detail {
-    min-height: 100vh;
-    background-color: #f5f5f5;
-    padding-bottom: 120rpx;
-}
-
-.nav-bar {
-    display: flex;
-    align-items: center;
-    height: 90rpx;
-    background-color: #ffffff;
-    padding: 0 30rpx;
-    position: relative;
-
-    .nav-back {
-        width: 60rpx;
-        height: 60rpx;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        .iconfont {
-            font-size: 36rpx;
-            color: #333;
-        }
-    }
-
-    .nav-title {
-        position: absolute;
-        left: 0;
-        right: 0;
-        text-align: center;
-        font-size: 32rpx;
-        font-weight: bold;
-        color: #333;
-    }
-}
-
 .loading-container {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     height: 300rpx;
+    padding-top: 200rpx;
+}
+
+.empty-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40rpx;
 }
 
 .status-card {
-    background-color: #2979ff;
+    background: linear-gradient(135deg, #2979ff, #1e5fcc);
     padding: 40rpx 30rpx;
     color: #ffffff;
 
@@ -342,8 +244,7 @@ export default {
     }
 }
 
-.info-card,
-.device-card {
+.info-card {
     background-color: #ffffff;
     margin: 20rpx;
     border-radius: 12rpx;
@@ -367,6 +268,7 @@ export default {
         .label {
             color: #999;
             width: 180rpx;
+            flex-shrink: 0;
         }
 
         .value {
@@ -387,6 +289,26 @@ export default {
                 border-radius: 4rpx;
             }
         }
+    }
+}
+
+.track-btn-wrapper {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16rpx;
+
+    .btn-track {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26rpx;
+        color: #2979ff;
+        background: rgba(41, 121, 255, 0.08);
+        border: 1rpx solid rgba(41, 121, 255, 0.3);
+        border-radius: 30rpx;
+        padding: 10rpx 30rpx;
+        height: auto;
+        line-height: normal;
     }
 }
 
@@ -461,12 +383,17 @@ export default {
 
                 .info-label {
                     color: #999;
-                    width: 150rpx;
+                    width: 120rpx;
                 }
 
                 .info-value {
                     color: #333;
                     flex: 1;
+
+                    &.price {
+                        color: #ff6b00;
+                        font-weight: bold;
+                    }
                 }
             }
         }
@@ -477,28 +404,6 @@ export default {
             color: #999;
             font-size: 26rpx;
         }
-    }
-}
-
-.action-bar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: #ffffff;
-    padding: 20rpx 30rpx;
-    display: flex;
-    justify-content: center;
-    box-shadow: 0 -2rpx 10rpx rgba(0, 0, 0, 0.05);
-
-    .btn-confirm {
-        background-color: #2979ff;
-        color: #ffffff;
-        border-radius: 40rpx;
-        font-size: 30rpx;
-        padding: 0 60rpx;
-        height: 80rpx;
-        line-height: 80rpx;
     }
 }
 </style>
