@@ -1,11 +1,20 @@
 import type { OrderForm, PlatformDeliveryForm } from '../types/order'
 import { createOrder } from '../api/order'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
+import { useWechatFollow } from './useWechatFollow'
 
 /**
  * 订单提交逻辑
  */
 export function useOrderSubmit() {
+  // 公众号关注引导
+  const {
+    showFollowPopup,
+    wechatName,
+    qrCode,
+    checkAndShowFollow,
+    dismissFollow
+  } = useWechatFollow()
   /**
    * 验证订单提交前的条件
    */
@@ -140,12 +149,21 @@ export function useOrderSubmit() {
         params.onSuccess()
       }
 
-      // 跳转到订单列表
-      setTimeout(() => {
-        uni.navigateTo({
-          url: '/addon/recycle/pages/order/list'
-        })
-      }, 1500)
+      // 检查是否需要弹出公众号关注引导
+      console.log('[OrderSubmit] 下单成功，开始检查公众号关注状态...')
+      const needFollowPopup = await checkAndShowFollow()
+      console.log('[OrderSubmit] needFollowPopup:', needFollowPopup)
+      if (needFollowPopup) {
+        // 需要弹窗，由调用方处理弹窗关闭后的跳转
+        // 不在此处自动跳转
+      } else {
+        // 不需要弹窗，直接跳转到订单列表
+        setTimeout(() => {
+          uni.navigateTo({
+            url: '/addon/recycle/pages/order/list'
+          })
+        }, 1500)
+      }
 
     } catch (error) {
       console.error('提交订单失败：', error)
@@ -160,6 +178,11 @@ export function useOrderSubmit() {
 
   return {
     validateBeforeSubmit,
-    submitOrder
+    submitOrder,
+    // 公众号关注引导相关
+    showFollowPopup,
+    wechatName,
+    qrCode,
+    dismissFollow
   }
 }

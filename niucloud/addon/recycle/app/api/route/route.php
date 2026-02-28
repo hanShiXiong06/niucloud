@@ -102,6 +102,17 @@ Route::group('recycle', function() {
     Route::get('device_query_api/express', 'addon\recycle\app\api\controller\recycle\DeviceQueryApiController@getExpress');
 
     // ---------------------------------------------------------------------------------------------------------------
+    // 退货订单相关接口
+    // 根据原订单ID查询退货订单
+    Route::get('recycle_return_order/by_order/:order_id', 'addon\recycle\app\api\controller\recycle_order\RecycleReturnOrder@getByOrderId');
+    // 获取退货订单详情
+    Route::get('recycle_return_order/:id', 'addon\recycle\app\api\controller\recycle_order\RecycleReturnOrder@detail');
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // 公众号关注状态检查
+    Route::get('wechat_follow/check', 'addon\recycle\app\api\controller\recycle_order\WechatFollow@check');
+
+    // ---------------------------------------------------------------------------------------------------------------
     // 统一快递服务接口（亿速/安果自动切换）
     Route::post('express/quote', 'addon\recycle\app\api\controller\express\ExpressController@quote');
     Route::get('express/track/:order_id', 'addon\recycle\app\api\controller\express\ExpressController@track');
