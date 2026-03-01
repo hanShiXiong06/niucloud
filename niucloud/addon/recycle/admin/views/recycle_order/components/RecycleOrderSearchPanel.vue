@@ -16,17 +16,17 @@
 
     <el-collapse-transition>
       <div v-show="!props.isMobile || props.mobileSearchVisible" class="p-2">
-        <el-form :inline="!props.isMobile" :model="props.advancedSearchForm" class="search-form">
-          <el-form-item label="订单编号" class="search-item">
+        <el-form :inline="!props.isMobile" :model="props.advancedSearchForm">
+          <el-form-item label="订单编号" :class="props.isMobile ? 'w-full' : ''">
             <el-input
-              v-model="props.advancedSearchForm.order_no"
+              v-model="props.advancedSearchForm.order_id"
               placeholder="输入精确订单号"
               clearable
               class="w-full"
             />
           </el-form-item>
 
-          <el-form-item label="快递单号" class="search-item">
+          <el-form-item label="快递单号" :class="props.isMobile ? 'w-full' : ''">
             <el-input
               v-model="props.advancedSearchForm.express_no"
               placeholder="输入快递单号"
@@ -35,7 +35,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="订单状态" class="search-item">
+          <el-form-item label="订单状态" :class="props.isMobile ? 'w-full' : ''">
             <el-select
               v-model="props.advancedSearchForm.status"
               placeholder="选择状态"
@@ -53,16 +53,16 @@
             </el-select>
           </el-form-item>
 
-          <el-form-item label="用户搜索" class="search-item">
+          <el-form-item label="用户搜索" :class="props.isMobile ? 'w-full' : ''">
             <member-select
               v-model="props.advancedSearchForm.member_id"
-              placeholder="输入用户昵称、手机号或用户编号"
+              placeholder="🔍 输入用户昵称、手机号或用户编号"
               @change="handleMemberChange"
               class="w-full"
             />
           </el-form-item>
 
-          <el-form-item label="用户手机号" class="search-item">
+          <el-form-item label="用户手机号" :class="props.isMobile ? 'w-full' : ''">
             <el-input
               v-model="props.advancedSearchForm.user_mobile"
               placeholder="输入用户手机号"
@@ -71,7 +71,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="配送方式" class="search-item">
+          <el-form-item label="配送方式" :class="props.isMobile ? 'w-full' : ''">
             <el-select
               v-model="props.advancedSearchForm.delivery_type"
               placeholder="选择配送方式"
@@ -79,12 +79,12 @@
               multiple
               class="w-full"
             >
-              <el-option label="快递配送" value="1" />
-              <el-option label="自送到店" value="2" />
+              <el-option label="📦 快递配送" value="1" />
+              <el-option label="🚗 自送到店" value="2" />
             </el-select>
           </el-form-item>
 
-          <el-form-item label="设备IMEI" class="search-item">
+          <el-form-item label="设备IMEI" :class="props.isMobile ? 'w-full' : ''">
             <el-input
               v-model="props.advancedSearchForm.device_imei"
               placeholder="输入设备IMEI号"
@@ -93,7 +93,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="设备型号" class="search-item">
+          <el-form-item label="设备型号" :class="props.isMobile ? 'w-full' : ''">
             <el-input
               v-model="props.advancedSearchForm.device_model"
               placeholder="输入设备型号"
@@ -102,7 +102,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="创建时间" class="search-item">
+          <el-form-item label="创建时间" :class="props.isMobile ? 'w-full' : ''">
             <el-date-picker
               v-model="props.advancedSearchForm.create_time_range"
               type="daterange"
@@ -115,7 +115,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="签收时间" class="search-item">
+          <el-form-item label="签收时间" :class="props.isMobile ? 'w-full' : ''">
             <el-date-picker
               v-model="props.advancedSearchForm.sign_at"
               type="daterange"
@@ -128,7 +128,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="质检时间" class="search-item">
+          <el-form-item label="质检时间" :class="props.isMobile ? 'w-full' : ''">
             <el-date-picker
               v-model="props.advancedSearchForm.complete_at"
               type="daterange"
@@ -141,7 +141,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="打款时间" class="search-item">
+          <el-form-item label="打款时间" :class="props.isMobile ? 'w-full' : ''">
             <el-date-picker
               v-model="props.advancedSearchForm.pay_time"
               type="daterange"
@@ -154,7 +154,7 @@
             />
           </el-form-item>
 
-          <div class="pt-4 border-t border-orange-200 w-full">
+          <div class="pt-4 border-t border-orange-200">
             <div :class="props.isMobile ? 'grid grid-cols-1 gap-2' : 'flex justify-center gap-3'">
               <el-button
                 type="primary"
@@ -211,36 +211,3 @@ const handleMemberChange = (...args: any[]) => {
   emit("member-change", ...args);
 };
 </script>
-
-<style scoped>
-/* 桌面端：搜索表单使用 grid 布局，一行 3 个 */
-.search-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-}
-
-.search-form .search-item {
-  width: calc(33.333% - 10px);
-  min-width: 240px;
-  margin-right: 10px;
-  margin-bottom: 12px;
-}
-
-.search-form .search-item :deep(.el-form-item__content) {
-  width: 100%;
-}
-
-.search-form .search-item :deep(.el-date-editor) {
-  width: 100% !important;
-}
-
-/* 移动端：一列 */
-@media (max-width: 768px) {
-  .search-form .search-item {
-    width: 100%;
-    min-width: unset;
-    margin-right: 0;
-  }
-}
-</style>

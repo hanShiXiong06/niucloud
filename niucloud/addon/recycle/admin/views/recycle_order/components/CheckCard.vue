@@ -15,19 +15,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
-  Lightning, Monitor, Picture, Setting
+  Lightning, Monitor, Picture, Setting, Tools, Iphone
 } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   title: string
-  icon: 'Lightning' | 'Monitor' | 'Picture' | 'Setting'
+  icon: 'Lightning' | 'Monitor' | 'Picture' | 'Setting' | 'Tools' | 'Iphone'
 }>()
 
 const iconMap = {
   Lightning,
   Monitor,
   Picture,
-  Setting
+  Setting,
+  Tools,
+  Iphone
 }
 
 const iconComponent = computed(() => iconMap[props.icon])

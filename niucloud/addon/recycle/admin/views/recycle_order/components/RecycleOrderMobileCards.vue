@@ -1,0 +1,266 @@
+<template>
+  <div v-loading="props.loading">
+    <el-empty v-if="!props.list.length" description="暂无订单数据" />
+
+    <div v-else class="grid gap-3">
+      <el-card v-for="row in props.list" :key="row.id" shadow="hover" class="rounded-lg">
+        <div class="mb-2 flex items-start justify-between gap-2">
+          <div class="text-[13px] font-semibold text-gray-700 break-all">
+            订单号：{{ row.order_no || row.id }}
+          </div>
+          <el-tag :type="props.getStatusType(row.status)" :effect="props.getStatusEffect(row.status)" size="small">
+            {{ row.status_name }}
+          </el-tag>
+        </div>
+
+        <div class="mb-2 flex items-center gap-2">
+          <el-avatar :size="28" :src="row.member?.headimg ? props.img(row.member.headimg) : ''">
+            <el-icon><User /></el-icon>
+          </el-avatar>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-gray-900">
+              {{ row.recycleUserAddress?.name || row.member?.nickname || "未知用户" }}
+            </div>
+            <div class="text-xs text-gray-500">
+              {{ row.member?.mobile || row.recycleUserAddress?.mobile || "暂无联系方式" }}
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-2 grid grid-cols-2 gap-2">
+          <div class="rounded-md border border-gray-200 bg-slate-50 p-2">
+            <div class="mb-1 text-xs text-gray-500">配送方式</div>
+            <el-tag size="small" :type="row.delivery_type === '1' ? 'warning' : 'success'">
+              {{ row.delivery_type === "1" ? "📦 快递" : "🚗 自送" }}
+            </el-tag>
+          </div>
+
+          <div class="rounded-md border border-gray-200 bg-slate-50 p-2">
+            <div class="mb-1 text-xs text-gray-500">设备数量</div>
+            <el-tag v-if="row.count == props.getDeviceCount(row.devices)" type="success" size="small">
+              {{ row.count }}/{{ props.getDeviceCount(row.devices) }}台
+            </el-tag>
+            <el-tag v-else type="danger" size="small">
+              {{ row.count ? row.count : "1" }}/{{ props.getDeviceCount(row.devices) }}台
+            </el-tag>
+          </div>
+
+          <div class="col-span-2 rounded-md border border-gray-200 bg-slate-50 p-2">
+            <div class="mb-1 text-xs text-gray-500">创建时间</div>
+            <div class="text-xs text-gray-800">{{ props.formatDateTime(row.create_at) }}</div>
+          </div>
+
+          <div v-if="row.delivery_type === '1'" class="col-span-2 rounded-md border border-gray-200 bg-slate-50 p-2">
+            <div class="mb-1 text-xs text-gray-500">快递单号</div>
+            <div
+              class="cursor-pointer text-xs text-blue-600 break-all"
+              @click="props.handleExpressHover(row)"
+              @mouseleave="props.handleExpressLeave"
+            >
+              <span v-if="!props.expressLoading[row.id]">{{ row.express_no || "暂无" }}</span>
+              <el-icon v-else class="animate-spin text-blue-500">
+                <Loading />
+              </el-icon>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="props.orderStatusMap[row.status]?.action?.length" class="mb-2 flex flex-wrap gap-2">
+          <el-button
+            v-for="action in props.orderStatusMap[row.status].action"
+            :key="action.key"
+            size="small"
+            :type="props.getActionButtonType(action.key)"
+            :icon="props.getActionIcon(action.key)"
+            @click="props.handleAction(row, action)"
+          >
+            {{ action.value }}
+          </el-button>
+          <el-button
+            type="success"
+            size="small"
+            :icon="Share"
+            @click="props.shareOrder(row)"
+          >
+            分享
+          </el-button>
+        </div>
+        <div v-else class="mb-2 flex flex-wrap gap-2">
+          <el-button
+            type="success"
+            size="small"
+            :icon="Share"
+            @click="props.shareOrder(row)"
+          >
+            分享
+          </el-button>
+        </div>
+
+        <el-button
+          size="small"
+          text
+          type="primary"
+          @click="props.toggleMobileOrderExpand(row.id)"
+          class="!pl-0"
+        >
+          {{ props.isMobileOrderExpanded(row.id) ? "收起设备列表" : "展开设备列表" }}
+          ({{ row.devices?.length || 0 }})
+        </el-button>
+
+        <el-collapse-transition>
+          <div v-show="props.isMobileOrderExpanded(row.id)" class="mt-2 grid gap-2 border-t border-dashed border-gray-300 pt-2">
+            <div v-for="device in row.devices || []" :key="device.id" class="rounded-md border border-gray-200 bg-white p-2">
+              <div class="text-xs font-semibold text-gray-800 break-all">{{ device.imei || "无IMEI" }}</div>
+              <div class="mt-1 text-xs text-gray-600">{{ device.model || "未知型号" }}</div>
+
+              <div class="mt-2 flex items-center justify-between">
+                <span class="text-sm font-semibold text-red-500">{{ props.formatPrice(device.final_price) }}</span>
+                <el-tag :type="props.getDeviceStatusType(device.status)" size="small">
+                  {{ device.status_name }}
+                </el-tag>
+              </div>
+
+              <div v-if="row.status == 4" class="mt-2 border-t border-dashed border-gray-200 pt-2">
+                <el-checkbox
+                  :model-value="props.isMobileDeviceSelected(row.id, device.id)"
+                  @change="(checked) => props.handleMobileDeviceSelection(row.id, device, checked)"
+                >
+                  批量选择
+                </el-checkbox>
+              </div>
+
+              <div class="mt-2 flex flex-wrap gap-2">
+                <el-button
+                  v-if="device.status === 1 && props.findOrderStatus(device.order_id) > 1"
+                  type="primary"
+                  size="small"
+                  :icon="DocumentChecked"
+                  @click="props.checkDevice(device)"
+                >
+                  开始质检
+                </el-button>
+                <el-button
+                  v-if="device.status == 2 || device.status == 3"
+                  type="success"
+                  size="small"
+                  :icon="PriceTag"
+                  @click="props.priceDevice(device)"
+                >
+                  定价
+                </el-button>
+                <el-button
+                  v-if="device.status == 4"
+                  type="primary"
+                  size="small"
+                  :icon="Check"
+                  @click="props.batchRecycleDevice(device.id)"
+                >
+                  确认
+                </el-button>
+                <el-button
+                  v-if="device.status == 4"
+                  type="warning"
+                  size="small"
+                  :icon="Edit"
+                  @click="props.priceDevice(device)"
+                >
+                  重新定价
+                </el-button>
+                <el-button
+                  v-if="device.status == 4"
+                  type="danger"
+                  size="small"
+                  :icon="Close"
+                  @click="props.batchReturnDevice(device.id)"
+                >
+                  拒绝
+                </el-button>
+                <el-button
+                  v-if="device.status >= 3"
+                  type="info"
+                  size="small"
+                  :icon="Printer"
+                  @click="props.printDeviceLabel(device)"
+                >
+                  打印标签
+                </el-button>
+                <el-button
+                  type="primary"
+                  link
+                  :icon="View"
+                  @click="props.viewDetail(device)"
+                  size="small"
+                >
+                  查看详情
+                </el-button>
+              </div>
+            </div>
+
+            <div
+              v-if="props.selectedDevices[row.id] && props.selectedDevices[row.id].length > 0 && row.status == 4"
+              class="flex justify-end"
+            >
+              <el-button type="primary" size="small" :icon="Check" @click="props.batchRecycleDevices(row.id)">
+                批量确认 ({{ props.selectedDevices[row.id].length }})
+              </el-button>
+            </div>
+          </div>
+        </el-collapse-transition>
+      </el-card>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import {
+  DocumentChecked,
+  PriceTag,
+  Check,
+  Edit,
+  Close,
+  Printer,
+  View,
+  User,
+  Loading,
+  Share,
+} from "@element-plus/icons-vue";
+
+interface Props {
+  loading: boolean;
+  list: any[];
+  orderStatusMap: Record<string, any>;
+  selectedDevices: Record<string | number, any[]>;
+  expressLoading: Record<string | number, boolean>;
+  formatPrice: (price: any) => string;
+  formatDateTime: (value: any) => string;
+  getDeviceCount: (devices: any[]) => number;
+  getStatusType: (status: any) => string;
+  getStatusEffect: (status: any) => string;
+  getDeviceStatusType: (status: any) => string;
+  getActionButtonType: (key: string) => string;
+  getActionIcon: (key: string) => any;
+  findOrderStatus: (orderId: number) => number;
+  img: (path: string) => string;
+  isMobileOrderExpanded: (orderId: number | string) => boolean;
+  toggleMobileOrderExpand: (orderId: number | string) => void;
+  isMobileDeviceSelected: (orderId: number | string, deviceId: number | string) => boolean;
+  handleMobileDeviceSelection: (
+    orderId: number | string,
+    device: any,
+    checked: string | number | boolean
+  ) => void;
+  checkDevice: (row: any) => void;
+  priceDevice: (row: any) => void;
+  batchRecycleDevice: (id: number | string) => void;
+  batchReturnDevice: (id: number | string) => void;
+  batchRecycleDevices: (orderId: number | string) => void;
+  printDeviceLabel: (device: any) => void;
+  viewDetail: (device: any) => void;
+  handleAction: (row: any, action: any) => void;
+  handleExpressHover: (row: any) => void;
+  handleExpressLeave: () => void;
+  shareOrder: (row: any) => void;
+}
+
+const props = defineProps<Props>();
+</script>

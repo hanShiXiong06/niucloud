@@ -1,12 +1,19 @@
 <template>
-    <el-dialog v-model="dialogVisible" title="设备信息确认" width="800" center>
+    <el-dialog
+        v-model="dialogVisible"
+        title="设备信息确认"
+        :width="isMobile ? '95vw' : '800px'"
+        top="4vh"
+        center
+        class="device-confirm-dialog"
+    >
         <template #header>
             <div class="flex justify-between items-center">
-                <span class="text-lg font-bold">设备信息确认 , 共 {{ devices.length }} 台 </span>
+                <span class="text-lg font-bold">设备信息确认，共 {{ devices.length }} 台</span>
             </div>
         </template>
 
-        <el-table :data="devices" border v-loading="loading">
+        <el-table v-if="!isMobile" :data="devices" border v-loading="loading">
             <el-table-column >
                 <template #header>
                     <span>IMEI</span>
@@ -55,22 +62,26 @@
             </el-table-column>
             <el-table-column label="设备分类">
                 <template #default="{ row }">
-                    <el-select 
+                    <el-tree-select 
                         v-model="row.category" 
                         placeholder="请选择设备分类"
-                        :class="{ 'category-required': !row.category || row.category === 0 }"
-                    >
-                        <el-option v-for="item in category" :key="item.id" :label="item.name" :value="item.id">
-                            <span>{{ item.name }}</span>
-                           
-                        </el-option>
-                    </el-select>
-                    <div v-if="!row.category || row.category === 0" class="category-tip">
+                        :data="categoryTree"
+                        :props="treeSelectProps"
+                        node-key="category_id"
+                        :loading="categoryLoading"
+                        filterable
+                        check-strictly
+                        :render-after-expand="false"
+                        class="w-full"
+                        :class="{ 'category-required': isInvalidCategory(row.category) }"
+                        @change="handleCategoryChange(row)"
+                    />
+                    <div v-if="isInvalidCategory(row.category)" class="category-tip">
                         请选择分类，建议选择手机
                     </div>
                 </template>
             </el-table-column>
-            <el-table-column label="操作" width="160">
+            <el-table-column label="操作" width="120">
                 <template #default="{ row, $index }">
                     <div v-if="row.editing">
                         <el-button-group>
@@ -82,17 +93,89 @@
                             </el-button>
                         </el-button-group>
                     </div>
-                    <el-button-group v-else>
-                        <el-button type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, $index)">
-                            编辑
-                        </el-button>
-                        <el-button type="danger" size="small" :icon="Delete" @click="handleRemoveDevice(row, $index)">
-                            删除
-                        </el-button>
-                    </el-button-group>
+                    <el-button v-else type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, $index)">
+                        编辑
+                    </el-button>
                 </template>
             </el-table-column>
         </el-table>
+
+        <div v-else v-loading="loading" class="space-y-3">
+            <div
+                v-for="(row, index) in devices"
+                :key="row.id || `device-${index}`"
+                class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+            >
+                <div class="mb-2 flex items-center justify-between">
+                    <div class="text-sm font-semibold text-gray-800">设备 {{ index + 1 }}</div>
+                    <el-tag :type="row.editing ? 'warning' : 'info'" size="small">
+                        {{ row.editing ? '编辑中' : '已保存' }}
+                    </el-tag>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <div class="mb-1 text-xs text-gray-500">IMEI</div>
+                        <el-input
+                            v-if="row.editing"
+                            v-model="row.imei"
+                            placeholder="请输入或扫描IMEI"
+                            ref="imeiInputRef"
+                            @keydown.enter="handleScanComplete(row)"
+                        />
+                        <div v-else class="text-sm text-gray-800 break-all">{{ row.imei || '未填写' }}</div>
+                    </div>
+
+                    <div>
+                        <div class="mb-1 text-xs text-gray-500">型号</div>
+                        <el-input
+                            v-if="row.editing"
+                            v-model="row.model"
+                            placeholder="请输入型号"
+                            ref="modelInputRef"
+                            @keydown.enter="handleModelEnter(row)"
+                        />
+                        <div v-else class="text-sm text-gray-800">{{ row.model || '未填写' }}</div>
+                    </div>
+
+                    <div>
+                        <div class="mb-1 text-xs text-gray-500">设备分类</div>
+                        <el-tree-select
+                            v-model="row.category"
+                            placeholder="请选择设备分类"
+                            :data="categoryTree"
+                            :props="treeSelectProps"
+                            node-key="category_id"
+                            :loading="categoryLoading"
+                            filterable
+                            check-strictly
+                            :render-after-expand="false"
+                            class="w-full"
+                            :class="{ 'category-required': isInvalidCategory(row.category) }"
+                            @change="handleCategoryChange(row)"
+                        />
+                        <div v-if="!row.editing" class="mt-1 text-xs text-gray-600">
+                            当前分类：{{ getCategoryName(row.category) }}
+                        </div>
+                        <div v-if="isInvalidCategory(row.category)" class="category-tip">
+                            请选择分类，建议选择手机
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <div v-if="row.editing" class="grid grid-cols-2 gap-2">
+                        <el-button type="success" size="small" @click="saveDevice(row, index)">保存</el-button>
+                        <el-button size="small" @click="cancelEdit(row, index)">取消</el-button>
+                    </div>
+                    <div v-else class="grid grid-cols-1 gap-2">
+                        <el-button type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, index)">
+                            编辑
+                        </el-button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div v-if="devices.length === 0" class="empty-data ">
             <el-empty>
@@ -103,10 +186,9 @@
         </div>
 
         <template #footer>
-            <div class="dialog-footer">
-                <el-button type="success" @click="handleAddDevice">添加设备</el-button>
-               
-                <el-button type="primary" @click="handleConfirm" :loading="submitting">
+            
+            <div :class="isMobile ? 'flex w-full flex-col gap-2' : 'dialog-footer'">
+                <el-button type="primary" :class="isMobile ? '!ml-0 w-full' : ''" @click="handleConfirm" :loading="submitting">
                     确认并签收
                 </el-button>
             </div>
@@ -115,10 +197,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch, toRaw, nextTick } from 'vue'
-import { Edit, Delete , Notification } from '@element-plus/icons-vue'
+import { ref, defineProps, defineEmits, watch, toRaw, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getImeiInfo } from '@/addon/recycle/api/recycle_order'
+import { getCategoryTree } from '@/addon/phone_shop/api/goods'
 
 // 定义设备信息接口
 interface Device {
@@ -128,6 +211,7 @@ interface Device {
     initial_price: number;
     editing: boolean;
     category: string | number;
+    category_path?: Array<string | number>;
     _originalData?: any; // 用于存储编辑前的原始数据
     [key: string]: any;
 }
@@ -135,30 +219,57 @@ interface Device {
 interface Category {
     id: string | number;
     name: string;
+    path: Array<string | number>;
 }
 
-const category = ref<Category[]>([
+interface GoodsCategoryTreeItem {
+    category_id: string | number;
+    category_name: string;
+    child_list?: GoodsCategoryTreeItem[];
+}
+
+const fallbackCategory: Category[] = [
     {
         id: 1,
-        name: '手机'
+        name: '手机',
+        path: [1]
     },
     {
         id: 2,
-        name: '平板'
+        name: '平板',
+        path: [2]
     },
     {
         id: 3,
-        name: '笔记本'
+        name: '笔记本',
+        path: [3]
     },
     {
         id: 4,
-        name: '手表'
+        name: '手表',
+        path: [4]
     },
     {
         id: 5,
-        name: '其他'
+        name: '其他',
+        path: [5]
     }
-])
+]
+
+const category = ref<Category[]>([...fallbackCategory])
+const fallbackCategoryTree: GoodsCategoryTreeItem[] = fallbackCategory.map(item => ({
+    category_id: item.id,
+    category_name: item.name,
+    child_list: []
+}))
+const categoryTree = ref<GoodsCategoryTreeItem[]>([...fallbackCategoryTree])
+const categoryLoading = ref(false)
+const defaultCategoryId = ref<string | number>(fallbackCategory[0].id)
+const treeSelectProps = {
+    value: 'category_id',
+    label: 'category_name',
+    children: 'child_list'
+}
 
 const props = defineProps({
     visible: {
@@ -178,11 +289,7 @@ const props = defineProps({
 const emit = defineEmits([
     'update:visible',
     'confirm',
-    'cancel',
-    'add-device',
-    'edit-device',
-    'remove-device',
-    'save-draft'
+    'cancel'
 ])
 
 // 内部状态
@@ -190,12 +297,119 @@ const dialogVisible = ref(props.visible)
 const devices = ref<Device[]>([])
 const loading = ref(false)
 const submitting = ref(false)
-const savingDraft = ref(false)
+const isMobile = ref(false)
 // 保存原始设备列表，用于取消操作
 const originalDeviceList = ref<Device[]>([])
 // 输入框引用
 const imeiInputRef = ref<any>(null)
 const modelInputRef = ref<any>(null)
+
+const updateResponsiveState = () => {
+    isMobile.value = window.innerWidth <= 768
+}
+
+const isEmptyCategory = (categoryId: string | number | undefined | null) => {
+    return categoryId === undefined || categoryId === null || categoryId === '' || Number(categoryId) === 0
+}
+
+const findCategoryOptionById = (categoryId: string | number | undefined | null) => {
+    if (isEmptyCategory(categoryId)) return null
+    return category.value.find(item => String(item.id) === String(categoryId)) || null
+}
+
+const categoryExists = (categoryId: string | number | undefined | null) => {
+    if (isEmptyCategory(categoryId)) return false
+    return !!findCategoryOptionById(categoryId)
+}
+
+const isInvalidCategory = (categoryId: string | number | undefined | null) => {
+    if (isEmptyCategory(categoryId)) return true
+    if (categoryLoading.value) return false
+    return !categoryExists(categoryId)
+}
+
+const normalizeCategoryId = (categoryId: string | number | undefined | null) => {
+    if (!isEmptyCategory(categoryId)) return categoryId as string | number
+    return defaultCategoryId.value
+}
+
+const normalizeCategoryPath = (
+    categoryPath: unknown,
+    categoryId: string | number | undefined | null
+): Array<string | number> => {
+    if (typeof categoryPath === 'string') {
+        try {
+            const parsed = JSON.parse(categoryPath)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed.map(item => String(item))
+            }
+        } catch (e) {
+            const splitPath = categoryPath.split(',').map(item => item.trim()).filter(Boolean)
+            if (splitPath.length > 0) {
+                return splitPath
+            }
+        }
+    }
+    if (Array.isArray(categoryPath) && categoryPath.length > 0) {
+        return categoryPath.map(item => String(item))
+    }
+    const matched = findCategoryOptionById(categoryId)
+    if (matched && matched.path.length > 0) {
+        return matched.path.map(item => String(item))
+    }
+    const normalizedId = normalizeCategoryId(categoryId)
+    return [String(normalizedId)]
+}
+
+const flattenCategoryTree = (
+    tree: GoodsCategoryTreeItem[],
+    parentPath: Array<string | number> = []
+): Category[] => {
+    const result: Category[] = []
+    tree.forEach((node) => {
+        const currentPath = [...parentPath, node.category_id]
+        result.push({
+            id: node.category_id,
+            name: node.category_name,
+            path: currentPath
+        })
+        if (Array.isArray(node.child_list) && node.child_list.length > 0) {
+            result.push(...flattenCategoryTree(node.child_list, currentPath))
+        }
+    })
+    return result
+}
+
+const loadGoodsCategoryTree = async () => {
+    categoryLoading.value = true
+    try {
+        const res = await getCategoryTree({})
+        const treeData: GoodsCategoryTreeItem[] = Array.isArray(res?.data) ? res.data : []
+        const flatten = flattenCategoryTree(treeData)
+        if (treeData.length > 0 && flatten.length > 0) {
+            categoryTree.value = treeData
+            category.value = flatten
+            defaultCategoryId.value = flatten[0].id
+        } else {
+            categoryTree.value = [...fallbackCategoryTree]
+            category.value = [...fallbackCategory]
+            defaultCategoryId.value = fallbackCategory[0].id
+        }
+    } catch (error) {
+        console.error('加载商城商品分类失败，使用默认分类兜底:', error)
+        categoryTree.value = [...fallbackCategoryTree]
+        category.value = [...fallbackCategory]
+        defaultCategoryId.value = fallbackCategory[0].id
+    } finally {
+        categoryLoading.value = false
+        devices.value.forEach((device) => {
+            if (isEmptyCategory(device.category)) {
+                device.category = defaultCategoryId.value
+            }
+            device.category_path = normalizeCategoryPath(device.category_path, device.category)
+        })
+    }
+}
 
 // 监听visible属性变化
 watch(() => props.visible, (newVal) => {
@@ -219,11 +433,14 @@ watch(() => props.deviceList, () => {
 const syncDeviceData = () => {
     try {
         const devicesCopy = JSON.parse(JSON.stringify(props.deviceList || []))
-        console.log(devicesCopy);
         devices.value = devicesCopy.map((device: Device) => ({
             ...device,
             editing: false, // 确保所有设备初始时不在编辑状态
-            category: device.category_id || 1, // 默认选择手机分类(ID=1)，如果已有分类则保持
+            category: normalizeCategoryId((device as any).category_id ?? (device as any).category),
+            category_path: normalizeCategoryPath(
+                (device as any).category_path ?? (device as any).info?.goods_category,
+                (device as any).category_id ?? (device as any).category
+            ),
             _originalData: null // 清空原始数据
         }))
         // 保存一份原始数据，用于取消操作
@@ -233,6 +450,20 @@ const syncDeviceData = () => {
         devices.value = []
         originalDeviceList.value = []
     }
+}
+
+const getCategoryName = (categoryId: string | number) => {
+    const current = findCategoryOptionById(categoryId)
+    return current ? current.name : '未选择'
+}
+
+const handleCategoryChange = (row: Device) => {
+    const matched = findCategoryOptionById(row.category)
+    if (matched && matched.path.length > 0) {
+        row.category_path = matched.path.map(item => String(item))
+        return
+    }
+    row.category_path = normalizeCategoryPath([], row.category)
 }
 
 // 监听内部visible状态变化，同步到父组件
@@ -277,41 +508,8 @@ const handleModelEnter = (row: Device) => {
     }
 }
 
-// 添加设备
-const handleAddDevice = () => {
-
-
-    // 检查是否有未保存的编辑中设备
-    const editingDevice = devices.value.find(d => d.editing)
-    if (editingDevice) {
-        ElMessage.warning('请先保存正在编辑的设备')
-        return
-    }
-
-    // 添加一个新的设备到内部列表，并设置为编辑状态
-    const newDevice = {
-        imei: '',
-        model: '',
-        initial_price: 0,
-        editing: true,
-        category: 1, // 默认选择手机分类
-        isNew: true
-    }
-
-    devices.value.push(newDevice)
-
-  
-    
-    // 添加后自动聚焦到IMEI输入框
-    nextTick(() => {
-        if (imeiInputRef.value && imeiInputRef.value.focus) {
-            imeiInputRef.value.focus()
-        }
-    })
-}
-
 // 编辑设备
-const handleEditDevice = (row: Device, index: number) => {
+const handleEditDevice = (_row: Device, index: number) => {
     // 检查是否有其他正在编辑的设备
     const editingDevice = devices.value.find(d => d.editing)
     if (editingDevice) {
@@ -320,14 +518,11 @@ const handleEditDevice = (row: Device, index: number) => {
     }
 
     // 保存原始数据，用于取消编辑
-    devices.value[index]._originalData = JSON.parse(JSON.stringify(row))
+    devices.value[index]._originalData = JSON.parse(JSON.stringify(_row))
 
     // 设置编辑状态
     devices.value[index].editing = true
 
-    // 通知父组件（可选）
-    emit('edit-device', row)
-    
     // 编辑时自动聚焦到IMEI输入框
     nextTick(() => {
         if (imeiInputRef.value && imeiInputRef.value.focus) {
@@ -345,10 +540,12 @@ const saveDevice = (row: Device, index: number) => {
     }
     
     // 验证分类不能为0
-    if (!row.category || row.category === 0) {
+    if (isInvalidCategory(row.category)) {
         ElMessage.warning('请选择设备分类，建议选择手机')
         return
     }
+
+    devices.value[index].category_path = normalizeCategoryPath(row.category_path, row.category)
 
     // 关闭编辑状态
     devices.value[index].editing = false
@@ -372,34 +569,6 @@ const cancelEdit = (row: Device, index: number) => {
     } else {
         // 直接关闭编辑状态
         devices.value[index].editing = false
-    }
-}
-
-// 删除设备
-const handleRemoveDevice = async (row: Device, index: number) => {
-    try {
-        // 确认删除操作
-        await ElMessageBox.confirm('确定要删除该设备吗？', '提示', {
-            confirmButtonText: '确定',
-            cancelButtonText: '取消',
-            type: 'warning'
-        })
-
-        // 从内部设备列表中移除该设备（本地操作）
-        devices.value.splice(index, 1)
-        
-        // 可选：如果设备已有ID，也通知父组件（用于已保存的设备）
-        if (row.id) {
-            emit('remove-device', row)
-        }
-        
-        ElMessage.success('设备已删除')
-
-    } catch (error: any) {
-        // 用户取消删除
-        if (error === 'cancel') return
-        console.error('删除设备失败:', error)
-        ElMessage.error('删除失败：' + (error.message || '未知错误'))
     }
 }
 
@@ -448,7 +617,7 @@ const handleConfirm = async () => {
     }
 
     // 验证设备分类
-    const invalidCategoryDevice = devices.value.find(device => !device.category || device.category === 0)
+    const invalidCategoryDevice = devices.value.find(device => isInvalidCategory(device.category))
     if (invalidCategoryDevice) {
         ElMessage.warning('请为所有设备选择分类，建议选择手机')
         return
@@ -461,10 +630,11 @@ const handleConfirm = async () => {
             .filter(device => !device.editing && device.imei && device.model) // 过滤掉编辑中的和空的设备
             .map(device => {
                 const rawDevice = toRaw(device)
-                const { editing, _originalData, isNew, category, ...rest } = rawDevice
+                const { editing, _originalData, isNew, category, category_path, ...rest } = rawDevice
                 return {
                     ...rest,
-                    category_id: category || 1 // 将category转换为category_id
+                    category_id: normalizeCategoryId(category),
+                    category_path: normalizeCategoryPath(category_path, category)
                 }
             })
 
@@ -479,6 +649,16 @@ const handleConfirm = async () => {
         submitting.value = false
     }
 }
+
+onMounted(() => {
+    updateResponsiveState()
+    window.addEventListener('resize', updateResponsiveState)
+    loadGoodsCategoryTree()
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateResponsiveState)
+})
 </script>
 
 <style lang="scss" scoped>

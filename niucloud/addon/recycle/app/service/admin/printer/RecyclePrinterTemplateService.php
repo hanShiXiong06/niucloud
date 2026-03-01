@@ -743,7 +743,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'final_status_name' => '状态:'.($device['final_status'] ? '已确认' : '未确认'),
             
             // 质检信息（使用关联查询的数据）
-            'check_result' =>  '结果:'.$device['check_result'] ?? '',
+            'check_result' =>  ''.$device['check_result'] ?? '',
             'check_staff' => '质检员:'.$device['checkUser']['username'] ?? '',
             'check_date' => '质检时间:'.$this->formatSafeTime($device['check_at']),
             'check_time' => '质检时间:'.$this->formatSafeTime($device['check_at']),

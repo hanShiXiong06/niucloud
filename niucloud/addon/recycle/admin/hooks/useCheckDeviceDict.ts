@@ -3,9 +3,11 @@
  * 用于管理设备质检相关的选项数据
  *
  * 字典类型：
- * - recycle_display: 屏幕状态
- * - recycle_appearance: 外观状态
- * - recycle_function: 功能检测
+ * - recycle_display:    外屏规格（屏幕状态）
+ * - recycle_indisplay:  内屏规格
+ * - recycle_appearance: 中框规格（外观状态）
+ * - recycle_function:   功能规格（功能检测）
+ * - recycle_fix:        维修规格
  */
 import { ref } from 'vue'
 import { useDictionary } from '@/app/api/dict'
@@ -20,9 +22,11 @@ interface DictItem {
 
 // 质检选项配置
 interface CheckOptions {
-  screen: DictItem[]      // 屏幕状态
-  appearance: DictItem[]  // 外观状态
-  function: DictItem[]    // 功能异常
+  screen: DictItem[]      // 外屏规格 (recycle_display)
+  indisplay: DictItem[]   // 内屏规格 (recycle_indisplay)
+  appearance: DictItem[]  // 中框规格 (recycle_appearance)
+  function: DictItem[]    // 功能规格 (recycle_function)
+  fix: DictItem[]         // 维修规格 (recycle_fix)
   brands: string[]        // 品牌列表
 }
 
@@ -38,6 +42,15 @@ const defaultOptions: CheckOptions = {
     { name: '内爆', value: '7', sort: 6, memo: '' },
     { name: '未知部件', value: '8', sort: 7, memo: '' },
     { name: '官方提示', value: '9', sort: 8, memo: '' },
+  ],
+  indisplay: [
+    { name: '正常', value: '1', sort: 0, memo: '' },
+    { name: '漏液', value: '2', sort: 1, memo: '' },
+    { name: '老化', value: '3', sort: 2, memo: '' },
+    { name: '亮点/坏点', value: '4', sort: 3, memo: '' },
+    { name: '阴阳屏', value: '5', sort: 4, memo: '' },
+    { name: '烧屏', value: '6', sort: 5, memo: '' },
+    { name: '内爆', value: '7', sort: 6, memo: '' },
   ],
   appearance: [
     { name: '无磕碰', value: '1', sort: 0, memo: '' },
@@ -74,6 +87,15 @@ const defaultOptions: CheckOptions = {
     { name: '前摄', value: '22', sort: 21, memo: '' },
     { name: '后摄', value: '23', sort: 22, memo: '' },
   ],
+  fix: [
+    { name: '原装', value: '1', sort: 0, memo: '' },
+    { name: '换屏', value: '2', sort: 1, memo: '' },
+    { name: '换电池', value: '3', sort: 2, memo: '' },
+    { name: '换后盖', value: '4', sort: 3, memo: '' },
+    { name: '换摄像头', value: '5', sort: 4, memo: '' },
+    { name: '主板维修', value: '6', sort: 5, memo: '' },
+    { name: '其他维修', value: '7', sort: 6, memo: '' },
+  ],
   brands: [
     '华为', '荣耀', '小米', 'OPPO', 'vivo', '三星', 'realme',
     '努比亚', 'moto', '中兴', 'HUAWEI', 'Xiaomi', 'Samsung',
@@ -103,23 +125,21 @@ export function useCheckDeviceDict() {
   const loadDictionary = async () => {
     loading.value = true
     try {
-      // 并行加载三个字典
-      const [screenData, appearanceData, functionData] = await Promise.all([
+      // 并行加载五个字典
+      const [screenData, indisplayData, appearanceData, functionData, fixData] = await Promise.all([
         loadSingleDict('recycle_display'),
+        loadSingleDict('recycle_indisplay'),
         loadSingleDict('recycle_appearance'),
-        loadSingleDict('recycle_function')
+        loadSingleDict('recycle_function'),
+        loadSingleDict('recycle_fix')
       ])
 
       // 更新选项（如果有数据则使用字典数据，否则保持默认值）
-      if (screenData.length > 0) {
-        options.value.screen = screenData
-      }
-      if (appearanceData.length > 0) {
-        options.value.appearance = appearanceData
-      }
-      if (functionData.length > 0) {
-        options.value.function = functionData
-      }
+      if (screenData.length > 0) options.value.screen = screenData
+      if (indisplayData.length > 0) options.value.indisplay = indisplayData
+      if (appearanceData.length > 0) options.value.appearance = appearanceData
+      if (functionData.length > 0) options.value.function = functionData
+      if (fixData.length > 0) options.value.fix = fixData
     } catch (error) {
       console.warn('加载质检字典失败，使用默认配置:', error)
     } finally {
@@ -130,11 +150,17 @@ export function useCheckDeviceDict() {
   // 获取屏幕选项的 name 数组（用于显示）
   const screenLabels = () => options.value.screen.map(item => item.name)
 
+  // 获取内屏选项的 name 数组
+  const indisplayLabels = () => options.value.indisplay.map(item => item.name)
+
   // 获取外观选项的 name 数组
   const appearanceLabels = () => options.value.appearance.map(item => item.name)
 
   // 获取功能选项的 name 数组
   const functionLabels = () => options.value.function.map(item => item.name)
+
+  // 获取维修选项的 name 数组
+  const fixLabels = () => options.value.fix.map(item => item.name)
 
   // 提取品牌
   const extractBrand = (productName: string): string => {
@@ -149,8 +175,10 @@ export function useCheckDeviceDict() {
     options,
     loadDictionary,
     screenLabels,
+    indisplayLabels,
     appearanceLabels,
     functionLabels,
+    fixLabels,
     extractBrand
   }
 }

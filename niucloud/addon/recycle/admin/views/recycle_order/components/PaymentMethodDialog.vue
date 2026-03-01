@@ -1,5 +1,12 @@
 <template>
-  <el-dialog v-model="dialogVisible" title="收款方式" width="700px" :destroy-on-close="true">
+  <el-dialog
+    v-model="dialogVisible"
+    title="收款方式"
+    :width="isMobile ? '95vw' : '700px'"
+    top="4vh"
+    class="payment-method-dialog"
+    :destroy-on-close="true"
+  >
     <div v-if="paymentInfoData && paymentInfoData.length > 0">
       <!-- 订单摘要信息卡片 -->
       <el-card v-if="currentPaymentInfo && currentPaymentInfo.order_summary" shadow="never" class="mb-4">
@@ -15,7 +22,7 @@
         <!-- 设备详情 -->
         <el-collapse>
           <el-collapse-item title="设备详情列表" name="devices">
-            <el-table :data="currentPaymentInfo.order_summary.devices" size="small" border>
+            <el-table v-if="!isMobile" :data="currentPaymentInfo.order_summary.devices" size="small" border>
               <el-table-column prop="model" label="型号" min-width="120" />
               <el-table-column prop="imei" label="IMEI" min-width="120" show-overflow-tooltip />
               <el-table-column prop="final_price" label="价格" width="80">
@@ -31,6 +38,22 @@
                 </template>
               </el-table-column>
             </el-table>
+            <div v-else class="space-y-2">
+              <div
+                v-for="(device, deviceIndex) in currentPaymentInfo.order_summary.devices || []"
+                :key="`${device.imei}-${deviceIndex}`"
+                class="rounded-lg border border-gray-200 bg-gray-50 p-3"
+              >
+                <div class="mb-1 flex items-start justify-between gap-2">
+                  <div class="text-sm font-semibold text-gray-800">{{ device.model || '未知型号' }}</div>
+                  <el-tag size="small" :type="device.status === 6 ? 'danger' : 'success'">
+                    {{ device.status_name }}
+                  </el-tag>
+                </div>
+                <div class="text-xs text-gray-500 break-all">{{ device.imei || '无IMEI' }}</div>
+                <div class="mt-2 text-sm font-semibold text-orange-500">¥{{ device.final_price }}</div>
+              </div>
+            </div>
           </el-collapse-item>
         </el-collapse>
       </el-card>
@@ -145,10 +168,11 @@
 
     <!-- 对话框底部按钮 -->
     <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="dialogVisible = false">取消</el-button>
+      <div :class="isMobile ? 'dialog-footer mobile-footer' : 'dialog-footer'">
+        <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="dialogVisible = false">取消</el-button>
         <el-button
           type="primary"
+          :class="isMobile ? '!ml-0 w-full' : ''"
           @click="handleConfirmPayment"
           :disabled="!canConfirm"
           :loading="confirming"
@@ -161,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Picture, InfoFilled } from '@element-plus/icons-vue'
 
@@ -214,6 +238,7 @@ const dialogVisible = ref(props.visible)
 const paymentInfoData = ref<PaymentInfoItem[]>(props.paymentInfo)
 const selectedPayTypeIndex = ref(0)
 const confirming = ref(false)
+const isMobile = ref(false)
 
 // 自定义支付信息（无收款码时使用）
 const customPayType = ref('')
@@ -221,6 +246,10 @@ const customAccount = ref('')
 
 // 打款凭证图片
 const paymentImages = ref('')
+
+const updateResponsiveState = () => {
+  isMobile.value = window.innerWidth <= 768
+}
 
 // 计算当前选择的支付方式
 const currentPaymentInfo = computed(() => {
@@ -316,6 +345,15 @@ const handleConfirmPayment = () => {
     dialogVisible.value = false
   }, 300)
 }
+
+onMounted(() => {
+  updateResponsiveState()
+  window.addEventListener('resize', updateResponsiveState)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateResponsiveState)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -337,6 +375,11 @@ const handleConfirmPayment = () => {
   display: flex;
   flex-wrap: wrap;
   margin-bottom: 16px;
+  gap: 8px;
+}
+
+.payment-radio-group :deep(.el-radio-button) {
+  margin-left: 0;
 }
 
 .payment-info {
@@ -417,10 +460,49 @@ const handleConfirmPayment = () => {
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
 }
 
 .price {
   color: #ff6b00;
   font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .card-header {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .payment-radio-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payment-radio-group :deep(.el-radio-button) {
+    width: 100%;
+  }
+
+  .payment-radio-group :deep(.el-radio-button__inner) {
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .qrcode {
+    width: 140px;
+    height: 140px;
+  }
+
+  .no-qrcode {
+    width: 140px;
+    height: 140px;
+  }
+
+  .mobile-footer {
+    width: 100%;
+    flex-direction: column;
+  }
 }
 </style>

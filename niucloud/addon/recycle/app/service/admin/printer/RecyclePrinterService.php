@@ -270,7 +270,7 @@ class RecyclePrinterService extends BaseAdminService
         for ($i = 0; $i < $result_length; $i += $line_length) {
             // 第一行只取17个字符
             if ($i == 0) {
-                $lines[] = mb_substr($check_result, $i, 17, 'UTF-8');
+                $lines[] = mb_substr($check_result, $i, 30, 'UTF-8');
             } else {
                 $lines[] = mb_substr($check_result, $i, $line_length, 'UTF-8');
             }

@@ -1,6 +1,6 @@
 import request from "@/utils/request";
 
-/***************************************************** hello world ****************************************************/
+// 获取分类树
 export function getCategoryTree() {
   return request.get(`recycle/recycle_category_tree`);
 }
@@ -37,10 +37,6 @@ export function getPrice(data: any) {
   return request.post("recycle/calculate/price", data);
 }
 
-// 发送当前订单的回收信息
-export function sendOrderInfo(data: any) {
-  return request.post("recycle/recycle_order", data);
-}
 export function getMemberLevel() {
   return request.get(`tk_vip/member/level`);
 }

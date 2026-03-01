@@ -491,8 +491,8 @@ class RecycleDeviceService extends BaseAdminService
                 $updateData = array_merge($updateData, $checkData);
             }
             if (isset($checkData['info'])) {
-                // 将info 转换为 json 字符串
-                $updateData['info'] = json_encode($checkData['info']);
+                // Model 已声明 $json=['info']，save() 时会自动 json_encode，无需手动编码
+                $updateData['info'] = $checkData['info'];
             }
             
             $device->save($updateData);

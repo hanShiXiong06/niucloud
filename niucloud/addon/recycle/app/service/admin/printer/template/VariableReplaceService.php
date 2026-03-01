@@ -109,40 +109,48 @@ class VariableReplaceService extends BaseAdminService
         if (empty($text)) {
             return $text;
         }
-        
-        // 如果文本长度不超过限制，直接返回
-        if (mb_strlen($text, 'UTF-8') <= $maxLength) {
-            return $text;
-        }
-        
-        $lines = [];
-        $currentLine = '';
-        $length = mb_strlen($text, 'UTF-8');
-        
-        for ($i = 0; $i < $length; $i++) {
-            $char = mb_substr($text, $i, 1, 'UTF-8');
-            
-            // 检查当前行加上新字符是否超过长度限制
-            if (mb_strlen($currentLine . $char, 'UTF-8') > $maxLength) {
-                // 当前行已满，保存并开始新行
-                if (!empty($currentLine)) {
-                    $lines[] = $currentLine;
-                    $currentLine = $char;
+
+        // 先按已有换行符拆分，再对每一行单独做长度截断
+        $existingLines = explode("\n", $text);
+        $resultLines = [];
+
+        foreach ($existingLines as $segment) {
+            $segment = trim($segment);
+            if ($segment === '') {
+                continue;
+            }
+
+            // 如果该行不超过限制，直接保留
+            if (mb_strlen($segment, 'UTF-8') <= $maxLength) {
+                $resultLines[] = $segment;
+                continue;
+            }
+
+            // 超长行按 maxLength 截断
+            $currentLine = '';
+            $length = mb_strlen($segment, 'UTF-8');
+
+            for ($i = 0; $i < $length; $i++) {
+                $char = mb_substr($segment, $i, 1, 'UTF-8');
+
+                if (mb_strlen($currentLine . $char, 'UTF-8') > $maxLength) {
+                    if (!empty($currentLine)) {
+                        $resultLines[] = $currentLine;
+                        $currentLine = $char;
+                    } else {
+                        $resultLines[] = $char;
+                    }
                 } else {
-                    // 单个字符就超长（理论上不会发生）
-                    $lines[] = $char;
+                    $currentLine .= $char;
                 }
-            } else {
-                $currentLine .= $char;
+            }
+
+            if (!empty($currentLine)) {
+                $resultLines[] = $currentLine;
             }
         }
-        
-        // 添加最后一行
-        if (!empty($currentLine)) {
-            $lines[] = $currentLine;
-        }
-        
-        return implode("\n", $lines);
+
+        return implode("\n", $resultLines);
     }
 
     /**
@@ -168,18 +176,19 @@ class VariableReplaceService extends BaseAdminService
             $h = $this->extractAttributeFromString($attributes, 'h', '1');
             $r = $this->extractAttributeFromString($attributes, 'r', '0');
             
-            // 分割文本行
-            $lines = explode("\n", $multiLineText);
+            // 分割文本行（过滤空行）
+            $lines = array_values(array_filter(
+                explode("\n", $multiLineText),
+                function ($line) { return trim($line) !== ''; }
+            ));
             $newTextTags = [];
-            
+
             // 为每一行创建一个TEXT标签
             foreach ($lines as $index => $line) {
-                if (trim($line) !== '') {
-                    // 计算新的y坐标（每行间距约24dots）
-                    $newY = intval($y) + ($index * 24);
-                    $escapedLine = htmlspecialchars(trim($line), ENT_QUOTES, 'UTF-8', false);
-                    $newTextTags[] = "<TEXT x=\"{$x}\" y=\"{$newY}\" w=\"{$w}\" h=\"{$h}\" r=\"{$r}\">{$escapedLine}</TEXT>";
-                }
+                // 计算新的y坐标（每行间距约24dots）
+                $newY = intval($y) + ($index * 24);
+                $escapedLine = htmlspecialchars(trim($line), ENT_QUOTES, 'UTF-8', false);
+                $newTextTags[] = "<TEXT x=\"{$x}\" y=\"{$newY}\" w=\"{$w}\" h=\"{$h}\" r=\"{$r}\">{$escapedLine}</TEXT>";
             }
             
             // 替换原始的TEXT标签

@@ -59,19 +59,7 @@
 
                     <!-- 价格对比区域 -->
                     <div class="flex items-center justify-between bg-gradient-to-r from-blue-50 to-orange-50 rounded-lg p-4 border">
-                        <!-- 之前价格 -->
-                        <div v-if="deviceData.before_price" class="text-center flex-1">
-                            <div class="text-xs text-gray-500 mb-1">之前定价</div>
-                            <div class="text-lg font-bold text-blue-600">¥{{ deviceData.before_price || '0.00' }}</div>
-                        </div>
-                        
-                        <!-- 箭头 -->
-                        <div v-if="deviceData.before_price" class="flex items-center justify-center px-4">
-                            <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                            </svg>
-                        </div>
-                        
+
                         <!-- 最终价格 -->
                         <div class="text-center flex-1">
                             <div class="text-xs text-gray-500 mb-1">最终定价</div>
@@ -103,17 +91,17 @@
             </div>
 
             <!-- 质检结果卡片 -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" v-if="deviceData.check_result">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" v-if="deviceData.check_result_seller || deviceData.check_result">
                 <div class="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-gray-50 to-green-50 border-b">
                     <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                     </svg>
-                    <span class="font-medium text-gray-800 text-sm">质检结果</span>
+                    <span class="font-medium text-gray-800 text-sm">卖家质检结果</span>
                 </div>
                 <div class="p-4">
                     <div class="bg-green-50 rounded-md p-3 border border-green-200">
-                        <div class="text-xs text-green-700 leading-relaxed">
-                            {{ deviceData.check_result }}
+                        <div class="text-xs text-green-700 leading-relaxed whitespace-pre-line">
+                            {{ deviceData.check_result_seller || deviceData.check_result }}
                         </div>
                     </div>
                 </div>
@@ -259,6 +247,8 @@ interface DeviceInfo {
     imei?: string;
     before_price?: string | number;
     check_result?: string;
+    check_result_seller?: string;
+    check_result_buyer?: string;
     final_price?: string | number;
     sell_price?: string | number;
     remark?: string;

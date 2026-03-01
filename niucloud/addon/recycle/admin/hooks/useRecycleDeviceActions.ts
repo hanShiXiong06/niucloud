@@ -30,17 +30,20 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
   const { list, pagination, getList, checkDeviceLogVisible, priceDeviceLogVisible } = options
 
   const mapDeviceToCheckForm = (data: any) => {
+    const sellerCheckResult = data?.check_result_seller || data?.check_result || ''
+    const sellerCheckImages = data?.check_images_seller || data?.check_images || ''
+
     return {
       id: data?.id,
       imei: data?.imei || '',
       model: data?.model || '',
       initial_price: data?.initial_price,
-      check_result: data?.check_result || '',
-      check_result_seller: data?.check_result_seller || '',
+      check_result: sellerCheckResult,
+      check_result_seller: sellerCheckResult,
       check_result_buyer: data?.check_result_buyer || '',
       check_meta: data?.check_meta ?? data?.info?.check_meta,
-      check_images: data?.check_images_seller || data?.check_images || '',
-      check_images_seller: data?.check_images_seller || data?.check_images || '',
+      check_images: sellerCheckImages,
+      check_images_seller: sellerCheckImages,
       check_images_buyer: data?.check_images_buyer || '',
       final_price: data?.final_price || '',
       sell_price: data?.sell_price || '',
@@ -52,11 +55,12 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
   }
 
   const buildCheckSubmitPayload = (formData: any) => {
+    const sellerCheckResult = formData.check_result_seller || formData.check_result || ''
     const sellerCheckImages = formData.check_images_seller || formData.check_images || ''
 
     return {
-      check_result: formData.check_result || '',
-      check_result_seller: formData.check_result_seller || '',
+      check_result: sellerCheckResult,
+      check_result_seller: sellerCheckResult,
       check_result_buyer: formData.check_result_buyer || '',
       check_images: sellerCheckImages,
       check_images_seller: sellerCheckImages,
@@ -126,7 +130,7 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
 
   const submitDeviceCheck = async (formData: any) => {
     try {
-      if (!formData.check_result_seller) {
+      if (!formData.check_result) {
         ElMessage.warning('请填写质检结果')
         return
       }

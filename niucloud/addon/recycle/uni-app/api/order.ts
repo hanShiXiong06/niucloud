@@ -42,10 +42,6 @@ export interface RecycleOrderDevice {
   check_at: number;
 }
 
-// 获取订单状态列表
-export function getOrderStatus() {
-  return request.get("recycle/recycle_order/status_count");
-}
 // 获取设备状态列表
 export function getDeviceStatus() {
   return request.get("recycle/device_status/list");
@@ -149,4 +145,9 @@ export function getExpress(express_code: string = '', mobile: string = '') {
 // 获取收货渠道字典
 export function getReceivingChannels() {
   return request.get('recycle/dict/29')
+}
+
+// 检查用户是否关注公众号
+export function checkWechatFollow() {
+  return request.get('recycle/wechat_follow/check')
 }

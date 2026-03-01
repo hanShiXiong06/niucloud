@@ -2,8 +2,9 @@
   <el-dialog 
     v-model="dialogVisible" 
     title="" 
-    width="60%" 
-    top="3vh"
+    :width="isMobile ? '95vw' : '60%'" 
+    :top="isMobile ? '0' : '3vh'"
+    :fullscreen="isMobile"
     center
     :destroy-on-close="true"
     class="device-detail-dialog"
@@ -23,7 +24,7 @@
             </p>
           </div>
         </div>
-        <div v-if="deviceData" class="text-right">
+        <div v-if="deviceData && !isMobile" class="text-right">
           <div class="text-xs text-blue-100">IMEI</div>
           <div class="font-mono text-sm">{{ deviceData.imei }}</div>
         </div>
@@ -63,7 +64,7 @@
                 <span>基础信息</span>
               </h4>
               
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div class="bg-gray-50 rounded-md p-2">
                   <div class="text-xs text-gray-500">设备型号</div>
                   <div class="text-sm font-medium text-gray-900 truncate">{{ deviceData.model }}</div>
@@ -94,7 +95,7 @@
                   <span>保修信息</span>
                 </h4>
                 
-                <div class="grid grid-cols-2 gap-2">
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div class="bg-gray-50 rounded-md p-2">
                     <div class="text-xs text-gray-500">保修状态</div>
                     <span 
@@ -124,7 +125,7 @@
                   <span>价格信息</span>
                 </h4>
                 
-                <div class="grid grid-cols-2 gap-2">
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div v-if="deviceData.before_price" class="bg-blue-50 rounded-md p-2 border border-blue-200">
                     <div class="text-xs text-blue-600">最终价格</div>
                     <div class="text-sm font-bold text-blue-700">¥{{ deviceData.before_price }}</div>
@@ -217,7 +218,7 @@
               <!-- 质检图片 -->
               <div v-if="checkImagesArray.length > 0" class="space-y-2">
                 <h4 class="text-xs font-medium text-gray-800">质检图片</h4>
-                <div class="grid grid-cols-6 gap-2">
+                <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
                   <div 
                     v-for="(imgUrl, index) in checkImagesArray" 
                     :key="index"
@@ -345,7 +346,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch, computed, reactive } from 'vue'
+import { ref, defineProps, defineEmits, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { img } from '@/utils/common'
 
 // 定义设备信息接口
@@ -423,6 +424,11 @@ const emit = defineEmits(['update:visible', 'closed'])
 // 内部状态
 const dialogVisible = ref(props.visible)
 const deviceData = ref<DeviceDetail | null>(props.device)
+const isMobile = ref(false)
+
+const updateResponsiveState = () => {
+    isMobile.value = window.innerWidth <= 768
+}
 
 // 计算质检图片数组
 const checkImagesArray = computed(() => {
@@ -518,6 +524,15 @@ const formatDate = (dateStr: string | number) => {
         minute: '2-digit'
     })
 }
+
+onMounted(() => {
+    updateResponsiveState()
+    window.addEventListener('resize', updateResponsiveState)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateResponsiveState)
+})
 </script>
 
 <style lang="scss" scoped>

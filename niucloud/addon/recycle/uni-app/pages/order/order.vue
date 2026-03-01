@@ -88,6 +88,14 @@
       @confirm="handleDeviceConfirm"
     />
 
+    <!-- 公众号关注引导弹窗 -->
+    <FollowOfficialAccountPopup
+      :visible="showFollowPopup"
+      :wechat-name="wechatName"
+      :qr-code="qrCode"
+      @close="handleFollowPopupClose"
+    />
+
     <tabbar addon="recycle" />
   </view>
 </template>
@@ -107,6 +115,7 @@ import DeviceInputModal from './components/DeviceInputModal.vue'
 import ExpressInfoSection from './components/ExpressInfoSection.vue'
 import ShopInfoCard from './components/ShopInfoCard.vue'
 import AgreementCheckbox from './components/AgreementCheckbox.vue'
+import FollowOfficialAccountPopup from './components/FollowOfficialAccountPopup.vue'
 
 // 导入 composables
 import { useTabCache } from '../../hooks/useTabCache'
@@ -147,7 +156,7 @@ const {
 const { shopInfo, fetchShopInfo, copyShopInfo, openLocation } = useShopInfo()
 
 // 订单提交
-const { submitOrder } = useOrderSubmit()
+const { submitOrder, showFollowPopup, wechatName, qrCode, dismissFollow } = useOrderSubmit()
 
 // 协议勾选
 const isAgreeRecycle = ref(false)
@@ -315,6 +324,14 @@ const checkPaymentInfo = async () => {
   } catch (error) {
     console.error('获取收款信息失败：', error)
   }
+}
+
+// 关闭公众号关注弹窗后跳转订单列表
+const handleFollowPopupClose = () => {
+  dismissFollow()
+  uni.navigateTo({
+    url: '/addon/recycle/pages/order/list'
+  })
 }
 
 // 页面显示时的处理

@@ -7,7 +7,7 @@
     class="check-device-dialog"
     align-center
   >
-    <!-- 设备信息条 -->
+    <!-- ==================== 设备信息条 ==================== -->
     <div class="device-info-bar">
       <div class="device-basic">
         <div class="device-icon">📱</div>
@@ -50,12 +50,13 @@
       </div>
     </div>
 
-    <!-- 智能质检面板 -->
+    <!-- ==================== 智能质检面板 ==================== -->
     <div class="smart-check-panel">
-      <div class="panel-header">
-        <span>🔍 智能质检</span>
-        <div class="header-actions">
+      <div class="panel-header flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <span class="text-[15px] font-semibold text-gray-900">🔍 智能质检</span>
+        <div class="header-actions flex w-full flex-wrap gap-2 md:w-auto md:justify-end">
           <el-button
+            class="action-btn !m-0"
             size="small"
             text
             :loading="loadingCoverage"
@@ -66,6 +67,7 @@
             {{ loadingCoverage ? '查询中...' : '查询保修' }}
           </el-button>
           <el-button
+            class="action-btn !m-0"
             size="small"
             text
             :loading="loadingActivationLock"
@@ -76,6 +78,7 @@
             {{ loadingActivationLock ? '查询中...' : '查询激活锁' }}
           </el-button>
           <el-button
+            class="action-btn !m-0"
             size="small"
             text
             :loading="loadingMdm"
@@ -85,9 +88,9 @@
             <el-icon v-if="!loadingMdm"><Monitor /></el-icon>
             {{ loadingMdm ? '查询中...' : '查询监管锁' }}
           </el-button>
-          <span class="divider">|</span>
-          <el-button size="small" text @click="clearAllSelections">清空</el-button>
-          <el-button size="small" text @click="fillCommonResult">常用模板</el-button>
+          <span class="divider hidden md:inline-block">|</span>
+          <el-button class="action-btn !m-0" size="small" text @click="clearAllSelections">清空</el-button>
+          <el-button class="action-btn !m-0" size="small" text @click="fillCommonResult">常用模板</el-button>
         </div>
       </div>
 
@@ -105,10 +108,10 @@
         </div>
       </el-collapse-transition>
 
-      <!-- 快速质检选项 - 卡片式布局 -->
+      <!-- ==================== 质检选项区 - 紧凑网格 ==================== -->
       <div class="check-grid">
-        <!-- 电池状态卡片 -->
-        <CheckCard title="电池状态" icon="Lightning">
+        <!-- 第一行: 电池(3col) + 外屏(3col) + 内屏(3col) + 中框(3col) -->
+        <CheckCard class="grid-cell grid-cell--battery" title="电池状态" icon="Lightning">
           <div class="input-row">
             <span class="label">健康度</span>
             <el-input-number
@@ -117,6 +120,7 @@
               :max="100"
               :step="1"
               size="small"
+              controls-position="right"
               @change="updateCheckResult"
             />
             <span class="unit">%</span>
@@ -155,60 +159,90 @@
           </div>
         </CheckCard>
 
-        <!-- 屏幕状态卡片 -->
-        <CheckCard title="屏幕状态" icon="Monitor">
+        <CheckCard class="grid-cell grid-cell--screen" title="外屏规格" icon="Monitor">
           <div class="tag-grid">
             <el-tag
-              v-for="option in dictOptions.screenLabels()"
-              :key="option"
-              :type="templateSelections.screen === option ? 'primary' : undefined"
-              :effect="templateSelections.screen === option ? 'dark' : 'plain'"
+              v-for="option in checkDictOptions.screen"
+              :key="option.value"
+              :type="templateSelections.screenId === String(option.value) ? 'primary' : undefined"
+              :effect="templateSelections.screenId === String(option.value) ? 'dark' : 'plain'"
               size="small"
               class="check-tag"
-              @click="selectScreenOption(option)"
+              @click="selectScreenOption(option.value)"
             >
-              {{ option }}
+              {{ option.name }}
             </el-tag>
           </div>
         </CheckCard>
 
-        <!-- 外观状态卡片 -->
-        <CheckCard title="外观状态" icon="Picture">
+        <CheckCard class="grid-cell grid-cell--indisplay" title="内屏规格" icon="Iphone">
           <div class="tag-grid">
             <el-tag
-              v-for="option in dictOptions.appearanceLabels()"
-              :key="option"
-              :type="templateSelections.appearance === option ? 'primary' : undefined"
-              :effect="templateSelections.appearance === option ? 'dark' : 'plain'"
+              v-for="option in checkDictOptions.indisplay"
+              :key="option.value"
+              :type="templateSelections.indisplayId === String(option.value) ? 'primary' : undefined"
+              :effect="templateSelections.indisplayId === String(option.value) ? 'dark' : 'plain'"
               size="small"
               class="check-tag"
-              @click="selectAppearanceOption(option)"
+              @click="selectIndisplayOption(option.value)"
             >
-              {{ option }}
+              {{ option.name }}
             </el-tag>
           </div>
         </CheckCard>
 
-        <!-- 功能异常卡片 -->
-        <CheckCard title="功能异常" icon="Setting">
+        <CheckCard class="grid-cell grid-cell--appearance" title="中框规格" icon="Picture">
           <div class="tag-grid">
             <el-tag
-              v-for="option in dictOptions.functionLabels()"
-              :key="option"
-              :type="templateSelections.function.includes(option) ? 'danger' : undefined"
-              :effect="templateSelections.function.includes(option) ? 'dark' : 'plain'"
+              v-for="option in checkDictOptions.appearance"
+              :key="option.value"
+              :type="templateSelections.appearanceId === String(option.value) ? 'primary' : undefined"
+              :effect="templateSelections.appearanceId === String(option.value) ? 'dark' : 'plain'"
               size="small"
               class="check-tag"
-              @click="toggleFunctionOption(option)"
+              @click="selectAppearanceOption(option.value)"
             >
-              {{ option }}
+              {{ option.name }}
+            </el-tag>
+          </div>
+        </CheckCard>
+
+        <!-- 第二行: 功能规格(8col) + 维修规格(4col) -->
+        <CheckCard class="grid-cell grid-cell--function" title="功能规格" icon="Setting">
+          <div class="tag-grid">
+            <el-tag
+              v-for="option in checkDictOptions.function"
+              :key="option.value"
+              :type="templateSelections.functionIds.includes(String(option.value)) ? 'danger' : undefined"
+              :effect="templateSelections.functionIds.includes(String(option.value)) ? 'dark' : 'plain'"
+              size="small"
+              class="check-tag"
+              @click="toggleFunctionOption(option.value)"
+            >
+              {{ option.name }}
+            </el-tag>
+          </div>
+        </CheckCard>
+
+        <CheckCard class="grid-cell grid-cell--fix" title="维修规格" icon="Tools">
+          <div class="tag-grid">
+            <el-tag
+              v-for="option in checkDictOptions.fix"
+              :key="option.value"
+              :type="templateSelections.fixIds.includes(String(option.value)) ? 'warning' : undefined"
+              :effect="templateSelections.fixIds.includes(String(option.value)) ? 'dark' : 'plain'"
+              size="small"
+              class="check-tag"
+              @click="toggleFixOption(option.value)"
+            >
+              {{ option.name }}
             </el-tag>
           </div>
         </CheckCard>
       </div>
     </div>
 
-    <!-- 核心信息表单 -->
+    <!-- ==================== 核心信息表单 ==================== -->
     <el-form
       ref="formRef"
       :model="deviceForm"
@@ -216,52 +250,172 @@
       label-position="top"
       class="core-form"
     >
-      <div class="form-row">
-        <el-form-item label="📋 质检结果" prop="check_result">
-          <el-input
-            v-model="deviceForm.check_result"
-            type="textarea"
-            :rows="4"
-            placeholder="详细描述设备状态，或使用上方快速选择..."
-            maxlength="100"
-            show-word-limit
-          />
-        </el-form-item>
-        <el-form-item label="📋 扣费说明" prop="remark">
-          <el-input
-            v-model="deviceForm.remark"
-            type="textarea"
-            :rows="4"
-            placeholder="扣费说明、特殊情况备注等..."
-            maxlength="200"
-            show-word-limit
-          />
-        </el-form-item>
-        <el-form-item label="💰 最终价格" prop="final_price" class="price-item">
-          <el-input-number
-            v-model="deviceForm.final_price"
-            :step="10"
-            :precision="2"
-            :min="0"
-            :max="99999"
-            placeholder="定价"
-            class="price-input"
-          />
-        </el-form-item>
+      <!-- 质检结果与定价区 -->
+      <div class="form-section">
+        <div class="form-section__header">📋 质检结果与定价</div>
+        <!-- 第一行: 卖家结果 + 买家结果 -->
+        <div class="form-row form-row--2col">
+          <el-form-item label="卖家可见质检结果" prop="check_result">
+            <el-input
+              v-model="deviceForm.check_result"
+              type="textarea"
+              :rows="3"
+              placeholder="卖家可见：详细描述设备状态，或使用上方快速选择..."
+              maxlength="200"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item prop="check_result_buyer">
+            <template #label>
+              <div class="form-label-with-action">
+                <span>
+                  买家可见质检结果
+                  <el-tooltip content="买家质检结果可单独编辑，不影响卖家结果" placement="top">
+                    <el-icon class="ml-1 text-gray-400" style="vertical-align: middle; cursor: help;"><Warning /></el-icon>
+                  </el-tooltip>
+                </span>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="syncSellerResultToBuyer"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                  同步卖家
+                </el-button>
+              </div>
+            </template>
+            <el-input
+              v-model="deviceForm.check_result_buyer"
+              type="textarea"
+              :rows="3"
+              placeholder="买家可见：可单独编辑展示文案..."
+              maxlength="200"
+              show-word-limit
+            />
+          </el-form-item>
+        </div>
+        <!-- 第二行: 扣费说明 + 最终价格 + 卖货价格 -->
+        <div class="form-row form-row--3col">
+          <el-form-item label="扣费说明" prop="remark">
+            <el-input
+              v-model="deviceForm.remark"
+              type="textarea"
+              :rows="2"
+              placeholder="扣费说明、特殊情况备注等..."
+              maxlength="200"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="💰 最终价格" prop="final_price" class="price-item">
+            <el-input-number
+              v-model="deviceForm.final_price"
+              :step="10"
+              :precision="2"
+              :min="0"
+              :max="99999"
+              placeholder="定价"
+              class="price-input"
+            />
+          </el-form-item>
+          <el-form-item label="💵 卖货价格" prop="sell_price" class="price-item">
+            <el-input-number
+              v-model="deviceForm.sell_price"
+              :step="10"
+              :precision="2"
+              :min="0"
+              :max="99999"
+              placeholder="卖货价格"
+              class="price-input"
+            />
+          </el-form-item>
+        </div>
       </div>
 
-      <el-form-item label="📸 质检图片">
-        <div class="upload-wrapper">
-          <upload-image v-model="deviceForm.check_images" :limit="6" />
-          <div v-if="qrCode" class="qr-quick-scan">
-            <img :src="qrCode" class="qr-mini" alt="扫码上传" />
-            <span>手机扫码上传</span>
-          </div>
+      <!-- 质检图片区 -->
+      <div class="form-section">
+        <div class="form-section__header">📸 质检图片</div>
+        <div class="form-row form-row--2col">
+          <el-form-item label="卖家可见质检图片">
+            <div class="upload-wrapper">
+              <div class="upload-main">
+                <div v-if="isMobile" class="mobile-camera-actions">
+                  <el-button
+                    type="primary"
+                    plain
+                    :loading="cameraUploading"
+                    :disabled="cameraUploading || checkImageCount >= maxCheckImageCount"
+                    @click="openCameraCapture"
+                  >
+                    {{ cameraUploading ? '上传中...' : '拍照上传' }}
+                  </el-button>
+                  <span class="camera-tip">
+                    {{ `已上传 ${checkImageCount}/${maxCheckImageCount}` }}
+                  </span>
+                  <input
+                    ref="cameraInputRef"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    multiple
+                    class="hidden"
+                    @change="handleCameraFilesChange"
+                  />
+                </div>
+                <upload-image v-model="deviceForm.check_images" :limit="6" />
+              </div>
+            </div>
+          </el-form-item>
+
+          <el-form-item>
+            <template #label>
+              <div class="form-label-with-action">
+                <span>买家可见质检图片</span>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="syncSellerImagesToBuyer"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                  同步卖家图片
+                </el-button>
+              </div>
+            </template>
+            <div class="upload-wrapper">
+              <div class="upload-main">
+                <div v-if="isMobile" class="mobile-camera-actions">
+                  <el-button
+                    type="primary"
+                    plain
+                    :loading="buyerCameraUploading"
+                    :disabled="buyerCameraUploading || buyerCheckImageCount >= buyerMaxCheckImageCount"
+                    @click="openBuyerCameraCapture"
+                  >
+                    {{ buyerCameraUploading ? '上传中...' : '拍照上传（买家）' }}
+                  </el-button>
+                  <span class="camera-tip">
+                    {{ `已上传 ${buyerCheckImageCount}/${buyerMaxCheckImageCount}` }}
+                  </span>
+                  <input
+                    ref="buyerCameraInputRef"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    multiple
+                    class="hidden"
+                    @change="handleBuyerCameraFilesChange"
+                  />
+                </div>
+                <upload-image v-model="deviceForm.check_images_buyer" :limit="6" />
+              </div>
+            </div>
+          </el-form-item>
         </div>
-      </el-form-item>
+      </div>
     </el-form>
 
-    <!-- 底部操作栏 -->
+    <!-- ==================== 底部操作栏 ==================== -->
     <template #footer>
       <div class="action-bar">
         <div class="action-info">
@@ -293,10 +447,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted } from 'vue'
+import { ref, reactive, watch, computed, nextTick, onMounted, onBeforeUnmount, toRef } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
-  Edit, Postcard, Aim, Monitor, Check, Headset, Close, Lock
+  Edit, Postcard, Aim, Monitor, Check, Headset, Close, Lock, CopyDocument, Warning
 } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 
@@ -305,6 +459,13 @@ import { getCoverage, getActivationlock, getMdm } from '@/addon/recycle/api/devi
 
 // Composables
 import { useCheckDeviceDict } from '@/addon/recycle/hooks/useCheckDeviceDict'
+import {
+  normalizeInfo,
+  useCheckMeta,
+  type CheckMetaPayload,
+  type CheckOptionsGroup
+} from './composables/useCheckMeta'
+import { useCameraUpload } from './composables/useCameraUpload'
 
 // Components
 import WarrantyInfoDisplay from '@/addon/recycle/components/WarrantyInfoDisplay.vue'
@@ -317,8 +478,14 @@ interface DeviceInfo {
   imei?: string
   initial_price?: string | number
   final_price?: string | number
+  sell_price?: string | number
   check_result?: string
+  check_result_seller?: string
+  check_result_buyer?: string
+  check_meta?: CheckMetaPayload | string | null
   check_images?: string
+  check_images_seller?: string
+  check_images_buyer?: string
   check_status?: number
   remark?: string
   status?: number
@@ -341,6 +508,7 @@ const emit = defineEmits<{
 
 // ==================== 字典数据 ====================
 const dictOptions = useCheckDeviceDict()
+const checkDictOptions = computed<CheckOptionsGroup>(() => dictOptions.options.value as CheckOptionsGroup)
 
 // ==================== 状态管理 ====================
 const dialogVisible = ref(props.visible)
@@ -351,6 +519,7 @@ const formRef = ref<FormInstance>()
 const imeiInputRef = ref()
 const showImeiEdit = ref(false)
 const qrCode = ref('')
+const isMobile = ref(false)
 
 // 查询状态
 const loadingCoverage = ref(false)
@@ -362,28 +531,17 @@ const warrantyInfo = ref<any>(null)
 const activationLockInfo = ref<any>(null)
 const mdmInfo = ref<any>(null)
 
-// 原始质检结果（用于拼接）
-const originalCheckResult = ref(props.device.check_result || '')
-
 // ==================== 表单数据 ====================
 const deviceForm = reactive({
-  check_result: props.device.check_result || '',
-  check_images: props.device.check_images || '',
+  check_result: props.device.check_result_seller || props.device.check_result || '',
+  check_result_buyer: props.device.check_result_buyer || '',
+  check_images: props.device.check_images_seller || props.device.check_images || '',
+  check_images_buyer: props.device.check_images_buyer || '',
   final_price: parsePrice(props.device.final_price),
+  sell_price: parsePrice(props.device.sell_price),
   remark: props.device.remark || '',
   imei: props.device.imei || '',
-  info: undefined as any
-})
-
-// 模板选择状态
-const templateSelections = reactive({
-  battery: undefined as number | undefined,
-  battery_num: undefined as number | undefined,
-  screen: '',
-  appearance: '',
-  function: [] as string[],
-  activationLock: false,
-  mdmLock: false
+  info: normalizeInfo(props.device.info)
 })
 
 // 表单验证规则
@@ -394,15 +552,44 @@ const rules = reactive<FormRules>({
   ]
 })
 
-// ==================== 计算属性 ====================
-const checkedCount = computed(() => {
-  let count = 0
-  if (templateSelections.battery) count++
-  if (templateSelections.battery_num) count++
-  if (templateSelections.screen) count++
-  if (templateSelections.appearance) count++
-  count += templateSelections.function.length
-  return count
+const {
+  templateSelections,
+  checkedCount,
+  getSubmitInfo,
+  updateCheckResult,
+  clearAllSelections,
+  fillCommonResult,
+  restoreFromDevice,
+  selectScreenOption,
+  selectIndisplayOption,
+  selectAppearanceOption,
+  toggleFunctionOption,
+  toggleFixOption
+} = useCheckMeta({
+  dictOptions: checkDictOptions,
+  deviceForm
+})
+
+const {
+  cameraUploading,
+  cameraInputRef,
+  maxCheckImageCount,
+  checkImageCount,
+  openCameraCapture,
+  handleCameraFilesChange
+} = useCameraUpload({
+  checkImages: toRef(deviceForm, 'check_images')
+})
+
+const {
+  cameraUploading: buyerCameraUploading,
+  cameraInputRef: buyerCameraInputRef,
+  maxCheckImageCount: buyerMaxCheckImageCount,
+  checkImageCount: buyerCheckImageCount,
+  openCameraCapture: openBuyerCameraCapture,
+  handleCameraFilesChange: handleBuyerCameraFilesChange
+} = useCameraUpload({
+  checkImages: toRef(deviceForm, 'check_images_buyer')
 })
 
 // ==================== 工具函数 ====================
@@ -410,6 +597,10 @@ function parsePrice(value: any): number | undefined {
   if (typeof value === 'number') return value
   if (typeof value === 'string') return parseFloat(value) || undefined
   return undefined
+}
+
+const updateDeviceMode = () => {
+  isMobile.value = window.innerWidth <= 768
 }
 
 // ==================== 二维码生成 ====================
@@ -436,78 +627,6 @@ const focusImeiInput = () => {
   imeiInputRef.value?.focus()
 }
 
-// ==================== 质检选项操作 ====================
-const selectScreenOption = (option: string) => {
-  templateSelections.screen = templateSelections.screen === option ? '' : option
-  updateCheckResult()
-}
-
-const selectAppearanceOption = (option: string) => {
-  templateSelections.appearance = templateSelections.appearance === option ? '' : option
-  updateCheckResult()
-}
-
-const toggleFunctionOption = (option: string) => {
-  const index = templateSelections.function.indexOf(option)
-  if (index > -1) {
-    templateSelections.function.splice(index, 1)
-  } else {
-    templateSelections.function.push(option)
-  }
-  updateCheckResult()
-}
-
-const updateCheckResult = () => {
-  const results: string[] = []
-
-  if (templateSelections.battery) {
-    results.push(`电池健康度${templateSelections.battery}%`)
-  }
-  if (templateSelections.battery_num) {
-    results.push(`循环${templateSelections.battery_num}次`)
-  }
-  if (templateSelections.activationLock) {
-    results.push('激活锁开启')
-  }
-  if (templateSelections.mdmLock) {
-    results.push('监管锁开启')
-  }
-  if (templateSelections.screen) {
-    results.push(`屏幕${templateSelections.screen}`)
-  }
-  if (templateSelections.appearance) {
-    results.push(`外观${templateSelections.appearance}`)
-  }
-  if (templateSelections.function.length > 0) {
-    results.push(`功能异常: ${templateSelections.function.join('、')}`)
-  }
-
-  const templateResult = results.join('; ')
-  if (originalCheckResult.value && templateResult) {
-    deviceForm.check_result = originalCheckResult.value + '; ' + templateResult
-  } else if (templateResult) {
-    deviceForm.check_result = templateResult
-  }
-}
-
-const clearAllSelections = () => {
-  templateSelections.battery = undefined
-  templateSelections.battery_num = undefined
-  templateSelections.activationLock = false
-  templateSelections.mdmLock = false
-  templateSelections.screen = ''
-  templateSelections.appearance = ''
-  templateSelections.function = []
-  deviceForm.check_result = ''
-}
-
-const fillCommonResult = () => {
-  templateSelections.battery = 85
-  templateSelections.screen = '完好'
-  templateSelections.appearance = '轻微磨损'
-  updateCheckResult()
-}
-
 // ==================== 查询功能 ====================
 const fetchCoverage = async () => {
   if (!deviceForm.imei) {
@@ -523,7 +642,15 @@ const fetchCoverage = async () => {
     if (res.data?.model) {
       warrantyInfo.value = res.data
       deviceData.value.model = `${res.data.model} ${res.data.capacity} ${res.data.color}`
-      deviceForm.info = res.data
+      deviceForm.info = {
+        ...normalizeInfo(deviceForm.info),
+        ...res.data
+      }
+      deviceForm.info = getSubmitInfo()
+
+      // 将保修状态写入质检结果
+      appendWarrantyToCheckResult(res.data)
+
       ElMessage.success('保修信息查询成功')
     } else if (res.data?.msg) {
       ElMessage.error('保修查询失败：' + res.data.msg)
@@ -540,6 +667,27 @@ const fetchCoverage = async () => {
 
 const clearWarrantyInfo = () => {
   warrantyInfo.value = null
+}
+
+// 将保修状态追加到质检结果文本
+const appendWarrantyToCheckResult = (data: any) => {
+  // 先移除旧的保修行
+  const lines = deviceForm.check_result
+    .split(/;\n|;\s*/)
+    .filter(line => line.trim() && !line.startsWith('保修'))
+
+  const coverage = data?.coverage
+  if (coverage) {
+    const isExpired = coverage.status === 'Out Of Warranty'
+    if (isExpired) {
+      lines.push('保修: 过保')
+    } else {
+      const dateStr = coverage.date || ''
+      lines.push(dateStr ? `保修: 在保 到期${dateStr}` : '保修: 在保')
+    }
+  }
+
+  deviceForm.check_result = lines.join(';\n')
 }
 
 const fetchActivationlock = async () => {
@@ -598,6 +746,25 @@ const fetchMdm = async () => {
   }
 }
 
+// ==================== 同步卖家信息到买家 ====================
+const syncSellerResultToBuyer = () => {
+  if (!deviceForm.check_result) {
+    ElMessage.warning('卖家质检结果为空，无法同步')
+    return
+  }
+  deviceForm.check_result_buyer = deviceForm.check_result
+  ElMessage.success('已同步卖家质检结果到买家，您仍可单独编辑买家内容')
+}
+
+const syncSellerImagesToBuyer = () => {
+  if (!deviceForm.check_images) {
+    ElMessage.warning('卖家质检图片为空，无法同步')
+    return
+  }
+  deviceForm.check_images_buyer = deviceForm.check_images
+  ElMessage.success('已同步卖家质检图片到买家，您仍可单独编辑买家图片')
+}
+
 // ==================== 表单操作 ====================
 const handleCancel = () => {
   dialogVisible.value = false
@@ -612,18 +779,7 @@ const handleConfirm = async () => {
 
     submitting.value = true
     try {
-      emit('confirm', {
-        id: deviceData.value.id,
-        check_result: deviceForm.check_result,
-        check_images: deviceForm.check_images,
-        remark: deviceForm.remark,
-        check_status: 1,
-        final_price: deviceForm.final_price,
-        action: 'check',
-        imei: deviceForm.imei,
-        model: deviceData.value.model,
-        info: deviceForm.info
-      })
+      emit('confirm', buildSubmitPayload('check'))
       dialogVisible.value = false
     } finally {
       submitting.value = false
@@ -634,21 +790,65 @@ const handleConfirm = async () => {
 const handleSaveDraft = async () => {
   savingDraft.value = true
   try {
-    emit('save-draft', {
-      id: deviceData.value.id,
-      check_result: deviceForm.check_result,
-      check_images: deviceForm.check_images,
-      remark: deviceForm.remark,
-      final_price: deviceForm.final_price,
-      imei: deviceForm.imei,
-      model: deviceData.value.model,
-      info: deviceForm.info,
-      action: 'save_draft'
-    })
+    emit('save-draft', buildSubmitPayload('save_draft'))
     dialogVisible.value = false
   } finally {
     savingDraft.value = false
   }
+}
+
+function buildSubmitPayload(action: 'check' | 'save_draft') {
+  const sellerResult = deviceForm.check_result || ''
+  const sellerImages = deviceForm.check_images || ''
+  return {
+    id: deviceData.value.id,
+    check_result: sellerResult,
+    check_result_seller: sellerResult,
+    check_result_buyer: deviceForm.check_result_buyer,
+    check_images: sellerImages,
+    check_images_seller: sellerImages,
+    check_images_buyer: deviceForm.check_images_buyer,
+    remark: deviceForm.remark,
+    check_status: action === 'check' ? 1 : undefined,
+    final_price: deviceForm.final_price,
+    sell_price: deviceForm.sell_price,
+    action,
+    imei: deviceForm.imei,
+    model: deviceData.value.model,
+    info: getSubmitInfo()
+  }
+}
+
+const initializeFormFromDevice = (device: DeviceInfo) => {
+  // 清空上一台设备的所有残留状态
+  warrantyInfo.value = null
+  activationLockInfo.value = null
+  mdmInfo.value = null
+  showImeiEdit.value = false
+  loadingCoverage.value = false
+  loadingActivationLock.value = false
+  loadingMdm.value = false
+  clearAllSelections()
+
+  // 填充新设备数据
+  deviceData.value = { ...device }
+  deviceForm.check_result = device.check_result_seller || device.check_result || ''
+  deviceForm.check_result_buyer = device.check_result_buyer || ''
+  deviceForm.check_images = device.check_images_seller || device.check_images || ''
+  deviceForm.check_images_buyer = device.check_images_buyer || ''
+  deviceForm.final_price = parsePrice(device.final_price)
+  deviceForm.sell_price = parsePrice(device.sell_price)
+  deviceForm.remark = device.remark || ''
+  deviceForm.imei = device.imei || ''
+  deviceForm.info = normalizeInfo(device.info)
+
+  // 从新设备的 check_meta 恢复质检选项
+  restoreFromDevice(device)
+
+  // 重置表单校验状态
+  nextTick(() => {
+    formRef.value?.clearValidate()
+  })
 }
 
 // ==================== 监听器 ====================
@@ -657,23 +857,40 @@ watch(() => props.visible, (val) => {
 })
 
 watch(() => props.device, (val) => {
-  deviceData.value = { ...val }
-  deviceForm.check_result = val.check_result || ''
-  deviceForm.check_images = val.check_images || ''
-  deviceForm.final_price = parsePrice(val.final_price)
-  deviceForm.remark = val.remark || ''
-  deviceForm.imei = val.imei || ''
-  originalCheckResult.value = val.check_result || ''
+  initializeFormFromDevice(val)
 }, { deep: true })
 
 watch(dialogVisible, (val) => {
   emit('update:visible', val)
 })
 
+watch(
+  () => [
+    checkDictOptions.value.screen,
+    checkDictOptions.value.indisplay,
+    checkDictOptions.value.appearance,
+    checkDictOptions.value.function,
+    checkDictOptions.value.fix
+  ],
+  () => {
+    if (!dialogVisible.value) return
+    if (checkedCount.value > 0) return
+    restoreFromDevice(deviceData.value)
+  },
+  { deep: true }
+)
+
 // ==================== 生命周期 ====================
-onMounted(() => {
+onMounted(async () => {
+  updateDeviceMode()
+  window.addEventListener('resize', updateDeviceMode)
   generateQrCode()
-  dictOptions.loadDictionary()
+  initializeFormFromDevice(props.device)
+  await dictOptions.loadDictionary()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateDeviceMode)
 })
 </script>
 
@@ -710,7 +927,7 @@ onMounted(() => {
   }
 }
 
-// 设备信息条
+// ==================== 设备信息条 ====================
 .device-info-bar {
   display: flex;
   align-items: center;
@@ -756,7 +973,7 @@ onMounted(() => {
   }
 }
 
-// 智能质检面板
+// ==================== 智能质检面板 ====================
 .smart-check-panel {
   background: white;
   border: 1px solid #e5e7eb;
@@ -764,18 +981,20 @@ onMounted(() => {
   margin-bottom: 16px;
 
   .panel-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     padding: 12px 16px;
     border-bottom: 1px solid #e5e7eb;
-    font-weight: 600;
-    color: #111827;
 
     .header-actions {
       display: flex;
-      align-items: center;
+      align-items: stretch;
+      width: 100%;
       gap: 8px;
+      flex-wrap: wrap;
+
+      .action-btn {
+        min-width: 108px;
+        flex: 1 1 calc(50% - 4px);
+      }
 
       .divider {
         color: #d1d5db;
@@ -801,16 +1020,26 @@ onMounted(() => {
       color: #374151;
     }
   }
+}
 
-  .check-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 2fr;
-    gap: 12px;
-    padding: 16px;
+// ==================== 质检选项网格 ====================
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 10px;
+  padding: 16px;
+
+  .grid-cell {
+    &--battery { grid-column: span 3; }
+    &--screen { grid-column: span 3; }
+    &--indisplay { grid-column: span 3; }
+    &--appearance { grid-column: span 3; }
+    &--function { grid-column: span 8; }
+    &--fix { grid-column: span 4; }
   }
 }
 
-// 标签网格
+// ==================== 标签网格 ====================
 .tag-grid {
   display: flex;
   flex-wrap: wrap;
@@ -827,7 +1056,7 @@ onMounted(() => {
   }
 }
 
-// 输入行
+// ==================== 输入行 ====================
 .input-row {
   display: flex;
   align-items: center;
@@ -851,17 +1080,55 @@ onMounted(() => {
   }
 }
 
-// 核心表单
+// ==================== 核心表单 ====================
 .core-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-section {
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 20px;
+  overflow: hidden;
+
+  &__header {
+    padding: 12px 20px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+  }
 
   .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 24px;
+    padding: 20px;
+
+    &--3col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+    }
+
+    &--2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      padding-top: 0;
+    }
+  }
+
+  .form-label-with-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+
+    .el-button {
+      font-size: 12px;
+      padding: 0;
+    }
   }
 
   .price-item {
@@ -875,20 +1142,18 @@ onMounted(() => {
     align-items: flex-start;
     gap: 16px;
 
-    .qr-quick-scan {
+    .upload-main {
+      flex: 1;
+    }
+
+    .mobile-camera-actions {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 4px;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
 
-      .qr-mini {
-        width: 50px;
-        height: 50px;
-        border-radius: 4px;
-        border: 1px solid #e5e7eb;
-      }
-
-      span {
+      .camera-tip {
         font-size: 12px;
         color: #6b7280;
       }
@@ -896,7 +1161,7 @@ onMounted(() => {
   }
 }
 
-// 底部操作栏
+// ==================== 底部操作栏 ====================
 .action-bar {
   display: flex;
   align-items: center;
@@ -918,7 +1183,7 @@ onMounted(() => {
   }
 }
 
-// 响应式
+// ==================== 响应式 ====================
 @media (max-width: 768px) {
   .check-device-dialog {
     :deep(.el-dialog) {
@@ -926,12 +1191,26 @@ onMounted(() => {
     }
   }
 
-  .smart-check-panel .check-grid {
-    grid-template-columns: 1fr 1fr;
+  .check-grid {
+    grid-template-columns: 1fr;
+
+    .grid-cell {
+      &--battery,
+      &--screen,
+      &--indisplay,
+      &--appearance,
+      &--function,
+      &--fix {
+        grid-column: span 1;
+      }
+    }
   }
 
-  .core-form .form-row {
-    grid-template-columns: 1fr;
+  .form-section .form-row {
+    &--3col,
+    &--2col {
+      grid-template-columns: 1fr;
+    }
   }
 
   .action-bar {
@@ -944,6 +1223,33 @@ onMounted(() => {
       .el-button {
         flex: 1;
       }
+    }
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .check-grid {
+    grid-template-columns: repeat(6, 1fr);
+
+    .grid-cell {
+      &--battery { grid-column: span 3; }
+      &--screen { grid-column: span 3; }
+      &--indisplay { grid-column: span 3; }
+      &--appearance { grid-column: span 3; }
+      &--function { grid-column: span 4; }
+      &--fix { grid-column: span 2; }
+    }
+  }
+}
+
+@media (min-width: 769px) {
+  .smart-check-panel .panel-header .header-actions {
+    width: auto;
+    align-items: center;
+
+    .action-btn {
+      min-width: auto;
+      flex: 0 0 auto;
     }
   }
 }

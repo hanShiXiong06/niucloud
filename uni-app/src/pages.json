@@ -277,7 +277,7 @@
                 }
 			]
         },
-// RECYCLE_PAGE_END
+        // RECYCLE_PAGE_END
         // PHONE_SHOP_PAGE_BEGIN
         {
             "root": "addon/phone_shop", 

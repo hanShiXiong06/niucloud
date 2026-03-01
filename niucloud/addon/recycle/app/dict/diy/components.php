@@ -50,12 +50,12 @@ return [
                 
                 // 组件属性
                 'template' => [
-                    'title' => '设备状态概况', // 标题
+                    'title' => '订单概况', // 标题
                     'viewAllText' => '全部', // 查看全部文本
-                    'pendingReceiptText' => '待质检', // 待质检文本
-                    'processingText' => '处理中', // 处理中文本
-                    'shippedText' => '已质检', // 已质检文本
+                    'pendingSignText' => '待签收', // 待签收文本
+                    'checkingText' => '质检中', // 质检中文本
                     'pendingConfirmText' => '待确认', // 待确认文本
+                    'pendingPaymentText' => '待打款', // 待打款文本
                     'titleColor' => '#333333', // 标题颜色
                     'viewAllColor' => '#999999', // 查看全部颜色
                     'numberColor' => '#FF6B00', // 数字颜色

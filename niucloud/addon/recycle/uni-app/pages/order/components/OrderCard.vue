@@ -24,9 +24,9 @@
           <text class="text-sm font-medium text-gray-800">{{ order.express_no }}</text>
         </view>
         <view class="express-actions">
-          <text class="arrow-btn" @tap.stop="openExpressTracking">
+          <view class="arrow-btn" @tap.stop="openExpressTracking">
             <up-icon name="arrow-right" size="14" color="#3b82f6"></up-icon>
-          </text>
+          </view>
         </view>
       </view>
 
@@ -42,14 +42,7 @@
     </view>
 
     <view class="order-content">
-      <OrderDeviceList
-        v-if="order.devices && order.devices.length > 0"
-        :devices="order.devices"
-        :expanded="expanded"
-        @toggle="toggleExpand"
-      />
-
-      <view v-else class="empty-devices">
+      <view class="empty-devices">
         <text class="text-xs text-gray-500">{{ emptyDeviceTip }}</text>
       </view>
 

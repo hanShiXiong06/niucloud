@@ -27,17 +27,30 @@
                 </el-tag>
             </el-form-item>
 
-            <el-form-item label="验机结果" prop="check_result">
-                <el-input 
-                    v-model="form.check_result" 
-                    type="textarea" 
-                    :rows="3" 
-                    placeholder="请输入验机结果" 
+            <el-form-item label="卖家质检结果" prop="check_result_seller">
+                <el-input
+                    v-model="form.check_result_seller"
+                    type="textarea"
+                    :rows="3"
+                    placeholder="请输入卖家质检结果"
                 />
             </el-form-item>
-            
-            <el-form-item label="外观照片">
-                <upload-image v-model="form.check_images" :limit="10" />
+
+            <el-form-item label="买家质检结果">
+                <el-input
+                    v-model="form.check_result_buyer"
+                    type="textarea"
+                    :rows="3"
+                    placeholder="请输入买家质检结果"
+                />
+            </el-form-item>
+
+            <el-form-item label="卖家照片">
+                <upload-image v-model="form.check_images_seller" :limit="10" />
+            </el-form-item>
+
+            <el-form-item label="买家照片">
+                <upload-image v-model="form.check_images_buyer" :limit="10" />
             </el-form-item>
             
             <!-- <el-form-item label="预估价格">
@@ -48,6 +61,12 @@
             
             <el-form-item label="最终报价" prop="final_price">
                 <el-input v-model="form.final_price" type="number">
+                    <template #append>元</template>
+                </el-input>
+            </el-form-item>
+
+            <el-form-item label="卖货价格">
+                <el-input v-model="form.sell_price" type="number">
                     <template #append>元</template>
                 </el-input>
             </el-form-item>
@@ -102,10 +121,15 @@ interface Device {
     model?: string;
     initial_price?: string | number;
     final_price?: string | number;
+    sell_price?: string | number;
     status: number;
     status_name?: string;
     check_result?: string;
+    check_result_seller?: string;
+    check_result_buyer?: string;
     check_images?: string | any[];
+    check_images_seller?: string | any[];
+    check_images_buyer?: string | any[];
     price_remark?: string;
 }
 
@@ -114,8 +138,13 @@ interface DeviceStatusUpdateParams {
     order_id: number;
     status: number;
     check_result?: string;
+    check_result_seller?: string;
+    check_result_buyer?: string;
     check_images?: string | any[];
+    check_images_seller?: string | any[];
+    check_images_buyer?: string | any[];
     final_price?: string | number;
+    sell_price?: string | number;
     price_remark?: string;
     check_status?: number;
 }
@@ -147,16 +176,21 @@ const form = reactive({
     model: '',
     currentStatus: DEVICE_STATUS.PENDING_CHECK,
     check_result: '',
+    check_result_seller: '',
+    check_result_buyer: '',
     check_images: '',
+    check_images_seller: '',
+    check_images_buyer: '',
     initial_price: 0,
     final_price: 0,
+    sell_price: 0,
     price_remark: ''
 });
 
 // 表单验证规则
 const rules = reactive<FormRules>({
-    check_result: [
-        { required: true, message: '请输入验机结果', trigger: 'blur' }
+    check_result_seller: [
+        { required: true, message: '请输入卖家质检结果', trigger: 'blur' }
     ],
     final_price: [
         { required: true, message: '请输入最终价格', trigger: 'blur' },
@@ -189,9 +223,14 @@ const initFormData = () => {
         form.model = props.deviceData.model || '';
         form.currentStatus = props.deviceData.status || DEVICE_STATUS.PENDING_CHECK;
         form.check_result = props.deviceData.check_result || '';
+        form.check_result_seller = props.deviceData.check_result_seller || props.deviceData.check_result || '';
+        form.check_result_buyer = props.deviceData.check_result_buyer || '';
         form.check_images = props.deviceData.check_images || '';
+        form.check_images_seller = props.deviceData.check_images_seller || props.deviceData.check_images || '';
+        form.check_images_buyer = props.deviceData.check_images_buyer || '';
         form.initial_price = props.deviceData.initial_price || 0;
         form.final_price = props.deviceData.final_price || 0;
+        form.sell_price = props.deviceData.sell_price || 0;
         form.price_remark = props.deviceData.price_remark || '';
     }
 };
@@ -249,8 +288,13 @@ const submitForm = async (action: 'CHECK' | 'CHECK_PRICE') => {
             order_id: form.order_id,
             status: DEVICE_STATUS.CHECKED, // 默认更新到已验机状态
             check_result: form.check_result,
-            check_images: form.check_images,
+            check_result_seller: form.check_result_seller,
+            check_result_buyer: form.check_result_buyer,
+            check_images: form.check_images_seller || form.check_images,
+            check_images_seller: form.check_images_seller || form.check_images,
+            check_images_buyer: form.check_images_buyer,
             final_price: form.final_price,
+            sell_price: form.sell_price,
             price_remark: form.price_remark,
             check_status: 1
         };

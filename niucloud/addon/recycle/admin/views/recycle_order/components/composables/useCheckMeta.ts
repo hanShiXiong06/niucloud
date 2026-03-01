@@ -29,13 +29,11 @@ export interface CheckMetaPayload {
 interface DeviceCheckMetaSource {
   check_meta?: CheckMetaPayload | string | null
   check_result?: string
-  check_result_seller?: string
   info?: any
 }
 
 interface DeviceFormLike {
   check_result: string
-  check_result_seller: string
   info: any
 }
 
@@ -216,38 +214,8 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       results.push(`维修记录: ${fixNames.join('、')}`)
     }
 
-    // 从 info 中读取保修信息，保证不会被质检选项覆盖丢失
-    const info = normalizeInfo(deviceForm.info)
-    const coverage = info.coverage
-    if (coverage) {
-      const isExpired = coverage.status === 'Out Of Warranty'
-      if (isExpired) {
-        results.push('保修: 过保')
-      } else {
-        const dateStr = coverage.date || ''
-        results.push(dateStr ? `保修: 在保 到期${dateStr}` : '保修: 在保')
-      }
-    }
-
-    deviceForm.check_result_seller = results.join(';\n')
+    deviceForm.check_result = results.join(';\n')
     deviceForm.info = getSubmitInfo()
-  }
-
-  // ==================== 标签打印内容生成 ====================
-
-  const buildLabelText = (): string => {
-    const info = normalizeInfo(deviceForm.info)
-    const lines: string[] = []
-    if (info.model) lines.push(`型号：${info.model}`)
-    if (info.capacity) lines.push(`内存/规格：${info.capacity}`)
-    // 保修信息
-    const coverage = info.coverage
-    if (coverage) {
-      const isExpired = coverage.status === 'Out Of Warranty'
-      lines.push(isExpired ? '保修：过保' : `保修：在保${coverage.date ? ' 至' + coverage.date : ''}`)
-    }
-    if (info.osVersion) lines.push(`系统：${info.osVersion}`)
-    return lines.join('\n')
   }
 
   // ==================== 重置 / 清空 ====================
@@ -266,7 +234,7 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
 
   const clearAllSelections = () => {
     resetTemplateSelections()
-    deviceForm.check_result_seller = ''
+    deviceForm.check_result = ''
     deviceForm.info = getSubmitInfo()
   }
 
@@ -422,10 +390,7 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       return
     }
 
-    // 旧数据回退：优先从 check_result_seller 解析，再 fallback 到 check_result
-    const restoredFromLegacy = applyLegacyCheckResult(
-      device.check_result_seller || device.check_result || ''
-    )
+    const restoredFromLegacy = applyLegacyCheckResult(device.check_result || '')
     if (restoredFromLegacy) {
       updateCheckResult()
       return
@@ -495,7 +460,6 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     optionNameById,
     getSubmitInfo,
     updateCheckResult,
-    buildLabelText,
     clearAllSelections,
     fillCommonResult,
     restoreFromDevice,
