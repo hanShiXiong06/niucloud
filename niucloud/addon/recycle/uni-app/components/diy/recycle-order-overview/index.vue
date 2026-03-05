@@ -11,28 +11,28 @@
             </view>
 
             <view class="overview-content flex justify-between items-center py-3 px-4">
-                <!-- 待质检 -->
-                <view class="status-item flex-1 flex flex-col items-center" @click="handleStatusClick('pending_inspection')">
-                    <text class="status-count font-bold" :style="{ color: numberColor }">{{ orderData.pending_inspection }}</text>
-                    <text class="status-name" :style="{ color: labelColor }">{{ pendingReceiptText }}</text>
+                <!-- 待签收 (订单状态1) -->
+                <view class="status-item flex-1 flex flex-col items-center" @click="handleStatusClick('1')">
+                    <text class="status-count font-bold" :style="{ color: numberColor }">{{ orderData.pending_sign }}</text>
+                    <text class="status-name" :style="{ color: labelColor }">{{ pendingSignText }}</text>
                 </view>
 
-                <!-- 处理中 -->
-                <view class="status-item flex-1 flex flex-col items-center" @click="handleStatusClick('processing')">
-                    <text class="status-count font-bold" :style="{ color: numberColor }">{{ orderData.processing }}</text>
-                    <text class="status-name" :style="{ color: labelColor }">{{ processingText }}</text>
+                <!-- 质检中 (订单状态2+3) -->
+                <view class="status-item flex-1 flex flex-col items-center" @click="handleStatusClick('3')">
+                    <text class="status-count font-bold" :style="{ color: numberColor }">{{ orderData.checking }}</text>
+                    <text class="status-name" :style="{ color: labelColor }">{{ checkingText }}</text>
                 </view>
 
-                <!-- 已质检 -->
-                <view class="status-item flex-1 flex flex-col items-center" @click="handleStatusClick('inspected')">
-                    <text class="status-count font-bold" :style="{ color: numberColor }">{{ orderData.inspected }}</text>
-                    <text class="status-name" :style="{ color: labelColor }">{{ shippedText }}</text>
-                </view>
-
-                <!-- 待确认 -->
-                <view class="status-item flex-1 flex flex-col items-center" @click="handleStatusClick('pending_confirm')">
+                <!-- 待确认 (订单状态5) -->
+                <view class="status-item flex-1 flex flex-col items-center" @click="handleStatusClick('5')">
                     <text class="status-count font-bold" :style="{ color: numberColor }">{{ orderData.pending_confirm }}</text>
                     <text class="status-name" :style="{ color: labelColor }">{{ pendingConfirmText }}</text>
+                </view>
+
+                <!-- 待打款 (订单状态6) -->
+                <view class="status-item flex-1 flex flex-col items-center" @click="handleStatusClick('6')">
+                    <text class="status-count font-bold" :style="{ color: numberColor }">{{ orderData.pending_payment }}</text>
+                    <text class="status-name" :style="{ color: labelColor }">{{ pendingPaymentText }}</text>
                 </view>
             </view>
         </view>
@@ -45,26 +45,18 @@ import { ref, computed, onMounted } from 'vue';
 import { img , getToken, redirect } from '@/utils/common';
 import { useRouter } from 'vue-router';
 import useDiyStore from '@/app/stores/diy';
-import { getDeviceStatusCount } from '@/addon/recycle/api/recycle';
+import { getOrderStatusCount } from '@/addon/recycle/api/order';
 import { useLogin } from "@/hooks/useLogin";
-
-
 
 
 // 定义订单数据接口
 interface OrderData {
-    pending_inspection: number; // 待质检
-    processing: number;      // 处理中
-    inspected: number;         // 已质检
-    pending_confirm: number; // 待确认
+    pending_sign: number;     // 待签收 (状态1)
+    checking: number;         // 质检中 (状态2+3)
+    pending_confirm: number;  // 待确认 (状态5)
+    pending_payment: number;  // 待打款 (状态6)
 }
 
-// 定义API响应接口
-interface ApiResponse {
-    code: number;
-    message: string;
-    data: OrderData;
-}
 
 const props = defineProps({
     component: {
@@ -82,19 +74,19 @@ const diyStore = useDiyStore();
 
 // 初始化数据
 const orderData = ref<OrderData>({
-    pending_inspection: 0,
-    processing: 0,
-    inspected: 0,
-    pending_confirm: 0
+    pending_sign: 0,
+    checking: 0,
+    pending_confirm: 0,
+    pending_payment: 0
 });
 
 // 组件配置
-const title = computed(() => props.component.title || '发货订单');
+const title = computed(() => props.component.title || '回收订单');
 const viewAllText = computed(() => props.component.viewAllText || '全部');
-const pendingReceiptText = computed(() => props.component.pendingReceiptText || '待质检');
-const processingText = computed(() => props.component.processingText || '处理中');
-const shippedText = computed(() => props.component.shippedText || '已质检');
+const pendingSignText = computed(() => props.component.pendingSignText || '待签收');
+const checkingText = computed(() => props.component.checkingText || '质检中');
 const pendingConfirmText = computed(() => props.component.pendingConfirmText || '待确认');
+const pendingPaymentText = computed(() => props.component.pendingPaymentText || '待打款');
 
 // 颜色设置
 const titleColor = computed(() => props.component.titleColor || '#333333');
@@ -127,16 +119,27 @@ const handleStatusClick = (status: string) => {
    redirect({url:'/addon/recycle/pages/order/list?status='+status})
 };
 
-// 获取设备统计数据
+// 获取订单状态统计数据
 const getOrderDataCount = async () => {
     try {
-        const res = await getDeviceStatusCount() as ApiResponse;
-        console.log('获取设备状态数量:', res);
-        if (res.code === 1 && res.data) {
-            orderData.value = res.data;
+        const res: any = await getOrderStatusCount();
+        console.log('获取订单状态数量:', res);
+        if (res.code === 1 && res.data && res.data.list) {
+            // 从接口返回的 list 中按 key 提取各状态数量
+            const statusMap: Record<string, number> = {};
+            res.data.list.forEach((item: any) => {
+                statusMap[item.key] = item.count || 0;
+            });
+
+            orderData.value = {
+                pending_sign: statusMap['1'] || 0,       // 待签收(状态1)
+                checking: (statusMap['2'] || 0) + (statusMap['3'] || 0), // 质检中(状态2已签收+状态3质检中)
+                pending_confirm: statusMap['5'] || 0,    // 待确认(状态5)
+                pending_payment: statusMap['6'] || 0     // 待打款(状态6)
+            };
         }
     } catch (error) {
-        console.error('获取设备状态数量失败:', error);
+        console.error('获取订单状态数量失败:', error);
     }
 };
 

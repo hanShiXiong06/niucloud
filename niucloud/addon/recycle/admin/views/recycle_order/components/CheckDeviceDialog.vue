@@ -250,86 +250,116 @@
       label-position="top"
       class="core-form"
     >
-      <!-- 质检结果与定价区 -->
-      <div class="form-section">
-        <div class="form-section__header">📋 质检结果与定价</div>
-        <!-- 第一行: 卖家结果 + 买家结果 -->
-        <div class="form-row form-row--2col">
-          <el-form-item label="卖家可见质检结果" prop="check_result">
+      <!-- ==================== 质检结果区 ==================== -->
+      <div class="result-cards">
+        <!-- 卖家质检结果 -->
+        <div class="result-card result-card--seller">
+          <div class="result-card__header">
+            <div class="result-card__title">
+              <span class="result-card__dot"></span>
+              卖家可见质检结果
+            </div>
+          </div>
+          <el-form-item prop="check_result_seller" class="result-card__body">
             <el-input
-              v-model="deviceForm.check_result"
+              v-model="deviceForm.check_result_seller"
               type="textarea"
-              :rows="3"
-              placeholder="卖家可见：详细描述设备状态，或使用上方快速选择..."
-              maxlength="200"
+              :rows="6"
+              placeholder="由上方质检选项自动生成，也可手动编辑..."
+              maxlength="500"
               show-word-limit
+              resize="none"
             />
           </el-form-item>
-          <el-form-item prop="check_result_buyer">
-            <template #label>
-              <div class="form-label-with-action">
-                <span>
-                  买家可见质检结果
-                  <el-tooltip content="买家质检结果可单独编辑，不影响卖家结果" placement="top">
-                    <el-icon class="ml-1 text-gray-400" style="vertical-align: middle; cursor: help;"><Warning /></el-icon>
-                  </el-tooltip>
-                </span>
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="syncSellerResultToBuyer"
-                >
-                  <el-icon><CopyDocument /></el-icon>
-                  同步卖家
-                </el-button>
-              </div>
-            </template>
+        </div>
+
+        <!-- 买家质检结果 -->
+        <div class="result-card result-card--buyer">
+          <div class="result-card__header">
+            <div class="result-card__title">
+              <span class="result-card__dot"></span>
+              买家可见质检结果
+              <el-tooltip content="买家质检结果可单独编辑，不影响卖家结果" placement="top">
+                <el-icon class="text-gray-400" style="vertical-align: middle; cursor: help; margin-left: 2px;"><Warning /></el-icon>
+              </el-tooltip>
+            </div>
+            <el-button type="primary" link size="small" @click="syncSellerResultToBuyer">
+              <el-icon><CopyDocument /></el-icon>
+              同步卖家
+            </el-button>
+          </div>
+          <el-form-item prop="check_result_buyer" class="result-card__body">
             <el-input
               v-model="deviceForm.check_result_buyer"
               type="textarea"
-              :rows="3"
-              placeholder="买家可见：可单独编辑展示文案..."
-              maxlength="200"
+              :rows="6"
+              placeholder="买家可见展示文案，可点击「同步卖家」快速填充..."
+              maxlength="500"
               show-word-limit
+              resize="none"
             />
           </el-form-item>
         </div>
-        <!-- 第二行: 扣费说明 + 最终价格 + 卖货价格 -->
-        <div class="form-row form-row--3col">
-          <el-form-item label="扣费说明" prop="remark">
+
+        <!-- 标签打印内容 -->
+        <div class="result-card result-card--label">
+          <div class="result-card__header">
+            <div class="result-card__title">
+              <span class="result-card__dot"></span>
+              标签打印内容
+            </div>
+            <el-button size="small" @click="generateLabel" class="label-gen-btn">
+              <el-icon style="margin-right: 2px;"><Printer /></el-icon>
+              生成标签
+            </el-button>
+          </div>
+          <el-form-item prop="check_result" class="result-card__body">
             <el-input
-              v-model="deviceForm.remark"
+              v-model="deviceForm.check_result"
               type="textarea"
-              :rows="2"
-              placeholder="扣费说明、特殊情况备注等..."
-              maxlength="200"
+              :rows="6"
+              placeholder="查询保修后自动生成（型号 / 内存 / 保修 / 系统），也可手动编辑..."
+              maxlength="300"
               show-word-limit
-            />
-          </el-form-item>
-          <el-form-item label="💰 最终价格" prop="final_price" class="price-item">
-            <el-input-number
-              v-model="deviceForm.final_price"
-              :step="10"
-              :precision="2"
-              :min="0"
-              :max="99999"
-              placeholder="定价"
-              class="price-input"
-            />
-          </el-form-item>
-          <el-form-item label="💵 卖货价格" prop="sell_price" class="price-item">
-            <el-input-number
-              v-model="deviceForm.sell_price"
-              :step="10"
-              :precision="2"
-              :min="0"
-              :max="99999"
-              placeholder="卖货价格"
-              class="price-input"
+              resize="none"
             />
           </el-form-item>
         </div>
+      </div>
+
+      <!-- ==================== 定价与备注区 ==================== -->
+      <div class="pricing-bar">
+       
+        <el-form-item label="最终价格" prop="final_price" class="pricing-bar__price">
+          <el-input-number
+            v-model="deviceForm.final_price"
+            :step="10"
+            :precision="2"
+            :min="0"
+            :max="99999"
+            placeholder="定价"
+            controls-position="right"
+          />
+        </el-form-item>
+        <el-form-item label="卖货价格" prop="sell_price" class="pricing-bar__price">
+          <el-input-number
+            v-model="deviceForm.sell_price"
+            :step="10"
+            :precision="2"
+            :min="0"
+            :max="99999"
+            placeholder="卖货价"
+            controls-position="right"
+          />
+        </el-form-item>
+         <el-form-item label="扣费说明" prop="remark" class="pricing-bar__remark">
+          <el-input
+            v-model="deviceForm.remark"
+            placeholder="扣费说明、特殊备注..."
+            maxlength="200"
+            clearable
+          />
+        </el-form-item>
       </div>
 
       <!-- 质检图片区 -->
@@ -362,7 +392,7 @@
                     @change="handleCameraFilesChange"
                   />
                 </div>
-                <upload-image v-model="deviceForm.check_images" :limit="6" />
+                <upload-image v-model="deviceForm.check_images" :limit="9" />
               </div>
             </div>
           </el-form-item>
@@ -450,7 +480,7 @@
 import { ref, reactive, watch, computed, nextTick, onMounted, onBeforeUnmount, toRef } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
-  Edit, Postcard, Aim, Monitor, Check, Headset, Close, Lock, CopyDocument, Warning
+  Edit, Postcard, Aim, Monitor, Check, Headset, Close, Lock, CopyDocument, Warning, Printer
 } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 
@@ -533,7 +563,8 @@ const mdmInfo = ref<any>(null)
 
 // ==================== 表单数据 ====================
 const deviceForm = reactive({
-  check_result: props.device.check_result_seller || props.device.check_result || '',
+  check_result: '',
+  check_result_seller: props.device.check_result_seller || props.device.check_result || '',
   check_result_buyer: props.device.check_result_buyer || '',
   check_images: props.device.check_images_seller || props.device.check_images || '',
   check_images_buyer: props.device.check_images_buyer || '',
@@ -546,7 +577,7 @@ const deviceForm = reactive({
 
 // 表单验证规则
 const rules = reactive<FormRules>({
-  check_result: [
+  check_result_seller: [
     { required: true, message: '请输入质检结果', trigger: 'blur' },
     { min: 5, message: '质检结果至少5个字符', trigger: 'blur' }
   ]
@@ -557,6 +588,7 @@ const {
   checkedCount,
   getSubmitInfo,
   updateCheckResult,
+  buildLabelText,
   clearAllSelections,
   fillCommonResult,
   restoreFromDevice,
@@ -595,7 +627,10 @@ const {
 // ==================== 工具函数 ====================
 function parsePrice(value: any): number | undefined {
   if (typeof value === 'number') return value
-  if (typeof value === 'string') return parseFloat(value) || undefined
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value)
+    return Number.isNaN(parsed) ? undefined : parsed
+  }
   return undefined
 }
 
@@ -649,7 +684,7 @@ const fetchCoverage = async () => {
       deviceForm.info = getSubmitInfo()
 
       // 将保修状态写入质检结果
-      appendWarrantyToCheckResult(res.data)
+      refreshAfterWarranty()
 
       ElMessage.success('保修信息查询成功')
     } else if (res.data?.msg) {
@@ -669,25 +704,18 @@ const clearWarrantyInfo = () => {
   warrantyInfo.value = null
 }
 
-// 将保修状态追加到质检结果文本
-const appendWarrantyToCheckResult = (data: any) => {
-  // 先移除旧的保修行
-  const lines = deviceForm.check_result
-    .split(/;\n|;\s*/)
-    .filter(line => line.trim() && !line.startsWith('保修'))
+// 保修查询后：保修数据已写入 info，由 updateCheckResult 统一生成卖家文本
+const refreshAfterWarranty = () => {
+  updateCheckResult()
+  deviceForm.check_result = buildLabelText()
+}
 
-  const coverage = data?.coverage
-  if (coverage) {
-    const isExpired = coverage.status === 'Out Of Warranty'
-    if (isExpired) {
-      lines.push('保修: 过保')
-    } else {
-      const dateStr = coverage.date || ''
-      lines.push(dateStr ? `保修: 在保 到期${dateStr}` : '保修: 在保')
-    }
+// 手动生成标签
+const generateLabel = () => {
+  deviceForm.check_result = buildLabelText()
+  if (!deviceForm.check_result) {
+    ElMessage.warning('暂无设备信息可生成标签，请先查询保修')
   }
-
-  deviceForm.check_result = lines.join(';\n')
 }
 
 const fetchActivationlock = async () => {
@@ -748,11 +776,11 @@ const fetchMdm = async () => {
 
 // ==================== 同步卖家信息到买家 ====================
 const syncSellerResultToBuyer = () => {
-  if (!deviceForm.check_result) {
+  if (!deviceForm.check_result_seller) {
     ElMessage.warning('卖家质检结果为空，无法同步')
     return
   }
-  deviceForm.check_result_buyer = deviceForm.check_result
+  deviceForm.check_result_buyer = deviceForm.check_result_seller
   ElMessage.success('已同步卖家质检结果到买家，您仍可单独编辑买家内容')
 }
 
@@ -798,12 +826,11 @@ const handleSaveDraft = async () => {
 }
 
 function buildSubmitPayload(action: 'check' | 'save_draft') {
-  const sellerResult = deviceForm.check_result || ''
   const sellerImages = deviceForm.check_images || ''
   return {
     id: deviceData.value.id,
-    check_result: sellerResult,
-    check_result_seller: sellerResult,
+    check_result: deviceForm.check_result,
+    check_result_seller: deviceForm.check_result_seller,
     check_result_buyer: deviceForm.check_result_buyer,
     check_images: sellerImages,
     check_images_seller: sellerImages,
@@ -832,7 +859,8 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
 
   // 填充新设备数据
   deviceData.value = { ...device }
-  deviceForm.check_result = device.check_result_seller || device.check_result || ''
+  deviceForm.check_result_seller = device.check_result_seller || device.check_result || ''
+  deviceForm.check_result = ''  // 稍后由 buildLabelText() 生成
   deviceForm.check_result_buyer = device.check_result_buyer || ''
   deviceForm.check_images = device.check_images_seller || device.check_images || ''
   deviceForm.check_images_buyer = device.check_images_buyer || ''
@@ -844,6 +872,9 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
 
   // 从新设备的 check_meta 恢复质检选项
   restoreFromDevice(device)
+
+  // 从 info 生成标签打印内容
+  deviceForm.check_result = buildLabelText()
 
   // 重置表单校验状态
   nextTick(() => {
@@ -914,9 +945,9 @@ onBeforeUnmount(() => {
   }
 
   :deep(.el-dialog__body) {
-    padding: 20px 24px;
+    padding: 14px 20px;
     background-color: #fafbfc;
-    max-height: 70vh;
+    max-height: 75vh;
     overflow-y: auto;
   }
 
@@ -935,8 +966,8 @@ onBeforeUnmount(() => {
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: 12px;
+  margin-bottom: 10px;
 
   .device-basic {
     display: flex;
@@ -978,7 +1009,7 @@ onBeforeUnmount(() => {
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 
   .panel-header {
     padding: 12px 16px;
@@ -1026,8 +1057,8 @@ onBeforeUnmount(() => {
 .check-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  gap: 10px;
-  padding: 16px;
+  gap: 8px;
+  padding: 12px;
 
   .grid-cell {
     &--battery { grid-column: span 3; }
@@ -1084,9 +1115,166 @@ onBeforeUnmount(() => {
 .core-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
+// ==================== 质检结果卡片组（一行三列） ====================
+.result-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.result-card {
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    border-bottom: 1px solid transparent;
+  }
+
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+
+  &__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  &__body {
+    padding: 0 10px 10px;
+    margin-bottom: 0 !important;
+
+    :deep(.el-form-item__content) {
+      line-height: 1;
+    }
+
+    :deep(.el-textarea__inner) {
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+  }
+
+  // —— 卖家：蓝色 ——
+  &--seller {
+    border-color: #dbeafe;
+    background: linear-gradient(180deg, #eff6ff 0%, #fff 50%);
+
+    .result-card__header { color: #1d4ed8; border-bottom-color: #dbeafe; }
+    .result-card__dot { background: #3b82f6; }
+
+    :deep(.el-textarea__inner) {
+      border-color: #bfdbfe;
+      &:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
+    }
+  }
+
+  // —— 买家：绿色 ——
+  &--buyer {
+    border-color: #d1fae5;
+    background: linear-gradient(180deg, #ecfdf5 0%, #fff 50%);
+
+    .result-card__header { color: #047857; border-bottom-color: #d1fae5; }
+    .result-card__dot { background: #10b981; }
+
+    :deep(.el-textarea__inner) {
+      border-color: #a7f3d0;
+      &:focus { border-color: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.1); }
+    }
+  }
+
+  // —— 标签：橙色虚线 ——
+  &--label {
+    border: 1.5px dashed #fed7aa;
+    background: linear-gradient(180deg, #fff7ed 0%, #fff 50%);
+
+    .result-card__header { color: #c2410c; border-bottom-color: #fed7aa; }
+    .result-card__dot { background: #f97316; }
+
+    :deep(.el-textarea__inner) {
+      border-color: #fed7aa;
+      background: #fffbf5;
+      font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+      font-size: 12px;
+      letter-spacing: 0.2px;
+      &:focus { border-color: #f97316; box-shadow: 0 0 0 2px rgba(249,115,22,0.1); }
+    }
+
+    .label-gen-btn {
+      border-color: #fb923c;
+      color: #ea580c;
+      background: white;
+      font-size: 11px;
+      border-radius: 4px;
+      padding: 2px 8px;
+      height: 22px;
+
+      &:hover {
+        background: #fff7ed;
+        border-color: #f97316;
+        color: #c2410c;
+      }
+    }
+  }
+}
+
+// ==================== 定价栏（紧凑一行） ====================
+.pricing-bar {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 12px;
+  align-items: end;
+  background: linear-gradient(90deg, #fffbeb 0%, #fff 60%);
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 12px 14px;
+
+  :deep(.el-form-item) {
+    margin-bottom: 0;
+  }
+
+  :deep(.el-form-item__label) {
+    font-size: 12px;
+    font-weight: 600;
+    color: #92400e;
+    padding-bottom: 4px;
+  }
+
+  &__remark {
+    :deep(.el-input__inner) {
+      border-radius: 6px;
+    }
+  }
+
+  &__price {
+    :deep(.el-input-number) {
+      width: 140px;
+    }
+  }
+}
+
+// ==================== 图片区（保留原有 form-section 样式） ====================
 .form-section {
   background: white;
   border: 1px solid #e5e7eb;
@@ -1116,6 +1304,10 @@ onBeforeUnmount(() => {
       grid-template-columns: 1fr 1fr;
       gap: 20px;
       padding-top: 0;
+    }
+
+    &--1col {
+      padding: 0 20px 20px;
     }
   }
 
@@ -1203,6 +1395,18 @@ onBeforeUnmount(() => {
       &--fix {
         grid-column: span 1;
       }
+    }
+  }
+
+  .result-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing-bar {
+    grid-template-columns: 1fr;
+
+    &__price :deep(.el-input-number) {
+      width: 100% !important;
     }
   }
 

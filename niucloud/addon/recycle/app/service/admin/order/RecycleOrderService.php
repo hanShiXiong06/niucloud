@@ -482,64 +482,12 @@ class RecycleOrderService extends BaseAdminService
         $countWhere = $where;
         unset($countWhere['status']);
 
-        // 处理前端传递的参数映射
-        $searchParams = [];
-
-        if (!empty($countWhere['order_id'])) {
-            $searchParams['id'] = $countWhere['order_id'];
-        }
-
-        if (!empty($countWhere['express_no'])) {
-            $searchParams['express_no'] = $countWhere['express_no'];
-        }
-
-        if (!empty($countWhere['remark'])) {
-            $searchParams['remark'] = $countWhere['remark'];
-        }
-
-        if (!empty($countWhere['create_time_start']) && !empty($countWhere['create_time_end'])) {
-            $searchParams['create_at'] = [$countWhere['create_time_start'], $countWhere['create_time_end']];
-        }
-
-        if (isset($countWhere['delivery_type']) && $countWhere['delivery_type'] !== '') {
-            if (is_string($countWhere['delivery_type']) && strpos($countWhere['delivery_type'], ',') !== false) {
-                $searchParams['delivery_type'] = explode(',', $countWhere['delivery_type']);
-            } else {
-                $searchParams['delivery_type'] = $countWhere['delivery_type'];
-            }
-        }
-
-        if (!empty($countWhere['device_imei'])) {
-            $searchParams['imei'] = $countWhere['device_imei'];
-        }
-
-        if (!empty($countWhere['device_model'])) {
-            $searchParams['device_model'] = $countWhere['device_model'];
-        }
-
-        if (!empty($countWhere['user_nickname'])) {
-            $searchParams['customer_name'] = $countWhere['user_nickname'];
-        }
-
-        if (!empty($countWhere['user_mobile'])) {
-            $searchParams['customer_phone'] = $countWhere['user_mobile'];
-        }
-
-        if (!empty($countWhere['keyword'])) {
-            $searchParams['keyword'] = $countWhere['keyword'];
-        }
-
-        if (!empty($countWhere['search'])) {
-            $searchParams['search'] = $countWhere['search'];
-        }
+        // 使用 Model 的参数映射方法（与 getPage 保持一致）
+        $searchParams = RecycleOrder::mapSearchParams($countWhere);
 
         // 获取基础查询模型（不包含状态筛选）
         $baseQuery = (new RecycleOrder())
-            ->withSearch([
-                'id', 'order_no', 'express_no', 'customer_name', 'customer_phone',
-                'delivery_type', 'create_at', 'remark', 'imei',
-                'device_model', 'search', 'keyword'
-            ], $searchParams)
+            ->withSearch(RecycleOrder::getSearchFields(), $searchParams)
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]]);
 
         // 获取所有状态的定义

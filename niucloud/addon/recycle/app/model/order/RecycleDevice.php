@@ -8,6 +8,7 @@ use addon\phone_shop\app\model\goods\Category as PhoneShopGoodsCategory;
 use addon\recycle\app\model\order\RecycleOrder;
 use app\model\member\Member;
 use app\model\sys\SysUser;
+use app\dict\sys\FileDict;
 use core\base\BaseModel;
 
 /**
@@ -62,7 +63,10 @@ class RecycleDevice extends BaseModel
     protected $append = [
         'status_name',
         'category_name',
-        'nickname'
+        'nickname',
+        'check_images_thumb_small',
+        'check_images_seller_thumb_small',
+        'check_images_buyer_thumb_small',
     ];
 
     /**
@@ -283,10 +287,102 @@ class RecycleDevice extends BaseModel
         if (!isset($data['member_id']) || empty($data['member_id'])) {
             return '未知';
         }
-        
+
         $member = new Member();
         $member = $member->where('member_id', $data['member_id'])->field('nickname')->find();
-        return $member['nickname'] ?? '未知';  
+        return $member['nickname'] ?? '未知';
     }
- 
+
+    /**
+     * 质检图片缩略图（小）获取器
+     * @param $value
+     * @param $data
+     * @return array
+     */
+    public function getCheckImagesThumbSmallAttr($value, $data)
+    {
+        return $this->buildImageThumbs($data, 'check_images', FileDict::SMALL);
+    }
+
+    /**
+     * 卖家质检图片缩略图（小）获取器
+     * @param $value
+     * @param $data
+     * @return array
+     */
+    public function getCheckImagesSellerThumbSmallAttr($value, $data)
+    {
+        return $this->buildImageThumbs($data, 'check_images_seller', FileDict::SMALL);
+    }
+
+    /**
+     * 买家质检图片缩略图（小）获取器
+     * @param $value
+     * @param $data
+     * @return array
+     */
+    public function getCheckImagesBuyerThumbSmallAttr($value, $data)
+    {
+        return $this->buildImageThumbs($data, 'check_images_buyer', FileDict::SMALL);
+    }
+
+    /**
+     * 质检图片缩略图（中）获取器
+     * @param $value
+     * @param $data
+     * @return array
+     */
+    public function getCheckImagesThumbMidAttr($value, $data)
+    {
+        return $this->buildImageThumbs($data, 'check_images', FileDict::MID);
+    }
+
+    /**
+     * 卖家质检图片缩略图（中）获取器
+     * @param $value
+     * @param $data
+     * @return array
+     */
+    public function getCheckImagesSellerThumbMidAttr($value, $data)
+    {
+        return $this->buildImageThumbs($data, 'check_images_seller', FileDict::MID);
+    }
+
+    /**
+     * 买家质检图片缩略图（中）获取器
+     * @param $value
+     * @param $data
+     * @return array
+     */
+    public function getCheckImagesBuyerThumbMidAttr($value, $data)
+    {
+        return $this->buildImageThumbs($data, 'check_images_buyer', FileDict::MID);
+    }
+
+    /**
+     * 构建逗号分隔图片字段的缩略图数组
+     * @param array $data 模型数据
+     * @param string $field 图片字段名
+     * @param string $thumbType 缩略图类型 (small/mid/big)
+     * @return array
+     */
+    private function buildImageThumbs(array $data, string $field, string $thumbType): array
+    {
+        if (!isset($data[$field]) || $data[$field] === '' || $data[$field] === null) {
+            return [];
+        }
+        $images = explode(',', (string)$data[$field]);
+        $thumbArr = [];
+        foreach ($images as $img) {
+            $img = trim($img);
+            if (empty($img)) continue;
+            $siteId = $data['site_id'] ?? 0;
+            $thumb = get_thumb_images($siteId, $img, $thumbType);
+            if (!empty($thumb)) {
+                $thumbArr[] = $thumb;
+            }
+        }
+        return $thumbArr;
+    }
+
 }

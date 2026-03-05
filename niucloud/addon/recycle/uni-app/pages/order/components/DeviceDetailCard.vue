@@ -56,14 +56,18 @@
    
 
     <!-- 检测结果 / 价格说明 -->
-    <view v-if="device.check_result || device.remark || device.check_at" class="px-3 pb-2 space-y-1">
-      <view v-if="device.check_result" class="flex text-xs">
+    <view v-if="checkResult || device.remark || device.price_remark || device.check_at" class="px-3 pb-2 space-y-1">
+      <view v-if="checkResult" class="flex text-xs">
         <text class="text-gray-400 w-14 flex-shrink-0">检测结果</text>
-        <text class="text-gray-600 flex-1">{{ device.check_result }}</text>
+        <text class="text-gray-600 flex-1">{{ checkResult }}</text>
       </view>
       <view v-if="device.remark" class="flex text-xs">
-        <text class="text-gray-400 w-14 flex-shrink-0">价格说明</text>
+        <text class="text-gray-400 w-14 flex-shrink-0">扣费说明</text>
         <text class="text-gray-600 flex-1">{{ device.remark }}</text>
+      </view>
+      <view v-if="device.price_remark" class="flex text-xs">
+        <text class="text-gray-400 w-14 flex-shrink-0">价格说明</text>
+        <text class="text-gray-600 flex-1">{{ device.price_remark }}</text>
       </view>
       <view v-if="device.check_at" class="flex text-xs">
         <text class="text-gray-400 w-14 flex-shrink-0">检测时间</text>
@@ -71,11 +75,11 @@
       </view>
     </view>
      <!-- 检测图片 -->
-    <view v-if="device.check_images" class="px-3 pb-2">
+    <view v-if="hasCheckImages" class="px-3 pb-2">
       <scroll-view scroll-x class="whitespace-nowrap">
         <view class="inline-flex gap-1.5 py-0.5">
           <view
-            v-for="(img_url, imgIndex) in imageList"
+            v-for="(img_url, imgIndex) in imageThumbList"
             :key="imgIndex"
             class="w-14 h-14 rounded-lg overflow-hidden bg-gray-100"
           >
@@ -135,10 +139,29 @@ defineEmits<{
 const statusColor = computed(() => getDeviceStatusInfo(props.device.status).color)
 const statusBg = computed(() => getDeviceStatusInfo(props.device.status).bgColor)
 
-const imageList = computed(() => {
-  if (!props.device.check_images) return []
-  return props.device.check_images.split(',')
+// 质检结果：优先取 check_result_seller，fallback 到 check_result
+const checkResult = computed(() => {
+  return props.device.check_result_seller || props.device.check_result || ''
 })
+
+// 原图列表（用于预览大图）：优先取 check_images_seller，fallback 到 check_images
+const imageList = computed(() => {
+  const raw = props.device.check_images_seller || props.device.check_images
+  if (!raw) return []
+  return raw.split(',').map(s => s.trim()).filter(s => s)
+})
+
+// 缩略图列表（用于列表展示，节省CDN）：优先取后端返回的缩略图，fallback 到原图
+const imageThumbList = computed(() => {
+  const thumbs = props.device.check_images_seller_thumb_small
+  if (thumbs && Array.isArray(thumbs) && thumbs.length > 0) {
+    return thumbs
+  }
+  return imageList.value
+})
+
+// 是否有质检图片
+const hasCheckImages = computed(() => imageList.value.length > 0)
 
 const showActions = computed(() => props.device.status === 4)
 

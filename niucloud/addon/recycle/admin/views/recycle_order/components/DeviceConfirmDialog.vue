@@ -10,6 +10,9 @@
         <template #header>
             <div class="flex justify-between items-center">
                 <span class="text-lg font-bold">设备信息确认，共 {{ devices.length }} 台</span>
+                <el-button type="primary" :icon="Plus" size="small" @click="addDevice">
+                    添加设备
+                </el-button>
             </div>
         </template>
 
@@ -81,7 +84,7 @@
                     </div>
                 </template>
             </el-table-column>
-            <el-table-column label="操作" width="120">
+            <el-table-column label="操作" width="160">
                 <template #default="{ row, $index }">
                     <div v-if="row.editing">
                         <el-button-group>
@@ -93,9 +96,14 @@
                             </el-button>
                         </el-button-group>
                     </div>
-                    <el-button v-else type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, $index)">
-                        编辑
-                    </el-button>
+                    <el-button-group v-else>
+                        <el-button type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, $index)">
+                            编辑
+                        </el-button>
+                        <el-button type="danger" size="small" @click="deleteDevice($index)">
+                            删除
+                        </el-button>
+                    </el-button-group>
                 </template>
             </el-table-column>
         </el-table>
@@ -168,9 +176,12 @@
                         <el-button type="success" size="small" @click="saveDevice(row, index)">保存</el-button>
                         <el-button size="small" @click="cancelEdit(row, index)">取消</el-button>
                     </div>
-                    <div v-else class="grid grid-cols-1 gap-2">
+                    <div v-else class="grid grid-cols-2 gap-2">
                         <el-button type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, index)">
                             编辑
+                        </el-button>
+                        <el-button type="danger" size="small" @click="deleteDevice(index)">
+                            删除
                         </el-button>
                     </div>
                 </div>
@@ -198,7 +209,7 @@
 
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, toRaw, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { Edit } from '@element-plus/icons-vue'
+import { Edit, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getImeiInfo } from '@/addon/recycle/api/recycle_order'
 import { getCategoryTree } from '@/addon/phone_shop/api/goods'
@@ -457,6 +468,36 @@ const getCategoryName = (categoryId: string | number) => {
     return current ? current.name : '未选择'
 }
 
+// 添加新设备
+const addDevice = () => {
+    // 检查是否有其他正在编辑的设备
+    const editingDevice = devices.value.find(d => d.editing)
+    if (editingDevice) {
+        ElMessage.warning('请先保存正在编辑的设备')
+        return
+    }
+
+    const newDevice: Device = {
+        imei: '',
+        model: '',
+        initial_price: 0,
+        editing: true,
+        isNew: true,
+        category: defaultCategoryId.value,
+        category_path: normalizeCategoryPath([], defaultCategoryId.value),
+        _originalData: null
+    }
+
+    devices.value.push(newDevice)
+
+    // 自动聚焦到新设备的IMEI输入框
+    nextTick(() => {
+        if (imeiInputRef.value && imeiInputRef.value.focus) {
+            imeiInputRef.value.focus()
+        }
+    })
+}
+
 const handleCategoryChange = (row: Device) => {
     const matched = findCategoryOptionById(row.category)
     if (matched && matched.path.length > 0) {
@@ -570,6 +611,23 @@ const cancelEdit = (row: Device, index: number) => {
         // 直接关闭编辑状态
         devices.value[index].editing = false
     }
+}
+
+// 删除设备
+const deleteDevice = (index: number) => {
+    const device = devices.value[index]
+    const label = device.imei ? `设备 ${device.imei}` : `设备 ${index + 1}`
+
+    ElMessageBox.confirm(`确定要删除 ${label} 吗？`, '提示', {
+        type: 'warning',
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消'
+    }).then(() => {
+        devices.value.splice(index, 1)
+        ElMessage.success('已删除')
+    }).catch(() => {
+        // 用户取消，不做操作
+    })
 }
 
 // 处理取消操作

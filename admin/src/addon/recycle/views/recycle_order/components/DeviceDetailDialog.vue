@@ -190,7 +190,7 @@
                     @click="previewImage(checkImagesSellerArray, index)"
                   >
                     <el-image
-                      :src="img(imgUrl)"
+                      :src="img(checkImagesSellerThumbArray[index] || imgUrl)"
                       fit="cover"
                       class="w-16 h-16 rounded border-2 border-gray-200 group-hover:border-blue-400 transition-colors duration-200"
                       lazy
@@ -225,7 +225,7 @@
                     @click="previewImage(checkImagesBuyerArray, index)"
                   >
                     <el-image
-                      :src="img(imgUrl)"
+                      :src="img(checkImagesBuyerThumbArray[index] || imgUrl)"
                       fit="cover"
                       class="w-16 h-16 rounded border-2 border-gray-200 group-hover:border-green-400 transition-colors duration-200"
                       lazy
@@ -394,6 +394,9 @@ interface DeviceDetail {
     check_images?: string;
     check_images_seller?: string;
     check_images_buyer?: string;
+    check_images_thumb_small?: string[];
+    check_images_seller_thumb_small?: string[];
+    check_images_buyer_thumb_small?: string[];
     before_price?: number | string;
     final_price?: number | string;
     sell_price?: number | string;
@@ -441,10 +444,30 @@ const checkImagesSellerArray = computed(() => {
     return raw.split(',').map(url => url.trim()).filter(url => url)
 })
 
+// 卖家质检图片缩略图数组（优先使用后端返回的缩略图）
+const checkImagesSellerThumbArray = computed(() => {
+    const thumbs = deviceData.value?.check_images_seller_thumb_small || deviceData.value?.check_images_thumb_small
+    if (thumbs && Array.isArray(thumbs) && thumbs.length > 0) {
+        return thumbs
+    }
+    // fallback: 使用原图
+    return checkImagesSellerArray.value
+})
+
 // 计算质检图片数组（买家）
 const checkImagesBuyerArray = computed(() => {
     if (!deviceData.value?.check_images_buyer) return []
     return deviceData.value.check_images_buyer.split(',').map(url => url.trim()).filter(url => url)
+})
+
+// 买家质检图片缩略图数组（优先使用后端返回的缩略图）
+const checkImagesBuyerThumbArray = computed(() => {
+    const thumbs = deviceData.value?.check_images_buyer_thumb_small
+    if (thumbs && Array.isArray(thumbs) && thumbs.length > 0) {
+        return thumbs
+    }
+    // fallback: 使用原图
+    return checkImagesBuyerArray.value
 })
 
 // 兼容：优先取 seller 字段，fallback 到旧字段

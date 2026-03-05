@@ -9,49 +9,11 @@
     :destroy-on-close="true"
     class="device-detail-dialog"
   >
-    <template #header>
-      <div class="flex justify-between items-center p-4 bg-gradient-to-r from-blue-600 to-purple-700 text-white rounded-t-lg">
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-lg text-left font-bold">设备详情</h3>
-            <p class="text-blue-100 text-xs" v-if="deviceData">
-              ID: {{ deviceData.id }} | {{ deviceData.model }}
-            </p>
-          </div>
-        </div>
-        <div v-if="deviceData && !isMobile" class="text-right">
-          <div class="text-xs text-blue-100">IMEI</div>
-          <div class="font-mono text-sm">{{ deviceData.imei }}</div>
-        </div>
-      </div>
-    </template>
-
-    <div v-if="deviceData" class="p-4 bg-gray-50 space-y-4 max-h-[80vh] overflow-y-auto">
+    
+    <div v-if="deviceData" class="p-4 bg-gray-50 space-y-4 max-h-[90vh] overflow-y-auto">
       
       <!-- 设备概览卡片 - 更紧凑的布局 -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div class="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-gray-50 to-blue-50 border-b">
-          <div class="flex items-center space-x-2">
-            <svg class="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6z"/>
-            </svg>
-            <span class="font-medium text-gray-800 text-sm">设备概览</span>
-          </div>
-          <el-tag 
-            :type="getStatusTagType(deviceData.status)" 
-            effect="light"
-            size="small"
-            class="font-medium"
-          >
-            {{ deviceData.status_name }}
-          </el-tag>
-        </div>
-        
         <div class="p-4">
           <!-- 基础信息区域 -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -64,20 +26,20 @@
                 <span>基础信息</span>
               </h4>
               
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div class="bg-gray-50 rounded-md p-2">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-1">
+                <div class="bg-gray-50 rounded-md p-2  flex items-center justify-between">
                   <div class="text-xs text-gray-500">设备型号</div>
                   <div class="text-sm font-medium text-gray-900 truncate">{{ deviceData.model }}</div>
                 </div>
-                <div class="bg-gray-50 rounded-md p-2">
+                <div class="bg-gray-50 rounded-md p-2  flex items-center justify-between">
                   <div class="text-xs text-gray-500">IMEI码</div>
                   <div class="text-sm font-mono text-gray-900">{{ deviceData.imei }}</div>
                 </div>
-                <div class="bg-gray-50 rounded-md p-2">
+                <div class="bg-gray-50 rounded-md p-2  flex items-center justify-between">
                   <div class="text-xs text-gray-500">创建时间</div>
                   <div class="text-sm text-gray-900">{{ formatDate(deviceData.create_at) }}</div>
                 </div>
-                <div class="bg-gray-50 rounded-md p-2" v-if="deviceData.info?.sn">
+                <div class="bg-gray-50 rounded-md p-2  flex items-center justify-between" v-if="deviceData.info?.sn">
                   <div class="text-xs text-gray-500">序列号</div>
                   <div class="text-sm font-mono text-gray-900">{{ deviceData.info.sn }}</div>
                 </div>
@@ -96,20 +58,22 @@
                 </h4>
                 
                 <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div class="bg-gray-50 rounded-md p-2">
+                  <div class="bg-gray-50 rounded-md p-2 flex items-center justify-between">
                     <div class="text-xs text-gray-500">保修状态</div>
                     <span 
                       :class="[
                         'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
-                        deviceData.info.coverage?.status === 'In Warranty' 
+                        deviceData.info.coverage?.status === 'In Warranty'  
                           ? 'bg-green-100 text-green-700' 
                           : 'bg-red-100 text-red-700'
                       ]"
                     >
-                      {{ deviceData.info.coverage?.status || deviceData.info.support || '未激活' }}
+                    <!-- Out Of Warranty 就是 过保  Limited Warranty 就是 有限保修 -->
+                    
+                    {{ deviceData.info.coverage?.status === 'Out Of Warranty' ? '过保' : deviceData.info.coverage?.status==='Limited Warranty' ? '在保' : deviceData.info.support || '未激活' }}
                     </span>
                   </div>
-                  <div class="bg-gray-50 rounded-md p-2" v-if="deviceData.info.purchase?.date">
+                  <div class="bg-gray-50 rounded-md p-2 flex items-center justify-between" v-if="deviceData.info.purchase?.date">
                     <div class="text-xs text-gray-500">购买日期</div>
                     <div class="text-sm text-gray-900">{{ deviceData.info.purchase.date }}</div>
                   </div>
@@ -125,30 +89,20 @@
                   <span>价格信息</span>
                 </h4>
                 
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div v-if="deviceData.before_price" class="bg-blue-50 rounded-md p-2 border border-blue-200">
-                    <div class="text-xs text-blue-600">最终价格</div>
-                    <div class="text-sm font-bold text-blue-700">¥{{ deviceData.before_price }}</div>
-                  </div>
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                 
                   <div class="bg-orange-50 rounded-md p-2 border border-orange-200">
                     <div class="text-xs text-orange-600">最终价格</div>
                     <div class="text-sm font-bold text-orange-700">
                       {{ deviceData.final_price ? `¥${deviceData.final_price}` : '未定价' }}
                     </div>
                   </div>
-                </div>
-                
-                <div v-if="deviceData.before_price && deviceData.final_price" 
-                     class="mt-2 text-center">
-                  <span 
-                    :class="[
-                      'inline-flex items-center text-xs font-medium px-2 py-1 rounded',
-                      getPriceChangeClass() === 'positive' ? 'bg-green-100 text-green-700' :
-                      getPriceChangeClass() === 'negative' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
-                    ]"
-                  >
-                    变化: {{ getPriceChangeText() }}
-                  </span>
+                  <div class="bg-purple-50 rounded-md p-2 border border-purple-200">
+                    <div class="text-xs text-purple-600">卖货价格</div>
+                    <div class="text-sm font-bold text-purple-700">
+                      {{ deviceData.sell_price ? `¥${deviceData.sell_price}` : '未填写' }}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -184,7 +138,7 @@
           </div>
           
           <div class="p-4">
-            <div v-if="deviceData.check_result" class="space-y-3">
+            <div v-if="hasCheckResult" class="space-y-3">
               <!-- 质检时间和质检员 -->
               <div class="flex items-center justify-between text-xs text-gray-600">
                 <div v-if="deviceData.check_at" class="flex items-center space-x-1">
@@ -200,35 +154,80 @@
                   <span>{{ deviceData.checkUser.real_name || deviceData.checkUser.username }}</span>
                 </div>
               </div>
-              
-              <!-- 质检结果 -->
-              <div class="bg-green-50 rounded-md p-3 border border-green-200">
-                <h4 class="text-xs font-medium text-green-800 mb-1">质检结果</h4>
-                <div class="text-xs text-green-700 leading-relaxed">
-                  {{ deviceData.check_result }}
+
+              <!-- 卖家质检结果 -->
+              <div v-if="sellerCheckResult" class="bg-blue-50 rounded-md p-3 border border-blue-200">
+                <h4 class="text-xs font-medium text-blue-800 mb-1">卖家质检结果</h4>
+                <div class="text-xs text-blue-700 leading-relaxed whitespace-pre-line">
+                  {{ sellerCheckResult }}
                 </div>
               </div>
-              <div  class="bg-red-50 rounded-md p-3 border border-red-200">
+
+              <!-- 买家质检结果 -->
+              <div v-if="buyerCheckResult" class="bg-green-50 rounded-md p-3 border border-green-200">
+                <h4 class="text-xs font-medium text-green-800 mb-1">买家质检结果</h4>
+                <div class="text-xs text-green-700 leading-relaxed whitespace-pre-line">
+                  {{ buyerCheckResult }}
+                </div>
+              </div>
+
+              <!-- 扣费说明 -->
+              <div class="bg-red-50 rounded-md p-3 border border-red-200">
                 <h4 class="text-xs font-medium text-red-800 mb-1">扣费说明</h4>
                 <div class="text-xs text-red-700 leading-relaxed">
                   {{ deviceData.remark }}
                 </div>
               </div>
-              
-              <!-- 质检图片 -->
-              <div v-if="checkImagesArray.length > 0" class="space-y-2">
-                <h4 class="text-xs font-medium text-gray-800">质检图片</h4>
+
+              <!-- 卖家质检图片 -->
+              <div v-if="checkImagesSellerArray.length > 0" class="space-y-2">
+                <h4 class="text-xs font-medium text-gray-800">卖家质检图片</h4>
                 <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  <div 
-                    v-for="(imgUrl, index) in checkImagesArray" 
-                    :key="index"
+                  <div
+                    v-for="(imgUrl, index) in checkImagesSellerArray"
+                    :key="'seller-' + index"
                     class="relative group cursor-pointer"
-                    @click="previewImage(checkImagesArray, index)"
+                    @click="previewImage(checkImagesSellerArray, index)"
                   >
-                    <el-image 
-                      :src="img(imgUrl)"
+                    <el-image
+                      :src="img(checkImagesSellerThumbArray[index] || imgUrl)"
                       fit="cover"
                       class="w-16 h-16 rounded border-2 border-gray-200 group-hover:border-blue-400 transition-colors duration-200"
+                      lazy
+                    >
+                      <template #error>
+                        <div class="w-full h-16 bg-gray-100 rounded flex flex-col items-center justify-center">
+                          <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
+                          </svg>
+                          <span class="text-xs text-gray-400">错误</span>
+                        </div>
+                      </template>
+                    </el-image>
+                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded flex items-center justify-center">
+                      <svg class="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                        <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 买家质检图片 -->
+              <div v-if="checkImagesBuyerArray.length > 0" class="space-y-2">
+                <h4 class="text-xs font-medium text-gray-800">买家质检图片</h4>
+                <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                  <div
+                    v-for="(imgUrl, index) in checkImagesBuyerArray"
+                    :key="'buyer-' + index"
+                    class="relative group cursor-pointer"
+                    @click="previewImage(checkImagesBuyerArray, index)"
+                  >
+                    <el-image
+                      :src="img(checkImagesBuyerThumbArray[index] || imgUrl)"
+                      fit="cover"
+                      class="w-16 h-16 rounded border-2 border-gray-200 group-hover:border-green-400 transition-colors duration-200"
                       lazy
                     >
                       <template #error>
@@ -389,10 +388,18 @@ interface DeviceDetail {
     status_name: string;
     check_status?: number;
     check_result?: string;
+    check_result_seller?: string;
+    check_result_buyer?: string;
     check_at?: string | number;
     check_images?: string;
+    check_images_seller?: string;
+    check_images_buyer?: string;
+    check_images_thumb_small?: string[];
+    check_images_seller_thumb_small?: string[];
+    check_images_buyer_thumb_small?: string[];
     before_price?: number | string;
     final_price?: number | string;
+    sell_price?: number | string;
     price_remark?: string;
     remark?: string;
     create_at: string;
@@ -430,10 +437,50 @@ const updateResponsiveState = () => {
     isMobile.value = window.innerWidth <= 768
 }
 
-// 计算质检图片数组
-const checkImagesArray = computed(() => {
-    if (!deviceData.value?.check_images) return []
-    return deviceData.value.check_images.split(',').map(url => url.trim()).filter(url => url)
+// 计算质检图片数组（卖家）
+const checkImagesSellerArray = computed(() => {
+    const raw = deviceData.value?.check_images_seller || deviceData.value?.check_images
+    if (!raw) return []
+    return raw.split(',').map(url => url.trim()).filter(url => url)
+})
+
+// 卖家质检图片缩略图数组（优先使用后端返回的缩略图）
+const checkImagesSellerThumbArray = computed(() => {
+    const thumbs = deviceData.value?.check_images_seller_thumb_small || deviceData.value?.check_images_thumb_small
+    if (thumbs && Array.isArray(thumbs) && thumbs.length > 0) {
+        return thumbs
+    }
+    // fallback: 使用原图
+    return checkImagesSellerArray.value
+})
+
+// 计算质检图片数组（买家）
+const checkImagesBuyerArray = computed(() => {
+    if (!deviceData.value?.check_images_buyer) return []
+    return deviceData.value.check_images_buyer.split(',').map(url => url.trim()).filter(url => url)
+})
+
+// 买家质检图片缩略图数组（优先使用后端返回的缩略图）
+const checkImagesBuyerThumbArray = computed(() => {
+    const thumbs = deviceData.value?.check_images_buyer_thumb_small
+    if (thumbs && Array.isArray(thumbs) && thumbs.length > 0) {
+        return thumbs
+    }
+    // fallback: 使用原图
+    return checkImagesBuyerArray.value
+})
+
+// 兼容：优先取 seller 字段，fallback 到旧字段
+const sellerCheckResult = computed(() => {
+    return deviceData.value?.check_result_seller || deviceData.value?.check_result || ''
+})
+
+const buyerCheckResult = computed(() => {
+    return deviceData.value?.check_result_buyer || ''
+})
+
+const hasCheckResult = computed(() => {
+    return !!(sellerCheckResult.value || buyerCheckResult.value)
 })
 
 // 价格变化相关函数

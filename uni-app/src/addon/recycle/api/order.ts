@@ -34,6 +34,10 @@ export interface RecycleOrderDevice {
   status: number;
   check_status: number;
   check_result: string;
+  check_result_seller?: string;
+  check_images?: string;
+  check_images_seller?: string;
+  check_images_seller_thumb_small?: string[];
   initial_price: number;
   final_price: number;
   price_remark: string;

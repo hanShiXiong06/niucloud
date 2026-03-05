@@ -57,7 +57,14 @@ return [
                         "navigationBarTitleText": "退货订单详情"
                     },
                     "needLogin": true
-                }
+                },
+                {
+					"path": "pages/price/show_price",
+					"style": {
+						"navigationBarTitleText": "二手机回收报价单"
+					},
+					"needLogin": true
+				},
 			]
         },
 // PAGE_END

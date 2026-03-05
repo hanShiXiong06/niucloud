@@ -50,6 +50,16 @@
                   </el-button>
 
                   <el-button
+                    v-if="deviceRow.status == 2"
+                    type="warning"
+                    size="small"
+                    :icon="Edit"
+                    @click="props.checkDevice(deviceRow)"
+                  >
+                    编辑质检
+                  </el-button>
+
+                  <el-button
                     v-if="deviceRow.status == 2 || deviceRow.status == 3"
                     type="success"
                     size="small"
@@ -165,9 +175,17 @@
           <el-avatar :size="32" :src="row.member?.headimg ? props.img(row.member.headimg) : ''" class="mr-2">
             <el-icon><User /></el-icon>
           </el-avatar>
-          <div>
-            <div class="text-sm font-medium text-gray-800">
-              {{ row.recycleUserAddress?.name || row.member?.nickname || "未知用户" }}
+          <div class="flex-1">
+            <div class="text-sm font-medium text-gray-800 flex items-center group">
+              <span>{{ getUserDisplayName(row) }}</span>
+              <el-icon
+                v-if="row.member?.member_id"
+                class="ml-1 text-xs text-gray-400 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+                @click="handleEditUsername(row)"
+                title="点击编辑昵称"
+              >
+                <Edit />
+              </el-icon>
             </div>
             <div class="text-xs text-gray-400">
               {{ row.member?.mobile || row.recycleUserAddress?.mobile || "暂无联系方式" }}
@@ -256,6 +274,8 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox, ElMessage } from 'element-plus'
+import request from '@/utils/request'
 import {
   Search,
   DocumentChecked,
@@ -304,4 +324,57 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const emit = defineEmits(['refresh'])
+
+// 获取用户显示名称（优先级：nickname → recycleUserAddress.name → "未知用户"）
+const getUserDisplayName = (row: any) => {
+  return row.member?.nickname || row.recycleUserAddress?.name || "未知用户"
+}
+
+// 编辑用户昵称
+const handleEditUsername = async (row: any) => {
+  if (!row.member?.member_id) {
+    ElMessage.warning('该订单没有关联会员，无法编辑昵称')
+    return
+  }
+
+  const currentNickname = row.member?.nickname || ''
+
+  try {
+    const { value } = await ElMessageBox.prompt('请输入用户昵称', '编辑昵称', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: currentNickname,
+      inputPlaceholder: '请输入昵称',
+      inputValidator: (value) => {
+        if (!value || value.trim() === '') {
+          return '昵称不能为空'
+        }
+        if (value.length > 50) {
+          return '昵称长度不能超过50个字符'
+        }
+        return true
+      }
+    })
+
+    if (value && value.trim()) {
+      // 调用 API 更新 nickname
+      await request.put(`member/member/modify/${row.member.member_id}/nickname`, {
+        value: value.trim(),
+        field: 'nickname'
+      }, { showSuccessMessage: true })
+
+      // 更新本地数据
+      if (row.member) {
+        row.member.nickname = value.trim()
+      }
+      // 触发刷新
+      emit('refresh')
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('更新昵称失败:', error)
+    }
+  }
+}
 </script>

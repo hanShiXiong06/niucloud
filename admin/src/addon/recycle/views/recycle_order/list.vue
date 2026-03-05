@@ -88,6 +88,8 @@
         :handle-express-hover="handleExpressHover"
         :handle-express-leave="handleExpressLeave"
         :share-order="shareOrder"
+        @refresh="getList"
+
       />
 
       <RecycleOrderMobileCards

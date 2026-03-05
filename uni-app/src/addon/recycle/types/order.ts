@@ -173,9 +173,13 @@ export interface OrderDetailDevice {
   status_name: string
   remark?: string
   check_result?: string
+  check_result_seller?: string
   check_status: number
   check_at?: number
   check_images?: string
+  check_images_seller?: string
+  check_images_seller_thumb_small?: string[]
+  price_remark?: string
   create_at: number
   update_at?: number
 }

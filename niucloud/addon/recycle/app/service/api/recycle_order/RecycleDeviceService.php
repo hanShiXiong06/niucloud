@@ -34,9 +34,9 @@ class RecycleDeviceService extends BaseApiService
     public function getPage(array $where = [])
     {
       
-        $field = 'id,order_id,imei,model,initial_price,final_price,price_remark,status,check_status,check_result,check_images,check_at,remark,create_at,update_at';
+        $field = 'id,order_id,site_id,imei,model,initial_price,final_price,price_remark,status,check_status,check_result,check_result_seller,check_images,check_images_seller,check_at,remark,create_at,update_at';
         $order = 'create_at desc';
-        
+
         $search_model = $this->model->where([
             ['site_id', '=', $this->site_id],
             ['member_id', '=', $this->member_id]
@@ -45,7 +45,8 @@ class RecycleDeviceService extends BaseApiService
                 $query->field('id,order_no,customer_name,customer_phone');
             }])
             ->field($field)
-            ->order($order);
+            ->order($order)
+            ->append(['check_images_seller_thumb_small']);
         
         $list = $this->pageQuery($search_model);
 
@@ -76,7 +77,8 @@ class RecycleDeviceService extends BaseApiService
                 $query->field('id,order_no,customer_name,customer_phone,status')
                     ->append(['status_name']);
             }
-        ])->findOrFail();
+        ])->append(['check_images_seller_thumb_small'])
+          ->findOrFail();
 
         if (empty($info)) {
             throw new ApiException('设备不存在');
@@ -111,7 +113,8 @@ class RecycleDeviceService extends BaseApiService
             ['order_id', '=', $order_id],
             ['site_id', '=', $this->site_id],
             ['member_id', '=', $this->member_id]
-        ])->select()->toArray();
+        ])->append(['check_images_seller_thumb_small'])
+          ->select()->toArray();
 
         foreach ($list as &$item) {
             $item['status_name'] = RecycleOrderDict::getDeviceStatusName($item['status']);

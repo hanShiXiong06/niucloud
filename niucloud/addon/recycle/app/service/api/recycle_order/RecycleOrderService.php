@@ -150,8 +150,8 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,imei,model,initial_price,status,final_price')
-                        ->append(['status_name']);
+                    $query->field('id,order_id,site_id,imei,model,initial_price,status,final_price,check_images,check_images_seller')
+                        ->append(['status_name', 'check_images_seller_thumb_small']);
                 }
             ])
             ->order($order)
@@ -307,7 +307,8 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,imei,model,initial_price,status,final_price,remark,check_images,check_result,price_remark');
+                    $query->field('id,order_id,site_id,imei,model,initial_price,status,final_price,remark,check_images,check_images_seller,check_result,check_result_seller,price_remark')
+                        ->append(['status_name', 'check_images_seller_thumb_small']);
                 },
                 'member' => function($query) {
                     $query->field('member_id,nickname,mobile');

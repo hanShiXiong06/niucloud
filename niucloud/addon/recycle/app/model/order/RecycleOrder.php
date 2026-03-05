@@ -209,11 +209,32 @@ class RecycleOrder extends BaseModel
         }
     }
 
-    // 搜索器 本表 customer_phone 模糊匹配
+    // 搜索器 本表 customer_phone 模糊匹配（增强版：同时搜索会员手机号和地址手机号）
     public function searchCustomerPhoneAttr($query, $value, $data)
     {
         if (!empty($value)) {
-            $query->where('customer_phone', 'like', "%{$value}%");
+            $query->where(function($subQuery) use ($value) {
+                // 搜索订单表的 customer_phone
+                $subQuery->whereOr('customer_phone', 'like', "%{$value}%");
+
+                // 搜索关联会员的 mobile
+                $subQuery->whereOr(function($memberQuery) use ($value) {
+                    $memberQuery->whereExists(function($existsQuery) use ($value) {
+                        $existsQuery->table($this->getTable('member'))
+                                   ->whereRaw($this->getTable('member') . '.member_id = ' . $this->getTable() . '.member_id')
+                                   ->where('mobile', 'like', "%{$value}%");
+                    });
+                });
+
+                // 搜索关联地址的 mobile
+                $subQuery->whereOr(function($addressQuery) use ($value) {
+                    $addressQuery->whereExists(function($existsQuery) use ($value) {
+                        $existsQuery->table($this->getTable('recycle_user_address'))
+                                   ->whereRaw($this->getTable('recycle_user_address') . '.member_id = ' . $this->getTable() . '.member_id')
+                                   ->where('mobile', 'like', "%{$value}%");
+                    });
+                });
+            });
         }
     }
 
