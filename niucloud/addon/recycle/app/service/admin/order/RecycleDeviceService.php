@@ -55,7 +55,7 @@ class RecycleDeviceService extends BaseAdminService
             ->with(['order'])
             ->field($field)
             ->order(empty($order) ? 'create_at desc' : $order)
-            ->append(['status_name']);
+            ->append(['status_name', 'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small']);
             
         return $this->pageQuery($search_model);
     }
@@ -84,7 +84,7 @@ class RecycleDeviceService extends BaseAdminService
         $info = (new RecycleDevice())->where([['id', '=', $id]])
         ->field($field)->with(['order','checkUser'])
         ->findOrEmpty()
-        ->append(['status_name'])
+        ->append(['status_name', 'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small'])
         ->toArray();
        
         return $info;
@@ -405,13 +405,14 @@ class RecycleDeviceService extends BaseAdminService
      * @param int $id 设备ID
      * @param array $checkData 质检数据
      * @param string $remark 备注
+     * @param string $action 操作类型：check=完成质检，save_draft=暂存质检
      * @return bool
      * @throws CommonException
      */
-    public function completeCheck(int $id, array $checkData, string $remark = '')
+    public function completeCheck(int $id, array $checkData, string $remark = '', string $action = 'check')
     {
 
-        
+
         // 开启事务
         Db::startTrans();
         try {
@@ -419,18 +420,18 @@ class RecycleDeviceService extends BaseAdminService
             if ($device->isEmpty()) {
                 throw new CommonException('DEVICE_NOT_FOUND');
             }
-            
+
             // 获取订单信息
             $order = RecycleOrder::findOrEmpty($device->order_id);
             if ($order->isEmpty()) {
                 throw new CommonException('ORDER_NOT_FOUND');
             }
-            
+
             // 检查订单状态，确保只有已签收的订单才能进行质检
             if ($order->status == RecycleOrderDict::ORDER_STATUS_PENDING_SIGN) {
                 throw new CommonException('请先签收订单后再进行质检');
             }
-            
+
             // 检查当前状态，如果不是质检中状态，则自动开始质检
             if ($device->status != RecycleOrderDict::DEVICE_STATUS_CHECKING) {
                 // 如果是待质检状态，则自动开始质检
@@ -438,7 +439,7 @@ class RecycleDeviceService extends BaseAdminService
                     // 先将设备状态更新为质检中
                     $device->status = RecycleOrderDict::DEVICE_STATUS_CHECKING;
                     $device->save();
-                    
+
                     // 记录质检开始日志
                     if (!isset($this->logService)) {
                         $this->logService = new CoreRecycleDeviceLogService();
@@ -448,44 +449,55 @@ class RecycleDeviceService extends BaseAdminService
                     throw new CommonException('DEVICE_STATUS_ERROR');
                 }
             }
-            
-            // 根据check_status确定目标状态
-            $targetStatus = RecycleOrderDict::DEVICE_STATUS_CHECKED;
-            if (isset($checkData['check_status'])) {
-                if ($checkData['check_status'] == 2) { // 假设2表示退回
-                    $targetStatus = RecycleOrderDict::DEVICE_STATUS_RETURNED;
+
+            // 根据 action 确定目标状态
+            if ($action === 'save_draft') {
+                // 暂存质检：保持质检中状态
+                $targetStatus = RecycleOrderDict::DEVICE_STATUS_CHECKING;
+            } else {
+                // 完成质检：根据check_status确定目标状态
+                $targetStatus = RecycleOrderDict::DEVICE_STATUS_CHECKED;
+                if (isset($checkData['check_status'])) {
+                    if ($checkData['check_status'] == 2) { // 假设2表示退回
+                        $targetStatus = RecycleOrderDict::DEVICE_STATUS_RETURNED;
+                    } else if (isset($checkData['final_price']) && $checkData['final_price'] > 0) {
+                        $targetStatus = RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM;
+
+                    }
+                    // 移除check_status，避免保存到数据库
+                    unset($checkData['check_status']);
                 } else if (isset($checkData['final_price']) && $checkData['final_price'] > 0) {
                     $targetStatus = RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM;
-                   
                 }
-                // 移除check_status，避免保存到数据库
-                unset($checkData['check_status']);
-            } else if (isset($checkData['final_price']) && $checkData['final_price'] > 0) {
-                $targetStatus = RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM;
             }
 
-        
-            
+
+
             // 更新设备质检信息
             $updateData = [
                 'status' => $targetStatus,
                 'check_uid'=>  $this->uid,
-                'check_at'=> time(),
                 'remark' => $remark,
             ];
+
+            // 只有完成质检时才更新 check_at
+            if ($action !== 'save_draft') {
+                $updateData['check_at'] = time();
+            }
+
             // if model
             if (isset($checkData['model'])) {
                 $updateData['model'] = $checkData['model'];
             }
-           
+
             // if info
-            
-          
+
+
             // 如果有最终价格 则 更新 'price_uid'=>  $this->uid,
             if (isset($checkData['final_price']) && $checkData['final_price'] > 0) {
                 $updateData['price_uid'] =  $this->uid;
             }
-            
+
             // 合并质检数据
             if (!empty($checkData)) {
                 $updateData = array_merge($updateData, $checkData);
@@ -494,15 +506,22 @@ class RecycleDeviceService extends BaseAdminService
                 // Model 已声明 $json=['info']，save() 时会自动 json_encode，无需手动编码
                 $updateData['info'] = $checkData['info'];
             }
-            
+
             $device->save($updateData);
-            
-            // 记录质检完成日志
+
+            // 记录日志
             if (!isset($this->logService)) {
                 $this->logService = new CoreRecycleDeviceLogService();
             }
-            $this->logService->logDeviceCheckComplete($device->id, $checkData, $remark);
-            
+
+            if ($action === 'save_draft') {
+                // 暂存质检：记录为质检开始或更新
+                $this->logService->logDeviceCheckStart($device->id, '暂存质检数据：' . $remark);
+            } else {
+                // 完成质检：记录质检完成
+                $this->logService->logDeviceCheckComplete($device->id, $checkData, $remark);
+            }
+
             // 同步更新订单状态
             try {
                 $this->syncOrderStatus($device->order_id, $targetStatus);
@@ -688,7 +707,7 @@ class RecycleDeviceService extends BaseAdminService
         return $search_model->withSearch(['order_id', 'device_name', 'imei', 'model', 'status', 'create_at'], $where)
             ->field($field)
             ->order(empty($order) ? 'create_at desc' : $order)
-            ->append(['status_name'])
+            ->append(['status_name', 'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small'])
             ->select()
             ->toArray();
     }

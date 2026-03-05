@@ -116,8 +116,8 @@ class RecycleDevice extends BaseAdminController
         // 参数验证
         $this->validate->scene('update')->check(array_merge(['id' => $id], $data['data']));
 
-        // 检查是否是质检操作
-        if (isset($data['data']['action']) && $data['data']['action'] == 'check') {
+        // 检查是否是质检操作（包括完成质检和暂存质检）
+        if (isset($data['data']['action']) && in_array($data['data']['action'], ['check', 'save_draft'])) {
             // 组装质检数据
             $checkData = [
                 'check_result' => $data['data']['check_result'] ?? '',
@@ -135,7 +135,7 @@ class RecycleDevice extends BaseAdminController
             if (empty($checkData['check_images']) && !empty($checkData['check_images_seller'])) {
                 $checkData['check_images'] = $checkData['check_images_seller'];
             }
-            
+
             // 如果有最终价格，添加到质检数据中
             if (isset($data['data']['final_price']) && $data['data']['final_price'] > 0) {
                 $checkData['final_price'] = $data['data']['final_price'];
@@ -145,12 +145,12 @@ class RecycleDevice extends BaseAdminController
             if (array_key_exists('sell_price', $data['data']) && $data['data']['sell_price'] !== '' && $data['data']['sell_price'] !== null) {
                 $checkData['sell_price'] = $data['data']['sell_price'];
             }
-            
+
             // 如果有check_status，添加到质检数据中
             if (isset($data['data']['check_status'])) {
                 $checkData['check_status'] = $data['data']['check_status'];
             }
-            
+
             // imei
             if (isset($data['data']['imei'])) {
                 $checkData['imei'] = $data['data']['imei'];
@@ -163,10 +163,10 @@ class RecycleDevice extends BaseAdminController
             if (isset($data['data']['model'])) {
                 $checkData['model'] = $data['data']['model'];
             }
-            
 
-            // 调用质检完成方法
-            return success($this->service->completeCheck($id, $checkData, $data['data']['remark'] ?? ''));
+
+            // 调用质检完成方法，传递 action 参数
+            return success($this->service->completeCheck($id, $checkData, $data['data']['remark'] ?? '', $data['data']['action']));
         }
         
         return success($this->service->update($id, $data['data']));
@@ -213,7 +213,8 @@ class RecycleDevice extends BaseAdminController
             ['check_data', []],
             ['final_price', 0],
             ['sell_price', ''],
-            ['remark', '']
+            ['remark', ''],
+            ['action', 'check']  // 新增：check=完成质检，save_draft=暂存质检
         ]);
 
         // 参数验证
@@ -228,7 +229,7 @@ class RecycleDevice extends BaseAdminController
             $checkData['sell_price'] = $data['sell_price'];
         }
 
-        return success($this->service->completeCheck($id, $checkData, $data['remark']));
+        return success($this->service->completeCheck($id, $checkData, $data['remark'], $data['action']));
     }
 
     /**

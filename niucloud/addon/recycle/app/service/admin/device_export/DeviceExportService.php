@@ -25,13 +25,19 @@ class DeviceExportService extends BaseAdminService
      */
     public function getPage(array $where = []): array
     {
-        
-        $field = 'id, imei, imei2, sn, model, member_id, category_id, status, update_at, final_price, create_at, order_id';
-        
+
+        $field = 'id, imei, imei2, sn, model, member_id, category_id, status, update_at, final_price, sell_price, create_at, order_id, check_result_buyer, check_images_buyer';
+
         $search_model = $this->model
             ->where([['site_id', '=', $this->site_id]])
             ->withSearch(['imei', 'model', 'status', 'update_at'], $where)
-            ->with(['order' ])
+            ->with([
+                'order' => function($query) {
+                    $query->with(['member' => function($q) {
+                        $q->field('member_id, username, nickname, mobile, headimg');
+                    }]);
+                }
+            ])
             ->field($field)
             ->order('update_at desc')
             ->append(['status_name', 'category_name' , 'nickname']);

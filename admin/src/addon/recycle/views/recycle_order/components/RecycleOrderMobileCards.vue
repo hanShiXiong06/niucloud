@@ -140,6 +140,15 @@
                   开始质检
                 </el-button>
                 <el-button
+                  v-if="device.status == 2"
+                  type="warning"
+                  size="small"
+                  :icon="Edit"
+                  @click="props.checkDevice(device)"
+                >
+                  编辑质检
+                </el-button>
+                <el-button
                   v-if="device.status == 2 || device.status == 3"
                   type="success"
                   size="small"
