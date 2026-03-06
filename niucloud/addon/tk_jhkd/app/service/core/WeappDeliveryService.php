@@ -60,9 +60,10 @@ class WeappDeliveryService extends BaseApiService
             $pay_model = new Pay();
             $where = array(
                 ['site_id', '=', $site_id],
-                ['out_trade_no', '=', $order_data['out_trade_no']]
+                ['trade_type', '=', 'jhkdOrderPay'],
+                ['trade_id', '=', $order_data['id']]
             );
-            $pay_info = $pay_model->where($where)->field('id,type')->findOrEmpty()->toArray();
+            $pay_info = $pay_model->where($where)->field('id,type,out_trade_no')->findOrEmpty()->toArray();
 
             if (empty($pay_info)) {
                 return '';
@@ -80,27 +81,77 @@ class WeappDeliveryService extends BaseApiService
                 return '发货信息录入接口，报错：' . $is_trade_managed["errmsg"];
             }
 
-            // 设置消息跳转路径设置接口
-            $result_jump_path = $weapp_delivery_service->setMsgJumpPath($site_id, 'tk_jhkd_order');
-            if ($result_jump_path['errcode'] != 0) {
-                return '设置消息跳转路径设置接口，报错：' . $result_jump_path["errmsg"];
+            // 设置消息跳转路径设置接口 - 直接设置为订单详情页
+            try {
+                $path = 'addon/tk_jhkd/pages/orderlist';
+                $api = \app\service\core\weapp\CoreWeappService::appApiClient($site_id);
+                $result_jump_path = $api->postJson('wxa/sec/order/set_msg_jump_path', [ 'path' => $path ])->toArray();
+                if ($result_jump_path['errcode'] != 0) {
+                    Log::write('设置消息跳转路径失败：' . json_encode($result_jump_path));
+                }
+            } catch (\Exception $e) {
+                Log::write('设置消息跳转路径异常：' . $e->getMessage());
             }
+            // 获取支付配置，判断是否为服务商支付
+            $pay_service = new \app\service\admin\pay\PayChannelService();
+            $pay_service->site_id = $site_id;
+            $pay_config = $pay_service->getInfo([
+                'type' => PayDict::WECHATPAY,
+                'channel' => \app\dict\common\ChannelDict::WEAPP
+            ]);
+
+            $mch_id = '';
+            $sub_mch_id = '';
+            if (!empty($pay_config)) {
+                $mch_id = $pay_config['config']['mch_id'] ?? '';
+                $sub_mch_id = $pay_config['config']['sub_mch_id'] ?? '';
+            }
+
+            if (empty($mch_id)) {
+                Log::write('========聚合快递订单上传小程序发货管理失败：未配置商户号=======');
+                return '未配置商户号';
+            }
+
             $member_info = (new Member())->where([['site_id', '=', $site_id], ['member_id', '=', $order_data['member_id']]])->field('weapp_openid')->findOrEmpty()->toArray();
+
+            // 构建发货信息参数
+            $order_key = [
+                'order_number_type' => 1,
+                'mchid' => $mch_id,
+                'out_trade_no' => $pay_info['out_trade_no']
+            ];
+
+            // 如果是服务商支付，添加 sub_mchid
+            if (!empty($sub_mch_id)) {
+                $order_key['sub_mchid'] = $sub_mch_id;
+            }
+
             $data = [
-                'out_trade_no' => $order_data['out_trade_no'],
-                'logistics_type' => 3, // 物流模式，发货方式枚举值：1、实体物流配送采用快递公司进行实体物流配送形式 2、同城配送 3、虚拟商品，虚拟商品，例如话费充值，点卡等，无实体配送形式 4、用户自提
-                'delivery_mode' => 'UNIFIED_DELIVERY', // 发货模式，发货模式枚举值：1、UNIFIED_DELIVERY（统一发货）2、SPLIT_DELIVERY（分拆发货） 示例值: UNIFIED_DELIVERY
-                // 同城配送没有物流信息，只能传一个订单
+                'order_key' => $order_key,
+                'logistics_type' => 3,
+                'delivery_mode' => 'UNIFIED_DELIVERY',
                 'shipping_list' => [
                     [
-                        'item_desc' => '聚合快递代下单-物品:' . $order_delivery['goods'] . '-' . $order_delivery['weight'] . 'kg', // 物流商品描述 示例值: "商品描述"
+                        'item_desc' => '聚合快递代下单-物品:' . $order_delivery['goods'] . '-' . $order_delivery['weight'] . 'kg',
                     ]
-                ], // 物流信息列表，发货物流单列表，支持统一发货（单个物流单）和分拆发货（多个物流单）两种模式，多重性: [1, 10]
-                'weapp_openid' => $member_info['weapp_openid'], // 用户标识，用户在小程序appid下的唯一标识。 下单前需获取到用户的Openid 示例值: oUpF8uMuAJO_M2pxb1Q9zNjWeS6o 字符字节限制: [1, 128]
+                ],
+                'upload_time' => date("c", time()),
+                'payer' => [
+                    'openid' => $member_info['weapp_openid']
+                ],
                 'is_all_delivered' => true
             ];
 
-            $weapp_delivery_service->uploadShippingInfo($site_id, $data);
+            Log::write('发货信息录入接口，参数打印：' . json_encode($data));
+
+            // 延时3秒执行发货通知
+            sleep(3);
+
+            // 直接调用微信 API
+            $api = \app\service\core\weapp\CoreWeappService::appApiClient($site_id);
+            $result = $api->postJson('wxa/sec/order/upload_shipping_info', $data)->toArray();
+
+            Log::write('发货信息录入接口，返回结果：' . json_encode($result));
         } catch (\Exception $e) {
             Log::write('========聚合快递订单上传小程序发货管理失败=======' . $e->getMessage() . $e->getFile() . $e->getLine());
         }
@@ -154,10 +205,16 @@ class WeappDeliveryService extends BaseApiService
                 return '发货信息录入接口，报错：' . $is_trade_managed["errmsg"];
             }
 
-            // 设置消息跳转路径设置接口
-            $result_jump_path = $weapp_delivery_service->setMsgJumpPath($site_id, 'tk_jhkd_order');
-            if ($result_jump_path['errcode'] != 0) {
-                return '设置消息跳转路径设置接口，报错：' . $result_jump_path["errmsg"];
+            // 设置消息跳转路径设置接口 - 直接设置为订单详情页
+            try {
+                $path = 'addon/tk_jhkd/pages/orderlist';
+                $api = \app\service\core\weapp\CoreWeappService::appApiClient($site_id);
+                $result_jump_path = $api->postJson('wxa/sec/order/set_msg_jump_path', [ 'path' => $path ])->toArray();
+                if ($result_jump_path['errcode'] != 0) {
+                    Log::write('设置消息跳转路径失败：' . json_encode($result_jump_path));
+                }
+            } catch (\Exception $e) {
+                Log::write('设置消息跳转路径异常：' . $e->getMessage());
             }
             $member_info = (new Member())->where([['site_id', '=', $site_id], ['member_id', '=', $order_data['member_id']]])->field('weapp_openid')->findOrEmpty()->toArray();
             $data = [
