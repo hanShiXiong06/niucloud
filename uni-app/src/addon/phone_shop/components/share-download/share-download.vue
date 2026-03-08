@@ -8,14 +8,23 @@
         <slot>
             <text class="nc-iconfont nc-icon-fenxiangV6xx default-icon"></text>
         </slot>
-
     </view>
+
+    <!-- 下载配置弹窗 -->
+    <download-config-dialog
+        :show="showConfigDialog"
+        @close="showConfigDialog = false"
+        @confirm="handleConfigConfirm"
+    />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { img } from '@/utils/common'
 import { getGoodsDetail } from '@/addon/phone_shop/api/goods'
+import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload'
+import { type DownloadConfig } from '@/addon/phone_shop/hooks/useDownloadConfig'
+import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue'
 
 interface Props {
     // 商品数据
@@ -26,12 +35,25 @@ interface Props {
     customStyle?: string
     // 是否显示提示
     showToast?: boolean
+    // 用户ID（用于生成分享链接）
+    userId?: string | number
 }
 
 const props = withDefaults(defineProps<Props>(), {
     type: 'circle',
     showToast: true
 })
+
+const {
+    downloadGoodsImagesWithConfig,
+    needShowConfigDialog,
+    saveConfig
+} = useGoodsDownload()
+
+// 配置弹窗显示状态
+const showConfigDialog = ref(false)
+// 待下载的图片数据（配置确认后使用）
+const pendingDownload = ref<{ images: string[], item: any } | null>(null)
 
 // 按钮样式
 const buttonStyle = computed(() => {
@@ -47,82 +69,46 @@ const btnClass = computed(() => {
     return props.type === 'grid' ? 'grid-style' : 'circle-style'
 })
 
-// 计算商品价格
-const getGoodsPrice = (item: any) => {
-    console.log(item);
-    
-    if (item.goodsSku) {
-        // 折扣价
-        if (item.is_discount && item.goodsSku.sale_price != item.goodsSku.price) {
-            return item.goodsSku.sale_price || item.goodsSku.price
-        }
-        // 会员价
-        if (item.member_discount && item.goodsSku.member_price != item.goodsSku.price) {
-            return item.goodsSku.member_price || item.goodsSku.price
-        }
-        return item.goodsSku.price
-    }
-    return item.price || '0.00'
+// 执行下载
+const performDownload = async (images: string[], item: any, config?: DownloadConfig) => {
+    await downloadGoodsImagesWithConfig(
+        images,
+        item,
+        config,
+        props.userId,
+        props.showToast
+    )
 }
 
-// 下载图片并复制文案
-const downloadImages = (images: string[], item: any) => {
-    return new Promise((resolve) => {
-        const tasks = images.map((url: string) => {
-            return new Promise((resolve, reject) => {
-                uni.downloadFile({
-                    url,
-                    success: (res) => {
-                        if (res.statusCode === 200) {
-                            uni.saveImageToPhotosAlbum({
-                                filePath: res.tempFilePath,
-                                success: resolve,
-                                fail: reject
-                            })
-                        } else {
-                            reject()
-                        }
-                    },
-                    fail: reject
-                })
-            })
-        })
+// 处理配置确认
+const handleConfigConfirm = async (config: DownloadConfig) => {
+    // 保存配置
+    saveConfig(config)
 
-        Promise.all(tasks).then(() => {
-            // 构建文案
-            const brandName = item.goods.goods_brand ? item.goods.goods_brand.brand_name + ' ' : ''
-            const subtitle = item.goods.sub_title ? item.goods.sub_title + ' ' : ''
-            const sku_no = item.goods.goodsSku?.sku_no ? '#' + item.goods.goodsSku.sku_no + ' ' : ''
-            const price = getGoodsPrice(item)
-            const text = `${brandName} ${item.goods.goods_name} ${subtitle}仅售💰${price} ${sku_no}`
+    // 关闭弹窗
+    showConfigDialog.value = false
 
-            uni.setClipboardData({
-                data: text,
-                success: () => {
-                    if (props.showToast) {
-                        uni.showToast({ title: '图片下载及文案复制成功', icon: 'none' })
-                    }
-                    resolve(true)
-                }
-            })
-        }).catch(() => {
-            if (props.showToast) {
-                uni.showToast({ title: '下载失败', icon: 'none' })
-            }
-            resolve(false)
-        })
-    })
+    // 如果有待下载的数据，执行下载
+    if (pendingDownload.value) {
+        await performDownload(
+            pendingDownload.value.images,
+            pendingDownload.value.item,
+            config
+        )
+        pendingDownload.value = null
+    }
 }
 
 // 处理下载
 const handleDownload = async () => {
     try {
+        let images: string[] = []
+
         // 如果商品数据中已有图片数组
         if (props.goodsItem.goods.goods_image) {
-            const images = Array.isArray(props.goodsItem.goods.goods_image)
+            images = Array.isArray(props.goodsItem.goods.goods_image)
                 ? props.goodsItem.goods.goods_image
-                : props.goodsItem.goods.goods_image.split(',')
-            await downloadImages(images, props.goodsItem)
+                : props.goodsItem.goods.goods_image.split(',').map((url: string) => img(url.trim()))
         } else {
             // 需要获取详情
             const res = await getGoodsDetail({ goods_id: props.goodsItem.goods.goods_id })
@@ -130,8 +116,18 @@ const handleDownload = async () => {
                 uni.showToast({ title: '商品信息获取失败', icon: 'none' })
                 return
             }
-            const images = res.data.goods.goods_image.split(',')
-            await downloadImages(images, props.goodsItem)
+            images = res.data.goods.goods_image.split(',').map((url: string) => img(url.trim()))
+        }
+
+        // 检查是否需要显示配置弹窗
+        if (needShowConfigDialog()) {
+            // 保存待下载数据
+            pendingDownload.value = { images, item: props.goodsItem }
+            // 显示配置弹窗
+            showConfigDialog.value = true
+        } else {
+            // 直接下载
+            await performDownload(images, props.goodsItem)
         }
     } catch (error) {
         console.error('下载失败:', error)
@@ -174,9 +170,9 @@ const handleDownload = async () => {
     right: 16rpx;
     bottom: 16rpx;
     padding: 10rpx 20rpx;
-    
+
     border-radius: 28rpx;
-    box-shadow: 0 4rpx 12rpx rgba(7, 193, 96, 0.3);
+    box-shadow: 0 4rpx 12rpx var(--primary-color-light);
     z-index: 10;
 
     .default-icon {

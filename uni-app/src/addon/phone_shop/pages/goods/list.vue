@@ -237,6 +237,13 @@
         </mescroll-body>
 
         <tabbar />
+
+        <!-- 下载配置弹窗 -->
+        <download-config-dialog
+            :show="showConfigDialog"
+            @close="showConfigDialog = false"
+            @confirm="handleConfigConfirm"
+        />
     </view>
 </template>
 
@@ -251,9 +258,18 @@ import GoodsFilter from '@/addon/phone_shop/components/goods-filter/goods-filter
 import useMescroll from '@/components/mescroll/hooks/useMescroll.js';
 import { onLoad, onPageScroll, onReachBottom } from '@dcloudio/uni-app';
 import { useGoods } from '@/addon/phone_shop/hooks/useGoods'
+import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload'
+import { type DownloadConfig } from '@/addon/phone_shop/hooks/useDownloadConfig'
+import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue'
+import { applyThemeColor } from '@/addon/phone_shop/utils/theme'
 
 const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom);
 const diyGoods = useGoods();
+const {
+    downloadGoodsImagesWithConfig,
+    needShowConfigDialog,
+    saveConfig
+} = useGoodsDownload();
 const goodsList = ref<Array<any>>([]);
 const coupon_id = ref<number | string>('');
 const mescrollRef = ref(null);
@@ -263,6 +279,10 @@ const goods_name = ref("");
 const listType = ref(true)
 const filterData = ref<any>({})
 const brandList = ref<Array<any>>([])
+
+// 下载配置相关
+const showConfigDialog = ref(false)
+const pendingDownload = ref<{ images: string[], item: any } | null>(null)
 
 // 获取状态栏高度（用于小程序安全区域）
 const statusBarHeight = ref(0)
@@ -401,11 +421,7 @@ const toDetail = (id: string | number) => {
 
 // 主题颜色
 const themeColor = () => {
-    return {
-        '--primary-color': '#07c160',
-        '--primary-color-light': 'rgba(7, 193, 96, 0.1)',
-        '--price-text-color': '#ff2d4a'
-    }
+    return applyThemeColor()
 }
 
 // 加载成色列表
@@ -429,6 +445,30 @@ const getBrandLabel = (brandId: string | number) => {
     return brand ? brand.label : ''
 }
 
+// 执行下载
+const performDownload = async (images: string[], item: any, config?: DownloadConfig) => {
+    await downloadGoodsImagesWithConfig(images, item, config, undefined, true)
+}
+
+// 处理配置确认
+const handleConfigConfirm = async (config: DownloadConfig) => {
+    // 保存配置
+    saveConfig(config)
+
+    // 关闭弹窗
+    showConfigDialog.value = false
+
+    // 如果有待下载的数据，执行下载
+    if (pendingDownload.value) {
+        await performDownload(
+            pendingDownload.value.images,
+            pendingDownload.value.item,
+            config
+        )
+        pendingDownload.value = null
+    }
+}
+
 // 下载单个商品图片
 const downloadGoods = async (item: any) => {
     try {
@@ -438,61 +478,23 @@ const downloadGoods = async (item: any) => {
             return
         }
 
-        const images = res.data.goods.goods_image.split(',')
-        await downloadImages(images, item)
+        // 处理图片URL：分割并转换为完整URL
+        const images = res.data.goods.goods_image.split(',').map((url: string) => img(url.trim()))
+
+        // 检查是否需要显示配置弹窗
+        if (needShowConfigDialog()) {
+            // 保存待下载数据 - 使用完整的商品详情数据
+            pendingDownload.value = { images, item: res.data }
+            // 显示配置弹窗
+            showConfigDialog.value = true
+        } else {
+            // 直接下载 - 使用完整的商品详情数据
+            await performDownload(images, res.data)
+        }
     } catch (error) {
         console.error('下载失败:', error)
         uni.showToast({ title: '下载失败', icon: 'none' })
     }
-}
-
-// 下载图片并复制文案
-const downloadImages = (images: string[], item: any, showToast: boolean = true) => {
-    return new Promise((resolve) => {
-        const tasks = images.map((url: string) => {
-            return new Promise((resolve, reject) => {
-                uni.downloadFile({
-                    url,
-                    success: (res) => {
-                        if (res.statusCode === 200) {
-                            uni.saveImageToPhotosAlbum({
-                                filePath: res.tempFilePath,
-                                success: resolve,
-                                fail: reject
-                            })
-                        } else {
-                            reject()
-                        }
-                    },
-                    fail: reject
-                })
-            })
-        })
-
-        Promise.all(tasks).then(() => {
-            // 构建文案
-            const brandName = item.goods_brand ? item.goods_brand.brand_name + ' ' : ''
-            const subtitle = item.sub_title ? item.sub_title + ' ' : ''
-            const sku_no = item.goodsSku?.sku_no ? '#' + item.goodsSku.sku_no + ' ' : ''
-            const price = diyGoods.goodsPrice(item)
-            const text = `${brandName}${item.goods_name} ${subtitle}${sku_no}￥${price}`
-
-            uni.setClipboardData({
-                data: text,
-                success: () => {
-                    if (showToast) {
-                        uni.showToast({ title: '图片下载及文案复制成功', icon: 'none' })
-                    }
-                    resolve(true)
-                }
-            })
-        }).catch(() => {
-            if (showToast) {
-                uni.showToast({ title: '下载失败', icon: 'none' })
-            }
-            resolve(false)
-        })
-    })
 }
 
 onMounted(() => {
@@ -568,7 +570,7 @@ onMounted(() => {
     background: var(--primary-color);
     border-radius: 28rpx;
     color: #fff;
-    box-shadow: 0 4rpx 12rpx rgba(7, 193, 96, 0.3);
+    box-shadow: 0 4rpx 12rpx var(--primary-color-light);
     z-index: 10;
 
     .nc-iconfont {

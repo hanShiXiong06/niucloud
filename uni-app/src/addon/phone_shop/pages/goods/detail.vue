@@ -298,23 +298,23 @@
 					</view>
 					<view class="flex" v-if="goodsDetail.goods.status == 1">
 						
-						<button
-							v-if="goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')"
-							class="!w-[200rpx] !h-[72rpx] text-[26rpx] !text-[#fff] !m-0 !mr-[20rpx] leading-[72rpx] rounded-full remove-border"
-							style="background: linear-gradient(127deg, #FFB000 0%, #FFA029 100%);"
-							@click="buyFn('join_cart')">
-							加入购物车</button>
-						<button v-if="isShowSingleSku"
-							:style="{ width: (goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')) ? '200rpx' : '420rpx' + '!important' }"
-							class="!h-[72rpx] text-[26rpx] !text-[#fff] !bg-[#FF4646] !m-0 leading-[72rpx] rounded-full remove-border"
-							@click="buyFn('buy_now')">立即购买</button>
-						<button v-else
-							:style="{ width: (goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')) ? '200rpx' : '420rpx' + '!important' }"
-							class="!h-[72rpx] text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[72rpx] rounded-full remove-border">已售罄</button>
-					</view>
-					<view class="flex flex-1 ml-[40rpx]" v-else>
-						<button
-							class="w-[100%] !h-[72rpx] text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[72rpx] rounded-full remove-border">该商品已下架</button>
+					<!--	<button-->
+					<!--		v-if="goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')"-->
+					<!--		class="!w-[200rpx] !h-[72rpx] text-[26rpx] !text-[#fff] !m-0 !mr-[20rpx] leading-[72rpx] rounded-full remove-border"-->
+					<!--		style="background: linear-gradient(127deg, #FFB000 0%, #FFA029 100%);"-->
+					<!--		@click="buyFn('join_cart')">-->
+					<!--		加入购物车</button>-->
+					<!--	<button v-if="isShowSingleSku"-->
+					<!--		:style="{ width: (goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')) ? '200rpx' : '420rpx' + '!important' }"-->
+					<!--		class="!h-[72rpx] text-[26rpx] !text-[#fff] !bg-[#FF4646] !m-0 leading-[72rpx] rounded-full remove-border"-->
+					<!--		@click="buyFn('buy_now')">立即购买</button>-->
+					<!--	<button v-else-->
+					<!--		:style="{ width: (goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')) ? '200rpx' : '420rpx' + '!important' }"-->
+					<!--		class="!h-[72rpx] text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[72rpx] rounded-full remove-border">已售罄</button>-->
+					<!--</view>-->
+					<!--<view class="flex flex-1 ml-[40rpx]" v-else>-->
+					<!--	<button-->
+					<!--		class="w-[100%] !h-[72rpx] text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[72rpx] rounded-full remove-border">该商品已下架</button>-->
 					</view>
 				</view>
 			</view>
@@ -355,23 +355,23 @@
 					<!-- #endif -->
 				</view>
 				<view class="flex" v-if="goodsDetail.goods.status == 1">
-					<!-- <share-download :goodsItem="goodsDetail" type="grid" >
+					<share-download :goodsItem="goodsDetail" type="grid" >
 						<up-icon name="moments" color="#fff" size="28"></up-icon>
 						<text>一键转发朋友圈</text>
-					</share-download> -->
-					<button
-						v-if="goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')"
-						class="!w-[200rpx] !h-[72rpx] text-[26rpx] !text-[#fff] !m-0 !mr-[20rpx] leading-[72rpx] rounded-full remove-border"
-						style="background: linear-gradient(127deg, #FFB000 0%, #FFA029 100%);"
-						@click="buyFn('join_cart')">
-						加入购物车</button>
-					<button v-if="isShowSingleSku"
-						:style="{ width: (goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')) ? '200rpx' : '420rpx' + '!important' }"
-						class="!h-[72rpx] text-[26rpx] !text-[#fff] primary-btn-bg !m-0 leading-[72rpx] rounded-full remove-border"
-						@click="buyFn('buy_now')">立即购买</button>
-					<button v-else
-						:style="{ width: (goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')) ? '200rpx' : '420rpx' + '!important' }"
-						class="!h-[72rpx] text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[72rpx] rounded-full remove-border">已售罄</button>
+					</share-download>
+					<!--<button-->
+					<!--	v-if="goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')"-->
+					<!--	class="!w-[200rpx] !h-[72rpx] text-[26rpx] !text-[#fff] !m-0 !mr-[20rpx] leading-[72rpx] rounded-full remove-border"-->
+					<!--	style="background: linear-gradient(127deg, #FFB000 0%, #FFA029 100%);"-->
+					<!--	@click="buyFn('join_cart')">-->
+					<!--	加入购物车</button>-->
+					<!--<button v-if="isShowSingleSku"-->
+					<!--	:style="{ width: (goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')) ? '200rpx' : '420rpx' + '!important' }"-->
+					<!--	class="!h-[72rpx] text-[26rpx] !text-[#fff] primary-btn-bg !m-0 leading-[72rpx] rounded-full remove-border"-->
+					<!--	@click="buyFn('buy_now')">立即购买</button>-->
+					<!--<button v-else-->
+					<!--	:style="{ width: (goodsDetail.goods.goods_type == 'real' || (goodsDetail.goods.goods_type == 'virtual' && goodsDetail.goods.virtual_receive_type != 'verify')) ? '200rpx' : '420rpx' + '!important' }"-->
+					<!--	class="!h-[72rpx] text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[72rpx] rounded-full remove-border">已售罄</button>-->
 				</view>
 				<view class="flex flex-1 ml-[40rpx]" v-else>
 					<button

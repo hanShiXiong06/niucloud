@@ -49,6 +49,11 @@ Route::group('phone_shop', function() {
     //商品品牌列表
     Route::get('goods/brand/list', 'addon\phone_shop\app\api\controller\goods\Brand@lists');
 
+
+    /***************************************************** 分享 ****************************************************/
+    // 生成商品分享短链接
+    Route::post('share/generate_link', 'addon\phone_shop\app\api\controller\Share@generateLink');
+
     /***************************************************** 评价 ****************************************************/
     // 获取 评价设置
     Route::get('goods/evaluate/config', 'addon\phone_shop\app\api\controller\Config@evaluate');
