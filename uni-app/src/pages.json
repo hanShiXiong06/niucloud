@@ -225,12 +225,10 @@
 					"style": {
 						"navigationBarTitleText": "回收主页"
 					}
-				},
-                // /addon/recycle/pages/price/show_price
-                {
-					"path": "pages/price/show_price",
+				},{
+					"path": "pages/price",
 					"style": {
-						"navigationBarTitleText": "二手机回收报价单"
+						"navigationBarTitleText": "回收报价单"
 					},
 					"needLogin": true
 				},
@@ -258,7 +256,7 @@
 				{
 					"path": "pages/payment/index",
 					"style": {
-						"navigationBarTitleText": "收款方式"
+						"navigationBarTitleText": "收款管理"
 					},
 					"needLogin": true
 				},
@@ -274,10 +272,17 @@
                         "navigationBarTitleText": "退货订单详情"
                     },
                     "needLogin": true
-                }
+                },
+                {
+					"path": "pages/price/show_price",
+					"style": {
+						"navigationBarTitleText": "二手机回收报价单"
+					},
+					"needLogin": true
+				},
 			]
         },
-        // RECYCLE_PAGE_END
+// RECYCLE_PAGE_END
         // PHONE_SHOP_PAGE_BEGIN
         {
             "root": "addon/phone_shop", 
@@ -361,9 +366,7 @@
 				{
 					"path": "pages/goods/list",
 					"style": {
-				        // #ifndef H5
-						"navigationStyle": "custom",
-						// #endif
+				
 						"navigationBarTitleText": "%shop.pages.goods.list%"
 						
 					}
