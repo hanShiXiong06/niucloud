@@ -44,6 +44,9 @@ class RecycleDeviceExportDataListener
                     'nickname' => [
                         'name' => '供应商',
                     ],
+                    'quoter_name' => [
+                        'name' => '报价人',
+                    ],
                     // 'category_name' => [
                     //     'name' => '设备分类',
                     // ],
@@ -56,8 +59,8 @@ class RecycleDeviceExportDataListener
                     'code' => [
                         'name' => '条形码',
                     ],
-                   
-                    
+
+
                 ]
             ]
         ];

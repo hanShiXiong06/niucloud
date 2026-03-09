@@ -24,14 +24,19 @@ class RecycleDeviceExportListener
         $data = [];
         if (isset($param['type']) && $param['type'] == 'recycle_device') {
             $model = new RecycleDevice();
-            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, status, final_price, update_at, order_id';
-            
+            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, status, final_price, update_at, order_id, price_uid';
+
             $where = $param['where'] ?? [];
-            
+
             // 查询导出数据 - 使用与列表页相同的逻辑
             $search_model = $model->where([['site_id', '=', $param['site_id'] ?? 0]])
                 ->withSearch(['imei', 'model', 'status', 'update_at'], $where)
-                ->with(['order'])
+                ->with([
+                    'order',
+                    'priceUser' => function($query) {
+                        $query->field('uid,username,real_name');
+                    }
+                ])
                 ->field($field)
                 ->append(['status_name', 'category_name', 'nickname','code'])
                 ->order('update_at desc');
@@ -55,23 +60,47 @@ class RecycleDeviceExportListener
             foreach ($data as $key => $value) {
                 $data[$key]['order_no'] = $value['order']['order_no'] ?? '';
                 $data[$key]['create_at'] = !empty($value['update_at']) ? $value['update_at'] : '';
-                
+
+                // 获取报价人姓名 - 兼容多种键名
+                $data[$key]['quoter_name'] = '';
+
+                // 尝试从 price_user 或 priceUser 获取
+                $priceUser = $value['price_user'] ?? $value['priceUser'] ?? null;
+
+                if (!empty($priceUser)) {
+                    $data[$key]['quoter_name'] = $priceUser['real_name'] ?? $priceUser['username'] ?? '';
+                }
+
+                // 如果还是空，尝试直接从 sys_user 表查询
+                if (empty($data[$key]['quoter_name']) && !empty($value['price_uid'])) {
+                    try {
+                        $sysUser = \app\model\sys\SysUser::where('uid', $value['price_uid'])
+                            ->field('uid,username,real_name')
+                            ->find();
+                        if ($sysUser) {
+                            $data[$key]['quoter_name'] = $sysUser['real_name'] ?? $sysUser['username'] ?? '';
+                        }
+                    } catch (\Exception $e) {
+                        // 查询失败，保持为空
+                    }
+                }
+
                 // 将数字类型的字段强制转换为字符串，防止Excel显示为科学计数法
-                // 在前面加上单引号，强制Excel识别为文本
+                // 使用制表符前缀强制Excel识别为文本
                 if (!empty($value['imei'])) {
-                    $data[$key]['imei'] = "" . $value['imei'];
+                    $data[$key]['imei'] = "\t" . $value['imei'];
                 }
                 if (!empty($value['imei2'])) {
-                    $data[$key]['imei2'] = "" . $value['imei2'];
+                    $data[$key]['imei2'] = "\t" . $value['imei2'];
                 }
                 if (!empty($value['sn'])) {
-                    $data[$key]['sn'] = "" . $value['sn'];
+                    $data[$key]['sn'] = "\t" . $value['sn'];
                 }
                 if (!empty($value['code'])) {
-                    $data[$key]['code'] = "" . $value['code'];
+                    $data[$key]['code'] = "\t" . $value['code'];
                 }
-                
-                unset($data[$key]['order'], $data[$key]['id'], $data[$key]['category_id'], $data[$key]['status'], $data[$key]['order_id'], $data[$key]['update_at']);
+
+                unset($data[$key]['order'], $data[$key]['price_user'], $data[$key]['priceUser'], $data[$key]['id'], $data[$key]['category_id'], $data[$key]['status'], $data[$key]['order_id'], $data[$key]['update_at'], $data[$key]['price_uid']);
             }
         }
         return $data;

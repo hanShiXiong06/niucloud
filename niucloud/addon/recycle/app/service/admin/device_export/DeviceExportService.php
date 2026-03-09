@@ -26,7 +26,7 @@ class DeviceExportService extends BaseAdminService
     public function getPage(array $where = []): array
     {
 
-        $field = 'id, imei, imei2, sn, model, member_id, category_id, status, update_at, final_price, sell_price, create_at, order_id, check_result_buyer, check_images_buyer';
+        $field = 'id, imei, imei2, sn, model, member_id, category_id, status, update_at, final_price, sell_price, create_at, order_id, check_result_buyer, check_images_buyer,price_uid';
 
         $search_model = $this->model
             ->where([['site_id', '=', $this->site_id]])
@@ -36,6 +36,9 @@ class DeviceExportService extends BaseAdminService
                     $query->with(['member' => function($q) {
                         $q->field('member_id, username, nickname, mobile, headimg');
                     }]);
+                },
+                'priceUser' => function($query) {
+                    $query->field('uid, username, real_name');
                 }
             ])
             ->field($field)
@@ -59,10 +62,10 @@ class DeviceExportService extends BaseAdminService
     {
         // 添加站点条件
         $where['site_id'] = $this->site_id;
-        
+
         // 调用系统导出Job
         ExportJob::dispatch(['site_id' => $this->site_id, 'type' => 'recycle_device', 'where' => $where, 'page' => ['page' => 0, 'limit' => 0]]);
-        
+
         return true;
     }
 }

@@ -88,6 +88,13 @@
                         </template>
                     </el-table-column>
 
+                    <el-table-column label="报价人" min-width="100" align="center">
+                        <template #default="{ row }">
+                            <span v-if="row.price_user">{{ row.priceUser.real_name || row.priceUser.username || '未知' }}</span>
+                            <span v-else class="text-gray-400">-</span>
+                        </template>
+                    </el-table-column>
+
                     <el-table-column prop="status_name" :label="t('status')" min-width="100" align="center">
                         <template #default="{ row }">
                             <el-tag type="success">{{ row.status_name }}</el-tag>
