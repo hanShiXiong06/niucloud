@@ -24,7 +24,19 @@
             
             <view class="form-item column">
                 <text class="label">图片（最多9张）</text>
-                <xy-upload v-model="formData.images" :maxCount="9" />
+                <view class="upload-container">
+                    <up-upload 
+                        :fileList="fileList" 
+                        @afterRead="afterRead" 
+                        @error="uploaderror" 
+                        @delete="deletePic"
+                        width="160" 
+                        height="160"
+                        name="1" 
+                        multiple 
+                        :maxCount="9"
+                    ></up-upload>
+                </view>
             </view>
         </view>
 
@@ -40,9 +52,10 @@ import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed, onMounted } from 'vue'
 import { publishCommunity, getCommunityCategories } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
-import xyUpload from '../../components/xy-upload.vue'
+import { uploadImage } from '@/app/api/system'
 
 const categoryList = ref<any[]>([])
+const fileList = ref<any[]>([])
 
 const selectedCategory = ref<any>(null)
 const formData = ref({
@@ -77,6 +90,76 @@ const onCategoryChange = (e: any) => {
         selectedCategory.value = categoryList.value[index]
         formData.value.category_id = selectedCategory.value.id
     }
+}
+
+// 删除图片
+const deletePic = (event: any) => {
+    fileList.value.splice(event.index, 1)
+    formData.value.images.splice(event.index, 1)
+}
+
+// 上传错误处理
+const uploaderror = (event: any) => {
+    console.log(event)
+    if (event.errno == 112) {
+        uni.showModal({
+            title: '权限不足',
+            content: '请在用户隐私保护指引里面声明【收集你选中的照片或视频信息】'
+        })
+    } else {
+        uni.showModal({
+            title: '上传失败',
+            content: event.errMsg,
+            showCancel: false
+        })
+    }
+}
+
+// 新增图片
+const afterRead = async (event: any) => {
+    uni.showLoading({ title: '上传中' })
+    
+    // 当设置 multiple 为 true 时, file 为数组格式，否则为对象格式
+    let lists = [].concat(event.file)
+    let fileListLen = fileList.value.length
+    
+    lists.map((item: any) => {
+        fileList.value.push({
+            ...item,
+            status: 'uploading',
+            message: '上传中',
+        })
+    })
+    
+    for (let i = 0; i < lists.length; i++) {
+        const result = await uploadFilePromise(lists[i].url)
+        let item = fileList.value[fileListLen]
+        fileList.value.splice(fileListLen, 1, {
+            ...item,
+            status: 'success',
+            message: '',
+            url: result,
+        })
+        formData.value.images.push(result)
+        fileListLen++
+    }
+}
+
+const uploadFilePromise = (url: string) => {
+    return new Promise((resolve, reject) => {
+        uploadImage({
+            filePath: url,
+            name: 'file'
+        }).then((res: any) => {
+            uni.hideLoading()
+            resolve(res.data.url)
+        }).catch((err: any) => {
+            uni.hideLoading()
+            console.log(err)
+            uni.showToast({ title: '上传失败', icon: 'none' })
+            reject(err)
+        })
+    })
 }
 
 const previewImage = (index: number) => {
@@ -148,6 +231,7 @@ const handleSubmit = async () => {
         color: #333;
         width: 120rpx;
         flex-shrink: 0;
+        margin-bottom: 16rpx;
     }
     
     .input {
@@ -179,6 +263,11 @@ const handleSubmit = async () => {
         align-items: center;
         font-size: 28rpx;
         color: #666;
+    }
+    
+    .upload-container {
+        width: 100%;
+        margin-top: 16rpx;
     }
 }
 

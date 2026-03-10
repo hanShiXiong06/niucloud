@@ -75,6 +75,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { getCampusAuthStatus } from '../api/xiaoyuan'
 
 const props = defineProps<{
     current: string
@@ -125,16 +126,56 @@ const switchTab = (tab: string) => {
     uni.reLaunch({ url: tabRoutes[tab] })
 }
 
-const onPlusClick = () => {
-    showPublishPopup.value = true
+const onPlusClick = async () => {
+    // 点击发布按钮时，先实时检查认证状态
+    try {
+        const res: any = await getCampusAuthStatus()
+        
+        if (res.code === 1) {
+            // status: 0=未认证, 1=审核中, 2=已认证, -1=审核拒绝
+            const status = res.data?.status ?? 0
+            
+            if (status === 2) {
+                // 已认证，显示发布类型选择弹窗
+                showPublishPopup.value = true
+            } else if (status === 1) {
+                // 审核中
+                uni.showModal({
+                    title: '认证审核中',
+                    content: '您的校园认证正在审核中，请耐心等待',
+                    showCancel: false
+                })
+            } else if (status === -1) {
+                // 审核拒绝
+                const refuseReason = res.data?.refuse_reason || '审核未通过'
+                uni.showModal({
+                    title: '认证未通过',
+                    content: `拒绝原因：${refuseReason}\n\n请重新提交认证`,
+                    confirmText: '去认证',
+                    success: (modalRes) => {
+                        if (modalRes.confirm) {
+                            uni.navigateTo({ url: '/addon/sd_xiaoyuan/pages/campus/auth' })
+                        }
+                    }
+                })
+            } else {
+                // 未认证，显示认证弹窗
+                showCertPopup.value = true
+            }
+        } else {
+            // 接口返回失败，显示未认证弹窗
+            showCertPopup.value = true
+        }
+    } catch (e) {
+        console.error('检查认证状态失败:', e)
+        // 请求失败，显示未认证弹窗
+        showCertPopup.value = true
+    }
 }
 
 const selectPublishType = (item: any) => {
+    // 已经在 onPlusClick 中检查过认证状态，这里直接跳转
     showPublishPopup.value = false
-    if (!props.isAuthed) {
-        showCertPopup.value = true
-        return
-    }
     uni.navigateTo({ url: item.url })
 }
 

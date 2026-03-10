@@ -6,19 +6,19 @@
             <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
             <view class="nav-bar" :style="{ height: navBarHeight + 'px', paddingRight: menuButtonRight + 'px' }">
                 <view class="page-title">消息中心</view>
-                <view class="nav-actions">
+                <!-- <view class="nav-actions" style="position:reactive;z-index:21">
                     <view class="action-btn" @click="markAllRead">
                         <u-icon name="checkmark-circle" size="20" color="#333"></u-icon>
                     </view>
                     <view class="action-btn" @click="clearAll">
                         <u-icon name="trash" size="20" color="#333"></u-icon>
                     </view>
-                </view>
+                </view> -->
             </view>
         </view>
 
         <!-- 消息列表 -->
-        <view class="message-list-wrap" :style="{ paddingTop: (statusBarHeight + navBarHeight + 20) + 'px' }">
+        <view class="message-list-wrap" :style="{ paddingTop: (statusBarHeight + navBarHeight + 20) + 'px' }" style="position:reactive;z-index:2">
             <view class="message-list-content">
                 <view 
                     class="message-item" 

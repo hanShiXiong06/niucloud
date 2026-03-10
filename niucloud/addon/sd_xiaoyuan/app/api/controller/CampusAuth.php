@@ -42,4 +42,37 @@ class CampusAuth extends BaseApiController
         $isAuth = $service->checkAuth();
         return success(['is_auth' => $isAuth]);
     }
+
+    /**
+     * 获取认证状态
+     * 返回详细的认证状态信息
+     */
+    public function status()
+    {
+        $service = new CampusAuthService();
+        $info = $service->getAuthInfo();
+
+        // 如果没有认证记录，返回未认证状态
+        if (empty($info)) {
+            return success([
+                'status' => 0,
+                'message' => '未提交认证申请',
+                'refuse_reason' => ''
+            ]);
+        }
+
+        // 状态映射：数据库状态 -> API 返回状态
+        // 数据库: -1=拒绝, 0=审核中, 1=已认证
+        // API: 0=未认证, 1=审核中, 2=已认证, -1=拒绝
+        $statusMap = [
+            -1 => ['status' => -1, 'message' => '审核拒绝'],
+            0  => ['status' => 1, 'message' => '审核中'],
+            1  => ['status' => 2, 'message' => '已认证']
+        ];
+
+        $result = $statusMap[$info['status']] ?? ['status' => 0, 'message' => '未认证'];
+        $result['refuse_reason'] = $info['refuse_reason'] ?? '';
+
+        return success($result);
+    }
 }

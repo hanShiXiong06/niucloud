@@ -96,7 +96,7 @@
         </view>
 
         <!-- Order Hall List -->
-        <view class="hall-content" :style="{ paddingTop: (statusBarHeight + navBarHeight + 90) + 'px' }">
+        <view class="hall-content" :style="{ paddingTop: (statusBarHeight + navBarHeight + 90) + 'px' }" style="position:reactive;z-index:2">
             <sd-order-item 
                 v-for="(item, index) in orderList"
                 :key="item.id"
