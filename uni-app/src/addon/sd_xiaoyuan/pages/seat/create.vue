@@ -322,6 +322,7 @@ const onPayFail = () => {
     border-radius: 16rpx;
     padding: 24rpx;
     margin-bottom: 20rpx;
+    width: auto;
     
     .section-header {
         display: flex;

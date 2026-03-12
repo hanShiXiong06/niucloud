@@ -1,5 +1,13 @@
 ﻿<template>
     <view class="secondhand-page">
+        <!-- 功能关闭提示 -->
+        <view v-if="config && config.enable_secondhand == 0" style="text-align:center;margin-top:150rpx;">
+            <u-icon name="info-circle" size="60" color="#ccc"></u-icon>
+            <text style="display:block;margin-top:20rpx;color:#999;font-size:28rpx;">{{ config.close_text || '功能已下架' }}</text>
+        </view>
+        
+        <!-- 正常内容 -->
+        <view v-else>
         <!-- 头部搜索与背景 -->
         <view class="header-section">
             <view class="header-bg"></view>
@@ -171,6 +179,7 @@
             </view>
             <text>卖闲置</text>
         </view>
+        </view>
     </view>
 </template>
 
@@ -178,9 +187,10 @@
 import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { getSecondhandList, getSecondhandCategoryList } from '../../api/xiaoyuan'
+import { getSecondhandList, getSecondhandCategoryList, getConfig } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
 
+const config = ref<any>(null)
 const keyword = ref('')
 const currentCategory = ref('')
 const sortType = ref('new')
@@ -209,9 +219,26 @@ const getCategoryColor = (index: number) => {
 }
 
 onMounted(() => {
+    loadConfig()
     loadCategories()
     loadGoods()
 })
+
+const loadConfig = async () => {
+    const cachedConfig = uni.getStorageSync('xiaoyuan_config')
+    if (cachedConfig) {
+        config.value = cachedConfig
+    }
+    try {
+        const res: any = await getConfig()
+        if (res.code === 1 && res.data) {
+            config.value = res.data
+            uni.setStorageSync('xiaoyuan_config', res.data)
+        }
+    } catch (e) {
+        console.error('获取配置失败:', e)
+    }
+}
 
 onShow(() => {
     const cachedSchool = uni.getStorageSync('current_school')

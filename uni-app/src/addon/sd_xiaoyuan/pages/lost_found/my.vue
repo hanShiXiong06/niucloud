@@ -1,5 +1,10 @@
 <template>
     <view class="my-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="tabs">
             <view class="tab-item" :class="{ active: currentTab === 'all' }" @click="switchTab('all')">全部</view>
             <view class="tab-item" :class="{ active: currentTab === 'active' }" @click="switchTab('active')">进行中</view>
@@ -39,6 +44,7 @@
         <view class="publish-btn" @click="goPublish">
             <text>发布</text>
         </view>
+        </view>
     </view>
 </template>
 
@@ -48,6 +54,10 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getMyPublishLostFound, closeLostFound, delLostFound } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_lost_found')
 
 const currentTab = ref('all')
 const itemList = ref<any[]>([])
@@ -61,7 +71,10 @@ const statusMap: Record<number, string> = {
     2: '已找到'
 }
 
-onShow(() => loadItems(true))
+onShow(() => {
+    loadConfig()
+    loadItems(true)
+})
 
 const switchTab = (tab: string) => {
     currentTab.value = tab

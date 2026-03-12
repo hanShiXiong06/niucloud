@@ -32,7 +32,7 @@
                             <text>{{ item.pickup_address }}</text>
                         </view>
                     </view>
-                    <image v-if="parseImages(item.images)[0]" class="card-img" :src="parseImages(item.images)[0]" mode="aspectFill"></image>
+                    <image v-if="parseImages(item.images)[0]" class="card-img" :src="img(parseImages(item.images)[0])" mode="aspectFill"></image>
                 </view>
                 <view class="card-footer">
                     <view class="reward">

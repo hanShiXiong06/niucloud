@@ -52,10 +52,11 @@ import { onShow } from '@dcloudio/uni-app'
 import useMemberStore from '@/stores/member'
 import { useLogin } from '@/hooks/useLogin'
 import { img } from '@/utils/common'
-import { getCreditInfo } from '../../api/xiaoyuan'
+import { getCreditInfo, getConfig } from '../../api/xiaoyuan'
 import { getRunnerInfo } from '../../api/runner'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import customTabbar from '../../components/custom-tabbar.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
 
 const memberStore = useMemberStore()
 const userInfo = computed(() => memberStore.info || {})
@@ -65,7 +66,9 @@ const navBarHeight = ref(44)
 const menuButtonRight = ref(0)
 const creditScore = ref(100)
 
-const menuGroups = ref([
+const { config, loadConfig } = useFeatureCheck()
+
+const allMenuGroups = [
     // 跑腿服务相关
     {
         title: '校园服务',
@@ -73,25 +76,12 @@ const menuGroups = ref([
             { name: '接单员主页', icon: 'home', url: '/addon/sd_xiaoyuan/pages/runner/index', color: '#fff', bg: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)' },
             { name: '我的订单', icon: 'list', url: '/addon/sd_xiaoyuan/pages/order/list', color: '#fff', bg: 'linear-gradient(135deg, #ff7243 0%, #ff9a44 100%)' },
             { name: '我的地址', icon: 'map', url: '/addon/sd_xiaoyuan/pages/address/list', color: '#fff', bg: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)' },
-    //     ]
-    // },
-    // // 校园生活相关
-    // {
-    //     title: '校园生活',
-    //     items: [
-            { name: '我的闲置', icon: 'shopping-cart', url: '/addon/sd_xiaoyuan/pages/secondhand/my', color: '#fff', bg: 'linear-gradient(135deg, #ff9a44 0%, #fc6076 100%)' },
-            { name: '我的帖子', icon: 'edit-pen', url: '/addon/sd_xiaoyuan/pages/community/my', color: '#fff', bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' },
-            { name: '我的表白', icon: 'heart-fill', url: '/addon/sd_xiaoyuan/pages/confession/my', color: '#fff', bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
-            { name: '失物招领', icon: 'search', url: '/addon/sd_xiaoyuan/pages/lost_found/my', color: '#fff', bg: 'linear-gradient(135deg, #00c853 0%, #69f0ae 100%)' },
-    //     ]
-    // },
-    // // 娱乐休闲相关
-    // {
-    //     title: '娱乐休闲',
-    //     items: [
-            { name: '我的游戏', icon: 'red-packet', url: '/addon/sd_xiaoyuan/pages/game/my', color: '#fff', bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
-            // { name: '我的房源', icon: 'home', url: '/addon/sd_xiaoyuan/pages/house/my', color: '#fff', bg: 'linear-gradient(135deg, #cd9cf2 0%, #f6f3ff 100%)' },
-            { name: '我的课表', icon: 'calendar', url: '/addon/sd_xiaoyuan/pages/schedule/index', color: '#fff', bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' }
+            { name: '我的闲置', icon: 'shopping-cart', url: '/addon/sd_xiaoyuan/pages/secondhand/my', color: '#fff', bg: 'linear-gradient(135deg, #ff9a44 0%, #fc6076 100%)', key: 'enable_secondhand' },
+            { name: '我的帖子', icon: 'edit-pen', url: '/addon/sd_xiaoyuan/pages/community/my', color: '#fff', bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', key: 'enable_community' },
+            { name: '我的表白', icon: 'heart-fill', url: '/addon/sd_xiaoyuan/pages/confession/my', color: '#fff', bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', key: 'enable_confession' },
+            { name: '失物招领', icon: 'search', url: '/addon/sd_xiaoyuan/pages/lost_found/my', color: '#fff', bg: 'linear-gradient(135deg, #00c853 0%, #69f0ae 100%)', key: 'enable_lost_found' },
+            { name: '我的游戏', icon: 'red-packet', url: '/addon/sd_xiaoyuan/pages/game/my', color: '#fff', bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', key: 'enable_game' },
+            { name: '我的课表', icon: 'calendar', url: '/addon/sd_xiaoyuan/pages/schedule/index', color: '#fff', bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', key: 'enable_schedule' }
         ]
     },
     // 推广相关
@@ -100,25 +90,35 @@ const menuGroups = ref([
         items: [
             { name: '邀请有礼', icon: 'gift', url: '/addon/sd_xiaoyuan/pages/invite/index', color: '#fff', bg: 'linear-gradient(135deg, #FF9A9E 0%, #FECFEF 100%)' },
             { name: '我的团队', icon: 'account-fill', url: '/addon/sd_xiaoyuan/pages/invite/team', color: '#fff', bg: 'linear-gradient(135deg, #ff9500 0%, #ffb347 100%)' },
-
             { name: '我的收益', icon: 'rmb-circle', url: '/app/pages/member/commission', color: '#fff', bg: 'linear-gradient(135deg, #ff9500 0%, #ffb347 100%)' },
             { name: '佣金提现', icon: 'red-packet', url: '/app/pages/member/apply_cash_out', color: '#fff', bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
-            { name: '提现记录', icon: 'list', url: '/app/pages/member/cash_out', color: '#fff', bg: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)' },
+            { name: '提现记录', icon: 'list', url: '/app/pages/member/cash_out', color: '#fff', bg: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)' }
         ]
     },
     // 账户相关
     {
         title: '账户中心',
         items: [
-            { name: '每日签到', icon: 'checkmark-circle', url: '/addon/sd_xiaoyuan/pages/sign/index', color: '#fff', bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
-            { name: '积分商城', icon: 'gift', url: '/addon/sd_xiaoyuan/pages/points/mall', color: '#fff', bg: 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)' },
-            { name: '兑换记录', icon: 'order', url: '/addon/sd_xiaoyuan/pages/points/orders', color: '#fff', bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' },
-            // { name: '我的优惠券', icon: 'coupon', url: '/addon/sd_xiaoyuan/pages/coupon/list', color: '#fff', bg: 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)' },
+            { name: '每日签到', icon: 'checkmark-circle', url: '/addon/sd_xiaoyuan/pages/sign/index', color: '#fff', bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', key: 'enable_sign' },
+            { name: '积分商城', icon: 'gift', url: '/addon/sd_xiaoyuan/pages/points/mall', color: '#fff', bg: 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)', key: 'enable_points_mall' },
+            { name: '兑换记录', icon: 'order', url: '/addon/sd_xiaoyuan/pages/points/orders', color: '#fff', bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', key: 'enable_points_mall' },
             { name: '我的评价', icon: 'star', url: '/addon/sd_xiaoyuan/pages/user/evaluates', color: '#fff', bg: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)' },
-            { name: '校园认证', icon: 'integral', url: '/addon/sd_xiaoyuan/pages/campus/auth', color: '#fff', bg: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)' }
+            { name: '校园认证', icon: 'integral', url: '/addon/sd_xiaoyuan/pages/campus/auth', color: '#fff', bg: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)', key: 'require_auth_publish' }
         ]
-    },
-])
+    }
+];
+
+const menuGroups = computed(() => {
+    if (!config.value) return allMenuGroups;
+
+    return allMenuGroups.map(group => ({
+        ...group,
+        items: group.items.filter(item => {
+            if (!item.key) return true;
+            return config.value[item.key] !== 0;
+        })
+    })).filter(group => group.items.length > 0);
+});
 
 onMounted(() => {
     const sysInfo = uni.getSystemInfoSync()
@@ -135,6 +135,7 @@ onMounted(() => {
 
 onShow(() => {
     loadUserInfo()
+    loadConfig()
     // 只有登录后才加载信用分和接单员状态
     if (isLoggedIn.value) {
         loadCreditScore()

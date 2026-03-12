@@ -1,5 +1,6 @@
 <template>
-    <view class="setting-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="setting-page" v-if="isFeatureEnabled">
         <view class="setting-group">
             <text class="group-title">学期时间</text>
             <view class="setting-row">
@@ -55,6 +56,10 @@
 import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_schedule')
 
 const STORAGE_KEY = 'sd_xiaoyuan_schedule_settings'
 
@@ -87,6 +92,7 @@ const totalWeeks = computed(() => {
 })
 
 onLoad(() => {
+    loadConfig()
     loadSettings()
 })
 

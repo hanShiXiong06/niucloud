@@ -1,5 +1,6 @@
 <template>
-    <view class="mall-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="mall-page" v-if="isFeatureEnabled">
         <view class="page-header">
             <view class="header-bg"></view>
             <view class="header-content">
@@ -119,6 +120,10 @@ import { ref, onMounted } from 'vue'
 import { getPointsGoodsList, exchangePointsGoods, getAddressList } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
 import useMemberStore from '@/stores/member'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_points_mall')
 
 const memberStore = useMemberStore()
 const loading = ref(false)
@@ -138,6 +143,7 @@ const exchangeForm = ref({
 })
 
 onMounted(() => {
+    loadConfig()
     loadGoods()
     loadAddresses()
     // 从会员信息获取积分

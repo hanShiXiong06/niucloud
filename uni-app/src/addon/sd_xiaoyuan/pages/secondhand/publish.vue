@@ -1,5 +1,13 @@
 ﻿<template>
     <view class="publish-page">
+        <!-- 功能关闭提示 -->
+        <view v-if="config && config.enable_secondhand == 0" style="text-align:center;margin-top:150rpx;">
+            <u-icon name="info-circle" size="60" color="#ccc"></u-icon>
+            <text style="display:block;margin-top:20rpx;color:#999;font-size:28rpx;">{{ config.close_text || '功能已下架' }}</text>
+        </view>
+        
+        <!-- 正常内容 -->
+        <view v-else>
         <view class="form-section">
             <view class="form-item">
                 <text class="label required">标题</text>
@@ -91,6 +99,7 @@
         <view class="submit-section">
             <button class="submit-btn" @click="submit">{{ isEdit ? '保存修改' : '发布闲置' }}</button>
         </view>
+        </view>
     </view>
 </template>
 
@@ -98,9 +107,11 @@
 import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { publishSecondhand, editSecondhand, getSecondhandInfo, getSecondhandCategoryList } from '../../api/xiaoyuan'
+import { publishSecondhand, editSecondhand, getSecondhandInfo, getSecondhandCategoryList, getConfig } from '../../api/xiaoyuan'
 import { uploadImage } from '@/app/api/system'
 import { img } from '@/utils/common'
+
+const config = ref<any>(null)
 
 const isEdit = ref(false)
 const editId = ref(0)
@@ -163,6 +174,9 @@ const chooseImage = () => {
             for (let i = 0; i < paths.length; i++) {
                 doUpload(paths[i])
             }
+        },
+        fail: (err) => {
+            handleUploadError(err)
         }
     })
 }
@@ -178,6 +192,24 @@ const doUpload = async (filePath: string) => {
     }
 }
 
+// 统一的上传错误处理
+const handleUploadError = (event: any) => {
+    console.log('上传错误:', event)
+    if (event.errno == 112 || event.errCode == 112) {
+        uni.showModal({
+            title: '权限不足',
+            content: '请在用户隐私保护指引里面声明【收集你选中的照片或视频信息】',
+            showCancel: false
+        })
+    } else {
+        uni.showModal({
+            title: '上传失败',
+            content: event.errMsg || '上传图片失败，请重试',
+            showCancel: false
+        })
+    }
+}
+
 const removeImage = (index: number) => {
     imageList.value.splice(index, 1)
 }
@@ -185,8 +217,23 @@ const removeImage = (index: number) => {
 const categoryList = ref<any[]>([])
 
 onMounted(() => {
+    loadConfig()
     loadCategories()
 })
+
+const loadConfig = async () => {
+    const cachedConfig = uni.getStorageSync('xiaoyuan_config')
+    if (cachedConfig) config.value = cachedConfig
+    try {
+        const res: any = await getConfig()
+        if (res.code === 1 && res.data) {
+            config.value = res.data
+            uni.setStorageSync('xiaoyuan_config', res.data)
+        }
+    } catch (e) {
+        console.error('获取配置失败:', e)
+    }
+}
 
 const loadCategories = async () => {
     const res: any = await getSecondhandCategoryList()

@@ -1,5 +1,10 @@
 <template>
     <view class="print-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <!-- 顶部背景 -->
         <view class="header-bg">
             <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
@@ -157,6 +162,7 @@
 
         <!-- 支付组件 -->
         <pay ref="payRef" @success="onPaySuccess" @fail="onPayFail" />
+        </view>
     </view>
 </template>
 
@@ -165,6 +171,10 @@ import { ref, computed, onMounted } from 'vue'
 import { createOrder, uploadDocument } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import pay from '@/components/pay/pay.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_print')
 
 const statusBarHeight = ref(0)
 const navBarHeight = ref(44)
@@ -249,6 +259,9 @@ const chooseFile = () => {
                 await doUploadFile(f.path, f.name)
             }
             uni.hideLoading()
+        },
+        fail: (err: any) => {
+            handleUploadError(err)
         }
     })
     // #endif
@@ -263,9 +276,30 @@ const chooseFile = () => {
                 await doUploadFile(tempPaths[i], `文件${files.value.length + 1}`)
             }
             uni.hideLoading()
+        },
+        fail: (err) => {
+            handleUploadError(err)
         }
     })
     // #endif
+}
+
+// 统一的上传错误处理
+const handleUploadError = (event: any) => {
+    console.log('上传错误:', event)
+    if (event.errno == 112 || event.errCode == 112) {
+        uni.showModal({
+            title: '权限不足',
+            content: '请在用户隐私保护指引里面声明【收集你选中的照片或视频信息】',
+            showCancel: false
+        })
+    } else {
+        uni.showModal({
+            title: '上传失败',
+            content: event.errMsg || '上传文件失败，请重试',
+            showCancel: false
+        })
+    }
 }
 
 const removeFile = (index: number) => {
@@ -408,6 +442,7 @@ const onPayFail = () => {
 
 .form-content {
     height: calc(100vh - 350rpx);
+    width: auto;
     padding: 20rpx;
 }
 
@@ -418,6 +453,7 @@ const onPayFail = () => {
     margin-bottom: 20rpx;
     display: flex;
     align-items: center;
+    width: auto;
     
     &.column {
         flex-direction: column;

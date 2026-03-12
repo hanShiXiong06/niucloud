@@ -1,5 +1,6 @@
 ﻿<template>
-    <view class="schedule-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="schedule-page" v-if="isFeatureEnabled">
         <view class="page-header">
             <view class="semester-info" @click="showWeekPicker = true">
                 <text class="semester">{{ semesterLabel }}</text>
@@ -73,6 +74,10 @@ import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getSchedule } from '../../api/xiaoyuan'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_schedule')
 
 const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const courseList = ref<any[]>([])
@@ -126,6 +131,7 @@ const semesterLabel = computed(() => {
 })
 
 onMounted(() => {
+    loadConfig()
     loadSettings()
     loadSchedule()
 })
@@ -155,11 +161,26 @@ const goToSetting = () => {
 }
 
 const loadSchedule = async () => {
-    const res: any = await getSchedule({ week: currentWeek.value })
+    const res: any = await getSchedule({ semester: getCurrentSemester() })
     console.log('课表数据:', res)
     if (res.code === 1) {
         courseList.value = res.data.list || res.data || []
         console.log('课程列表:', courseList.value)
+    }
+}
+
+// 添加获取当前学期的函数
+const getCurrentSemester = () => {
+    const now = new Date()
+    const month = now.getMonth() + 1
+    const year = now.getFullYear()
+    
+    if (month >= 9) {
+        return `${year}-${year + 1}-1`
+    } else if (month >= 2) {
+        return `${year - 1}-${year}-2`
+    } else {
+        return `${year - 1}-${year}-1`
     }
 }
 
@@ -195,8 +216,23 @@ const getDateByWeekDay = (day: number) => {
 
 const handleCellClick = (day: number, section: number) => {
     const course = getCourse(day, section)
+    console.log('点击的课程:', course)
     if (course) {
-        uni.navigateTo({ url: `/addon/sd_xiaoyuan/pages/schedule/edit?id=${course.id}` })
+        console.log('课程ID:', course.id)
+        if (course.id) {
+            // 尝试使用绝对路径
+            const url = `/addon/sd_xiaoyuan/pages/schedule/edit?id=${course.id}`
+            console.log('导航到:', url)
+            uni.navigateTo({ 
+                url: url,
+                fail: (err) => {
+                    console.error('导航失败:', err)
+                    uni.showToast({ title: '页面跳转失败', icon: 'none' })
+                }
+            })
+        } else {
+            uni.showToast({ title: '课程数据异常，无法编辑', icon: 'none' })
+        }
     } else {
         uni.navigateTo({ url: `/addon/sd_xiaoyuan/pages/schedule/add?day=${day}&section=${section}&week=${currentWeek.value}` })
     }

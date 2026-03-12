@@ -52,7 +52,7 @@
                 <el-table-column label="用户" width="160">
                     <template #default="{ row }">
                         <div style="display:flex;align-items:center;gap:8px;">
-                            <el-avatar :src="row.avatar" :size="32" />
+                            <el-avatar :src="img(row.avatar)" :size="32" />
                             <span>{{ row.nickname || '-' }}</span>
                         </div>
                     </template>
@@ -128,6 +128,7 @@ import {
     getGameCompanionList, auditGameCompanion, setTopGameCompanion,
     deleteGameCompanion, getGameCompanionStat, getAllSchools
 } from '@/addon/sd_xiaoyuan/api/admin'
+import { img } from '@/utils/common'
 
 const list = ref<any[]>([])
 const total = ref(0)

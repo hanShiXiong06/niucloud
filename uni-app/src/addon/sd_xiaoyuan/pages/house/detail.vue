@@ -1,5 +1,6 @@
 ﻿<template>
-    <view class="detail-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="detail-page" v-if="isFeatureEnabled">
         <swiper class="image-swiper" v-if="images.length > 0" indicator-dots autoplay circular>
             <swiper-item v-for="(item, index) in images" :key="index">
                 <image :src="img(item)" mode="aspectFill" @click="previewImage(index)"></image>
@@ -103,6 +104,10 @@ import { getHouseDetail, createHouseOrder, offlineHouse as offlineApi } from '..
 import pay from '@/components/pay/pay.vue'
 import { img } from '@/utils/common'
 import useMemberStore from '@/stores/member'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_house')
 
 const memberStore = useMemberStore()
 const isOwner = computed(() => houseInfo.value.member_id && memberStore.info?.member_id && houseInfo.value.member_id == memberStore.info.member_id)
@@ -148,6 +153,7 @@ const facilities = computed(() => {
 onLoad((options: any) => {
     if (options?.id) {
         houseId.value = parseInt(options.id)
+        loadConfig()
         loadDetail()
     }
 })

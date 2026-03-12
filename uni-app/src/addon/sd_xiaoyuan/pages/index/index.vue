@@ -88,7 +88,7 @@
                 ></u-notice-bar>
             </view>
             <!-- Menu Grid -->
-            <view class="menu-section">
+            <view class="menu-section" v-if="config">
                 <view class="menu-item" v-for="(item, index) in menuList" :key="index" @click="handleMenuClick(item)">
                     <view class="menu-icon" :style="{ background: item.bgColor, border: item.border }">
                         <u-icon :name="item.icon" size="28" :color="item.iconColor || '#333'"></u-icon>
@@ -98,8 +98,8 @@
             </view>
 
             <!-- Feature Banner Row 1: 房屋租赁 + 课程表 + 拼单好饭 -->
-            <view class="feature-banners feature-banners-three">
-                <view class="feature-banner banner-house" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/house/index' })">
+            <view class="feature-banners feature-banners-three" v-if="config">
+                <view v-if="config.enable_house !== 0" class="feature-banner banner-house" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/house/index' })">
                     <view class="banner-info">
                         <text class="banner-title">房屋租赁</text>
                         <text class="banner-desc">校园周边好房</text>
@@ -108,7 +108,7 @@
                         <u-icon name="home-fill" size="32" color="rgba(255,255,255,0.85)"></u-icon>
                     </view>
                 </view>
-                <view class="feature-banner banner-schedule" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/schedule/index' })">
+                <view v-if="config.enable_schedule !== 0" class="feature-banner banner-schedule" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/schedule/index' })">
                     <view class="banner-info">
                         <text class="banner-title">课程表</text>
                         <text class="banner-desc">查看课程安排</text>
@@ -117,7 +117,7 @@
                         <u-icon name="calendar-fill" size="32" color="rgba(255,255,255,0.85)"></u-icon>
                     </view>
                 </view>
-                <view class="feature-banner banner-group" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/group/index' })">
+                <view v-if="config.enable_group !== 0" class="feature-banner banner-group" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/group/index' })">
                     <view class="banner-info">
                         <text class="banner-title">拼单好饭</text>
                         <text class="banner-desc">一起拼更划算</text>
@@ -129,8 +129,8 @@
             </view>
 
             <!-- Feature Banner Row 2: 闲置 + 失物招领 + 树洞 -->
-            <view class="feature-banners feature-banners-three">
-                <view class="feature-banner banner-secondhand" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/secondhand/index' })">
+            <view class="feature-banners feature-banners-three" v-if="config">
+                <view v-if="config.enable_secondhand !== 0" class="feature-banner banner-secondhand" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/secondhand/index' })">
                     <view class="banner-info">
                         <text class="banner-title">闲置市场</text>
                         <text class="banner-desc">好物低价转</text>
@@ -139,7 +139,7 @@
                         <u-icon name="bag-fill" size="32" color="rgba(255,255,255,0.85)"></u-icon>
                     </view>
                 </view>
-                <view class="feature-banner banner-lost" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/lost_found/index' })">
+                <view v-if="config.enable_lost_found !== 0" class="feature-banner banner-lost" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/lost_found/index' })">
                     <view class="banner-info">
                         <text class="banner-title">失物招领</text>
                         <text class="banner-desc">帮你找回来</text>
@@ -148,7 +148,7 @@
                         <u-icon name="search" size="32" color="rgba(255,255,255,0.85)"></u-icon>
                     </view>
                 </view>
-                <view class="feature-banner banner-community" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/community/index' })">
+                <view v-if="config.enable_community !== 0" class="feature-banner banner-community" @click="handleMenuClick({ url: '/addon/sd_xiaoyuan/pages/community/index' })">
                     <view class="banner-info">
                         <text class="banner-title">校园树洞</text>
                         <text class="banner-desc">匿名说心事</text>
@@ -247,18 +247,25 @@ const stats = ref({
     user_count: 0
 })
 
-const menuList = ref([
-    { name: '帮我买', icon: 'shopping-cart-fill', url: '/addon/sd_xiaoyuan/pages/buy/create', iconColor: '#ff6b00', bgColor: '#fff4e6', border: 'none' },
-    { name: '帮我送', icon: 'car', url: '/addon/sd_xiaoyuan/pages/send/create', iconColor: '#13c2c2', bgColor: '#e6fffb', border: 'none' },
-    { name: '代取快递', icon: 'gift-fill', url: '/addon/sd_xiaoyuan/pages/express/pickup', iconColor: '#52c41a', bgColor: '#f6ffed', border: 'none' },
-    { name: '帮打印', icon: 'file-text-fill', url: '/addon/sd_xiaoyuan/pages/print/create', iconColor: '#ff9800', bgColor: '#fff8e1', border: 'none' },
-    { name: '扔垃圾', icon: 'trash-fill', url: '/addon/sd_xiaoyuan/pages/trash/create', iconColor: '#9c27b0', bgColor: '#f3e5f5', border: 'none' },
-    { name: '帮搬运', icon: 'car-fill', url: '/addon/sd_xiaoyuan/pages/carry/create', iconColor: '#4caf50', bgColor: '#e8f5e9', border: 'none' },
-    { name: '代清洁', icon: 'star-fill', url: '/addon/sd_xiaoyuan/pages/clean/create', iconColor: '#2196f3', bgColor: '#e3f2fd', border: 'none' },
-    { name: '帮帮忙', icon: 'question-circle-fill', url: '/addon/sd_xiaoyuan/pages/help/create', iconColor: '#e91e63', bgColor: '#fce4ec', border: 'none' },
-    { name: '表白墙', icon: 'heart-fill', url: '/addon/sd_xiaoyuan/pages/confession/index', iconColor: '#fa709a', bgColor: '#fff0f5', border: 'none' },
-    { name: '游戏陪练', icon: 'red-packet-fill', url: '/addon/sd_xiaoyuan/pages/game/publish', iconColor: '#ff7243', bgColor: '#fff3e0', border: 'none' },
-    ])
+const config = ref<any>(null)
+
+const allMenuItems = [
+    { name: '帮我买', icon: 'shopping-cart-fill', url: '/addon/sd_xiaoyuan/pages/buy/create', iconColor: '#ff6b00', bgColor: '#fff4e6', border: 'none', key: 'enable_buy' },
+    { name: '帮我送', icon: 'car', url: '/addon/sd_xiaoyuan/pages/send/create', iconColor: '#13c2c2', bgColor: '#e6fffb', border: 'none', key: 'enable_send' },
+    { name: '代取快递', icon: 'gift-fill', url: '/addon/sd_xiaoyuan/pages/express/pickup', iconColor: '#52c41a', bgColor: '#f6ffed', border: 'none', key: 'enable_express' },
+    { name: '帮打印', icon: 'file-text-fill', url: '/addon/sd_xiaoyuan/pages/print/create', iconColor: '#ff9800', bgColor: '#fff8e1', border: 'none', key: 'enable_print' },
+    { name: '扔垃圾', icon: 'trash-fill', url: '/addon/sd_xiaoyuan/pages/trash/create', iconColor: '#9c27b0', bgColor: '#f3e5f5', border: 'none', key: 'enable_trash' },
+    { name: '帮搬运', icon: 'car-fill', url: '/addon/sd_xiaoyuan/pages/carry/create', iconColor: '#4caf50', bgColor: '#e8f5e9', border: 'none', key: 'enable_carry' },
+    { name: '代清洁', icon: 'star-fill', url: '/addon/sd_xiaoyuan/pages/clean/create', iconColor: '#2196f3', bgColor: '#e3f2fd', border: 'none', key: 'enable_clean' },
+    { name: '帮帮忙', icon: 'question-circle-fill', url: '/addon/sd_xiaoyuan/pages/help/create', iconColor: '#e91e63', bgColor: '#fce4ec', border: 'none', key: 'enable_help' },
+    { name: '表白墙', icon: 'heart-fill', url: '/addon/sd_xiaoyuan/pages/confession/index', iconColor: '#fa709a', bgColor: '#fff0f5', border: 'none', key: 'enable_confession' },
+    { name: '游戏陪练', icon: 'red-packet-fill', url: '/addon/sd_xiaoyuan/pages/game/publish', iconColor: '#ff7243', bgColor: '#fff3e0', border: 'none', key: 'enable_game' },
+]
+
+const menuList = computed(() => {
+    if (!config.value) return allMenuItems
+    return allMenuItems.filter(item => config.value[item.key] !== 0)
+})
 
 const tabbarRef = ref<any>(null)
 
@@ -282,6 +289,7 @@ onMounted(() => {
     loadAuthStatus()
     loadStats()
     loadMyOrders()
+    loadFeatureConfig()
     uni.hideTabBar()
 })
 
@@ -307,6 +315,50 @@ const loadAuthStatus = async () => {
         }
     } catch (e) {
         console.error('获取认证状态失败:', e)
+    }
+}
+
+const loadFeatureConfig = async () => {
+    // 先从缓存读取配置
+    const cachedConfig = uni.getStorageSync('xiaoyuan_config')
+    if (cachedConfig) {
+        config.value = cachedConfig
+    }
+    
+    // 异步请求最新配置
+    try {
+        const res: any = await getConfig()
+        if (res.code === 1 && res.data) {
+            // 更新配置
+            config.value = res.data
+            // 缓存到本地
+            uni.setStorageSync('xiaoyuan_config', res.data)
+        }
+    } catch (e) {
+        console.error('获取配置失败:', e)
+        // 如果请求失败且没有缓存，使用默认配置（全部开启）
+        if (!cachedConfig) {
+            config.value = {
+                enable_buy: 1,
+                enable_send: 1,
+                enable_express: 1,
+                enable_print: 1,
+                enable_trash: 1,
+                enable_carry: 1,
+                enable_clean: 1,
+                enable_help: 1,
+                enable_game: 1,
+                enable_house: 1,
+                enable_schedule: 1,
+                enable_group: 1,
+                enable_secondhand: 1,
+                enable_lost_found: 1,
+                enable_community: 1,
+                enable_confession: 1,
+                enable_sign: 1,
+                enable_points_mall: 1,
+            }
+        }
     }
 }
 

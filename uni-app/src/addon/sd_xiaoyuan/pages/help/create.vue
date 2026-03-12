@@ -1,5 +1,6 @@
 <template>
-    <view class="help-create-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="help-create-page" v-if="isFeatureEnabled">
         <u-navbar 
             title="帮帮忙" 
             :safeAreaInsetTop="true"
@@ -108,6 +109,10 @@ import { createHelpOrder } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import xyUpload from '../../components/xy-upload.vue'
 import pay from '@/components/pay/pay.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_help')
 
 const imageStr = ref('')
 const payRef = ref<any>(null)
@@ -123,6 +128,7 @@ const formData = ref({
 const selectedAddress = ref<any>(null)
 
 onMounted(() => {
+    loadConfig()
     tryBindFenxiao()
     uni.$on('onAddressSelect', (address: any) => {
         selectedAddress.value = address
@@ -221,6 +227,7 @@ const onPayFail = () => {
     border-radius: 16rpx;
     padding: 24rpx;
     margin-bottom: 20rpx;
+    width: auto;
     
     .section-header {
         display: flex;

@@ -27,7 +27,7 @@
                 @click="selectSchool(item)"
             >
                 <view class="school-logo">
-                    <image v-if="item.logo" :src="item.logo" mode="aspectFit"></image>
+                    <image v-if="item.logo" :src="img(item.logo)" mode="aspectFit"></image>
                     <view v-else class="default-logo">
                         <u-icon name="home" size="30" color="#999"></u-icon>
                     </view>
@@ -56,6 +56,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getSchoolList } from '../../api/xiaoyuan'
+import { img } from '@/utils/common'
 
 const statusBarHeight = ref(0)
 const navBarHeight = ref(44)

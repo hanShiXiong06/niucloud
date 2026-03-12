@@ -1,48 +1,73 @@
 ﻿<template>
     <view class="publish-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="form-section">
             <view class="form-item">
-                <text class="label">分类</text>
+                <view class="item-header">
+                    <u-icon name="grid" size="18" color="#52c41a"></u-icon>
+                    <text class="label">分类</text>
+                </view>
                 <picker :range="categoryList" range-key="name" @change="onCategoryChange">
                     <view class="picker-value">
-                        {{ selectedCategory ? selectedCategory.name : '请选择分类' }}
+                        <text :class="{ placeholder: !selectedCategory }">
+                            {{ selectedCategory ? selectedCategory.name : '请选择分类' }}
+                        </text>
                         <u-icon name="arrow-right" size="14" color="#ccc"></u-icon>
                     </view>
                 </picker>
             </view>
             
             <view class="form-item">
-                <text class="label">标题</text>
-                <input class="input" v-model="formData.title" placeholder="请输入标题（选填）" />
+                <view class="item-header">
+                    <u-icon name="edit-pen" size="18" color="#1890ff"></u-icon>
+                    <text class="label">标题</text>
+                    <text class="optional">选填</text>
+                </view>
+                <input class="input" v-model="formData.title" placeholder="给你的帖子起个标题吧~" />
             </view>
             
             <view class="form-item column">
-                <text class="label">内容</text>
-                <textarea class="textarea" v-model="formData.content" placeholder="分享你的校园生活..." :maxlength="1000" />
+                <view class="item-header">
+                    <u-icon name="chat" size="18" color="#ff9800"></u-icon>
+                    <text class="label">内容</text>
+                </view>
+                <textarea 
+                    class="textarea" 
+                    v-model="formData.content" 
+                    placeholder="分享你的校园生活，记录美好瞬间..." 
+                    :maxlength="1000"
+                    :auto-height="true"
+                    :show-confirm-bar="false"
+                />
                 <text class="count">{{ formData.content.length }}/1000</text>
             </view>
             
             <view class="form-item column">
-                <text class="label">图片（最多9张）</text>
+                <view class="item-header">
+                    <u-icon name="photo" size="18" color="#e91e63"></u-icon>
+                    <text class="label">图片</text>
+                    <text class="hint">最多9张</text>
+                </view>
                 <view class="upload-container">
-                    <up-upload 
-                        :fileList="fileList" 
-                        @afterRead="afterRead" 
-                        @error="uploaderror" 
-                        @delete="deletePic"
-                        width="160" 
-                        height="160"
-                        name="1" 
-                        multiple 
-                        :maxCount="9"
-                    ></up-upload>
+                    <xy-upload v-model="imageStr" :maxCount="9" />
                 </view>
             </view>
         </view>
 
         <view class="submit-bar">
-            <view class="bar-space"></view>
-            <button class="submit-btn2" :disabled="!canSubmit" @click="handleSubmit">发布</button>
+            <view class="tips">
+                <u-icon name="info-circle" size="14" color="#999"></u-icon>
+                <text>发布即表示同意社区规范</text>
+            </view>
+            <button class="submit-btn" :disabled="!canSubmit" @click="handleSubmit">
+                <u-icon name="checkmark-circle" size="18" color="#333"></u-icon>
+                <text>发布</text>
+            </button>
+        </view>
         </view>
     </view>
 </template>
@@ -51,18 +76,20 @@
 import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed, onMounted } from 'vue'
 import { publishCommunity, getCommunityCategories } from '../../api/xiaoyuan'
-import { img } from '@/utils/common'
-import { uploadImage } from '@/app/api/system'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+import xyUpload from '../../components/xy-upload.vue'
 
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_community')
 const categoryList = ref<any[]>([])
-const fileList = ref<any[]>([])
+const imageStr = ref('')
 
 const selectedCategory = ref<any>(null)
 const formData = ref({
     category_id: 0,
     title: '',
     content: '',
-    images: [] as string[]
+    images: ''
 })
 
 const canSubmit = computed(() => {
@@ -70,6 +97,7 @@ const canSubmit = computed(() => {
 })
 
 onMounted(() => {
+    loadConfig()
     loadCategories()
 })
 
@@ -92,83 +120,6 @@ const onCategoryChange = (e: any) => {
     }
 }
 
-// 删除图片
-const deletePic = (event: any) => {
-    fileList.value.splice(event.index, 1)
-    formData.value.images.splice(event.index, 1)
-}
-
-// 上传错误处理
-const uploaderror = (event: any) => {
-    console.log(event)
-    if (event.errno == 112) {
-        uni.showModal({
-            title: '权限不足',
-            content: '请在用户隐私保护指引里面声明【收集你选中的照片或视频信息】'
-        })
-    } else {
-        uni.showModal({
-            title: '上传失败',
-            content: event.errMsg,
-            showCancel: false
-        })
-    }
-}
-
-// 新增图片
-const afterRead = async (event: any) => {
-    uni.showLoading({ title: '上传中' })
-    
-    // 当设置 multiple 为 true 时, file 为数组格式，否则为对象格式
-    let lists = [].concat(event.file)
-    let fileListLen = fileList.value.length
-    
-    lists.map((item: any) => {
-        fileList.value.push({
-            ...item,
-            status: 'uploading',
-            message: '上传中',
-        })
-    })
-    
-    for (let i = 0; i < lists.length; i++) {
-        const result = await uploadFilePromise(lists[i].url)
-        let item = fileList.value[fileListLen]
-        fileList.value.splice(fileListLen, 1, {
-            ...item,
-            status: 'success',
-            message: '',
-            url: result,
-        })
-        formData.value.images.push(result)
-        fileListLen++
-    }
-}
-
-const uploadFilePromise = (url: string) => {
-    return new Promise((resolve, reject) => {
-        uploadImage({
-            filePath: url,
-            name: 'file'
-        }).then((res: any) => {
-            uni.hideLoading()
-            resolve(res.data.url)
-        }).catch((err: any) => {
-            uni.hideLoading()
-            console.log(err)
-            uni.showToast({ title: '上传失败', icon: 'none' })
-            reject(err)
-        })
-    })
-}
-
-const previewImage = (index: number) => {
-    uni.previewImage({
-        current: index,
-        urls: formData.value.images.map((u: string) => img(u))
-    })
-}
-
 const handleSubmit = async () => {
     if (!canSubmit.value) return
     
@@ -179,6 +130,7 @@ const handleSubmit = async () => {
     try {
         const res: any = await publishCommunity({
             ...formData.value,
+            images: imageStr.value,
             school_id: currentSchool?.id || 0,
             campus: currentSchool?.campus || ''
         })
@@ -202,115 +154,116 @@ const handleSubmit = async () => {
 <style lang="scss" scoped>
 .publish-page {
     min-height: 100vh;
-    background: #f5f5f5;
-    padding-bottom: 120rpx;
+    background: linear-gradient(to bottom, #f0f9ff 0%, #f5f5f5 200rpx);
+    padding-bottom: 140rpx;
 }
 
 .form-section {
     background: #fff;
     margin: 20rpx;
-    border-radius: 16rpx;
-    padding: 0 20rpx;
+    border-radius: 20rpx;
+    padding: 0 30rpx;
+    width: auto;
+    box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04);
 }
 
 .form-item {
     display: flex;
-    align-items: center;
-    padding: 24rpx 0;
+    flex-direction: column;
+    padding: 32rpx 0;
     border-bottom: 1rpx solid #f0f0f0;
     
-    &.column {
-        flex-direction: column;
-        align-items: flex-start;
+    &:last-child { 
+        border-bottom: none; 
     }
     
-    &:last-child { border-bottom: none; }
-    
-    .label {
-        font-size: 28rpx;
-        color: #333;
-        width: 120rpx;
-        flex-shrink: 0;
-        margin-bottom: 16rpx;
+    .item-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20rpx;
+        
+        .label {
+            font-size: 30rpx;
+            color: #333;
+            font-weight: 600;
+            margin-left: 12rpx;
+            flex: 1;
+        }
+        
+        .optional {
+            font-size: 24rpx;
+            color: #999;
+            background: #f5f5f5;
+            padding: 4rpx 12rpx;
+            border-radius: 8rpx;
+        }
+        
+        .hint {
+            font-size: 24rpx;
+            color: #999;
+        }
     }
     
     .input {
-        flex: 1;
+        width: 100%;
         font-size: 28rpx;
+        padding: 20rpx;
+        background: #f8f9fa;
+        border-radius: 12rpx;
+        border: 2rpx solid transparent;
+        transition: all 0.3s;
+        
+        &:focus {
+            background: #fff;
+            border-color: #52c41a;
+        }
     }
     
     .textarea {
         width: 100%;
-        height: 300rpx;
+        min-height: 300rpx;
         font-size: 28rpx;
-        margin-top: 16rpx;
-        padding: 16rpx;
-        background: #f8f8f8;
-        border-radius: 8rpx;
+        padding: 20rpx;
+        background: #f8f9fa;
+        border-radius: 12rpx;
+        line-height: 1.6;
+        border: 2rpx solid transparent;
+        transition: all 0.3s;
+        box-sizing: border-box;
+        
+        &:focus {
+            background: #fff;
+            border-color: #52c41a;
+        }
     }
     
     .count {
         align-self: flex-end;
         font-size: 24rpx;
         color: #999;
-        margin-top: 8rpx;
+        margin-top: 12rpx;
     }
     
     .picker-value {
-        flex: 1;
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-size: 28rpx;
-        color: #666;
+        padding: 20rpx;
+        background: #f8f9fa;
+        border-radius: 12rpx;
+        
+        text {
+            color: #333;
+            
+            &.placeholder {
+                color: #999;
+            }
+        }
     }
     
     .upload-container {
         width: 100%;
-        margin-top: 16rpx;
-    }
-}
-
-.image-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16rpx;
-    margin-top: 16rpx;
-    width: 100%;
-}
-
-.image-item {
-    width: 200rpx;
-    height: 200rpx;
-    border-radius: 8rpx;
-    position: relative;
-    overflow: hidden;
-    
-    image {
-        width: 100%;
-        height: 100%;
-    }
-    
-    .delete-btn {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 40rpx;
-        height: 40rpx;
-        background: rgba(0,0,0,0.5);
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 0 0 0 8rpx;
-    }
-    
-    &.add {
-        background: #f5f5f5;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 2rpx dashed #ddd;
     }
 }
 
@@ -319,30 +272,61 @@ const handleSubmit = async () => {
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 20rpx 30rpx;z-index: 22;
+    padding: 16rpx 30rpx;
     background: #fff;
-    box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.05);
-    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+    box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.08);
+    padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-
-    .submit-btn2 {
-        background: linear-gradient(to top, #aaf69b, #d1ff7c);
-        color: #000;
+    justify-content: space-between;
+    z-index: 22;
+    width: auto;
+    
+    .tips {
+        display: flex;
+        align-items: center;
+        gap: 8rpx;
+        flex: 1;
+        
+        text {
+            font-size: 24rpx;
+            color: #999;
+        }
+    }
+    
+    .submit-btn {
+        background: linear-gradient(135deg, #52c41a, #73d13d);
+        color: #fff;
         border: none;
-        border-radius: 40rpx;
-        padding: 16rpx 60rpx;
-        font-size: 28rpx;
+        border-radius: 50rpx;
+        padding: 0 48rpx;
+        font-size: 30rpx;
         font-weight: bold;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 80rpx;
+        gap: 8rpx;
+        height: 80rpx;
+        box-shadow: 0 4rpx 12rpx rgba(82, 196, 26, 0.3);
+        transition: all 0.3s;
+        
+        &:active {
+            transform: scale(0.95);
+            box-shadow: 0 2rpx 8rpx rgba(82, 196, 26, 0.2);
+        }
         
         &[disabled] {
-            background: #ccc;
+            background: linear-gradient(135deg, #d9d9d9, #e8e8e8);
+            color: #999;
+            box-shadow: none;
+        }
+        
+        text {
             color: #fff;
+        }
+        
+        &[disabled] text {
+            color: #999;
         }
     }
 }

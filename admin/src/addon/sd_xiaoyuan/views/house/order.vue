@@ -39,7 +39,7 @@
                 <el-table-column label="会员" width="150">
                     <template #default="{ row }">
                         <div v-if="row.member" class="flex-center">
-                            <el-avatar :src="row.member.headimg" :size="28" class="mr-1" />
+                            <el-avatar :src="img(row.member.headimg)" :size="28" class="mr-1" />
                             <span>{{ row.member.nickname }}</span>
                         </div>
                         <span v-else>-</span>
@@ -89,6 +89,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getHouseOrderList, handleHouseOrder, refundHouseDeposit, refundHouseAll } from '../../api/admin'
+import { img } from '@/utils/common'
 
 const searchForm = ref({ status: '' })
 const tableData = ref([])

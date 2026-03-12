@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="detail-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="post-detail" v-if="postInfo">
             <view class="post-header">
                 <image class="avatar" :src="img(postInfo.member_headimg || '/static/resource/images/default_headimg.png')" mode="aspectFill"></image>
@@ -80,6 +85,7 @@
             :shareUrl="shareUrl"
             @hide="showSharePopup = false"
         />
+        </view>
     </view>
 </template>
 
@@ -91,7 +97,10 @@ import { getCommunityDetail, likeCommunity, getCommunityComments, addCommunityCo
 import { img } from '@/utils/common'
 import useMemberStore from '@/stores/member'
 import sharePopup from '../../components/share-popup.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
 
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_community')
 const memberStore = useMemberStore()
 const isOwner = computed(() => postInfo.value?.member_id && memberStore.info?.member_id && postInfo.value.member_id == memberStore.info.member_id)
 
@@ -130,6 +139,7 @@ const images = computed(() => {
 })
 
 onLoad((options: any) => {
+    loadConfig()
     postId.value = Number(options?.id) || 0
     
     if (postId.value) {
@@ -248,9 +258,12 @@ const handleLike = async () => {
         if (res.code === 1) {
             isLiked.value = true
             postInfo.value.like_count = (postInfo.value.like_count || 0) + 1
+        } else {
+            uni.showToast({ title: res.msg || '操作失败', icon: 'none' })
         }
-    } catch (e) {
-        console.error(e)
+    } catch (e: any) {
+        console.error('点赞失败', e)
+        uni.showToast({ title: e.msg || '操作失败', icon: 'none' })
     }
 }
 

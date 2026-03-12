@@ -152,6 +152,64 @@
 
             <!-- 接单范围已移除，接单员只能看到自己学校的订单 -->
             <!-- 提现配置已移除，使用框架自带提现功能 -->
+
+            <!-- 功能开关 -->
+            <el-tab-pane label="功能开关" name="features">
+                <el-card>
+                    <el-alert
+                        title="功能开关配置"
+                        description="关闭后，前端将不显示对应功能的入口和菜单"
+                        type="info"
+                        :closable="false"
+                        style="margin-bottom: 20px;"
+                    />
+                    <el-form :model="featureConfig" label-width="150px">
+                        <el-form-item label="任务类型功能">
+                            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                                <el-checkbox v-model="featureConfig.enable_buy" :true-label="1" :false-label="0">帮我买</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_send" :true-label="1" :false-label="0">帮我送</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_express" :true-label="1" :false-label="0">代取快递</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_print" :true-label="1" :false-label="0">帮打印</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_trash" :true-label="1" :false-label="0">扔垃圾</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_carry" :true-label="1" :false-label="0">帮搬运</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_clean" :true-label="1" :false-label="0">代清洁</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_help" :true-label="1" :false-label="0">帮帮忙</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_game" :true-label="1" :false-label="0">游戏陪练</el-checkbox>
+                            </div>
+                        </el-form-item>
+                        
+                        <el-form-item label="其他功能">
+                            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                                <el-checkbox v-model="featureConfig.enable_house" :true-label="1" :false-label="0">房屋租赁</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_schedule" :true-label="1" :false-label="0">课程表</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_group" :true-label="1" :false-label="0">拼单好饭</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_secondhand" :true-label="1" :false-label="0">闲置市场</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_lost_found" :true-label="1" :false-label="0">失物招领</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_community" :true-label="1" :false-label="0">校园树洞</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_confession" :true-label="1" :false-label="0">表白墙</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_sign" :true-label="1" :false-label="0">每日签到</el-checkbox>
+                                <el-checkbox v-model="featureConfig.enable_points_mall" :true-label="1" :false-label="0">积分商城</el-checkbox>
+                            </div>
+                        </el-form-item>
+                        
+                        <el-form-item label="认证设置">
+                            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                                <el-checkbox v-model="featureConfig.require_auth_publish" :true-label="1" :false-label="0">发布需要实名认证</el-checkbox>
+                            </div>
+                            <div class="text-gray-400 text-xs mt-1">关闭后，用户发布内容时不需要进行实名认证，个人中心的实名认证入口也会隐藏</div>
+                        </el-form-item>
+                        
+                        <el-form-item label="关闭提示文字">
+                            <el-input v-model="featureConfig.close_text" placeholder="请输入功能关闭时的提示文字" style="width: 400px;" />
+                            <div class="text-gray-400 text-xs mt-1">当功能关闭时，页面显示的提示文字</div>
+                        </el-form-item>
+                        
+                        <el-form-item>
+                            <el-button type="primary" @click="saveFeatureConfig">保存配置</el-button>
+                        </el-form-item>
+                    </el-form>
+                </el-card>
+            </el-tab-pane>
         </el-tabs>
     </div>
 </template>
@@ -200,6 +258,28 @@ const expressConfig = ref({
     aliyun_express_appcode: ''
 })
 
+const featureConfig = ref({
+    enable_buy: 1,
+    enable_send: 1,
+    enable_express: 1,
+    enable_print: 1,
+    enable_trash: 1,
+    enable_carry: 1,
+    enable_clean: 1,
+    enable_help: 1,
+    enable_game: 1,
+    enable_house: 1,
+    enable_schedule: 1,
+    enable_group: 1,
+    enable_secondhand: 1,
+    enable_lost_found: 1,
+    enable_community: 1,
+    enable_confession: 1,
+    enable_sign: 1,
+    enable_points_mall: 1,
+    close_text: '功能已下架',
+    require_auth_publish: 1
+})
 
 onMounted(() => {
     loadConfig()
@@ -212,6 +292,7 @@ const loadConfig = async () => {
             if (res.data.base) Object.assign(baseConfig.value, res.data.base)
             if (res.data.fee) Object.assign(feeConfig.value, res.data.fee)
             if (res.data.express) Object.assign(expressConfig.value, res.data.express)
+            if (res.data.features) Object.assign(featureConfig.value, res.data.features)
         }
     } catch (e) {
         console.error(e)
@@ -247,6 +328,19 @@ const saveFeeConfig = async () => {
 const saveExpressConfig = async () => {
     try {
         const res: any = await setConfig({ type: 'express', config: expressConfig.value })
+        if (res.code === 1) {
+            ElMessage.success('保存成功')
+        } else {
+            ElMessage.error(res.msg || '保存失败')
+        }
+    } catch (e) {
+        ElMessage.error('保存失败')
+    }
+}
+
+const saveFeatureConfig = async () => {
+    try {
+        const res: any = await setConfig({ type: 'features', config: featureConfig.value })
         if (res.code === 1) {
             ElMessage.success('保存成功')
         } else {

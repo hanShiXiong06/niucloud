@@ -1,5 +1,6 @@
 ﻿<template>
-    <view class="add-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="add-page" v-if="isFeatureEnabled">
         <view class="form-section">
             <view class="form-item">
                 <text class="label">课程名称</text>
@@ -92,6 +93,10 @@ import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { addCourse, editCourse, getSchedule } from '../../api/xiaoyuan'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_schedule')
 
 const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const sections = Array.from({ length: 12 }, (_, i) => `第${i + 1}节`)
@@ -135,6 +140,7 @@ const formData = ref({
 })
 
 onLoad((options: any) => {
+    loadConfig()
     if (options?.id) {
         isEdit.value = true
         courseId.value = parseInt(options.id)

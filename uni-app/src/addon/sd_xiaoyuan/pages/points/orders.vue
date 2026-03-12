@@ -1,5 +1,6 @@
 <template>
-    <view class="orders-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="orders-page" v-if="isFeatureEnabled">
         <view class="status-tabs">
             <view class="tab-item" :class="{ active: currentStatus === -1 }" @click="changeStatus(-1)">全部</view>
             <view class="tab-item" :class="{ active: currentStatus === 0 }" @click="changeStatus(0)">待发货</view>
@@ -45,6 +46,10 @@ import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { getMyPointsOrders } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_points_mall')
 
 const loading = ref(false)
 const orderList = ref<any[]>([])
@@ -60,6 +65,7 @@ const getStatusText = (status: number) => statusMap[status] || '未知'
 
 
 onMounted(() => {
+    loadConfig()
     loadOrders()
 })
 

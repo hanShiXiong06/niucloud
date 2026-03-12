@@ -1,5 +1,6 @@
 <template>
-    <view class="create-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="create-page" v-if="isFeatureEnabled">
         <view class="form-section">
             <view class="section-title">拼单类型</view>
             <view class="type-list">
@@ -85,8 +86,13 @@ import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { createGroupOrder } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_group')
 
 onMounted(() => {
+    loadConfig()
     tryBindFenxiao()
 })
 

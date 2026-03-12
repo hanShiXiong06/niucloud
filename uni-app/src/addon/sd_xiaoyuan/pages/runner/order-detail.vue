@@ -368,6 +368,21 @@
                 <text class="value">{{ order.create_time }}</text>
             </view>
             
+            <!-- 任务凭证 -->
+            <view class="info-item column" v-if="order.status >= 40 && extData.delivery_images && extData.delivery_images.length > 0">
+                <text class="label">任务凭证</text>
+                <view class="image-list">
+                    <image 
+                        v-for="(imgUrl, idx) in extData.delivery_images" 
+                        :key="idx" 
+                        :src="img(imgUrl)" 
+                        mode="aspectFill" 
+                        class="order-image"
+                        @click="previewImage(imgUrl, extData.delivery_images)"
+                    />
+                </view>
+            </view>
+            
             <!-- 完成凭证 -->
             <view class="info-item column" v-if="order.status === 50 && extData.proof_images && extData.proof_images.length > 0">
                 <text class="label">完成凭证</text>
@@ -414,7 +429,19 @@
         <view class="proof-popup" v-if="showProofPopup">
             <view class="proof-title">上传完成凭证</view>
             <view class="proof-desc">请上传送达/完成凭证图片（必填）</view>
-            <xy-upload v-model="proofImages" :maxCount="4" />
+            
+            <!-- 图片列表 -->
+            <view class="proof-images">
+                <view class="proof-img-item" v-for="(url, index) in proofImages" :key="index">
+                    <image :src="img(url)" mode="aspectFill"></image>
+                    <view class="proof-img-del" @click="removeProofImage(index)">×</view>
+                </view>
+                <view class="proof-img-add" v-if="proofImages.length < 4" @click="chooseProofImage">
+                    <u-icon name="plus" size="40" color="#999"></u-icon>
+                    <text>添加图片</text>
+                </view>
+            </view>
+            
             <view class="proof-btns">
                 <button class="proof-btn-cancel" @click="showProofPopup = false">取消</button>
                 <button class="proof-btn-confirm" @click="confirmComplete" :disabled="proofImages.length === 0">确认提交</button>
@@ -428,9 +455,9 @@ import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getOrderDetail, pickupOrder as pickupOrderApi, deliveryOrder as deliveryOrderApi, completeOrder as completeOrderApi, rejectOrder as rejectOrderApi } from '../../api/runner'
-import xyUpload from '../../components/xy-upload.vue'
 import { img } from '@/utils/common'
 import { getStatusText, getStatusDesc, getStatus20Text, getDeliveryText, getCompleteText, getTaskTypeName, needPickupStep, taskTypeMap } from '../../utils/order-status'
+import { uploadImage } from '@/app/api/system'
 
 const order = ref<any>({})
 const extData = ref<any>({})
@@ -637,6 +664,50 @@ const deliveryOrder = async () => {
 
 const showProofPopup = ref(false)
 const proofImages = ref<string[]>([])
+
+const chooseProofImage = () => {
+    uni.chooseImage({
+        count: 4 - proofImages.value.length,
+        sizeType: ['compressed'],
+        sourceType: ['album', 'camera'],
+        success: async (res) => {
+            try {
+                uni.showLoading({ title: '上传中...' })
+                for (const tempFilePath of res.tempFilePaths) {
+                    const uploadRes = await uploadImage(tempFilePath)
+                    if (uploadRes.code === 1 && uploadRes.data?.url) {
+                        proofImages.value.push(uploadRes.data.url)
+                    }
+                }
+                uni.hideLoading()
+            } catch (e: any) {
+                uni.hideLoading()
+                handleUploadError(e)
+            }
+        },
+        fail: (e) => {
+            handleUploadError(e)
+        }
+    })
+}
+
+const removeProofImage = (index: number) => {
+    proofImages.value.splice(index, 1)
+}
+
+const handleUploadError = (error: any) => {
+    console.error('上传错误:', error)
+    if (error.errno === 112 || error.errCode === 112) {
+        uni.showToast({ 
+            title: '上传失败，请在隐私保护指引中声明相册权限', 
+            icon: 'none',
+            duration: 3000
+        })
+    } else {
+        const message = error.errMsg || error.msg || '上传失败，请重试'
+        uni.showToast({ title: message, icon: 'none' })
+    }
+}
 
 const openProofPopup = () => {
     proofImages.value = []
@@ -1005,6 +1076,46 @@ const rejectOrder = () => {
         flex-wrap: wrap;
         gap: 16rpx;
         margin-bottom: 30rpx;
+
+        .proof-img-item {
+            width: 150rpx;
+            height: 150rpx;
+            border-radius: 12rpx;
+            overflow: hidden;
+            position: relative;
+
+            image { width: 100%; height: 100%; }
+
+            .proof-img-del {
+                position: absolute;
+                top: 0; right: 0;
+                width: 40rpx; height: 40rpx;
+                background: rgba(0,0,0,0.5);
+                color: #fff;
+                font-size: 28rpx;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 0 0 0 12rpx;
+            }
+        }
+
+        .proof-img-add {
+            width: 150rpx;
+            height: 150rpx;
+            border: 2rpx dashed #ddd;
+            border-radius: 12rpx;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8rpx;
+
+            text {
+                font-size: 22rpx;
+                color: #999;
+            }
+        }
     }
 
     .proof-img-item {

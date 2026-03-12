@@ -1,5 +1,6 @@
 ﻿<template>
-    <view class="my-house-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="my-house-page" v-if="isFeatureEnabled">
         <view class="tabs">
             <view class="tab-item" :class="{ active: currentTab === 'all' }" @click="switchTab('all')">全部</view>
             <view class="tab-item" :class="{ active: currentTab === 'pending' }" @click="switchTab('pending')">待审核</view>
@@ -52,6 +53,10 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getMyHouse, offlineHouse as offlineApi, deleteHouse as deleteApi } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_house')
 
 const currentTab = ref('all')
 const houseList = ref<any[]>([])
@@ -66,7 +71,7 @@ const statusMap: Record<number, string> = {
     3: '已出租'
 }
 
-onShow(() => loadHouses(true))
+onShow(() => { loadConfig(); loadHouses(true) })
 
 const switchTab = (tab: string) => {
     currentTab.value = tab

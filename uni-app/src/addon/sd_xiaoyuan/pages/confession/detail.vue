@@ -1,8 +1,13 @@
 ﻿<template>
     <view class="detail-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="confession-detail" v-if="confessionInfo">
             <view class="detail-header">
-                <image class="avatar" :src="confessionInfo.is_anonymous ? 'https://cdn.niucloud.com/img/default_headimg.png' : img(confessionInfo.avatar || confessionInfo.headimg || 'https://cdn.niucloud.com/img/default_headimg.png')" mode="aspectFill"></image>
+                <image class="avatar" :src="confessionInfo.is_anonymous ? img('/static/resource/images/default_headimg.png') : img(confessionInfo.avatar || confessionInfo.headimg || '/static/resource/images/default_headimg.png')" mode="aspectFill"></image>
                 <view class="user-info">
                     <text class="nickname">{{ confessionInfo.is_anonymous ? '匿名用户' : (confessionInfo.nickname || '用户') }}</text>
                     <text class="time">{{ (confessionInfo.create_time) }}</text>
@@ -54,7 +59,7 @@
             <view class="section-title">评论 ({{ commentTotal }})</view>
             <view class="comment-list">
                 <view class="comment-item" v-for="item in commentList" :key="item.id">
-                    <image class="avatar" :src="item.is_anonymous ? 'https://cdn.niucloud.com/img/default_headimg.png' : img(item.avatar || item.headimg || 'https://cdn.niucloud.com/img/default_headimg.png')"></image>
+                    <image class="avatar" :src="item.is_anonymous ? img('/static/resource/images/default_headimg.png') : img(item.avatar || item.headimg || '/static/resource/images/default_headimg.png')"></image>
                     <view class="comment-content">
                         <text class="nickname">{{ item.is_anonymous ? '匿名用户' : (item.nickname || '用户') }}</text>
                         <text class="content">{{ item.content }}</text>
@@ -75,6 +80,7 @@
             <input class="comment-input" v-model="commentContent" placeholder="说点什么..." />
             <button class="send-btn" @click="sendComment">发送</button>
         </view>
+        </view>
     </view>
 </template>
 
@@ -85,7 +91,10 @@ import { onLoad } from '@dcloudio/uni-app'
 import { getConfessionDetail, likeConfession, getConfessionComments, addConfessionComment, deleteConfession } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
 import useMemberStore from '@/stores/member'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
 
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_confession')
 const memberStore = useMemberStore()
 const isOwner = computed(() => confessionInfo.value?.member_id && memberStore.info?.member_id && confessionInfo.value.member_id == memberStore.info.member_id)
 
@@ -111,6 +120,7 @@ const imageList = computed(() => {
 })
 
 onLoad((options: any) => {
+    loadConfig()
     confessionId.value = Number(options?.id) || 0
     
     if (confessionId.value) {
@@ -182,9 +192,12 @@ const handleLike = async () => {
         if (res.code === 1) {
             isLiked.value = true
             confessionInfo.value.like_count = (confessionInfo.value.like_count || 0) + 1
+        } else {
+            uni.showToast({ title: res.msg || '操作失败', icon: 'none' })
         }
-    } catch (e) {
-        console.error(e)
+    } catch (e: any) {
+        console.error('点赞失败', e)
+        uni.showToast({ title: e.msg || '操作失败', icon: 'none' })
     }
 }
 

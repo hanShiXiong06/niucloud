@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="lostfound-detail">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <!-- 类型标签 -->
         <view class="type-banner" :class="item.type">
             <text class="type-text">{{ item.type === 'LOST' ? '寻物启事' : '失物招领' }}</text>
@@ -66,6 +71,7 @@
                 {{ item.type === 'LOST' ? '我找到了' : '是我的' }}
             </button>
         </view>
+        </view>
     </view>
 </template>
 
@@ -76,7 +82,10 @@ import { onLoad } from '@dcloudio/uni-app'
 import { getLostFoundDetail, contactLostFound, closeLostFound } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
 import useMemberStore from '@/stores/member'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
 
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_lost_found')
 const memberStore = useMemberStore()
 const isOwner = computed(() => item.value.member_id && memberStore.info?.member_id && item.value.member_id == memberStore.info.member_id)
 
@@ -99,6 +108,7 @@ const images = computed(() => {
 const itemId = ref(0)
 
 onLoad((options: any) => {
+    loadConfig()
     itemId.value = parseInt(options?.id || '0')
     if (itemId.value) loadDetail()
 })

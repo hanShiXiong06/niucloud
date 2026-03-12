@@ -1,5 +1,6 @@
 ﻿<template>
-    <view class="sign-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="sign-page" v-if="isFeatureEnabled">
         <!-- 头部 -->
         <view class="page-header">
             <view class="header-bg"></view>
@@ -106,6 +107,10 @@
 import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { getSignStatus, doSign as doSignApi, getSignHistory } from '../../api/xiaoyuan'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_sign')
 
 const signStatus = ref<any>({
     is_signed: false,
@@ -126,6 +131,7 @@ const weekRewards = ref([
 const recentHistory = ref<any[]>([])
 
 onMounted(() => {
+    loadConfig()
     loadSignStatus()
     loadHistory()
 })

@@ -74,8 +74,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { getCampusAuthStatus } from '../api/xiaoyuan'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { getCampusAuthStatus, getConfig } from '../api/xiaoyuan'
 
 const props = defineProps<{
     current: string
@@ -84,6 +84,7 @@ const props = defineProps<{
 
 const showPublishPopup = ref(false)
 const showCertPopup = ref(false)
+const config = ref<any>(null)
 
 const tabRoutes: Record<string, string> = {
     home: '/addon/sd_xiaoyuan/pages/index/index',
@@ -92,29 +93,77 @@ const tabRoutes: Record<string, string> = {
     user: '/addon/sd_xiaoyuan/pages/user/index'
 }
 
-const publishTypes = [
-    { id: 'buy', name: '帮我买', icon: 'shopping-cart', color: '#ff6b00', url: '/addon/sd_xiaoyuan/pages/buy/create' },
-    { id: 'send', name: '帮我送', icon: 'car', color: '#13c2c2', url: '/addon/sd_xiaoyuan/pages/send/create' },
-    { id: 'express', name: '代取快递', icon: 'gift', color: '#52c41a', url: '/addon/sd_xiaoyuan/pages/express/pickup' },
-    { id: 'print', name: '帮打印', icon: 'file-text', color: '#ff9800', url: '/addon/sd_xiaoyuan/pages/print/create' },
-    { id: 'queue', name: '代排队', icon: 'clock', color: '#ff5722', url: '/addon/sd_xiaoyuan/pages/queue/create' },
-    { id: 'seat', name: '代占座', icon: 'account', color: '#795548', url: '/addon/sd_xiaoyuan/pages/seat/create' },
-    { id: 'trash', name: '扔垃圾', icon: 'trash', color: '#9c27b0', url: '/addon/sd_xiaoyuan/pages/trash/create' },
-    { id: 'carry', name: '帮搬运', icon: 'car', color: '#4caf50', url: '/addon/sd_xiaoyuan/pages/carry/create' },
-    { id: 'clean', name: '代清洁', icon: 'star', color: '#2196f3', url: '/addon/sd_xiaoyuan/pages/clean/create' },
-    { id: 'help', name: '帮帮忙', icon: 'question-circle', color: '#e91e63', url: '/addon/sd_xiaoyuan/pages/help/create' },
-    { id: 'game', name: '游戏陪玩', icon: 'red-packet', color: '#ff7243', url: '/addon/sd_xiaoyuan/pages/game/publish' },
-    { id: 'community', name: '树洞发布', icon: 'chat', color: '#673ab7', url: '/addon/sd_xiaoyuan/pages/community/publish' },
-    { id: 'confession', name: '表白墙', icon: 'heart', color: '#fa709a', url: '/addon/sd_xiaoyuan/pages/confession/publish' },
-    { id: 'secondhand', name: '闲置发布', icon: 'bag', color: '#13c2c2', url: '/addon/sd_xiaoyuan/pages/secondhand/publish' },
-    { id: 'lost', name: '失物招领', icon: 'search', color: '#ff4d4f', url: '/addon/sd_xiaoyuan/pages/lost_found/publish' },
-    { id: 'group', name: '拼单好饭', icon: 'heart-fill', color: '#ff9500', url: '/addon/sd_xiaoyuan/pages/group/create' }
+const allPublishTypes = [
+    { id: 'buy', name: '帮我买', icon: 'shopping-cart', color: '#ff6b00', url: '/addon/sd_xiaoyuan/pages/buy/create', key: 'enable_buy' },
+    { id: 'send', name: '帮我送', icon: 'car', color: '#13c2c2', url: '/addon/sd_xiaoyuan/pages/send/create', key: 'enable_send' },
+    { id: 'express', name: '代取快递', icon: 'gift', color: '#52c41a', url: '/addon/sd_xiaoyuan/pages/express/pickup', key: 'enable_express' },
+    { id: 'print', name: '帮打印', icon: 'file-text', color: '#ff9800', url: '/addon/sd_xiaoyuan/pages/print/create', key: 'enable_print' },
+    { id: 'trash', name: '扔垃圾', icon: 'trash', color: '#9c27b0', url: '/addon/sd_xiaoyuan/pages/trash/create', key: 'enable_trash' },
+    { id: 'carry', name: '帮搬运', icon: 'car', color: '#4caf50', url: '/addon/sd_xiaoyuan/pages/carry/create', key: 'enable_carry' },
+    { id: 'clean', name: '代清洁', icon: 'star', color: '#2196f3', url: '/addon/sd_xiaoyuan/pages/clean/create', key: 'enable_clean' },
+    { id: 'help', name: '帮帮忙', icon: 'question-circle', color: '#e91e63', url: '/addon/sd_xiaoyuan/pages/help/create', key: 'enable_help' },
+    { id: 'game', name: '游戏陪玩', icon: 'red-packet', color: '#ff7243', url: '/addon/sd_xiaoyuan/pages/game/publish', key: 'enable_game' },
+    { id: 'community', name: '树洞发布', icon: 'chat', color: '#673ab7', url: '/addon/sd_xiaoyuan/pages/community/publish', key: 'enable_community' },
+    { id: 'confession', name: '表白墙', icon: 'heart', color: '#fa709a', url: '/addon/sd_xiaoyuan/pages/confession/publish', key: 'enable_confession' },
+    { id: 'secondhand', name: '闲置发布', icon: 'bag', color: '#13c2c2', url: '/addon/sd_xiaoyuan/pages/secondhand/publish', key: 'enable_secondhand' },
+    { id: 'lost', name: '失物招领', icon: 'search', color: '#ff4d4f', url: '/addon/sd_xiaoyuan/pages/lost_found/publish', key: 'enable_lost_found' },
+    { id: 'group', name: '拼单好饭', icon: 'heart-fill', color: '#ff9500', url: '/addon/sd_xiaoyuan/pages/group/create', key: 'enable_group' }
 ]
+
+const publishTypes = computed(() => {
+    if (!config.value) return allPublishTypes
+    return allPublishTypes.filter(item => config.value[item.key] !== 0)
+})
+
+const loadFeatureConfig = async () => {
+    // 先从缓存读取配置
+    const cachedConfig = uni.getStorageSync('xiaoyuan_config')
+    if (cachedConfig) {
+        config.value = cachedConfig
+    }
+    
+    // 异步请求最新配置
+    try {
+        const res: any = await getConfig()
+        if (res.code === 1 && res.data) {
+            // 更新配置
+            config.value = res.data
+            // 缓存到本地
+            uni.setStorageSync('xiaoyuan_config', res.data)
+        }
+    } catch (e) {
+        console.error('获取配置失败:', e)
+        // 如果请求失败且没有缓存，使用默认配置（全部开启）
+        if (!cachedConfig) {
+            config.value = {
+                enable_buy: 1,
+                enable_send: 1,
+                enable_express: 1,
+                enable_print: 1,
+                enable_trash: 1,
+                enable_carry: 1,
+                enable_clean: 1,
+                enable_help: 1,
+                enable_game: 1,
+                enable_house: 1,
+                enable_schedule: 1,
+                enable_group: 1,
+                enable_secondhand: 1,
+                enable_lost_found: 1,
+                enable_community: 1,
+                enable_confession: 1,
+                enable_sign: 1,
+                enable_points_mall: 1,
+            }
+        }
+    }
+}
 
 onMounted(() => {
     uni.$on('openPublishPopup', () => {
         showPublishPopup.value = true
     })
+    loadFeatureConfig()
 })
 
 onUnmounted(() => {

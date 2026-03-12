@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="community-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <!-- 顶部背景与导航 -->
         <view class="header-section">
             <image class="header-bg" src="https://picsum.photos/750/300?random=community" mode="aspectFill"></image>
@@ -93,7 +98,7 @@
                 <!-- 帖子卡片 -->
                 <view class="post-card" v-for="(item, index) in postList" :key="item.id" @click="goToDetail(item)">
                     <view class="card-header">
-                        <image class="avatar" :src="item.member_headimg ? img(item.member_headimg) : 'https://cdn.niucloud.com/img/default_headimg.png'" mode="aspectFill"></image>
+                        <image class="avatar" :src="item.member_headimg ? img(item.member_headimg) : img('/static/resource/images/default_headimg.png')" mode="aspectFill"></image>
                         <view class="user-meta">
                             <view class="name-row">
                                 <text class="nickname">{{ item.member_nickname || '匿名用户' }}</text>
@@ -170,6 +175,7 @@
         </view>
 
         <custom-tabbar current="community" />
+        </view>
     </view>
 </template>
 
@@ -180,6 +186,10 @@ import { onShow } from '@dcloudio/uni-app'
 import { getCommunityList, likeCommunity, getCommunityCategories, getCommunityStats } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
 import customTabbar from '../../components/custom-tabbar.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_community')
 
 const currentCategory = ref(0)
 const currentSort = ref('new')
@@ -198,6 +208,7 @@ const stats = ref({
 })
 
 onMounted(() => {
+    loadConfig()
     loadCategories()
     loadPosts()
     loadStats()
@@ -360,14 +371,14 @@ const likePost = async (item: any) => {
     try {
         const res: any = await likeCommunity({ post_id: item.id })
         if (res.code === 1) {
-            item.is_liked = !item.is_liked
-            item.like_count = item.is_liked ? (item.like_count || 0) + 1 : Math.max((item.like_count || 0) - 1, 0)
+            item.is_liked = true
+            item.like_count = (item.like_count || 0) + 1
         } else {
             uni.showToast({ title: res.msg || '操作失败', icon: 'none' })
         }
     } catch (e: any) {
         console.error('点赞失败', e)
-        uni.showToast({ title: '请先登录', icon: 'none' })
+        uni.showToast({ title: e.msg || '操作失败', icon: 'none' })
     }
 }
 

@@ -1,5 +1,6 @@
 <template>
-    <view class="carry-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="carry-page" v-if="isFeatureEnabled">
         <!-- 顶部背景 -->
         <view class="header-bg">
             <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
@@ -138,6 +139,10 @@ import { ref, onMounted } from 'vue'
 import { createOrder } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import pay from '@/components/pay/pay.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_carry')
 
 const statusBarHeight = ref(0)
 const navBarHeight = ref(44)
@@ -154,6 +159,7 @@ const quickTags = ['书籍', '桌椅', '床板', '生活物品', '活动物品',
 const selectedTags = ref<string[]>([])
 
 onMounted(() => {
+    loadConfig()
     tryBindFenxiao()
     const sysInfo = uni.getSystemInfoSync()
     statusBarHeight.value = sysInfo.statusBarHeight || 0
@@ -324,6 +330,7 @@ const onPayFail = () => {
 
 .form-content {
     height: calc(100vh - 350rpx);
+    width: auto;
     padding: 20rpx;
 }
 
@@ -334,6 +341,7 @@ const onPayFail = () => {
     margin-bottom: 20rpx;
     display: flex;
     align-items: center;
+    width: auto;
     
     &.column {
         flex-direction: column;

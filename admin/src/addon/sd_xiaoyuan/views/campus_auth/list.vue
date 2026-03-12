@@ -62,7 +62,7 @@
                 <el-table-column label="关联用户" min-width="160">
                     <template #default="{ row }">
                         <div style="display:flex;align-items:center;gap:8px;">
-                            <el-avatar :size="32" :src="row.member_headimg" v-if="row.member_headimg" />
+                            <el-avatar :size="32" :src="img(row.member_headimg)" v-if="row.member_headimg" />
                             <el-avatar :size="32" v-else>{{ (row.member_nickname || '?').charAt(0) }}</el-avatar>
                             <div>
                                 <div style="font-weight:500;">{{ row.member_nickname || '-' }}</div>
@@ -145,7 +145,7 @@
                     <el-tag :type="getStatusType(currentAuth.status)">{{ getStatusName(currentAuth.status) }}</el-tag>
                 </el-descriptions-item>
                 <el-descriptions-item label="证件照片" :span="2">
-                    <el-image :src="currentAuth.cert_image" style="width: 200px;" :preview-src-list="[currentAuth.cert_image]" />
+                    <el-image :src="img(currentAuth.cert_image)" style="width: 200px;" :preview-src-list="[img(currentAuth.cert_image)]" />
                 </el-descriptions-item>
                 <el-descriptions-item label="拒绝原因" :span="2" v-if="currentAuth.refuse_reason">{{ currentAuth.refuse_reason }}</el-descriptions-item>
                 <el-descriptions-item label="申请时间">{{ (currentAuth.create_time) }}</el-descriptions-item>
@@ -168,6 +168,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCampusAuthList, getCampusAuthStat, auditCampusAuth, cancelCampusAuth } from '@/addon/sd_xiaoyuan/api/admin'
+import { img } from '@/utils/common'
 
 const loading = ref(false)
 const authList = ref<any[]>([])

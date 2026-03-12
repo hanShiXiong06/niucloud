@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="my-posts-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="tabs">
             <view class="tab-item" :class="{ active: currentTab === 'all' }" @click="switchTab('all')">全部</view>
             <view class="tab-item" :class="{ active: currentTab === 'pending' }" @click="switchTab('pending')">待审核</view>
@@ -47,6 +52,7 @@
         <view class="publish-btn" @click="goPublish">
             <text>发布帖子</text>
         </view>
+        </view>
     </view>
 </template>
 
@@ -56,6 +62,10 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getMyCommunity, deleteCommunity } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_community')
 
 const currentTab = ref('all')
 const postList = ref<any[]>([])
@@ -69,7 +79,10 @@ const statusMap: Record<number, string> = {
     2: '已下架'
 }
 
-onShow(() => loadPosts(true))
+onShow(() => {
+    loadConfig()
+    loadPosts(true)
+})
 
 const switchTab = (tab: string) => {
     currentTab.value = tab
@@ -168,11 +181,12 @@ const goPublish = () => {
         font-size: 28rpx;
         color: #666;
         padding: 16rpx 0;
-        
+        position: relative;
+
         &.active {
             color: #333;
             font-weight: bold;
-            
+
             &::after {
                 content: '';
                 position: absolute;
@@ -191,13 +205,13 @@ const goPublish = () => {
 .post-list {
     flex: 1;
     padding: 20rpx;
-    padding-bottom: 120rpx;
+    padding-bottom: 120rpx;width: auto;
 }
 
 .post-item {
     background: #fff;
     border-radius: 16rpx;
-    padding: 24rpx;
+    padding: 24rpx;width: auto;
     margin-bottom: 20rpx;
     
     .post-header {
@@ -239,30 +253,38 @@ const goPublish = () => {
         display: flex;
         gap: 12rpx;
         margin-bottom: 16rpx;
-        
+        flex-wrap: wrap;
+
         image {
-            width: 200rpx;
+            flex: 0 0 calc((100% - 24rpx) / 3);
+            width: calc((100% - 24rpx) / 3);
             height: 200rpx;
             border-radius: 8rpx;
+            object-fit: cover;
         }
     }
     
     .post-meta {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-end;
+        margin-bottom: 12rpx;
         
         .stats {
             font-size: 24rpx;
             color: #999;
+            flex: 1;
             
             text { margin-right: 20rpx; }
         }
         
         .status {
-            font-size: 24rpx;
-            padding: 4rpx 16rpx;
-            border-radius: 4rpx;
+            font-size: 22rpx;
+            padding: 6rpx 12rpx;
+            border-radius: 6rpx;
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-left: 12rpx;
             
             &.pending { background: #fff7e6; color: #fa8c16; }
             &.published { background: #f6ffed; color: #52c41a; }

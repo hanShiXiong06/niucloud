@@ -1,5 +1,6 @@
 ﻿<template>
-    <view class="history-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="history-page" v-if="isFeatureEnabled">
         <view class="stat-card">
             <view class="stat-item">
                 <text class="value">{{ totalDays }}</text>
@@ -101,6 +102,7 @@ const calendarDays = computed(() => {
 })
 
 onMounted(() => {
+    loadConfig()
     loadHistory()
 })
 

@@ -1,5 +1,6 @@
 <template>
-    <view class="express-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="express-page" v-if="isFeatureEnabled">
         <!-- 顶部背景 -->
         <view class="header-bg">
             <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
@@ -140,7 +141,7 @@
                         @click="selectStation(item)"
                     >
                         <view class="station-logo">
-                            <image v-if="item.logo" :src="item.logo" mode="aspectFit"></image>
+                            <image v-if="item.logo" :src="img(item.logo)" mode="aspectFit"></image>
                             <text v-else class="logo-text">驿站</text>
                         </view>
                         <view class="station-info">
@@ -176,6 +177,11 @@ import { getExpressStations, getPackagePrices, createOrder } from '../../api/xia
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import pay from '@/components/pay/pay.vue'
 import xyUpload from '../../components/xy-upload.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+import { img } from '@/utils/common'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_express')
 
 const statusBarHeight = ref(0)
 const navBarHeight = ref(44)
@@ -196,6 +202,7 @@ const imageStr = ref('')
 const pickupCode = ref('')
 
 onMounted(() => {
+    loadConfig()
     tryBindFenxiao()
     const sysInfo = uni.getSystemInfoSync()
     statusBarHeight.value = sysInfo.statusBarHeight || 0
@@ -450,6 +457,7 @@ const onPayFail = () => {
 
 .form-content {
     height: calc(100vh - 400rpx);
+    width: auto;
     padding: 20rpx;
 }
 
@@ -460,6 +468,7 @@ const onPayFail = () => {
     margin-bottom: 20rpx;
     display: flex;
     align-items: center;
+    width: auto;
     
     &.column {
         flex-direction: column;

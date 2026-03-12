@@ -1,5 +1,6 @@
 <template>
-    <view class="game-publish">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="game-publish" v-if="isFeatureEnabled">
         <view class="form-section">
             <view class="section-title">游戏信息</view>
             <view class="form-item">
@@ -88,6 +89,10 @@ import { createOrder } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import pay from '@/components/pay/pay.vue'
 import xyUpload from '../../components/xy-upload.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_game')
 
 const editId = ref(0)
 const imageStr = ref('')
@@ -133,6 +138,7 @@ onLoad((options: any) => {
 })
 
 onMounted(() => {
+    loadConfig()
     tryBindFenxiao()
     loadTypes()
     // 获取用户信息

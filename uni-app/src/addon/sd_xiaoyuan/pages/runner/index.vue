@@ -46,7 +46,7 @@
             <!-- 顶部状态栏 -->
             <view class="top-header">
                 <view class="user-info">
-                    <image class="avatar" :src="runnerAvatar" mode="aspectFill"></image>
+                    <image class="avatar" :src="img(runnerAvatar)" mode="aspectFill"></image>
                     <view class="info">
                         <text class="name">{{ runnerInfo.real_name }}</text>
                         <view class="level">
@@ -183,7 +183,19 @@
         <view class="proof-popup" v-if="showProofPopup">
             <view class="proof-title">{{ proofAction === 'complete' ? '上传完成凭证' : '上传任务凭证' }}</view>
             <view class="proof-desc">{{ proofAction === 'complete' ? '请上传完成凭证图片（必填）' : '可上传任务凭证图片（选填）' }}</view>
-            <xy-upload v-model="proofImages" :maxCount="4" />
+            
+            <!-- 图片列表 -->
+            <view class="proof-images">
+                <view class="proof-img-item" v-for="(url, index) in proofImages" :key="index">
+                    <image :src="img(url)" mode="aspectFill"></image>
+                    <view class="proof-img-del" @click="removeProofImage(index)">×</view>
+                </view>
+                <view class="proof-img-add" v-if="proofImages.length < 4" @click="chooseProofImage">
+                    <u-icon name="plus" size="40" color="#999"></u-icon>
+                    <text>添加图片</text>
+                </view>
+            </view>
+            
             <view class="proof-btns"> 
                 <button class="proof-btn-cancel" @click="showProofPopup = false">取消</button>
                 <button class="proof-btn-confirm" @click="confirmProofAction" :disabled="proofAction === 'complete' && proofImages.length === 0">确认提交</button>
@@ -224,9 +236,9 @@ import { getRunnerLevels } from '../../api/xiaoyuan'
 import useMemberStore from '@/stores/member'
 import { img } from '@/utils/common'
 import request from '@/utils/request'
-import xyUpload from '../../components/xy-upload.vue'
 import sdOrderItem from '../../components/sd-order-item.vue'
 import { getStatusText, getStatus20Text, getDeliveryText, getCompleteText, getTaskTypeName, needPickupStep } from '../../utils/order-status'
+import { uploadImage } from '@/app/api/system'
 
 const memberStore = useMemberStore()
 const runnerInfo = ref<any>({})
@@ -523,6 +535,50 @@ const handleComplete = (order: any) => {
     proofOrderId.value = order.id
     proofImages.value = []
     showProofPopup.value = true
+}
+
+const chooseProofImage = () => {
+    uni.chooseImage({
+        count: 4 - proofImages.value.length,
+        sizeType: ['compressed'],
+        sourceType: ['album', 'camera'],
+        success: async (res) => {
+            try {
+                uni.showLoading({ title: '上传中...' })
+                for (const tempFilePath of res.tempFilePaths) {
+                    const uploadRes = await uploadImage({ filePath: tempFilePath, name: 'file' })
+                    if (uploadRes.code === 1 && uploadRes.data?.url) {
+                        proofImages.value.push(uploadRes.data.url)
+                    }
+                }
+                uni.hideLoading()
+            } catch (e: any) {
+                uni.hideLoading()
+                handleUploadError(e)
+            }
+        },
+        fail: (e) => {
+            handleUploadError(e)
+        }
+    })
+}
+
+const removeProofImage = (index: number) => {
+    proofImages.value.splice(index, 1)
+}
+
+const handleUploadError = (error: any) => {
+    console.error('上传错误:', error)
+    if (error.errno === 112 || error.errCode === 112) {
+        uni.showToast({ 
+            title: '上传失败，请在隐私保护指引中声明相册权限', 
+            icon: 'none',
+            duration: 3000
+        })
+    } else {
+        const message = error.errMsg || error.msg || '上传失败，请重试'
+        uni.showToast({ title: message, icon: 'none' })
+    }
 }
 
 const confirmProofAction = async () => {

@@ -338,11 +338,35 @@ const chooseImage = () => {
                         if (data.code === 1 && data.data && data.data.url) {
                             publishForm.value.images.push(data.data.url)
                         }
+                    },
+                    fail: (err) => {
+                        handleUploadError(err)
                     }
                 })
             })
+        },
+        fail: (err) => {
+            handleUploadError(err)
         }
     })
+}
+
+// 统一的上传错误处理
+const handleUploadError = (event: any) => {
+    console.log('上传错误:', event)
+    if (event.errno == 112 || event.errCode == 112) {
+        uni.showModal({
+            title: '权限不足',
+            content: '请在用户隐私保护指引里面声明【收集你选中的照片或视频信息】',
+            showCancel: false
+        })
+    } else {
+        uni.showModal({
+            title: '上传失败',
+            content: event.errMsg || '上传图片失败，请重试',
+            showCancel: false
+        })
+    }
 }
 
 const removeImage = (idx: number) => {

@@ -53,7 +53,7 @@
                 <el-table-column label="用户信息" min-width="200">
                     <template #default="{ row }">
                         <div class="user-info">
-                            <el-avatar :src="row.headimg" :size="40" />
+                            <el-avatar :src="img(row.headimg)" :size="40" />
                             <div class="info">
                                 <div class="name">{{ row.nickname || '用户' + row.member_id }}</div>
                                 <div class="mobile">{{ row.mobile || '-' }}</div>
@@ -158,6 +158,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getCreditList, getCreditLogList, adjustCredit, getCreditStat } from '@/addon/sd_xiaoyuan/api/credit'
+import { img } from '@/utils/common'
 
 const loading = ref(false)
 const list = ref<any[]>([])

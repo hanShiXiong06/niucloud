@@ -1,5 +1,6 @@
 <template>
-    <view class="detail-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="detail-page" v-if="isFeatureEnabled">
         <view class="detail-header" v-if="info.id">
             <view class="header-bg"></view>
             <view class="header-content">
@@ -120,6 +121,10 @@ import { ref, computed } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import { getGroupOrderInfo, joinGroupOrder, quitGroupOrder, cancelGroupOrder, confirmGroupOrderSuccess, completeGroupOrder } from '../../api/xiaoyuan'
 import useMemberStore from '@/stores/member'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_group')
 
 const memberStore = useMemberStore()
 const info = ref<any>({})
@@ -271,6 +276,7 @@ onShareAppMessage(() => {
 onLoad((options: any) => {
     groupId.value = parseInt(options?.id || '0')
     if (groupId.value) {
+        loadConfig()
         loadInfo()
     }
 })

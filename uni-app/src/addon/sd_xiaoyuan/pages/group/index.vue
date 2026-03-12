@@ -1,5 +1,6 @@
 <template>
-    <view class="group-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="group-page" v-if="isFeatureEnabled">
         <!-- 头部区域 -->
         <view class="header-section">
             <view class="header-bg"></view>
@@ -254,6 +255,7 @@ const loadStats = async () => {
 }
 
 onMounted(() => {
+    loadConfig()
     loadList()
     loadStats()
 })

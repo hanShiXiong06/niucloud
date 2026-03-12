@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="my-confession-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="tabs">
             <view class="tab-item" :class="{ active: currentTab === 'all' }" @click="switchTab('all')">全部</view>
             <view class="tab-item" :class="{ active: currentTab === 'pending' }" @click="switchTab('pending')">待审核</view>
@@ -49,6 +54,7 @@
         <view class="publish-btn" @click="goPublish">
             <text>发表白</text>
         </view>
+        </view>
     </view>
 </template>
 
@@ -58,6 +64,10 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getMyConfession, deleteConfession as deleteApi } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_confession')
 
 const currentTab = ref('all')
 const confessionList = ref<any[]>([])
@@ -71,7 +81,10 @@ const statusMap: Record<number, string> = {
     2: '已下架'
 }
 
-onShow(() => loadConfessions(true))
+onShow(() => {
+    loadConfig()
+    loadConfessions(true)
+})
 
 const switchTab = (tab: string) => {
     currentTab.value = tab

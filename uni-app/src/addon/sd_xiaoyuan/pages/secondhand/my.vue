@@ -1,5 +1,10 @@
 <template>
     <view class="my-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="tabs">
             <view class="tab-item" :class="{ active: currentTab === 'all' }" @click="switchTab('all')">全部</view>
             <view class="tab-item" :class="{ active: currentTab === 'published' }" @click="switchTab('published')">在售</view>
@@ -9,12 +14,14 @@
 
         <scroll-view scroll-y class="goods-list" @scrolltolower="loadMore">
             <view class="goods-item" v-for="item in goodsList" :key="item.id" @click="goDetail(item.id)">
-                <image class="goods-image" :src="img(getFirstImage(item.images))" mode="aspectFill"></image>
+                <view class="goods-image-wrapper">
+                    <image class="goods-image" :src="img(getFirstImage(item.images))" mode="aspectFill"></image>
+                    <text class="status-badge" :class="getStatusClass(item.status)">{{ getStatusText(item.status) }}</text>
+                </view>
                 <view class="goods-info">
                     <text class="title">{{ item.title }}</text>
                     <view class="meta">
                         <text class="price">¥{{ item.price }}</text>
-                        <text class="status" :class="getStatusClass(item.status)">{{ getStatusText(item.status) }}</text>
                     </view>
                     <view class="stats">
                         <text>浏览 {{ item.view_count || 0 }}</text>
@@ -44,6 +51,7 @@
         <view class="publish-btn" @click="goPublish">
             <text>发布闲置</text>
         </view>
+        </view>
     </view>
 </template>
 
@@ -53,6 +61,10 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getMyPublishSecondhand, offSecondhand, soldSecondhand, delSecondhand, onSecondhand } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_secondhand')
 
 const currentTab = ref('all')
 const goodsList = ref<any[]>([])
@@ -67,7 +79,10 @@ const statusMap: Record<number, string> = {
     3: '已删除'
 }
 
-onShow(() => loadGoods(true))
+onShow(() => {
+    loadConfig()
+    loadGoods(true)
+})
 
 const switchTab = (tab: string) => {
     currentTab.value = tab
@@ -249,14 +264,47 @@ const goPublish = () => {
     border-radius: 16rpx;
     padding: 20rpx;
     margin-bottom: 20rpx;
-    
-    .goods-image {
+
+    .goods-image-wrapper {
+        position: relative;
         width: 100%;
         height: 300rpx;
-        border-radius: 12rpx;
         margin-bottom: 16rpx;
+
+        .goods-image {
+            width: 100%;
+            height: 100%;
+            border-radius: 12rpx;
+        }
+
+        .status-badge {
+            position: absolute;
+            bottom: 12rpx;
+            left: 12rpx;
+            font-size: 24rpx;
+            padding: 6rpx 16rpx;
+            border-radius: 6rpx;
+            font-weight: bold;
+
+            &.offline {
+                background: rgba(245, 245, 245, 0.95);
+                color: #999;
+            }
+            &.published {
+                background: rgba(246, 255, 237, 0.95);
+                color: #52c41a;
+            }
+            &.sold {
+                background: rgba(230, 247, 255, 0.95);
+                color: #1890ff;
+            }
+            &.deleted {
+                background: rgba(255, 241, 240, 0.95);
+                color: #ff4d4f;
+            }
+        }
     }
-    
+
     .goods-info {
         .title {
             display: block;
@@ -265,44 +313,33 @@ const goPublish = () => {
             color: #333;
             margin-bottom: 12rpx;
         }
-        
+
         .meta {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 12rpx;
-            
+
             .price {
                 font-size: 28rpx;
                 color: #ff6b00;
                 font-weight: bold;
             }
-            
-            .status {
-                font-size: 24rpx;
-                padding: 4rpx 16rpx;
-                border-radius: 4rpx;
-                
-                &.offline { background: #f5f5f5; color: #999; }
-                &.published { background: #f6ffed; color: #52c41a; }
-                &.sold { background: #e6f7ff; color: #1890ff; }
-                &.deleted { background: #fff1f0; color: #ff4d4f; }
-            }
         }
-        
+
         .stats {
             font-size: 24rpx;
             color: #999;
         }
     }
-    
+
     .actions {
         display: flex;
         gap: 16rpx;
         margin-top: 16rpx;
         padding-top: 16rpx;
         border-top: 1rpx solid #f0f0f0;
-        
+
         .action-btn {
             flex: 1;
             height: 64rpx;
@@ -312,7 +349,7 @@ const goPublish = () => {
             color: #666;
             border: none;
             border-radius: 8rpx;
-            
+
             &.danger {
                 background: #fff1f0;
                 color: #ff4d4f;

@@ -1,5 +1,6 @@
 <template>
-    <view class="game-my">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="game-my" v-if="isFeatureEnabled">
         <!-- 状态筛选 -->
         <view class="status-tabs">
             <view class="tab" :class="{ active: currentStatus === '' }" @click="changeStatus('')">全部</view>
@@ -74,6 +75,10 @@ import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getMyGameList, setGameStatus, delGame } from '../../api/game'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_game')
 
 const list = ref<any[]>([])
 const currentStatus = ref('')
@@ -90,7 +95,7 @@ const serviceMap: Record<string, string> = {
 }
 const statusMap: Record<number, string> = { 0: '待审核', 1: '上架中', 2: '已下架', 3: '已拒绝' }
 
-onShow(() => { loadList(true) })
+onShow(() => { loadConfig(); loadList(true) })
 
 const loadList = async (refresh = false) => {
     if (loading.value) return

@@ -28,10 +28,10 @@
             @close="showPoster=false">
             <view class="poster-wrap">
                 <!-- #ifndef H5 -->
-                <image v-if="posterData" style="width: 600rpx;" mode="widthFix" :src="posterData"></image>
+                <image v-if="posterData" style="width: 600rpx;" mode="widthFix" :src="img(posterData)"></image>
                 <!-- #endif -->
                 <!-- #ifdef H5 -->
-                <img v-if="posterData" style="width: 600rpx;" :src="posterData" />
+                <img v-if="posterData" style="width: 600rpx;" :src="img(posterData)" />
                 <!-- #endif -->
                 <view class="save-btn" @tap="savePoster">
                     <!-- #ifndef H5 -->

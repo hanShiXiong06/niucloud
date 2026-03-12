@@ -400,6 +400,21 @@
                 <text class="value">{{ order.create_time }}</text>
             </view>
             
+            <!-- 任务凭证 -->
+            <view class="info-item column" v-if="order.status >= 40 && extData.delivery_images && extData.delivery_images.length > 0">
+                <text class="label">任务凭证</text>
+                <view class="image-list">
+                    <image 
+                        v-for="(imgUrl, idx) in extData.delivery_images" 
+                        :key="idx" 
+                        :src="img(imgUrl)" 
+                        mode="aspectFill" 
+                        class="order-image"
+                        @click="previewImage(imgUrl, extData.delivery_images)"
+                    />
+                </view>
+            </view>
+            
             <!-- 完成凭证 -->
             <view class="info-item column" v-if="order.status === 50 && extData.proof_images && extData.proof_images.length > 0">
                 <text class="label">完成凭证</text>

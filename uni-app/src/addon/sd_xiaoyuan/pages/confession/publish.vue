@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="publish-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="form-section">
             <view class="form-item column">
                 <view class="label-row">
@@ -65,15 +70,24 @@
                 {{ submitting ? '发布中...' : '发布表白' }}
             </button>
         </view>
+        </view>
     </view>
 </template>
 
 <script setup lang="ts">
 import '@/addon/sd_xiaoyuan/css/base.css'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { publishConfession } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
 import { uploadImage } from '@/app/api/system'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_confession')
+
+onMounted(() => {
+    loadConfig()
+})
 
 const formData = ref({
     content: '',
@@ -103,6 +117,9 @@ const chooseImage = () => {
             for (let i = 0; i < paths.length; i++) {
                 doUpload(paths[i])
             }
+        },
+        fail: (err) => {
+            handleUploadError(err)
         }
     })
 }
@@ -116,6 +133,24 @@ const doUpload = async (filePath: string) => {
         imageList.value.push(res.data.url)
     } else {
         uni.showToast({ title: '上传失败', icon: 'none' })
+    }
+}
+
+// 统一的上传错误处理
+const handleUploadError = (event: any) => {
+    console.log('上传错误:', event)
+    if (event.errno == 112 || event.errCode == 112) {
+        uni.showModal({
+            title: '权限不足',
+            content: '请在用户隐私保护指引里面声明【收集你选中的照片或视频信息】',
+            showCancel: false
+        })
+    } else {
+        uni.showModal({
+            title: '上传失败',
+            content: event.errMsg || '上传图片失败，请重试',
+            showCancel: false
+        })
     }
 }
 

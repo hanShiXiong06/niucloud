@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="lostfound-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <!-- 顶部统计与搜索 -->
         <view class="header-section" :class="currentType.toLowerCase()">
             <view class="header-content">
@@ -114,7 +119,7 @@
                     
                     <view class="card-footer">
                         <view class="user">
-                            <image class="avatar" :src="item.member_avatar ? img(item.member_avatar) : 'https://cdn.niucloud.com/img/default_headimg.png'" mode="aspectFill"></image>
+                            <image class="avatar" :src="item.member_avatar ? img(item.member_avatar) : img('/static/resource/images/default_headimg.png')" mode="aspectFill"></image>
                             <text class="nickname">{{ item.member_nickname || '同学' }}</text>
                         </view>
                         <view class="contact-btn" @click.stop="handleContact(item)">
@@ -147,6 +152,7 @@
                 <text>我捡到</text>
             </view>
         </view>
+        </view>
     </view>
 </template>
 
@@ -156,6 +162,10 @@ import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getLostFoundList, getLostFoundStats } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_lost_found')
 
 const currentType = ref('LOST')
 const currentCategory = ref('')
@@ -194,6 +204,7 @@ const loadStats = async () => {
 }
 
 onMounted(() => {
+    loadConfig()
     loadItems()
     loadUrgent()
     loadStats()

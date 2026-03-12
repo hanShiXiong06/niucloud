@@ -1,5 +1,6 @@
 ﻿<template>
-    <view class="publish-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="publish-page" v-if="isFeatureEnabled">
         <view class="form-section">
             <view class="form-item">
                 <text class="label">房源标题</text>
@@ -107,6 +108,7 @@ const formData = ref({
 })
 
 onLoad((options: any) => {
+    loadConfig()
     if (options?.id) {
         isEdit.value = true
         editId.value = parseInt(options.id)

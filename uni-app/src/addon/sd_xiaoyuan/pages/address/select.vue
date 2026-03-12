@@ -6,12 +6,10 @@
             :safeAreaInsetTop="true"
             :placeholder="true"
             bgColor="#c0fe95"
+            :autoBack="true"
+            leftIcon="arrow-left"
+            @clickLeft="goBack"
         >
-            <template #right>
-                <view class="nav-right-btn" @click="goToAdd">
-                    <u-icon name="plus" size="18" color="#333"></u-icon>
-                </view>
-            </template>
         </u-navbar>
 
         <scroll-view scroll-y class="address-list">
@@ -37,9 +35,19 @@
             <view class="empty" v-if="addressList.length === 0 && !loading">
                 <u-icon name="map" size="80" color="#ccc"></u-icon>
                 <text>暂无地址，请添加</text>
-                <button class="add-btn" @click="goToAdd">添加地址</button>
             </view>
+            
+            <!-- 底部占位 -->
+            <view style="height: 120rpx;"></view>
         </scroll-view>
+
+        <!-- 底部添加按钮 -->
+        <view class="bottom-bar">
+            <button class="add-address-btn" @click="goToAdd">
+                <u-icon name="plus-circle" size="18" color="#333"></u-icon>
+                <text>添加新地址</text>
+            </button>
+        </view>
 
     </view>
 </template>
@@ -114,6 +122,9 @@ const goToAdd = () => {
     })
 }
 
+const goBack = () => {
+    uni.navigateBack()
+}
 </script>
 
 <style lang="scss" scoped>
@@ -122,12 +133,9 @@ const goToAdd = () => {
     background: #f5f5f5;
 }
 
-.nav-right-btn {
-    padding: 10rpx 20rpx;
-}
-
 .address-list {
-    height: calc(100vh - 200rpx);width: auto;
+    height: calc(100vh - 200rpx);
+    width: auto;
     padding: 20rpx;
 }
 
@@ -196,16 +204,6 @@ const goToAdd = () => {
         font-size: 28rpx;
         color: #999;
     }
-    
-    .add-btn {
-        margin-top: 40rpx;
-        padding: 16rpx 60rpx;
-        background: linear-gradient(to top, #aaf69b, #d1ff7c);
-        color: #333;
-        font-size: 28rpx;
-        border-radius: 40rpx;
-        border: none;
-    }
 }
 
 .bottom-bar {
@@ -213,9 +211,25 @@ const goToAdd = () => {
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 16rpx 30rpx;
+    padding: 20rpx 30rpx;
     background: #fff;
     box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.05);
-    padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+    z-index: 10;
+    
+    .add-address-btn {
+        width: 100%;
+        height: 88rpx;
+        background: linear-gradient(to top, #aaf69b, #d1ff7c);
+        color: #333;
+        font-size: 30rpx;
+        font-weight: bold;
+        border-radius: 44rpx;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12rpx;
+    }
 }
 </style>

@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="confession-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <!-- 头部背景与搜索 -->
         <view class="header-section">
             <image class="header-bg" src="https://picsum.photos/750/350?random=love" mode="aspectFill"></image>
@@ -89,7 +94,7 @@
 
                     <view class="card-footer">
                         <view class="from-info">
-                            <image class="avatar" :src="item.is_anonymous ? 'https://cdn.niucloud.com/img/default_headimg.png' : img(item.avatar || item.headimg || 'https://cdn.niucloud.com/img/default_headimg.png')" mode="aspectFill"></image>
+                            <image class="avatar" :src="item.is_anonymous ? img('/static/resource/images/default_headimg.png') : img(item.avatar || item.headimg || '/static/resource/images/default_headimg.png')" mode="aspectFill"></image>
                             <text class="name">{{ item.is_anonymous ? '匿名同学' : (item.nickname || '用户') }}</text>
                         </view>
                         <view class="actions">
@@ -124,6 +129,7 @@
             <u-icon name="edit-pen" size="24" color="#fff"></u-icon>
             <text>表白</text>
         </view>
+        </view>
     </view>
 </template>
 
@@ -133,6 +139,10 @@ import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getConfessionList, likeConfession as likeConfessionApi, getConfessionStats } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_confession')
 
 const keyword = ref('')
 const currentTab = ref('ALL')
@@ -154,6 +164,7 @@ const notices = ref([
 ])
 
 onMounted(() => {
+    loadConfig()
     loadConfessions()
     loadStats()
 })
@@ -292,9 +303,12 @@ const likeConfession = async (item: any) => {
         if (res.code === 1) {
             item.like_count = (item.like_count || 0) + 1
             item.is_liked = true
+        } else {
+            uni.showToast({ title: res.msg || '操作失败', icon: 'none' })
         }
-    } catch (e) {
-        console.error(e)
+    } catch (e: any) {
+        console.error('点赞失败', e)
+        uni.showToast({ title: e.msg || '操作失败', icon: 'none' })
     }
 }
 </script>

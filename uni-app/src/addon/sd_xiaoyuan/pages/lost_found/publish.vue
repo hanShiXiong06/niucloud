@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="publish-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <view class="form-section">
             <view class="form-item">
                 <text class="label required">类型</text>
@@ -83,15 +88,24 @@
         </view>
         
         <button class="submit-btn" @click="submit">{{ isEdit ? '保存修改' : '发布' }}</button>
+        </view>
     </view>
 </template>
 
 <script setup lang="ts">
 import '@/addon/sd_xiaoyuan/css/base.css'
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { publishLostFound, editLostFound, getLostFoundInfo } from '../../api/xiaoyuan'
 import xyUpload from '../../components/xy-upload.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_lost_found')
+
+onMounted(() => {
+    loadConfig()
+})
 
 const isEdit = ref(false)
 const editId = ref(0)

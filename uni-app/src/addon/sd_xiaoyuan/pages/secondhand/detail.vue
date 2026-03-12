@@ -1,5 +1,10 @@
 ﻿<template>
     <view class="secondhand-detail">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <!-- 图片轮播 -->
         <swiper class="goods-swiper" :indicator-dots="true" :autoplay="false">
             <swiper-item v-for="(item, index) in images" :key="index">
@@ -80,6 +85,7 @@
                 <button class="btn-want" @click="wantGoods">我想要</button>
             </view>
         </view>
+        </view>
     </view>
 </template>
 
@@ -90,7 +96,10 @@ import { onLoad } from '@dcloudio/uni-app'
 import { getSecondhandDetail, wantSecondhand, offSecondhand, soldSecondhand, getSecondhandCategoryList } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
 import useMemberStore from '@/stores/member'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
 
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_secondhand')
 const memberStore = useMemberStore()
 const isOwner = computed(() => goods.value.member_id && memberStore.info?.member_id && goods.value.member_id == memberStore.info.member_id)
 
@@ -129,6 +138,7 @@ const images = computed(() => {
 const goodsId = ref(0)
 
 onLoad((options: any) => {
+    loadConfig()
     goodsId.value = parseInt(options?.id || '0')
     loadCategories()
     if (goodsId.value) loadDetail()

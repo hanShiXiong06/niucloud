@@ -80,9 +80,9 @@
                 <el-descriptions-item label="评价图片" :span="2" v-if="currentEvaluate.images">
                     <div class="image-list">
                         <el-image 
-                            v-for="(img, index) in parseImages(currentEvaluate.images)" 
+                            v-for="(imgUrl, index) in parseImages(currentEvaluate.images)" 
                             :key="index"
-                            :src="img(img)" 
+                            :src="img(imgUrl)" 
                             style="width: 100px; height: 100px; margin-right: 10px;"
                             :preview-src-list="parseImages(currentEvaluate.images).map(item => img(item))"
                         />
@@ -98,6 +98,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getEvaluateList, deleteEvaluate as deleteEvaluateApi } from '@/addon/sd_xiaoyuan/api/admin'
+import { img } from '@/utils/common'
 
 const loading = ref(false)
 const evaluateList = ref<any[]>([])

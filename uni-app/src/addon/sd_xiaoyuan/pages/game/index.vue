@@ -1,5 +1,6 @@
 <template>
-    <view class="game-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="game-page" v-if="isFeatureEnabled">
         <!-- 顶部筛选 -->
         <view class="filter-bar">
             <scroll-view scroll-x class="type-tabs">
@@ -92,6 +93,10 @@ import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getGameList, getGameTypes as fetchGameTypes, getServiceTypes as fetchServiceTypes } from '../../api/game'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_game')
 
 const list = ref<any[]>([])
 const gameTypes = ref<any[]>([])
@@ -111,6 +116,7 @@ const serviceMap: Record<string, string> = {
 }
 
 onMounted(() => {
+    loadConfig()
     loadTypes()
     loadList()
 })

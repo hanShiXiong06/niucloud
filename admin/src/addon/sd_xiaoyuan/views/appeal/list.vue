@@ -114,9 +114,9 @@
                 <el-descriptions-item label="图片凭证" :span="2" v-if="currentAppeal.images">
                     <div class="image-list">
                         <el-image 
-                            v-for="(img, index) in parseImages(currentAppeal.images)" 
+                            v-for="(imgUrl, index) in parseImages(currentAppeal.images)" 
                             :key="index"
-                            :src="img(img)" 
+                            :src="img(imgUrl)" 
                             style="width: 100px; height: 100px; margin-right: 10px;"
                             :preview-src-list="parseImages(currentAppeal.images).map(item => img(item))"
                         />
@@ -147,6 +147,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getAppealList, handleAppeal as handleAppealApi } from '@/addon/sd_xiaoyuan/api/admin'
+import { img } from '@/utils/common'
 
 const loading = ref(false)
 const appealList = ref<any[]>([])

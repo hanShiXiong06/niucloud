@@ -1,5 +1,6 @@
 <template>
-    <view class="record-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="record-page" v-if="isFeatureEnabled">
         <view class="header">
             <view class="total-points">
                 <text class="label">我的积分</text>
@@ -59,6 +60,10 @@
 import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted, watch } from 'vue'
 import { getMyPoints, getPointsRecord } from '../../api/xiaoyuan'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_points_mall')
 
 const loading = ref(false)
 const activeTab = ref('all')
@@ -66,6 +71,7 @@ const myPoints = ref(0)
 const recordList = ref<any[]>([])
 
 onMounted(() => {
+    loadConfig()
     loadMyPoints()
     loadRecords()
 })

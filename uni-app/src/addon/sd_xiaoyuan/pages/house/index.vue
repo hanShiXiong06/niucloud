@@ -1,5 +1,6 @@
 ﻿<template>
-    <view class="house-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="house-page" v-if="isFeatureEnabled">
         <!-- 顶部搜索与筛选 -->
         <view class="header-section">
             <view class="search-box">
@@ -105,6 +106,10 @@ import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getHouseList } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_house')
 
 const keyword = ref('')
 const houseType = ref('')
@@ -122,6 +127,7 @@ const typeMap: Record<string, string> = {
 }
 
 onMounted(() => {
+    loadConfig()
     loadHouses()
 })
 

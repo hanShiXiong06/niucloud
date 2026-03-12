@@ -1,5 +1,6 @@
 <template>
-    <view class="clean-create-page">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="clean-create-page" v-if="isFeatureEnabled">
         <u-navbar 
             title="代清洁" 
             :safeAreaInsetTop="true"
@@ -145,6 +146,10 @@ import { ref, onMounted } from 'vue'
 import { createOrder } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import pay from '@/components/pay/pay.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_clean')
 
 const formData = ref({
     clean_type: 'DORM',
@@ -163,6 +168,7 @@ const payRef = ref<any>(null)
 const currentOrderId = ref(0)
 
 onMounted(() => {
+    loadConfig()
     tryBindFenxiao()
     uni.$on('onAddressSelect', (address: any) => {
         selectedAddress.value = address
@@ -265,6 +271,7 @@ const onPayFail = () => {
     border-radius: 16rpx;
     padding: 24rpx;
     margin-bottom: 20rpx;
+    width: auto;
     
     .section-header {
         display: flex;

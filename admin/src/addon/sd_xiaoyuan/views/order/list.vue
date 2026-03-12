@@ -129,9 +129,9 @@
                 </el-table-column>
                 <el-table-column label="图片" width="100">
                     <template #default="{ row }">
-                        <el-image v-if="row.goods_image" :src="row.goods_image" style="width:50px;height:50px;" fit="cover" :preview-src-list="[row.goods_image]" />
+                        <el-image v-if="row.goods_image" :src="img(row.goods_image)" style="width:50px;height:50px;" fit="cover" :preview-src-list="[img(row.goods_image)]" />
                         <template v-else-if="row.ext_data?.images?.length">
-                            <el-image :src="row.ext_data.images[0]" style="width:50px;height:50px;" fit="cover" :preview-src-list="row.ext_data.images" />
+                            <el-image :src="img(row.ext_data.images[0])" style="width:50px;height:50px;" fit="cover" :preview-src-list="row.ext_data.images.map((i: string) => img(i))" />
                         </template>
                         <span v-else class="text-gray">-</span>
                     </template>
@@ -211,15 +211,20 @@
                 <el-descriptions-item label="备注" :span="2">{{ currentOrder.remark || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="图片" :span="2" v-if="currentOrder.goods_image || (currentOrder.ext_data?.images?.length)">
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <el-image v-if="currentOrder.goods_image" :src="currentOrder.goods_image" style="width:80px;height:80px;" fit="cover" :preview-src-list="[currentOrder.goods_image]" />
+                        <el-image v-if="currentOrder.goods_image" :src="img(currentOrder.goods_image)" style="width:80px;height:80px;" fit="cover" :preview-src-list="[img(currentOrder.goods_image)]" />
                         <template v-if="currentOrder.ext_data?.images?.length">
-                            <el-image v-for="(img, i) in currentOrder.ext_data.images" :key="i" :src="img" style="width:80px;height:80px;" fit="cover" :preview-src-list="currentOrder.ext_data.images" />
+                            <el-image v-for="(imgUrl, i) in currentOrder.ext_data.images" :key="i" :src="img(imgUrl)" style="width:80px;height:80px;" fit="cover" :preview-src-list="currentOrder.ext_data.images.map((url: string) => img(url))" />
                         </template>
+                    </div>
+                </el-descriptions-item>
+                <el-descriptions-item label="任务凭证" :span="2" v-if="currentOrder.status >= 40 && currentOrder.ext_data?.delivery_images?.length">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <el-image v-for="(imgUrl, i) in currentOrder.ext_data.delivery_images" :key="i" :src="img(imgUrl)" style="width:80px;height:80px;" fit="cover" :preview-src-list="currentOrder.ext_data.delivery_images.map((url: string) => img(url))" />
                     </div>
                 </el-descriptions-item>
                 <el-descriptions-item label="完成凭证" :span="2" v-if="currentOrder.status === 50 && currentOrder.ext_data?.proof_images?.length">
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <el-image v-for="(img, i) in currentOrder.ext_data.proof_images" :key="i" :src="img" style="width:80px;height:80px;" fit="cover" :preview-src-list="currentOrder.ext_data.proof_images" />
+                        <el-image v-for="(imgUrl, i) in currentOrder.ext_data.proof_images" :key="i" :src="img(imgUrl)" style="width:80px;height:80px;" fit="cover" :preview-src-list="currentOrder.ext_data.proof_images.map((url: string) => img(url))" />
                     </div>
                 </el-descriptions-item>
             </el-descriptions>
@@ -266,6 +271,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getOrderList, getOrderStat, cancelOrder as cancelOrderApi, assignRunner as assignRunnerApi, getOnlineRunners, getAllSchools } from '@/addon/sd_xiaoyuan/api/admin'
 import { Search } from '@element-plus/icons-vue'
+import { img } from '@/utils/common'
 
 const loading = ref(false)
 const orderList = ref<any[]>([])

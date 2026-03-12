@@ -1,5 +1,6 @@
 <template>
-    <view class="game-detail">
+    <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+    <view class="game-detail" v-if="isFeatureEnabled">
         <view class="detail-card" v-if="info.id">
             <!-- 头部 -->
             <view class="profile-section">
@@ -88,6 +89,10 @@ import { onLoad } from '@dcloudio/uni-app'
 import { getGameDetail } from '../../api/game'
 import { img } from '@/utils/common'
 import useMemberStore from '@/stores/member'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_game')
 
 const memberStore = useMemberStore()
 const info = ref<any>({})
@@ -118,6 +123,7 @@ const images = computed(() => {
 
 onLoad((options: any) => {
     detailId = parseInt(options.id)
+    loadConfig()
     loadDetail()
 })
 

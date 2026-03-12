@@ -1,5 +1,10 @@
 <template>
     <view class="buy-page">
+        <!-- 功能关闭提示 -->
+        <feature-disabled :show="!isFeatureEnabled" :text="config?.close_text" />
+        
+        <!-- 正常内容 -->
+        <view v-if="isFeatureEnabled">
         <!-- 顶部背景 -->
         <view class="header-bg">
             <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
@@ -138,6 +143,7 @@
         
         <!-- 支付组件 -->
         <pay ref="payRef" @success="onPaySuccess" @fail="onPayFail" />
+        </view>
     </view>
 </template>
 
@@ -148,6 +154,10 @@ import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import pay from '@/components/pay/pay.vue'
 import '../../css/base.css'
 import xyUpload from '../../components/xy-upload.vue'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_buy')
 
 const statusBarHeight = ref(0)
 const navBarHeight = ref(44)
@@ -168,6 +178,7 @@ const quickTags = ['牛奶', '面包', '水果', '辣条', '泡面', '饮料', '
 const selectedTags = ref<string[]>([])
 
 onMounted(() => {
+    loadConfig()
     tryBindFenxiao()
     const sysInfo = uni.getSystemInfoSync()
     statusBarHeight.value = sysInfo.statusBarHeight || 0
@@ -344,6 +355,7 @@ const onPayFail = () => {
     margin-bottom: 20rpx;
     display: flex;
     align-items: center;
+    width: auto;
     
     &.column {
         flex-direction: column;

@@ -23,7 +23,7 @@
                 <el-table-column label="用户信息" width="180">
                     <template #default="{ row }">
                         <div class="user-info">
-                            <el-avatar :src="row.headimg" :size="32" />
+                            <el-avatar :src="img(row.headimg)" :size="32" />
                             <span class="nickname">{{ row.nickname || '用户' + row.member_id }}</span>
                         </div>
                     </template>
@@ -62,6 +62,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCommunityCommentList, auditComment, deleteComment } from '../../api/admin'
+import { img } from '@/utils/common'
 
 const searchForm = ref({ keyword: '', status: '' })
 const tableData = ref([])
