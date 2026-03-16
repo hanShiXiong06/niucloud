@@ -84,6 +84,21 @@
                     </div>
                 </template>
             </el-table-column>
+            <el-table-column label="预估价格" width="160">
+                <template #default="{ row }">
+                    <el-input-number
+                        v-if="row.editing"
+                        v-model="row.initial_price"
+                        :min="0"
+                        :precision="2"
+                        :controls="false"
+                        placeholder="选填"
+                        size="small"
+                        class="w-full"
+                    />
+                    <span v-else>{{ row.initial_price ? `¥${row.initial_price}` : '—' }}</span>
+                </template>
+            </el-table-column>
             <el-table-column label="操作" width="160">
                 <template #default="{ row, $index }">
                     <div v-if="row.editing">
@@ -168,6 +183,21 @@
                         <div v-if="isInvalidCategory(row.category)" class="category-tip">
                             请选择分类，建议选择手机
                         </div>
+                    </div>
+
+                    <div>
+                        <div class="mb-1 text-xs text-gray-500">预估价格</div>
+                        <el-input-number
+                            v-if="row.editing"
+                            v-model="row.initial_price"
+                            :min="0"
+                            :precision="2"
+                            :controls="false"
+                            placeholder="选填"
+                            size="small"
+                            class="w-full"
+                        />
+                        <div v-else class="text-sm text-gray-800">{{ row.initial_price ? `¥${row.initial_price}` : '未填写' }}</div>
                     </div>
                 </div>
 

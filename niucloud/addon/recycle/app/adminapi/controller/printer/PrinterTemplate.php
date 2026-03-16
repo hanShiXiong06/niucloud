@@ -70,36 +70,36 @@ class PrinterTemplate extends BaseAdminController
     {
         $data = $this->request->params([
             ['template_name', ''],
-            ['template_type', 'device_label'], // 默认类型
+            ['template_type', 'device_label'],
             ['width', 58],
             ['height', 40],
             ['content', ''],
-            ['template_data', ''], // JSON格式的模板数据（前端虚拟字段）
+            ['template_data', ''],
             ['html_content', ''],
             ['variables', []],
             ['status', 1],
-            ['is_default', 0]
+            ['is_default', 0],
+            ['printer_id', 0],
+            ['trigger_event', '']
         ]);
-        
+
         // 验证参数
         $this->validate($data, [
             'template_name' => 'require',
             'width' => 'require|number',
             'height' => 'require|number'
         ]);
-        
-        // 如果没有template_type，使用默认值
+
         if (empty($data['template_type'])) {
             $data['template_type'] = 'device_label';
         }
-        
-        // 如果提供了template_data，将其作为content保存（兼容旧格式）
+
         if (!empty($data['template_data']) && empty($data['content'])) {
             $data['content'] = $data['template_data'];
         }
-        
+
         $template_id = $this->service->add($data);
-        
+
         return success('添加成功', ['id' => $template_id]);
     }
 
@@ -112,34 +112,34 @@ class PrinterTemplate extends BaseAdminController
     {
         $data = $this->request->params([
             ['template_name', ''],
-            ['template_type', 'device_label'], // 默认类型
+            ['template_type', 'device_label'],
             ['width', 58],
             ['height', 40],
             ['content', ''],
-            ['template_data', ''], // JSON格式的模板数据（前端虚拟字段）
+            ['template_data', ''],
             ['html_content', ''],
             ['variables', []],
             ['status', 1],
-            ['is_default', 0]
+            ['is_default', 0],
+            ['printer_id', 0],
+            ['trigger_event', '']
         ]);
-        
+
         // 验证参数
         $this->validate($data, [
             'template_name' => 'require',
             'width' => 'require|number',
             'height' => 'require|number'
         ]);
-        
-        // 如果没有template_type，使用默认值
+
         if (empty($data['template_type'])) {
             $data['template_type'] = 'device_label';
         }
-        
-        // 如果提供了template_data，将其作为content保存（兼容旧格式）
+
         if (!empty($data['template_data']) && empty($data['content'])) {
             $data['content'] = $data['template_data'];
         }
-        
+
         $this->service->edit($id, $data);
         return success('编辑成功');
     }

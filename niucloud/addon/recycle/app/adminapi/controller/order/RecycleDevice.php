@@ -163,6 +163,22 @@ class RecycleDevice extends BaseAdminController
             if (isset($data['data']['model'])) {
                 $checkData['model'] = $data['data']['model'];
             }
+            // system_version
+            if (isset($data['data']['system_version'])) {
+                $checkData['system_version'] = $data['data']['system_version'];
+            }
+            // warranty_info
+            if (isset($data['data']['warranty_info'])) {
+                $checkData['warranty_info'] = $data['data']['warranty_info'];
+            }
+            // capacity
+            if (isset($data['data']['capacity'])) {
+                $checkData['capacity'] = $data['data']['capacity'];
+            }
+            // color
+            if (isset($data['data']['color'])) {
+                $checkData['color'] = $data['data']['color'];
+            }
 
 
             // 调用质检完成方法，传递 action 参数

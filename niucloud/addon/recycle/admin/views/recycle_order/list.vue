@@ -603,6 +603,45 @@ const handleAddOrderSuccess = async () => {
   await getList();
 };
 
+// 处理设备深链接（扫码跳转 ?recycle_device=ID）
+const handleDeviceDeepLink = async () => {
+  // 直接从 window.location 读取，避免 Vue Router 守卫重定向导致 query 丢失
+  const urlParams = new URLSearchParams(window.location.search);
+  const deviceId = urlParams.get("id");
+  if (!deviceId) return;
+
+  // 清除 URL 参数（避免刷新重复触发）
+  urlParams.delete("id");
+  const newSearch = urlParams.toString();
+  const newUrl = window.location.pathname + (newSearch ? "?" + newSearch : "");
+  window.history.replaceState({}, "", newUrl);
+
+  try {
+    const res = await getDevice(Number(deviceId));
+    if (res.code !== 1 || !res.data) {
+      ElMessage.error("设备不存在或已删除");
+      return;
+    }
+
+    const device = res.data;
+    const status = device.status;
+
+    if (status === 1 || status === 2) {
+      // 待质检 / 质检中 → 打开质检弹窗
+      checkDevice(device);
+    } else if (status === 3 || status === 4) {
+      // 已质检 / 待确认 → 打开定价弹窗
+      priceDevice(device);
+    } else {
+      // 已回收 / 已退回 / 其他 → 打开详情弹窗
+      viewDetail(device);
+    }
+  } catch (error) {
+    console.error("设备深链接处理失败:", error);
+    ElMessage.error("获取设备信息失败");
+  }
+};
+
 // 页面加载
 onMounted(async () => {
   updateResponsiveState();
@@ -610,6 +649,8 @@ onMounted(async () => {
   await loadStatusList();
   // 使用保存的页码获取数据
   await getList(pagination.value.page);
+  // 处理设备深链接（扫码跳转）
+  await handleDeviceDeepLink();
 });
 
 onBeforeUnmount(() => {

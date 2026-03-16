@@ -2,7 +2,7 @@
   <el-dialog
     v-model="dialogVisible"
     title="设备质检"
-    width="960px"
+    :width="isMobile ? '95vw' : '960px'"
     :destroy-on-close="true"
     class="check-device-dialog"
     align-center
@@ -47,6 +47,26 @@
           <el-icon><Edit /></el-icon>
           修改IMEI
         </el-button>
+      </div>
+    </div>
+
+    <!-- ==================== 设备扩展信息 ==================== -->
+    <div class="extra-fields-bar">
+      <div class="extra-field">
+        <span class="extra-label">内存</span>
+        <el-input v-model="deviceForm.capacity" size="small" placeholder="如 256GB" />
+      </div>
+      <div class="extra-field">
+        <span class="extra-label">颜色</span>
+        <el-input v-model="deviceForm.color" size="small" placeholder="如 深空黑色" />
+      </div>
+      <div class="extra-field">
+        <span class="extra-label">系统版本</span>
+        <el-input v-model="deviceForm.system_version" size="small" placeholder="如 iOS 17.3.1" />
+      </div>
+      <div class="extra-field">
+        <span class="extra-label">保修信息</span>
+        <el-input v-model="deviceForm.warranty_info" size="small" placeholder="保修日期/过保/未激活" />
       </div>
     </div>
 
@@ -301,30 +321,6 @@
           </el-form-item>
         </div>
 
-        <!-- 标签打印内容 -->
-        <div class="result-card result-card--label">
-          <div class="result-card__header">
-            <div class="result-card__title">
-              <span class="result-card__dot"></span>
-              标签打印内容
-            </div>
-            <el-button size="small" @click="generateLabel" class="label-gen-btn">
-              <el-icon style="margin-right: 2px;"><Printer /></el-icon>
-              生成标签
-            </el-button>
-          </div>
-          <el-form-item prop="check_result" class="result-card__body">
-            <el-input
-              v-model="deviceForm.check_result"
-              type="textarea"
-              :rows="6"
-              placeholder="查询保修后自动生成（型号 / 内存 / 保修 / 系统），也可手动编辑..."
-              maxlength="300"
-              show-word-limit
-              resize="none"
-            />
-          </el-form-item>
-        </div>
       </div>
 
       <!-- ==================== 定价与备注区 ==================== -->
@@ -480,7 +476,7 @@
 import { ref, reactive, watch, computed, nextTick, onMounted, onBeforeUnmount, toRef } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
-  Edit, Postcard, Aim, Monitor, Check, Headset, Close, Lock, CopyDocument, Warning, Printer
+  Edit, Postcard, Aim, Monitor, Check, Headset, Close, Lock, CopyDocument, Warning
 } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 
@@ -572,7 +568,11 @@ const deviceForm = reactive({
   sell_price: parsePrice(props.device.sell_price),
   remark: props.device.remark || '',
   imei: props.device.imei || '',
-  info: normalizeInfo(props.device.info)
+  info: normalizeInfo(props.device.info),
+  system_version: props.device.system_version || '',
+  warranty_info: props.device.warranty_info || '',
+  capacity: normalizeInfo(props.device.info).capacity || '',
+  color: normalizeInfo(props.device.info).color || ''
 })
 
 // 表单验证规则
@@ -588,7 +588,6 @@ const {
   checkedCount,
   getSubmitInfo,
   updateCheckResult,
-  buildLabelText,
   clearAllSelections,
   fillCommonResult,
   restoreFromDevice,
@@ -683,6 +682,30 @@ const fetchCoverage = async () => {
       }
       deviceForm.info = getSubmitInfo()
 
+      // 自动填充内存
+      if (res.data.capacity && !deviceForm.capacity) {
+        deviceForm.capacity = res.data.capacity
+      }
+      // 自动填充颜色
+      if (res.data.color && !deviceForm.color) {
+        deviceForm.color = res.data.color
+      }
+      // 自动填充系统版本
+      if (res.data.osVersion && !deviceForm.system_version) {
+        deviceForm.system_version = res.data.osVersion
+      }
+      // 自动填充保修信息
+      if (res.data.coverage) {
+        const status = res.data.coverage.status || ''
+        if (status === 'Out Of Warranty') {
+          deviceForm.warranty_info = '过保'
+        } else if (status === 'Not Activated' || !res.data.coverage.date) {
+          deviceForm.warranty_info = '未激活'
+        } else {
+          deviceForm.warranty_info = res.data.coverage.date || '在保'
+        }
+      }
+
       // 将保修状态写入质检结果
       refreshAfterWarranty()
 
@@ -707,15 +730,6 @@ const clearWarrantyInfo = () => {
 // 保修查询后：保修数据已写入 info，由 updateCheckResult 统一生成卖家文本
 const refreshAfterWarranty = () => {
   updateCheckResult()
-  deviceForm.check_result = buildLabelText()
-}
-
-// 手动生成标签
-const generateLabel = () => {
-  deviceForm.check_result = buildLabelText()
-  if (!deviceForm.check_result) {
-    ElMessage.warning('暂无设备信息可生成标签，请先查询保修')
-  }
 }
 
 const fetchActivationlock = async () => {
@@ -842,7 +856,11 @@ function buildSubmitPayload(action: 'check' | 'save_draft') {
     action,
     imei: deviceForm.imei,
     model: deviceData.value.model,
-    info: getSubmitInfo()
+    info: getSubmitInfo(),
+    system_version: deviceForm.system_version,
+    warranty_info: deviceForm.warranty_info,
+    capacity: deviceForm.capacity,
+    color: deviceForm.color
   }
 }
 
@@ -860,7 +878,7 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
   // 填充新设备数据
   deviceData.value = { ...device }
   deviceForm.check_result_seller = device.check_result_seller || device.check_result || ''
-  deviceForm.check_result = ''  // 稍后由 buildLabelText() 生成
+  deviceForm.check_result = ''
   deviceForm.check_result_buyer = device.check_result_buyer || ''
   deviceForm.check_images = device.check_images_seller || device.check_images || ''
   deviceForm.check_images_buyer = device.check_images_buyer || ''
@@ -869,12 +887,14 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
   deviceForm.remark = device.remark || ''
   deviceForm.imei = device.imei || ''
   deviceForm.info = normalizeInfo(device.info)
+  deviceForm.system_version = device.system_version || ''
+  deviceForm.warranty_info = device.warranty_info || ''
+  const restoredInfo = normalizeInfo(device.info)
+  deviceForm.capacity = device.capacity || restoredInfo.capacity || ''
+  deviceForm.color = device.color || restoredInfo.color || ''
 
   // 从新设备的 check_meta 恢复质检选项
   restoreFromDevice(device)
-
-  // 从 info 生成标签打印内容
-  deviceForm.check_result = buildLabelText()
 
   // 重置表单校验状态
   nextTick(() => {
@@ -1004,6 +1024,39 @@ onBeforeUnmount(() => {
   }
 }
 
+// ==================== 系统版本 & 保修信息 ====================
+.extra-fields-bar {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+
+  .extra-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .extra-label {
+    font-size: 13px;
+    color: #374151;
+    white-space: nowrap;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .extra-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    white-space: nowrap;
+  }
+}
+
 // ==================== 智能质检面板 ====================
 .smart-check-panel {
   background: white;
@@ -1118,10 +1171,10 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
-// ==================== 质检结果卡片组（一行三列） ====================
+// ==================== 质检结果卡片组（一行两列） ====================
 .result-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
@@ -1201,40 +1254,6 @@ onBeforeUnmount(() => {
     :deep(.el-textarea__inner) {
       border-color: #a7f3d0;
       &:focus { border-color: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.1); }
-    }
-  }
-
-  // —— 标签：橙色虚线 ——
-  &--label {
-    border: 1.5px dashed #fed7aa;
-    background: linear-gradient(180deg, #fff7ed 0%, #fff 50%);
-
-    .result-card__header { color: #c2410c; border-bottom-color: #fed7aa; }
-    .result-card__dot { background: #f97316; }
-
-    :deep(.el-textarea__inner) {
-      border-color: #fed7aa;
-      background: #fffbf5;
-      font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
-      font-size: 12px;
-      letter-spacing: 0.2px;
-      &:focus { border-color: #f97316; box-shadow: 0 0 0 2px rgba(249,115,22,0.1); }
-    }
-
-    .label-gen-btn {
-      border-color: #fb923c;
-      color: #ea580c;
-      background: white;
-      font-size: 11px;
-      border-radius: 4px;
-      padding: 2px 8px;
-      height: 22px;
-
-      &:hover {
-        background: #fff7ed;
-        border-color: #f97316;
-        color: #c2410c;
-      }
     }
   }
 }
@@ -1383,6 +1402,26 @@ onBeforeUnmount(() => {
     }
   }
 
+  .device-info-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+
+    .quick-actions {
+      width: 100%;
+
+      .el-button {
+        width: 100%;
+      }
+    }
+  }
+
+  .extra-fields-bar {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
   .check-grid {
     grid-template-columns: 1fr;
 
@@ -1443,6 +1482,10 @@ onBeforeUnmount(() => {
       &--function { grid-column: span 4; }
       &--fix { grid-column: span 2; }
     }
+  }
+
+  .pricing-bar {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

@@ -53,7 +53,7 @@
                     <el-table-column prop="model" :label="t('型号')" min-width="150" show-overflow-tooltip />
                     <el-table-column prop="category_name" :label="t('分类')" min-width="100" align="center" />
 
-                    <el-table-column prop="final_price" :label="t('定价')" min-width="100" align="right">
+                    <el-table-column prop="final_price" label="收货价" min-width="100" align="right">
                         <template #default="{ row }">
                             ¥{{ row.final_price || '0.00' }}
                         </template>
@@ -88,6 +88,13 @@
                         </template>
                     </el-table-column>
 
+                    <el-table-column label="报价人" min-width="100" align="center">
+                        <template #default="{ row }">
+                            <span v-if="row.price_user">{{ row.priceUser.real_name || row.priceUser.username || '未知' }}</span>
+                            <span v-else class="text-gray-400">-</span>
+                        </template>
+                    </el-table-column>
+
                     <el-table-column prop="status_name" :label="t('status')" min-width="100" align="center">
                         <template #default="{ row }">
                             <el-tag type="success">{{ row.status_name }}</el-tag>
@@ -97,12 +104,6 @@
                     <el-table-column :label="t('回收时间')" min-width="150" align="center">
                         <template #default="{ row }">
                             {{ row.update_at || '' }}
-                        </template>
-                    </el-table-column>
-
-                    <el-table-column :label="t('订单编号')" min-width="180" show-overflow-tooltip>
-                        <template #default="{ row }">
-                            {{ row.order?.order_no || '' }}
                         </template>
                     </el-table-column>
 
@@ -139,67 +140,133 @@
         <el-dialog
             v-model="detailDialogVisible"
             title="设备详情"
-            width="800px"
+            width="900px"
             :destroy-on-close="true"
         >
             <div v-if="currentDevice" class="space-y-4">
                 <!-- 基本信息 -->
-                <el-descriptions :column="2" border>
-                    <el-descriptions-item label="设备型号">{{ currentDevice.model }}</el-descriptions-item>
-                    <el-descriptions-item label="IMEI">{{ currentDevice.imei }}</el-descriptions-item>
-                    <el-descriptions-item label="分类">{{ currentDevice.category_name }}</el-descriptions-item>
-                    <el-descriptions-item label="状态">
-                        <el-tag type="success">{{ currentDevice.status_name }}</el-tag>
-                    </el-descriptions-item>
-                    <el-descriptions-item label="定价">¥{{ currentDevice.final_price || '0.00' }}</el-descriptions-item>
-                    <el-descriptions-item label="卖货价格">¥{{ currentDevice.sell_price || '0.00' }}</el-descriptions-item>
-                    <el-descriptions-item label="回收时间" :span="2">{{ currentDevice.update_at }}</el-descriptions-item>
-                </el-descriptions>
+                <div class="bg-white rounded-lg border border-gray-200 p-4">
+                    <h4 class="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        <span class="w-1 h-5 bg-blue-500 rounded"></span>
+                        基本信息
+                    </h4>
+                    <el-descriptions :column="2" border size="default">
+                        <el-descriptions-item label="设备型号" label-class-name="font-medium">
+                            {{ currentDevice.model }}
+                        </el-descriptions-item>
+                        <el-descriptions-item label="IMEI" label-class-name="font-medium">
+                            {{ currentDevice.imei }}
+                        </el-descriptions-item>
+                        <el-descriptions-item label="分类" label-class-name="font-medium">
+                            {{ currentDevice.category_name }}
+                        </el-descriptions-item>
+                        <el-descriptions-item label="状态" label-class-name="font-medium">
+                            <el-tag type="success">{{ currentDevice.status_name }}</el-tag>
+                        </el-descriptions-item>
+                        <el-descriptions-item label="收货价" label-class-name="font-medium">
+                            <span class="text-orange-600 font-semibold text-base">¥{{ currentDevice.final_price || '0.00' }}</span>
+                        </el-descriptions-item>
+                        <el-descriptions-item label="卖货价格" label-class-name="font-medium">
+                            <span class="text-green-600 font-semibold text-base">¥{{ currentDevice.sell_price || '0.00' }}</span>
+                        </el-descriptions-item>
+                        <el-descriptions-item label="回收时间" :span="2" label-class-name="font-medium">
+                            {{ currentDevice.update_at }}
+                        </el-descriptions-item>
+                    </el-descriptions>
+                </div>
 
                 <!-- 供货商信息 -->
-                <div v-if="currentDevice.order?.member" class="bg-gray-50 rounded-lg p-4">
-                    <h4 class="text-sm font-medium text-gray-700 mb-3">供货商信息</h4>
-                    <div class="flex items-center gap-4">
-                        <el-avatar :size="60" :src="img(currentDevice.order.member.headimg)" v-if="currentDevice.order.member.headimg">
-                            <el-icon><User /></el-icon>
-                        </el-avatar>
-                        <div>
-                            <div class="font-medium">{{ currentDevice.order.member.nickname || currentDevice.order.member.username || '未知用户' }}</div>
-                            <div class="text-sm text-gray-500">{{ currentDevice.order.member.mobile || '-' }}</div>
+                <div v-if="currentDevice.order?.member" class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
+                    <h4 class="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        <span class="w-1 h-5 bg-indigo-500 rounded"></span>
+                        供货商信息
+                    </h4>
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                            </svg>
+                            <span class="text-base font-semibold text-gray-900">
+                                {{ currentDevice.order.member.nickname || currentDevice.order.member.username || '未知用户' }}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-2 text-gray-600">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"/>
+                            </svg>
+                            <span>{{ currentDevice.order.member.mobile || '未绑定手机' }}</span>
                         </div>
                     </div>
                 </div>
 
                 <!-- 买家质检结果 -->
-                <div v-if="currentDevice.check_result_buyer" class="bg-green-50 rounded-lg p-4 border border-green-200">
-                    <h4 class="text-sm font-medium text-green-800 mb-2">买家质检结果</h4>
-                    <div class="text-sm text-green-700 leading-relaxed whitespace-pre-line">
-                        {{ currentDevice.check_result_buyer }}
+                <div v-if="currentDevice.check_result_buyer || buyerCheckImages.length > 0" class="bg-white rounded-lg border border-green-300 overflow-hidden">
+                    <div class="bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-3">
+                        <h4 class="text-base font-semibold text-white flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            买家质检结果
+                        </h4>
                     </div>
-                </div>
 
-                <!-- 买家质检图片 -->
-                <div v-if="buyerCheckImages.length > 0" class="space-y-2">
-                    <h4 class="text-sm font-medium text-gray-800">买家质检图片</h4>
-                    <div class="grid grid-cols-4 gap-3">
-                        <div
-                            v-for="(imgUrl, index) in buyerCheckImages"
-                            :key="index"
-                            class="relative group cursor-pointer"
-                            @click="previewImages(buyerCheckImages, index)"
-                        >
-                            <el-image
-                                :src="img(imgUrl)"
-                                fit="cover"
-                                class="w-full h-24 rounded border-2 border-gray-200 group-hover:border-green-400 transition-colors"
-                                lazy
-                            >
-                                <template #error>
-                                    <div class="w-full h-24 bg-gray-100 rounded flex items-center justify-center">
-                                        <el-icon class="text-gray-400"><Picture /></el-icon>
+                    <div class="p-4 space-y-4">
+                        <!-- 质检文字结果 -->
+                        <div v-if="currentDevice.check_result_buyer" class="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
+                            <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-line font-medium">
+                                {{ currentDevice.check_result_buyer }}
+                            </div>
+                        </div>
+
+                        <!-- 质检图片 -->
+                        <div v-if="buyerCheckImages.length > 0">
+                            <div class="flex items-center gap-2 mb-3">
+                                <svg class="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
+                                </svg>
+                                <span class="text-sm font-medium text-gray-700">质检图片 ({{ buyerCheckImages.length }})</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-3">
+                                <div
+                                    v-for="(imgUrl, index) in buyerCheckImages"
+                                    :key="index"
+                                    class="relative group cursor-pointer rounded-lg overflow-hidden"
+                                    @click="previewImages(buyerCheckImages, index)"
+                                >
+                                    <el-image
+                                        :src="img(imgUrl)"
+                                        fit="cover"
+                                        class="w-full h-28 border-2 border-gray-200 group-hover:border-green-500 transition-all duration-200"
+                                        lazy
+                                    >
+                                        <template #error>
+                                            <div class="w-full h-28 bg-gray-100 flex flex-col items-center justify-center">
+                                                <el-icon class="text-gray-400 text-2xl"><Picture /></el-icon>
+                                                <span class="text-xs text-gray-400 mt-1">加载失败</span>
+                                            </div>
+                                        </template>
+                                    </el-image>
+                                    <!-- 悬浮遮罩 -->
+                                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-center justify-center">
+                                        <svg class="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                                        </svg>
                                     </div>
-                                </template>
-                            </el-image>
+                                    <!-- 图片序号 -->
+                                    <div class="absolute top-2 left-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
+                                        {{ index + 1 }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 无质检结果提示 -->
+                        <div v-if="!currentDevice.check_result_buyer && buyerCheckImages.length === 0" class="text-center py-8">
+                            <svg class="w-16 h-16 text-gray-300 mx-auto mb-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            </svg>
+                            <p class="text-gray-400 text-sm">暂无买家质检结果</p>
                         </div>
                     </div>
                 </div>

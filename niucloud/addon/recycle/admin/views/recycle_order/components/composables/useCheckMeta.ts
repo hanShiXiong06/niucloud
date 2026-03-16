@@ -37,6 +37,10 @@ interface DeviceFormLike {
   check_result: string
   check_result_seller: string
   info: any
+  system_version?: string
+  warranty_info?: string
+  capacity?: string
+  color?: string
 }
 
 interface UseCheckMetaOptions {
@@ -220,34 +224,18 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     const info = normalizeInfo(deviceForm.info)
     const coverage = info.coverage
     if (coverage) {
-      const isExpired = coverage.status === 'Out Of Warranty'
-      if (isExpired) {
+      const status = coverage.status || ''
+      if (status === 'Out Of Warranty') {
         results.push('保修: 过保')
+      } else if (status === 'Not Activated' || !coverage.date) {
+        results.push('保修: 未激活')
       } else {
-        const dateStr = coverage.date || ''
-        results.push(dateStr ? `保修: 在保 到期${dateStr}` : '保修: 在保')
+        results.push(`保修: 在保 到期${coverage.date}`)
       }
     }
 
     deviceForm.check_result_seller = results.join(';\n')
     deviceForm.info = getSubmitInfo()
-  }
-
-  // ==================== 标签打印内容生成 ====================
-
-  const buildLabelText = (): string => {
-    const info = normalizeInfo(deviceForm.info)
-    const lines: string[] = []
-    if (info.model) lines.push(`型号：${info.model}`)
-    if (info.capacity) lines.push(`内存/规格：${info.capacity}`)
-    // 保修信息
-    const coverage = info.coverage
-    if (coverage) {
-      const isExpired = coverage.status === 'Out Of Warranty'
-      lines.push(isExpired ? '保修：过保' : `保修：在保${coverage.date ? ' 至' + coverage.date : ''}`)
-    }
-    if (info.osVersion) lines.push(`系统：${info.osVersion}`)
-    return lines.join('\n')
   }
 
   // ==================== 重置 / 清空 ====================
@@ -495,7 +483,6 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     optionNameById,
     getSubmitInfo,
     updateCheckResult,
-    buildLabelText,
     clearAllSelections,
     fillCommonResult,
     restoreFromDevice,

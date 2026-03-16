@@ -49,7 +49,7 @@ class TemplatePrintService extends BaseAdminService
             if (empty($printer['user_name']) || empty($printer['user_key']) || empty($printer['sn'])) {
                 throw new AdminException('打印机配置不完整，请检查用户名、密钥和设备号');
             }
-            
+
             // 打印前检查打印机状态
             if ($checkStatus) {
                 $statusResult = $this->printerApiService->queryPrinterStatus(
@@ -57,14 +57,14 @@ class TemplatePrintService extends BaseAdminService
                     $printer['user_key'],
                     $printer['sn']
                 );
-                
+
                 if (!$statusResult['success']) {
                     return [
                         'success' => false,
                         'message' => '无法查询打印机状态：' . $statusResult['message']
                     ];
                 }
-                
+
                 $printerStatus = $statusResult['status'];
                 if ($printerStatus === 0) {
                     return [
@@ -74,7 +74,7 @@ class TemplatePrintService extends BaseAdminService
                         'printer_status_text' => $statusResult['status_text']
                     ];
                 }
-                
+
                 if ($printerStatus === 2) {
                     return [
                         'success' => false,
@@ -84,13 +84,13 @@ class TemplatePrintService extends BaseAdminService
                     ];
                 }
             }
-            
+
             // 修复内容格式问题
             $content = $this->fixXmlQuotes($content);
-            
+
             // 芯烨云标签打印API
             $api_url = 'https://open.xpyun.net/api/openapi/xprinter/printLabel';
-            
+
             // 生成签名
             $timestamp = time();
             $sign_str = $printer['user_name'] . $printer['user_key'] . $timestamp;
@@ -107,12 +107,12 @@ class TemplatePrintService extends BaseAdminService
                 'horizontalOffset' => 0,
                 'verticalOffset' => 0
             ];
-            
+
             // 使用JSON格式调用API
             $result = $this->sendJsonRequest($api_url, $post_data);
-            
+
             return $result;
-            
+
         } catch (AdminException $e) {
             return [
                 'success' => false,
@@ -127,35 +127,35 @@ class TemplatePrintService extends BaseAdminService
     }
 
     /**
-     * 修复XML中的引号问题
+     * 修复XML中的引号问题（只处理标签属性，不动标签内容）
      * @param string $content
      * @return string
      */
     private function fixXmlQuotes(string $content): string
     {
         // 芯烨云要求XML属性值必须用双引号包围
-        $patterns = [
-            // 修复可能的单引号属性
-            '/(\w+)=\'([^\']*)\'/m' => '$1="$2"',
-            // 修复可能缺失的引号
-            '/(\w+)=([^"\s>]+)/m' => '$1="$2"',
-        ];
-        
-        foreach ($patterns as $pattern => $replacement) {
-            $content = preg_replace($pattern, $replacement, $content);
-        }
-        
-        // 确保TEXT标签内的文本内容不包含问题字符
-        $content = preg_replace_callback('/<TEXT[^>]*>([^<]*)<\/TEXT>/', function($matches) {
-            $tag_attrs = $matches[0];
-            $text_content = $matches[1];
-            
-            // 对文本内容进行适当的转义
-            $text_content = htmlspecialchars($text_content, ENT_QUOTES, 'UTF-8', false);
-            
-            return str_replace($matches[1], $text_content, $tag_attrs);
+        // 只在XML开标签 <TAG ...> 内部修复属性引号，不影响标签之间的文本/URL内容
+        $content = preg_replace_callback('/<([A-Z][A-Z0-9]*)(\s[^>]*)?>/', function ($matches) {
+            $tagName = $matches[1];
+            $attrs = $matches[2] ?? '';
+            if (empty(trim($attrs))) {
+                return $matches[0];
+            }
+            // 修复单引号属性值
+            $attrs = preg_replace("/(\w+)='([^']*)'/", '$1="$2"', $attrs);
+            // 修复缺失引号的属性值
+            $attrs = preg_replace('/(\w+)=([^"\s>][^\s>]*)/', '$1="$2"', $attrs);
+            return '<' . $tagName . $attrs . '>';
         }, $content);
-        
+
+        // 确保TEXT标签内的文本内容不包含XML特殊字符
+        $content = preg_replace_callback('/<TEXT[^>]*>([^<]*)<\/TEXT>/', function ($matches) {
+            $full_tag = $matches[0];
+            $text_content = $matches[1];
+            $escaped = htmlspecialchars($text_content, ENT_QUOTES, 'UTF-8', false);
+            return str_replace($text_content, $escaped, $full_tag);
+        }, $content);
+
         return $content;
     }
 
@@ -183,13 +183,13 @@ class TemplatePrintService extends BaseAdminService
             'Content-Length: ' . strlen(json_encode($data)),
             'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         ]);
-        
+
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curl_error = curl_error($ch);
         $curl_errno = curl_errno($ch);
         curl_close($ch);
-        
+
         // 检查CURL错误
         if ($response === false || !empty($curl_error)) {
             $error_message = '网络请求失败';
@@ -199,14 +199,14 @@ class TemplatePrintService extends BaseAdminService
             if ($curl_error) {
                 $error_message .= "：{$curl_error}";
             }
-            
+
             return [
                 'success' => false,
                 'message' => $error_message,
                 'http_code' => $http_code
             ];
         }
-        
+
         // 检查HTTP状态码
         if ($http_code !== 200) {
             return [
@@ -215,10 +215,10 @@ class TemplatePrintService extends BaseAdminService
                 'http_code' => $http_code
             ];
         }
-        
+
         // 解析JSON响应
         $result = json_decode($response, true);
-        
+
         if ($result === null) {
             return [
                 'success' => false,
@@ -226,7 +226,7 @@ class TemplatePrintService extends BaseAdminService
                 'http_code' => $http_code
             ];
         }
-        
+
         // 检查API返回结果
         if (isset($result['msg']) && $result['msg'] === 'ok') {
             return [
@@ -255,9 +255,8 @@ class TemplatePrintService extends BaseAdminService
     {
         // 替换变量
         $final_content = $this->variableReplaceService->replaceVariables($content, $variables);
-        
+
         // 发送打印
         return $this->sendToPrinter($printer, $final_content);
     }
 }
-

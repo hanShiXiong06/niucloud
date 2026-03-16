@@ -237,7 +237,7 @@ const handleAdd = () => {
 
 // 编辑模板
 const handleEdit = (row) => {
-  router.push(`/recycle/printer_template/edit/${row.template_id}`);
+  router.push({ path: '/recycle/printer_template/add', query: { id: row.template_id } });
 };
 
 // 删除模板

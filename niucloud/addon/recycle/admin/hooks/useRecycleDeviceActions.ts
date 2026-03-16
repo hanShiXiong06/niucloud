@@ -47,7 +47,11 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
       remark: data?.remark || '',
       status: data?.status,
       check_status: data?.check_status,
-      info: data?.info
+      info: data?.info,
+      system_version: data?.system_version || '',
+      warranty_info: data?.warranty_info || '',
+      capacity: data?.capacity || '',
+      color: data?.color || ''
     }
   }
 
@@ -66,7 +70,11 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
       sell_price: formData.sell_price,
       imei: formData.imei,
       info: formData.info,
-      model: formData.model
+      model: formData.model,
+      system_version: formData.system_version || '',
+      warranty_info: formData.warranty_info || '',
+      capacity: formData.capacity || '',
+      color: formData.color || ''
     }
   }
 
@@ -87,7 +95,11 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
     final_price: '',
     sell_price: '',
     check_status: 0,
-    info: undefined as any
+    info: undefined as any,
+    system_version: '',
+    warranty_info: '',
+    capacity: '',
+    color: ''
   })
 
   const selectedDevices = ref<Record<string | number, any[]>>({})

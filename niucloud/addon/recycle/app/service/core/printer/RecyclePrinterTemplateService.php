@@ -51,6 +51,7 @@ class RecyclePrinterTemplateService extends BaseService
                 'variables' => [
                     'order_no' => ['name' => '订单号', 'example' => 'RC' . date('YmdHis')],
                     'customer_name' => ['name' => '客户姓名', 'example' => '张三'],
+                    'member_nickname' => ['name' => '会员昵称', 'example' => '小明'],
                     'customer_phone' => ['name' => '客户电话', 'example' => '13800138000'],
                     'order_status' => ['name' => '订单状态', 'example' => '已完成'],
                     'total_amount' => ['name' => '订单总额', 'example' => '5000.00'],
@@ -292,6 +293,7 @@ class RecyclePrinterTemplateService extends BaseService
         return [
             'order_no' => 'RC' . date('YmdHis'),
             'customer_name' => '张三',
+            'member_nickname' => '小明',
             'customer_phone' => '13800138000',
             'imei' => '867851234567890',
             'model' => 'iPhone 14 Pro Max',

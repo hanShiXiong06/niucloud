@@ -490,7 +490,34 @@ class RecycleDeviceService extends BaseAdminService
                 $updateData['model'] = $checkData['model'];
             }
 
-            // if info
+            // 从 info 中自动提取 system_version 和 warranty_info（如果前端未手动填写）
+            if (isset($checkData['info']) && is_array($checkData['info'])) {
+                $infoData = $checkData['info'];
+                // 系统版本
+                if (empty($checkData['system_version']) && !empty($infoData['osVersion'])) {
+                    $checkData['system_version'] = $infoData['osVersion'];
+                }
+                // 保修信息
+                if (empty($checkData['warranty_info']) && !empty($infoData['coverage'])) {
+                    $coverage = $infoData['coverage'];
+                    $coverageStatus = $coverage['status'] ?? '';
+                    if ($coverageStatus === 'Out Of Warranty') {
+                        $checkData['warranty_info'] = '过保';
+                    } elseif ($coverageStatus === 'Not Activated' || empty($coverage['date'])) {
+                        $checkData['warranty_info'] = '未激活';
+                    } else {
+                        $checkData['warranty_info'] = $coverage['date'] ?? '在保';
+                    }
+                }
+                // 内存
+                if (empty($checkData['capacity']) && !empty($infoData['capacity'])) {
+                    $checkData['capacity'] = $infoData['capacity'];
+                }
+                // 颜色
+                if (empty($checkData['color']) && !empty($infoData['color'])) {
+                    $checkData['color'] = $infoData['color'];
+                }
+            }
 
 
             // 如果有最终价格 则 更新 'price_uid'=>  $this->uid,
@@ -542,6 +569,32 @@ class RecycleDeviceService extends BaseAdminService
                 Log::record('【质检完成】已触发质检完成事件: ' . json_encode($eventData), 'info');
             } catch (\Exception $e) {
                 Log::record('【质检完成】触发事件异常: ' . $e->getMessage(), 'error');
+            }
+
+            // 根据触发时机自动打印标签
+            try {
+                $triggerEvent = $action === 'save_draft' ? 'draft' : 'complete';
+                $templateService = new \addon\recycle\app\service\admin\printer\RecyclePrinterTemplateService();
+                $template = $templateService->getTemplateByTrigger($triggerEvent);
+                Log::record("【自动打印】action={$action} triggerEvent={$triggerEvent} 找到模板=" . json_encode($template ? ($template['template_id'] ?? 'empty') : 'null'), 'info');
+                if (!empty($template)) {
+                    $templateInfo = $templateService->getInfo($template['template_id']);
+                    $deviceData = $templateService->getDevicePrintData($id);
+                    $printer = $templateService->getDefaultPrinter();
+                    if (!empty($printer) && !empty($templateInfo['instruction_content'])) {
+                        $printService = new \addon\recycle\app\service\admin\printer\template\TemplatePrintService();
+                        $copies = 1;
+                        if (!empty($templateInfo['content']) && is_array($templateInfo['content'])) {
+                            $copies = $templateInfo['content']['copies'] ?? 1;
+                        }
+                        for ($i = 0; $i < $copies; $i++) {
+                            $printService->printWithVariables($templateInfo['instruction_content'], $deviceData, $printer);
+                        }
+                        Log::record("【自动打印】触发时机={$triggerEvent} 设备ID={$id} 模板={$template['template_id']} 份数={$copies}", 'info');
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::record('【自动打印】异常: ' . $e->getMessage(), 'error');
             }
             
             Db::commit();

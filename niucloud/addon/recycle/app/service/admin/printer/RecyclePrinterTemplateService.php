@@ -122,7 +122,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function getInfo(int $id)
     {
-        $field = 'template_id,template_name,template_type,width,height,content,instruction_content,html_content,variables,status,is_default,create_time,update_time';
+        $field = 'template_id,template_name,template_type,width,height,content,instruction_content,html_content,variables,status,is_default,printer_id,trigger_event,create_time,update_time';
         
         $info = $this->model->field($field)
             ->where([['template_id', '=', $id], ['site_id', '=', $this->site_id]])
@@ -216,9 +216,10 @@ class RecyclePrinterTemplateService extends BaseAdminService
     {
         // 定义数据库表中存在的字段（根据SQL表结构）
         $allowedFields = [
-            'site_id', 'template_name', 'template_type', 'size', 'content', 
-            'html_content', 'width', 'height', 'instruction_content', 
-            'variables', 'status', 'is_default', 'uid', 'create_time', 'update_time'
+            'site_id', 'template_name', 'template_type', 'size', 'content',
+            'html_content', 'width', 'height', 'instruction_content',
+            'variables', 'status', 'is_default', 'printer_id', 'trigger_event',
+            'uid', 'create_time', 'update_time'
         ];
         
         $data['site_id'] = $this->site_id;
@@ -296,9 +297,10 @@ class RecyclePrinterTemplateService extends BaseAdminService
     {
         // 定义数据库表中存在的字段（根据SQL表结构，排除主键和自动字段）
         $allowedFields = [
-            'template_name', 'template_type', 'size', 'content', 
-            'html_content', 'width', 'height', 'instruction_content', 
-            'variables', 'status', 'is_default', 'update_time'
+            'template_name', 'template_type', 'size', 'content',
+            'html_content', 'width', 'height', 'instruction_content',
+            'variables', 'status', 'is_default', 'printer_id', 'trigger_event',
+            'update_time'
                 ];
                 
         $data['update_time'] = time();
@@ -574,52 +576,98 @@ class RecyclePrinterTemplateService extends BaseAdminService
             // 基础设备信息
             'device_id' => '12345',
             'id' => '12345',
-            
+
             // 基础订单信息
             'order_id' => 'RC' . date('YmdHis'),
             'order_no' => 'RC' . date('YmdHis'),
-            
+
             // 客户信息
             'customer_name' => '张三',
+            'member_nickname' => '小明',
             'customer_phone' => '13800138000',
-            
+            'pay_type' => '支付宝',
+            'pay_account' => '138****8000',
+            'total_amount' => '5000.00',
+            'device_count' => '4',
+            'order_status' => '已完成',
+            'order_remark' => '无',
+
             // 设备信息
             'imei' => '867851234567890',
+            'imei2' => '867851234567891',
+            'sn' => 'C02XG0FHJHD5',
             'model' => 'iPhone 14 Pro Max',
             'brand' => 'Apple',
             'color' => '深空黑色',
             'memory' => '8GB',
             'capacity' => '256GB',
-            
+            'system_version' => 'iOS 17.3.1',
+            'warranty_info' => '2025-12-31',
+
+            // 设备序号信息
+            'device_index' => '1',
+            'device_total' => '4',
+            'device_number' => '1/4',
+
             // 质检信息
             'condition_level' => '9成新',
             'check_result' => '外观良好功能正常电池健康度85%屏幕无划痕摄像头清晰充电接口正常',
+            'check_result_seller' => '外观良好功能正常',
+            'check_result_buyer' => '电池健康度85%',
             'check_staff' => $staff_name,
             'check_staff_name' => $staff_name,
             'check_time' => date('Y-m-d H:i:s'),
             'check_date' => date('Y-m-d'),
-            
+            'check_status' => '已质检',
+
             // 价格信息
             'price' => '5000.00',
-            'final_price' => '5000.00',
+            'initial_price' => '5000.00',
+            'final_price' => '4800.00',
+            'sell_price' => '5200.00',
+            'before_price' => '4500.00',
             'price_staff' => $staff_name,
             'price_staff_name' => $staff_name,
             'price_date' => date('Y-m-d'),
-            
+            'price_time' => date('Y-m-d H:i:s'),
+            'price_remark' => '市场行情调整',
+
+            // 快递信息
+            'express_company' => '顺丰速运',
+            'express_no' => 'SF1234567890',
+            'delivery_type' => '快递',
+            'delivery_fee' => '15.00',
+            'delivery_status' => '已签收',
+            'delivery_operator' => '张三',
+
+            // 状态信息
+            'status' => '已回收',
+            'status_name' => '已回收',
+            'final_status' => '已确认',
+
             // 时间信息
             'date' => date('Y-m-d'),
             'time' => date('H:i:s'),
             'current_time' => date('Y-m-d H:i:s'),
+            'current_date' => date('Y-m-d'),
             'datetime' => date('Y-m-d H:i:s'),
-            
+            'create_time' => date('Y-m-d H:i:s'),
+            'update_time' => date('Y-m-d H:i:s'),
+            'sign_time' => date('Y-m-d H:i:s'),
+            'complete_time' => date('Y-m-d H:i:s'),
+            'pay_time' => date('Y-m-d H:i:s'),
+
             // 其他信息
             'site_name' => '回收中心',
             'staff_name' => $staff_name,
-            
+            'remark' => '无',
+            'member_id' => '10001',
+
             // 二维码和条形码内容
             'qrcode_content' => 'https://example.com/order/RC' . date('YmdHis'),
             'barcode_content' => '867851234567890',
-            
+            'device_url' => request()->domain() . '/site/recycle_order/list?id=12345',
+
             // 兼容旧格式
             'content' => '<PAGE><SIZE>58,40</SIZE><TEXT x="8" y="8" w="1" h="1" r="0">设备回收质检标签</TEXT></PAGE>'
         ];
@@ -635,12 +683,12 @@ class RecyclePrinterTemplateService extends BaseAdminService
         if (empty($time)) {
             return '';
         }
-        
+
         // 如果是数字（时间戳）
         if (is_numeric($time)) {
             return date($format, (int)$time);
         }
-        
+
         // 如果是字符串，尝试转换为时间戳
         if (is_string($time)) {
             $timestamp = strtotime($time);
@@ -648,9 +696,26 @@ class RecyclePrinterTemplateService extends BaseAdminService
                 return date($format, $timestamp);
             }
         }
-        
+
         // 如果都失败了，返回空字符串
         return '';
+    }
+
+    /**
+     * 获取快递状态名称
+     * @param int $status
+     * @return string
+     */
+    private function getDeliveryStatusName(int $status): string
+    {
+        $names = [
+            0 => '未下单',
+            1 => '已下单',
+            2 => '运输中',
+            3 => '已签收',
+            4 => '已取消'
+        ];
+        return $names[$status] ?? '未知';
     }
 
     /**
@@ -660,7 +725,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function getDevicePrintData(int $device_id): array
     {
-       
+
         // 查询设备数据，使用with关联查询质检员和定价员信息
         $device_model = new \addon\recycle\app\model\order\RecycleDevice();
         $device = $device_model->with(['checkUser', 'priceUser'])->where([
@@ -668,22 +733,44 @@ class RecyclePrinterTemplateService extends BaseAdminService
             ['site_id', '=', $this->site_id]
         ])->findOrEmpty()->toArray();
 
-       
-       
+
+
         if (empty($device)) {
             throw new AdminException('设备不存在');
         }
-        
+
         // 获取订单信息（如果需要）
         $order_model = new \addon\recycle\app\model\order\RecycleOrder();
         $order = [];
+        $member_nickname = '';
         if (!empty($device['order_id'])) {
             $order = $order_model->where([
                 ['id', '=', $device['order_id']],
                 ['site_id', '=', $this->site_id]
             ])->findOrEmpty()->toArray();
+            // 关联查询会员昵称
+            if (!empty($order['member_id'])) {
+                $member = (new \app\model\member\Member())->where([
+                    ['member_id', '=', $order['member_id']]
+                ])->field('nickname')->findOrEmpty();
+                $member_nickname = $member['nickname'] ?? '';
+            }
         }
-        
+
+        // 计算设备在订单中的序号
+        $device_index = 1;
+        $device_total = 1;
+        if (!empty($device['order_id'])) {
+            // 查询同订单的所有设备，按创建时间排序
+            $devices = $device_model->where([
+                ['order_id', '=', $device['order_id']],
+                ['site_id', '=', $this->site_id]
+            ])->order('id', 'asc')->column('id');
+
+            $device_total = count($devices);
+            $device_index = array_search($device_id, $devices) + 1; // +1 因为数组从0开始
+        }
+
         // 使用设备模型中定义的固定分类数据
         $categories = [
             1 => '手机',
@@ -693,11 +780,11 @@ class RecyclePrinterTemplateService extends BaseAdminService
             5 => '其他'
         ];
         $category_name = $categories[$device['category_id'] ?? 1] ?? '手机';
-        
+
         // 状态名称映射
         $status_names = [
             1 => '待质检',
-            2 => '质检中', 
+            2 => '质检中',
             3 => '已质检',
             4 => '待确认',
             5 => '已回收',
@@ -705,76 +792,109 @@ class RecyclePrinterTemplateService extends BaseAdminService
             7 => '已定价',
             8 => '已定价（重新定价）'
         ];
-        
+
         $check_status_names = [
             0 => '未质检',
             1 => '质检中',
             2 => '已质检'
         ];
-        
+
         // 组装打印数据
         return [
             // 设备基本信息
-            'device_id' => '设备id:'.(string)$device['id'],
-            'id' => '设备id:'.(string)$device['id'],
-            'imei' =>$device['imei'] ?? '',
-            'model' => '型号:'. $device['model'] ?? '',
-            
-            // 订单信息
-            'order_id' => '订单id:'.(string)($device['order_id'] ?? 0),
-            'order_no' => '订单号:'.$order['order_no'] ?? '',
-            
-            // 分类信息（使用固定分类数据）
-            'category_id' => '分类id:'.(string)($device['category_id'] ?? 1),
-            'category_name' => '分类:'.$category_name,
-            // 'brand' => '品牌:'.$device['brand'] ?? '', // 品牌信息直接从设备表获取
-            
-            // 价格信息
-            'initial_price' =>  '初始价格:'.$device['initial_price'] ? number_format((float)$device['initial_price'], 2) : '0.00',
-            'final_price' => '最终价格:'.$device['final_price'] ? number_format((float)$device['final_price'], 2) : '0.00',
-            'price' => '最终价格:'.$device['final_price'] ? number_format((float)$device['final_price'], 2) : ($device['initial_price'] ? number_format((float)$device['initial_price'], 2) : '0.00'),
-            
-            // 状态信息
-            'status' => '状态id:'.(string)($device['status'] ?? 1),
-            'status_name' =>  '状态:'.$status_names[$device['status'] ?? 1] ?? '未知状态',
-            'check_status' => '质检状态:'.(string)($device['check_status'] ?? 0),
-            'check_status_name' => $check_status_names[$device['check_status'] ?? 0] ?? '未知状态',
-            'final_status' =>   (string)($device['final_status'] ?? 0),
-            'final_status_name' => '状态:'.($device['final_status'] ? '已确认' : '未确认'),
-            
-            // 质检信息（使用关联查询的数据）
-            'check_result' =>  ''.$device['check_result'] ?? '',
-            'check_staff' => '质检员:'.$device['checkUser']['username'] ?? '',
-            'check_date' => '质检时间:'.$this->formatSafeTime($device['check_at']),
-            'check_time' => '质检时间:'.$this->formatSafeTime($device['check_at']),
+            'device_id' => (string)$device['id'],
+            'id' => (string)$device['id'],
+            'imei' => $device['imei'] ?? '',
+            'imei2' => $device['imei2'] ?? '',
+            'sn' => $device['sn'] ?? '',
+            'model' => $device['model'] ?? '',
+            'system_version' => $device['system_version'] ?? '',
+            'warranty_info' => $device['warranty_info'] ?? '',
+            'capacity' => $device['capacity'] ?? '',
+            'color' => $device['color'] ?? '',
 
-            
-            // 定价信息（使用关联查询的数据）
+            // 设备序号信息
+            'device_index' => (string)$device_index,
+            'device_total' => (string)$device_total,
+            'device_number' => $device_index . '/' . $device_total,
+
+            // 订单信息
+            'order_id' => (string)($device['order_id'] ?? 0),
+            'order_no' => $order['order_no'] ?? '',
+            'customer_name' => $order['customer_name'] ?? '',
+            'customer_phone' => $order['customer_phone'] ?? '',
+            'member_nickname' => $member_nickname,
+            'pay_type' => $order['pay_type'] ?? '',
+            'pay_account' => $order['pay_account'] ?? '',
+            'total_amount' => $order['total_amount'] ?? '0.00',
+            'device_count' => $order['device_count'] ?? '0',
+            'order_status' => $status_names[$order['status'] ?? 1] ?? '',
+            'order_remark' => $order['remark'] ?? '',
+
+            // 分类信息
+            'category_id' => (string)($device['category_id'] ?? 1),
+            'category_name' => $category_name,
+
+            // 价格信息
+            'initial_price' => $device['initial_price'] ? number_format((float)$device['initial_price'], 2) : '0.00',
+            'final_price' => $device['final_price'] ? number_format((float)$device['final_price'], 2) : '0.00',
+            'sell_price' => $device['sell_price'] ? number_format((float)$device['sell_price'], 2) : '0.00',
+            'price' => $device['final_price'] ? number_format((float)$device['final_price'], 2) : ($device['initial_price'] ? number_format((float)$device['initial_price'], 2) : '0.00'),
+            'before_price' => $device['before_price'] ?? '',
+            'price_remark' => $device['price_remark'] ?? '',
+
+            // 状态信息
+            'status' => (string)($device['status'] ?? 1),
+            'status_name' => $status_names[$device['status'] ?? 1] ?? '',
+            'check_status' => (string)($device['check_status'] ?? 0),
+            'check_status_name' => $check_status_names[$device['check_status'] ?? 0] ?? '',
+            'final_status' => (string)($device['final_status'] ?? 0),
+            'final_status_name' => $device['final_status'] ? '已确认' : '未确认',
+
+            // 质检信息
+            'check_result' => $device['check_result'] ?? '',
+            'check_result_seller' => $device['check_result_seller'] ?? '',
+            'check_result_buyer' => $device['check_result_buyer'] ?? '',
+            'check_staff' => $device['checkUser']['username'] ?? '',
+            'check_date' => $this->formatSafeTime($device['check_at'], 'Y-m-d'),
+            'check_time' => $this->formatSafeTime($device['check_at']),
+
+            // 定价信息
             'price_staff' => $device['checkUser']['username'] ?? '',
             'price_staff_name' => $device['checkUser']['real_name'] ?? $device['price_user']['username'] ?? '',
-            'price_time' => '打款时间'.$this->formatSafeTime($device['price_at']),
+            'price_time' => $this->formatSafeTime($device['price_at']),
 
-            'price_remark' => '备注'.$device['price_remark'] ?? '',
-            
+            // 快递信息
+            'express_company' => $order['express_company'] ?? '',
+            'express_no' => $order['express_no'] ?? '',
+            'delivery_type' => ($order['delivery_type'] ?? '') === 'express' ? '快递' : '自送',
+            'delivery_fee' => $order['delivery_fee'] ?? '0.00',
+            'delivery_status' => $this->getDeliveryStatusName($order['delivery_status'] ?? 0),
+            'delivery_operator' => $order['delivery_operator_name'] ?? '',
+
             // 会员信息
-            'member_id' => '会员:'.(string)($device['member_id'] ?? 0),
-            
+            'member_id' => (string)($device['member_id'] ?? 0),
+
             // 时间信息
-            'create_time' =>'入库时间:'.$this->formatSafeTime($device['create_at']),
-            'update_time' => '更新时间:'.$this->formatSafeTime($device['update_at']),
+            'create_time' => $this->formatSafeTime($device['create_at']),
+            'update_time' => $this->formatSafeTime($device['update_at']),
+            'sign_time' => $this->formatSafeTime($order['sign_at'] ?? 0),
+            'complete_time' => $this->formatSafeTime($order['complete_at'] ?? 0),
+            'pay_time' => $this->formatSafeTime($order['pay_time'] ?? 0),
             'current_time' => date('Y-m-d H:i:s'),
             'current_date' => date('Y-m-d'),
             'datetime' => date('Y-m-d H:i:s'),
             'date' => date('Y-m-d'),
             'time' => date('H:i:s'),
-            
+
             // 备注信息
-            'remark' => '备注:'.$device['remark'] ?? '',
-            
+            'remark' => $device['remark'] ?? '',
+
             // 二维码和条形码内容
             'qrcode_content' => "{$device['imei']}",
             'barcode_content' => $device['imei'] ?? '',
-            
+            'device_url' => request()->domain() . '/site/recycle_order/list?id=' . $device['id'],
+
             // 其他常用字段
             'site_name' => '回收中心'
         ];
@@ -886,6 +1006,24 @@ class RecyclePrinterTemplateService extends BaseAdminService
     public function renderTemplate(array $templateData, float $scale = 1.0): string
     {
         return $this->renderService->renderToHtml($templateData, [], $scale);
+    }
+
+    /**
+     * 根据触发时机获取模板
+     * @param string $triggerEvent 触发时机：draft/complete
+     * @param string $templateType 模板类型，默认 device_label
+     * @return array
+     */
+    public function getTemplateByTrigger(string $triggerEvent, string $templateType = 'device_label'): array
+    {
+        $template = $this->model->where([
+            ['site_id', '=', $this->site_id],
+            ['trigger_event', '=', $triggerEvent],
+            ['template_type', '=', $templateType],
+            ['status', '=', 1]
+        ])->findOrEmpty()->toArray();
+
+        return $template;
     }
 
 } 
