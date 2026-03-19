@@ -36,6 +36,9 @@ class OrderPay extends BaseNoticeTemplate
         $memberId = (int)($order['member_id'] ?? 0);
         $wapDomain = get_wap_domain($siteId);
 
+        $deliveryType = $order['delivery_type'] ?? 1;
+        $deliveryTypeName = $deliveryType == 1 ? '快递' : '自送';
+
         return $this->toReturn(
             [
                 '__wechat_page' => $wapDomain . '/addon/recycle/pages/order/detail?id=' . $orderId,
@@ -44,6 +47,9 @@ class OrderPay extends BaseNoticeTemplate
                 'pay_type' => $order['pay_type_name'] ?? '线下支付',
                 'pay_account' => $order['pay_account'] ?? '请查看订单详情',
                 'pay_result' => '打款成功',
+                'delivery_type' => $deliveryType,
+                'delivery_type_name' => $deliveryTypeName,
+                'url' => 'https://gl%2ehsxbk%2etop/mplink/a5f'
             ],
             [
                 'member_id' => $memberId

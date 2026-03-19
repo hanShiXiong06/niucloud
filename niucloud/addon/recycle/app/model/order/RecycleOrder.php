@@ -112,7 +112,9 @@ class RecycleOrder extends BaseModel
      */
     public function getDeliveryTypeNameAttr($value, $data)
     {
-        
+        if (!isset($data['delivery_type'])) {
+            return '快递';
+        }
         return $data['delivery_type'] == 1 ? '快递':'自送';
     }
 

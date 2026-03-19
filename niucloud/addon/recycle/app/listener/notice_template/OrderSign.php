@@ -36,13 +36,20 @@ class OrderSign extends BaseNoticeTemplate
         $memberId = (int)($order['member_id'] ?? 0);
         $wapDomain = get_wap_domain($siteId);
 
+        // 处理 delivery_type，避免访问器报错
+        $deliveryType = $order['delivery_type'] ?? 1;
+        $deliveryTypeName = $deliveryType == 1 ? '快递' : '自送';
+
         return $this->toReturn(
             [
                 '__wechat_page' => $wapDomain . '/addon/recycle/pages/order/detail?id=' . $orderId,
                 '__weapp_page' => 'addon/recycle/pages/order/detail?id=' . $orderId,
                 'order_no' => $order['order_no'] ?? '',
                 'sign_time' => date('Y-m-d H:i:s'),
+                'delivery_type' => $deliveryType,
+                'delivery_type_name' => $deliveryTypeName,
                 'remark' => '您的回收订单已签收，请等待工作人员审核。',
+                 'url' => 'https://gl%2ehsxbk%2etop/mplink/a5f'
             ],
             [
                 'member_id' => $memberId

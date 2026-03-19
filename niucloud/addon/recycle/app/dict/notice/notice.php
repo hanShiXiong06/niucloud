@@ -1,6 +1,6 @@
 <?php
 return [
-    // 订单签收通知
+    // 1. 订单签收通知
     'recycle_order_sign' => [
         'addon' => 'recycle',
         'key' => 'recycle_order_sign',
@@ -12,10 +12,13 @@ return [
             'order_no' => '订单号',
             'sign_time' => '签收时间',
             'remark' => '温馨提示',
+            'delivery_type' => '配送方式代码',
+            'delivery_type_name' => '配送方式',
+            'url' => '订单链接'
         ],
     ],
 
-    // 用户下单成功通知
+    // 2. 用户下单成功通知
     'recycle_order_add' => [
         'addon' => 'recycle',
         'key' => 'recycle_order_add',
@@ -28,10 +31,13 @@ return [
             'shop_name' => '下单门店',
             'address' => '收货地址',
             'create_time' => '下单时间',
+            'delivery_type' => '配送方式代码',
+            'delivery_type_name' => '配送方式',
+            'url' => '订单链接'
         ],
     ],
 
-    // 打款成功通知
+    //3.  打款成功通知
     'recycle_order_pay' => [
         'addon' => 'recycle',
         'key' => 'recycle_order_pay',
@@ -44,10 +50,13 @@ return [
             'pay_type' => '收款方式',
             'pay_account' => '收款账号',
             'pay_result' => '打款结果',
+            'delivery_type' => '配送方式代码',
+            'delivery_type_name' => '配送方式',
+            'url' => '订单链接'
         ],
     ],
 
-    // 订单验收通知（待确认）
+    // 4. 订单验收通知（待确认）
     'recycle_order_agree' => [
         'addon' => 'recycle',
         'key' => 'recycle_order_agree',
@@ -58,7 +67,10 @@ return [
         'variable' => [
             'order_no' => '订单编号',
             'time' => '时间',
+            'delivery_type' => '配送方式代码',
+            'delivery_type_name' => '配送方式',
             'status' => '状态',
+            'url' => '订单链接'
         ],
     ],
 ];

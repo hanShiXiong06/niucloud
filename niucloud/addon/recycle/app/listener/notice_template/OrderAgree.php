@@ -36,6 +36,9 @@ class OrderAgree extends BaseNoticeTemplate
         $memberId = (int)($order['member_id'] ?? 0);
         $wapDomain = get_wap_domain($siteId);
 
+        $deliveryType = $order['delivery_type'] ?? 1;
+        $deliveryTypeName = $deliveryType == 1 ? '快递' : '自送';
+
         return $this->toReturn(
             [
                 '__wechat_page' => $wapDomain . '/addon/recycle/pages/order/detail?id=' . $orderId,
@@ -43,6 +46,9 @@ class OrderAgree extends BaseNoticeTemplate
                 'order_no' => $order['order_no'] ?? '',
                 'time' => date('Y-m-d H:i:s'),
                 'status' => '待确认',
+                'delivery_type' => $deliveryType,
+                'delivery_type_name' => $deliveryTypeName,
+                'url' => 'https://gl%2ehsxbk%2etop/mplink/a5f'
             ],
             [
                 'member_id' => $memberId
