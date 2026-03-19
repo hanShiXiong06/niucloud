@@ -504,34 +504,6 @@
 			]
         },
 // PHONE_SHOP_PAGE_END
-        // KD_API_PAGE_BEGIN
-                // *********************************** 快递API ***********************************
-             {
-			"root": "addon/kd_api",
-			"pages": [
-				{
-					"path": "pages/index",
-					"style": {
-						// #ifndef H5
-						"navigationStyle": "custom",
-						// #endif
-						"navigationBarTitleText": "接口信息"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order",
-					"style": {
-						// #ifndef H5
-						"navigationStyle": "custom",
-						// #endif
-						"navigationBarTitleText": "订单列表"
-					},
-					"needLogin": true
-				}
-			]
-		},
-                // KD_API_PAGE_END
 // {{ PAGE_END }}
         {
             "root": "app/components",
