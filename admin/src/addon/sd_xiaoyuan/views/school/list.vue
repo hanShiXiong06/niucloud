@@ -102,6 +102,24 @@
                 <el-form-item label="排序">
                     <el-input-number v-model="formData.sort" :min="0" :max="9999" />
                 </el-form-item>
+                <el-form-item label="开学日期">
+                    <el-date-picker v-model="formData.semester_start" type="date" placeholder="请选择开学日期" value-format="YYYY-MM-DD" />
+                </el-form-item>
+                <el-form-item label="结束日期">
+                    <el-date-picker v-model="formData.semester_end" type="date" placeholder="请选择学期结束日期" value-format="YYYY-MM-DD" />
+                </el-form-item>
+                <el-form-item label="课节时间">
+                    <div class="sections-wrap">
+                        <div class="section-row" v-for="(s, idx) in formData.sections" :key="idx">
+                            <span class="section-label">第{{ idx + 1 }}节</span>
+                            <el-time-picker v-model="s.start" format="HH:mm" value-format="HH:mm" placeholder="开始" style="width: 120px;" />
+                            <span class="section-sep">~</span>
+                            <el-time-picker v-model="s.end" format="HH:mm" value-format="HH:mm" placeholder="结束" style="width: 120px;" />
+                            <el-button v-if="formData.sections.length > 1" type="danger" link size="small" @click="formData.sections.splice(idx, 1)">删除</el-button>
+                        </div>
+                        <el-button type="primary" link size="small" @click="addSection">+ 添加课节</el-button>
+                    </div>
+                </el-form-item>
                 <el-form-item label="状态">
                     <el-switch v-model="formData.status" :active-value="1" :inactive-value="0" />
                 </el-form-item>
@@ -146,9 +164,37 @@ const formData = reactive({
     lng: '',
     lat: '',
     campus_list: '',
+    semester_start: '',
+    semester_end: '',
+    sections: [
+        { start: '08:00', end: '08:45' },
+        { start: '08:55', end: '09:40' },
+        { start: '10:00', end: '10:45' },
+        { start: '10:55', end: '11:40' },
+        { start: '14:00', end: '14:45' },
+        { start: '14:55', end: '15:40' },
+        { start: '16:00', end: '16:45' },
+        { start: '16:55', end: '17:40' },
+    ] as { start: string; end: string }[],
     sort: 0,
     status: 1
 })
+
+const defaultSections = [
+    { start: '08:00', end: '08:45' },
+    { start: '08:55', end: '09:40' },
+    { start: '10:00', end: '10:45' },
+    { start: '10:55', end: '11:40' },
+    { start: '14:00', end: '14:45' },
+    { start: '14:55', end: '15:40' },
+    { start: '16:00', end: '16:45' },
+    { start: '16:55', end: '17:40' },
+]
+
+const addSection = () => {
+    const last = formData.sections[formData.sections.length - 1]
+    formData.sections.push({ start: last?.end || '08:00', end: '08:45' })
+}
 
 const mapLoading = ref(true)
 let mapKey = ''
@@ -245,6 +291,9 @@ const showAdd = () => {
     formData.lng = ''
     formData.lat = ''
     formData.campus_list = ''
+    formData.semester_start = ''
+    formData.semester_end = ''
+    formData.sections = defaultSections.map(s => ({ ...s }))
     formData.sort = 0
     formData.status = 1
     formVisible.value = true
@@ -262,6 +311,9 @@ const showEdit = (row: any) => {
     formData.lng = row.lng || ''
     formData.lat = row.lat || ''
     formData.campus_list = row.campus_list || ''
+    formData.semester_start = row.semester_start || ''
+    formData.semester_end = row.semester_end || ''
+    formData.sections = row.sections ? (typeof row.sections === 'string' ? JSON.parse(row.sections) : row.sections) : defaultSections.map(s => ({ ...s }))
     formData.sort = row.sort || 0
     formData.status = row.status
     formVisible.value = true
@@ -278,10 +330,14 @@ const handleSubmit = async () => {
     
     submitLoading.value = true
     try {
+        const submitData = {
+            ...formData,
+            sections: JSON.stringify(formData.sections)
+        }
         if (formData.id) {
-            await editSchool(formData)
+            await editSchool(submitData)
         } else {
-            await addSchool(formData)
+            await addSchool(submitData)
         }
         ElMessage.success(formData.id ? '编辑成功' : '添加成功')
         formVisible.value = false
@@ -365,5 +421,16 @@ const handleDel = (row: any) => {
     margin-top: 8px;
     font-size: 12px;
     color: #999;
+}
+
+.sections-wrap {
+    .section-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        .section-label { width: 50px; font-size: 13px; color: #666; flex-shrink: 0; }
+        .section-sep { color: #999; }
+    }
 }
 </style>

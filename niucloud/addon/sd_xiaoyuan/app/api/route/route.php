@@ -12,6 +12,8 @@ Route::group('sd_xiaoyuan', function () {
         Route::get('list', 'addon\sd_xiaoyuan\app\api\controller\School@list');
         Route::get('info', 'addon\sd_xiaoyuan\app\api\controller\School@info');
         Route::get('campus_list', 'addon\sd_xiaoyuan\app\api\controller\School@campusList');
+        Route::get('grades', 'addon\sd_xiaoyuan\app\api\controller\School@grades');
+        Route::get('classes', 'addon\sd_xiaoyuan\app\api\controller\School@classes');
     });
     
     // 订单大厅（公开浏览）
@@ -154,6 +156,8 @@ Route::group('sd_xiaoyuan', function () {
         Route::post('edit', 'addon\sd_xiaoyuan\app\api\controller\Schedule@edit');
         Route::post('delete', 'addon\sd_xiaoyuan\app\api\controller\Schedule@delete');
         Route::post('clear', 'addon\sd_xiaoyuan\app\api\controller\Schedule@clear');
+        Route::get('class_schedule', 'addon\sd_xiaoyuan\app\api\controller\Schedule@classSchedule');
+        Route::post('bind_class', 'addon\sd_xiaoyuan\app\api\controller\Schedule@bindClass');
     });
 
     // 签到接口

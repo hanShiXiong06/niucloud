@@ -201,6 +201,24 @@ export function clearSchedule(data: any) {
     return request.post('sd_xiaoyuan/schedule/clear', data)
 }
 
+// 班级课表接口
+export function getClassSchedule(params: any) {
+    return request.get('sd_xiaoyuan/schedule/class_schedule', params)
+}
+
+export function bindClassSchedule(data: any) {
+    return request.post('sd_xiaoyuan/schedule/bind_class', data)
+}
+
+// 学校年级/班级接口
+export function getSchoolGrades(params: any) {
+    return request.get('sd_xiaoyuan/school/grades', params)
+}
+
+export function getSchoolClasses(params: any) {
+    return request.get('sd_xiaoyuan/school/classes', params)
+}
+
 // 签到接口
 export function doSign() {
     return request.post('sd_xiaoyuan/sign/sign', {})

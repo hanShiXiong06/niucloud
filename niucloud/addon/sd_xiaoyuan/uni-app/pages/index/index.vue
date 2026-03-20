@@ -47,7 +47,7 @@
             <view style="height: 50rpx;"></view>
             <view class="promo-section">
                 <!-- 未认证: 引导认证 -->
-                <view class="promo-card" v-if="!isAuthed" @click="goTo('/addon/sd_xiaoyuan/pages/campus/auth')">
+                <view class="promo-card" v-if="!isAuthed && config?.require_auth_publish != 0" @click="goTo('/addon/sd_xiaoyuan/pages/campus/auth')">
                     <view class="promo-left">
                         <view class="promo-title">校园帮互助实名认证</view>
                         <view class="promo-subtitle">安全可靠，快速认证</view>
@@ -522,7 +522,7 @@ const openPublish = async () => {
         console.error('获取认证状态失败:', e)
     }
     // 再检测认证
-    if (!isAuthed.value) {
+    if (config.value?.require_auth_publish != 0 && !isAuthed.value) {
         tabbarRef.value?.triggerCertPopup()
         return
     }
@@ -532,7 +532,7 @@ const openPublish = async () => {
 const handleMenuClick = async (item: any) => {
     if (item.url) {
         // 需要认证的操作优先检测登录
-        if (needsCertCheck(item.url)) {
+        if (config.value?.require_auth_publish != 0 && needsCertCheck(item.url)) {
             if (!isLoggedIn.value) {
                 useLogin().setLoginBack({ url: '/addon/sd_xiaoyuan/pages/index/index' })
                 return
@@ -580,7 +580,7 @@ const handleFeatureClick = (type: string) => {
             break
         case 'sell':
             if (!isLoggedIn.value) { useLogin().setLoginBack({ url: '/addon/sd_xiaoyuan/pages/index/index' }); return }
-            if (!isAuthed.value) { tabbarRef.value?.triggerCertPopup(); return }
+            if (config.value?.require_auth_publish != 0 && !isAuthed.value) { tabbarRef.value?.triggerCertPopup(); return }
             uni.navigateTo({ url: '/addon/sd_xiaoyuan/pages/secondhand/publish' })
             break
     }

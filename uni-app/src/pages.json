@@ -983,8 +983,7 @@
                 {
                     "path": "pages/secondhand/index",
                     "style": {
-                        "navigationBarTitleText": "二手闲置",
-                        "navigationStyle": "custom"
+                        "navigationBarTitleText": "二手闲置"
                     },
                     "needLogin": true
                 },

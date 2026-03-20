@@ -78,8 +78,7 @@
         "requiredPrivateInfos": [
             "chooseLocation",
             "getLocation",
-            "chooseAddress",
-            "setClipboardData"
+            "chooseAddress"
         ],
         "__usePrivacyCheck__": true
     },

@@ -3,35 +3,49 @@ declare(strict_types=1);
 
 namespace addon\sd_xiaoyuan\app\adminapi\controller;
 
-use addon\sd_xiaoyuan\app\service\core\SchoolService;
+use addon\sd_xiaoyuan\app\service\core\SchoolClassService;
 use core\base\BaseAdminController;
 use think\Response;
 
 /**
- * 学校管理控制器
+ * 班级管理控制器
  */
-class School extends BaseAdminController
+class SchoolClass extends BaseAdminController
 {
     /**
-     * 获取学校列表
+     * 班级列表(分页)
      */
     public function lists(): Response
     {
         $data = $this->request->params([
             ['name', ''],
             ['status', ''],
-            ['province', ''],
-            ['city', ''],
+            ['grade', ''],
+            ['school_id', 0],
             ['page', 1],
             ['limit', 10],
         ]);
-        
-        $list = (new SchoolService())->getPage($data);
+
+        $list = (new SchoolClassService())->getPage($data);
         return success($list);
     }
 
     /**
-     * 获取学校详情
+     * 班级列表(不分页)
+     */
+    public function all(): Response
+    {
+        $data = $this->request->params([
+            ['school_id', 0],
+            ['grade', ''],
+        ]);
+
+        $list = (new SchoolClassService())->getList($data);
+        return success($list);
+    }
+
+    /**
+     * 班级详情
      */
     public function info(): Response
     {
@@ -39,60 +53,48 @@ class School extends BaseAdminController
         if (empty($id)) {
             return fail('参数错误');
         }
-        
-        $info = (new SchoolService())->getInfo((int)$id);
+
+        $info = (new SchoolClassService())->getInfo((int)$id);
         return success($info);
     }
 
     /**
-     * 添加学校
+     * 添加班级
      */
     public function add(): Response
     {
         $data = $this->request->params([
+            ['school_id', 0],
+            ['department_id', 0],
+            ['major_id', 0],
             ['name', ''],
-            ['short_name', ''],
-            ['logo', ''],
-            ['province', ''],
-            ['city', ''],
-            ['address', ''],
-            ['campus_list', ''],
-            ['lng', ''],
-            ['lat', ''],
-            ['semester_start', null],
-            ['semester_end', null],
-            ['sections', ''],
+            ['code', ''],
+            ['grade', ''],
             ['sort', 0],
             ['status', 1],
         ]);
-        
+
         if (empty($data['name'])) {
-            return fail('请填写学校名称');
+            return fail('请填写班级名称');
         }
-        
-        $id = (new SchoolService())->add($data);
+
+        $id = (new SchoolClassService())->add($data);
         return success(['id' => $id]);
     }
 
     /**
-     * 编辑学校
+     * 编辑班级
      */
     public function edit(): Response
     {
         $id = $this->request->param('id', 0);
         $data = $this->request->params([
+            ['school_id', 0],
+            ['department_id', 0],
+            ['major_id', 0],
             ['name', ''],
-            ['short_name', ''],
-            ['logo', ''],
-            ['province', ''],
-            ['city', ''],
-            ['address', ''],
-            ['campus_list', ''],
-            ['lng', ''],
-            ['lat', ''],
-            ['semester_start', null],
-            ['semester_end', null],
-            ['sections', ''],
+            ['code', ''],
+            ['grade', ''],
             ['sort', 0],
             ['status', 1],
         ]);
@@ -101,12 +103,12 @@ class School extends BaseAdminController
             return fail('参数错误');
         }
 
-        (new SchoolService())->edit((int)$id, $data);
+        (new SchoolClassService())->edit((int)$id, $data);
         return success('编辑成功');
     }
 
     /**
-     * 删除学校
+     * 删除班级
      */
     public function del(): Response
     {
@@ -114,33 +116,24 @@ class School extends BaseAdminController
         if (empty($id)) {
             return fail('参数错误');
         }
-        
-        (new SchoolService())->del((int)$id);
+
+        (new SchoolClassService())->del((int)$id);
         return success('删除成功');
     }
 
     /**
-     * 修改学校状态
+     * 修改班级状态
      */
     public function setStatus(): Response
     {
         $id = $this->request->param('id', 0);
         $status = $this->request->param('status', 0);
-        
+
         if (empty($id)) {
             return fail('参数错误');
         }
-        
-        (new SchoolService())->setStatus((int)$id, (int)$status);
-        return success('操作成功');
-    }
 
-    /**
-     * 获取学校列表(不分页)
-     */
-    public function all(): Response
-    {
-        $list = (new SchoolService())->getList([]);
-        return success($list);
+        (new SchoolClassService())->setStatus((int)$id, (int)$status);
+        return success('操作成功');
     }
 }

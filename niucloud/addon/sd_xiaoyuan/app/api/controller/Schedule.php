@@ -3,6 +3,7 @@
 namespace addon\sd_xiaoyuan\app\api\controller;
 
 use addon\sd_xiaoyuan\app\service\core\ScheduleService;
+use addon\sd_xiaoyuan\app\service\core\ClassScheduleService;
 use core\base\BaseApiController;
 
 /**
@@ -16,8 +17,9 @@ class Schedule extends BaseApiController
     public function index()
     {
         $semester = $this->request->param('semester', '');
+        $school_id = intval($this->request->param('school_id', 0));
         $service = new ScheduleService();
-        $data = $service->getSchedule($semester);
+        $data = $service->getSchedule($semester, $school_id);
         return success($data);
     }
 
@@ -102,5 +104,45 @@ class Schedule extends BaseApiController
         $service = new ScheduleService();
         $service->clearSchedule($semester);
         return success();
+    }
+
+    /**
+     * 获取班级课表
+     */
+    public function classSchedule()
+    {
+        $class_id = $this->request->param('class_id', 0);
+        $semester = $this->request->param('semester', '');
+
+        if (empty($class_id)) {
+            return fail('参数错误');
+        }
+        if (empty($semester)) {
+            return fail('请指定学期');
+        }
+
+        $service = new ClassScheduleService();
+        $list = $service->getListByClass((int)$class_id, $semester);
+        return success($list);
+    }
+
+    /**
+     * 绑定班级课表
+     */
+    public function bindClass()
+    {
+        $data = $this->request->params([
+            ['class_id', 0],
+            ['school_id', 0],
+            ['semester', ''],
+        ]);
+
+        if (empty($data['class_id'])) {
+            return fail('请选择班级');
+        }
+
+        $service = new ScheduleService();
+        $result = $service->bindClass($data);
+        return success($result);
     }
 }

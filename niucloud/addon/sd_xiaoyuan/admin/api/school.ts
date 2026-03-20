@@ -2,12 +2,12 @@ import request from '@/utils/request'
 
 // 获取学校列表
 export function getSchoolList(params: any) {
-    return request.get('sd_xiaoyuan/school/list', params)
+    return request.get('sd_xiaoyuan/school/list', { params })
 }
 
 // 获取学校详情
 export function getSchoolInfo(id: number) {
-    return request.get('sd_xiaoyuan/school/info', { id })
+    return request.get('sd_xiaoyuan/school/info', { params: { id } })
 }
 
 // 添加学校

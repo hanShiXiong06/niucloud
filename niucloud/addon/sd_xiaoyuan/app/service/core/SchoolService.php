@@ -23,7 +23,7 @@ class SchoolService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'id,site_id,name,short_name,logo,province,city,address,campus_list,lng,lat,sort,status,create_time';
+        $field = 'id,site_id,name,short_name,logo,province,city,address,campus_list,lng,lat,semester_start,semester_end,sections,sort,status,create_time';
         $order = 'sort desc,id desc';
         
         // 只使用模型中定义的搜索器

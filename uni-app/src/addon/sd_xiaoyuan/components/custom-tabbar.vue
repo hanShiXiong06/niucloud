@@ -176,6 +176,11 @@ const switchTab = (tab: string) => {
 }
 
 const onPlusClick = async () => {
+    // 如果配置不需要实名认证，直接显示发布弹窗
+    if (config.value && config.value.require_auth_publish == 0) {
+        showPublishPopup.value = true
+        return
+    }
     // 点击发布按钮时，先实时检查认证状态
     try {
         const res: any = await getCampusAuthStatus()

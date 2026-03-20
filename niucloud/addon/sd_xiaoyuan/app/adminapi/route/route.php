@@ -304,6 +304,27 @@ Route::group('sd_xiaoyuan', function () {
         Route::post('delete', 'addon\sd_xiaoyuan\app\adminapi\controller\LostFoundCategory@delete');
     });
 
+    // 班级管理
+    Route::group('school_class', function () {
+        Route::get('list', 'addon\sd_xiaoyuan\app\adminapi\controller\SchoolClass@lists');
+        Route::get('all', 'addon\sd_xiaoyuan\app\adminapi\controller\SchoolClass@all');
+        Route::get('info', 'addon\sd_xiaoyuan\app\adminapi\controller\SchoolClass@info');
+        Route::post('add', 'addon\sd_xiaoyuan\app\adminapi\controller\SchoolClass@add');
+        Route::post('edit', 'addon\sd_xiaoyuan\app\adminapi\controller\SchoolClass@edit');
+        Route::post('del', 'addon\sd_xiaoyuan\app\adminapi\controller\SchoolClass@del');
+        Route::post('set_status', 'addon\sd_xiaoyuan\app\adminapi\controller\SchoolClass@setStatus');
+    });
+
+    // 班级课表管理
+    Route::group('class_schedule', function () {
+        Route::get('list', 'addon\sd_xiaoyuan\app\adminapi\controller\ClassSchedule@lists');
+        Route::post('add', 'addon\sd_xiaoyuan\app\adminapi\controller\ClassSchedule@add');
+        Route::post('edit', 'addon\sd_xiaoyuan\app\adminapi\controller\ClassSchedule@edit');
+        Route::post('del', 'addon\sd_xiaoyuan\app\adminapi\controller\ClassSchedule@del');
+        Route::post('clear', 'addon\sd_xiaoyuan\app\adminapi\controller\ClassSchedule@clear');
+        Route::post('import', 'addon\sd_xiaoyuan\app\adminapi\controller\ClassSchedule@import');
+    });
+
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,
