@@ -50,23 +50,35 @@
       </div>
     </div>
 
-    <!-- ==================== 设备扩展信息 ==================== -->
-    <div class="extra-fields-bar">
-      <div class="extra-field">
-        <span class="extra-label">内存</span>
-        <el-input v-model="deviceForm.capacity" size="small" placeholder="如 256GB" />
+    <!-- ==================== 设备规格信息 ==================== -->
+    <div class="device-specs-bar">
+      <div class="device-specs-bar__item">
+        <span class="device-specs-bar__icon">💾</span>
+        <div class="device-specs-bar__field">
+          <span class="device-specs-bar__label">内存</span>
+          <el-input v-model="deviceForm.capacity" size="small" placeholder="如 256GB" />
+        </div>
       </div>
-      <div class="extra-field">
-        <span class="extra-label">颜色</span>
-        <el-input v-model="deviceForm.color" size="small" placeholder="如 深空黑色" />
+      <div class="device-specs-bar__item">
+        <span class="device-specs-bar__icon">🎨</span>
+        <div class="device-specs-bar__field">
+          <span class="device-specs-bar__label">颜色</span>
+          <el-input v-model="deviceForm.color" size="small" placeholder="如 深空黑色" />
+        </div>
       </div>
-      <div class="extra-field">
-        <span class="extra-label">系统版本</span>
-        <el-input v-model="deviceForm.system_version" size="small" placeholder="如 iOS 17.3.1" />
+      <div class="device-specs-bar__item">
+        <span class="device-specs-bar__icon">📲</span>
+        <div class="device-specs-bar__field">
+          <span class="device-specs-bar__label">系统版本</span>
+          <el-input v-model="deviceForm.system_version" size="small" placeholder="如 iOS 17.3.1" />
+        </div>
       </div>
-      <div class="extra-field">
-        <span class="extra-label">保修信息</span>
-        <el-input v-model="deviceForm.warranty_info" size="small" placeholder="保修日期/过保/未激活" />
+      <div class="device-specs-bar__item">
+        <span class="device-specs-bar__icon">🛡</span>
+        <div class="device-specs-bar__field">
+          <span class="device-specs-bar__label">保修信息</span>
+          <el-input v-model="deviceForm.warranty_info" size="small" placeholder="保修日期/过保/未激活" />
+        </div>
       </div>
     </div>
 
@@ -325,8 +337,8 @@
 
       <!-- ==================== 定价与备注区 ==================== -->
       <div class="pricing-bar">
-       
-        <el-form-item label="最终价格" prop="final_price" class="pricing-bar__price">
+      
+        <el-form-item label="回收定价" prop="final_price" class="pricing-bar__price">
           <el-input-number
             v-model="deviceForm.final_price"
             :step="10"
@@ -335,6 +347,12 @@
             :max="99999"
             placeholder="定价"
             controls-position="right"
+          />
+        </el-form-item>
+         <el-form-item label="预估定价" prop="final_price" class="pricing-bar__price">
+          <el-input-number
+            v-model="deviceForm.initial_price"
+            disabled
           />
         </el-form-item>
         <el-form-item label="卖货价格" prop="sell_price" class="pricing-bar__price">
@@ -1024,35 +1042,45 @@ onBeforeUnmount(() => {
   }
 }
 
-// ==================== 系统版本 & 保修信息 ====================
-.extra-fields-bar {
+// ==================== 设备规格信息栏 ====================
+.device-specs-bar {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 10px 12px;
+  overflow: hidden;
   margin-bottom: 10px;
 
-  .extra-field {
+  &__item {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border-right: 1px solid #f1f5f9;
+
+    &:last-child { border-right: none; }
+  }
+
+  &__icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
     min-width: 0;
   }
 
-  .extra-label {
-    font-size: 13px;
-    color: #374151;
-    white-space: nowrap;
+  &__label {
+    font-size: 10px;
+    color: #94a3b8;
     font-weight: 500;
-    flex-shrink: 0;
-  }
-
-  .extra-hint {
-    font-size: 12px;
-    color: #9ca3af;
     white-space: nowrap;
   }
 }
@@ -1261,7 +1289,7 @@ onBeforeUnmount(() => {
 // ==================== 定价栏（紧凑一行） ====================
 .pricing-bar {
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: auto auto auto auto;
   gap: 12px;
   align-items: end;
   background: linear-gradient(90deg, #fffbeb 0%, #fff 60%);
@@ -1416,10 +1444,16 @@ onBeforeUnmount(() => {
     }
   }
 
-  .extra-fields-bar {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 8px 10px;
+  .device-specs-bar {
+    grid-template-columns: repeat(2, 1fr);
+
+    &__item {
+      border-bottom: 1px solid #f1f5f9;
+
+      &:nth-child(2n) { border-right: none; }
+      &:nth-child(3),
+      &:nth-child(4) { border-bottom: none; }
+    }
   }
 
   .check-grid {
