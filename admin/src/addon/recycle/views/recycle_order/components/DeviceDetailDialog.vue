@@ -49,34 +49,22 @@
             <!-- 右侧：保修和价格信息 -->
             <div class="space-y-3">
               <!-- 保修信息 -->
-              <div v-if="deviceData.info">
-                <h4 class="font-medium text-gray-700 text-sm flex items-center space-x-1 mb-2">
-                  <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                  </svg>
-                  <span>保修信息</span>
-                </h4>
-                
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div class="bg-gray-50 rounded-md p-2 flex items-center justify-between">
-                    <div class="text-xs text-gray-500">保修状态</div>
-                    <span 
-                      :class="[
-                        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
-                        deviceData.info.coverage?.status === 'In Warranty'  
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-red-100 text-red-700'
-                      ]"
-                    >
-                    <!-- Out Of Warranty 就是 过保  Limited Warranty 就是 有限保修 -->
-                    
-                    {{ deviceData.info.coverage?.status === 'Out Of Warranty' ? '过保' : deviceData.info.coverage?.status==='Limited Warranty' ? '在保' : deviceData.info.support || '未激活' }}
-                    </span>
-                  </div>
-                  <div class="bg-gray-50 rounded-md p-2 flex items-center justify-between" v-if="deviceData.info.purchase?.date">
-                    <div class="text-xs text-gray-500">购买日期</div>
-                    <div class="text-sm text-gray-900">{{ deviceData.info.purchase.date }}</div>
-                  </div>
+              <div class="extra-fields-bar">
+                <div class="extra-field" v-if="deviceData.capacity">
+                  <span class="extra-label">内存</span>
+                  <el-tag type="primary">{{deviceData.capacity}} </el-tag>
+                </div>
+                <div class="extra-field" v-if="deviceData.color">
+                  <span class="extra-label">颜色</span>
+                   <el-tag type="primary">{{deviceData.color}} </el-tag>
+                </div>
+                <div class="extra-field" v-if="deviceData.system_version">
+                  <span class="extra-label">系统版本</span>
+                  <el-tag type="primary">{{deviceData.system_version}}</el-tag>
+                </div>
+                <div class="extra-field" v-if="deviceData.warranty_info">
+                  <span class="extra-label">保修信息</span>
+                  <el-tag type="primary">{{deviceData.warranty_info}}</el-tag>
                 </div>
               </div>
 

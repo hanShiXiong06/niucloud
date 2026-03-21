@@ -49,7 +49,7 @@ class OrderPay extends BaseNoticeTemplate
                 'pay_result' => '打款成功',
                 'delivery_type' => $deliveryType,
                 'delivery_type_name' => $deliveryTypeName,
-                'url' => 'https://gl%2ehsxbk%2etop/mplink/a5f'
+                'url' => 'https://gl.hsxbk.top/mplink/a5f'
             ],
             [
                 'member_id' => $memberId

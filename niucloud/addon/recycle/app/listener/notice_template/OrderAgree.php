@@ -48,7 +48,7 @@ class OrderAgree extends BaseNoticeTemplate
                 'status' => '待确认',
                 'delivery_type' => $deliveryType,
                 'delivery_type_name' => $deliveryTypeName,
-                'url' => 'https://gl%2ehsxbk%2etop/mplink/a5f'
+                'url' => 'https://gl.hsxbk.top/mplink/a5f'
             ],
             [
                 'member_id' => $memberId

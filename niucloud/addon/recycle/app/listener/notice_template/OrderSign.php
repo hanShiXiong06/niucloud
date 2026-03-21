@@ -49,7 +49,7 @@ class OrderSign extends BaseNoticeTemplate
                 'delivery_type' => $deliveryType,
                 'delivery_type_name' => $deliveryTypeName,
                 'remark' => '您的回收订单已签收，请等待工作人员审核。',
-                 'url' => 'https://gl%2ehsxbk%2etop/mplink/a5f'
+                 'url' => 'https://gl.hsxbk.top/mplink/a5f'
             ],
             [
                 'member_id' => $memberId
