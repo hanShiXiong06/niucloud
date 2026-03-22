@@ -367,7 +367,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   background: #fff;
   border-radius: 10px;
   border: 1px solid #e5e7eb;
-  overflow: hidden;
+
 }
 
 .ddd-section-header {

@@ -214,7 +214,7 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       results.push(`中框${appearanceName}`)
     }
     if (functionNames.length > 0) {
-      results.push(`功能异常: ${functionNames.join('、')}`)
+      results.push(`功能: ${functionNames.join('、')}`)
     }
     if (fixNames.length > 0) {
       results.push(`维修记录: ${fixNames.join('、')}`)
