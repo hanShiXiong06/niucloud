@@ -35,6 +35,8 @@ class OrderSign extends BaseNoticeTemplate
         $siteId = (int)($order['site_id'] ?? 0);
         $memberId = (int)($order['member_id'] ?? 0);
         $wapDomain = get_wap_domain($siteId);
+        // 获取域名，避免在多域名环境下报错
+        $domain = request()->domain();
 
         // 处理 delivery_type，避免访问器报错
         $deliveryType = $order['delivery_type'] ?? 1;
@@ -49,7 +51,7 @@ class OrderSign extends BaseNoticeTemplate
                 'delivery_type' => $deliveryType,
                 'delivery_type_name' => $deliveryTypeName,
                 'remark' => '您的回收订单已签收，请等待工作人员审核。',
-                 'url' => 'https://gl.hsxbk.top/mplink/a5f'
+                 'url' => '/mplink/a5f'
             ],
             [
                 'member_id' => $memberId

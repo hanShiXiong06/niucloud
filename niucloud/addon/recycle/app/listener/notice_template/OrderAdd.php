@@ -5,7 +5,7 @@ namespace addon\recycle\app\listener\notice_template;
 
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderService;
 use app\listener\notice_template\BaseNoticeTemplate;
-
+use think\facade\Log;
 /**
  * 回收订单下单通知
  */
@@ -34,6 +34,11 @@ class OrderAdd extends BaseNoticeTemplate
         $pageOrderId = (int)($order['id'] ?? $orderId);
         $wapDomain = get_wap_domain($siteId);
 
+        // 获取域名，避免在多域名环境下报错
+        $domain = request()->domain();
+
+        
+
         $deliveryType = $order['delivery_type'] ?? 1;
         $deliveryTypeName = $deliveryType == 1 ? '快递' : '自送';
 
@@ -48,7 +53,7 @@ class OrderAdd extends BaseNoticeTemplate
                 'delivery_type' => $deliveryType,
                 'delivery_type_name' => $deliveryTypeName,
                 'remark' => '您的回收订单已提交，请等待工作人员联系。',
-                'url' => 'https://gl.hsxbk.top/mplink/a5f'
+                'url' => '/mplink/a5f'
             ],
             [
                 'member_id' => $memberId
