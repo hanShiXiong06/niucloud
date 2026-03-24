@@ -109,11 +109,11 @@ class AuthService extends BaseAdminService
         foreach ($ignore as $item) {
             if (strpos($rule, $item) !== false) return;
         }
-        
-        if (!$this->isCheckDomain()) return;
 
         $authinfo = (new CoreAuthService())->getAuthInfo()['data'] ?? [];;
         if (empty($authinfo)) return;
+
+        if (!$this->isCheckDomain()) return;
 
         $site_address = $authinfo['site_address'] ?? '';
         $domain = request()->domain();

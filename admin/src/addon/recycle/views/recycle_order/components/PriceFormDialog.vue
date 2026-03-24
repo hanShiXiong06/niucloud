@@ -56,6 +56,9 @@
               style="width: 100%;"
               @change="updatePriceClass"
             />
+            <span v-if="deviceData.initial_price" class="cdd-pricing-main__ref">
+              参考预估：¥{{ deviceData.initial_price }}
+            </span>
             <!-- 价格变化指示 -->
             <div v-if="deviceData.before_price && deviceForm.final_price !== undefined" class="pfd-price-diff">
               <span :class="['pfd-price-diff__badge', priceChangeClass]">
@@ -134,6 +137,7 @@ interface DeviceInfo {
     color?: string;
     system_version?: string;
     warranty_info?: string;
+    initial_price?: string | number;
     before_price?: string | number;
     check_result?: string;
     check_result_seller?: string;
@@ -330,6 +334,14 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
     color: #374151;
     padding-bottom: 4px;
   }
+}
+
+.cdd-pricing-main__ref {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #ea580c;
+  font-weight: 500;
 }
 
 /* 价格变化指示 */

@@ -12,6 +12,7 @@
 namespace addon\recycle\app\service\api\recycle_user_address;
 
 use addon\recycle\app\model\address\RecycleUserAddress;
+use app\model\member\Member;
 
 
 use core\base\BaseApiService;
@@ -57,6 +58,9 @@ class RecycleUserAddressService extends BaseApiService
         $data['site_id'] = $this->site_id;
         $data['member_id'] = $this->member_id;
         $res = $this->model->create($data);
+        // 获取用户的 name 并同步到 member 表中的 nick_name 
+
+        (new Member()) ->where([['member_id', '=', $res->member_id],['site_id', '=', $this->site_id]])->update(['nickname' => $data['name'],'mobile' => $data['mobile']]);
         return $res->id;
 
     }

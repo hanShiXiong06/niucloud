@@ -149,6 +149,13 @@
             "needLogin": true
         },
         {
+            "path": "app/pages/setting/authorization",
+            "style": {
+                "navigationBarTitleText": "%pages.setting.authorization%"
+            },
+            "needLogin": true
+        },
+        {
             "path": "app/pages/webview/index",
             "style": {
                 "navigationBarTitleText": "%pages.webview.index%"
@@ -983,7 +990,8 @@
                 {
                     "path": "pages/secondhand/index",
                     "style": {
-                        "navigationBarTitleText": "二手闲置"
+                        "navigationBarTitleText": "二手闲置",
+                        "navigationStyle": "custom"
                     },
                     "needLogin": true
                 },
