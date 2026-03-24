@@ -67,7 +67,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted, computed } from 'vue'
 import { onShow, onReachBottom } from '@dcloudio/uni-app'
 import { getMessageList, readMessage, readAllMessages, clearMessages } from '../../api/xiaoyuan'

@@ -12,6 +12,10 @@
                     </el-select>
                 </el-form-item>
 
+                <el-form-item label="文件格式说明">
+                    <div class="file-tip">支持 CSV/TSV/Excel 文件，表头需包含：nj, bjdm, bjmc, weekday, jcxx, xn, xq_meta, kcmc, rkjs, skdd, skbj, xf, skzs</div>
+                </el-form-item>
+
                 <el-form-item label="上传文件">
                     <el-upload
                         ref="uploadRef"
@@ -22,9 +26,6 @@
                         :on-remove="handleFileRemove"
                     >
                         <el-button type="primary">选择文件</el-button>
-                        <template #tip>
-                            <div class="el-upload__tip">支持 CSV/TSV/Excel 文件，表头需包含：nj, bjdm, bjmc, weekday, jcxx, xn, xq_meta, kcmc, rkjs, skdd, skbj, xf, skzs</div>
-                        </template>
                     </el-upload>
                 </el-form-item>
 
@@ -119,4 +120,9 @@ const goBack = () => {
 
 <style lang="scss" scoped>
 .import-container { padding: 20px; }
+.file-tip {
+    color: #909399;
+    font-size: 13px;
+    line-height: 1.6;
+}
 </style>

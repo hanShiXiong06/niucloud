@@ -109,7 +109,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed, onMounted } from 'vue'
 import { applyRunner } from '../../api/runner'
 import { getSchoolList, getSchoolCampusList } from '../../api/xiaoyuan'

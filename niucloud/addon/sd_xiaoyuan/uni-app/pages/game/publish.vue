@@ -81,7 +81,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getGameDetail, getGameTypes as fetchGameTypes, getServiceTypes as fetchServiceTypes } from '../../api/game'

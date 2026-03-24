@@ -75,7 +75,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed, onMounted } from 'vue'
 import { publishConfession } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'

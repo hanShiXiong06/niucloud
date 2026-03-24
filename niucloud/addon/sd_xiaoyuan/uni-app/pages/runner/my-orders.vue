@@ -78,7 +78,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { getMyOrders, pickupOrder as pickupOrderApi, deliveryOrder as deliveryOrderApi, completeOrder as completeOrderApi, rejectOrder as rejectOrderApi } from '../../api/runner'
 import xyUpload from '../../components/xy-upload.vue'

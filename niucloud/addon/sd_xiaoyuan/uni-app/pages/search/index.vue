@@ -1,6 +1,6 @@
 <template>
     <view class="search-page">
-        <view class="search-header" :style="{ paddingTop: headerPaddingTop, height: headerHeight, paddingRight: headerPaddingRight }">
+        <view class="search-header">
             <view class="search-bar">
                 <u-icon name="search" size="16" color="#999"></u-icon>
                 <input 
@@ -76,26 +76,8 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
-import { ref, watch, computed } from 'vue'
+import { ref, watch } from 'vue'
 import { getOrderHall, getSecondhandList, getConfessionList, getLostFoundList, getCommunityList } from '../../api/xiaoyuan'
-
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 0
-// #ifdef MP-WEIXIN
-const menuButtonInfo = uni.getMenuButtonBoundingClientRect()
-const navBarHeight = (menuButtonInfo.top - statusBarHeight) * 2 + menuButtonInfo.height
-const headerPaddingTop = menuButtonInfo.top + 'px'
-const headerHeight = menuButtonInfo.height + 'px'
-const screenWidth = uni.getSystemInfoSync().windowWidth
-const menuButtonRight = screenWidth - menuButtonInfo.right
-const headerPaddingRight = (screenWidth - menuButtonInfo.left + menuButtonRight) + 'px'
-// #endif
-// #ifndef MP-WEIXIN
-const navBarHeight = 44
-const headerPaddingTop = statusBarHeight + 'px'
-const headerHeight = '44px'
-const headerPaddingRight = '24rpx'
-// #endif
 
 const keyword = ref('')
 const currentTab = ref('order')
@@ -274,7 +256,6 @@ const goBack = () => {
         border-radius: 32rpx;
         padding: 0 24rpx;
         height: 68rpx;
-
 
         .search-input {
             flex: 1;

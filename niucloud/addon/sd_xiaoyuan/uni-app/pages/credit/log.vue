@@ -50,7 +50,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { getCreditInfo, getCreditLogList } from '../../api/xiaoyuan'
 

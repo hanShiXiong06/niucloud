@@ -103,7 +103,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { createHelpOrder } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'

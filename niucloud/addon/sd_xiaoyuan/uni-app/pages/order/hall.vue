@@ -305,8 +305,13 @@ const loadUnreadCount = async () => {
         if (res.code === 1) {
             unreadCount.value = res.data.count || 0
         }
-    } catch (e) {
-        console.error(e)
+    } catch (e: any) {
+        // 如果是401未登录错误，静默处理
+        if (e?.code === 401 || e?.msg === '请登录') {
+            unreadCount.value = 0
+            return
+        }
+        console.error('加载未读消息数失败:', e)
     }
 }
 

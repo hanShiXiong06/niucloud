@@ -56,7 +56,6 @@
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getAddressList } from '../../api/xiaoyuan'
-import '../../css/base.css'
 
 const loading = ref(false)
 const addressList = ref<any[]>([])

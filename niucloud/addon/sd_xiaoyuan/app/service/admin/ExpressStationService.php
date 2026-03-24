@@ -42,7 +42,6 @@ class ExpressStationService extends BaseAdminService
 
     public function edit(int $id, array $data)
     {
-        $data['update_time'] = time();
         $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->update($data);
         return true;
     }

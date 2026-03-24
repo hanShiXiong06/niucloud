@@ -60,7 +60,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted, computed } from 'vue'
 import { getSignHistory } from '../../api/xiaoyuan'
 

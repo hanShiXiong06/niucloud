@@ -56,7 +56,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getMyPublishSecondhand, offSecondhand, soldSecondhand, delSecondhand, onSecondhand } from '../../api/xiaoyuan'

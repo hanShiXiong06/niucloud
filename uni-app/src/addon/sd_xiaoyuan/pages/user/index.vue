@@ -46,7 +46,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import useMemberStore from '@/stores/member'

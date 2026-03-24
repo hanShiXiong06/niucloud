@@ -180,13 +180,13 @@
                 </view>
             </view>
         </template>
-        <template v-if="diyStore.mode == '' && data.global && diyGroup.showCopyright.value && data.global.copyright && data.global.copyright.isShow">
+        <template v-if="data.global && diyGroup.showCopyright.value && data.global.copyright && data.global.copyright.isShow">
            <copy-right :textColor="data.global.copyright.textColor" />
         </template>
 
         <template v-if="diyStore.mode == '' && data.global && data.global.bottomTabBar && data.global.bottomTabBar.isShow">
             <view class="pt-[20rpx]"></view>
-            <tabbar :addon="data.global.bottomTabBar.designNav.key" />
+            <tabbar :addon="data.global.bottomTabBar.designNav?.key" />
         </template>
     </view>
 </template>

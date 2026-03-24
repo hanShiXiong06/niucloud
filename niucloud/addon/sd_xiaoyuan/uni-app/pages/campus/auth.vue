@@ -149,7 +149,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted, computed } from 'vue'
 import { getCampusAuthInfo, applyCampusAuth, getSchoolList, getSchoolCampusList } from '../../api/xiaoyuan'
 import xyUpload from '../../components/xy-upload.vue'

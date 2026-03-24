@@ -88,7 +88,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { getAppealList } from '../../api/runner'
 import { img } from '@/utils/common'

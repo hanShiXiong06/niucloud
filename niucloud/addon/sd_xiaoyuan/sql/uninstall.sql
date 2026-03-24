@@ -55,4 +55,6 @@ DROP TABLE IF EXISTS `xiaoyuan_points_goods`;
 DROP TABLE IF EXISTS `xiaoyuan_points_goods_category`;
 DROP TABLE IF EXISTS `xiaoyuan_points_order`;
 DROP TABLE IF EXISTS `xiaoyuan_schedule_setting`;
+DROP TABLE IF EXISTS `xiaoyuan_class`;
+DROP TABLE IF EXISTS `xiaoyuan_class_schedule`;
 DROP TABLE IF EXISTS `xiaoyuan_tip_order`;

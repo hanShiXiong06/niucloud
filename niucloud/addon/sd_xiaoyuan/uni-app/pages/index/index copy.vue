@@ -288,7 +288,12 @@ const loadAuthStatus = async () => {
         if (res.code === 1 && res.data) {
             isAuthed.value = res.data.status === 1 || res.data.status === 'passed'
         }
-    } catch (e) {
+    } catch (e: any) {
+        // 如果是401未登录错误，静默处理
+        if (e?.code === 401 || e?.msg === '请登录') {
+            isAuthed.value = false
+            return
+        }
         console.error('获取认证状态失败:', e)
     }
 }
@@ -404,7 +409,12 @@ const loadUnreadCount = async () => {
             unreadCount.value = res.data.count || 0
         }
     } catch (e: any) {
-        console.error(e)
+        // 如果是401未登录错误，静默处理
+        if (e?.code === 401 || e?.msg === '请登录') {
+            unreadCount.value = 0
+            return
+        }
+        console.error('加载未读消息数失败:', e)
     }
 }
 
@@ -630,7 +640,12 @@ const loadMyOrders = async () => {
         if (res.code === 1) {
             myOrders.value = (res.data.list || res.data || []).map((item: any) => mapOrderItemForIndex(item))
         }
-    } catch (e) {
+    } catch (e: any) {
+        // 如果是401未登录错误，静默处理
+        if (e?.code === 401 || e?.msg === '请登录') {
+            myOrders.value = []
+            return
+        }
         console.error('加载任务大厅失败:', e)
     }
 }

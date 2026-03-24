@@ -57,7 +57,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted, watch } from 'vue'
 import { getMyPoints, getPointsRecord } from '../../api/xiaoyuan'
 import { useFeatureCheck } from '../../composables/useFeatureCheck'

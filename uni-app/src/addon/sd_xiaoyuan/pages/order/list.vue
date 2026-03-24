@@ -87,7 +87,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getOrderList, cancelOrder as cancelOrderApi, payOrder as payOrderApi } from '../../api/xiaoyuan'

@@ -89,7 +89,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { addCourse, editCourse, getSchedule } from '../../api/xiaoyuan'

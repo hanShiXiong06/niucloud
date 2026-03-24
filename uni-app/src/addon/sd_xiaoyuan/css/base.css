@@ -356,7 +356,6 @@
     border: none;width: auto;
     text-align: center;
 }
-
 .submit-btn:active {
     opacity: 0.9;
     transform: scale(0.98);
@@ -374,4 +373,29 @@
 /* 页面顶部渐变背景区域 */
 .page-header-bg {
     background: linear-gradient(to bottom, #c0fe95, #f5f5f5);
+}
+
+/* 强制按钮颜色样式 */
+/deep/.primary-btn-bg {
+    background: #007aff !important;
+}
+
+/* 强制所有支付按钮颜色 */
+.submit-btn2,
+.submit-btn,
+.btn-pay,
+.order-btn,
+.popup-submit {
+    background: #007aff !important;
+    color: #ffffff !important;
+}
+
+.submit-btn2:active,
+.submit-btn:active,
+.btn-pay:active,
+.order-btn:active,
+.popup-submit:active {
+    background: #0056cc !important;
+    opacity: 0.9;
+    transform: scale(0.98);
 }

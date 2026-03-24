@@ -104,7 +104,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { publishSecondhand, editSecondhand, getSecondhandInfo, getSecondhandCategoryList, getConfig } from '../../api/xiaoyuan'

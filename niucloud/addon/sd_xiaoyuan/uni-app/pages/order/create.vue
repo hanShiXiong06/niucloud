@@ -141,7 +141,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed, onMounted } from 'vue'
 import { createOrder, calculateFee } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'

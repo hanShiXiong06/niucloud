@@ -66,7 +66,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { getRunnerInfo, setRange, updateRunnerInfo } from '../../api/runner'
 import xyUpload from '../../components/xy-upload.vue'

@@ -42,7 +42,7 @@
                 </el-table-column>
                 <el-table-column prop="create_time" label="创建时间" width="170">
                     <template #default="{ row }">
-                        {{ row.create_time ? new Date(row.create_time * 1000).toLocaleString() : '-' }}
+                        {{ row.create_time || '-' }}
                     </template>
                 </el-table-column>
                 <el-table-column label="操作" width="200" fixed="right">
@@ -151,10 +151,13 @@ const loadList = async () => {
             page: pagination.page,
             limit: pagination.limit
         })
+        console.log('班级列表返回数据:', res)
         list.value = res.data?.data || []
         pagination.total = res.data?.total || 0
+        console.log('list.value:', list.value)
+        console.log('pagination.total:', pagination.total)
     } catch (e) {
-        console.error(e)
+        console.error('加载班级列表失败:', e)
     } finally {
         loading.value = false
     }

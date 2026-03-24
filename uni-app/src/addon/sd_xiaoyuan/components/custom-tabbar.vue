@@ -176,11 +176,6 @@ const switchTab = (tab: string) => {
 }
 
 const onPlusClick = async () => {
-    // 如果配置不需要实名认证，直接显示发布弹窗
-    if (config.value && config.value.require_auth_publish == 0) {
-        showPublishPopup.value = true
-        return
-    }
     // 点击发布按钮时，先实时检查认证状态
     try {
         const res: any = await getCampusAuthStatus()
@@ -218,11 +213,28 @@ const onPlusClick = async () => {
             }
         } else {
             // 接口返回失败，显示未认证弹窗
-            showCertPopup.value = true
+            // showCertPopup.value = true
         }
-    } catch (e) {
+    } catch (e: any) {
         console.error('检查认证状态失败:', e)
-        // 请求失败，显示未认证弹窗
+        
+        // 如果是401未登录错误，不显示认证弹窗
+        if (e?.code === 401 || e?.msg === '请登录') {
+            // 用户未登录，引导去登录
+            uni.showModal({
+                title: '提示',
+                content: '请先登录后再发布内容',
+                confirmText: '去登录',
+                success: (modalRes) => {
+                    if (modalRes.confirm) {
+                        uni.navigateTo({ url: '/app/pages/auth/login' })
+                    }
+                }
+            })
+            return
+        }
+        
+        // 其他错误，显示未认证弹窗
         showCertPopup.value = true
     }
 }

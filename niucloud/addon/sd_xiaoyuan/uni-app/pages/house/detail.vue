@@ -88,7 +88,7 @@
                     <text>押金</text>
                     <text class="total-price">¥{{ houseInfo.deposit || 0 }}</text>
                 </view>
-                <button class="popup-submit" @click="submitOrder">确认下单并支付</button>
+                <u-button type="primary" shape="circle" @click="submitOrder">确认下单并支付</u-button>
             </view>
         </u-popup>
 
@@ -97,7 +97,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getHouseDetail, createHouseOrder, offlineHouse as offlineApi } from '../../api/xiaoyuan'

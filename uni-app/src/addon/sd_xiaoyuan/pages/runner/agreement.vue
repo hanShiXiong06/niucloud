@@ -79,7 +79,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 </script>
 
 <style lang="scss" scoped>

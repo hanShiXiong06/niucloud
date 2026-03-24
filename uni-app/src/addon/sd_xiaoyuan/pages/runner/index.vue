@@ -228,7 +228,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getRunnerInfo, setOnline, getRunnerStat, getOrderHall, getMyOrders, acceptOrder, pickupOrder, deliveryOrder, completeOrder } from '../../api/runner'

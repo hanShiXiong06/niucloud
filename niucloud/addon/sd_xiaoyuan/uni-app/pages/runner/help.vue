@@ -37,7 +37,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 
 const faqList = ref([

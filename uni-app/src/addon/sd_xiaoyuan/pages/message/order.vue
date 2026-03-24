@@ -61,7 +61,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { getMessageList } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'

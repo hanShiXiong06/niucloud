@@ -86,7 +86,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, watch, onMounted } from 'vue'
 import { getCouponList, receiveCoupon as receiveCouponApi, getMyCoupons } from '../../api/xiaoyuan'
 

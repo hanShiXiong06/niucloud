@@ -116,7 +116,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import { getGroupOrderInfo, joinGroupOrder, quitGroupOrder, cancelGroupOrder, confirmGroupOrderSuccess, completeGroupOrder } from '../../api/xiaoyuan'

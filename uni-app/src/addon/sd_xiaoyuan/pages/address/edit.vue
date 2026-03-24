@@ -55,7 +55,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getAddressDetail, addAddress, editAddress } from '../../api/xiaoyuan'

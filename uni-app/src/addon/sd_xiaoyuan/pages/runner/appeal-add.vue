@@ -41,7 +41,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed } from 'vue'
 import { addAppeal } from '../../api/runner'
 import xyUpload from '../../components/xy-upload.vue'

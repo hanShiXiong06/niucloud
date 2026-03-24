@@ -104,7 +104,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { getSignStatus, doSign as doSignApi, getSignHistory } from '../../api/xiaoyuan'
 import { useFeatureCheck } from '../../composables/useFeatureCheck'

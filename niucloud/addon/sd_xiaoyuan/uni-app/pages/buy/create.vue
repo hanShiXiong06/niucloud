@@ -17,9 +17,6 @@
             </view>
         </view>
 
-        <!-- 占位，防止内容被固定导航遮挡 -->
-        <view :style="{ height: (statusBarHeight + navBarHeight + 10) + 'px' }"></view>
-
         <!-- 表单内容 -->
         <scroll-view scroll-y class="form-content">
             <!-- 送货地址 -->
@@ -155,7 +152,6 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { createOrder } from '../../api/xiaoyuan'
 import { tryBindFenxiao } from '../../utils/bindFenxiao'
 import pay from '@/components/pay/pay.vue'
-import '../../css/base.css'
 import xyUpload from '../../components/xy-upload.vue'
 import { useFeatureCheck } from '../../composables/useFeatureCheck'
 import FeatureDisabled from '../../components/feature-disabled.vue'
@@ -327,11 +323,6 @@ const onPayFail = () => {
 .header-bg {
     background: linear-gradient(135deg, #e3f2fd, #bbdefb);
     padding-bottom: 20rpx;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
 }
 
 .navbar {

@@ -128,11 +128,14 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, onMounted } from 'vue'
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
 import { getGroupOrderList, getGroupOrderStats } from '../../api/xiaoyuan'
 import { img } from '@/utils/common'
+import { useFeatureCheck } from '../../composables/useFeatureCheck'
+import FeatureDisabled from '../../components/feature-disabled.vue'
+
+const { config, isFeatureEnabled, loadConfig } = useFeatureCheck('enable_group')
 
 const currentTab = ref('')
 const groupList = ref<any[]>([])

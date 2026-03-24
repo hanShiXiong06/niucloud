@@ -85,7 +85,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getConfessionDetail, likeConfession, getConfessionComments, addConfessionComment, deleteConfession } from '../../api/xiaoyuan'

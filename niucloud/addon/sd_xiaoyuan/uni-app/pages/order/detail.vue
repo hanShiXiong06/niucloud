@@ -503,7 +503,6 @@
 </template>
 
 <script setup lang="ts">
-import '@/addon/sd_xiaoyuan/css/base.css'
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getOrderDetail, cancelOrder as cancelOrderApi, getRunnerLocation, tipOrder } from '../../api/xiaoyuan'
