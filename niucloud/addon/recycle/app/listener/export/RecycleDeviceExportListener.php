@@ -24,7 +24,7 @@ class RecycleDeviceExportListener
         $data = [];
         if (isset($param['type']) && $param['type'] == 'recycle_device') {
             $model = new RecycleDevice();
-            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, status, final_price, update_at, order_id, price_uid';
+            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, color,capacity,warranty_info, status, final_price, update_at, order_id, price_uid';
 
             $where = $param['where'] ?? [];
 
