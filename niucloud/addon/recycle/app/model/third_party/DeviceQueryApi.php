@@ -135,69 +135,98 @@ class DeviceQueryApi extends BaseModel
      */
     public static function getDefaultApiList(): array
     {
+        return self::groupApiRows(self::getDefaultApiRows());
+    }
+
+    /**
+     * 获取默认API行数据（用于初始化表数据）
+     * @return array
+     */
+    public static function getDefaultApiRows(): array
+    {
+        $v = '1.0.0';
         return [
-            'apple' => [
-                'coverage' => ['name' => '苹果保修查询', 'endpoint' => '/apple/coverage', 'price' => '0.2-0.8'],
-                'coverage_capacity' => ['name' => '苹果保修查询(容量/颜色)', 'endpoint' => '/apple/coverage-capacity', 'price' => '1'],
-                'coverage_backup' => ['name' => '苹果保修查询(备用)', 'endpoint' => '/apple/coverage-backup', 'price' => '1.2'],
-                'activationlock' => ['name' => '激活锁查询', 'endpoint' => '/apple/activationlock', 'price' => '0.4'],
-                'icloud' => ['name' => 'ID黑白查询', 'endpoint' => '/apple/icloud', 'price' => '0.8'],
-                'serial' => ['name' => '序列号转换', 'endpoint' => '/apple/serial', 'price' => '1'],
-                'repair' => ['name' => '维修状态查询', 'endpoint' => '/apple/repair', 'price' => '0.2'],
-                'simlock' => ['name' => '网络锁查询', 'endpoint' => '/apple/simlock', 'price' => '1'],
-                'carrier' => ['name' => '运营商查询', 'endpoint' => '/apple/carrier', 'price' => '1.2'],
-                'country' => ['name' => '销售地查询', 'endpoint' => '/apple/country', 'price' => '1.2'],
-                'partnumber' => ['name' => '型号号码查询', 'endpoint' => '/apple/partnumber', 'price' => '1.6'],
-                'purchase' => ['name' => '购买日期查询', 'endpoint' => '/apple/purchase', 'price' => '1.2'],
-                'mdm' => ['name' => '监管锁查询', 'endpoint' => '/apple/mdm', 'price' => '10'],
-                'mac_activationlock' => ['name' => 'Mac激活锁查询', 'endpoint' => '/apple/mac-activationlock', 'price' => '2'],
-                'details' => ['name' => '苹果验机报告(网络锁)', 'endpoint' => '/apple/details', 'price' => '2.5'],
-                'details_purchase' => ['name' => '苹果验机报告(购买日期)', 'endpoint' => '/apple/details-purchase', 'price' => '3'],
-                'details_ultimate' => ['name' => '苹果验机报告(旗舰版)', 'endpoint' => '/apple/details-ultimate', 'price' => '3.5'],
-                'model' => ['name' => '苹果型号查询', 'endpoint' => '/apple/model', 'price' => '0.05']
-            ],
-            'android' => [
-                'huawei_coverage' => ['name' => '华为保修查询', 'endpoint' => '/huawei/coverage', 'price' => '0.4'],
-                'honor_coverage' => ['name' => '荣耀保修查询', 'endpoint' => '/honor/coverage', 'price' => '0.4'],
-                'xiaomi_coverage' => ['name' => '小米保修查询', 'endpoint' => '/xiaomi/coverage', 'price' => '0.8'],
-                'oppo_coverage' => ['name' => 'OPPO保修查询', 'endpoint' => '/oppo/coverage', 'price' => '0.8'],
-                'vivo_coverage' => ['name' => 'vivo保修查询', 'endpoint' => '/vivo/coverage', 'price' => '1'],
-                'samsung_coverage' => ['name' => '三星保修查询', 'endpoint' => '/samsung/coverage', 'price' => '1'],
-                'realme_coverage' => ['name' => 'realme保修查询', 'endpoint' => '/realme/coverage', 'price' => '0.8'],
-                'nubia_coverage' => ['name' => '努比亚保修查询', 'endpoint' => '/nubia/coverage', 'price' => '1'],
-                'motorola_coverage' => ['name' => 'moto保修查询', 'endpoint' => '/motorola/coverage', 'price' => '1'],
-                'zte_coverage' => ['name' => '中兴保修查询', 'endpoint' => '/zte/coverage', 'price' => '0.6'],
-                'xiaomi_activationlock' => ['name' => '小米账号锁查询', 'endpoint' => '/xiaomi/activationlock', 'price' => '0.02']
-            ],
-            'imei' => [
-                'model' => ['name' => 'IMEI查询(型号)', 'endpoint' => '/imei/model', 'price' => '0.2'],
-                'manufacture' => ['name' => 'IMEI查询(生产日期)', 'endpoint' => '/imei/manufacture', 'price' => '0.6'],
-                'blacklist' => ['name' => 'IMEI查询(黑名单)', 'endpoint' => '/imei/blacklist', 'price' => '0.4'],
-                'att' => ['name' => 'AT&T状态查询', 'endpoint' => '/imei/att', 'price' => '0.8'],
-                't_mobile' => ['name' => 'T-Mobile状态查询', 'endpoint' => '/imei/t-mobile', 'price' => '0.8'],
-                'verizon' => ['name' => 'Verizon状态查询', 'endpoint' => '/imei/verizon', 'price' => '0.6']
-            ],
-            'other' => [
-                'barcode' => ['name' => '条码查询', 'endpoint' => '/item/barcode', 'price' => '0.02'],
-                'ip_location' => ['name' => 'IP地址查询', 'endpoint' => '/ip/location', 'price' => '0.001'],
-                'phone_location' => ['name' => '号码归属地查询', 'endpoint' => '/phone/location', 'price' => '0.001']
-            ]
+            // Apple
+            [ 'name' => '苹果保修查询', 'version' => $v, 'api_list' => '/apple/coverage', 'remark' => '0.2-0.8元', 'status' => 1 ],
+            [ 'name' => '苹果保修查询（容量/颜色）', 'version' => $v, 'api_list' => '/apple/coverage-capacity', 'remark' => '1元', 'status' => 1 ],
+            [ 'name' => '苹果保修查询（备用）', 'version' => $v, 'api_list' => '/apple/coverage-backup', 'remark' => '1.2元', 'status' => 1 ],
+            [ 'name' => '激活锁查询', 'version' => $v, 'api_list' => '/apple/activationlock', 'remark' => '0.4元', 'status' => 1 ],
+            [ 'name' => 'ID黑白查询', 'version' => $v, 'api_list' => '/apple/icloud', 'remark' => '0.8元', 'status' => 1 ],
+            [ 'name' => '序列号转换', 'version' => $v, 'api_list' => '/apple/serial', 'remark' => '1元', 'status' => 1 ],
+            [ 'name' => '维修状态查询', 'version' => $v, 'api_list' => '/apple/repair', 'remark' => '0.2元', 'status' => 1 ],
+            [ 'name' => '网络锁查询', 'version' => $v, 'api_list' => '/apple/simlock', 'remark' => '1元', 'status' => 1 ],
+            [ 'name' => '运营商查询', 'version' => $v, 'api_list' => '/apple/carrier', 'remark' => '1.2元', 'status' => 1 ],
+            [ 'name' => '销售地查询', 'version' => $v, 'api_list' => '/apple/country', 'remark' => '1.2元', 'status' => 1 ],
+            [ 'name' => '型号号码查询', 'version' => $v, 'api_list' => '/apple/partnumber', 'remark' => '1.6元', 'status' => 1 ],
+            [ 'name' => '购买日期查询', 'version' => $v, 'api_list' => '/apple/purchase', 'remark' => '1.2元', 'status' => 1 ],
+            [ 'name' => '监管锁查询', 'version' => $v, 'api_list' => '/apple/mdm', 'remark' => '10元', 'status' => 1 ],
+            [ 'name' => 'Mac激活锁查询', 'version' => $v, 'api_list' => '/apple/mac-activationlock', 'remark' => '2元', 'status' => 1 ],
+            [ 'name' => '苹果验机报告（网络锁）', 'version' => $v, 'api_list' => '/apple/details', 'remark' => '2.5元', 'status' => 1 ],
+            [ 'name' => '苹果验机报告（购买日期）', 'version' => $v, 'api_list' => '/apple/details-purchase', 'remark' => '3元', 'status' => 1 ],
+            [ 'name' => '苹果验机报告（旗舰版）', 'version' => $v, 'api_list' => '/apple/details-ultimate', 'remark' => '3.5元', 'status' => 1 ],
+            [ 'name' => '苹果型号查询', 'version' => $v, 'api_list' => '/apple/model', 'remark' => '0.05元', 'status' => 1 ],
+
+            // Android coverage (from doc)
+            [ 'name' => '华为保修查询', 'version' => $v, 'api_list' => '/huawei/coverage', 'remark' => '0.4元', 'status' => 1 ],
+            [ 'name' => '荣耀保修查询', 'version' => $v, 'api_list' => '/honor/coverage', 'remark' => '0.4元', 'status' => 1 ],
+            [ 'name' => '小米保修查询', 'version' => $v, 'api_list' => '/xiaomi/coverage', 'remark' => '1元', 'status' => 1 ],
+            [ 'name' => 'OPPO保修查询', 'version' => $v, 'api_list' => '/oppo/coverage', 'remark' => '0.8元', 'status' => 1 ],
+            [ 'name' => 'vivo保修查询', 'version' => $v, 'api_list' => '/vivo/coverage', 'remark' => '1元', 'status' => 1 ],
+            [ 'name' => '三星保修查询', 'version' => $v, 'api_list' => '/samsung/coverage', 'remark' => '1元', 'status' => 1 ],
+            [ 'name' => '真我保修查询', 'version' => $v, 'api_list' => '/realme/coverage', 'remark' => '0.8元', 'status' => 1 ],
+            [ 'name' => '努比亚保修查询', 'version' => $v, 'api_list' => '/nubia/coverage', 'remark' => '1元', 'status' => 1 ],
+            [ 'name' => 'moto保修查询', 'version' => $v, 'api_list' => '/motorola/coverage', 'remark' => '1元', 'status' => 1 ],
+            [ 'name' => '中兴保修查询', 'version' => $v, 'api_list' => '/zte/coverage', 'remark' => '0.6元', 'status' => 1 ],
+
+            // IMEI
+            [ 'name' => 'IMEI查询(型号)', 'version' => $v, 'api_list' => '/imei/model', 'remark' => '0.2元', 'status' => 1 ],
+            [ 'name' => 'IMEI查询(生产日期)', 'version' => $v, 'api_list' => '/imei/manufacture', 'remark' => '0.6元', 'status' => 1 ],
+            [ 'name' => 'IMEI查询(黑名单)', 'version' => $v, 'api_list' => '/imei/blacklist', 'remark' => '0.4元', 'status' => 1 ],
+            [ 'name' => 'AT&T状态查询', 'version' => $v, 'api_list' => '/imei/att', 'remark' => '0.8元', 'status' => 1 ],
+            [ 'name' => 'T-Mobile状态查询', 'version' => $v, 'api_list' => '/imei/t-mobile', 'remark' => '0.8元', 'status' => 1 ],
+            [ 'name' => 'Verizon状态查询', 'version' => $v, 'api_list' => '/imei/verizon', 'remark' => '0.6元', 'status' => 1 ],
+
+            // Other
+            [ 'name' => '条码查询', 'version' => $v, 'api_list' => '/item/barcode', 'remark' => '0.02元', 'status' => 1 ],
+            [ 'name' => 'IP地址查询', 'version' => $v, 'api_list' => '/ip/location', 'remark' => '0.001元', 'status' => 1 ],
+            [ 'name' => '号码归属地查询', 'version' => $v, 'api_list' => '/phone/location', 'remark' => '0.001元', 'status' => 1 ],
         ];
     }
 
     /**
-     * 获取API清单
-     * @return array|null
+     * 获取API清单（从数据库按行读取，并分组返回）
+     * @return array
      */
-    public static function getApiList()
+    public static function getApiList(): array
     {
-        $apiData = self::where('status', 1)->find();
-        if ($apiData && !empty($apiData->api_list)) {
-            return $apiData->api_list;
+        $rows = self::where('status', 1)
+            ->field('id,name,api_list,remark,version,status')
+            ->order('id', 'asc')
+            ->select()
+            ->toArray();
+
+        if (!empty($rows)) {
+            return self::groupApiRows($rows);
         }
-        
-        // 如果数据库中没有数据，返回默认清单
+
+        // 数据库没有数据时，返回默认清单
         return self::getDefaultApiList();
+    }
+
+    /**
+     * 初始化默认API清单
+     * @return bool
+     */
+    public static function initDefaultApiList(): bool
+    {
+        $existing = self::count();
+        if ($existing > 0) return true;
+
+        $rows = self::getDefaultApiRows();
+        foreach ($rows as $row) {
+            self::create($row);
+        }
+        return true;
     }
 
     /**
@@ -207,37 +236,65 @@ class DeviceQueryApi extends BaseModel
      */
     public static function getApiByEndpoint(string $endpoint)
     {
+        $endpoint = trim($endpoint);
+        if ($endpoint === '') return null;
+
         $apiList = self::getApiList();
-        
+
         foreach ($apiList as $category => $apis) {
             foreach ($apis as $key => $api) {
-                if ($api['endpoint'] === $endpoint) {
+                if (($api['endpoint'] ?? '') === $endpoint) {
                     return array_merge($api, ['category' => $category, 'key' => $key]);
                 }
             }
         }
-        
+
         return null;
     }
 
     /**
-     * 初始化默认API清单
-     * @return bool
+     * 将行数据按分类聚合，返回结构：
+     * [ 'apple' => [key => ['name','endpoint','price']], 'android' => [...], 'imei' => [...], 'other' => [...] ]
      */
-    public static function initDefaultApiList(): bool
+    private static function groupApiRows(array $rows): array
     {
-        $existing = self::find();
-        if (!$existing) {
-            $data = [
-                'name' => '默认API接口清单',
-                'api_list' => self::getDefaultApiList(),
-                'status' => 1,
-                'remark' => '系统默认初始化的API接口清单，更新日期：2024-09-20'
+        $grouped = [
+            'apple' => [],
+            'android' => [],
+            'imei' => [],
+            'other' => [],
+        ];
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) continue;
+            $endpoint = (string)($row['api_list'] ?? $row['endpoint'] ?? '');
+            if ($endpoint === '') continue;
+
+            $category = self::inferCategory($endpoint);
+            $key = ltrim($endpoint, '/');
+            $key = str_replace('/', '_', $key);
+
+            $grouped[$category][$key] = [
+                'name' => (string)($row['name'] ?? ''),
+                'endpoint' => $endpoint,
+                // remark 字段存储“价格/说明”
+                'price' => (string)($row['remark'] ?? $row['price'] ?? ''),
+                'id' => $row['id'] ?? 0,
+                'version' => $row['version'] ?? '',
+                'status' => $row['status'] ?? 1,
             ];
-            
-            return (bool) self::create($data);
         }
-        
-        return true;
+
+        return $grouped;
     }
-} 
+
+    private static function inferCategory(string $endpoint): string
+    {
+        $endpoint = trim($endpoint);
+        if (str_starts_with($endpoint, '/apple/')) return 'apple';
+        if (str_starts_with($endpoint, '/imei/')) return 'imei';
+        // 非 apple/imei 的 /coverage 归入 android（包含华为/荣耀/小米等）
+        if (str_contains($endpoint, '/coverage')) return 'android';
+        return 'other';
+    }
+}

@@ -36,79 +36,139 @@ class DeviceQueryService extends BaseAdminService
             throw new CommonException('IMEI或序列号不能为空');
         }
 
-        $queryResult = $this->localQueryDevice($queryCode, $api);
-        // 如果本地查询成功，则直接返回
-        if( !empty($queryResult) ){
-            return [
-                'success' => true,
-                'data' => $queryResult,
-            ];
-        }
+        $api = trim((string)$api);
+        if ($api === '') $api = '/apple/model';
 
-        // 使用新的第三方服务架构
+        // 自动检索：只输入串号时，苹果优先；苹果查不到则轮询其它 /model 接口（配置驱动）
+        $endpoints = ($api === '/apple/model')
+            ? $this->getEnabledEndpointsByContains('/model', ['/apple/model'])
+            : [ $api ];
+
         $service = new CoreThirdPartyService();
+        $errors = [];
 
-        // 记录查询开始时间
-        $startTime = microtime(true);
+        foreach ($endpoints as $endpoint) {
+            $endpoint = trim((string)$endpoint);
+            if ($endpoint === '') continue;
 
-        try {
-            // 调用新架构的统一接口
-            $result = $service->call(
-                ThirdPartyDict::SERVICE_TYPE_DEVICE_QUERY,
-                'queryByImei',
-                [
-                    'imei' => $queryCode,
-                    'api' => $api
-                ],
-                $siteId
-            );
-
-            // 计算响应时间（毫秒）
-            $responseTime = round((microtime(true) - $startTime) * 1000);
-
-            if (!$result['success']) {
-                throw new CommonException($result['message'] ?? '查询失败');
+            // 本地缓存
+            $queryResult = $this->localQueryDevice($queryCode, $endpoint);
+            if (!empty($queryResult)) {
+                return [
+                    'success' => true,
+                    'data' => $queryResult,
+                ];
             }
 
-            // 获取返回的数据
-            $apiResult = $result['data'];
+            $startTime = microtime(true);
+            try {
+                $result = $service->call(
+                    ThirdPartyDict::SERVICE_TYPE_DEVICE_QUERY,
+                    'queryByImei',
+                    [
+                        'imei' => $queryCode,
+                        'api' => $endpoint
+                    ],
+                    (int)$siteId
+                );
 
-            // 解析结果（保持原有的解析逻辑）
-            $parsedResult = $this->parseNewArchitectureResult($apiResult);
+                $responseTime = round((microtime(true) - $startTime) * 1000);
 
-            // 保存查询结果到数据库
-            if ($parsedResult['success']) {
-                try {
-                    DeviceQueryResult::saveQueryResult([
-                        'site_id' => $siteId,
-                        'query_code' => $queryCode,
-                        'api_endpoint' => $api,
-                        'query_result' => $parsedResult['data'],
-                        'raw_response' => $apiResult,
-                        'status' => 1,
-                        'cost_amount' => $parsedResult['cost'],
-                        'balance' => $parsedResult['balance'],
-                        'remark' => '设备查询（新架构）'
-                    ]);
-                } catch (\Exception $e) {
-                    // 记录错误但不影响查询流程
-                    \think\facade\Log::warning('保存查询结果失败: ' . $e->getMessage());
+                if (!$result['success']) {
+                    $errors[] = $result['message'] ?? '查询失败';
+                    continue;
                 }
+
+                $apiResult = $result['data'];
+
+                // 命中判断：3023 返回 success 但 data 为空时，认为“未查到”，继续尝试下一个接口
+                $rawData = isset($apiResult['data']) && is_array($apiResult['data']) ? $apiResult['data'] : [];
+                if (empty($rawData)) {
+                    $errors[] = "{$endpoint}: 未查询到数据";
+                    continue;
+                }
+
+                $parsedResult = $this->parseNewArchitectureResult($apiResult);
+
+                // 保存查询结果到数据库
+                if ($parsedResult['success']) {
+                    try {
+                        DeviceQueryResult::saveQueryResult([
+                            'site_id' => (int)$siteId,
+                            'query_code' => $queryCode,
+                            'api_endpoint' => $endpoint,
+                            'query_result' => $parsedResult['data'],
+                            'raw_response' => $apiResult,
+                            'status' => 1,
+                            'cost_amount' => $parsedResult['cost'],
+                            'balance' => $parsedResult['balance'],
+                            'remark' => '设备查询（新架构）'
+                        ]);
+                    } catch (\Exception $e) {
+                        \think\facade\Log::warning('保存查询结果失败: ' . $e->getMessage());
+                    }
+                }
+
+                return [
+                    'success' => $parsedResult['success'],
+                    'data' => $parsedResult['data'],
+                    'cost' => $parsedResult['cost'],
+                    'api_name' => $endpoint,
+                    'response_time' => $responseTime,
+                    'balance' => $parsedResult['balance'],
+                    'provider' => $result['provider'] ?? 'unknown'
+                ];
+
+            } catch (\Exception $e) {
+                // 自动检索模式下：失败继续尝试下一个；单接口模式保持原行为抛错
+                if (count($endpoints) <= 1) {
+                    throw new CommonException('设备查询失败: ' . $e->getMessage());
+                }
+                $errors[] = "{$endpoint}: " . $e->getMessage();
+                continue;
             }
-
-            return [
-                'success' => $parsedResult['success'],
-                'data' => $parsedResult['data'],
-                'cost' => $parsedResult['cost'],
-                'api_name' => $api,
-                'response_time' => $responseTime,
-                'balance' => $parsedResult['balance'],
-                'provider' => $result['provider'] ?? 'unknown'
-            ];
-
-        } catch (\Exception $e) {
-            throw new CommonException('设备查询失败: ' . $e->getMessage());
         }
+
+        $msg = !empty($errors) ? implode('；', array_slice($errors, 0, 3)) : '查询失败';
+        throw new CommonException('设备查询失败: ' . $msg);
+    }
+
+    /**
+     * 从配置表 device_query_api 获取启用的 endpoint 列表（包含某个片段），并按 preferred 顺序置顶
+     */
+    private function getEnabledEndpointsByContains(string $contains, array $preferred = []): array
+    {
+        $contains = trim($contains);
+
+        $rows = (new DeviceQueryApi())
+            ->where('status', 1)
+            ->field('api_list')
+            ->order('id', 'asc')
+            ->select()
+            ->toArray();
+
+        $endpoints = [];
+        foreach ($preferred as $p) {
+            $p = trim((string)$p);
+            if ($p !== '') $endpoints[] = $p;
+        }
+
+        foreach ($rows as $row) {
+            $endpoint = trim((string)($row['api_list'] ?? ''));
+            if ($endpoint === '') continue;
+            if ($contains !== '' && !str_contains($endpoint, $contains)) continue;
+            $endpoints[] = $endpoint;
+        }
+
+        // 去重并保持顺序
+        $seen = [];
+        $uniq = [];
+        foreach ($endpoints as $ep) {
+            if (isset($seen[$ep])) continue;
+            $seen[$ep] = true;
+            $uniq[] = $ep;
+        }
+        return $uniq;
     }
 
     /**
@@ -447,45 +507,27 @@ class DeviceQueryService extends BaseAdminService
         }
     }
 
-    // 获取设备的基本信息 coverage
-    public function getCoverage(array $data){
-//coverage-capacity?sn=354817664998779 / sn=NK4H7P4F12
-        //使用switch 判断品牌
-        switch($data['brand']){
-            case '华为':
-                return $this->queryDevice($data['imei'], $this->site_id, '/huawei/coverage')['data'];
-            case 'HUAWEI':
-                return $this->queryDevice($data['imei'], $this->site_id, '/huawei/coverage')['data'];
-            case '小米':
-                return $this->queryDevice($data['imei'], $this->site_id, '/xiaomi/coverage')['data'];
-            case 'Xiaomi':
-                return $this->queryDevice($data['imei'], $this->site_id, '/xiaomi/coverage')['data'];
-            case 'OPPO':
-                return $this->queryDevice($data['imei'], $this->site_id, '/oppo/coverage')['data'];
-            case 'vivo':
-                return $this->queryDevice($data['imei'], $this->site_id, '/vivo/coverage')['data'];
-            case '三星':
-                return $this->queryDevice($data['imei'], $this->site_id, '/samsung/coverage')['data'];
-            case 'Samsung':
-                return $this->queryDevice($data['imei'], $this->site_id, '/samsung/coverage')['data'];
-            case 'realme':
-                return $this->queryDevice($data['imei'], $this->site_id, '/realme/coverage')['data'];
-            case '努比亚':
-                return $this->queryDevice($data['imei'], $this->site_id, '/nubia/coverage')['data'];
-            case 'Nubia':
-                return $this->queryDevice($data['imei'], $this->site_id, '/nubia/coverage')['data'];
-            case 'moto':
-                return $this->queryDevice($data['imei'], $this->site_id, '/moto/coverage')['data'];
-            case '摩托':
-                return $this->queryDevice($data['imei'], $this->site_id, '/moto/coverage')['data'];
-            case '中兴':
-                return $this->queryDevice($data['imei'], $this->site_id, '/zte/coverage')['data'];
-            case 'ZTE':
-                return $this->queryDevice($data['imei'], $this->site_id, '/zte/coverage')['data'];
-            default:
-                return $this->queryDevice($data['imei'], $this->site_id, '/apple/coverage-capacity')['data'];
+    // 获取设备的基本信息 coverage（无需输入品牌，按配置轮询；苹果优先）
+    public function getCoverage(array $data)
+    {
+        $imei = trim((string)($data['imei'] ?? ''));
+        if ($imei === '') return [];
+
+        $endpoints = $this->getEnabledEndpointsByContains('/coverage', ['/apple/coverage-capacity', '/apple/coverage']);
+
+        foreach ($endpoints as $endpoint) {
+            try {
+                $res = $this->queryDevice($imei, $this->site_id, $endpoint);
+                if (!empty($res['data'])) {
+                    return $res['data'];
+                }
+            } catch (\Exception $e) {
+                // 查不到/报错都继续尝试下一个（你确认“查不到不扣费”）
+                continue;
+            }
         }
-        
+
+        throw new CommonException('查询失败');
     }
     // 获取设备的激活锁 activationlock
     public function getActivationlock(string $imei = ''){
