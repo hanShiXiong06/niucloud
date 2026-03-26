@@ -606,4 +606,15 @@ Route::group('recycle', function () {
     AdminLog::class
 ]);
 
+// ✅ USER_CODE_BEGIN -- recycle_order_reward
+Route::group('recycle', function () {
+    Route::get('order_reward/getconfig', 'addon\recycle\app\adminapi\controller\order\OrderReward@getConfig');
+    Route::post('order_reward/setconfig', 'addon\recycle\app\adminapi\controller\order\OrderReward@setConfig');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+// USER_CODE_END -- recycle_order_reward
+
 // yisu

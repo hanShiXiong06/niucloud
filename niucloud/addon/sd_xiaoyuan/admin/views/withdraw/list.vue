@@ -55,7 +55,12 @@
 
         <!-- 提现列表 -->
         <el-card>
-            <el-table :data="withdrawList" v-loading="loading" stripe>
+            <div class="mb-[10px]">
+                <el-button type="primary" @click="batchAudit" :disabled="selectedRows.length === 0">批量审核</el-button>
+                <span class="ml-[10px] text-gray-500">已选择 {{ selectedRows.length }} 条</span>
+            </div>
+            <el-table :data="withdrawList" v-loading="loading" stripe @selection-change="handleSelectionChange">
+                <el-table-column type="selection" width="55" :selectable="checkSelectable" />
                 <el-table-column prop="withdraw_no" label="提现单号" width="180" />
                 <el-table-column prop="runner_name" label="接单员" width="120" />
                 <el-table-column prop="amount" label="提现金额" width="120">
@@ -138,6 +143,32 @@
                 <el-button type="primary" @click="confirmRefuse">确定</el-button>
             </template>
         </el-dialog>
+
+        <!-- 批量审核弹窗 -->
+        <el-dialog v-model="batchAuditVisible" title="出纳审核" width="600px">
+            <el-form label-width="100px">
+                <el-form-item label="审核状态">
+                    <el-radio-group v-model="batchAuditStatus">
+                        <el-radio :label="1">审核通过</el-radio>
+                        <el-radio :label="2">审核驳回</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item label="操作订单" v-if="selectedRows.length > 0">
+                    <div class="order-list">
+                        <el-tag v-for="row in selectedRows" :key="row.id" class="mr-[5px] mb-[5px]">
+                            {{ row.withdraw_no }}
+                        </el-tag>
+                    </div>
+                </el-form-item>
+                <el-form-item label="驳回原因" v-if="batchAuditStatus === 2">
+                    <el-input v-model="batchRefuseReason" type="textarea" :rows="4" placeholder="请输入驳回原因" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="batchAuditVisible = false">取消</el-button>
+                <el-button type="primary" @click="confirmBatchAudit">确定</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -153,6 +184,10 @@ const detailVisible = ref(false)
 const refuseVisible = ref(false)
 const currentWithdraw = ref<any>(null)
 const refuseReason = ref('')
+const selectedRows = ref<any[]>([])
+const batchAuditVisible = ref(false)
+const batchAuditStatus = ref(1)
+const batchRefuseReason = ref('')
 
 const searchForm = ref({
     withdraw_no: '',
@@ -301,6 +336,55 @@ const transferWithdraw = (row: any) => {
         }
     }).catch(() => {})
 }
+
+// 表格多选
+const handleSelectionChange = (selection: any[]) => {
+    selectedRows.value = selection
+}
+
+// 只允许选择待审核状态的记录
+const checkSelectable = (row: any) => {
+    return row.status === 0
+}
+
+// 批量审核
+const batchAudit = () => {
+    if (selectedRows.value.length === 0) {
+        ElMessage.warning('请选择要审核的记录')
+        return
+    }
+    batchAuditStatus.value = 1
+    batchRefuseReason.value = ''
+    batchAuditVisible.value = true
+}
+
+// 确认批量审核
+const confirmBatchAudit = async () => {
+    if (batchAuditStatus.value === 2 && !batchRefuseReason.value) {
+        ElMessage.warning('请输入驳回原因')
+        return
+    }
+
+    try {
+        const promises = selectedRows.value.map(row => 
+            auditWithdrawApi({ 
+                id: row.id, 
+                status: batchAuditStatus.value, 
+                refuse_reason: batchAuditStatus.value === 2 ? batchRefuseReason.value : '' 
+            })
+        )
+        
+        await Promise.all(promises)
+        
+        ElMessage.success('批量审核成功')
+        batchAuditVisible.value = false
+        selectedRows.value = []
+        loadWithdraws()
+        loadStat()
+    } catch (e) {
+        ElMessage.error('操作失败')
+    }
+}
 </script>
 
 <style scoped lang="scss">
@@ -348,5 +432,10 @@ const transferWithdraw = (row: any) => {
 .el-pagination {
     margin-top: 20px;
     justify-content: flex-end;
+}
+
+.order-list {
+    max-height: 200px;
+    overflow-y: auto;
 }
 </style>

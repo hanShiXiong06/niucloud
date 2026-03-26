@@ -13,31 +13,56 @@
     =================================================================== -->
     <section class="cdd-section cdd-device-card">
       <div class="cdd-device-card__header">
-        <div class="flex items-center gap-3 min-w-0">
-          <span class="cdd-device-card__emoji">📱</span>
-          <div class="min-w-0">
-            <div class="cdd-device-card__model">{{ deviceData.model || '未知型号' }}</div>
+        <div class="cdd-device-card__info">
+          <div class="cdd-device-card__icon">📱</div>
+          <div class="cdd-device-card__content">
+            <!-- 型号显示/编辑 -->
+            <div class="cdd-device-card__model-row">
+              <template v-if="!isEditingDeviceInfo">
+                <div class="cdd-device-card__model-display">
+                  <span class="model-text">{{ deviceForm.model || '未知型号' }}</span>
+                </div>
+              </template>
+              <el-input
+                v-else
+                v-model="deviceForm.model"
+                placeholder="请输入设备型号"
+                size="default"
+                clearable
+                ref="modelInputRef"
+                class="cdd-model-input"
+              >
+                <template #prefix>
+                  <el-icon><Cellphone /></el-icon>
+                </template>
+              </el-input>
+            </div>
+
+            <!-- IMEI显示/编辑 -->
             <div class="cdd-device-card__imei-row">
-              <template v-if="!showImeiEdit">
-                <span class="cdd-device-card__imei-label">IMEI</span>
-                <span class="cdd-device-card__imei-val">{{ deviceForm.imei || '未录入' }}</span>
+              <template v-if="!isEditingDeviceInfo">
+                <div class="cdd-device-card__imei-display">
+                  <span class="imei-label">IMEI</span>
+                  <span class="imei-value">{{ formatImei(deviceForm.imei) || '未录入' }}</span>
+                </div>
               </template>
               <el-input
                 v-else
                 v-model="deviceForm.imei"
-                placeholder="请输入15位IMEI或扫码枪录入"
-                size="small"
+                placeholder="请输入或扫描15位IMEI"
+                size="default"
                 clearable
                 maxlength="15"
                 show-word-limit
                 ref="imeiInputRef"
                 @input="handleImeiInput"
-                @blur="showImeiEdit = false"
                 class="cdd-imei-input"
               >
-                <template #prefix><el-icon><Postcard /></el-icon></template>
+                <template #prefix>
+                  <el-icon><Postcard /></el-icon>
+                </template>
                 <template #append>
-                  <el-button @click="focusImeiInput" size="small">
+                  <el-button @click="focusImeiInput" size="small" type="primary" link>
                     <el-icon><Aim /></el-icon> 扫码
                   </el-button>
                 </template>
@@ -45,14 +70,37 @@
             </div>
           </div>
         </div>
-        <el-button
-          v-if="!showImeiEdit"
-          size="small"
-          @click="toggleImeiEdit"
-          class="cdd-device-card__edit-btn"
-        >
-          <el-icon><Edit /></el-icon> 修改IMEI
-        </el-button>
+
+        <!-- 编辑按钮 -->
+        <div class="cdd-device-card__actions">
+          <template v-if="!isEditingDeviceInfo">
+            <el-button
+              type="primary"
+              size="small"
+              link
+              @click="startEditDeviceInfo"
+              class="cdd-edit-link"
+            >
+              <el-icon><Edit /></el-icon>
+              <span>编辑</span>
+            </el-button>
+          </template>
+          <template v-else>
+            <el-button
+              type="success"
+              size="small"
+              @click="saveDeviceInfo"
+            >
+              <el-icon><Check /></el-icon>
+            </el-button>
+            <el-button
+              size="small"
+              @click="cancelEditDeviceInfo"
+            >
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </template>
+        </div>
       </div>
     </section>
 
@@ -535,9 +583,13 @@ const submitting = ref(false)
 const savingDraft = ref(false)
 const formRef = ref<FormInstance>()
 const imeiInputRef = ref()
-const showImeiEdit = ref(false)
+const modelInputRef = ref()
+const isEditingDeviceInfo = ref(false)
 const qrCode = ref('')
 const isMobile = ref(false)
+
+// 保存编辑前的原始数据
+const originalDeviceInfo = ref({ model: '', imei: '' })
 
 const loadingCoverage = ref(false)
 const loadingActivationLock = ref(false)
@@ -546,6 +598,7 @@ const activationLockInfo = ref<any>(null)
 const mdmInfo = ref<any>(null)
 
 const deviceForm = reactive({
+  model: props.device.model || '',
   check_result: '',
   check_result_seller: props.device.check_result_seller || props.device.check_result || '',
   check_result_buyer: props.device.check_result_buyer || '',
@@ -614,12 +667,57 @@ const generateQrCode = async () => {
   )
 }
 
-const toggleImeiEdit = () => {
-  showImeiEdit.value = !showImeiEdit.value
-  if (showImeiEdit.value) setTimeout(() => imeiInputRef.value?.focus(), 100)
+// 格式化 IMEI 显示
+const formatImei = (imei: string) => {
+  if (!imei) return ''
+  return imei.replace(/(\d{4})(?=\d)/g, '$1 ')
 }
-const handleImeiInput = (value: string) => { deviceForm.imei = value.replace(/[^0-9]/g, '') }
-const focusImeiInput = () => { imeiInputRef.value?.focus() }
+
+// 开始编辑设备信息
+const startEditDeviceInfo = () => {
+  originalDeviceInfo.value = {
+    model: deviceForm.model,
+    imei: deviceForm.imei
+  }
+  isEditingDeviceInfo.value = true
+  nextTick(() => {
+    modelInputRef.value?.focus()
+  })
+}
+
+// 保存设备信息
+const saveDeviceInfo = () => {
+  if (!deviceForm.model?.trim()) {
+    ElMessage.warning('请输入设备型号')
+    return
+  }
+  if (!deviceForm.imei?.trim()) {
+    ElMessage.warning('请输入IMEI号')
+    return
+  }
+  if (deviceForm.imei.length !== 15) {
+    ElMessage.warning('IMEI号必须是15位')
+    return
+  }
+
+  isEditingDeviceInfo.value = false
+  ElMessage.success('设备信息已更新')
+}
+
+// 取消编辑设备信息
+const cancelEditDeviceInfo = () => {
+  deviceForm.model = originalDeviceInfo.value.model
+  deviceForm.imei = originalDeviceInfo.value.imei
+  isEditingDeviceInfo.value = false
+}
+
+const handleImeiInput = (value: string) => {
+  deviceForm.imei = value.replace(/[^0-9]/g, '')
+}
+
+const focusImeiInput = () => {
+  imeiInputRef.value?.focus()
+}
 
 // 查询保修 —— 结果直接回填规格输入框，不弹额外面板
 const fetchCoverage = async () => {
@@ -757,12 +855,15 @@ function buildSubmitPayload(action: 'check' | 'save_draft') {
 const initializeFormFromDevice = (device: DeviceInfo) => {
   activationLockInfo.value = null
   mdmInfo.value = null
-  showImeiEdit.value = false
+  isEditingDeviceInfo.value = false
   loadingCoverage.value = false
   loadingActivationLock.value = false
   loadingMdm.value = false
   clearAllSelections()
   deviceData.value = { ...device }
+  // 更新设备基本信息
+  deviceForm.model = device.model || ''
+  deviceForm.imei = device.imei || ''
   deviceForm.check_result_seller = device.check_result_seller || device.check_result || ''
   deviceForm.check_result = ''
   deviceForm.check_result_buyer = device.check_result_buyer || ''
@@ -859,47 +960,171 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
    设备档案卡
    ============================================================ */
 .cdd-device-card {
+  background: linear-gradient(135deg, #393b41 0%, #302e32 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+
   &__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
-    background: #f8fafc;
-    gap: 10px;
+    padding: 20px;
+    gap: 16px;
   }
-  &__emoji { font-size: 26px; flex-shrink: 0; }
-  &__model {
-    font-size: 15px;
-    font-weight: 700;
-    color: #111827;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+
+  &__info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
   }
+
+  &__icon {
+    font-size: 42px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  }
+
+  &__content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__model-row {
+    margin-bottom: 8px;
+  }
+
+  &__model-display {
+    .model-text {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      display: block;
+      line-height: 1.4;
+    }
+  }
+
   &__imei-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 3px;
+    gap: 8px;
     flex-wrap: wrap;
   }
-  &__imei-label {
-    font-size: 10px;
-    color: #9ca3af;
-    background: #f3f4f6;
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-weight: 500;
+
+  &__imei-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+
+    .imei-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.8);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .imei-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+      letter-spacing: 0.5px;
+    }
   }
-  &__imei-val {
-    font-size: 12px;
-    color: #374151;
-    font-family: 'SF Mono', 'Fira Code', monospace;
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
   }
-  &__edit-btn { flex-shrink: 0; font-size: 12px; }
+
+  // 编辑模式下的输入框样式
+  .cdd-model-input,
+  .cdd-imei-input {
+    :deep(.el-input__wrapper) {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+      &:hover {
+        border-color: rgba(255, 255, 255, 0.5);
+      }
+
+      &.is-focus {
+        border-color: #ffffff;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+      }
+    }
+
+    :deep(.el-input__inner) {
+      color: #1f2937;
+      font-weight: 500;
+    }
+  }
+
+  .cdd-model-input {
+    :deep(.el-input__inner) {
+      font-size: 16px;
+      font-weight: 600;
+    }
+  }
+
+  .cdd-imei-input {
+    :deep(.el-input__inner) {
+      font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+      letter-spacing: 0.5px;
+    }
+  }
 }
 
-.cdd-imei-input { width: 280px; }
+// 编辑链接按钮样式
+.cdd-edit-link {
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: #ffffff !important;
+    transform: translateY(-1px);
+  }
+
+  span {
+    margin-left: 4px;
+  }
+}
+
+// 编辑模式下的按钮样式
+.cdd-device-card__actions {
+  .el-button {
+    backdrop-filter: blur(10px);
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    &.el-button--success {
+      background: #10b981;
+      border-color: #10b981;
+      color: #ffffff;
+
+      &:hover {
+        background: #059669;
+        border-color: #059669;
+      }
+    }
+  }
+}
 
 /* ============================================================
    通用 block 标题栏

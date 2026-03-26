@@ -194,6 +194,63 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
     }
 
     /**
+     * 订单完成奖励通知
+     * @param array $data  需包含 order_id, site_id, reward_point
+     * @return void
+     */
+    public function orderRewardNotify(array $data): void
+    {
+        try {
+            Log::info('【回收通知】订单完成奖励通知', $data);
+
+            if (empty($data['order_id']) || empty($data['site_id'])) {
+                Log::error('【回收通知】订单完成奖励通知参数不完整', $data);
+                return;
+            }
+
+            $coreService = new CoreRecycleOrderService();
+            $orderInfo = $coreService->getInfo((int)$data['order_id']);
+
+            if (empty($orderInfo)) {
+                Log::error('【回收通知】订单不存在: ' . $data['order_id']);
+                return;
+            }
+
+            $memberId = (int)($orderInfo['member_id'] ?? 0);
+            if ($memberId <= 0) {
+                Log::error('【回收通知】订单完成奖励通知 member_id 为空，跳过通知');
+                return;
+            }
+
+            $rewardPoint = (int)($data['reward_point'] ?? 0);
+            if ($rewardPoint <= 0) {
+                return;
+            }
+
+            $completeTime = date('Y-m-d H:i:s');
+            if (!empty($orderInfo['complete_at'])) {
+                $rawAt = (int)$orderInfo['complete_at'];
+                if ($rawAt > 0) {
+                    $completeTime = date('Y-m-d H:i:s', $rawAt);
+                }
+            }
+
+            $this->noticeService->send((int)$data['site_id'], 'recycle_order_reward', [
+                'order_id'      => (int)$data['order_id'],
+                'member_id'     => $memberId,
+                'order_no'      => $orderInfo['order_no'] ?? '',
+                'complete_time' => $completeTime,
+                'reward_point'  => $rewardPoint,
+                'remark'        => '恭喜您获得' . $rewardPoint . '积分奖励，可用于兑换或抵扣',
+            ]);
+
+            Log::info('【回收通知】订单完成奖励通知发送成功: ' . $data['order_id']);
+        } catch (\Exception $e) {
+            Log::error('【回收通知】订单完成奖励通知发送失败: ' . $e->getMessage(), $data);
+        }
+    }
+
+    /**
      * 订单确认通知（通知用户确认报价）
      * 变量与 OrderAgree listener 和模板定义保持一致：order_no, time, status
      * @param array $data

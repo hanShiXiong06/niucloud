@@ -26,6 +26,8 @@ return [
             'addon\recycle\app\listener\notice_template\OrderAgree',
             // 打款通知
             'addon\recycle\app\listener\notice_template\OrderPay',
+            // 订单完成奖励通知
+            'addon\recycle\app\listener\notice_template\OrderReward',
         ],
         // 应用信息
         'RecyclePromotion' => [ 'addon\recycle\app\listener\app\RecyclePromotionListener' ],

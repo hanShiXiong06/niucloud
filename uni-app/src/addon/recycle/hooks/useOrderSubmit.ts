@@ -93,7 +93,7 @@ export function useOrderSubmit() {
     }
 
     // 请求订阅相关消息通知
-    await useSubscribeMessage().request('recycle_order_sign,recycle_order_agree,recycle_order_pay')
+    await useSubscribeMessage().request('recycle_order_sign,recycle_order_agree,recycle_order_pay,recycle_order_reward')
 
     // 添加设备列表到表单数据
     params.form.devices = params.phoneList

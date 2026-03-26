@@ -9,7 +9,15 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 export default defineConfig({
     base: '',
     server: {
-        host: '0.0.0.0'
+        host: '0.0.0.0',
+        proxy: {
+            // 本地设备读取接口代理
+            '/api/local-device': {
+                target: 'http://localhost:8080',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api\/local-device/, '/api/devices')
+            }
+        }
     },
     plugins: [
         vue(),

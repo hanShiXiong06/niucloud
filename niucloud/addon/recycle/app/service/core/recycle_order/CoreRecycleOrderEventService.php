@@ -180,6 +180,9 @@ class CoreRecycleOrderEventService extends BaseCoreService
         } catch (\Exception $e) {
             Log::error('订单打款后事件处理失败：' . $e->getMessage(), $data);
         }
+
+        // 打款即完成，触发订单完成事件
+        self::orderCompleteAfter($data);
     }
 
     /**
@@ -201,8 +204,104 @@ class CoreRecycleOrderEventService extends BaseCoreService
     {
         try {
             Log::info('回收订单完成后事件', $data);
+
+            // 订单完成奖励积分
+            $rewardPoint = self::giveOrderRewardPoint($data);
+
+            // 发送奖励通知
+            if ($rewardPoint > 0 && !empty($data['site_id'])) {
+                $notifyService = new CoreRecycleOrderNotifyService();
+                $notifyService->orderRewardNotify([
+                    'order_id'     => $data['order_id'],
+                    'site_id'      => $data['site_id'],
+                    'reward_point' => $rewardPoint,
+                ]);
+            }
         } catch (\Exception $e) {
             Log::error('订单完成后事件处理失败：' . $e->getMessage(), $data);
+        }
+    }
+
+    /**
+     * 订单完成奖励积分
+     * @param array $data
+     * @return int 实际发放的积分数，0 表示未发放
+     */
+    private static function giveOrderRewardPoint(array $data): int
+    {
+        try {
+            $order_id = $data['order_id'] ?? 0;
+            if (empty($order_id)) {
+                return 0;
+            }
+
+            // 获取订单信息
+            $order = (new \addon\recycle\app\model\order\RecycleOrder())
+                ->where(['id' => $order_id])
+                ->findOrEmpty()
+                ->toArray();
+
+            if (empty($order) || empty($order['member_id'])) {
+                return 0;
+            }
+
+            // 获取奖励配置
+            $config = (new \app\service\core\sys\CoreConfigService())->getConfig($order['site_id'], 'recycle_order_reward');
+            if (empty($config) || empty($config['value'])) {
+                return 0;
+            }
+
+            $reward_config = $config['value'];
+
+            // 检查是否启用
+            if (empty($reward_config['is_enable']) || $reward_config['is_enable'] != 1) {
+                return 0;
+            }
+
+            // 检查积分数量
+            $reward_point = intval($reward_config['reward_point'] ?? 0);
+            if ($reward_point <= 0) {
+                return 0;
+            }
+
+            // 检查奖励次数限制
+            $reward_times = intval($reward_config['reward_times'] ?? 1);
+            if ($reward_times <= 0) {
+                return 0;
+            }
+
+            // 统计用户已获得奖励的次数
+            $rewarded_count = (new \app\model\member\MemberAccountLog())
+                ->where([
+                    ['site_id', '=', $order['site_id']],
+                    ['member_id', '=', $order['member_id']],
+                    ['account_type', '=', \app\dict\member\MemberAccountTypeDict::POINT],
+                    ['from_type', '=', 'recycle_order_reward']
+                ])
+                ->count();
+
+            // 判断是否已达到奖励次数上限
+            if ($rewarded_count >= $reward_times) {
+                Log::write('订单完成奖励积分跳过: 用户已达到奖励次数上限 (已奖励' . $rewarded_count . '次，上限' . $reward_times . '次)');
+                return 0;
+            }
+
+            // 发放积分
+            Log::write('订单完成奖励积分开始: 订单ID=' . $order_id . ', 会员ID=' . $order['member_id'] . ', 积分=' . $reward_point . ', 当前第' . ($rewarded_count + 1) . '次奖励');
+            (new \app\service\core\member\CoreMemberAccountService())->addLog(
+                $order['site_id'],
+                $order['member_id'],
+                \app\dict\member\MemberAccountTypeDict::POINT,
+                $reward_point,
+                'recycle_order_reward',
+                '订单完成奖励' . $reward_point . '积分',
+                $order_id
+            );
+            Log::write('订单完成奖励积分成功');
+            return $reward_point;
+        } catch (\Exception $e) {
+            Log::error('订单完成奖励积分失败：' . $e->getMessage());
+            return 0;
         }
     }
 

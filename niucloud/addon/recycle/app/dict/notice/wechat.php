@@ -48,4 +48,16 @@ return [
         'keyword_name_list' => ["订单编号", "创建时间", "审核状态"],
         'tips' => '使用该消息请将微信公众号服务类目选择为：软件/建站/技术开发'
     ],
+    // 订单完成积分奖励通知
+    'recycle_order_reward' => [
+        'temp_key' => '',
+        'content' => [
+            ['订单编号', '{order_no}', 'character_string1'],
+            ['完成时间', '{complete_time}', 'time2'],
+            ['奖励积分', '{reward_point}', 'number3'],
+            ['温馨提示', '{remark}', 'thing4'],
+        ],
+        'keyword_name_list' => ['订单编号', '完成时间', '奖励积分', '温馨提示'],
+        'tips' => '使用该消息请将微信公众号服务类目选择为：商家自营/3C数码'
+    ],
 ];

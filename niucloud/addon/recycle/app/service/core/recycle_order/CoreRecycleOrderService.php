@@ -61,33 +61,33 @@ class CoreRecycleOrderService extends BaseCoreService
             ]);
 
             // 创建设备
-            if (!empty($devicesPayload)) {
-                $devices = [];
-                foreach ($devicesPayload as $device) {
-                    $categoryId = (int)($device['category_id'] ?? 1);
-                    $categoryPath = $device['category_path'] ?? [];
-                    if (!is_array($categoryPath) || empty($categoryPath)) {
-                        $categoryPath = [ $categoryId ];
-                    }
+            // if (!empty($devicesPayload)) {
+            //     $devices = [];
+            //     foreach ($devicesPayload as $device) {
+            //         $categoryId = (int)($device['category_id'] ?? 1);
+            //         $categoryPath = $device['category_path'] ?? [];
+            //         if (!is_array($categoryPath) || empty($categoryPath)) {
+            //             $categoryPath = [ $categoryId ];
+            //         }
 
-                    $devices[] = [
-                        'site_id' => $data['site_id'],
-                        'order_id' => $order->id,
-                        'member_id' => $data['member_id'] ?? 0,
-                        'category_id' => $categoryId,
-                        'info' => [
-                            'goods_category' => array_values(array_map('strval', $categoryPath))
-                        ],
-                        'imei' => $device['imei'] ?? '',
-                        'model' => $device['model'] ?? '',
-                        'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
-                        'initial_price' => $device['initial_price'] ?? 0,
-                        'create_at' => time(),
-                        'update_at' => time(),
-                    ];
-                }
-                (new RecycleDevice())->saveAll($devices);
-            }
+            //         $devices[] = [
+            //             'site_id' => $data['site_id'],
+            //             'order_id' => $order->id,
+            //             'member_id' => $data['member_id'] ?? 0,
+            //             'category_id' => $categoryId,
+            //             'info' => [
+            //                 'goods_category' => array_values(array_map('strval', $categoryPath))
+            //             ],
+            //             'imei' => $device['imei'] ?? '',
+            //             'model' => $device['model'] ?? '',
+            //             'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
+            //             'initial_price' => $device['initial_price'] ?? 0,
+            //             'create_at' => time(),
+            //             'update_at' => time(),
+            //         ];
+            //     }
+            //     (new RecycleDevice())->saveAll($devices);
+            // }
 
             // 触发创建后事件
             CoreRecycleOrderEventService::orderCreateAfter([

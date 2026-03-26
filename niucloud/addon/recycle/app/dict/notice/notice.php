@@ -56,6 +56,23 @@ return [
         ],
     ],
 
+    // 5. 订单完成奖励通知
+    'recycle_order_reward' => [
+        'addon' => 'recycle',
+        'key' => 'recycle_order_reward',
+        'receiver_type' => 1,
+        'name' => '订单完成积分奖励通知',
+        'title' => '订单完成积分奖励通知',
+        'async' => true,
+        'variable' => [
+            'order_no'      => '订单编号',
+            'complete_time' => '完成时间',
+            'reward_point'  => '奖励积分',
+            'remark'        => '温馨提示',
+            'url'           => '积分页链接'
+        ],
+    ],
+
     // 4. 订单验收通知（待确认）
     'recycle_order_agree' => [
         'addon' => 'recycle',
