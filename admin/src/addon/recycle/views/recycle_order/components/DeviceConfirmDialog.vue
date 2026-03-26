@@ -2,7 +2,7 @@
     <el-dialog
         v-model="dialogVisible"
         title="设备信息确认"
-        :width="isMobile ? '95vw' : '800px'"
+        :width="isMobile ? '95vw' : '900px'"
         top="4vh"
         center
         class="device-confirm-dialog"
@@ -16,58 +16,57 @@
             </div>
         </template>
 
-        <el-table v-if="!isMobile" :data="devices" border v-loading="loading">
-            <el-table-column >
-                <template #header>
-                    <span>IMEI</span>
-                    <span class="text-sm text-gray-500">支持扫码枪输入 </span>
-                </template>
-                <!-- |支持扫码枪直接输入，输入完成会自动跳转到型号输入 -->
-                <template #default="{ row }">
-                    <div v-if="row.editing" class="imei-input-container">
-                        <el-input 
-                            v-model="row.imei" 
-                            placeholder="请输入或扫描IMEI" 
-                            ref="imeiInputRef"
-                            autofocus
-                            @keydown.enter="handleScanComplete(row)"
-
-                            class="imei-input"
-                        >
-                            <template #suffix>
-                                <el-icon title="支持扫码枪输入" class="scanner-icon">
-                                    <svg viewBox="0 0 1024 1024" width="16" height="16">
-                                        <path d="M864 64H160C107 64 64 107 64 160v128c0 17.7 14.3 32 32 32s32-14.3 32-32V160c0-17.7 14.3-32 32-32h704c17.7 0 32 14.3 32 32v128c0 17.7 14.3 32 32 32s32-14.3 32-32V160c0-53-43-96-96-96z" fill="currentColor"></path>
-                                        <path d="M864 896H160c-17.7 0-32-14.3-32-32V736c0-17.7-14.3-32-32-32s-32 14.3-32 32v128c0 53 43 96 96 96h704c53 0 96-43 96-96V736c0-17.7-14.3-32-32-32s-32 14.3-32 32v128c0 17.7-14.3 32-32 32zM640 288c0 17.7 14.3 32 32 32s32-14.3 32-32-14.3-32-32-32-32 14.3-32 32z" fill="currentColor"></path>
-                                        <path d="M352 320h160c17.7 0 32-14.3 32-32s-14.3-32-32-32H352c-17.7 0-32 14.3-32 32s14.3 32 32 32zM544 704H160c-17.7 0-32-14.3-32-32V352c0-17.7 14.3-32 32-32h128c17.7 0 32-14.3 32-32s-14.3-32-32-32H160c-53 0-96 43-96 96v320c0 53 43 96 96 96h384c17.7 0 32-14.3 32-32s-14.3-32-32-32z" fill="currentColor"></path>
-                                        <path d="M864.2 384c-17.7 0-32 14.3-32 32v256c0 17.7 14.3 32 32 32 17.7 0 32-14.3 32-32V416c0-17.7-14.3-32-32-32zM96 576c-17.7 0-32 14.3-32 32s14.3 32 32 32h64c17.7 0 32-14.3 32-32s-14.3-32-32-32H96zM736 576c-17.7 0-32 14.3-32 32s14.3 32 32 32h64c17.7 0 32-14.3 32-32s-14.3-32-32-32h-64z" fill="currentColor"></path>
-                                    </svg>
-                                </el-icon>
-                            </template>
-                        </el-input>
-                      
-                    </div>
-                    <span v-else>{{ row.imei }}</span>
+        <el-table v-if="!isMobile" :data="devices" border v-loading="loading" class="device-table">
+            <el-table-column label="序号" width="60" align="center">
+                <template #default="{ $index }">
+                    <span class="device-index">{{ $index + 1 }}</span>
                 </template>
             </el-table-column>
-            <el-table-column label="型号">
+            <el-table-column label="IMEI串号" width="200">
+                <template #header>
+                    <div class="header-with-tip">
+                        <span>IMEI串号</span>
+                        <el-icon class="scanner-tip-icon" title="支持扫码枪输入">
+                            <svg viewBox="0 0 1024 1024" width="14" height="14">
+                                <path d="M864 64H160C107 64 64 107 64 160v128c0 17.7 14.3 32 32 32s32-14.3 32-32V160c0-17.7 14.3-32 32-32h704c17.7 0 32 14.3 32 32v128c0 17.7 14.3 32 32 32s32-14.3 32-32V160c0-53-43-96-96-96z" fill="currentColor"></path>
+                                <path d="M864 896H160c-17.7 0-32-14.3-32-32V736c0-17.7-14.3-32-32-32s-32 14.3-32 32v128c0 53 43 96 96 96h704c53 0 96-43 96-96V736c0-17.7-14.3-32-32-32s-32 14.3-32 32v128c0 17.7-14.3 32-32 32z" fill="currentColor"></path>
+                            </svg>
+                        </el-icon>
+                    </div>
+                </template>
+                <template #default="{ row }">
+                    <div v-if="row.editing" class="imei-input-container">
+                        <el-input
+                            v-model="row.imei"
+                            placeholder="请输入或扫描"
+                            ref="imeiInputRef"
+                            autofocus
+                            maxlength="15"
+                            @keydown.enter="handleScanComplete(row)"
+                            class="imei-input"
+                        />
+                    </div>
+                    <div v-else class="imei-display">{{ formatImei(row.imei) }}</div>
+                </template>
+            </el-table-column>
+            <el-table-column label="设备型号" min-width="160">
                 <template #default="{ row }">
                     <div v-if="row.editing">
-                        <el-input 
-                            v-model="row.model" 
-                            placeholder="请输入型号" 
+                        <el-input
+                            v-model="row.model"
+                            placeholder="请输入型号"
                             ref="modelInputRef"
                             @keydown.enter="handleModelEnter(row)"
                         />
                     </div>
-                    <span v-else>{{ row.model }}</span>
+                    <div v-else class="model-display">{{ row.model }}</div>
                 </template>
             </el-table-column>
-            <el-table-column label="设备分类">
+            <el-table-column label="分类" width="120">
                 <template #default="{ row }">
-                    <el-tree-select 
-                        v-model="row.category" 
-                        placeholder="请选择设备分类"
+                    <el-tree-select
+                        v-model="row.category"
+                        placeholder="请选择"
                         :data="categoryTree"
                         :props="treeSelectProps"
                         node-key="category_id"
@@ -75,82 +74,82 @@
                         filterable
                         check-strictly
                         :render-after-expand="false"
+                        size="small"
                         class="w-full"
                         :class="{ 'category-required': isInvalidCategory(row.category) }"
                         @change="handleCategoryChange(row)"
                     />
                     <div v-if="isInvalidCategory(row.category)" class="category-tip">
-                        请选择分类，建议选择手机
+                        请选择分类
                     </div>
                 </template>
             </el-table-column>
-            <el-table-column label="预估价格" width="160">
+            <el-table-column label="预估价" width="120">
                 <template #default="{ row }">
                     <el-input-number
                         v-if="row.editing"
                         v-model="row.initial_price"
                         :min="0"
-                        :precision="2"
                         :controls="false"
                         placeholder="选填"
                         size="small"
-                        class="w-full"
+
                     />
-                    <span v-else>{{ row.initial_price ? `¥${row.initial_price}` : '—' }}</span>
+                    <span v-else class="price-display">{{ row.initial_price ? `¥${row.initial_price}` : '—' }}</span>
                 </template>
             </el-table-column>
-            <el-table-column label="操作" width="160">
+            <el-table-column label="操作" width="160" fixed="right">
                 <template #default="{ row, $index }">
-                    <div v-if="row.editing">
-                        <el-button-group>
-                            <el-button type="success" size="small" @click="saveDevice(row, $index)">
-                                保存
-                            </el-button>
-                            <el-button type="info" size="small" @click="cancelEdit(row, $index)">
-                                取消
-                            </el-button>
-                        </el-button-group>
+                    <div v-if="row.editing" class="action-buttons">
+                        <el-button type="success" size="small" @click="saveDevice(row, $index)">
+                            保存
+                        </el-button>
+                        <el-button size="small" @click="cancelEdit(row, $index)">
+                            取消
+                        </el-button>
                     </div>
-                    <el-button-group v-else>
-                        <el-button type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, $index)">
+                    <div v-else class="action-buttons">
+                        <el-button type="primary" link size="small" :icon="Edit" @click="handleEditDevice(row, $index)">
                             编辑
                         </el-button>
-                        <el-button type="danger" size="small" @click="deleteDevice($index)">
+                        <el-button type="danger" link size="small" @click="deleteDevice($index)">
                             删除
                         </el-button>
-                    </el-button-group>
+                    </div>
                 </template>
             </el-table-column>
         </el-table>
 
-        <div v-else v-loading="loading" class="space-y-3">
+        <div v-else v-loading="loading" class="mobile-device-list">
             <div
                 v-for="(row, index) in devices"
                 :key="row.id || `device-${index}`"
-                class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+                class="device-card"
+                :class="{ 'editing': row.editing }"
             >
-                <div class="mb-2 flex items-center justify-between">
-                    <div class="text-sm font-semibold text-gray-800">设备 {{ index + 1 }}</div>
-                    <el-tag :type="row.editing ? 'warning' : 'info'" size="small">
+                <div class="card-header">
+                    <div class="device-number">设备 {{ index + 1 }}</div>
+                    <el-tag :type="row.editing ? 'warning' : 'success'" size="small">
                         {{ row.editing ? '编辑中' : '已保存' }}
                     </el-tag>
                 </div>
 
-                <div class="space-y-3">
-                    <div>
-                        <div class="mb-1 text-xs text-gray-500">IMEI</div>
+                <div class="card-body">
+                    <div class="info-row">
+                        <div class="info-label">IMEI串号</div>
                         <el-input
                             v-if="row.editing"
                             v-model="row.imei"
-                            placeholder="请输入或扫描IMEI"
+                            placeholder="请输入或扫描"
                             ref="imeiInputRef"
+                            maxlength="15"
                             @keydown.enter="handleScanComplete(row)"
                         />
-                        <div v-else class="text-sm text-gray-800 break-all">{{ row.imei || '未填写' }}</div>
+                        <div v-else class="info-value imei-value">{{ formatImei(row.imei) || '未填写' }}</div>
                     </div>
 
-                    <div>
-                        <div class="mb-1 text-xs text-gray-500">型号</div>
+                    <div class="info-row">
+                        <div class="info-label">设备型号</div>
                         <el-input
                             v-if="row.editing"
                             v-model="row.model"
@@ -158,14 +157,14 @@
                             ref="modelInputRef"
                             @keydown.enter="handleModelEnter(row)"
                         />
-                        <div v-else class="text-sm text-gray-800">{{ row.model || '未填写' }}</div>
+                        <div v-else class="info-value">{{ row.model || '未填写' }}</div>
                     </div>
 
-                    <div>
-                        <div class="mb-1 text-xs text-gray-500">设备分类</div>
+                    <div class="info-row">
+                        <div class="info-label">分类</div>
                         <el-tree-select
                             v-model="row.category"
-                            placeholder="请选择设备分类"
+                            placeholder="请选择"
                             :data="categoryTree"
                             :props="treeSelectProps"
                             node-key="category_id"
@@ -173,20 +172,18 @@
                             filterable
                             check-strictly
                             :render-after-expand="false"
+                            size="small"
                             class="w-full"
                             :class="{ 'category-required': isInvalidCategory(row.category) }"
                             @change="handleCategoryChange(row)"
                         />
-                        <div v-if="!row.editing" class="mt-1 text-xs text-gray-600">
-                            当前分类：{{ getCategoryName(row.category) }}
-                        </div>
                         <div v-if="isInvalidCategory(row.category)" class="category-tip">
-                            请选择分类，建议选择手机
+                            请选择分类
                         </div>
                     </div>
 
-                    <div>
-                        <div class="mb-1 text-xs text-gray-500">预估价格</div>
+                    <div class="info-row">
+                        <div class="info-label">预估价</div>
                         <el-input-number
                             v-if="row.editing"
                             v-model="row.initial_price"
@@ -197,20 +194,20 @@
                             size="small"
                             class="w-full"
                         />
-                        <div v-else class="text-sm text-gray-800">{{ row.initial_price ? `¥${row.initial_price}` : '未填写' }}</div>
+                        <div v-else class="info-value price-value">{{ row.initial_price ? `¥${row.initial_price}` : '未填写' }}</div>
                     </div>
                 </div>
 
-                <div class="mt-3">
-                    <div v-if="row.editing" class="grid grid-cols-2 gap-2">
-                        <el-button type="success" size="small" @click="saveDevice(row, index)">保存</el-button>
-                        <el-button size="small" @click="cancelEdit(row, index)">取消</el-button>
+                <div class="card-footer">
+                    <div v-if="row.editing" class="action-group">
+                        <el-button type="success" size="small" @click="saveDevice(row, index)" class="flex-1">保存</el-button>
+                        <el-button size="small" @click="cancelEdit(row, index)" class="flex-1">取消</el-button>
                     </div>
-                    <div v-else class="grid grid-cols-2 gap-2">
-                        <el-button type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, index)">
+                    <div v-else class="action-group">
+                        <el-button type="primary" size="small" :icon="Edit" @click="handleEditDevice(row, index)" class="flex-1">
                             编辑
                         </el-button>
-                        <el-button type="danger" size="small" @click="deleteDevice(index)">
+                        <el-button type="danger" size="small" @click="deleteDevice(index)" class="flex-1">
                             删除
                         </el-button>
                     </div>
@@ -498,6 +495,12 @@ const getCategoryName = (categoryId: string | number) => {
     return current ? current.name : '未选择'
 }
 
+// 格式化IMEI显示，每4位添加空格
+const formatImei = (imei: string) => {
+    if (!imei) return ''
+    return imei.replace(/(\d{4})(?=\d)/g, '$1 ')
+}
+
 // 添加新设备
 const addDevice = () => {
     // 检查是否有其他正在编辑的设备
@@ -750,6 +753,14 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+.device-confirm-dialog {
+    :deep(.el-dialog__body) {
+        padding: 20px;
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+}
+
 .dialog-footer {
     display: flex;
     justify-content: flex-end;
@@ -764,25 +775,162 @@ onBeforeUnmount(() => {
     padding: 30px 0;
 }
 
+// 桌面端表格样式
+.device-table {
+    :deep(.el-table__header) {
+        th {
+            background-color: #f5f7fa;
+            font-weight: 600;
+            color: #606266;
+        }
+    }
+
+    .device-index {
+        font-weight: 600;
+        color: #909399;
+    }
+
+    .header-with-tip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        .scanner-tip-icon {
+            color: #409EFF;
+            cursor: help;
+        }
+    }
+
+    .imei-display {
+        font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+        font-size: 13px;
+        color: #303133;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+    }
+
+    .model-display {
+        color: #303133;
+        font-weight: 500;
+    }
+
+    .price-display {
+        color: #67C23A;
+        font-weight: 600;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+}
+
 .imei-input-container {
     position: relative;
-    
+
     .imei-input {
         width: 100%;
+
+        :deep(.el-input__inner) {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            letter-spacing: 0.5px;
+        }
     }
-    
-    .scan-tip {
-        font-size: 12px;
-        color: #909399;
-        margin-top: 4px;
+}
+
+// 移动端卡片样式
+.mobile-device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.device-card {
+    background: #fff;
+    border: 1px solid #e4e7ed;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+
+    &.editing {
+        border-color: #409EFF;
+        box-shadow: 0 2px 12px rgba(64, 158, 255, 0.15);
     }
-    
-    .scanner-icon {
-        cursor: pointer;
-        color: #409EFF;
-        
+
+    &:not(.editing) {
         &:hover {
-            color: #66b1ff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+    }
+
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #f5f7fa 0%, #e8edf3 100%);
+        border-bottom: 1px solid #e4e7ed;
+
+        .device-number {
+            font-size: 14px;
+            font-weight: 600;
+            color: #303133;
+        }
+    }
+
+    .card-body {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+
+        .info-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+
+            .info-label {
+                font-size: 12px;
+                color: #909399;
+                font-weight: 500;
+            }
+
+            .info-value {
+                font-size: 14px;
+                color: #303133;
+                min-height: 22px;
+                display: flex;
+                align-items: center;
+
+                &.imei-value {
+                    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+                    font-size: 13px;
+                    letter-spacing: 0.5px;
+                    font-weight: 500;
+                    color: #409EFF;
+                }
+
+                &.price-value {
+                    color: #67C23A;
+                    font-weight: 600;
+                }
+            }
+        }
+    }
+
+    .card-footer {
+        padding: 12px 16px;
+        background: #fafafa;
+        border-top: 1px solid #e4e7ed;
+
+        .action-group {
+            display: flex;
+            gap: 8px;
+
+            .flex-1 {
+                flex: 1;
+            }
         }
     }
 }
@@ -802,5 +950,15 @@ onBeforeUnmount(() => {
     color: #f56c6c;
     font-size: 12px;
     margin-top: 4px;
+    line-height: 1.4;
+}
+
+// 响应式优化
+@media (max-width: 768px) {
+    .device-confirm-dialog {
+        :deep(.el-dialog__body) {
+            padding: 12px;
+        }
+    }
 }
 </style>
