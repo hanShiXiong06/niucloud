@@ -40,7 +40,7 @@
             <view class="auth-form" v-if="!authInfoId || isAuthExpanded">
                 <!-- 姓名 -->
                 <view class="auth-form-item">
-                    <label class="label">姓名</label>
+                    <label class="label required-label">姓名</label>
                     <input
                         class="input"
                         :class="{'disabled-input': !!authInfoId}"
@@ -55,7 +55,7 @@
 
                 <!-- 手机号 -->
                 <view class="auth-form-item">
-                    <label class="label">手机号</label>
+                    <label class="label required-label">手机号</label>
                     <input
                         class="input"
                         :class="{'disabled-input': !!authInfoId}"
@@ -72,7 +72,7 @@
 
                 <!-- 身份证号 -->
                 <view class="auth-form-item">
-                    <label class="label">身份证号</label>
+                    <label class="label required-label">身份证号</label>
                     <input
                         class="input"
                         :class="{'disabled-input': !!authInfoId}"
@@ -112,7 +112,9 @@
                 <!-- 身份证照片 (仅在未认证时显示) -->
                 <view class="auth-form-item" v-if="!authInfoId">
                     <label class="label">身份证照片</label>
-                    <view class="id-card-upload">
+                    <view class="text-[20rpx]">首次合作必填，避免不必要的麻烦</view>
+                        <view class="text-[19rpx]">该信息仅用于验证您的身份，我司承诺不会泄露个人隐私或用于其他用途</view>
+                    <view class="id-card-upload mt-1">
                         <!-- 已上传图片 -->
                         <view v-if="authFormData.card_pic" class="id-card-preview-wrapper">
                             <image 
@@ -170,9 +172,9 @@
                 </view>
             </view>
             <!-- 添加提示信息 -->
-            <view class="payment-tips" v-if="paymentList.length < 2">
+            <view class="payment-tips" v-if="paymentList.length < 1">
                 <up-icon name="info-circle" size="16" color="#f59e0b"></up-icon>
-                <text>收款方式建议添加2种以上，防止出现封卡问题,导致不能收款</text>
+                <text>收款方式建议添加1种以上，防止出现封卡问题,导致不能收款</text>
             </view>
             <!-- 收款方式列表 -->
             <view class="payment-list" v-if="paymentList.length">
@@ -491,10 +493,10 @@ const validateAuthForm = (showError = true): boolean => {
     const isNameValid = validateAuthName(showError);
     const isMobileValid = validateAuthMobile(showError);
     const isIdCardValid = validateAuthIdCard(showError);
-    const isCardPicValid = validateAuthCardPic(showError);
-    const isAreaValid = validateAuthArea(showError);
-    const isDetailAddressValid = validateAuthDetailAddress(showError);
-    return isNameValid && isMobileValid && isIdCardValid && isCardPicValid && isAreaValid && isDetailAddressValid;
+    // const isCardPicValid = validateAuthCardPic(showError);
+    // const isAreaValid = validateAuthArea(showError);
+    // const isDetailAddressValid = validateAuthDetailAddress(showError);
+    return isNameValid && isMobileValid && isIdCardValid ;
 };
 
 const isAuthFormValid = computed(() => {
@@ -1465,6 +1467,21 @@ const openAuthAreaPicker = () => {
     color: #475569;
     margin-bottom: 12rpx;
     font-weight: 500;
+}
+
+.auth-form-item .required-label {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.auth-form-item .required-label::after {
+    content: '*';
+    margin-left: 8rpx;
+    color: #ef4444;
+    font-size: 28rpx;
+    font-weight: 600;
+    line-height: 1;
 }
 
 .auth-form-item .input,

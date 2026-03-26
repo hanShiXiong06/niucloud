@@ -60,34 +60,47 @@ class CoreRecycleOrderService extends BaseCoreService
                 'update_at' => time(),
             ]);
 
-            // 创建设备
-            // if (!empty($devicesPayload)) {
-            //     $devices = [];
-            //     foreach ($devicesPayload as $device) {
-            //         $categoryId = (int)($device['category_id'] ?? 1);
-            //         $categoryPath = $device['category_path'] ?? [];
-            //         if (!is_array($categoryPath) || empty($categoryPath)) {
-            //             $categoryPath = [ $categoryId ];
-            //         }
+            // 创建设备 判断是否有设备信息 如果没有设备信息 不创建设备记录
+            if (!empty($devicesPayload) && count($devicesPayload) > 0) {
+                $devices = [];
+                foreach ($devicesPayload as $device) {
+                    // 检查设备信息是否有效：至少需要有 imei 或 model
+                    $imei = trim($device['imei'] ?? '');
+                    $model = trim($device['model'] ?? '');
 
-            //         $devices[] = [
-            //             'site_id' => $data['site_id'],
-            //             'order_id' => $order->id,
-            //             'member_id' => $data['member_id'] ?? 0,
-            //             'category_id' => $categoryId,
-            //             'info' => [
-            //                 'goods_category' => array_values(array_map('strval', $categoryPath))
-            //             ],
-            //             'imei' => $device['imei'] ?? '',
-            //             'model' => $device['model'] ?? '',
-            //             'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
-            //             'initial_price' => $device['initial_price'] ?? 0,
-            //             'create_at' => time(),
-            //             'update_at' => time(),
-            //         ];
-            //     }
-            //     (new RecycleDevice())->saveAll($devices);
-            // }
+                    // 如果 imei 和 model 都为空，跳过该设备
+                    if (empty($imei) && empty($model)) {
+                        continue;
+                    }
+
+                    $categoryId = (int)($device['category_id'] ?? 1);
+                    $categoryPath = $device['category_path'] ?? [];
+                    if (!is_array($categoryPath) || empty($categoryPath)) {
+                        $categoryPath = [ $categoryId ];
+                    }
+
+                    $devices[] = [
+                        'site_id' => $data['site_id'],
+                        'order_id' => $order->id,
+                        'member_id' => $data['member_id'] ?? 0,
+                        'category_id' => $categoryId,
+                        'info' => [
+                            'goods_category' => array_values(array_map('strval', $categoryPath))
+                        ],
+                        'imei' => $imei,
+                        'model' => $model,
+                        'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
+                        'initial_price' => $device['initial_price'] ?? 0,
+                        'create_at' => time(),
+                        'update_at' => time(),
+                    ];
+                }
+
+                // 只有在有有效设备信息时才批量保存
+                if (!empty($devices)) {
+                    (new RecycleDevice())->saveAll($devices);
+                }
+            }
 
             // 触发创建后事件
             CoreRecycleOrderEventService::orderCreateAfter([

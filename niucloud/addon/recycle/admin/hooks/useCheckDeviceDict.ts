@@ -113,7 +113,7 @@ export function useCheckDeviceDict() {
       const res = await useDictionary(dictKey)
       // 数据结构: res.data.dictionary 是数组
       if (res.data?.dictionary && Array.isArray(res.data.dictionary)) {
-        return res.data.dictionary.sort((a: DictItem, b: DictItem) => a.sort - b.sort)
+        return res.data.dictionary
       }
     } catch (error) {
       console.warn(`加载字典 ${dictKey} 失败:`, error)

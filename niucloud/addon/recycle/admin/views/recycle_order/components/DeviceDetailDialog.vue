@@ -1,352 +1,213 @@
 <template>
-  <el-dialog 
-    v-model="dialogVisible" 
-    title="" 
-    :width="isMobile ? '95vw' : '60%'" 
+  <el-dialog
+    v-model="dialogVisible"
+    title=""
+    :width="isMobile ? '95vw' : '700px'"
     :top="isMobile ? '0' : '3vh'"
     :fullscreen="isMobile"
     center
     :destroy-on-close="true"
     class="device-detail-dialog"
   >
-    
-    <div v-if="deviceData" class="p-4 bg-gray-50 space-y-4 max-h-[90vh] overflow-y-auto">
-      
-      <!-- 设备概览卡片 - 更紧凑的布局 -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div class="p-4">
-          <!-- 基础信息区域 -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <!-- 左侧：设备基本信息 -->
-            <div class="space-y-3">
-              <h4 class="font-medium text-gray-700 text-sm flex items-center space-x-1">
-                <svg class="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4z"/>
-                </svg>
-                <span>基础信息</span>
-              </h4>
-              
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-1">
-                <div class="bg-gray-50 rounded-md p-2  flex items-center justify-between">
-                  <div class="text-xs text-gray-500">设备型号</div>
-                  <div class="text-sm font-medium text-gray-900 truncate">{{ deviceData.model }}</div>
-                </div>
-                <div class="bg-gray-50 rounded-md p-2  flex items-center justify-between">
-                  <div class="text-xs text-gray-500">IMEI码</div>
-                  <div class="text-sm font-mono text-gray-900">{{ deviceData.imei }}</div>
-                </div>
-                <div class="bg-gray-50 rounded-md p-2  flex items-center justify-between">
-                  <div class="text-xs text-gray-500">创建时间</div>
-                  <div class="text-sm text-gray-900">{{ formatDate(deviceData.create_at) }}</div>
-                </div>
-                <div class="bg-gray-50 rounded-md p-2  flex items-center justify-between" v-if="deviceData.info?.sn">
-                  <div class="text-xs text-gray-500">序列号</div>
-                  <div class="text-sm font-mono text-gray-900">{{ deviceData.info.sn }}</div>
-                </div>
-              </div>
-            </div>
 
-            <!-- 右侧：保修和价格信息 -->
-            <div class="space-y-3">
-              <!-- 保修信息 -->
-              <div v-if="deviceData.info">
-                <h4 class="font-medium text-gray-700 text-sm flex items-center space-x-1 mb-2">
-                  <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                  </svg>
-                  <span>保修信息</span>
-                </h4>
-                
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div class="bg-gray-50 rounded-md p-2 flex items-center justify-between">
-                    <div class="text-xs text-gray-500">保修状态</div>
-                    <span 
-                      :class="[
-                        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
-                        deviceData.info.coverage?.status === 'In Warranty'  
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-red-100 text-red-700'
-                      ]"
-                    >
-                    <!-- Out Of Warranty 就是 过保  Limited Warranty 就是 有限保修 -->
-                    
-                    {{ deviceData.info.coverage?.status === 'Out Of Warranty' ? '过保' : deviceData.info.coverage?.status==='Limited Warranty' ? '在保' : deviceData.info.support || '未激活' }}
-                    </span>
-                  </div>
-                  <div class="bg-gray-50 rounded-md p-2 flex items-center justify-between" v-if="deviceData.info.purchase?.date">
-                    <div class="text-xs text-gray-500">购买日期</div>
-                    <div class="text-sm text-gray-900">{{ deviceData.info.purchase.date }}</div>
-                  </div>
-                </div>
-              </div>
+    <div v-if="deviceData" class="ddd-wrap">
 
-              <!-- 价格信息 -->
-              <div>
-                <h4 class="font-medium text-gray-700 text-sm flex items-center space-x-1 mb-2">
-                  <svg class="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd"/>
-                  </svg>
-                  <span>价格信息</span>
-                </h4>
-                
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                 
-                  <div class="bg-orange-50 rounded-md p-2 border border-orange-200">
-                    <div class="text-xs text-orange-600">最终价格</div>
-                    <div class="text-sm font-bold text-orange-700">
-                      {{ deviceData.final_price ? `¥${deviceData.final_price}` : '未定价' }}
-                    </div>
-                  </div>
-                  <div class="bg-purple-50 rounded-md p-2 border border-purple-200">
-                    <div class="text-xs text-purple-600">卖货价格</div>
-                    <div class="text-sm font-bold text-purple-700">
-                      {{ deviceData.sell_price ? `¥${deviceData.sell_price}` : '未填写' }}
-                    </div>
-                  </div>
-                </div>
-              </div>
+      <!-- ===== 设备信息卡片 ===== -->
+      <DeviceInfoCard :device="deviceData" mode="full" class="ddd-section" />
+
+      <!-- ===== 价格信息 ===== -->
+      <div class="ddd-section ddd-price-section">
+        <div class="ddd-section-header">
+          <svg class="ddd-section-icon text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd"/>
+          </svg>
+          <span class="ddd-section-title">价格信息</span>
+        </div>
+        <div class="ddd-price-grid">
+          <div class="ddd-price-card ddd-price-card--final">
+            <div class="ddd-price-label">最终价格</div>
+            <div class="ddd-price-value">
+              {{ deviceData.final_price ? `¥${deviceData.final_price}` : '未定价' }}
             </div>
           </div>
-          
-          <!-- 价格备注 -->
-          <div v-if="deviceData.price_remark" class="bg-blue-50 border-l-3 border-blue-400 p-3 rounded-r">
-            <div class="flex items-start">
-              <svg class="w-4 h-4 text-blue-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-              </svg>
-              <div>
-                <p class="text-xs font-medium text-blue-700">价格备注</p>
-                <p class="text-xs text-blue-600 mt-0.5">{{ deviceData.price_remark }}</p>
-              </div>
+          <div class="ddd-price-card ddd-price-card--sell">
+            <div class="ddd-price-label">卖货价格</div>
+            <div class="ddd-price-value">
+              {{ deviceData.sell_price ? `¥${deviceData.sell_price}` : '未填写' }}
             </div>
+          </div>
+        </div>
+        <!-- 价格备注 -->
+        <div v-if="deviceData.price_remark" class="ddd-remark">
+          <svg class="ddd-remark-icon" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+          </svg>
+          <div>
+            <p class="ddd-remark-title">价格备注</p>
+            <p class="ddd-remark-content">{{ deviceData.price_remark }}</p>
           </div>
         </div>
       </div>
 
-      <!-- 质检和日志 - 并排布局 -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <!-- 质检信息卡片 -->
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-gray-50 to-green-50 border-b">
-            <div class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-              </svg>
-              <span class="font-medium text-gray-800 text-sm">质检信息</span>
-            </div>
-            
+      <!-- ===== 质检 & 日志 并排 ===== -->
+      <div class="ddd-two-col">
+
+        <!-- 质检信息 -->
+        <div class="ddd-section ddd-check-section">
+          <div class="ddd-section-header">
+            <svg class="ddd-section-icon text-green-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            <span class="ddd-section-title">质检信息</span>
           </div>
-          
-          <div class="p-4">
-            <div v-if="hasCheckResult" class="space-y-3">
-              <!-- 质检时间和质检员 -->
-              <div class="flex items-center justify-between text-xs text-gray-600">
-                <div v-if="deviceData.check_at" class="flex items-center space-x-1">
-                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-                  </svg>
-                  <span>{{ formatDate(deviceData.check_at) }}</span>
-                </div>
-                <div v-if="deviceData.checkUser" class="flex items-center space-x-1">
-                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
-                  </svg>
-                  <span>{{ deviceData.checkUser.real_name || deviceData.checkUser.username }}</span>
-                </div>
-              </div>
 
-              <!-- 卖家质检结果 -->
-              <div v-if="sellerCheckResult" class="bg-blue-50 rounded-md p-3 border border-blue-200">
-                <h4 class="text-xs font-medium text-blue-800 mb-1">卖家质检结果</h4>
-                <div class="text-xs text-blue-700 leading-relaxed whitespace-pre-line">
-                  {{ sellerCheckResult }}
-                </div>
-              </div>
+          <div v-if="hasCheckResult" class="ddd-check-body">
+            <!-- 质检时间 & 质检员 -->
+            <div class="ddd-check-meta">
+              <span v-if="deviceData.check_at" class="ddd-check-meta-item">
+                🕐 {{ formatDate(deviceData.check_at) }}
+              </span>
+              <span v-if="deviceData.checkUser" class="ddd-check-meta-item">
+                👤 {{ deviceData.checkUser.real_name || deviceData.checkUser.username }}
+              </span>
+            </div>
 
-              <!-- 买家质检结果 -->
-              <div v-if="buyerCheckResult" class="bg-green-50 rounded-md p-3 border border-green-200">
-                <h4 class="text-xs font-medium text-green-800 mb-1">买家质检结果</h4>
-                <div class="text-xs text-green-700 leading-relaxed whitespace-pre-line">
-                  {{ buyerCheckResult }}
-                </div>
-              </div>
+            <!-- 卖家质检结果 -->
+            <div v-if="sellerCheckResult" class="ddd-result-block ddd-result-block--seller">
+              <div class="ddd-result-title">卖家质检结果</div>
+              <div class="ddd-result-content">{{ sellerCheckResult }}</div>
+            </div>
 
-              <!-- 扣费说明 -->
-              <div class="bg-red-50 rounded-md p-3 border border-red-200">
-                <h4 class="text-xs font-medium text-red-800 mb-1">扣费说明</h4>
-                <div class="text-xs text-red-700 leading-relaxed">
-                  {{ deviceData.remark }}
-                </div>
-              </div>
+            <!-- 买家质检结果 -->
+            <div v-if="buyerCheckResult" class="ddd-result-block ddd-result-block--buyer">
+              <div class="ddd-result-title">买家质检结果</div>
+              <div class="ddd-result-content">{{ buyerCheckResult }}</div>
+            </div>
 
-              <!-- 卖家质检图片 -->
-              <div v-if="checkImagesSellerArray.length > 0" class="space-y-2">
-                <h4 class="text-xs font-medium text-gray-800">卖家质检图片</h4>
-                <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  <div
-                    v-for="(imgUrl, index) in checkImagesSellerArray"
-                    :key="'seller-' + index"
-                    class="relative group cursor-pointer"
-                    @click="previewImage(checkImagesSellerArray, index)"
+            <!-- 扣费说明 -->
+            <div v-if="deviceData.remark" class="ddd-result-block ddd-result-block--deduct">
+              <div class="ddd-result-title">扣费说明</div>
+              <div class="ddd-result-content">{{ deviceData.remark }}</div>
+            </div>
+
+            <!-- 卖家质检图片 -->
+            <div v-if="checkImagesSellerArray.length > 0" class="ddd-image-group">
+              <div class="ddd-image-group-title">卖家质检图片</div>
+              <div class="ddd-image-grid">
+                <div
+                  v-for="(imgUrl, index) in checkImagesSellerArray"
+                  :key="'seller-' + index"
+                  class="ddd-image-thumb"
+                  @click="previewImage(checkImagesSellerArray, index)"
+                >
+                  <el-image
+                    :src="img(checkImagesSellerThumbArray[index] || imgUrl)"
+                    fit="cover"
+                    lazy
                   >
-                    <el-image
-                      :src="img(checkImagesSellerThumbArray[index] || imgUrl)"
-                      fit="cover"
-                      class="w-16 h-16 rounded border-2 border-gray-200 group-hover:border-blue-400 transition-colors duration-200"
-                      lazy
-                    >
-                      <template #error>
-                        <div class="w-full h-16 bg-gray-100 rounded flex flex-col items-center justify-center">
-                          <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
-                          </svg>
-                          <span class="text-xs text-gray-400">错误</span>
-                        </div>
-                      </template>
-                    </el-image>
-                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded flex items-center justify-center">
-                      <svg class="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                        <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 买家质检图片 -->
-              <div v-if="checkImagesBuyerArray.length > 0" class="space-y-2">
-                <h4 class="text-xs font-medium text-gray-800">买家质检图片</h4>
-                <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  <div
-                    v-for="(imgUrl, index) in checkImagesBuyerArray"
-                    :key="'buyer-' + index"
-                    class="relative group cursor-pointer"
-                    @click="previewImage(checkImagesBuyerArray, index)"
-                  >
-                    <el-image
-                      :src="img(checkImagesBuyerThumbArray[index] || imgUrl)"
-                      fit="cover"
-                      class="w-16 h-16 rounded border-2 border-gray-200 group-hover:border-green-400 transition-colors duration-200"
-                      lazy
-                    >
-                      <template #error>
-                        <div class="w-full h-16 bg-gray-100 rounded flex flex-col items-center justify-center">
-                          <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
-                          </svg>
-                          <span class="text-xs text-gray-400">错误</span>
-                        </div>
-                      </template>
-                    </el-image>
-                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded flex items-center justify-center">
-                      <svg class="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                        <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-                      </svg>
-                    </div>
-                  </div>
+                    <template #error>
+                      <div class="ddd-image-error">🖼</div>
+                    </template>
+                  </el-image>
                 </div>
               </div>
             </div>
-            
-            <!-- 未质检状态 -->
-            <div v-else class="text-center py-6">
-              <svg class="w-12 h-12 text-gray-300 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-              </svg>
-              <h3 class="text-sm font-medium text-gray-400 mb-1">暂无质检结果</h3>
-              <p class="text-xs text-gray-400">设备尚未进行质检</p>
+
+            <!-- 买家质检图片 -->
+            <div v-if="checkImagesBuyerArray.length > 0" class="ddd-image-group">
+              <div class="ddd-image-group-title">买家质检图片</div>
+              <div class="ddd-image-grid">
+                <div
+                  v-for="(imgUrl, index) in checkImagesBuyerArray"
+                  :key="'buyer-' + index"
+                  class="ddd-image-thumb ddd-image-thumb--buyer"
+                  @click="previewImage(checkImagesBuyerArray, index)"
+                >
+                  <el-image
+                    :src="img(checkImagesBuyerThumbArray[index] || imgUrl)"
+                    fit="cover"
+                    lazy
+                  >
+                    <template #error>
+                      <div class="ddd-image-error">🖼</div>
+                    </template>
+                  </el-image>
+                </div>
+              </div>
             </div>
+          </div>
+
+          <!-- 未质检 -->
+          <div v-else class="ddd-empty">
+            <div class="ddd-empty-icon">🔍</div>
+            <div class="ddd-empty-text">暂无质检结果</div>
           </div>
         </div>
 
-        <!-- 操作日志卡片 -->
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-gray-50 to-purple-50 border-b">
-            <div class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-                <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
-              </svg>
-              <span class="font-medium text-gray-800 text-sm">操作日志</span>
-            </div>
-            <el-tag v-if="deviceData.logs && deviceData.logs.length > 0" type="info" size="small" effect="plain">
+        <!-- 操作日志 -->
+        <div class="ddd-section ddd-log-section">
+          <div class="ddd-section-header">
+            <svg class="ddd-section-icon text-purple-500" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+              <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+            </svg>
+            <span class="ddd-section-title">操作日志</span>
+            <el-tag v-if="deviceData.logs?.length" type="info" size="small" effect="plain" class="ml-auto">
               {{ deviceData.logs.length }} 条
             </el-tag>
           </div>
-          
-          <div class="p-4">
-            <div v-if="deviceData.logs && deviceData.logs.length > 0" class="space-y-3">
-              <div 
-                v-for="(log, index) in deviceData.logs" 
-                :key="log.id"
-                class="relative"
-              >
-                <!-- 时间线 -->
-                <div v-if="index < deviceData.logs.length - 1" 
-                     class="absolute left-4 top-8 w-0.5 h-4 bg-gray-200"></div>
-                
-                <div class="flex items-start space-x-3">
-                  <!-- 时间点 -->
-                  <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 relative z-10">
-                    <div class="w-2 h-2 bg-purple-600 rounded-full"></div>
-                  </div>
-                  
-                  <!-- 日志内容 -->
-                  <div class="flex-1 min-w-0 bg-gray-50 rounded-md p-3">
-                    <div class="flex items-start justify-between mb-1">
-                      <div class="flex items-center space-x-2">
-                        <span class="font-medium text-gray-900 text-sm">{{ log.operator_name }}</span>
-                        <el-tag size="small" effect="light" type="primary">{{ log.status_name }}</el-tag>
-                      </div>
-                      <time class="text-xs text-gray-500">{{ formatDate(log.create_at) }}</time>
-                    </div>
-                    
-                    <div v-if="log.remark" class="text-xs text-gray-700 leading-relaxed">
-                      {{ log.remark }}
-                    </div>
-                  </div>
+
+          <div v-if="deviceData.logs?.length" class="ddd-log-list">
+            <div
+              v-for="(log, index) in deviceData.logs"
+              :key="log.id"
+              class="ddd-log-item"
+            >
+              <div class="ddd-log-dot"></div>
+              <div v-if="index < deviceData.logs.length - 1" class="ddd-log-line"></div>
+              <div class="ddd-log-content">
+                <div class="ddd-log-top">
+                  <span class="ddd-log-operator">{{ log.operator_name }}</span>
+                  <el-tag size="small" effect="light" type="primary">{{ log.status_name }}</el-tag>
+                  <time class="ddd-log-time">{{ formatDate(log.create_at) }}</time>
                 </div>
+                <div v-if="log.remark" class="ddd-log-remark">{{ log.remark }}</div>
               </div>
             </div>
-            
-            <!-- 无日志状态 -->
-            <div v-else class="text-center py-6">
-              <svg class="w-12 h-12 text-gray-300 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
-              </svg>
-              <h3 class="text-sm font-medium text-gray-400 mb-1">暂无操作日志</h3>
-              <p class="text-xs text-gray-400">该设备暂无操作记录</p>
-            </div>
+          </div>
+
+          <div v-else class="ddd-empty">
+            <div class="ddd-empty-icon">📋</div>
+            <div class="ddd-empty-text">暂无操作日志</div>
           </div>
         </div>
+
       </div>
     </div>
 
     <!-- 空状态 -->
-    <div v-else class="text-center py-12">
-      <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
-      </svg>
-      <h3 class="text-lg font-medium text-gray-400 mb-2">暂无设备详情</h3>
-      <p class="text-gray-400">设备信息加载失败或数据不存在</p>
+    <div v-else class="ddd-empty ddd-empty--page">
+      <div class="ddd-empty-icon">📱</div>
+      <div class="ddd-empty-text">设备信息加载失败或数据不存在</div>
     </div>
 
     <!-- 图片预览 -->
-    <el-image-viewer 
-      v-if="imageViewer.show" 
+    <el-image-viewer
+      v-if="imageViewer.show"
       :url-list="previewImageList"
       :initial-index="imageViewer.index"
       :zoom-rate="1.2"
       @close="imageViewer.show = false"
     />
   </el-dialog>
+
 </template>
+
 
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { img } from '@/utils/common'
+import DeviceInfoCard from './DeviceInfoCard.vue'
 
 // 定义设备信息接口
 interface DeviceLog {
@@ -357,35 +218,16 @@ interface DeviceLog {
     remark?: string;
 }
 
-interface DeviceOrder {
-    id: number | string;
-    status_name: string;
-    delivery_type_name: string;
-    express_no?: string;
-    [key: string]: any;
-}
-
-interface DeviceInfo {
-    sn?: string;
-    model?: string;
-    coverage?: {
-        status?: string;
-        description?: string;
-    };
-    support?: string;
-    purchase?: {
-        date?: string;
-        validated?: boolean;
-    };
-    [key: string]: any;
-}
-
 interface DeviceDetail {
     id: number | string;
     imei: string;
     model: string;
     status: number | string;
     status_name: string;
+    capacity?: string;
+    color?: string;
+    system_version?: string;
+    warranty_info?: string;
     check_status?: number;
     check_result?: string;
     check_result_seller?: string;
@@ -404,268 +246,420 @@ interface DeviceDetail {
     remark?: string;
     create_at: string;
     update_at: string;
-    order?: DeviceOrder;
     logs?: DeviceLog[];
-    info?: DeviceInfo;
-    checkUser?: {
-        uid: number;
-        username: string;
-        real_name?: string;
-    };
+    info?: { sn?: string; [key: string]: any };
+    checkUser?: { uid: number; username: string; real_name?: string };
     [key: string]: any;
 }
 
 const props = defineProps({
-    visible: {
-        type: Boolean,
-        default: false
-    },
-    device: {
-        type: Object as () => DeviceDetail | null,
-        default: null
-    }
+    visible: { type: Boolean, default: false },
+    device: { type: Object as () => DeviceDetail | null, default: null }
 })
 
 const emit = defineEmits(['update:visible', 'closed'])
 
-// 内部状态
 const dialogVisible = ref(props.visible)
 const deviceData = ref<DeviceDetail | null>(props.device)
 const isMobile = ref(false)
 
-const updateResponsiveState = () => {
-    isMobile.value = window.innerWidth <= 768
-}
+const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
 
-// 计算质检图片数组（卖家）
+// 质检图片
 const checkImagesSellerArray = computed(() => {
     const raw = deviceData.value?.check_images_seller || deviceData.value?.check_images
     if (!raw) return []
-    return raw.split(',').map(url => url.trim()).filter(url => url)
+    return raw.split(',').map((u: string) => u.trim()).filter((u: string) => u)
 })
-
-// 卖家质检图片缩略图数组（优先使用后端返回的缩略图）
 const checkImagesSellerThumbArray = computed(() => {
     const thumbs = deviceData.value?.check_images_seller_thumb_small || deviceData.value?.check_images_thumb_small
-    if (thumbs && Array.isArray(thumbs) && thumbs.length > 0) {
-        return thumbs
-    }
-    // fallback: 使用原图
-    return checkImagesSellerArray.value
+    return (thumbs && Array.isArray(thumbs) && thumbs.length > 0) ? thumbs : checkImagesSellerArray.value
 })
-
-// 计算质检图片数组（买家）
 const checkImagesBuyerArray = computed(() => {
     if (!deviceData.value?.check_images_buyer) return []
-    return deviceData.value.check_images_buyer.split(',').map(url => url.trim()).filter(url => url)
+    return deviceData.value.check_images_buyer.split(',').map((u: string) => u.trim()).filter((u: string) => u)
 })
-
-// 买家质检图片缩略图数组（优先使用后端返回的缩略图）
 const checkImagesBuyerThumbArray = computed(() => {
     const thumbs = deviceData.value?.check_images_buyer_thumb_small
-    if (thumbs && Array.isArray(thumbs) && thumbs.length > 0) {
-        return thumbs
-    }
-    // fallback: 使用原图
-    return checkImagesBuyerArray.value
+    return (thumbs && Array.isArray(thumbs) && thumbs.length > 0) ? thumbs : checkImagesBuyerArray.value
 })
 
-// 兼容：优先取 seller 字段，fallback 到旧字段
-const sellerCheckResult = computed(() => {
-    return deviceData.value?.check_result_seller || deviceData.value?.check_result || ''
+const sellerCheckResult = computed(() =>
+    deviceData.value?.check_result_seller || deviceData.value?.check_result || ''
+)
+const buyerCheckResult = computed(() => deviceData.value?.check_result_buyer || '')
+const hasCheckResult = computed(() => !!(sellerCheckResult.value || buyerCheckResult.value))
+
+// 监听
+watch(() => props.visible, (v) => { dialogVisible.value = v })
+watch(() => props.device, (v) => { deviceData.value = v }, { deep: true })
+watch(dialogVisible, (v) => {
+    emit('update:visible', v)
+    if (!v) emit('closed')
 })
 
-const buyerCheckResult = computed(() => {
-    return deviceData.value?.check_result_buyer || ''
-})
-
-const hasCheckResult = computed(() => {
-    return !!(sellerCheckResult.value || buyerCheckResult.value)
-})
-
-// 价格变化相关函数
-const getPriceChangeText = () => {
-    if (!deviceData.value?.final_price || !deviceData.value?.before_price) return ''
-    const initial = parseFloat(deviceData.value.before_price.toString())
-    const final = parseFloat(deviceData.value.final_price.toString())
-    const diff = final - initial
-    if (diff > 0) return `+¥${diff.toFixed(2)}`
-    if (diff < 0) return `-¥${Math.abs(diff).toFixed(2)}`
-    return '无变化'
-}
-
-const getPriceChangeClass = () => {
-    if (!deviceData.value?.final_price || !deviceData.value?.before_price) return ''
-    const initial = parseFloat(deviceData.value.before_price.toString())
-    const final = parseFloat(deviceData.value.final_price.toString())
-    const diff = final - initial
-    if (diff > 0) return 'positive'
-    if (diff < 0) return 'negative'
-    return 'neutral'
-}
-
-// 监听visible属性变化
-watch(() => props.visible, (newVal) => {
-    dialogVisible.value = newVal
-})
-
-// 监听device属性变化
-watch(() => props.device, (newVal) => {
-    deviceData.value = newVal
-}, { deep: true })
-
-// 监听内部visible状态变化，同步到父组件
-watch(dialogVisible, (newVal) => {
-    emit('update:visible', newVal)
-    if (!newVal) {
-        emit('closed')
-    }
-})
-
-// 预览图片
-const imageViewer = reactive({
-    show: false,
-    index: 0
-})
-
+// 图片预览
+const imageViewer = reactive({ show: false, index: 0 })
 const previewImageList = ref<string[]>([])
-
 const previewImage = (images: string[], index: number) => {
     previewImageList.value = images.map(url => img(url))
     imageViewer.index = index
     imageViewer.show = true
 }
 
-// 工具函数
-const getStatusTagType = (status: number | string) => {
-    const statusNum = parseInt(status.toString())
-    switch (statusNum) {
-        case 1: return 'info'
-        case 2: return 'success'
-        case 3: return 'warning'
-        case 4: return 'danger'
-        case 5: return 'primary'
-        default: return 'info'
-    }
-}
-
 const formatDate = (dateStr: string | number) => {
-    if (!dateStr) return '暂无'
-    
-    let date: Date;
+    if (!dateStr) return '—'
+    let date: Date
     if (typeof dateStr === 'number') {
-        // 如果是时间戳，需要判断是秒还是毫秒
-        const timestamp = dateStr > 9999999999 ? dateStr : dateStr * 1000;
-        date = new Date(timestamp);
+        date = new Date(dateStr > 9999999999 ? dateStr : dateStr * 1000)
     } else {
-        date = new Date(dateStr);
+        date = new Date(dateStr)
     }
-    
-    if (isNaN(date.getTime())) return '暂无'
-    
+    if (isNaN(date.getTime())) return '—'
     return date.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
     })
 }
 
-onMounted(() => {
-    updateResponsiveState()
-    window.addEventListener('resize', updateResponsiveState)
-})
-
-onBeforeUnmount(() => {
-    window.removeEventListener('resize', updateResponsiveState)
-})
+onMounted(() => { updateResponsiveState(); window.addEventListener('resize', updateResponsiveState) })
+onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveState) })
 </script>
 
+
 <style lang="scss" scoped>
+/* =====================
+   Dialog 容器
+   ===================== */
 .device-detail-dialog {
   :deep(.el-dialog) {
     border-radius: 12px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.18);
     overflow: hidden;
-    max-width: 1400px;
   }
-
-  :deep(.el-dialog__header) {
-    padding: 0;
-    border: none;
-  }
-  
-  :deep(.el-dialog__body) {
-    padding: 0;
-    background-color: #f9fafb;
-  }
-
+  :deep(.el-dialog__header) { padding: 0; border: none; }
+  :deep(.el-dialog__body) { padding: 0; background: #f1f5f9; }
   :deep(.el-dialog__headerbtn) {
-    top: 1.5rem;
-    right: 1.5rem;
-    
-    .el-dialog__close {
-      color: white;
-      font-size: 1.25rem;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 0.375rem;
-      padding: 0.25rem;
-      
-      &:hover {
-        background: rgba(255, 255, 255, 0.3);
-        color: white;
-      }
-    }
+    top: 12px; right: 12px; z-index: 10;
   }
 }
 
-// 自定义滚动条
-:deep(.el-dialog__body) {
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  &::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 3px;
-  }
-  
-  &::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
-    
-    &:hover {
-      background: #94a3b8;
-    }
+/* =====================
+   整体包裹
+   ===================== */
+.ddd-wrap {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 88vh;
+  overflow-y: auto;
+
+  &::-webkit-scrollbar { width: 5px; }
+  &::-webkit-scrollbar-track { background: #f1f5f9; }
+  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+}
+
+/* =====================
+   通用 section 卡片
+   ===================== */
+.ddd-section {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+
+}
+
+.ddd-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: linear-gradient(to right, #f9fafb, #f3f4f6);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ddd-section-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.ddd-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* =====================
+   价格区
+   ===================== */
+.ddd-price-section {
+  .ddd-price-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 12px 14px;
   }
 }
 
-// 动画效果
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+.ddd-price-card {
+  border-radius: 8px;
+  padding: 10px 12px;
+
+  .ddd-price-label {
+    font-size: 11px;
+    margin-bottom: 4px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  .ddd-price-value {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  &--final {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    .ddd-price-label { color: #ea580c; }
+    .ddd-price-value { color: #c2410c; }
+  }
+  &--sell {
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    .ddd-price-label { color: #7c3aed; }
+    .ddd-price-value { color: #6d28d9; }
   }
 }
 
-.bg-white {
-  animation: slideUp 0.4s ease-out;
+.ddd-remark {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 14px 12px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  border-left: 3px solid #60a5fa;
+  border-radius: 0 6px 6px 0;
+
+  .ddd-remark-icon {
+    width: 14px;
+    height: 14px;
+    color: #3b82f6;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .ddd-remark-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #1d4ed8;
+    margin-bottom: 2px;
+  }
+  .ddd-remark-content {
+    font-size: 12px;
+    color: #1e40af;
+    line-height: 1.5;
+  }
 }
 
-.bg-white:nth-child(2) {
-  animation-delay: 0.1s;
+/* =====================
+   两列并排（质检 + 日志）
+   ===================== */
+.ddd-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-.bg-white:nth-child(3) {
-  animation-delay: 0.2s;
+/* =====================
+   质检区
+   ===================== */
+.ddd-check-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.bg-white:nth-child(4) {
-  animation-delay: 0.3s;
+.ddd-check-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ddd-check-meta-item {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.ddd-result-block {
+  border-radius: 6px;
+  padding: 8px 10px;
+  border-width: 1px;
+  border-style: solid;
+
+  .ddd-result-title {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .ddd-result-content {
+    font-size: 11px;
+    line-height: 1.6;
+    white-space: pre-line;
+  }
+
+  &--seller {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    .ddd-result-title { color: #1d4ed8; }
+    .ddd-result-content { color: #1e40af; }
+  }
+  &--buyer {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    .ddd-result-title { color: #15803d; }
+    .ddd-result-content { color: #166534; }
+  }
+  &--deduct {
+    background: #fef2f2;
+    border-color: #fecaca;
+    .ddd-result-title { color: #b91c1c; }
+    .ddd-result-content { color: #991b1b; }
+  }
+}
+
+/* =====================
+   质检图片
+   ===================== */
+.ddd-image-group {
+  .ddd-image-group-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 6px;
+  }
+}
+.ddd-image-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ddd-image-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid #e5e7eb;
+  transition: border-color 0.2s;
+
+  &:hover { border-color: #60a5fa; }
+  &--buyer:hover { border-color: #4ade80; }
+
+  :deep(.el-image) { width: 100%; height: 100%; display: block; }
+}
+.ddd-image-error {
+  width: 100%;
+  height: 100%;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+/* =====================
+   操作日志
+   ===================== */
+.ddd-log-list {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ddd-log-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  position: relative;
+  padding-bottom: 12px;
+
+  &:last-child { padding-bottom: 0; }
+}
+
+.ddd-log-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  flex-shrink: 0;
+  margin-top: 5px;
+  position: relative;
+  z-index: 1;
+}
+
+.ddd-log-line {
+  position: absolute;
+  left: 3px;
+  top: 14px;
+  bottom: 0;
+  width: 2px;
+  background: #e9d5ff;
+}
+
+.ddd-log-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ddd-log-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.ddd-log-operator {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.ddd-log-time {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-left: auto;
+}
+
+.ddd-log-remark {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* =====================
+   空状态
+   ===================== */
+.ddd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  gap: 6px;
+
+  &--page { padding: 60px 16px; }
+}
+.ddd-empty-icon { font-size: 32px; opacity: 0.4; }
+.ddd-empty-text { font-size: 12px; color: #9ca3af; }
+
+/* =====================
+   响应式
+   ===================== */
+@media (max-width: 640px) {
+  .ddd-two-col {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

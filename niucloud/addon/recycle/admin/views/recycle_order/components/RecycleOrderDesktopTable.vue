@@ -210,7 +210,7 @@
       </template>
     </el-table-column>
 
-    <el-table-column label="状态" width="120" align="center">
+    <el-table-column label="状态" width="130" align="center">
       <template #default="{ row }">
         <el-tag :type="props.getStatusType(row.status)" :effect="props.getStatusEffect(row.status)">
           <el-icon class="mr-1">

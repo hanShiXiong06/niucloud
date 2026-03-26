@@ -95,15 +95,25 @@ class SignHandler extends BaseFlowHandler
             $categoryId = (int)($device['category_id'] ?? 1);
             $categoryPath = $this->normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
 
+            // 提取设备详细信息
+            $deviceInfo = $device['info'] ?? [];
+
             // 检查是否有设备ID并且该ID是否在现有设备中
             if (!empty($device['id']) && isset($existingDevices[$device['id']])) {
                 // 设备已存在，执行更新操作
                 $deviceData = [
                     'imei' => $device['imei'] ?? '',
+                    'imei2' => $device['imei2'] ?? '',
+                    'serial_number' => $device['serial_number'] ?? '',
                     'model' => $device['model'] ?? '',
+                    'color' => $device['color'] ?? '',
+                    'capacity' => $device['capacity'] ?? '',
+                    'system_version' => $device['system_version'] ?? '',
+                    'battery_health' => $deviceInfo['battery_health'] ?? '',
+                    'battery_cycle_count' => $deviceInfo['battery_cycle_count'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
                     'category_id' => $categoryId,
-                    'info' => $this->buildDeviceInfo($existingDevices[$device['id']]['info'] ?? [], $categoryPath),
+                    'info' => $this->buildDeviceInfo($existingDevices[$device['id']]['info'] ?? [], $categoryPath, $deviceInfo),
                     'update_at' => time()
                 ];
                 $deviceService->signUpdate((int)$device['id'], $deviceData);
@@ -113,10 +123,17 @@ class SignHandler extends BaseFlowHandler
                 $deviceData = [
                     'order_id' => $orderId,
                     'imei' => $device['imei'] ?? '',
+                    'imei2' => $device['imei2'] ?? '',
+                    'serial_number' => $device['serial_number'] ?? '',
                     'model' => $device['model'] ?? '',
+                    'color' => $device['color'] ?? '',
+                    'capacity' => $device['capacity'] ?? '',
+                    'system_version' => $device['system_version'] ?? '',
+                    'battery_health' => $deviceInfo['battery_health'] ?? '',
+                    'battery_cycle_count' => $deviceInfo['battery_cycle_count'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
                     'category_id' => $categoryId,
-                    'info' => $this->buildDeviceInfo([], $categoryPath),
+                    'info' => $this->buildDeviceInfo([], $categoryPath, $deviceInfo),
                     'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
                     'create_at' => time(),
                     'update_at' => time(),
@@ -156,12 +173,13 @@ class SignHandler extends BaseFlowHandler
     }
 
     /**
-     * 合并设备info信息，补充商城分类路径
-     * @param mixed $originInfo
-     * @param array $categoryPath
+     * 合并设备info信息，补充商城分类路径和设备详细信息
+     * @param mixed $originInfo 原始info信息
+     * @param array $categoryPath 分类路径
+     * @param array $deviceInfo 设备详细信息
      * @return array
      */
-    private function buildDeviceInfo($originInfo, array $categoryPath): array
+    private function buildDeviceInfo($originInfo, array $categoryPath, array $deviceInfo = []): array
     {
         if (is_string($originInfo) && $originInfo !== '') {
             $decoded = json_decode($originInfo, true);
@@ -172,7 +190,14 @@ class SignHandler extends BaseFlowHandler
             $originInfo = [];
         }
 
+        // 设置商品分类路径
         $originInfo['goods_category'] = $categoryPath;
+
+        // 合并设备详细信息（如果提供）
+        if (!empty($deviceInfo) && is_array($deviceInfo)) {
+            $originInfo = array_merge($originInfo, $deviceInfo);
+        }
+
         return $originInfo;
     }
 }

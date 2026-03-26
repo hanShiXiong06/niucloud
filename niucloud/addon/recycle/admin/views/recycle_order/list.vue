@@ -715,14 +715,10 @@ const handleDeviceConfirm = async (data: {
     // 提交设备信息
     const result = await updateRecycleOrder(data.orderId, {
       action: "order_sign",
-      devices: data.devices.map((device) => ({
-        id: device.id,
-        imei: device.imei,
-        model: device.model,
-        initial_price: device.initial_price,
-        category_id: device.category_id,
-        category_path: device.category_path,
-      })),
+      devices: data.devices.map((device) => {
+        const { editing, _originalData, isNew, ...rest } = device
+        return rest
+      }),
     });
 
     if (result.code !== 1) {

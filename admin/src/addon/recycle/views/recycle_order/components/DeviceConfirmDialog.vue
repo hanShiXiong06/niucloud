@@ -244,7 +244,7 @@
 import { ref, defineProps, defineEmits, watch, toRaw, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { Edit, Plus, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getImeiInfo } from '@/addon/recycle/api/recycle_order'
+import { getImeiInfo, deleteOrderDevice } from '@/addon/recycle/api/recycle_order'
 import { getCategoryTree } from '@/addon/phone_shop/api/goods'
 import axios from 'axios'
 
@@ -601,6 +601,10 @@ const mapLocalDeviceToDevice = (localDevice: any): Device => {
         capacity,
         system_version,
         warranty_info,
+        // 电池信息
+        battery_health: battery !== undefined ? String(battery) : '',
+        battery_cycle: battery_num !== undefined ? String(battery_num) : '',
+        battery_cycle_count: battery_num !== undefined ? String(battery_num) : '',
         info, // 包含 check_meta 的完整信息
         _originalData: null
     }
@@ -926,7 +930,7 @@ const cancelEdit = (row: Device, index: number) => {
 }
 
 // 删除设备
-const deleteDevice = (index: number) => {
+const deleteDevice = async (index: number) => {
     const device = devices.value[index]
     const label = device.imei ? `设备 ${device.imei}` : `设备 ${index + 1}`
 
@@ -934,9 +938,22 @@ const deleteDevice = (index: number) => {
         type: 'warning',
         confirmButtonText: '确定删除',
         cancelButtonText: '取消'
-    }).then(() => {
-        devices.value.splice(index, 1)
-        ElMessage.success('已删除')
+    }).then(async () => {
+        // 如果设备有ID，说明已存在于数据库，需要调用API删除
+        if (device.id) {
+            try {
+                await deleteOrderDevice(device.id)
+                devices.value.splice(index, 1)
+                ElMessage.success('已删除')
+            } catch (error) {
+                ElMessage.error('删除失败，请重试')
+                console.error('删除设备失败:', error)
+            }
+        } else {
+            // 新添加的设备，直接从本地数组删除
+            devices.value.splice(index, 1)
+            ElMessage.success('已删除')
+        }
     }).catch(() => {
         // 用户取消，不做操作
     })

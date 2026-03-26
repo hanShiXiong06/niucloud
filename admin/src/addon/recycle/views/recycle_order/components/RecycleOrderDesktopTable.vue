@@ -213,9 +213,6 @@
     <el-table-column label="状态" width="130" align="center">
       <template #default="{ row }">
         <el-tag :type="props.getStatusType(row.status)" :effect="props.getStatusEffect(row.status)">
-          <el-icon class="mr-1">
-            <component :is="props.getStatusIcon(row.status)" />
-          </el-icon>
           {{ row.status_name }}
         </el-tag>
       </template>

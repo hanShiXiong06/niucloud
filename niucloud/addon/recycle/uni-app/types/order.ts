@@ -5,6 +5,7 @@
 // 设备信息
 export interface Device {
   imei: string
+  model?: string
   initial_price?: string
 }
 

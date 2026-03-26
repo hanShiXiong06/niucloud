@@ -1,22 +1,31 @@
 <template>
-    <el-dialog 
-        v-model="dialogVisible" 
-        title="设备验机结果和定价" 
-        width="600px" 
+    <el-dialog
+        v-model="dialogVisible"
+        title="设备验机结果和定价"
+        width="640px"
         :destroy-on-close="true"
         @closed="handleClosed"
+        class="device-edit-dialog"
     >
-        <el-form 
-            :model="form" 
-            label-width="100px" 
-            :rules="rules" 
+        <!-- 设备信息只读卡片 -->
+        <DeviceInfoCard
+            v-if="props.deviceData"
+            :device="props.deviceData"
+            mode="full"
+            class="mb-4"
+        />
+
+        <el-form
+            :model="form"
+            label-width="100px"
+            :rules="rules"
             ref="formRef"
             v-loading="loading"
         >
             <el-form-item label="IMEI">
                 <el-input v-model="form.imei" disabled />
             </el-form-item>
-            
+
             <el-form-item label="型号">
                 <el-input v-model="form.model" />
             </el-form-item>
@@ -98,6 +107,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, defineProps, defineEmits, watch, computed } from 'vue';
+import DeviceInfoCard from './DeviceInfoCard.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { updateDeviceStatus } from '@/addon/recycle/api/recycle_order';
@@ -332,6 +342,11 @@ if (props.visible) {
 </script>
 
 <style lang="scss" scoped>
+.device-edit-dialog {
+  :deep(.el-dialog__body) {
+    padding: 16px 20px 0;
+  }
+}
 .dialog-footer {
     display: flex;
     justify-content: flex-end;

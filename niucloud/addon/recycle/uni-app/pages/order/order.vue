@@ -300,10 +300,10 @@ const checkPaymentInfo = async () => {
   try {
     const res = await getPaymentList()
 
-    if (res.data.length < 2) {
+    if (res.data.length < 1) {
       uni.showModal({
-        title: '提示',
-        content: '您尚未输入个人信息，建议至少添加2种收款方式及完善个人信息，以便回收完成后能及时收到款项。',
+        title: '提示（重要）',
+        content: '您尚未输入个人信息，建议添加收款方式及完善个人信息，以便回收完成后能及时收到款项。',
         confirmText: '立即设置',
         cancelText: '稍后设置',
         success: function(res) {
