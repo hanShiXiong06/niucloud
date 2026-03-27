@@ -501,7 +501,12 @@ const goTo = (url: string) => {
 }
 
 const handleSchoolClick = () => {
-    uni.navigateTo({ url: '/addon/sd_xiaoyuan/pages/school/select' })
+    uni.navigateTo({
+        url: '/addon/sd_xiaoyuan/pages/school/select',
+        fail: (err) => {
+            console.error('导航失败:', err)
+        }
+    })
 }
 
 const selectSchool = (school: any) => {
