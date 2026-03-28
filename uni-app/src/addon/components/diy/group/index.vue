@@ -156,27 +156,6 @@
                 <template v-if="component.componentName == 'PhoneShopSearch'">
                    <diy-phone-shop-search ref="diyPhoneShopSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopSearch" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'XiaoyuanBanner'">
-                   <diy-xiaoyuan-banner ref="diyXiaoyuanBannerRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanBanner" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanHeader'">
-                   <diy-xiaoyuan-header ref="diyXiaoyuanHeaderRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanHeader" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanMenuGrid'">
-                   <diy-xiaoyuan-menu-grid ref="diyXiaoyuanMenuGridRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanMenuGrid" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanNotice'">
-                   <diy-xiaoyuan-notice ref="diyXiaoyuanNoticeRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanNotice" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanOrderHall'">
-                   <diy-xiaoyuan-order-hall ref="diyXiaoyuanOrderHallRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanOrderHall" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanPromoCard'">
-                   <diy-xiaoyuan-promo-card ref="diyXiaoyuanPromoCardRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanPromoCard" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanSearch'">
-                   <diy-xiaoyuan-search ref="diyXiaoyuanSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanSearch" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
                 </view>
             </view>
         </template>
@@ -202,13 +181,6 @@
    import diyPhoneShopMemberInfo from '@/addon/phone_shop/components/diy/phone-shop-member-info/index.vue';
    import diyPhoneShopOrderInfo from '@/addon/phone_shop/components/diy/phone-shop-order-info/index.vue';
    import diyPhoneShopSearch from '@/addon/phone_shop/components/diy/phone-shop-search/index.vue';
-   import diyXiaoyuanBanner from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-banner/index.vue';
-   import diyXiaoyuanHeader from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-header/index.vue';
-   import diyXiaoyuanMenuGrid from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-menu-grid/index.vue';
-   import diyXiaoyuanNotice from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-notice/index.vue';
-   import diyXiaoyuanOrderHall from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-order-hall/index.vue';
-   import diyXiaoyuanPromoCard from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-promo-card/index.vue';
-   import diyXiaoyuanSearch from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-search/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';

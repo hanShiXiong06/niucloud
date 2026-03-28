@@ -1,7 +1,0 @@
-{
-	"dependencies": {
-		"vue3-colorpicker": "^2.2.3",
-        "vue-echarts": "^7.0.3",
-        "echarts": "^5.4.1"
-    }
-}
