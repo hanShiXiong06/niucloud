@@ -30,7 +30,7 @@ class RecycleDeviceExportListener
 
             // 查询导出数据 - 使用与列表页相同的逻辑
             $search_model = $model->where([['site_id', '=', $param['site_id'] ?? 0]])
-                ->withSearch(['imei', 'model', 'status', 'update_at', 'export_status'], $where)
+                ->withSearch(['imei', 'model', 'status', 'update_at', 'export_status', 'device_ids'], $where)
                 ->with([
                     'order',
                     'priceUser' => function($query) {

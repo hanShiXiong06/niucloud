@@ -274,6 +274,19 @@ class RecycleDevice extends BaseModel
         // 值为空或 'all' 时不加条件
     }
 
+    /**
+     * 搜索器 按设备ID列表筛选（用于勾选导出）
+     * @param $query
+     * @param $value
+     * @param $data
+     */
+    public function searchDeviceIdsAttr($query, $value, $data)
+    {
+        if (!empty($value) && is_array($value)) {
+            $query->whereIn('id', $value);
+        }
+    }
+
     // 质检员关联查询 sys_user  本表 check_uid 关联 sys_user 的 id
     public function checkUser()
     {

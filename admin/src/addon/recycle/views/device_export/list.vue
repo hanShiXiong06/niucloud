@@ -45,17 +45,20 @@
                     <el-form-item>
                         <el-button type="primary" @click="loadDeviceList()">{{ t('search') }}</el-button>
                         <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
-                        <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">{{ t('export') }}</el-button>
+                        <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">
+                            {{ selectedDevices.length > 0 ? `导出选中 (${selectedDevices.length})` : t('export') }}
+                        </el-button>
                     </el-form-item>
                 </el-form>
             </el-card>
 
             <div class="mt-[10px]">
-                <el-table :data="deviceTableData.data" size="large" v-loading="deviceTableData.loading" :row-class-name="tableRowClassName">
+                <el-table :data="deviceTableData.data" size="large" v-loading="deviceTableData.loading" :row-class-name="tableRowClassName" @selection-change="handleSelectionChange">
                     <template #empty>
                         <span>{{ !deviceTableData.loading ? t('emptyData') : '' }}</span>
                     </template>
 
+                    <el-table-column type="selection" width="55" align="center" />
                     <el-table-column prop="imei" :label="t('imei')" min-width="120" />
                     <el-table-column prop="model" :label="t('型号')" min-width="150" show-overflow-tooltip />
                     <el-table-column prop="category_name" :label="t('分类')" min-width="100" align="center" />
@@ -147,7 +150,7 @@
                 </div>
             </div>
 
-            <export-sure ref="exportSureDialog" :show="flag" type="recycle_device" :searchParam="deviceTableData.searchParam" @close="handleClose" />
+            <export-sure ref="exportSureDialog" :show="flag" type="recycle_device" :searchParam="exportSearchParam" @close="handleClose" />
         </el-card>
 
         <!-- 设备详情对话框 -->
@@ -435,15 +438,43 @@ const previewImages = (images: string[], index: number) => {
  */
 const exportSureDialog = ref(null)
 const flag = ref(false)
+const selectedDevices = ref<any[]>([])
+
+const handleSelectionChange = (selection: any[]) => {
+    selectedDevices.value = selection
+}
+
+/**
+ * 导出参数：勾选了设备则传 device_ids，否则按搜索条件全量导出
+ * 注意：update_at 需要经过 formatTimeRange 处理，加上 00:00:00 和 23:59:59，
+ * 否则后端会把结束日期解析为当天 00:00:00，导致数据丢失
+ */
+const exportSearchParam = computed(() => {
+    const base = {
+        ...deviceTableData.searchParam,
+        update_at: formatTimeRange(deviceTableData.searchParam.update_at)
+    }
+    if (selectedDevices.value.length > 0) {
+        return {
+            ...base,
+            device_ids: selectedDevices.value.map((row: any) => row.id)
+        }
+    }
+    return base
+})
+
 const handleClose = (val: boolean) => {
     flag.value = val
 }
 const exportEvent = () => {
-    // 检查当前列表是否包含已导出记录
-    const hasExported = deviceTableData.data.some((row: any) => row.export_time && row.export_time > 0)
+    // 判断要导出的设备列表（选中的 or 当前页全部）
+    const devicesToExport = selectedDevices.value.length > 0 ? selectedDevices.value : deviceTableData.data
+
+    // 检查要导出的设备中是否包含已导出记录
+    const hasExported = devicesToExport.some((row: any) => row.export_time && row.export_time > 0)
     if (hasExported) {
         ElMessageBox.confirm(
-            '当前列表中包含已导出的设备记录，是否继续导出？',
+            '当前导出范围中包含已导出的设备记录，是否继续导出？',
             '提示',
             {
                 confirmButtonText: '继续导出',
