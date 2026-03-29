@@ -24,6 +24,13 @@
                         </el-select>
                     </el-form-item>
 
+                    <el-form-item label="导出状态" prop="export_status">
+                        <el-select v-model="deviceTableData.searchParam.export_status" class="!w-[150px]">
+                            <el-option label="全部" value="" />
+                            <el-option label="未导出" value="unexported" />
+                        </el-select>
+                    </el-form-item>
+
                     <el-form-item :label="t('回收时间')" prop="update_at">
                         <el-date-picker
                             v-model="deviceTableData.searchParam.update_at"
@@ -44,7 +51,7 @@
             </el-card>
 
             <div class="mt-[10px]">
-                <el-table :data="deviceTableData.data" size="large" v-loading="deviceTableData.loading">
+                <el-table :data="deviceTableData.data" size="large" v-loading="deviceTableData.loading" :row-class-name="tableRowClassName">
                     <template #empty>
                         <span>{{ !deviceTableData.loading ? t('emptyData') : '' }}</span>
                     </template>
@@ -104,6 +111,13 @@
                     <el-table-column :label="t('回收时间')" min-width="150" align="center">
                         <template #default="{ row }">
                             {{ row.update_at || '' }}
+                        </template>
+                    </el-table-column>
+
+                    <el-table-column label="导出时间" min-width="150" align="center">
+                        <template #default="{ row }">
+                            <span v-if="row.export_time && row.export_time > 0">{{ formatTimestamp(row.export_time) }}</span>
+                            <el-tag v-else type="info" size="small">未导出</el-tag>
                         </template>
                     </el-table-column>
 
@@ -286,7 +300,7 @@
 <script lang="ts" setup>
 import { reactive, ref, computed } from 'vue'
 import { t } from '@/lang'
-import { FormInstance, ElMessage, ElImageViewer } from 'element-plus'
+import { FormInstance, ElMessage, ElImageViewer, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { getRecycleDeviceList, updateDevice } from '@/addon/recycle/api/device_export'
 import { img } from '@/utils/common'
@@ -306,7 +320,8 @@ const deviceTableData = reactive({
         model: '',
         category_id: '',
         update_at: [],
-        status: 5  // 固定为已回收状态
+        status: 5,  // 固定为已回收状态
+        export_status: ''
     }
 })
 
@@ -424,11 +439,75 @@ const handleClose = (val: boolean) => {
     flag.value = val
 }
 const exportEvent = () => {
-    flag.value = true
+    // 检查当前列表是否包含已导出记录
+    const hasExported = deviceTableData.data.some((row: any) => row.export_time && row.export_time > 0)
+    if (hasExported) {
+        ElMessageBox.confirm(
+            '当前列表中包含已导出的设备记录，是否继续导出？',
+            '提示',
+            {
+                confirmButtonText: '继续导出',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }
+        ).then(() => {
+            flag.value = true
+        }).catch(() => {
+            // 用户取消
+        })
+    } else {
+        flag.value = true
+    }
 }
 
-// 初始化加载
+/**
+ * 时间戳转日期字符串
+ */
+const formatTimestamp = (timestamp: number): string => {
+    if (!timestamp || timestamp <= 0) return ''
+    const date = new Date(timestamp * 1000)
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    const h = String(date.getHours()).padStart(2, '0')
+    const min = String(date.getMinutes()).padStart(2, '0')
+    const s = String(date.getSeconds()).padStart(2, '0')
+    return `${y}-${m}-${d} ${h}:${min}:${s}`
+}
+
+/**
+ * 已导出行灰色样式
+ */
+const tableRowClassName = ({ row }: { row: any }) => {
+    if (row.export_time && row.export_time > 0) {
+        return 'exported-row'
+    }
+    return ''
+}
+
+/**
+ * 获取今天日期字符串 YYYY-MM-DD
+ */
+const getTodayDate = (): string => {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+// 初始化加载 — 默认 update_at 设为今天
+const today = getTodayDate()
+deviceTableData.searchParam.update_at = [today, today]
 loadDeviceList()
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+:deep(.exported-row) {
+    background-color: #f5f5f5 !important;
+    color: #999;
+}
+:deep(.exported-row td) {
+    background-color: #f5f5f5 !important;
+}
+</style>

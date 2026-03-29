@@ -258,6 +258,22 @@ class RecycleDevice extends BaseModel
         }
     }
 
+    /**
+     * 搜索器 导出状态筛选
+     * @param $query
+     * @param $value
+     * @param $data
+     */
+    public function searchExportStatusAttr($query, $value, $data)
+    {
+        if ($value === 'unexported') {
+            $query->where(function ($q) {
+                $q->where('export_time', 0)->whereOr('export_time', null);
+            });
+        }
+        // 值为空或 'all' 时不加条件
+    }
+
     // 质检员关联查询 sys_user  本表 check_uid 关联 sys_user 的 id
     public function checkUser()
     {
