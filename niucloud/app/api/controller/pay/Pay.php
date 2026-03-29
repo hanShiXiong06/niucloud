@@ -1,4 +1,4 @@
-<?php
+/Users/a123/Documents/1-work/niucloud/niucloud/niucloud/app/api/controller/pay/Pay.php<?php
 // +----------------------------------------------------------------------
 // | Niucloud-admin 企业快速开发的saas管理平台
 // +----------------------------------------------------------------------
