@@ -580,7 +580,9 @@ class RecycleDeviceService extends BaseAdminService
                 if (!empty($template)) {
                     $templateInfo = $templateService->getInfo($template['template_id']);
                     $deviceData = $templateService->getDevicePrintData($id);
-                    $printer = $templateService->getDefaultPrinter();
+                    // 优先使用模板绑定的打印机，其次用当前操作员账号绑定的打印机
+                    $bindPrinterId = (int)($templateInfo['printer_id'] ?? 0);
+                    $printer = $templateService->getDefaultPrinter($bindPrinterId);
                     if (!empty($printer) && !empty($templateInfo['instruction_content'])) {
                         $printService = new \addon\recycle\app\service\admin\printer\template\TemplatePrintService();
                         $copies = 1;

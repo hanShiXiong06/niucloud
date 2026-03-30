@@ -463,41 +463,40 @@ class RecyclePrinterTemplateService extends BaseAdminService
 
 
     /**
-     * 获取默认打印机
+     * 获取打印机
+     * 优先使用模板绑定的指定打印机（printer_id > 0），
+     * 否则查找当前登录用户（uid）绑定且启用的打印机。
+     * 严格按账号隔离，不跨账号降级。
+     *
+     * @param int $bindPrinterId 模板绑定的打印机ID，0表示不指定
      * @return array
      */
-    public function getDefaultPrinter(): array
+    public function getDefaultPrinter(int $bindPrinterId = 0): array
     {
         $printer_model = new \addon\recycle\app\model\printer\RecyclePrinter();
-        
-        // 先查找当前用户的默认打印机
+
+        // 1. 优先使用模板指定的打印机（前提：该打印机启用且属于本站点）
+        if ($bindPrinterId > 0) {
+            $printer = $printer_model->where([
+                ['site_id',    '=', $this->site_id],
+                ['printer_id', '=', $bindPrinterId],
+                ['status',     '=', 1],
+            ])->field('printer_id,printer_name,sn,user_name,user_key,brand,type')
+            ->findOrEmpty()->toArray();
+
+            if (!empty($printer)) {
+                return $printer;
+            }
+        }
+
+        // 2. 查当前用户（uid）绑定的默认打印机
         $printer = $printer_model->where([
             ['site_id', '=', $this->site_id],
-            ['status', '=', 1],
-            ['is_default', '=', 1],
-            ['uid', '=', $this->uid]
+            ['status',  '=', 1],
+            ['uid',     '=', $this->uid],
         ])->field('printer_id,printer_name,sn,user_name,user_key,brand,type')
         ->findOrEmpty()->toArray();
-        
-        // 如果没有找到用户专属的默认打印机，查找站点默认打印机
-        if (empty($printer)) {
-            $printer = $printer_model->where([
-                ['site_id', '=', $this->site_id],
-                ['status', '=', 1],
-                ['is_default', '=', 1]
-            ])->field('printer_id,printer_name,sn,user_name,user_key,brand,type')
-            ->findOrEmpty()->toArray();
-        }
-        
-        // 如果还是没有，获取第一个启用的打印机
-        if (empty($printer)) {
-            $printer = $printer_model->where([
-                ['site_id', '=', $this->site_id],
-                ['status', '=', 1]
-            ])->field('printer_id,printer_name,sn,user_name,user_key,brand,type')
-            ->findOrEmpty()->toArray();
-        }
-        
+
         return $printer;
     }
     
