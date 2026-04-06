@@ -409,5 +409,5 @@ class PrinterTemplate extends BaseAdminController
         } else {
             return fail($result['message']);
         }
-                        }
-                    }
+    }
+}

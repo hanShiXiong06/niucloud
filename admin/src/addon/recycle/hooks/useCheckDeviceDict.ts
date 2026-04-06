@@ -99,7 +99,8 @@ const defaultOptions: CheckOptions = {
   brands: [
     '华为', '荣耀', '小米', 'OPPO', 'vivo', '三星', 'realme',
     '努比亚', 'moto', '中兴', 'HUAWEI', 'Xiaomi', 'Samsung',
-    'Realme', 'Nubia', 'Moto', 'ZTE', '摩托'
+    'Realme', 'Nubia', 'Moto', 'ZTE', '摩托',
+    'Apple', 'iPhone', 'iPad', '苹果'
   ]
 }
 
@@ -162,12 +163,29 @@ export function useCheckDeviceDict() {
   // 获取维修选项的 name 数组
   const fixLabels = () => options.value.fix.map(item => item.name)
 
-  // 提取品牌
+  // 品牌关键词 → 标准化 key（与后端端点映射一致）
+  const BRAND_KEY_MAP: Record<string, string> = {
+    'apple': 'apple', 'iphone': 'apple', 'ipad': 'apple', '苹果': 'apple',
+    'huawei': 'huawei', '华为': 'huawei',
+    'honor': 'honor', '荣耀': 'honor',
+    'xiaomi': 'xiaomi', '小米': 'xiaomi', 'redmi': 'xiaomi', '红米': 'xiaomi',
+    'oppo': 'oppo',
+    'vivo': 'vivo',
+    'samsung': 'samsung', '三星': 'samsung',
+    'realme': 'realme',
+    'nubia': 'nubia', '努比亚': 'nubia',
+    'moto': 'moto', '摩托': 'moto',
+    'zte': 'zte', '中兴': 'zte',
+  }
+
+  // 提取品牌：从型号字符串中识别品牌并返回标准化 key
   const extractBrand = (productName: string): string => {
     if (!productName) return ''
-    const brandRegex = new RegExp(`^(${options.value.brands.join('|')})`, 'i')
-    const match = productName.match(brandRegex)
-    return match ? match[0] : ''
+    const lower = productName.toLowerCase()
+    for (const [keyword, key] of Object.entries(BRAND_KEY_MAP)) {
+      if (lower.includes(keyword.toLowerCase())) return key
+    }
+    return ''
   }
 
   return {

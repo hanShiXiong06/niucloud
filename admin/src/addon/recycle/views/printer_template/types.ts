@@ -121,6 +121,8 @@ export const VARIABLE_GROUPS: VariableGroup[] = [
       { key: 'device_index', label: '设备序号', sampleValue: '1' },
       { key: 'device_total', label: '设备总数', sampleValue: '4' },
       { key: 'device_number', label: '设备编号', sampleValue: '1/4' },
+      //电池状态
+      { key: 'battery', label: '电池', sampleValue: '100' },
     ]
   },
   {

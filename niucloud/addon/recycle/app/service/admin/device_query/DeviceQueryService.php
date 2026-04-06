@@ -507,14 +507,47 @@ class DeviceQueryService extends BaseAdminService
         }
     }
 
-    // 获取设备的基本信息 coverage（无需输入品牌，按配置轮询；苹果优先）
+    // 获取设备的基本信息 coverage（有品牌时精准定位端点，无品牌时兜底轮询）
     public function getCoverage(array $data)
     {
-        $imei = trim((string)($data['imei'] ?? ''));
+        $imei  = trim((string)($data['imei'] ?? ''));
+        $brand = strtolower(trim((string)($data['brand'] ?? '')));
         if ($imei === '') return [];
 
-        $endpoints = $this->getEnabledEndpointsByContains('/coverage', ['/apple/coverage-capacity', '/apple/coverage']);
+        // 品牌 → coverage 端点映射（按优先级排列，苹果优先尝试带容量的接口）
+        $brandEndpointMap = [
+            'apple'   => ['/apple/coverage-capacity', '/apple/coverage'],
+            'huawei'  => ['/huawei/coverage'],
+            'honor'   => ['/honor/coverage'],
+            'xiaomi'  => ['/xiaomi/coverage'],
+            'oppo'    => ['/oppo/coverage'],
+            'vivo'    => ['/vivo/coverage'],
+            'samsung' => ['/samsung/coverage'],
+            'realme'  => ['/realme/coverage'],
+            'nubia'   => ['/nubia/coverage'],
+            'moto'    => ['/moto/coverage'],
+            'zte'     => ['/zte/coverage'],
+        ];
 
+        // 品牌已知：优先查对应品牌端点，全部失败后回退到兜底轮询
+        if ($brand !== '' && isset($brandEndpointMap[$brand])) {
+            foreach ($brandEndpointMap[$brand] as $endpoint) {
+                try {
+                    $res = $this->queryDevice($imei, $this->site_id, $endpoint);
+                    if (!empty($res['data'])) return $res['data'];
+                } catch (\Exception $e) {
+                    continue;
+                }
+            }
+            // 品牌端点全部失败，回退兜底轮询（端点未启用或查无结果）
+        }
+
+        // 兜底轮询：品牌端点失败或品牌未知时使用
+        // 若品牌已知，将其对应端点置顶，提升命中概率
+        $preferred = isset($brandEndpointMap[$brand])
+            ? $brandEndpointMap[$brand]
+            : ['/apple/coverage-capacity', '/apple/coverage'];
+        $endpoints = $this->getEnabledEndpointsByContains('/coverage', $preferred);
         foreach ($endpoints as $endpoint) {
             try {
                 $res = $this->queryDevice($imei, $this->site_id, $endpoint);
@@ -522,7 +555,6 @@ class DeviceQueryService extends BaseAdminService
                     return $res['data'];
                 }
             } catch (\Exception $e) {
-                // 查不到/报错都继续尝试下一个（你确认“查不到不扣费”）
                 continue;
             }
         }

@@ -590,6 +590,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'device_count' => '4',
             'order_status' => '已完成',
             'order_remark' => '无',
+            //电池状态
+            'battery' => '100',
 
             // 设备信息
             'imei' => '867851234567890',
@@ -811,6 +813,10 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'warranty_info' => $device['warranty_info'] ?? '',
             'capacity' => $device['capacity'] ?? '',
             'color' => $device['color'] ?? '',
+            //电池状态
+            'battery' => $device['check_meta']['battery']  ?? '未检测',
+
+
 
             // 设备序号信息
             'device_index' => (string)$device_index,
