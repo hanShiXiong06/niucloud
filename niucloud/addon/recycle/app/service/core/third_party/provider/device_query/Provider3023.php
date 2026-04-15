@@ -55,8 +55,9 @@ class Provider3023 extends BaseProvider
             throw new \Exception('API Key未配置');
         }
 
-        // 构建URL - 3023 API使用GET请求，参数在URL中
-        $url = rtrim($baseUrl, '/') . $api . '?imei=' . $imei;
+        // 苹果接口用 imei= 参数，安卓品牌接口用 sn= 参数（安卓接口以 sn 接收 IMEI）
+        $paramKey = str_starts_with($api, '/apple/') ? 'imei' : 'sn';
+        $url = rtrim($baseUrl, '/') . $api . '?' . $paramKey . '=' . $imei;
 
         // 设置请求头 - API key在header中
         $headers = [

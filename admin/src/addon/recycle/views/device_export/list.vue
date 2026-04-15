@@ -35,15 +35,19 @@
                         <el-date-picker
                             v-model="deviceTableData.searchParam.update_at"
                             type="daterange"
+                            range-separator="至"
                             value-format="YYYY-MM-DD"
                             :start-placeholder="t('startDate')"
                             :end-placeholder="t('endDate')"
                             format="YYYY-MM-DD"
+                            unlink-panels
+                            clearable
+                            :shortcuts="dateRangeShortcuts"
                         />
                     </el-form-item>
 
                     <el-form-item>
-                        <el-button type="primary" @click="loadDeviceList()">{{ t('search') }}</el-button>
+                        <el-button type="primary" @click="handleSearch">{{ t('search') }}</el-button>
                         <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
                         <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">
                             {{ selectedDevices.length > 0 ? `导出选中 (${selectedDevices.length})` : t('export') }}
@@ -339,9 +343,56 @@ const categoryList = ref([
     { id: 5, name: '其他' }
 ])
 
+const formatDate = (date: Date): string => {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+/**
+ * 获取最近 N 天日期范围，默认包含今天
+ */
+const getRecentDateRange = (days: number): string[] => {
+    const endDate = new Date()
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - Math.max(days - 1, 0))
+    return [formatDate(startDate), formatDate(endDate)]
+}
+
+const setDefaultDateRange = () => {
+    deviceTableData.searchParam.update_at = getRecentDateRange(7)
+}
+
+const dateRangeShortcuts = [
+    {
+        text: '今天',
+        value: () => getRecentDateRange(1)
+    },
+    {
+        text: '近7天',
+        value: () => getRecentDateRange(7)
+    },
+    {
+        text: '近15天',
+        value: () => getRecentDateRange(15)
+    },
+    {
+        text: '近30天',
+        value: () => getRecentDateRange(30)
+    }
+]
+
+const handleSearch = () => {
+    deviceTableData.page = 1
+    loadDeviceList()
+}
+
 const resetForm = (formEl: FormInstance | undefined) => {
     if (!formEl) return
     formEl.resetFields()
+    setDefaultDateRange()
+    deviceTableData.page = 1
     loadDeviceList()
 }
 
@@ -516,20 +567,8 @@ const tableRowClassName = ({ row }: { row: any }) => {
     return ''
 }
 
-/**
- * 获取今天日期字符串 YYYY-MM-DD
- */
-const getTodayDate = (): string => {
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = String(now.getMonth() + 1).padStart(2, '0')
-    const d = String(now.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
-}
-
-// 初始化加载 — 默认 update_at 设为今天
-const today = getTodayDate()
-deviceTableData.searchParam.update_at = [today, today]
+// 初始化加载，默认回收时间为最近 7 天（含今天）
+setDefaultDateRange()
 loadDeviceList()
 </script>
 

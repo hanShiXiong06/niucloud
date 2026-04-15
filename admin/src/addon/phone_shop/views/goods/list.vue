@@ -131,6 +131,11 @@
                             </div>
                         </template>
                     </el-table-column>
+                       <el-table-column :label="t('goodsCategory')" min-width="120">
+                        <template #default="{ row }">
+                            <span>{{ row.category_full_name || '-' }}</span>
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="sku_no" :label="t('sn')" min-width="130">
                         <template #default="{ row }">
                             <span :title="row.sku_no">{{ row.goodsSku.sku_no }}</span>
@@ -189,6 +194,7 @@
                         </template>
                     </el-table-column>
 
+                 
                     <el-table-column prop="site_name" :label="t('来源')" min-width="120" />
                     <el-table-column prop="join_time" v-if="goodsTable.searchParam.status == 1" :label="t('库龄')"
                         min-width="120" />
