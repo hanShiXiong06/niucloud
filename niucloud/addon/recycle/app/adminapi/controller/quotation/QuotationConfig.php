@@ -65,6 +65,7 @@ class QuotationConfig extends BaseAdminController
             ['open_id', ''],
             ['is_enable', 1],
             ['auto_request', 1],
+            ['use_crawler_remark', 0],
             ['request_time', '00:00'],
             ['remark', ''],
         ]);
@@ -94,6 +95,7 @@ class QuotationConfig extends BaseAdminController
             ['open_id', ''],
             ['is_enable', 1],
             ['auto_request', 1],
+            ['use_crawler_remark', 0],
             ['request_time', '00:00'],
             ['remark', ''],
         ]);

@@ -35,7 +35,7 @@ class QuotationConfigService extends BaseAdminService
      */
     public function getPage(array $where = []): array
     {
-        $field = 'id,site_id,quotation_id,price_name,config_name,default_price_value,default_percentage_value,price_adjustment_type,price_adjustment_value,quotation_background_color,quotation_text_color,is_enable,auto_request,request_time,remark,create_at,update_at';
+        $field = 'id,site_id,quotation_id,price_name,config_name,default_price_value,default_percentage_value,price_adjustment_type,price_adjustment_value,quotation_background_color,quotation_text_color,is_enable,auto_request,use_crawler_remark,request_time,remark,create_at,update_at';
         
         $search_model = $this->model->where([['site_id', '=', $this->site_id]])
             ->withSearch(['quotation_id', 'price_name', 'is_enable'], $where)

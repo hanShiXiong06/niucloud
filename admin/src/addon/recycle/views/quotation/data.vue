@@ -418,7 +418,7 @@ function extractPriceTypes (data: any[]) {
     // 提取报价类型选项
     // 1. 花机/内爆
     // 2. 靓机/小花
-    priceTypeOptions.value = ['花机/内爆', '靓机/小花']
+    priceTypeOptions.value = ['花机/内爆', '靓机/小花', '卡贴外版', '外版无锁', '资源机']
 }
 
 // 搜索

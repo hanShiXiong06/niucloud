@@ -30,7 +30,7 @@ class RecycleDeviceExportListener
 
             // 查询导出数据 - 使用与列表页相同的逻辑
             $search_model = $model->where([['site_id', '=', $param['site_id'] ?? 0]])
-                ->withSearch(['imei', 'model', 'status', 'update_at', 'export_status', 'device_ids'], $where)
+                ->withSearch(['imei', 'model', 'status', 'update_at','export_status', 'device_ids'], $where)
                 ->with([
                     'order',
                     'priceUser' => function($query) {
@@ -57,14 +57,13 @@ class RecycleDeviceExportListener
             }
             
             // 处理导出数据格式
-            // 先收集所有设备 ID，用于批量更新 export_time
+             // 先收集所有设备 ID，用于批量更新 export_time
             $deviceIds = array_column($data, 'id');
 
             // 批量更新这些设备的 export_time
             if (!empty($deviceIds)) {
                 (new RecycleDevice())->whereIn('id', $deviceIds)->update(['export_time' => time()]);
             }
-
             foreach ($data as $key => $value) {
                 $data[$key]['order_no'] = $value['order']['order_no'] ?? '';
                 $data[$key]['create_at'] = !empty($value['update_at']) ? $value['update_at'] : '';

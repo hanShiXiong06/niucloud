@@ -91,17 +91,63 @@
             </el-dialog>
 
             <!-- 发送请求对话框 -->
-            <el-dialog v-model="sendDialogVisible" title="发送报价请求" width="50%" :destroy-on-close="true">
-                <el-form :model="sendForm" label-width="120px" ref="sendFormRef">
-                    <el-form-item label="报价单配置ID" prop="config_id">
-                        <el-input-number v-model="sendForm.config_id" :min="1" placeholder="请输入报价单配置ID" style="width: 100%" />
+            <el-dialog v-model="sendDialogVisible" title="发送报价请求" width="600px" :destroy-on-close="true">
+                <el-alert
+                    title="提示"
+                    type="info"
+                    :closable="false"
+                    class="mb-4"
+                >
+                    <template #default>
+                        <div class="text-sm">
+                            <p>选择需要爬取的报价单，系统将自动获取最新报价数据。</p>
+                            <p class="mt-1 text-gray-500">默认已全选所有报价单，可根据需要调整。</p>
+                        </div>
+                    </template>
+                </el-alert>
+
+                <el-form :model="sendForm" label-width="100px" ref="sendFormRef">
+                    <el-form-item label="报价单" prop="config_ids">
+                        <el-checkbox-group v-model="sendForm.config_ids" class="w-full">
+                            <div class="grid grid-cols-1 gap-2">
+                                <el-checkbox
+                                    v-for="item in quotationOptions"
+                                    :key="item.key"
+                                    :label="item.key"
+                                    class="!mr-0"
+                                >
+                                    <div class="flex items-center justify-between w-full">
+                                        <span class="font-medium">{{ item.label }}</span>
+                                        <el-tag size="small" type="info">ID: {{ item.value }}</el-tag>
+                                    </div>
+                                </el-checkbox>
+                            </div>
+                        </el-checkbox-group>
+                    </el-form-item>
+
+                    <el-form-item>
+                        <div class="flex items-center gap-2 text-sm text-gray-600">
+                            <el-icon><InfoFilled /></el-icon>
+                            <span>已选择 <span class="text-blue-600 font-medium">{{ sendForm.config_ids.length }}</span> 个报价单</span>
+                        </div>
                     </el-form-item>
                 </el-form>
+
                 <template #footer>
-                    <span class="dialog-footer">
-                        <el-button @click="sendDialogVisible = false">取消</el-button>
-                        <el-button type="primary" :loading="sendLoading" @click="confirmSend">确定</el-button>
-                    </span>
+                    <div class="flex justify-between items-center">
+                        <el-button size="small" @click="selectAll">全选</el-button>
+                        <div>
+                            <el-button @click="sendDialogVisible = false">取消</el-button>
+                            <el-button
+                                type="primary"
+                                :loading="sendLoading"
+                                :disabled="sendForm.config_ids.length === 0"
+                                @click="confirmSend"
+                            >
+                                {{ sendLoading ? '爬取中...' : `开始爬取 (${sendForm.config_ids.length})` }}
+                            </el-button>
+                        </div>
+                    </div>
                 </template>
             </el-dialog>
         </el-card>
@@ -112,11 +158,22 @@
 import { reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import type { FormInstance } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 import { getQuotationRequestList, getQuotationRequestInfo, sendQuotationRequest } from '@/addon/recycle/api/quotation'
 import JsonPreview from './components/json-preview.vue'
 
 const route = useRoute()
 const pageName = route.meta.title
+
+// 报价单选项
+const quotationOptions = [
+    { label: '靓机/小花', value: '114', key: 1 },
+    { label: '花机/内爆', value: '115', key: 2 },
+    { label: '卡贴外版', value: '116', key: 3 },
+    { label: '外版无锁', value: '117', key: 4 },
+    { label: '资源机', value: '121', key: 5 }
+]
 
 const table = reactive({
     page: 1,
@@ -139,7 +196,7 @@ const sendLoading = ref(false)
 const infoData = ref<any>(null)
 
 const sendForm = reactive({
-    config_id: null
+    config_ids: [] as string[]
 })
 
 /**
@@ -180,22 +237,47 @@ const viewInfoEvent = async (row: any) => {
  * 发送请求
  */
 const sendRequestEvent = () => {
-    sendForm.config_id = null
+    // 默认全选所有报价单（使用 key 而不是 value）
+    sendForm.config_ids = quotationOptions.map(item => item.key)
     sendDialogVisible.value = true
 }
 
+/**
+ * 全选
+ */
+const selectAll = () => {
+    sendForm.config_ids = quotationOptions.map(item => item.key)
+}
+
+/**
+ * 确认发送
+ */
 const confirmSend = async () => {
-    if (!sendForm.config_id) {
+    if (sendForm.config_ids.length === 0) {
+        ElMessage.warning('请至少选择一个报价单')
         return
     }
+
     sendLoading.value = true
-    sendQuotationRequest({ config_id: sendForm.config_id }).then(() => {
+
+    try {
+        // 批量发送请求（config_ids 现在存储的是 key，即配置表的主键ID）
+        const promises = sendForm.config_ids.map(config_id =>
+            sendQuotationRequest({ config_id: config_id })
+        )
+
+        await Promise.all(promises)
+
+        ElMessage.success(`成功发送 ${sendForm.config_ids.length} 个报价请求`)
         sendLoading.value = false
         sendDialogVisible.value = false
         loadList()
-    }).catch(() => {
+    } catch (error) {
         sendLoading.value = false
-    })
+        ElMessage.error('部分请求发送失败，请查看详情')
+        // 即使部分失败，也刷新列表
+        loadList()
+    }
 }
 
 const resetForm = (formEl: FormInstance | undefined) => {

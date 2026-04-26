@@ -46,7 +46,16 @@
             <el-form-item label="自动请求" prop="auto_request">
                 <el-switch v-model="formData.auto_request" :active-value="1" :inactive-value="0" />
             </el-form-item>
-            
+
+            <el-form-item label="使用爬虫备注" prop="use_crawler_remark">
+                <el-switch
+                    v-model="formData.use_crawler_remark"
+                    :active-value="1"
+                    :inactive-value="0"
+                />
+                <div class="form-tip">开启后，爬取数据时会自动更新扣费配置的备注信息</div>
+            </el-form-item>
+
             <el-form-item label="请求时间" prop="request_time" v-if="formData.auto_request === 1">
                 <el-time-picker 
                     v-model="formData.request_time" 
@@ -93,6 +102,7 @@ const initialFormData = {
     open_id: '',
     is_enable: 1,
     auto_request: 0,
+    use_crawler_remark: 0,
     request_time: ''
 }
 const formData: Record<string, any> = reactive({ ...initialFormData })

@@ -719,6 +719,31 @@ const focusImeiInput = () => {
   imeiInputRef.value?.focus()
 }
 
+// 从接口返回数据中兼容提取 capacity / color / model
+const parseCoverageFields = (d: any) => {
+  // capacity / color：安卓品牌放在 product 子对象，苹果直接在顶层
+  const capacity = d.capacity || d.product?.capacity || ''
+  const color    = d.color    || d.product?.color    || ''
+  // model：接口返回的 d.model 是最权威的型号名（OPPO Find X9 Pro / iPhone 16 Pro 等）
+  // product.model 仅作兜底（部分品牌顶层 model 为空时）
+  const modelDisplay = d.model || d.product?.model || ''
+  return { capacity, color, modelDisplay }
+}
+
+// 兼容多品牌的保修状态解析
+const parseCoverageStatus = (coverage: any): string => {
+  if (!coverage) return ''
+  const status = (coverage.status || '').trim()
+  const date   = (coverage.date   || '').trim()
+  if (status === 'Out Of Warranty') return '过保'
+  if (status === 'Not Activated' || (!date && !status)) return '未激活'
+  if (status === 'In Warranty' || status === 'Active') {
+    return date ? `在保至 ${date}` : '在保'
+  }
+  // 其他情况：有日期就显示日期，否则显示原始 status
+  return date || status || '在保'
+}
+
 // 查询保修 —— 结果直接回填规格输入框，不弹额外面板
 const fetchCoverage = async () => {
   if (!deviceForm.imei) { ElMessage.warning('请先输入IMEI号码'); return }
@@ -727,17 +752,18 @@ const fetchCoverage = async () => {
     const brand = dictOptions.extractBrand(deviceData.value.model || '')
     const res = await getCoverage({ imei: deviceForm.imei, brand })
     if (res.data?.model) {
-      deviceData.value.model = `${res.data.model} ${res.data.capacity} ${res.data.color}`
+      const { capacity, color, modelDisplay } = parseCoverageFields(res.data)
+      // 更新型号（拼接规格，过滤空值），同步到 deviceData 和 deviceForm 保证界面显示与提交一致
+      const fullModel = [modelDisplay, capacity, color].filter(Boolean).join(' ')
+      deviceData.value.model = fullModel
+      deviceForm.model = fullModel
       deviceForm.info = { ...normalizeInfo(deviceForm.info), ...res.data }
       deviceForm.info = getSubmitInfo()
-      if (res.data.capacity) deviceForm.capacity = res.data.capacity
-      if (res.data.color) deviceForm.color = res.data.color
+      if (capacity) deviceForm.capacity = capacity
+      if (color)    deviceForm.color    = color
       if (res.data.osVersion) deviceForm.system_version = res.data.osVersion
       if (res.data.coverage) {
-        const s = res.data.coverage.status || ''
-        if (s === 'Out Of Warranty') deviceForm.warranty_info = '过保'
-        else if (s === 'Not Activated' || !res.data.coverage.date) deviceForm.warranty_info = '未激活'
-        else deviceForm.warranty_info = res.data.coverage.date || '在保'
+        deviceForm.warranty_info = parseCoverageStatus(res.data.coverage)
       }
       updateCheckResult()
       ElMessage.success('保修信息已自动填入规格栏')

@@ -243,7 +243,12 @@ const modelOptions = ref<any[]>([])
 // 报价类型选项（固定）
 const priceTypeOptions = [
     { label: '靓机/小花', value: '114' },
-    { label: '花机/内爆', value: '115' }
+    { label: '花机/内爆', value: '115' },
+    { label: '卡贴外版', value: '116' },
+    { label: '外版无锁', value: '117' },
+    { label: '资源机', value: '121' },
+    
+
 ]
 
 // 表单验证规则

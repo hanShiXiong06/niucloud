@@ -71,7 +71,7 @@ class QuotationDataService extends BaseAdminService
     {
         $requestModel = new \addon\recycle\app\model\quotation\RecycleQuotationRequest();
         $requestInfo = $requestModel->where('id', $requestId)->findOrEmpty();
-        
+
         if ($requestInfo->isEmpty()) {
             throw new CommonException('请求记录不存在');
         }
@@ -81,39 +81,70 @@ class QuotationDataService extends BaseAdminService
         $priceName = $requestInfo['price_name'];
         $priceDate = date('Y-m-d');
 
+        // 检查是否需要更新爬虫备注
+        $this->updateCrawlerRemarkIfNeeded($quotationId, $data);
+
         // 每次爬取新数据前，都将旧的当前记录置为非当前
-        try {
-            Db::startTrans();
+        // 添加死锁重试机制
+        $maxRetries = 3;
+        $retryCount = 0;
+        $success = false;
+
+        while (!$success && $retryCount < $maxRetries) {
             try {
-                $affectedRows = $this->dataModel
-                    ->where([
-                        ['site_id', '=', $this->site_id],
-                        ['quotation_id', '=', $quotationId],
-                        ['price_name', '=', $priceName],
-                        ['is_current', '=', QuotationDict::IS_CURRENT_YES],
-                    ])
-                    ->update(['is_current' => QuotationDict::IS_CURRENT_NO]);
+                Db::startTrans();
+                try {
+                    $affectedRows = $this->dataModel
+                        ->where([
+                            ['site_id', '=', $this->site_id],
+                            ['quotation_id', '=', $quotationId],
+                            ['price_name', '=', $priceName],
+                            ['is_current', '=', QuotationDict::IS_CURRENT_YES],
+                        ])
+                        ->update(['is_current' => QuotationDict::IS_CURRENT_NO]);
 
-                Db::commit();
+                    Db::commit();
+                    $success = true;
 
-                Log::info('旧报价数据已标记为非当前', [
-                    'affected_rows' => $affectedRows,
-                    'site_id' => $this->site_id,
-                    'quotation_id' => $quotationId,
-                    'price_name' => $priceName,
-                ]);
+                    Log::info('旧报价数据已标记为非当前', [
+                        'affected_rows' => $affectedRows,
+                        'site_id' => $this->site_id,
+                        'quotation_id' => $quotationId,
+                        'price_name' => $priceName,
+                        'retry_count' => $retryCount,
+                    ]);
+                } catch (\Exception $e) {
+                    Db::rollback();
+
+                    // 检查是否是死锁错误
+                    if (strpos($e->getMessage(), 'Deadlock') !== false && $retryCount < $maxRetries - 1) {
+                        $retryCount++;
+                        // 随机延迟 50-200ms 后重试，避免多个请求同时重试
+                        usleep(rand(50000, 200000));
+                        Log::warning('检测到死锁，正在重试', [
+                            'site_id' => $this->site_id,
+                            'quotation_id' => $quotationId,
+                            'price_name' => $priceName,
+                            'retry_count' => $retryCount,
+                            'error' => $e->getMessage(),
+                        ]);
+                        continue;
+                    }
+
+                    Log::error('更新旧报价数据状态失败', [
+                        'site_id' => $this->site_id,
+                        'quotation_id' => $quotationId,
+                        'price_name' => $priceName,
+                        'retry_count' => $retryCount,
+                        'error' => $e->getMessage(),
+                    ]);
+                    throw $e;
+                }
             } catch (\Exception $e) {
-                Db::rollback();
-                Log::error('更新旧报价数据状态失败', [
-                    'site_id' => $this->site_id,
-                    'quotation_id' => $quotationId,
-                    'price_name' => $priceName,
-                    'error' => $e->getMessage(),
-                ]);
-                throw $e;
+                if (!$success && $retryCount >= $maxRetries - 1) {
+                    throw new CommonException('更新旧数据状态失败: ' . $e->getMessage());
+                }
             }
-        } catch (\Exception $e) {
-            throw new CommonException('更新旧数据状态失败: ' . $e->getMessage());
         }
 
         // 解析sku数据
@@ -836,6 +867,9 @@ class QuotationDataService extends BaseAdminService
         $priceTypeMap = [
             '靓机/小花' => '114',
             '花机/内爆' => '115',
+            '卡贴外版' => '116',
+            '外版无锁' => '117',
+            '资源机' => '121',
         ];
 
         // 完全匹配
@@ -1122,4 +1156,267 @@ class QuotationDataService extends BaseAdminService
         ];
     }
 
+    /**
+     * 根据配置决定是否更新爬虫备注
+     * @param string|int $quotationId 报价单ID
+     * @param array $data 爬虫返回的数据
+     * @return void
+     */
+    private function updateCrawlerRemarkIfNeeded($quotationId, array $data): void
+    {
+        try {
+            // 1. 查询报价单配置，检查是否开启了"使用爬虫备注"
+            $configModel = new \addon\recycle\app\model\quotation\RecycleQuotationConfig();
+            $config = $configModel
+                ->where([
+                    ['site_id', '=', $this->site_id],
+                    ['quotation_id', '=', $quotationId],
+                ])
+                ->findOrEmpty();
+
+            if ($config->isEmpty()) {
+                Log::info('未找到报价单配置，跳过备注更新', [
+                    'quotation_id' => $quotationId,
+                    'site_id' => $this->site_id,
+                ]);
+                return;
+            }
+
+            // 2. 检查是否开启了"使用爬虫备注"
+            $useCrawlerRemark = $config->use_crawler_remark ?? 0;
+            if ($useCrawlerRemark != 1) {
+                Log::info('未开启使用爬虫备注，跳过备注更新', [
+                    'quotation_id' => $quotationId,
+                    'use_crawler_remark' => $useCrawlerRemark,
+                ]);
+                return;
+            }
+
+            // 3. 解析爬虫数据中的备注信息
+            $remarkData = $this->extractRemarkFromCrawlerData($data);
+            if (empty($remarkData)) {
+                Log::info('爬虫数据中未找到备注信息，跳过备注更新', [
+                    'quotation_id' => $quotationId,
+                ]);
+                return;
+            }
+
+            // 4. 更新扣费配置表的备注信息（传入 quotation_id）
+            $this->updateDeductionConfigRemark($remarkData, $quotationId);
+
+            Log::info('爬虫备注更新成功', [
+                'quotation_id' => $quotationId,
+                'updated_count' => count($remarkData),
+            ]);
+        } catch (\Exception $e) {
+            // 备注更新失败不影响主流程，只记录日志
+            Log::error('更新爬虫备注失败', [
+                'quotation_id' => $quotationId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+
+    /**
+     * 从爬虫数据中提取备注信息
+     * 支持多个字段的备注信息整合，根据报价单ID配置不同的提取规则
+     * @param array $data 爬虫返回的数据
+     * @return array 备注数据 [goods_id => remark_text]
+     */
+    private function extractRemarkFromCrawlerData(array $data): array
+    {
+        $remarkData = [];
+
+        // 获取报价单ID（从请求信息中获取）
+        $quotationId = $data['quotation_id'] ?? '';
+
+        // 根据报价单ID获取候选的备注字段（作为参考）
+        $candidateFields = $this->getRemarkFieldsConfig($quotationId);
+
+        // 从 SKU 数据中提取备注信息
+        $skuData = $data['sku'] ?? [];
+        foreach ($skuData as $groupKey => $group) {
+            foreach ($group as $item) {
+                $goodsId = $item['goods_id'] ?? 0;
+                if ($goodsId <= 0) {
+                    continue;
+                }
+
+                // 收集该商品的所有备注信息
+                $remarkParts = [];
+
+                // 从 config_attr 中提取备注信息
+                $configAttr = $item['config_attr'] ?? [];
+
+                // 先收集该 SKU 实际存在的字段名称
+                $existingFields = [];
+                foreach ($configAttr as $attr) {
+                    $questionName = $attr['question_name'] ?? '';
+                    if (!empty($questionName)) {
+                        $existingFields[] = $questionName;
+                    }
+                }
+
+                // 遍历 config_attr，提取候选字段中实际存在的字段
+                foreach ($configAttr as $attr) {
+                    $questionName = $attr['question_name'] ?? '';
+                    $answerName = $attr['answer_name'] ?? '';
+
+                    // 检查是否是候选的备注字段，并且该字段实际存在
+                    if (in_array($questionName, $candidateFields) && !empty($answerName)) {
+                        // 清理 HTML 标签，保留纯文本
+                        $cleanText = strip_tags($answerName);
+                        // 去除多余的空格和换行
+                        $cleanText = preg_replace('/\s+/', ' ', $cleanText);
+                        $cleanText = trim($cleanText);
+
+                        if (!empty($cleanText)) {
+                            // 添加标签，格式：【字段名】内容
+                            $remarkParts[] = '【' . $questionName . '】' . $cleanText;
+                        }
+                    }
+                }
+
+                // 将所有备注部分整合成一个完整的备注
+                if (!empty($remarkParts)) {
+                    // 使用换行符分隔不同的备注部分，保持清晰的格式
+                    $remarkData[$goodsId] = implode("\n", $remarkParts);
+
+                    // 记录日志，方便调试
+                    Log::info('提取商品备注信息', [
+                        'goods_id' => $goodsId,
+                        'quotation_id' => $quotationId,
+                        'extracted_fields' => array_map(function($part) {
+                            return explode('】', $part)[0] . '】';
+                        }, $remarkParts),
+                        'remark_length' => mb_strlen($remarkData[$goodsId]),
+                    ]);
+                }
+            }
+        }
+
+        return $remarkData;
+    }
+
+    /**
+     * 根据报价单ID获取需要提取的备注字段配置
+     * @param string|int $quotationId 报价单ID
+     * @return array 需要提取的字段名称数组
+     */
+    private function getRemarkFieldsConfig($quotationId): array
+    {
+        // 将 quotationId 转换为字符串，确保数组键匹配
+        $quotationId = (string)$quotationId;
+
+        // 根据报价单ID配置需要提取的备注字段
+        $config = [
+            '114' => ['颜色加/扣前项', '加/扣钱项'],           // 靓机/小花
+            '115' => ['加/扣钱项', '彩点', '蓝光'],           // 花机/内爆
+            '116' => ['颜色加/扣前项', '加/扣钱项'],           // 卡贴外版
+            '117' => ['加/扣钱项'],                           // 外版无锁
+            '121' => ['加/扣钱项'],                           // 资源机
+        ];
+
+        // 返回对应报价单的配置，如果没有配置则返回默认配置
+        return $config[$quotationId] ?? ['加/扣钱项'];
+    }
+
+    /**
+     * 更新扣费配置表的备注信息
+     * @param array $remarkData 备注数据 [goods_id => remark_text]
+     * @param string|int $quotationId 报价单ID
+     * @return void
+     */
+    private function updateDeductionConfigRemark(array $remarkData, $quotationId): void
+    {
+        if (empty($remarkData)) {
+            return;
+        }
+
+        $deductionConfigModel = new \addon\recycle\app\model\quotation\RecycleDeductionConfig();
+
+        // 批量更新备注信息
+        foreach ($remarkData as $goodsId => $remarkText) {
+            try {
+                // 查找匹配的扣费配置
+                // 1. 根据 site_id 匹配站点
+                // 2. 根据 price_id 匹配报价单（price_id 字段存储的是报价类型，如：114, 115）
+                // 3. 根据 model_id 匹配商品（model_id 可能是逗号分隔的多个ID）
+                $config = $deductionConfigModel
+                    ->where([
+                        ['site_id', '=', $this->site_id],
+                        ['price_id', 'like', '%' . $quotationId . '%'], // 匹配报价单ID
+                    ])
+                    ->where(function($query) use ($goodsId) {
+                        // model_id 可能是逗号分隔的多个ID，需要模糊匹配
+                        $query->where('model_id', 'like', '%' . $goodsId . '%');
+                    })
+                    ->findOrEmpty();
+
+                if (!$config->isEmpty()) {
+                    // 找到配置，更新备注信息
+                    $config->save([
+                        'remark_text' => $remarkText,
+                        'update_at' => time(),
+                    ]);
+
+                    Log::info('扣费配置备注更新成功', [
+                        'config_id' => $config->id,
+                        'config_name' => $config->config_name,
+                        'quotation_id' => $quotationId,
+                        'goods_id' => $goodsId,
+                        'remark_length' => mb_strlen($remarkText),
+                    ]);
+                } else {
+                    // 未找到配置，自动创建新配置
+                    Log::info('未找到匹配的扣费配置，自动创建新配置', [
+                        'quotation_id' => $quotationId,
+                        'goods_id' => $goodsId,
+                        'site_id' => $this->site_id,
+                    ]);
+
+                    // 获取商品名称（从 model 表中查询）
+                    $modelModel = new \addon\recycle\app\model\quotation\RecycleQuotationModel();
+                    $model = $modelModel
+                        ->where([
+                            ['site_id', '=', $this->site_id],
+                            ['goods_id', '=', $goodsId],
+                        ])
+                        ->findOrEmpty();
+
+                    $goodsName = !$model->isEmpty() ? $model->goods_name : '未知商品';
+
+                    // 创建新的扣费配置
+                    $newConfig = $deductionConfigModel->create([
+                        'site_id' => $this->site_id,
+                        'config_name' => $goodsName,
+                        'model_id' => (string)$goodsId,
+                        'price_id' => (string)$quotationId,
+                        'remark_text' => $remarkText,
+                        'sort' => 0,
+                        'is_enable' => 1,
+                        'create_at' => time(),
+                        'update_at' => time(),
+                    ]);
+
+                    Log::info('自动创建扣费配置成功', [
+                        'config_id' => $newConfig->id,
+                        'config_name' => $goodsName,
+                        'quotation_id' => $quotationId,
+                        'goods_id' => $goodsId,
+                        'remark_length' => mb_strlen($remarkText),
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('更新或创建扣费配置备注失败', [
+                    'quotation_id' => $quotationId,
+                    'goods_id' => $goodsId,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
+        }
+    }
 }
+

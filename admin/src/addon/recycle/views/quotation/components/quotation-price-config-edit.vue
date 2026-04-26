@@ -1,5 +1,5 @@
 <template>
-    <el-dialog v-model="showDialog" :title="formData.id ? '编辑价格配置' : '添加价格配置'" width="80%" class="diy-dialog-wrap" :destroy-on-close="true">
+    <el-dialog v-model="showDialog" :title="formData.id ? '编辑价格配置' : '添加价格配置'" width="1200px" class="diy-dialog-wrap" :destroy-on-close="true">
         <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRules" class="page-form" v-loading="loading">
             <el-form-item label="标题" prop="title">
                 <el-input v-model="formData.title"  clearable placeholder="请输入标题" class="input-width" />
@@ -35,22 +35,91 @@
             <template v-if="formData.config_type === 1">
                 <!-- 编辑模式：显示已有的SKU列表（可删除） -->
                 <div v-if="formData.id && formData.sku_list && Array.isArray(formData.sku_list) && formData.sku_list.length > 0" class="mb-4">
-                    <el-divider content-position="left">当前SKU列表（{{ formData.sku_list.length }}个）</el-divider>
-                    <div class="border rounded p-4 bg-gray-50 mb-4">
-                        <div class="text-sm font-medium text-gray-700 mb-3">已配置的SKU：</div>
-                        <div class="max-h-[300px] overflow-y-auto">
-                            <div class="grid grid-cols-1 gap-2">
+                    <el-divider content-position="left">
+                        <span class="text-sm">当前SKU列表（{{ formData.sku_list.length }}个）</span>
+                    </el-divider>
+
+                    <div class="border rounded bg-gray-50 mb-4">
+                        <!-- 操作栏 -->
+                        <div class="flex items-center justify-between p-2 border-b bg-white">
+                            <div class="flex items-center gap-2">
+                                <el-checkbox
+                                    v-model="selectAllExistingSkus"
+                                    :indeterminate="isIndeterminate"
+                                    @change="handleSelectAllExisting"
+                                >
+                                    全选
+                                </el-checkbox>
+                                <span v-if="selectedExistingSkuIndexes.length > 0" class="text-xs text-blue-600">
+                                    已选 {{ selectedExistingSkuIndexes.length }} 个
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <!-- 快速筛选 -->
+                                <el-dropdown v-if="existingGrades.length > 0" trigger="click" @command="handleQuickDeleteByGrade">
+                                    <el-button size="small" text type="primary">
+                                        按等级删除 <el-icon class="ml-1"><ArrowDown /></el-icon>
+                                    </el-button>
+                                    <template #dropdown>
+                                        <el-dropdown-menu>
+                                            <el-dropdown-item
+                                                v-for="grade in existingGrades"
+                                                :key="grade"
+                                                :command="grade"
+                                            >
+                                                {{ grade }} ({{ getExistingGradeCount(grade) }}个)
+                                            </el-dropdown-item>
+                                        </el-dropdown-menu>
+                                    </template>
+                                </el-dropdown>
+                                <el-dropdown v-if="existingCapacities.length > 0" trigger="click" @command="handleQuickDeleteByCapacity">
+                                    <el-button size="small" text type="success">
+                                        按容量删除 <el-icon class="ml-1"><ArrowDown /></el-icon>
+                                    </el-button>
+                                    <template #dropdown>
+                                        <el-dropdown-menu>
+                                            <el-dropdown-item
+                                                v-for="capacity in existingCapacities"
+                                                :key="capacity"
+                                                :command="capacity"
+                                            >
+                                                {{ capacity }} ({{ getExistingCapacityCount(capacity) }}个)
+                                            </el-dropdown-item>
+                                        </el-dropdown-menu>
+                                    </template>
+                                </el-dropdown>
+                                <el-button
+                                    v-if="selectedExistingSkuIndexes.length > 0"
+                                    type="danger"
+                                    size="small"
+                                    @click="batchRemoveSkusFromList"
+                                >
+                                    批量删除 ({{ selectedExistingSkuIndexes.length }})
+                                </el-button>
+                            </div>
+                        </div>
+
+                        <!-- SKU列表 -->
+                        <div class="max-h-[280px] overflow-y-auto p-2">
+                            <div class="grid grid-cols-1 gap-1">
                                 <div
                                     v-for="(sku, index) in formData.sku_list"
                                     :key="`existing-${index}`"
-                                    class="flex items-center justify-between text-sm text-gray-600 p-2 bg-white rounded border"
+                                    class="flex items-center justify-between text-sm p-2 bg-white rounded border hover:bg-blue-50 transition-colors"
+                                    :class="{ 'bg-blue-50 border-blue-300': selectedExistingSkuIndexes.includes(index) }"
                                 >
-                                    <div class="flex items-center">
-                                    <span class="font-medium">{{ sku.goods_name || ('型号ID: ' + sku.goods_id) }}</span>
-                                    <span class="mx-2 text-gray-400">/</span>
-                                    <span>{{ sku.capacity || '-' }}</span>
-                                    <span v-if="sku.config_item_name" class="mx-2 text-gray-400">/</span>
-                                    <span v-if="sku.config_item_name" class="text-blue-600">{{ sku.config_item_name }}</span>
+                                    <div class="flex items-center gap-2 flex-1">
+                                        <el-checkbox
+                                            :model-value="selectedExistingSkuIndexes.includes(index)"
+                                            @change="handleExistingSkuSelect(index, $event)"
+                                        />
+                                        <span class="font-medium text-gray-800">{{ sku.goods_name || ('型号ID: ' + sku.goods_id) }}</span>
+                                        <span class="text-gray-300">|</span>
+                                        <el-tag size="small" type="success" effect="plain" class="!py-0">{{ sku.capacity || '-' }}</el-tag>
+                                        <template v-if="sku.config_item_name">
+                                            <span class="text-gray-300">|</span>
+                                            <el-tag size="small" type="primary" effect="plain" class="!py-0">{{ sku.config_item_name }}</el-tag>
+                                        </template>
                                     </div>
                                     <el-button
                                         type="danger"
@@ -118,10 +187,17 @@
 
                     <!-- SKU选择区域 -->
                     <div v-if="selectedModelIds.length > 0" class="mb-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="font-medium">{{ formData.id ? '添加新SKU（型号+内存+规格）' : '选择SKU（型号+内存+规格）' }}：</span>
-                            <div class="flex gap-2">
-                                <el-button size="small" @click="selectAllSkus">全选</el-button>
+                        <!-- 标题栏 -->
+                        <div class="flex items-center justify-between mb-2 pb-2 border-b">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-semibold text-gray-700">SKU选择</span>
+                                <el-tag size="small" type="info" effect="plain">型号+容量+等级</el-tag>
+                                <span v-if="selectedSkuKeys.length > 0" class="text-xs text-blue-600">
+                                    已选 {{ selectedSkuKeys.length }} 个
+                                </span>
+                            </div>
+                            <div class="flex gap-1">
+                                <el-button size="small" @click="selectAllFilteredSkus">全选筛选结果</el-button>
                                 <el-button size="small" @click="clearSkuSelection">清空</el-button>
                                 <el-button
                                     v-if="formData.id && selectedSkuKeys.length > 0"
@@ -129,30 +205,135 @@
                                     size="small"
                                     @click="addSkusToList"
                                 >
-                                    添加到列表
+                                    添加 ({{ selectedSkuKeys.length }})
                                 </el-button>
                             </div>
                         </div>
-                        <div v-loading="skuListLoading" class="max-h-[300px] overflow-y-auto border rounded p-4">
+
+                        <!-- 紧凑型筛选区域 -->
+                        <div class="mb-2 p-2 bg-gray-50 rounded border border-gray-200">
+                            <div class="grid grid-cols-2 gap-3">
+                                <!-- 等级筛选 -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <span class="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                            <el-icon class="text-blue-500" :size="14"><PriceTag /></el-icon>
+                                            等级
+                                            <span v-if="selectedGradeFilters.length > 0" class="text-blue-600">
+                                                ({{ selectedGradeFilters.length }})
+                                            </span>
+                                        </span>
+                                        <el-button
+                                            v-if="selectedGradeFilters.length > 0"
+                                            size="small"
+                                            text
+                                            type="primary"
+                                            @click="clearGradeFilters"
+                                            class="h-5 text-xs"
+                                        >
+                                            清除
+                                        </el-button>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1">
+                                        <el-tag
+                                            v-for="grade in availableGrades"
+                                            :key="grade"
+                                            :type="selectedGradeFilters.includes(grade) ? 'primary' : ''"
+                                            :effect="selectedGradeFilters.includes(grade) ? 'dark' : 'plain'"
+                                            class="cursor-pointer transition-all hover:scale-105"
+                                            size="small"
+                                            @click="toggleGradeFilter(grade)"
+                                        >
+                                            {{ grade }} <span class="text-xs opacity-75">({{ getGradeCount(grade) }})</span>
+                                        </el-tag>
+                                        <span v-if="availableGrades.length === 0" class="text-xs text-gray-400">暂无</span>
+                                    </div>
+                                </div>
+
+                                <!-- 容量筛选 -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <span class="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                            <el-icon class="text-green-500" :size="14"><Coin /></el-icon>
+                                            容量
+                                            <span v-if="selectedCapacityFilters.length > 0" class="text-green-600">
+                                                ({{ selectedCapacityFilters.length }})
+                                            </span>
+                                        </span>
+                                        <el-button
+                                            v-if="selectedCapacityFilters.length > 0"
+                                            size="small"
+                                            text
+                                            type="success"
+                                            @click="clearCapacityFilters"
+                                            class="h-5 text-xs"
+                                        >
+                                            清除
+                                        </el-button>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1">
+                                        <el-tag
+                                            v-for="capacity in availableCapacities"
+                                            :key="capacity"
+                                            :type="selectedCapacityFilters.includes(capacity) ? 'success' : ''"
+                                            :effect="selectedCapacityFilters.includes(capacity) ? 'dark' : 'plain'"
+                                            class="cursor-pointer transition-all hover:scale-105"
+                                            size="small"
+                                            @click="toggleCapacityFilter(capacity)"
+                                        >
+                                            {{ capacity }} <span class="text-xs opacity-75">({{ getCapacityCount(capacity) }})</span>
+                                        </el-tag>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 筛选结果统计 - 紧凑显示 -->
+                            <div v-if="selectedGradeFilters.length > 0 || selectedCapacityFilters.length > 0"
+                                 class="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
+                                <span class="text-xs text-gray-600 flex items-center gap-1">
+                                    <el-icon :size="12"><Filter /></el-icon>
+                                    筛选结果：
+                                    <span class="font-medium text-orange-600">{{ filteredSkuList.length }}</span>
+                                    <span class="text-gray-400">/</span>
+                                    <span>{{ skuList.length }}</span>
+                                </span>
+                                <el-button
+                                    size="small"
+                                    text
+                                    type="warning"
+                                    @click="clearAllFilters"
+                                    class="h-5 text-xs"
+                                >
+                                    清除所有筛选
+                                </el-button>
+                            </div>
+                        </div>
+
+                        <!-- SKU列表 - 紧凑显示 -->
+                        <div v-loading="skuListLoading" class="max-h-[320px] overflow-y-auto border rounded bg-white">
                             <el-checkbox-group v-model="selectedSkuKeys" @change="handleSkuChange">
-                                <div v-for="sku in skuList" :key="sku.key" class="mb-2">
-                                    <el-checkbox :label="sku.key" :disabled="isSkuInList(sku)">
-                                        <span class="font-medium">{{ sku.goods_name }}</span>
-                                        <span class="mx-2 text-gray-500">/</span>
-                                        <span>{{ sku.capacity }}</span>
-                                        <span v-if="sku.config_item_name" class="mx-2 text-gray-500">/</span>
-                                        <span v-if="sku.config_item_name" class="text-blue-600">{{ sku.config_item_name }}</span>
-                                        <span v-if="isSkuInList(sku)" class="ml-2 text-xs text-gray-400">(已添加)</span>
+                                <div v-for="sku in filteredSkuList" :key="sku.key"
+                                     class="px-3 py-1.5 border-b border-gray-100 hover:bg-blue-50 transition-colors last:border-b-0">
+                                    <el-checkbox :label="sku.key" :disabled="isSkuInList(sku)" class="w-full">
+                                        <div class="flex items-center gap-2 text-sm">
+                                            <span class="font-medium text-gray-800">{{ sku.goods_name }}</span>
+                                            <span class="text-gray-300">|</span>
+                                            <el-tag size="small" type="success" effect="plain" class="!py-0">{{ sku.capacity }}</el-tag>
+                                            <template v-if="sku.config_item_name">
+                                                <span class="text-gray-300">|</span>
+                                                <el-tag size="small" type="primary" effect="plain" class="!py-0">{{ sku.config_item_name }}</el-tag>
+                                            </template>
+                                            <el-tag v-if="isSkuInList(sku)" size="small" type="info" effect="plain" class="!py-0">已添加</el-tag>
+                                        </div>
                                     </el-checkbox>
                                 </div>
                             </el-checkbox-group>
-                            <div v-if="skuList.length === 0 && !skuListLoading" class="text-center text-gray-400 py-4">
-                                暂无SKU数据
+                            <div v-if="filteredSkuList.length === 0 && !skuListLoading" class="text-center py-6">
+                                <el-icon class="text-3xl text-gray-300 mb-1"><DocumentDelete /></el-icon>
+                                <div class="text-xs text-gray-400">
+                                    {{ skuList.length > 0 ? '没有符合筛选条件的SKU' : '暂无SKU数据' }}
+                                </div>
                             </div>
-                        </div>
-                        <div v-if="selectedSkuKeys.length > 0" class="mt-2 text-sm text-gray-600">
-                            已选择 {{ selectedSkuKeys.length }} 个SKU
-                            <span v-if="formData.id" class="ml-2 text-blue-600">（点击"添加到列表"按钮将SKU添加到配置中）</span>
                         </div>
                     </div>
                 </div>
@@ -224,10 +405,10 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import type { FormInstance } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete } from '@element-plus/icons-vue'
+import { Delete, Select, Close, Plus, PriceTag, Coin, Filter, Check, DocumentDelete, ArrowDown, Search } from '@element-plus/icons-vue'
 import { addQuotationPriceConfig, editQuotationPriceConfig, getQuotationPriceConfigInfo, batchAddSkuPriceConfig, getQuotationConfigList, getQuotationDataCascadeOptions } from '@/addon/recycle/api/quotation'
 
 const showDialog = ref(false)
@@ -273,6 +454,14 @@ const skuList = ref<Array<{
 const selectedSkuKeys = ref<string[]>([])
 const skuListLoading = ref(false)
 
+// 筛选条件
+const selectedGradeFilters = ref<string[]>([])
+const selectedCapacityFilters = ref<string[]>([])
+
+// 已有SKU列表的批量选择
+const selectedExistingSkuIndexes = ref<number[]>([])
+const selectAllExistingSkus = ref(false)
+
 // 当前选中的报价单信息
 const currentQuotationInfo = computed(() => {
     return quotationList.value.find(q => q.id === selectedQuotationId.value) || null
@@ -284,6 +473,95 @@ const currentQuotationId = computed(() => {
 
 const currentPriceName = computed(() => {
     return currentQuotationInfo.value?.price_name || ''
+})
+
+// 可用的等级列表（从SKU列表中提取）
+const availableGrades = computed(() => {
+    const grades = new Set<string>()
+    skuList.value.forEach(sku => {
+        if (sku.config_item_name) {
+            grades.add(sku.config_item_name)
+        }
+    })
+    return Array.from(grades).sort()
+})
+
+// 可用的容量列表（从SKU列表中提取）
+const availableCapacities = computed(() => {
+    const capacities = new Set<string>()
+    skuList.value.forEach(sku => {
+        if (sku.capacity) {
+            capacities.add(sku.capacity)
+        }
+    })
+    // 自定义排序：按容量大小排序
+    return Array.from(capacities).sort((a, b) => {
+        const getSize = (cap: string) => {
+            const num = parseInt(cap)
+            if (cap.includes('T')) return num * 1024
+            return num
+        }
+        return getSize(a) - getSize(b)
+    })
+})
+
+// 筛选后的SKU列表
+const filteredSkuList = computed(() => {
+    let filtered = skuList.value
+
+    // 按等级筛选
+    if (selectedGradeFilters.value.length > 0) {
+        filtered = filtered.filter(sku =>
+            selectedGradeFilters.value.includes(sku.config_item_name)
+        )
+    }
+
+    // 按容量筛选
+    if (selectedCapacityFilters.value.length > 0) {
+        filtered = filtered.filter(sku =>
+            selectedCapacityFilters.value.includes(sku.capacity)
+        )
+    }
+
+    return filtered
+})
+
+// 已有SKU列表中的等级列表
+const existingGrades = computed(() => {
+    if (!formData.sku_list || !Array.isArray(formData.sku_list)) return []
+    const grades = new Set<string>()
+    formData.sku_list.forEach((sku: any) => {
+        if (sku.config_item_name) {
+            grades.add(sku.config_item_name)
+        }
+    })
+    return Array.from(grades).sort()
+})
+
+// 已有SKU列表中的容量列表
+const existingCapacities = computed(() => {
+    if (!formData.sku_list || !Array.isArray(formData.sku_list)) return []
+    const capacities = new Set<string>()
+    formData.sku_list.forEach((sku: any) => {
+        if (sku.capacity) {
+            capacities.add(sku.capacity)
+        }
+    })
+    return Array.from(capacities).sort((a, b) => {
+        const getSize = (cap: string) => {
+            const num = parseInt(cap)
+            if (cap.includes('T')) return num * 1024
+            return num
+        }
+        return getSize(a) - getSize(b)
+    })
+})
+
+// 全选状态的半选状态
+const isIndeterminate = computed(() => {
+    const total = formData.sku_list?.length || 0
+    const selected = selectedExistingSkuIndexes.value.length
+    return selected > 0 && selected < total
 })
 
 // 表单验证规则
@@ -301,26 +579,7 @@ const formRules = computed(() => {
     }
 
     // 根据配置类型动态添加必填项
-    if (formData.config_type === 1) {
-        // SKU级别：如果有sku_list（编辑模式），不需要验证；否则需要选择SKU
-        if (!formData.id && (!selectedSkuKeys.value || selectedSkuKeys.value.length === 0)) {
-            rules.quotation_id = [{ required: true, message: '请选择报价单', trigger: 'change' }]
-            rules.model_ids = [{
-                required: true,
-                message: '请至少选择一个型号',
-                trigger: 'change',
-                validator: (rule: any, value: any, callback: any) => {
-                    if (!selectedModelIds.value || selectedModelIds.value.length === 0) {
-                        callback(new Error('请至少选择一个型号'))
-                    } else if (!selectedSkuKeys.value || selectedSkuKeys.value.length === 0) {
-                        callback(new Error('请至少选择一个SKU'))
-                    } else {
-                        callback()
-                    }
-                }
-            }]
-        }
-    } else if (formData.config_type === 2) {
+    if (formData.config_type === 2) {
         // 型号+内存：需要设备ID、容量
         rules.goods_id = [{ required: true, message: '请输入设备ID', trigger: 'blur' }]
         rules.capacity = [{ required: true, message: '请输入容量', trigger: 'blur' }]
@@ -375,6 +634,9 @@ const handleQuotationChange = () => {
     selectedModelIds.value = []
     selectedSkuKeys.value = []
     skuList.value = []
+    // 清除筛选条件
+    selectedGradeFilters.value = []
+    selectedCapacityFilters.value = []
     if (selectedQuotationId.value) {
         loadModelList()
     }
@@ -415,6 +677,9 @@ const loadModelList = async () => {
 const handleModelChange = async (modelIds: number[]) => {
     selectedModelIds.value = modelIds
     selectedSkuKeys.value = []
+    // 清除筛选条件
+    selectedGradeFilters.value = []
+    selectedCapacityFilters.value = []
 
     if (modelIds.length > 0 && currentQuotationId.value && currentPriceName.value) {
         await loadSkuList()
@@ -502,10 +767,315 @@ const handleSkuChange = (selected: string[]) => {
 }
 
 /**
- * 全选SKU
+ * 全选SKU（筛选后的）
  */
-const selectAllSkus = () => {
-    selectedSkuKeys.value = skuList.value.map(sku => sku.key)
+const selectAllFilteredSkus = () => {
+    const filteredKeys = filteredSkuList.value
+        .filter(sku => !isSkuInList(sku))
+        .map(sku => sku.key)
+
+    // 合并已选择的和新选择的（去重）
+    const allKeys = new Set([...selectedSkuKeys.value, ...filteredKeys])
+    selectedSkuKeys.value = Array.from(allKeys)
+}
+
+/**
+ * 切换等级筛选（并自动选中/取消选中）
+ */
+const toggleGradeFilter = (grade: string) => {
+    const index = selectedGradeFilters.value.indexOf(grade)
+
+    if (index > -1) {
+        // 取消筛选：移除筛选条件，并取消选中该等级的所有SKU
+        selectedGradeFilters.value.splice(index, 1)
+
+        // 取消选中该等级的SKU
+        const gradeSkuKeys = skuList.value
+            .filter(sku => sku.config_item_name === grade)
+            .map(sku => sku.key)
+
+        selectedSkuKeys.value = selectedSkuKeys.value.filter(
+            key => !gradeSkuKeys.includes(key)
+        )
+    } else {
+        // 添加筛选：添加筛选条件，并自动选中该等级的所有SKU
+        selectedGradeFilters.value.push(grade)
+
+        // 自动选中该等级的SKU（排除已在列表中的）
+        const gradeSkuKeys = skuList.value
+            .filter(sku => sku.config_item_name === grade && !isSkuInList(sku))
+            .map(sku => sku.key)
+
+        // 合并到已选择的SKU中（去重）
+        const allKeys = new Set([...selectedSkuKeys.value, ...gradeSkuKeys])
+        selectedSkuKeys.value = Array.from(allKeys)
+
+        // 提示用户
+        if (gradeSkuKeys.length > 0) {
+            ElMessage.success(`已自动选中 ${gradeSkuKeys.length} 个"${grade}"等级的SKU`)
+        }
+    }
+}
+
+/**
+ * 切换容量筛选（并自动选中/取消选中）
+ */
+const toggleCapacityFilter = (capacity: string) => {
+    const index = selectedCapacityFilters.value.indexOf(capacity)
+
+    if (index > -1) {
+        // 取消筛选：移除筛选条件，并取消选中该容量的所有SKU
+        selectedCapacityFilters.value.splice(index, 1)
+
+        // 取消选中该容量的SKU
+        const capacitySkuKeys = skuList.value
+            .filter(sku => sku.capacity === capacity)
+            .map(sku => sku.key)
+
+        selectedSkuKeys.value = selectedSkuKeys.value.filter(
+            key => !capacitySkuKeys.includes(key)
+        )
+    } else {
+        // 添加筛选：添加筛选条件，并自动选中该容量的所有SKU
+        selectedCapacityFilters.value.push(capacity)
+
+        // 自动选中该容量的SKU（排除已在列表中的）
+        const capacitySkuKeys = skuList.value
+            .filter(sku => sku.capacity === capacity && !isSkuInList(sku))
+            .map(sku => sku.key)
+
+        // 合并到已选择的SKU中（去重）
+        const allKeys = new Set([...selectedSkuKeys.value, ...capacitySkuKeys])
+        selectedSkuKeys.value = Array.from(allKeys)
+
+        // 提示用户
+        if (capacitySkuKeys.length > 0) {
+            ElMessage.success(`已自动选中 ${capacitySkuKeys.length} 个"${capacity}"容量的SKU`)
+        }
+    }
+}
+
+/**
+ * 清除等级筛选
+ */
+const clearGradeFilters = () => {
+    selectedGradeFilters.value = []
+}
+
+/**
+ * 清除容量筛选
+ */
+const clearCapacityFilters = () => {
+    selectedCapacityFilters.value = []
+}
+
+/**
+ * 清除所有筛选
+ */
+const clearAllFilters = () => {
+    selectedGradeFilters.value = []
+    selectedCapacityFilters.value = []
+}
+
+/**
+ * 获取指定等级的SKU数量
+ */
+const getGradeCount = (grade: string) => {
+    return skuList.value.filter(sku => sku.config_item_name === grade).length
+}
+
+/**
+ * 获取指定容量的SKU数量
+ */
+const getCapacityCount = (capacity: string) => {
+    return skuList.value.filter(sku => sku.capacity === capacity).length
+}
+
+/**
+ * 获取已有SKU列表中指定等级的数量
+ */
+const getExistingGradeCount = (grade: string) => {
+    if (!formData.sku_list || !Array.isArray(formData.sku_list)) return 0
+    return formData.sku_list.filter((sku: any) => sku.config_item_name === grade).length
+}
+
+/**
+ * 获取已有SKU列表中指定容量的数量
+ */
+const getExistingCapacityCount = (capacity: string) => {
+    if (!formData.sku_list || !Array.isArray(formData.sku_list)) return 0
+    return formData.sku_list.filter((sku: any) => sku.capacity === capacity).length
+}
+
+/**
+ * 全选/取消全选已有SKU
+ */
+const handleSelectAllExisting = (checked: boolean) => {
+    if (checked) {
+        selectedExistingSkuIndexes.value = formData.sku_list.map((_: any, index: number) => index)
+    } else {
+        selectedExistingSkuIndexes.value = []
+    }
+}
+
+/**
+ * 单个SKU选择变化
+ */
+const handleExistingSkuSelect = (index: number, checked: boolean) => {
+    if (checked) {
+        if (!selectedExistingSkuIndexes.value.includes(index)) {
+            selectedExistingSkuIndexes.value.push(index)
+        }
+    } else {
+        const idx = selectedExistingSkuIndexes.value.indexOf(index)
+        if (idx > -1) {
+            selectedExistingSkuIndexes.value.splice(idx, 1)
+        }
+    }
+
+    // 更新全选状态
+    const total = formData.sku_list?.length || 0
+    selectAllExistingSkus.value = selectedExistingSkuIndexes.value.length === total
+}
+
+/**
+ * 批量删除已选中的SKU
+ */
+const batchRemoveSkusFromList = async () => {
+    if (selectedExistingSkuIndexes.value.length === 0) {
+        ElMessage.warning('请先选择要删除的SKU')
+        return
+    }
+
+    try {
+        await ElMessageBox.confirm(
+            `确定要删除选中的 ${selectedExistingSkuIndexes.value.length} 个SKU吗？`,
+            '批量删除确认',
+            {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }
+        )
+
+        if (!formData.sku_list || !Array.isArray(formData.sku_list)) {
+            return
+        }
+
+        // 按索引从大到小排序，避免删除时索引错乱
+        const sortedIndexes = [...selectedExistingSkuIndexes.value].sort((a, b) => b - a)
+
+        sortedIndexes.forEach(index => {
+            formData.sku_list.splice(index, 1)
+        })
+
+        // 如果列表为空，清空sku_list
+        if (formData.sku_list.length === 0) {
+            formData.sku_list = null
+        }
+
+        // 清空选择
+        selectedExistingSkuIndexes.value = []
+        selectAllExistingSkus.value = false
+
+        ElMessage.success(`成功删除 ${sortedIndexes.length} 个SKU`)
+    } catch {
+        // 用户取消删除
+    }
+}
+
+/**
+ * 按等级快速删除
+ */
+const handleQuickDeleteByGrade = async (grade: string) => {
+    if (!formData.sku_list || !Array.isArray(formData.sku_list)) return
+
+    const count = getExistingGradeCount(grade)
+
+    try {
+        await ElMessageBox.confirm(
+            `确定要删除所有"${grade}"等级的SKU吗？共 ${count} 个`,
+            '快速删除确认',
+            {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }
+        )
+
+        // 找出所有该等级的索引（从大到小）
+        const indexes: number[] = []
+        formData.sku_list.forEach((sku: any, index: number) => {
+            if (sku.config_item_name === grade) {
+                indexes.push(index)
+            }
+        })
+
+        // 从大到小删除
+        indexes.sort((a, b) => b - a).forEach(index => {
+            formData.sku_list.splice(index, 1)
+        })
+
+        // 如果列表为空，清空sku_list
+        if (formData.sku_list.length === 0) {
+            formData.sku_list = null
+        }
+
+        // 清空选择
+        selectedExistingSkuIndexes.value = []
+        selectAllExistingSkus.value = false
+
+        ElMessage.success(`成功删除 ${count} 个"${grade}"等级的SKU`)
+    } catch {
+        // 用户取消删除
+    }
+}
+
+/**
+ * 按容量快速删除
+ */
+const handleQuickDeleteByCapacity = async (capacity: string) => {
+    if (!formData.sku_list || !Array.isArray(formData.sku_list)) return
+
+    const count = getExistingCapacityCount(capacity)
+
+    try {
+        await ElMessageBox.confirm(
+            `确定要删除所有"${capacity}"容量的SKU吗？共 ${count} 个`,
+            '快速删除确认',
+            {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }
+        )
+
+        // 找出所有该容量的索引（从大到小）
+        const indexes: number[] = []
+        formData.sku_list.forEach((sku: any, index: number) => {
+            if (sku.capacity === capacity) {
+                indexes.push(index)
+            }
+        })
+
+        // 从大到小删除
+        indexes.sort((a, b) => b - a).forEach(index => {
+            formData.sku_list.splice(index, 1)
+        })
+
+        // 如果列表为空，清空sku_list
+        if (formData.sku_list.length === 0) {
+            formData.sku_list = null
+        }
+
+        // 清空选择
+        selectedExistingSkuIndexes.value = []
+        selectAllExistingSkus.value = false
+
+        ElMessage.success(`成功删除 ${count} 个"${capacity}"容量的SKU`)
+    } catch {
+        // 用户取消删除
+    }
 }
 
 /**
@@ -650,6 +1220,20 @@ const confirm = async (formEl: FormInstance | undefined) => {
 
     await formEl.validate(async (valid) => {
         if (valid) {
+            // SKU级别配置的额外验证
+            if (formData.config_type === 1) {
+                // 添加模式：必须选择SKU
+                if (!formData.id && selectedSkuKeys.value.length === 0) {
+                    ElMessage.warning('请至少选择一个SKU')
+                    return
+                }
+                // 编辑模式：如果没有已有SKU列表，也没有选择新SKU，提示错误
+                if (formData.id && (!formData.sku_list || formData.sku_list.length === 0) && selectedSkuKeys.value.length === 0) {
+                    ElMessage.warning('请至少保留或添加一个SKU')
+                    return
+                }
+            }
+
             loading.value = true
 
             try {
@@ -774,6 +1358,9 @@ const setFormData = async (row: any = null) => {
     selectedModelIds.value = []
     selectedSkuKeys.value = []
     skuList.value = []
+    // 清除筛选条件
+    selectedGradeFilters.value = []
+    selectedCapacityFilters.value = []
     loading.value = true
 
     // 加载报价单列表

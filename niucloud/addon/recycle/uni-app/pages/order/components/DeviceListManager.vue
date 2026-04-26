@@ -106,13 +106,13 @@
             <view class="input-wrapper">
               <input
                 v-model="newDevice.imei"
-                placeholder="仅输入后6位数字"
+                placeholder="输入后6位（字母或数字）"
                 maxlength="6"
-                type="number"
+                type="text"
                 class="custom-input"
               />
             </view>
-            <text class="form-hint">仅需输入IMEI/SN的后6位数字</text>
+            <text class="form-hint">仅需输入IMEI/SN的后6位，可以是字母或数字</text>
           </view>
 
           <!-- 定价输入 -->
@@ -385,7 +385,7 @@ const confirmAdd = () => {
 
   if (newDevice.value.imei.length !== 6) {
     uni.showToast({
-      title: '串号必须是6位数字',
+      title: '串号必须是6位',
       icon: 'none'
     })
     return

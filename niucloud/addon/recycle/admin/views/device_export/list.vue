@@ -24,31 +24,45 @@
                         </el-select>
                     </el-form-item>
 
+                    <el-form-item label="导出状态" prop="export_status">
+                        <el-select v-model="deviceTableData.searchParam.export_status" class="!w-[150px]">
+                            <el-option label="全部" value="" />
+                            <el-option label="未导出" value="unexported" />
+                        </el-select>
+                    </el-form-item>
+
                     <el-form-item :label="t('回收时间')" prop="update_at">
                         <el-date-picker
                             v-model="deviceTableData.searchParam.update_at"
                             type="daterange"
+                            range-separator="至"
                             value-format="YYYY-MM-DD"
                             :start-placeholder="t('startDate')"
                             :end-placeholder="t('endDate')"
                             format="YYYY-MM-DD"
+                            unlink-panels
+                            clearable
+                            :shortcuts="dateRangeShortcuts"
                         />
                     </el-form-item>
 
                     <el-form-item>
-                        <el-button type="primary" @click="loadDeviceList()">{{ t('search') }}</el-button>
+                        <el-button type="primary" @click="handleSearch">{{ t('search') }}</el-button>
                         <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
-                        <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">{{ t('export') }}</el-button>
+                        <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">
+                            {{ selectedDevices.length > 0 ? `导出选中 (${selectedDevices.length})` : t('export') }}
+                        </el-button>
                     </el-form-item>
                 </el-form>
             </el-card>
 
             <div class="mt-[10px]">
-                <el-table :data="deviceTableData.data" size="large" v-loading="deviceTableData.loading">
+                <el-table :data="deviceTableData.data" size="large" v-loading="deviceTableData.loading" :row-class-name="tableRowClassName" @selection-change="handleSelectionChange">
                     <template #empty>
                         <span>{{ !deviceTableData.loading ? t('emptyData') : '' }}</span>
                     </template>
 
+                    <el-table-column type="selection" width="55" align="center" />
                     <el-table-column prop="imei" :label="t('imei')" min-width="120" />
                     <el-table-column prop="model" :label="t('型号')" min-width="150" show-overflow-tooltip />
                     <el-table-column prop="category_name" :label="t('分类')" min-width="100" align="center" />
@@ -107,6 +121,13 @@
                         </template>
                     </el-table-column>
 
+                    <el-table-column label="导出时间" min-width="150" align="center">
+                        <template #default="{ row }">
+                            <span v-if="row.export_time && row.export_time > 0">{{ formatTimestamp(row.export_time) }}</span>
+                            <el-tag v-else type="info" size="small">未导出</el-tag>
+                        </template>
+                    </el-table-column>
+
                     <el-table-column label="操作" min-width="100" align="center" fixed="right">
                         <template #default="{ row }">
                             <el-button
@@ -133,7 +154,7 @@
                 </div>
             </div>
 
-            <export-sure ref="exportSureDialog" :show="flag" type="recycle_device" :searchParam="deviceTableData.searchParam" @close="handleClose" />
+            <export-sure ref="exportSureDialog" :show="flag" type="recycle_device" :searchParam="exportSearchParam" @close="handleClose" />
         </el-card>
 
         <!-- 设备详情对话框 -->
@@ -286,7 +307,7 @@
 <script lang="ts" setup>
 import { reactive, ref, computed } from 'vue'
 import { t } from '@/lang'
-import { FormInstance, ElMessage, ElImageViewer } from 'element-plus'
+import { FormInstance, ElMessage, ElImageViewer, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { getRecycleDeviceList, updateDevice } from '@/addon/recycle/api/device_export'
 import { img } from '@/utils/common'
@@ -306,7 +327,8 @@ const deviceTableData = reactive({
         model: '',
         category_id: '',
         update_at: [],
-        status: 5  // 固定为已回收状态
+        status: 5,  // 固定为已回收状态
+        export_status: ''
     }
 })
 
@@ -321,9 +343,56 @@ const categoryList = ref([
     { id: 5, name: '其他' }
 ])
 
+const formatDate = (date: Date): string => {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+/**
+ * 获取最近 N 天日期范围，默认包含今天
+ */
+const getRecentDateRange = (days: number): string[] => {
+    const endDate = new Date()
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - Math.max(days - 1, 0))
+    return [formatDate(startDate), formatDate(endDate)]
+}
+
+const setDefaultDateRange = () => {
+    deviceTableData.searchParam.update_at = getRecentDateRange(7)
+}
+
+const dateRangeShortcuts = [
+    {
+        text: '今天',
+        value: () => getRecentDateRange(1)
+    },
+    {
+        text: '近7天',
+        value: () => getRecentDateRange(7)
+    },
+    {
+        text: '近15天',
+        value: () => getRecentDateRange(15)
+    },
+    {
+        text: '近30天',
+        value: () => getRecentDateRange(30)
+    }
+]
+
+const handleSearch = () => {
+    deviceTableData.page = 1
+    loadDeviceList()
+}
+
 const resetForm = (formEl: FormInstance | undefined) => {
     if (!formEl) return
     formEl.resetFields()
+    setDefaultDateRange()
+    deviceTableData.page = 1
     loadDeviceList()
 }
 
@@ -420,15 +489,95 @@ const previewImages = (images: string[], index: number) => {
  */
 const exportSureDialog = ref(null)
 const flag = ref(false)
+const selectedDevices = ref<any[]>([])
+
+const handleSelectionChange = (selection: any[]) => {
+    selectedDevices.value = selection
+}
+
+/**
+ * 导出参数：勾选了设备则传 device_ids，否则按搜索条件全量导出
+ * 注意：update_at 需要经过 formatTimeRange 处理，加上 00:00:00 和 23:59:59，
+ * 否则后端会把结束日期解析为当天 00:00:00，导致数据丢失
+ */
+const exportSearchParam = computed(() => {
+    const base = {
+        ...deviceTableData.searchParam,
+        update_at: formatTimeRange(deviceTableData.searchParam.update_at)
+    }
+    if (selectedDevices.value.length > 0) {
+        return {
+            ...base,
+            device_ids: selectedDevices.value.map((row: any) => row.id)
+        }
+    }
+    return base
+})
+
 const handleClose = (val: boolean) => {
     flag.value = val
 }
 const exportEvent = () => {
-    flag.value = true
+    // 判断要导出的设备列表（选中的 or 当前页全部）
+    const devicesToExport = selectedDevices.value.length > 0 ? selectedDevices.value : deviceTableData.data
+
+    // 检查要导出的设备中是否包含已导出记录
+    const hasExported = devicesToExport.some((row: any) => row.export_time && row.export_time > 0)
+    if (hasExported) {
+        ElMessageBox.confirm(
+            '当前导出范围中包含已导出的设备记录，是否继续导出？',
+            '提示',
+            {
+                confirmButtonText: '继续导出',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }
+        ).then(() => {
+            flag.value = true
+        }).catch(() => {
+            // 用户取消
+        })
+    } else {
+        flag.value = true
+    }
 }
 
-// 初始化加载
+/**
+ * 时间戳转日期字符串
+ */
+const formatTimestamp = (timestamp: number): string => {
+    if (!timestamp || timestamp <= 0) return ''
+    const date = new Date(timestamp * 1000)
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    const h = String(date.getHours()).padStart(2, '0')
+    const min = String(date.getMinutes()).padStart(2, '0')
+    const s = String(date.getSeconds()).padStart(2, '0')
+    return `${y}-${m}-${d} ${h}:${min}:${s}`
+}
+
+/**
+ * 已导出行灰色样式
+ */
+const tableRowClassName = ({ row }: { row: any }) => {
+    if (row.export_time && row.export_time > 0) {
+        return 'exported-row'
+    }
+    return ''
+}
+
+// 初始化加载，默认回收时间为最近 7 天（含今天）
+setDefaultDateRange()
 loadDeviceList()
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+:deep(.exported-row) {
+    background-color: #f5f5f5 !important;
+    color: #999;
+}
+:deep(.exported-row td) {
+    background-color: #f5f5f5 !important;
+}
+</style>

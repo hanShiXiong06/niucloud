@@ -43,7 +43,7 @@ class DeviceExportController extends BaseAdminController
             ['update_at', []],
             ['status', 5], // 固定为已回收状态
             ['export_status', ''],
-            ['device_ids', []],
+             ['device_ids', []],
         ]);
 
         (new DeviceExportService())->export($data);

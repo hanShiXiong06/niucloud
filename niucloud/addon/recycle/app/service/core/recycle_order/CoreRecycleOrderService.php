@@ -55,7 +55,7 @@ class CoreRecycleOrderService extends BaseCoreService
                 'express_no' => $data['express_no'] ?? '',
                 'status' => RecycleOrderDict::ORDER_STATUS_PENDING_SIGN,
                 'device_count' => count($devicesPayload),
-                'count'=> $data['count'],
+                'count'=>$data['count'] ,
                 'remark' => $data['remark'] ?? '',
                 'create_at' => time(),
                 'update_at' => time(),

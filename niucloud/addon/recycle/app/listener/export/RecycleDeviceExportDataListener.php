@@ -41,7 +41,7 @@ class RecycleDeviceExportDataListener
                     'model' => [
                         'name' => '品牌型号',
                     ],
-                     'color'=>[
+                    'color'=>[
                          'name' => '颜色'
                     ],
                     'capacity'=>[
@@ -49,6 +49,9 @@ class RecycleDeviceExportDataListener
                     ],
                     'warranty_info'=>[
                         'name' => '保修'
+                    ],
+                    'final_price'=>[
+                        'name' =>'最终价格'
                     ],
                     'nickname' => [
                         'name' => '供应商',

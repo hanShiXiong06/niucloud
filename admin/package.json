@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 && vite build && node publish.cjs",
+        "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vite build && node publish.cjs",
         "build:config": "vite build && node publish-config.cjs",
         "preview": "vite preview"
     },
@@ -35,7 +35,7 @@
         "sass": "1.58.0",
         "sortablejs": "1.15.0",
         "vditor": "^3.10.9",
-        "vue": "3.2.45",
+        "vue": "3.3.13",
         "vue-echarts": "^7.0.3",
         "vue-i18n": "9.2.2",
         "vue-jsonp": "2.0.0",
