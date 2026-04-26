@@ -243,6 +243,7 @@ class WjBooksInfoService extends BaseAdminService
             'img' => $book_data['img'] ?? ($book_data['image'] ?? ''),
             'small_img' => $book_data['smallImg'] ?? ($book_data['small_image'] ?? ''),
             'gist' => $book_data['gist'] ?? ($book_data['summary'] ?? ''),
+            'recycle_price' => $this->calculateRecyclePrice($book_data, $config ? $config->toArray() : []),
             'api_json' => $api_json,
             'api_query_time' => date('Y-m-d H:i:s'),
         ];
@@ -253,5 +254,99 @@ class WjBooksInfoService extends BaseAdminService
             'api_result' => $responseResult,
             'api_provider' => $apiProviderName
         ];
+    }
+
+    /**
+     * 计算图书回收价格
+     * @param array $book_data
+     * @param array $config
+     * @return float
+     */
+    private function calculateRecyclePrice(array $book_data, array $config = [])
+    {
+        $originalPrice = floatval($book_data['price'] ?? 0);
+
+        if ($originalPrice <= 0) {
+            return 0.5;
+        }
+
+        $baseRatio = 0.08;
+        $pubDate = $book_data['pubDate'] ?? ($book_data['pub_date'] ?? '');
+        $pubYear = 0;
+
+        if (!empty($pubDate) && preg_match('/(\d{4})/', $pubDate, $matches)) {
+            $pubYear = intval($matches[1]);
+        }
+
+        $currentYear = intval(date('Y'));
+        $ageRatio = 0;
+
+        if ($pubYear > 0) {
+            $bookAge = $currentYear - $pubYear;
+
+            if ($bookAge <= 1) {
+                $ageRatio = 0.04;
+            } else if ($bookAge <= 2) {
+                $ageRatio = 0.02;
+            } else if ($bookAge <= 4) {
+                $ageRatio = 0;
+            } else if ($bookAge <= 7) {
+                $ageRatio = -0.02;
+            } else {
+                $ageRatio = -0.04;
+            }
+        }
+
+        $bindingRatio = 0;
+        $binding = $book_data['binding'] ?? '';
+
+        if (strpos($binding, '精装') !== false || strpos($binding, 'hardcover') !== false) {
+            $bindingRatio = 0.02;
+        } else if (strpos($binding, '平装') !== false || strpos($binding, 'paperback') !== false) {
+            $bindingRatio = 0;
+        }
+
+        $pageRatio = 0;
+        $pages = intval($book_data['page'] ?? 0);
+
+        if ($pages > 500) {
+            $pageRatio = 0.01;
+        } else if ($pages < 100) {
+            $pageRatio = -0.01;
+        }
+
+        $finalRatio = $baseRatio + $ageRatio + $bindingRatio + $pageRatio;
+        $finalRatio = max(0.03, min(0.15, $finalRatio));
+
+        $recyclePrice = $originalPrice * $finalRatio;
+        $minPrice = 0.1;
+        $maxPrice = 20.0;
+
+        if ($originalPrice > 200) {
+            $maxPrice = 50.0;
+        }
+
+        $recyclePrice = max($minPrice, min($maxPrice, $recyclePrice));
+
+        if ($originalPrice <= 20) {
+            $recyclePrice = min($recyclePrice, 1.5);
+        } else if ($originalPrice <= 50) {
+            $recyclePrice = min($recyclePrice, 3.0);
+        } else if ($originalPrice <= 100) {
+            $recyclePrice = min($recyclePrice, 6.0);
+        } else if ($originalPrice <= 150) {
+            $recyclePrice = min($recyclePrice, 8.0);
+        } else {
+            $recyclePrice = min($recyclePrice, 12.0);
+        }
+
+        $priceAdjustRate = floatval($config['price_adjust_rate'] ?? 0);
+        if ($priceAdjustRate != 0) {
+            $recyclePrice = $recyclePrice * (1 + $priceAdjustRate / 100);
+        }
+
+        $recyclePrice = max($minPrice, $recyclePrice);
+
+        return round($recyclePrice * 10) / 10;
     }
 }

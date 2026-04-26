@@ -188,7 +188,7 @@ class WjBooksInfoService extends BaseApiService
             'img' => $book_data['img'] ?? ($book_data['image'] ?? ''),
             'small_img' => $book_data['smallImg'] ?? ($book_data['small_image'] ?? ''),
             'gist' => $book_data['gist'] ?? ($book_data['summary'] ?? ''),
-            'recycle_price' => $this->calculateRecyclePrice($book_data),
+            'recycle_price' => $this->calculateRecyclePrice($book_data, $config ? $config->toArray() : []),
             'can_recycle' => 1, // 默认可回收
             'recycle_count' => 0,
             'api_json' => $api_json,
@@ -270,7 +270,7 @@ class WjBooksInfoService extends BaseApiService
      * @param array $book_data 图书数据
      * @return float 回收价格
      */
-    private function calculateRecyclePrice(array $book_data)
+    private function calculateRecyclePrice(array $book_data, array $config = [])
     {
         // 获取图书原价
         $originalPrice = floatval($book_data['price'] ?? 0);
@@ -381,12 +381,20 @@ class WjBooksInfoService extends BaseApiService
             $recyclePrice = min($recyclePrice, 12.0);
         }
         
+        $priceAdjustRate = floatval($config['price_adjust_rate'] ?? 0);
+        if ($priceAdjustRate != 0) {
+            $recyclePrice = $recyclePrice * (1 + $priceAdjustRate / 100);
+        }
+
+        // 调整后兜底最小值，避免出现负数或0
+        $recyclePrice = max($minPrice, $recyclePrice);
+
         // 取整到0.1元，例如3.56元变为3.6元
         $recyclePrice = round($recyclePrice * 10) / 10;
         
         // 记录价格计算过程
-        Log::info("图书回收价格计算 - 书名: {$book_data['title']}, 原价: {$originalPrice}, 出版年: {$pubYear}, 装帧: {$binding}, 页数: {$pages}, 最终比例: {$finalRatio}, 回收价: {$recyclePrice}");
+        Log::info("图书回收价格计算 - 书名: {$book_data['title']}, 原价: {$originalPrice}, 出版年: {$pubYear}, 装帧: {$binding}, 页数: {$pages}, 最终比例: {$finalRatio}, 调整比例: {$priceAdjustRate}, 回收价: {$recyclePrice}");
         
         return $recyclePrice;
     }
-} 
+}

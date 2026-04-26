@@ -21,6 +21,7 @@ CREATE TABLE `{{prefix}}wj_books_config`  (
   `platform_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '二手书回收平台' COMMENT '平台名称',
   `min_book_count` int(11) UNSIGNED NULL DEFAULT 5 COMMENT '上门回收最低图书数量',
   `rejected_book_retrieve_days` int(11) UNSIGNED NULL DEFAULT 7 COMMENT '拒收书籍可取回的期限天数',
+  `price_adjust_rate` decimal(5, 2) NOT NULL DEFAULT 0.00 COMMENT '回收价调整比例，单位%',
   `book_api_enabled` tinyint(1) UNSIGNED NULL DEFAULT 1 COMMENT '是否启用图书API(0:不启用只内部查询,1:启用调用外部API)',
   `book_api_provider` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '0' COMMENT '图书数据API来源【\'0:juhe 1:likeapi\'】',
   `book_api_key` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT '图书API密钥',

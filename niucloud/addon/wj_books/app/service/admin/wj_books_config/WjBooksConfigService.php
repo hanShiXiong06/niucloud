@@ -12,6 +12,7 @@
 namespace addon\wj_books\app\service\admin\wj_books_config;
 
 use addon\wj_books\app\model\wj_books_config\WjBooksConfig;
+use app\service\core\sys\CoreConfigService;
 use core\base\BaseAdminService;
 use think\facade\Cache;
 use think\facade\Validate;
@@ -23,6 +24,8 @@ use think\facade\Validate;
  */
 class WjBooksConfigService extends BaseAdminService
 {
+    private const RECYCLE_NOTICE_CONFIG_KEY = 'wj_books_recycle_notice';
+
     /**
      * 缓存前缀
      * @var string
@@ -62,6 +65,8 @@ class WjBooksConfigService extends BaseAdminService
             // 缓存配置，有效期1小时
             Cache::set($cache_key, $config, 3600);
         }
+
+        $config['recycle_notice_content'] = $this->getRecycleNoticeContent();
         
         return $config;
     }
@@ -77,6 +82,9 @@ class WjBooksConfigService extends BaseAdminService
         validate(\addon\wj_books\app\validate\wj_books_config\WjBooksConfig::class)
             ->scene('update')
             ->check($data);
+
+        $recycleNoticeContent = $data['recycle_notice_content'] ?? '';
+        unset($data['recycle_notice_content']);
         
         // 查询是否已存在配置
         $config = $this->model->where([['site_id', '=', $this->site_id]])->find();
@@ -92,6 +100,10 @@ class WjBooksConfigService extends BaseAdminService
         
         // 清除缓存
         $this->clearCache();
+
+        (new CoreConfigService())->setConfig($this->site_id, self::RECYCLE_NOTICE_CONFIG_KEY, [
+            'content' => $recycleNoticeContent
+        ]);
         
         return $result !== false;
     }
@@ -107,6 +119,7 @@ class WjBooksConfigService extends BaseAdminService
             'platform_name' => '二手书回收平台',
             'min_book_count' => 5,
             'rejected_book_retrieve_days' => 2,
+            'price_adjust_rate' => 0,
             'book_api_enabled' => 1,
             'book_api_provider' => '0',
             'book_api_key' => '',
@@ -128,6 +141,30 @@ class WjBooksConfigService extends BaseAdminService
         $this->model->insert($data);
         
         return $data;
+    }
+
+    /**
+     * 获取回收须知内容
+     * @return string
+     */
+    private function getRecycleNoticeContent(): string
+    {
+        $config = (new CoreConfigService())->getConfigValue($this->site_id, self::RECYCLE_NOTICE_CONFIG_KEY);
+        $content = $config['content'] ?? '';
+        return $content !== '' ? $content : $this->getDefaultRecycleNoticeContent();
+    }
+
+    /**
+     * 默认回收须知
+     * @return string
+     */
+    private function getDefaultRecycleNoticeContent(): string
+    {
+        return implode("\n", [
+            '请提前整理好书籍，以便快递员上门取件',
+            '请确保书籍是正版，且非缺页、水渍等影响阅读的书籍。',
+            '平台收货审核完成后，款项将立即到账'
+        ]);
     }
 
     /**

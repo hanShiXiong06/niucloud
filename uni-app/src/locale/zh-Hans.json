@@ -71,5 +71,7 @@
     "phone_shop.pages.point.list": "积分商品列表",
     "phone_shop.pages.point.detail": "积分商品详情",
     "phone_shop.pages.point.payment": "待付款订单",
-    "phone_shop.pages.point.order_list": "积分兑换记录"
+    "phone_shop.pages.point.order_list": "积分兑换记录",
+    "wj_books.pages.index": "旧书回收平台",
+    "wj_books.pages.home.index": "旧书回收平台"
 }

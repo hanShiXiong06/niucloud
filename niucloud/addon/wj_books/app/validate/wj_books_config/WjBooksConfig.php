@@ -28,6 +28,8 @@ class WjBooksConfig extends Validate
         'platform_name' => 'max:100',
         'min_book_count' => 'integer|between:1,100',
         'rejected_book_retrieve_days' => 'integer|between:1,30',
+        'price_adjust_rate' => 'float|between:-100,1000',
+        'recycle_notice_content' => 'max:5000',
         'book_api_enabled' => 'in:0,1',
         'book_api_provider' => 'in:0,1',
         'book_api_key' => 'max:255',
@@ -57,6 +59,9 @@ class WjBooksConfig extends Validate
         'rejected_book_retrieve_days.require' => '拒收书籍可取回期限不能为空',
         'rejected_book_retrieve_days.integer' => '拒收书籍可取回期限必须为整数',
         'rejected_book_retrieve_days.between' => '拒收书籍可取回期限必须在1-30之间',
+        'price_adjust_rate.float' => '回收价调整比例必须是数字',
+        'price_adjust_rate.between' => '回收价调整比例必须在-100到1000之间',
+        'recycle_notice_content.max' => '订单回收须知最多不能超过5000个字符',
         'book_api_enabled.require' => '是否启用图书API不能为空',
         'book_api_enabled.in' => '是否启用图书API参数错误',
         'book_api_provider.requireIf' => '图书数据API来源不能为空',
@@ -85,7 +90,7 @@ class WjBooksConfig extends Validate
      */
     protected $scene = [
         'update' => [
-            'platform_name', 'min_book_count', 'rejected_book_retrieve_days', 'book_api_enabled',
+            'platform_name', 'min_book_count', 'rejected_book_retrieve_days', 'price_adjust_rate', 'recycle_notice_content', 'book_api_enabled',
             'book_api_provider', 'book_api_key', 'yunyang_appid', 'yunyang_app_secret',
             'yunyang_channel_subtag', 'express_receiver_name', 'express_receiver_mobile',
             'express_receiver_province', 'express_receiver_city', 'express_receiver_county',
