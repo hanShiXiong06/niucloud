@@ -1,0 +1,491 @@
+<?php
+
+return [
+    'DIY_WJ_BOOKS_MEMBER_INDEX' => [
+        'wj_books_member_index' => [ // 页面标识
+            "title" => "旧书回收个人中心", // 页面名称
+            'cover' => '', // 页面封面图
+            'preview' => '', // 页面预览图
+            'desc' => '个人中心', // 页面描述
+            'mode' => 'diy', // 页面模式：diy：自定义，fixed：固定
+            // 页面数据源
+            'data' => [
+                'global' => [
+                    'title' => '个人中心',
+                    'pageStartBgColor' => '#F8F8F8',
+                    'pageEndBgColor' => '',
+                    'pageGradientAngle' => 'to bottom',
+                    "bgUrl" => "",
+                    'bgHeightScale' => 0,
+                    "imgWidth" => "",
+                    "imgHeight" => "",
+                    'bottomTabBar' => [
+                        'control' => true,
+                        'isShow' => true,
+                        'designNav' => [
+                            'title' => '',
+                            'key' => ''
+                        ]
+                    ],
+                    "copyright" => [
+                        'control' => true,
+                        'isShow' => false,
+                        'textColor' =>'#ccc',
+                    ],
+                    "template" => [
+                        "textColor" => "#303133",
+                        'pageStartBgColor' => '',
+                        'pageEndBgColor' => '',
+                        'pageGradientAngle' => 'to bottom',
+                        'componentBgUrl' => '',
+                        'componentBgAlpha' => 2,
+                        "componentStartBgColor" => "",
+                        "componentEndBgColor" => "",
+                        "componentGradientAngle" => "to bottom",
+                        "topRounded" => 0,
+                        "bottomRounded" => 0,
+                        "elementBgColor" => "",
+                        "topElementRounded" => 0,
+                        "bottomElementRounded" => 0,
+                        "margin" => [
+                            "top" => 0,
+                            "bottom" => 0,
+                            "both" => 12
+                        ]
+                    ],
+                    'topStatusBar' => [
+                        'control' => true,
+                        'isShow' => false,
+                        'bgColor' => '#ffffff',
+                        'rollBgColor' => '#ffffff',
+                        'style' => 'style-1',
+                        'styleName' => '风格1',
+                        'textColor' => '#333333',
+                        'rollTextColor' => '#333333',
+                        'textAlign' => 'center',
+                        'inputPlaceholder' => '请输入搜索关键词',
+                        'imgUrl' => '',
+                        'link' => [
+                            'name' => '',
+                        ],
+                    ],
+                    'popWindow' => [
+                        'imgUrl' => '',
+                        'imgWidth' => '',
+                        'imgHeight' => '',
+                        'count' => 'once',
+                        'show' => false,
+                        'link' => [
+                            'name' => '',
+                        ],
+                    ]
+                ],
+                "value" => [
+                    [
+                        "path" => "edit-member-info",
+                        "id" => "67qv49qgxp00",
+                        "componentName" => "MemberInfo",
+                        "componentTitle" => "会员信息",
+                        "uses" => 0,
+                        "ignore" => ["componentBgUrl"],
+                        "pageStartBgColor" => "",
+                        "pageEndBgColor" => "",
+                        "pageGradientAngle" => "to bottom",
+                        "componentBgUrl" => "",
+                        "componentBgAlpha" => 2,
+                        "componentStartBgColor" => "rgba(76, 175, 80, 1)",
+                        "componentEndBgColor" => "rgba(139, 195, 74, 1)",
+                        "componentGradientAngle" => "to right",
+                        "topRounded" => 9,
+                        "bottomRounded" => 9,
+                        "elementBgColor" => "",
+                        "topElementRounded" => 0,
+                        "bottomElementRounded" => 0,
+                        "margin" => [
+                            "top" => 12,
+                            "bottom" => 6,
+                            "both" => 12
+                        ],
+                        'pageStyle' => 'padding-top:2rpx;padding-bottom:0rpx;padding-right:24rpx;padding-left:24rpx;',
+                        'componentIsShow' => true,
+                        "style" => "style-1",
+                        "styleName" => "风格1",
+                        "textColor" => "#FFFFFF",
+                        "bgUrl" => "",
+                        "bgColorStart" => "",
+                        "bgColorEnd" => ""
+                    ],
+                    [
+                        "path" => "edit-horz-blank",
+                        "uses" => 0,
+                        "id" => "2da0xqyo8zms",
+                        "componentName" => "HorzBlank",
+                        "componentTitle" => "辅助空白",
+                        "ignore" => ["pageBgColor", "componentBgUrl"],
+                        "height" => 10,
+                        "textColor" => "#303133",
+                        "pageStartBgColor" => "",
+                        "pageEndBgColor" => "",
+                        "pageGradientAngle" => "to bottom",
+                        "componentBgUrl" => "",
+                        "componentBgAlpha" => 2,
+                        "componentStartBgColor" => "rgba(255, 255, 255, 1)",
+                        "componentEndBgColor" => "",
+                        "componentGradientAngle" => "to bottom",
+                        "topRounded" => 9,
+                        "bottomRounded" => 0,
+                        "elementBgColor" => "",
+                        "topElementRounded" => 0,
+                        "bottomElementRounded" => 0,
+                        "margin" => [
+                            "top" => 6,
+                            "bottom" => 0,
+                            "both" => 12
+                        ],
+                        'pageStyle' => 'padding-top:2rpx;padding-bottom:0rpx;padding-right:0rpx;padding-left:0rpx;',
+                        'componentIsShow' => true
+                    ],
+                    [
+                        "path" => "edit-text",
+                        "uses" => 0,
+                        "position" => "",
+                        "id" => "1puhgfus8www",
+                        "componentName" => "Text",
+                        "componentTitle" => "标题",
+                        "ignore" => [],
+                        "style" => "style-2",
+                        "styleName" => "风格2",
+                        "text" => "我的服务",
+                        "link" => [
+                            "name" => ""
+                        ],
+                        "textColor" => "#303133",
+                        "fontSize" => 16,
+                        "fontWeight" => "normal",
+                        "textAlign" => "center",
+                        "subTitle" => [
+                            "text" => "",
+                            "color" => "#999999",
+                            "fontSize" => 14,
+                            "control" => true,
+                            "fontWeight" => "normal"
+                        ],
+                        "more" => [
+                            "text" => "全部",
+                            "control" => true,
+                            "isShow" => true,
+                            "link" => [
+                                "name" => ""
+                            ],
+                            "color" => "#999999"
+                        ],
+                        "pageStartBgColor" => "",
+                        "pageEndBgColor" => "",
+                        "pageGradientAngle" => "to bottom",
+                        "componentBgUrl" => "",
+                        "componentBgAlpha" => 2,
+                        "componentStartBgColor" => "rgba(255, 255, 255, 1)",
+                        "componentEndBgColor" => "",
+                        "componentGradientAngle" => "to bottom",
+                        "topRounded" => 0,
+                        "bottomRounded" => 0,
+                        "elementBgColor" => "",
+                        "topElementRounded" => 0,
+                        "bottomElementRounded" => 0,
+                        "margin" => [
+                            "top" => 0,
+                            "bottom" => 0,
+                            "both" => 12
+                        ],
+                        'pageStyle' => 'padding-top:2rpx;padding-bottom:0rpx;padding-right:20rpx;padding-left:20rpx;',
+                        'componentIsShow' => true
+                    ],
+                    [
+                        "path" => "edit-graphic-nav",
+                        "id" => "62b7d7hl4ok",
+                        "componentName" => "GraphicNav",
+                        "componentTitle" => "图文导航",
+                        "uses" => 0,
+                        "layout" => "horizontal",
+                        "mode" => "graphic",
+                        "showStyle" => "fixed",
+                        "rowCount" => 4,
+                        "pageCount" => 2,
+                        "carousel" => [
+                            "type" => "circle",
+                            "color" => "#FFFFFF"
+                        ],
+                        "imageSize" => 25,
+                        "aroundRadius" => 25,
+                        "font" => [
+                            "size" => 12,
+                            "weight" => "bold",
+                            "color" => "#303133"
+                        ],
+                        "pageStartBgColor" => "",
+                        "pageEndBgColor" => "",
+                        "pageGradientAngle" => "to bottom",
+                        "componentBgUrl" => "",
+                        "componentBgAlpha" => 2,
+                        "componentStartBgColor" => "rgba(255, 255, 255, 1)",
+                        "componentEndBgColor" => "",
+                        "componentGradientAngle" => "to bottom",
+                        "topRounded" => 0,
+                        "bottomRounded" => 9,
+                        "elementBgColor" => "",
+                        "topElementRounded" => 0,
+                        "bottomElementRounded" => 0,
+                        "margin" => [
+                            "top" => 0,
+                            "bottom" => 6,
+                            "both" => 12
+                        ],
+                        'pageStyle' => 'padding-top:2rpx;padding-bottom:0rpx;padding-right:0rpx;padding-left:0rpx;',
+                        'componentIsShow' => true,
+                        "ignore" => [],
+                        "list" => [
+                            [
+                                "title" => "我的订单",
+                                "link" => [
+                                    "parent" => "WJ_BOOKS_LINK",
+                                    "name" => "WJ_BOOKS_ORDER_LIST",
+                                    "title" => "回收订单列表",
+                                    "url" => "/addon/wj_books/pages/order/list",
+                                    "action" => "decorate"
+                                ],
+                                "imageUrl" => "static/resource/images/diy/horz_m_personal.png",
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ],
+                                "id" => "xvlauaflc6o",
+                                "imgWidth" => 100,
+                                "imgHeight" => 100
+                            ],
+                            [
+                                "title" => "我的余额",
+                                "link" => [
+                                    "parent" => "MEMBER_LINK",
+                                    "name" => "MEMBER_BALANCE",
+                                    "title" => "我的余额",
+                                    "url" => "/app/pages/member/balance"
+                                ],
+                                "imageUrl" => "static/resource/images/diy/horz_m_balance.png",
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ],
+                                "id" => "63bjscck5n40",
+                                "imgWidth" => 100,
+                                "imgHeight" => 100
+                            ],
+                            [
+                                "title" => "我的积分",
+                                "link" => [
+                                    "parent" => "MEMBER_LINK",
+                                    "name" => "MEMBER_POINT",
+                                    "title" => "我的积分",
+                                    "url" => "/app/pages/member/point"
+                                ],
+                                "imageUrl" => "static/resource/images/diy/horz_m_point.png",
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ],
+                                "id" => "4qiczw54t8g0",
+                                "imgWidth" => 100,
+                                "imgHeight" => 100
+                            ],
+                            [
+                                "title" => "联系客服",
+                                "link" => [
+                                    "name" => "MEMBER_CONTACT",
+                                    "parent" => "MEMBER_LINK",
+                                    "title" => "客服",
+                                    "url" => "/app/pages/member/contact",
+                                    "action" => ""
+                                ],
+                                "imageUrl" => "static/resource/images/diy/horz_m_service.png",
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ],
+                                "id" => "2eqwfkdphpgk",
+                                "imgWidth" => 100,
+                                "imgHeight" => 100
+                            ]
+                        ],
+                        "swiper" => [
+                            "indicatorColor" => "rgba(0, 0, 0, 0.3)",
+                            "indicatorActiveColor" => "#FF0E0E",
+                            "indicatorStyle" => "style-1",
+                            "indicatorAlign" => "center"
+                        ]
+                    ],
+                    [
+                        "path" => "edit-graphic-nav",
+                        "uses" => 0,
+                        "id" => "33yn28534fs0",
+                        "componentName" => "GraphicNav",
+                        "componentTitle" => "图文导航",
+                        "ignore" => [],
+                        "layout" => "vertical",
+                        "mode" => "graphic",
+                        "showStyle" => "fixed",
+                        "rowCount" => 4,
+                        "pageCount" => 2,
+                        "carousel" => [
+                            "type" => "circle",
+                            "color" => "#FFFFFF"
+                        ],
+                        "imageSize" => 25,
+                        "aroundRadius" => 0,
+                        "font" => [
+                            "size" => 13,
+                            "weight" => "normal",
+                            "color" => "rgba(0, 0, 0, 1)"
+                        ],
+                        "list" => [
+                            [
+                                "title" => "个人资料",
+                                "link" => [
+                                    "parent" => "MEMBER_LINK",
+                                    "name" => "MEMBER_PERSONAL",
+                                    "title" => "个人资料",
+                                    "url" => "/app/pages/member/personal"
+                                ],
+                                "imageUrl" => "static/resource/images/diy/vert_m_personal.png",
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ],
+                                "id" => "4xc4kw9xlqu0",
+                                "imgWidth" => 92,
+                                "imgHeight" => 92
+                            ],
+                            [
+                                "title" => "我的余额",
+                                "link" => [
+                                    "parent" => "MEMBER_LINK",
+                                    "name" => "MEMBER_BALANCE",
+                                    "title" => "我的余额",
+                                    "url" => "/app/pages/member/balance"
+                                ],
+                                "imageUrl" => "static/resource/images/diy/vert_m_balance.png",
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ],
+                                "id" => "4555rq0cc1q0",
+                                "imgWidth" => 92,
+                                "imgHeight" => 92
+                            ],
+                            [
+                                "title" => "我的积分",
+                                "link" => [
+                                    "parent" => "MEMBER_LINK",
+                                    "name" => "MEMBER_POINT",
+                                    "title" => "我的积分",
+                                    "url" => "/app/pages/member/point"
+                                ],
+                                "imageUrl" => "static/resource/images/diy/vert_m_point.png",
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ],
+                                "id" => "1gq3uxox0fk0",
+                                "imgWidth" => 92,
+                                "imgHeight" => 92
+                            ],
+                            [
+                                "title" => "联系客服",
+                                "link" => [
+                                    "name" => "MEMBER_CONTACT",
+                                    "parent" => "MEMBER_LINK",
+                                    "title" => "客服",
+                                    "url" => "/app/pages/member/contact",
+                                    "action" => ""
+                                ],
+                                "imageUrl" => "static/resource/images/diy/vert_m_service.png",
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ],
+                                "id" => "6gqbh1tvyr00",
+                                "imgWidth" => 92,
+                                "imgHeight" => 92
+                            ],
+                            [
+                                "id" => "6xhwid2el5c0",
+                                "title" => "wx:15555304033",
+                                "imageUrl" => "static/resource/images/diy/vert_m_develop.png",
+                                "imgWidth" => 92,
+                                "imgHeight" => 92,
+                                "link" => [
+                                    "name" => ""
+                                ],
+                                "label" => [
+                                    "control" => false,
+                                    "text" => "热门",
+                                    "textColor" => "#FFFFFF",
+                                    "bgColorStart" => "#F83287",
+                                    "bgColorEnd" => "#FE3423"
+                                ]
+                            ]
+                        ],
+                        "swiper" => [
+                            "indicatorColor" => "rgba(0, 0, 0, 0.3)",
+                            "indicatorActiveColor" => "#FF0E0E",
+                            "indicatorStyle" => "style-1",
+                            "indicatorAlign" => "center"
+                        ],
+                        "pageStartBgColor" => "",
+                        "pageEndBgColor" => "",
+                        "pageGradientAngle" => "to bottom",
+                        "componentBgUrl" => "",
+                        "componentBgAlpha" => 2,
+                        "componentStartBgColor" => "rgba(255, 255, 255, 1)",
+                        "componentEndBgColor" => "",
+                        "componentGradientAngle" => "to bottom",
+                        "topRounded" => 9,
+                        "bottomRounded" => 9,
+                        "elementBgColor" => "",
+                        "topElementRounded" => 0,
+                        "bottomElementRounded" => 0,
+                        "margin" => [
+                            "top" => 6,
+                            "bottom" => 12,
+                            "both" => 12
+                        ],
+                        'pageStyle' => 'padding-top:2rpx;padding-bottom:20rpx;padding-right:0rpx;padding-left:0rpx;',
+                        'componentIsShow' => true
+                    ]
+                ]
+            ]
+        ]
+    ]
+];

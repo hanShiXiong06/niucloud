@@ -1,0 +1,19 @@
+{
+      "memberId":"用户编码",
+      "memberIdPlaceholder":"全部",
+      "isbn":"ISBN码",
+      "isbnPlaceholder":"请输入ISBN码",
+      "scanTime":"扫描时间",
+      "scanTimePlaceholder":"请输入扫描时间",
+      "scanType":"扫描方式",
+      "scanTypePlaceholder":"请输入扫描方式",
+      "status":"状态",
+      "statusPlaceholder":"请输入状态",
+      "createTime":"创建时间",
+      "updateTime":"更新时间",
+      "addWjBooksScanRecords":"添加图书扫描记录",
+      "updateWjBooksScanRecords":"编辑图书扫描记录",
+      "wjBooksScanRecordsDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}

@@ -1,0 +1,21 @@
+{
+  "title": "旧书回收平台",
+  "processTitle": "回收流程",
+  "viewDetails": "查看详情",
+  "scanCode": "扫码回收",
+  "freePickup": "免费上门",
+  "reviewAndPay": "审核拿钱",
+  "doorCollection": "上门收旧书",
+  "freePickupTag": "免费上门取件",
+  "inputISBN": "手动输入ISBN码",
+  "scanNow": "立即扫码回收",
+  "manualInput": "手动输入ISBN码",
+  "notSupportTitle": "以下书籍不支持回收",
+  "whyChooseUs": "为什么选择我们",
+  "faq": "常见问题",
+  "cancelButton": "取消",
+  "confirmButton": "确认",
+  "isbnPlaceholder": "请输入13位ISBN码",
+  "isbnTip": "ISBN码一般印在书籍封底或版权页",
+  "isbnExample": "ISBN码示例图"
+} 
