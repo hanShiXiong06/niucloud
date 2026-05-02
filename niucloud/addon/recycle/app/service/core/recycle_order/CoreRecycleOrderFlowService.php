@@ -80,7 +80,6 @@ class CoreRecycleOrderFlowService extends BaseCoreService
 
             // 4. 获取转换配置
             $transitionConfig = $this->getTransitionConfig($order['status'], $action, $flowConfig);
-            $data['payment_info']='测试';
 
             // 5. 验证必需数据
             $this->validateRequiredData($data, $transitionConfig);

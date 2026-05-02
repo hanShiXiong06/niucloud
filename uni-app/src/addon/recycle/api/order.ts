@@ -103,52 +103,9 @@ export function getRealInfo() {
   return request.get(`tk_vip/real/getrealinfo`);
 }
 
-// ============ 安果快递相关接口 ============
-// 获取可用预约时间
-export function getPickupTimes() {
-  return request.get('recycle/anguo_delivery/pickup_times');
-}
-
-// 创建快递订单
-export function createAnguoDelivery(data: {
-  order_id: number;
-  sender_address: {
-    name: string;
-    mobile: string;
-    province: string;
-    city: string;
-    district: string;
-    address: string;
-  };
-  pickup_time: string;
-  weight?: number;
-}) {
-  return request.post('recycle/anguo_delivery/create', data);
-}
-
-// 取消快递订单
-export function cancelAnguoDelivery(order_id: number) {
-  return request.post('recycle/anguo_delivery/cancel', { order_id });
-}
-
-// 同步快递状态
-export function syncAnguoDeliveryStatus(order_id: number) {
-  return request.post('recycle/anguo_delivery/sync_status', { order_id });
-}
-
-
 // 查询快递单号
-
-// export function getDelivery(order_id: number) {
-//   return request.post('recycle/anguo_delivery/sync_status', { order_id });
-// }
 export function getExpress(express_code: string = '', mobile: string = '') {
   return request.get('recycle/device_query_api/express',  { express_code, mobile })
-}
-
-// 获取收货渠道字典
-export function getReceivingChannels() {
-  return request.get('recycle/dict/29')
 }
 
 // 检查用户是否关注公众号

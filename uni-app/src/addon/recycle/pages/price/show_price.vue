@@ -1,25 +1,23 @@
 <template>
 	<view class="show-price-page">
-		<view class="page-bg"></view>
-
-		<!-- 顶部导航栏 -->
-		<view class="custom-navbar">
+		<view class="custom-navbar" :class="{ compact: isScrolled }">
 			<view class="navbar-content">
 				<view class="navbar-left" @click="goBack">
-					<text class="iconfont icon-left"></text>
+					<u-icon name="arrow-left" color="#ffffff" size="42rpx"></u-icon>
 				</view>
-				<view class="navbar-title"> {{ priceTypeName }}{{  pageTitle }}</view>
-				<view class="navbar-right" @click="loadPriceData">
-					<text class="refresh-text">刷新</text>
+				<view class="navbar-center">
+					<text class="navbar-title">{{ navbarTitle }}</text>
+					<text v-if="isScrolled" class="navbar-subtitle">{{ priceDateDisplay }}</text>
 				</view>
+				<view class="navbar-capsule-space"></view>
 			</view>
 		</view>
 
 		<!-- 加载状态 -->
 		<view v-if="loading" class="loading-container">
+			<view class="skeleton-hero"></view>
 			<view class="skeleton-card"></view>
-			<view class="skeleton-card"></view>
-			<view class="skeleton-table"></view>
+			<view class="skeleton-card large"></view>
 			<text class="loading-text">报价数据加载中...</text>
 		</view>
 
@@ -33,94 +31,137 @@
 
 		<!-- 报价数据 -->
 		<view v-else class="price-content">
-			<!-- 报价概览卡片 -->
-			<view class="summary-card">
-				<view class="summary-top">
-					<text class="summary-tag">实时价格</text>
-					<text class="summary-meta">报价日期 {{ priceDateDisplay }}</text>
-				</view>
-				
+			<!-- <view class="quotation-cover"> -->
+				<!-- <view class="watermark watermark-a">大亨速收报价单</view>
+				<view class="watermark watermark-b">大亨速收报价单</view> -->
+				<!-- <view class="cover-main">
+					<text class="cover-title">{{ navbarTitle }}</text>
+					<text class="cover-time">{{ priceDateDisplay }}</text>
+				</view> -->
+			<!-- </view> -->
+
+			<view class="notice-card">
+				<text v-for="line in noticeLines" :key="line" class="notice-line">{{ line }}</text>
 			</view>
 
-			<!-- 多表格展示 -->
-			<view class="tables-wrapper">
+			<view class="tool-card">
+				<view class="tool-head">
+					<view class="data-meta">
+						<text>共 {{ filteredModelCount }} 个型号</text>
+						<text class="dot">·</text>
+						<text>{{ filteredRowCount }} 条价格</text>
+					</view>
+					<view class="tool-actions">
+						<view class="tool-action" @click="openTypeSheet">切换报价单</view>
+						<view class="tool-action primary" @click="loadPriceData">刷新</view>
+					</view>
+				</view>
+				<view class="search-box">
+					<text class="iconfont iconsousuo"></text>
+					<input v-model="keyword" class="search-input" placeholder="搜索型号 / 容量" placeholder-class="search-placeholder" />
+				</view>
+			</view>
+
+			<view class="sheet-list">
 				<view
 					v-for="table in groupedTables"
 					:key="table.id"
 					:id="`table-${table.id}`"
-					class="table-container"
+					class="sheet-section"
 				>
-					<scroll-view scroll-x="false" class="table-scroll" show-scrollbar="false">
-						<view class="excel-table">
-							<view class="table-header">
-								<view class="header-cell col-model" :style="{ width: `${fixedColWidths.model}rpx` }">型号</view>
-								<view class="header-cell col-capacity" :style="{ width: `${fixedColWidths.capacity}rpx` }">容量</view>
-								<view
-									v-for="config in table.configColumns"
-									:key="config"
-									class="header-cell col-price"
-								>
-									<text class="header-config-text">{{ config }}</text>
-								</view>
-								<view class="header-cell col-remark">备注</view>
+					<view v-if="groupedTables.length > 1" class="section-title">
+						<text>价格结构 {{ table.id }}</text>
+						<text class="section-sub">{{ table.configColumns.join(' / ') }}</text>
+					</view>
+
+					<view
+						v-for="(modelGroup, modelIdx) in getModelGroups(table.rows)"
+						:key="`${table.id}-${modelIdx}`"
+						class="model-card"
+					>
+						<view class="model-head">
+							<view class="model-name-block">
+								<text class="model-brand">{{ getModelBrand(modelGroup.modelName) }}</text>
+								<text class="model-name">{{ modelGroup.modelName }}</text>
 							</view>
+							<text class="capacity-count">{{ modelGroup.rows.length }} 个容量</text>
+						</view>
 
-							<view class="table-body">
-								<view
-									v-for="(modelGroup, modelIdx) in getModelGroups(table.rows)"
-									:key="modelIdx"
-									class="model-group"
-								>
-									<view class="model-group-row">
-										<view class="body-cell col-model model-merged" :style="{ width: `${fixedColWidths.model}rpx` }">
-											<text class="cell-text model-name">{{ modelGroup.modelName }}</text>
-										</view>
+						<view class="price-table-wrap">
+							<view class="mobile-price-table">
+								<view class="price-row table-head">
+									<view class="price-cell capacity-cell">机身内存</view>
+									<view
+										v-for="column in table.priceColumns"
+										:key="column.key"
+										class="price-cell price-head-cell"
+										:style="getPriceColumnStyle(column)"
+									>
+										<text>{{ column.name }}</text>
+									</view>
+									<view
+										v-for="column in table.adjustmentColumns"
+										:key="column.key"
+										class="price-cell adjustment-head-cell"
+										:style="getAdjustmentColumnStyle(column)"
+									>
+										{{ column.name }}
+									</view>
+								</view>
 
-										<view class="data-area">
-											<view class="data-columns">
-												<view
-													v-for="(row, rowIdx) in modelGroup.rows"
-													:key="rowIdx"
-													class="data-row"
-												>
-													<view class="body-cell col-capacity" :style="{ width: `${fixedColWidths.capacity}rpx` }">
-														<text class="cell-text">{{ row.capacity || '--' }}</text>
-													</view>
-
-													<view
-														v-for="config in table.configColumns"
-														:key="config"
-														class="body-cell col-price"
-													>
-														<view v-if="hasPriceValue(row.prices?.[config])" class="price-box">
-															<text class="price-value">{{ formatPrice(row.prices?.[config]) }}</text>
-														</view>
-														<text v-else class="empty-cell">--</text>
-													</view>
-												</view>
+								<view class="price-body-wrap">
+									<view class="price-main-columns">
+										<view
+											v-for="(row, rowIdx) in getDisplayRows(modelGroup.rows, table.adjustmentColumns)"
+											:key="rowIdx"
+											class="price-row"
+											:style="{ height: `${row.displayRowHeight || ADJUSTMENT_ROW_HEIGHT_RPX}rpx`, minHeight: `${row.displayRowHeight || ADJUSTMENT_ROW_HEIGHT_RPX}rpx` }"
+										>
+											<view class="price-cell capacity-cell capacity-body">{{ row.capacity || '--' }}</view>
+											<view
+												v-for="column in table.priceColumns"
+												:key="column.key"
+												class="price-cell price-body-cell"
+												:style="getPriceColumnStyle(column)"
+											>
+												<text v-if="hasPriceValue(row.prices?.[column.name])" class="price-value">{{ formatPrice(row.prices?.[column.name]) }}</text>
+												<text v-else class="empty-cell">--</text>
 											</view>
+										</view>
+									</view>
 
-											<view class="remark-column">
-												<view
-													v-for="(row, rowIdx) in modelGroup.rows"
-													:key="rowIdx"
-													class="remark-cell-wrapper"
-												>
-													<view
-														v-if="row.showRemark"
-														class="body-cell col-remark remark-merged"
-														:style="{ height: `${row.remarkRowspan * ROW_HEIGHT_RPX}rpx` }"
-													>
-														<text class="remark-text">{{ row.displayRemark || '--' }}</text>
-													</view>
+									<view
+										v-for="column in table.adjustmentColumns"
+										:key="column.key"
+										class="adjustment-column"
+										:style="getAdjustmentColumnStyle(column)"
+									>
+										<view
+											v-for="(row, rowIdx) in getDisplayRows(modelGroup.rows, table.adjustmentColumns)"
+											:key="`${column.key}-${rowIdx}`"
+											class="adjustment-cell-wrapper"
+											:style="{ height: `${row.displayRowHeight || ADJUSTMENT_ROW_HEIGHT_RPX}rpx`, minHeight: `${row.displayRowHeight || ADJUSTMENT_ROW_HEIGHT_RPX}rpx` }"
+										>
+											<view
+												v-if="getAdjustmentCell(row, column.key).show"
+												class="price-cell adjustment-body-cell"
+												:style="{ ...getAdjustmentColumnStyle(column), height: `${getAdjustmentCell(row, column.key).height || getAdjustmentCell(row, column.key).rowspan * ADJUSTMENT_ROW_HEIGHT_RPX}rpx` }"
+											>
+												<view v-if="getAdjustmentCell(row, column.key).parts.length" class="adjustment-item-list">
+													<text
+														v-for="item in getAdjustmentCell(row, column.key).parts"
+														:key="item"
+														class="adjustment-item-text"
+													>{{ item }}</text>
 												</view>
+												<text v-else class="adjustment-cell-text">/</text>
 											</view>
 										</view>
 									</view>
 								</view>
 							</view>
 						</view>
-					</scroll-view>
+					</view>
 				</view>
 			</view>
 		</view>
@@ -131,29 +172,87 @@
 				<view class="order-btn" @click="goToOrder">去下单</view>
 			</view>
 		</view>
+
+		<view v-if="showTypeSheet" class="sheet-mask" @click="showTypeSheet = false">
+			<view class="type-sheet" @click.stop>
+				<view class="type-sheet-head">
+					<text class="type-title">选择报价单</text>
+					<text class="type-close" @click="showTypeSheet = false">关闭</text>
+				</view>
+				<view v-if="quotationTypes.length === 0" class="type-empty">暂无可切换报价单</view>
+				<view
+					v-for="item in quotationTypes"
+					:key="item.dataset_id || item.quotation_id"
+					class="type-item"
+					:class="{ active: String(item.dataset_id) === String(datasetId) || String(item.quotation_id) === String(priceTypeId) }"
+					@click="switchQuotation(item)"
+				>
+					<view>
+						<text class="type-name">{{ item.title || item.dataset_name || item.price_name }}</text>
+						<text class="type-meta">{{ item.last_sync_at_text || '待同步' }} · {{ item.model_count || 0 }} 个型号</text>
+					</view>
+					<text class="type-check">✓</text>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
-import { getQuotationPriceList, type QuotationPriceData } from '@/addon/recycle/api/quotation'
+import { onLoad, onPageScroll } from '@dcloudio/uni-app'
+import { getQuotationPriceList, getQuotationV2PriceList, getQuotationV2Types, type QuotationPriceData, type QuotationV2Type } from '@/addon/recycle/api/quotation'
 
 interface EnhancedPriceRow extends QuotationPriceData {
-	showRemark?: boolean
-	remarkRowspan?: number
-	displayRemark?: string
+	showAdjustment?: boolean
+	adjustmentRowspan?: number
+	displayAdjustment?: string
+	displayAdjustmentParts?: string[]
+	displayAdjustmentCells?: Record<string, AdjustmentDisplayCell>
+	displayRowHeight?: number
 }
 
 interface GroupedTable {
 	id: number
 	configColumns: string[]
+	priceColumns: PriceColumn[]
+	adjustmentColumns: AdjustmentColumn[]
+	rows: EnhancedPriceRow[]
+}
+
+interface PriceColumn {
+	key: string
+	name: string
+	width: number
+}
+
+interface AdjustmentColumn {
+	key: string
+	name: string
+	sort: number
+	width?: number
+}
+
+interface AdjustmentDisplayCell {
+	show: boolean
+	rowspan: number
+	parts: string[]
+	text: string
+	height: number
+}
+
+interface ModelGroup {
+	modelName: string
 	rows: EnhancedPriceRow[]
 }
 
 interface PricePageOptions {
 	id?: string
+	quotation_id?: string
+	dataset_id?: string
+	source?: string
 	title?: string
+	price_date?: string
 }
 
 interface PriceListResponse {
@@ -162,21 +261,53 @@ interface PriceListResponse {
 	data?: QuotationPriceData[]
 }
 
-const ROW_HEIGHT_RPX = 88
 const ORDER_PAGE_URL = '/addon/recycle/pages/order/order'
+const ADJUSTMENT_ROW_HEIGHT_RPX = 68
+const ADJUSTMENT_TEXT_LINE_HEIGHT_RPX = 20
+const ADJUSTMENT_TEXT_GAP_RPX = 2
+const ADJUSTMENT_CELL_PADDING_RPX = 12
+const TABLE_TOTAL_WIDTH_RPX = 750
+const CAPACITY_COLUMN_WIDTH_RPX = 76
+const PRICE_COLUMN_WIDTH_CONFIG = {
+	minWhenMany: 76,
+	minWhenNormal: 82,
+	minWhenFew: 120,
+	maxWhenMany: 94,
+	maxWhenNormal: 108,
+	maxWhenFew: 128
+}
+const ADJUSTMENT_COLUMN_WIDTH_CONFIG = {
+	minWhenMany: 96,
+	minWhenTwo: 118,
+	minWhenOne: 150,
+	maxWhenMany: 280,
+	maxWhenTwo: 380,
+	maxWhenOne: 460
+}
 
 const priceTypeId = ref('')
+const datasetId = ref('')
+const source = ref('')
+const priceDate = ref('')
 const pageTitle = ref('报价查询')
 const loading = ref(false)
 const tableData = ref<QuotationPriceData[]>([])
 const priceTypeName = ref('')
+const keyword = ref('')
+const isScrolled = ref(false)
+const showTypeSheet = ref(false)
+const quotationTypes = ref<QuotationV2Type[]>([])
 
 const groupedTables = computed<GroupedTable[]>(() => {
-	if (tableData.value.length === 0) return []
+	const normalizedData = filterRows(tableData.value).map(row => ({
+		...row,
+		prices: normalizePrices(row.prices)
+	}))
+	if (normalizedData.length === 0) return []
 
 	const configGroupMap = new Map<string, QuotationPriceData[]>()
 
-	for (const row of tableData.value) {
+	for (const row of normalizedData) {
 		if (!row.prices) continue
 
 		// 完全按接口返回顺序渲染，不做前端排序
@@ -194,21 +325,24 @@ const groupedTables = computed<GroupedTable[]>(() => {
 
 	configGroupMap.forEach((rows, key) => {
 		const normalizedRows = rows.map(row => ({ ...row }))
+		const configColumns = key ? key.split('|||') : []
+		const tableColumns = calculateTableColumnWidths(
+			configColumns,
+			collectAdjustmentColumns(normalizedRows),
+			normalizedRows
+		)
 
 		tables.push({
 			id: idx++,
-			configColumns: key ? key.split('|||') : [],
+			configColumns,
+			priceColumns: tableColumns.priceColumns,
+			adjustmentColumns: tableColumns.adjustmentColumns,
 			rows: normalizedRows
 		})
 	})
 
 	return tables
 })
-
-const fixedColWidths = {
-	model: 180,
-	capacity: 85
-}
 
 const priceDateDisplay = computed(() => {
 	const dateList = tableData.value
@@ -226,15 +360,40 @@ const priceDateDisplay = computed(() => {
 	return formatDate(raw)
 })
 
-function getModelGroups(rows: EnhancedPriceRow[]): Array<{ modelName: string; rows: EnhancedPriceRow[] }> {
-	const groups: Array<{ modelName: string; rows: EnhancedPriceRow[] }> = []
+const navbarTitle = computed(() => {
+	if (priceTypeName.value && (!pageTitle.value || pageTitle.value === '报价查询' || pageTitle.value === priceTypeName.value)) {
+		return priceTypeName.value
+	}
+	if (priceTypeName.value && pageTitle.value) {
+		return pageTitle.value.includes(priceTypeName.value) ? pageTitle.value : `${priceTypeName.value}${pageTitle.value}`
+	}
+	return pageTitle.value || '报价查询'
+})
+
+const noticeLines = computed(() => [
+	'温馨提示：报价仅供参考，最终价格以质检结果为准',
+	'请确认设备型号、容量、成色与功能状态后再下单',
+	'报价保签收当天，特殊机况以人工复核为准'
+])
+
+const filteredModelCount = computed(() => {
+	const modelSet = new Set<string>()
+	for (const row of filterRows(tableData.value)) {
+		if (row.goods_name) modelSet.add(row.goods_name)
+	}
+	return modelSet.size
+})
+
+const filteredRowCount = computed(() => filterRows(tableData.value).length)
+
+function getModelGroups(rows: EnhancedPriceRow[]): ModelGroup[] {
+	const groups: ModelGroup[] = []
 	let currentModelName = ''
-	let currentGroup: { modelName: string; rows: EnhancedPriceRow[] } | null = null
+	let currentGroup: ModelGroup | null = null
 
 	rows.forEach(row => {
 		if (row.goods_name !== currentModelName) {
 			if (currentGroup) {
-				processRemarkRowspan(currentGroup.rows)
 				groups.push(currentGroup)
 			}
 			currentModelName = row.goods_name
@@ -248,45 +407,44 @@ function getModelGroups(rows: EnhancedPriceRow[]): Array<{ modelName: string; ro
 	})
 
 	if (currentGroup) {
-		processRemarkRowspan(currentGroup.rows)
 		groups.push(currentGroup)
 	}
 
 	return groups
 }
 
-function processRemarkRowspan(rows: EnhancedPriceRow[]) {
-	let currentRemark = ''
-	let remarkStartIndex = 0
-
-	rows.forEach((row, index) => {
-		const remark = row.value_info?.trim() || ''
-		if (remark !== currentRemark) {
-			if (remarkStartIndex < index) {
-				for (let i = remarkStartIndex; i < index; i++) {
-					rows[i].remarkRowspan = index - remarkStartIndex
-				}
-			}
-			currentRemark = remark
-			remarkStartIndex = index
-			row.showRemark = true
-			row.remarkRowspan = 1
-			row.displayRemark = remark || '--'
-		} else {
-			row.showRemark = false
-			row.remarkRowspan = 0
-		}
-	})
-
-	if (remarkStartIndex < rows.length) {
-		for (let i = remarkStartIndex; i < rows.length; i++) {
-			rows[i].remarkRowspan = rows.length - remarkStartIndex
-		}
-	}
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null
+}
+
+function normalizePrices(value: unknown): Record<string, unknown> {
+	if (Array.isArray(value)) {
+		const result: Record<string, unknown> = {}
+		for (const item of value) {
+			if (!isRecord(item)) continue
+			const name = String(item.name || item.field_name || item.price_name || '').trim()
+			if (!name) continue
+			result[name] = item
+		}
+		return result
+	}
+
+	if (isRecord(value)) {
+		return value
+	}
+
+	return {}
+}
+
+function filterRows(rows: QuotationPriceData[]): QuotationPriceData[] {
+	const word = keyword.value.trim().toLowerCase()
+	if (!word) return rows
+
+	return rows.filter(row => {
+		const model = String(row.goods_name || '').toLowerCase()
+		const capacity = String(row.capacity || '').toLowerCase()
+		return model.includes(word) || capacity.includes(word)
+	})
 }
 
 function parsePriceValue(value: unknown): number | null {
@@ -318,7 +476,7 @@ function formatPrice(value: unknown): string {
 	if (num === null) return '--'
 
 	// 按需求去掉小数点，仅显示整数价格
-	return `${Math.trunc(num)}`
+	return `${Math.round(num)}`
 }
 
 function formatDate(timestamp: number | string): string {
@@ -338,17 +496,20 @@ function formatDate(timestamp: number | string): string {
 }
 
 async function loadPriceData() {
-	if (!priceTypeId.value) {
+	if (!priceTypeId.value && !datasetId.value) {
 		uni.showToast({ title: '参数错误', icon: 'none' })
 		return
 	}
 
 	loading.value = true
 	try {
-		const res = (await getQuotationPriceList({
-			quotation_id: priceTypeId.value,
-			is_current: 1
-		})) as PriceListResponse
+		const shouldUseV2 = source.value === 'v2' || datasetId.value || source.value !== 'legacy'
+		const res = shouldUseV2
+			? await loadV2WithFallback()
+			: await getQuotationPriceList({
+				quotation_id: priceTypeId.value,
+				is_current: 1
+			}) as PriceListResponse
 
 		if (res.code === 1 && res.data) {
 			tableData.value = res.data || []
@@ -369,13 +530,681 @@ async function loadPriceData() {
 	}
 }
 
+async function loadV2WithFallback() {
+	try {
+		const res = (await getQuotationV2PriceList({
+			dataset_id: datasetId.value,
+			quotation_id: priceTypeId.value,
+			price_date: priceDate.value
+		})) as PriceListResponse
+		if (res.code === 1 && (res.data?.length || source.value === 'v2' || datasetId.value)) {
+			source.value = 'v2'
+			return res
+		}
+	} catch (error) {
+		if (source.value === 'v2' || datasetId.value) {
+			throw error
+		}
+	}
+
+	source.value = 'legacy'
+	return await getQuotationPriceList({
+		quotation_id: priceTypeId.value,
+		is_current: 1
+	}) as PriceListResponse
+}
+
 function goToOrder() {
-	const query = priceTypeId.value ? `?quotation_id=${encodeURIComponent(priceTypeId.value)}` : ''
+	const queryParts: string[] = []
+	if (priceTypeId.value) queryParts.push(`quotation_id=${encodeURIComponent(priceTypeId.value)}`)
+	if (datasetId.value) queryParts.push(`dataset_id=${encodeURIComponent(datasetId.value)}`)
+	const query = queryParts.length ? `?${queryParts.join('&')}` : ''
 	uni.navigateTo({ url: `${ORDER_PAGE_URL}${query}` })
 }
 
 function goBack() {
 	uni.navigateBack()
+}
+
+function getModelBrand(modelName: string): string {
+	const name = String(modelName || '')
+	if (/iphone|ipad|mac|苹果/i.test(name)) return '苹果'
+	if (/honor|荣耀/i.test(name)) return '荣耀'
+	if (/huawei|华为/i.test(name)) return '华为'
+	if (/xiaomi|redmi|小米|红米/i.test(name)) return '小米'
+	if (/oppo/i.test(name)) return 'OPPO'
+	if (/vivo/i.test(name)) return 'vivo'
+	if (/samsung|三星/i.test(name)) return '三星'
+	return '型号'
+}
+
+function getDisplayRows(rows: EnhancedPriceRow[], adjustmentColumns: AdjustmentColumn[]): EnhancedPriceRow[] {
+	const displayRows = rows.map(row => {
+		const displayAdjustmentCells = buildRowAdjustmentCells(row, adjustmentColumns)
+		return {
+			...row,
+			showAdjustment: true,
+			adjustmentRowspan: 1,
+			displayAdjustmentCells,
+			displayAdjustmentParts: Object.values(displayAdjustmentCells).flatMap(cell => cell.parts),
+			displayAdjustment: Object.values(displayAdjustmentCells).map(cell => cell.text).filter(Boolean).join('；')
+		}
+	})
+
+	if (displayRows.length === 0 || adjustmentColumns.length === 0) {
+		return displayRows
+	}
+
+	for (const column of adjustmentColumns) {
+		const uniqueNonEmptyTexts = Array.from(new Set(
+			displayRows
+				.map(row => row.displayAdjustmentCells?.[column.key]?.text || '')
+				.filter(Boolean)
+		))
+
+		if (uniqueNonEmptyTexts.length === 1) {
+			const sourceCell = displayRows
+				.map(row => row.displayAdjustmentCells?.[column.key])
+				.find(cell => cell && cell.text === uniqueNonEmptyTexts[0])
+			const firstCell = displayRows[0].displayAdjustmentCells?.[column.key]
+			if (firstCell) {
+				firstCell.show = true
+				firstCell.rowspan = displayRows.length
+				firstCell.parts = sourceCell?.parts || splitAdjustmentText(uniqueNonEmptyTexts[0])
+				firstCell.text = uniqueNonEmptyTexts[0]
+			}
+			for (let index = 1; index < displayRows.length; index++) {
+				const cell = displayRows[index].displayAdjustmentCells?.[column.key]
+				if (cell) {
+					cell.show = false
+					cell.rowspan = 0
+				}
+			}
+			applyAdjustmentCellHeight(displayRows, column, 0, displayRows.length)
+			continue
+		}
+
+		let startIndex = 0
+		let currentText = displayRows[0]?.displayAdjustmentCells?.[column.key]?.text || ''
+
+		for (let index = 1; index <= displayRows.length; index++) {
+			const text = displayRows[index]?.displayAdjustmentCells?.[column.key]?.text || ''
+			if (index === displayRows.length || text !== currentText) {
+				const span = index - startIndex
+				const startCell = displayRows[startIndex].displayAdjustmentCells?.[column.key]
+				if (startCell) {
+					startCell.show = true
+					startCell.rowspan = span
+				}
+				for (let i = startIndex + 1; i < index; i++) {
+					const cell = displayRows[i].displayAdjustmentCells?.[column.key]
+					if (cell) {
+						cell.show = false
+						cell.rowspan = 0
+					}
+				}
+				applyAdjustmentCellHeight(displayRows, column, startIndex, span)
+				startIndex = index
+				currentText = text
+			}
+		}
+	}
+
+	applyDisplayRowHeights(displayRows)
+
+	return displayRows
+}
+
+function collectAdjustmentColumns(rows: EnhancedPriceRow[]): AdjustmentColumn[] {
+	const columns = new Map<string, AdjustmentColumn>()
+
+	for (const row of rows) {
+		for (const item of collectAdjustmentItemRecords(row)) {
+			const column = getAdjustmentColumnFromItem(item)
+			if (!column || columns.has(column.key)) continue
+			columns.set(column.key, column)
+		}
+
+		for (const part of splitAdjustmentSummaryText(row.adjustment_summary || row.value_info || '')) {
+			const parsed = parseLabeledAdjustmentText(part)
+			if (!parsed || columns.has(parsed.key) || Array.from(columns.values()).some(column => column.name === parsed.name)) continue
+			columns.set(parsed.key, parsed)
+		}
+	}
+
+	if (columns.size === 0 && rows.some(row => normalizeAdjustmentParts(row).length > 0)) {
+		columns.set('adjustment', {
+			key: 'adjustment',
+			name: '加/扣钱项',
+			sort: 999
+		})
+	}
+
+	return Array.from(columns.values()).sort((a, b) => (a.sort - b.sort) || a.name.localeCompare(b.name))
+}
+
+function calculateTableColumnWidths(priceNames: string[], adjustmentColumns: AdjustmentColumn[], rows: EnhancedPriceRow[]): {
+	priceColumns: PriceColumn[]
+	adjustmentColumns: AdjustmentColumn[]
+} {
+	const priceColumns: PriceColumn[] = priceNames.map(name => ({
+		key: `price:${name}`,
+		name,
+		width: 0
+	}))
+	const columns = [
+		...priceColumns.map(column => ({
+			type: 'price' as const,
+			key: column.key,
+			score: getPriceColumnScore(column.name, rows),
+			min: getPriceColumnMinWidth(priceColumns.length),
+			max: getPriceColumnMaxWidth(priceColumns.length)
+		})),
+		...adjustmentColumns.map(column => ({
+			type: 'adjustment' as const,
+			key: column.key,
+			score: getAdjustmentColumnScore(column, rows) * 1.35,
+			min: getAdjustmentColumnMinWidth(adjustmentColumns.length),
+			max: getAdjustmentColumnMaxWidth(adjustmentColumns.length)
+		}))
+	]
+
+	if (columns.length === 0) {
+		return { priceColumns, adjustmentColumns }
+	}
+
+	const totalWidth = Math.max(0, TABLE_TOTAL_WIDTH_RPX - CAPACITY_COLUMN_WIDTH_RPX)
+	const widthMap = allocateColumnWidths(columns, totalWidth)
+
+	return {
+		priceColumns: priceColumns.map(column => ({
+			...column,
+			width: widthMap[column.key] || getPriceColumnMinWidth(priceColumns.length)
+		})),
+		adjustmentColumns: adjustmentColumns.map(column => ({
+			...column,
+			width: widthMap[column.key] || getAdjustmentColumnMinWidth(adjustmentColumns.length)
+		}))
+	}
+}
+
+function allocateColumnWidths(columns: Array<{ key: string; score: number; min: number; max: number }>, totalWidth: number): Record<string, number> {
+	const result: Record<string, number> = {}
+	const minTotal = columns.reduce((total, column) => total + column.min, 0)
+	const scoreTotal = columns.reduce((total, column) => total + Math.max(1, column.score), 0)
+	const flexibleWidth = Math.max(0, totalWidth - minTotal)
+
+	for (const column of columns) {
+		const weightedWidth = column.min + Math.round(flexibleWidth * (Math.max(1, column.score) / scoreTotal))
+		result[column.key] = Math.max(column.min, Math.min(column.max, weightedWidth))
+	}
+
+	let remaining = totalWidth - Object.values(result).reduce((total, width) => total + width, 0)
+	const sortedColumns = [...columns].sort((a, b) => b.score - a.score)
+	let guard = 0
+	while (remaining !== 0 && sortedColumns.length > 0 && guard < sortedColumns.length * 1000) {
+		for (const column of sortedColumns) {
+			if (remaining > 0 && result[column.key] < column.max) {
+				result[column.key]++
+				remaining--
+			} else if (remaining < 0 && result[column.key] > column.min) {
+				result[column.key]--
+				remaining++
+			}
+			if (remaining === 0) break
+		}
+		guard++
+		if (
+			(remaining > 0 && sortedColumns.every(column => result[column.key] >= column.max))
+			|| (remaining < 0 && sortedColumns.every(column => result[column.key] <= column.min))
+		) {
+			break
+		}
+	}
+
+	return result
+}
+
+function getPriceColumnScore(name: string, rows: EnhancedPriceRow[]): number {
+	let maxPriceWeight = 0
+	for (const row of rows) {
+		const price = formatPrice(row.prices?.[name])
+		if (price !== '--') {
+			maxPriceWeight = Math.max(maxPriceWeight, getTextDisplayWeight(price))
+		}
+	}
+
+	return Math.max(3, maxPriceWeight * 1.4 + Math.min(getTextDisplayWeight(name) * 0.16, 4))
+}
+
+function getAdjustmentColumnScore(column: AdjustmentColumn, rows: EnhancedPriceRow[]): number {
+	let score = getTextDisplayWeight(column.name) * 1.4
+	let longestPartWeight = 0
+	let totalPartWeight = 0
+	let partCount = 0
+
+	for (const row of rows) {
+		const cells = buildRowAdjustmentCells(row, [column])
+		const parts = cells[column.key]?.parts || []
+		for (const part of parts) {
+			const weight = getTextDisplayWeight(part)
+			longestPartWeight = Math.max(longestPartWeight, weight)
+			totalPartWeight += weight
+			partCount++
+		}
+	}
+
+	const averagePartWeight = partCount > 0 ? totalPartWeight / partCount : 0
+	score += longestPartWeight * 0.7 + averagePartWeight * 0.3
+	return score
+}
+
+function getTextDisplayWeight(text: string): number {
+	let weight = 0
+	for (const char of String(text || '')) {
+		weight += /[\x00-\x7F]/.test(char) ? 0.55 : 1
+	}
+	return weight
+}
+
+function getPriceColumnMinWidth(count: number): number {
+	if (count >= 4) return PRICE_COLUMN_WIDTH_CONFIG.minWhenMany
+	if (count >= 3) return PRICE_COLUMN_WIDTH_CONFIG.minWhenNormal
+	return PRICE_COLUMN_WIDTH_CONFIG.minWhenFew
+}
+
+function getPriceColumnMaxWidth(count: number): number {
+	if (count >= 4) return PRICE_COLUMN_WIDTH_CONFIG.maxWhenMany
+	if (count >= 3) return PRICE_COLUMN_WIDTH_CONFIG.maxWhenNormal
+	return PRICE_COLUMN_WIDTH_CONFIG.maxWhenFew
+}
+
+function getAdjustmentColumnMinWidth(count: number): number {
+	if (count >= 3) return ADJUSTMENT_COLUMN_WIDTH_CONFIG.minWhenMany
+	if (count === 2) return ADJUSTMENT_COLUMN_WIDTH_CONFIG.minWhenTwo
+	return ADJUSTMENT_COLUMN_WIDTH_CONFIG.minWhenOne
+}
+
+function getAdjustmentColumnMaxWidth(count: number): number {
+	if (count <= 1) return ADJUSTMENT_COLUMN_WIDTH_CONFIG.maxWhenOne
+	if (count === 2) return ADJUSTMENT_COLUMN_WIDTH_CONFIG.maxWhenTwo
+	return ADJUSTMENT_COLUMN_WIDTH_CONFIG.maxWhenMany
+}
+
+function buildRowAdjustmentCells(row: EnhancedPriceRow, adjustmentColumns: AdjustmentColumn[]): Record<string, AdjustmentDisplayCell> {
+	const map: Record<string, AdjustmentDisplayCell> = {}
+	for (const column of adjustmentColumns) {
+		map[column.key] = {
+			show: true,
+			rowspan: 1,
+			parts: [],
+			text: '',
+			height: ADJUSTMENT_ROW_HEIGHT_RPX
+		}
+	}
+
+	for (const item of collectAdjustmentItemRecords(row)) {
+		const column = getAdjustmentColumnFromItem(item)
+		if (!column || !map[column.key]) continue
+		map[column.key].parts.push(...getAdjustmentItemContentParts(item))
+	}
+
+	for (const part of splitAdjustmentSummaryText(row.adjustment_summary || row.value_info || '')) {
+		const parsed = parseLabeledAdjustmentText(part)
+		if (!parsed) continue
+		const key = map[parsed.key] ? parsed.key : findAdjustmentColumnKeyByName(adjustmentColumns, parsed.name)
+		if (!key || !map[key]) continue
+		map[key].parts.push(...splitAdjustmentText(parsed.content))
+	}
+
+	if (adjustmentColumns.length === 1 && Object.values(map)[0] && Object.values(map)[0].parts.length === 0) {
+		Object.values(map)[0].parts = normalizeAdjustmentParts(row)
+	}
+
+	for (const column of adjustmentColumns) {
+		const parts = uniqueAdjustmentParts(map[column.key].parts)
+		map[column.key].parts = parts
+		map[column.key].text = parts.join('；')
+	}
+
+	return map
+}
+
+function applyAdjustmentCellHeight(rows: EnhancedPriceRow[], column: AdjustmentColumn, startIndex: number, rowspan: number) {
+	const cell = rows[startIndex]?.displayAdjustmentCells?.[column.key]
+	if (!cell) return
+
+	const contentHeight = estimateAdjustmentCellHeight(cell.parts, getAdjustmentColumnWidth(column))
+	const baseHeight = rowspan * ADJUSTMENT_ROW_HEIGHT_RPX
+	cell.height = Math.max(baseHeight, contentHeight)
+}
+
+function applyDisplayRowHeights(rows: EnhancedPriceRow[]) {
+	const requiredHeights = rows.map(() => ADJUSTMENT_ROW_HEIGHT_RPX)
+
+	rows.forEach((row, rowIndex) => {
+		Object.values(row.displayAdjustmentCells || {}).forEach(cell => {
+			if (!cell.show || cell.rowspan <= 0) return
+			const rowSpan = Math.max(1, cell.rowspan)
+			const averageHeight = Math.ceil((cell.height || ADJUSTMENT_ROW_HEIGHT_RPX * rowSpan) / rowSpan)
+			for (let index = rowIndex; index < Math.min(rows.length, rowIndex + rowSpan); index++) {
+				requiredHeights[index] = Math.max(requiredHeights[index], averageHeight)
+			}
+		})
+	})
+
+	rows.forEach((row, index) => {
+		row.displayRowHeight = requiredHeights[index]
+	})
+
+	rows.forEach((row, rowIndex) => {
+		Object.values(row.displayAdjustmentCells || {}).forEach(cell => {
+			if (!cell.show || cell.rowspan <= 0) return
+			let height = 0
+			for (let index = rowIndex; index < Math.min(rows.length, rowIndex + cell.rowspan); index++) {
+				height += rows[index].displayRowHeight || ADJUSTMENT_ROW_HEIGHT_RPX
+			}
+			cell.height = Math.max(cell.height || 0, height)
+		})
+	})
+}
+
+function estimateAdjustmentCellHeight(parts: string[], columnWidth: number): number {
+	if (parts.length === 0) return ADJUSTMENT_ROW_HEIGHT_RPX
+
+	const contentLines = parts.reduce((total, part) => {
+		return total + estimateTextLineCount(part, columnWidth)
+	}, 0)
+	const gapHeight = Math.max(0, parts.length - 1) * ADJUSTMENT_TEXT_GAP_RPX
+
+	return Math.max(
+		ADJUSTMENT_ROW_HEIGHT_RPX,
+		contentLines * ADJUSTMENT_TEXT_LINE_HEIGHT_RPX + gapHeight + ADJUSTMENT_CELL_PADDING_RPX
+	)
+}
+
+function estimateTextLineCount(text: string, columnWidth: number): number {
+	const normalizedText = String(text || '').trim()
+	if (!normalizedText) return 1
+
+	const availableWidth = Math.max(64, columnWidth - 12)
+	const charsPerLine = Math.max(4, Math.floor(availableWidth / 14))
+	let weight = 0
+	for (const char of normalizedText) {
+		weight += /[\x00-\x7F]/.test(char) ? 0.55 : 1
+	}
+
+	return Math.max(1, Math.ceil(weight / charsPerLine))
+}
+
+function normalizeAdjustmentParts(row: EnhancedPriceRow): string[] {
+	const parts = collectAdjustmentItemRecords(row).flatMap(item => {
+		const column = getAdjustmentColumnFromItem(item)
+		const content = getAdjustmentItemContentParts(item).join(' ')
+		return column && content ? [`${column.name}：${content}`] : splitAdjustmentText(content)
+	})
+
+	parts.push(
+		String(row.adjustment_summary || ''),
+		String(row.value_info || ''),
+		String((row as Record<string, unknown>).remark_text || ''),
+		String((row as Record<string, unknown>).remark || '')
+	)
+
+	return mergeAdjustmentTextParts(parts)
+}
+
+function formatAdjustmentItems(value: unknown): string[] {
+	if (typeof value === 'string') {
+		return splitAdjustmentText(value)
+	}
+
+	const items = Array.isArray(value)
+		? value
+		: isRecord(value)
+			? hasAdjustmentContent(value) ? [value] : Object.values(value)
+			: []
+
+	const parts: string[] = []
+	for (const item of items) {
+		if (typeof item === 'string') {
+			parts.push(...splitAdjustmentText(item))
+			continue
+		}
+		if (!isRecord(item)) continue
+
+		const content = String(item.content_text || item.remark_text || item.content || item.text || item.value || item.remark || '').trim()
+		if (!content) continue
+
+		const fieldName = String(item.field_name || item.name || item.title || item.label || '').trim()
+		const text = fieldName ? `${fieldName}：${content}` : content
+		if (!parts.includes(text)) {
+			parts.push(text)
+		}
+	}
+
+	return parts
+}
+
+function collectAdjustmentItemRecords(row: EnhancedPriceRow): Record<string, unknown>[] {
+	const sources = [
+		row.adjustment_items,
+		(row as Record<string, unknown>).adjustments,
+		(row as Record<string, unknown>).notes,
+		(row as Record<string, unknown>).note_items,
+		(row as Record<string, unknown>).remark_items,
+		(row as Record<string, unknown>).deduction_items,
+		(row as Record<string, unknown>).deductionConfig
+	]
+	const records: Record<string, unknown>[] = []
+
+	for (const source of sources) {
+		if (Array.isArray(source)) {
+			for (const item of source) {
+				if (isRecord(item)) records.push(item)
+			}
+			continue
+		}
+		if (isRecord(source)) {
+			if (hasAdjustmentContent(source)) {
+				records.push(source)
+			} else {
+				for (const item of Object.values(source)) {
+					if (isRecord(item)) records.push(item)
+				}
+			}
+		}
+	}
+
+	return records
+}
+
+function getAdjustmentColumnFromItem(item: Record<string, unknown>): AdjustmentColumn | null {
+	const name = String(item.field_name || item.name || item.title || item.label || '').trim()
+	if (!name) return null
+	const rawKey = item.field_id !== undefined && item.field_id !== null && item.field_id !== ''
+		? `field:${String(item.field_id)}`
+		: `label:${name}`
+
+	return {
+		key: rawKey,
+		name,
+		sort: Number(item.field_sort || item.sort || 999)
+	}
+}
+
+function findAdjustmentColumnKeyByName(columns: AdjustmentColumn[], name: string): string {
+	return columns.find(column => column.name === name)?.key || ''
+}
+
+function parseLabeledAdjustmentText(value: unknown): (AdjustmentColumn & { content: string }) | null {
+	const text = String(value || '').trim()
+	const separatorIndex = text.indexOf('：')
+	if (separatorIndex <= 0) return null
+	const name = text.slice(0, separatorIndex).trim()
+	const content = text.slice(separatorIndex + 1).trim()
+	if (!name || !content) return null
+
+	return {
+		key: `label:${name}`,
+		name,
+		sort: 999,
+		content
+	}
+}
+
+function getAdjustmentItemContentParts(item: Record<string, unknown>): string[] {
+	const htmlParts = getHtmlTextParts(String(item.content_html || item.html || ''))
+	if (htmlParts.length > 1) return htmlParts
+
+	const content = String(item.content_text || item.remark_text || item.content || item.text || item.value || item.remark || '').trim()
+	return splitAdjustmentText(content || htmlParts.join(' '))
+}
+
+function getHtmlTextParts(html: string): string[] {
+	if (!html.trim()) return []
+
+	const parts: string[] = []
+	const paragraphPattern = /<p[^>]*>(.*?)<\/p>/gi
+	let match: RegExpExecArray | null
+	while ((match = paragraphPattern.exec(html)) !== null) {
+		const text = decodeHtmlText(match[1])
+		if (text) parts.push(text)
+	}
+
+	if (parts.length > 0) return parts
+
+	const text = decodeHtmlText(html)
+	return text ? [text] : []
+}
+
+function decodeHtmlText(value: string): string {
+	return value
+		.replace(/<[^>]+>/g, ' ')
+		.replace(/&nbsp;/gi, ' ')
+		.replace(/&amp;/gi, '&')
+		.replace(/&lt;/gi, '<')
+		.replace(/&gt;/gi, '>')
+		.replace(/&quot;/gi, '"')
+		.replace(/&#39;/gi, "'")
+		.replace(/\s+/g, ' ')
+		.trim()
+}
+
+function hasAdjustmentContent(value: Record<string, unknown>): boolean {
+	return ['content_text', 'remark_text', 'content', 'text', 'value', 'remark'].some(key => {
+		const content = value[key]
+		return typeof content === 'string' && content.trim() !== ''
+	})
+}
+
+function mergeAdjustmentTextParts(parts: string[]): string[] {
+	const result: string[] = []
+	const seen = new Set<string>()
+
+	for (const part of parts) {
+		for (const text of splitAdjustmentText(part)) {
+			addUniqueAdjustmentPart(result, seen, text)
+		}
+	}
+
+	return result
+}
+
+function uniqueAdjustmentParts(parts: string[]): string[] {
+	const result: string[] = []
+	const seen = new Set<string>()
+	for (const part of parts) {
+		for (const text of splitAdjustmentText(part)) {
+			addUniqueAdjustmentPart(result, seen, text)
+		}
+	}
+	return result
+}
+
+function addUniqueAdjustmentPart(result: string[], seen: Set<string>, text: string) {
+	const key = text.replace(/\s+/g, '')
+	if (seen.has(key)) return
+	seen.add(key)
+	result.push(text)
+}
+
+function getAdjustmentColumnWidth(column: AdjustmentColumn): number {
+	return column.width || 128
+}
+
+function getAdjustmentColumnStyle(column: AdjustmentColumn): Record<string, string> {
+	const width = getAdjustmentColumnWidth(column)
+	return {
+		flex: `0 0 ${width}rpx`,
+		width: `${width}rpx`,
+		minWidth: `${width}rpx`,
+		maxWidth: `${width}rpx`
+	}
+}
+
+function getPriceColumnStyle(column: PriceColumn): Record<string, string> {
+	const width = column.width || 64
+	return {
+		flex: `0 0 ${width}rpx`,
+		width: `${width}rpx`,
+		minWidth: `${width}rpx`,
+		maxWidth: `${width}rpx`
+	}
+}
+
+function getAdjustmentCell(row: EnhancedPriceRow, key: string): AdjustmentDisplayCell {
+	return row.displayAdjustmentCells?.[key] || {
+		show: false,
+		rowspan: 1,
+		parts: [],
+		text: '',
+		height: ADJUSTMENT_ROW_HEIGHT_RPX
+	}
+}
+
+function splitAdjustmentText(value: unknown): string[] {
+	return String(value || '')
+		.replace(/\u00a0/g, ' ')
+		.replace(/\s*\n+\s*/g, '；')
+		.split(/[；;\s]+/)
+		.map(item => item.trim())
+		.filter(item => item !== '' && item !== '--')
+}
+
+function splitAdjustmentSummaryText(value: unknown): string[] {
+	return String(value || '')
+		.replace(/\u00a0/g, ' ')
+		.replace(/\s*\n+\s*/g, '；')
+		.split(/[；;]/)
+		.map(item => item.trim())
+		.filter(item => item !== '' && item !== '--')
+}
+
+async function loadQuotationTypes() {
+	try {
+		const res = await getQuotationV2Types({ limit: 30 }) as any
+		quotationTypes.value = res.code === 1 && Array.isArray(res.data) ? res.data : []
+	} catch (error) {
+		quotationTypes.value = []
+	}
+}
+
+function openTypeSheet() {
+	showTypeSheet.value = true
+	if (quotationTypes.value.length === 0) {
+		loadQuotationTypes()
+	}
+}
+
+function switchQuotation(item: QuotationV2Type) {
+	datasetId.value = String(item.dataset_id || '')
+	priceTypeId.value = String(item.quotation_id || '')
+	source.value = 'v2'
+	pageTitle.value = item.title || item.dataset_name || item.price_name || '报价查询'
+	showTypeSheet.value = false
+	keyword.value = ''
+	loadPriceData()
 }
 
 function safeDecode(value: string): string {
@@ -394,10 +1223,21 @@ function getErrorMessage(error: unknown): string {
 }
 
 onLoad((options: PricePageOptions) => {
-	if (options?.id) {
-		priceTypeId.value = options.id
+	if (options?.source) {
+		source.value = options.source
+	}
+	if (options?.dataset_id) {
+		datasetId.value = options.dataset_id
+	}
+	if (options?.price_date) {
+		priceDate.value = options.price_date
+	}
+	const id = options?.id || options?.quotation_id || ''
+	if (id || datasetId.value) {
+		priceTypeId.value = id
 		pageTitle.value = options?.title ? safeDecode(options.title) : '报价查询'
 		loadPriceData()
+		loadQuotationTypes()
 		return
 	}
 
@@ -405,6 +1245,10 @@ onLoad((options: PricePageOptions) => {
 		title: '缺少参数',
 		icon: 'none'
 	})
+})
+
+onPageScroll((event) => {
+	isScrolled.value = event.scrollTop > 80
 })
 </script>
 
@@ -424,11 +1268,11 @@ onLoad((options: PricePageOptions) => {
 	--shadow: 0 10rpx 24rpx rgba(31, 41, 55, 0.08);
 	--table-font-size: 22rpx;
 	--table-price-font-size: 24rpx;
-	--table-remark-font-size: 0.44rem;
+	--table-remark-font-size: 22rpx;
 	--table-row-height: 88rpx;
 	--table-cell-padding-y: 8rpx;
 	--table-cell-padding-x: 2rpx;
-	--table-remark-padding: 0.08rem 0.12rem;
+	--table-remark-padding: 8rpx 12rpx;
 	min-height: 100vh;
 	background: var(--bg-main);
 	font-family: 'DIN Alternate', 'PingFang SC', 'Helvetica Neue', sans-serif;
@@ -453,7 +1297,7 @@ onLoad((options: PricePageOptions) => {
 	left: 0;
 	right: 0;
 	z-index: 999;
-	backdrop-filter: blur(8px);
+	backdrop-filter: blur(8rpx);
 	background: rgba(255, 255, 255, 0.9);
 	border-bottom: 1rpx solid rgba(59, 130, 246, 0.16);
 
@@ -506,7 +1350,7 @@ onLoad((options: PricePageOptions) => {
 .empty-container {
 	position: relative;
 	z-index: 1;
-	padding: calc(88rpx + env(safe-area-inset-top) + 24rpx) 20rpx calc(160rpx + env(safe-area-inset-bottom));
+	padding: calc(88rpx + env(safe-area-inset-top) + 24rpx) 6rpx calc(160rpx + env(safe-area-inset-bottom));
 }
 
 .loading-container {
@@ -692,9 +1536,9 @@ onLoad((options: PricePageOptions) => {
 }
 
 .remark-column {
-	width: 5rem;
-	min-width: 5rem;
-	max-width: 5rem;
+	width: 180rpx;
+	min-width: 180rpx;
+	max-width: 180rpx;
 	flex-shrink: 0;
 	display: flex;
 	flex-direction: column;
@@ -761,9 +1605,9 @@ onLoad((options: PricePageOptions) => {
 }
 
 .col-remark {
-	width: 5rem;
-	min-width: 5rem;
-	max-width: 5rem;
+	width: 180rpx;
+	min-width: 180rpx;
+	max-width: 180rpx;
 	flex-shrink: 0;
 	background: var(--warning-bg);
 }
@@ -855,7 +1699,7 @@ onLoad((options: PricePageOptions) => {
 	z-index: 1000;
 	padding: 12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));
 	background: rgba(255, 255, 255, 0.95);
-	backdrop-filter: blur(8px);
+	backdrop-filter: blur(8rpx);
 	border-top: 1rpx solid rgba(59, 130, 246, 0.16);
 	box-shadow: 0 -6rpx 20rpx rgba(31, 41, 55, 0.08);
 }
@@ -904,6 +1748,668 @@ onLoad((options: PricePageOptions) => {
 		opacity: 1;
 		transform: translateY(0);
 	}
+}
+
+.custom-navbar {
+	background: rgba(17, 24, 39, 0.92);
+	border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
+	color: #ffffff;
+
+	.navbar-content {
+		position: relative;
+		height: 104rpx;
+		padding: env(safe-area-inset-top) 18rpx 0;
+	}
+
+	.navbar-left {
+		flex: 0 0 72rpx;
+		width: 72rpx;
+		height: 72rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+
+		:deep(.u-icon) {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+	}
+
+	.navbar-center {
+		position: absolute;
+		left: 50%;
+		top: env(safe-area-inset-top);
+		transform: translateX(-50%);
+		width: calc(100% - 440rpx);
+		min-width: 260rpx;
+		// height: 104rpx;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 0 10rpx;
+		box-sizing: border-box;
+		pointer-events: none;
+		margin-top: 20rpx;
+	}
+
+	.navbar-title {
+		display: block;
+		width: 100%;
+		font-size: 30rpx;
+		line-height: 40rpx;
+		font-weight: 700;
+		text-align: center;
+		color: #ffffff;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.navbar-subtitle {
+		margin-top: 2rpx;
+		font-size: 20rpx;
+		line-height: 28rpx;
+		color: rgba(255, 255, 255, 0.72);
+	}
+
+	.navbar-capsule-space {
+		flex: 0 0 190rpx;
+		width: 190rpx;
+		height: 72rpx;
+	}
+}
+
+.custom-navbar.compact {
+	background: rgba(17, 24, 39, 0.96);
+}
+
+.price-content,
+.loading-container,
+.empty-container {
+	padding-top: calc(104rpx + env(safe-area-inset-top) + 18rpx);
+}
+
+.skeleton-hero {
+	height: 220rpx;
+	border-radius: 0;
+	background: linear-gradient(100deg, #111827 30%, #374151 45%, #111827 60%);
+	background-size: 260% 100%;
+	animation: skeleton-shimmer 1.2s linear infinite;
+}
+
+.skeleton-card.large {
+	height: 520rpx;
+}
+
+.quotation-cover {
+	position: relative;
+	min-height: 230rpx;
+	margin: -18rpx -6rpx 0;
+	padding: 42rpx 28rpx 26rpx;
+	background: linear-gradient(100deg, #050505 0%, #202020 45%, #5a5a5a 100%);
+	overflow: hidden;
+}
+
+.cover-main {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 24rpx;
+	min-height: 150rpx;
+}
+
+.cover-title {
+	flex: 1;
+	font-size: 42rpx;
+	line-height: 56rpx;
+	font-weight: 800;
+	color: #ffffff;
+	letter-spacing: 1rpx;
+}
+
+.cover-time {
+	flex-shrink: 0;
+	font-size: 22rpx;
+	line-height: 32rpx;
+	color: rgba(255, 255, 255, 0.82);
+	padding-bottom: 8rpx;
+}
+
+.watermark {
+	position: absolute;
+	z-index: 1;
+	font-size: 34rpx;
+	line-height: 44rpx;
+	color: rgba(255, 255, 255, 0.1);
+	transform: rotate(-28deg);
+	white-space: nowrap;
+}
+
+.watermark-a {
+	left: 30rpx;
+	top: 36rpx;
+}
+
+.watermark-b {
+	right: -30rpx;
+	bottom: 36rpx;
+}
+
+.notice-card {
+	margin: 0 -6rpx 12rpx;
+	padding: 24rpx 18rpx;
+	background: #fff8ed;
+	border-bottom: 1rpx solid #f3d7aa;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.notice-line {
+	font-size: 27rpx;
+	line-height: 42rpx;
+	font-weight: 700;
+	color: #f59e0b;
+	text-align: center;
+}
+
+.tool-card {
+	margin-bottom: 10rpx;
+	padding: 12rpx;
+	border-radius: 10rpx;
+	background: #ffffff;
+	border: 1rpx solid #e5e7eb;
+}
+
+.tool-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12rpx;
+	margin-bottom: 12rpx;
+}
+
+.tool-actions {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 8rpx;
+}
+
+.tool-action {
+	height: 52rpx;
+	line-height: 52rpx;
+	padding: 0 16rpx;
+	border-radius: 8rpx;
+	box-sizing: border-box;
+	border: 1rpx solid #e5e7eb;
+	background: #f3f4f6;
+	color: #374151;
+	font-size: 22rpx;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.tool-action.primary {
+	border-color: #111827;
+	background: #111827;
+	color: #ffffff;
+}
+
+.search-box {
+	height: 70rpx;
+	border-radius: 35rpx;
+	background: #f3f4f6;
+	display: flex;
+	align-items: center;
+	padding: 0 22rpx;
+}
+
+.search-box .iconfont {
+	font-size: 26rpx;
+	color: #9ca3af;
+	margin-right: 10rpx;
+}
+
+.search-input {
+	flex: 1;
+	height: 70rpx;
+	font-size: 26rpx;
+	color: #111827;
+}
+
+.search-placeholder {
+	color: #9ca3af;
+}
+
+.data-meta {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	font-size: 23rpx;
+	line-height: 32rpx;
+	color: #6b7280;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.dot {
+	margin: 0 10rpx;
+}
+
+.sheet-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10rpx;
+}
+
+.sheet-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10rpx;
+}
+
+.section-title {
+	padding: 0 4rpx;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	font-size: 26rpx;
+	line-height: 36rpx;
+	font-weight: 700;
+	color: #111827;
+}
+
+.section-sub {
+	max-width: 430rpx;
+	font-size: 22rpx;
+	font-weight: 400;
+	color: #6b7280;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.model-card {
+	background: #ffffff;
+	border: none;
+	border-radius: 0;
+	overflow: hidden;
+	box-shadow: none;
+}
+
+.model-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14rpx 10rpx 12rpx;
+	background: #f8fafc;
+	border-bottom: 1rpx solid #e5e7eb;
+}
+
+.model-name-block {
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 10rpx;
+}
+
+.model-brand {
+	flex-shrink: 0;
+	height: 32rpx;
+	line-height: 32rpx;
+	padding: 0 9rpx;
+	border-radius: 4rpx;
+	background: #111827;
+	color: #ffffff;
+	font-size: 19rpx;
+	font-weight: 700;
+}
+
+.model-name {
+	font-size: 27rpx;
+	line-height: 36rpx;
+	font-weight: 800;
+	color: #2f343b;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.capacity-count {
+	flex-shrink: 0;
+	font-size: 20rpx;
+	line-height: 28rpx;
+	color: #6b7280;
+	margin-left: 16rpx;
+}
+
+.price-table-wrap {
+	width: 100%;
+	overflow: hidden;
+}
+
+.mobile-price-table {
+	width: 100%;
+}
+
+.price-row {
+	display: flex;
+	height: 78rpx;
+	min-height: 78rpx;
+	border-bottom: 1rpx solid #eeeeee;
+}
+
+.price-row:last-child {
+	border-bottom: none;
+}
+
+.table-head {
+	height: 90rpx;
+	min-height: 90rpx;
+	background: linear-gradient(100deg, #050505 0%, #232323 58%, #5a5a5a 100%);
+	color: #ffffff;
+}
+
+.price-cell {
+	box-sizing: border-box;
+	min-width: 0;
+	padding: 4rpx 2rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-right: 1rpx solid #eeeeee;
+	text-align: center;
+	word-break: break-word;
+}
+
+.price-cell:last-child {
+	border-right: none;
+}
+
+.capacity-cell {
+	flex: 0 0 82rpx;
+	width: 82rpx;
+	min-width: 82rpx;
+	max-width: 82rpx;
+	font-size: 18rpx;
+	font-weight: 400;
+	background: inherit;
+}
+
+.capacity-body {
+	background: #f9fafb;
+	color: #111827;
+	font-size: 22rpx;
+}
+
+.price-head-cell {
+	flex: 1 1 0;
+	font-size: 17rpx;
+	line-height: 22rpx;
+	font-weight: 700;
+	color: #ffffff;
+	overflow: hidden;
+}
+
+.price-head-cell text {
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.adjustment-head-cell {
+	flex-shrink: 0;
+	width: 228rpx;
+	min-width: 228rpx;
+	max-width: 228rpx;
+	font-size: 18rpx;
+	line-height: 24rpx;
+	font-weight: 800;
+	color: #ffffff;
+	background: rgba(255, 255, 255, 0.08);
+}
+
+.price-body-wrap {
+	display: flex;
+	align-items: stretch;
+}
+
+.price-main-columns {
+	flex: 1;
+	min-width: 0;
+}
+
+.price-body-cell {
+	flex: 1 1 0;
+	background: #f0ffe4;
+	overflow: hidden;
+}
+
+.price-row:nth-child(2n + 1) .price-body-cell {
+	background: #ffffff;
+}
+
+.price-value {
+	font-size: 22rpx;
+	line-height: 28rpx;
+	font-weight: 800;
+	color: #30343a;
+	white-space: nowrap;
+}
+
+.empty-cell {
+	font-size: 22rpx;
+	color: #9ca3af;
+}
+
+.adjustment-column {
+	position: relative;
+	flex-shrink: 0;
+	width: 228rpx;
+	min-width: 228rpx;
+	max-width: 228rpx;
+	background: #ffffff;
+}
+
+.adjustment-cell-wrapper {
+	position: relative;
+	height: 68rpx;
+	min-height: 68rpx;
+	border-bottom: 1rpx solid #eeeeee;
+	box-sizing: border-box;
+}
+
+.adjustment-cell-wrapper:last-child {
+	border-bottom: none;
+}
+
+.adjustment-body-cell {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	z-index: 2;
+	width: 100%;
+	min-width: 228rpx;
+	max-width: 228rpx;
+	padding: 3rpx 5rpx;
+	background: #ffffff;
+	border-right: none;
+	border-bottom: 1rpx solid #eeeeee;
+	align-items: center;
+	justify-content: center;
+}
+
+.adjustment-item-list {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: center;
+	gap: 2rpx;
+}
+
+.adjustment-item-text {
+	display: block;
+	width: 100%;
+	font-size: 15rpx;
+	line-height: 19rpx;
+	font-weight: 600;
+	color: #343941;
+	text-align: center;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.adjustment-cell-text {
+	width: 100%;
+	font-size: 15rpx;
+	line-height: 19rpx;
+	font-weight: 600;
+	color: #343941;
+	text-align: center;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.adjustment-box {
+	padding: 18rpx 20rpx 22rpx;
+	background: #ffffff;
+	border-top: 1rpx solid #e5e7eb;
+}
+
+.adjustment-title {
+	margin-bottom: 12rpx;
+	font-size: 25rpx;
+	line-height: 34rpx;
+	font-weight: 800;
+	color: #111827;
+}
+
+.adjustment-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 14rpx;
+	padding: 10rpx 0;
+	border-top: 1rpx dashed #e5e7eb;
+}
+
+.adjustment-row:first-of-type {
+	border-top: none;
+}
+
+.adjustment-label {
+	flex-shrink: 0;
+	min-width: 116rpx;
+	font-size: 23rpx;
+	line-height: 34rpx;
+	font-weight: 700;
+	color: #374151;
+}
+
+.adjustment-text {
+	flex: 1;
+	font-size: 24rpx;
+	line-height: 36rpx;
+	font-weight: 600;
+	color: #374151;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.sheet-mask {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	z-index: 2000;
+	background: rgba(0, 0, 0, 0.42);
+	display: flex;
+	align-items: flex-end;
+}
+
+.type-sheet {
+	width: 100%;
+	max-height: 1100rpx;
+	padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom));
+	background: #ffffff;
+	border-radius: 28rpx 28rpx 0 0;
+	box-sizing: border-box;
+	overflow-y: auto;
+}
+
+.type-sheet-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 18rpx;
+}
+
+.type-title {
+	font-size: 32rpx;
+	line-height: 44rpx;
+	font-weight: 800;
+	color: #111827;
+}
+
+.type-close {
+	font-size: 24rpx;
+	color: #6b7280;
+	padding: 10rpx 18rpx;
+	background: #f3f4f6;
+	border-radius: 22rpx;
+}
+
+.type-empty {
+	padding: 50rpx 0;
+	text-align: center;
+	font-size: 26rpx;
+	color: #6b7280;
+}
+
+.type-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 22rpx 8rpx;
+	border-top: 1rpx solid #f1f5f9;
+}
+
+.type-name {
+	display: block;
+	font-size: 29rpx;
+	line-height: 40rpx;
+	font-weight: 700;
+	color: #111827;
+}
+
+.type-meta {
+	display: block;
+	margin-top: 6rpx;
+	font-size: 23rpx;
+	line-height: 32rpx;
+	color: #6b7280;
+}
+
+.type-check {
+	display: none;
+	font-size: 30rpx;
+	color: #16a34a;
+	font-weight: 800;
+}
+
+.type-item.active .type-check {
+	display: block;
 }
 
 </style>

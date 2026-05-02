@@ -92,9 +92,7 @@ class RecycleOrder extends BaseApiController
             ["express_no", ""],            // 快递单号
             ["remark", ""],                // 备注
             ["devices", []],               // 设备列表
-            ["use_platform_delivery", 0],  // 是否使用平台快递(兼容旧参数)
-            ["platform_delivery", []],     // 平台快递信息(兼容旧参数)
-            ["use_express", 0],            // 是否使用统一快递服务
+            ["use_express", 0],            // 是否使用平台快递（亿速）
             ["express_config", []],        // 快递配置(use_express=1时必填)
         ]);
 
@@ -119,7 +117,7 @@ class RecycleOrder extends BaseApiController
             'devices.*.initial_price.min' => '预估价格必须大于0',
         ]);
 
-        // 如果使用统一快递服务（新逻辑）
+        // 如果使用统一快递服务（亿速）
         if ($data['use_express']) {
             $expressConfig = $data['express_config'];
             if (empty($expressConfig['sender_name'])) {
@@ -132,21 +130,6 @@ class RecycleOrder extends BaseApiController
                 return fail('请选择寄件人所在地区');
             }
             if (empty($expressConfig['sender_address'])) {
-                return fail('请输入寄件人详细地址');
-            }
-        // 兼容旧的平台快递逻辑
-        } elseif ($data['use_platform_delivery']) {
-            $platformDelivery = $data['platform_delivery'];
-            if (empty($platformDelivery['sender_name'])) {
-                return fail('请输入寄件人姓名');
-            }
-            if (empty($platformDelivery['sender_mobile'])) {
-                return fail('请输入寄件人手机号');
-            }
-            if (empty($platformDelivery['sender_province']) || empty($platformDelivery['sender_city']) || empty($platformDelivery['sender_district'])) {
-                return fail('请选择寄件人所在地区');
-            }
-            if (empty($platformDelivery['sender_address'])) {
                 return fail('请输入寄件人详细地址');
             }
         } elseif ($data['delivery_type'] == 1 && empty($data['express_no'])) {

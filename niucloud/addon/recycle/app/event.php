@@ -34,6 +34,9 @@ return [
         
         // 设备质检完成事件
         'AfterDeviceCheckComplete' => [ 'addon\recycle\app\listener\device\DeviceCheckCompleteListener' ],
+
+        // 快递回调事件。易速推送统一在此分发，后续 ERP、通知、财务流水可挂载扩展。
+        'RecycleExpressEvent' => [ 'addon\recycle\app\listener\express\RecycleExpressEventListener' ],
         
         // 微信转账场景
         'GetWechatTransferTradeScene' => [ 'addon\recycle\app\listener\pay\RecycleTransferSceneListener' ],

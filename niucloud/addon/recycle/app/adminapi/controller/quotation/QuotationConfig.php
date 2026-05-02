@@ -61,8 +61,6 @@ class QuotationConfig extends BaseAdminController
             ['price_adjustment_value', 0],
             ['quotation_background_color', ''],
             ['quotation_text_color', ''],
-            ['authorization_token', ''],
-            ['open_id', ''],
             ['is_enable', 1],
             ['auto_request', 1],
             ['use_crawler_remark', 0],
@@ -91,8 +89,6 @@ class QuotationConfig extends BaseAdminController
             ['price_adjustment_value', 0],
             ['quotation_background_color', ''],
             ['quotation_text_color', ''],
-            ['authorization_token', ''],
-            ['open_id', ''],
             ['is_enable', 1],
             ['auto_request', 1],
             ['use_crawler_remark', 0],
@@ -129,4 +125,3 @@ class QuotationConfig extends BaseAdminController
         return success('EDIT_SUCCESS');
     }
 }
-

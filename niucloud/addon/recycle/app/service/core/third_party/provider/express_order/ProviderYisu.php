@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\core\third_party\provider\express_order;
 
+use addon\recycle\app\dict\third_party\ThirdPartyDict;
 use addon\recycle\app\service\core\third_party\provider\BaseProvider;
 use Exception;
 
@@ -14,6 +15,27 @@ use Exception;
 class ProviderYisu extends BaseProvider
 {
     /**
+     * 易速开放接口路径。允许在 sys_config 中通过 api_paths 覆盖，避免接口升级时改代码。
+     */
+    private const API_PATHS = [
+        'quote' => '/openApi/getPrice',
+        'create' => '/openApi/doOrder',
+        'cancel' => '/openApi/doCancel',
+        'modify' => '/openApi/doModify',
+        'detail' => '/openApi/getOrderDetail',
+        'waybillPdf' => '/openApi/getWaybillPdf',
+        'fund' => '/openApi/fund',
+    ];
+
+    private const METHOD_ALIASES = [
+        'preOrder' => 'quote',
+        'sendOrder' => 'create',
+        'cancelOrder' => 'cancel',
+        'track' => 'detail',
+        'balance' => 'fund',
+    ];
+
+    /**
      * 执行API调用
      * @param string $method 方法名
      * @param array $params 参数
@@ -23,19 +45,17 @@ class ProviderYisu extends BaseProvider
     public function execute(string $method, array $params): array
     {
         $config = $this->config;
-        $baseUrl = $config['base_url'] ?? 'http://open.yisuopen.com';
+        $baseUrl = $config['base_url'] ?? '';
         $appid = $config['appid'] ?? '';
         $appSecret = $config['app_secret'] ?? '';
         $version = $config['version'] ?? 'V1.0';
 
-        // 根据方法名映射到API端点
-        $apiMap = [
-            'preOrder' => '/openApi/getPriceList',      // 预下单（获取报价）
-            'sendOrder' => '/openApi/doOrder',          // 下单
-            'cancelOrder' => '/openApi/doCancel',       // 取消订单
-            'track' => '/openApi/getOrderDetail',       // 轨迹查询
-            'balance' => '/openApi/fund',               // 余额查询
-        ];
+        if (empty($baseUrl) || empty($appid) || empty($appSecret)) {
+            throw new Exception('亿速快递配置不完整');
+        }
+
+        $method = self::METHOD_ALIASES[$method] ?? $method;
+        $apiMap = array_merge(self::API_PATHS, is_array($config['api_paths'] ?? null) ? $config['api_paths'] : []);
 
         if (!isset($apiMap[$method])) {
             throw new Exception("不支持的方法: {$method}");
@@ -62,13 +82,8 @@ class ProviderYisu extends BaseProvider
     private function prepareRequestData(string $method, array $params): array
     {
         switch ($method) {
-            case 'preOrder':
-                // 预下单参数
-                $expressType = 1;
-                if (($params['weight'] ?? 0) > 30 || ($params['customerType'] ?? '') == 'ky') {
-                    $expressType = 2;
-                }
-                return [
+            case 'quote':
+                $data = [
                     'sendPhone' => $params['senderMobile'] ?? '18050000000',
                     'sendAddress' => ($params['senderProvince'] ?? '') . ($params['senderCity'] ?? '') .
                                    ($params['senderDistrict'] ?? '') . ($params['senderAddress'] ?? ''),
@@ -80,14 +95,19 @@ class ProviderYisu extends BaseProvider
                     'length' => $params['vloumLong'] ?? 0,
                     'width' => $params['vloumWidth'] ?? 0,
                     'height' => $params['vloumHeight'] ?? 0,
-                    'payMethod' => 3,
-                    'expressType' => $expressType,
+                    'volume' => $this->calculateVolume($params),
+                    'goods' => $params['goods'] ?? '回收设备',
                 ];
+                $productCode = $this->firstFilledString($params, ['productCode', 'deliveryType']);
+                $hasProductCode = $productCode !== '' || array_key_exists('productCode', $params) || array_key_exists('deliveryType', $params);
+                if ($hasProductCode) {
+                    $data['productCode'] = (int)$productCode;
+                }
+                return $data;
 
-            case 'sendOrder':
-                // 下单参数
-                return [
-                    'productCode' => $params['deliveryType'] ?? '',
+            case 'create':
+                $data = [
+                    'productCode' => (int)($params['deliveryType'] ?? $params['productCode'] ?? 0),
                     'senderPhone' => $params['senderMobile'] ?? '',
                     'senderName' => $params['senderName'] ?? '',
                     'guaranteeValueAmount' => $params['guaranteeValueAmount'] ?? 0,
@@ -99,25 +119,38 @@ class ProviderYisu extends BaseProvider
                     'receiveName' => $params['receiveName'] ?? '',
                     'goods' => $params['goods'] ?? '',
                     'packageNum' => $params['packageCount'] ?? 1,
-                    'volume' => (int)($params['vloumLong'] ?? 0) / 100 * ($params['vloumWidth'] ?? 0) / 100 * ($params['vloumHeight'] ?? 0) / 100,
+                    'length' => $params['vloumLong'] ?? 0,
+                    'width' => $params['vloumWidth'] ?? 0,
+                    'height' => $params['vloumHeight'] ?? 0,
+                    'volume' => $this->calculateVolume($params),
                     'weight' => $params['weight'] ?? 1,
+                    'payMethod' => $params['payMethod'] ?? 3,
+                    'remark' => $params['remark'] ?? '',
+                    'thirdOrderNo' => $params['thirdOrderNo'] ?? $params['third_order_no'] ?? $params['recycle_order_no'] ?? '',
+                    'orderSendTime' => $params['orderSendTime'] ?? $params['pickup_time'] ?? '',
+                ];
+                return $data;
+
+            case 'cancel':
+                return $this->buildIdentifierParams($params) + [
+                    'genre' => (int)($params['genre'] ?? 1),
                 ];
 
-            case 'cancelOrder':
-                // 取消订单参数
-                return [
-                    'genre' => 1,
-                    'orderNo' => $params['order_no'] ?? '',
+            case 'modify':
+                return $this->buildIdentifierParams($params) + [
+                    'packageNum' => $params['packageNum'] ?? $params['package_count'] ?? '',
+                    'orderSendTime' => $params['orderSendTime'] ?? $params['pickup_time'] ?? '',
                 ];
 
-            case 'track':
-                // 轨迹查询参数
-                return [
-                    'waybillNo' => $params['delivery_id'] ?? '',
+            case 'detail':
+                return $this->buildIdentifierParams($params);
+
+            case 'waybillPdf':
+                return $this->buildIdentifierParams($params) + [
+                    'temCode' => (string)($params['temCode'] ?? $params['template_code'] ?? ''),
                 ];
 
-            case 'balance':
-                // 余额查询无需参数
+            case 'fund':
                 return [];
 
             default:
@@ -145,58 +178,69 @@ class ProviderYisu extends BaseProvider
 
         // 根据方法处理响应数据
         switch ($method) {
-            case 'preOrder':
-                // 返回报价列表
+            case 'quote':
+                if (!empty($result['data']['errorCode'])) {
+                    throw new Exception($result['data']['errorMsg'] ?? $result['data']['remark'] ?? '获取报价失败');
+                }
                 return [
                     'success' => true,
                     'data' => $result['data'] ?? [],
+                    'raw_data' => $result,
                     'message' => '获取报价成功',
                 ];
 
-            case 'sendOrder':
-                // 返回订单信息
+            case 'create':
                 return [
                     'success' => true,
                     'data' => [
                         'orderNo' => $result['data']['orderNo'] ?? '',
                         'deliveryId' => $result['data']['waybillNo'] ?? '',
+                        'waybillNo' => $result['data']['waybillNo'] ?? '',
+                        'raw' => $result['data'] ?? [],
                     ],
+                    'raw_data' => $result,
                     'message' => '下单成功',
                 ];
 
-            case 'cancelOrder':
-                // 返回取消结果
+            case 'cancel':
+            case 'modify':
+            case 'waybillPdf':
                 return [
                     'success' => true,
                     'data' => $result['data'] ?? [],
-                    'message' => '取消成功',
+                    'raw_data' => $result,
+                    'message' => $method === 'cancel' ? '取消/拦截成功' : '操作成功',
                 ];
 
-            case 'track':
-                // 返回轨迹信息
+            case 'detail':
                 $traceList = [];
                 if (!empty($result['data']['traceList'])) {
                     foreach ($result['data']['traceList'] as $trace) {
                         $traceList[] = [
-                            'time' => $trace['opeTimeAll'] ?? '',
-                            'desc' => $trace['opeRemark'] ?? '',
+                            'time' => $trace['opeTimeAll'] ?? $trace['time'] ?? '',
+                            'desc' => $trace['opeRemark'] ?? $trace['desc'] ?? '',
+                            'raw' => $trace,
                         ];
                     }
                 }
                 return [
                     'success' => true,
-                    'data' => $traceList,
+                    'data' => array_merge($result['data'] ?? [], ['trace_list' => $traceList]),
+                    'trace_list' => $traceList,
+                    'raw_data' => $result,
                     'message' => '查询成功',
                 ];
 
-            case 'balance':
-                // 返回余额信息
+            case 'fund':
                 return [
                     'success' => true,
                     'data' => [
                         'balance' => $result['data']['balance'] ?? 0,
+                        'commission' => $result['data']['commission'] ?? 0,
+                        'integral' => $result['data']['integral'] ?? 0,
                     ],
                     'balance' => $result['data']['balance'] ?? 0,
+                    'raw_data' => $result,
                     'message' => '查询成功',
                 ];
 
@@ -221,7 +265,7 @@ class ProviderYisu extends BaseProvider
      */
     private function yisuHttpRequest(string $url, array $data, string $appid, string $version, string $appSecret): array
     {
-        $timeStamp = time();
+        $timeStamp = (int)round(microtime(true) * 1000);
         $sign = $this->generateSign($appid, $version, $timeStamp, $appSecret);
 
         $headers = [
@@ -258,6 +302,53 @@ class ProviderYisu extends BaseProvider
         }
 
         return $response;
+    }
+
+    private function calculateVolume(array $params): float
+    {
+        if (isset($params['volume']) && (float)$params['volume'] > 0) {
+            return (float)$params['volume'];
+        }
+
+        $length = (float)($params['vloumLong'] ?? $params['length'] ?? 0);
+        $width = (float)($params['vloumWidth'] ?? $params['width'] ?? 0);
+        $height = (float)($params['vloumHeight'] ?? $params['height'] ?? 0);
+
+        if ($length <= 0 || $width <= 0 || $height <= 0) {
+            return 0;
+        }
+
+        return round($length / 100 * $width / 100 * $height / 100, 4);
+    }
+
+    private function buildIdentifierParams(array $params): array
+    {
+        $data = [];
+        foreach ([
+            'thirdOrderNo' => ['thirdOrderNo', 'third_order_no'],
+            'waybillNo' => ['waybillNo', 'delivery_id', 'waybill_no', 'express_no'],
+            'orderNo' => ['orderNo', 'order_no'],
+        ] as $target => $aliases) {
+            foreach ($aliases as $alias) {
+                if (!empty($params[$alias])) {
+                    $data[$target] = $params[$alias];
+                    break;
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    private function firstFilledString(array $data, array $keys): string
+    {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && trim((string)$data[$key]) !== '') {
+                return trim((string)$data[$key]);
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -309,16 +400,16 @@ class ProviderYisu extends BaseProvider
      */
     public function getName(): string
     {
-        return 'yisu';
+        return '亿速快递';
     }
 
     /**
-     * 获取提供者显示名称
+     * 获取提供者标识
      * @return string
      */
     public function getProviderName(): string
     {
-        return '易速快递';
+        return ThirdPartyDict::PROVIDER_YISU;
     }
 
     /**
@@ -327,6 +418,6 @@ class ProviderYisu extends BaseProvider
      */
     public function getServiceType(): string
     {
-        return 'express_order';
+        return ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER;
     }
 }

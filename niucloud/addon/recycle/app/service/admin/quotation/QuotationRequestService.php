@@ -6,6 +6,9 @@ namespace addon\recycle\app\service\admin\quotation;
 use addon\recycle\app\model\quotation\RecycleQuotationRequest;
 use addon\recycle\app\model\quotation\RecycleQuotationConfig;
 use addon\recycle\app\dict\quotation\QuotationDict;
+use addon\recycle\app\dict\third_party\ThirdPartyDict;
+use addon\recycle\app\model\third_party\ThirdPartyApiLog;
+use addon\recycle\app\service\core\quotation\QuotationCrawlerConfigService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -18,8 +21,6 @@ use think\facade\Log;
  */
 class QuotationRequestService extends BaseAdminService
 {
-    private const REQUEST_BASE_URL = 'https://daheng.chaoniu.top/api/v1/quotation/detail';
-
     /**
      * @var RecycleQuotationRequest
      */
@@ -30,11 +31,14 @@ class QuotationRequestService extends BaseAdminService
      */
     protected $configModel;
 
+    private $crawlerConfigService;
+
     public function __construct()
     {
         parent::__construct();
         $this->requestModel = new RecycleQuotationRequest();
         $this->configModel = new RecycleQuotationConfig();
+        $this->crawlerConfigService = new QuotationCrawlerConfigService();
     }
 
     /**
@@ -57,9 +61,9 @@ class QuotationRequestService extends BaseAdminService
         $targetSiteId = $this->resolveSiteId($config, $siteId);
         $this->site_id = $targetSiteId;
 
-        $tokens = $this->buildTokens($config);
+        $crawlerConfig = $this->getCrawlerProviderConfig($targetSiteId);
         $quotationParams = $this->buildQuotationParams($config);
-        $requestUrl = $this->buildRequestUrl($quotationParams);
+        $requestUrl = $this->buildRequestUrl($quotationParams, $crawlerConfig);
         $requestData = $this->buildRequestData($quotationParams, $targetSiteId);
 
         // 创建请求记录（缩小事务范围）
@@ -67,17 +71,31 @@ class QuotationRequestService extends BaseAdminService
         $requestId = $requestRecord->id;
 
         try {
-            $headerMap = $this->defaultHeaderMap($tokens);
+            $headerMap = $this->defaultHeaderMap($crawlerConfig);
             $this->persistRequestMeta($requestRecord, $requestUrl, $headerMap);
 
             // HTTP请求在事务外执行，避免长时间锁表
-            [$responseCode, $responseData] = $this->sendHttpRequest($requestUrl, $headerMap);
+            $requestStartTime = microtime(true);
+            [$responseCode, $responseData] = $this->sendHttpRequest($requestUrl, $headerMap, (int)$crawlerConfig['timeout']);
+            $duration = (int)round((microtime(true) - $requestStartTime) * 1000);
 
             // 处理响应时才开启事务
             $result = $this->handleResponse($requestRecord, $responseCode, $responseData);
+            $this->logCrawlerCall($targetSiteId, $requestUrl, $quotationParams, $responseData, $duration, true);
 
             return $result;
         } catch (\Exception $e) {
+            $duration = isset($requestStartTime) ? (int)round((microtime(true) - $requestStartTime) * 1000) : 0;
+            $this->logCrawlerCall(
+                $targetSiteId,
+                $requestUrl ?? '',
+                $quotationParams ?? [],
+                $responseData ?? [],
+                $duration,
+                false,
+                $e->getMessage()
+            );
+
             // 更新请求记录为失败状态
             $this->requestModel->where('id', $requestId)->update([
                 'request_status' => QuotationDict::REQUEST_STATUS_FAILED,
@@ -169,23 +187,6 @@ class QuotationRequestService extends BaseAdminService
         return $siteId ?? intval($config['site_id'] ?? 0);
     }
 
-    private function buildTokens(array $config): array
-    {
-        $tokens = [
-            'authorization_token' => $config['authorization_token'] ?? '',
-            'open_id' => $config['open_id'] ?? '',
-        ];
-
-        if (empty($tokens['authorization_token'])) {
-            throw new CommonException('Authorization Token为空，请检查配置');
-        }
-        if (empty($tokens['open_id'])) {
-            throw new CommonException('OpenId为空，请检查配置');
-        }
-
-        return $tokens;
-    }
-
     private function buildQuotationParams(array $config): array
     {
         $quotationId = isset($config['quotation_id']) && $config['quotation_id'] !== '' && $config['quotation_id'] !== null
@@ -244,9 +245,27 @@ class QuotationRequestService extends BaseAdminService
         ];
     }
 
-    private function buildRequestUrl(array $params): string
+    private function getCrawlerProviderConfig(int $siteId): array
     {
-        return self::REQUEST_BASE_URL . '?' . http_build_query($params);
+        $config = $this->crawlerConfigService->getProviderConfig($siteId);
+        if (empty($config)) {
+            throw new CommonException('报价爬虫配置未启用或配置不存在');
+        }
+
+        foreach (['base_url', 'detail_path', 'authorization_token', 'open_id'] as $field) {
+            if (trim((string)($config[$field] ?? '')) === '') {
+                throw new CommonException('报价爬虫配置不完整：' . $field);
+            }
+        }
+
+        $config['timeout'] = max(1, (int)($config['timeout'] ?? 30));
+
+        return $config;
+    }
+
+    private function buildRequestUrl(array $params, array $crawlerConfig): string
+    {
+        return rtrim((string)$crawlerConfig['base_url'], '/') . '/' . ltrim((string)$crawlerConfig['detail_path'], '/') . '?' . http_build_query($params);
     }
 
     private function buildRequestData(array $params, int $siteId): array
@@ -266,18 +285,18 @@ class QuotationRequestService extends BaseAdminService
         ];
     }
 
-    private function defaultHeaderMap(array $tokens): array
+    private function defaultHeaderMap(array $crawlerConfig): array
     {
         return [
-            'Version' => '2.2.3',
-            'AppId' => 'wxeff5f3c92ec08aff',
-            'Platform' => '2',
-            'Authorization' => $tokens['authorization_token'],
-            'OpenId' => $tokens['open_id'],
+            'Version' => (string)($crawlerConfig['version'] ?? '2.2.3'),
+            'AppId' => (string)($crawlerConfig['app_id'] ?? 'wxeff5f3c92ec08aff'),
+            'Platform' => (string)($crawlerConfig['platform'] ?? '2'),
+            'Authorization' => (string)$crawlerConfig['authorization_token'],
+            'OpenId' => (string)$crawlerConfig['open_id'],
             'content-type' => 'application/json',
-            'Accept-Encoding' => 'gzip,compress,br,deflate',
-            'User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.64(0x18004030) NetType/4G Language/zh_CN',
-            'Referer' => 'https://servicewechat.com/wxeff5f3c92ec08aff/123/page-frame.html',
+            'Accept-Encoding' => (string)($crawlerConfig['accept_encoding'] ?? 'gzip,compress,br,deflate'),
+            'User-Agent' => (string)($crawlerConfig['user_agent'] ?? ''),
+            'Referer' => (string)($crawlerConfig['referer'] ?? ''),
         ];
     }
 
@@ -289,12 +308,12 @@ class QuotationRequestService extends BaseAdminService
         ]);
     }
 
-    private function sendHttpRequest(string $url, array $headerMap): array
+    private function sendHttpRequest(string $url, array $headerMap, int $timeout): array
     {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $this->buildHeaders($headerMap));
@@ -375,5 +394,30 @@ class QuotationRequestService extends BaseAdminService
 
         throw new CommonException('请求失败：' . $errorMessage);
     }
-}
 
+    private function logCrawlerCall(
+        int $siteId,
+        string $requestUrl,
+        array $requestParams,
+        array $responseData,
+        int $duration,
+        bool $success,
+        string $errorMsg = ''
+    ): void {
+        ThirdPartyApiLog::log([
+            'site_id' => $siteId,
+            'service_type' => ThirdPartyDict::SERVICE_TYPE_QUOTATION_CRAWLER,
+            'provider_name' => ThirdPartyDict::PROVIDER_CHAONIU_QUOTATION,
+            'method' => 'quotation.detail',
+            'request_params' => [
+                'request_url' => $requestUrl,
+                'params' => $requestParams,
+            ],
+            'response_data' => $responseData,
+            'cost' => 0,
+            'duration' => $duration,
+            'status' => $success ? ThirdPartyDict::CALL_STATUS_SUCCESS : ThirdPartyDict::CALL_STATUS_FAILED,
+            'error_msg' => $errorMsg,
+        ]);
+    }
+}

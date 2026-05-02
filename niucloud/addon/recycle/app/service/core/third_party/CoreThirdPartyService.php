@@ -99,8 +99,12 @@ class CoreThirdPartyService extends BaseCoreService
             // 更新统计
             $this->updateStats($siteId, $serviceType, $provider->getProviderName(), false, 0, $duration);
 
-            // 尝试备用服务商
-            return $this->tryBackupProvider($serviceType, $method, $params, $siteId, $provider->getProviderName());
+            // 尝试备用服务商，若没有备用服务商则保留主服务商的真实错误原因。
+            try {
+                return $this->tryBackupProvider($serviceType, $method, $params, $siteId, $provider->getProviderName());
+            } catch (\Exception $backupException) {
+                throw new CommonException($errorMsg ?: $backupException->getMessage());
+            }
         }
     }
 
@@ -114,6 +118,20 @@ class CoreThirdPartyService extends BaseCoreService
      */
     private function getProvider(string $serviceType, int $siteId, string $excludeProvider = '')
     {
+        $configService = new RecycleThirdPartyConfigService();
+        if ($configService->hasSavedConfig($siteId)) {
+            if (!$configService->isServiceEnabled($siteId, $serviceType)) {
+                throw new CommonException("站点{$siteId}已禁用{$serviceType}服务");
+            }
+
+            $provider = $this->getProviderFromConfigCenter($serviceType, $siteId, $excludeProvider, $configService);
+            if ($provider) {
+                return $provider;
+            }
+
+            return null;
+        }
+
         // 获取所有可用的服务提供者
         $services = ThirdPartyService::getAvailableProviders($siteId, $serviceType);
 
@@ -123,6 +141,14 @@ class CoreThirdPartyService extends BaseCoreService
 
         // 按优先级尝试
         foreach ($services as $service) {
+            // 2.0 阶段快递下单仅保留亿速，忽略历史安果等快递服务商配置
+            if (
+                $serviceType === ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER
+                && $service['provider_name'] !== ThirdPartyDict::PROVIDER_YISU
+            ) {
+                continue;
+            }
+
             // 跳过已排除的提供商
             if (!empty($excludeProvider) && $service['provider_name'] === $excludeProvider) {
                 continue;
@@ -137,7 +163,8 @@ class CoreThirdPartyService extends BaseCoreService
                 }
 
                 // 实例化Provider
-                $provider = new $providerClass($service['config'], $siteId);
+                $providerConfig = $this->mergeDefaultProviderConfig($serviceType, $service['provider_name'], $service['config'] ?? []);
+                $provider = new $providerClass($providerConfig, $siteId);
 
                 // 健康检查
                 if ($provider->healthCheck()) {
@@ -150,6 +177,65 @@ class CoreThirdPartyService extends BaseCoreService
                 Log::error("加载Provider失败: {$service['provider_name']}, 错误: " . $e->getMessage());
                 continue;
             }
+        }
+
+        return null;
+    }
+
+    private function mergeDefaultProviderConfig(string $serviceType, string $providerName, array $config): array
+    {
+        $configService = new RecycleThirdPartyConfigService();
+        $map = $configService->getServiceMap();
+        if (!isset($map[$serviceType])) {
+            return $config;
+        }
+
+        $sectionKey = $map[$serviceType]['section'];
+        $default = $configService->getDefaultConfig();
+        $providerDefault = $default[$sectionKey][$providerName] ?? [];
+        if (!is_array($providerDefault)) {
+            return $config;
+        }
+
+        return array_merge($providerDefault, $config);
+    }
+
+    private function getProviderFromConfigCenter(
+        string $serviceType,
+        int $siteId,
+        string $excludeProvider,
+        RecycleThirdPartyConfigService $configService
+    ) {
+        $map = $configService->getServiceMap();
+        if (!isset($map[$serviceType])) {
+            return null;
+        }
+
+        $providerName = $map[$serviceType]['provider'];
+        if (!empty($excludeProvider) && $providerName === $excludeProvider) {
+            return null;
+        }
+
+        $config = $configService->getProviderConfig($siteId, $serviceType, $providerName);
+        if (empty($config)) {
+            return null;
+        }
+
+        try {
+            $providerClass = $this->getProviderClass($serviceType, $providerName);
+            if (!class_exists($providerClass)) {
+                Log::warning("Provider类不存在: {$providerClass}");
+                return null;
+            }
+
+            $provider = new $providerClass($config, $siteId);
+            if ($provider->healthCheck()) {
+                return $provider;
+            }
+
+            Log::warning("配置中心Provider健康检查失败: {$providerName}");
+        } catch (\Exception $e) {
+            Log::error("配置中心加载Provider失败: {$providerName}, 错误: " . $e->getMessage());
         }
 
         return null;

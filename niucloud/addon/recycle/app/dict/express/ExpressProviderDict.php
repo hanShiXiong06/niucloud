@@ -12,7 +12,6 @@ class ExpressProviderDict
 {
     // 服务商标识
     const PROVIDER_YISU = 'yisu';
-    const PROVIDER_ANGUO = 'anguo';
     const PROVIDER_MANUAL = 'manual'; // 手动录入快递号
 
     // 状态
@@ -33,14 +32,6 @@ class ExpressProviderDict
                 'support_quote' => true,   // 支持报价
                 'support_cancel' => true,  // 支持取消
                 'support_track' => true,   // 支持追踪
-            ],
-            self::PROVIDER_ANGUO => [
-                'key' => self::PROVIDER_ANGUO,
-                'name' => '安果ERP',
-                'desc' => '安果ERP快递服务，支持上门取件',
-                'support_quote' => false,  // 安果不支持在线报价
-                'support_cancel' => true,
-                'support_track' => true,
             ],
         ];
     }
@@ -63,7 +54,7 @@ class ExpressProviderDict
      */
     public static function isValid(string $provider): bool
     {
-        return in_array($provider, [self::PROVIDER_YISU, self::PROVIDER_ANGUO]);
+        return in_array($provider, [self::PROVIDER_YISU], true);
     }
 
     /**

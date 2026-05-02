@@ -342,13 +342,16 @@ Route::group('recycle', function () {
 Route::group('recycle', function () {
     // 设备查询配置管理
     Route::get('device_query_config/lists', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@lists');
+    Route::get('device_query_config/config', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@getConfig');
+    Route::post('device_query_config/config', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@setConfig');
+    Route::put('device_query_config/status/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@modifyStatus');
+    Route::post('device_query_config/test/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@testConnection');
+    Route::get('device_query_config/stats/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@getStats');
+    Route::get('device_query_config/balance/:channelKey', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@balance');
     Route::get('device_query_config/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@info');
     Route::post('device_query_config', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@add');
     Route::put('device_query_config/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@edit');
     Route::delete('device_query_config/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@del');
-    Route::put('device_query_config/status/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@modifyStatus');
-    Route::post('device_query_config/test/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@testConnection');
-    Route::get('device_query_config/stats/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryConfigController@getStats');
 
     // API接口清单管理
     Route::get('device_query_api/lists', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryApiController@lists');
@@ -361,6 +364,7 @@ Route::group('recycle', function () {
     Route::post('device_query_api/init', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryApiController@initDefaultApiList');
     Route::get('device_query_api/by_endpoint', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryApiController@getApiByEndpoint');
     Route::get('device_query_api/by_category', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryApiController@getApisByCategory');
+    Route::post('device_query_api/query', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryApiController@query');
     // 获取设备的基本信息 coverage
     Route::get('device_query_api/coverage', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryApiController@getCoverage');
     // 获取设备的激活锁 activationlock
@@ -370,6 +374,7 @@ Route::group('recycle', function () {
     Route::get('device_query_api/express', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryApiController@getExpress');
     // 查询结果管理
     Route::get('device_query_result/lists', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryResultController@lists');
+    Route::get('device_query_result/overview', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryResultController@overview');
     Route::get('device_query_result/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryResultController@info');
     Route::delete('device_query_result/:id', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryResultController@del');
     Route::post('device_query_result/batch_del', 'addon\recycle\app\adminapi\controller\device_query\DeviceQueryResultController@batchDel');
@@ -391,6 +396,13 @@ Route::group('recycle', function () {
  * 第三方服务管理相关接口
 */
 Route::group('recycle', function () {
+    // 第三方配置中心（sys_config）
+    Route::get('third_party_config/overview', 'addon\recycle\app\adminapi\controller\third_party\ThirdPartyConfig@overview');
+    Route::get('third_party_config', 'addon\recycle\app\adminapi\controller\third_party\ThirdPartyConfig@getConfig');
+    Route::post('third_party_config', 'addon\recycle\app\adminapi\controller\third_party\ThirdPartyConfig@setConfig');
+    Route::get('third_party_config/default', 'addon\recycle\app\adminapi\controller\third_party\ThirdPartyConfig@getDefaultConfig');
+    Route::post('third_party/address_parse', 'addon\recycle\app\adminapi\controller\third_party\AddressParse@parse');
+
     // 第三方服务配置管理
     Route::get('third_party_service/lists', 'addon\recycle\app\adminapi\controller\third_party\ThirdPartyService@lists');
     Route::get('third_party_service/:id', 'addon\recycle\app\adminapi\controller\third_party\ThirdPartyService@info');
@@ -424,6 +436,9 @@ Route::group('recycle', function () {
     Route::post('express_order/create', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@create');
     Route::post('express_order/cancel', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@cancel');
     Route::get('express_order/track', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@track');
+    Route::get('express_order/detail', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@detail');
+    Route::post('express_order/modify', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@modify');
+    Route::post('express_order/waybill_pdf', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@waybillPdf');
     Route::get('express_order/balance', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@balance');
     // 统一快递服务 - 为回收订单创建/取消/查询快递
     Route::post('express_order/create_for_order', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@createForOrder');
@@ -473,16 +488,17 @@ Route::group('recycle', function () {
     Route::post('yisu_product/batch_update', 'addon\recycle\app\adminapi\controller\yisu\YisuProduct@batchUpdate');
     Route::post('yisu_product/modify_status', 'addon\recycle\app\adminapi\controller\yisu\YisuProduct@modifyStatus');
     Route::get('yisu_product/enabled', 'addon\recycle\app\adminapi\controller\yisu\YisuProduct@enabled');
+    Route::post('yisu/create_order', 'addon\recycle\app\adminapi\controller\yisu\Yisu@createOrder');
 
     // yisu 业务相关接口
     // 下单 
-    Route::post('yisu_order/create_order', 'addon\recycle\app\adminapi\controller\yisu\YisuOrder@createOrder');
+    Route::post('yisu_order/create_order', 'addon\recycle\app\adminapi\controller\yisu\Yisu@createOrder');
     // 取消
-    Route::post('yisu_order/cancel', 'addon\recycle\app\adminapi\controller\yisu\YisuOrder@cancel');
+    Route::post('yisu_order/cancel', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@cancel');
     // 查询
-    Route::get('yisu_order/query', 'addon\recycle\app\adminapi\controller\yisu\YisuOrder@query');
+    Route::get('yisu_order/query', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@detail');
     // 查询物流
-    Route::get('yisu_order/track', 'addon\recycle\app\adminapi\controller\yisu\YisuOrder@track');
+    Route::get('yisu_order/track', 'addon\recycle\app\adminapi\controller\express\ExpressOrder@track');
 
 })->middleware([
     AdminCheckToken::class,
@@ -527,6 +543,10 @@ Route::group('recycle', function () {
 */
 
 Route::group('recycle', function () {
+    Route::get('quotation_crawler_config', 'addon\recycle\app\adminapi\controller\quotation\QuotationCrawlerConfig@getConfig');
+    Route::post('quotation_crawler_config', 'addon\recycle\app\adminapi\controller\quotation\QuotationCrawlerConfig@setConfig');
+    Route::get('quotation_crawler_config/default', 'addon\recycle\app\adminapi\controller\quotation\QuotationCrawlerConfig@getDefaultConfig');
+
     // 报价单配置管理
     Route::get('quotation_config', 'addon\recycle\app\adminapi\controller\quotation\QuotationConfig@lists');
     Route::get('quotation_config/:id', 'addon\recycle\app\adminapi\controller\quotation\QuotationConfig@info');
@@ -585,6 +605,43 @@ Route::group('recycle', function () {
     Route::post('quotation_spec/grade_spec/batch_sync_status', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@batchSetGradeSpecSyncStatus');
     // 同步统计
     Route::get('quotation_spec/sync_stats', 'addon\recycle\app\adminapi\controller\quotation\QuotationSpec@getSyncStats');
+
+    // 报价 2.0：数据集、预览、导入、独立价格/说明数据
+    Route::get('quotation_v2/display_config', 'addon\recycle\app\adminapi\controller\quotation_v2\DisplayConfig@info');
+    Route::post('quotation_v2/display_config', 'addon\recycle\app\adminapi\controller\quotation_v2\DisplayConfig@save');
+    Route::get('quotation_v2/dataset', 'addon\recycle\app\adminapi\controller\quotation_v2\Dataset@lists');
+    Route::get('quotation_v2/dataset/all', 'addon\recycle\app\adminapi\controller\quotation_v2\Dataset@all');
+    Route::post('quotation_v2/dataset/init_chaoniu_defaults', 'addon\recycle\app\adminapi\controller\quotation_v2\Dataset@initChaoniuDefaults');
+    Route::get('quotation_v2/dataset/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Dataset@info');
+    Route::post('quotation_v2/dataset', 'addon\recycle\app\adminapi\controller\quotation_v2\Dataset@add');
+    Route::put('quotation_v2/dataset/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Dataset@edit');
+    Route::delete('quotation_v2/dataset/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Dataset@del');
+
+    Route::post('quotation_v2/sync/preview/:datasetId', 'addon\recycle\app\adminapi\controller\quotation_v2\Sync@preview');
+    Route::post('quotation_v2/sync/import/:logId', 'addon\recycle\app\adminapi\controller\quotation_v2\Sync@import');
+    Route::post('quotation_v2/sync/now/:datasetId', 'addon\recycle\app\adminapi\controller\quotation_v2\Sync@syncNow');
+
+    Route::get('quotation_v2/model', 'addon\recycle\app\adminapi\controller\quotation_v2\Query@models');
+    Route::get('quotation_v2/capacity', 'addon\recycle\app\adminapi\controller\quotation_v2\Query@capacities');
+    Route::get('quotation_v2/field', 'addon\recycle\app\adminapi\controller\quotation_v2\Query@fields');
+    Route::get('quotation_v2/price/matrix', 'addon\recycle\app\adminapi\controller\quotation_v2\Query@priceMatrix');
+    Route::get('quotation_v2/price', 'addon\recycle\app\adminapi\controller\quotation_v2\Query@prices');
+    Route::get('quotation_v2/note', 'addon\recycle\app\adminapi\controller\quotation_v2\Query@notes');
+    Route::get('quotation_v2/log', 'addon\recycle\app\adminapi\controller\quotation_v2\Query@logs');
+    Route::post('quotation_v2/model', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@addModel');
+    Route::put('quotation_v2/model/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@editModel');
+    Route::delete('quotation_v2/model/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@deleteModel');
+    Route::post('quotation_v2/capacity', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@addCapacity');
+    Route::put('quotation_v2/capacity/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@editCapacity');
+    Route::delete('quotation_v2/capacity/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@deleteCapacity');
+    Route::post('quotation_v2/field', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@addField');
+    Route::put('quotation_v2/field/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@editField');
+    Route::delete('quotation_v2/field/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@deleteField');
+    Route::post('quotation_v2/note', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@addNote');
+    Route::put('quotation_v2/note/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@editNote');
+    Route::delete('quotation_v2/note/:id', 'addon\recycle\app\adminapi\controller\quotation_v2\Manage@deleteNote');
+    Route::put('quotation_v2/price/:id/adjust', 'addon\recycle\app\adminapi\controller\quotation_v2\Price@adjust');
+    Route::post('quotation_v2/price/batch_adjust', 'addon\recycle\app\adminapi\controller\quotation_v2\Price@batchAdjust');
 
 
 })->middleware([

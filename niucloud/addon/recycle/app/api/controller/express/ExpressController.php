@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\api\controller\express;
 
+use addon\recycle\app\dict\express\ExpressProviderDict;
+use addon\recycle\app\service\core\express\YisuExpressPushService;
 use addon\recycle\app\service\core\express\RecycleExpressService;
 use core\base\BaseApiController;
 use think\Response;
@@ -49,7 +51,7 @@ class ExpressController extends BaseApiController
         ];
 
         $result = $expressService->getQuote(
-            $this->request->defaultSiteId(),
+            $this->request->siteId(),
             $senderAddress,
             (float)$data['weight'],
             (int)$data['package_count']
@@ -69,7 +71,7 @@ class ExpressController extends BaseApiController
         $expressService = new RecycleExpressService();
 
         $result = $expressService->trackOrder(
-            $this->request->defaultSiteId(),
+            $this->request->siteId(),
             $orderId
         );
 
@@ -86,7 +88,7 @@ class ExpressController extends BaseApiController
         $expressService = new RecycleExpressService();
 
         $result = $expressService->getAvailableProviders(
-            $this->request->defaultSiteId()
+            $this->request->siteId()
         );
 
         return success($result);
@@ -101,7 +103,7 @@ class ExpressController extends BaseApiController
     {
         $expressService = new RecycleExpressService();
 
-        $siteId = $this->request->defaultSiteId();
+        $siteId = $this->request->siteId();
         $enabled = $expressService->isExpressEnabled($siteId);
 
         $provider = '';
@@ -115,10 +117,16 @@ class ExpressController extends BaseApiController
             $shopAddress = $expressService->getShopAddress($siteId);
         }
 
+        $providerName = $provider ? ExpressProviderDict::getProviderName($provider) : '';
+
         return success([
             'enabled' => $enabled,
-            'provider' => $provider,  // yisu | anguo
+            'provider' => $provider,
+            'provider_name' => $providerName,
             'has_shop_address' => !empty($shopAddress),
+            'prompt' => $enabled && !empty($shopAddress) && $providerName
+                ? '将使用' . $providerName . '进行平台快递下单，请确认寄件地址准确。'
+                : '',
         ]);
     }
 
@@ -147,11 +155,31 @@ class ExpressController extends BaseApiController
         ];
 
         $expressService->cancelOrder(
-            $this->request->defaultSiteId(),
+            $this->request->siteId(),
             (int)$data['order_id'],
             $operatorInfo
         );
 
         return success('取消成功');
+    }
+
+    /**
+     * 易速推送回调。必须在 2 秒内返回 SUCCESS。
+     * @return Response
+     */
+    public function yisuPush(): Response
+    {
+        $requestParams = $this->request->param();
+        $bodyParams = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
+        $payload = array_merge($requestParams, $bodyParams);
+
+        try {
+            $siteId = (int)($payload['site_id'] ?? $this->request->param('site_id', $this->request->siteId()));
+            (new YisuExpressPushService())->handle($siteId, $payload);
+        } catch (\Exception $e) {
+            \think\facade\Log::error('易速推送处理失败：' . $e->getMessage(), ['payload' => $payload]);
+        }
+
+        return response('SUCCESS');
     }
 }

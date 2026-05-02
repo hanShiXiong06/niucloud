@@ -34,6 +34,7 @@ class ExpressProviderConfig extends BaseModel
             ['site_id', '=', $siteId],
             ['status', '=', ExpressProviderDict::STATUS_ENABLED],
             ['is_default', '=', 1],
+            ['provider', '=', ExpressProviderDict::PROVIDER_YISU],
         ])->find();
 
         if ($config) {
@@ -44,6 +45,7 @@ class ExpressProviderConfig extends BaseModel
         $config = self::where([
             ['site_id', '=', $siteId],
             ['status', '=', ExpressProviderDict::STATUS_ENABLED],
+            ['provider', '=', ExpressProviderDict::PROVIDER_YISU],
         ])->order('sort desc, id asc')->find();
 
         return $config ? $config['provider'] : '';
@@ -59,6 +61,7 @@ class ExpressProviderConfig extends BaseModel
         return self::where([
             ['site_id', '=', $siteId],
             ['status', '=', ExpressProviderDict::STATUS_ENABLED],
+            ['provider', '=', ExpressProviderDict::PROVIDER_YISU],
         ])->order('sort desc, id asc')->select()->toArray();
     }
 
@@ -117,6 +120,10 @@ class ExpressProviderConfig extends BaseModel
      */
     public static function setDefault(int $siteId, string $provider): void
     {
+        if ($provider !== ExpressProviderDict::PROVIDER_YISU) {
+            return;
+        }
+
         // 先取消所有默认
         self::where([
             ['site_id', '=', $siteId],

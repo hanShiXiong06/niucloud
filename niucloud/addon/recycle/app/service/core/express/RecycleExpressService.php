@@ -8,14 +8,14 @@ use addon\recycle\app\model\express\ExpressProviderConfig;
 use addon\recycle\app\model\express\ExpressOrderRecord;
 use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\service\core\ExpressOrderService;
-use addon\recycle\app\service\core\recycle_order\RecycleAnguoDeliveryService;
+use addon\recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use core\exception\CommonException;
 use think\facade\Db;
 use think\facade\Log;
 
 /**
  * 统一快递服务
- * 封装亿速/安果的差异，提供统一的快递操作入口
+ * 2.0 阶段仅保留亿速快递，订单侧仍通过本服务访问平台快递能力。
  * Class RecycleExpressService
  * @package addon\recycle\app\service\core\express
  */
@@ -29,9 +29,23 @@ class RecycleExpressService
      */
     public function getActiveProvider(int $siteId): string
     {
+        $configService = new RecycleThirdPartyConfigService();
+        if ($configService->hasSavedConfig($siteId)) {
+            if (!$configService->isServiceEnabled($siteId, 'express_order')) {
+                throw new CommonException('快递服务未启用，请在第三方配置中心启用亿速快递');
+            }
+            if (!$configService->isProviderConfigComplete($siteId, 'express_order', ExpressProviderDict::PROVIDER_YISU)) {
+                throw new CommonException('亿速快递配置不完整，请在第三方配置中心配置');
+            }
+            return ExpressProviderDict::PROVIDER_YISU;
+        }
+
         $provider = ExpressProviderConfig::getDefaultProvider($siteId);
         if (empty($provider)) {
             throw new CommonException('未配置快递服务商，请在后台设置');
+        }
+        if ($provider !== ExpressProviderDict::PROVIDER_YISU) {
+            throw new CommonException('当前仅支持亿速快递，请在后台启用亿速快递服务');
         }
         return $provider;
     }
@@ -55,13 +69,7 @@ class RecycleExpressService
             throw new CommonException('未配置商户收货地址，请先在后台配置');
         }
 
-        if ($provider === ExpressProviderDict::PROVIDER_YISU) {
-            return $this->getYisuQuote($siteId, $senderAddress, $shopAddress, $weight, $packageCount);
-        } elseif ($provider === ExpressProviderDict::PROVIDER_ANGUO) {
-            return $this->getAnguoQuote($siteId, $senderAddress, $shopAddress, $weight);
-        }
-
-        throw new CommonException("不支持的服务商: {$provider}");
+        return $this->getYisuQuote($siteId, $senderAddress, $shopAddress, $weight, $packageCount);
     }
 
     /**
@@ -89,58 +97,29 @@ class RecycleExpressService
 
         // 统一返回格式
         $result = [];
-        if (!empty($quoteList['data'])) {
-            foreach ($quoteList['data'] as $item) {
-                $result[] = [
-                    'product_code' => $item['productCode'] ?? '',
-                    'product_name' => $item['productName'] ?? '',
-                    'price' => (float)($item['totalPrice'] ?? $item['price'] ?? 0),
-                    'estimated_time' => $item['aging'] ?? '',
-                    'provider' => ExpressProviderDict::PROVIDER_YISU,
-                    'logo' => $item['logo'] ?? '',
-                ];
+        foreach ($quoteList as $item) {
+            $price = (float)($item['totalPrice'] ?? $item['totalFee'] ?? $item['price'] ?? 0);
+            if ($price <= 0) {
+                $price = (float)($item['channelFee'] ?? 0)
+                    + (float)($item['serviceCharge'] ?? 0)
+                    + (float)($item['guarantFee'] ?? 0)
+                    + (float)($item['incrementFee'] ?? 0);
             }
-        } elseif (is_array($quoteList)) {
-            // getQuote 可能直接返回数组
-            foreach ($quoteList as $item) {
-                $result[] = [
-                    'product_code' => $item['productCode'] ?? '',
-                    'product_name' => $item['productName'] ?? '',
-                    'price' => (float)($item['totalPrice'] ?? $item['price'] ?? 0),
-                    'estimated_time' => $item['aging'] ?? '',
-                    'provider' => ExpressProviderDict::PROVIDER_YISU,
-                    'logo' => $item['logo'] ?? '',
-                ];
-            }
+            $result[] = [
+                'product_code' => $item['productCode'] ?? '',
+                'product_name' => $item['productName'] ?? $item['channelName'] ?? $item['typeName'] ?? '',
+                'price' => $price,
+                'estimated_time' => $item['aging'] ?? $item['promiseTimeType'] ?? '',
+                'provider' => ExpressProviderDict::PROVIDER_YISU,
+                'logo' => $item['logo'] ?? '',
+                'raw' => $item,
+            ];
         }
 
         return [
             'provider' => ExpressProviderDict::PROVIDER_YISU,
             'provider_name' => '亿速物流',
             'list' => $result,
-        ];
-    }
-
-    /**
-     * 安果报价（安果不支持在线报价，返回固定提示）
-     */
-    private function getAnguoQuote(int $siteId, array $sender, array $receiver, float $weight): array
-    {
-        // 安果ERP不支持预报价，返回默认提示
-        return [
-            'provider' => ExpressProviderDict::PROVIDER_ANGUO,
-            'provider_name' => '安果ERP',
-            'list' => [
-                [
-                    'product_code' => 'SF',
-                    'product_name' => '顺丰速运',
-                    'price' => 0, // 安果到付，价格取件时确认
-                    'estimated_time' => '1-3天',
-                    'provider' => ExpressProviderDict::PROVIDER_ANGUO,
-                    'logo' => '',
-                    'remark' => '费用由快递员取件时确认',
-                ],
-            ],
         ];
     }
 
@@ -178,13 +157,7 @@ class RecycleExpressService
 
             $result = [];
 
-            if ($provider === ExpressProviderDict::PROVIDER_YISU) {
-                $result = $this->createYisuOrder($siteId, $order, $expressConfig, $shopAddress, $operatorInfo);
-            } elseif ($provider === ExpressProviderDict::PROVIDER_ANGUO) {
-                $result = $this->createAnguoOrder($siteId, $order, $expressConfig, $shopAddress, $operatorInfo);
-            } else {
-                throw new CommonException("不支持的服务商: {$provider}");
-            }
+            $result = $this->createYisuOrder($siteId, $order, $expressConfig, $shopAddress, $operatorInfo);
 
             Db::commit();
 
@@ -218,6 +191,15 @@ class RecycleExpressService
                 $productCode = $enabledProducts[0]['product_code'];
             }
         }
+        if (empty($productCode)) {
+            throw new CommonException('未配置可用的亿速快递产品，请先在后台启用快递产品');
+        }
+
+        foreach (['province' => '省份', 'city' => '城市', 'district' => '区县', 'address' => '详细地址'] as $field => $label) {
+            if (trim((string)($shopAddress[$field] ?? '')) === '') {
+                throw new CommonException('商家收货地址' . $label . '不完整，请在后台重新选择省市区并保存地址');
+            }
+        }
 
         $params = [
             // 快递产品
@@ -243,6 +225,9 @@ class RecycleExpressService
             'goods' => '回收设备',
             'weight' => (float)($config['weight'] ?? 1.0),
             'packageCount' => (int)($config['package_count'] ?? 1),
+            'thirdOrderNo' => 'recycle_' . $siteId . '_' . $order->id,
+            'remark' => $config['remark'] ?? '',
+            'orderSendTime' => $config['pickup_time'] ?? '',
 
             // 关联回收订单
             'recycle_order_id' => $order->id,
@@ -252,8 +237,11 @@ class RecycleExpressService
         // 调用亿速下单
         $apiResult = $expressService->createOrder($siteId, $params);
 
-        $expressNo = $apiResult['data']['deliveryId'] ?? $apiResult['data']['orderNo'] ?? '';
-        $orderNo = $apiResult['data']['orderNo'] ?? '';
+        $expressNo = $apiResult['deliveryId'] ?? $apiResult['orderNo'] ?? '';
+        $orderNo = $apiResult['orderNo'] ?? '';
+        if (empty($expressNo) && empty($orderNo)) {
+            throw new CommonException('亿速下单成功但未返回运单号');
+        }
         $estimatedCost = (float)($config['estimated_cost'] ?? 0);
 
         // 更新回收订单
@@ -274,7 +262,7 @@ class RecycleExpressService
                     'address' => $config['sender_address'] ?? '',
                 ],
                 'receiver' => $shopAddress,
-                'product_code' => $config['product_code'] ?? '',
+                'product_code' => $productCode,
                 'weight' => $config['weight'] ?? 1.0,
                 'estimated_cost' => $estimatedCost,
                 'order_no' => $orderNo,
@@ -292,49 +280,6 @@ class RecycleExpressService
             'delivery_id' => $expressNo,
             'estimated_cost' => $estimatedCost,
             'provider' => ExpressProviderDict::PROVIDER_YISU,
-        ];
-    }
-
-    /**
-     * 安果下单
-     */
-    private function createAnguoOrder(int $siteId, $order, array $config, array $shopAddress, array $operatorInfo): array
-    {
-        $anguoService = new RecycleAnguoDeliveryService($siteId);
-
-        $senderAddress = [
-            'name' => $config['sender_name'] ?? '',
-            'mobile' => $config['sender_mobile'] ?? '',
-            'province' => $config['sender_province'] ?? '',
-            'city' => $config['sender_city'] ?? '',
-            'district' => $config['sender_district'] ?? '',
-            'address' => $config['sender_address'] ?? '',
-        ];
-
-        $pickupTime = $config['pickup_time'] ?? '';
-        $weight = (float)($config['weight'] ?? 1.0);
-
-        // 调用安果下单（内部会更新 RecycleOrder）
-        $result = $anguoService->createDeliveryOrder(
-            $order->id,
-            $senderAddress,
-            $pickupTime,
-            $weight
-        );
-
-        // 补充 delivery_data 中的操作人信息
-        $deliveryData = json_decode($order->delivery_data ?: '{}', true);
-        $deliveryData['operator'] = $operatorInfo;
-        $order->save([
-            'delivery_data' => json_encode($deliveryData, JSON_UNESCAPED_UNICODE),
-        ]);
-
-        return [
-            'express_no' => $result['tracking_number'] ?? '',
-            'order_no' => $result['tracking_number'] ?? '',
-            'delivery_id' => $result['delivery_id'] ?? '',
-            'estimated_cost' => 0, // 安果到付
-            'provider' => ExpressProviderDict::PROVIDER_ANGUO,
         ];
     }
 
@@ -365,18 +310,13 @@ class RecycleExpressService
 
         Db::startTrans();
         try {
-            if ($platform === ExpressProviderDict::PROVIDER_YISU) {
-                $expressService = new ExpressOrderService();
-                $orderNo = $order->delivery_order_id ?: $order->express_no;
-                $expressService->cancelOrder($siteId, $orderNo);
-
-            } elseif ($platform === ExpressProviderDict::PROVIDER_ANGUO) {
-                $anguoService = new RecycleAnguoDeliveryService($siteId);
-                $anguoService->cancelDelivery($order->id);
-
-            } else {
+            if ($platform !== ExpressProviderDict::PROVIDER_YISU) {
                 throw new CommonException("未知的快递平台: {$platform}");
             }
+
+            $expressService = new ExpressOrderService();
+            $orderNo = $order->delivery_order_id ?: $order->express_no;
+            $expressService->cancelOrder($siteId, $orderNo);
 
             // 更新回收订单
             $order->save([
@@ -426,17 +366,12 @@ class RecycleExpressService
 
         $platform = $order->delivery_platform;
 
-        if ($platform === ExpressProviderDict::PROVIDER_YISU) {
-            $expressService = new ExpressOrderService();
-            return $expressService->trackOrder($siteId, $order->express_no);
-
-        } elseif ($platform === ExpressProviderDict::PROVIDER_ANGUO) {
-            $anguoService = new RecycleAnguoDeliveryService($siteId);
-            return $anguoService->syncDeliveryStatus($order->id);
-
+        if ($platform !== ExpressProviderDict::PROVIDER_YISU) {
+            throw new CommonException("未知的快递平台: {$platform}");
         }
 
-        throw new CommonException("未知的快递平台: {$platform}");
+        $expressService = new ExpressOrderService();
+        return $expressService->trackOrder($siteId, $order->express_no);
     }
 
     /**
@@ -457,6 +392,24 @@ class RecycleExpressService
      */
     public function getAvailableProviders(int $siteId): array
     {
+        $configService = new RecycleThirdPartyConfigService();
+        if ($configService->hasSavedConfig($siteId)) {
+            if (!$configService->isServiceEnabled($siteId, 'express_order')) {
+                return [];
+            }
+
+            return [
+                [
+                    'provider' => ExpressProviderDict::PROVIDER_YISU,
+                    'provider_name' => ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
+                    'is_default' => 1,
+                    'support_quote' => true,
+                    'support_cancel' => true,
+                    'support_track' => true,
+                ],
+            ];
+        }
+
         $providers = ExpressProviderConfig::getEnabledProviders($siteId);
         $allProviders = ExpressProviderDict::getProviders();
 
@@ -484,6 +437,12 @@ class RecycleExpressService
      */
     public function isExpressEnabled(int $siteId): bool
     {
+        $configService = new RecycleThirdPartyConfigService();
+        if ($configService->hasSavedConfig($siteId)) {
+            return $configService->isServiceEnabled($siteId, 'express_order')
+                && $configService->isProviderConfigComplete($siteId, 'express_order', ExpressProviderDict::PROVIDER_YISU);
+        }
+
         $provider = ExpressProviderConfig::getDefaultProvider($siteId);
         return !empty($provider);
     }
@@ -511,9 +470,8 @@ class RecycleExpressService
             return null;
         }
 
-        // 解析地址
-        $fullAddress = $address['full_address'] ?? '';
-        $addressParts = $this->parseAddress($fullAddress);
+        $fullAddress = (string)($address['full_address'] ?? '');
+        $addressParts = $this->resolveShopAddressParts($address);
 
         return [
             'contact_name' => $address['contact_name'] ?? '',
@@ -524,6 +482,46 @@ class RecycleExpressService
             'address' => $addressParts['detail'],
             'full_address' => $fullAddress,
         ];
+    }
+
+    /**
+     * 解析商家地址。优先使用省市区 ID，避免 full_address 格式变化导致省市区为空。
+     * @param array $address
+     * @return array
+     */
+    private function resolveShopAddressParts(array $address): array
+    {
+        $provinceId = (int)($address['province_id'] ?? 0);
+        $cityId = (int)($address['city_id'] ?? 0);
+        $districtId = (int)($address['district_id'] ?? 0);
+
+        if ($provinceId > 0 && $cityId > 0 && $districtId > 0) {
+            $areaNames = Db::name('sys_area')
+                ->whereIn('id', [$provinceId, $cityId, $districtId])
+                ->column('name', 'id');
+
+            $province = (string)($areaNames[$provinceId] ?? '');
+            $city = (string)($areaNames[$cityId] ?? '');
+            $district = (string)($areaNames[$districtId] ?? '');
+            $detail = trim((string)($address['address'] ?? ''));
+
+            if ($province !== '' && $city !== '' && $district !== '') {
+                return [
+                    'province' => $province,
+                    'city' => $city,
+                    'district' => $district,
+                    'detail' => $detail,
+                ];
+            }
+        }
+
+        $fullAddress = (string)($address['full_address'] ?? '');
+        $addressParts = $this->parseAddress($fullAddress);
+        if ($addressParts['detail'] === '' && !empty($address['address'])) {
+            $addressParts['detail'] = (string)$address['address'];
+        }
+
+        return $addressParts;
     }
 
     /**

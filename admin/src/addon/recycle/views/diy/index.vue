@@ -13,13 +13,15 @@ import { computed, markRaw } from 'vue';
 import useDiyStore from '@/stores/modules/diy';
 import EditRecycleCategory from './components/edit-recycle-category.vue';
 import EditRecycleOrderOverview from './components/edit-recycle-order-overview.vue';
+import EditRecycleQuotationList from './components/edit-recycle-quotation-list.vue';
 
 const diyStore = useDiyStore();
 
 // 编辑组件映射
 const componentMap: Record<string, any> = {
   EditRecycleCategory,
-  EditRecycleOrderOverview
+  EditRecycleOrderOverview,
+  EditRecycleQuotationList
 };
 
 const diyEditComponent = computed(() => {
@@ -72,6 +74,50 @@ const recycleComponents = [
         bgColor: '#ffffff',
         textColor: '#333333',
         imageUrl: ''
+      },
+      {
+        name: 'RecycleQuotationList',
+        title: '回收报价单',
+        icon: 'iconfont iconshangpinliebiaopc',
+        componentTitle: '回收报价单',
+        componentName: 'RecycleQuotationList',
+        componentType: 'EditRecycleQuotationList',
+        isDelete: false,
+        isDisabled: false,
+        allPages: true,
+        defaultDataList: {},
+        extra: {},
+        marginTop: 5,
+        paddingTop: 10,
+        paddingBottom: 10,
+        marginBottom: 5,
+        value: {
+          title: '今日报价',
+          subtitle: '实时同步回收报价单',
+          actionText: '查看',
+          limit: 5,
+          showRefresh: true,
+          displayStyle: 'list',
+          navImageUrl: '',
+          navRowCount: 4,
+          navImageSize: 40,
+          navAroundRadius: 20,
+          componentStartBgColor: '',
+          componentEndBgColor: '',
+          componentGradientAngle: 'to bottom',
+          componentBgUrl: '',
+          componentBgAlpha: 0,
+          topRounded: 0,
+          bottomRounded: 0,
+          titleColor: '#111827',
+          subtitleColor: '#6B7280',
+          buttonColor: '#2563EB',
+          margin: {
+            top: 10,
+            bottom: 10,
+            both: 12
+          }
+        }
       }
     ]
   }
@@ -87,4 +133,4 @@ if (diyStore.components) {
 .diy-index {
   height: 100%;
 }
-</style> 
+</style>

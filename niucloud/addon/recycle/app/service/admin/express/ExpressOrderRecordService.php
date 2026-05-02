@@ -28,15 +28,18 @@ class ExpressOrderRecordService extends BaseAdminService
     public function getPage(array $where = []): array
     {
         $field = 'id, site_id, order_no, recycle_order_id, recycle_device_id, provider_name, product_code, product_name, delivery_id,
-                  sender_name, sender_mobile, sender_address, receiver_name, receiver_mobile, receiver_address,
+                  sender_name, sender_mobile, sender_province, sender_city, sender_district, sender_address,
+                  receiver_name, receiver_mobile, receiver_province, receiver_city, receiver_district, receiver_address,
                   goods_name, package_count, estimated_weight, actual_weight, weight_diff,
                   estimated_cost, actual_cost, cost_diff, payment_status, order_status,
                   pickup_time, delivery_time, create_at, update_at';
 
         $order = 'create_at desc';
+        $where['site_id'] = $this->site_id;
 
-        $searchModel = $this->model->withSearch(['site_id', 'order_no', 'delivery_id', 'order_status',
-                                                  'recycle_order_id', 'recycle_device_id', 'provider_name', 'create_time'], $where)
+        $searchModel = $this->model->withSearch(['site_id', 'keyword', 'order_no', 'delivery_id', 'order_status',
+                                                  'recycle_order_id', 'recycle_device_id', 'provider_name',
+                                                  'product_code', 'sender_mobile', 'receiver_mobile', 'create_time'], $where)
             ->field($field)
             ->order($order)
             ->append(['status_text', 'payment_status_text']);
@@ -55,7 +58,7 @@ class ExpressOrderRecordService extends BaseAdminService
     {
         $field = '*';
 
-        $info = $this->model->field($field)->where([['id', '=', $id]])->findOrEmpty()->toArray();
+        $info = $this->model->field($field)->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
 
         if (!empty($info)) {
             $info['status_text'] = ExpressOrderDict::getStatusText($info['order_status']);

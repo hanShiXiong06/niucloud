@@ -6,6 +6,8 @@ namespace addon\recycle\app\service\admin;
 use addon\recycle\app\model\DeviceQueryConfig;
 use addon\recycle\app\model\DeviceQueryApi;
 use addon\recycle\app\model\DeviceQueryResult;
+use addon\recycle\app\service\core\device_query\CoreDeviceQueryService;
+use addon\recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use core\base\BaseAdminService;
 use think\facade\Cache;
 
@@ -27,67 +29,20 @@ class DeviceQueryService extends BaseAdminService
      */
     public function queryDevice(string $queryCode, $siteId, $api='/apple/model'): array
     {
-        // 参数验证
         $queryCode = trim($queryCode);
         if (empty($queryCode)) {
             throw new CommonException('IMEI或序列号不能为空');
         }
 
-        $queryResult = $this->localQueryDevice($queryCode, $api);
-        // 如果本地查询成功，则直接返回
-        if( !empty($queryResult) ){
-            return [
-                'success' => true,
-                'data' => $queryResult,
-            ];
+        $api = trim((string)$api) ?: '/apple/model';
+        $params = ['query_code' => $queryCode];
+        if (str_starts_with($api, '/')) {
+            $params['api_endpoint'] = $api;
+        } else {
+            $params['service_code'] = $api;
         }
 
-        // 获取站点配置
-        $config = DeviceQueryConfig::getSiteConfig($this->site_id);
-        if (empty($config)) {
-            throw new CommonException('站点查询配置未找到或已禁用');
-        }
-        
-        // 记录查询开始时间
-        $startTime = microtime(true);
-        
-        // 执行查询 - 使用单个API端点
-        $queryResult = $this->executeQuery($queryCode, $config, $api);
-        
-        // 计算响应时间（毫秒）
-        $responseTime = round((microtime(true) - $startTime) * 1000);
-        
-        // 解析结果
-        $parsedResult = $this->parseQueryResult($queryResult);
-        
-        // 保存查询结果到数据库
-        if ($parsedResult['success']) {
-            try {
-                DeviceQueryResult::saveQueryResult([
-                    'site_id' => $siteId,
-                    'query_code' => $queryCode,
-                    'api_endpoint' => $api,
-                    'query_result' => $parsedResult['data'],
-                    'raw_response' => $queryResult,
-                    'status' => 1,
-                    'cost_amount' => $parsedResult['cost'],
-                    'balance' => $parsedResult['data']['balance'] ?? 0,
-                    'remark' => '设备查询'
-                ]);
-            } catch (\Exception $e) {
-                // 记录错误但不影响查询流程
-                \think\facade\Log::warning('保存查询结果失败: ' . $e->getMessage());
-            }
-        }
-        
-        return [
-            'success' => $parsedResult['success'],
-            'data' => $parsedResult['data'],
-            'cost' => $parsedResult['cost'],
-            'api_name' => $config['enabled_apis'],
-            'response_time' => $responseTime,
-            'balance' => $parsedResult['data']['balance'] ?? 0
-        ];
+        return (new CoreDeviceQueryService())->query((int)$siteId, $params);
     }
 
     // 本地查询
@@ -291,20 +246,17 @@ class DeviceQueryService extends BaseAdminService
         }
 
         try {
-            // 获取站点配置
-            $config = DeviceQueryConfig::getSiteConfig($this->site_id);
-            if (!$config) {
-                return null;
-            }
-
-            // 执行查询
-            $result = $this->queryDevice($queryCode, $this->site_id);
+            $result = (new CoreDeviceQueryService())->query((int)$this->site_id, [
+                'query_code' => $queryCode,
+                'query_type' => $queryType,
+                'service_code' => $queryType === 'imei' ? 'apple_model' : 'apple_coverage',
+            ]);
             
             if ($result['success']) {
                 return [
                     'query_result' => $result['data'],
                     'cost_amount' => $result['cost'],
-                    'from_cache' => false
+                    'from_cache' => (bool)($result['from_cache'] ?? false)
                 ];
             }
 
@@ -492,23 +444,33 @@ class DeviceQueryService extends BaseAdminService
       }
     
       private function queryExpress(string $express_code = '' , string $mobile = ''){
-        // 通过site_id 获取 数据库存储 的 host 和 path
+        $thirdPartyConfig = (new RecycleThirdPartyConfigService())->getProviderConfig($this->site_id, 'express_query', 'ali_express');
+        if (!empty($thirdPartyConfig)) {
+          $host = $thirdPartyConfig['base_url'] ?? '';
+          $path = $thirdPartyConfig['api_path'] ?? '';
+          $appcode = $thirdPartyConfig['api_key'] ?? '';
+        } else {
+          // 通过site_id 获取 数据库存储 的 host 和 path，兼容旧配置
         $config = (new DeviceQueryConfig())->where([['site_id', '=', $this->site_id],['enabled_apis','=','/api-mall/api/express/query']])->findOrEmpty()->toArray();
       
-        $host = $config['base_url'] ?? "https://kzexpress.market.alicloudapi.com";
+          $host = $config['base_url'] ?? "";
         $path = $config['enabled_apis'] ?? "/api-mall/api/express/query";
+          $appcode = $config['api_key'] ?? "";
+        }
+
+        if (empty($host) || empty($path) || empty($appcode)) {
+          throw new CommonException('阿里快递查询配置不完整');
+        }
        
         $method = "POST";
-        $appcode = $config['api_key'] ?? "";
         $headers = array();
         array_push($headers, "Authorization:APPCODE " . $appcode);
         //根据API的要求，定义相对应的Content-Type
         array_push($headers, "Content-Type".":"."application/x-www-form-urlencoded; charset=UTF-8");
         // 设置返回的格式
         array_push($headers, "Accept".":"."application/json");
-        $querys = "";
         $bodys = "expressNo={$express_code}&mobile={$mobile}";
-        $url = $host . $path;
+        $url = rtrim($host, '/') . '/' . ltrim($path, '/');
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_CUSTOMREQUEST, $method);
         curl_setopt($curl, CURLOPT_URL, $url);
@@ -522,7 +484,7 @@ class DeviceQueryService extends BaseAdminService
         $err = curl_error($curl);
         curl_close($curl);
         if ($err) {
-          throw new Exception($err);
+          throw new CommonException($err);
         } else {
           
           $res = json_decode($response, true);

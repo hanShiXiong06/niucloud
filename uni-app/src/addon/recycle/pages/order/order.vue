@@ -103,9 +103,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { getAddressList } from '@/app/api/member'
 import { getPaymentList } from '@/addon/recycle/api/payment'
-import { getReceivingChannels } from '@/addon/recycle/api/order'
+import { checkExpressEnabled } from '@/addon/recycle/api/express'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 
 // 导入组件
@@ -223,18 +222,16 @@ const handlePlatformDeliveryChange = async (value: boolean) => {
   }
 }
 
-interface DictItem {
-  name?: string
-  value?: string
-  memo?: string
-}
-
-interface ReceivingChannelsResponse {
+interface ExpressCheckResponse {
   code: number
   msg?: string
   data?: {
-    dictionary?: DictItem[]
+    enabled?: boolean
+    provider?: string
+    provider_name?: string
+    has_shop_address?: boolean
     memo?: string
+    prompt?: string
   }
 }
 
@@ -256,12 +253,26 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
   if (currentTab.value !== 0 || !enablePlatformDelivery.value) return true
 
   try {
-    const res = await getReceivingChannels() as ReceivingChannelsResponse
+    const res = await checkExpressEnabled() as ExpressCheckResponse
     if (res.code !== 1 || !res.data) return true
 
-    // 优先使用字典项 value=1 的 memo，其次使用字典根级 memo
-    const platformChannel = res.data.dictionary?.find(item => item.value === '1')
-    const memo = (platformChannel?.memo || res.data.memo || '').trim()
+    if (!res.data.enabled) {
+      uni.showToast({
+        title: '平台快递未启用',
+        icon: 'none'
+      })
+      return false
+    }
+
+    if (!res.data.has_shop_address) {
+      uni.showToast({
+        title: '商家收货地址未配置',
+        icon: 'none'
+      })
+      return false
+    }
+
+    const memo = String(res.data.prompt || res.data.memo || '').trim()
 
     if (!memo) return true
     return await showPlatformDeliveryMemoConfirm(memo)

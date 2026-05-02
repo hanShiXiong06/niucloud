@@ -152,6 +152,23 @@ class DeviceQueryApiController extends BaseAdminController
         return success('GET_SUCCESS', $result);
     }
 
+    /**
+     * 按配置化查询项执行设备查询
+     */
+    public function query()
+    {
+        $data = $this->request->params([
+            ['service_code', ''],
+            ['query_code', ''],
+            ['query_type', ''],
+            ['channel_key', ''],
+            ['force_refresh', false],
+        ]);
+
+        $result = (new DeviceQueryService())->queryByService($data);
+        return success($result);
+    }
+
     // 获取设备的基本信息 coverage
     public function getCoverage()
     {

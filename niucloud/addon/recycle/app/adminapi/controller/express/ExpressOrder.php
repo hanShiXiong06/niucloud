@@ -36,10 +36,13 @@ class ExpressOrder extends BaseAdminController
             ['vloumHeight', 0],
             ['guaranteeValueAmount', 0],
             ['customerType', ''],
+            ['productCode', ''],
+            ['deliveryType', ''],
+            ['goods', '回收设备'],
         ]);
 
         $service = new ExpressOrderService();
-        $result = $service->getQuote($this->site_id, $data);
+        $result = $service->getQuote($this->siteId(), $data);
 
         return success($result);
     }
@@ -71,10 +74,17 @@ class ExpressOrder extends BaseAdminController
             ['vloumWidth', 0],
             ['vloumHeight', 0],
             ['guaranteeValueAmount', 0],    // 保价金额
+            ['payMethod', 3],
+            ['remark', ''],
+            ['thirdOrderNo', ''],
+            ['orderSendTime', ''],
+            ['estimated_cost', 0],
+            ['recycle_order_id', 0],
+            ['recycle_device_id', 0],
         ]);
 
         $service = new ExpressOrderService();
-        $result = $service->createOrder($this->site_id, $data);
+        $result = $service->createOrder($this->siteId(), $data);
 
         return success($result, '下单成功');
     }
@@ -86,15 +96,23 @@ class ExpressOrder extends BaseAdminController
     public function cancel()
     {
         $orderNo = $this->request->param('order_no', '');
+        $waybillNo = $this->request->param('waybill_no', $this->request->param('delivery_id', ''));
+        $thirdOrderNo = $this->request->param('third_order_no', '');
+        $genre = (int)$this->request->param('genre', 1);
 
-        if (empty($orderNo)) {
-            return fail('订单号不能为空');
+        if (empty($orderNo) && empty($waybillNo) && empty($thirdOrderNo)) {
+            return fail('订单号、运单号、商户订单号至少填写一个');
         }
 
         $service = new ExpressOrderService();
-        $service->cancelOrder($this->site_id, $orderNo);
+        $service->cancelOrInterceptOrder($this->siteId(), [
+            'order_no' => $orderNo,
+            'waybill_no' => $waybillNo,
+            'third_order_no' => $thirdOrderNo,
+            'genre' => $genre,
+        ]);
 
-        return success([], '取消成功');
+        return success([], $genre === 3 ? '拦截成功' : '取消成功');
     }
 
     /**
@@ -110,7 +128,68 @@ class ExpressOrder extends BaseAdminController
         }
 
         $service = new ExpressOrderService();
-        $result = $service->trackOrder($this->site_id, $deliveryId);
+        $result = $service->trackOrder($this->siteId(), $deliveryId);
+
+        return success($result);
+    }
+
+    /**
+     * 查询运单详情
+     * @return \think\Response
+     */
+    public function detail()
+    {
+        $params = $this->getIdentifierParams();
+        if (empty($params)) {
+            return fail('订单号、运单号、商户订单号至少填写一个');
+        }
+
+        $service = new ExpressOrderService();
+        $result = $service->getOrderDetail($this->siteId(), $params);
+
+        return success($result);
+    }
+
+    /**
+     * 修改运单信息
+     * @return \think\Response
+     */
+    public function modify()
+    {
+        $params = $this->getIdentifierParams();
+        $packageNum = $this->request->param('package_num', $this->request->param('packageNum', ''));
+        $orderSendTime = $this->request->param('order_send_time', $this->request->param('orderSendTime', ''));
+
+        if (empty($params)) {
+            return fail('订单号、运单号、商户订单号至少填写一个');
+        }
+        if ($packageNum === '' && $orderSendTime === '') {
+            return fail('包裹数和预约时间至少填写一个');
+        }
+
+        $params['packageNum'] = $packageNum;
+        $params['orderSendTime'] = $orderSendTime;
+
+        $service = new ExpressOrderService();
+        $result = $service->modifyOrder($this->siteId(), $params);
+
+        return success($result, '修改成功');
+    }
+
+    /**
+     * 获取面单PDF
+     * @return \think\Response
+     */
+    public function waybillPdf()
+    {
+        $params = $this->getIdentifierParams();
+        if (empty($params)) {
+            return fail('订单号、运单号、商户订单号至少填写一个');
+        }
+        $params['template_code'] = $this->request->param('template_code', $this->request->param('temCode', ''));
+
+        $service = new ExpressOrderService();
+        $result = $service->getWaybillPdf($this->siteId(), $params);
 
         return success($result);
     }
@@ -122,9 +201,9 @@ class ExpressOrder extends BaseAdminController
     public function balance()
     {
         $service = new ExpressOrderService();
-        $balance = $service->getBalance($this->site_id);
+        $fund = $service->getFund($this->siteId());
 
-        return success(['balance' => $balance]);
+        return success($fund);
     }
 
     // ==================== 统一快递服务接口（基于RecycleExpressService） ====================
@@ -161,7 +240,7 @@ class ExpressOrder extends BaseAdminController
         $expressService = new RecycleExpressService();
 
         $operatorInfo = [
-            'uid' => $this->uid,
+            'uid' => $this->request->uid(),
             'username' => $this->request->adminInfo()['username'] ?? '',
             'source' => 'admin',
             'member_id' => 0,
@@ -182,7 +261,7 @@ class ExpressOrder extends BaseAdminController
         ];
 
         $result = $expressService->createOrder(
-            $this->site_id,
+            $this->siteId(),
             (int)$data['recycle_order_id'],
             $expressConfig,
             $operatorInfo
@@ -206,14 +285,14 @@ class ExpressOrder extends BaseAdminController
         $expressService = new RecycleExpressService();
 
         $operatorInfo = [
-            'uid' => $this->uid,
+            'uid' => $this->request->uid(),
             'username' => $this->request->adminInfo()['username'] ?? '',
             'source' => 'admin',
             'member_id' => 0,
         ];
 
         $expressService->cancelOrder(
-            $this->site_id,
+            $this->siteId(),
             (int)$recycleOrderId,
             $operatorInfo
         );
@@ -236,7 +315,7 @@ class ExpressOrder extends BaseAdminController
         $expressService = new RecycleExpressService();
 
         $result = $expressService->trackOrder(
-            $this->site_id,
+            $this->siteId(),
             (int)$recycleOrderId
         );
 
@@ -276,12 +355,37 @@ class ExpressOrder extends BaseAdminController
         ];
 
         $result = $expressService->getQuote(
-            $this->site_id,
+            $this->siteId(),
             $senderAddress,
             (float)$data['weight'],
             (int)$data['package_count']
         );
 
         return success($result);
+    }
+
+    private function getIdentifierParams(): array
+    {
+        $params = [];
+        $thirdOrderNo = $this->request->param('third_order_no', $this->request->param('thirdOrderNo', ''));
+        $waybillNo = $this->request->param('waybill_no', $this->request->param('waybillNo', $this->request->param('delivery_id', '')));
+        $orderNo = $this->request->param('order_no', $this->request->param('orderNo', ''));
+
+        if ($thirdOrderNo !== '') {
+            $params['third_order_no'] = $thirdOrderNo;
+        }
+        if ($waybillNo !== '') {
+            $params['waybill_no'] = $waybillNo;
+        }
+        if ($orderNo !== '') {
+            $params['order_no'] = $orderNo;
+        }
+
+        return $params;
+    }
+
+    private function siteId(): int
+    {
+        return (int)$this->request->siteId();
     }
 }

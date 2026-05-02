@@ -340,7 +340,7 @@ class RecycleOrderService extends BaseApiService
             $data['status'] = RecycleOrderDict::ORDER_STATUS_PENDING_SIGN;
             $data['order_no'] = $this->generateOrderNo();
 
-            // ========== 统一快递服务（新逻辑）==========
+            // ========== 统一快递服务（亿速）==========
             if (!empty($data['use_express']) && !empty($data['express_config'])) {
                 // 先创建回收订单
                 $order = $this->model->create($data);
@@ -372,43 +372,6 @@ class RecycleOrderService extends BaseApiService
                     throw new ApiException('快递下单失败：' . $e->getMessage());
                 }
 
-            // ========== 兼容旧的安果平台快递逻辑 ==========
-            } elseif (!empty($data['use_platform_delivery']) && !empty($data['platform_delivery'])) {
-                $anguoService = new \addon\recycle\app\service\core\recycle_order\RecycleAnguoDeliveryService($this->site_id);
-
-                // 暂时保存订单信息用于安国API调用
-                $tempOrder = $this->model->create($data);
-
-                try {
-                    // 调用安国API下单
-                    $platformDelivery = $data['platform_delivery'];
-                    $senderAddress = [
-                        'name' => $platformDelivery['sender_name'],
-                        'mobile' => $platformDelivery['sender_mobile'],
-                        'province' => $platformDelivery['sender_province'],
-                        'city' => $platformDelivery['sender_city'],
-                        'district' => $platformDelivery['sender_district'],
-                        'address' => $platformDelivery['sender_address']
-                    ];
-
-                    $pickupTime = $platformDelivery['pickup_time'] ?? '';
-                    $weight = floatval($platformDelivery['weight'] ?? 1.0);
-
-                    $deliveryResult = $anguoService->createDeliveryOrder(
-                        $tempOrder->id,
-                        $senderAddress,
-                        $pickupTime,
-                        $weight
-                    );
-
-                    // 安国API调用成功，订单已经在createDeliveryOrder中更新了express_no等字段
-                    $order = $tempOrder;
-
-                } catch (\Exception $e) {
-                    // 安国API调用失败，删除已创建的订单
-                    $tempOrder->delete();
-                    throw new ApiException('快递下单失败：' . $e->getMessage());
-                }
             } else {
                 // 不使用平台快递，直接创建订单（自填快递号 或 自送到店）
                 $order = $this->model->create($data);

@@ -61,7 +61,7 @@ class Yisu extends BaseAdminController
             ];
 
             $service = new ExpressOrderService();
-            $result = $service->createOrder($this->siteId, $orderParams);
+            $result = $service->createOrder((int)$this->request->siteId(), $orderParams);
 
             return success([
                 'express_no' => $result['deliveryId'] ?? '',

@@ -4,7 +4,9 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\api;
 
 use addon\recycle\app\model\third_party\DeviceQueryConfig;
+use addon\recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use core\base\BaseApiService;
+use core\exception\CommonException;
 use think\facade\Cache;
 
 /**
@@ -22,23 +24,33 @@ class DeviceQueryService extends BaseApiService
       }
     
       private function queryExpress(string $express_code = '' , string $mobile = ''){
-        // 通过site_id 获取 数据库存储 的 host 和 path
+        $thirdPartyConfig = (new RecycleThirdPartyConfigService())->getProviderConfig($this->site_id, 'express_query', 'ali_express');
+        if (!empty($thirdPartyConfig)) {
+          $host = $thirdPartyConfig['base_url'] ?? '';
+          $path = $thirdPartyConfig['api_path'] ?? '';
+          $appcode = $thirdPartyConfig['api_key'] ?? '';
+        } else {
+          // 通过site_id 获取 数据库存储 的 host 和 path，兼容旧配置
         $config = (new DeviceQueryConfig())->where([['site_id', '=', $this->site_id],['enabled_apis','=','/api-mall/api/express/query']])->findOrEmpty()->toArray();
       
-        $host = $config['base_url'] ?? "https://kzexpress.market.alicloudapi.com";
+          $host = $config['base_url'] ?? "";
         $path = $config['enabled_apis'] ?? "/api-mall/api/express/query";
+          $appcode = $config['api_key'] ?? "";
+        }
+
+        if (empty($host) || empty($path) || empty($appcode)) {
+          throw new CommonException('阿里快递查询配置不完整');
+        }
        
         $method = "POST";
-        $appcode = $config['api_key'] ?? "";
         $headers = array();
         array_push($headers, "Authorization:APPCODE " . $appcode);
         //根据API的要求，定义相对应的Content-Type
         array_push($headers, "Content-Type".":"."application/x-www-form-urlencoded; charset=UTF-8");
         // 设置返回的格式
         array_push($headers, "Accept".":"."application/json");
-        $querys = "";
         $bodys = "expressNo={$express_code}&mobile={$mobile}";
-        $url = $host . $path;
+        $url = rtrim($host, '/') . '/' . ltrim($path, '/');
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_CUSTOMREQUEST, $method);
         curl_setopt($curl, CURLOPT_URL, $url);
@@ -52,7 +64,7 @@ class DeviceQueryService extends BaseApiService
         $err = curl_error($curl);
         curl_close($curl);
         if ($err) {
-          throw new Exception($err);
+          throw new CommonException($err);
         } else {
           
           $res = json_decode($response, true);

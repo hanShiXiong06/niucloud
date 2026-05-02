@@ -14,6 +14,8 @@ class ThirdPartyDict
     const SERVICE_TYPE_DEVICE_QUERY = 'device_query';    // 设备查询
     const SERVICE_TYPE_EXPRESS_ORDER = 'express_order';  // 快递下单
     const SERVICE_TYPE_EXPRESS_QUERY = 'express_query';  // 快递查询
+    const SERVICE_TYPE_ADDRESS_PARSE = 'address_parse';  // 地址解析
+    const SERVICE_TYPE_QUOTATION_CRAWLER = 'quotation_crawler'; // 报价爬虫
     const SERVICE_TYPE_SMS = 'sms';                      // 短信服务
     const SERVICE_TYPE_PAYMENT = 'payment';              // 支付网关
 
@@ -30,6 +32,8 @@ class ThirdPartyDict
     const PROVIDER_YISU = 'yisu';                    // 亿速快递
     const PROVIDER_ANGUO = 'anguo';                  // 安果ERP快递
     const PROVIDER_ALI_EXPRESS = 'ali_express';      // 阿里快递查询
+    const PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS = 'tencent_cloud_market_address'; // 腾讯云市场地址解析
+    const PROVIDER_CHAONIU_QUOTATION = 'chaoniu';     // 超牛报价
     const PROVIDER_ALIYUN_SMS = 'aliyun_sms';        // 阿里云短信
 
     // ==================== 服务类型文本映射 ====================
@@ -37,6 +41,8 @@ class ThirdPartyDict
         self::SERVICE_TYPE_DEVICE_QUERY => '设备查询',
         self::SERVICE_TYPE_EXPRESS_ORDER => '快递下单',
         self::SERVICE_TYPE_EXPRESS_QUERY => '快递查询',
+        self::SERVICE_TYPE_ADDRESS_PARSE => '地址解析',
+        self::SERVICE_TYPE_QUOTATION_CRAWLER => '报价爬虫',
         self::SERVICE_TYPE_SMS => '短信服务',
         self::SERVICE_TYPE_PAYMENT => '支付网关',
     ];
@@ -59,6 +65,8 @@ class ThirdPartyDict
         self::PROVIDER_YISU => '亿速快递',
         self::PROVIDER_ANGUO => '安果ERP快递',
         self::PROVIDER_ALI_EXPRESS => '阿里快递查询',
+        self::PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS => '腾讯云市场地址解析',
+        self::PROVIDER_CHAONIU_QUOTATION => '超牛报价',
         self::PROVIDER_ALIYUN_SMS => '阿里云短信',
     ];
 
@@ -141,12 +149,21 @@ class ThirdPartyDict
             case self::SERVICE_TYPE_EXPRESS_ORDER:
                 $providers = [
                     self::PROVIDER_YISU => self::PROVIDER_TEXT[self::PROVIDER_YISU],
-                    self::PROVIDER_ANGUO => self::PROVIDER_TEXT[self::PROVIDER_ANGUO],
                 ];
                 break;
             case self::SERVICE_TYPE_EXPRESS_QUERY:
                 $providers = [
                     self::PROVIDER_ALI_EXPRESS => self::PROVIDER_TEXT[self::PROVIDER_ALI_EXPRESS],
+                ];
+                break;
+            case self::SERVICE_TYPE_ADDRESS_PARSE:
+                $providers = [
+                    self::PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS => self::PROVIDER_TEXT[self::PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS],
+                ];
+                break;
+            case self::SERVICE_TYPE_QUOTATION_CRAWLER:
+                $providers = [
+                    self::PROVIDER_CHAONIU_QUOTATION => self::PROVIDER_TEXT[self::PROVIDER_CHAONIU_QUOTATION],
                 ];
                 break;
             case self::SERVICE_TYPE_SMS:

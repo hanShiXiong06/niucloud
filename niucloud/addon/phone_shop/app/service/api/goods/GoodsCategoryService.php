@@ -53,8 +53,31 @@ class GoodsCategoryService extends BaseApiService
     
         $site_id = empty($sites['category_status'] ) ? $this->site_id : $this->site_id.",0";
         $params['site_id'] =$this->site_id;
-        return ( new CoreGoodsCategoryService() )->getTree([[ 'is_show', '=', 1 ], [ 'site_id', 'in', "$site_id" ] ], $params  );
+        $list = ( new CoreGoodsCategoryService() )->getTree([[ 'is_show', '=', 1 ], [ 'site_id', 'in', "$site_id" ] ], $params  );
+        return $this->filterEmptyGoodsCategory($list);
         
+    }
+
+    /**
+     * 过滤没有商品数据的分类；如果子分类有商品，则保留父分类用于展示层级。
+     * @param array $list
+     * @return array
+     */
+    private function filterEmptyGoodsCategory(array $list)
+    {
+        $result = [];
+
+        foreach ($list as $item) {
+            if (!empty($item['child_list'])) {
+                $item['child_list'] = $this->filterEmptyGoodsCategory($item['child_list']);
+            }
+
+            if (!empty($item['goods_count']) || !empty($item['child_list'])) {
+                $result[] = $item;
+            }
+        }
+
+        return $result;
     }
 
     /**

@@ -1,5 +1,27 @@
 import request from '@/utils/request'
 
+// ==================== 第三方配置中心 ====================
+
+export function apiThirdPartyConfig() {
+    return request.get('recycle/third_party_config')
+}
+
+export function apiThirdPartyConfigOverview() {
+    return request.get('recycle/third_party_config/overview')
+}
+
+export function parseThirdPartyAddress(params: any) {
+    return request.post('recycle/third_party/address_parse', params)
+}
+
+export function apiThirdPartyConfigSave(params: Record<string, any>) {
+    return request.post('recycle/third_party_config', params)
+}
+
+export function apiThirdPartyConfigDefault() {
+    return request.get('recycle/third_party_config/default')
+}
+
 // ==================== 第三方服务配置 ====================
 
 /**

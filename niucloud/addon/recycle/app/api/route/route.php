@@ -23,6 +23,15 @@ Route::group('tk_vip', function() {
 })->middleware(ApiChannel::class)
     ->middleware(ApiCheckToken::class, true) //false表示不验证登录
     ->middleware(ApiLog::class);
+
+Route::group('tk_jhkd', function() {
+    // 易速快递推送回调兼容入口，外部地址：https://gl.hsxbk.top/api/tk_jhkd/yisunotice
+    Route::post('yisunotice', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush');
+
+})->middleware(ApiChannel::class)
+    ->middleware(ApiCheckToken::class, false)
+    ->middleware(ApiLog::class);
+
 Route::group('recycle', function() {
      // 获取热门分类
      Route::get('recycle_category/hot', 'addon\recycle\app\api\controller\category\RecycleCategory@hot');
@@ -30,6 +39,10 @@ Route::group('recycle', function() {
      // 报价查询（移动端）
      Route::get('quotation_price/lists', 'addon\recycle\app\api\controller\quotation\QuotationPrice@lists');
      Route::get('quotation_price/types', 'addon\recycle\app\api\controller\quotation\QuotationPrice@getPriceTypes');
+     Route::get('quotation_v2/lists', 'addon\recycle\app\api\controller\quotation\QuotationV2@lists');
+     Route::get('quotation_v2/types', 'addon\recycle\app\api\controller\quotation\QuotationV2@types');
+     // 易速快递推送回调
+     Route::post('express/yisu_push', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush');
 
 })->middleware(ApiChannel::class)
 ->middleware(ApiCheckToken::class, false) //false表示不验证登录
@@ -90,13 +103,6 @@ Route::group('recycle', function() {
     Route::delete('recycle_user_address/:id', 'addon\recycle\app\api\controller\address\RecycleUserAddress@del');
 
 
-    // ---------------------------------------------------------------------------------------------------------------
-    // 安果快递相关接口（保留兼容）
-    Route::get('anguo_delivery/pickup_times', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@getPickupTimes');
-    Route::post('anguo_delivery/create', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@create');
-    Route::post('anguo_delivery/cancel', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@cancel');
-    Route::post('anguo_delivery/sync_status', 'addon\recycle\app\api\controller\recycle\RecycleAnguoDelivery@syncStatus');
-
     // 获取快递信息
     // Route::get('device_query_api/express', 'addon\recycle\app\adminapi\controller\DeviceQueryApiController@getExpress');
     Route::get('device_query_api/express', 'addon\recycle\app\api\controller\recycle\DeviceQueryApiController@getExpress');
@@ -113,7 +119,7 @@ Route::group('recycle', function() {
     Route::get('wechat_follow/check', 'addon\recycle\app\api\controller\recycle_order\WechatFollow@check');
 
     // ---------------------------------------------------------------------------------------------------------------
-    // 统一快递服务接口（亿速/安果自动切换）
+    // 统一快递服务接口（亿速）
     Route::post('express/quote', 'addon\recycle\app\api\controller\express\ExpressController@quote');
     Route::get('express/track/:order_id', 'addon\recycle\app\api\controller\express\ExpressController@track');
     Route::get('express/providers', 'addon\recycle\app\api\controller\express\ExpressController@providers');

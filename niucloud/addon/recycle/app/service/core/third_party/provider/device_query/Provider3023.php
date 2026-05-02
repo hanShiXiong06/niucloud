@@ -48,7 +48,7 @@ class Provider3023 extends BaseProvider
             throw new \Exception('IMEI不能为空');
         }
 
-        $baseUrl = $this->getConfig('base_url', 'http://api.3023data.com');
+        $baseUrl = $this->getConfig('base_url', '');
         $apiKey = $this->getConfig('api_key', '');
 
         if (empty($apiKey)) {
@@ -86,7 +86,7 @@ class Provider3023 extends BaseProvider
             throw new \Exception('IMEI或序列号不能为空');
         }
 
-        $baseUrl = $this->getConfig('base_url', 'http://api.3023data.com');
+        $baseUrl = $this->getConfig('base_url', '');
         $apiKey = $this->getConfig('api_key', '');
 
         // 构建URL
@@ -118,7 +118,7 @@ class Provider3023 extends BaseProvider
             throw new \Exception('IMEI不能为空');
         }
 
-        $baseUrl = $this->getConfig('base_url', 'http://api.3023data.com');
+        $baseUrl = $this->getConfig('base_url', '');
         $apiKey = $this->getConfig('api_key', '');
 
         $url = rtrim($baseUrl, '/') . '/apple/activationlock?imei=' . $imei;
@@ -142,7 +142,7 @@ class Provider3023 extends BaseProvider
             throw new \Exception('IMEI不能为空');
         }
 
-        $baseUrl = $this->getConfig('base_url', 'http://api.3023data.com');
+        $baseUrl = $this->getConfig('base_url', '');
         $apiKey = $this->getConfig('api_key', '');
 
         $url = rtrim($baseUrl, '/') . '/apple/mdm?imei=' . $imei;
@@ -186,7 +186,7 @@ class Provider3023 extends BaseProvider
     public function getBalance(): float
     {
         try {
-            $baseUrl = $this->getConfig('base_url', 'http://api.3023data.com');
+            $baseUrl = $this->getConfig('base_url', '');
             $apiKey = $this->getConfig('api_key', '');
 
             $url = rtrim($baseUrl, '/') . '/user/balance';
@@ -215,8 +215,9 @@ class Provider3023 extends BaseProvider
     {
         // 检查必要的配置是否存在
         $apiKey = $this->getConfig('api_key', '');
-        if (empty($apiKey)) {
-            $this->logError('健康检查失败: API Key未配置');
+        $baseUrl = $this->getConfig('base_url', '');
+        if (empty($baseUrl) || empty($apiKey)) {
+            $this->logError('健康检查失败: 3023配置不完整');
             return false;
         }
 

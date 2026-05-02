@@ -83,6 +83,15 @@ class DeviceQueryResultController extends BaseAdminController
     }
 
     /**
+     * 获取设备查询总览
+     */
+    public function overview()
+    {
+        $result = (new DeviceQueryResultService())->getQueryOverview();
+        return success('GET_SUCCESS', $result);
+    }
+
+    /**
      * 清理过期缓存
      * @return \think\Response
      */

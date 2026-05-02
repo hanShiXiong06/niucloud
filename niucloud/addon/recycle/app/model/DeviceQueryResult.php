@@ -174,7 +174,8 @@ class DeviceQueryResult extends BaseModel
     {
         if (is_array($value)) {
             if (!empty($value[0]) && !empty($value[1])) {
-                $query->whereBetweenTime('create_at', $value[0], $value[1]);
+                [$startTime, $endTime] = self::normalizeDateRange($value[0], $value[1]);
+                $query->whereBetweenTime('create_at', $startTime, $endTime);
             }
         }
     }
@@ -260,18 +261,30 @@ class DeviceQueryResult extends BaseModel
         $query = self::where('site_id', $siteId);
         
         if ($startDate && $endDate) {
-            $query->whereBetweenTime('create_at', $startDate, $endDate);
+            [$startTime, $endTime] = self::normalizeDateRange($startDate, $endDate);
+            $query->whereBetweenTime('create_at', $startTime, $endTime);
         }
 
         $stats = [
-            'total_queries' => $query->count(),
-            'success_queries' => $query->where('status', 1)->count(),
-            'failed_queries' => $query->where('status', 0)->count(),
-            'total_cost' => $query->sum('cost_amount'),
-            'avg_response_time' => $query->avg('response_time')
+            'total_queries' => (clone $query)->count(),
+            'success_queries' => (clone $query)->where('status', 1)->count(),
+            'failed_queries' => (clone $query)->where('status', 0)->count(),
+            'total_cost' => (clone $query)->where('status', 1)->sum('cost_amount'),
+            'avg_response_time' => (clone $query)->avg('response_time')
         ];
 
         return $stats;
+    }
+
+    private static function normalizeDateRange($startDate, $endDate): array
+    {
+        $startTimestamp = strtotime((string)$startDate);
+        $endTimestamp = strtotime((string)$endDate);
+
+        return [
+            $startTimestamp > 0 ? date('Y-m-d 00:00:00', $startTimestamp) : (string)$startDate,
+            $endTimestamp > 0 ? date('Y-m-d 23:59:59', $endTimestamp) : (string)$endDate,
+        ];
     }
 
     /**

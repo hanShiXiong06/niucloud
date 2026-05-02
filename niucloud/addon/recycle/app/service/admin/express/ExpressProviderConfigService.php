@@ -34,14 +34,16 @@ class ExpressProviderConfigService extends BaseAdminService
     public function getList(): array
     {
         $list = $this->model->where([
-            ['site_id', '=', $this->site_id]
+            ['site_id', '=', $this->site_id],
+            ['provider', '=', ExpressProviderDict::PROVIDER_YISU],
         ])->order('sort asc, id asc')->select()->toArray();
 
         // 如果没有配置，初始化默认配置
         if (empty($list)) {
             ExpressProviderConfig::initSiteConfig($this->site_id);
             $list = $this->model->where([
-                ['site_id', '=', $this->site_id]
+                ['site_id', '=', $this->site_id],
+                ['provider', '=', ExpressProviderDict::PROVIDER_YISU],
             ])->order('sort asc, id asc')->select()->toArray();
         }
 
@@ -94,6 +96,9 @@ class ExpressProviderConfigService extends BaseAdminService
         if (!$record) {
             throw new AdminException('配置不存在');
         }
+        if ($record->provider !== ExpressProviderDict::PROVIDER_YISU) {
+            throw new AdminException('2.0 阶段仅支持亿速快递');
+        }
 
         $updateData = [];
 
@@ -136,6 +141,9 @@ class ExpressProviderConfigService extends BaseAdminService
         if (!$record) {
             throw new AdminException('配置不存在');
         }
+        if ($record->provider !== ExpressProviderDict::PROVIDER_YISU) {
+            throw new AdminException('2.0 阶段仅支持亿速快递');
+        }
 
         if (!$record->status) {
             throw new AdminException('请先启用该服务商');
@@ -162,6 +170,9 @@ class ExpressProviderConfigService extends BaseAdminService
         if (!$record) {
             throw new AdminException('配置不存在');
         }
+        if ($record->provider !== ExpressProviderDict::PROVIDER_YISU) {
+            throw new AdminException('2.0 阶段仅支持亿速快递');
+        }
 
         $newStatus = $record->status ? 0 : 1;
 
@@ -170,7 +181,8 @@ class ExpressProviderConfigService extends BaseAdminService
             $otherEnabled = $this->model->where([
                 ['site_id', '=', $this->site_id],
                 ['id', '<>', $id],
-                ['status', '=', 1]
+                ['status', '=', 1],
+                ['provider', '=', ExpressProviderDict::PROVIDER_YISU],
             ])->find();
 
             if ($otherEnabled) {

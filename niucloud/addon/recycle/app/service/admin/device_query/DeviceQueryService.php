@@ -4,14 +4,12 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\admin\device_query;
 
 use addon\recycle\app\model\third_party\DeviceQueryApi;
-use addon\recycle\app\model\third_party\DeviceQueryConfig;
 use addon\recycle\app\model\third_party\DeviceQueryResult;
-use addon\recycle\app\service\admin\Exception;
+use addon\recycle\app\service\core\device_query\CoreDeviceQueryService;
 use addon\recycle\app\service\core\third_party\CoreThirdPartyService;
 use addon\recycle\app\dict\third_party\ThirdPartyDict;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
-use think\facade\Cache;
 
 /**
  * 设备查询服务类
@@ -30,107 +28,40 @@ class DeviceQueryService extends BaseAdminService
      */
     public function queryDevice(string $queryCode, $siteId, $api='/apple/model'): array
     {
-        // 参数验证
         $queryCode = trim($queryCode);
         if (empty($queryCode)) {
             throw new CommonException('IMEI或序列号不能为空');
         }
 
-        $api = trim((string)$api);
-        if ($api === '') $api = '/apple/model';
-
-        // 自动检索：只输入串号时，苹果优先；苹果查不到则轮询其它 /model 接口（配置驱动）
-        $endpoints = ($api === '/apple/model')
-            ? $this->getEnabledEndpointsByContains('/model', ['/apple/model'])
-            : [ $api ];
-
-        $service = new CoreThirdPartyService();
-        $errors = [];
-
-        foreach ($endpoints as $endpoint) {
-            $endpoint = trim((string)$endpoint);
-            if ($endpoint === '') continue;
-
-            // 本地缓存
-            $queryResult = $this->localQueryDevice($queryCode, $endpoint);
-            if (!empty($queryResult)) {
-                return [
-                    'success' => true,
-                    'data' => $queryResult,
-                ];
-            }
-
-            $startTime = microtime(true);
-            try {
-                $result = $service->call(
-                    ThirdPartyDict::SERVICE_TYPE_DEVICE_QUERY,
-                    'queryByImei',
-                    [
-                        'imei' => $queryCode,
-                        'api' => $endpoint
-                    ],
-                    (int)$siteId
-                );
-
-                $responseTime = round((microtime(true) - $startTime) * 1000);
-
-                if (!$result['success']) {
-                    $errors[] = $result['message'] ?? '查询失败';
-                    continue;
-                }
-
-                $apiResult = $result['data'];
-
-                // 命中判断：3023 返回 success 但 data 为空时，认为“未查到”，继续尝试下一个接口
-                $rawData = isset($apiResult['data']) && is_array($apiResult['data']) ? $apiResult['data'] : [];
-                if (empty($rawData)) {
-                    $errors[] = "{$endpoint}: 未查询到数据";
-                    continue;
-                }
-
-                $parsedResult = $this->parseNewArchitectureResult($apiResult);
-
-                // 保存查询结果到数据库
-                if ($parsedResult['success']) {
-                    try {
-                        DeviceQueryResult::saveQueryResult([
-                            'site_id' => (int)$siteId,
-                            'query_code' => $queryCode,
-                            'api_endpoint' => $endpoint,
-                            'query_result' => $parsedResult['data'],
-                            'raw_response' => $apiResult,
-                            'status' => 1,
-                            'cost_amount' => $parsedResult['cost'],
-                            'balance' => $parsedResult['balance'],
-                            'remark' => '设备查询（新架构）'
-                        ]);
-                    } catch (\Exception $e) {
-                        \think\facade\Log::warning('保存查询结果失败: ' . $e->getMessage());
-                    }
-                }
-
-                return [
-                    'success' => $parsedResult['success'],
-                    'data' => $parsedResult['data'],
-                    'cost' => $parsedResult['cost'],
-                    'api_name' => $endpoint,
-                    'response_time' => $responseTime,
-                    'balance' => $parsedResult['balance'],
-                    'provider' => $result['provider'] ?? 'unknown'
-                ];
-
-            } catch (\Exception $e) {
-                // 自动检索模式下：失败继续尝试下一个；单接口模式保持原行为抛错
-                if (count($endpoints) <= 1) {
-                    throw new CommonException('设备查询失败: ' . $e->getMessage());
-                }
-                $errors[] = "{$endpoint}: " . $e->getMessage();
-                continue;
-            }
+        $api = trim((string)$api) ?: '/apple/model';
+        $params = ['query_code' => $queryCode];
+        if (str_starts_with($api, '/')) {
+            $params['api_endpoint'] = $api;
+        } else {
+            $params['service_code'] = $api;
         }
 
-        $msg = !empty($errors) ? implode('；', array_slice($errors, 0, 3)) : '查询失败';
-        throw new CommonException('设备查询失败: ' . $msg);
+        return (new CoreDeviceQueryService())->query((int)$siteId, $params);
+    }
+
+    public function queryByService(array $data): array
+    {
+        $serviceCode = trim((string)($data['service_code'] ?? ''));
+        $queryCode = trim((string)($data['query_code'] ?? ''));
+        if ($serviceCode === '') {
+            throw new CommonException('请选择查询项');
+        }
+        if ($queryCode === '') {
+            throw new CommonException('请输入IMEI或序列号');
+        }
+
+        return (new CoreDeviceQueryService())->query((int)$this->site_id, [
+            'service_code' => $serviceCode,
+            'query_code' => $queryCode,
+            'query_type' => (string)($data['query_type'] ?? ''),
+            'channel_key' => (string)($data['channel_key'] ?? ''),
+            'force_refresh' => (bool)($data['force_refresh'] ?? false),
+        ]);
     }
 
     /**
@@ -362,20 +293,17 @@ class DeviceQueryService extends BaseAdminService
         }
 
         try {
-            // 获取站点配置
-            $config = DeviceQueryConfig::getSiteConfig($this->site_id);
-            if (!$config) {
-                return null;
-            }
-
-            // 执行查询
-            $result = $this->queryDevice($queryCode, $this->site_id);
+            $result = (new CoreDeviceQueryService())->query((int)$this->site_id, [
+                'query_code' => $queryCode,
+                'query_type' => $queryType,
+                'service_code' => $queryType === 'imei' ? 'apple_model' : 'apple_coverage',
+            ]);
             
             if ($result['success']) {
                 return [
                     'query_result' => $result['data'],
                     'cost_amount' => $result['cost'],
-                    'from_cache' => false
+                    'from_cache' => (bool)($result['from_cache'] ?? false)
                 ];
             }
 

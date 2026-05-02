@@ -81,6 +81,16 @@ export interface ExpressProvider {
   support_track: boolean;
 }
 
+/** 平台快递启用状态 */
+export interface ExpressCheckResult {
+  enabled: boolean;
+  provider: string;
+  provider_name?: string;
+  has_shop_address: boolean;
+  prompt?: string;
+  memo?: string;
+}
+
 /** 快递配置（下单时传入） */
 export interface ExpressConfig {
   sender_name: string;

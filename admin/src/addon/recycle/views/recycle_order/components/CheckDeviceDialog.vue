@@ -114,17 +114,19 @@
           <!-- 联网查询组 -->
           <div class="cdd-query-group">
             <span class="cdd-query-group__tag">联网</span>
-            <el-button size="small" text :loading="loadingCoverage" :disabled="!deviceForm.imei" @click="fetchCoverage">
-              <el-icon v-if="!loadingCoverage"><Headset /></el-icon>
-              {{ loadingCoverage ? '查询中...' : '查保修' }}
-            </el-button>
-            <el-button size="small" text :loading="loadingActivationLock" :disabled="!deviceForm.imei" @click="fetchActivationlock">
-              <el-icon v-if="!loadingActivationLock"><Lock /></el-icon>
-              {{ loadingActivationLock ? '查询中...' : '查激活锁' }}
-            </el-button>
-            <el-button size="small" text :loading="loadingMdm" :disabled="!deviceForm.imei" @click="fetchMdm">
-              <el-icon v-if="!loadingMdm"><Monitor /></el-icon>
-              {{ loadingMdm ? '查询中...' : '查监管锁' }}
+            <el-button
+              v-for="action in visibleDeviceQueryActions"
+              :key="action.code"
+              size="small"
+              text
+              :loading="isQueryActionLoading(action.code)"
+              :disabled="!deviceForm.imei"
+              @click="runDeviceQueryAction(action)"
+            >
+              <el-icon v-if="!isQueryActionLoading(action.code)">
+                <component :is="getQueryActionIcon(action.result_handler)" />
+              </el-icon>
+              {{ isQueryActionLoading(action.code) ? '查询中...' : action.name }}
             </el-button>
           </div>
           <!-- 本地操作 -->
@@ -534,7 +536,8 @@ import {
 } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 
-import { getCoverage, getActivationlock, getMdm } from '@/addon/recycle/api/device_query_api'
+import { queryDeviceByService } from '@/addon/recycle/api/device_query_api'
+import { getDeviceQueryConfigList } from '@/addon/recycle/api/device_query_config'
 import { useCheckDeviceDict } from '@/addon/recycle/hooks/useCheckDeviceDict'
 import {
   normalizeInfo,
@@ -591,11 +594,16 @@ const isMobile = ref(false)
 // 保存编辑前的原始数据
 const originalDeviceInfo = ref({ model: '', imei: '' })
 
-const loadingCoverage = ref(false)
-const loadingActivationLock = ref(false)
-const loadingMdm = ref(false)
 const activationLockInfo = ref<any>(null)
 const mdmInfo = ref<any>(null)
+const deviceQueryServices = ref<any[]>([])
+const deviceQueryLoadingMap = ref<Record<string, boolean>>({})
+
+const visibleDeviceQueryActions = computed(() => {
+  return deviceQueryServices.value
+    .filter(service => Number(service.enabled) === 1 && Number(service.show_in_check) === 1 && Number(service.mapping_count || 0) > 0)
+    .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0))
+})
 
 const deviceForm = reactive({
   model: props.device.model || '',
@@ -665,6 +673,120 @@ const generateQrCode = async () => {
     window.location.origin + '/site/diy/attachment',
     { errorCorrectionLevel: 'L', margin: 0, width: 100 }
   )
+}
+
+const loadDeviceQueryActions = async () => {
+  try {
+    const res = await getDeviceQueryConfigList({ page: 1, limit: 100 })
+    const payload = res.data?.list || res.data?.config ? res.data : (res.data?.data || {})
+    deviceQueryServices.value = payload.list || payload.data || []
+  } catch {
+    deviceQueryServices.value = []
+  }
+}
+
+const isQueryActionLoading = (code: string) => {
+  return !!deviceQueryLoadingMap.value[code]
+}
+
+const getQueryActionIcon = (handler: string) => {
+  if (handler === 'coverage') return Headset
+  if (handler === 'activationlock') return Lock
+  if (handler === 'mdm') return Monitor
+  return Headset
+}
+
+const runDeviceQueryAction = async (action: any) => {
+  if (!deviceForm.imei) {
+    ElMessage.warning('请先输入IMEI号码')
+    return
+  }
+  const serviceCode = action.code
+  deviceQueryLoadingMap.value = { ...deviceQueryLoadingMap.value, [serviceCode]: true }
+  try {
+    const res = await queryDeviceByService({
+      service_code: serviceCode,
+      query_code: deviceForm.imei,
+      query_type: action.query_type || 'imei'
+    })
+    applyDeviceQueryResult(action, res.data?.data || res.data || {})
+  } catch (error: any) {
+    ElMessage.error(error?.message || `${action.name || '设备查询'}失败，请检查设备查询配置`)
+  } finally {
+    deviceQueryLoadingMap.value = { ...deviceQueryLoadingMap.value, [serviceCode]: false }
+  }
+}
+
+const unwrapDeviceQueryData = (payload: any) => {
+  if (payload?.data?.data) return payload.data.data
+  if (payload?.data) return payload.data
+  return payload || {}
+}
+
+const applyDeviceQueryResult = (action: any, payload: any) => {
+  const data = unwrapDeviceQueryData(payload)
+  if (!data || Object.keys(data).length === 0) {
+    ElMessage.warning(`${action.name || '设备查询'}未查询到有效数据`)
+    return
+  }
+
+  deviceForm.info = {
+    ...normalizeInfo(deviceForm.info),
+    [action.code]: data,
+    last_device_query: {
+      service_code: action.code,
+      service_name: action.name,
+      result_handler: action.result_handler || 'generic',
+      data
+    }
+  }
+
+  if (action.result_handler === 'coverage') {
+    applyCoverageData(data)
+    ElMessage.success(`${action.name}已自动填入`)
+    return
+  }
+
+  if (action.result_handler === 'activationlock') {
+    activationLockInfo.value = data
+    templateSelections.activationLock = data.locked === true || data.fmi === 'On' || data.activation_lock === 'On' || data.activation_lock === '有锁'
+    updateCheckResult()
+    ElMessage.success(`${action.name}：${templateSelections.activationLock ? '已开启' : '未开启'}，已自动填入`)
+    return
+  }
+
+  if (action.result_handler === 'mdm') {
+    mdmInfo.value = data
+    templateSelections.mdmLock = data.locked === true || data.mdm === 'On' || data.mdm === true
+    updateCheckResult()
+    ElMessage.success(`${action.name}：${templateSelections.mdmLock ? '已开启' : '未开启'}，已自动填入`)
+    return
+  }
+
+  ElMessage.success(`${action.name || '设备查询'}查询成功`)
+}
+
+const applyCoverageData = (data: any) => {
+  const { capacity, color, modelDisplay } = parseCoverageFields(data)
+  const fullModel = [modelDisplay, capacity, color].filter(Boolean).join(' ')
+  if (fullModel) {
+    deviceData.value.model = fullModel
+    deviceForm.model = fullModel
+  }
+  deviceForm.info = { ...normalizeInfo(deviceForm.info), ...data }
+  deviceForm.info = getSubmitInfo()
+  if (capacity) deviceForm.capacity = capacity
+  if (color) deviceForm.color = color
+  if (data.osVersion) deviceForm.system_version = data.osVersion
+  if (data.coverage) {
+    deviceForm.warranty_info = parseCoverageStatus(data.coverage)
+  } else if (data.coverage_status || data.coverage_date) {
+    deviceForm.warranty_info = parseCoverageStatus({
+      status: data.coverage_status,
+      date: data.coverage_date
+    })
+  }
+  updateCheckResult()
 }
 
 // 格式化 IMEI 显示
@@ -744,85 +866,6 @@ const parseCoverageStatus = (coverage: any): string => {
   return date || status || '在保'
 }
 
-// 查询保修 —— 结果直接回填规格输入框，不弹额外面板
-const fetchCoverage = async () => {
-  if (!deviceForm.imei) { ElMessage.warning('请先输入IMEI号码'); return }
-  loadingCoverage.value = true
-  try {
-    const brand = dictOptions.extractBrand(deviceData.value.model || '')
-    const res = await getCoverage({ imei: deviceForm.imei, brand })
-    if (res.data?.model) {
-      const { capacity, color, modelDisplay } = parseCoverageFields(res.data)
-      // 更新型号（拼接规格，过滤空值），同步到 deviceData 和 deviceForm 保证界面显示与提交一致
-      const fullModel = [modelDisplay, capacity, color].filter(Boolean).join(' ')
-      deviceData.value.model = fullModel
-      deviceForm.model = fullModel
-      deviceForm.info = { ...normalizeInfo(deviceForm.info), ...res.data }
-      deviceForm.info = getSubmitInfo()
-      if (capacity) deviceForm.capacity = capacity
-      if (color)    deviceForm.color    = color
-      if (res.data.osVersion) deviceForm.system_version = res.data.osVersion
-      if (res.data.coverage) {
-        deviceForm.warranty_info = parseCoverageStatus(res.data.coverage)
-      }
-      updateCheckResult()
-      ElMessage.success('保修信息已自动填入规格栏')
-    } else if (res.data?.msg) {
-      ElMessage.error('保修查询失败：' + res.data.msg)
-    } else {
-      ElMessage.warning('未查询到保修信息')
-    }
-  } catch {
-    ElMessage.error('保修查询失败，请稍后重试')
-  } finally {
-    loadingCoverage.value = false
-  }
-}
-
-const fetchActivationlock = async () => {
-  if (!deviceForm.imei) { ElMessage.warning('请先输入IMEI号码'); return }
-  loadingActivationLock.value = true
-  try {
-    const res = await getActivationlock(deviceForm.imei)
-    if (res.data?.sn) {
-      activationLockInfo.value = res.data
-      templateSelections.activationLock = res.data.locked === true || res.data.fmi === 'On'
-      updateCheckResult()
-      ElMessage.success(`激活锁：${templateSelections.activationLock ? '已开启' : '未开启'}，已自动填入`)
-    } else if (res.data?.msg) {
-      ElMessage.error('激活锁查询失败：' + res.data.msg)
-    } else {
-      ElMessage.warning('未查询到激活锁信息')
-    }
-  } catch {
-    ElMessage.error('激活锁查询失败，请稍后重试')
-  } finally {
-    loadingActivationLock.value = false
-  }
-}
-
-const fetchMdm = async () => {
-  if (!deviceForm.imei) { ElMessage.warning('请先输入IMEI号码'); return }
-  loadingMdm.value = true
-  try {
-    const res = await getMdm(deviceForm.imei)
-    if (res.data?.sn) {
-      mdmInfo.value = res.data
-      templateSelections.mdmLock = res.data.locked === true || res.data.mdm === 'On' || res.data.mdm === true
-      updateCheckResult()
-      ElMessage.success(`监管锁：${templateSelections.mdmLock ? '已开启' : '未开启'}，已自动填入`)
-    } else if (res.data?.msg) {
-      ElMessage.error('监管锁查询失败：' + res.data.msg)
-    } else {
-      ElMessage.warning('未查询到监管锁信息')
-    }
-  } catch {
-    ElMessage.error('监管锁查询失败，请稍后重试')
-  } finally {
-    loadingMdm.value = false
-  }
-}
-
 const syncSellerResultToBuyer = () => {
   if (!deviceForm.check_result_seller) { ElMessage.warning('卖家质检结果为空，无法同步'); return }
   deviceForm.check_result_buyer = deviceForm.check_result_seller
@@ -882,9 +925,7 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
   activationLockInfo.value = null
   mdmInfo.value = null
   isEditingDeviceInfo.value = false
-  loadingCoverage.value = false
-  loadingActivationLock.value = false
-  loadingMdm.value = false
+  deviceQueryLoadingMap.value = {}
   clearAllSelections()
   deviceData.value = { ...device }
   // 更新设备基本信息
@@ -929,6 +970,7 @@ onMounted(async () => {
   window.addEventListener('resize', updateDeviceMode)
   generateQrCode()
   initializeFormFromDevice(props.device)
+  await loadDeviceQueryActions()
   await dictOptions.loadDictionary()
 })
 onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) })

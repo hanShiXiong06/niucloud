@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\core;
 
+use addon\recycle\app\dict\third_party\ThirdPartyDict;
 use addon\recycle\app\dict\yisu\YisuProductDict;
 use addon\recycle\app\model\express\ExpressOrderRecord;
+use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\model\yisu\YisuProductConfig;
 use addon\recycle\app\service\core\third_party\CoreThirdPartyService;
 use core\exception\CommonException;
@@ -25,7 +27,7 @@ class ExpressOrderService
     }
 
     /**
-     * 获取快递报价（只返回启用的产品）
+     * 获取快递报价
      * @param int $siteId 站点ID
      * @param array $params 参数
      * @return array
@@ -43,12 +45,29 @@ class ExpressOrderService
                 throw new CommonException("缺少必填参数: {$field}");
             }
         }
+        if (empty($params['thirdOrderNo'])) {
+            $params['thirdOrderNo'] = $params['third_order_no']
+                ?? (!empty($params['recycle_order_id']) ? 'recycle_' . $siteId . '_' . $params['recycle_order_id'] : 'recycle_express_' . $siteId . '_' . date('YmdHis') . mt_rand(1000, 9999));
+        }
 
-        // 调用第三方服务获取所有报价
+        $productCode = $this->firstFilledString($params, ['productCode', 'deliveryType']);
+        $isSmartQuote = $productCode === '' || $productCode === '0';
+        if (!$isSmartQuote && !YisuProductConfig::isProductEnabled($siteId, $productCode)) {
+            throw new CommonException('所选快递产品未启用，请先在易速产品配置中启用');
+        }
+
+        $quoteParams = $params;
+        if (!$isSmartQuote) {
+            $quoteParams['productCode'] = $productCode;
+        } else {
+            $quoteParams['productCode'] = 0;
+            unset($quoteParams['deliveryType']);
+        }
+
         $result = $this->thirdPartyService->call(
-            'express_order',  // 服务类型
-            'preOrder',       // 方法：获取报价
-            $params,
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
+            'quote',
+            $quoteParams,
             $siteId
         );
 
@@ -56,23 +75,86 @@ class ExpressOrderService
             throw new CommonException($result['message'] ?? '获取报价失败');
         }
 
-        // 获取启用的产品代码列表
-        $enabledProductCodes = YisuProductConfig::getEnabledProductCodes($siteId);
-
-        // 如果没有配置启用的产品，返回所有报价
-        if (empty($enabledProductCodes)) {
-            return $result['data'];
+        $quote = $result['data']['data'] ?? [];
+        if (empty($quote)) {
+            return [];
         }
 
-        // 过滤只返回启用的产品
-        $filteredData = [];
-        foreach ($result['data'] as $quote) {
-            if (in_array($quote['productCode'] ?? '', $enabledProductCodes)) {
-                $filteredData[] = $quote;
+        if (isset($quote[0]) && is_array($quote[0])) {
+            foreach ($quote as &$item) {
+                $item = $this->fillQuoteProductInfo($item, $isSmartQuote ? '' : $productCode);
+            }
+            return $quote;
+        }
+
+        return [$this->fillQuoteProductInfo($quote, $isSmartQuote ? '' : $productCode)];
+    }
+
+    private function fillQuoteProductInfo(array $quote, string $fallbackProductCode = ''): array
+    {
+        $quote['debug_raw'] = $quote;
+        $productCode = (string)($quote['productCode'] ?? $quote['product_code'] ?? $fallbackProductCode);
+        if ($productCode !== '') {
+            $quote['productCode'] = $productCode;
+            $quote['productName'] = $quote['productName'] ?? YisuProductDict::getProductName($productCode);
+        } else {
+            $quote['productName'] = $quote['productName'] ?? '智能报价';
+        }
+        $quote['estimatedCost'] = $this->resolveQuoteAmount($quote);
+
+        return $quote;
+    }
+
+    private function firstFilledString(array $data, array $keys): string
+    {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && trim((string)$data[$key]) !== '') {
+                return trim((string)$data[$key]);
             }
         }
 
-        return $filteredData;
+        return '';
+    }
+
+    private function resolveQuoteAmount(array $quote): float
+    {
+        foreach ([
+            'estimatedCost',
+            'totalPrice',
+            'totalFee',
+            'totalAmount',
+            'price',
+            'fee',
+            'amount',
+            'prePrice',
+            'predictPrice',
+            'estimatedPrice',
+            'freight',
+            'freightFee',
+            'transportFee',
+            'channelFee',
+        ] as $field) {
+            if (isset($quote[$field]) && is_numeric($quote[$field]) && (float)$quote[$field] > 0) {
+                return round((float)$quote[$field], 2);
+            }
+        }
+
+        $sum = 0.0;
+        foreach ([
+            'channelFee',
+            'serviceCharge',
+            'serviceFee',
+            'guarantFee',
+            'guaranteeFee',
+            'incrementFee',
+            'otherFee',
+        ] as $field) {
+            if (isset($quote[$field]) && is_numeric($quote[$field])) {
+                $sum += (float)$quote[$field];
+            }
+        }
+
+        return round($sum, 2);
     }
 
     /**
@@ -96,11 +178,15 @@ class ExpressOrderService
                 throw new CommonException("缺少必填参数: {$field}");
             }
         }
+        if (empty($params['thirdOrderNo'])) {
+            $params['thirdOrderNo'] = $params['third_order_no']
+                ?? (!empty($params['recycle_order_id']) ? 'recycle_' . $siteId . '_' . $params['recycle_order_id'] : 'recycle_express_' . $siteId . '_' . date('YmdHis') . mt_rand(1000, 9999));
+        }
 
         // 调用第三方服务
         $result = $this->thirdPartyService->call(
-            'express_order',
-            'sendOrder',      // 方法：下单
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
+            'create',
             $params,
             $siteId
         );
@@ -109,10 +195,12 @@ class ExpressOrderService
             throw new CommonException($result['message'] ?? '下单失败');
         }
 
-        // 创建快递订单记录
-        $this->createExpressRecord($siteId, $params, $result['data']);
+        $apiData = $result['data']['data'] ?? [];
 
-        return $result['data'];
+        // 创建快递订单记录
+        $this->createExpressRecord($siteId, $params, $apiData);
+
+        return $apiData;
     }
 
     /**
@@ -215,10 +303,16 @@ class ExpressOrderService
      */
     public function cancelOrder(int $siteId, string $orderNo): bool
     {
+        $record = $this->findLocalExpressRecord($siteId, ['order_no' => $orderNo, 'waybill_no' => $orderNo]);
+        $cancelParams = ['order_no' => $orderNo];
+        if ($record) {
+            $cancelParams = $this->buildCancelIdentifierParams($record, $cancelParams);
+        }
+
         $result = $this->thirdPartyService->call(
-            'express_order',
-            'cancelOrder',    // 方法：取消订单
-            ['order_no' => $orderNo],
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
+            'cancel',
+            $cancelParams,
             $siteId
         );
 
@@ -226,12 +320,7 @@ class ExpressOrderService
             throw new CommonException($result['message'] ?? '取消订单失败');
         }
 
-        // 更新快递订单记录状态
-        try {
-            ExpressOrderRecord::updateStatus($orderNo, 'cancelled', '用户取消订单');
-        } catch (\Exception $e) {
-            Log::error('更新快递订单记录状态失败: ' . $e->getMessage());
-        }
+        $this->markLocalExpressRecordClosed($siteId, $cancelParams, '用户取消订单');
 
         return true;
     }
@@ -245,18 +334,9 @@ class ExpressOrderService
      */
     public function trackOrder(int $siteId, string $deliveryId): array
     {
-        $result = $this->thirdPartyService->call(
-            'express_order',
-            'track',          // 方法：轨迹查询
-            ['delivery_id' => $deliveryId],
-            $siteId
-        );
+        $result = $this->getOrderDetail($siteId, ['delivery_id' => $deliveryId]);
 
-        if (!$result['success']) {
-            throw new CommonException($result['message'] ?? '查询轨迹失败');
-        }
-
-        return $result['data'];
+        return $result['trace_list'] ?? $result['traceList'] ?? [];
     }
 
     /**
@@ -267,9 +347,15 @@ class ExpressOrderService
      */
     public function getBalance(int $siteId): float
     {
+        $fund = $this->getFund($siteId);
+        return (float)($fund['balance'] ?? 0);
+    }
+
+    public function getFund(int $siteId): array
+    {
         $result = $this->thirdPartyService->call(
-            'express_order',
-            'balance',        // 方法：余额查询
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
+            'fund',
             [],
             $siteId
         );
@@ -278,6 +364,381 @@ class ExpressOrderService
             throw new CommonException($result['message'] ?? '查询余额失败');
         }
 
-        return (float)($result['balance'] ?? 0);
+        return $result['data']['data'] ?? [];
+    }
+
+    public function cancelOrInterceptOrder(int $siteId, array $params): bool
+    {
+        $record = $this->findLocalExpressRecord($siteId, $params);
+        if ($record) {
+            $params = $this->buildCancelIdentifierParams($record, $params);
+        }
+
+        $result = $this->thirdPartyService->call(
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
+            'cancel',
+            $params,
+            $siteId
+        );
+
+        if (!$result['success']) {
+            throw new CommonException($result['message'] ?? '取消/拦截失败');
+        }
+
+        $remark = ((int)($params['genre'] ?? 1) === 3) ? '已拦截/关闭' : '用户取消订单';
+        $this->markLocalExpressRecordClosed($siteId, $params, $remark);
+
+        return true;
+    }
+
+    private function buildCancelIdentifierParams(ExpressOrderRecord $record, array $params): array
+    {
+        if (!empty($record->order_no)) {
+            $params['order_no'] = $record->order_no;
+        }
+        if (!empty($record->delivery_id)) {
+            $params['waybill_no'] = $record->delivery_id;
+        }
+        if (empty($params['third_order_no']) && !empty($record->recycle_order_id)) {
+            $params['third_order_no'] = 'recycle_' . (int)$record->site_id . '_' . (int)$record->recycle_order_id;
+        }
+
+        return $params;
+    }
+
+    private function findLocalExpressRecord(int $siteId, array $params): ?ExpressOrderRecord
+    {
+        $query = ExpressOrderRecord::where('site_id', $siteId);
+        $orderNo = (string)($params['order_no'] ?? $params['orderNo'] ?? '');
+        if ($orderNo !== '') {
+            $record = (clone $query)->where('order_no', $orderNo)->find();
+            if ($record) {
+                return $record;
+            }
+        }
+
+        $waybillNo = (string)($params['waybill_no'] ?? $params['waybillNo'] ?? $params['delivery_id'] ?? '');
+        if ($waybillNo !== '') {
+            $record = (clone $query)->where('delivery_id', $waybillNo)->find();
+            if ($record) {
+                return $record;
+            }
+        }
+
+        $thirdOrderNo = (string)($params['third_order_no'] ?? $params['thirdOrderNo'] ?? '');
+        if ($thirdOrderNo !== '' && preg_match('/^recycle_(\d+)_(\d+)$/', $thirdOrderNo, $matches)) {
+            return (clone $query)
+                ->where('site_id', (int)$matches[1])
+                ->where('recycle_order_id', (int)$matches[2])
+                ->find();
+        }
+
+        return null;
+    }
+
+    private function markLocalExpressRecordClosed(int $siteId, array $params, string $remark): void
+    {
+        try {
+            $record = $this->findLocalExpressRecord($siteId, $params);
+            if (!$record) {
+                Log::warning('取消快递成功，但未匹配到本地运单记录', ['site_id' => $siteId, 'params' => $params]);
+                return;
+            }
+
+            $statusHistory = $record->status_history ?? [];
+            $statusHistory[] = [
+                'status' => 'cancelled',
+                'remark' => $remark,
+                'time' => time(),
+            ];
+
+            $apiResponse = $record->api_response ?? [];
+            $apiResponse['last_cancel'] = [
+                'params' => $params,
+                'remark' => $remark,
+                'time' => time(),
+            ];
+
+            $record->save([
+                'order_status' => 'cancelled',
+                'cancel_reason' => $remark,
+                'cancel_time' => time(),
+                'status_history' => $statusHistory,
+                'api_response' => $apiResponse,
+            ]);
+
+            if (!empty($record->recycle_order_id)) {
+                RecycleOrder::where([['site_id', '=', $siteId], ['id', '=', (int)$record->recycle_order_id]])->update([
+                    'delivery_status' => 4,
+                    'delivery_fee' => 0,
+                    'update_at' => time(),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('更新快递订单记录关闭状态失败: ' . $e->getMessage(), ['site_id' => $siteId, 'params' => $params]);
+        }
+    }
+
+    public function modifyOrder(int $siteId, array $params): array
+    {
+        $result = $this->thirdPartyService->call(
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
+            'modify',
+            $params,
+            $siteId
+        );
+
+        if (!$result['success']) {
+            throw new CommonException($result['message'] ?? '修改运单失败');
+        }
+
+        return $result['data']['data'] ?? [];
+    }
+
+    public function getOrderDetail(int $siteId, array $params): array
+    {
+        $result = $this->thirdPartyService->call(
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
+            'detail',
+            $params,
+            $siteId
+        );
+
+        if (!$result['success']) {
+            throw new CommonException($result['message'] ?? '查询运单详情失败');
+        }
+
+        $detail = $result['data']['data'] ?? [];
+        $this->syncLocalExpressRecordFromDetail($siteId, $params, $detail);
+
+        return $detail;
+    }
+
+    private function syncLocalExpressRecordFromDetail(int $siteId, array $params, array $detail): void
+    {
+        if (empty($detail)) {
+            return;
+        }
+
+        $identifyParams = $params;
+        if (!empty($detail['orderCode'])) {
+            $identifyParams['order_no'] = $detail['orderCode'];
+        }
+        if (!empty($detail['trackingNum'])) {
+            $identifyParams['waybill_no'] = $detail['trackingNum'];
+        }
+
+        $record = $this->findLocalExpressRecord($siteId, $identifyParams);
+        if (!$record) {
+            return;
+        }
+
+        $status = $this->mapYisuDetailStatus((int)($detail['status'] ?? -1));
+        if ($status === '') {
+            return;
+        }
+
+        $oldStatus = (string)$record->order_status;
+        $statusChanged = $oldStatus !== $status;
+        if (!$this->canApplyLocalStatus($oldStatus, $status)) {
+            $this->dispatchExpressStatusSyncEvent('status_sync_ignored', $siteId, $record, $oldStatus, $status, $detail, [
+                'notice' => '第三方状态与本地终态不一致，系统已忽略本次覆盖',
+                'source' => 'detail_query',
+            ]);
+            return;
+        }
+
+        $statusName = (string)($detail['statusName'] ?? '查询运单详情同步');
+        $statusHistory = $record->status_history ?? [];
+        if ($statusChanged) {
+            $statusHistory[] = [
+                'status' => $status,
+                'remark' => '运单详情同步：' . $statusName,
+                'time' => time(),
+            ];
+        }
+
+        $apiResponse = $record->api_response ?? [];
+        $apiResponse['last_detail'] = $detail;
+        if ($statusChanged) {
+            $apiResponse['status_sync_notice'][] = [
+                'source' => 'detail_query',
+                'old_status' => $oldStatus,
+                'new_status' => $status,
+                'third_status' => (int)($detail['status'] ?? -1),
+                'third_status_name' => $statusName,
+                'notice' => '第三方运单状态与本地不一致，已按第三方状态同步',
+                'time' => time(),
+            ];
+        }
+
+        $update = [
+            'api_response' => $apiResponse,
+        ];
+        if ($statusChanged) {
+            $update['order_status'] = $status;
+            $update['status_history'] = $statusHistory;
+        }
+
+        if (!empty($detail['trackingNum'])) {
+            $update['delivery_id'] = $detail['trackingNum'];
+        }
+        if (isset($detail['payFee']) && is_numeric($detail['payFee'])) {
+            $update['actual_cost'] = (float)$detail['payFee'];
+            $update['cost_diff'] = (float)$detail['payFee'] - (float)$record->estimated_cost;
+        }
+        if (isset($detail['weightActual']) && is_numeric($detail['weightActual']) && (float)$detail['weightActual'] > 0) {
+            $update['actual_weight'] = (float)$detail['weightActual'];
+            $update['weight_diff'] = (float)$detail['weightActual'] - (float)$record->estimated_weight;
+        }
+        if ($statusChanged && $status === 'cancelled') {
+            $update['cancel_time'] = time();
+            $update['cancel_reason'] = $statusName ?: '已关闭';
+        } elseif ($statusChanged && $status === 'delivered') {
+            $update['delivery_time'] = time();
+        }
+
+        $record->save($update);
+
+        if ($statusChanged && !empty($record->recycle_order_id)) {
+            $deliveryStatusMap = [
+                'pending' => 1,
+                'in_transit' => 2,
+                'delivered' => 3,
+                'cancelled' => 4,
+                'exception' => 2,
+            ];
+            $orderUpdate = [
+                'delivery_status' => $deliveryStatusMap[$status] ?? 1,
+                'delivery_fee' => (float)($update['actual_cost'] ?? $record->actual_cost ?? 0),
+                'update_at' => time(),
+            ];
+            if (!empty($update['delivery_id'])) {
+                $orderUpdate['express_no'] = $update['delivery_id'];
+            }
+            RecycleOrder::where([['site_id', '=', $siteId], ['id', '=', (int)$record->recycle_order_id]])->update($orderUpdate);
+        }
+
+        if ($statusChanged) {
+            $this->dispatchExpressStatusSyncEvent('status_synced', $siteId, $record, $oldStatus, $status, $detail, [
+                'notice' => '第三方运单状态与本地不一致，已按第三方状态同步',
+                'source' => 'detail_query',
+                'update' => $update,
+            ]);
+        }
+    }
+
+    private function dispatchExpressStatusSyncEvent(string $eventType, int $siteId, ExpressOrderRecord $record, string $oldStatus, string $newStatus, array $detail, array $extra = []): void
+    {
+        event('RecycleExpressEvent', array_merge([
+            'site_id' => $siteId,
+            'event_type' => $eventType,
+            'record_id' => (int)$record->id,
+            'order_no' => (string)$record->order_no,
+            'delivery_id' => (string)$record->delivery_id,
+            'recycle_order_id' => (int)$record->recycle_order_id,
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus,
+            'third_status' => (int)($detail['status'] ?? -1),
+            'third_status_name' => (string)($detail['statusName'] ?? ''),
+            'detail' => $detail,
+        ], $extra));
+    }
+
+    private function mapYisuDetailStatus(int $status): string
+    {
+        $map = [
+            0 => 'pending',
+            1 => 'pending',
+            2 => 'in_transit',
+            5 => 'delivered',
+            6 => 'cancelled',
+            7 => 'cancelled',
+            8 => 'cancelled',
+            9 => 'cancelled',
+        ];
+
+        return $map[$status] ?? '';
+    }
+
+    private function canApplyLocalStatus(string $currentStatus, string $incomingStatus): bool
+    {
+        if ($currentStatus === '') {
+            return true;
+        }
+        if ($currentStatus === 'cancelled') {
+            return $incomingStatus === 'cancelled';
+        }
+        if ($currentStatus === 'delivered') {
+            return $incomingStatus === 'delivered';
+        }
+
+        return true;
+    }
+
+    public function getWaybillPdf(int $siteId, array $params): array
+    {
+        $result = $this->thirdPartyService->call(
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
+            'waybillPdf',
+            $params,
+            $siteId
+        );
+
+        if (!$result['success']) {
+            throw new CommonException($result['message'] ?? '获取面单失败');
+        }
+
+        $data = $result['data']['data'] ?? [];
+        $this->recordWaybillPdfResult($siteId, $params, $data);
+
+        return $data;
+    }
+
+    private function recordWaybillPdfResult(int $siteId, array $params, array $data): void
+    {
+        try {
+            $record = $this->findLocalExpressRecord($siteId, $params);
+            if (!$record) {
+                return;
+            }
+
+            $apiResponse = $record->api_response ?? [];
+            $history = $apiResponse['waybill_pdf_history'] ?? [];
+            $history[] = [
+                'params' => $params,
+                'data_format' => $data['dataFormat'] ?? $data['data_format'] ?? '',
+                'has_pdf_data' => !empty($data['pdfData'] ?? $data['url'] ?? $data['pdf_url'] ?? ''),
+                'time' => time(),
+            ];
+            if (count($history) > 20) {
+                $history = array_slice($history, -20);
+            }
+
+            $apiResponse['last_waybill_pdf'] = end($history);
+            $apiResponse['waybill_pdf_history'] = $history;
+            $record->save([
+                'api_response' => $apiResponse,
+                'update_at' => time(),
+            ]);
+
+            event('RecycleExpressEvent', [
+                'site_id' => $siteId,
+                'event_type' => 'waybill_pdf',
+                'record_id' => (int)$record->id,
+                'order_no' => (string)$record->order_no,
+                'delivery_id' => (string)$record->delivery_id,
+                'recycle_order_id' => (int)$record->recycle_order_id,
+                'detail' => [
+                    'params' => $params,
+                    'data_format' => $data['dataFormat'] ?? $data['data_format'] ?? '',
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('记录面单获取结果失败: ' . $e->getMessage(), [
+                'site_id' => $siteId,
+                'params' => $params,
+            ]);
+        }
     }
 }

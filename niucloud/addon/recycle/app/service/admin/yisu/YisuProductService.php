@@ -45,6 +45,7 @@ class YisuProductService extends BaseAdminService
                 'id' => $configured['id'] ?? 0,
                 'product_code' => $productCode,
                 'product_name' => $product['product_name'],
+                'express_type' => $product['express_type'] ?? '快递',
                 'logo' => $product['logo'],
                 'status' => $configured['status'] ?? 0,
                 'sort' => $configured['sort'] ?? 0,

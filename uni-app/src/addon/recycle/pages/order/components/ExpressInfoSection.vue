@@ -9,7 +9,7 @@
     <up-row customStyle="margin-bottom: 12px">
       <up-col span="12">
         <view class="delivery-mode-toggle">
-          <!-- 动态渲染平台快递渠道（从字典获取） -->
+          <!-- 动态渲染平台快递渠道 -->
           <view
             v-for="channel in channels"
             :key="channel.value"
@@ -138,12 +138,16 @@ const showPickupTimePicker = ref(false)
 // 地址选择弹窗显示状态
 const showAddressPopup = ref(false)
 
+// 当前选择的平台快递渠道
+const selectedChannelValue = ref('')
+
 // 使用收货渠道 hook
 const {
   channels,
   loading,
   defaultChannelValue,
-  getDefaultPlatformDeliveryState
+  getDefaultPlatformDeliveryState,
+  isPlatformChannel
 } = useReceivingChannels()
 
 const emit = defineEmits<{
@@ -158,8 +162,9 @@ const emit = defineEmits<{
 watch(
   () => loading.value,
   (isLoading) => {
-    if (!isLoading && defaultChannelValue.value !== undefined) {
+    if (!isLoading) {
       // 渠道加载完成，设置默认状态
+      selectedChannelValue.value = defaultChannelValue.value
       const defaultState = getDefaultPlatformDeliveryState()
       emit('update:usePlatformDelivery', defaultState)
     }
@@ -169,17 +174,14 @@ watch(
 
 // 计算当前选中的渠道 value
 const currentChannelValue = computed(() => {
-  return props.usePlatformDelivery ? '1' : '0'
+  return props.usePlatformDelivery ? (selectedChannelValue.value || defaultChannelValue.value) : 'manual'
 })
 
 // 处理渠道点击
 const handleChannelClick = (channel: ChannelItem) => {
-  // 如果点击的是平台快递渠道（value 为 "1"），则设置为 true
-  if (channel.value === '1') {
+  if (isPlatformChannel(channel.value)) {
+    selectedChannelValue.value = channel.value
     emit('update:usePlatformDelivery', true)
-  } else {
-    // 其他渠道暂时也设置为 false（手动输入）
-    emit('update:usePlatformDelivery', false)
   }
 }
 

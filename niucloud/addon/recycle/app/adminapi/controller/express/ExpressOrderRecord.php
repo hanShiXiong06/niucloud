@@ -20,12 +20,16 @@ class ExpressOrderRecord extends BaseAdminController
     public function lists()
     {
         $data = $this->request->params([
+            ['keyword', ''],
             ['order_no', ''],
             ['delivery_id', ''],
             ['order_status', ''],
             ['recycle_order_id', 0],
             ['recycle_device_id', 0],
             ['provider_name', ''],
+            ['product_code', ''],
+            ['sender_mobile', ''],
+            ['receiver_mobile', ''],
             ['create_time', []],
         ]);
 
@@ -41,7 +45,7 @@ class ExpressOrderRecord extends BaseAdminController
      */
     public function info()
     {
-        $id = $this->request->param('id', 0);
+        $id = (int)$this->request->param('id', 0);
 
         if (empty($id)) {
             return fail('参数错误');
@@ -99,7 +103,7 @@ class ExpressOrderRecord extends BaseAdminController
      */
     public function edit()
     {
-        $id = $this->request->param('id', 0);
+        $id = (int)$this->request->param('id', 0);
 
         if (empty($id)) {
             return fail('参数错误');
@@ -124,7 +128,7 @@ class ExpressOrderRecord extends BaseAdminController
      */
     public function del()
     {
-        $id = $this->request->param('id', 0);
+        $id = (int)$this->request->param('id', 0);
 
         if (empty($id)) {
             return fail('参数错误');
@@ -142,7 +146,7 @@ class ExpressOrderRecord extends BaseAdminController
      */
     public function updateStatus()
     {
-        $id = $this->request->param('id', 0);
+        $id = (int)$this->request->param('id', 0);
         $status = $this->request->param('status', '');
         $remark = $this->request->param('remark', '');
 
@@ -162,7 +166,7 @@ class ExpressOrderRecord extends BaseAdminController
      */
     public function updateActualInfo()
     {
-        $id = $this->request->param('id', 0);
+        $id = (int)$this->request->param('id', 0);
         $actualWeight = $this->request->param('actual_weight', 0);
         $actualCost = $this->request->param('actual_cost', 0);
 

@@ -70,11 +70,15 @@ class ProviderAliExpress extends BaseProvider
             throw new \Exception('快递单号不能为空');
         }
 
-        $baseUrl = $this->getConfig('base_url', 'https://kzexpress.market.alicloudapi.com');
+        $baseUrl = $this->getConfig('base_url', '');
         $apiKey = $this->getConfig('api_key');
-        $apiPath = $this->getConfig('enabled_apis', '/api-mall/api/express/query');
+        $apiPath = $this->getConfig('api_path', $this->getConfig('enabled_apis', ''));
 
-        $url = $baseUrl . $apiPath;
+        if (empty($baseUrl) || empty($apiKey) || empty($apiPath)) {
+            throw new \Exception('阿里快递查询配置不完整');
+        }
+
+        $url = rtrim($baseUrl, '/') . '/' . ltrim($apiPath, '/');
         $method = "POST";
 
         // 设置请求头
@@ -98,6 +102,7 @@ class ProviderAliExpress extends BaseProvider
             curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
             curl_setopt($curl, CURLOPT_POSTFIELDS, $bodys);
+            curl_setopt($curl, CURLOPT_TIMEOUT, $this->getConfig('timeout', 30));
 
             $response = curl_exec($curl);
             $err = curl_error($curl);
@@ -152,17 +157,8 @@ class ProviderAliExpress extends BaseProvider
      */
     public function healthCheck(): bool
     {
-        try {
-            // 使用一个测试单号进行健康检查
-            $result = $this->queryExpress([
-                'express_no' => '75******1234',  // 测试单号
-            ]);
-
-            // 只要API能响应就认为健康（即使单号不存在）
-            return true;
-        } catch (\Exception $e) {
-            $this->logError('健康检查失败', ['error' => $e->getMessage()]);
-            return false;
-        }
+        return !empty($this->getConfig('base_url', ''))
+            && !empty($this->getConfig('api_key', ''))
+            && !empty($this->getConfig('api_path', $this->getConfig('enabled_apis', '')));
     }
 }

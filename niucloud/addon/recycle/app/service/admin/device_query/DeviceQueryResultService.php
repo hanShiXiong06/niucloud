@@ -27,7 +27,7 @@ class DeviceQueryResultService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'id,site_id,query_code,query_type,api_endpoint,api_name,status,cost_amount,response_time,error_code,error_message,operator_name,remark,create_at';
+        $field = 'id,site_id,query_code,query_type,api_endpoint,api_name,status,cost_amount,response_time,error_code,error_message,operator_name,remark,raw_response,create_at';
         $order = 'create_at desc';
 
         $search_model = $this->model->where([['site_id', '=', $this->site_id]])
@@ -36,7 +36,19 @@ class DeviceQueryResultService extends BaseAdminService
             ->order($order)
             ->append(['status_name', 'query_type_name']);
 
-        return $this->pageQuery($search_model);
+        $result = $this->pageQuery($search_model);
+        $list = $result['data'] ?? $result['list'] ?? [];
+        foreach ($list as &$item) {
+            $item = $this->formatResultItem($item);
+        }
+        unset($item);
+        if (isset($result['data'])) {
+            $result['data'] = $list;
+        } elseif (isset($result['list'])) {
+            $result['list'] = $list;
+        }
+
+        return $result;
     }
 
     /**
@@ -58,7 +70,39 @@ class DeviceQueryResultService extends BaseAdminService
             throw new CommonException('查询结果不存在');
         }
 
-        return $info;
+        return $this->formatResultItem($info);
+    }
+
+    private function formatResultItem(array $item): array
+    {
+        $meta = is_array($item['raw_response']['meta'] ?? null) ? $item['raw_response']['meta'] : [];
+        $raw = is_array($item['raw_response']['raw'] ?? null) ? $item['raw_response']['raw'] : [];
+
+        $item['service_code'] = (string)($meta['service_code'] ?? '');
+        $item['service_name'] = (string)($meta['service_name'] ?? $item['api_name'] ?? '');
+        $item['channel_name'] = (string)($meta['channel_name'] ?? '');
+        $item['channel_key'] = (string)($meta['channel_key'] ?? '');
+        $item['third_cost'] = (float)($meta['third_cost'] ?? $raw['cost'] ?? $item['cost_amount'] ?? 0);
+        $item['balance'] = (float)($meta['balance'] ?? $raw['balance'] ?? 0);
+        $item['create_at_text'] = $this->formatTimeValue($item['create_at'] ?? '');
+        $item['update_at_text'] = $this->formatTimeValue($item['update_at'] ?? '');
+
+        return $item;
+    }
+
+    private function formatTimeValue($value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        if (is_numeric($value)) {
+            $timestamp = (int)$value;
+        } else {
+            $timestamp = strtotime((string)$value);
+        }
+
+        return $timestamp > 0 ? date('Y-m-d H:i:s', $timestamp) : (string)$value;
     }
 
     /**
@@ -111,15 +155,16 @@ class DeviceQueryResultService extends BaseAdminService
 
         // 添加时间范围筛选
         if (!empty($where['create_at']) && is_array($where['create_at'])) {
-            $query->whereBetweenTime('create_at', $where['create_at'][0], $where['create_at'][1]);
+            [$startTime, $endTime] = $this->normalizeDateRange($where['create_at'][0], $where['create_at'][1]);
+            $query->whereBetweenTime('create_at', $startTime, $endTime);
         }
 
         $stats = [
-            'total_queries' => $query->count(),
-            'success_queries' => $query->where('status', 1)->count(),
-            'failed_queries' => $query->where('status', 0)->count(),
-            'total_cost' => $query->sum('cost_amount'),
-            'avg_response_time' => $query->avg('response_time')
+            'total_queries' => (clone $query)->count(),
+            'success_queries' => (clone $query)->where('status', 1)->count(),
+            'failed_queries' => (clone $query)->where('status', 0)->count(),
+            'total_cost' => (clone $query)->where('status', 1)->sum('cost_amount'),
+            'avg_response_time' => (clone $query)->avg('response_time')
         ];
 
         // 计算成功率
@@ -128,6 +173,22 @@ class DeviceQueryResultService extends BaseAdminService
             : 0;
 
         return $stats;
+    }
+
+    public function getQueryOverview(): array
+    {
+        $query = $this->model->where([['site_id', '=', $this->site_id]]);
+        $total = $query->count();
+        $success = (clone $query)->where('status', 1)->count();
+        $failed = $total - $success;
+
+        return [
+            'total_queries' => $total,
+            'success_queries' => $success,
+            'failed_queries' => $failed,
+            'success_rate' => $total > 0 ? round(($success / $total) * 100, 2) : 0,
+            'total_cost' => (clone $query)->where('status', 1)->sum('cost_amount'),
+        ];
     }
 
     /**
@@ -141,10 +202,12 @@ class DeviceQueryResultService extends BaseAdminService
 
         // 添加时间范围筛选
         if (!empty($where['create_at']) && is_array($where['create_at'])) {
-            $query->whereBetweenTime('create_at', $where['create_at'][0], $where['create_at'][1]);
+            [$startTime, $endTime] = $this->normalizeDateRange($where['create_at'][0], $where['create_at'][1]);
+            $query->whereBetweenTime('create_at', $startTime, $endTime);
         }
 
         $apiStats = $query->field('api_endpoint,api_name,count(*) as query_count,sum(cost_amount) as total_cost,avg(response_time) as avg_response_time')
+            ->where('status', 1)
             ->group('api_endpoint')
             ->order('query_count desc')
             ->select()
@@ -207,10 +270,22 @@ class DeviceQueryResultService extends BaseAdminService
     public function getTotalConsumption(array $where = []){
         $query = $this->model->where([['site_id', '=', $this->site_id]]);
         if(!empty($where['create_at'][0]) && !empty($where['create_at'][1])){
-            $query->whereBetweenTime('create_at', $where['create_at'][0], $where['create_at'][1]);
+            [$startTime, $endTime] = $this->normalizeDateRange($where['create_at'][0], $where['create_at'][1]);
+            $query->whereBetweenTime('create_at', $startTime, $endTime);
         }
-        $total_consumption = $query->sum('cost_amount');
+        $total_consumption = (clone $query)->where('status', 1)->sum('cost_amount');
         $total_count = $query->count();
         return ['total_consumption' => $total_consumption, 'total_count' => $total_count];
     }
-} 
+
+    private function normalizeDateRange($startDate, $endDate): array
+    {
+        $startTimestamp = strtotime((string)$startDate);
+        $endTimestamp = strtotime((string)$endDate);
+
+        return [
+            $startTimestamp > 0 ? date('Y-m-d 00:00:00', $startTimestamp) : (string)$startDate,
+            $endTimestamp > 0 ? date('Y-m-d 23:59:59', $endTimestamp) : (string)$endDate,
+        ];
+    }
+}

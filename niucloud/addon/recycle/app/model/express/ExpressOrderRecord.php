@@ -74,6 +74,41 @@ class ExpressOrderRecord extends BaseModel
         }
     }
 
+    public function searchProductCodeAttr($query, $value, $data)
+    {
+        if ($value) {
+            $query->where('product_code', '=', $value);
+        }
+    }
+
+    public function searchSenderMobileAttr($query, $value, $data)
+    {
+        if ($value) {
+            $query->where('sender_mobile', 'like', '%' . $value . '%');
+        }
+    }
+
+    public function searchReceiverMobileAttr($query, $value, $data)
+    {
+        if ($value) {
+            $query->where('receiver_mobile', 'like', '%' . $value . '%');
+        }
+    }
+
+    public function searchKeywordAttr($query, $value, $data)
+    {
+        if ($value) {
+            $query->where(function ($query) use ($value) {
+                $query->where('order_no', 'like', '%' . $value . '%')
+                    ->whereOr('delivery_id', 'like', '%' . $value . '%')
+                    ->whereOr('sender_name', 'like', '%' . $value . '%')
+                    ->whereOr('sender_mobile', 'like', '%' . $value . '%')
+                    ->whereOr('receiver_name', 'like', '%' . $value . '%')
+                    ->whereOr('receiver_mobile', 'like', '%' . $value . '%');
+            });
+        }
+    }
+
     /**
      * 搜索器：回收订单ID
      * @param $query

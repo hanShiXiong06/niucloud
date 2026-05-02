@@ -15,7 +15,7 @@ class ExpressOrderDict
     const STATUS_PICKED = 'picked';             // 已揽收
     const STATUS_IN_TRANSIT = 'in_transit';     // 运输中
     const STATUS_DELIVERED = 'delivered';       // 已签收
-    const STATUS_CANCELLED = 'cancelled';       // 已取消
+    const STATUS_CANCELLED = 'cancelled';       // 已关闭
     const STATUS_EXCEPTION = 'exception';       // 异常
 
     // 支付状态
@@ -29,7 +29,7 @@ class ExpressOrderDict
         self::STATUS_PICKED => '已揽收',
         self::STATUS_IN_TRANSIT => '运输中',
         self::STATUS_DELIVERED => '已签收',
-        self::STATUS_CANCELLED => '已取消',
+        self::STATUS_CANCELLED => '已关闭',
         self::STATUS_EXCEPTION => '异常',
     ];
 

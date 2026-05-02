@@ -8,7 +8,7 @@
                         v-model="curlCommand"
                         type="textarea"
                         :rows="4"
-                        placeholder="请粘贴curl命令，然后点击解析按钮自动填充表单..."
+                        placeholder="请粘贴curl命令，然后点击解析按钮自动填充报价ID、价格名称和配置名称。Token/OpenId 请在服务能力中心的报价爬虫中配置。"
                         class="curl-input"
                     />
                     <el-button type="primary" @click="parseCurl" :disabled="!curlCommand.trim()" style="margin-top: 10px;">
@@ -30,14 +30,13 @@
             <el-form-item label="配置名称" prop="config_name">
                 <el-input v-model="formData.config_name" clearable placeholder="请输入配置名称" class="input-width" />
             </el-form-item>
-            
-            <el-form-item label="Authorization Token" prop="authorization_token">
-                <el-input v-model="formData.authorization_token" type="textarea" :rows="3" clearable placeholder="请输入Authorization Token" class="input-width" />
-            </el-form-item>
-            
-            <el-form-item label="OpenId" prop="open_id">
-                <el-input v-model="formData.open_id" clearable placeholder="请输入OpenId" class="input-width" />
-            </el-form-item>
+
+            <el-alert
+                class="mb-[18px]"
+                type="info"
+                :closable="false"
+                title="报价爬虫的 Authorization Token 和 OpenId 已统一放到服务能力中心配置。"
+            />
             
             <el-form-item label="是否启用" prop="is_enable">
                 <el-switch v-model="formData.is_enable" :active-value="1" :inactive-value="0" />
@@ -98,8 +97,6 @@ const initialFormData = {
     quotation_id: '',
     price_name: '',
     config_name: '',
-    authorization_token: '',
-    open_id: '',
     is_enable: 1,
     auto_request: 0,
     use_crawler_remark: 0,
@@ -162,31 +159,6 @@ const parseCurl = () => {
             }
         }
         
-        // 提取Authorization header - 支持多种格式
-        // 格式1: -H 'Authorization: xxx'
-        // 格式2: -H "Authorization: xxx"
-        // 格式3: -H Authorization: xxx
-        let authMatch = curlStr.match(/-H\s+['"]?Authorization:\s*([^'"]+?)(?:['"]|\s|$)/i) ||
-                       curlStr.match(/Authorization:\s*([^\n\r'"]+)/i)
-        
-        if (authMatch) {
-            let authValue = authMatch[1].trim()
-            // 移除可能的引号和反斜杠
-            authValue = authValue.replace(/^['"]+|['"]+$/g, '').replace(/\\+$/, '').trim()
-            formData.authorization_token = authValue
-        }
-        
-        // 提取OpenId header
-        let openIdMatch = curlStr.match(/-H\s+['"]?OpenId:\s*([^'"]+?)(?:['"]|\s|$)/i) ||
-                         curlStr.match(/OpenId:\s*([^\n\r'"]+)/i)
-        
-        if (openIdMatch) {
-            let openIdValue = openIdMatch[1].trim()
-            // 移除可能的引号和反斜杠
-            openIdValue = openIdValue.replace(/^['"]+|['"]+$/g, '').replace(/\\+$/, '').trim()
-            formData.open_id = openIdValue
-        }
-        
         // 如果没有配置名称，自动生成一个
         if (!formData.config_name && quotationId && priceName) {
             const decodedPriceName = decodeURIComponent(priceName)
@@ -200,14 +172,8 @@ const parseCurl = () => {
         if (!formData.price_name) {
             ElMessage.warning('警告：未找到price_name参数')
         }
-        if (!formData.authorization_token) {
-            ElMessage.warning('警告：未找到Authorization header')
-        }
-        if (!formData.open_id) {
-            ElMessage.warning('警告：未找到OpenId header')
-        }
         
-        ElMessage.success('CURL命令解析成功！已自动填充表单字段')
+        ElMessage.success('CURL命令解析成功！Token/OpenId 请在服务能力中心配置')
         
         // 清空curl命令
         curlCommand.value = ''
@@ -229,12 +195,6 @@ const formRules = computed(() => {
         ],
         config_name: [
             { required: true, message: '请输入配置名称', trigger: 'blur' }
-        ],
-        authorization_token: [
-            { required: true, message: '请输入Authorization Token', trigger: 'blur' }
-        ],
-        open_id: [
-            { required: true, message: '请输入OpenId', trigger: 'blur' }
         ]
     }
 })
@@ -303,4 +263,3 @@ defineExpose({
     height: auto !important;
 }
 </style>
-

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\admin\printer\template;
 
+use addon\recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use addon\recycle\app\service\admin\printer\template\VariableReplaceService;
 use addon\recycle\app\service\admin\printer\template\PrinterApiService;
 use core\base\BaseAdminService;
@@ -88,8 +89,24 @@ class TemplatePrintService extends BaseAdminService
             // 修复内容格式问题
             $content = $this->fixXmlQuotes($content);
 
-            // 芯烨云标签打印API
-            $api_url = 'https://open.xpyun.net/api/openapi/xprinter/printLabel';
+            $thirdPartyConfigService = new RecycleThirdPartyConfigService();
+            $printerApiConfig = $thirdPartyConfigService->getPrinterConfig($this->site_id);
+            if (empty($printerApiConfig) || !$thirdPartyConfigService->isPrinterConfigComplete($this->site_id)) {
+                return [
+                    'success' => false,
+                    'message' => '打印服务未启用或配置不完整'
+                ];
+            }
+
+            $baseUrl = $printerApiConfig['base_url'] ?? '';
+            $printLabelPath = $printerApiConfig['print_label_path'] ?? '';
+            if (empty($baseUrl) || empty($printLabelPath)) {
+                return [
+                    'success' => false,
+                    'message' => '芯烨云打印接口地址未配置'
+                ];
+            }
+            $api_url = rtrim($baseUrl, '/') . '/' . ltrim($printLabelPath, '/');
 
             // 生成签名
             $timestamp = time();
@@ -109,7 +126,7 @@ class TemplatePrintService extends BaseAdminService
             ];
 
             // 使用JSON格式调用API
-            $result = $this->sendJsonRequest($api_url, $post_data);
+            $result = $this->sendJsonRequest($api_url, $post_data, $printerApiConfig);
 
             return $result;
 
@@ -165,15 +182,15 @@ class TemplatePrintService extends BaseAdminService
      * @param array $data
      * @return array
      */
-    private function sendJsonRequest(string $url, array $data): array
+    private function sendJsonRequest(string $url, array $data, array $config = []): array
     {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, (int)($config['timeout'] ?? 30));
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, (int)($config['connect_timeout'] ?? 10));
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);

@@ -1,5 +1,9 @@
 import { ref, onMounted } from 'vue'
-import { getReceivingChannels } from '../api/order'
+import {
+  checkExpressEnabled,
+  getExpressProviders,
+  type ExpressProvider
+} from '../api/express'
 
 /**
  * 渠道项接口
@@ -9,11 +13,16 @@ export interface ChannelItem {
   value: string
   sort: number
   memo: string
+  provider: string
+  provider_name: string
+  support_quote?: boolean
+  support_cancel?: boolean
+  support_track?: boolean
 }
 
 /**
  * 收货渠道管理
- * 管理后台配置的收货渠道（如顺丰快递等）
+ * 管理后台配置的统一快递服务商
  */
 export function useReceivingChannels() {
   // 渠道列表
@@ -22,7 +31,7 @@ export function useReceivingChannels() {
   // 加载状态
   const loading = ref(false)
 
-  // 默认选中的渠道 value（根据 sort 最大值）
+  // 默认选中的渠道 value（优先使用默认服务商）
   const defaultChannelValue = ref<string>('')
 
   /**
@@ -31,28 +40,43 @@ export function useReceivingChannels() {
   const fetchChannels = async () => {
     try {
       loading.value = true
-      const res: any = await getReceivingChannels()
 
-      if (res.code === 1 && res.data && res.data.dictionary) {
-        // 按 sort 降序排序（sort 值越大优先级越高）
-        channels.value = res.data.dictionary.sort(
-          (a: ChannelItem, b: ChannelItem) => b.sort - a.sort
-        )
+      const [checkRes, providersRes]: any[] = await Promise.all([
+        checkExpressEnabled(),
+        getExpressProviders()
+      ])
 
-        // 设置默认渠道
-        if (channels.value.length > 0) {
-          defaultChannelValue.value = channels.value[0].value
-        } else {
-          defaultChannelValue.value = ''
-        }
+      const checkData = checkRes?.data || {}
+      const isEnabled = checkRes?.code === 1 && !!checkData.enabled
+      const providers = Array.isArray(providersRes?.data) ? providersRes.data : []
+
+      if (isEnabled && providersRes?.code === 1 && providers.length > 0) {
+        channels.value = providers
+          .map((provider: ExpressProvider, index: number): ChannelItem => {
+            const isDefault = Number(provider.is_default || 0) === 1
+            return {
+              name: provider.provider_name || '平台快递',
+              value: provider.provider,
+              sort: isDefault ? 1000 : 100 - index,
+              memo: '',
+              provider: provider.provider,
+              provider_name: provider.provider_name || '',
+              support_quote: provider.support_quote,
+              support_cancel: provider.support_cancel,
+              support_track: provider.support_track
+            }
+          })
+          .sort((a: ChannelItem, b: ChannelItem) => b.sort - a.sort)
+
+        const activeProvider = checkData.provider || ''
+        const activeChannel = channels.value.find(channel => channel.provider === activeProvider)
+        defaultChannelValue.value = activeChannel?.value || channels.value[0]?.value || ''
       } else {
-        // 接口返回失败，设置为空
         channels.value = []
         defaultChannelValue.value = ''
       }
     } catch (error) {
       console.error('获取收货渠道配置失败：', error)
-      // 加载失败，设置为空
       channels.value = []
       defaultChannelValue.value = ''
     } finally {
@@ -72,15 +96,15 @@ export function useReceivingChannels() {
    * @param value 渠道 value
    */
   const isPlatformChannel = (value: string): boolean => {
-    return value === '1' // value 为 "1" 表示平台快递（如顺丰）
+    return channels.value.some(ch => ch.value === value)
   }
 
   /**
    * 获取默认的平台快递状态
-   * 如果默认渠道是平台快递（value=1），返回 true，否则返回 false
+   * 只要后端有可用服务商，就默认使用平台快递
    */
   const getDefaultPlatformDeliveryState = (): boolean => {
-    return isPlatformChannel(defaultChannelValue.value)
+    return !!defaultChannelValue.value && isPlatformChannel(defaultChannelValue.value)
   }
 
   // 组件挂载时自动加载渠道配置

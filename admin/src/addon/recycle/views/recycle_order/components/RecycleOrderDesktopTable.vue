@@ -10,7 +10,7 @@
     <el-table-column type="expand">
       <template #default="{ row }">
         <div class="p-5 bg-slate-50 rounded-md">
-          <div class="mb-3 flex items-center justify-between border-b border-gray-200 pb-3">
+          <div class="mb-3 flex items-center  border-b border-gray-200 pb-3">
             <h4 class="text-base font-medium text-gray-800">📱 设备列表</h4>
             <span class="text-sm text-gray-500">共 {{ row.devices?.length || 0 }} 台设备</span>
           </div>
@@ -22,8 +22,8 @@
             @selection-change="(val) => props.handleDeviceSelectionChange(val, row.id)"
           >
             <el-table-column type="selection" width="55" />
-            <el-table-column prop="imei" label="IMEI" min-width="150" />
-            <el-table-column prop="model" label="设备型号" min-width="120" />
+            <el-table-column prop="imei" label="IMEI" width="150" />
+            <el-table-column prop="model" label="设备型号" width="200" />
             <el-table-column prop="final_price" label="最终价格" width="100">
               <template #default="{ row: deviceRow }">
                 <span class="text-red-500 font-semibold">{{ props.formatPrice(deviceRow.final_price) }}</span>
@@ -36,7 +36,7 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" min-width="280">
+            <el-table-column label="操作"  fixed="right">
               <template #default="{ row: deviceRow }">
                 <el-button-group>
                   <el-button

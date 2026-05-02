@@ -14,6 +14,24 @@ use core\base\BaseAdminController;
 class DeviceQueryConfigController extends BaseAdminController
 {
     /**
+     * 获取设备查询完整配置
+     */
+    public function getConfig()
+    {
+        return success((new DeviceQueryConfigService())->getPage());
+    }
+
+    /**
+     * 保存设备查询完整配置
+     */
+    public function setConfig()
+    {
+        $data = $this->request->post();
+        (new DeviceQueryConfigService())->saveConfigCenter($data);
+        return success('SAVE_SUCCESS');
+    }
+
+    /**
      * 获取设备查询配置列表
      * @return \think\Response
      */
@@ -30,10 +48,9 @@ class DeviceQueryConfigController extends BaseAdminController
 
     /**
      * 设备查询配置详情
-     * @param int $id
      * @return \think\Response
      */
-    public function info(int $id)
+    public function info(string $id)
     {
         return success((new DeviceQueryConfigService())->getInfo($id));
     }
@@ -45,46 +62,39 @@ class DeviceQueryConfigController extends BaseAdminController
     public function add()
     {
         $data = $this->request->params([
+            ['code', ''],
             ['name', ''],
-            ['api_key', ''],
-            ['base_url', 'http://api.3023data.com'],
-            ['enabled_apis', []],
-            ['timeout', 30],
-            ['max_retry', 3],
-            ['cache_time', 3600],
-            ['daily_limit', 1000],
-            ['balance', 0.00],
-            ['status', 1],
-            ['remark', ''],
+            ['category', 'other'],
+            ['query_type', 'other'],
+            ['cost_price', 0],
+            ['cache_ttl', 0],
+            ['sort', 0],
+            ['enabled', 1],
+            ['show_in_check', 0],
+            ['result_handler', 'generic'],
         ]);
-
-        // $this->validate($data, 'addon\recycle\app\validate\DeviceQueryConfigValidate.add');
         $id = (new DeviceQueryConfigService())->add($data);
         return success('ADD_SUCCESS', ['id' => $id]);
     }
 
     /**
      * 编辑设备查询配置
-     * @param int $id
      * @return \think\Response
      */
-    public function edit(int $id)
+    public function edit(string $id)
     {
         $data = $this->request->params([
+            ['code', ''],
             ['name', ''],
-            ['api_key', ''],
-            ['base_url', ''],
-            ['enabled_apis', []],
-            ['timeout', 30],
-            ['max_retry', 3],
-            ['cache_time', 3600],
-            ['daily_limit', 1000],
-            ['balance', 0.00],
-            ['status', 1],
-            ['remark', ''],
+            ['category', 'other'],
+            ['query_type', 'other'],
+            ['cost_price', 0],
+            ['cache_ttl', 0],
+            ['sort', 0],
+            ['enabled', 1],
+            ['show_in_check', 0],
+            ['result_handler', 'generic'],
         ]);
-
-        // $this->validate($data, 'addon\recycle\app\validate\DeviceQueryConfigValidate.edit');
         (new DeviceQueryConfigService())->edit($id, $data);
         return success('EDIT_SUCCESS');
     }
@@ -94,7 +104,7 @@ class DeviceQueryConfigController extends BaseAdminController
      * @param int $id
      * @return \think\Response
      */
-    public function del(int $id)
+    public function del(string $id)
     {
         (new DeviceQueryConfigService())->del($id);
         return success('DELETE_SUCCESS');
@@ -105,7 +115,7 @@ class DeviceQueryConfigController extends BaseAdminController
      * @param int $id
      * @return \think\Response
      */
-    public function modifyStatus(int $id)
+    public function modifyStatus(string $id)
     {
         $data = $this->request->params([
             ['status', 1],
@@ -119,9 +129,14 @@ class DeviceQueryConfigController extends BaseAdminController
      * @param int $id
      * @return \think\Response
      */
-    public function testConnection(int $id)
+    public function testConnection(string $id)
     {
-        $result = (new DeviceQueryConfigService())->testConnection($id);
+        $data = $this->request->params([
+            ['query_code', ''],
+            ['query_type', ''],
+            ['channel_key', ''],
+        ]);
+        $result = (new DeviceQueryConfigService())->testConnection($id, $data);
         return success('TEST_SUCCESS', $result);
     }
 
@@ -130,7 +145,7 @@ class DeviceQueryConfigController extends BaseAdminController
      * @param int $id
      * @return \think\Response
      */
-    public function getStats(int $id)
+    public function getStats(string $id)
     {
         $data = $this->request->params([
             ['start_date', ''],
@@ -138,6 +153,15 @@ class DeviceQueryConfigController extends BaseAdminController
         ]);
         
         $result = (new DeviceQueryConfigService())->getStats($id, $data);
+        return success('GET_SUCCESS', $result);
+    }
+
+    /**
+     * 查询渠道余额
+     */
+    public function balance(string $channelKey)
+    {
+        $result = (new DeviceQueryConfigService())->getChannelBalance($channelKey);
         return success('GET_SUCCESS', $result);
     }
 } 
