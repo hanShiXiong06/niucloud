@@ -149,9 +149,9 @@
                     <div class="active-dataset-hint">型号、容量、字段、加/扣钱项和备注内容都绑定在这张报价单下。</div>
                 </div>
                 <el-tabs v-model="activeTab" class="mt-[12px]" @tab-change="loadDetail(1)">
-                    <el-tab-pane label="价格管理" name="prices">
-                        <div class="section-toolbar">
-                            <el-form :inline="true" :model="detailSearch.prices">
+	                    <el-tab-pane label="价格管理" name="prices">
+	                        <div class="section-toolbar">
+	                            <el-form :inline="true" :model="detailSearch.prices">
                                 <el-form-item label="报价单">
                                     <el-select
                                         v-model="detailSearch.prices.dataset_id"
@@ -186,12 +186,22 @@
                                 <el-form-item label="价格项">
                                     <el-input v-model="detailSearch.prices.field_name" clearable placeholder="价格项" class="w-[140px]" />
                                 </el-form-item>
-                                <el-form-item>
-                                    <el-button type="primary" @click="loadDetail(1)">查询</el-button>
-                                    <el-button @click="resetDetailSearch('prices')">重置</el-button>
-                                </el-form-item>
-                            </el-form>
-                        </div>
+	                                <el-form-item>
+	                                    <el-button type="primary" @click="loadDetail(1)">查询</el-button>
+	                                    <el-button @click="resetDetailSearch('prices')">重置</el-button>
+	                                </el-form-item>
+	                            </el-form>
+	                            <div class="batch-mode-actions">
+	                                <el-button v-if="!batchPriceMode" type="primary" @click="enterBatchPriceMode">批量调价</el-button>
+	                                <template v-else>
+	                                    <el-tag type="warning" size="large">已选 {{ selectedPriceCount }} 个价格</el-tag>
+	                                    <el-button @click="selectCurrentPriceResult">选择当前结果</el-button>
+	                                    <el-button @click="clearSelectedPrices">清空</el-button>
+	                                    <el-button type="primary" :disabled="!selectedPriceCount" @click="openBatchPriceDialog">批量调整</el-button>
+	                                    <el-button @click="exitBatchPriceMode">退出</el-button>
+	                                </template>
+	                            </div>
+	                        </div>
 
                         <el-empty v-if="!priceMatrixGroups.length && !detailTable.prices.loading" description="暂无价格数据，请先预览并导入报价单" />
                         <div v-else v-loading="detailTable.prices.loading" class="matrix-group-list">
@@ -208,27 +218,77 @@
                                 <el-table
                                     :data="group.rows"
                                     border
-                                    row-key="row_key"
-                                    :span-method="priceMatrixSpanMethodMap[group.group_key]"
-                                    class="quotation-matrix-table"
-                                >
-                                    <el-table-column prop="model_label" label="型号" min-width="180" fixed />
-                                    <el-table-column prop="capacity_label" label="容量" width="110" fixed />
-                                    <el-table-column
-                                        v-for="column in group.columns"
-                                        :key="column.field_id"
-                                        :label="column.field_name"
-                                        min-width="132"
-                                    >
-                                        <template #default="{ row }">
-                                            <button v-if="row.prices?.[column.field_id]" class="price-cell" type="button" @click="openPriceDialog(row.prices[column.field_id])">
-                                                <strong>{{ row.prices[column.field_id].price_value_text }}</strong>
-                                                <span v-if="Number(row.prices[column.field_id].adjust_value || 0) !== 0">{{ row.prices[column.field_id].adjust_value_text }}</span>
-                                                <em v-if="row.prices[column.field_id].locked">锁定</em>
-                                            </button>
-                                            <span v-else class="muted">-</span>
-                                        </template>
-                                    </el-table-column>
+	                                    row-key="row_key"
+	                                    :span-method="priceMatrixSpanMethodMap[group.group_key]"
+	                                    class="quotation-matrix-table"
+	                                >
+	                                    <el-table-column prop="model_label" label="型号" min-width="210" fixed>
+	                                        <template #default="{ row }">
+	                                            <div class="model-cell">
+	                                                <el-checkbox
+	                                                    v-if="batchPriceMode"
+	                                                    :model-value="isModelFullySelected(group, row.model_id)"
+	                                                    :indeterminate="isModelPartiallySelected(group, row.model_id)"
+	                                                    @change="toggleModelPrices(group, row.model_id, $event)"
+	                                                />
+	                                                <span>{{ row.model_label }}</span>
+	                                            </div>
+	                                        </template>
+	                                    </el-table-column>
+	                                    <el-table-column prop="capacity_label" label="容量" width="130" fixed>
+	                                        <template #default="{ row }">
+	                                            <div class="capacity-cell">
+	                                                <el-checkbox
+	                                                    v-if="batchPriceMode"
+	                                                    :model-value="isRowFullySelected(row)"
+	                                                    :indeterminate="isRowPartiallySelected(row)"
+	                                                    @change="toggleRowPrices(row, $event)"
+	                                                />
+	                                                <span>{{ row.capacity_label }}</span>
+	                                            </div>
+	                                        </template>
+	                                    </el-table-column>
+	                                    <el-table-column
+	                                        v-for="column in group.columns"
+	                                        :key="column.field_id"
+	                                        min-width="132"
+	                                    >
+	                                        <template #header>
+	                                            <div class="grade-head">
+	                                                <el-checkbox
+	                                                    v-if="batchPriceMode"
+	                                                    :model-value="isColumnFullySelected(group, column.field_id)"
+	                                                    :indeterminate="isColumnPartiallySelected(group, column.field_id)"
+	                                                    @change="toggleColumnPrices(group, column.field_id, $event)"
+	                                                />
+	                                                <span>{{ column.field_name }}</span>
+	                                            </div>
+	                                        </template>
+	                                        <template #default="{ row }">
+	                                            <div
+	                                                v-if="row.prices?.[column.field_id]"
+	                                                class="price-cell"
+	                                                :class="{ 'is-selected': isPriceSelected(row.prices[column.field_id].id), 'is-batch-mode': batchPriceMode }"
+	                                                role="button"
+	                                                tabindex="0"
+	                                                @click="handlePriceCellClick(row.prices[column.field_id])"
+	                                                @keydown.enter.prevent="handlePriceCellClick(row.prices[column.field_id])"
+	                                                @keydown.space.prevent="handlePriceCellClick(row.prices[column.field_id])"
+	                                            >
+	                                                <el-checkbox
+	                                                    v-if="batchPriceMode"
+	                                                    class="price-cell-check"
+	                                                    :model-value="isPriceSelected(row.prices[column.field_id].id)"
+	                                                    @click.stop
+	                                                    @change="toggleSinglePrice(row.prices[column.field_id].id, $event)"
+	                                                />
+	                                                <strong>{{ row.prices[column.field_id].price_value_text }}</strong>
+	                                                <span v-if="Number(row.prices[column.field_id].adjust_value || 0) !== 0">{{ row.prices[column.field_id].adjust_value_text }}</span>
+	                                                <em v-if="row.prices[column.field_id].locked">锁定</em>
+	                                            </div>
+	                                            <span v-else class="muted">-</span>
+	                                        </template>
+	                                    </el-table-column>
                                     <el-table-column
                                         v-for="column in group.adjustment_columns"
                                         :key="`adjustment-${column.field_id}`"
@@ -683,7 +743,7 @@
             </template>
         </el-dialog>
 
-        <el-dialog v-model="priceDialog.show" title="设置 SKU 价格" width="500px">
+	        <el-dialog v-model="priceDialog.show" title="设置 SKU 价格" width="500px">
             <el-form :model="priceDialog.form" label-width="110px">
                 <el-alert
                     type="info"
@@ -704,10 +764,54 @@
             <template #footer>
                 <el-button @click="priceDialog.show = false">取消</el-button>
                 <el-button type="primary" @click="savePriceAdjust">保存</el-button>
-            </template>
-        </el-dialog>
-    </div>
-</template>
+	            </template>
+	        </el-dialog>
+
+	        <el-dialog v-model="batchPriceDialog.show" title="批量调价" width="620px">
+	            <div class="batch-summary">
+	                <div><span>已选价格</span><strong>{{ selectedPriceCount }}</strong></div>
+	                <div><span>型号</span><strong>{{ selectedPriceSummary.modelCount }}</strong></div>
+	                <div><span>容量</span><strong>{{ selectedPriceSummary.capacityCount }}</strong></div>
+	                <div><span>等级</span><strong>{{ selectedPriceSummary.fieldCount }}</strong></div>
+	            </div>
+	            <el-form :model="batchPriceDialog.form" label-width="110px" class="mt-[14px]">
+	                <el-form-item label="调整方式">
+	                    <el-select v-model="batchPriceDialog.form.adjust_type" class="w-full">
+	                        <el-option label="固定金额" :value="1" />
+	                        <el-option label="百分比" :value="2" />
+	                        <el-option label="覆盖价格" :value="3" />
+	                    </el-select>
+	                </el-form-item>
+	                <el-form-item label="调整值">
+	                    <el-input-number v-model="batchPriceDialog.form.adjust_value" :precision="2" class="w-full" />
+	                </el-form-item>
+	                <el-form-item label="锁定策略">
+	                    <el-radio-group v-model="batchPriceDialog.form.lock_mode">
+	                        <el-radio label="keep">不改变</el-radio>
+	                        <el-radio label="lock">调整后锁定</el-radio>
+	                        <el-radio label="unlock">调整后解锁</el-radio>
+	                    </el-radio-group>
+	                </el-form-item>
+	                <el-alert
+	                    type="warning"
+	                    :closable="false"
+	                    title="批量调价只作用于当前选中的价格记录。提交前请确认选中范围，保存后会刷新当前报价矩阵。"
+	                />
+	            </el-form>
+	            <div v-if="selectedPricePreview.length" class="batch-preview">
+	                <div class="batch-preview-title">影响示例</div>
+	                <div v-for="item in selectedPricePreview" :key="item.id" class="batch-preview-row">
+	                    <span>{{ item.model_label }} / {{ item.capacity_label }} / {{ item.field_name }}</span>
+	                    <strong>{{ item.price_value_text }}</strong>
+	                </div>
+	            </div>
+	            <template #footer>
+	                <el-button @click="batchPriceDialog.show = false">取消</el-button>
+	                <el-button type="primary" :loading="batchPriceDialog.loading" :disabled="!selectedPriceCount" @click="saveBatchPriceAdjust">确认应用</el-button>
+	            </template>
+	        </el-dialog>
+	    </div>
+	</template>
 
 <script setup lang="ts">
 import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
@@ -716,10 +820,11 @@ import {
     addQuotationV2Capacity,
     addQuotationV2Dataset,
     addQuotationV2Field,
-    addQuotationV2Model,
-    addQuotationV2Note,
-    adjustQuotationV2Price,
-    deleteQuotationV2Capacity,
+	    addQuotationV2Model,
+	    addQuotationV2Note,
+	    adjustQuotationV2Price,
+	    batchAdjustQuotationV2Price,
+	    deleteQuotationV2Capacity,
     deleteQuotationV2Dataset,
     deleteQuotationV2Field,
     deleteQuotationV2Model,
@@ -802,7 +907,18 @@ const datasetDialog = reactive<any>({ show: false, form: {} })
 const previewDialog = reactive<any>({ show: false, data: null })
 const manageDialog = reactive<any>({ show: false, type: '', form: {} })
 const priceDialog = reactive<any>({ show: false, form: {} })
+const batchPriceDialog = reactive<any>({
+    show: false,
+    loading: false,
+    form: {
+        adjust_type: 1,
+        adjust_value: 0,
+        lock_mode: 'keep'
+    }
+})
 const priceMatrix = reactive<any>({ columns: [], adjustment_columns: [], rows: [], groups: [] })
+const batchPriceMode = ref(false)
+const selectedPriceIds = ref<Set<number>>(new Set())
 
 const responseRows = (res: any) => Array.isArray(res.data) ? res.data : (res.data?.data || [])
 const responseListRows = (res: any) => res.data?.list || res.data?.data || []
@@ -828,6 +944,20 @@ const priceCapacitySpan = computed(() => buildSpanMap(detailTable.prices.data, (
 const priceMatrixColumns = computed(() => priceMatrix.columns || [])
 const priceMatrixRows = computed(() => priceMatrix.rows || [])
 const priceMatrixGroups = computed(() => priceMatrix.groups || [])
+const selectedPriceCount = computed(() => selectedPriceIds.value.size)
+const allMatrixPrices = computed(() => priceMatrixGroups.value.flatMap((group: any) => getGroupPrices(group)))
+const selectedMatrixPrices = computed(() => allMatrixPrices.value.filter((item: any) => selectedPriceIds.value.has(Number(item.id || 0))))
+const selectedPriceSummary = computed(() => {
+    const modelIds = new Set(selectedMatrixPrices.value.map((item: any) => item.model_id))
+    const capacityIds = new Set(selectedMatrixPrices.value.map((item: any) => item.capacity_id))
+    const fieldIds = new Set(selectedMatrixPrices.value.map((item: any) => item.field_id))
+    return {
+        modelCount: modelIds.size,
+        capacityCount: capacityIds.size,
+        fieldCount: fieldIds.size
+    }
+})
+const selectedPricePreview = computed(() => selectedMatrixPrices.value.slice(0, 5))
 const priceMatrixModelSpan = computed(() => buildSpanMap(priceMatrixRows.value, (row: any) => String(row.model_id || row.external_goods_id || '')))
 const priceMatrixSpanMethodMap = computed(() => {
     const map: Record<string, Function> = {}
@@ -867,6 +997,112 @@ const priceSpanMethod = ({ rowIndex, columnIndex }: any) => {
     if (columnIndex === 2 || columnIndex === 7) {
         return { rowspan: priceCapacitySpan.value[rowIndex] ?? 1, colspan: priceCapacitySpan.value[rowIndex] === 0 ? 0 : 1 }
     }
+}
+
+const normalizeChecked = (value: string | number | boolean) => value === true
+
+const getRowPrices = (row: any) => Object.values(row.prices || {})
+    .map((price: any) => ({
+        ...price,
+        model_id: row.model_id,
+        model_label: row.model_label,
+        capacity_id: row.capacity_id,
+        capacity_label: row.capacity_label
+    }))
+    .filter((price: any) => Number(price.id || 0) > 0)
+
+const getRowPriceIds = (row: any) => getRowPrices(row).map((price: any) => Number(price.id))
+
+const getGroupPrices = (group: any) => (group.rows || []).flatMap((row: any) => getRowPrices(row))
+
+const getModelPriceIds = (group: any, modelId: number) => (group.rows || [])
+    .filter((row: any) => Number(row.model_id || 0) === Number(modelId || 0))
+    .flatMap((row: any) => getRowPriceIds(row))
+
+const getColumnPriceIds = (group: any, fieldId: number) => (group.rows || [])
+    .map((row: any) => Number(row.prices?.[fieldId]?.id || 0))
+    .filter(Boolean)
+
+const areAllSelected = (ids: number[]) => ids.length > 0 && ids.every(id => selectedPriceIds.value.has(id))
+const areSomeSelected = (ids: number[]) => ids.some(id => selectedPriceIds.value.has(id))
+const isPriceSelected = (id: number) => selectedPriceIds.value.has(Number(id || 0))
+const isRowFullySelected = (row: any) => areAllSelected(getRowPriceIds(row))
+const isRowPartiallySelected = (row: any) => {
+    const ids = getRowPriceIds(row)
+    return !areAllSelected(ids) && areSomeSelected(ids)
+}
+const isModelFullySelected = (group: any, modelId: number) => areAllSelected(getModelPriceIds(group, modelId))
+const isModelPartiallySelected = (group: any, modelId: number) => {
+    const ids = getModelPriceIds(group, modelId)
+    return !areAllSelected(ids) && areSomeSelected(ids)
+}
+const isColumnFullySelected = (group: any, fieldId: number) => areAllSelected(getColumnPriceIds(group, fieldId))
+const isColumnPartiallySelected = (group: any, fieldId: number) => {
+    const ids = getColumnPriceIds(group, fieldId)
+    return !areAllSelected(ids) && areSomeSelected(ids)
+}
+
+const setSelectedPriceIds = (ids: number[], checked: boolean) => {
+    const next = new Set(selectedPriceIds.value)
+    ids.filter(Boolean).forEach(id => {
+        if (checked) next.add(Number(id))
+        else next.delete(Number(id))
+    })
+    selectedPriceIds.value = next
+}
+
+const toggleSinglePrice = (id: number, checked: string | number | boolean) => {
+    setSelectedPriceIds([Number(id || 0)], normalizeChecked(checked))
+}
+
+const toggleRowPrices = (row: any, checked: string | number | boolean) => {
+    setSelectedPriceIds(getRowPriceIds(row), normalizeChecked(checked))
+}
+
+const toggleModelPrices = (group: any, modelId: number, checked: string | number | boolean) => {
+    setSelectedPriceIds(getModelPriceIds(group, modelId), normalizeChecked(checked))
+}
+
+const toggleColumnPrices = (group: any, fieldId: number, checked: string | number | boolean) => {
+    setSelectedPriceIds(getColumnPriceIds(group, fieldId), normalizeChecked(checked))
+}
+
+const enterBatchPriceMode = () => {
+    batchPriceMode.value = true
+}
+
+const exitBatchPriceMode = () => {
+    batchPriceMode.value = false
+    clearSelectedPrices()
+}
+
+const clearSelectedPrices = () => {
+    selectedPriceIds.value = new Set()
+}
+
+const selectCurrentPriceResult = () => {
+    setSelectedPriceIds(allMatrixPrices.value.map((item: any) => Number(item.id || 0)), true)
+}
+
+const handlePriceCellClick = (price: any) => {
+    if (batchPriceMode.value) {
+        toggleSinglePrice(price.id, !isPriceSelected(price.id))
+        return
+    }
+    openPriceDialog(price)
+}
+
+const openBatchPriceDialog = () => {
+    if (!selectedPriceCount.value) {
+        ElMessage.warning('请先选择需要调整的价格')
+        return
+    }
+    batchPriceDialog.form = {
+        adjust_type: 1,
+        adjust_value: 0,
+        lock_mode: 'keep'
+    }
+    batchPriceDialog.show = true
 }
 
 const priceMatrixSpanMethod = ({ rowIndex, columnIndex }: any) => {
@@ -1064,11 +1300,12 @@ const loadPriceMatrix = async () => {
     table.data = responseListRows(res)
     table.total = responseTotal(res)
     const matrix = responseMatrix(res)
-    priceMatrix.columns = matrix.columns || []
-    priceMatrix.adjustment_columns = matrix.adjustment_columns || []
-    priceMatrix.rows = matrix.rows || []
-    priceMatrix.groups = normalizeMatrixGroups(matrix.groups || [])
-}
+	    priceMatrix.columns = matrix.columns || []
+	    priceMatrix.adjustment_columns = matrix.adjustment_columns || []
+	    priceMatrix.rows = matrix.rows || []
+	    priceMatrix.groups = normalizeMatrixGroups(matrix.groups || [])
+	    clearSelectedPrices()
+	}
 
 const ensureModelOptions = async () => {
     if (!selectedDataset.value?.id || modelOptions.value.length) return
@@ -1174,9 +1411,11 @@ const getAdjustmentRuleClass = (rule: string) => {
 }
 
 const selectDataset = async (row: any) => {
-    selectedDataset.value = row
-    detailSearch.prices.dataset_id = row.id
-    resetDatasetScopedFilters()
+	    selectedDataset.value = row
+	    detailSearch.prices.dataset_id = row.id
+	    clearSelectedPrices()
+	    batchPriceMode.value = false
+	    resetDatasetScopedFilters()
     modelOptions.value = []
     capacityOptions.value = []
     fieldOptions.value = []
@@ -1187,9 +1426,11 @@ const switchActiveDataset = async (datasetId: number) => {
     const dataset = datasetOptions.value.find((item: any) => Number(item.id) === Number(datasetId))
         || datasetTable.data.find((item: any) => Number(item.id) === Number(datasetId))
     if (!dataset) return
-    selectedDataset.value = dataset
-    detailSearch.prices.dataset_id = dataset.id
-    resetDatasetScopedFilters()
+	    selectedDataset.value = dataset
+	    detailSearch.prices.dataset_id = dataset.id
+	    clearSelectedPrices()
+	    batchPriceMode.value = false
+	    resetDatasetScopedFilters()
     modelOptions.value = []
     capacityOptions.value = []
     fieldOptions.value = []
@@ -1219,8 +1460,8 @@ const resetDetailSearch = async (tab: string) => {
             detailSearch[tab][key] = ''
         }
     })
-    await loadDetail(1)
-}
+	    await loadDetail(1)
+	}
 
 const initDefaults = async () => {
     await initQuotationV2ChaoniuDefaults()
@@ -1457,6 +1698,36 @@ const savePriceAdjust = async () => {
     await loadDetail(detailTable.prices.page)
 }
 
+const saveBatchPriceAdjust = async () => {
+    if (!selectedPriceCount.value) {
+        ElMessage.warning('请先选择需要调整的价格')
+        return
+    }
+    const ids = Array.from(selectedPriceIds.value)
+    const lockPayload: Record<string, number> = {}
+    if (batchPriceDialog.form.lock_mode === 'lock') lockPayload.locked = 1
+    if (batchPriceDialog.form.lock_mode === 'unlock') lockPayload.locked = 0
+    await ElMessageBox.confirm(
+        `将批量调整 ${ids.length} 个价格，确定继续吗？`,
+        '确认批量调价',
+        { type: 'warning' }
+    )
+    batchPriceDialog.loading = true
+    try {
+        await batchAdjustQuotationV2Price({
+            ids,
+            adjust_type: batchPriceDialog.form.adjust_type,
+            adjust_value: batchPriceDialog.form.adjust_value,
+            ...lockPayload
+        })
+        batchPriceDialog.show = false
+        clearSelectedPrices()
+        await loadDetail(detailTable.prices.page)
+    } finally {
+        batchPriceDialog.loading = false
+    }
+}
+
 const fieldTypeTag = (type: string) => {
     if (type === 'price') return 'success'
     if (type === 'adjustment') return 'danger'
@@ -1495,8 +1766,16 @@ onMounted(async () => {
         gap: 16px;
     }
 
-    .head-actions,
-    .section-toolbar {
+	    .head-actions,
+	    .section-toolbar {
+	        flex-wrap: wrap;
+	    }
+
+    .batch-mode-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
         flex-wrap: wrap;
     }
 
@@ -1686,10 +1965,11 @@ onMounted(async () => {
         color: #b42318;
     }
 
-    .price-cell {
-        display: inline-flex;
-        flex-direction: column;
-        align-items: center;
+	    .price-cell {
+        position: relative;
+	        display: inline-flex;
+	        flex-direction: column;
+	        align-items: center;
         justify-content: center;
         width: 100%;
         min-height: 48px;
@@ -1697,11 +1977,36 @@ onMounted(async () => {
         border-radius: 4px;
         background: #f0fdf4;
         color: #1f2937;
-        cursor: pointer;
+	        cursor: pointer;
+	    }
+
+	    .price-cell:hover {
+	        background: #dcfce7;
+	    }
+
+    .price-cell.is-batch-mode {
+        padding: 8px 8px 8px 30px;
+        background: #f8fafc;
+        border: 1px solid #d0d5dd;
     }
 
-    .price-cell:hover {
-        background: #dcfce7;
+    .price-cell.is-batch-mode:hover {
+        background: #eff6ff;
+        border-color: #93c5fd;
+    }
+
+    .price-cell.is-selected {
+        background: #dbeafe;
+        border-color: #2563eb;
+        box-shadow: inset 0 0 0 1px #2563eb;
+    }
+
+    .price-cell-check {
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        height: 16px;
     }
 
     .price-cell strong {
@@ -1740,11 +2045,103 @@ onMounted(async () => {
         background: #f8fafc;
     }
 
-    .matrix-title {
-        color: #111827;
+	    .matrix-title {
+	        color: #111827;
         font-size: 16px;
         font-weight: 700;
-        line-height: 1.4;
+	        line-height: 1.4;
+	    }
+
+    .model-cell,
+    .capacity-cell,
+    .grade-head {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .model-cell span,
+    .capacity-cell span,
+    .grade-head span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .batch-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .batch-summary > div {
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        background: #f9fafb;
+    }
+
+    .batch-summary span,
+    .batch-summary strong {
+        display: block;
+    }
+
+    .batch-summary span {
+        color: #6b7280;
+        font-size: 12px;
+    }
+
+    .batch-summary strong {
+        margin-top: 4px;
+        color: #111827;
+        font-size: 20px;
+        line-height: 1.2;
+    }
+
+    .batch-preview {
+        margin-top: 14px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .batch-preview-title {
+        padding: 9px 12px;
+        color: #111827;
+        font-size: 13px;
+        font-weight: 700;
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .batch-preview-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 9px 12px;
+        border-top: 1px solid #f2f4f7;
+        font-size: 13px;
+    }
+
+    .batch-preview-row:first-of-type {
+        border-top: 0;
+    }
+
+    .batch-preview-row span {
+        min-width: 0;
+        color: #344054;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .batch-preview-row strong {
+        color: #111827;
+        font-weight: 700;
+        flex-shrink: 0;
     }
 
     .quotation-matrix-table {

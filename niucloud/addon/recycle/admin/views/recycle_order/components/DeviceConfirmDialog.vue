@@ -245,7 +245,6 @@ import { ref, defineProps, defineEmits, watch, toRaw, nextTick, onMounted, onBef
 import { Edit, Plus, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getImeiInfo, deleteOrderDevice } from '@/addon/recycle/api/recycle_order'
-import { getCategoryTree } from '@/addon/phone_shop/api/goods'
 import axios from 'axios'
 
 // 定义设备信息接口
@@ -418,54 +417,17 @@ const normalizeCategoryPath = (
     return [String(normalizedId)]
 }
 
-const flattenCategoryTree = (
-    tree: GoodsCategoryTreeItem[],
-    parentPath: Array<string | number> = []
-): Category[] => {
-    const result: Category[] = []
-    tree.forEach((node) => {
-        const currentPath = [...parentPath, node.category_id]
-        result.push({
-            id: node.category_id,
-            name: node.category_name,
-            path: currentPath
-        })
-        if (Array.isArray(node.child_list) && node.child_list.length > 0) {
-            result.push(...flattenCategoryTree(node.child_list, currentPath))
+const useFallbackCategoryTree = () => {
+    categoryLoading.value = false
+    categoryTree.value = [...fallbackCategoryTree]
+    category.value = [...fallbackCategory]
+    defaultCategoryId.value = fallbackCategory[0].id
+    devices.value.forEach((device) => {
+        if (isEmptyCategory(device.category)) {
+            device.category = defaultCategoryId.value
         }
+        device.category_path = normalizeCategoryPath(device.category_path, device.category)
     })
-    return result
-}
-
-const loadGoodsCategoryTree = async () => {
-    categoryLoading.value = true
-    try {
-        const res = await getCategoryTree({})
-        const treeData: GoodsCategoryTreeItem[] = Array.isArray(res?.data) ? res.data : []
-        const flatten = flattenCategoryTree(treeData)
-        if (treeData.length > 0 && flatten.length > 0) {
-            categoryTree.value = treeData
-            category.value = flatten
-            defaultCategoryId.value = flatten[0].id
-        } else {
-            categoryTree.value = [...fallbackCategoryTree]
-            category.value = [...fallbackCategory]
-            defaultCategoryId.value = fallbackCategory[0].id
-        }
-    } catch (error) {
-        console.error('加载商城商品分类失败，使用默认分类兜底:', error)
-        categoryTree.value = [...fallbackCategoryTree]
-        category.value = [...fallbackCategory]
-        defaultCategoryId.value = fallbackCategory[0].id
-    } finally {
-        categoryLoading.value = false
-        devices.value.forEach((device) => {
-            if (isEmptyCategory(device.category)) {
-                device.category = defaultCategoryId.value
-            }
-            device.category_path = normalizeCategoryPath(device.category_path, device.category)
-        })
-    }
 }
 
 // 监听visible属性变化
@@ -1052,7 +1014,7 @@ const handleConfirm = async () => {
 onMounted(() => {
     updateResponsiveState()
     window.addEventListener('resize', updateResponsiveState)
-    loadGoodsCategoryTree()
+    useFallbackCategoryTree()
 })
 
 onBeforeUnmount(() => {

@@ -1,0 +1,2 @@
+-- The schema is installed by addon\recycle_quote_spider\Addon::install().
+-- Keep this file empty so the framework installer does not run plugin DDL in a transaction.

@@ -48,9 +48,12 @@ class DeviceQueryConfigService extends BaseAdminService
             $serviceMappings = array_values(array_filter($mappings, static function ($mapping) use ($service) {
                 return (string)($mapping['service_code'] ?? '') === (string)($service['code'] ?? '');
             }));
+            $enabledServiceMappings = array_values(array_filter($serviceMappings, static function ($mapping) {
+                return !empty($mapping['enabled']);
+            }));
 
             $channelKeys = [];
-            foreach ($serviceMappings as $mapping) {
+            foreach ($enabledServiceMappings as $mapping) {
                 $channelKey = (string)($mapping['channel_key'] ?? '');
                 if ($channelKey !== '' && isset($channelMap[$channelKey])) {
                     $channelKeys[] = $channelKey;
@@ -70,6 +73,7 @@ class DeviceQueryConfigService extends BaseAdminService
                 'result_handler' => (string)($service['result_handler'] ?? 'generic'),
                 'channel_count' => count(array_unique($channelKeys)),
                 'mapping_count' => count($serviceMappings),
+                'enabled_mapping_count' => count($enabledServiceMappings),
                 'channels' => array_values(array_unique($channelKeys)),
             ];
         }

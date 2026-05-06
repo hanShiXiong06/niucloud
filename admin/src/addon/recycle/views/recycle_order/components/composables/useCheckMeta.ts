@@ -24,6 +24,22 @@ export interface CheckMetaPayload {
   fix_ids: string[]
   activation_lock: boolean
   mdm_lock: boolean
+  custom_fields?: Record<string, any>
+  template_id?: number | string
+  template_version?: number | string
+}
+
+export interface CheckTemplateField {
+  id?: number | string
+  field_key: string
+  field_name: string
+  component: string
+  unit?: string
+  placeholder?: string
+  default_value?: any
+  result_visible?: number
+  result_template?: string
+  options?: DictOptionItem[]
 }
 
 interface DeviceCheckMetaSource {
@@ -46,6 +62,8 @@ interface DeviceFormLike {
 interface UseCheckMetaOptions {
   dictOptions: ComputedRef<CheckOptionsGroup>
   deviceForm: DeviceFormLike
+  fieldConfigByKey?: ComputedRef<Record<string, CheckTemplateField>>
+  templateInfo?: ComputedRef<Record<string, any> | null>
 }
 
 interface TemplateSelections {
@@ -58,6 +76,7 @@ interface TemplateSelections {
   fixIds: string[]
   activationLock: boolean
   mdmLock: boolean
+  customFields: Record<string, any>
 }
 
 function toOptionalNumber(value: any): number | undefined {
@@ -86,7 +105,32 @@ export function normalizeInfo(rawInfo: any): Record<string, any> {
   return typeof rawInfo === 'object' ? { ...rawInfo } : {}
 }
 
-export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
+function isEmptyValue(value: any): boolean {
+  if (value === '' || value === null || value === undefined) return true
+  return Array.isArray(value) && value.length === 0
+}
+
+function optionLabels(options: DictOptionItem[] = [], value: any): string[] {
+  const values = Array.isArray(value) ? value.map((item) => toStringValue(item)) : [toStringValue(value)]
+  const map: Record<string, string> = {}
+  options.forEach((item) => {
+    map[toStringValue(item.value)] = item.name
+  })
+  return values.map((item) => map[item] || item).filter(Boolean)
+}
+
+function renderResultTemplate(template: string, value: any, labels: string[], field?: CheckTemplateField): string {
+  const valueText = Array.isArray(value) ? value.join('、') : toStringValue(value)
+  const labelText = labels[0] || valueText
+  return template
+    .replace(/\{value\}/g, valueText)
+    .replace(/\{label\}/g, labelText)
+    .replace(/\{labels\}/g, labels.join('、'))
+    .replace(/\{name\}/g, field?.field_name || '')
+    .replace(/\{unit\}/g, field?.unit || '')
+}
+
+export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templateInfo }: UseCheckMetaOptions) {
   const templateSelections = reactive<TemplateSelections>({
     battery: undefined,
     battery_num: undefined,
@@ -96,7 +140,8 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     functionIds: [],
     fixIds: [],
     activationLock: false,
-    mdmLock: false
+    mdmLock: false,
+    customFields: {}
   })
 
   // ==================== 字典映射 ====================
@@ -148,6 +193,9 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     if (templateSelections.appearanceId) count++
     count += templateSelections.functionIds.length
     count += templateSelections.fixIds.length
+    Object.values(templateSelections.customFields).forEach((value) => {
+      if (!isEmptyValue(value)) count++
+    })
     return count
   })
 
@@ -164,7 +212,10 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       function_ids: templateSelections.functionIds.map((item) => toStringValue(item)),
       fix_ids: templateSelections.fixIds.map((item) => toStringValue(item)),
       activation_lock: !!templateSelections.activationLock,
-      mdm_lock: !!templateSelections.mdmLock
+      mdm_lock: !!templateSelections.mdmLock,
+      custom_fields: { ...templateSelections.customFields },
+      template_id: templateInfo?.value?.id,
+      template_version: templateInfo?.value?.version
     }
   }
 
@@ -172,6 +223,10 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     const normalizedInfo = normalizeInfo(deviceForm.info)
     return {
       ...normalizedInfo,
+      capacity: deviceForm.capacity || normalizedInfo.capacity || '',
+      color: deviceForm.color || normalizedInfo.color || '',
+      system_version: deviceForm.system_version || normalizedInfo.system_version || '',
+      warranty_info: deviceForm.warranty_info || normalizedInfo.warranty_info || '',
       check_meta: buildCheckMeta()
     }
   }
@@ -181,6 +236,18 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
   const updateCheckResult = () => {
     const checkMeta = buildCheckMeta()
     const results: string[] = []
+    const fieldMap = fieldConfigByKey?.value || {}
+
+    const pushKnownResult = (fieldKey: string, value: any, labels: string[], fallback: string) => {
+      const field = fieldMap[fieldKey]
+      if (field && Number(field.result_visible) !== 1) return
+      if (field?.result_template) {
+        const text = renderResultTemplate(field.result_template, value, labels, field)
+        if (text) results.push(text)
+        return
+      }
+      if (fallback) results.push(fallback)
+    }
 
     const screenName = checkMeta.screen_id ? optionNameById.value.screen[checkMeta.screen_id] : ''
     const indisplayName = checkMeta.indisplay_id ? optionNameById.value.indisplay[checkMeta.indisplay_id] : ''
@@ -192,33 +259,52 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       .map((id) => optionNameById.value.fix[id])
       .filter(Boolean)
 
+    ;(['capacity', 'color', 'system_version', 'warranty_info'] as const).forEach((fieldKey) => {
+      const value = deviceForm[fieldKey]
+      if (isEmptyValue(value)) return
+      pushKnownResult(fieldKey, value, [toStringValue(value)], '')
+    })
+
     if (checkMeta.battery !== undefined) {
-      results.push(`电池健康度${checkMeta.battery}%`)
+      pushKnownResult('battery', checkMeta.battery, [toStringValue(checkMeta.battery)], `电池健康度${checkMeta.battery}%`)
     }
     if (checkMeta.battery_num !== undefined) {
-      results.push(`循环${checkMeta.battery_num}次`)
+      pushKnownResult('battery_num', checkMeta.battery_num, [toStringValue(checkMeta.battery_num)], `循环${checkMeta.battery_num}次`)
     }
     if (checkMeta.activation_lock) {
-      results.push('激活锁开启')
+      pushKnownResult('activation_lock', true, ['开启'], '激活锁开启')
     }
     if (checkMeta.mdm_lock) {
-      results.push('监管锁开启')
+      pushKnownResult('mdm_lock', true, ['开启'], '监管锁开启')
     }
     if (screenName) {
-      results.push(`外屏${screenName}`)
+      pushKnownResult('screen_id', checkMeta.screen_id, [screenName], `外屏${screenName}`)
     }
     if (indisplayName) {
-      results.push(`内屏${indisplayName}`)
+      pushKnownResult('indisplay_id', checkMeta.indisplay_id, [indisplayName], `内屏${indisplayName}`)
     }
     if (appearanceName) {
-      results.push(`中框${appearanceName}`)
+      pushKnownResult('appearance_id', checkMeta.appearance_id, [appearanceName], `中框${appearanceName}`)
     }
     if (functionNames.length > 0) {
-      results.push(`功能: ${functionNames.join('、')}`)
+      pushKnownResult('function_ids', checkMeta.function_ids, functionNames, `功能: ${functionNames.join('、')}`)
     }
     if (fixNames.length > 0) {
-      results.push(`维修记录: ${fixNames.join('、')}`)
+      pushKnownResult('fix_ids', checkMeta.fix_ids, fixNames, `维修记录: ${fixNames.join('、')}`)
     }
+
+    Object.entries(templateSelections.customFields).forEach(([fieldKey, value]) => {
+      if (isEmptyValue(value)) return
+      const field = fieldMap[fieldKey]
+      if (!field || Number(field.result_visible) !== 1) return
+      const labels = optionLabels(field.options || [], value)
+      if (field.result_template) {
+        const text = renderResultTemplate(field.result_template, value, labels, field)
+        if (text) results.push(text)
+      return
+      }
+      results.push(`${field.field_name}: ${labels.length ? labels.join('、') : toStringValue(value)}${field.unit || ''}`)
+    })
 
     // 从 info 中读取保修信息，保证不会被质检选项覆盖丢失
     const info = normalizeInfo(deviceForm.info)
@@ -250,6 +336,7 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     templateSelections.fixIds = []
     templateSelections.activationLock = false
     templateSelections.mdmLock = false
+    templateSelections.customFields = {}
   }
 
   const clearAllSelections = () => {
@@ -274,6 +361,7 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       .filter(Boolean)
     templateSelections.activationLock = !!meta.activation_lock
     templateSelections.mdmLock = !!meta.mdm_lock
+    templateSelections.customFields = { ...(meta.custom_fields || {}) }
   }
 
   const parseCheckMeta = (source: any): CheckMetaPayload | null => {
@@ -309,7 +397,10 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
       function_ids: functionIds,
       fix_ids: fixIds,
       activation_lock: !!(parsed.activation_lock ?? parsed.activationLock),
-      mdm_lock: !!(parsed.mdm_lock ?? parsed.mdmLock)
+      mdm_lock: !!(parsed.mdm_lock ?? parsed.mdmLock),
+      custom_fields: typeof parsed.custom_fields === 'object' && parsed.custom_fields ? { ...parsed.custom_fields } : {},
+      template_id: parsed.template_id,
+      template_version: parsed.template_version
     }
   }
 
@@ -464,6 +555,11 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     updateCheckResult()
   }
 
+  const setCustomFieldValue = (fieldKey: string, value: any) => {
+    templateSelections.customFields[fieldKey] = value
+    updateCheckResult()
+  }
+
   // ==================== 常用模板 ====================
 
   const fillCommonResult = () => {
@@ -481,6 +577,7 @@ export function useCheckMeta({ dictOptions, deviceForm }: UseCheckMetaOptions) {
     templateSelections,
     checkedCount,
     optionNameById,
+    setCustomFieldValue,
     getSubmitInfo,
     updateCheckResult,
     clearAllSelections,

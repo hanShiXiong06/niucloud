@@ -1,0 +1,560 @@
+<?php
+declare(strict_types=1);
+
+namespace addon\recycle\app\service\admin\check;
+
+use addon\recycle\app\model\check\RecycleCheckField;
+use addon\recycle\app\model\check\RecycleCheckGroup;
+use addon\recycle\app\model\check\RecycleCheckOption;
+use addon\recycle\app\model\check\RecycleCheckTemplate;
+use core\base\BaseAdminService;
+use core\exception\CommonException;
+use think\facade\Db;
+
+class RecycleCheckTemplateService extends BaseAdminService
+{
+    private RecycleCheckTemplate $templateModel;
+    private RecycleCheckGroup $groupModel;
+    private RecycleCheckField $fieldModel;
+    private RecycleCheckOption $optionModel;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->templateModel = new RecycleCheckTemplate();
+        $this->groupModel = new RecycleCheckGroup();
+        $this->fieldModel = new RecycleCheckField();
+        $this->optionModel = new RecycleCheckOption();
+        $this->model = $this->templateModel;
+    }
+
+    public function getPage(array $where = []): array
+    {
+        $where['site_id'] = $this->site_id;
+        $query = $this->templateModel
+            ->withSearch(['site_id', 'status', 'scene', 'keyword'], $where)
+            ->order('sort asc,id desc');
+        return $this->pageQuery($query);
+    }
+
+    public function all(array $where = []): array
+    {
+        $where['site_id'] = $this->site_id;
+        return $this->templateModel
+            ->withSearch(['site_id', 'status', 'scene', 'keyword'], $where)
+            ->order('sort asc,id desc')
+            ->select()
+            ->toArray();
+    }
+
+    public function info(int $id): array
+    {
+        $info = $this->templateModel->where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $id],
+        ])->findOrEmpty()->toArray();
+        if (empty($info)) {
+            throw new CommonException('质检模板不存在');
+        }
+        return $info;
+    }
+
+    public function addTemplate(array $data): int
+    {
+        $name = trim((string)($data['template_name'] ?? ''));
+        if ($name === '') {
+            throw new CommonException('请输入模板名称');
+        }
+        $key = trim((string)($data['template_key'] ?? ''));
+        if ($key === '') {
+            $key = 'custom_' . time();
+        }
+        $record = $this->templateModel->create([
+            'site_id' => $this->site_id,
+            'template_key' => $key,
+            'template_name' => $name,
+            'scene' => (string)($data['scene'] ?? 'phone'),
+            'is_default' => (int)($data['is_default'] ?? 0),
+            'status' => (int)($data['status'] ?? 1),
+            'sort' => (int)($data['sort'] ?? 0),
+            'version' => 1,
+        ]);
+        if ((int)($data['is_default'] ?? 0) === 1) {
+            $this->setDefault((int)$record->id);
+        }
+        return (int)$record->id;
+    }
+
+    public function editTemplate(int $id, array $data): bool
+    {
+        $this->info($id);
+        $save = [];
+        foreach (['template_key', 'template_name', 'scene'] as $field) {
+            if (array_key_exists($field, $data) && $data[$field] !== '') {
+                $save[$field] = (string)$data[$field];
+            }
+        }
+        foreach (['is_default', 'status', 'sort'] as $field) {
+            if (array_key_exists($field, $data) && $data[$field] !== '') {
+                $save[$field] = (int)$data[$field];
+            }
+        }
+        $save['version'] = Db::raw('version + 1');
+        $this->templateModel->where('id', $id)->update($save);
+        if ((int)($data['is_default'] ?? 0) === 1) {
+            $this->setDefault($id);
+        }
+        return true;
+    }
+
+    public function deleteTemplate(int $id): bool
+    {
+        $this->info($id);
+        $fieldIds = $this->fieldModel->where('template_id', $id)->column('id');
+        if (!empty($fieldIds)) {
+            $this->optionModel->whereIn('field_id', $fieldIds)->delete();
+        }
+        $this->fieldModel->where('template_id', $id)->delete();
+        $this->groupModel->where('template_id', $id)->delete();
+        $this->templateModel->where('id', $id)->delete();
+        return true;
+    }
+
+    public function setDefault(int $id): bool
+    {
+        $template = $this->info($id);
+        $this->templateModel->where([
+            ['site_id', '=', $this->site_id],
+            ['scene', '=', $template['scene']],
+        ])->update(['is_default' => 0]);
+        $this->templateModel->where('id', $id)->update(['is_default' => 1, 'status' => 1]);
+        return true;
+    }
+
+    public function groups(int $templateId): array
+    {
+        $this->info($templateId);
+        return $this->groupModel->where([
+            ['site_id', '=', $this->site_id],
+            ['template_id', '=', $templateId],
+        ])->order('sort asc,id asc')->select()->toArray();
+    }
+
+    public function saveGroup(array $data): int
+    {
+        $templateId = (int)($data['template_id'] ?? 0);
+        $this->info($templateId);
+        $id = (int)($data['id'] ?? 0);
+        $save = [
+            'site_id' => $this->site_id,
+            'template_id' => $templateId,
+            'group_key' => (string)($data['group_key'] ?? ''),
+            'group_name' => (string)($data['group_name'] ?? ''),
+            'description' => (string)($data['description'] ?? ''),
+            'sort' => (int)($data['sort'] ?? 0),
+            'status' => (int)($data['status'] ?? 1),
+        ];
+        if ($save['group_key'] === '' || $save['group_name'] === '') {
+            throw new CommonException('请填写分组标识和分组名称');
+        }
+        if ($id > 0) {
+            $this->groupModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->update($save);
+            $this->touchTemplate($templateId);
+            return $id;
+        }
+        $record = $this->groupModel->create($save);
+        $this->touchTemplate($templateId);
+        return (int)$record->id;
+    }
+
+    public function deleteGroup(int $id): bool
+    {
+        $group = $this->groupModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
+        if (empty($group)) {
+            throw new CommonException('质检分组不存在');
+        }
+        $fieldIds = $this->fieldModel->where('group_id', $id)->column('id');
+        if (!empty($fieldIds)) {
+            $this->optionModel->whereIn('field_id', $fieldIds)->delete();
+        }
+        $this->fieldModel->where('group_id', $id)->delete();
+        $this->groupModel->where('id', $id)->delete();
+        $this->touchTemplate((int)$group['template_id']);
+        return true;
+    }
+
+    public function fields(int $templateId, int $groupId = 0): array
+    {
+        $this->info($templateId);
+        $query = $this->fieldModel->where([
+            ['site_id', '=', $this->site_id],
+            ['template_id', '=', $templateId],
+        ]);
+        if ($groupId > 0) {
+            $query->where('group_id', '=', $groupId);
+        }
+        $fields = $query->order('sort asc,id asc')->select()->toArray();
+        $fieldIds = array_column($fields, 'id');
+        $options = empty($fieldIds) ? [] : $this->optionModel
+            ->whereIn('field_id', $fieldIds)
+            ->order('sort asc,id asc')
+            ->select()
+            ->toArray();
+        $optionMap = [];
+        foreach ($options as $option) {
+            $optionMap[(int)$option['field_id']][] = $option;
+        }
+        foreach ($fields as &$field) {
+            $field['options'] = $optionMap[(int)$field['id']] ?? [];
+        }
+        return $fields;
+    }
+
+    public function saveField(array $data): int
+    {
+        $templateId = (int)($data['template_id'] ?? 0);
+        $this->info($templateId);
+        $id = (int)($data['id'] ?? 0);
+        $save = [
+            'site_id' => $this->site_id,
+            'template_id' => $templateId,
+            'group_id' => (int)($data['group_id'] ?? 0),
+            'field_key' => (string)($data['field_key'] ?? ''),
+            'field_name' => (string)($data['field_name'] ?? ''),
+            'component' => (string)($data['component'] ?? 'input'),
+            'selection_mode' => (string)($data['selection_mode'] ?? ''),
+            'unit' => (string)($data['unit'] ?? ''),
+            'placeholder' => (string)($data['placeholder'] ?? ''),
+            'default_value' => (string)($data['default_value'] ?? ''),
+            'is_required' => (int)($data['is_required'] ?? 0),
+            'is_show' => (int)($data['is_show'] ?? 1),
+            'seller_visible' => (int)($data['seller_visible'] ?? 1),
+            'buyer_visible' => (int)($data['buyer_visible'] ?? 0),
+            'result_visible' => (int)($data['result_visible'] ?? 1),
+            'result_template' => (string)($data['result_template'] ?? ''),
+            'api_fill_enabled' => (int)($data['api_fill_enabled'] ?? 0),
+            'api_fill_policy' => (string)($data['api_fill_policy'] ?? 'empty_only'),
+            'sort' => (int)($data['sort'] ?? 0),
+            'extra_config' => $this->normalizeJsonConfig($data['extra_config'] ?? []),
+        ];
+        if ($save['group_id'] <= 0 || $save['field_key'] === '' || $save['field_name'] === '') {
+            throw new CommonException('请填写字段分组、字段标识和字段名称');
+        }
+        if ($id > 0) {
+            $this->fieldModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->update($save);
+            $this->touchTemplate($templateId);
+            return $id;
+        }
+        $record = $this->fieldModel->create($save);
+        $this->touchTemplate($templateId);
+        return (int)$record->id;
+    }
+
+    public function deleteField(int $id): bool
+    {
+        $field = $this->fieldModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
+        if (empty($field)) {
+            throw new CommonException('质检字段不存在');
+        }
+        $this->optionModel->where('field_id', $id)->delete();
+        $this->fieldModel->where('id', $id)->delete();
+        $this->touchTemplate((int)$field['template_id']);
+        return true;
+    }
+
+    public function saveOption(array $data): int
+    {
+        $fieldId = (int)($data['field_id'] ?? 0);
+        $field = $this->fieldModel->where([['id', '=', $fieldId], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
+        if (empty($field)) {
+            throw new CommonException('质检字段不存在');
+        }
+        $id = (int)($data['id'] ?? 0);
+        $save = [
+            'site_id' => $this->site_id,
+            'field_id' => $fieldId,
+            'option_label' => (string)($data['option_label'] ?? ''),
+            'option_value' => (string)($data['option_value'] ?? ''),
+            'is_default' => (int)($data['is_default'] ?? 0),
+            'is_show' => (int)($data['is_show'] ?? 1),
+            'sort' => (int)($data['sort'] ?? 0),
+            'extra_config' => $this->normalizeJsonConfig($data['extra_config'] ?? []),
+        ];
+        if ($save['option_label'] === '') {
+            throw new CommonException('请输入选项名称');
+        }
+        if ($save['option_value'] === '') {
+            $save['option_value'] = (string)time();
+        }
+        if ($id > 0) {
+            $this->optionModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->update($save);
+            $this->touchTemplate((int)$field['template_id']);
+            return $id;
+        }
+        $record = $this->optionModel->create($save);
+        $this->touchTemplate((int)$field['template_id']);
+        return (int)$record->id;
+    }
+
+    public function deleteOption(int $id): bool
+    {
+        $option = $this->optionModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
+        if (empty($option)) {
+            throw new CommonException('质检选项不存在');
+        }
+        $field = $this->fieldModel->where('id', (int)$option['field_id'])->findOrEmpty()->toArray();
+        $this->optionModel->where('id', $id)->delete();
+        if (!empty($field)) {
+            $this->touchTemplate((int)$field['template_id']);
+        }
+        return true;
+    }
+
+    public function schema(array $where = []): array
+    {
+        $templateId = (int)($where['template_id'] ?? 0);
+        if ($templateId > 0) {
+            $template = $this->info($templateId);
+        } else {
+            $scene = (string)($where['scene'] ?? 'phone');
+            $template = $this->templateModel->where([
+                ['site_id', '=', $this->site_id],
+                ['scene', '=', $scene],
+                ['status', '=', 1],
+            ])->order('is_default desc,sort asc,id asc')->findOrEmpty()->toArray();
+            if (empty($template)) {
+                $this->initDefault();
+                $template = $this->templateModel->where([
+                    ['site_id', '=', $this->site_id],
+                    ['scene', '=', $scene],
+                    ['status', '=', 1],
+                ])->order('is_default desc,sort asc,id asc')->findOrEmpty()->toArray();
+            }
+        }
+        if (empty($template)) {
+            return ['template' => null, 'groups' => []];
+        }
+
+        $groups = $this->groupModel->where([
+            ['site_id', '=', $this->site_id],
+            ['template_id', '=', $template['id']],
+            ['status', '=', 1],
+        ])->order('sort asc,id asc')->select()->toArray();
+        $fields = $this->fieldModel->where([
+            ['site_id', '=', $this->site_id],
+            ['template_id', '=', $template['id']],
+            ['is_show', '=', 1],
+        ])->order('sort asc,id asc')->select()->toArray();
+        $fieldIds = array_column($fields, 'id');
+        $options = empty($fieldIds) ? [] : $this->optionModel
+            ->whereIn('field_id', $fieldIds)
+            ->where('is_show', 1)
+            ->order('sort asc,id asc')
+            ->select()
+            ->toArray();
+        $optionMap = [];
+        foreach ($options as $option) {
+            $optionMap[(int)$option['field_id']][] = $this->formatOption($option);
+        }
+        $fieldMap = [];
+        foreach ($fields as $field) {
+            $fieldMap[(int)$field['group_id']][] = $this->formatField($field, $optionMap[(int)$field['id']] ?? []);
+        }
+        foreach ($groups as &$group) {
+            $group['fields'] = $fieldMap[(int)$group['id']] ?? [];
+        }
+        return [
+            'template' => $template,
+            'groups' => $groups,
+        ];
+    }
+
+    public function initDefault(): array
+    {
+        $existing = $this->templateModel->where([
+            ['site_id', '=', $this->site_id],
+            ['template_key', '=', 'default_phone'],
+        ])->findOrEmpty()->toArray();
+        if (!empty($existing)) {
+            return $this->schema(['template_id' => (int)$existing['id']]);
+        }
+
+        $template = $this->templateModel->create([
+            'site_id' => $this->site_id,
+            'template_key' => 'default_phone',
+            'template_name' => '默认手机质检模板',
+            'scene' => 'phone',
+            'is_default' => 1,
+            'status' => 1,
+            'sort' => 0,
+            'version' => 1,
+        ]);
+        $templateId = (int)$template->id;
+
+        $groups = [
+            ['device_info', '设备信息', '容量、颜色、系统、保修、电池和锁', 10],
+            ['appearance', '外观规格', '外屏、内屏、中框等外观判断', 20],
+            ['issues', '问题记录', '功能异常和维修记录', 30],
+        ];
+        $groupIds = [];
+        foreach ($groups as [$key, $name, $description, $sort]) {
+            $group = $this->groupModel->create([
+                'site_id' => $this->site_id,
+                'template_id' => $templateId,
+                'group_key' => $key,
+                'group_name' => $name,
+                'description' => $description,
+                'sort' => $sort,
+                'status' => 1,
+            ]);
+            $groupIds[$key] = (int)$group->id;
+        }
+
+        $this->createDefaultField($templateId, $groupIds['device_info'], 'capacity', '内存', 'input', '', '', '如 256GB', '', '内存{value}', 10);
+        $this->createDefaultField($templateId, $groupIds['device_info'], 'color', '颜色', 'input', '', '', '如 深空黑色', '', '颜色{value}', 20);
+        $this->createDefaultField($templateId, $groupIds['device_info'], 'system_version', '系统版本', 'input', '', '', '如 iOS 17.3.1', '', '系统{value}', 30);
+        $this->createDefaultField($templateId, $groupIds['device_info'], 'warranty_info', '保修信息', 'input', '', '', '保修日期/过保/未激活', '', '保修: {value}', 40);
+        $this->createDefaultField($templateId, $groupIds['device_info'], 'battery', '电池健康度', 'number', '', '%', '', '', '电池健康度{value}%', 50);
+        $this->createDefaultField($templateId, $groupIds['device_info'], 'battery_num', '循环次数', 'number', '', '次', '', '', '循环{value}次', 60);
+        $this->createDefaultField($templateId, $groupIds['device_info'], 'activation_lock', '激活锁', 'switch', '', '', '', '', '激活锁开启', 70);
+        $this->createDefaultField($templateId, $groupIds['device_info'], 'mdm_lock', '监管锁', 'switch', '', '', '', '', '监管锁开启', 80);
+
+        $this->createDefaultField($templateId, $groupIds['appearance'], 'screen_id', '外屏规格', 'radio', 'single', '', '', 'recycle_display', '外屏{label}', 10);
+        $this->createDefaultField($templateId, $groupIds['appearance'], 'indisplay_id', '内屏规格', 'radio', 'single', '', '', 'recycle_indisplay', '内屏{label}', 20);
+        $this->createDefaultField($templateId, $groupIds['appearance'], 'appearance_id', '中框规格', 'radio', 'single', '', '', 'recycle_appearance', '中框{label}', 30);
+
+        $this->createDefaultField($templateId, $groupIds['issues'], 'function_ids', '功能异常', 'checkbox', 'multiple', '', '', 'recycle_function', '功能: {labels}', 10);
+        $this->createDefaultField($templateId, $groupIds['issues'], 'fix_ids', '维修记录', 'checkbox', 'multiple', '', '', 'recycle_fix', '维修记录: {labels}', 20);
+
+        return $this->schema(['template_id' => $templateId]);
+    }
+
+    private function createDefaultField(int $templateId, int $groupId, string $key, string $name, string $component, string $mode, string $unit, string $placeholder, string $dictKey, string $resultTemplate, int $sort): void
+    {
+        $field = $this->fieldModel->create([
+            'site_id' => $this->site_id,
+            'template_id' => $templateId,
+            'group_id' => $groupId,
+            'field_key' => $key,
+            'field_name' => $name,
+            'component' => $component,
+            'selection_mode' => $mode,
+            'unit' => $unit,
+            'placeholder' => $placeholder,
+            'default_value' => '',
+            'is_required' => 0,
+            'is_show' => 1,
+            'seller_visible' => 1,
+            'buyer_visible' => 0,
+            'result_visible' => 1,
+            'result_template' => $resultTemplate,
+            'api_fill_enabled' => in_array($key, ['capacity', 'color', 'system_version', 'warranty_info', 'activation_lock', 'mdm_lock'], true) ? 1 : 0,
+            'api_fill_policy' => 'overwrite',
+            'sort' => $sort,
+            'extra_config' => [],
+        ]);
+        if ($dictKey !== '') {
+            $this->createOptionsFromDict((int)$field->id, $dictKey);
+        }
+    }
+
+    private function createOptionsFromDict(int $fieldId, string $dictKey): void
+    {
+        $dict = Db::name('sys_dict')->where('key', $dictKey)->find();
+        $items = [];
+        if (!empty($dict['dictionary'])) {
+            $decoded = is_string($dict['dictionary']) ? json_decode($dict['dictionary'], true) : $dict['dictionary'];
+            if (is_array($decoded)) {
+                $items = $decoded;
+            }
+        }
+        if (empty($items)) {
+            $items = $this->fallbackDictItems($dictKey);
+        }
+        foreach ($items as $index => $item) {
+            $label = (string)($item['name'] ?? $item['label'] ?? '');
+            if ($label === '') {
+                continue;
+            }
+            $this->optionModel->create([
+                'site_id' => $this->site_id,
+                'field_id' => $fieldId,
+                'option_label' => $label,
+                'option_value' => (string)($item['value'] ?? ($index + 1)),
+                'is_default' => 0,
+                'is_show' => 1,
+                'sort' => (int)($item['sort'] ?? $index),
+                'extra_config' => [],
+            ]);
+        }
+    }
+
+    private function fallbackDictItems(string $dictKey): array
+    {
+        $defaults = [
+            'recycle_display' => ['无划痕', '细微划痕', '小划痕', '明显划痕', '硬划痕', '外爆', '内爆', '未知部件', '官方提示'],
+            'recycle_indisplay' => ['正常', '漏液', '老化', '亮点/坏点', '阴阳屏', '烧屏', '内爆'],
+            'recycle_appearance' => ['无磕碰', '细微划痕', '轻微氧化', '中度磨损', '重度磨损', '严重损坏', '组装壳', '组装后玻璃'],
+            'recycle_function' => ['通话', '充电', '指纹', '面容', 'WiFi', '蓝牙', '指南针', 'NFC', '振动', '重力', '距离感应', '光线感应', '闪光', '触摸', '主麦', '前麦', '后麦', '扬声器', '听筒', '网络锁', '按键', '前摄', '后摄'],
+            'recycle_fix' => ['原装', '换屏', '换电池', '换后盖', '换摄像头', '主板维修', '其他维修'],
+        ];
+        return array_map(static fn($name, $index) => ['name' => $name, 'value' => (string)($index + 1), 'sort' => $index], $defaults[$dictKey] ?? [], array_keys($defaults[$dictKey] ?? []));
+    }
+
+    private function formatField(array $field, array $options): array
+    {
+        return [
+            'id' => (int)$field['id'],
+            'field_key' => $field['field_key'],
+            'field_name' => $field['field_name'],
+            'component' => $field['component'],
+            'selection_mode' => $field['selection_mode'],
+            'unit' => $field['unit'],
+            'placeholder' => $field['placeholder'],
+            'default_value' => $field['default_value'],
+            'is_required' => (int)$field['is_required'],
+            'seller_visible' => (int)$field['seller_visible'],
+            'buyer_visible' => (int)$field['buyer_visible'],
+            'result_visible' => (int)$field['result_visible'],
+            'result_template' => $field['result_template'],
+            'api_fill_enabled' => (int)$field['api_fill_enabled'],
+            'api_fill_policy' => $field['api_fill_policy'],
+            'sort' => (int)$field['sort'],
+            'extra_config' => $field['extra_config'] ?? [],
+            'options' => $options,
+        ];
+    }
+
+    private function formatOption(array $option): array
+    {
+        return [
+            'id' => (int)$option['id'],
+            'name' => $option['option_label'],
+            'label' => $option['option_label'],
+            'value' => (string)$option['option_value'],
+            'is_default' => (int)$option['is_default'],
+            'sort' => (int)$option['sort'],
+            'extra_config' => $option['extra_config'] ?? [],
+        ];
+    }
+
+    private function normalizeJsonConfig($value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+        return [];
+    }
+
+    private function touchTemplate(int $templateId): void
+    {
+        $this->templateModel->where('id', $templateId)->update([
+            'version' => Db::raw('version + 1'),
+            'update_at' => time(),
+        ]);
+    }
+}

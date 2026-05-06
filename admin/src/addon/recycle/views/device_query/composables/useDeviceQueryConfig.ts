@@ -10,6 +10,12 @@ import {
   testDeviceQueryConnection,
   updateDeviceQueryConfigStatus
 } from '@/addon/recycle/api/device_query_config'
+import {
+  deviceQueryServicePresets,
+  providerPresets,
+  type DeviceQueryProviderPreset,
+  type DeviceQueryServicePreset
+} from '../constants/providerPresets'
 
 export const providerOptions = [
   { label: '3023 路径接口', value: 'path_query' },
@@ -296,6 +302,13 @@ export function useDeviceQueryConfig() {
   const channels = ref<any[]>([])
   const mappings = ref<any[]>([])
   const config = reactive(defaultBaseConfig())
+  const providerFilter = ref('')
+  const categoryFilter = ref('')
+  const serviceKeyword = ref('')
+  const presetProviderFilter = ref('')
+  const presetCategoryFilter = ref('')
+  const presetKeyword = ref('')
+  const selectedPresetKeys = ref<string[]>([])
 
   const serviceDialogVisible = ref(false)
   const channelDialogVisible = ref(false)
@@ -323,6 +336,86 @@ export function useDeviceQueryConfig() {
 
   const getChannel = (channelKey: string) => channels.value.find(item => item.key === channelKey) || null
   const getService = (serviceCode: string) => services.value.find(item => item.code === serviceCode) || null
+
+  const filteredServices = computed(() => {
+    const keyword = serviceKeyword.value.trim().toLowerCase()
+    return services.value
+      .filter(service => {
+        if (categoryFilter.value && service.category !== categoryFilter.value && service.category_label !== categoryFilter.value) return false
+        if (providerFilter.value) {
+          const hasProvider = mappings.value.some(mapping => mapping.service_code === service.code && mapping.channel_key === providerFilter.value)
+          if (!hasProvider) return false
+        }
+        if (!keyword) return true
+        return [service.name, service.code, service.category]
+          .some(value => String(value || '').toLowerCase().includes(keyword))
+      })
+      .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0))
+  })
+
+  const filteredMappings = computed(() => {
+    const keyword = serviceKeyword.value.trim().toLowerCase()
+    return mappings.value.filter(mapping => {
+      const service = getService(String(mapping.service_code || ''))
+      if (providerFilter.value && mapping.channel_key !== providerFilter.value) return false
+      if (categoryFilter.value && service?.category !== categoryFilter.value && service?.category_label !== categoryFilter.value) return false
+      if (!keyword) return true
+      return [
+        service?.name,
+        mapping.service_code,
+        mapping.channel_key,
+        mapping.endpoint_value
+      ].some(value => String(value || '').toLowerCase().includes(keyword))
+    })
+  })
+
+  const providerStatusRows = computed(() => providerPresets.map(provider => {
+    const channel = getChannel(provider.key)
+    const providerMappings = mappings.value.filter(mapping => mapping.channel_key === provider.key)
+    const enabledMappings = providerMappings.filter(mapping => Number(mapping.enabled) === 1)
+    const channelEnabled = Number(channel?.enabled || 0) === 1
+    const visibleServices = services.value.filter(service => (
+      channelEnabled
+      && Number(service.enabled) === 1
+      && Number(service.show_in_check) === 1
+      && enabledMappings.some(mapping => mapping.service_code === service.code)
+    ))
+
+    return {
+      ...provider,
+      channel,
+      imported: !!channel,
+      enabled: channelEnabled ? 1 : 0,
+      mapping_total: providerMappings.length,
+      enabled_mapping_total: enabledMappings.length,
+      visible_service_total: visibleServices.length,
+      priority: Number(channel?.priority ?? provider.priority)
+    }
+  }))
+
+  const filteredPresetRows = computed(() => {
+    const keyword = presetKeyword.value.trim().toLowerCase()
+    return deviceQueryServicePresets.filter(row => {
+      if (presetProviderFilter.value && row.provider_key !== presetProviderFilter.value) return false
+      if (presetCategoryFilter.value && row.category_label !== presetCategoryFilter.value) return false
+      if (!keyword) return true
+      return [row.name, row.code, row.endpoint_value, row.category_label, row.provider_name]
+        .some(value => String(value || '').toLowerCase().includes(keyword))
+    })
+  })
+
+  const presetImportStats = computed(() => {
+    const rows = selectedPresetKeys.value.length
+      ? filteredPresetRows.value.filter(row => selectedPresetKeys.value.includes(presetRowKey(row)))
+      : filteredPresetRows.value
+    const serviceCodes = new Set(rows.map(row => row.code))
+    const providers = new Set(rows.map(row => row.provider_key))
+    return {
+      row_total: rows.length,
+      service_total: serviceCodes.size,
+      provider_total: providers.size
+    }
+  })
 
   const getEndpointTypeByChannelKey = (channelKey: string) => {
     return getEndpointTypeByChannel(getChannel(channelKey))
@@ -396,8 +489,7 @@ export function useDeviceQueryConfig() {
 
     const channel = getChannel(String(mapping.channel_key || ''))
     if (!channel) return '渠道不存在'
-    if (!channel.enabled) return '渠道未启用'
-    if (!mapping.enabled) return '映射未启用'
+    if (!mapping.enabled) return ''
     if (!mapping.endpoint_value) return '接口值为空'
     if (!mapping.query_param) return '参数名为空'
 
@@ -413,19 +505,55 @@ export function useDeviceQueryConfig() {
 
   const configDiagnostics = computed(() => {
     const enabledChannels = channels.value.filter(item => Number(item.enabled) === 1)
-    const mappingCountByService = mappings.value.reduce((map: Record<string, number>, mapping) => {
-      if (Number(mapping.enabled) === 1) {
+    const isRunnableMapping = (mapping: any) => {
+      const channel = getChannel(String(mapping.channel_key || ''))
+      return Number(mapping.enabled) === 1
+        && Number(channel?.enabled || 0) === 1
+        && !getMappingProblem(mapping)
+    }
+    const runnableMappingCountByService = mappings.value.reduce((map: Record<string, number>, mapping) => {
+      if (isRunnableMapping(mapping)) {
         map[mapping.service_code] = (map[mapping.service_code] || 0) + 1
       }
       return map
     }, {})
+    const mappingCountByService = mappings.value.reduce((map: Record<string, number>, mapping) => {
+      map[mapping.service_code] = (map[mapping.service_code] || 0) + 1
+      return map
+    }, {})
     const serviceProblems = services.value
-      .filter(service => Number(service.enabled) === 1 && Number(mappingCountByService[service.code] || 0) === 0)
+      .filter(service => (
+        Number(service.enabled) === 1
+        && Number(service.show_in_check) === 1
+        && Number(mappingCountByService[service.code] || 0) === 0
+      ))
       .map(service => ({
         type: 'warning',
         title: `${service.name} 没有接口映射`,
-        desc: '这个查询项不会出现在质检弹窗，也无法执行查询。',
+        desc: '这个质检按钮没有绑定第三方接口，不会出现在质检弹窗，也无法执行查询。',
         action: '补映射'
+      }))
+    const disabledChannelProblems = channels.value
+      .filter(channel => Number(channel.enabled) !== 1)
+      .map(channel => {
+        const affectedMappings = mappings.value.filter(mapping => (
+          mapping.channel_key === channel.key
+          && Number(mapping.enabled) === 1
+          && !!getService(String(mapping.service_code || ''))
+        ))
+        const affectedServices = new Set(affectedMappings.map(mapping => mapping.service_code))
+        return {
+          channel,
+          mapping_total: affectedMappings.length,
+          service_total: affectedServices.size
+        }
+      })
+      .filter(item => item.mapping_total > 0)
+      .map(item => ({
+        type: 'warning',
+        title: `${item.channel.name || item.channel.key} 已停用`,
+        desc: `该服务商下 ${item.service_total} 个查询项、${item.mapping_total} 条映射暂不参与查询。需要使用时启用服务商即可。`,
+        action: '配渠道'
       }))
     const mappingProblems = mappings.value
       .map((mapping, index) => ({
@@ -443,7 +571,7 @@ export function useDeviceQueryConfig() {
     const visibleServices = services.value.filter(service => (
       Number(service.enabled) === 1
       && Number(service.show_in_check) === 1
-      && Number(mappingCountByService[service.code] || 0) > 0
+      && Number(runnableMappingCountByService[service.code] || 0) > 0
     ))
 
     const problems = [
@@ -453,6 +581,7 @@ export function useDeviceQueryConfig() {
         desc: '请先新增并启用 3023 或爱查助手渠道。',
         action: '配渠道'
       }]),
+      ...disabledChannelProblems,
       ...serviceProblems,
       ...mappingProblems,
       ...(visibleServices.length ? [] : [{
@@ -462,6 +591,7 @@ export function useDeviceQueryConfig() {
         action: '开按钮'
       }])
     ]
+    const problemLimit = 6
 
     return {
       channel_total: channels.value.length,
@@ -470,6 +600,8 @@ export function useDeviceQueryConfig() {
       mapping_total: mappings.value.length,
       visible_service_total: visibleServices.length,
       problems,
+      display_problems: problems.slice(0, problemLimit),
+      hidden_problem_total: Math.max(problems.length - problemLimit, 0),
       invalid_mapping_indexes: mappings.value
         .map((mapping, index) => ({ index, problem: getMappingProblem(mapping) }))
         .filter(item => item.problem)
@@ -506,6 +638,127 @@ export function useDeviceQueryConfig() {
     } else {
       mappings.value.push(record)
     }
+  }
+
+  const presetRowKey = (row: Pick<DeviceQueryServicePreset, 'provider_key' | 'code' | 'endpoint_value'>) => {
+    return `${row.provider_key}::${row.code}::${row.endpoint_value}`
+  }
+
+  const ensureProviderChannel = (provider: DeviceQueryProviderPreset, forceEnabled = false) => {
+    const oldChannel = getChannel(provider.key)
+    upsertChannelLocal({
+      key: provider.key,
+      name: provider.name,
+      provider: provider.provider,
+      enabled: forceEnabled ? 1 : Number(oldChannel?.enabled ?? provider.enabled),
+      priority: Number(oldChannel?.priority ?? provider.priority),
+      base_url: oldChannel?.base_url || provider.base_url,
+      method: oldChannel?.method || 'GET',
+      token: oldChannel?.token || '',
+      auth_type: oldChannel?.auth_type || provider.auth_type,
+      auth_key: oldChannel?.auth_key || provider.auth_key,
+      service_id_key: oldChannel?.service_id_key || provider.service_id_key,
+      timeout: oldChannel?.timeout || 300,
+      connect_timeout: oldChannel?.connect_timeout || 10,
+      balance_warning: oldChannel?.balance_warning || 20
+    })
+  }
+
+  const upsertPresetRows = async (rows: DeviceQueryServicePreset[], forceEnableChannel = false) => {
+    if (!rows.length) {
+      ElMessage.warning('没有可导入的接口')
+      return
+    }
+
+    rows.forEach(row => {
+      const provider = providerPresets.find(item => item.key === row.provider_key)
+      if (provider) ensureProviderChannel(provider, forceEnableChannel)
+
+      upsertServiceLocal({
+        code: row.code,
+        name: row.name,
+        category: row.category,
+        category_label: row.category_label,
+        query_type: row.query_type,
+        cost_price: row.cost_price,
+        cache_ttl: row.cache_ttl,
+        sort: row.sort,
+        enabled: row.enabled,
+        show_in_check: row.show_in_check,
+        result_handler: row.result_handler
+      })
+
+      upsertMappingLocal({
+        service_code: row.code,
+        channel_key: row.provider_key,
+        enabled: 1,
+        endpoint_type: row.endpoint_type,
+        endpoint_value: row.endpoint_value,
+        query_param: row.query_param,
+        cost_price: row.cost_price,
+        retry_on: [410, 502, 503],
+        switch_on_404: 0,
+        switch_on_no_data: row.switch_on_no_data
+      })
+    })
+
+    if (!config.default_channel_key || !channels.value.some(item => item.key === config.default_channel_key)) {
+      config.default_channel_key = rows[0].provider_key
+    }
+
+    await saveConfigCollections()
+    await loadData()
+  }
+
+  const importSelectedPresets = async () => {
+    const rows = selectedPresetKeys.value.length
+      ? filteredPresetRows.value.filter(row => selectedPresetKeys.value.includes(presetRowKey(row)))
+      : filteredPresetRows.value
+    await upsertPresetRows(rows)
+    selectedPresetKeys.value = []
+    ElMessage.success(`已导入/更新 ${rows.length} 条接口映射`)
+  }
+
+  const importProviderPreset = async (providerKey: string, forceEnableChannel = false) => {
+    const rows = deviceQueryServicePresets.filter(row => row.provider_key === providerKey)
+    await upsertPresetRows(rows, forceEnableChannel)
+    const provider = providerPresets.find(item => item.key === providerKey)
+    ElMessage.success(`已导入/更新 ${provider?.name || providerKey} 的 ${rows.length} 条接口映射`)
+  }
+
+  const toggleProviderStatus = async (row: any) => {
+    const provider = providerPresets.find(item => item.key === row.key)
+    if (!provider) return
+    if (!row.channel) {
+      ensureProviderChannel(provider, true)
+    } else {
+      const index = channels.value.findIndex(item => item.key === row.key)
+      if (index >= 0) {
+        channels.value.splice(index, 1, {
+          ...channels.value[index],
+          enabled: Number(channels.value[index].enabled) === 1 ? 0 : 1
+        })
+      }
+    }
+    await saveConfigCollections()
+    await loadData()
+    ElMessage.success('服务商状态已更新')
+  }
+
+  const toggleMappingStatus = async (row: any) => {
+    const index = mappings.value.findIndex(item => (
+      item.service_code === row.service_code
+      && item.channel_key === row.channel_key
+      && item.endpoint_value === row.endpoint_value
+    ))
+    if (index < 0) return
+    mappings.value.splice(index, 1, {
+      ...mappings.value[index],
+      enabled: Number(row.enabled || 0)
+    })
+    await saveConfigCollections()
+    await loadData()
+    ElMessage.success('接口映射状态已更新')
   }
 
   const create3023Example = async () => {
@@ -992,10 +1245,15 @@ export function useDeviceQueryConfig() {
   }
 
   const openMappingDialog = (row?: any, index = -1) => {
+    const actualIndex = row ? mappings.value.findIndex(item => (
+      item.service_code === row.service_code
+      && item.channel_key === row.channel_key
+      && item.endpoint_value === row.endpoint_value
+    )) : index
     Object.assign(mappingForm, defaultMappingForm(), row ? {
       ...row,
       retry_on: normalizeRetryOn(row.retry_on),
-      _index: index,
+      _index: actualIndex >= 0 ? actualIndex : index,
       _editing: true
     } : {})
     if (mappingForm.channel_key) {
@@ -1033,9 +1291,14 @@ export function useDeviceQueryConfig() {
     }
   }
 
-  const deleteMapping = async (_row: any, index: number) => {
+  const deleteMapping = async (row: any, index: number) => {
     await ElMessageBox.confirm('确认删除这个接口映射吗？', '提示', { type: 'warning' })
-    mappings.value.splice(index, 1)
+    const actualIndex = mappings.value.findIndex(item => (
+      item.service_code === row.service_code
+      && item.channel_key === row.channel_key
+      && item.endpoint_value === row.endpoint_value
+    ))
+    mappings.value.splice(actualIndex >= 0 ? actualIndex : index, 1)
     try {
       await saveConfigCollections()
       ElMessage.success('接口映射已删除')
@@ -1063,6 +1326,18 @@ export function useDeviceQueryConfig() {
     services,
     channels,
     mappings,
+    filteredServices,
+    filteredMappings,
+    providerStatusRows,
+    filteredPresetRows,
+    presetImportStats,
+    providerFilter,
+    categoryFilter,
+    serviceKeyword,
+    presetProviderFilter,
+    presetCategoryFilter,
+    presetKeyword,
+    selectedPresetKeys,
     config,
     serviceDialogVisible,
     channelDialogVisible,
@@ -1080,6 +1355,11 @@ export function useDeviceQueryConfig() {
     channelOptions,
     configDiagnostics,
     loadData,
+    presetRowKey,
+    importSelectedPresets,
+    importProviderPreset,
+    toggleProviderStatus,
+    toggleMappingStatus,
     create3023Example,
     createGkdtExample,
     cleanInvalidMappings,

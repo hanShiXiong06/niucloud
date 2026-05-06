@@ -660,3 +660,80 @@ CREATE TABLE `{{prefix}}recycle_quotation_price_config` (
   KEY `idx_goods_capacity` (`goods_id`,`capacity`),
   KEY `idx_goods_capacity_config` (`goods_id`,`capacity`,`config_item_name`)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4  COMMENT='价格配置表';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_template` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `template_key` varchar(80) NOT NULL DEFAULT '' COMMENT '模板标识',
+  `template_name` varchar(120) NOT NULL DEFAULT '' COMMENT '模板名称',
+  `scene` varchar(50) NOT NULL DEFAULT 'phone' COMMENT '场景',
+  `is_default` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否默认',
+  `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `version` int NOT NULL DEFAULT '1' COMMENT '模板版本',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_template_key` (`site_id`,`template_key`),
+  KEY `idx_site_scene` (`site_id`,`scene`,`status`,`is_default`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检模板';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_group` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `template_id` int NOT NULL DEFAULT '0' COMMENT '模板ID',
+  `group_key` varchar(80) NOT NULL DEFAULT '' COMMENT '分组标识',
+  `group_name` varchar(120) NOT NULL DEFAULT '' COMMENT '分组名称',
+  `description` varchar(500) NOT NULL DEFAULT '' COMMENT '说明',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_template` (`template_id`,`status`,`sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检分组';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_field` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `template_id` int NOT NULL DEFAULT '0' COMMENT '模板ID',
+  `group_id` int NOT NULL DEFAULT '0' COMMENT '分组ID',
+  `field_key` varchar(80) NOT NULL DEFAULT '' COMMENT '字段标识',
+  `field_name` varchar(120) NOT NULL DEFAULT '' COMMENT '字段名称',
+  `component` varchar(40) NOT NULL DEFAULT 'input' COMMENT '组件类型',
+  `selection_mode` varchar(20) NOT NULL DEFAULT '' COMMENT 'single/multiple',
+  `unit` varchar(20) NOT NULL DEFAULT '' COMMENT '单位',
+  `placeholder` varchar(255) NOT NULL DEFAULT '' COMMENT '提示语',
+  `default_value` varchar(500) NOT NULL DEFAULT '' COMMENT '默认值',
+  `is_required` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否必填',
+  `is_show` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否显示',
+  `seller_visible` tinyint(1) NOT NULL DEFAULT '1' COMMENT '卖家可见',
+  `buyer_visible` tinyint(1) NOT NULL DEFAULT '0' COMMENT '买家可见',
+  `result_visible` tinyint(1) NOT NULL DEFAULT '1' COMMENT '参与结果文案',
+  `result_template` varchar(255) NOT NULL DEFAULT '' COMMENT '结果文案模板',
+  `api_fill_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT '允许API回填',
+  `api_fill_policy` varchar(30) NOT NULL DEFAULT 'empty_only' COMMENT '回填策略',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `extra_config` json DEFAULT NULL COMMENT '扩展配置',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_template_field` (`template_id`,`field_key`),
+  KEY `idx_group` (`group_id`,`is_show`,`sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检字段';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_option` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `field_id` int NOT NULL DEFAULT '0' COMMENT '字段ID',
+  `option_label` varchar(120) NOT NULL DEFAULT '' COMMENT '选项名称',
+  `option_value` varchar(80) NOT NULL DEFAULT '' COMMENT '选项值',
+  `is_default` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否默认',
+  `is_show` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否显示',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `extra_config` json DEFAULT NULL COMMENT '扩展配置',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_field` (`field_id`,`is_show`,`sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检字段选项';

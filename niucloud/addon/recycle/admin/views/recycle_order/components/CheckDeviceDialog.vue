@@ -109,22 +109,24 @@
     =================================================================== -->
     <section class="cdd-section cdd-block-info">
       <div class="cdd-block-header">
-        <span>📋 设备信息</span>
+        <span>{{ groupLabel('device_info', '设备信息') }}</span>
         <div class="cdd-toolbar">
           <!-- 联网查询组 -->
           <div class="cdd-query-group">
             <span class="cdd-query-group__tag">联网</span>
-            <el-button size="small" text :loading="loadingCoverage" :disabled="!deviceForm.imei" @click="fetchCoverage">
-              <el-icon v-if="!loadingCoverage"><Headset /></el-icon>
-              {{ loadingCoverage ? '查询中...' : '查保修' }}
-            </el-button>
-            <el-button size="small" text :loading="loadingActivationLock" :disabled="!deviceForm.imei" @click="fetchActivationlock">
-              <el-icon v-if="!loadingActivationLock"><Lock /></el-icon>
-              {{ loadingActivationLock ? '查询中...' : '查激活锁' }}
-            </el-button>
-            <el-button size="small" text :loading="loadingMdm" :disabled="!deviceForm.imei" @click="fetchMdm">
-              <el-icon v-if="!loadingMdm"><Monitor /></el-icon>
-              {{ loadingMdm ? '查询中...' : '查监管锁' }}
+            <el-button
+              v-for="action in visibleDeviceQueryActions"
+              :key="action.code"
+              size="small"
+              text
+              :loading="isQueryActionLoading(action.code)"
+              :disabled="!deviceForm.imei"
+              @click="runDeviceQueryAction(action)"
+            >
+              <el-icon v-if="!isQueryActionLoading(action.code)">
+                <component :is="getQueryActionIcon(action.result_handler)" />
+              </el-icon>
+              {{ isQueryActionLoading(action.code) ? '查询中...' : action.name }}
             </el-button>
           </div>
           <!-- 本地操作 -->
@@ -141,36 +143,36 @@
         <div class="cdd-info-cell">
           <span class="cdd-info-cell__icon">💾</span>
           <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">内存</span>
-            <el-input v-model="deviceForm.capacity" size="small" placeholder="如 256GB" />
+            <span class="cdd-info-cell__label">{{ fieldLabel('capacity', '内存') }}</span>
+            <el-input v-model="deviceForm.capacity" size="small" :placeholder="fieldPlaceholder('capacity', '如 256GB')" @change="updateCheckResult" />
           </div>
         </div>
         <div class="cdd-info-cell">
           <span class="cdd-info-cell__icon">🎨</span>
           <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">颜色</span>
-            <el-input v-model="deviceForm.color" size="small" placeholder="如 深空黑色" />
+            <span class="cdd-info-cell__label">{{ fieldLabel('color', '颜色') }}</span>
+            <el-input v-model="deviceForm.color" size="small" :placeholder="fieldPlaceholder('color', '如 深空黑色')" @change="updateCheckResult" />
           </div>
         </div>
         <div class="cdd-info-cell">
           <span class="cdd-info-cell__icon">📲</span>
           <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">系统版本</span>
-            <el-input v-model="deviceForm.system_version" size="small" placeholder="如 iOS 17.3.1" />
+            <span class="cdd-info-cell__label">{{ fieldLabel('system_version', '系统版本') }}</span>
+            <el-input v-model="deviceForm.system_version" size="small" :placeholder="fieldPlaceholder('system_version', '如 iOS 17.3.1')" @change="updateCheckResult" />
           </div>
         </div>
         <div class="cdd-info-cell">
           <span class="cdd-info-cell__icon">🛡</span>
           <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">保修信息</span>
-            <el-input v-model="deviceForm.warranty_info" size="small" placeholder="保修日期/过保/未激活" />
+            <span class="cdd-info-cell__label">{{ fieldLabel('warranty_info', '保修信息') }}</span>
+            <el-input v-model="deviceForm.warranty_info" size="small" :placeholder="fieldPlaceholder('warranty_info', '保修日期/过保/未激活')" @change="updateCheckResult" />
           </div>
         </div>
         <!-- 第二行：电池 + 锁 -->
         <div class="cdd-info-cell cdd-info-cell--row2">
           <span class="cdd-info-cell__icon">🔋</span>
           <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">电池健康度</span>
+            <span class="cdd-info-cell__label">{{ fieldLabel('battery', '电池健康度') }}</span>
             <div class="cdd-info-cell__input-row">
               <el-input-number
                 v-model="templateSelections.battery"
@@ -179,28 +181,28 @@
                 class="cdd-info-cell__number"
                 @change="updateCheckResult"
               />
-              <span class="cdd-info-cell__unit">%</span>
+              <span class="cdd-info-cell__unit">{{ fieldUnit('battery', '%') }}</span>
             </div>
           </div>
         </div>
         <div class="cdd-info-cell cdd-info-cell--row2">
           <span class="cdd-info-cell__icon">🔁</span>
           <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">循环次数</span>
+            <span class="cdd-info-cell__label">{{ fieldLabel('battery_num', '循环次数') }}</span>
             <div class="cdd-info-cell__input-row">
               <el-input
                 v-model="templateSelections.battery_num"
                 type="number" size="small" style="flex:1"
                 @change="updateCheckResult"
               />
-              <span class="cdd-info-cell__unit">次</span>
+              <span class="cdd-info-cell__unit">{{ fieldUnit('battery_num', '次') }}</span>
             </div>
           </div>
         </div>
         <div class="cdd-info-cell cdd-info-cell--row2">
           <span class="cdd-info-cell__icon">🔒</span>
           <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">激活锁</span>
+            <span class="cdd-info-cell__label">{{ fieldLabel('activation_lock', '激活锁') }}</span>
             <el-switch
               v-model="templateSelections.activationLock"
               active-text="已开" inactive-text="未开" size="small"
@@ -212,7 +214,7 @@
         <div class="cdd-info-cell cdd-info-cell--row2">
           <span class="cdd-info-cell__icon">🖥</span>
           <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">监管锁</span>
+            <span class="cdd-info-cell__label">{{ fieldLabel('mdm_lock', '监管锁') }}</span>
             <el-switch
               v-model="templateSelections.mdmLock"
               active-text="已开" inactive-text="未开" size="small"
@@ -229,7 +231,7 @@
     =================================================================== -->
     <section class="cdd-section cdd-block-appearance">
       <div class="cdd-block-header">
-        <span>📐 外观规格</span>
+        <span>{{ groupLabel('appearance', '外观规格') }}</span>
         <span
           v-if="[templateSelections.screenId, templateSelections.indisplayId, templateSelections.appearanceId].filter(Boolean).length > 0"
           class="cdd-block-badge"
@@ -241,7 +243,7 @@
         <!-- 外屏规格 -->
         <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.screenId }">
           <div class="cdd-sub-header">
-            外屏规格
+            {{ fieldLabel('screen_id', '外屏规格') }}
             <span v-if="templateSelections.screenId" class="cdd-sub-done">✓</span>
           </div>
           <div class="cdd-tag-grid">
@@ -257,7 +259,7 @@
         <!-- 内屏规格 -->
         <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.indisplayId }">
           <div class="cdd-sub-header">
-            内屏规格
+            {{ fieldLabel('indisplay_id', '内屏规格') }}
             <span v-if="templateSelections.indisplayId" class="cdd-sub-done">✓</span>
           </div>
           <div class="cdd-tag-grid">
@@ -273,7 +275,7 @@
         <!-- 中框规格 -->
         <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.appearanceId }">
           <div class="cdd-sub-header">
-            中框规格
+            {{ fieldLabel('appearance_id', '中框规格') }}
             <span v-if="templateSelections.appearanceId" class="cdd-sub-done">✓</span>
           </div>
           <div class="cdd-tag-grid">
@@ -294,7 +296,7 @@
     =================================================================== -->
     <section class="cdd-section cdd-block-issues">
       <div class="cdd-block-header">
-        <span>⚠️ 问题记录</span>
+        <span>{{ groupLabel('issues', '问题记录') }}</span>
         <span
           v-if="templateSelections.functionIds.length + templateSelections.fixIds.length > 0"
           class="cdd-block-badge cdd-block-badge--warn"
@@ -306,7 +308,7 @@
         <!-- 功能异常 -->
         <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': templateSelections.functionIds.length > 0 }">
           <div class="cdd-sub-header">
-            功能
+            {{ fieldLabel('function_ids', '功能') }}
             <span v-if="templateSelections.functionIds.length > 0" class="cdd-sub-badge cdd-sub-badge--danger">
               {{ templateSelections.functionIds.length }} 项
             </span>
@@ -324,7 +326,7 @@
         <!-- 维修记录 -->
         <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': templateSelections.fixIds.length > 0 }">
           <div class="cdd-sub-header">
-            维修记录
+            {{ fieldLabel('fix_ids', '维修记录') }}
             <span v-if="templateSelections.fixIds.length > 0" class="cdd-sub-badge cdd-sub-badge--warning">
               {{ templateSelections.fixIds.length }} 项
             </span>
@@ -337,6 +339,100 @@
               size="small" class="cdd-check-tag"
               @click="toggleFixOption(opt.value)"
             >{{ opt.name }}</el-tag>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="customCheckGroups.length" class="cdd-section cdd-custom-section">
+      <div class="cdd-block-header">
+        <span>自定义质检项</span>
+        <span class="cdd-block-badge">模板 {{ checkTemplateInfo?.template_name || '默认' }}</span>
+      </div>
+      <div class="cdd-custom-groups">
+        <div v-for="group in customCheckGroups" :key="group.id || group.group_key" class="cdd-custom-group">
+          <div class="cdd-sub-header">{{ group.group_name }}</div>
+          <div class="cdd-custom-grid">
+            <div v-for="field in group.fields" :key="field.field_key" class="cdd-custom-field">
+              <div class="cdd-custom-field__label">
+                {{ field.field_name }}
+                <span v-if="field.unit" class="cdd-custom-field__unit">{{ field.unit }}</span>
+              </div>
+
+              <el-input
+                v-if="field.component === 'input'"
+                :model-value="templateSelections.customFields[field.field_key]"
+                :placeholder="field.placeholder"
+                size="small"
+                clearable
+                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
+              />
+              <el-input
+                v-else-if="field.component === 'textarea'"
+                :model-value="templateSelections.customFields[field.field_key]"
+                :placeholder="field.placeholder"
+                type="textarea"
+                :rows="2"
+                resize="none"
+                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
+              />
+              <el-input-number
+                v-else-if="field.component === 'number'"
+                :model-value="templateSelections.customFields[field.field_key]"
+                :min="0"
+                controls-position="right"
+                size="small"
+                class="cdd-custom-field__number"
+                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
+              />
+              <el-switch
+                v-else-if="field.component === 'switch'"
+                :model-value="!!templateSelections.customFields[field.field_key]"
+                active-text="是"
+                inactive-text="否"
+                size="small"
+                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
+              />
+              <el-select
+                v-else-if="field.component === 'select'"
+                :model-value="templateSelections.customFields[field.field_key]"
+                :placeholder="field.placeholder || '请选择'"
+                size="small"
+                clearable
+                class="cdd-custom-field__select"
+                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
+              >
+                <el-option v-for="option in field.options || []" :key="option.value" :label="option.name || option.label" :value="String(option.value)" />
+              </el-select>
+              <el-radio-group
+                v-else-if="field.component === 'radio'"
+                :model-value="templateSelections.customFields[field.field_key]"
+                size="small"
+                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
+              >
+                <el-radio-button v-for="option in field.options || []" :key="option.value" :label="String(option.value)">
+                  {{ option.name || option.label }}
+                </el-radio-button>
+              </el-radio-group>
+              <el-checkbox-group
+                v-else-if="field.component === 'checkbox'"
+                :model-value="templateSelections.customFields[field.field_key] || []"
+                size="small"
+                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
+              >
+                <el-checkbox-button v-for="option in field.options || []" :key="option.value" :label="String(option.value)">
+                  {{ option.name || option.label }}
+                </el-checkbox-button>
+              </el-checkbox-group>
+              <el-input
+                v-else
+                :model-value="templateSelections.customFields[field.field_key]"
+                :placeholder="field.placeholder"
+                size="small"
+                clearable
+                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -530,17 +626,20 @@
 import { ref, reactive, watch, computed, nextTick, onMounted, onBeforeUnmount, toRef } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
-  Edit, Postcard, Aim, Monitor, Check, Headset, Lock, CopyDocument, Warning
+  Cellphone, Edit, Postcard, Aim, Monitor, Check, Close, Headset, Lock, CopyDocument, Warning
 } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 
-import { getCoverage, getActivationlock, getMdm } from '@/addon/recycle/api/device_query_api'
+import { queryDeviceByService } from '@/addon/recycle/api/device_query_api'
+import { getDeviceQueryConfigList } from '@/addon/recycle/api/device_query_config'
+import { getCheckTemplateSchema } from '@/addon/recycle/api/check_template'
 import { useCheckDeviceDict } from '@/addon/recycle/hooks/useCheckDeviceDict'
 import {
   normalizeInfo,
   useCheckMeta,
   type CheckMetaPayload,
-  type CheckOptionsGroup
+  type CheckOptionsGroup,
+  type CheckTemplateField
 } from './composables/useCheckMeta'
 import { useCameraUpload } from './composables/useCameraUpload'
 
@@ -575,7 +674,66 @@ const emit = defineEmits<{
 }>()
 
 const dictOptions = useCheckDeviceDict()
-const checkDictOptions = computed<CheckOptionsGroup>(() => dictOptions.options.value as CheckOptionsGroup)
+const checkSchemaLoading = ref(false)
+const checkTemplateInfo = ref<any>(null)
+const checkTemplateGroups = ref<any[]>([])
+const knownCheckFieldKeys = ['capacity', 'color', 'system_version', 'warranty_info', 'battery', 'battery_num', 'activation_lock', 'mdm_lock', 'screen_id', 'indisplay_id', 'appearance_id', 'function_ids', 'fix_ids']
+const schemaFieldKeyMap: Record<string, keyof CheckOptionsGroup> = {
+  screen_id: 'screen',
+  indisplay_id: 'indisplay',
+  appearance_id: 'appearance',
+  function_ids: 'function',
+  fix_ids: 'fix'
+}
+
+const normalizeSchemaOption = (option: any) => ({
+  name: option.name || option.label || option.option_label || '',
+  label: option.label || option.name || option.option_label || '',
+  value: String(option.value ?? option.option_value ?? ''),
+  sort: Number(option.sort || 0),
+  memo: option.memo || ''
+})
+
+const fieldConfigByKey = computed<Record<string, CheckTemplateField>>(() => {
+  const map: Record<string, CheckTemplateField> = {}
+  checkTemplateGroups.value.forEach((group: any) => {
+    ;(group.fields || []).forEach((field: any) => {
+      map[field.field_key] = {
+        ...field,
+        options: (field.options || []).map(normalizeSchemaOption)
+      }
+    })
+  })
+  return map
+})
+
+const groupConfigByKey = computed<Record<string, any>>(() => {
+  const map: Record<string, any> = {}
+  checkTemplateGroups.value.forEach((group: any) => {
+    map[group.group_key] = group
+  })
+  return map
+})
+
+const checkDictOptions = computed<CheckOptionsGroup>(() => {
+  const options = { ...(dictOptions.options.value as CheckOptionsGroup) }
+  Object.entries(schemaFieldKeyMap).forEach(([fieldKey, optionKey]) => {
+    const field = fieldConfigByKey.value[fieldKey]
+    if (field?.options?.length) {
+      options[optionKey] = field.options as any
+    }
+  })
+  return options
+})
+
+const customCheckGroups = computed(() => {
+  return checkTemplateGroups.value
+    .map((group: any) => ({
+      ...group,
+      fields: (group.fields || []).filter((field: any) => !knownCheckFieldKeys.includes(field.field_key))
+    }))
+    .filter((group: any) => group.fields.length)
+})
 
 const dialogVisible = ref(props.visible)
 const deviceData = ref<DeviceInfo>({ ...props.device })
@@ -591,11 +749,20 @@ const isMobile = ref(false)
 // 保存编辑前的原始数据
 const originalDeviceInfo = ref({ model: '', imei: '' })
 
-const loadingCoverage = ref(false)
-const loadingActivationLock = ref(false)
-const loadingMdm = ref(false)
 const activationLockInfo = ref<any>(null)
 const mdmInfo = ref<any>(null)
+const deviceQueryServices = ref<any[]>([])
+const deviceQueryLoadingMap = ref<Record<string, boolean>>({})
+
+const visibleDeviceQueryActions = computed(() => {
+  return deviceQueryServices.value
+    .filter(service => (
+      Number(service.enabled) === 1
+      && Number(service.show_in_check) === 1
+      && Number(service.enabled_mapping_count ?? (service.mapping_count || 0)) > 0
+    ))
+    .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0))
+})
 
 const deviceForm = reactive({
   model: props.device.model || '',
@@ -626,9 +793,15 @@ const {
   templateSelections, checkedCount, getSubmitInfo,
   updateCheckResult, clearAllSelections, fillCommonResult,
   restoreFromDevice,
+  setCustomFieldValue,
   selectScreenOption, selectIndisplayOption, selectAppearanceOption,
   toggleFunctionOption, toggleFixOption
-} = useCheckMeta({ dictOptions: checkDictOptions, deviceForm })
+} = useCheckMeta({
+  dictOptions: checkDictOptions,
+  deviceForm,
+  fieldConfigByKey,
+  templateInfo: computed(() => checkTemplateInfo.value)
+})
 
 const {
   cameraUploading, cameraInputRef, maxCheckImageCount,
@@ -665,6 +838,152 @@ const generateQrCode = async () => {
     window.location.origin + '/site/diy/attachment',
     { errorCorrectionLevel: 'L', margin: 0, width: 100 }
   )
+}
+
+const loadCheckTemplateSchema = async () => {
+  checkSchemaLoading.value = true
+  try {
+    const res: any = await getCheckTemplateSchema({ scene: 'phone' })
+    const payload = res.data || {}
+    checkTemplateInfo.value = payload.template || null
+    checkTemplateGroups.value = payload.groups || []
+    restoreFromDevice(deviceData.value)
+  } catch (error) {
+    checkTemplateInfo.value = null
+    checkTemplateGroups.value = []
+  } finally {
+    checkSchemaLoading.value = false
+  }
+}
+
+const fieldLabel = (fieldKey: string, fallback: string) => {
+  return fieldConfigByKey.value[fieldKey]?.field_name || fallback
+}
+
+const fieldPlaceholder = (fieldKey: string, fallback: string) => {
+  return fieldConfigByKey.value[fieldKey]?.placeholder || fallback
+}
+
+const fieldUnit = (fieldKey: string, fallback: string) => {
+  return fieldConfigByKey.value[fieldKey]?.unit || fallback
+}
+
+const groupLabel = (groupKey: string, fallback: string) => {
+  return groupConfigByKey.value[groupKey]?.group_name || fallback
+}
+
+const loadDeviceQueryActions = async () => {
+  try {
+    const res = await getDeviceQueryConfigList({ page: 1, limit: 100 })
+    const payload = res.data?.list || res.data?.config ? res.data : (res.data?.data || {})
+    deviceQueryServices.value = payload.list || payload.data || []
+  } catch {
+    deviceQueryServices.value = []
+  }
+}
+
+const isQueryActionLoading = (code: string) => {
+  return !!deviceQueryLoadingMap.value[code]
+}
+
+const getQueryActionIcon = (handler: string) => {
+  if (handler === 'coverage') return Headset
+  if (handler === 'activationlock') return Lock
+  if (handler === 'mdm') return Monitor
+  return Headset
+}
+
+const runDeviceQueryAction = async (action: any) => {
+  if (!deviceForm.imei) {
+    ElMessage.warning('请先输入IMEI号码')
+    return
+  }
+  const serviceCode = action.code
+  deviceQueryLoadingMap.value = { ...deviceQueryLoadingMap.value, [serviceCode]: true }
+  try {
+    const res = await queryDeviceByService({
+      service_code: serviceCode,
+      query_code: deviceForm.imei,
+      query_type: action.query_type || 'imei'
+    })
+    applyDeviceQueryResult(action, res.data?.data || res.data || {})
+  } catch (error: any) {
+    ElMessage.error(error?.message || `${action.name || '设备查询'}失败，请检查设备查询配置`)
+  } finally {
+    deviceQueryLoadingMap.value = { ...deviceQueryLoadingMap.value, [serviceCode]: false }
+  }
+}
+
+const unwrapDeviceQueryData = (payload: any) => {
+  if (payload?.data?.data) return payload.data.data
+  if (payload?.data) return payload.data
+  return payload || {}
+}
+
+const applyDeviceQueryResult = (action: any, payload: any) => {
+  const data = unwrapDeviceQueryData(payload)
+  if (!data || Object.keys(data).length === 0) {
+    ElMessage.warning(`${action.name || '设备查询'}未查询到有效数据`)
+    return
+  }
+
+  deviceForm.info = {
+    ...normalizeInfo(deviceForm.info),
+    [action.code]: data,
+    last_device_query: {
+      service_code: action.code,
+      service_name: action.name,
+      result_handler: action.result_handler || 'generic',
+      data
+    }
+  }
+
+  if (action.result_handler === 'coverage') {
+    applyCoverageData(data)
+    ElMessage.success(`${action.name}已自动填入`)
+    return
+  }
+
+  if (action.result_handler === 'activationlock') {
+    activationLockInfo.value = data
+    templateSelections.activationLock = data.locked === true || data.fmi === 'On' || data.activation_lock === 'On' || data.activation_lock === '有锁'
+    updateCheckResult()
+    ElMessage.success(`${action.name}：${templateSelections.activationLock ? '已开启' : '未开启'}，已自动填入`)
+    return
+  }
+
+  if (action.result_handler === 'mdm') {
+    mdmInfo.value = data
+    templateSelections.mdmLock = data.locked === true || data.mdm === 'On' || data.mdm === true
+    updateCheckResult()
+    ElMessage.success(`${action.name}：${templateSelections.mdmLock ? '已开启' : '未开启'}，已自动填入`)
+    return
+  }
+
+  ElMessage.success(`${action.name || '设备查询'}查询成功`)
+}
+
+const applyCoverageData = (data: any) => {
+  const { capacity, color, modelDisplay } = parseCoverageFields(data)
+  const fullModel = [modelDisplay, capacity, color].filter(Boolean).join(' ')
+  if (fullModel) {
+    deviceData.value.model = fullModel
+    deviceForm.model = fullModel
+  }
+  deviceForm.info = { ...normalizeInfo(deviceForm.info), ...data }
+  deviceForm.info = getSubmitInfo()
+  if (capacity) deviceForm.capacity = capacity
+  if (color) deviceForm.color = color
+  if (data.osVersion) deviceForm.system_version = data.osVersion
+  if (data.coverage) {
+    deviceForm.warranty_info = parseCoverageStatus(data.coverage)
+  } else if (data.coverage_status || data.coverage_date) {
+    deviceForm.warranty_info = parseCoverageStatus({
+      status: data.coverage_status,
+      date: data.coverage_date
+    })
+  }
+  updateCheckResult()
 }
 
 // 格式化 IMEI 显示
@@ -744,85 +1063,6 @@ const parseCoverageStatus = (coverage: any): string => {
   return date || status || '在保'
 }
 
-// 查询保修 —— 结果直接回填规格输入框，不弹额外面板
-const fetchCoverage = async () => {
-  if (!deviceForm.imei) { ElMessage.warning('请先输入IMEI号码'); return }
-  loadingCoverage.value = true
-  try {
-    const brand = dictOptions.extractBrand(deviceData.value.model || '')
-    const res = await getCoverage({ imei: deviceForm.imei, brand })
-    if (res.data?.model) {
-      const { capacity, color, modelDisplay } = parseCoverageFields(res.data)
-      // 更新型号（拼接规格，过滤空值），同步到 deviceData 和 deviceForm 保证界面显示与提交一致
-      const fullModel = [modelDisplay, capacity, color].filter(Boolean).join(' ')
-      deviceData.value.model = fullModel
-      deviceForm.model = fullModel
-      deviceForm.info = { ...normalizeInfo(deviceForm.info), ...res.data }
-      deviceForm.info = getSubmitInfo()
-      if (capacity) deviceForm.capacity = capacity
-      if (color)    deviceForm.color    = color
-      if (res.data.osVersion) deviceForm.system_version = res.data.osVersion
-      if (res.data.coverage) {
-        deviceForm.warranty_info = parseCoverageStatus(res.data.coverage)
-      }
-      updateCheckResult()
-      ElMessage.success('保修信息已自动填入规格栏')
-    } else if (res.data?.msg) {
-      ElMessage.error('保修查询失败：' + res.data.msg)
-    } else {
-      ElMessage.warning('未查询到保修信息')
-    }
-  } catch {
-    ElMessage.error('保修查询失败，请稍后重试')
-  } finally {
-    loadingCoverage.value = false
-  }
-}
-
-const fetchActivationlock = async () => {
-  if (!deviceForm.imei) { ElMessage.warning('请先输入IMEI号码'); return }
-  loadingActivationLock.value = true
-  try {
-    const res = await getActivationlock(deviceForm.imei)
-    if (res.data?.sn) {
-      activationLockInfo.value = res.data
-      templateSelections.activationLock = res.data.locked === true || res.data.fmi === 'On'
-      updateCheckResult()
-      ElMessage.success(`激活锁：${templateSelections.activationLock ? '已开启' : '未开启'}，已自动填入`)
-    } else if (res.data?.msg) {
-      ElMessage.error('激活锁查询失败：' + res.data.msg)
-    } else {
-      ElMessage.warning('未查询到激活锁信息')
-    }
-  } catch {
-    ElMessage.error('激活锁查询失败，请稍后重试')
-  } finally {
-    loadingActivationLock.value = false
-  }
-}
-
-const fetchMdm = async () => {
-  if (!deviceForm.imei) { ElMessage.warning('请先输入IMEI号码'); return }
-  loadingMdm.value = true
-  try {
-    const res = await getMdm(deviceForm.imei)
-    if (res.data?.sn) {
-      mdmInfo.value = res.data
-      templateSelections.mdmLock = res.data.locked === true || res.data.mdm === 'On' || res.data.mdm === true
-      updateCheckResult()
-      ElMessage.success(`监管锁：${templateSelections.mdmLock ? '已开启' : '未开启'}，已自动填入`)
-    } else if (res.data?.msg) {
-      ElMessage.error('监管锁查询失败：' + res.data.msg)
-    } else {
-      ElMessage.warning('未查询到监管锁信息')
-    }
-  } catch {
-    ElMessage.error('监管锁查询失败，请稍后重试')
-  } finally {
-    loadingMdm.value = false
-  }
-}
-
 const syncSellerResultToBuyer = () => {
   if (!deviceForm.check_result_seller) { ElMessage.warning('卖家质检结果为空，无法同步'); return }
   deviceForm.check_result_buyer = deviceForm.check_result_seller
@@ -882,9 +1122,7 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
   activationLockInfo.value = null
   mdmInfo.value = null
   isEditingDeviceInfo.value = false
-  loadingCoverage.value = false
-  loadingActivationLock.value = false
-  loadingMdm.value = false
+  deviceQueryLoadingMap.value = {}
   clearAllSelections()
   deviceData.value = { ...device }
   // 更新设备基本信息
@@ -930,6 +1168,8 @@ onMounted(async () => {
   generateQrCode()
   initializeFormFromDevice(props.device)
   await dictOptions.loadDictionary()
+  await loadCheckTemplateSchema()
+  await loadDeviceQueryActions()
 })
 onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) })
 </script>
@@ -1313,6 +1553,73 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
 }
 
 /* ============================================================
+   自定义质检项
+   ============================================================ */
+.cdd-custom-section {
+  overflow: visible;
+}
+
+.cdd-custom-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.cdd-custom-group {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f5f9;
+
+  &:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+}
+
+.cdd-custom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cdd-custom-field {
+  min-width: 0;
+
+  &__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 5px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  &__unit {
+    color: #94a3b8;
+    font-weight: 400;
+  }
+
+  &__number,
+  &__select {
+    width: 100%;
+  }
+
+  :deep(.el-radio-group),
+  :deep(.el-checkbox-group) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  :deep(.el-radio-button__inner),
+  :deep(.el-checkbox-button__inner) {
+    border-radius: 4px;
+    border-left: 1px solid var(--el-border-color);
+  }
+}
+
+/* ============================================================
    区域 3：质检结果
    ============================================================ */
 .cdd-result-section { overflow: visible; }
@@ -1510,6 +1817,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
 
   // 结果两列 → 一列
   .cdd-result-cols { grid-template-columns: 1fr; }
+  .cdd-custom-grid { grid-template-columns: 1fr; }
 
   // 定价副栏 → 一列
   .cdd-pricing-sub { grid-template-columns: 1fr; }

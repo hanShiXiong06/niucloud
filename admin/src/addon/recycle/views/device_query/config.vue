@@ -86,6 +86,47 @@
           </div>
         </div>
 
+        <div class="provider-board">
+          <div class="provider-board-head">
+            <div>
+              <div class="section-title">服务商切换</div>
+              <div class="section-desc">服务商启停会影响该渠道下所有接口映射。日常故障切换时，优先停用异常服务商，再启用备用服务商。</div>
+            </div>
+            <div class="workbench-actions">
+              <el-button @click="importProviderPreset('gkdt_main')">补齐爱查接口</el-button>
+              <el-button @click="importProviderPreset('3023_main')">补齐 3023 接口</el-button>
+            </div>
+          </div>
+          <el-table :data="providerStatusRows" size="small" border>
+            <el-table-column prop="name" label="服务商" min-width="150" />
+            <el-table-column label="接入状态" width="110">
+              <template #default="{ row }">
+                <el-tag :type="row.imported ? 'success' : 'warning'">{{ row.imported ? '已接入' : '未接入' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="启用" width="90">
+              <template #default="{ row }">
+                <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="映射" width="130">
+              <template #default="{ row }">{{ row.enabled_mapping_total }} / {{ row.mapping_total }}</template>
+            </el-table-column>
+            <el-table-column prop="visible_service_total" label="质检按钮" width="100" />
+            <el-table-column prop="priority" label="优先级" width="90" />
+            <el-table-column prop="guide" label="配置提示" min-width="320" show-overflow-tooltip />
+            <el-table-column label="操作" width="230" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="importProviderPreset(row.key)">导入/补齐</el-button>
+                <el-button link :type="row.enabled ? 'warning' : 'success'" @click="toggleProviderStatus(row)">
+                  {{ row.enabled ? '停用' : '启用' }}
+                </el-button>
+                <el-button link @click="activeTab = 'channels'">配置密钥</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
         <div class="guide-layout">
           <div class="guide-block">
             <div class="guide-title">正确配置方式</div>
@@ -104,9 +145,12 @@
           </div>
 
           <div class="problem-block">
-            <div class="guide-title">当前状态</div>
+            <div class="guide-title problem-title">
+              <span>当前状态</span>
+              <em v-if="configDiagnostics.problems.length">{{ configDiagnostics.problems.length }} 项需关注</em>
+            </div>
             <template v-if="configDiagnostics.problems.length">
-              <div v-for="(item, index) in configDiagnostics.problems" :key="index" class="problem-item" :class="item.type">
+              <div v-for="(item, index) in configDiagnostics.display_problems" :key="index" class="problem-item" :class="item.type">
                 <div>
                   <strong>{{ item.title }}</strong>
                   <p>{{ item.desc }}</p>
@@ -114,6 +158,9 @@
                 <el-button v-if="item.action === '配渠道'" link type="primary" @click="activeTab = 'channels'">去配置</el-button>
                 <el-button v-else-if="item.action === '补映射' || item.action === '改映射'" link type="primary" @click="activeTab = 'mappings'">去处理</el-button>
                 <el-button v-else link type="primary" @click="activeTab = 'services'">去处理</el-button>
+              </div>
+              <div v-if="configDiagnostics.hidden_problem_total" class="problem-more">
+                还有 {{ configDiagnostics.hidden_problem_total }} 项已收起，可到查询项或接口映射列表按服务商筛选处理。
               </div>
             </template>
             <div v-else class="empty-state">
@@ -124,13 +171,77 @@
       </div>
 
       <el-tabs v-model="activeTab" class="config-tabs">
+        <el-tab-pane label="服务商预设" name="presets">
+          <div class="section-toolbar">
+            <div>
+              <div class="section-title">接口预设库</div>
+              <div class="section-desc">这里整理了当前两家服务商的接口清单。导入会创建或更新查询项、渠道和接口映射，不会覆盖已填写的密钥。</div>
+            </div>
+            <div class="workbench-actions">
+              <el-button @click="selectedPresetKeys = []">清空选择</el-button>
+              <el-button type="primary" @click="importSelectedPresets">
+                导入当前{{ selectedPresetKeys.length ? '选择' : '筛选' }}（{{ presetImportStats.row_total }}）
+              </el-button>
+            </div>
+          </div>
+          <div class="filter-bar">
+            <el-select v-model="presetProviderFilter" clearable placeholder="服务商" class="filter-item">
+              <el-option v-for="item in providerPresetOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-select v-model="presetCategoryFilter" clearable placeholder="分类" class="filter-item">
+              <el-option v-for="item in categoryPresetOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-input v-model.trim="presetKeyword" clearable placeholder="搜索名称、编码、接口值" class="filter-keyword" />
+            <div class="filter-summary">
+              将导入 {{ presetImportStats.service_total }} 个查询项、{{ presetImportStats.row_total }} 条映射、{{ presetImportStats.provider_total }} 个服务商
+            </div>
+          </div>
+          <el-table :data="filteredPresetRows" size="large" border @selection-change="handlePresetSelectionChange">
+            <el-table-column type="selection" width="48" />
+            <el-table-column prop="provider_name" label="服务商" width="110" />
+            <el-table-column prop="category_label" label="分类" width="90" />
+            <el-table-column prop="name" label="接口名称" min-width="220" />
+            <el-table-column prop="code" label="查询项编码" min-width="190" />
+            <el-table-column label="接口值" min-width="170">
+              <template #default="{ row }">
+                <el-tag size="small" effect="plain">{{ row.endpoint_type === 'service_id' ? '服务ID' : '路径' }}</el-tag>
+                <span class="endpoint-text">{{ row.endpoint_value }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="query_param" label="参数" width="80" />
+            <el-table-column prop="cost_label" label="参考成本" width="110">
+              <template #default="{ row }">{{ row.cost_label || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="质检显示" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.show_in_check ? 'success' : 'info'">{{ row.show_in_check ? '默认显示' : '默认隐藏' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="返回字段" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ (row.sample_fields || []).join('、') || '-' }}</template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+
         <el-tab-pane label="查询项" name="services">
           <div class="section-toolbar">
             <div>
               <div class="section-title">用户可查询的业务项</div>
               <div class="section-desc">打开“质检显示”后，会出现在设备质检弹窗的联网查询区域。</div>
             </div>
-            <el-button type="primary" @click="openServiceDialog()">新增查询项</el-button>
+            <div class="workbench-actions">
+              <el-button @click="activeTab = 'presets'">从预设导入</el-button>
+              <el-button type="primary" @click="openServiceDialog()">新增查询项</el-button>
+            </div>
+          </div>
+          <div class="filter-bar">
+            <el-select v-model="providerFilter" clearable placeholder="服务商" class="filter-item">
+              <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-select v-model="categoryFilter" clearable placeholder="分类" class="filter-item">
+              <el-option v-for="item in serviceCategoryOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-input v-model.trim="serviceKeyword" clearable placeholder="搜索查询项名称、编码" class="filter-keyword" />
           </div>
           <el-alert
             class="mb-[14px]"
@@ -139,7 +250,7 @@
             show-icon
             title="查询项只是业务按钮，必须至少有一条接口映射才能执行查询。表格中的“渠道/映射”为 0 的查询项不会显示到质检弹窗。"
           />
-          <el-table :data="services" v-loading="loading" size="large" border>
+          <el-table :data="filteredServices" v-loading="loading" size="large" border>
             <el-table-column prop="name" label="名称" min-width="180" />
             <el-table-column prop="code" label="编码" min-width="170" />
             <el-table-column prop="category" label="分类" width="110" />
@@ -152,8 +263,8 @@
             </el-table-column>
             <el-table-column label="渠道/映射" width="110">
               <template #default="{ row }">
-                <el-tag :type="Number(row.mapping_count || 0) > 0 ? 'success' : 'warning'">
-                  {{ row.channel_count || 0 }} / {{ row.mapping_count || 0 }}
+                <el-tag :type="Number(row.enabled_mapping_count || row.mapping_count || 0) > 0 ? 'success' : 'warning'">
+                  {{ row.channel_count || 0 }} / {{ row.enabled_mapping_count ?? (row.mapping_count || 0) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -170,7 +281,7 @@
             <el-table-column label="操作" width="210" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" @click="openServiceDialog(row)">编辑</el-button>
-                <el-button v-if="Number(row.mapping_count || 0) === 0" link type="success" @click="openMappingDialog({ service_code: row.code, enabled: 1 }, -1)">补映射</el-button>
+                <el-button v-if="Number(row.enabled_mapping_count || row.mapping_count || 0) === 0" link type="success" @click="openMappingDialog({ service_code: row.code, enabled: 1 }, -1)">补映射</el-button>
                 <el-button v-else link type="success" @click="testService(row)">测试</el-button>
                 <el-button link type="warning" @click="toggleService(row)">{{ row.enabled ? '停用' : '启用' }}</el-button>
                 <el-button link type="danger" @click="deleteService(row)">删除</el-button>
@@ -218,7 +329,16 @@
             </div>
             <el-button type="primary" @click="openMappingDialog()">新增映射</el-button>
           </div>
-          <el-table :data="mappings" v-loading="loading" size="large" border>
+          <div class="filter-bar">
+            <el-select v-model="providerFilter" clearable placeholder="服务商" class="filter-item">
+              <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-select v-model="categoryFilter" clearable placeholder="分类" class="filter-item">
+              <el-option v-for="item in serviceCategoryOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <el-input v-model.trim="serviceKeyword" clearable placeholder="搜索查询项、接口值" class="filter-keyword" />
+          </div>
+          <el-table :data="filteredMappings" v-loading="loading" size="large" border>
             <el-table-column label="查询项" min-width="190">
               <template #default="{ row }">{{ serviceName(row.service_code) }}</template>
             </el-table-column>
@@ -235,7 +355,7 @@
             </el-table-column>
             <el-table-column label="状态" width="90">
               <template #default="{ row }">
-                <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</el-tag>
+                <el-switch v-model="row.enabled" :active-value="1" :inactive-value="0" @change="toggleMappingStatus(row)" />
               </template>
             </el-table-column>
             <el-table-column label="操作" width="150" fixed="right">
@@ -582,6 +702,11 @@ import {
   resultHandlerOptions,
   useDeviceQueryConfig
 } from './composables/useDeviceQueryConfig'
+import {
+  categoryPresetOptions,
+  providerPresetOptions,
+  type DeviceQueryServicePreset
+} from './constants/providerPresets'
 
 const {
   loading,
@@ -589,6 +714,18 @@ const {
   services,
   channels,
   mappings,
+  filteredServices,
+  filteredMappings,
+  providerStatusRows,
+  filteredPresetRows,
+  presetImportStats,
+  providerFilter,
+  categoryFilter,
+  serviceKeyword,
+  presetProviderFilter,
+  presetCategoryFilter,
+  presetKeyword,
+  selectedPresetKeys,
   config,
   serviceDialogVisible,
   channelDialogVisible,
@@ -606,6 +743,11 @@ const {
   parsedServiceRows,
   importingParsedServices,
   loadData,
+  presetRowKey,
+  importSelectedPresets,
+  importProviderPreset,
+  toggleProviderStatus,
+  toggleMappingStatus,
   create3023Example,
   createGkdtExample,
   cleanInvalidMappings,
@@ -635,6 +777,16 @@ const endpointTypeLabel = (value: string) => endpointTypeOptions.find(item => it
 const resultHandlerLabel = (value: string) => resultHandlerOptions.find(item => item.value === value)?.label || value || '-'
 const serviceName = (code: string) => services.value.find(item => item.code === code)?.name || code || '-'
 const channelName = (key: string) => channels.value.find(item => item.key === key)?.name || key || '-'
+const serviceCategoryOptions = [
+  { label: '苹果', value: 'apple' },
+  { label: '安卓', value: 'android' },
+  { label: 'IMEI', value: 'imei' },
+  { label: '其他', value: 'other' }
+]
+
+const handlePresetSelectionChange = (rows: DeviceQueryServicePreset[]) => {
+  selectedPresetKeys.value = rows.map(row => presetRowKey(row))
+}
 
 onMounted(loadData)
 </script>
@@ -722,7 +874,8 @@ onMounted(loadData)
     background: #fff;
   }
 
-  .workbench-head {
+  .workbench-head,
+  .provider-board-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -767,6 +920,16 @@ onMounted(loadData)
     }
   }
 
+  .provider-board {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #edf0f3;
+  }
+
+  .provider-board-head {
+    margin-bottom: 12px;
+  }
+
   .guide-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -787,6 +950,20 @@ onMounted(loadData)
     color: #111827;
     font-size: 14px;
     font-weight: 600;
+  }
+
+  .problem-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    em {
+      color: #667085;
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 400;
+    }
   }
 
   .guide-row {
@@ -859,6 +1036,16 @@ onMounted(loadData)
     border-radius: 6px;
   }
 
+  .problem-more {
+    margin-top: 10px;
+    padding: 9px 10px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.5;
+    background: #f8fafc;
+    border-radius: 6px;
+  }
+
   .dialog-alert {
     margin: 0 0 16px;
   }
@@ -881,6 +1068,38 @@ onMounted(loadData)
     align-items: flex-start;
     gap: 16px;
     margin-bottom: 14px;
+  }
+
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 12px;
+    border: 1px solid #edf0f3;
+    border-radius: 6px;
+    background: #fafafa;
+  }
+
+  .filter-item {
+    width: 180px;
+  }
+
+  .filter-keyword {
+    width: 280px;
+  }
+
+  .filter-summary {
+    color: #667085;
+    font-size: 13px;
+  }
+
+  .endpoint-text {
+    margin-left: 8px;
+    color: #111827;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
   }
 
   .section-title {
@@ -985,6 +1204,10 @@ onMounted(loadData)
       flex-direction: column;
     }
 
+    .provider-board-head {
+      flex-direction: column;
+    }
+
     .workbench-actions {
       justify-content: flex-start;
     }
@@ -997,6 +1220,11 @@ onMounted(loadData)
     .parse-head,
     .parse-result-head {
       flex-direction: column;
+    }
+
+    .filter-item,
+    .filter-keyword {
+      width: 100%;
     }
   }
 }

@@ -205,6 +205,38 @@ Route::group('recycle', function () {
 ]);
 // USER_CODE_END -- recycle_device_export
 
+// ✅ USER_CODE_BEGIN -- recycle_check_template
+/**
+ * 质检模板配置
+ */
+Route::group('recycle', function () {
+    Route::get('check_template/pages', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@pages');
+    Route::get('check_template/all', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@all');
+    Route::get('check_template/schema', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@schema');
+    Route::post('check_template/init_default', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@initDefault');
+    Route::get('check_template/:id', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@info');
+    Route::post('check_template', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@add');
+    Route::put('check_template/:id', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@edit');
+    Route::delete('check_template/:id', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@del');
+    Route::put('check_template/:id/default', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@setDefault');
+
+    Route::get('check_template_group', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@groups');
+    Route::post('check_template_group', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@saveGroup');
+    Route::delete('check_template_group/:id', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@deleteGroup');
+
+    Route::get('check_template_field', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@fields');
+    Route::post('check_template_field', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@saveField');
+    Route::delete('check_template_field/:id', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@deleteField');
+
+    Route::post('check_template_option', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@saveOption');
+    Route::delete('check_template_option/:id', 'addon\recycle\app\adminapi\controller\check\RecycleCheckTemplate@deleteOption');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+// USER_CODE_END -- recycle_check_template
+
 // ✅ USER_CODE_BEGIN -- recycle_printer
 /**
  * 打印机相关接口
