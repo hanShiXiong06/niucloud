@@ -2,7 +2,7 @@
   "title": "回收报价增强",
   "desc": "依赖手机回收系统，提供报价爬虫、Excel导入和报价管理能力",
   "key": "recycle_quote_spider",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "author": "hsx",
   "type": "addon",
   "support_app": "recycle",

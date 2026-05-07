@@ -223,73 +223,6 @@
     ],
     "subPackages": [
         // {{ PAGE_BEGAIN }}
-        // RECYCLE_PAGE_BEGIN
-        {
-            "root": "addon/recycle", 
-            "pages": [
-				{
-					"path": "pages/index",
-					"style": {
-						"navigationBarTitleText": "回收主页"
-					}
-				},{
-					"path": "pages/price",
-					"style": {
-						"navigationBarTitleText": "回收报价单"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order/order",
-					"style": {
-						"navigationBarTitleText": "立即下单"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order/list",
-					"style": {
-						"navigationBarTitleText": "订单列表"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order/detail",
-					"style": {
-						"navigationBarTitleText": "订单详情"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/payment/index",
-					"style": {
-						"navigationBarTitleText": "收款管理"
-					},
-					"needLogin": true
-				},
-				{
-                    "path": "pages/return_order/list",
-                    "style": {
-                        "navigationBarTitleText": "退货订单"
-                    },
-                    "needLogin": true
-                },{
-                    "path": "pages/return_order/detail",
-                    "style": {
-                        "navigationBarTitleText": "退货订单详情"
-                    },
-                    "needLogin": true
-                },
-                {
-					"path": "pages/price/show_price",
-					"style": {
-						"navigationBarTitleText": "二手机回收报价单"
-					},
-					"needLogin": true
-				},
-			]
-        },
-// RECYCLE_PAGE_END
         // PHONE_SHOP_PAGE_BEGIN
         {
             "root": "addon/phone_shop", 
@@ -511,62 +444,73 @@
 			]
         },
 // PHONE_SHOP_PAGE_END
-            // WJ_BOOKS_WJ_BOOKS_PAGE_BEGIN
-            // *********************************** wj_books ***********************************
-            {
-                "root": "addon/wj_books",
-                "pages": [
-                    {
-					   "path": "pages/home/index",
-					   "style": {
-						   "navigationBarTitleText": "%pages.home.index%"
-					   }
-				   },
-                    {
-                        "path": "pages/order/index",
-                        "style": {
-                            "navigationBarTitleText": "创建回收订单"
-                        }
+        // RECYCLE_PAGE_BEGIN
+        {
+            "root": "addon/recycle", 
+            "pages": [
+				{
+					"path": "pages/index",
+					"style": {
+						"navigationBarTitleText": "回收主页"
+					}
+				},{
+					"path": "pages/price",
+					"style": {
+						"navigationBarTitleText": "回收报价单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/order",
+					"style": {
+						"navigationBarTitleText": "立即下单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/list",
+					"style": {
+						"navigationBarTitleText": "订单列表"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/detail",
+					"style": {
+						"navigationBarTitleText": "订单详情"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/payment/index",
+					"style": {
+						"navigationBarTitleText": "收款管理"
+					},
+					"needLogin": true
+				},
+				{
+                    "path": "pages/return_order/list",
+                    "style": {
+                        "navigationBarTitleText": "退货订单"
                     },
-                    {
-                        "path": "pages/address/index",
-                        "style": {
-                            "navigationBarTitleText": "地址管理"
-                        }
+                    "needLogin": true
+                },{
+                    "path": "pages/return_order/detail",
+                    "style": {
+                        "navigationBarTitleText": "退货订单详情"
                     },
-                    {
-                        "path": "pages/address/address_edit",
-                        "style": {
-                            "navigationBarTitleText": "编辑地址"
-                        }
-                    },
-                    {
-                        "path": "pages/order/success",
-                        "style": {
-                            "navigationBarTitleText": "下单成功"
-                        }
-                    },
-                    {
-                        "path": "pages/order/list",
-                        "style": {
-                            "navigationBarTitleText": "我的订单"
-                        }
-                    },
-                    {
-                        "path": "pages/order/detail",
-                        "style": {
-                            "navigationBarTitleText": "订单详情"
-                        }
-                    },
-                    {
-                        "path": "pages/home/my",
-                        "style": {
-                            "navigationBarTitleText": "个人中心"
-                        }
-                    }
-                ]
-            },
-            // WJ_BOOKS_WJ_BOOKS_PAGE_END
+                    "needLogin": true
+                },
+                {
+					"path": "pages/price/show_price",
+					"style": {
+						"navigationBarTitleText": "二手机回收报价单"
+					},
+					"needLogin": true
+				},
+			]
+        },
+// RECYCLE_PAGE_END
 // {{ PAGE_END }}
         {
             "root": "app/components",

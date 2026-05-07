@@ -1,18 +1,31 @@
-
-
+DROP TABLE IF EXISTS `{{prefix}}express_order_record`;
+DROP TABLE IF EXISTS `{{prefix}}express_address_book`;
+DROP TABLE IF EXISTS `{{prefix}}yisu_product_config`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_express_provider_config`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_check_option`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_check_field`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_check_group`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_check_template`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_price`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_model`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_brand`;
+DROP TABLE IF EXISTS `{{prefix}}device_query_result`;
+DROP TABLE IF EXISTS `{{prefix}}device_query_api`;
+DROP TABLE IF EXISTS `{{prefix}}device_query_config`;
+DROP TABLE IF EXISTS `{{prefix}}third_party_cost_stats`;
+DROP TABLE IF EXISTS `{{prefix}}third_party_api_log`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_print_log`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_print_scene`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_printer_template`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_printer`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_order_log`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_log`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_user_address`;
+DROP TABLE IF EXISTS `{{prefix}}payment_info`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_shop_address`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_category_config`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_order`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_device`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_return_order`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_return_device`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_category`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_category_config`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_shop_address`;
-DROP TABLE IF EXISTS `{{prefix}}payment_info`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_user_address`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_device_log`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_order_log`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_printer`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_printer_template`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_print_scene`;
-DROP TABLE IF EXISTS `{{prefix}}recycle_print_log`;
-
