@@ -34,8 +34,8 @@
                 :bgColor="getDeviceStatusInfo(device.status).bgColor"
               />
             </view>
-            <!-- IMEI -->
-            <text class="text-xs text-gray-400">{{ device.imei }}</text>
+            <!-- 串号 -->
+            <text class="text-xs text-gray-400">{{ device.user_sn || device.imei }}</text>
           </view>
           <!-- 价格 -->
           <view class="text-right mt-5">

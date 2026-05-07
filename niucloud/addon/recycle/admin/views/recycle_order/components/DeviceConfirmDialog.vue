@@ -28,7 +28,7 @@
                     <span class="device-index">{{ $index + 1 }}</span>
                 </template>
             </el-table-column>
-            <el-table-column label="用户串号" width="130">
+            <el-table-column label="用户串号" width="90">
                 <template #default="{ row }">
                     <span class="user-sn-display">{{ row.user_sn || '未提交' }}</span>
                 </template>

@@ -27,11 +27,11 @@
               <template #default="{ row: deviceRow }">
                 <div class="text-xs leading-5">
                   <div v-if="deviceRow.user_sn" class="font-semibold text-gray-800">用户：{{ deviceRow.user_sn }}</div>
-                  <div class="text-gray-500">管理：{{ deviceRow.imei || '未录入' }}</div>
+                  <div class="text-gray-500">{{ deviceRow.imei || '未录入' }}</div>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="model" label="设备型号" width="200" />
+            <el-table-column prop="model" label="设备型号" width="250" />
             <el-table-column prop="final_price" label="最终价格" width="100">
               <template #default="{ row: deviceRow }">
                 <span class="text-red-500 font-semibold">{{ props.formatPrice(deviceRow.final_price) }}</span>

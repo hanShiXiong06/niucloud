@@ -790,8 +790,6 @@ const printDeviceLabel = async (device: any) => {
       dangerouslyUseHTMLString: true,
       confirmButtonText: "确认打印",
       cancelButtonText: "取消",
-      type: "info",
-      customClass: "device-print-confirm-box",
     });
 
     loading = ElLoading.service({
@@ -968,9 +966,9 @@ const shareOrder = async (row: any) => {
 
 <style lang="scss" scoped>
 .recycle-order-list {
-  height: calc(100vh - 140px);
+  height: calc(100vh - 90px);
   min-height: 0;
-  max-height: calc(100vh - 140px);
+  max-height: calc(100vh - 90px);
   overflow: hidden;
 
   .el-card {

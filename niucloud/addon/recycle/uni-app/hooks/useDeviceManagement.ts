@@ -11,7 +11,9 @@ export function useDeviceManagement() {
   const addDevices = (devices: Device[]) => {
     devices.forEach(device => {
       phoneList.value.push({
-        imei: device.imei,
+        imei: device.imei || '',
+        user_sn: device.user_sn || device.imei || '',
+        model: device.model,
         initial_price: device.initial_price
       })
     })

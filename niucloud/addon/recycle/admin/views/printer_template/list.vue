@@ -306,8 +306,6 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .template-list-wrap {
-  padding: 16px;
-
   .card-header {
     display: flex;
     justify-content: space-between;

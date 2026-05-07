@@ -293,7 +293,7 @@
                                             <el-form-item label="姓名"><el-input v-model="shipmentForm.senderName" /></el-form-item>
                                             <el-form-item label="手机号"><el-input v-model="shipmentForm.senderMobile" /></el-form-item>
                                         </div>
-                                        <div class="field-grid three">
+                                        <div class="field-grid">
                                             <el-form-item label="省"><el-input v-model="shipmentForm.senderProvince" /></el-form-item>
                                             <el-form-item label="市"><el-input v-model="shipmentForm.senderCity" /></el-form-item>
                                             <el-form-item label="区县"><el-input v-model="shipmentForm.senderDistrict" /></el-form-item>
@@ -371,7 +371,7 @@
                                             <el-form-item label="姓名"><el-input v-model="shipmentForm.receiveName" /></el-form-item>
                                             <el-form-item label="手机号"><el-input v-model="shipmentForm.receiveMobile" /></el-form-item>
                                         </div>
-                                        <div class="field-grid three">
+                                        <div class="field-grid ">
                                             <el-form-item label="省"><el-input v-model="shipmentForm.receiveProvince" /></el-form-item>
                                             <el-form-item label="市"><el-input v-model="shipmentForm.receiveCity" /></el-form-item>
                                             <el-form-item label="区县"><el-input v-model="shipmentForm.receiveDistrict" /></el-form-item>

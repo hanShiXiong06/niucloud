@@ -15,9 +15,9 @@
             <view class="input-group">
               <view class="input-wrapper flex-1">
                 <u-input
-                  v-model="singleInput.imei"
+                  v-model="singleInput.user_sn"
                   size="14"
-                  placeholder="输入IMEI/SN码"
+                  placeholder="输入用户SN码"
                   border="surround"
                   clearable
                 ></u-input>
@@ -43,9 +43,9 @@
             <view v-for="(input, index) in inputList" :key="index" class="input-group">
               <view class="input-wrapper flex-1">
                 <u-input
-                  v-model="input.imei"
+                  v-model="input.user_sn"
                   size="14"
-                  placeholder="输入IMEI/SN码"
+                  placeholder="输入用户SN码"
                   border="surround"
                   clearable
                 ></u-input>
@@ -93,7 +93,7 @@
           </view>
           <view v-for="(item, index) in tempDeviceList" :key="index" class="device-item">
             <view class="device-info">
-              <text class="imei">IMEI: {{ item.imei }}</text>
+              <text class="imei">用户SN: {{ item.user_sn || item.imei }}</text>
               <text v-if="item.initial_price" class="price">¥{{ item.initial_price }}</text>
             </view>
             <view class="delete-btn" @click="removeDevice(index)">
@@ -141,14 +141,14 @@ const popupRef = ref(null)
 const localEnablePricing = ref(props.enablePricing)
 
 // 单台模式输入
-const singleInput = ref<{ imei: string; initial_price: string }>({
-  imei: '',
+const singleInput = ref<{ user_sn: string; initial_price: string }>({
+  user_sn: '',
   initial_price: ''
 })
 
 // 批量模式输入列表
-const inputList = ref<Array<{ imei: string; initial_price: string }>>([
-  { imei: '', initial_price: '' }
+const inputList = ref<Array<{ user_sn: string; initial_price: string }>>([
+  { user_sn: '', initial_price: '' }
 ])
 
 // 批量模式临时设备列表
@@ -158,8 +158,8 @@ watch(() => props.visible, (newVal) => {
   if (newVal) {
     (popupRef.value as any)?.open()
     // 重置数据
-    singleInput.value = { imei: '', initial_price: '' }
-    inputList.value = [{ imei: '', initial_price: '' }]
+    singleInput.value = { user_sn: '', initial_price: '' }
+    inputList.value = [{ user_sn: '', initial_price: '' }]
     tempDeviceList.value = []
   } else {
     (popupRef.value as any)?.close()
@@ -172,7 +172,7 @@ watch(() => props.enablePricing, (newVal) => {
 
 // 添加输入框（批量模式）
 const addInput = () => {
-  inputList.value.push({ imei: '', initial_price: '' })
+  inputList.value.push({ user_sn: '', initial_price: '' })
 }
 
 // 移除输入框（批量模式）
@@ -185,7 +185,7 @@ const handleSingleScan = () => {
   uni.scanCode({
     onlyFromCamera: true,
     success: (res) => {
-      singleInput.value.imei = res.result
+      singleInput.value.user_sn = res.result
     },
     fail: () => {
       uni.showToast({
@@ -201,7 +201,7 @@ const handleScan = (index: number) => {
   uni.scanCode({
     onlyFromCamera: true,
     success: (res) => {
-      inputList.value[index].imei = res.result
+      inputList.value[index].user_sn = res.result
     },
     fail: () => {
       uni.showToast({
@@ -214,11 +214,11 @@ const handleScan = (index: number) => {
 
 // 添加设备到临时列表（批量模式）
 const addDevices = () => {
-  const validInputs = inputList.value.filter(input => input.imei.trim())
+  const validInputs = inputList.value.filter(input => input.user_sn.trim())
 
   if (validInputs.length === 0) {
     uni.showToast({
-      title: '请输入IMEI码',
+      title: '请输入用户SN码',
       icon: 'none'
     })
     return
@@ -226,16 +226,17 @@ const addDevices = () => {
 
   for (const input of validInputs) {
     // 检查是否重复
-    if (tempDeviceList.value.some(item => item.imei === input.imei)) {
+    if (tempDeviceList.value.some(item => (item.user_sn || item.imei) === input.user_sn)) {
       uni.showToast({
-        title: `IMEI码 ${input.imei} 已存在`,
+        title: `用户SN ${input.user_sn} 已存在`,
         icon: 'none'
       })
       continue
     }
 
     const device: Device = {
-      imei: input.imei,
+      imei: '',
+      user_sn: input.user_sn,
       initial_price: localEnablePricing.value ? input.initial_price : undefined
     }
 
@@ -243,7 +244,7 @@ const addDevices = () => {
   }
 
   // 清空输入
-  inputList.value = [{ imei: '', initial_price: '' }]
+  inputList.value = [{ user_sn: '', initial_price: '' }]
 }
 
 // 从临时列表删除设备（批量模式）
@@ -255,16 +256,17 @@ const removeDevice = (index: number) => {
 const handleConfirm = () => {
   if (props.mode === 'single') {
     // 单台模式
-    if (!singleInput.value.imei.trim()) {
+    if (!singleInput.value.user_sn.trim()) {
       uni.showToast({
-        title: '请输入IMEI码',
+        title: '请输入用户SN码',
         icon: 'none'
       })
       return
     }
 
     const device: Device = {
-      imei: singleInput.value.imei,
+      imei: '',
+      user_sn: singleInput.value.user_sn,
       initial_price: localEnablePricing.value ? singleInput.value.initial_price : undefined
     }
 
