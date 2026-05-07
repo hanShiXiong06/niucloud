@@ -221,111 +221,223 @@
             </template>
         </el-dialog>
 
-        <el-dialog v-model="createDialogVisible" title="新建快递运单" width="1080px" destroy-on-close>
-            <el-form :model="shipmentForm" label-width="92px" class="shipment-form">
-                <el-row :gutter="14">
-                    <el-col :span="12">
-                        <div class="address-panel">
-                            <div class="address-title">寄件人</div>
-                            <el-form-item label="整段地址">
-                                <el-input v-model="senderRawAddress" type="textarea" :rows="2" placeholder="姓名 手机号 省市区详细地址" />
-                            </el-form-item>
-                            <el-form-item>
-                                <el-button :loading="addressParseLoading.sender" @click="parseRawAddress('sender')">解析寄件地址</el-button>
-                            </el-form-item>
-                            <el-row :gutter="10">
-                                <el-col :span="12"><el-form-item label="姓名"><el-input v-model="shipmentForm.senderName" /></el-form-item></el-col>
-                                <el-col :span="12"><el-form-item label="手机号"><el-input v-model="shipmentForm.senderMobile" /></el-form-item></el-col>
-                            </el-row>
-                            <el-row :gutter="10">
-                                <el-col :span="8"><el-form-item label="省"><el-input v-model="shipmentForm.senderProvince" /></el-form-item></el-col>
-                                <el-col :span="8"><el-form-item label="市"><el-input v-model="shipmentForm.senderCity" /></el-form-item></el-col>
-                                <el-col :span="8"><el-form-item label="区县"><el-input v-model="shipmentForm.senderDistrict" /></el-form-item></el-col>
-                            </el-row>
-                            <el-form-item label="详细地址">
-                                <el-input v-model="shipmentForm.senderAddress" />
-                            </el-form-item>
-                        </div>
-                    </el-col>
-                    <el-col :span="12">
-                        <div class="address-panel">
-                            <div class="address-title">
-                                <span>收件人</span>
-                                <el-select v-model="selectedShopAddressId" clearable placeholder="选择商家地址" class="address-select" @change="applyShopAddress">
-                                    <el-option v-for="item in shopAddressList" :key="item.id" :label="`${item.contact_name} ${item.mobile} ${item.full_address || item.address || ''}`" :value="item.id" />
-                                </el-select>
+        <el-dialog v-model="createDialogVisible" title="新建快递运单" width="min(1320px, calc(100vw - 32px))" class="shipment-dialog" destroy-on-close>
+            <div class="shipment-layout">
+                <div class="shipment-main">
+                    <el-alert
+                        class="quote-alert"
+                        :type="quoteState.valid ? 'success' : 'warning'"
+                        :closable="false"
+                        show-icon
+                        :title="quoteState.valid ? `已选择报价：${selectedQuoteName}，预估 ¥${Number(shipmentForm.estimated_cost || 0).toFixed(2)}` : '请先获取报价再下单。快递产品、重量、包裹数、保价、预约时间或寄收件信息变化后，需要重新获取报价。'"
+                    />
+                    <el-form :model="shipmentForm" label-width="88px" class="shipment-form">
+                        <div class="shipment-section">
+                            <div class="section-head">
+                                <div>
+                                    <strong>寄收件信息</strong>
+                                    <span>可粘贴整段地址解析，也可从常用地址一键填入。</span>
+                                </div>
                             </div>
-                            <el-form-item label="整段地址">
-                                <el-input v-model="receiverRawAddress" type="textarea" :rows="2" placeholder="姓名 手机号 省市区详细地址" />
-                            </el-form-item>
-                            <el-form-item>
-                                <el-button :loading="addressParseLoading.receiver" @click="parseRawAddress('receiver')">解析收件地址</el-button>
-                            </el-form-item>
-                            <el-row :gutter="10">
-                                <el-col :span="12"><el-form-item label="姓名"><el-input v-model="shipmentForm.receiveName" /></el-form-item></el-col>
-                                <el-col :span="12"><el-form-item label="手机号"><el-input v-model="shipmentForm.receiveMobile" /></el-form-item></el-col>
-                            </el-row>
-                            <el-row :gutter="10">
-                                <el-col :span="8"><el-form-item label="省"><el-input v-model="shipmentForm.receiveProvince" /></el-form-item></el-col>
-                                <el-col :span="8"><el-form-item label="市"><el-input v-model="shipmentForm.receiveCity" /></el-form-item></el-col>
-                                <el-col :span="8"><el-form-item label="区县"><el-input v-model="shipmentForm.receiveDistrict" /></el-form-item></el-col>
-                            </el-row>
-                            <el-form-item label="详细地址">
-                                <el-input v-model="shipmentForm.receiveAddress" />
-                            </el-form-item>
+                            <div class="address-form-grid">
+                                <div>
+                                    <div class="address-panel">
+                                        <div class="address-title">
+                                            <span>寄件人</span>
+                                            <div class="address-title-actions">
+                                                <el-button link type="primary" @click="saveCurrentAddress('sender')">保存当前地址</el-button>
+                                                <el-button link type="danger" @click="clearShipmentAddress('sender')">清空</el-button>
+                                            </div>
+                                        </div>
+                                        <div class="address-selector">
+                                            <el-select
+                                                v-model="selectedAddressBookIds.sender"
+                                                filterable
+                                                remote
+                                                clearable
+                                                reserve-keyword
+                                                popper-class="express-address-select-dropdown"
+                                                :remote-method="(keyword: string) => searchAddressBooks('sender', keyword)"
+                                                :loading="addressBookLoading.sender"
+                                                placeholder="搜索寄件地址：姓名 / 手机号 / 地址"
+                                                @focus="searchAddressBooks('sender', addressBookKeywords.sender)"
+                                                @change="applyAddressBookById('sender', $event)"
+                                            >
+                                                <el-option v-for="item in senderAddressBooks" :key="item.id" :label="addressOptionLabel(item)" :value="item.id">
+                                                    <div class="address-option">
+                                                        <div>
+                                                            <strong>{{ item.name }} {{ item.mobile }}</strong>
+                                                            <span>{{ formatAddressBook(item) }}</span>
+                                                        </div>
+                                                        <div class="address-option-actions">
+                                                            <em v-if="item.is_default">默认</em>
+                                                            <em v-else-if="item.is_top">置顶</em>
+                                                            <el-button link type="primary" @click.stop.prevent="setAddressDefault(item)">默认</el-button>
+                                                            <el-button link type="primary" @click.stop.prevent="toggleAddressTop(item)">{{ item.is_top ? '取消置顶' : '置顶' }}</el-button>
+                                                        </div>
+                                                    </div>
+                                                </el-option>
+                                            </el-select>
+                                            <div v-if="selectedSenderAddress" class="selected-address">
+                                                <strong>{{ selectedSenderAddress.name }} {{ selectedSenderAddress.mobile }}</strong>
+                                                <span>{{ formatAddressBook(selectedSenderAddress) }}</span>
+                                            </div>
+                                        </div>
+                                        <el-form-item label="整段地址">
+                                            <div class="parse-row">
+                                                <el-input v-model="senderRawAddress" type="textarea" :rows="2" placeholder="姓名 手机号 省市区详细地址" />
+                                                <el-button :loading="addressParseLoading.sender" @click="parseRawAddress('sender')">解析</el-button>
+                                            </div>
+                                        </el-form-item>
+                                        <div class="field-grid two">
+                                            <el-form-item label="姓名"><el-input v-model="shipmentForm.senderName" /></el-form-item>
+                                            <el-form-item label="手机号"><el-input v-model="shipmentForm.senderMobile" /></el-form-item>
+                                        </div>
+                                        <div class="field-grid">
+                                            <el-form-item label="省"><el-input v-model="shipmentForm.senderProvince" /></el-form-item>
+                                            <el-form-item label="市"><el-input v-model="shipmentForm.senderCity" /></el-form-item>
+                                            <el-form-item label="区县"><el-input v-model="shipmentForm.senderDistrict" /></el-form-item>
+                                        </div>
+                                        <el-form-item label="详细地址">
+                                            <el-input v-model="shipmentForm.senderAddress" />
+                                        </el-form-item>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="address-panel">
+                                        <div class="address-title">
+                                            <span>收件人</span>
+                                            <div class="address-title-actions">
+                                                <el-button link type="primary" @click="saveCurrentAddress('receiver')">保存当前地址</el-button>
+                                                <el-button link type="danger" @click="clearShipmentAddress('receiver')">清空</el-button>
+                                            </div>
+                                        </div>
+                                        <div class="address-selector">
+                                            <el-select
+                                                v-model="selectedAddressBookIds.receiver"
+                                                filterable
+                                                remote
+                                                clearable
+                                                reserve-keyword
+                                                popper-class="express-address-select-dropdown"
+                                                :remote-method="(keyword: string) => searchAddressBooks('receiver', keyword)"
+                                                :loading="addressBookLoading.receiver"
+                                                placeholder="搜索收件地址：姓名 / 手机号 / 地址"
+                                                @focus="searchAddressBooks('receiver', addressBookKeywords.receiver)"
+                                                @change="applyAddressBookById('receiver', $event)"
+                                            >
+                                                <el-option-group label="常用收件地址">
+                                                    <el-option v-for="item in receiverAddressBooks" :key="`book-${item.id}`" :label="addressOptionLabel(item)" :value="`book:${item.id}`">
+                                                        <div class="address-option">
+                                                            <div>
+                                                                <strong>{{ item.name }} {{ item.mobile }}</strong>
+                                                                <span>{{ formatAddressBook(item) }}</span>
+                                                            </div>
+                                                            <div class="address-option-actions">
+                                                                <em v-if="item.is_default">默认</em>
+                                                                <em v-else-if="item.is_top">置顶</em>
+                                                                <el-button link type="primary" @click.stop.prevent="setAddressDefault(item)">默认</el-button>
+                                                                <el-button link type="primary" @click.stop.prevent="toggleAddressTop(item)">{{ item.is_top ? '取消置顶' : '置顶' }}</el-button>
+                                                            </div>
+                                                        </div>
+                                                    </el-option>
+                                                </el-option-group>
+                                                <el-option-group v-if="shopAddressList.length" label="商家地址">
+                                                    <el-option v-for="item in filteredShopAddressList" :key="`shop-${item.id}`" :label="shopAddressOptionLabel(item)" :value="`shop:${item.id}`">
+                                                        <div class="address-option">
+                                                            <div>
+                                                                <strong>{{ item.contact_name }} {{ item.mobile }}</strong>
+                                                                <span>{{ item.full_address || item.address || '' }}</span>
+                                                            </div>
+                                                            <div class="address-option-actions">
+                                                                <em v-if="Number(item.is_default_refund) === 1">默认</em>
+                                                            </div>
+                                                        </div>
+                                                    </el-option>
+                                                </el-option-group>
+                                            </el-select>
+                                            <div v-if="selectedReceiverAddress" class="selected-address">
+                                                <strong>{{ selectedReceiverAddress.name }} {{ selectedReceiverAddress.mobile }}</strong>
+                                                <span>{{ formatAddressBook(selectedReceiverAddress) }}</span>
+                                            </div>
+                                        </div>
+                                        <el-form-item label="整段地址">
+                                            <div class="parse-row">
+                                                <el-input v-model="receiverRawAddress" type="textarea" :rows="2" placeholder="姓名 手机号 省市区详细地址" />
+                                                <el-button :loading="addressParseLoading.receiver" @click="parseRawAddress('receiver')">解析</el-button>
+                                            </div>
+                                        </el-form-item>
+                                        <div class="field-grid two">
+                                            <el-form-item label="姓名"><el-input v-model="shipmentForm.receiveName" /></el-form-item>
+                                            <el-form-item label="手机号"><el-input v-model="shipmentForm.receiveMobile" /></el-form-item>
+                                        </div>
+                                        <div class="field-grid ">
+                                            <el-form-item label="省"><el-input v-model="shipmentForm.receiveProvince" /></el-form-item>
+                                            <el-form-item label="市"><el-input v-model="shipmentForm.receiveCity" /></el-form-item>
+                                            <el-form-item label="区县"><el-input v-model="shipmentForm.receiveDistrict" /></el-form-item>
+                                        </div>
+                                        <el-form-item label="详细地址">
+                                            <el-input v-model="shipmentForm.receiveAddress" />
+                                        </el-form-item>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </el-col>
-                </el-row>
 
-                <el-row :gutter="12" class="mt-[12px]">
-                    <el-col :span="5">
-                        <el-form-item label="快递产品">
-                            <el-select v-model="shipmentForm.deliveryType" clearable placeholder="智能报价">
-                                <el-option label="智能报价" value="" />
-                                <el-option v-for="item in enabledYisuProducts" :key="item.product_code" :label="`${item.product_name}（${item.product_code}）`" :value="item.product_code" />
-                            </el-select>
-                        </el-form-item>
-                    </el-col>
-                    <el-col :span="4"><el-form-item label="物品"><el-input v-model="shipmentForm.goods" /></el-form-item></el-col>
-                    <el-col :span="4"><el-form-item label="重量kg"><el-input-number v-model="shipmentForm.weight" :min="0.1" :precision="2" :step="0.1" /></el-form-item></el-col>
-                    <el-col :span="4"><el-form-item label="包裹数"><el-input-number v-model="shipmentForm.packageCount" :min="1" :max="99" /></el-form-item></el-col>
-                    <el-col :span="4"><el-form-item label="保价"><el-input-number v-model="shipmentForm.guaranteeValueAmount" :min="0" :precision="2" /></el-form-item></el-col>
-                    <el-col :span="3"><el-form-item label="预约"><el-date-picker v-model="shipmentForm.orderSendTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="可选" /></el-form-item></el-col>
-                </el-row>
-                <el-form-item label="备注">
-                    <el-input v-model="shipmentForm.remark" />
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" :loading="shipmentLoading.quote" @click="runShipmentQuote">获取报价</el-button>
-                    <el-button type="success" :loading="shipmentLoading.create" @click="runShipmentCreate">确认下单</el-button>
-                </el-form-item>
-            </el-form>
+                        <div class="shipment-section">
+                            <div class="section-head">
+                                <div>
+                                    <strong>包裹信息</strong>
+                                    <span>点击获取报价后，系统会查询已启用快递公司的报价并按价格排序。</span>
+                                </div>
+                                <el-button type="primary" :loading="shipmentLoading.quote" @click="runShipmentQuote">获取全部报价</el-button>
+                            </div>
+                            <div class="package-grid">
+                                <el-form-item label="物品" class="goods-field"><el-input v-model="shipmentForm.goods" /></el-form-item>
+                                <el-form-item label="重量kg"><el-input-number v-model="shipmentForm.weight" :min="0.1" :precision="2" :step="0.1" /></el-form-item>
+                                <el-form-item label="包裹数"><el-input-number v-model="shipmentForm.packageCount" :min="1" :max="99" /></el-form-item>
+                                <el-form-item label="保价"><el-input-number v-model="shipmentForm.guaranteeValueAmount" :min="0" :precision="2" /></el-form-item>
+                                <el-form-item label="预约" class="time-field"><el-date-picker v-model="shipmentForm.orderSendTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="可选" /></el-form-item>
+                                <el-form-item label="备注" class="remark-field"><el-input v-model="shipmentForm.remark" /></el-form-item>
+                            </div>
+                        </div>
+                    </el-form>
+                </div>
 
-            <el-table v-if="quoteList.length" :data="quoteList" border size="small" class="mt-[12px]">
-                <el-table-column prop="productName" label="产品" min-width="130" />
-                <el-table-column label="预估费用" width="120">
-                    <template #default="{ row }">
-                        <span :class="{ danger: Number(getQuotePrice(row)) <= 0 }">¥{{ getQuotePrice(row) }}</span>
-                    </template>
-                </el-table-column>
-                <el-table-column prop="channelName" label="渠道" min-width="120" />
-                <el-table-column label="操作" width="100">
-                    <template #default="{ row }">
-                        <el-button link type="primary" @click="selectQuote(row)">选择</el-button>
-                    </template>
-                </el-table-column>
-            </el-table>
+                <aside class="shipment-side">
+                    <div class="side-title">报价结果</div>
+                    <div v-if="!quoteList.length" class="quote-empty">
+                        <strong>还没有报价</strong>
+                        <span>填写寄收件和包裹信息后点击“获取全部报价”。</span>
+                    </div>
+                    <div v-else class="quote-card-list">
+                        <div v-for="(row, index) in quoteList" :key="`${row.productCode || row.product_code || row.productName}-${getQuotePrice(row)}`" class="quote-card" :class="{ active: isQuoteSelected(row) }" @click="selectQuote(row)">
+                            <div>
+                                <strong>
+                                    <span v-if="index === 0" class="quote-rank">最低</span>
+                                    {{ row.productName || row.product_name || '快递产品' }}
+                                </strong>
+                                <span>{{ row.channelName || row.channel_name || '易速渠道' }}</span>
+                            </div>
+                            <em>¥{{ getQuotePrice(row) }}</em>
+                        </div>
+                    </div>
+                    <div class="quote-tip">
+                        下单会使用当前选中的快递公司。若重量、保价、预约时间或地址变动，请重新获取报价。
+                    </div>
+                </aside>
+            </div>
 
             <template #footer>
                 <el-button @click="createDialogVisible = false">关闭</el-button>
-                <el-button type="primary" :loading="shipmentLoading.create" @click="runShipmentCreate">确认下单</el-button>
+                <el-button type="primary" :disabled="!quoteState.valid" :loading="shipmentLoading.create" @click="runShipmentCreate">按选中快递下单</el-button>
             </template>
         </el-dialog>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     cancelOrInterceptExpressOrder,
@@ -334,12 +446,15 @@ import {
     getExpressOrderRecordList,
     getExpressOrderRecordInfo,
     getExpressWaybillPdf,
+    getExpressAddressBookList,
+    saveExpressAddressBook,
+    setExpressAddressBookDefault,
+    setExpressAddressBookTop,
     updateExpressOrderActualInfo,
     getExpressOrderStatistics
 } from '@/addon/recycle/api/express'
 import { parseThirdPartyAddress } from '@/addon/recycle/api/third_party'
 import { getShopAddressList } from '@/addon/recycle/api/shop_address'
-import { getYisuProductList } from '@/addon/recycle/api/yisu'
 
 const loading = ref(false)
 const orderList = ref<any[]>([])
@@ -351,11 +466,27 @@ const createDialogVisible = ref(false)
 const currentOrder = ref<any>(null)
 const operationLoading = reactive<Record<number, '' | 'cancel' | 'intercept' | 'waybill'>>({})
 const shopAddressList = ref<any[]>([])
-const yisuProductList = ref<any[]>([])
-const selectedShopAddressId = ref('')
+const addressBookList = ref<any[]>([])
+const selectedAddressBookIds = reactive<Record<'sender' | 'receiver', string | number>>({
+    sender: '',
+    receiver: ''
+})
+const addressBookKeywords = reactive<Record<'sender' | 'receiver', string>>({
+    sender: '',
+    receiver: ''
+})
+const addressBookLoading = reactive<Record<'sender' | 'receiver', boolean>>({
+    sender: false,
+    receiver: false
+})
 const senderRawAddress = ref('')
 const receiverRawAddress = ref('')
 const quoteList = ref<any[]>([])
+const quoteState = reactive({
+    valid: false,
+    signature: '',
+    selectedKey: ''
+})
 const addressParseLoading = reactive<Record<string, boolean>>({
     sender: false,
     receiver: false
@@ -422,7 +553,24 @@ const statusMeta = (status: string): any => {
     return statusOptions.find(item => item.value === status) || { label: status || '未知', value: status || '', type: 'info' }
 }
 
-const enabledYisuProducts = computed(() => yisuProductList.value.filter(item => Number(item.status) === 1))
+const senderAddressBooks = computed(() => addressBookList.value.filter(item => item.address_type === 'sender'))
+const receiverAddressBooks = computed(() => addressBookList.value.filter(item => item.address_type === 'receiver'))
+const filteredShopAddressList = computed(() => {
+    const keyword = addressBookKeywords.receiver.trim()
+    if (!keyword) return shopAddressList.value
+    return shopAddressList.value.filter(item => shopAddressOptionLabel(item).includes(keyword))
+})
+const selectedSenderAddress = computed(() => senderAddressBooks.value.find(item => String(item.id) === String(selectedAddressBookIds.sender)))
+const selectedReceiverAddress = computed(() => {
+    const value = String(selectedAddressBookIds.receiver || '')
+    if (!value.startsWith('book:')) return null
+    const id = value.replace('book:', '')
+    return receiverAddressBooks.value.find(item => String(item.id) === id) || null
+})
+const selectedQuoteName = computed(() => {
+    const quote = quoteList.value.find(item => quoteKey(item) === quoteState.selectedKey)
+    return quote?.productName || quote?.product_name || shipmentForm.deliveryType || '快递产品'
+})
 
 const buildParams = () => {
     const params: Record<string, any> = {
@@ -465,21 +613,17 @@ const loadStatistics = async () => {
 }
 
 const loadCreateOptions = async () => {
-    const [addressRes, productRes] = await Promise.allSettled([
+    const [addressRes, bookRes] = await Promise.allSettled([
         getShopAddressList({ page: 1, limit: 100 }),
-        getYisuProductList()
+        getExpressAddressBookList({})
     ])
     if (addressRes.status === 'fulfilled') {
         shopAddressList.value = addressRes.value.data?.list || []
-        const defaultAddress = shopAddressList.value.find(item => Number(item.is_default_refund) === 1) || shopAddressList.value[0]
-        if (defaultAddress && !selectedShopAddressId.value) {
-            selectedShopAddressId.value = defaultAddress.id
-            applyShopAddress(defaultAddress.id)
-        }
     }
-    if (productRes.status === 'fulfilled') {
-        yisuProductList.value = productRes.value.data || []
+    if (bookRes.status === 'fulfilled') {
+        addressBookList.value = bookRes.value.data || []
     }
+    applyDefaultAddressBooks()
 }
 
 const handleSearch = async () => {
@@ -533,7 +677,11 @@ const resetShipmentForm = () => {
     senderRawAddress.value = ''
     receiverRawAddress.value = ''
     quoteList.value = []
-    selectedShopAddressId.value = ''
+    resetQuoteState()
+    selectedAddressBookIds.sender = ''
+    selectedAddressBookIds.receiver = ''
+    addressBookKeywords.sender = ''
+    addressBookKeywords.receiver = ''
 }
 
 const openCreateDialog = async () => {
@@ -586,6 +734,63 @@ const fillParsedAddress = (type: 'sender' | 'receiver', parsed: Record<string, a
     }
 }
 
+const clearShipmentAddress = (type: 'sender' | 'receiver') => {
+    if (type === 'sender') {
+        selectedAddressBookIds.sender = ''
+        senderRawAddress.value = ''
+        shipmentForm.senderName = ''
+        shipmentForm.senderMobile = ''
+        shipmentForm.senderProvince = ''
+        shipmentForm.senderCity = ''
+        shipmentForm.senderDistrict = ''
+        shipmentForm.senderAddress = ''
+    } else {
+        selectedAddressBookIds.receiver = ''
+        receiverRawAddress.value = ''
+        shipmentForm.receiveName = ''
+        shipmentForm.receiveMobile = ''
+        shipmentForm.receiveProvince = ''
+        shipmentForm.receiveCity = ''
+        shipmentForm.receiveDistrict = ''
+        shipmentForm.receiveAddress = ''
+    }
+    resetQuoteState()
+}
+
+const resetQuoteState = () => {
+    quoteState.valid = false
+    quoteState.signature = ''
+    quoteState.selectedKey = ''
+    shipmentForm.estimated_cost = 0
+}
+
+const quoteSignature = () => JSON.stringify({
+    deliveryType: shipmentForm.deliveryType,
+    senderProvince: shipmentForm.senderProvince,
+    senderCity: shipmentForm.senderCity,
+    senderDistrict: shipmentForm.senderDistrict,
+    senderAddress: shipmentForm.senderAddress,
+    receiveProvince: shipmentForm.receiveProvince,
+    receiveCity: shipmentForm.receiveCity,
+    receiveDistrict: shipmentForm.receiveDistrict,
+    receiveAddress: shipmentForm.receiveAddress,
+    goods: shipmentForm.goods,
+    weight: shipmentForm.weight,
+    packageCount: shipmentForm.packageCount,
+    guaranteeValueAmount: shipmentForm.guaranteeValueAmount,
+    orderSendTime: shipmentForm.orderSendTime
+})
+
+watch(
+    () => quoteSignature(),
+    (signature) => {
+        if (quoteState.valid && quoteState.signature && signature !== quoteState.signature) {
+            quoteState.valid = false
+            shipmentForm.estimated_cost = 0
+        }
+    }
+)
+
 const parseRawAddress = async (type: 'sender' | 'receiver') => {
     const raw = type === 'sender' ? senderRawAddress.value : receiverRawAddress.value
     if (!raw.trim()) {
@@ -611,6 +816,132 @@ const applyShopAddress = (id: string | number) => {
     if (!item) return
     receiverRawAddress.value = `${item.contact_name || ''} ${item.mobile || ''} ${item.full_address || item.address || ''}`
     fillParsedAddress('receiver', parseAddressText(receiverRawAddress.value))
+}
+
+const formatAddressBook = (item: any) => `${item.province || ''}${item.city || ''}${item.district || ''}${item.address || ''}`
+const addressOptionLabel = (item: any) => `${item.name || ''} ${item.mobile || ''} ${formatAddressBook(item)} ${item.tag || ''}`.trim()
+const shopAddressOptionLabel = (item: any) => `${item.contact_name || ''} ${item.mobile || ''} ${item.full_address || item.address || ''}`.trim()
+
+const applyAddressBook = (item: any) => {
+    const parsed = {
+        name: item.name,
+        mobile: item.mobile,
+        province: item.province,
+        city: item.city,
+        district: item.district,
+        address: item.address
+    }
+    if (item.address_type === 'sender') {
+        selectedAddressBookIds.sender = item.id
+        senderRawAddress.value = `${item.name} ${item.mobile} ${formatAddressBook(item)}`
+        fillParsedAddress('sender', parsed)
+    } else {
+        selectedAddressBookIds.receiver = `book:${item.id}`
+        receiverRawAddress.value = `${item.name} ${item.mobile} ${formatAddressBook(item)}`
+        fillParsedAddress('receiver', parsed)
+    }
+}
+
+const applyAddressBookById = (type: 'sender' | 'receiver', value: string | number) => {
+    if (!value) return
+    const rawValue = String(value)
+    if (type === 'receiver' && rawValue.startsWith('shop:')) {
+        applyShopAddress(rawValue.replace('shop:', ''))
+        return
+    }
+
+    const id = rawValue.replace('book:', '')
+    const list = type === 'sender' ? senderAddressBooks.value : receiverAddressBooks.value
+    const item = list.find(address => String(address.id) === id)
+    if (item) applyAddressBook(item)
+}
+
+const applyDefaultAddressBooks = () => {
+    const sender = senderAddressBooks.value.find(item => Number(item.is_default) === 1) || senderAddressBooks.value[0]
+    const receiver = receiverAddressBooks.value.find(item => Number(item.is_default) === 1) || receiverAddressBooks.value[0]
+    const shopReceiver = shopAddressList.value.find(item => Number(item.is_default_refund) === 1) || shopAddressList.value[0]
+    if (sender) applyAddressBook(sender)
+    if (receiver) {
+        applyAddressBook(receiver)
+    } else if (shopReceiver) {
+        selectedAddressBookIds.receiver = `shop:${shopReceiver.id}`
+        applyShopAddress(shopReceiver.id)
+    }
+}
+
+const searchAddressBooks = async (type: 'sender' | 'receiver', keyword = '') => {
+    addressBookKeywords[type] = keyword
+    addressBookLoading[type] = true
+    try {
+        const res = await getExpressAddressBookList({ address_type: type, keyword })
+        const nextList = res.data || []
+        const otherList = addressBookList.value.filter(item => item.address_type !== type)
+        addressBookList.value = [...otherList, ...nextList]
+    } finally {
+        addressBookLoading[type] = false
+    }
+}
+
+const buildAddressPayload = (type: 'sender' | 'receiver') => {
+    if (type === 'sender') {
+        return {
+            address_type: 'sender',
+            name: shipmentForm.senderName,
+            mobile: shipmentForm.senderMobile,
+            province: shipmentForm.senderProvince,
+            city: shipmentForm.senderCity,
+            district: shipmentForm.senderDistrict,
+            address: shipmentForm.senderAddress,
+            tag: '手动保存'
+        }
+    }
+
+    return {
+        address_type: 'receiver',
+        name: shipmentForm.receiveName,
+        mobile: shipmentForm.receiveMobile,
+        province: shipmentForm.receiveProvince,
+        city: shipmentForm.receiveCity,
+        district: shipmentForm.receiveDistrict,
+        address: shipmentForm.receiveAddress,
+        tag: '手动保存'
+    }
+}
+
+const saveCurrentAddress = async (type: 'sender' | 'receiver') => {
+    const payload = buildAddressPayload(type)
+    const required = ['name', 'mobile', 'province', 'city', 'district', 'address']
+    if (required.some(key => !payload[key as keyof typeof payload])) {
+        ElMessage.warning(type === 'sender' ? '请先补全寄件人地址' : '请先补全收件人地址')
+        return
+    }
+    await saveExpressAddressBook(payload)
+    ElMessage.success('常用地址已保存')
+    await searchAddressBooks(type, addressBookKeywords[type])
+    const list = type === 'sender' ? senderAddressBooks.value : receiverAddressBooks.value
+    const saved = list.find(item => item.mobile === payload.mobile && item.address === payload.address)
+    if (saved) applyAddressBook(saved)
+}
+
+const reloadAddressBook = async () => {
+    const [senderRes, receiverRes] = await Promise.all([
+        getExpressAddressBookList({ address_type: 'sender', keyword: addressBookKeywords.sender }),
+        getExpressAddressBookList({ address_type: 'receiver', keyword: addressBookKeywords.receiver })
+    ])
+    addressBookList.value = [...(senderRes.data || []), ...(receiverRes.data || [])]
+}
+
+const setAddressDefault = async (item: any) => {
+    await setExpressAddressBookDefault(item.id)
+    ElMessage.success('默认地址已更新')
+    await reloadAddressBook()
+}
+
+const toggleAddressTop = async (item: any) => {
+    const nextTop = Number(item.is_top) === 1 ? 0 : 1
+    await setExpressAddressBookTop(item.id, nextTop)
+    ElMessage.success(nextTop ? '地址已置顶' : '已取消置顶')
+    await reloadAddressBook()
 }
 
 const getQuotePrice = (row: any) => {
@@ -643,7 +974,13 @@ const getQuotePrice = (row: any) => {
 const selectQuote = (row: any) => {
     shipmentForm.deliveryType = String(row.productCode || row.product_code || shipmentForm.deliveryType)
     shipmentForm.estimated_cost = Number(getQuotePrice(row))
+    quoteState.valid = true
+    quoteState.signature = quoteSignature()
+    quoteState.selectedKey = quoteKey(row)
 }
+
+const quoteKey = (row: any) => `${row.productCode || row.product_code || ''}-${row.productName || row.product_name || ''}-${getQuotePrice(row)}`
+const isQuoteSelected = (row: any) => quoteKey(row) === quoteState.selectedKey
 
 const validateShipment = (requireProduct = true) => {
     const required = [
@@ -660,7 +997,7 @@ const validateShipment = (requireProduct = true) => {
         ['receiveDistrict', '请填写收件区县'],
         ['receiveAddress', '请填写收件详细地址']
     ]
-    if (requireProduct) required.unshift(['deliveryType', '请选择快递产品'])
+    if (requireProduct) required.unshift(['deliveryType', '请先选择一个报价'])
     for (const [field, message] of required) {
         if (!shipmentForm[field]) {
             ElMessage.warning(message)
@@ -674,10 +1011,12 @@ const runShipmentQuote = async () => {
     if (!validateShipment(false)) return
     shipmentLoading.quote = true
     try {
-        const res = await getExpressQuote(shipmentForm)
-        quoteList.value = res.data || []
+        shipmentForm.deliveryType = ''
+        const res = await getExpressQuote({ ...shipmentForm, deliveryType: '', productCode: '' })
+        quoteList.value = (res.data || []).sort((left: any, right: any) => Number(getQuotePrice(left)) - Number(getQuotePrice(right)))
         if (quoteList.value[0]) selectQuote(quoteList.value[0])
-        ElMessage.success('报价获取成功')
+        if (!quoteList.value.length) resetQuoteState()
+        ElMessage.success(`已获取 ${quoteList.value.length} 个可用报价`)
     } finally {
         shipmentLoading.quote = false
     }
@@ -685,6 +1024,11 @@ const runShipmentQuote = async () => {
 
 const runShipmentCreate = async () => {
     if (!validateShipment()) return
+    if (!quoteState.valid || quoteState.signature !== quoteSignature()) {
+        ElMessage.warning('当前报价已失效，请重新获取报价后再下单')
+        quoteState.valid = false
+        return
+    }
     if (!shipmentForm.thirdOrderNo) {
         shipmentForm.thirdOrderNo = `manual_${Date.now()}`
     }
@@ -800,7 +1144,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .main-container {
-    padding: 20px;
+    padding: 10px;
 }
 
 .page-head {
@@ -887,6 +1231,19 @@ onMounted(() => {
 }
 
 .shipment-form {
+    :deep(.el-form-item) {
+        margin-bottom: 14px;
+    }
+
+    :deep(.el-form-item__content) {
+        min-width: 0;
+    }
+
+    :deep(.el-input),
+    :deep(.el-select) {
+        width: 100%;
+    }
+
     :deep(.el-input-number) {
         width: 100%;
     }
@@ -896,11 +1253,124 @@ onMounted(() => {
     }
 }
 
-.address-panel {
+.shipment-dialog {
+    :deep(.el-dialog__body) {
+        padding-top: 12px;
+        max-height: calc(100vh - 190px);
+        overflow: auto;
+    }
+
+    :deep(.el-dialog__footer) {
+        padding-top: 12px;
+        border-top: 1px solid #edf0f5;
+    }
+}
+
+.shipment-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 304px;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.shipment-main {
+    min-width: 0;
+}
+
+.shipment-form {
+    :deep(.el-form-item) {
+        margin-bottom: 14px;
+    }
+
+    :deep(.el-form-item__content) {
+        min-width: 0;
+    }
+
+    :deep(.el-input),
+    :deep(.el-select),
+    :deep(.el-input-number),
+    :deep(.el-date-editor) {
+        width: 100%;
+    }
+}
+
+.quote-alert {
+    margin-bottom: 12px;
+}
+
+.shipment-section {
+    min-width: 0;
+    padding: 16px 16px 4px;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
-    padding: 14px 14px 0;
+    background: #fff;
+
+    & + .shipment-section {
+        margin-top: 12px;
+    }
+}
+
+.section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+
+    strong {
+        display: block;
+        color: #111827;
+        font-size: 15px;
+        line-height: 1.3;
+    }
+
+    span {
+        display: block;
+        margin-top: 4px;
+        color: #6b7280;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+}
+
+.address-panel {
+    min-width: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px 14px 2px;
     background: #fbfdff;
+}
+
+.address-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.field-grid {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+
+    &.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    &.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.parse-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 72px;
+    gap: 8px;
+    width: 100%;
+
+    .el-button {
+        align-self: stretch;
+        height: auto;
+    }
 }
 
 .address-title {
@@ -911,9 +1381,291 @@ onMounted(() => {
     justify-content: space-between;
     color: #111827;
     font-weight: 600;
+    gap: 10px;
 }
 
-.address-select {
-    width: 260px;
+.address-title-actions {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+}
+
+.package-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0 12px;
+
+    > :deep(.el-form-item) {
+        grid-column: span 3;
+        min-width: 0;
+    }
+
+    .product-field,
+    .goods-field,
+    .time-field {
+        grid-column: span 4;
+    }
+
+    .remark-field {
+        grid-column: span 8;
+    }
+}
+
+.address-selector {
+    margin-bottom: 12px;
+}
+
+.selected-address {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid #dbeafe;
+    border-radius: 6px;
+    background: #eff6ff;
+
+    strong {
+        color: #111827;
+        font-size: 13px;
+        line-height: 1.4;
+    }
+
+    span {
+        color: #4b5563;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+}
+
+.address-option {
+    display: flex;
+    width: 100%;
+    min-height: 58px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    strong,
+    span {
+        display: block;
+        max-width: 420px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    strong {
+        color: #111827;
+        font-size: 13px;
+        line-height: 1.4;
+    }
+
+    span {
+        margin-top: 2px;
+        color: #6b7280;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+}
+
+.address-option-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+
+    em {
+        padding: 1px 5px;
+        border-radius: 4px;
+        color: #2563eb;
+        background: #eff6ff;
+        font-size: 11px;
+        font-style: normal;
+    }
+
+    :deep(.el-button) {
+        height: 20px;
+        padding: 0;
+        font-size: 12px;
+    }
+}
+
+.shipment-side {
+    position: sticky;
+    top: 0;
+    max-height: calc(100vh - 230px);
+    padding: 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fbfdff;
+    overflow: auto;
+}
+
+.side-title {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.quote-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 18px 12px;
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+    color: #6b7280;
+    text-align: center;
+
+    strong {
+        color: #111827;
+        font-size: 14px;
+    }
+
+    span {
+        font-size: 12px;
+        line-height: 1.5;
+    }
+}
+
+.quote-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.quote-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+
+    &.active {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
+    }
+
+    strong,
+    span {
+        display: block;
+    }
+
+    strong {
+        color: #111827;
+        font-size: 13px;
+    }
+
+    span {
+        margin-top: 4px;
+        color: #6b7280;
+        font-size: 12px;
+    }
+
+    em {
+        color: #dc2626;
+        font-size: 16px;
+        font-style: normal;
+        font-weight: 700;
+    }
+}
+
+.quote-tip {
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 6px;
+    color: #92400e;
+    background: #fffbeb;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+@media (max-width: 1180px) {
+    .shipment-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .shipment-side {
+        position: static;
+    }
+
+    .address-form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .shipment-side {
+        max-height: none;
+    }
+}
+
+@media (max-width: 920px) {
+    .address-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .package-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+
+        > :deep(.el-form-item),
+        .product-field,
+        .goods-field,
+        .time-field,
+        .remark-field {
+            grid-column: span 6;
+        }
+    }
+}
+
+@media (max-width: 760px) {
+    .field-grid.two,
+    .field-grid.three {
+        grid-template-columns: 1fr;
+    }
+
+    .address-title,
+    .address-title-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .address-option {
+        align-items: flex-start;
+        flex-direction: column;
+
+        strong,
+        span {
+            max-width: 100%;
+        }
+    }
+}
+</style>
+
+<style lang="scss">
+.express-address-select-dropdown {
+    .el-select-dropdown__item {
+        height: auto;
+        min-height: 66px;
+        padding: 8px 12px;
+        line-height: normal;
+    }
+
+    .el-select-group__title {
+        height: 30px;
+        padding-left: 12px;
+        line-height: 30px;
+    }
+
+    .el-select-dropdown__item.selected,
+    .el-select-dropdown__item.hover {
+        background-color: #f5f8ff;
+    }
 }
 </style>

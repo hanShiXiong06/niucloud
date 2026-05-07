@@ -115,13 +115,18 @@
             <el-table-column prop="visible_service_total" label="质检按钮" width="100" />
             <el-table-column prop="priority" label="优先级" width="90" />
             <el-table-column prop="guide" label="配置提示" min-width="320" show-overflow-tooltip />
+            <el-table-column label="密钥" width="110">
+              <template #default="{ row }">
+                <el-tag :type="getChannelSecretState(row).type">{{ getChannelSecretState(row).text }}</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="230" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" @click="importProviderPreset(row.key)">导入/补齐</el-button>
                 <el-button link :type="row.enabled ? 'warning' : 'success'" @click="toggleProviderStatus(row)">
                   {{ row.enabled ? '停用' : '启用' }}
                 </el-button>
-                <el-button link @click="activeTab = 'channels'">配置密钥</el-button>
+                <el-button link @click="openSecretDialog(row)">配置密钥</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -156,6 +161,7 @@
                   <p>{{ item.desc }}</p>
                 </div>
                 <el-button v-if="item.action === '配渠道'" link type="primary" @click="activeTab = 'channels'">去配置</el-button>
+                <el-button v-else-if="item.action === '配密钥'" link type="primary" @click="activeTab = 'channels'">去配置</el-button>
                 <el-button v-else-if="item.action === '补映射' || item.action === '改映射'" link type="primary" @click="activeTab = 'mappings'">去处理</el-button>
                 <el-button v-else link type="primary" @click="activeTab = 'services'">去处理</el-button>
               </div>
@@ -305,6 +311,13 @@
               <template #default="{ row }">{{ providerLabel(row.provider) }}</template>
             </el-table-column>
             <el-table-column prop="base_url" label="请求地址" min-width="260" />
+            <el-table-column label="密钥" width="110">
+              <template #default="{ row }">
+                <el-tag :type="getChannelSecretState({ key: row.key, channel: row }).type">
+                  {{ getChannelSecretState({ key: row.key, channel: row }).text }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="priority" label="优先级" width="90" />
             <el-table-column label="状态" width="90">
               <template #default="{ row }">
@@ -314,6 +327,7 @@
             <el-table-column label="操作" width="210" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" @click="openChannelDialog(row)">编辑</el-button>
+                <el-button link @click="openSecretDialog({ key: row.key, name: row.name, channel: row })">配置密钥</el-button>
                 <el-button v-if="row.provider === 'path_query'" link type="success" @click="queryChannelBalance(row)">查余额</el-button>
                 <el-button link type="danger" @click="deleteChannel(row)">删除</el-button>
               </template>
@@ -586,7 +600,7 @@
           class="dialog-alert"
           type="info"
           :closable="false"
-          title="3023 渠道通常使用 Header 鉴权，字段名 key；爱查助手通常使用 Query 鉴权，服务ID字段 key，密钥字段按实际接口配置。"
+          title="这里只维护渠道地址和请求方式。密钥请在列表中点击“配置密钥”单独填写，系统不会内置任何客户密钥。"
         />
         <el-row :gutter="12">
           <el-col :span="12">
@@ -604,9 +618,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="密钥">
-          <el-input v-model="channelForm.token" type="password" show-password placeholder="服务商分配的 key/token" />
-        </el-form-item>
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="服务ID字段">
@@ -628,6 +639,92 @@
       <template #footer>
         <el-button @click="channelDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="saveChannel">保存渠道</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="secretDialogVisible" :title="secretDialogTitle" width="760px">
+      <div class="secret-guide">
+        <div class="secret-guide-card">
+          <span>1</span>
+          <strong>注册开通</strong>
+          <p>{{ secretGuide.register }}</p>
+        </div>
+        <div class="secret-guide-card">
+          <span>2</span>
+          <strong>查看文档</strong>
+          <p>{{ secretGuide.document }}</p>
+        </div>
+        <div class="secret-guide-card">
+          <span>3</span>
+          <strong>充值套餐</strong>
+          <p>{{ secretGuide.recharge }}</p>
+        </div>
+        <div class="secret-guide-card">
+          <span>4</span>
+          <strong>复制密钥</strong>
+          <p>{{ secretGuide.secret }}</p>
+        </div>
+      </div>
+
+      <el-alert
+        class="dialog-alert"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="请填写客户自己的 API Key 或 token。不要把开发测试密钥、截图里的密钥或其他商户密钥写进这里。"
+      />
+
+      <el-form :model="secretForm" label-width="120px">
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="渠道键">
+              <el-input v-model.trim="secretForm.key" disabled />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="渠道名称">
+              <el-input v-model.trim="secretForm.name" placeholder="如 3023Data / 爱查助手" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="请求地址">
+          <el-input v-model.trim="secretForm.base_url" placeholder="按服务商文档填写接口请求地址" />
+        </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="8">
+            <el-form-item label="鉴权位置">
+              <el-select v-model="secretForm.auth_type" class="w-full">
+                <el-option label="Header" value="header" />
+                <el-option label="Query" value="query" />
+                <el-option label="不鉴权" value="none" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="鉴权字段">
+              <el-input v-model.trim="secretForm.auth_key" placeholder="如 key / token" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="服务ID字段">
+              <el-input v-model.trim="secretForm.service_id_key" placeholder="服务ID接口通常为 key" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="API密钥">
+          <el-input
+            v-model="secretForm.token"
+            type="password"
+            show-password
+            clearable
+            placeholder="粘贴客户从服务商后台复制的 API Key / token"
+          />
+          <div class="field-tip">保存后系统会用于第三方设备查询；导入预设和补齐接口不会覆盖这里已经填写的密钥。</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="secretDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveSecretConfig">保存密钥配置</el-button>
       </template>
     </el-dialog>
 
@@ -729,16 +826,20 @@ const {
   config,
   serviceDialogVisible,
   channelDialogVisible,
+  secretDialogVisible,
   mappingDialogVisible,
   serviceForm,
   channelForm,
+  secretForm,
   mappingForm,
   serviceDialogTitle,
   channelDialogTitle,
+  secretDialogTitle,
   mappingDialogTitle,
   serviceOptions,
   channelOptions,
   configDiagnostics,
+  secretGuide,
   serviceImportText,
   parsedServiceRows,
   importingParsedServices,
@@ -761,6 +862,9 @@ const {
   testService,
   deleteService,
   queryChannelBalance,
+  getChannelSecretState,
+  openSecretDialog,
+  saveSecretConfig,
   openChannelDialog,
   saveChannel,
   deleteChannel,
@@ -1187,6 +1291,49 @@ onMounted(loadData)
     font-size: 12px;
     line-height: 1.5;
   }
+
+  .secret-guide {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .secret-guide-card {
+    min-height: 132px;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f9fafb;
+
+    span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      margin-bottom: 8px;
+      border-radius: 50%;
+      color: #fff;
+      background: #2563eb;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    strong {
+      display: block;
+      color: #111827;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    p {
+      margin: 6px 0 0;
+      color: #667085;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+  }
 }
 
 @media (max-width: 900px) {
@@ -1213,7 +1360,8 @@ onMounted(loadData)
     }
 
     .status-grid,
-    .guide-layout {
+    .guide-layout,
+    .secret-guide {
       grid-template-columns: 1fr;
     }
 

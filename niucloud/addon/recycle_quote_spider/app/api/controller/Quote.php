@@ -8,6 +8,23 @@ use core\base\BaseApiController;
 
 class Quote extends BaseApiController
 {
+    public function sources()
+    {
+        return success((new QuoteQueryService())->sources());
+    }
+
+    public function featured()
+    {
+        $data = $this->request->params([
+            ['source_id', ''],
+            ['category_id', ''],
+            ['keyword', ''],
+            ['limit', 10],
+            ['only_hot', ''],
+        ]);
+        return success((new QuoteQueryService())->featured($data));
+    }
+
     public function categoryTree()
     {
         $data = $this->request->params([

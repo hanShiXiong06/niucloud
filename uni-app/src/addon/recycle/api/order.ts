@@ -15,6 +15,10 @@ export function createOrder(data: any) {
   return request.post("recycle/recycle_order", data);
 }
 
+export function getOrderSubmitConfig() {
+  return request.get("recycle/order_submit_config");
+}
+
 // getOrderStatusCount 获取 订单菜单及统计
 export function getOrderStatusCount() {
   return request.get("recycle/recycle_order/status_count");

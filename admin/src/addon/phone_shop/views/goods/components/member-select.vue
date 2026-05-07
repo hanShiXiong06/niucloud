@@ -11,7 +11,7 @@
             :remote-method="handleSearch"
             :loading="loading"
             clearable
-            class="w-full !min-h-[40px]"
+            class="w-full"
             @change="handleSelectChange"
             @clear="handleClear"
         >

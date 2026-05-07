@@ -13,13 +13,13 @@
           <view
             v-for="channel in channels"
             :key="channel.value"
-            :class="['toggle-item', usePlatformDelivery && currentChannelValue === channel.value ? 'active' : '']"
+            :class="['toggle-item', usePlatformDelivery && currentChannelValue === channel.value ? 'active' : '', !canUsePlatformDelivery ? 'disabled' : '']"
             @click="handleChannelClick(channel)"
           >
             <view class="flex items-center justify-center gap-1">
-              <text>{{ channel.name.split('｜')[0] }}</text>
-              <view v-if="channel.name.includes('｜')" class="free-tag">
-                <text class="free-tag-text">{{ channel.name.split('｜')[1] }}</text>
+              <text>{{ platformDeliveryDisplayName }}</text>
+              <view class="free-tag">
+                <text class="free-tag-text">{{ platformDeliveryTag }}</text>
               </view>
             </view>
           </view>
@@ -62,6 +62,11 @@
         </view>
       </up-col>
     </up-row>
+
+    <view v-if="!canUsePlatformDelivery" class="platform-threshold-tip">
+      <up-icon name="info-circle" size="14" color="#b45309"></up-icon>
+      <text>满 {{ freeShippingMinCount }} 台可使用{{ platformDeliveryName }}包邮；当前可手动填写快递单号。</text>
+    </view>
 
     <!-- 平台快递下单 -->
     <view v-if="usePlatformDelivery" class="platform-delivery-section">
@@ -128,9 +133,16 @@ interface Props {
   platformDeliveryForm: PlatformDeliveryForm
   pickupTimeOptions: Array<{ label: string; value: string }>
   needPickupTime: boolean
+  orderCount?: number
+  freeShippingMinCount?: number
+  platformDeliveryName?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  orderCount: 1,
+  freeShippingMinCount: 1,
+  platformDeliveryName: '京东快递'
+})
 
 // 预约时间选择器显示状态
 const showPickupTimePicker = ref(false)
@@ -166,7 +178,7 @@ watch(
       // 渠道加载完成，设置默认状态
       selectedChannelValue.value = defaultChannelValue.value
       const defaultState = getDefaultPlatformDeliveryState()
-      emit('update:usePlatformDelivery', defaultState)
+      emit('update:usePlatformDelivery', defaultState && canUsePlatformDelivery.value)
     }
   },
   { immediate: true }
@@ -177,8 +189,29 @@ const currentChannelValue = computed(() => {
   return props.usePlatformDelivery ? (selectedChannelValue.value || defaultChannelValue.value) : 'manual'
 })
 
+const canUsePlatformDelivery = computed(() => {
+  return Number(props.orderCount || 0) >= Number(props.freeShippingMinCount || 1)
+})
+
+const platformDeliveryTag = computed(() => {
+  return Number(props.freeShippingMinCount || 1) > 1 ? `满${props.freeShippingMinCount}台包邮` : '包邮'
+})
+
+const platformDeliveryDisplayName = computed(() => {
+  return String(props.platformDeliveryName || '京东快递').trim() || '京东快递'
+})
+
 // 处理渠道点击
 const handleChannelClick = (channel: ChannelItem) => {
+  if (!canUsePlatformDelivery.value) {
+    uni.showToast({
+      title: `满 ${props.freeShippingMinCount} 台可用${platformDeliveryDisplayName.value}包邮`,
+      icon: 'none'
+    })
+    emit('update:usePlatformDelivery', false)
+    return
+  }
+
   if (isPlatformChannel(channel.value)) {
     selectedChannelValue.value = channel.value
     emit('update:usePlatformDelivery', true)
@@ -238,6 +271,12 @@ const handleAddressSelect = (address: any) => {
     &:active {
       transform: scale(0.98);
     }
+
+    &.disabled {
+      opacity: 0.56;
+      background: #e5e7eb;
+      color: #94a3b8;
+    }
   }
 }
 
@@ -263,6 +302,20 @@ const handleAddressSelect = (address: any) => {
   .free-tag-text {
     color: #92400e;
   }
+}
+
+.platform-threshold-tip {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 16rpx 18rpx;
+  margin-bottom: 16rpx;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12rpx;
+  font-size: 12px;
+  color: #92400e;
+  line-height: 1.5;
 }
 
 .platform-delivery-section {

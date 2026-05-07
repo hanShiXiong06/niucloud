@@ -11,7 +11,6 @@
                             <el-option label="设备查询" value="device_query" />
                             <el-option label="快递下单" value="express_order" />
                             <el-option label="快递查询" value="express_query" />
-                            <el-option label="报价爬虫" value="quotation_crawler" />
                         </el-select>
                     </el-form-item>
                     <el-form-item label="服务商">
@@ -65,7 +64,6 @@
                             <el-tag v-if="row.service_type === 'device_query'" type="primary" size="small">设备查询</el-tag>
                             <el-tag v-else-if="row.service_type === 'express_order'" type="success" size="small">快递下单</el-tag>
                             <el-tag v-else-if="row.service_type === 'express_query'" type="info" size="small">快递查询</el-tag>
-                            <el-tag v-else-if="row.service_type === 'quotation_crawler'" type="warning" size="small">报价爬虫</el-tag>
                             <el-tag v-else size="small">{{ row.service_type }}</el-tag>
                         </template>
                     </el-table-column>

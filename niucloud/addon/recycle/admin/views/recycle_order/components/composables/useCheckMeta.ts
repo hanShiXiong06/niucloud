@@ -560,19 +560,6 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     updateCheckResult()
   }
 
-  // ==================== 常用模板 ====================
-
-  const fillCommonResult = () => {
-    templateSelections.battery = 85
-    const preferredScreenId = optionIdByName.value.screen['完好'] || toStringValue(dictOptions.value.screen[0]?.value)
-    const preferredIndisplayId = optionIdByName.value.indisplay['正常'] || toStringValue(dictOptions.value.indisplay[0]?.value)
-    const preferredAppearanceId = optionIdByName.value.appearance['轻微磨损'] || toStringValue(dictOptions.value.appearance[0]?.value)
-    templateSelections.screenId = preferredScreenId
-    templateSelections.indisplayId = preferredIndisplayId
-    templateSelections.appearanceId = preferredAppearanceId
-    updateCheckResult()
-  }
-
   return {
     templateSelections,
     checkedCount,
@@ -581,7 +568,6 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     getSubmitInfo,
     updateCheckResult,
     clearAllSelections,
-    fillCommonResult,
     restoreFromDevice,
     selectScreenOption,
     selectIndisplayOption,

@@ -7,6 +7,8 @@ use app\api\middleware\ApiLog;
 use think\facade\Route;
 
 Route::group('recycle_quote_spider', function () {
+    Route::get('source', 'addon\recycle_quote_spider\app\api\controller\Quote@sources');
+    Route::get('featured', 'addon\recycle_quote_spider\app\api\controller\Quote@featured');
     Route::get('category/tree', 'addon\recycle_quote_spider\app\api\controller\Quote@categoryTree');
     Route::get('item', 'addon\recycle_quote_spider\app\api\controller\Quote@items');
     Route::get('item/:id', 'addon\recycle_quote_spider\app\api\controller\Quote@detail');

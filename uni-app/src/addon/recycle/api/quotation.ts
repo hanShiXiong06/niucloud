@@ -1,31 +1,24 @@
 import request from "@/utils/request";
 
 /**
- * 获取报价数据列表（移动端）
+ * 获取报价爬虫插件的前台报价项列表
  */
-export function getQuotationPriceList(params: any) {
-  return request.get("recycle/quotation_price/lists", params);
+export function getQuoteSpiderFeatured(params: any = {}) {
+  return request.get("recycle_quote_spider/featured", params);
 }
 
 /**
- * 获取报价类型列表
+ * 获取报价爬虫插件的前台分类树
  */
-export function getQuotationPriceTypes() {
-  return request.get("recycle/quotation_price/types");
+export function getQuoteSpiderCategoryTree(params: any = {}) {
+  return request.get("recycle_quote_spider/category/tree", params);
 }
 
 /**
- * 获取报价 2.0 报价单列表（移动端低代码入口）
+ * 获取报价爬虫插件的报价项详情
  */
-export function getQuotationV2Types(params: any = {}) {
-  return request.get("recycle/quotation_v2/types", params);
-}
-
-/**
- * 获取报价 2.0 明细（移动端）
- */
-export function getQuotationV2PriceList(params: any) {
-  return request.get("recycle/quotation_v2/lists", params);
+export function getQuoteSpiderDetail(id: number | string) {
+  return request.get(`recycle_quote_spider/item/${id}`);
 }
 
 /**
@@ -66,21 +59,50 @@ export interface PriceDetail {
   adjust_value?: number;
 }
 
-export interface QuotationPriceType {
-  quotation_id: number;
-  price_name: string;
+export interface QuoteSpiderItem {
+  id: number;
+  source_id: number;
+  category_id: number;
+  brand: string;
+  tab: string;
+  name: string;
+  parent_name: string;
+  category_path?: string;
+  title: string;
+  quote_type: string;
+  is_image_quote: number;
+  image: string;
+  timage: string;
+  bimage: string;
+  icon: string;
+  is_hot: number;
+  model_count: number;
+  last_sync_at_text: string;
+  rows?: QuoteSpiderRow[];
 }
 
-export interface QuotationV2Type {
+export interface QuoteSpiderCategory {
   id: number;
-  dataset_id: number;
-  quotation_id: number;
-  price_name: string;
-  dataset_name: string;
-  title: string;
-  last_sync_at: number;
-  last_sync_at_text: string;
-  last_sync_status_name: string;
-  price_count: number;
-  model_count: number;
+  source_id: number;
+  parent_id: number;
+  name: string;
+  level: number;
+  sort: number;
+  is_show: number;
+  children?: QuoteSpiderCategory[];
+}
+
+export interface QuoteSpiderRow {
+  id: number;
+  item_id: number;
+  brand: string;
+  tab: string;
+  model_name: string;
+  columns?: string[];
+  source_prices?: Record<string, any>;
+  manual_prices?: Record<string, any>;
+  final_prices?: Record<string, any>;
+  remark?: string;
+  create_at?: number | string;
+  update_at?: number | string;
 }

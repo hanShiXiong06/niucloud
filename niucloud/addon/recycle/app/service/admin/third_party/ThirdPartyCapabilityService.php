@@ -3,13 +3,10 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\admin\third_party;
 
-use addon\recycle\app\dict\config\RecycleConfigKeyDict;
 use addon\recycle\app\dict\third_party\ThirdPartyDict;
 use addon\recycle\app\model\third_party\ThirdPartyApiLog;
 use addon\recycle\app\service\core\device_query\DeviceQueryConfigService;
-use addon\recycle\app\service\core\quotation\QuotationCrawlerConfigService;
 use addon\recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
-use app\model\sys\SysConfig;
 use core\base\BaseAdminService;
 
 /**
@@ -18,14 +15,12 @@ use core\base\BaseAdminService;
 class ThirdPartyCapabilityService extends BaseAdminService
 {
     private $thirdPartyConfigService;
-    private $quotationCrawlerConfigService;
     private $deviceQueryConfigService;
 
     public function __construct()
     {
         parent::__construct();
         $this->thirdPartyConfigService = new RecycleThirdPartyConfigService();
-        $this->quotationCrawlerConfigService = new QuotationCrawlerConfigService();
         $this->deviceQueryConfigService = new DeviceQueryConfigService();
     }
 
@@ -37,7 +32,6 @@ class ThirdPartyCapabilityService extends BaseAdminService
             $this->buildAddressParseCapability(),
             $this->buildDeviceQueryCapability(),
             $this->buildPrinterCapability(),
-            $this->buildQuotationCrawlerCapability(),
         ];
 
         return [
@@ -142,59 +136,6 @@ class ThirdPartyCapabilityService extends BaseAdminService
         );
     }
 
-    private function buildQuotationCrawlerCapability(): array
-    {
-        $rawConfig = $this->getRawQuotationCrawlerConfig();
-        $config = !empty($rawConfig) ? $rawConfig : $this->quotationCrawlerConfigService->getConfig($this->site_id, false);
-        $provider = (string)($config['provider'] ?? ThirdPartyDict::PROVIDER_CHAONIU_QUOTATION);
-        $providerConfig = $config['providers'][$provider] ?? [];
-        $configStatus = $this->checkRequired($providerConfig, ['base_url', 'detail_path', 'authorization_token', 'open_id'], ['authorization_token', 'open_id']);
-
-        $capability = $this->buildCapability(
-            'quotation_crawler',
-            '报价爬虫',
-            $providerConfig['name'] ?? '超牛报价',
-            ThirdPartyDict::SERVICE_TYPE_QUOTATION_CRAWLER,
-            $provider,
-            !empty($config['enabled']),
-            $configStatus,
-            ['报价同步', '自动请求', '备注同步']
-        );
-        $capability['config_diagnostic'] = [
-            'site_id' => $this->site_id,
-            'source' => !empty($rawConfig) ? 'sys_config' : 'service_config',
-            'provider' => $provider,
-            'has_provider_config' => is_array($providerConfig) && !empty($providerConfig) ? 1 : 0,
-            'has_authorization_token' => $this->hasConfigValue($providerConfig['authorization_token'] ?? null, true) ? 1 : 0,
-            'has_open_id' => $this->hasConfigValue($providerConfig['open_id'] ?? null, true) ? 1 : 0,
-        ];
-        $capability['config_summary'] = [
-            'enabled' => !empty($config['enabled']) ? 1 : 0,
-            'provider' => $provider,
-            'provider_label' => $providerConfig['name'] ?? '超牛报价',
-            'base_url' => (string)($providerConfig['base_url'] ?? ''),
-            'detail_path' => (string)($providerConfig['detail_path'] ?? ''),
-            'authorization_token' => (string)($providerConfig['authorization_token'] ?? ''),
-            'open_id' => (string)($providerConfig['open_id'] ?? ''),
-            'authorization_token_saved' => $this->hasConfigValue($providerConfig['authorization_token'] ?? null, true) ? 1 : 0,
-            'open_id_saved' => $this->hasConfigValue($providerConfig['open_id'] ?? null, true) ? 1 : 0,
-            'timeout' => (int)($providerConfig['timeout'] ?? 0),
-        ];
-
-        return $capability;
-    }
-
-    private function getRawQuotationCrawlerConfig(): array
-    {
-        $row = (new SysConfig())->where([
-            ['site_id', '=', $this->site_id],
-            ['config_key', '=', RecycleConfigKeyDict::QUOTATION_CRAWLER],
-        ])->findOrEmpty()->toArray();
-
-        $value = $row['value'] ?? [];
-        return is_array($value) ? $value : [];
-    }
-
     private function buildCapability(
         string $key,
         string $name,
@@ -263,16 +204,7 @@ class ThirdPartyCapabilityService extends BaseAdminService
             return false;
         }
 
-        if ($secret && $text === QuotationCrawlerConfigService::MASK_VALUE) {
-            return true;
-        }
-
         return true;
-    }
-
-    private function maskSecretValue($value): string
-    {
-        return $this->hasConfigValue($value, true) ? QuotationCrawlerConfigService::MASK_VALUE : '';
     }
 
     private function getTodayStats(string $serviceType, string $providerName): array

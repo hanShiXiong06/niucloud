@@ -91,21 +91,109 @@ ADD COLUMN `sell_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '卖货价格' 
 -- 将已签收状态的订单设置签收时间为更新时间（临时数据修复）
 UPDATE `{{prefix}}recycle_order` SET `sign_at` = `update_at` WHERE `status` >= 2 AND `sign_at` = 0; 
 
--- 为报价型号表添加关联字段（存储该型号关联的内存ID和规格ID）
-ALTER TABLE `{{prefix}}recycle_quotation_model` ADD COLUMN `capacity_ids` json COMMENT '关联的内存ID数组' AFTER `goods_name`;
-ALTER TABLE `{{prefix}}recycle_quotation_model` ADD COLUMN `grade_spec_ids` json COMMENT '关联的规格ID数组' AFTER `capacity_ids`;
+CREATE TABLE IF NOT EXISTS `{{prefix}}express_address_book` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `address_type` varchar(20) NOT NULL DEFAULT 'sender' COMMENT '地址类型 sender寄件人 receiver收件人',
+  `name` varchar(80) NOT NULL DEFAULT '' COMMENT '联系人',
+  `mobile` varchar(30) NOT NULL DEFAULT '' COMMENT '手机号',
+  `province` varchar(80) NOT NULL DEFAULT '' COMMENT '省',
+  `city` varchar(80) NOT NULL DEFAULT '' COMMENT '市',
+  `district` varchar(80) NOT NULL DEFAULT '' COMMENT '区县',
+  `address` varchar(255) NOT NULL DEFAULT '' COMMENT '详细地址',
+  `tag` varchar(50) NOT NULL DEFAULT '' COMMENT '标签',
+  `is_default` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否默认',
+  `is_top` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否置顶',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_type` (`site_id`,`address_type`,`status`,`is_top`,`is_default`),
+  KEY `idx_mobile` (`site_id`,`mobile`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='快递常用寄收件地址';
 
--- 为报价数据表添加关联字段（重构后使用关联方式存储数据）
--- 注意：如果字段已存在，执行时会报错，请先检查表结构
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `model_id` int NOT NULL DEFAULT '0' COMMENT '型号ID（关联recycle_quotation_model表）' AFTER `price_name`;
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `capacity_id` int NOT NULL DEFAULT '0' COMMENT '内存ID（关联recycle_quotation_capacity表）' AFTER `model_id`;
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `grade_spec_id` int NOT NULL DEFAULT '0' COMMENT '等级规格ID（关联recycle_quotation_grade_spec表）' AFTER `capacity_id`;
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `deduction_config_id` int NOT NULL DEFAULT '0' COMMENT '扣费配置ID（关联recycle_deduction_config表）' AFTER `grade_spec_id`;
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '价格（冗余字段，方便查询）' AFTER `deduction_config_id`;
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD COLUMN `grade_spec_name` varchar(100) NOT NULL DEFAULT '' COMMENT '等级规格名称（冗余字段，方便查询）' AFTER `grade_spec_id`;
+CREATE TABLE IF NOT EXISTS `{{prefix}}express_order_record` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `order_no` varchar(100) NOT NULL DEFAULT '' COMMENT '第三方订单号',
+  `recycle_order_id` int NOT NULL DEFAULT '0' COMMENT '回收订单ID',
+  `recycle_device_id` int NOT NULL DEFAULT '0' COMMENT '回收设备ID',
+  `provider_name` varchar(50) NOT NULL DEFAULT '' COMMENT '服务商',
+  `product_code` varchar(50) NOT NULL DEFAULT '' COMMENT '快递产品编码',
+  `product_name` varchar(100) NOT NULL DEFAULT '' COMMENT '快递产品名称',
+  `delivery_id` varchar(100) NOT NULL DEFAULT '' COMMENT '运单号',
+  `sender_name` varchar(80) NOT NULL DEFAULT '' COMMENT '寄件人',
+  `sender_mobile` varchar(30) NOT NULL DEFAULT '' COMMENT '寄件手机号',
+  `sender_province` varchar(80) NOT NULL DEFAULT '' COMMENT '寄件省',
+  `sender_city` varchar(80) NOT NULL DEFAULT '' COMMENT '寄件市',
+  `sender_district` varchar(80) NOT NULL DEFAULT '' COMMENT '寄件区县',
+  `sender_address` varchar(255) NOT NULL DEFAULT '' COMMENT '寄件详细地址',
+  `receiver_name` varchar(80) NOT NULL DEFAULT '' COMMENT '收件人',
+  `receiver_mobile` varchar(30) NOT NULL DEFAULT '' COMMENT '收件手机号',
+  `receiver_province` varchar(80) NOT NULL DEFAULT '' COMMENT '收件省',
+  `receiver_city` varchar(80) NOT NULL DEFAULT '' COMMENT '收件市',
+  `receiver_district` varchar(80) NOT NULL DEFAULT '' COMMENT '收件区县',
+  `receiver_address` varchar(255) NOT NULL DEFAULT '' COMMENT '收件详细地址',
+  `goods_name` varchar(100) NOT NULL DEFAULT '' COMMENT '物品名称',
+  `goods_value` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '保价金额',
+  `package_count` int NOT NULL DEFAULT '1' COMMENT '包裹数',
+  `estimated_weight` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '预估重量',
+  `actual_weight` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '实际重量',
+  `weight_diff` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '重量差异',
+  `volume` decimal(10,4) NOT NULL DEFAULT '0.0000' COMMENT '体积',
+  `volume_long` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '长cm',
+  `volume_width` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '宽cm',
+  `volume_height` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '高cm',
+  `estimated_cost` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '预估费用',
+  `actual_cost` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '实际费用',
+  `cost_diff` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '费用差异',
+  `payment_status` tinyint(1) NOT NULL DEFAULT '0' COMMENT '支付状态',
+  `user_paid` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '用户支付',
+  `discount_amount` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '优惠金额',
+  `order_status` varchar(30) NOT NULL DEFAULT 'pending' COMMENT '运单状态',
+  `status_history` json DEFAULT NULL COMMENT '状态历史',
+  `api_response` json DEFAULT NULL COMMENT 'API响应',
+  `pickup_time` int NOT NULL DEFAULT '0' COMMENT '揽收时间',
+  `delivery_time` int NOT NULL DEFAULT '0' COMMENT '签收时间',
+  `cancel_time` int NOT NULL DEFAULT '0' COMMENT '取消时间',
+  `cancel_reason` varchar(255) NOT NULL DEFAULT '' COMMENT '取消原因',
+  `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_create` (`site_id`,`create_at`),
+  KEY `idx_order_no` (`site_id`,`order_no`),
+  KEY `idx_delivery_id` (`site_id`,`delivery_id`),
+  KEY `idx_recycle_order` (`site_id`,`recycle_order_id`),
+  KEY `idx_status` (`site_id`,`order_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='快递运单记录';
 
--- 为新增字段添加索引
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD KEY `idx_model_id` (`model_id`);
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD KEY `idx_capacity_id` (`capacity_id`);
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD KEY `idx_grade_spec_id` (`grade_spec_id`);
-ALTER TABLE `{{prefix}}recycle_quotation_data` ADD KEY `idx_deduction_config_id` (`deduction_config_id`); 
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_express_provider_config` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `provider` varchar(50) NOT NULL DEFAULT '' COMMENT '服务商标识',
+  `provider_name` varchar(100) NOT NULL DEFAULT '' COMMENT '服务商名称',
+  `status` tinyint(1) NOT NULL DEFAULT '0' COMMENT '状态',
+  `is_default` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否默认',
+  `config` json DEFAULT NULL COMMENT '服务商配置',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_provider` (`site_id`,`provider`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收快递服务商配置';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}yisu_product_config` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `product_code` varchar(50) NOT NULL DEFAULT '' COMMENT '产品编码',
+  `product_name` varchar(100) NOT NULL DEFAULT '' COMMENT '产品名称',
+  `logo` varchar(255) NOT NULL DEFAULT '' COMMENT '产品图标',
+  `status` tinyint(1) NOT NULL DEFAULT '0' COMMENT '状态',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `create_at` int NOT NULL DEFAULT '0',
+  `update_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_product` (`site_id`,`product_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='易速快递产品配置';

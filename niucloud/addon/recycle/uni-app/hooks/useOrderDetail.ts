@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import type { OrderDetailInfo, OrderDetailDevice } from '../types/order'
-import { getOrderDetail, deviceConfirm, deviceAllConfirm } from '../api/order'
+import { getOrderDetail, deviceConfirm, deviceAllConfirm, getOrderSubmitConfig } from '../api/order'
 import { getRecycleUserAddressInfo } from '../api/return_order'
 import { getPaymentList } from '../api/payment'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
@@ -44,6 +44,54 @@ export function useOrderDetail() {
       .toFixed(2)
   })
 
+  const normalizePositiveNumber = (value: any, fallback = 1) => {
+    const count = Number(value)
+    return Number.isFinite(count) && count > 0 ? Math.min(5, Math.floor(count)) : fallback
+  }
+
+  const checkPayoutProfile = async () => {
+    const configRes = await getOrderSubmitConfig()
+    const profile = {
+      enabled: configRes?.data?.profile?.enabled === 0 ? 0 : 1,
+      payment_required: configRes?.data?.profile?.payment_required === 0 ? 0 : 1,
+      payment_min_count: normalizePositiveNumber(configRes?.data?.profile?.payment_min_count, 1),
+      id_card_required: configRes?.data?.profile?.id_card_required === 0 ? 0 : 1
+    }
+
+    if (!profile.enabled) return true
+
+    const [paymentRes, addressRes] = await Promise.all([
+      profile.payment_required ? getPaymentList() : Promise.resolve({ code: 1, data: [] }),
+      getRecycleUserAddressInfo()
+    ])
+    const paymentList = Array.isArray(paymentRes?.data) ? paymentRes.data : []
+    const addressInfo = addressRes?.data || {}
+    const missing: string[] = []
+
+    if (!addressInfo.name || !addressInfo.mobile) missing.push('个人资料')
+    if (profile.id_card_required && (!addressInfo.id_card || !addressInfo.card_pic)) missing.push('身份证信息')
+    if (profile.payment_required && paymentList.length < profile.payment_min_count) missing.push(`${profile.payment_min_count} 种收款方式`)
+
+    if (!missing.length) return true
+
+    uni.showModal({
+      title: '提示',
+      content: `请先完善${missing.join('、')}`,
+      confirmText: '去添加',
+      success: (res) => {
+        if (res.confirm) {
+          setTimeout(() => {
+            uni.navigateTo({
+              url: '/addon/recycle/pages/payment/index'
+            })
+          }, 100)
+        }
+      }
+    })
+
+    return false
+  }
+
   // 获取订单详情
   const loadOrderDetail = async (id: string | number) => {
     try {
@@ -78,35 +126,8 @@ export function useOrderDetail() {
       // 请求订阅消息
       await useSubscribeMessage().request('recycle_order_pay')
 
-      // 检查支付方式和地址信息
-      const paymentRes = await getPaymentList()
-      const addressRes = await getRecycleUserAddressInfo()
-
-      if (
-        !paymentRes ||
-        paymentRes.code !== 1 ||
-        !paymentRes.data ||
-        paymentRes.data.length === 0 ||
-        !addressRes ||
-        addressRes.code !== 1 ||
-        !addressRes.data ||
-        !addressRes.data.id_card
-      ) {
+      if (!await checkPayoutProfile()) {
         loading.value = false
-        uni.showModal({
-          title: '提示',
-          content: '请先完善信息',
-          confirmText: '去添加',
-          success: (res) => {
-            if (res.confirm) {
-              setTimeout(() => {
-                uni.navigateTo({
-                  url: '/addon/recycle/pages/payment/index'
-                })
-              }, 100)
-            }
-          }
-        })
         return false
       }
 

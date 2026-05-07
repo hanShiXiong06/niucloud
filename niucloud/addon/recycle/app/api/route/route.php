@@ -36,11 +36,6 @@ Route::group('recycle', function() {
      // 获取热门分类
      Route::get('recycle_category/hot', 'addon\recycle\app\api\controller\category\RecycleCategory@hot');
      Route::get('recycle_category_tree', 'addon\recycle\app\api\controller\category\RecycleCategory@tree');
-     // 报价查询（移动端）
-     Route::get('quotation_price/lists', 'addon\recycle\app\api\controller\quotation\QuotationPrice@lists');
-     Route::get('quotation_price/types', 'addon\recycle\app\api\controller\quotation\QuotationPrice@getPriceTypes');
-     Route::get('quotation_v2/lists', 'addon\recycle\app\api\controller\quotation\QuotationV2@lists');
-     Route::get('quotation_v2/types', 'addon\recycle\app\api\controller\quotation\QuotationV2@types');
      // 易速快递推送回调
      Route::post('express/yisu_push', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush');
 
@@ -67,6 +62,7 @@ Route::group('recycle', function() {
     Route::get('recycle_device/count', 'addon\recycle\app\api\controller\recycle_order\RecycleDevice@getCount');
 
     // 回收订单相关接口
+    Route::get('order_submit_config', 'addon\recycle\app\api\controller\recycle_order\OrderSubmitConfig@info');
     Route::get('recycle_order', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@lists');
     // 获取单条订单详情
     Route::get('recycle_order/:id', 'addon\recycle\app\api\controller\recycle_order\RecycleOrder@show');

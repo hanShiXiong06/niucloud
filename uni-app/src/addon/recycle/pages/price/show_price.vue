@@ -22,7 +22,7 @@
 		</view>
 
 		<!-- 空状态 -->
-		<view v-else-if="groupedTables.length === 0" class="empty-container">
+		<view v-else-if="groupedTables.length === 0 && !spiderImageUrl" class="empty-container">
 			<view class="empty-badge">暂无数据</view>
 			<text class="empty-title">没有可展示的报价</text>
 			<text class="empty-desc">你可以点击刷新重新拉取最新报价</text>
@@ -31,20 +31,15 @@
 
 		<!-- 报价数据 -->
 		<view v-else class="price-content">
-			<!-- <view class="quotation-cover"> -->
-				<!-- <view class="watermark watermark-a">大亨速收报价单</view>
-				<view class="watermark watermark-b">大亨速收报价单</view> -->
-				<!-- <view class="cover-main">
-					<text class="cover-title">{{ navbarTitle }}</text>
-					<text class="cover-time">{{ priceDateDisplay }}</text>
-				</view> -->
-			<!-- </view> -->
-
 			<view class="notice-card">
 				<text v-for="line in noticeLines" :key="line" class="notice-line">{{ line }}</text>
 			</view>
 
-			<view class="tool-card">
+			<view v-if="spiderImageUrl" class="image-quote-card">
+				<image class="image-quote" :src="spiderImageUrl" mode="widthFix" @click="previewSpiderImage" />
+			</view>
+
+			<view v-if="groupedTables.length > 0" class="tool-card">
 				<view class="tool-head">
 					<view class="data-meta">
 						<text>共 {{ filteredModelCount }} 个型号</text>
@@ -62,7 +57,7 @@
 				</view>
 			</view>
 
-			<view class="sheet-list">
+			<view v-if="groupedTables.length > 0" class="sheet-list">
 				<view
 					v-for="table in groupedTables"
 					:key="table.id"
@@ -201,7 +196,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onPageScroll } from '@dcloudio/uni-app'
-import { getQuotationPriceList, getQuotationV2PriceList, getQuotationV2Types, type QuotationPriceData, type QuotationV2Type } from '@/addon/recycle/api/quotation'
+import { getQuoteSpiderDetail, type QuoteSpiderItem } from '@/addon/recycle/api/quotation'
+import { getQuotationV2PriceList, getQuotationV2Types, type QuotationPriceData, type QuotationV2Type } from '@/addon/recycle_daheng_quote/api/quotation'
 
 interface EnhancedPriceRow extends QuotationPriceData {
 	showAdjustment?: boolean
@@ -250,6 +246,7 @@ interface PricePageOptions {
 	id?: string
 	quotation_id?: string
 	dataset_id?: string
+	item_id?: string
 	source?: string
 	title?: string
 	price_date?: string
@@ -268,6 +265,8 @@ const ADJUSTMENT_TEXT_GAP_RPX = 2
 const ADJUSTMENT_CELL_PADDING_RPX = 12
 const TABLE_TOTAL_WIDTH_RPX = 750
 const CAPACITY_COLUMN_WIDTH_RPX = 76
+const CAPACITY_TEXT_LINE_HEIGHT_RPX = 28
+const CAPACITY_CELL_PADDING_RPX = 16
 const PRICE_COLUMN_WIDTH_CONFIG = {
 	minWhenMany: 76,
 	minWhenNormal: 82,
@@ -287,6 +286,7 @@ const ADJUSTMENT_COLUMN_WIDTH_CONFIG = {
 
 const priceTypeId = ref('')
 const datasetId = ref('')
+const spiderItemId = ref('')
 const source = ref('')
 const priceDate = ref('')
 const pageTitle = ref('报价查询')
@@ -297,6 +297,7 @@ const keyword = ref('')
 const isScrolled = ref(false)
 const showTypeSheet = ref(false)
 const quotationTypes = ref<QuotationV2Type[]>([])
+const spiderImageUrl = ref('')
 
 const groupedTables = computed<GroupedTable[]>(() => {
 	const normalizedData = filterRows(tableData.value).map(row => ({
@@ -496,6 +497,11 @@ function formatDate(timestamp: number | string): string {
 }
 
 async function loadPriceData() {
+	if (source.value === 'spider') {
+		await loadSpiderPriceData()
+		return
+	}
+
 	if (!priceTypeId.value && !datasetId.value) {
 		uni.showToast({ title: '参数错误', icon: 'none' })
 		return
@@ -503,13 +509,7 @@ async function loadPriceData() {
 
 	loading.value = true
 	try {
-		const shouldUseV2 = source.value === 'v2' || datasetId.value || source.value !== 'legacy'
-		const res = shouldUseV2
-			? await loadV2WithFallback()
-			: await getQuotationPriceList({
-				quotation_id: priceTypeId.value,
-				is_current: 1
-			}) as PriceListResponse
+		const res = await loadV2PriceData()
 
 		if (res.code === 1 && res.data) {
 			tableData.value = res.data || []
@@ -530,34 +530,138 @@ async function loadPriceData() {
 	}
 }
 
-async function loadV2WithFallback() {
+async function loadSpiderPriceData() {
+	if (!spiderItemId.value) {
+		uni.showToast({ title: '参数错误', icon: 'none' })
+		return
+	}
+
+	loading.value = true
 	try {
-		const res = (await getQuotationV2PriceList({
-			dataset_id: datasetId.value,
-			quotation_id: priceTypeId.value,
-			price_date: priceDate.value
-		})) as PriceListResponse
-		if (res.code === 1 && (res.data?.length || source.value === 'v2' || datasetId.value)) {
-			source.value = 'v2'
-			return res
+		const res = await getQuoteSpiderDetail(spiderItemId.value) as any
+		if (res.code === 1 && res.data) {
+			const item = res.data as QuoteSpiderItem
+			spiderImageUrl.value = resolveSpiderImage(item)
+			tableData.value = normalizeSpiderRows(item)
+			priceTypeName.value = item.title || item.name || ''
+			if (!pageTitle.value || pageTitle.value === '报价查询') {
+				pageTitle.value = priceTypeName.value || '报价查询'
+			}
+		} else {
+			uni.showToast({ title: res.msg || '加载失败', icon: 'none' })
 		}
-	} catch (error) {
-		if (source.value === 'v2' || datasetId.value) {
-			throw error
+	} catch (error: unknown) {
+		console.error('加载爬虫报价失败:', error)
+		uni.showToast({
+			title: getErrorMessage(error),
+			icon: 'none'
+		})
+	} finally {
+		loading.value = false
+	}
+}
+
+function resolveSpiderImage(item: QuoteSpiderItem): string {
+	return item.bimage || item.image || item.timage || item.icon || ''
+}
+
+function previewSpiderImage() {
+	if (!spiderImageUrl.value) return
+	uni.previewImage({
+		urls: [spiderImageUrl.value],
+		current: 0
+	})
+}
+
+function normalizeSpiderRows(item: QuoteSpiderItem): QuotationPriceData[] {
+	const title = item.title || item.name || '报价单'
+	const rows = Array.isArray(item.rows) ? item.rows : []
+
+	return rows.map(row => {
+		const prices = normalizeSpiderPrices(row.final_prices || row.manual_prices || row.source_prices || {}, row.columns || [])
+		return {
+			id: row.id,
+			quotation_id: item.id,
+			price_name: title,
+			goods_id: row.id,
+			goods_name: row.model_name || item.name || title,
+			capacity: row.tab || row.brand || item.tab || item.brand || '报价',
+			prices,
+			add_value_info: 0,
+			value_info: row.remark || '',
+			adjustment_items: row.remark ? [{ field_name: '备注', content_text: row.remark }] : [],
+			adjustment_summary: row.remark || '',
+			price_date: '',
+			create_at: row.create_at || '',
+			update_at: row.update_at || ''
+		}
+	})
+}
+
+function normalizeSpiderPrices(value: unknown, columns: string[] = []): Record<string, unknown> {
+	const result: Record<string, unknown> = {}
+	const columnNames = columns.map(column => String(column || '').trim())
+
+	if (isRecord(value)) {
+		for (const key of Object.keys(value)) {
+			const columnName = resolveSpiderPriceColumnName(key, columnNames)
+			if (!columnName) continue
+			result[columnName] = {
+				price: value[key],
+				final: value[key]
+			}
 		}
 	}
 
-	source.value = 'legacy'
-	return await getQuotationPriceList({
+	if (Array.isArray(value)) {
+		value.forEach((item, index) => {
+			if (isRecord(item)) {
+				const key = String(item.name || item.field_name || item.label || columnNames[index] || `价格${index + 1}`).trim()
+				if (key) result[key] = item
+			} else {
+				const key = String(columnNames[index] || `价格${index + 1}`)
+				result[key] = {
+					price: item,
+					final: item
+				}
+			}
+		})
+	}
+
+	if (Object.keys(result).length === 0 && columnNames.length > 0) {
+		for (const column of columnNames) {
+			if (!column) continue
+			result[column] = ''
+		}
+	}
+
+	return result
+}
+
+function resolveSpiderPriceColumnName(key: string, columns: string[]): string {
+	const name = String(key || '').trim()
+	if (name === '') return ''
+	if (/^\d+$/.test(name)) {
+		return columns[Number(name)] || ''
+	}
+	return name
+}
+
+async function loadV2PriceData() {
+	const res = (await getQuotationV2PriceList({
+		dataset_id: datasetId.value,
 		quotation_id: priceTypeId.value,
-		is_current: 1
-	}) as PriceListResponse
+		price_date: priceDate.value
+	})) as PriceListResponse
+	source.value = 'v2'
+	return res
 }
 
 function goToOrder() {
 	const queryParts: string[] = []
 	if (priceTypeId.value) queryParts.push(`quotation_id=${encodeURIComponent(priceTypeId.value)}`)
 	if (datasetId.value) queryParts.push(`dataset_id=${encodeURIComponent(datasetId.value)}`)
+	if (spiderItemId.value) queryParts.push(`quote_spider_item_id=${encodeURIComponent(spiderItemId.value)}`)
 	const query = queryParts.length ? `?${queryParts.join('&')}` : ''
 	uni.navigateTo({ url: `${ORDER_PAGE_URL}${query}` })
 }
@@ -587,11 +691,13 @@ function getDisplayRows(rows: EnhancedPriceRow[], adjustmentColumns: AdjustmentC
 			adjustmentRowspan: 1,
 			displayAdjustmentCells,
 			displayAdjustmentParts: Object.values(displayAdjustmentCells).flatMap(cell => cell.parts),
-			displayAdjustment: Object.values(displayAdjustmentCells).map(cell => cell.text).filter(Boolean).join('；')
+			displayAdjustment: Object.values(displayAdjustmentCells).map(cell => cell.text).filter(Boolean).join('；'),
+			displayRowHeight: estimateCapacityCellHeight(row.capacity || '--')
 		}
 	})
 
 	if (displayRows.length === 0 || adjustmentColumns.length === 0) {
+		applyDisplayRowHeights(displayRows)
 		return displayRows
 	}
 
@@ -880,7 +986,11 @@ function applyAdjustmentCellHeight(rows: EnhancedPriceRow[], column: AdjustmentC
 }
 
 function applyDisplayRowHeights(rows: EnhancedPriceRow[]) {
-	const requiredHeights = rows.map(() => ADJUSTMENT_ROW_HEIGHT_RPX)
+	const requiredHeights = rows.map(row => Math.max(
+		ADJUSTMENT_ROW_HEIGHT_RPX,
+		estimateCapacityCellHeight(row.capacity || '--'),
+		Number(row.displayRowHeight || 0)
+	))
 
 	rows.forEach((row, rowIndex) => {
 		Object.values(row.displayAdjustmentCells || {}).forEach(cell => {
@@ -907,6 +1017,11 @@ function applyDisplayRowHeights(rows: EnhancedPriceRow[]) {
 			cell.height = Math.max(cell.height || 0, height)
 		})
 	})
+}
+
+function estimateCapacityCellHeight(value: unknown): number {
+	const lines = estimateTextLineCount(String(value || '--'), CAPACITY_COLUMN_WIDTH_RPX)
+	return Math.max(ADJUSTMENT_ROW_HEIGHT_RPX, lines * CAPACITY_TEXT_LINE_HEIGHT_RPX + CAPACITY_CELL_PADDING_RPX)
 }
 
 function estimateAdjustmentCellHeight(parts: string[], columnWidth: number): number {
@@ -1191,6 +1306,10 @@ async function loadQuotationTypes() {
 }
 
 function openTypeSheet() {
+	if (source.value === 'spider') {
+		uni.showToast({ title: '当前报价暂不支持切换', icon: 'none' })
+		return
+	}
 	showTypeSheet.value = true
 	if (quotationTypes.value.length === 0) {
 		loadQuotationTypes()
@@ -1229,8 +1348,16 @@ onLoad((options: PricePageOptions) => {
 	if (options?.dataset_id) {
 		datasetId.value = options.dataset_id
 	}
+	if (options?.item_id) {
+		spiderItemId.value = options.item_id
+	}
 	if (options?.price_date) {
 		priceDate.value = options.price_date
+	}
+	if (source.value === 'spider' && spiderItemId.value) {
+		pageTitle.value = options?.title ? safeDecode(options.title) : '报价查询'
+		loadPriceData()
+		return
 	}
 	const id = options?.id || options?.quotation_id || ''
 	if (id || datasetId.value) {
@@ -1917,6 +2044,20 @@ onPageScroll((event) => {
 	text-align: center;
 }
 
+.image-quote-card {
+	margin-bottom: 12rpx;
+	padding: 12rpx;
+	background: #ffffff;
+	border: 1rpx solid #e5e7eb;
+	border-radius: 10rpx;
+}
+
+.image-quote {
+	width: 100%;
+	display: block;
+	border-radius: 8rpx;
+}
+
 .tool-card {
 	margin-bottom: 10rpx;
 	padding: 12rpx;
@@ -2148,6 +2289,9 @@ onPageScroll((event) => {
 	background: #f9fafb;
 	color: #111827;
 	font-size: 22rpx;
+	line-height: 28rpx;
+	white-space: normal;
+	overflow-wrap: anywhere;
 }
 
 .price-head-cell {

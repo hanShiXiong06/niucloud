@@ -177,7 +177,7 @@ class QuoteItemService extends BaseAdminService
         $this->getInfo($id);
         $save = $this->buildAdjustSave($data, ['is_show', 'is_hot', 'sort', 'follow_source']);
         foreach (['name', 'brand', 'tab', 'keywords', 'quote_type', 'image', 'timage', 'bimage', 'icon'] as $field) {
-            if (array_key_exists($field, $data) && $data[$field] !== '') {
+            if (array_key_exists($field, $data)) {
                 $save[$field] = (string)$data[$field];
             }
         }

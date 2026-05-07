@@ -184,7 +184,12 @@ class RecycleOrder extends BaseModel
             $query->whereExists(function($subQuery) use ($value) {
                 $subQuery->table($this->getTable('recycle_device'))
                          ->whereRaw($this->getTable('recycle_device') . '.order_id = ' . $this->getTable() . '.id')
-                         ->where('imei', 'like', "%{$value}%");
+                         ->where(function($deviceQuery) use ($value) {
+                             $deviceQuery->whereOr([
+                                 ['imei', 'like', "%{$value}%"],
+                                 ['user_sn', 'like', "%{$value}%"]
+                             ]);
+                         });
             });
         }
     }

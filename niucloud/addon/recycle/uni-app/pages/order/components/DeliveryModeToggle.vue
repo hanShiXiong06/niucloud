@@ -3,11 +3,11 @@
     <view class="flex gap-3 relative z-10">
       <view
         v-for="(tab, index) in tabs"
-        :key="index"
-        :class="['tab-item', modelValue === index ? 'active' : '']"
-        @tap="handleSwitch(index)"
+        :key="tab.value"
+        :class="['tab-item', modelValue === tab.value ? 'active' : '']"
+        @tap="handleSwitch(tab.value)"
       >
-        {{ tab }}
+        {{ tab.label }}
       </view>
     </view>
     <view class="order-link" @tap="handleToOrderList">
@@ -18,13 +18,21 @@
 </template>
 
 <script setup lang="ts">
-interface Props {
-  modelValue: number
-  tabs?: string[]
+interface DeliveryTab {
+  label: string
+  value: number
 }
 
-withDefaults(defineProps<Props>(), {
-  tabs: () => ['邮寄到店', '自送到店']
+interface Props {
+  modelValue: number
+  tabs?: DeliveryTab[]
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  tabs: () => [
+    { label: '邮寄到店', value: 0 },
+    { label: '自送到店', value: 1 }
+  ]
 })
 
 const emit = defineEmits<{
@@ -33,6 +41,8 @@ const emit = defineEmits<{
 }>()
 
 const handleSwitch = (index: number) => {
+  if (!props.tabs.some(tab => tab.value === index)) return
+
   emit('update:modelValue', index)
 }
 

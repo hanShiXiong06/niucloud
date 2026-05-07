@@ -129,7 +129,14 @@
         >
           <el-table-column prop="id" label="ID" width="55" />
           <el-table-column prop="model" label="型号" min-width="110" />
-          <el-table-column prop="imei" label="IMEI" min-width="130" />
+          <el-table-column label="串号" min-width="170">
+            <template #default="scope">
+              <div class="odd-serial-cell">
+                <div v-if="scope.row.user_sn">用户：{{ scope.row.user_sn }}</div>
+                <div>管理：{{ scope.row.imei || '暂无' }}</div>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="规格" min-width="180">
             <template #default="scope">
               <div class="odd-spec-tags">
@@ -168,7 +175,8 @@
                 {{ device.status_name }}
               </el-tag>
             </div>
-            <div class="odd-device-card__imei">IMEI：{{ device.imei || '暂无' }}</div>
+            <div v-if="device.user_sn" class="odd-device-card__imei">用户串号：{{ device.user_sn }}</div>
+            <div class="odd-device-card__imei">管理串号：{{ device.imei || '暂无' }}</div>
             <!-- 规格信息 -->
             <div class="odd-device-card__specs" v-if="device.capacity || device.color || device.system_version || device.warranty_info">
               <el-tag v-if="device.capacity" size="small" type="info" effect="plain">{{ device.capacity }}</el-tag>
@@ -454,6 +462,14 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   gap: 4px;
 }
 .odd-no-spec { font-size: 12px; color: #d1d5db; }
+
+.odd-serial-cell {
+  color: #475569;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-all;
+}
 
 /* 价格 */
 .odd-price {

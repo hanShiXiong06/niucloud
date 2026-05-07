@@ -243,6 +243,10 @@ class RecycleThirdPartyConfigService extends BaseCoreService
     private function mergeConfig(array $default, array $data): array
     {
         foreach ($data as $key => $value) {
+            if (!array_key_exists($key, $default)) {
+                continue;
+            }
+
             if ($key === 'device_query' && is_array($value)) {
                 $default[$key] = $this->deviceQueryConfigService->sanitizeConfig(array_merge(
                     is_array($default[$key] ?? null) ? $default[$key] : [],

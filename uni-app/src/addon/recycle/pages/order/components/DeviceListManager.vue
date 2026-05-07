@@ -1,24 +1,5 @@
 <template>
   <view>
-    <!-- 设备列表标题和操作按钮 -->
-    <view class="flex justify-between items-center mb-2">
-      <text class="text-sm font-medium">设备列表</text>
-      <view class="flex gap-2">
-        <!-- 批量添加按钮 -->
-        <view
-          v-if="showBatchButton"
-          :id="'batch-add-btn'"
-          class="batch-add-button"
-          @click="handleBatchAdd"
-        >
-          <view class="flex items-center gap-1 px-2 py-1 rounded text-xs">
-            <up-icon name="plus" size="14" color="#fff"></up-icon>
-            <text>添加设备</text>
-          </view>
-        </view>
-      </view>
-    </view>
-
     <!-- 设备列表 -->
     <view v-if="devices.length > 0" class="space-y-2 mb-3">
       <view
@@ -30,7 +11,7 @@
         <view class="flex flex-col gap-1 flex-1">
           <text class="text-sm">
             <text class="font-medium mr-1" style="color: #4f46e5;">{{ index + 1 }}</text>
-            串号: {{ item.imei }}
+            用户串号: {{ item.user_sn || item.imei }}
           </text>
           <text v-if="item.model" class="text-xs text-gray-600">
             名称: {{ item.model }}
@@ -78,10 +59,18 @@
     >
       <view class="add-dialog">
         <view class="dialog-header">
-          <text class="dialog-title">添加设备信息</text>
+          <view>
+            <text class="dialog-title">添加回收设备</text>
+            <text class="dialog-subtitle">用于用户下单前登记，门店签收时再录入完整 IMEI/SN。</text>
+          </view>
         </view>
 
         <view class="dialog-content" :id="'dialog-content'">
+          <view class="dialog-tip">
+            <view class="dialog-tip__badge">提示</view>
+            <text class="dialog-tip__text">设备名称和用户串号后 6 位必填。</text>
+          </view>
+
           <!-- 设备名称输入 -->
           <view :id="'input-model'" class="form-item">
             <view class="form-label">
@@ -97,15 +86,15 @@
             </view>
           </view>
 
-          <!-- 串号输入（后6位） -->
+          <!-- 用户串号输入（后6位） -->
           <view :id="'input-imei'" class="form-item">
             <view class="form-label">
-              <text>串号后6位</text>
+              <text>用户串号后6位</text>
               <text class="required">*</text>
             </view>
             <view class="input-wrapper">
               <input
-                v-model="newDevice.imei"
+                v-model="newDevice.user_sn"
                 placeholder="输入后6位（字母或数字）"
                 maxlength="6"
                 type="text"
@@ -118,16 +107,17 @@
           <!-- 定价输入 -->
           <view :id="'input-price'" class="form-item">
             <view class="form-label">
-              <text>定价</text>
+              <text>预估价（选填）</text>
             </view>
             <view class="input-wrapper">
               <input
                 v-model="newDevice.initial_price"
-                placeholder="请输入定价"
+                placeholder="不确定可以留空"
                 type="digit"
                 class="custom-input"
               />
             </view>
+            <text class="form-hint">这里只做下单预估，不会影响门店最终质检报价</text>
           </view>
         </view>
 
@@ -145,39 +135,11 @@
         </view>
       </view>
     </up-popup>
-
-    <!-- 新手引导遮罩 -->
-    <view v-if="showGuide" class="guide-overlay" @click.stop>
-      <!-- 镂空高亮区域 -->
-      <view class="guide-spotlight" :style="spotlightStyle"></view>
-
-      <!-- 引导提示 -->
-      <view class="guide-tooltip" :style="tooltipStyle">
-        <view class="guide-header">
-          <view class="guide-step-badge">步骤 {{ guideStep }}/3</view>
-          <text class="guide-skip-btn" @click="skipGuide">跳过</text>
-        </view>
-        <view class="guide-title">{{ currentGuide.title }}</view>
-        <view class="guide-desc">{{ currentGuide.desc }}</view>
-
-        <!-- 操作按钮 -->
-        <view class="guide-actions">
-          <view v-if="guideStep > 1" class="guide-btn guide-btn-secondary" @click="prevStep">
-            上一步
-          </view>
-          <view class="guide-btn guide-btn-primary" @click="nextStep">
-            {{ guideStep < 3 ? '下一步' : '完成' }}
-          </view>
-        </view>
-
-        <view v-if="guideStep > 1" class="guide-arrow" :class="currentGuide.arrowClass"></view>
-      </view>
-    </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed, nextTick } from 'vue'
+import { ref, watch } from 'vue'
 import type { Device } from '../../../types/order'
 
 interface Props {
@@ -205,84 +167,19 @@ const localCount = ref(props.count)
 const showAddDialog = ref(false)
 const newDevice = ref<Device>({
   imei: '',
+  user_sn: '',
   model: '',
   initial_price: ''
 })
 
-// 引导相关
-const showGuide = ref(false)
-const guideStep = ref(1)
-const spotlightRect = ref({ top: 0, left: 0, width: 0, height: 0 })
-const GUIDE_STORAGE_KEY = 'recycle_device_guide_shown_v2'
-
-// 引导配置
-const guides = [
-  {
-    step: 1,
-    title: '第一步：点击添加设备',
-    desc: '点击右上角的"添加设备"按钮，开始添加设备信息',
-    targetId: 'batch-add-btn',
-    arrowClass: 'arrow-top-right'
-  },
-  {
-    step: 2,
-    title: '第二步：填写设备信息',
-    desc: '依次填写设备名称、串号后6位和定价，所有字段都是必填项',
-    targetId: 'dialog-content',
-    arrowClass: 'arrow-top'
-  },
-  {
-    step: 3,
-    title: '第三步：确认添加',
-    desc: '检查信息无误后，点击"确定"按钮完成添加',
-    targetId: 'confirm-btn',
-    arrowClass: 'arrow-bottom'
-  }
-]
-
-const currentGuide = computed(() => {
-  return guides.find(g => g.step === guideStep.value) || guides[0]
-})
-
-// 镂空高亮样式
-const spotlightStyle = computed(() => {
-  const rect = spotlightRect.value
-  return {
-    top: `${rect.top - 8}px`,
-    left: `${rect.left - 8}px`,
-    width: `${rect.width + 16}px`,
-    height: `${rect.height + 16}px`,
-    borderRadius: guideStep.value === 1 ? '8px' : '12px'
-  }
-})
-
-// 提示框位置
-const tooltipStyle = computed(() => {
-  const rect = spotlightRect.value
-  const step = guideStep.value
-
-  if (step === 1) {
-    return {
-      top: `${rect.top + rect.height + 20}px`,
-      right: '20px'
-    }
-  } else if (step >= 2 && step <= 4) {
-    return {
-      top: `${rect.top + rect.height + 20}px`,
-      left: '50%',
-      transform: 'translateX(-50%)'
-    }
-  } else {
-    return {
-      bottom: `${window.innerHeight - rect.top + 20}px`,
-      left: '50%',
-      transform: 'translateX(-50%)'
-    }
-  }
-})
+const normalizeCount = (value: any) => {
+  const rawValue = typeof value === 'object' && value !== null ? value.value : value
+  const count = Number(rawValue)
+  return Number.isFinite(count) && count > 0 ? count : 1
+}
 
 watch(() => props.count, (newVal) => {
-  localCount.value = newVal
+  localCount.value = normalizeCount(newVal)
 })
 
 // 监听设备数量变化，自动更新数量
@@ -293,37 +190,13 @@ watch(() => props.devices.length, (newLength) => {
   }
 })
 
-onMounted(() => {
-  const hasShownGuide = uni.getStorageSync(GUIDE_STORAGE_KEY)
-  if (!hasShownGuide) {
-    showGuide.value = true
-    nextTick(() => {
-      updateSpotlight()
-    })
-  }
-})
+const handleCountChange = (value: any) => {
+  const count = normalizeCount(value)
+  localCount.value = count
 
-const updateSpotlight = () => {
-  const targetId = currentGuide.value.targetId
-
-  // 使用 uni.createSelectorQuery 获取元素位置
-  const query = uni.createSelectorQuery()
-  query.select(`#${targetId}`).boundingClientRect((data: any) => {
-    if (data) {
-      spotlightRect.value = {
-        top: data.top,
-        left: data.left,
-        width: data.width,
-        height: data.height
-      }
-    }
-  }).exec()
-}
-
-const handleCountChange = (value: number) => {
   // 如果有设备，不允许手动修改数量
   if (props.devices.length === 0) {
-    emit('update:count', value)
+    emit('update:count', count)
   }
 }
 
@@ -339,27 +212,17 @@ const handleRemove = (index: number) => {
 
 const handleBatchAdd = () => {
   showAddDialog.value = true
-
-  if (showGuide.value && guideStep.value === 1) {
-    setTimeout(() => {
-      guideStep.value = 2
-      updateSpotlight()
-    }, 300)
-  }
 }
 
-const closeAddDialog = () => {
-  if (showGuide.value && guideStep.value > 1) {
-    uni.showToast({
-      title: '请完成引导步骤',
-      icon: 'none'
-    })
-    return
-  }
+defineExpose({
+  openAddDialog: handleBatchAdd
+})
 
+const closeAddDialog = () => {
   showAddDialog.value = false
   newDevice.value = {
     imei: '',
+    user_sn: '',
     model: '',
     initial_price: ''
   }
@@ -375,7 +238,7 @@ const confirmAdd = () => {
     return
   }
 
-  if (!newDevice.value.imei?.trim()) {
+  if (!newDevice.value.user_sn?.trim()) {
     uni.showToast({
       title: '请输入串号后6位',
       icon: 'none'
@@ -383,7 +246,7 @@ const confirmAdd = () => {
     return
   }
 
-  if (newDevice.value.imei.length !== 6) {
+  if (newDevice.value.user_sn.length !== 6) {
     uni.showToast({
       title: '串号必须是6位',
       icon: 'none'
@@ -410,66 +273,15 @@ const confirmAdd = () => {
   showAddDialog.value = false
   newDevice.value = {
     imei: '',
+    user_sn: '',
     model: '',
     initial_price: ''
-  }
-
-  // 完成引导
-  if (showGuide.value) {
-    skipGuide()
   }
 
   uni.showToast({
     title: '添加成功',
     icon: 'success'
   })
-}
-
-const skipGuide = () => {
-  showGuide.value = false
-  guideStep.value = 1
-  uni.setStorageSync(GUIDE_STORAGE_KEY, true)
-
-  if (showAddDialog.value) {
-    showAddDialog.value = false
-    newDevice.value = {
-      imei: '',
-      model: '',
-      initial_price: ''
-    }
-  }
-}
-
-const nextStep = () => {
-  if (guideStep.value === 1) {
-    // 第一步：打开弹窗
-    if (!showAddDialog.value) {
-      handleBatchAdd()
-    } else {
-      guideStep.value = 2
-      nextTick(() => {
-        updateSpotlight()
-      })
-    }
-  } else if (guideStep.value < 3) {
-    // 第2步：直接进入第3步
-    guideStep.value++
-    nextTick(() => {
-      updateSpotlight()
-    })
-  } else {
-    // 第3步：完成引导
-    skipGuide()
-  }
-}
-
-const prevStep = () => {
-  if (guideStep.value > 1) {
-    guideStep.value--
-    nextTick(() => {
-      updateSpotlight()
-    })
-  }
 }
 </script>
 
@@ -483,35 +295,71 @@ const prevStep = () => {
   margin-bottom: 0.5rem;
 }
 
-.batch-add-button {
-  background: var(--primary-color);
-  color: #fff;
-  border-radius: 4px;
-}
-
 .add-dialog {
-  width: 600rpx;
+  width: 640rpx;
+  max-height: 86vh;
   background: #fff;
-  border-radius: 10px;
+  border-radius: 20rpx;
   overflow: hidden;
 }
 
 .dialog-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 32rpx;
+  justify-content: flex-start;
+  padding: 32rpx 32rpx 24rpx;
   border-bottom: 1px solid #f0f0f0;
 }
 
 .dialog-title {
+  display: block;
   font-size: 18px;
   font-weight: 600;
   color: #333;
+  line-height: 1.4;
+}
+
+.dialog-subtitle {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
 }
 
 .dialog-content {
   padding: 32rpx;
+  max-height: 58vh;
+  overflow-y: auto;
+}
+
+.dialog-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  padding: 18rpx 20rpx;
+  margin-bottom: 28rpx;
+  background: #f8fafc;
+  border-radius: 12rpx;
+}
+
+.dialog-tip__badge {
+  flex-shrink: 0;
+  padding: 4rpx 10rpx;
+  background: rgba(79, 70, 229, 0.1);
+  color: var(--primary-color);
+  border-radius: 999rpx;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.dialog-tip__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #4b5563;
+  line-height: 1.5;
 }
 
 .form-item {
@@ -580,122 +428,5 @@ const prevStep = () => {
 .dialog-button.confirm {
   color: var(--primary-color);
   font-weight: 600;
-}
-
-// 引导样式
-.guide-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  z-index: 9998;
-}
-
-.guide-spotlight {
-  position: fixed;
-  background: #fff;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75);
-  z-index: 9999;
-  transition: all 0.3s ease;
-  pointer-events: none;
-}
-
-.guide-tooltip {
-  position: fixed;
-  background: #fff;
-  border-radius: 12rpx;
-  padding: 32rpx;
-  width: 560rpx;
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.3);
-  z-index: 10000;
-}
-
-.guide-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16rpx;
-}
-
-.guide-step-badge {
-  background: var(--primary-color);
-  color: #fff;
-  padding: 6rpx 16rpx;
-  border-radius: 20rpx;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.guide-skip-btn {
-  color: #999;
-  font-size: 14px;
-}
-
-.guide-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 12rpx;
-}
-
-.guide-desc {
-  font-size: 14px;
-  color: #666;
-  line-height: 1.6;
-  margin-bottom: 24rpx;
-}
-
-.guide-actions {
-  display: flex;
-  gap: 16rpx;
-  justify-content: flex-end;
-}
-
-.guide-btn {
-  padding: 16rpx 32rpx;
-  border-radius: 8rpx;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.guide-btn-secondary {
-  background: #f5f5f5;
-  color: #666;
-}
-
-.guide-btn-primary {
-  background: var(--primary-color);
-  color: #fff;
-}
-
-.guide-arrow {
-  position: absolute;
-  width: 0;
-  height: 0;
-  border: 12rpx solid transparent;
-}
-
-.arrow-top {
-  top: -24rpx;
-  left: 50%;
-  transform: translateX(-50%);
-  border-bottom-color: #fff;
-}
-
-.arrow-top-right {
-  top: -24rpx;
-  right: 40rpx;
-  border-bottom-color: #fff;
-}
-
-.arrow-bottom {
-  bottom: -24rpx;
-  left: 50%;
-  transform: translateX(-50%);
-  border-top-color: #fff;
 }
 </style>

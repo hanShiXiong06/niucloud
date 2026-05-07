@@ -5,6 +5,7 @@
 // 设备信息
 export interface Device {
   imei: string
+  user_sn?: string
   model?: string
   initial_price?: string
 }
@@ -97,6 +98,7 @@ export interface AddressInfo {
 export interface OrderDevice {
   id: number
   imei: string
+  user_sn?: string
   model: string
   brand: string
   initial_price: string
@@ -166,6 +168,7 @@ export interface MescrollUpOption {
 export interface OrderDetailDevice {
   id: number
   imei: string
+  user_sn?: string
   model: string
   brand?: string
   initial_price: string

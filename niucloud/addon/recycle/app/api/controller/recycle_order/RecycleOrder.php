@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace addon\recycle\app\api\controller\recycle_order;
 
 use core\base\BaseApiController;
+use addon\recycle\app\service\core\order\OrderSubmitConfigService;
 use addon\recycle\app\service\api\recycle_order\RecycleOrderService;
 use addon\recycle\app\dict\order\RecycleOrderDict;
 use think\App;
@@ -101,6 +102,7 @@ class RecycleOrder extends BaseApiController
 
             // 'devices' => 'require|array|min:1',
             // 'devices.*.imei' => 'require|length:15',
+            // 'devices.*.user_sn' => 'max:100',
             // 'devices.*.model' => 'require',
             'devices.*.initial_price' => 'float|min:0',
         ], [
@@ -118,7 +120,13 @@ class RecycleOrder extends BaseApiController
         ]);
 
         // 如果使用统一快递服务（亿速）
+        $orderSubmitConfigService = new OrderSubmitConfigService();
+
         if ($data['use_express']) {
+            if (!$orderSubmitConfigService->canUsePlatformDelivery((int)$this->site_id, (int)$data['count'])) {
+                return fail('当前数量未达到平台包邮下单要求');
+            }
+
             $expressConfig = $data['express_config'];
             if (empty($expressConfig['sender_name'])) {
                 return fail('请输入寄件人姓名');
@@ -135,6 +143,10 @@ class RecycleOrder extends BaseApiController
         } elseif ($data['delivery_type'] == 1 && empty($data['express_no'])) {
             // 如果不使用平台快递，且配送方式是快递，则需要快递单号
             return fail('请输入快递单号');
+        }
+
+        if (!$orderSubmitConfigService->isDeliveryModeEnabled((int)$this->site_id, (int)$data['delivery_type'])) {
+            return fail('当前下单方式未开启');
         }
 
         return success($this->service->add($data));

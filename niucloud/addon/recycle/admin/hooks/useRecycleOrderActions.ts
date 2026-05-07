@@ -93,6 +93,7 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
         id: device.id,
         model: device.model,
         imei: device.imei,
+        user_sn: device.user_sn,
         final_price: device.final_price || 0,
         status: device.status,
         status_name: device.status_name || ''

@@ -1,17 +1,24 @@
 import request from "@/utils/request";
 
 /**
- * 获取报价数据列表（移动端）
+ * 获取报价爬虫插件的前台报价项列表
  */
-export function getQuotationPriceList(params: any) {
-  return request.get("recycle/quotation_price/lists", params);
+export function getQuoteSpiderFeatured(params: any = {}) {
+  return request.get("recycle_quote_spider/featured", params);
 }
 
 /**
- * 获取报价类型列表
+ * 获取报价爬虫插件的前台分类树
  */
-export function getQuotationPriceTypes() {
-  return request.get("recycle/quotation_price/types");
+export function getQuoteSpiderCategoryTree(params: any = {}) {
+  return request.get("recycle_quote_spider/category/tree", params);
+}
+
+/**
+ * 获取报价爬虫插件的报价项详情
+ */
+export function getQuoteSpiderDetail(id: number | string) {
+  return request.get(`recycle_quote_spider/item/${id}`);
 }
 
 /**
@@ -27,18 +34,75 @@ export interface QuotationPriceData {
   prices: Record<string, PriceDetail>;
   add_value_info: number;
   value_info?: string;
+  adjustment_items?: QuotationAdjustmentItem[];
+  adjustment_summary?: string;
   price_date: string;
-  create_at: number;
-  update_at: number;
+  create_at: number | string;
+  update_at: number | string;
+}
+
+export interface QuotationAdjustmentItem {
+  id?: number;
+  field_id?: number;
+  field_name?: string;
+  field_type?: string;
+  field_sort?: number;
+  content_text?: string;
+  content_html?: string;
 }
 
 export interface PriceDetail {
   original: number;
   final: number;
+  price?: number;
+  adjust_type?: number;
+  adjust_value?: number;
 }
 
-export interface QuotationPriceType {
-  quotation_id: number;
-  price_name: string;
+export interface QuoteSpiderItem {
+  id: number;
+  source_id: number;
+  category_id: number;
+  brand: string;
+  tab: string;
+  name: string;
+  parent_name: string;
+  category_path?: string;
+  title: string;
+  quote_type: string;
+  is_image_quote: number;
+  image: string;
+  timage: string;
+  bimage: string;
+  icon: string;
+  is_hot: number;
+  model_count: number;
+  last_sync_at_text: string;
+  rows?: QuoteSpiderRow[];
 }
 
+export interface QuoteSpiderCategory {
+  id: number;
+  source_id: number;
+  parent_id: number;
+  name: string;
+  level: number;
+  sort: number;
+  is_show: number;
+  children?: QuoteSpiderCategory[];
+}
+
+export interface QuoteSpiderRow {
+  id: number;
+  item_id: number;
+  brand: string;
+  tab: string;
+  model_name: string;
+  columns?: string[];
+  source_prices?: Record<string, any>;
+  manual_prices?: Record<string, any>;
+  final_prices?: Record<string, any>;
+  remark?: string;
+  create_at?: number | string;
+  update_at?: number | string;
+}

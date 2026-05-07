@@ -1,0 +1,11 @@
+{
+  "title": "大亨速收报价",
+  "desc": "提供大亨速收报价配置、报价 2.0 工作台、同步导入和前台报价展示能力",
+  "key": "recycle_daheng_quote",
+  "version": "0.1.0",
+  "author": "hsx",
+  "type": "addon",
+  "support_app": "recycle",
+  "compile": [],
+  "support_version": "1.2.1"
+}

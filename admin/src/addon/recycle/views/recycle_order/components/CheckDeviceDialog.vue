@@ -2,623 +2,213 @@
   <el-dialog
     v-model="dialogVisible"
     title="设备质检"
-    :width="isMobile ? '95vw' : '980px'"
+    :width="isMobile ? '96vw' : '1240px'"
     :destroy-on-close="true"
-    class="check-device-dialog"
+    class="check-device-dialog cdd-workbench-dialog"
     align-center
   >
-
-    <!-- ===================================================================
-         设备档案：型号 + IMEI 标识栏
-    =================================================================== -->
-    <section class="cdd-section cdd-device-card">
-      <div class="cdd-device-card__header">
-        <div class="cdd-device-card__info">
-          <div class="cdd-device-card__icon">📱</div>
-          <div class="cdd-device-card__content">
-            <!-- 型号显示/编辑 -->
-            <div class="cdd-device-card__model-row">
-              <template v-if="!isEditingDeviceInfo">
-                <div class="cdd-device-card__model-display">
-                  <span class="model-text">{{ deviceForm.model || '未知型号' }}</span>
-                </div>
-              </template>
-              <el-input
-                v-else
-                v-model="deviceForm.model"
-                placeholder="请输入设备型号"
-                size="default"
-                clearable
-                ref="modelInputRef"
-                class="cdd-model-input"
-              >
-                <template #prefix>
-                  <el-icon><Cellphone /></el-icon>
-                </template>
-              </el-input>
-            </div>
-
-            <!-- IMEI显示/编辑 -->
-            <div class="cdd-device-card__imei-row">
-              <template v-if="!isEditingDeviceInfo">
-                <div class="cdd-device-card__imei-display">
-                  <span class="imei-label">IMEI</span>
-                  <span class="imei-value">{{ formatImei(deviceForm.imei) || '未录入' }}</span>
-                </div>
-              </template>
-              <el-input
-                v-else
-                v-model="deviceForm.imei"
-                placeholder="请输入或扫描15位IMEI"
-                size="default"
-                clearable
-                maxlength="15"
-                show-word-limit
-                ref="imeiInputRef"
-                @input="handleImeiInput"
-                class="cdd-imei-input"
-              >
-                <template #prefix>
-                  <el-icon><Postcard /></el-icon>
-                </template>
-                <template #append>
-                  <el-button @click="focusImeiInput" size="small" type="primary" link>
-                    <el-icon><Aim /></el-icon> 扫码
-                  </el-button>
-                </template>
-              </el-input>
-            </div>
-          </div>
-        </div>
-
-        <!-- 编辑按钮 -->
-        <div class="cdd-device-card__actions">
+    <div class="cdd-workbench">
+      <header class="cdd-topbar">
+        <div class="cdd-topbar__identity">
           <template v-if="!isEditingDeviceInfo">
-            <el-button
-              type="primary"
-              size="small"
-              link
-              @click="startEditDeviceInfo"
-              class="cdd-edit-link"
-            >
-              <el-icon><Edit /></el-icon>
-              <span>编辑</span>
-            </el-button>
+            <div class="cdd-model-title">{{ deviceForm.model || '未知型号' }}</div>
+            <div class="cdd-imei-line">
+              <span>IMEI</span>
+              <strong>{{ formatImei(deviceForm.imei) || '未录入' }}</strong>
+            </div>
           </template>
           <template v-else>
-            <el-button
-              type="success"
-              size="small"
-              @click="saveDeviceInfo"
-            >
-              <el-icon><Check /></el-icon>
-            </el-button>
-            <el-button
-              size="small"
-              @click="cancelEditDeviceInfo"
-            >
-              <el-icon><Close /></el-icon>
-            </el-button>
+            <el-input ref="modelInputRef" v-model="deviceForm.model" placeholder="请输入设备型号" clearable class="cdd-topbar__model-input">
+              <template #prefix><el-icon><Cellphone /></el-icon></template>
+            </el-input>
+            <el-input ref="imeiInputRef" v-model="deviceForm.imei" placeholder="请输入或扫描15位IMEI" clearable maxlength="15" show-word-limit class="cdd-topbar__imei-input" @input="handleImeiInput">
+              <template #prefix><el-icon><Postcard /></el-icon></template>
+              <template #append>
+                <el-button @click="focusImeiInput"><el-icon><Aim /></el-icon></el-button>
+              </template>
+            </el-input>
           </template>
         </div>
-      </div>
-    </section>
 
-    <!-- ===================================================================
-         Block 1：设备信息（8项输入：规格 + 电池 + 锁）
-    =================================================================== -->
-    <section class="cdd-section cdd-block-info">
-      <div class="cdd-block-header">
-        <span>{{ groupLabel('device_info', '设备信息') }}</span>
-        <div class="cdd-toolbar">
-          <!-- 联网查询组 -->
-          <div class="cdd-query-group">
-            <span class="cdd-query-group__tag">联网</span>
-            <el-button
-              v-for="action in visibleDeviceQueryActions"
-              :key="action.code"
-              size="small"
-              text
-              :loading="isQueryActionLoading(action.code)"
-              :disabled="!deviceForm.imei"
-              @click="runDeviceQueryAction(action)"
-            >
-              <el-icon v-if="!isQueryActionLoading(action.code)">
-                <component :is="getQueryActionIcon(action.result_handler)" />
-              </el-icon>
-              {{ isQueryActionLoading(action.code) ? '查询中...' : action.name }}
-            </el-button>
-          </div>
-          <!-- 本地操作 -->
-          <div class="cdd-local-group">
-            <el-button size="small" text @click="fillCommonResult">常用模板</el-button>
-            <el-button size="small" text type="danger" @click="clearAllSelections">清空选项</el-button>
-          </div>
+        <div class="cdd-topbar__actions">
+          <el-tag size="small" effect="plain">{{ checkTemplateInfo?.template_name || '默认质检模板' }}</el-tag>
+          <el-tag size="small" type="success" effect="plain">已填 {{ checkedCount }} 项</el-tag>
+          <template v-if="!isEditingDeviceInfo">
+            <el-button size="small" :icon="Edit" @click="startEditDeviceInfo">编辑设备</el-button>
+          </template>
+          <template v-else>
+            <el-button size="small" type="success" :icon="Check" @click="saveDeviceInfo">保存</el-button>
+            <el-button size="small" :icon="Close" @click="cancelEditDeviceInfo">取消</el-button>
+          </template>
         </div>
-      </div>
+      </header>
 
-      <!-- 8格输入网格（2行×4列） -->
-      <div class="cdd-info-grid">
-        <!-- 第一行：基本规格 -->
-        <div class="cdd-info-cell">
-          <span class="cdd-info-cell__icon">💾</span>
-          <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">{{ fieldLabel('capacity', '内存') }}</span>
-            <el-input v-model="deviceForm.capacity" size="small" :placeholder="fieldPlaceholder('capacity', '如 256GB')" @change="updateCheckResult" />
-          </div>
-        </div>
-        <div class="cdd-info-cell">
-          <span class="cdd-info-cell__icon">🎨</span>
-          <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">{{ fieldLabel('color', '颜色') }}</span>
-            <el-input v-model="deviceForm.color" size="small" :placeholder="fieldPlaceholder('color', '如 深空黑色')" @change="updateCheckResult" />
-          </div>
-        </div>
-        <div class="cdd-info-cell">
-          <span class="cdd-info-cell__icon">📲</span>
-          <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">{{ fieldLabel('system_version', '系统版本') }}</span>
-            <el-input v-model="deviceForm.system_version" size="small" :placeholder="fieldPlaceholder('system_version', '如 iOS 17.3.1')" @change="updateCheckResult" />
-          </div>
-        </div>
-        <div class="cdd-info-cell">
-          <span class="cdd-info-cell__icon">🛡</span>
-          <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">{{ fieldLabel('warranty_info', '保修信息') }}</span>
-            <el-input v-model="deviceForm.warranty_info" size="small" :placeholder="fieldPlaceholder('warranty_info', '保修日期/过保/未激活')" @change="updateCheckResult" />
-          </div>
-        </div>
-        <!-- 第二行：电池 + 锁 -->
-        <div class="cdd-info-cell cdd-info-cell--row2">
-          <span class="cdd-info-cell__icon">🔋</span>
-          <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">{{ fieldLabel('battery', '电池健康度') }}</span>
-            <div class="cdd-info-cell__input-row">
-              <el-input-number
-                v-model="templateSelections.battery"
-                :min="0" :max="100" :step="1"
-                size="small" controls-position="right"
-                class="cdd-info-cell__number"
-                @change="updateCheckResult"
-              />
-              <span class="cdd-info-cell__unit">{{ fieldUnit('battery', '%') }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="cdd-info-cell cdd-info-cell--row2">
-          <span class="cdd-info-cell__icon">🔁</span>
-          <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">{{ fieldLabel('battery_num', '循环次数') }}</span>
-            <div class="cdd-info-cell__input-row">
-              <el-input
-                v-model="templateSelections.battery_num"
-                type="number" size="small" style="flex:1"
-                @change="updateCheckResult"
-              />
-              <span class="cdd-info-cell__unit">{{ fieldUnit('battery_num', '次') }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="cdd-info-cell cdd-info-cell--row2">
-          <span class="cdd-info-cell__icon">🔒</span>
-          <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">{{ fieldLabel('activation_lock', '激活锁') }}</span>
-            <el-switch
-              v-model="templateSelections.activationLock"
-              active-text="已开" inactive-text="未开" size="small"
-              style="--el-switch-on-color:#ef4444;--el-switch-off-color:#22c55e"
-              @change="updateCheckResult"
-            />
-          </div>
-        </div>
-        <div class="cdd-info-cell cdd-info-cell--row2">
-          <span class="cdd-info-cell__icon">🖥</span>
-          <div class="cdd-info-cell__body">
-            <span class="cdd-info-cell__label">{{ fieldLabel('mdm_lock', '监管锁') }}</span>
-            <el-switch
-              v-model="templateSelections.mdmLock"
-              active-text="已开" inactive-text="未开" size="small"
-              style="--el-switch-on-color:#ef4444;--el-switch-off-color:#22c55e"
-              @change="updateCheckResult"
-            />
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===================================================================
-         Block 2：外观规格（外屏 | 内屏 | 中框）
-    =================================================================== -->
-    <section class="cdd-section cdd-block-appearance">
-      <div class="cdd-block-header">
-        <span>{{ groupLabel('appearance', '外观规格') }}</span>
-        <span
-          v-if="[templateSelections.screenId, templateSelections.indisplayId, templateSelections.appearanceId].filter(Boolean).length > 0"
-          class="cdd-block-badge"
-        >
-          已选 {{ [templateSelections.screenId, templateSelections.indisplayId, templateSelections.appearanceId].filter(Boolean).length }}/3
-        </span>
-      </div>
-      <div class="cdd-sub-cols cdd-sub-cols--3">
-        <!-- 外屏规格 -->
-        <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.screenId }">
-          <div class="cdd-sub-header">
-            {{ fieldLabel('screen_id', '外屏规格') }}
-            <span v-if="templateSelections.screenId" class="cdd-sub-done">✓</span>
-          </div>
-          <div class="cdd-tag-grid">
-            <el-tag
-              v-for="opt in checkDictOptions.screen" :key="opt.value"
-              :type="templateSelections.screenId === String(opt.value) ? 'primary' : undefined"
-              :effect="templateSelections.screenId === String(opt.value) ? 'dark' : 'plain'"
-              size="small" class="cdd-check-tag"
-              @click="selectScreenOption(opt.value)"
-            >{{ opt.name }}</el-tag>
-          </div>
-        </div>
-        <!-- 内屏规格 -->
-        <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.indisplayId }">
-          <div class="cdd-sub-header">
-            {{ fieldLabel('indisplay_id', '内屏规格') }}
-            <span v-if="templateSelections.indisplayId" class="cdd-sub-done">✓</span>
-          </div>
-          <div class="cdd-tag-grid">
-            <el-tag
-              v-for="opt in checkDictOptions.indisplay" :key="opt.value"
-              :type="templateSelections.indisplayId === String(opt.value) ? 'primary' : undefined"
-              :effect="templateSelections.indisplayId === String(opt.value) ? 'dark' : 'plain'"
-              size="small" class="cdd-check-tag"
-              @click="selectIndisplayOption(opt.value)"
-            >{{ opt.name }}</el-tag>
-          </div>
-        </div>
-        <!-- 中框规格 -->
-        <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.appearanceId }">
-          <div class="cdd-sub-header">
-            {{ fieldLabel('appearance_id', '中框规格') }}
-            <span v-if="templateSelections.appearanceId" class="cdd-sub-done">✓</span>
-          </div>
-          <div class="cdd-tag-grid">
-            <el-tag
-              v-for="opt in checkDictOptions.appearance" :key="opt.value"
-              :type="templateSelections.appearanceId === String(opt.value) ? 'primary' : undefined"
-              :effect="templateSelections.appearanceId === String(opt.value) ? 'dark' : 'plain'"
-              size="small" class="cdd-check-tag"
-              @click="selectAppearanceOption(opt.value)"
-            >{{ opt.name }}</el-tag>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===================================================================
-         Block 3：问题记录（功能异常 | 维修记录）
-    =================================================================== -->
-    <section class="cdd-section cdd-block-issues">
-      <div class="cdd-block-header">
-        <span>{{ groupLabel('issues', '问题记录') }}</span>
-        <span
-          v-if="templateSelections.functionIds.length + templateSelections.fixIds.length > 0"
-          class="cdd-block-badge cdd-block-badge--warn"
-        >
-          已选 {{ templateSelections.functionIds.length + templateSelections.fixIds.length }} 项
-        </span>
-      </div>
-      <div class="cdd-sub-cols cdd-sub-cols--2">
-        <!-- 功能异常 -->
-        <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': templateSelections.functionIds.length > 0 }">
-          <div class="cdd-sub-header">
-            {{ fieldLabel('function_ids', '功能') }}
-            <span v-if="templateSelections.functionIds.length > 0" class="cdd-sub-badge cdd-sub-badge--danger">
-              {{ templateSelections.functionIds.length }} 项
-            </span>
-          </div>
-          <div class="cdd-tag-grid">
-            <el-tag
-              v-for="opt in checkDictOptions.function" :key="opt.value"
-              :type="templateSelections.functionIds.includes(String(opt.value)) ? 'danger' : undefined"
-              :effect="templateSelections.functionIds.includes(String(opt.value)) ? 'dark' : 'plain'"
-              size="small" class="cdd-check-tag"
-              @click="toggleFunctionOption(opt.value)"
-            >{{ opt.name }}</el-tag>
-          </div>
-        </div>
-        <!-- 维修记录 -->
-        <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': templateSelections.fixIds.length > 0 }">
-          <div class="cdd-sub-header">
-            {{ fieldLabel('fix_ids', '维修记录') }}
-            <span v-if="templateSelections.fixIds.length > 0" class="cdd-sub-badge cdd-sub-badge--warning">
-              {{ templateSelections.fixIds.length }} 项
-            </span>
-          </div>
-          <div class="cdd-tag-grid">
-            <el-tag
-              v-for="opt in checkDictOptions.fix" :key="opt.value"
-              :type="templateSelections.fixIds.includes(String(opt.value)) ? 'warning' : undefined"
-              :effect="templateSelections.fixIds.includes(String(opt.value)) ? 'dark' : 'plain'"
-              size="small" class="cdd-check-tag"
-              @click="toggleFixOption(opt.value)"
-            >{{ opt.name }}</el-tag>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section v-if="customCheckGroups.length" class="cdd-section cdd-custom-section">
-      <div class="cdd-block-header">
-        <span>自定义质检项</span>
-        <span class="cdd-block-badge">模板 {{ checkTemplateInfo?.template_name || '默认' }}</span>
-      </div>
-      <div class="cdd-custom-groups">
-        <div v-for="group in customCheckGroups" :key="group.id || group.group_key" class="cdd-custom-group">
-          <div class="cdd-sub-header">{{ group.group_name }}</div>
-          <div class="cdd-custom-grid">
-            <div v-for="field in group.fields" :key="field.field_key" class="cdd-custom-field">
-              <div class="cdd-custom-field__label">
-                {{ field.field_name }}
-                <span v-if="field.unit" class="cdd-custom-field__unit">{{ field.unit }}</span>
+      <el-form ref="formRef" :model="deviceForm" :rules="rules" label-position="top" class="cdd-main-form">
+        <div class="cdd-main">
+          <aside class="cdd-side cdd-side--left">
+            <div class="cdd-panel cdd-summary-panel">
+              <div class="cdd-panel__title">设备摘要</div>
+              <div class="cdd-summary-list">
+                <div><span>容量</span><strong>{{ deviceForm.capacity || '-' }}</strong></div>
+                <div><span>颜色</span><strong>{{ deviceForm.color || '-' }}</strong></div>
+                <div><span>系统</span><strong>{{ deviceForm.system_version || '-' }}</strong></div>
+                <div><span>保修</span><strong>{{ deviceForm.warranty_info || '-' }}</strong></div>
               </div>
-
-              <el-input
-                v-if="field.component === 'input'"
-                :model-value="templateSelections.customFields[field.field_key]"
-                :placeholder="field.placeholder"
-                size="small"
-                clearable
-                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
-              />
-              <el-input
-                v-else-if="field.component === 'textarea'"
-                :model-value="templateSelections.customFields[field.field_key]"
-                :placeholder="field.placeholder"
-                type="textarea"
-                :rows="2"
-                resize="none"
-                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
-              />
-              <el-input-number
-                v-else-if="field.component === 'number'"
-                :model-value="templateSelections.customFields[field.field_key]"
-                :min="0"
-                controls-position="right"
-                size="small"
-                class="cdd-custom-field__number"
-                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
-              />
-              <el-switch
-                v-else-if="field.component === 'switch'"
-                :model-value="!!templateSelections.customFields[field.field_key]"
-                active-text="是"
-                inactive-text="否"
-                size="small"
-                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
-              />
-              <el-select
-                v-else-if="field.component === 'select'"
-                :model-value="templateSelections.customFields[field.field_key]"
-                :placeholder="field.placeholder || '请选择'"
-                size="small"
-                clearable
-                class="cdd-custom-field__select"
-                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
-              >
-                <el-option v-for="option in field.options || []" :key="option.value" :label="option.name || option.label" :value="String(option.value)" />
-              </el-select>
-              <el-radio-group
-                v-else-if="field.component === 'radio'"
-                :model-value="templateSelections.customFields[field.field_key]"
-                size="small"
-                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
-              >
-                <el-radio-button v-for="option in field.options || []" :key="option.value" :label="String(option.value)">
-                  {{ option.name || option.label }}
-                </el-radio-button>
-              </el-radio-group>
-              <el-checkbox-group
-                v-else-if="field.component === 'checkbox'"
-                :model-value="templateSelections.customFields[field.field_key] || []"
-                size="small"
-                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
-              >
-                <el-checkbox-button v-for="option in field.options || []" :key="option.value" :label="String(option.value)">
-                  {{ option.name || option.label }}
-                </el-checkbox-button>
-              </el-checkbox-group>
-              <el-input
-                v-else
-                :model-value="templateSelections.customFields[field.field_key]"
-                :placeholder="field.placeholder"
-                size="small"
-                clearable
-                @update:model-value="value => setCustomFieldValue(field.field_key, value)"
-              />
             </div>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- ===================================================================
-         区域 3：质检结果文本（卖家 / 买家）
-    =================================================================== -->
-    <el-form ref="formRef" :model="deviceForm" :rules="rules" label-position="top">
-      <section class="cdd-section cdd-result-section">
-        <div class="cdd-result-cols">
-
-          <!-- 卖家质检结果 -->
-          <div class="cdd-result-card cdd-result-card--seller">
-            <div class="cdd-result-card__header">
-              <span class="cdd-result-card__dot"></span>
-              <span class="cdd-result-card__title">卖家可见质检结果</span>
-              <el-tooltip content="此内容将展示给卖家" placement="top">
-                <el-icon class="cdd-result-card__help"><Warning /></el-icon>
-              </el-tooltip>
-            </div>
-            <el-form-item prop="check_result_seller" class="cdd-result-card__body">
-              <el-input
-                v-model="deviceForm.check_result_seller"
-                type="textarea"
-                :rows="isMobile ? 5 : 7"
-                placeholder="由上方质检选项自动生成，也可手动编辑..."
-                maxlength="500"
-                show-word-limit
-                resize="none"
-              />
-            </el-form-item>
-          </div>
-
-          <!-- 买家质检结果 -->
-          <div class="cdd-result-card cdd-result-card--buyer">
-            <div class="cdd-result-card__header">
-              <span class="cdd-result-card__dot"></span>
-              <span class="cdd-result-card__title">买家可见质检结果</span>
-              <el-tooltip content="此内容将展示给买家，可独立编辑" placement="top">
-                <el-icon class="cdd-result-card__help"><Warning /></el-icon>
-              </el-tooltip>
-              <el-button
-                type="primary" link size="small"
-                class="ml-auto"
-                @click="syncSellerResultToBuyer"
-              >
-                <el-icon><CopyDocument /></el-icon> 同步卖家
-              </el-button>
-            </div>
-            <el-form-item prop="check_result_buyer" class="cdd-result-card__body">
-              <el-input
-                v-model="deviceForm.check_result_buyer"
-                type="textarea"
-                :rows="isMobile ? 5 : 7"
-                placeholder="可点击「同步卖家」快速填充，再按需修改..."
-                maxlength="500"
-                show-word-limit
-                resize="none"
-              />
-            </el-form-item>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- ===================================================================
-           区域 4：定价信息
-      =================================================================== -->
-      <section class="cdd-section cdd-pricing-section">
-        <div class="cdd-block-header">💰 定价信息</div>
-
-        <!-- 回收定价：独占一行、视觉突出 -->
-        <div class="cdd-pricing-main">
-          <el-form-item prop="final_price" class="cdd-pricing-main__item">
-            <template #label>
-              <span class="cdd-pricing-main__label">
-                回收定价
-                <span class="cdd-pricing-main__required">*</span>
-                <span v-if="deviceData.initial_price" class="cdd-pricing-main__ref">
-                  参考预估：¥{{ deviceData.initial_price }}
-                </span>
-              </span>
-            </template>
-            <el-input-number
-              v-model="deviceForm.final_price"
-              :step="10" :precision="2" :min="0" :max="99999"
-              placeholder="输入回收定价"
-              controls-position="right"
-              class="cdd-pricing-main__input"
-            />
-          </el-form-item>
-          <el-form-item label="扣费说明" prop="remark" class="cdd-pricing-sub__item cdd-pricing-sub__item--remark">
-            <el-input
-              v-model="deviceForm.remark"
-              placeholder="扣费原因、特殊备注..."
-              maxlength="200"
-              clearable
-            />
-          </el-form-item>
-        </div>
-      </section>
-
-      <!-- ===================================================================
-           区域 5：质检图片
-      =================================================================== -->
-      <section class="cdd-section cdd-photos-section">
-        <div class="cdd-photos-cols">
-
-          <!-- 卖家图片 -->
-          <div class="cdd-photo-block cdd-photo-block--seller">
-            <div class="cdd-photo-block__header">
-              <span class="cdd-photo-block__dot"></span>
-              卖家质检图片
-            </div>
-            <div class="cdd-photo-block__body">
-              <div v-if="isMobile" class="cdd-camera-row">
-                <el-button
-                  type="primary" plain size="small"
-                  :loading="cameraUploading"
-                  :disabled="cameraUploading || checkImageCount >= maxCheckImageCount"
-                  @click="openCameraCapture"
-                >{{ cameraUploading ? '上传中...' : '📷 拍照上传' }}</el-button>
-                <span class="cdd-camera-tip">{{ checkImageCount }}/{{ maxCheckImageCount }}</span>
-                <input
-                  ref="cameraInputRef" type="file" accept="image/*"
-                  capture="environment" multiple class="hidden"
-                  @change="handleCameraFilesChange"
-                />
+            <div class="cdd-panel">
+              <div class="cdd-panel__title">联网查询</div>
+              <div class="cdd-query-stack">
+                <el-button v-for="action in visibleDeviceQueryActions" :key="action.code" size="small" plain :loading="isQueryActionLoading(action.code)" :disabled="!deviceForm.imei" @click="runDeviceQueryAction(action)">
+                  <el-icon v-if="!isQueryActionLoading(action.code)"><component :is="getQueryActionIcon(action.result_handler)" /></el-icon>
+                  {{ isQueryActionLoading(action.code) ? '查询中...' : action.name }}
+                </el-button>
+                <div v-if="visibleDeviceQueryActions.length === 0" class="cdd-muted">暂无可用查询服务</div>
               </div>
-              <upload-image v-model="deviceForm.check_images" :limit="9" />
             </div>
-          </div>
 
-          <!-- 买家图片 -->
-          <div class="cdd-photo-block cdd-photo-block--buyer">
-            <div class="cdd-photo-block__header">
-              <span class="cdd-photo-block__dot"></span>
-              买家质检图片
-              <el-button type="primary" link size="small" class="ml-auto" @click="syncSellerImagesToBuyer">
-                <el-icon><CopyDocument /></el-icon> 同步卖家图片
-              </el-button>
-            </div>
-            <div class="cdd-photo-block__body">
-              <div v-if="isMobile" class="cdd-camera-row">
-                <el-button
-                  type="primary" plain size="small"
-                  :loading="buyerCameraUploading"
-                  :disabled="buyerCameraUploading || buyerCheckImageCount >= buyerMaxCheckImageCount"
-                  @click="openBuyerCameraCapture"
-                >{{ buyerCameraUploading ? '上传中...' : '📷 拍照上传' }}</el-button>
-                <span class="cdd-camera-tip">{{ buyerCheckImageCount }}/{{ buyerMaxCheckImageCount }}</span>
-                <input
-                  ref="buyerCameraInputRef" type="file" accept="image/*"
-                  capture="environment" multiple class="hidden"
-                  @change="handleBuyerCameraFilesChange"
-                />
+            <div class="cdd-panel">
+              <div class="cdd-panel__title">快捷操作</div>
+              <div class="cdd-action-stack">
+                <el-button size="small" type="danger" plain @click="clearAllSelections">清空选项</el-button>
               </div>
-              <upload-image v-model="deviceForm.check_images_buyer" :limit="6" />
             </div>
-          </div>
 
+            <div class="cdd-panel cdd-image-summary">
+              <div class="cdd-panel__title">图片</div>
+              <div class="cdd-summary-list">
+                <div><span>卖家图片</span><strong>{{ checkImageCount }}/{{ maxCheckImageCount }}</strong></div>
+                <div><span>买家图片</span><strong>{{ buyerCheckImageCount }}/{{ buyerMaxCheckImageCount }}</strong></div>
+              </div>
+            </div>
+          </aside>
+
+          <section class="cdd-center">
+            <div class="cdd-anchor-bar">
+              <button type="button" @click.prevent.stop="scrollToCheckSection('cdd-device-info')">{{ groupLabel('device_info', '设备信息') }}</button>
+              <button type="button" @click.prevent.stop="scrollToCheckSection('cdd-appearance')">{{ groupLabel('appearance', '外观规格') }}</button>
+              <button type="button" @click.prevent.stop="scrollToCheckSection('cdd-issues')">{{ groupLabel('issues', '问题记录') }}</button>
+              <button v-if="customCheckGroups.length" type="button" @click.prevent.stop="scrollToCheckSection('cdd-custom')">自定义</button>
+            </div>
+
+            <div ref="centerScrollRef" class="cdd-center-scroll" @click.stop>
+              <section id="cdd-device-info" class="cdd-section cdd-work-section">
+                <div class="cdd-section-title">{{ groupLabel('device_info', '设备信息') }}</div>
+                <div class="cdd-info-grid">
+                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('capacity', '内存') }}</span><el-input v-model="deviceForm.capacity" size="small" :placeholder="fieldPlaceholder('capacity', '如 256GB')" @change="updateCheckResult" /></div>
+                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('color', '颜色') }}</span><el-input v-model="deviceForm.color" size="small" :placeholder="fieldPlaceholder('color', '如 深空黑色')" @change="updateCheckResult" /></div>
+                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('system_version', '系统版本') }}</span><el-input v-model="deviceForm.system_version" size="small" :placeholder="fieldPlaceholder('system_version', '如 iOS 17.3.1')" @change="updateCheckResult" /></div>
+                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('warranty_info', '保修信息') }}</span><el-input v-model="deviceForm.warranty_info" size="small" :placeholder="fieldPlaceholder('warranty_info', '保修日期/过保/未激活')" @change="updateCheckResult" /></div>
+                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('battery', '电池健康度') }}</span><div class="cdd-inline-control"><el-input-number v-model="templateSelections.battery" :min="0" :max="100" :step="1" size="small" controls-position="right" @change="updateCheckResult" /><span>{{ fieldUnit('battery', '%') }}</span></div></div>
+                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('battery_num', '循环次数') }}</span><div class="cdd-inline-control"><el-input v-model="templateSelections.battery_num" type="number" size="small" @change="updateCheckResult" /><span>{{ fieldUnit('battery_num', '次') }}</span></div></div>
+                  <div class="cdd-info-cell cdd-info-cell--switch"><span class="cdd-info-cell__label">{{ fieldLabel('activation_lock', '激活锁') }}</span><el-switch v-model="templateSelections.activationLock" active-text="已开" inactive-text="未开" size="small" style="--el-switch-on-color:#ef4444;--el-switch-off-color:#22c55e" @change="updateCheckResult" /></div>
+                  <div class="cdd-info-cell cdd-info-cell--switch"><span class="cdd-info-cell__label">{{ fieldLabel('mdm_lock', '监管锁') }}</span><el-switch v-model="templateSelections.mdmLock" active-text="已开" inactive-text="未开" size="small" style="--el-switch-on-color:#ef4444;--el-switch-off-color:#22c55e" @change="updateCheckResult" /></div>
+                </div>
+              </section>
+
+              <section id="cdd-appearance" class="cdd-section cdd-work-section">
+                <div class="cdd-section-title"><span>{{ groupLabel('appearance', '外观规格') }}</span><em>已选 {{ [templateSelections.screenId, templateSelections.indisplayId, templateSelections.appearanceId].filter(Boolean).length }}/3</em></div>
+                <div class="cdd-sub-cols cdd-sub-cols--3">
+                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.screenId }">
+                    <div class="cdd-sub-header">{{ fieldLabel('screen_id', '外屏规格') }}</div>
+                    <div class="cdd-tag-grid"><el-tag v-for="opt in checkDictOptions.screen" :key="opt.value" :type="templateSelections.screenId === String(opt.value) ? 'primary' : undefined" :effect="templateSelections.screenId === String(opt.value) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="selectScreenOption(opt.value)">{{ opt.name }}</el-tag></div>
+                  </div>
+                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.indisplayId }">
+                    <div class="cdd-sub-header">{{ fieldLabel('indisplay_id', '内屏规格') }}</div>
+                    <div class="cdd-tag-grid"><el-tag v-for="opt in checkDictOptions.indisplay" :key="opt.value" :type="templateSelections.indisplayId === String(opt.value) ? 'primary' : undefined" :effect="templateSelections.indisplayId === String(opt.value) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="selectIndisplayOption(opt.value)">{{ opt.name }}</el-tag></div>
+                  </div>
+                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.appearanceId }">
+                    <div class="cdd-sub-header">{{ fieldLabel('appearance_id', '中框规格') }}</div>
+                    <div class="cdd-tag-grid"><el-tag v-for="opt in checkDictOptions.appearance" :key="opt.value" :type="templateSelections.appearanceId === String(opt.value) ? 'primary' : undefined" :effect="templateSelections.appearanceId === String(opt.value) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="selectAppearanceOption(opt.value)">{{ opt.name }}</el-tag></div>
+                  </div>
+                </div>
+              </section>
+
+              <section id="cdd-issues" class="cdd-section cdd-work-section">
+                <div class="cdd-section-title"><span>{{ groupLabel('issues', '问题记录') }}</span><em>已选 {{ templateSelections.functionIds.length + templateSelections.fixIds.length }} 项</em></div>
+                <div class="cdd-sub-cols cdd-sub-cols--2">
+                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': templateSelections.functionIds.length > 0 }">
+                    <div class="cdd-sub-header">{{ fieldLabel('function_ids', '功能') }} <em v-if="templateSelections.functionIds.length">{{ templateSelections.functionIds.length }} 项</em></div>
+                    <div class="cdd-tag-grid cdd-tag-grid--scroll"><el-tag v-for="opt in checkDictOptions.function" :key="opt.value" :type="templateSelections.functionIds.includes(String(opt.value)) ? 'danger' : undefined" :effect="templateSelections.functionIds.includes(String(opt.value)) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="toggleFunctionOption(opt.value)">{{ opt.name }}</el-tag></div>
+                  </div>
+                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': templateSelections.fixIds.length > 0 }">
+                    <div class="cdd-sub-header">{{ fieldLabel('fix_ids', '维修记录') }} <em v-if="templateSelections.fixIds.length">{{ templateSelections.fixIds.length }} 项</em></div>
+                    <div class="cdd-tag-grid cdd-tag-grid--scroll"><el-tag v-for="opt in checkDictOptions.fix" :key="opt.value" :type="templateSelections.fixIds.includes(String(opt.value)) ? 'warning' : undefined" :effect="templateSelections.fixIds.includes(String(opt.value)) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="toggleFixOption(opt.value)">{{ opt.name }}</el-tag></div>
+                  </div>
+                </div>
+              </section>
+
+              <section v-if="customCheckGroups.length" id="cdd-custom" class="cdd-section cdd-work-section">
+                <div class="cdd-section-title">自定义质检项</div>
+                <div class="cdd-custom-groups">
+                  <div v-for="group in customCheckGroups" :key="group.id || group.group_key" class="cdd-custom-group">
+                    <div class="cdd-sub-header">{{ group.group_name }}</div>
+                    <div class="cdd-custom-grid">
+                      <div v-for="field in group.fields" :key="field.field_key" class="cdd-custom-field">
+                        <div class="cdd-custom-field__label">{{ field.field_name }}<span v-if="field.unit" class="cdd-custom-field__unit">{{ field.unit }}</span></div>
+                        <el-input v-if="field.component === 'input'" :model-value="templateSelections.customFields[field.field_key]" :placeholder="field.placeholder" size="small" clearable @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
+                        <el-input v-else-if="field.component === 'textarea'" :model-value="templateSelections.customFields[field.field_key]" :placeholder="field.placeholder" type="textarea" :rows="2" resize="none" @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
+                        <el-input-number v-else-if="field.component === 'number'" :model-value="templateSelections.customFields[field.field_key]" :min="0" controls-position="right" size="small" class="cdd-custom-field__number" @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
+                        <el-switch v-else-if="field.component === 'switch'" :model-value="!!templateSelections.customFields[field.field_key]" active-text="是" inactive-text="否" size="small" @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
+                        <el-select v-else-if="field.component === 'select'" :model-value="templateSelections.customFields[field.field_key]" :placeholder="field.placeholder || '请选择'" size="small" clearable class="cdd-custom-field__select" @update:model-value="value => setCustomFieldValue(field.field_key, value)"><el-option v-for="option in field.options || []" :key="option.value" :label="option.name || option.label" :value="String(option.value)" /></el-select>
+                        <el-radio-group v-else-if="field.component === 'radio'" :model-value="templateSelections.customFields[field.field_key]" size="small" @update:model-value="value => setCustomFieldValue(field.field_key, value)"><el-radio-button v-for="option in field.options || []" :key="option.value" :label="String(option.value)">{{ option.name || option.label }}</el-radio-button></el-radio-group>
+                        <el-checkbox-group v-else-if="field.component === 'checkbox'" :model-value="templateSelections.customFields[field.field_key] || []" size="small" @update:model-value="value => setCustomFieldValue(field.field_key, value)"><el-checkbox-button v-for="option in field.options || []" :key="option.value" :label="String(option.value)">{{ option.name || option.label }}</el-checkbox-button></el-checkbox-group>
+                        <el-input v-else :model-value="templateSelections.customFields[field.field_key]" :placeholder="field.placeholder" size="small" clearable @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <aside class="cdd-side cdd-side--right">
+            <div class="cdd-right-scroll">
+              <section class="cdd-panel cdd-result-panel">
+                <div class="cdd-panel__title">卖家质检结果</div>
+                <el-form-item prop="check_result_seller" class="cdd-result-field"><el-input v-model="deviceForm.check_result_seller" type="textarea" :rows="7" placeholder="由质检选项自动生成，也可手动编辑..." maxlength="500" show-word-limit resize="none" /></el-form-item>
+              </section>
+
+              <section class="cdd-panel cdd-result-panel">
+                <div class="cdd-panel__title"><span>买家质检结果</span><el-button type="primary" link size="small" @click="syncSellerResultToBuyer"><el-icon><CopyDocument /></el-icon> 同步</el-button></div>
+                <el-form-item prop="check_result_buyer" class="cdd-result-field"><el-input v-model="deviceForm.check_result_buyer" type="textarea" :rows="5" placeholder="可同步卖家内容后单独调整..." maxlength="500" show-word-limit resize="none" /></el-form-item>
+              </section>
+
+              <section class="cdd-panel cdd-price-panel">
+                <div class="cdd-panel__title">定价</div>
+                <el-form-item prop="final_price" class="cdd-price-field">
+                  <template #label><span>回收定价 <em v-if="deviceData.initial_price">参考 ¥{{ deviceData.initial_price }}</em></span></template>
+                  <el-input-number v-model="deviceForm.final_price" :step="10" :precision="2" :min="0" :max="99999" controls-position="right" class="cdd-price-input" />
+                </el-form-item>
+                <el-form-item label="扣费说明" prop="remark" class="cdd-remark-field"><el-input v-model="deviceForm.remark" placeholder="扣费原因、特殊备注..." maxlength="200" clearable /></el-form-item>
+              </section>
+
+              <section class="cdd-panel cdd-upload-panel">
+                <el-collapse>
+                  <el-collapse-item>
+                    <template #title><span class="cdd-upload-title">质检图片  卖家 {{ checkImageCount }}/{{ maxCheckImageCount }}  买家 {{ buyerCheckImageCount }}/{{ buyerMaxCheckImageCount }}</span></template>
+                    <div v-if="isMobile" class="cdd-camera-row"><el-button type="primary" plain size="small" :loading="cameraUploading" :disabled="cameraUploading || checkImageCount >= maxCheckImageCount" @click="openCameraCapture">{{ cameraUploading ? '上传中...' : '拍照上传' }}</el-button><input ref="cameraInputRef" type="file" accept="image/*" capture="environment" multiple class="hidden" @change="handleCameraFilesChange" /></div>
+                    <div class="cdd-upload-block"><div class="cdd-upload-label">卖家图片</div><upload-image v-model="deviceForm.check_images" :limit="9" /></div>
+                    <div class="cdd-upload-block"><div class="cdd-upload-label">买家图片 <el-button type="primary" link size="small" @click="syncSellerImagesToBuyer">同步卖家</el-button></div><div v-if="isMobile" class="cdd-camera-row"><el-button type="primary" plain size="small" :loading="buyerCameraUploading" :disabled="buyerCameraUploading || buyerCheckImageCount >= buyerMaxCheckImageCount" @click="openBuyerCameraCapture">{{ buyerCameraUploading ? '上传中...' : '拍照上传' }}</el-button><input ref="buyerCameraInputRef" type="file" accept="image/*" capture="environment" multiple class="hidden" @change="handleBuyerCameraFilesChange" /></div><upload-image v-model="deviceForm.check_images_buyer" :limit="6" /></div>
+                  </el-collapse-item>
+                </el-collapse>
+              </section>
+            </div>
+          </aside>
         </div>
-      </section>
+      </el-form>
+    </div>
 
-    </el-form>
-
-    <!-- ===================================================================
-         底部操作栏
-    =================================================================== -->
     <template #footer>
       <div class="cdd-footer">
         <span class="cdd-footer__info">已填质检项：{{ checkedCount }}</span>
         <div class="cdd-footer__btns">
           <el-button size="large" @click="handleCancel">取消</el-button>
-          <el-button type="warning" size="large" :loading="savingDraft" @click="handleSaveDraft">
-            {{ savingDraft ? '暂存中...' : '暂存草稿' }}
-          </el-button>
-          <el-button type="primary" size="large" :loading="submitting" @click="handleConfirm">
-            <el-icon v-if="!submitting"><Check /></el-icon>
-            {{ submitting ? '提交中...' : '完成质检' }}
-          </el-button>
+          <el-button type="warning" size="large" :loading="savingDraft" @click="handleSaveDraft">{{ savingDraft ? '暂存中...' : '暂存草稿' }}</el-button>
+          <el-button type="primary" size="large" :loading="submitting" @click="handleConfirm"><el-icon v-if="!submitting"><Check /></el-icon>{{ submitting ? '提交中...' : '完成质检' }}</el-button>
         </div>
       </div>
     </template>
-
   </el-dialog>
 </template>
 
@@ -626,9 +216,8 @@
 import { ref, reactive, watch, computed, nextTick, onMounted, onBeforeUnmount, toRef } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
-  Cellphone, Edit, Postcard, Aim, Monitor, Check, Close, Headset, Lock, CopyDocument, Warning
+  Cellphone, Edit, Postcard, Aim, Monitor, Check, Close, Headset, Lock, CopyDocument
 } from '@element-plus/icons-vue'
-import QRCode from 'qrcode'
 
 import { queryDeviceByService } from '@/addon/recycle/api/device_query_api'
 import { getDeviceQueryConfigList } from '@/addon/recycle/api/device_query_config'
@@ -742,8 +331,8 @@ const savingDraft = ref(false)
 const formRef = ref<FormInstance>()
 const imeiInputRef = ref()
 const modelInputRef = ref()
+const centerScrollRef = ref<HTMLElement | null>(null)
 const isEditingDeviceInfo = ref(false)
-const qrCode = ref('')
 const isMobile = ref(false)
 
 // 保存编辑前的原始数据
@@ -791,7 +380,7 @@ const rules = reactive<FormRules>({
 
 const {
   templateSelections, checkedCount, getSubmitInfo,
-  updateCheckResult, clearAllSelections, fillCommonResult,
+  updateCheckResult, clearAllSelections,
   restoreFromDevice,
   setCustomFieldValue,
   selectScreenOption, selectIndisplayOption, selectAppearanceOption,
@@ -817,11 +406,6 @@ const {
   handleCameraFilesChange: handleBuyerCameraFilesChange
 } = useCameraUpload({ checkImages: toRef(deviceForm, 'check_images_buyer') })
 
-// 电池卡完成状态
-const batteryDone = computed(() =>
-  templateSelections.battery !== undefined || templateSelections.battery_num !== undefined
-)
-
 function parsePrice(value: any): number | undefined {
   if (typeof value === 'number') return value
   if (typeof value === 'string') {
@@ -832,13 +416,6 @@ function parsePrice(value: any): number | undefined {
 }
 
 const updateDeviceMode = () => { isMobile.value = window.innerWidth <= 768 }
-
-const generateQrCode = async () => {
-  qrCode.value = await QRCode.toDataURL(
-    window.location.origin + '/site/diy/attachment',
-    { errorCorrectionLevel: 'L', margin: 0, width: 100 }
-  )
-}
 
 const loadCheckTemplateSchema = async () => {
   checkSchemaLoading.value = true
@@ -1038,6 +615,14 @@ const focusImeiInput = () => {
   imeiInputRef.value?.focus()
 }
 
+const scrollToCheckSection = (sectionId: string) => {
+  const scrollEl = centerScrollRef.value
+  const target = document.getElementById(sectionId)
+  if (!scrollEl || !target) return
+  const offset = target.offsetTop - scrollEl.offsetTop
+  scrollEl.scrollTo({ top: Math.max(offset - 8, 0), behavior: 'smooth' })
+}
+
 // 从接口返回数据中兼容提取 capacity / color / model
 const parseCoverageFields = (d: any) => {
   // capacity / color：安卓品牌放在 product 子对象，苹果直接在顶层
@@ -1165,7 +750,6 @@ watch(
 onMounted(async () => {
   updateDeviceMode()
   window.addEventListener('resize', updateDeviceMode)
-  generateQrCode()
   initializeFormFromDevice(props.device)
   await dictOptions.loadDictionary()
   await loadCheckTemplateSchema()
@@ -1765,11 +1349,542 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
 }
 
 /* ============================================================
+   工作台布局覆盖
+   ============================================================ */
+.cdd-workbench-dialog {
+  :deep(.el-dialog) {
+    height: min(90vh, 860px);
+    max-height: 860px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+  }
+
+  :deep(.el-dialog__header) {
+    flex: 0 0 auto;
+    padding: 12px 18px;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+
+    .el-dialog__title {
+      color: #111827;
+      font-size: 16px;
+      font-weight: 700;
+    }
+  }
+
+  :deep(.el-dialog__headerbtn .el-dialog__close) {
+    color: #6b7280;
+
+    &:hover {
+      color: #111827;
+    }
+  }
+
+  :deep(.el-dialog__body) {
+    flex: 1;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #f5f7fa;
+    display: block;
+  }
+
+  :deep(.el-dialog__footer) {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    background: #fff;
+    border-top: 1px solid #e5e7eb;
+  }
+}
+
+.cdd-workbench {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cdd-main-form {
+  flex: 1 1 auto;
+  height: calc(min(90vh, 860px) - 64px - 69px - 59px);
+  min-height: 420px;
+  overflow: hidden;
+}
+
+.cdd-topbar {
+  flex: 0 0 auto;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.cdd-topbar__identity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.cdd-model-title {
+  overflow: hidden;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cdd-imei-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 12px;
+
+  span {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #f3f4f6;
+    color: #64748b;
+    font-weight: 700;
+  }
+
+  strong {
+    color: #111827;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+  }
+}
+
+.cdd-topbar__model-input {
+  min-width: 280px;
+}
+
+.cdd-topbar__imei-input {
+  width: 280px;
+}
+
+.cdd-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cdd-main {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 330px;
+  gap: 10px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.cdd-side,
+.cdd-center {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.cdd-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.cdd-side--left {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cdd-side--right {
+  display: flex;
+  flex-direction: column;
+}
+
+.cdd-panel,
+.cdd-work-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.cdd-panel {
+  padding: 12px;
+}
+
+.cdd-panel__title,
+.cdd-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+
+  em {
+    color: #6b7280;
+    font-style: normal;
+    font-size: 12px;
+    font-weight: 500;
+  }
+}
+
+.cdd-summary-list {
+  display: grid;
+  gap: 8px;
+
+  div {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    color: #6b7280;
+    font-size: 12px;
+  }
+
+  strong {
+    min-width: 0;
+    color: #111827;
+    font-weight: 600;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+}
+
+.cdd-query-stack,
+.cdd-action-stack {
+  display: grid;
+  gap: 8px;
+
+  .el-button {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
+.cdd-muted {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.cdd-center {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.cdd-anchor-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+
+  button {
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #4b5563;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    text-decoration: none;
+    cursor: pointer;
+
+    &:hover {
+      color: #2563eb;
+      background: #eff6ff;
+    }
+  }
+}
+
+.cdd-center-scroll,
+.cdd-right-scroll {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 6px;
+    background: #cbd5e1;
+  }
+}
+
+.cdd-center-scroll {
+  display: block;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.cdd-right-scroll {
+  display: block;
+  padding-right: 4px;
+}
+
+.cdd-center-scroll > .cdd-work-section + .cdd-work-section,
+.cdd-right-scroll > .cdd-panel + .cdd-panel {
+  margin-top: 10px;
+}
+
+.cdd-work-section {
+  padding: 12px;
+  margin-bottom: 0;
+  scroll-margin-top: 8px;
+}
+
+.cdd-info-grid {
+  gap: 10px;
+}
+
+.cdd-work-section .cdd-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cdd-work-section .cdd-info-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+}
+
+.cdd-info-cell__label,
+.cdd-custom-field__label {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cdd-inline-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .el-input,
+  .el-input-number {
+    flex: 1;
+    min-width: 0;
+  }
+
+  span {
+    flex: 0 0 auto;
+    color: #94a3b8;
+    font-size: 12px;
+  }
+}
+
+.cdd-info-cell--switch {
+  justify-content: space-between;
+}
+
+.cdd-work-section .cdd-sub-section {
+  padding: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 6px;
+  background: #fbfdff;
+}
+
+.cdd-work-section .cdd-sub-section--done {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.cdd-work-section .cdd-sub-cols {
+  gap: 10px;
+}
+
+.cdd-sub-header em {
+  color: #6b7280;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cdd-tag-grid {
+  max-height: 128px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.cdd-tag-grid--scroll {
+  max-height: 172px;
+}
+
+.cdd-check-tag {
+  border-radius: 5px;
+  user-select: none;
+}
+
+.cdd-custom-section {
+  overflow: hidden;
+}
+
+.cdd-custom-groups {
+  padding: 0;
+}
+
+.cdd-result-field,
+.cdd-price-field,
+.cdd-remark-field {
+  margin-bottom: 0 !important;
+}
+
+.cdd-result-field :deep(.el-textarea__inner) {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.cdd-price-input {
+  width: 100%;
+}
+
+.cdd-price-field :deep(.el-form-item__label) {
+  font-size: 12px;
+  font-weight: 700;
+
+  em {
+    margin-left: 6px;
+    color: #9ca3af;
+    font-style: normal;
+    font-weight: 400;
+  }
+}
+
+.cdd-upload-panel {
+  padding: 0;
+  overflow: hidden;
+
+  :deep(.el-collapse) {
+    border: 0;
+  }
+
+  :deep(.el-collapse-item__header) {
+    height: 42px;
+    padding: 0 12px;
+    border-bottom-color: #e5e7eb;
+    font-weight: 700;
+  }
+
+  :deep(.el-collapse-item__wrap) {
+    border-bottom: 0;
+  }
+
+  :deep(.el-collapse-item__content) {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 10px 12px 12px;
+  }
+}
+
+.cdd-upload-title {
+  color: #111827;
+  font-size: 13px;
+}
+
+.cdd-upload-block + .cdd-upload-block {
+  margin-top: 12px;
+}
+
+.cdd-upload-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cdd-footer {
+  min-height: 38px;
+}
+
+/* ============================================================
    响应式
    ============================================================ */
 @media (max-width: 768px) {
   .check-device-dialog {
-    :deep(.el-dialog) { width: 95vw !important; }
+    :deep(.el-dialog) {
+      width: 96vw !important;
+      height: 92vh;
+    }
+  }
+
+  .cdd-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cdd-topbar__identity {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .cdd-topbar__imei-input,
+  .cdd-topbar__model-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .cdd-main {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow-y: auto;
+  }
+
+  .cdd-main-form {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .cdd-side--left,
+  .cdd-side--right,
+  .cdd-center {
+    height: auto;
+    overflow: visible;
+  }
+
+  .cdd-center-scroll,
+  .cdd-right-scroll {
+    overflow: visible;
+  }
+
+  .cdd-anchor-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    overflow-x: auto;
+  }
+
+  .cdd-work-section .cdd-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   // Block 1 设备信息：4列 → 2列
@@ -1834,7 +1949,1163 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
     flex-direction: column;
     gap: 10px;
     align-items: stretch;
-    &__btns { flex-direction: column; .el-button { width: 100%; } }
+    &__btns {
+      flex-direction: column;
+
+      .el-button {
+        width: 100%;
+        margin-left: 0;
+      }
+    }
+  }
+}
+
+/* ============================================================
+   质检工作台统一样式
+   放在样式末尾作为最终规范层，覆盖上方历史样式差异。
+   ============================================================ */
+$cdd-border: #e5e7eb;
+$cdd-soft-border: #eef2f7;
+$cdd-text: #111827;
+$cdd-text-secondary: #4b5563;
+$cdd-text-muted: #94a3b8;
+$cdd-bg: #f5f7fa;
+$cdd-panel-bg: #ffffff;
+$cdd-primary: #2563eb;
+$cdd-success: #16a34a;
+$cdd-danger: #dc2626;
+$cdd-warning: #d97706;
+
+.check-device-dialog.cdd-workbench-dialog {
+  :deep(.el-dialog) {
+    width: min(1240px, 96vw);
+    height: min(90vh, 860px);
+    max-height: 860px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 10px;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  }
+
+  :deep(.el-dialog__header) {
+    flex: 0 0 auto;
+    padding: 12px 18px;
+    background: $cdd-panel-bg;
+    border-bottom: 1px solid $cdd-border;
+
+    .el-dialog__title {
+      color: $cdd-text;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+  }
+
+  :deep(.el-dialog__headerbtn) {
+    top: 11px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+
+    .el-dialog__close {
+      color: #6b7280;
+      font-size: 17px;
+
+      &:hover {
+        color: $cdd-text;
+      }
+    }
+  }
+
+  :deep(.el-dialog__body) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: block;
+    padding: 0;
+    overflow: hidden;
+    background: $cdd-bg;
+  }
+
+  :deep(.el-dialog__footer) {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    background: $cdd-panel-bg;
+    border-top: 1px solid $cdd-border;
+  }
+
+  :deep(.el-button) {
+    border-radius: 6px;
+  }
+
+  :deep(.el-input__wrapper),
+  :deep(.el-textarea__inner),
+  :deep(.el-input-number .el-input__wrapper) {
+    border-radius: 6px;
+    box-shadow: 0 0 0 1px #d8dee8 inset;
+  }
+
+  :deep(.el-input__wrapper:hover),
+  :deep(.el-textarea__inner:hover),
+  :deep(.el-input-number .el-input__wrapper:hover) {
+    box-shadow: 0 0 0 1px #b9c4d3 inset;
+  }
+
+  :deep(.el-input__wrapper.is-focus),
+  :deep(.el-textarea__inner:focus),
+  :deep(.el-input-number .el-input__wrapper.is-focus) {
+    box-shadow: 0 0 0 1px $cdd-primary inset, 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+}
+
+.cdd-workbench {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  color: $cdd-text;
+}
+
+.cdd-topbar {
+  flex: 0 0 auto;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: $cdd-panel-bg;
+  border-bottom: 1px solid $cdd-border;
+}
+
+.cdd-topbar__identity {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.cdd-model-title {
+  min-width: 0;
+  overflow: hidden;
+  color: $cdd-text;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cdd-imei-line {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid $cdd-soft-border;
+  border-radius: 6px;
+  background: #f8fafc;
+
+  span {
+    flex: 0 0 auto;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  strong {
+    min-width: 0;
+    overflow: hidden;
+    color: $cdd-text;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.cdd-topbar__model-input,
+.cdd-topbar__imei-input {
+  min-width: 0;
+}
+
+.cdd-topbar__model-input {
+  width: min(420px, 100%);
+}
+
+.cdd-topbar__imei-input {
+  width: 300px;
+}
+
+.cdd-topbar__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  :deep(.el-tag) {
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+}
+
+.cdd-main-form {
+  flex: 1 1 auto;
+  height: calc(min(90vh, 860px) - 68px - 59px - 49px);
+  min-height: 420px;
+  overflow: hidden;
+}
+
+.cdd-main {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 340px;
+  gap: 10px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.cdd-side,
+.cdd-center {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.cdd-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.cdd-side--left,
+.cdd-right-scroll,
+.cdd-center-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #cbd5e1;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+.cdd-side--right {
+  display: flex;
+  flex-direction: column;
+}
+
+.cdd-center {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.cdd-panel,
+.cdd-work-section {
+  background: $cdd-panel-bg;
+  border: 1px solid $cdd-border;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.cdd-panel {
+  padding: 12px;
+}
+
+.cdd-work-section {
+  padding: 12px;
+  margin: 0;
+  scroll-margin-top: 8px;
+}
+
+.cdd-panel__title,
+.cdd-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  margin: 0 0 10px;
+  color: $cdd-text;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+
+  span {
+    min-width: 0;
+  }
+
+  em {
+    flex: 0 0 auto;
+    color: #6b7280;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 500;
+  }
+}
+
+.cdd-summary-list {
+  display: grid;
+  gap: 8px;
+
+  div {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  span {
+    color: #64748b;
+  }
+
+  strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: $cdd-text;
+    font-weight: 600;
+  }
+}
+
+.cdd-query-stack,
+.cdd-action-stack {
+  display: grid;
+  gap: 8px;
+
+  .el-button {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
+.cdd-muted {
+  padding: 8px 0;
+  color: $cdd-text-muted;
+  font-size: 12px;
+  text-align: center;
+}
+
+.cdd-anchor-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  background: $cdd-panel-bg;
+  border: 1px solid $cdd-border;
+  border-radius: 8px;
+
+  button {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: $cdd-text-secondary;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color 0.16s ease, color 0.16s ease;
+
+    &:hover,
+    &:focus-visible {
+      color: $cdd-primary;
+      background: #eff6ff;
+      outline: none;
+    }
+  }
+}
+
+.cdd-center-scroll,
+.cdd-right-scroll {
+  min-height: 0;
+  height: 100%;
+  padding-right: 4px;
+}
+
+.cdd-center-scroll > .cdd-work-section + .cdd-work-section,
+.cdd-right-scroll > .cdd-panel + .cdd-panel {
+  margin-top: 10px;
+}
+
+.cdd-work-section .cdd-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cdd-work-section .cdd-info-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+}
+
+.cdd-info-cell__label,
+.cdd-custom-field__label {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cdd-inline-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .el-input,
+  .el-input-number {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+
+  span {
+    flex: 0 0 auto;
+    color: $cdd-text-muted;
+    font-size: 12px;
+  }
+}
+
+.cdd-info-cell--switch {
+  min-height: 54px;
+  justify-content: space-between;
+}
+
+.cdd-work-section .cdd-sub-cols {
+  display: grid;
+  gap: 10px;
+}
+
+.cdd-sub-cols--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cdd-sub-cols--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cdd-work-section .cdd-sub-section {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid $cdd-soft-border;
+  border-radius: 6px;
+  background: #fbfdff;
+}
+
+.cdd-work-section .cdd-sub-section--done {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.cdd-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+
+  em {
+    flex: 0 0 auto;
+    color: #6b7280;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 600;
+  }
+}
+
+.cdd-tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 132px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.cdd-tag-grid--scroll {
+  max-height: 176px;
+}
+
+.cdd-check-tag {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+  }
+}
+
+.cdd-custom-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+}
+
+.cdd-custom-group {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid $cdd-soft-border;
+  border-radius: 6px;
+  background: #fbfdff;
+}
+
+.cdd-custom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cdd-custom-field {
+  min-width: 0;
+
+  &__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 5px;
+  }
+
+  &__unit {
+    color: $cdd-text-muted;
+    font-weight: 400;
+  }
+
+  &__number,
+  &__select {
+    width: 100%;
+  }
+
+  :deep(.el-radio-group),
+  :deep(.el-checkbox-group) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  :deep(.el-radio-button__inner),
+  :deep(.el-checkbox-button__inner) {
+    border-left: 1px solid var(--el-border-color);
+    border-radius: 6px;
+  }
+}
+
+.cdd-result-field,
+.cdd-price-field,
+.cdd-remark-field {
+  margin-bottom: 0 !important;
+}
+
+.cdd-result-field {
+  :deep(.el-form-item__content) {
+    line-height: 1;
+  }
+
+  :deep(.el-textarea__inner) {
+    min-height: 112px !important;
+    color: #1f2937;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+}
+
+.cdd-price-panel {
+  :deep(.el-form-item__label) {
+    display: block;
+    padding-bottom: 4px;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+
+    em {
+      margin-left: 6px;
+      color: $cdd-warning;
+      font-style: normal;
+      font-weight: 500;
+    }
+  }
+
+  .cdd-remark-field {
+    margin-top: 10px;
+  }
+}
+
+.cdd-price-input {
+  width: 100%;
+}
+
+.cdd-upload-panel {
+  padding: 0;
+  overflow: hidden;
+
+  :deep(.el-collapse) {
+    border: 0;
+  }
+
+  :deep(.el-collapse-item__header) {
+    height: auto;
+    min-height: 42px;
+    padding: 0 12px;
+    border-bottom-color: $cdd-border;
+    color: $cdd-text;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  :deep(.el-collapse-item__wrap) {
+    border-bottom: 0;
+  }
+
+  :deep(.el-collapse-item__content) {
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 10px 12px 12px;
+  }
+}
+
+.cdd-upload-title {
+  color: $cdd-text;
+  font-size: 13px;
+  white-space: normal;
+}
+
+.cdd-upload-block + .cdd-upload-block {
+  margin-top: 12px;
+}
+
+.cdd-upload-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: $cdd-text-secondary;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cdd-camera-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.cdd-footer {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  &__info {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  &__btns {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+
+    .el-button {
+      margin-left: 0;
+    }
+  }
+}
+
+@media (max-width: 1180px) {
+  .cdd-main {
+    grid-template-columns: 200px minmax(0, 1fr) 320px;
+  }
+
+  .cdd-work-section .cdd-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .cdd-main {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+
+  .cdd-side--left {
+    display: none;
+  }
+
+  .cdd-sub-cols--3,
+  .cdd-sub-cols--2,
+  .cdd-custom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .check-device-dialog.cdd-workbench-dialog {
+    :deep(.el-dialog) {
+      width: 96vw !important;
+      height: 92vh;
+      max-height: 92vh;
+      margin: 4vh auto !important;
+    }
+
+    :deep(.el-dialog__header) {
+      padding: 10px 42px 10px 14px;
+    }
+
+    :deep(.el-dialog__footer) {
+      padding: 10px 12px;
+    }
+  }
+
+  .cdd-topbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding: 10px 12px;
+  }
+
+  .cdd-topbar__identity {
+    width: 100%;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .cdd-model-title {
+    white-space: normal;
+  }
+
+  .cdd-imei-line {
+    width: 100%;
+  }
+
+  .cdd-topbar__model-input,
+  .cdd-topbar__imei-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .cdd-topbar__actions {
+    justify-content: flex-start;
+  }
+
+  .cdd-main-form {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .cdd-main {
+    height: 100%;
+    display: block;
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  .cdd-side,
+  .cdd-side--right,
+  .cdd-center {
+    height: auto;
+    overflow: visible;
+  }
+
+  .cdd-side--left {
+    display: flex;
+    margin-bottom: 8px;
+  }
+
+  .cdd-center {
+    display: block;
+  }
+
+  .cdd-center-scroll,
+  .cdd-right-scroll {
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .cdd-anchor-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin-bottom: 8px;
+  }
+
+  .cdd-work-section .cdd-info-grid,
+  .cdd-sub-cols--3,
+  .cdd-sub-cols--2,
+  .cdd-custom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cdd-right-scroll {
+    margin-top: 10px;
+  }
+
+  .cdd-footer {
+    align-items: stretch;
+    flex-direction: column;
+
+    &__info {
+      text-align: center;
+    }
+
+    &__btns {
+      flex-direction: column;
+      width: 100%;
+
+      .el-button {
+        width: 100%;
+        margin-left: 0;
+      }
+    }
+  }
+}
+
+/* ============================================================
+   质检工作台视觉刷新 v2
+   Element Plus Dialog 可能与 scoped 样式同级/teleport，这里用全局选择器确保命中。
+   ============================================================ */
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog) {
+  overflow: hidden;
+  border: 1px solid #d8e0ea;
+  border-radius: 12px;
+  background: #f3f6fa;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__header),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__header) {
+  min-height: 50px;
+  padding: 14px 52px 13px 18px;
+  background: linear-gradient(90deg, #ffffff 0%, #f4f8ff 55%, #eefdf7 100%);
+  border-bottom: 1px solid #dbe4ef;
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__title),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__title) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__title::before),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__title::before) {
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: #2563eb;
+  content: '';
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__body),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__body) {
+  background: #eef3f8;
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__footer),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__footer) {
+  background: #ffffff;
+  border-top: 1px solid #dbe4ef;
+  box-shadow: 0 -8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.cdd-topbar {
+  min-height: 74px;
+  padding: 12px 16px;
+  background: linear-gradient(90deg, #ffffff 0%, #f8fbff 100%);
+  border-bottom: 1px solid #dbe4ef;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+.cdd-model-title {
+  position: relative;
+  padding-left: 14px;
+  color: #0f172a;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.cdd-model-title::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 4px;
+  border-radius: 999px;
+  background: #22c55e;
+  content: '';
+}
+
+.cdd-imei-line {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-color: #cbd5e1;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cdd-topbar__actions {
+  :deep(.el-tag) {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  :deep(.el-tag.el-tag--success) {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #15803d;
+  }
+}
+
+.cdd-main {
+  grid-template-columns: 226px minmax(0, 1fr) 352px;
+  gap: 12px;
+  padding: 12px;
+  background: #eef3f8;
+}
+
+.cdd-panel,
+.cdd-work-section,
+.cdd-anchor-bar {
+  border-color: #dbe4ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cdd-panel {
+  padding: 13px;
+}
+
+.cdd-panel__title,
+.cdd-section-title {
+  margin: -3px -3px 12px;
+  padding: 0 0 9px;
+  border-bottom: 1px solid #edf2f7;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cdd-summary-panel {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.cdd-summary-list {
+  gap: 9px;
+
+  div {
+    grid-template-columns: 46px minmax(0, 1fr);
+    padding: 7px 8px;
+    border-radius: 7px;
+    background: #f8fafc;
+  }
+}
+
+.cdd-query-stack .el-button,
+.cdd-action-stack .el-button {
+  min-height: 32px;
+  border-color: #d7e0ea;
+  background: #ffffff;
+}
+
+.cdd-query-stack .el-button:hover,
+.cdd-action-stack .el-button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.cdd-anchor-bar {
+  gap: 7px;
+  padding: 9px;
+}
+
+.cdd-anchor-bar button {
+  min-height: 30px;
+  padding: 6px 11px;
+  border: 1px solid transparent;
+}
+
+.cdd-anchor-bar button:hover,
+.cdd-anchor-bar button:focus-visible {
+  border-color: #bfdbfe;
+}
+
+.cdd-work-section {
+  padding: 14px;
+}
+
+.cdd-work-section .cdd-info-grid {
+  gap: 12px;
+}
+
+.cdd-work-section .cdd-info-cell {
+  padding: 10px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.cdd-info-cell--switch {
+  justify-content: center;
+}
+
+.cdd-work-section .cdd-sub-section,
+.cdd-custom-group {
+  padding: 12px;
+  border-color: #dfe7f1;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.cdd-work-section .cdd-sub-section--done {
+  border-color: #86efac;
+  background: #f0fdf4;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08);
+}
+
+.cdd-sub-header {
+  margin-bottom: 9px;
+  color: #1f2937;
+  font-weight: 800;
+}
+
+.cdd-tag-grid {
+  gap: 7px;
+  max-height: 142px;
+}
+
+.cdd-tag-grid--scroll {
+  max-height: 188px;
+}
+
+.cdd-check-tag {
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-weight: 600;
+}
+
+.cdd-result-panel {
+  border-left: 4px solid #3b82f6;
+}
+
+.cdd-result-panel + .cdd-result-panel {
+  border-left-color: #10b981;
+}
+
+.cdd-result-field :deep(.el-textarea__inner) {
+  background: #fbfdff;
+}
+
+.cdd-price-panel {
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(180deg, #ffffff 0%, #fffaf0 100%);
+}
+
+.cdd-upload-panel {
+  border-left: 4px solid #8b5cf6;
+}
+
+.cdd-footer__info {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.cdd-footer__btns {
+  .el-button {
+    min-width: 104px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .cdd-main {
+    grid-template-columns: 210px minmax(0, 1fr) 326px;
+  }
+}
+
+@media (max-width: 980px) {
+  .cdd-main {
+    grid-template-columns: minmax(0, 1fr) 326px;
+  }
+}
+
+@media (max-width: 768px) {
+  .cdd-main {
+    display: block;
+    padding: 9px;
+  }
+
+  .cdd-topbar {
+    padding: 11px 12px;
+  }
+
+  .cdd-work-section .cdd-info-cell {
+    padding: 9px;
   }
 }
 </style>

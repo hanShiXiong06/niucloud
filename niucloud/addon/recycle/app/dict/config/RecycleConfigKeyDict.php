@@ -10,6 +10,5 @@ class RecycleConfigKeyDict
 {
     const THIRD_PARTY = 'recycle_third_party_config';
     const DEVICE_QUERY = 'recycle_device_query_config';
-    const QUOTATION_CRAWLER = 'recycle_quotation_crawler_config';
-    const QUOTATION_DISPLAY = 'recycle_quotation_display_config';
+    const ORDER_SUBMIT = 'recycle_order_submit_config';
 }

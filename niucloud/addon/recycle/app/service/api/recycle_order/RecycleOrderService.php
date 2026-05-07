@@ -150,7 +150,7 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,site_id,imei,model,initial_price,status,final_price,check_images,check_images_seller')
+                    $query->field('id,order_id,site_id,imei,user_sn,model,initial_price,status,final_price,check_images,check_images_seller')
                         ->append(['status_name', 'check_images_seller_thumb_small']);
                 }
             ])
@@ -282,6 +282,7 @@ class RecycleOrderService extends BaseApiService
                            ->where(function($deviceCondition) use ($search) {
                                $deviceCondition->whereOr([
                                    ['imei', 'like', "%{$search}%"],
+                                   ['user_sn', 'like', "%{$search}%"],
                                    ['model', 'like', "%{$search}%"]
                                ]);
                            });
@@ -307,7 +308,7 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,site_id,imei,model,initial_price,status,final_price,remark,check_images,check_images_seller,check_result,check_result_seller,price_remark')
+                    $query->field('id,order_id,site_id,imei,user_sn,model,initial_price,status,final_price,remark,check_images,check_images_seller,check_result,check_result_seller,price_remark')
                         ->append(['status_name', 'check_images_seller_thumb_small']);
                 },
                 'member' => function($query) {
@@ -395,6 +396,7 @@ class RecycleOrderService extends BaseApiService
                             'goods_category' => array_values(array_map('strval', $categoryPath))
                         ],
                         'imei' => $device['imei'] ?? '',
+                        'user_sn' => $device['user_sn'] ?? ($device['imei'] ?? ''),
                         'model' => $device['model'] ?? '',
                         'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
                         'initial_price' => $device['initial_price'] ?? 0,

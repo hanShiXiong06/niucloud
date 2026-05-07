@@ -4,7 +4,7 @@ import request from '@/utils/request'
  * 获取快递订单记录列表
  */
 export function getExpressOrderRecordList(params: any) {
-    return request.get('recycle/express_order_record/lists', params)
+    return request.get('recycle/express_order_record/lists', { params })
 }
 
 /**
@@ -53,28 +53,28 @@ export function updateExpressOrderActualInfo(params: any) {
  * 获取重量差异列表
  */
 export function getWeightDiffList(params: any) {
-    return request.get('recycle/express_order_record/weight_diff_list', params)
+    return request.get('recycle/express_order_record/weight_diff_list', { params })
 }
 
 /**
  * 获取费用差异列表
  */
 export function getCostDiffList(params: any) {
-    return request.get('recycle/express_order_record/cost_diff_list', params)
+    return request.get('recycle/express_order_record/cost_diff_list', { params })
 }
 
 /**
  * 获取快递费用统计
  */
 export function getExpressOrderStatistics(params: any) {
-    return request.get('recycle/express_order_record/statistics', params)
+    return request.get('recycle/express_order_record/statistics', { params })
 }
 
 /**
  * 根据回收订单ID获取快递记录
  */
 export function getExpressOrderByRecycleOrderId(params: any) {
-    return request.get('recycle/express_order_record/by_recycle_order', params)
+    return request.get('recycle/express_order_record/by_recycle_order', { params })
 }
 
 /**
@@ -85,6 +85,14 @@ export function createExpressOrder(params: any) {
 }
 
 // ============ 统一快递服务接口 ============
+
+export function getExpressQuote(params: any) {
+    return request.post('recycle/express_order/quote', params)
+}
+
+export function createExpressOrderDirect(params: any) {
+    return request.post('recycle/express_order/create', params)
+}
 
 /**
  * 为回收订单创建快递单（管理员操作）
@@ -112,6 +120,46 @@ export function trackExpressForOrder(params: any) {
  */
 export function getUnifiedExpressQuote(params: any) {
     return request.post('recycle/express_order/unified_quote', params)
+}
+
+export function getExpressFund() {
+    return request.get('recycle/express_order/balance')
+}
+
+export function getExpressOrderDetail(params: any) {
+    return request.get('recycle/express_order/detail', { params })
+}
+
+export function cancelOrInterceptExpressOrder(params: any) {
+    return request.post('recycle/express_order/cancel', params)
+}
+
+export function modifyExpressOrder(params: any) {
+    return request.post('recycle/express_order/modify', params)
+}
+
+export function getExpressWaybillPdf(params: any) {
+    return request.post('recycle/express_order/waybill_pdf', params)
+}
+
+export function getExpressAddressBookList(params: any) {
+    return request.get('recycle/express_address_book/lists', { params })
+}
+
+export function saveExpressAddressBook(params: any) {
+    return request.post('recycle/express_address_book/save', params)
+}
+
+export function deleteExpressAddressBook(id: number) {
+    return request.delete(`recycle/express_address_book/${id}`)
+}
+
+export function setExpressAddressBookDefault(id: number) {
+    return request.post(`recycle/express_address_book/${id}/default`)
+}
+
+export function setExpressAddressBookTop(id: number, is_top: number) {
+    return request.post(`recycle/express_address_book/${id}/top`, { is_top })
 }
 
 // ============ 快递服务商配置接口 ============

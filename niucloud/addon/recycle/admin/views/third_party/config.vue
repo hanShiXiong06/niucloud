@@ -70,10 +70,6 @@
                     <div v-if="item.missing_fields?.length" class="capability-warning">
                         缺少配置：{{ item.missing_fields.join('、') }}
                     </div>
-                    <div v-else-if="item.key === 'quotation_crawler' && item.config_summary" class="capability-secret-state">
-                        <span>Token {{ item.config_summary.authorization_token_saved ? '已保存' : '未配置' }}</span>
-                        <span>OpenId {{ item.config_summary.open_id_saved ? '已保存' : '未配置' }}</span>
-                    </div>
                     <div v-else-if="item.last_call?.error_msg" class="capability-warning">
                         最近失败：{{ item.last_call.error_msg }}
                     </div>
@@ -323,71 +319,6 @@
                     </el-form>
                 </el-tab-pane>
 
-                <el-tab-pane label="报价爬虫" name="quotation_crawler">
-                    <div class="tab-intro">
-                        <div class="intro-title">报价爬虫能力</div>
-                        <div class="intro-text">用于同步外部报价数据。公共 Token、OpenId 和请求头配置在这里，每个报价任务自己的价格策略在报价管理里配置。</div>
-                    </div>
-                    <el-form :model="quotationCrawlerForm" label-width="150px" class="max-w-[860px]" v-loading="quotationCrawlerLoading">
-                        <el-alert
-                            class="mb-[18px]"
-                            type="info"
-                            :closable="false"
-                            title="这里配置报价爬虫的公共接口参数。为了便于调试，Token 和 OpenId 会按原值回显，请只给可信管理员开放该页面。"
-                        />
-
-                        <el-form-item label="启用">
-                            <el-switch v-model="quotationCrawlerForm.enabled" :active-value="1" :inactive-value="0" />
-                        </el-form-item>
-                        <el-form-item label="服务商">
-                            <el-select v-model="quotationCrawlerForm.provider" disabled>
-                                <el-option label="超牛报价" value="chaoniu" />
-                            </el-select>
-                        </el-form-item>
-                        <el-form-item label="接口域名">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.base_url" placeholder="https://daheng.chaoniu.top" />
-                        </el-form-item>
-                        <el-form-item label="报价详情路径">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.detail_path" placeholder="/api/v1/quotation/detail" />
-                        </el-form-item>
-                        <el-form-item label="版本号">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.version" placeholder="2.2.3" />
-                        </el-form-item>
-                        <el-form-item label="AppId">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.app_id" placeholder="wxeff5f3c92ec08aff" />
-                        </el-form-item>
-                        <el-form-item label="Platform">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.platform" placeholder="2" />
-                        </el-form-item>
-                        <el-form-item label="Authorization Token">
-                            <el-input
-                                v-model="quotationCrawlerForm.providers.chaoniu.authorization_token"
-                                type="textarea"
-                                :rows="3"
-                                placeholder="请输入报价爬虫 Authorization Token"
-                            />
-                        </el-form-item>
-                        <el-form-item label="OpenId">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.open_id" placeholder="请输入报价爬虫 OpenId" />
-                        </el-form-item>
-                        <el-form-item label="Referer">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.referer" />
-                        </el-form-item>
-                        <el-form-item label="User-Agent">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.user_agent" type="textarea" :rows="3" />
-                        </el-form-item>
-                        <el-form-item label="Accept-Encoding">
-                            <el-input v-model="quotationCrawlerForm.providers.chaoniu.accept_encoding" placeholder="gzip,compress,br,deflate" />
-                        </el-form-item>
-                        <el-form-item label="超时时间">
-                            <el-input-number v-model="quotationCrawlerForm.providers.chaoniu.timeout" :min="1" :max="120" />
-                        </el-form-item>
-                        <el-form-item>
-                            <el-button @click="loadQuotationCrawlerDefault">恢复默认</el-button>
-                            <el-button type="primary" :loading="quotationCrawlerSaving" @click="saveQuotationCrawler">保存报价爬虫配置</el-button>
-                        </el-form-item>
-                    </el-form>
-                </el-tab-pane>
             </el-tabs>
         </el-card>
     </div>
@@ -398,15 +329,12 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { apiThirdPartyConfig, apiThirdPartyConfigDefault, apiThirdPartyConfigOverview, apiThirdPartyConfigSave } from '@/addon/recycle/api/third_party'
-import { getQuotationCrawlerConfig, getQuotationCrawlerDefaultConfig, saveQuotationCrawlerConfig } from '@/addon/recycle/api/quotation'
 import { batchUpdateYisuProduct, getYisuProductList } from '@/addon/recycle/api/yisu'
 import { getExpressFund } from '@/addon/recycle/api/express'
 
 const router = useRouter()
 const activeTab = ref('express_order')
 const saving = ref(false)
-const quotationCrawlerLoading = ref(false)
-const quotationCrawlerSaving = ref(false)
 const overviewLoading = ref(false)
 const overview = reactive<any>({
     today: {
@@ -483,11 +411,6 @@ const defaultForm = {
 }
 
 const clone = (data: Record<string, any>) => JSON.parse(JSON.stringify(data))
-const unwrapResponseData = (res: any) => {
-    if (res?.data?.data !== undefined) return res.data.data
-    if (res?.data !== undefined) return res.data
-    return res || {}
-}
 const mergeDeep = (target: Record<string, any>, source: Record<string, any>) => {
     const result = clone(target)
     Object.keys(source || {}).forEach((key) => {
@@ -508,28 +431,6 @@ const mergeDeep = (target: Record<string, any>, source: Record<string, any>) => 
 }
 
 const form = reactive<any>(clone(defaultForm))
-const defaultQuotationCrawlerForm = {
-    enabled: 1,
-    provider: 'chaoniu',
-    providers: {
-        chaoniu: {
-            name: '超牛报价',
-            base_url: 'https://daheng.chaoniu.top',
-            detail_path: '/api/v1/quotation/detail',
-            version: '2.4.1',
-            app_id: '',
-            platform: '2',
-            authorization_token: '',
-            open_id: '',
-            referer: 'https://servicewechat.com/wx7c82fedb54be53fc/41/page-frame.html',
-            user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.71(0x18004730) NetType/WIFI Language/zh_CN',
-            accept_encoding: 'gzip,compress,br,deflate',
-            timeout: 30
-        }
-    }
-}
-
-const quotationCrawlerForm = reactive<any>(clone(defaultQuotationCrawlerForm))
 const expressFund = ref<any>(null)
 const activeProductType = ref('快递')
 const yisuProductList = ref<any[]>([])
@@ -553,31 +454,8 @@ const filteredYisuProducts = computed(() => {
     return yisuProductList.value.filter(item => (item.express_type || '快递') === activeProductType.value)
 })
 
-const quotationCrawlerCapability = computed(() => {
-    return overview.capabilities.find((item: any) => item.key === 'quotation_crawler') || null
-})
-
-const syncQuotationCrawlerSecretState = () => {
-    const summary = quotationCrawlerCapability.value?.config_summary
-    const provider = quotationCrawlerForm.provider || 'chaoniu'
-    const providerForm = quotationCrawlerForm.providers?.[provider]
-    if (!summary || !providerForm) return
-
-    if (summary.authorization_token_saved) {
-        providerForm.authorization_token = summary.authorization_token || providerForm.authorization_token || ''
-    }
-    if (summary.open_id_saved) {
-        providerForm.open_id = summary.open_id || providerForm.open_id || ''
-    }
-}
-
 const assignForm = (data: Record<string, any>) => {
     Object.assign(form, mergeDeep(defaultForm, data || {}))
-}
-
-const assignQuotationCrawlerForm = (data: Record<string, any>) => {
-    Object.assign(quotationCrawlerForm, mergeDeep(defaultQuotationCrawlerForm, data || {}))
-    syncQuotationCrawlerSecretState()
 }
 
 const loadOverview = async () => {
@@ -588,7 +466,6 @@ const loadOverview = async () => {
             today: res.data?.today || {},
             capabilities: res.data?.capabilities || []
         })
-        syncQuotationCrawlerSecretState()
     } finally {
         overviewLoading.value = false
     }
@@ -597,16 +474,6 @@ const loadOverview = async () => {
 const loadConfig = async () => {
     const res = await apiThirdPartyConfig()
     assignForm(res.data)
-}
-
-const loadQuotationCrawlerConfig = async () => {
-    quotationCrawlerLoading.value = true
-    try {
-        const res = await getQuotationCrawlerConfig()
-        assignQuotationCrawlerForm(unwrapResponseData(res))
-    } finally {
-        quotationCrawlerLoading.value = false
-    }
 }
 
 const loadDefault = async () => {
@@ -628,29 +495,6 @@ const saveConfig = async () => {
         await loadOverview()
     } finally {
         saving.value = false
-    }
-}
-
-const loadQuotationCrawlerDefault = async () => {
-    try {
-        await ElMessageBox.confirm('恢复默认只会重置页面表单，保存后才会生效。确定恢复默认配置吗？', '提示', {
-            type: 'warning'
-        })
-        const res = await getQuotationCrawlerDefaultConfig()
-        assignQuotationCrawlerForm(unwrapResponseData(res))
-    } catch (error) {}
-}
-
-const saveQuotationCrawler = async () => {
-    quotationCrawlerSaving.value = true
-    try {
-        const res = await saveQuotationCrawlerConfig(quotationCrawlerForm)
-        const savedConfig = unwrapResponseData(res)
-        ElMessage.success('保存成功')
-        assignQuotationCrawlerForm(savedConfig)
-        await loadOverview()
-    } finally {
-        quotationCrawlerSaving.value = false
     }
 }
 
@@ -732,7 +576,6 @@ const formatTime = (time: number) => {
 
 onMounted(() => {
     loadConfig()
-    loadQuotationCrawlerConfig()
     loadOverview()
     loadYisuProducts()
 })
@@ -852,55 +695,6 @@ onMounted(() => {
     margin-top: 12px;
     color: #6b7280;
     font-size: 12px;
-}
-
-.capability-secret-state {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 12px;
-}
-
-.capability-secret-state span {
-    padding: 3px 7px;
-    color: #047857;
-    font-size: 12px;
-    line-height: 1.4;
-    background: #ecfdf5;
-    border: 1px solid #a7f3d0;
-    border-radius: 6px;
-}
-
-.crawler-config-state {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    max-width: 1040px;
-}
-
-.crawler-config-state > div {
-    min-width: 0;
-    padding: 10px 12px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    background: #f9fafb;
-}
-
-.crawler-config-state span {
-    display: block;
-    color: #6b7280;
-    font-size: 12px;
-}
-
-.crawler-config-state strong {
-    display: block;
-    min-width: 0;
-    margin-top: 6px;
-    color: #111827;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
 }
 
 .tab-intro {

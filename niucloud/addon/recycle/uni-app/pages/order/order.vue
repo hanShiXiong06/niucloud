@@ -3,23 +3,37 @@
     <!-- 顶部导航栏 -->
     <DeliveryModeToggle
       v-model="currentTab"
+      :tabs="deliveryTabs"
       @to-order-list="toOrderList"
+    />
+
+    <OrderNoticeBar
+      :enabled="orderSubmitConfig.notice.enabled"
+      :title="orderSubmitConfig.notice.title"
+      :content="orderSubmitConfig.notice.content"
     />
 
     <u-form :model="form" :rules="rules" ref="formRef" label-position="left">
       <!-- 出货信息 -->
       <view class="bg-white rounded-lg p-3 mb-3 border-l-4" style="border-color: #D8C1C1;">
-        <view class="flex items-center gap-1 mb-2">
-          <up-icon name="info-circle" size="16" color="#8C7575"></up-icon>
-          <text class="text-sm font-medium" style="color: #8C7575;">出货信息</text>
+        <view class="shipment-header">
+          <view class="shipment-title">
+            <up-icon name="info-circle" size="16" color="#8C7575"></up-icon>
+            <text class="text-sm font-medium" style="color: #8C7575;">出货信息</text>
+          </view>
+          <view v-if="orderSubmitConfig.device_add_enabled" class="shipment-add-button" @click="openInlineDeviceAdd">
+            <up-icon name="plus" size="14" color="#fff"></up-icon>
+            <text>{{ phoneList.length ? '继续添加' : '添加设备' }}</text>
+          </view>
         </view>
 
         <!-- 设备列表管理 -->
         <DeviceListManager
+          ref="deviceListManagerRef"
           :devices="phoneList"
           :count="deviceCount"
           :show-add-button="true"
-          :show-batch-button="true"
+          :show-batch-button="false"
           :show-delete-button="true"
           @update:devices="phoneList = $event"
           @update:count="deviceCount = $event"
@@ -48,6 +62,9 @@
         :platform-delivery-form="platformDeliveryForm"
         :pickup-time-options="pickupTimeOptions"
         :need-pickup-time="needPickupTime"
+        :order-count="deviceCount"
+        :free-shipping-min-count="orderSubmitConfig.platform_delivery.free_shipping_min_count"
+        :platform-delivery-name="orderSubmitConfig.platform_delivery.display_name"
         @update:use-platform-delivery="handlePlatformDeliveryChange"
         @update:express-no="form.express_no = $event"
         @update:platform-delivery-form="platformDeliveryForm = $event"
@@ -103,9 +120,10 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { getAddressList } from '@/app/api/member'
 import { getPaymentList } from '@/addon/recycle/api/payment'
-import { getReceivingChannels } from '@/addon/recycle/api/order'
+import { getRecycleUserAddressInfo } from '@/addon/recycle/api/return_order'
+import { checkExpressEnabled } from '@/addon/recycle/api/express'
+import { getOrderSubmitConfig } from '@/addon/recycle/api/order'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 
 // 导入组件
@@ -116,6 +134,7 @@ import ExpressInfoSection from './components/ExpressInfoSection.vue'
 import ShopInfoCard from './components/ShopInfoCard.vue'
 import AgreementCheckbox from './components/AgreementCheckbox.vue'
 import FollowOfficialAccountPopup from './components/FollowOfficialAccountPopup.vue'
+import OrderNoticeBar from './components/OrderNoticeBar.vue'
 
 // 导入 composables
 import { useTabCache } from '../../hooks/useTabCache'
@@ -129,13 +148,53 @@ import { useOrderSubmit } from '../../hooks/useOrderSubmit'
 const TAB_CACHE_KEY = 'recycle_order_current_tab'
 const { currentTab, switchTab } = useTabCache(TAB_CACHE_KEY, 0)
 
+const orderSubmitConfig = ref({
+  device_add_enabled: 1,
+  notice: {
+    enabled: 0,
+    title: '下单提示',
+    content: ''
+  },
+  default_count: 1,
+  delivery_modes: {
+    mail: 1,
+    self: 1
+  },
+  profile: {
+    enabled: 1,
+    payment_required: 1,
+    payment_min_count: 1,
+    id_card_required: 1
+  },
+  platform_delivery: {
+    display_name: '京东快递',
+    free_shipping_min_count: 1
+  }
+})
+
+const deliveryTabs = computed(() => {
+  const tabs: Array<{ label: string; value: number }> = []
+  if (orderSubmitConfig.value.delivery_modes.mail) tabs.push({ label: '邮寄到店', value: 0 })
+  if (orderSubmitConfig.value.delivery_modes.self) tabs.push({ label: '自送到店', value: 1 })
+  return tabs
+})
+
+const normalizePositiveNumber = (value: any, fallback = 1) => {
+  const count = Number(value)
+  return Number.isFinite(count) && count > 0 ? Math.min(99, Math.floor(count)) : fallback
+}
+
 // 表单管理
 const { form, rules, formRef, resetForm } = useOrderForm(currentTab)
 
 // 计算属性确保 count 是数字类型
 const deviceCount = computed({
   get: () => form.value.count,
-  set: (val) => {  form.value.count = val.value  }
+  set: (val: any) => {
+    const rawValue = typeof val === 'object' && val !== null ? val.value : val
+    const count = Number(rawValue)
+    form.value.count = Number.isFinite(count) && count > 0 ? count : 1
+  }
 })
 
 // 设备管理
@@ -164,6 +223,7 @@ const isAgreeRecycle = ref(false)
 // 设备弹窗状态
 const showDeviceModal = ref(false)
 const deviceModalMode = ref<'single' | 'batch'>('batch')
+const deviceListManagerRef = ref<InstanceType<typeof DeviceListManager> | null>(null)
 
 // 监听 Tab 切换
 watch(currentTab, (newVal) => {
@@ -175,6 +235,63 @@ watch(currentTab, (newVal) => {
     form.value.express_no = ''
   }
 })
+
+const normalizeOrderSubmitConfig = (data: any = {}) => {
+  const mail = data.delivery_modes?.mail ? 1 : 0
+  const self = data.delivery_modes?.self ? 1 : 0
+  orderSubmitConfig.value = {
+    device_add_enabled: data.device_add_enabled ? 1 : 0,
+    notice: {
+      enabled: data.notice?.enabled ? 1 : 0,
+      title: data.notice?.title || '下单提示',
+      content: data.notice?.content || ''
+    },
+    default_count: normalizePositiveNumber(data.default_count, 1),
+    delivery_modes: {
+      mail: mail || self ? mail : 1,
+      self: mail || self ? self : 1
+    },
+    profile: {
+      enabled: data.profile?.enabled === 0 ? 0 : 1,
+      payment_required: data.profile?.payment_required === 0 ? 0 : 1,
+      payment_min_count: Math.min(5, normalizePositiveNumber(data.profile?.payment_min_count, 1)),
+      id_card_required: data.profile?.id_card_required === 0 ? 0 : 1
+    },
+    platform_delivery: {
+      display_name: data.platform_delivery?.display_name || '京东快递',
+      free_shipping_min_count: normalizePositiveNumber(data.platform_delivery?.free_shipping_min_count, 1)
+    }
+  }
+}
+
+const applyAvailableDeliveryMode = () => {
+  const modes = orderSubmitConfig.value.delivery_modes
+  if (!modes.mail && currentTab.value === 0) {
+    currentTab.value = 1
+    return
+  }
+  if (!modes.self && currentTab.value === 1) {
+    currentTab.value = 0
+  }
+}
+
+const loadOrderSubmitConfig = async () => {
+  try {
+    const res = await getOrderSubmitConfig()
+    normalizeOrderSubmitConfig(res.data || {})
+  } catch (error) {
+    console.error('获取下单配置失败：', error)
+    normalizeOrderSubmitConfig()
+  }
+  applyAvailableDeliveryMode()
+  applyDefaultCount()
+}
+
+const applyDefaultCount = () => {
+  if (phoneList.value.length > 0) return
+
+  form.value.count = normalizePositiveNumber(orderSubmitConfig.value.default_count, 1)
+}
 
 // 跳转到订单列表
 const toOrderList = () => {
@@ -193,6 +310,12 @@ const openSingleDeviceModal = () => {
 const openBatchDeviceModal = () => {
   deviceModalMode.value = 'batch'
   showDeviceModal.value = true
+}
+
+const openInlineDeviceAdd = () => {
+  if (!orderSubmitConfig.value.device_add_enabled) return
+
+  deviceListManagerRef.value?.openAddDialog()
 }
 
 // 处理设备确认添加
@@ -217,24 +340,31 @@ const scanCode = () => {
 
 // 处理平台快递切换
 const handlePlatformDeliveryChange = async (value: boolean) => {
+  if (value && !canUsePlatformDelivery.value) {
+    uni.showToast({
+      title: `满 ${orderSubmitConfig.value.platform_delivery.free_shipping_min_count} 台可用${orderSubmitConfig.value.platform_delivery.display_name}包邮`,
+      icon: 'none'
+    })
+    enablePlatformDelivery.value = false
+    return
+  }
+
   enablePlatformDelivery.value = value
   if (value) {
     await handlePlatformDeliveryToggle()
   }
 }
 
-interface DictItem {
-  name?: string
-  value?: string
-  memo?: string
-}
-
-interface ReceivingChannelsResponse {
+interface ExpressCheckResponse {
   code: number
   msg?: string
   data?: {
-    dictionary?: DictItem[]
+    enabled?: boolean
+    provider?: string
+    provider_name?: string
+    has_shop_address?: boolean
     memo?: string
+    prompt?: string
   }
 }
 
@@ -255,13 +385,35 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
   // 仅在邮寄模式且启用平台快递时提示
   if (currentTab.value !== 0 || !enablePlatformDelivery.value) return true
 
+  if (!canUsePlatformDelivery.value) {
+    uni.showToast({
+      title: `满 ${orderSubmitConfig.value.platform_delivery.free_shipping_min_count} 台可用${orderSubmitConfig.value.platform_delivery.display_name}包邮`,
+      icon: 'none'
+    })
+    return false
+  }
+
   try {
-    const res = await getReceivingChannels() as ReceivingChannelsResponse
+    const res = await checkExpressEnabled() as ExpressCheckResponse
     if (res.code !== 1 || !res.data) return true
 
-    // 优先使用字典项 value=1 的 memo，其次使用字典根级 memo
-    const platformChannel = res.data.dictionary?.find(item => item.value === '1')
-    const memo = (platformChannel?.memo || res.data.memo || '').trim()
+    if (!res.data.enabled) {
+      uni.showToast({
+        title: '平台快递未启用',
+        icon: 'none'
+      })
+      return false
+    }
+
+    if (!res.data.has_shop_address) {
+      uni.showToast({
+        title: '商家收货地址未配置',
+        icon: 'none'
+      })
+      return false
+    }
+
+    const memo = String(res.data.prompt || res.data.memo || '').trim()
 
     if (!memo) return true
     return await showPlatformDeliveryMemoConfirm(memo)
@@ -272,8 +424,31 @@ const shouldContinueWithPlatformPrompt = async (): Promise<boolean> => {
   }
 }
 
+const canUsePlatformDelivery = computed(() => {
+  return Number(deviceCount.value || 0) >= Number(orderSubmitConfig.value.platform_delivery.free_shipping_min_count || 1)
+})
+
+watch(canUsePlatformDelivery, (canUse) => {
+  if (!canUse && enablePlatformDelivery.value) {
+    enablePlatformDelivery.value = false
+  }
+})
+
 // 提交订单
 const handleSubmitOrder = async () => {
+  const modeKey = currentTab.value === 0 ? 'mail' : 'self'
+  if (!orderSubmitConfig.value.delivery_modes[modeKey]) {
+    uni.showToast({
+      title: '当前下单方式未开启',
+      icon: 'none'
+    })
+    applyAvailableDeliveryMode()
+    return
+  }
+
+  const profileReady = await checkPaymentInfo()
+  if (!profileReady) return
+
   const canSubmit = await shouldContinueWithPlatformPrompt()
   if (!canSubmit) return
 
@@ -291,19 +466,42 @@ const handleSubmitOrder = async () => {
       phoneList.value = []
       resetPlatformDeliveryForm()
       isAgreeRecycle.value = false
+      applyDefaultCount()
     }
   })
 }
 
 // 检查收款信息
-const checkPaymentInfo = async () => {
-  try {
-    const res = await getPaymentList()
+const checkPaymentInfo = async (): Promise<boolean> => {
+  const profile = orderSubmitConfig.value.profile
+  if (!profile.enabled) return true
 
-    if (res.data.length < 1) {
+  try {
+    const [paymentRes, addressRes] = await Promise.all([
+      profile.payment_required ? getPaymentList() : Promise.resolve({ code: 1, data: [] }),
+      getRecycleUserAddressInfo()
+    ])
+
+    const paymentList = Array.isArray(paymentRes?.data) ? paymentRes.data : []
+    const addressInfo = addressRes?.data || {}
+    const missing: string[] = []
+
+    if (!addressInfo.name || !addressInfo.mobile) {
+      missing.push('个人资料')
+    }
+
+    if (profile.id_card_required && (!addressInfo.id_card || !addressInfo.card_pic)) {
+      missing.push('身份证信息')
+    }
+
+    if (profile.payment_required && paymentList.length < profile.payment_min_count) {
+      missing.push(`${profile.payment_min_count} 种收款方式`)
+    }
+
+    if (missing.length) {
       uni.showModal({
         title: '提示（重要）',
-        content: '您尚未输入个人信息，建议添加收款方式及完善个人信息，以便回收完成后能及时收到款项。',
+        content: `请完善${missing.join('、')}，以便回收完成后及时打款。`,
         confirmText: '立即设置',
         cancelText: '稍后设置',
         success: function(res) {
@@ -313,17 +511,20 @@ const checkPaymentInfo = async () => {
             })
           } else {
             uni.showToast({
-              title: '请记得及时完善收款信息，避免影响回收款项到账',
+              title: '请记得及时完善资料，避免影响回收款到账',
               icon: 'none',
               duration: 3000
             })
           }
         }
       })
+      return false
     }
   } catch (error) {
     console.error('获取收款信息失败：', error)
   }
+
+  return true
 }
 
 // 关闭公众号关注弹窗后跳转订单列表
@@ -336,6 +537,8 @@ const handleFollowPopupClose = () => {
 
 // 页面显示时的处理
 onShow(async () => {
+  await loadOrderSubmitConfig()
+
   // 请求订阅相关消息通知
   await useSubscribeMessage().request('recycle_order_sign,recycle_order_agree,recycle_order_pay')
 
@@ -348,6 +551,37 @@ fetchShopInfo()
 </script>
 
 <style scoped lang="scss">
+.shipment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.shipment-title {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.shipment-add-button {
+  flex-shrink: 0;
+  min-width: 144rpx;
+  height: 58rpx;
+  padding: 0 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  background: var(--primary-color);
+  color: #fff;
+  border-radius: 999rpx;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .label {
   font-size: 14px;
   color: #374151;

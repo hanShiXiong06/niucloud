@@ -165,77 +165,106 @@
             </template>
         </el-dialog>
 
-        <!-- 确认退货对话框 -->
-        <el-dialog v-model="confirmDialogVisible" title="确认退货" width="500px" :close-on-click-modal="false">
-            <el-form :model="confirmForm" label-width="120px" ref="confirmFormRef">
-                 <el-form-item label="快递公司" prop="express_company">
-                    <el-select v-model="confirmForm.express_company" placeholder="请选择快递公司" clearable>
-                        <el-option v-for="item in expressCompanyOptions" :key="item.value" :label="item.label"
-                            :value="item.value" />
+        <!-- 确认退货工作台 -->
+        <el-dialog v-model="confirmDialogVisible" title="退货发货工作台" width="min(1180px, calc(100vw - 32px))" class="return-shipment-dialog" :close-on-click-modal="false">
+            <div class="return-workbench">
+                <section class="return-panel">
+                    <div class="return-panel-head">
+                        <div>
+                            <strong>寄件地址</strong>
+                            <span>默认使用商家发货地址，可切换或临时解析。</span>
+                        </div>
+                        <el-button link type="danger" @click="clearReturnSender">清空</el-button>
+                    </div>
+                    <el-select v-model="selectedShopSenderId" filterable clearable placeholder="选择商家寄件地址" @change="applyShopSenderAddress">
+                        <el-option v-for="item in senderShopAddressList" :key="item.id" :label="shopAddressLabel(item)" :value="item.id" />
                     </el-select>
-                </el-form-item>
+                    <div class="parse-inline">
+                        <el-input v-model="senderRawAddress" type="textarea" :rows="2" placeholder="临时寄件地址：姓名 手机号 省市区详细地址" />
+                        <el-button :loading="addressParseLoading.sender" @click="parseReturnAddress('sender')">解析</el-button>
+                    </div>
+                    <div class="return-address-grid">
+                        <el-input v-model="returnShipmentForm.senderName" placeholder="寄件人" />
+                        <el-input v-model="returnShipmentForm.senderMobile" placeholder="寄件手机号" />
+                        <el-input v-model="returnShipmentForm.senderProvince" placeholder="省" />
+                        <el-input v-model="returnShipmentForm.senderCity" placeholder="市" />
+                        <el-input v-model="returnShipmentForm.senderDistrict" placeholder="区县" />
+                        <el-input v-model="returnShipmentForm.senderAddress" placeholder="详细地址" class="span-2" />
+                    </div>
+                </section>
 
-                <!-- 易速快递选项 -->
-                <el-form-item label="使用易速快递">
-                    <el-switch v-model="confirmForm.use_yisu_express" />
-                    <span style="margin-left: 10px; font-size: 12px; color: #909399;">
-                        开启后将自动下单易速快递
-                    </span>
-                </el-form-item>
+                <section class="return-panel">
+                    <div class="return-panel-head">
+                        <div>
+                            <strong>退货地址</strong>
+                            <span>默认使用用户提交的退货地址，本次可直接修改。</span>
+                        </div>
+                        <el-button link type="primary" @click="parseReturnAddress('receiver')">重新解析</el-button>
+                    </div>
+                    <div class="parse-inline">
+                        <el-input v-model="receiverRawAddress" type="textarea" :rows="2" placeholder="退货地址：姓名 手机号 省市区详细地址" />
+                        <el-button :loading="addressParseLoading.receiver" @click="parseReturnAddress('receiver')">解析</el-button>
+                    </div>
+                    <div class="return-address-grid">
+                        <el-input v-model="returnShipmentForm.receiveName" placeholder="收件人" />
+                        <el-input v-model="returnShipmentForm.receiveMobile" placeholder="收件手机号" />
+                        <el-input v-model="returnShipmentForm.receiveProvince" placeholder="省" />
+                        <el-input v-model="returnShipmentForm.receiveCity" placeholder="市" />
+                        <el-input v-model="returnShipmentForm.receiveDistrict" placeholder="区县" />
+                        <el-input v-model="returnShipmentForm.receiveAddress" placeholder="详细地址" class="span-2" />
+                    </div>
+                </section>
 
-                <el-form-item v-if="confirmForm.use_yisu_express" label="快递产品" prop="yisu_product_code"
-                    :rules="[{ required: confirmForm.use_yisu_express, message: '请选择快递产品', trigger: 'change' }]">
-                    <el-select v-model="confirmForm.yisu_product_code" placeholder="请选择快递产品"
-                        :loading="yisuProductsLoading" clearable>
-                        <el-option v-for="item in yisuProducts" :key="item.product_code"
-                            :label="`${item.product_name} (${item.product_code})`"
-                            :value="item.product_code">
-                            <span>{{ item.product_name }}</span>
-                            <span style="float: right; color: #8492a6; font-size: 13px;">{{ item.product_code }}</span>
-                        </el-option>
-                    </el-select>
-                </el-form-item>
+                <section class="return-panel shipment-control-panel">
+                    <div class="return-panel-head">
+                        <div>
+                            <strong>快递处理</strong>
+                            <span>系统快递会先报价，选中报价后下单并反显单号。</span>
+                        </div>
+                    </div>
+                    <el-radio-group v-model="confirmForm.shipment_mode" class="shipment-mode">
+                        <el-radio-button label="system">系统快递</el-radio-button>
+                        <el-radio-button label="manual">手动录入</el-radio-button>
+                        <el-radio-button label="self">物流车/自取</el-radio-button>
+                    </el-radio-group>
 
-                <el-form-item v-if="confirmForm.express_company !=='物流车/自取'" label="快递单号" prop="express_no"
-                    :rules="[{ required: confirmForm.express_company !=='物流车/自取' && !confirmForm.use_yisu_express, message: '请输入快递单号', trigger: 'blur' }]">
-                    <el-input v-model="confirmForm.express_no" placeholder="请输入或扫描快递单号" clearable ref="expressNoInput"
-                        @focus="focusInput" :disabled="confirmForm.use_yisu_express" />
-                    <span v-if="confirmForm.use_yisu_express" style="font-size: 12px; color: #909399;">
-                        使用易速快递时，快递单号将自动生成
-                    </span>
-                </el-form-item>
-              
-
-                <el-form-item label="备注" prop="remark">
-                    <el-input v-model="confirmForm.remark" type="textarea" :rows="2" placeholder="请输入备注信息(选填)" />
-                </el-form-item>
-            </el-form>
-            <div class="scan-tip">
-                <el-alert title="支持扫码枪录入快递单号" type="info" :closable="false" show-icon>
-                    <div class="scan-instruction">点击输入框后，可直接使用扫码枪扫描快递单号</div>
-                </el-alert>
-            </div>
-            <div>
-                <!-- 退货地址 -->
-                <el-descriptions :column="2" border>
-                    <el-descriptions-item label="退货地址">
-                        <!-- 插槽 -->
-                        <template #default>
-                            <div>
-                                <p>联系人:{{ return_user_address.name }}</p>
-                                <p>手机号:{{ return_user_address.mobile }}</p>
-                                <p>地址:
-                                    {{ return_user_address.address }}
-
-                                </p>
+                    <div v-if="confirmForm.shipment_mode === 'system'" class="system-shipment">
+                        <div class="package-inline">
+                            <el-input v-model="returnShipmentForm.goods" placeholder="物品名称" />
+                            <el-input-number v-model="returnShipmentForm.weight" :min="0.1" :precision="2" :step="0.1" />
+                            <el-input-number v-model="returnShipmentForm.packageCount" :min="1" :max="99" />
+                            <el-input-number v-model="returnShipmentForm.guaranteeValueAmount" :min="0" :precision="2" />
+                        </div>
+                        <el-button type="primary" :loading="quoteLoading" @click="runReturnQuote">获取报价</el-button>
+                        <div v-if="returnQuoteList.length" class="quote-result-list">
+                            <div v-for="(item, index) in returnQuoteList" :key="returnQuoteKey(item)" class="quote-result-item" :class="{ active: isReturnQuoteSelected(item) }" @click="selectReturnQuote(item)">
+                                <div>
+                                    <strong><span v-if="index === 0">最低</span>{{ item.productName || item.product_name || '快递产品' }}</strong>
+                                    <em>{{ item.channelName || item.channel_name || '易速渠道' }}</em>
+                                </div>
+                                <b>¥{{ getReturnQuotePrice(item) }}</b>
                             </div>
-                        </template>
-                    </el-descriptions-item>
-                </el-descriptions>
+                        </div>
+                        <el-alert v-else title="填写寄件和退货地址后获取报价，系统会返回已启用快递公司的报价。" type="info" :closable="false" show-icon />
+                        <div v-if="confirmForm.express_no" class="generated-waybill">
+                            <span>已生成运单</span>
+                            <strong>{{ confirmForm.express_company }} {{ confirmForm.express_no }}</strong>
+                        </div>
+                    </div>
+
+                    <div v-else-if="confirmForm.shipment_mode === 'manual'" class="manual-shipment">
+                        <el-select v-model="confirmForm.express_company" placeholder="请选择快递公司" clearable>
+                            <el-option v-for="item in expressCompanyOptions" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                        <el-input v-model="confirmForm.express_no" placeholder="请输入或扫描快递单号" clearable ref="expressNoInput" @focus="focusInput" />
+                        <el-alert title="手动录入时快递单号必填。系统快递下单成功后会自动反显单号。" type="info" :closable="false" show-icon />
+                    </div>
+
+                    <el-input v-model="confirmForm.remark" type="textarea" :rows="3" placeholder="退货备注" />
+                </section>
             </div>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="edit_return_user_address">修改本次退货地址</el-button>
                     <el-button @click="confirmDialogVisible = false">取消</el-button>
                     <el-button type="primary" :loading="operationLoading" @click="submitConfirm">确认退货</el-button>
                 </span>
@@ -330,7 +359,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Download, Search, Refresh, View } from '@element-plus/icons-vue'
@@ -343,12 +372,11 @@ import {
     deleteReturnOrder,
     cancelReturnOrder,
     getReturnOrderDetail,
-    getDeviceInfo,
-    checkExistingReturnOrder,
-    appendToReturnOrder
+    getDeviceInfo
 } from '../../api/recycle_return_order'
-import { getEnabledYisuProducts } from '../../api/yisu'
-import { createExpressOrder } from '../../api/express'
+import { getShopAddressList } from '../../api/shop_address'
+import { getExpressQuote, createExpressOrderDirect } from '../../api/express'
+import { parseThirdPartyAddress } from '../../api/third_party'
 import { IReturnOrderListParams, IReturnOrder, IStatusCount } from '../../interface/recycle_return_order'
 import {
     RETURN_ORDER_STATUS,
@@ -476,15 +504,93 @@ const confirmForm = reactive({
     remark: '',
     is_append: false,
     return_order_id: 0,
-    use_yisu_express: false,
-    yisu_product_code: ''
+    shipment_mode: 'system',
+    selected_quote_key: ''
 })
-const confirmFormRef = ref<FormInstance>()
 const expressNoInput = ref<HTMLInputElement>()
 
-// 易速快递产品列表
-const yisuProducts = ref<any[]>([])
-const yisuProductsLoading = ref(false)
+const shopAddressList = ref<any[]>([])
+const selectedShopSenderId = ref('')
+const senderRawAddress = ref('')
+const receiverRawAddress = ref('')
+const returnQuoteList = ref<any[]>([])
+const quoteLoading = ref(false)
+const addressParseLoading = reactive({
+    sender: false,
+    receiver: false
+})
+const returnShipmentForm = reactive<any>({
+    deliveryType: '',
+    senderName: '',
+    senderMobile: '',
+    senderProvince: '',
+    senderCity: '',
+    senderDistrict: '',
+    senderAddress: '',
+    receiveName: '',
+    receiveMobile: '',
+    receiveProvince: '',
+    receiveCity: '',
+    receiveDistrict: '',
+    receiveAddress: '',
+    goods: '退回设备',
+    weight: 1,
+    packageCount: 1,
+    guaranteeValueAmount: 0,
+    estimated_cost: 0,
+    remark: '',
+    thirdOrderNo: ''
+})
+
+const senderShopAddressList = computed(() => {
+    const list = shopAddressList.value.filter(item => Number(item.is_delivery_address) === 1)
+    return list.length ? list : shopAddressList.value
+})
+
+const returnQuoteSignature = () => JSON.stringify({
+    senderProvince: returnShipmentForm.senderProvince,
+    senderCity: returnShipmentForm.senderCity,
+    senderDistrict: returnShipmentForm.senderDistrict,
+    senderAddress: returnShipmentForm.senderAddress,
+    receiveProvince: returnShipmentForm.receiveProvince,
+    receiveCity: returnShipmentForm.receiveCity,
+    receiveDistrict: returnShipmentForm.receiveDistrict,
+    receiveAddress: returnShipmentForm.receiveAddress,
+    goods: returnShipmentForm.goods,
+    weight: returnShipmentForm.weight,
+    packageCount: returnShipmentForm.packageCount,
+    guaranteeValueAmount: returnShipmentForm.guaranteeValueAmount
+})
+const lastReturnQuoteSignature = ref('')
+
+watch(
+    () => confirmForm.shipment_mode,
+    (mode) => {
+        if (mode !== 'system') {
+            returnQuoteList.value = []
+            confirmForm.selected_quote_key = ''
+            returnShipmentForm.deliveryType = ''
+            returnShipmentForm.estimated_cost = 0
+        }
+        if (mode !== 'manual') {
+            confirmForm.express_no = ''
+            if (mode === 'self') confirmForm.express_company = '物流车/自取'
+        }
+    }
+)
+
+watch(
+    () => returnQuoteSignature(),
+    (signature) => {
+        if (lastReturnQuoteSignature.value && signature !== lastReturnQuoteSignature.value) {
+            returnQuoteList.value = []
+            confirmForm.selected_quote_key = ''
+            returnShipmentForm.deliveryType = ''
+            returnShipmentForm.estimated_cost = 0
+            confirmForm.express_no = ''
+        }
+    }
+)
 
 // 快递公司选项
 const expressCompanyOptions = ref([
@@ -549,6 +655,157 @@ const formatPrice = (price: number | string | undefined) => {
 
     const priceNum = typeof price === 'string' ? parseFloat(price) : price
     return `¥${priceNum.toFixed(2)}`
+}
+
+const shopAddressLabel = (item: any) => `${item.contact_name || ''} ${item.mobile || ''} ${item.full_address || item.address || ''}`.trim()
+
+const parseAddressText = (raw: string) => {
+    let text = raw.trim().replace(/\s+/g, ' ')
+    const mobileMatch = text.match(/1[3-9]\d{9}/)
+    const mobile = mobileMatch ? mobileMatch[0] : ''
+    if (mobile) text = text.replace(mobile, ' ').replace(/\s+/g, ' ').trim()
+    const parts = text.split(' ').filter(Boolean)
+    let name = ''
+    if (parts.length > 1 && !/(省|市|区|县|州|盟|旗|镇|路|街|号|室)/.test(parts[0])) {
+        name = parts.shift() || ''
+        text = parts.join('')
+    } else {
+        text = text.replace(/\s/g, '')
+    }
+    const areaMatch = text.match(/^(.+?(?:省|自治区|市))(.+?(?:市|自治州|地区|盟))?(.+?(?:区|县|市|旗))?(.+)$/)
+    return {
+        name,
+        mobile,
+        province: areaMatch?.[1] || '',
+        city: areaMatch?.[2] || '',
+        district: areaMatch?.[3] || '',
+        address: areaMatch?.[4] || text
+    }
+}
+
+const fillReturnAddress = (type: 'sender' | 'receiver', parsed: Record<string, any>) => {
+    if (type === 'sender') {
+        returnShipmentForm.senderName = parsed.name || returnShipmentForm.senderName
+        returnShipmentForm.senderMobile = parsed.mobile || returnShipmentForm.senderMobile
+        returnShipmentForm.senderProvince = parsed.province || returnShipmentForm.senderProvince
+        returnShipmentForm.senderCity = parsed.city || returnShipmentForm.senderCity
+        returnShipmentForm.senderDistrict = parsed.district || returnShipmentForm.senderDistrict
+        returnShipmentForm.senderAddress = parsed.address || parsed.info || returnShipmentForm.senderAddress
+    } else {
+        returnShipmentForm.receiveName = parsed.name || returnShipmentForm.receiveName
+        returnShipmentForm.receiveMobile = parsed.mobile || returnShipmentForm.receiveMobile
+        returnShipmentForm.receiveProvince = parsed.province || returnShipmentForm.receiveProvince
+        returnShipmentForm.receiveCity = parsed.city || returnShipmentForm.receiveCity
+        returnShipmentForm.receiveDistrict = parsed.district || returnShipmentForm.receiveDistrict
+        returnShipmentForm.receiveAddress = parsed.address || parsed.info || returnShipmentForm.receiveAddress
+        return_user_address.value = {
+            ...return_user_address.value,
+            name: returnShipmentForm.receiveName,
+            mobile: returnShipmentForm.receiveMobile,
+            address: `${returnShipmentForm.receiveProvince}${returnShipmentForm.receiveCity}${returnShipmentForm.receiveDistrict}${returnShipmentForm.receiveAddress}`
+        }
+    }
+}
+
+const parseReturnAddress = async (type: 'sender' | 'receiver') => {
+    const raw = type === 'sender' ? senderRawAddress.value : receiverRawAddress.value
+    if (!raw.trim()) {
+        ElMessage.warning(type === 'sender' ? '请先填写寄件地址' : '请先填写退货地址')
+        return
+    }
+    addressParseLoading[type] = true
+    try {
+        const res = await parseThirdPartyAddress({ address: raw })
+        fillReturnAddress(type, res.data || {})
+        ElMessage.success('地址解析成功')
+    } catch (error) {
+        fillReturnAddress(type, parseAddressText(raw))
+        ElMessage.warning('地址解析接口不可用，已使用本地基础解析')
+    } finally {
+        addressParseLoading[type] = false
+    }
+}
+
+const applyShopSenderAddress = (id: string | number) => {
+    const item = shopAddressList.value.find(address => String(address.id) === String(id))
+    if (!item) return
+    senderRawAddress.value = `${item.contact_name || ''} ${item.mobile || ''} ${item.full_address || item.address || ''}`
+    fillReturnAddress('sender', parseAddressText(senderRawAddress.value))
+}
+
+const clearReturnSender = () => {
+    selectedShopSenderId.value = ''
+    senderRawAddress.value = ''
+    returnShipmentForm.senderName = ''
+    returnShipmentForm.senderMobile = ''
+    returnShipmentForm.senderProvince = ''
+    returnShipmentForm.senderCity = ''
+    returnShipmentForm.senderDistrict = ''
+    returnShipmentForm.senderAddress = ''
+    returnQuoteList.value = []
+    confirmForm.selected_quote_key = ''
+    confirmForm.express_no = ''
+    confirmForm.express_company = ''
+}
+
+const getReturnQuotePrice = (row: any) => {
+    for (const field of ['estimatedCost', 'totalPrice', 'totalFee', 'totalAmount', 'price', 'fee', 'amount', 'prePrice', 'predictPrice', 'estimatedPrice', 'freight', 'freightFee', 'transportFee', 'channelFee']) {
+        const value = Number(row[field])
+        if (value > 0) return value.toFixed(2)
+    }
+    return ['channelFee', 'serviceCharge', 'serviceFee', 'guarantFee', 'guaranteeFee', 'incrementFee', 'otherFee']
+        .reduce((total, field) => total + Number(row[field] || 0), 0)
+        .toFixed(2)
+}
+
+const returnQuoteKey = (row: any) => `${row.productCode || row.product_code || ''}-${row.productName || row.product_name || ''}-${getReturnQuotePrice(row)}`
+const isReturnQuoteSelected = (row: any) => returnQuoteKey(row) === confirmForm.selected_quote_key
+
+const selectReturnQuote = (row: any) => {
+    returnShipmentForm.deliveryType = String(row.productCode || row.product_code || '')
+    returnShipmentForm.estimated_cost = Number(getReturnQuotePrice(row))
+    confirmForm.selected_quote_key = returnQuoteKey(row)
+    confirmForm.express_company = row.productName || row.product_name || '系统快递'
+    confirmForm.express_no = ''
+}
+
+const validateReturnShipmentAddress = () => {
+    const fields = [
+        ['senderName', '请填写寄件人'],
+        ['senderMobile', '请填写寄件手机号'],
+        ['senderProvince', '请填写寄件省份'],
+        ['senderCity', '请填写寄件城市'],
+        ['senderDistrict', '请填写寄件区县'],
+        ['senderAddress', '请填写寄件详细地址'],
+        ['receiveName', '请填写退货联系人'],
+        ['receiveMobile', '请填写退货手机号'],
+        ['receiveProvince', '请填写退货省份'],
+        ['receiveCity', '请填写退货城市'],
+        ['receiveDistrict', '请填写退货区县'],
+        ['receiveAddress', '请填写退货详细地址']
+    ]
+    for (const [field, message] of fields) {
+        if (!returnShipmentForm[field]) {
+            ElMessage.warning(message)
+            return false
+        }
+    }
+    return true
+}
+
+const runReturnQuote = async () => {
+    if (!validateReturnShipmentAddress()) return
+    quoteLoading.value = true
+    try {
+        returnShipmentForm.deliveryType = ''
+        const res = await getExpressQuote({ ...returnShipmentForm, deliveryType: '', productCode: '' })
+        returnQuoteList.value = (res.data || []).sort((left: any, right: any) => Number(getReturnQuotePrice(left)) - Number(getReturnQuotePrice(right)))
+        lastReturnQuoteSignature.value = returnQuoteSignature()
+        if (returnQuoteList.value[0]) selectReturnQuote(returnQuoteList.value[0])
+        ElMessage.success(`已获取 ${returnQuoteList.value.length} 个报价`)
+    } finally {
+        quoteLoading.value = false
+    }
 }
 
 // 获取设备列表信息
@@ -818,23 +1075,13 @@ const handleConfirm = async (id: number) => {
     try {
         // 先获取设备信息，了解其所属订单
         tableLoading.value = true
-        const res = await getDeviceInfo(id)
+        const [res, shopAddressRes] = await Promise.all([
+            getDeviceInfo(id),
+            getShopAddressList({ page: 1, limit: 100 })
+        ])
 
         return_user_address.value = res.data?.memberAddress || {}
-
-        // 查询已启用的易速快递产品
-        yisuProductsLoading.value = true
-        try {
-            const yisuRes = await getEnabledYisuProducts()
-            if (yisuRes && yisuRes.data) {
-                yisuProducts.value = yisuRes.data || []
-            }
-        } catch (error) {
-            console.error('获取易速产品失败:', error)
-            yisuProducts.value = []
-        } finally {
-            yisuProductsLoading.value = false
-        }
+        shopAddressList.value = shopAddressRes.data?.list || shopAddressRes.data?.data || shopAddressRes.data || []
 
         if (handleApiResponse(res, '', '获取设备信息失败')) {
             const deviceInfo = res.data?.data || res.data || {}
@@ -847,8 +1094,41 @@ const handleConfirm = async (id: number) => {
             confirmForm.remark = ''
             confirmForm.is_append = false
             confirmForm.return_order_id = 0
-            confirmForm.use_yisu_express = false
-            confirmForm.yisu_product_code = ''
+            confirmForm.shipment_mode = 'system'
+            confirmForm.selected_quote_key = ''
+            returnQuoteList.value = []
+            lastReturnQuoteSignature.value = ''
+            Object.assign(returnShipmentForm, {
+                deliveryType: '',
+                senderName: '',
+                senderMobile: '',
+                senderProvince: '',
+                senderCity: '',
+                senderDistrict: '',
+                senderAddress: '',
+                receiveName: '',
+                receiveMobile: '',
+                receiveProvince: '',
+                receiveCity: '',
+                receiveDistrict: '',
+                receiveAddress: '',
+                goods: `退回设备${deviceInfo.model ? `-${deviceInfo.model}` : ''}`,
+                weight: 1,
+                packageCount: 1,
+                guaranteeValueAmount: 0,
+                estimated_cost: 0,
+                remark: '',
+                thirdOrderNo: `return_${id}_${Date.now()}`
+            })
+            const defaultSender = senderShopAddressList.value.find(item => Number(item.is_default_delivery) === 1) || senderShopAddressList.value[0]
+            if (defaultSender) {
+                selectedShopSenderId.value = defaultSender.id
+                applyShopSenderAddress(defaultSender.id)
+            }
+            receiverRawAddress.value = `${return_user_address.value.name || ''} ${return_user_address.value.mobile || ''} ${return_user_address.value.address || ''}`
+            if (receiverRawAddress.value.trim()) {
+                fillReturnAddress('receiver', parseAddressText(receiverRawAddress.value))
+            }
 
             // 检查是否已有该订单的退货单
             if (deviceInfo.order_id) {
@@ -858,6 +1138,7 @@ const handleConfirm = async (id: number) => {
                     confirmForm.return_order_id = existingReturnOrder.id
                     confirmForm.express_no = existingReturnOrder.express_no || ''
                     confirmForm.express_company = existingReturnOrder.express_company || ''
+                    confirmForm.shipment_mode = existingReturnOrder.express_no ? 'manual' : 'system'
 
                     // 如果已有退货单，显示追加提示
                     ElMessage({
@@ -868,9 +1149,6 @@ const handleConfirm = async (id: number) => {
             }
 
             confirmDialogVisible.value = true
-
-            // 自动聚焦到输入框，方便扫码枪使用
-            focusInput()
         }
     } catch (error) {
         console.error('获取设备信息失败:', error)
@@ -896,98 +1174,86 @@ const checkExistingReturnOrder = async (orderId: number) => {
 
 // 提交确认退货
 const submitConfirm = async () => {
-    if (!confirmFormRef.value) return
+    operationLoading.value = true
+    activeOperationId.value = confirmForm.id
 
-    await confirmFormRef.value.validate(async (valid) => {
-        if (!valid) {
-            ElMessage.warning('请填写完整信息')
-            return
-        }
+    try {
+        let res
+        let expressOrderNo = confirmForm.express_no
+        let expressCompany = confirmForm.express_company
 
-        operationLoading.value = true
-        activeOperationId.value = confirmForm.id
-
-        try {
-            let res
-            let expressOrderNo = confirmForm.express_no
-
-            // 如果启用了易速快递，先创建快递订单
-            if (confirmForm.use_yisu_express && confirmForm.yisu_product_code) {
-                try {
-                    const expressRes = await createExpressOrder({
-                        product_code: confirmForm.yisu_product_code,
-                        sender_name: return_user_address.value.name,
-                        sender_mobile: return_user_address.value.mobile,
-                        sender_address: return_user_address.value.address,
-                        sender_province: '',
-                        sender_city: '',
-                        sender_district: '',
-                        receiver_name: '回收中心',
-                        receiver_mobile: '13800138000',
-                        receiver_address: '回收中心地址',
-                        receiver_province: '',
-                        receiver_city: '',
-                        receiver_district: '',
-                        goods: '回收设备',
-                        weight: 1,
-                        package_count: 1,
-                        remark: confirmForm.remark
-                    })
-
-                    if (expressRes && expressRes.data && expressRes.data.express_no) {
-                        expressOrderNo = expressRes.data.express_no
-                        ElMessage.success('易速快递订单创建成功')
-                    } else {
-                        throw new Error('快递订单创建失败')
-                    }
-                } catch (error) {
-                    console.error('创建易速快递订单失败:', error)
-                    ElMessage.error('创建易速快递订单失败，请重试')
-                    operationLoading.value = false
-                    activeOperationId.value = null
-                    return
-                }
+        if (confirmForm.shipment_mode === 'system') {
+            if (!validateReturnShipmentAddress()) return
+            if (!returnShipmentForm.deliveryType || !confirmForm.selected_quote_key) {
+                ElMessage.warning('请先获取报价并选择快递公司')
+                return
             }
-
-            if (confirmForm.is_append) {
-                // 如果是追加到现有退货单
-                res = await appendToReturnOrder({
-                    device_id: confirmForm.id,
-                    return_order_id: confirmForm.return_order_id,
-                    remark: confirmForm.remark
-                })
-
-                if (handleApiResponse(res, '设备已成功添加到退货单', '添加设备到退货单失败')) {
-                    confirmDialogVisible.value = false
-                    getList()
-                    getStatusCount()
-                }
-            } else {
-                // 创建新退货单
-                res = await confirmReturnOrder(confirmForm.id, {
-                    express_no: expressOrderNo,
-                    express_company: confirmForm.express_company,
+            try {
+                const expressRes = await createExpressOrderDirect({
+                    ...returnShipmentForm,
                     remark: confirmForm.remark,
-                    order_id: confirmForm.order_id, // 传递订单ID，便于后端关联
-                    member_mobile: return_user_address.value.mobile,
-                    member_name: return_user_address.value.name,
-                    return_address:return_user_address.value.address,
+                    recycle_order_id: confirmForm.order_id
                 })
-
-                if (handleApiResponse(res, '确认退货成功', '确认退货失败')) {
-                    confirmDialogVisible.value = false
-                    getList()
-                    getStatusCount()
+                const expressData = expressRes.data || {}
+                expressOrderNo = expressData.deliveryId || expressData.waybillNo || expressData.express_no || expressData.delivery_id || ''
+                if (expressOrderNo) {
+                    confirmForm.express_no = expressOrderNo
+                    expressCompany = confirmForm.express_company || '系统快递'
+                    ElMessage.success('系统快递下单成功')
+                } else {
+                    throw new Error('系统快递下单成功但未返回运单号')
                 }
+            } catch (error) {
+                console.error('系统快递下单失败:', error)
+                ElMessage.error('系统快递下单失败，请重试')
+                return
             }
-        } catch (error) {
-            console.error('确认退货失败:', error)
-            ElMessage.error('确认退货失败')
-        } finally {
-            operationLoading.value = false
-            activeOperationId.value = null
+        } else if (confirmForm.shipment_mode === 'manual') {
+            if (!confirmForm.express_company || !confirmForm.express_no) {
+                ElMessage.warning('请填写快递公司和快递单号')
+                return
+            }
+        } else {
+            expressCompany = '物流车/自取'
+            expressOrderNo = ''
         }
-    })
+
+        if (confirmForm.is_append) {
+            res = await appendToReturnOrder({
+                device_id: confirmForm.id,
+                return_order_id: confirmForm.return_order_id,
+                remark: confirmForm.remark
+            })
+
+            if (handleApiResponse(res, '设备已成功添加到退货单', '添加设备到退货单失败')) {
+                confirmDialogVisible.value = false
+                getList()
+                getStatusCount()
+            }
+        } else {
+            res = await confirmReturnOrder(confirmForm.id, {
+                express_no: expressOrderNo,
+                express_company: expressCompany,
+                remark: confirmForm.remark,
+                order_id: confirmForm.order_id,
+                member_mobile: returnShipmentForm.receiveMobile || return_user_address.value.mobile,
+                member_name: returnShipmentForm.receiveName || return_user_address.value.name,
+                return_address: `${returnShipmentForm.receiveProvince}${returnShipmentForm.receiveCity}${returnShipmentForm.receiveDistrict}${returnShipmentForm.receiveAddress}` || return_user_address.value.address,
+            })
+
+            if (handleApiResponse(res, '确认退货成功', '确认退货失败')) {
+                confirmDialogVisible.value = false
+                getList()
+                getStatusCount()
+            }
+        }
+    } catch (error) {
+        console.error('确认退货失败:', error)
+        ElMessage.error('确认退货失败')
+    } finally {
+        operationLoading.value = false
+        activeOperationId.value = null
+    }
 }
 
 
@@ -1259,5 +1525,169 @@ onMounted(() => {
 .scan-instruction {
     font-size: 12px;
     color: #909399;
+}
+
+.return-shipment-dialog :deep(.el-dialog__body) {
+    max-height: calc(100vh - 190px);
+    overflow: auto;
+}
+
+.return-workbench {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.return-panel {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.shipment-control-panel {
+    grid-column: span 2;
+}
+
+.return-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.return-panel-head strong {
+    display: block;
+    color: #111827;
+    font-size: 15px;
+    line-height: 1.3;
+}
+
+.return-panel-head span {
+    display: block;
+    margin-top: 4px;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.parse-inline {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 72px;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.parse-inline .el-button {
+    height: auto;
+}
+
+.return-address-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.return-address-grid .span-2 {
+    grid-column: span 2;
+}
+
+.shipment-mode {
+    margin-bottom: 12px;
+}
+
+.system-shipment,
+.manual-shipment {
+    display: grid;
+    gap: 12px;
+}
+
+.package-inline {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(120px, .7fr));
+    gap: 10px;
+}
+
+.package-inline :deep(.el-input-number) {
+    width: 100%;
+}
+
+.quote-result-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.quote-result-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fbfdff;
+    cursor: pointer;
+}
+
+.quote-result-item.active {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
+}
+
+.quote-result-item strong,
+.quote-result-item em {
+    display: block;
+}
+
+.quote-result-item strong {
+    color: #111827;
+    font-size: 13px;
+}
+
+.quote-result-item strong span {
+    margin-right: 6px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: #dc2626;
+    background: #fee2e2;
+    font-size: 11px;
+}
+
+.quote-result-item em {
+    margin-top: 4px;
+    color: #6b7280;
+    font-size: 12px;
+    font-style: normal;
+}
+
+.quote-result-item b {
+    color: #dc2626;
+    font-size: 16px;
+}
+
+.generated-waybill {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: #065f46;
+    background: #ecfdf5;
+}
+
+@media (max-width: 900px) {
+    .return-workbench,
+    .package-inline {
+        grid-template-columns: 1fr;
+    }
+
+    .shipment-control-panel,
+    .return-address-grid .span-2 {
+        grid-column: auto;
+    }
 }
 </style>

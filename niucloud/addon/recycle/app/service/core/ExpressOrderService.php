@@ -5,6 +5,7 @@ namespace addon\recycle\app\service\core;
 
 use addon\recycle\app\dict\third_party\ThirdPartyDict;
 use addon\recycle\app\dict\yisu\YisuProductDict;
+use addon\recycle\app\model\express\ExpressAddressBook;
 use addon\recycle\app\model\express\ExpressOrderRecord;
 use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\model\yisu\YisuProductConfig;
@@ -51,19 +52,63 @@ class ExpressOrderService
         }
 
         $productCode = $this->firstFilledString($params, ['productCode', 'deliveryType']);
-        $isSmartQuote = $productCode === '' || $productCode === '0';
-        if (!$isSmartQuote && !YisuProductConfig::isProductEnabled($siteId, $productCode)) {
+        if ($productCode === '' || $productCode === '0') {
+            return $this->getEnabledProductQuotes($siteId, $params);
+        }
+
+        if (!YisuProductConfig::isProductEnabled($siteId, $productCode)) {
             throw new CommonException('所选快递产品未启用，请先在易速产品配置中启用');
         }
 
-        $quoteParams = $params;
-        if (!$isSmartQuote) {
-            $quoteParams['productCode'] = $productCode;
-        } else {
-            $quoteParams['productCode'] = 0;
-            unset($quoteParams['deliveryType']);
+        return $this->getSingleProductQuote($siteId, $params, $productCode);
+    }
+
+    private function getEnabledProductQuotes(int $siteId, array $params): array
+    {
+        $enabledProducts = YisuProductConfig::getEnabledProducts($siteId);
+        if (empty($enabledProducts)) {
+            throw new CommonException('暂无启用的快递产品，请先在易速产品配置中启用');
         }
 
+        $quotes = [];
+        $errors = [];
+        foreach ($enabledProducts as $product) {
+            $productCode = (string)($product['product_code'] ?? '');
+            if ($productCode === '') {
+                continue;
+            }
+
+            try {
+                foreach ($this->getSingleProductQuote($siteId, $params, $productCode) as $quote) {
+                    if ($this->resolveQuoteAmount($quote) > 0) {
+                        $quotes[] = $quote;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $errors[] = ($product['product_name'] ?? YisuProductDict::getProductName($productCode)) . '：' . $e->getMessage();
+            }
+        }
+
+        usort($quotes, function ($left, $right) {
+            return $this->resolveQuoteAmount($left) <=> $this->resolveQuoteAmount($right);
+        });
+
+        if (empty($quotes)) {
+            $message = '未获取到可用报价';
+            if (!empty($errors)) {
+                $message .= '：' . implode('；', array_slice($errors, 0, 3));
+            }
+            throw new CommonException($message);
+        }
+
+        return $quotes;
+    }
+
+    private function getSingleProductQuote(int $siteId, array $params, string $productCode): array
+    {
+        $quoteParams = $params;
+        $quoteParams['productCode'] = $productCode;
+        $quoteParams['deliveryType'] = $productCode;
         $result = $this->thirdPartyService->call(
             ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER,
             'quote',
@@ -82,12 +127,12 @@ class ExpressOrderService
 
         if (isset($quote[0]) && is_array($quote[0])) {
             foreach ($quote as &$item) {
-                $item = $this->fillQuoteProductInfo($item, $isSmartQuote ? '' : $productCode);
+                $item = $this->fillQuoteProductInfo($item, $productCode);
             }
             return $quote;
         }
 
-        return [$this->fillQuoteProductInfo($quote, $isSmartQuote ? '' : $productCode)];
+        return [$this->fillQuoteProductInfo($quote, $productCode)];
     }
 
     private function fillQuoteProductInfo(array $quote, string $fallbackProductCode = ''): array
@@ -178,6 +223,9 @@ class ExpressOrderService
                 throw new CommonException("缺少必填参数: {$field}");
             }
         }
+        if (!YisuProductConfig::isProductEnabled($siteId, (string)$params['deliveryType'])) {
+            throw new CommonException('所选快递产品未启用，请重新获取报价后下单');
+        }
         if (empty($params['thirdOrderNo'])) {
             $params['thirdOrderNo'] = $params['third_order_no']
                 ?? (!empty($params['recycle_order_id']) ? 'recycle_' . $siteId . '_' . $params['recycle_order_id'] : 'recycle_express_' . $siteId . '_' . date('YmdHis') . mt_rand(1000, 9999));
@@ -199,8 +247,76 @@ class ExpressOrderService
 
         // 创建快递订单记录
         $this->createExpressRecord($siteId, $params, $apiData);
+        $this->saveAddressBook($siteId, $params);
 
         return $apiData;
+    }
+
+    private function saveAddressBook(int $siteId, array $params): void
+    {
+        try {
+            $this->upsertAddressBook($siteId, [
+                'address_type' => 'sender',
+                'name' => $params['senderName'] ?? '',
+                'mobile' => $params['senderMobile'] ?? '',
+                'province' => $params['senderProvince'] ?? '',
+                'city' => $params['senderCity'] ?? '',
+                'district' => $params['senderDistrict'] ?? '',
+                'address' => $params['senderAddress'] ?? '',
+                'tag' => '最近使用',
+            ]);
+            $this->upsertAddressBook($siteId, [
+                'address_type' => 'receiver',
+                'name' => $params['receiveName'] ?? '',
+                'mobile' => $params['receiveMobile'] ?? '',
+                'province' => $params['receiveProvince'] ?? '',
+                'city' => $params['receiveCity'] ?? '',
+                'district' => $params['receiveDistrict'] ?? '',
+                'address' => $params['receiveAddress'] ?? '',
+                'tag' => '最近使用',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('保存快递常用地址失败: ' . $e->getMessage());
+        }
+    }
+
+    private function upsertAddressBook(int $siteId, array $data): void
+    {
+        foreach (['address_type', 'name', 'mobile', 'province', 'city', 'district', 'address'] as $field) {
+            if (trim((string)($data[$field] ?? '')) === '') {
+                return;
+            }
+        }
+
+        $record = [
+            'site_id' => $siteId,
+            'address_type' => (string)$data['address_type'],
+            'name' => trim((string)$data['name']),
+            'mobile' => trim((string)$data['mobile']),
+            'province' => trim((string)$data['province']),
+            'city' => trim((string)$data['city']),
+            'district' => trim((string)$data['district']),
+            'address' => trim((string)$data['address']),
+            'tag' => trim((string)($data['tag'] ?? '最近使用')),
+            'status' => 1,
+        ];
+
+        $exists = ExpressAddressBook::where([
+            ['site_id', '=', $siteId],
+            ['address_type', '=', $record['address_type']],
+            ['mobile', '=', $record['mobile']],
+            ['province', '=', $record['province']],
+            ['city', '=', $record['city']],
+            ['district', '=', $record['district']],
+            ['address', '=', $record['address']],
+        ])->find();
+
+        if ($exists) {
+            $exists->save($record);
+            return;
+        }
+
+        ExpressAddressBook::create($record);
     }
 
     /**

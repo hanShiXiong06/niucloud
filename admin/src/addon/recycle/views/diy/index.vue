@@ -13,7 +13,7 @@ import { computed, markRaw } from 'vue';
 import useDiyStore from '@/stores/modules/diy';
 import EditRecycleCategory from './components/edit-recycle-category.vue';
 import EditRecycleOrderOverview from './components/edit-recycle-order-overview.vue';
-import EditRecycleQuotationList from './components/edit-recycle-quotation-list.vue';
+import EditRecycleSpiderQuotationList from './components/edit-recycle-spider-quotation-list.vue';
 
 const diyStore = useDiyStore();
 
@@ -21,7 +21,7 @@ const diyStore = useDiyStore();
 const componentMap: Record<string, any> = {
   EditRecycleCategory,
   EditRecycleOrderOverview,
-  EditRecycleQuotationList
+  EditRecycleSpiderQuotationList
 };
 
 const diyEditComponent = computed(() => {
@@ -76,12 +76,12 @@ const recycleComponents = [
         imageUrl: ''
       },
       {
-        name: 'RecycleQuotationList',
-        title: '回收报价单',
+        name: 'RecycleSpiderQuotationList',
+        title: '爬虫报价单',
         icon: 'iconfont iconshangpinliebiaopc',
-        componentTitle: '回收报价单',
-        componentName: 'RecycleQuotationList',
-        componentType: 'EditRecycleQuotationList',
+        componentTitle: '爬虫报价单',
+        componentName: 'RecycleSpiderQuotationList',
+        componentType: 'EditRecycleSpiderQuotationList',
         isDelete: false,
         isDisabled: false,
         allPages: true,
@@ -92,13 +92,20 @@ const recycleComponents = [
         paddingBottom: 10,
         marginBottom: 5,
         value: {
-          title: '今日报价',
-          subtitle: '实时同步回收报价单',
+          title: '实时报价',
+          subtitle: '按数据源同步展示回收报价',
+          showHeader: true,
           actionText: '查看',
-          limit: 5,
+          sourceId: 0,
+          limit: 6,
+          onlyHot: false,
+          showCategoryTabs: true,
+          categoryDefaultMode: 'first',
+          categoryTabDepth: 0,
+          flatGroupMode: 'level2',
+          showGroupCount: true,
           showRefresh: true,
           displayStyle: 'list',
-          navImageUrl: '',
           navRowCount: 4,
           navImageSize: 40,
           navAroundRadius: 20,
@@ -112,6 +119,15 @@ const recycleComponents = [
           titleColor: '#111827',
           subtitleColor: '#6B7280',
           buttonColor: '#2563EB',
+          groupTitleColor: '#111827',
+          groupCountColor: '#94A3B8',
+          groupTitleSize: 22,
+          groupTitleWeight: 500,
+          groupTitleAlign: 'left',
+          itemTitleColor: '#111827',
+          itemTitleSize: 28,
+          itemMetaColor: '#6B7280',
+          itemImageRadius: 20,
           margin: {
             top: 10,
             bottom: 10,

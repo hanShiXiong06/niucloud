@@ -28,6 +28,11 @@
                     <span class="device-index">{{ $index + 1 }}</span>
                 </template>
             </el-table-column>
+            <el-table-column label="用户串号" width="90">
+                <template #default="{ row }">
+                    <span class="user-sn-display">{{ row.user_sn || '未提交' }}</span>
+                </template>
+            </el-table-column>
             <el-table-column label="IMEI串号" width="200">
                 <template #header>
                     <div class="header-with-tip">
@@ -142,6 +147,11 @@
 
                 <div class="card-body">
                     <div class="info-row">
+                        <div class="info-label">用户串号</div>
+                        <div class="info-value imei-value">{{ row.user_sn || '未提交' }}</div>
+                    </div>
+
+                    <div class="info-row">
                         <div class="info-label">IMEI串号</div>
                         <el-input
                             v-if="row.editing"
@@ -251,6 +261,7 @@ import axios from 'axios'
 interface Device {
     id?: string | number;
     imei: string;
+    user_sn?: string;
     imei2?: string;
     model: string;
     initial_price: number;
@@ -1043,6 +1054,13 @@ onBeforeUnmount(() => {
     justify-content: center;
     flex-direction: column;
     padding: 30px 0;
+}
+
+.user-sn-display {
+    color: #475569;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    word-break: break-all;
 }
 
 // 桌面端表格样式

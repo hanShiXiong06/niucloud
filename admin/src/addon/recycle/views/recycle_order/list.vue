@@ -1,133 +1,137 @@
 <template>
   <div class="recycle-order-list h-full">
     <el-card class="box-card !border-none h-full relative" shadow="never">
-      <div :class="isMobile ? 'mb-4 flex flex-col gap-3' : 'mb-4 flex items-center justify-between'">
-        <span :class="isMobile ? 'text-lg font-semibold text-gray-800' : 'text-xl font-semibold text-gray-800'">📱 回收订单管理</span>
-        <div :class="isMobile ? 'w-full' : 'btn-wrap'">
-          <el-button type="primary" :icon="Plus" :class="isMobile ? 'w-full' : ''" @click="showAddOrderDialog">代下单</el-button>
+      <div class="order-list-header">
+        <div :class="isMobile ? 'order-page-header order-page-header--mobile' : 'order-page-header'">
+          <span :class="isMobile ? 'text-lg font-semibold text-gray-800' : 'text-xl font-semibold text-gray-800'">📱 回收订单管理</span>
+          <div :class="isMobile ? 'w-full' : 'btn-wrap'">
+            <el-button type="primary" :icon="Plus" :class="isMobile ? 'w-full' : ''" @click="showAddOrderDialog">代下单</el-button>
+          </div>
         </div>
+
+        <RecycleOrderSearchPanel
+          :is-mobile="isMobile"
+          :mobile-search-visible="mobileSearchVisible"
+          :advanced-search-form="advancedSearchForm"
+          :order-status-map="orderStatusMap"
+          @toggle-mobile-search="mobileSearchVisible = !mobileSearchVisible"
+          @advanced-search="advancedSearch"
+          @reset-search="resetAdvancedSearch"
+          @member-change="handleMemberChange"
+        />
+
+        <!-- 状态标签页 -->
+        <el-tabs
+          v-model="activeTab"
+          @tab-click="handleTabClick"
+          class="order-tabs"
+        >
+          <el-tab-pane name="">
+            <template #label>
+              <div class="flex items-center">
+                <el-icon class="mr-1"><Document /></el-icon>
+                <span>全部</span>
+              </div>
+            </template>
+          </el-tab-pane>
+          <el-tab-pane
+            v-for="(item, key) in orderStatusMap"
+            :key="key"
+            :name="item.status"
+          >
+            <template #label>
+              <div class="flex items-center">
+                <el-icon class="mr-1">
+                  <component :is="getStatusIcon(item.status)" />
+                </el-icon>
+                <span>{{ item.name }}</span>
+                <el-badge
+                  v-if="item.status < 7"
+                  :value="getStatusCount(item.status)"
+                  class="ml-1"
+                  :type="getStatusBadgeType(item.status)"
+                />
+              </div>
+            </template>
+          </el-tab-pane>
+        </el-tabs>
       </div>
 
-      <RecycleOrderSearchPanel
-        :is-mobile="isMobile"
-        :mobile-search-visible="mobileSearchVisible"
-        :advanced-search-form="advancedSearchForm"
-        :order-status-map="orderStatusMap"
-        @toggle-mobile-search="mobileSearchVisible = !mobileSearchVisible"
-        @advanced-search="advancedSearch"
-        @reset-search="resetAdvancedSearch"
-        @member-change="handleMemberChange"
-      />
-
-      <!-- 状态标签页 -->
-      <el-tabs
-        v-model="activeTab"
-        @tab-click="handleTabClick"
-        class="order-tabs"
-      >
-        <el-tab-pane name="">
-          <template #label>
-            <div class="flex items-center">
-              <el-icon class="mr-1"><Document /></el-icon>
-              <span>全部</span>
-            </div>
-          </template>
-        </el-tab-pane>
-        <el-tab-pane
-          v-for="(item, key) in orderStatusMap"
-          :key="key"
-          :name="item.status"
-        >
-          <template #label>
-            <div class="flex items-center">
-              <el-icon class="mr-1">
-                <component :is="getStatusIcon(item.status)" />
-              </el-icon>
-              <span>{{ item.name }}</span>
-              <el-badge
-                v-if="item.status < 7"
-                :value="getStatusCount(item.status)"
-                class="ml-1"
-                :type="getStatusBadgeType(item.status)"
-              />
-            </div>
-          </template>
-        </el-tab-pane>
-      </el-tabs>
-
       <!-- 列表 -->
-      <RecycleOrderDesktopTable
-        v-if="!isMobile"
-        :loading="loading"
-        :list="list"
-        :expand-row-keys="expandRowKeys"
-        :order-status-map="orderStatusMap"
-        :selected-devices="selectedDevices"
-        :express-loading="expressLoading"
-        :format-price="formatPrice"
-        :format-date-time="formatDateTime"
-        :get-device-count="getDeviceCount"
-        :get-status-type="getStatusType"
-        :get-status-effect="getStatusEffect"
-        :get-status-icon="getStatusIcon"
-        :get-device-status-type="getDeviceStatusType"
-        :get-action-button-type="getActionButtonType"
-        :get-action-icon="getActionIcon"
-        :find-order-status="findOrderStatus"
-        :img="img"
-        :handle-expand-change="handleExpandChange"
-        :handle-device-selection-change="handleDeviceSelectionChange"
-        :check-device="checkDevice"
-        :price-device="priceDevice"
-        :batch-recycle-device="batchRecycleDevice"
-        :batch-return-device="batchReturnDevice"
-        :batch-recycle-devices="batchRecycleDevices"
-        :print-device-label="printDeviceLabel"
-        :view-detail="viewDetail"
-        :handle-action="handleAction"
-        :handle-express-hover="handleExpressHover"
-        :handle-express-leave="handleExpressLeave"
-        :share-order="shareOrder"
-        @refresh="getList"
+      <div :class="isMobile ? 'order-table-region order-table-region--mobile' : 'order-table-region'">
+        <RecycleOrderDesktopTable
+          v-if="!isMobile"
+          :loading="loading"
+          :list="list"
+          :expand-row-keys="expandRowKeys"
+          :order-status-map="orderStatusMap"
+          :selected-devices="selectedDevices"
+          :express-loading="expressLoading"
+          :format-price="formatPrice"
+          :format-date-time="formatDateTime"
+          :get-device-count="getDeviceCount"
+          :get-status-type="getStatusType"
+          :get-status-effect="getStatusEffect"
+          :get-status-icon="getStatusIcon"
+          :get-device-status-type="getDeviceStatusType"
+          :get-action-button-type="getActionButtonType"
+          :get-action-icon="getActionIcon"
+          :find-order-status="findOrderStatus"
+          :img="img"
+          :handle-expand-change="handleExpandChange"
+          :handle-device-selection-change="handleDeviceSelectionChange"
+          :check-device="checkDevice"
+          :price-device="priceDevice"
+          :batch-recycle-device="batchRecycleDevice"
+          :batch-return-device="batchReturnDevice"
+          :batch-recycle-devices="batchRecycleDevices"
+          :print-device-label="printDeviceLabel"
+          :view-detail="viewDetail"
+          :handle-action="handleAction"
+          :handle-express-hover="handleExpressHover"
+          :handle-express-leave="handleExpressLeave"
+          :share-order="shareOrder"
+          @refresh="getList"
 
-      />
+        />
 
-      <RecycleOrderMobileCards
-        v-else
-        :loading="loading"
-        :list="list"
-        :order-status-map="orderStatusMap"
-        :selected-devices="selectedDevices"
-        :express-loading="expressLoading"
-        :format-price="formatPrice"
-        :format-date-time="formatDateTime"
-        :get-device-count="getDeviceCount"
-        :get-status-type="getStatusType"
-        :get-status-effect="getStatusEffect"
-        :get-device-status-type="getDeviceStatusType"
-        :get-action-button-type="getActionButtonType"
-        :get-action-icon="getActionIcon"
-        :find-order-status="findOrderStatus"
-        :img="img"
-        :is-mobile-order-expanded="isMobileOrderExpanded"
-        :toggle-mobile-order-expand="toggleMobileOrderExpand"
-        :is-mobile-device-selected="isMobileDeviceSelected"
-        :handle-mobile-device-selection="handleMobileDeviceSelection"
-        :check-device="checkDevice"
-        :price-device="priceDevice"
-        :batch-recycle-device="batchRecycleDevice"
-        :batch-return-device="batchReturnDevice"
-        :batch-recycle-devices="batchRecycleDevices"
-        :print-device-label="printDeviceLabel"
-        :view-detail="viewDetail"
-        :handle-action="handleAction"
-        :handle-express-hover="handleExpressHover"
-        :handle-express-leave="handleExpressLeave"
-        :share-order="shareOrder"
-      />
+        <RecycleOrderMobileCards
+          v-else
+          :loading="loading"
+          :list="list"
+          :order-status-map="orderStatusMap"
+          :selected-devices="selectedDevices"
+          :express-loading="expressLoading"
+          :format-price="formatPrice"
+          :format-date-time="formatDateTime"
+          :get-device-count="getDeviceCount"
+          :get-status-type="getStatusType"
+          :get-status-effect="getStatusEffect"
+          :get-device-status-type="getDeviceStatusType"
+          :get-action-button-type="getActionButtonType"
+          :get-action-icon="getActionIcon"
+          :find-order-status="findOrderStatus"
+          :img="img"
+          :is-mobile-order-expanded="isMobileOrderExpanded"
+          :toggle-mobile-order-expand="toggleMobileOrderExpand"
+          :is-mobile-device-selected="isMobileDeviceSelected"
+          :handle-mobile-device-selection="handleMobileDeviceSelection"
+          :check-device="checkDevice"
+          :price-device="priceDevice"
+          :batch-recycle-device="batchRecycleDevice"
+          :batch-return-device="batchReturnDevice"
+          :batch-recycle-devices="batchRecycleDevices"
+          :print-device-label="printDeviceLabel"
+          :view-detail="viewDetail"
+          :handle-action="handleAction"
+          :handle-express-hover="handleExpressHover"
+          :handle-express-leave="handleExpressLeave"
+          :share-order="shareOrder"
+        />
+      </div>
 
       <!-- 分页 -->
-      <div :class="isMobile ? 'mt-4 flex flex-col gap-2 items-start' : 'flex justify-between items-center mt-4'">
+      <div :class="isMobile ? 'order-pagination order-pagination--mobile' : 'order-pagination'">
         <div class="text-sm text-gray-500">
           <template v-if="isMobile">
             共 {{ pagination.total }} 条记录
@@ -910,21 +914,87 @@ const shareOrder = async (row: any) => {
 
 <style lang="scss" scoped>
 .recycle-order-list {
+  height: calc(100vh - 90px);
+  min-height: 0;
+  max-height: calc(100vh - 90px);
+  overflow: hidden;
+
   .el-card {
     height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
   }
 
   :deep(.el-card__body) {
     flex: 1;
-    overflow: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px;
+  }
+
+  .order-list-header {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .order-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .order-page-header--mobile {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .order-table-region {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 0;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .order-table-region--mobile {
+    height: auto;
+    overflow-y: auto;
+    border: 0;
+    background: transparent;
+  }
+
+  .order-pagination {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 52px;
+    padding-top: 10px;
+    margin-top: 0;
+    background: #fff;
+  }
+
+  .order-pagination--mobile {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 12px;
   }
 
   // 标签页样式
   .order-tabs {
+    margin-bottom: 10px;
+
     :deep(.el-tabs__header) {
-      margin-bottom: 16px;
+      margin-bottom: 0;
     }
 
     :deep(.el-tabs__nav-wrap) {
@@ -944,6 +1014,18 @@ const shareOrder = async (row: any) => {
     }
   }
 
+}
+
+@media (max-width: 768px) {
+  .recycle-order-list {
+    max-height: none;
+    overflow: visible;
+
+    :deep(.el-card__body) {
+      overflow: visible;
+      padding: 12px;
+    }
+  }
 }
 
 .device-detail {

@@ -263,8 +263,13 @@
                                 <el-table-column type="selection" width="36" />
                                 <el-table-column prop="name" label="报价项" min-width="220" show-overflow-tooltip>
                                     <template #default="{ row }">
-                                        <div class="name-main">{{ row.name }}</div>
-                                        <div class="name-sub">{{ row.brand || '-' }} · {{ row.tab || '-' }} · {{ row.parent_name || '-' }}</div>
+                                        <div class="quote-item-cell">
+                                            <el-image v-if="resolveQuoteItemIcon(row)" class="quote-item-icon" :src="imageUrl(resolveQuoteItemIcon(row))" fit="cover" />
+                                            <div class="quote-item-copy">
+                                                <div class="name-main">{{ row.name }}</div>
+                                                <div class="name-sub">{{ row.brand || '-' }} · {{ row.tab || '-' }} · {{ row.parent_name || '-' }}</div>
+                                            </div>
+                                        </div>
                                     </template>
                                 </el-table-column>
                                 <el-table-column label="排序" width="96">
@@ -571,11 +576,21 @@
                                 </el-descriptions>
                             </section>
                             <section class="row-edit-section">
-                                <div class="section-title">图片报价</div>
-                                <upload-image v-model="rowDrawer.item.image" :limit="1" />
-                                <div class="form-tip">如果这个报价项使用图片报价，上传后保存即可。结构化报价也可以保留图片作为辅助资料。</div>
+                                <div class="section-title">展示图片</div>
+                                <div class="image-setting-grid">
+                                    <div class="image-setting-card">
+                                        <div class="image-setting-title">导航图标</div>
+                                        <upload-image v-model="rowDrawer.item.icon" :limit="1" />
+                                        <div class="form-tip">用于低代码图文导航、报价项列表缩略图。你手动替换后会优先展示这个图标。</div>
+                                    </div>
+                                    <div class="image-setting-card">
+                                        <div class="image-setting-title">报价图片</div>
+                                        <upload-image v-model="rowDrawer.item.image" :limit="1" />
+                                        <div class="form-tip">图片报价会使用这张图；结构化报价也可以保留为辅助资料。</div>
+                                    </div>
+                                </div>
                                 <div class="mt-[12px]">
-                                    <el-button type="primary" @click="saveDrawerItem">保存图片和基础状态</el-button>
+                                    <el-button type="primary" @click="saveDrawerItem">保存展示图片</el-button>
                                 </div>
                             </section>
                         </div>
@@ -746,6 +761,10 @@
                     <el-form-item v-if="editDialog.mode !== 'create'" label="上级名称">
                         <el-input v-model="editDialog.form.parent_name" disabled placeholder="来源上级名称" />
                         <div class="form-tip">第三方来源返回的上级名称，用于辅助识别，不等同于本地分类节点。</div>
+                    </el-form-item>
+                    <el-form-item label="导航图标">
+                        <upload-image v-model="editDialog.form.icon" :limit="1" />
+                        <div class="form-tip">用于低代码图文导航和后台报价项缩略图。手动上传后优先展示，不填则回退到来源图片。</div>
                     </el-form-item>
                     <el-form-item v-if="editDialog.form.is_image_quote === 1" label="报价图片">
                         <upload-image v-model="editDialog.form.image" :limit="1" />
@@ -1664,6 +1683,9 @@ const openCreateDialog = (type: EditType) => {
             quote_type: 'manual',
             is_image_quote: 0,
             image: '',
+            timage: '',
+            bimage: '',
+            icon: '',
             is_show: 1,
             is_hot: 0,
             follow_source: 0,
@@ -2109,6 +2131,17 @@ const flattenCategories = (list: any[]): any[] => {
     return result
 }
 
+const resolveQuoteItemIcon = (item: any) => {
+    return item.icon || item.image || item.timage || item.bimage || ''
+}
+
+const imageUrl = (value: string) => {
+    const url = String(value || '').trim()
+    if (!url) return ''
+    if (/^(https?:)?\/\//.test(url) || url.startsWith('data:')) return url
+    return url.startsWith('/') ? url : `/${url}`
+}
+
 onMounted(() => {
     loadSources()
     refreshManage()
@@ -2240,6 +2273,26 @@ onBeforeUnmount(() => {
     line-height: 1.45;
 }
 
+.quote-item-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.quote-item-icon {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    background: #f7f8fa;
+}
+
+.quote-item-copy {
+    min-width: 0;
+}
+
 .switch-line {
     display: flex;
     align-items: center;
@@ -2314,6 +2367,27 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     gap: 14px;
+}
+
+.image-setting-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.image-setting-card {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: #fafafa;
+}
+
+.image-setting-title {
+    margin-bottom: 10px;
+    color: #303133;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .pager {
@@ -2433,6 +2507,7 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
+    .image-setting-grid,
     .row-edit-grid,
     .batch-adjust-layout {
         grid-template-columns: 1fr;

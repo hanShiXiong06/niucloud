@@ -4,13 +4,14 @@
     :data="props.list"
     :expand-row-keys="props.expandRowKeys"
     row-key="id"
+    height="100%"
     style="width: 100%"
     @expand-change="(row, expandedRows) => props.handleExpandChange(row, expandedRows)"
   >
     <el-table-column type="expand">
       <template #default="{ row }">
         <div class="p-5 bg-slate-50 rounded-md">
-          <div class="mb-3 flex items-center justify-between border-b border-gray-200 pb-3">
+          <div class="mb-3 flex items-center  border-b border-gray-200 pb-3">
             <h4 class="text-base font-medium text-gray-800">📱 设备列表</h4>
             <span class="text-sm text-gray-500">共 {{ row.devices?.length || 0 }} 台设备</span>
           </div>
@@ -22,8 +23,15 @@
             @selection-change="(val) => props.handleDeviceSelectionChange(val, row.id)"
           >
             <el-table-column type="selection" width="55" />
-            <el-table-column prop="imei" label="IMEI" min-width="150" />
-            <el-table-column prop="model" label="设备型号" min-width="120" />
+            <el-table-column label="串号" width="190">
+              <template #default="{ row: deviceRow }">
+                <div class="text-xs leading-5">
+                  <div v-if="deviceRow.user_sn" class="font-semibold text-gray-800">用户：{{ deviceRow.user_sn }}</div>
+                  <div class="text-gray-500">管理：{{ deviceRow.imei || '未录入' }}</div>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="model" label="设备型号" width="200" />
             <el-table-column prop="final_price" label="最终价格" width="100">
               <template #default="{ row: deviceRow }">
                 <span class="text-red-500 font-semibold">{{ props.formatPrice(deviceRow.final_price) }}</span>
@@ -36,7 +44,7 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" min-width="280">
+            <el-table-column label="操作"  fixed="right">
               <template #default="{ row: deviceRow }">
                 <el-button-group>
                   <el-button
@@ -200,12 +208,12 @@
         <div class="text-xs">提交数量/签收数量</div>
       </template>
       <template #default="{ row }">
-        <el-tag v-if="row.count == props.getDeviceCount(row.devices)" type="success">
-          {{ row.count }}/ {{ props.getDeviceCount(row.devices) }}台
+        <el-tag v-if="isDeviceCountMatched(row)" type="success">
+          {{ getSubmittedDeviceCount(row) }}/ {{ getSignedDeviceCount(row) }}台
         </el-tag>
         <el-tag v-else type="danger">
-          {{ row.count ? row.count : "1" }}/
-          {{ props.getDeviceCount(row.devices) }}台
+          {{ getSubmittedDeviceCount(row) }}/
+          {{ getSignedDeviceCount(row) }}台
         </el-tag>
       </template>
     </el-table-column>
@@ -322,6 +330,17 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits(['refresh'])
+
+const normalizeDeviceCount = (value: any) => {
+  const count = Number(value)
+  return Number.isFinite(count) && count > 0 ? count : 1
+}
+
+const getSubmittedDeviceCount = (row: any) => normalizeDeviceCount(row.count)
+
+const getSignedDeviceCount = (row: any) => props.getDeviceCount(row.devices)
+
+const isDeviceCountMatched = (row: any) => getSubmittedDeviceCount(row) === getSignedDeviceCount(row)
 
 // 获取用户显示名称（优先级：nickname → recycleUserAddress.name → "未知用户"）
 const getUserDisplayName = (row: any) => {

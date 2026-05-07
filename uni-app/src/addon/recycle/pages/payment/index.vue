@@ -2,15 +2,15 @@
     <view class="payment-page">
 
         <!-- 实名认证信息卡片 (已认证状态可折叠) -->
-        <view class="auth-card" :class="{'auth-card-certified': !!authInfoId}">
+        <view class="auth-card" v-if="orderSubmitConfig.profile.enabled" :class="{'auth-card-certified': !!authInfoId}">
             <view class="auth-header" @tap="toggleAuthExpand">
                 <view class="auth-left">
                     <view class="auth-status" v-if="!!authInfoId">
                         <up-icon name="checkmark-circle-fill" color="#10b981" size="20"></up-icon>
-                        <text class="status-text">已完成实名认证</text>
+                        <text class="status-text">{{ orderSubmitConfig.profile.id_card_required ? '已完成实名认证' : '已完善个人资料' }}</text>
                     </view>
-                    <view class="auth-title" v-else>实名认证</view>
-                    <view class="auth-subtitle" v-if="!authInfoId">完成实名认证后可添加收款方式</view>
+                    <view class="auth-title" v-else>{{ orderSubmitConfig.profile.id_card_required ? '实名认证' : '个人资料' }}</view>
+                    <view class="auth-subtitle" v-if="!authInfoId">{{ orderSubmitConfig.profile.id_card_required ? '完成实名认证后可添加收款方式' : '完善姓名和手机号后可添加收款方式' }}</view>
                 </view>
                 <view class="auth-toggle" v-if="!!authInfoId">
                     <up-icon :name="isAuthExpanded ? 'arrow-up' : 'arrow-down'" size="20" color="#64748b"></up-icon>
@@ -71,8 +71,8 @@
                 </view>
 
                 <!-- 身份证号 -->
-                <view class="auth-form-item">
-                    <label class="label required-label">身份证号</label>
+                <view class="auth-form-item" v-if="orderSubmitConfig.profile.id_card_required">
+                    <label class="label" :class="{ 'required-label': orderSubmitConfig.profile.id_card_required }">身份证号</label>
                     <input
                         class="input"
                         :class="{'disabled-input': !!authInfoId}"
@@ -110,8 +110,8 @@
                 </view>
 
                 <!-- 身份证照片 (仅在未认证时显示) -->
-                <view class="auth-form-item" v-if="!authInfoId">
-                    <label class="label">身份证照片</label>
+                <view class="auth-form-item" v-if="!authInfoId && orderSubmitConfig.profile.id_card_required">
+                    <label class="label required-label">身份证照片</label>
                     <view class="text-[20rpx]">首次合作必填，避免不必要的麻烦</view>
                         <view class="text-[19rpx]">该信息仅用于验证您的身份，我司承诺不会泄露个人隐私或用于其他用途</view>
                     <view class="id-card-upload mt-1">
@@ -156,14 +156,19 @@
                         :loading="authLoading"
                         @tap="submitAuthForm"
                     >
-                        {{ authLoading ? '提交中...' : (authInfoId ? '更新退货地址' : '提交认证信息') }}
+                        {{ authLoading ? '提交中...' : (authInfoId ? '更新退货地址' : (orderSubmitConfig.profile.id_card_required ? '提交认证信息' : '保存个人资料')) }}
                     </button>
                 </view>
             </view>
         </view>
 
-        <!-- 收款方式区域 (仅在认证后显示) -->
-        <view class="payment-section" v-if="!!authInfoId">
+        <view class="profile-disabled-tip" v-else>
+            <view class="profile-disabled-title">个人资料未设为必填</view>
+            <view class="profile-disabled-desc">你可以直接维护收款方式；商家关闭了下单前个人资料强提醒。</view>
+        </view>
+
+        <!-- 收款方式区域 -->
+        <view class="payment-section" v-if="canManagePayment">
             <view class="section-header">
                 <view class="section-title">收款方式</view>
                 <view class="section-action" @tap="openPopup">
@@ -172,9 +177,9 @@
                 </view>
             </view>
             <!-- 添加提示信息 -->
-            <view class="payment-tips" v-if="paymentList.length < 1">
+            <view class="payment-tips" v-if="paymentRequirementText">
                 <up-icon name="info-circle" size="16" color="#f59e0b"></up-icon>
-                <text>收款方式建议添加1种以上，防止出现封卡问题,导致不能收款</text>
+                <text>{{ paymentRequirementText }}</text>
             </view>
             <!-- 收款方式列表 -->
             <view class="payment-list" v-if="paymentList.length">
@@ -211,6 +216,10 @@
                 <text>请添加收款方式</text>
                 <button class="btn-add-empty" @tap="openPopup">添加收款方式</button>
             </view>
+        </view>
+        <view class="payment-locked-tip" v-else>
+            <up-icon name="lock" size="34" color="#94a3b8"></up-icon>
+            <text>请先完善上方资料，再添加收款方式</text>
         </view>
 
         <!-- 简单版添加/编辑弹窗 -->
@@ -286,6 +295,7 @@
 import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { getPaymentList, addPayment, updatePayment, deletePayment, setDefaultPayment, type PaymentInfo } from '../../api/payment'
 import { getRecycleUserAddressInfo, addRecycleUserAddress, editRecycleUserAddress } from '@/addon/recycle/api/return_order'
+import { getOrderSubmitConfig } from '@/addon/recycle/api/order'
 
 import { img } from '@/utils/common'
 import { uploadImage } from '@/app/api/system'
@@ -362,8 +372,56 @@ const idCardUploading = ref(false); // For ID card image upload
 const authInfoId = ref(0); // To store the ID of existing auth info
 const showAuthSuccess = ref(false); // For auth submission success animation
 const areaRefAuth = ref<any>(null); // Ref for auth area picker
+const orderSubmitConfig = ref({
+    profile: {
+        enabled: 1,
+        payment_required: 1,
+        payment_min_count: 1,
+        id_card_required: 1
+    }
+})
 
-onMounted(() => {
+const normalizePositiveNumber = (value: any, fallback = 1) => {
+    const count = Number(value)
+    return Number.isFinite(count) && count > 0 ? Math.min(5, Math.floor(count)) : fallback
+}
+
+const normalizeOrderSubmitConfig = (data: any = {}) => {
+    orderSubmitConfig.value.profile = {
+        enabled: data.profile?.enabled === 0 ? 0 : 1,
+        payment_required: data.profile?.payment_required === 0 ? 0 : 1,
+        payment_min_count: normalizePositiveNumber(data.profile?.payment_min_count, 1),
+        id_card_required: data.profile?.id_card_required === 0 ? 0 : 1
+    }
+}
+
+const loadOrderSubmitConfig = async () => {
+    try {
+        const res = await getOrderSubmitConfig()
+        normalizeOrderSubmitConfig(res.data || {})
+    } catch (error) {
+        console.error('获取下单配置失败', error)
+        normalizeOrderSubmitConfig()
+    }
+}
+
+const isProfileRequired = computed(() => !!orderSubmitConfig.value.profile.enabled)
+const isIdCardRequired = computed(() => !!orderSubmitConfig.value.profile.id_card_required)
+const isPaymentRequired = computed(() => isProfileRequired.value && !!orderSubmitConfig.value.profile.payment_required)
+const paymentMinCount = computed(() => Math.max(1, Number(orderSubmitConfig.value.profile.payment_min_count || 1)))
+const canManagePayment = computed(() => !isProfileRequired.value || !!authInfoId.value)
+const paymentRequirementText = computed(() => {
+    if (!isPaymentRequired.value) return ''
+
+    const minCount = paymentMinCount.value
+    if (paymentList.value.length >= minCount) return ''
+
+    const lackCount = minCount - paymentList.value.length
+    return `请至少添加 ${minCount} 种收款方式，还差 ${lackCount} 种，防止打款失败。`
+})
+
+onMounted(async () => {
+    await loadOrderSubmitConfig()
     loadPaymentList()
     loadAuthInfo(); // Load authentication info
     
@@ -449,6 +507,11 @@ const validateAuthMobile = (showError = true): boolean => {
 };
 
 const validateAuthIdCard = (showError = true): boolean => {
+    if (!isIdCardRequired.value) {
+        authErrors.id_card = '';
+        return true;
+    }
+
 	if (!authFormData.id_card && !authInfoId.value) {
 		if (showError) authErrors.id_card = '请输入身份证号码';
 		return false;
@@ -461,6 +524,11 @@ const validateAuthIdCard = (showError = true): boolean => {
 };
 
 const validateAuthCardPic = (showError = true): boolean => {
+    if (!isIdCardRequired.value) {
+        authErrors.card_pic = '';
+        return true;
+    }
+
 	if (!authFormData.card_pic && !authInfoId.value) {
 		if (showError) authErrors.card_pic = '请上传身份证照片';
 		return false;
@@ -493,15 +561,17 @@ const validateAuthForm = (showError = true): boolean => {
     const isNameValid = validateAuthName(showError);
     const isMobileValid = validateAuthMobile(showError);
     const isIdCardValid = validateAuthIdCard(showError);
-    // const isCardPicValid = validateAuthCardPic(showError);
+    const isCardPicValid = validateAuthCardPic(showError);
     // const isAreaValid = validateAuthArea(showError);
     // const isDetailAddressValid = validateAuthDetailAddress(showError);
-    return isNameValid && isMobileValid && isIdCardValid ;
+    return isNameValid && isMobileValid && isIdCardValid && isCardPicValid;
 };
 
 const isAuthFormValid = computed(() => {
-    return authFormData.name && authFormData.mobile && authFormData.id_card && authFormData.card_pic &&
-           authFormData.province_id && authFormData.detail_address && 
+    const idCardReady = !isIdCardRequired.value || (authFormData.id_card && authFormData.card_pic)
+
+    return authFormData.name && authFormData.mobile && idCardReady &&
+           authFormData.province_id && authFormData.detail_address &&
            !authErrors.name && !authErrors.mobile && !authErrors.id_card && !authErrors.card_pic &&
            !authErrors.area && !authErrors.detail_address;
 });
@@ -634,8 +704,8 @@ const submitAuthForm = async () => {
             const res = await addRecycleUserAddress({
                 name: authFormData.name,
                 mobile: authFormData.mobile,
-                id_card: authFormData.id_card,
-                card_pic: authFormData.card_pic,
+                id_card: isIdCardRequired.value ? authFormData.id_card : '',
+                card_pic: isIdCardRequired.value ? authFormData.card_pic : '',
                 address: address,
             } as AuthFormData) as ApiResponse<{id: number}>;
             
@@ -929,6 +999,38 @@ const openAuthAreaPicker = () => {
 
 .auth-card-certified {
     border-color: #86efac;
+}
+
+.profile-disabled-tip,
+.payment-locked-tip {
+    background: #fff;
+    border-radius: 16rpx;
+    padding: 28rpx 30rpx;
+    margin-bottom: 30rpx;
+    border: 1rpx solid #e2e8f0;
+    box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.03);
+}
+
+.profile-disabled-title {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.profile-disabled-desc {
+    margin-top: 8rpx;
+    font-size: 25rpx;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.payment-locked-tip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14rpx;
+    color: #64748b;
+    font-size: 26rpx;
 }
 
 .auth-header {

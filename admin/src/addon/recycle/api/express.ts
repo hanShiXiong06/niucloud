@@ -142,6 +142,26 @@ export function getExpressWaybillPdf(params: any) {
     return request.post('recycle/express_order/waybill_pdf', params)
 }
 
+export function getExpressAddressBookList(params: any) {
+    return request.get('recycle/express_address_book/lists', { params })
+}
+
+export function saveExpressAddressBook(params: any) {
+    return request.post('recycle/express_address_book/save', params)
+}
+
+export function deleteExpressAddressBook(id: number) {
+    return request.delete(`recycle/express_address_book/${id}`)
+}
+
+export function setExpressAddressBookDefault(id: number) {
+    return request.post(`recycle/express_address_book/${id}/default`)
+}
+
+export function setExpressAddressBookTop(id: number, is_top: number) {
+    return request.post(`recycle/express_address_book/${id}/top`, { is_top })
+}
+
 // ============ 快递服务商配置接口 ============
 
 /**

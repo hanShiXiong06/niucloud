@@ -37,11 +37,11 @@
 
           <div class="rounded-md border border-gray-200 bg-slate-50 p-2">
             <div class="mb-1 text-xs text-gray-500">设备数量</div>
-            <el-tag v-if="row.count == props.getDeviceCount(row.devices)" type="success" size="small">
-              {{ row.count }}/{{ props.getDeviceCount(row.devices) }}台
+            <el-tag v-if="isDeviceCountMatched(row)" type="success" size="small">
+              {{ getSubmittedDeviceCount(row) }}/{{ getSignedDeviceCount(row) }}台
             </el-tag>
             <el-tag v-else type="danger" size="small">
-              {{ row.count ? row.count : "1" }}/{{ props.getDeviceCount(row.devices) }}台
+              {{ getSubmittedDeviceCount(row) }}/{{ getSignedDeviceCount(row) }}台
             </el-tag>
           </div>
 
@@ -110,7 +110,12 @@
         <el-collapse-transition>
           <div v-show="props.isMobileOrderExpanded(row.id)" class="mt-2 grid gap-2 border-t border-dashed border-gray-300 pt-2">
             <div v-for="device in row.devices || []" :key="device.id" class="rounded-md border border-gray-200 bg-white p-2">
-              <div class="text-xs font-semibold text-gray-800 break-all">{{ device.imei || "无IMEI" }}</div>
+              <div class="text-xs font-semibold text-gray-800 break-all">
+                {{ device.user_sn || device.imei || "无串号" }}
+              </div>
+              <div v-if="device.user_sn && device.imei" class="text-[11px] text-gray-400 break-all">
+                管理录入：{{ device.imei }}
+              </div>
               <div class="mt-1 text-xs text-gray-600">{{ device.model || "未知型号" }}</div>
 
               <div class="mt-2 flex items-center justify-between">
@@ -272,4 +277,15 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+const normalizeDeviceCount = (value: any) => {
+  const count = Number(value)
+  return Number.isFinite(count) && count > 0 ? count : 1
+}
+
+const getSubmittedDeviceCount = (row: any) => normalizeDeviceCount(row.count)
+
+const getSignedDeviceCount = (row: any) => props.getDeviceCount(row.devices)
+
+const isDeviceCountMatched = (row: any) => getSubmittedDeviceCount(row) === getSignedDeviceCount(row)
 </script>

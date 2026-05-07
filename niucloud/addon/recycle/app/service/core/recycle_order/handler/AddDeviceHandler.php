@@ -57,6 +57,7 @@ class AddDeviceHandler extends BaseFlowHandler
             $deviceData = [
                 'order_id' => $order['id'],
                 'imei' => $device['imei'] ?? '',
+                'user_sn' => $device['user_sn'] ?? ($device['imei'] ?? ''),
                 'model' => $device['model'] ?? '',
                 'initial_price' => $device['initial_price'] ?? 0,
                 'category_id' => $categoryId,
