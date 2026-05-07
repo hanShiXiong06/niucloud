@@ -178,7 +178,7 @@
 <script lang="ts" setup>
    import diyRecycleCategory from '@/addon/recycle/components/diy/recycle-category/index.vue';
    import diyRecycleOrderOverview from '@/addon/recycle/components/diy/recycle-order-overview/index.vue';
-   import diyRecycleQuotationList from '@/addon/recycle/components/diy/recycle-quotation-list/index.vue';
+   import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
    import diyRecycleSpiderQuotationList from '@/addon/recycle/components/diy/recycle-spider-quotation-list/index.vue';
    import diyRecycleSendButton from '@/addon/recycle/components/diy/recycle-send-button/index.vue';
    import diyPhoneGoodsCoupon from '@/addon/phone_shop/components/diy/phone-goods-coupon/index.vue';

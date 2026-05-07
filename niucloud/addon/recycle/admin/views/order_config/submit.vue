@@ -130,6 +130,17 @@
                     </div>
                 </section>
 
+                <section class="config-section">
+                    <div class="section-title">订单确认</div>
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">允许用户拒绝出售</div>
+                            <div class="setting-desc">开启后，用户在订单详情的每台设备上可以自主点击“拒绝出售”；关闭后，用户端隐藏该按钮，只能由管理员代用户拒绝出售并处理退回。</div>
+                        </div>
+                        <el-switch v-model="form.allow_user_reject_sale" :active-value="1" :inactive-value="0" />
+                    </div>
+                </section>
+
                 <section class="config-section muted">
                     <div class="section-title">后续配置预留</div>
                     <div class="placeholder-list">
@@ -172,7 +183,8 @@ const form = reactive<OrderSubmitConfig>({
     platform_delivery: {
         display_name: '京东快递',
         free_shipping_min_count: 1
-    }
+    },
+    allow_user_reject_sale: 1
 })
 
 const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
@@ -189,6 +201,7 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.profile.id_card_required = data.profile?.id_card_required === 0 ? 0 : 1
     form.platform_delivery.display_name = data.platform_delivery?.display_name || '京东快递'
     form.platform_delivery.free_shipping_min_count = Math.max(1, Math.min(99, Number(data.platform_delivery?.free_shipping_min_count || 1)))
+    form.allow_user_reject_sale = data.allow_user_reject_sale === 0 ? 0 : 1
     if (!form.delivery_modes.mail && !form.delivery_modes.self) {
         form.delivery_modes.mail = 1
         form.delivery_modes.self = 1

@@ -114,9 +114,11 @@
           :device="device"
           :index="index"
           :isSelected="isDeviceSelected(device.id)"
+          :allowRejectSale="submitConfig.allow_user_reject_sale !== 0"
           @toggle-select="toggleDeviceSelection(device.id)"
           @confirm="handleDeviceConfirm(device)"
           @negotiate="negotiate"
+          @reject-sale="handleDeviceRejectSale(device)"
         />
       </view>
 
@@ -152,7 +154,7 @@ import DeviceDetailCard from './components/DeviceDetailCard.vue'
 
 const {
   loading, orderInfo, isEmpty, hasNoDevices, totalPrice,
-  loadOrderDetail, confirmDevice, confirmDevices, negotiate
+  submitConfig, loadOrderDetail, confirmDevice, confirmDevices, rejectDeviceSale, negotiate
 } = useOrderDetail()
 
 const { returnOrderList, hasReturnOrder, loadReturnOrders, goToReturnOrder } = useReturnOrder()
@@ -167,6 +169,11 @@ const {
 
 const handleDeviceConfirm = async (device: any) => {
   const success = await confirmDevice(device)
+  if (success) resetSelection()
+}
+
+const handleDeviceRejectSale = async (device: any) => {
+  const success = await rejectDeviceSale(device)
   if (success) resetSelection()
 }
 

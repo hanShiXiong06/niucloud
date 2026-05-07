@@ -195,6 +195,8 @@
     <OrderDetailDialog
       v-model:visible="orderDetailVisible"
       :order-detail="orderDetail"
+      @view-device="viewDetail"
+      @query-express="handleExpressQuery"
     />
     <!-- 支付方式 -->
     <PaymentMethodDialog
@@ -208,9 +210,10 @@
     <el-dialog
       v-model="expressPopoverVisible"
       title="快递物流信息"
-      :width="isMobile ? '95vw' : '600px'"
+      :width="isMobile ? '95vw' : '760px'"
       top="4vh"
       :destroy-on-close="true"
+      class="express-dialog"
     >
       <div v-if="expressInfo" class="express-info-container">
         <!-- 快递基本信息 -->
@@ -804,7 +807,7 @@ const queryExpress = async (express_code: string, mobile: string) => {
 };
 
 // 处理快递单号悬停
-const handleExpressHover = async (row: any) => {
+const handleExpressHover = async (row: any, delay = 500) => {
   if (!row.express_no || row.express_no === "暂无") return;
 
   // 清除之前的计时器
@@ -819,7 +822,12 @@ const handleExpressHover = async (row: any) => {
       expressLoading.value[row.id] = true;
 
       // 获取用户手机号后4位
-      const mobile = row.member?.mobile || row.recycleUserAddress?.mobile || "";
+      const mobile =
+        row.member?.mobile ||
+        row.recycleUserAddress?.mobile ||
+        row.member_mobile ||
+        row.mobile ||
+        "";
       const mobileLast4 = mobile.slice(-4);
 
       if (!mobileLast4) {
@@ -851,7 +859,11 @@ const handleExpressHover = async (row: any) => {
       // 清除loading状态
       expressLoading.value[row.id] = false;
     }
-  }, 500); // 500ms延迟
+  }, delay);
+};
+
+const handleExpressQuery = (row: any) => {
+  handleExpressHover(row, 0);
 };
 
 // 处理鼠标离开
@@ -1254,13 +1266,18 @@ const shareOrder = async (row: any) => {
 }
 
 .express-info-container {
-  max-height: 500px;
+  max-height: min(68vh, 620px);
   overflow-y: auto;
+  padding-right: 6px;
 }
 
 .express-header {
   border-bottom: 1px solid #ebeef5;
   padding-bottom: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
 }
 
 .trace-item .trace-location {

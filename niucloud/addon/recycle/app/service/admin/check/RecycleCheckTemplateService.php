@@ -31,6 +31,7 @@ class RecycleCheckTemplateService extends BaseAdminService
     public function getPage(array $where = []): array
     {
         $where['site_id'] = $this->site_id;
+        $this->ensureSingleDefault();
         $query = $this->templateModel
             ->withSearch(['site_id', 'status', 'scene', 'keyword'], $where)
             ->order('sort asc,id desc');
@@ -40,6 +41,7 @@ class RecycleCheckTemplateService extends BaseAdminService
     public function all(array $where = []): array
     {
         $where['site_id'] = $this->site_id;
+        $this->ensureSingleDefault();
         return $this->templateModel
             ->withSearch(['site_id', 'status', 'scene', 'keyword'], $where)
             ->order('sort asc,id desc')
@@ -69,11 +71,12 @@ class RecycleCheckTemplateService extends BaseAdminService
         if ($key === '') {
             $key = 'custom_' . time();
         }
+        $scene = (string)($data['scene'] ?? 'phone');
         $record = $this->templateModel->create([
             'site_id' => $this->site_id,
             'template_key' => $key,
             'template_name' => $name,
-            'scene' => (string)($data['scene'] ?? 'phone'),
+            'scene' => $scene,
             'is_default' => (int)($data['is_default'] ?? 0),
             'status' => (int)($data['status'] ?? 1),
             'sort' => (int)($data['sort'] ?? 0),
@@ -81,13 +84,15 @@ class RecycleCheckTemplateService extends BaseAdminService
         ]);
         if ((int)($data['is_default'] ?? 0) === 1) {
             $this->setDefault((int)$record->id);
+        } else {
+            $this->ensureSingleDefault();
         }
         return (int)$record->id;
     }
 
     public function editTemplate(int $id, array $data): bool
     {
-        $this->info($id);
+        $template = $this->info($id);
         $save = [];
         foreach (['template_key', 'template_name', 'scene'] as $field) {
             if (array_key_exists($field, $data) && $data[$field] !== '') {
@@ -103,13 +108,15 @@ class RecycleCheckTemplateService extends BaseAdminService
         $this->templateModel->where('id', $id)->update($save);
         if ((int)($data['is_default'] ?? 0) === 1) {
             $this->setDefault($id);
+        } else {
+            $this->ensureSingleDefault();
         }
         return true;
     }
 
     public function deleteTemplate(int $id): bool
     {
-        $this->info($id);
+        $template = $this->info($id);
         $fieldIds = $this->fieldModel->where('template_id', $id)->column('id');
         if (!empty($fieldIds)) {
             $this->optionModel->whereIn('field_id', $fieldIds)->delete();
@@ -117,17 +124,22 @@ class RecycleCheckTemplateService extends BaseAdminService
         $this->fieldModel->where('template_id', $id)->delete();
         $this->groupModel->where('template_id', $id)->delete();
         $this->templateModel->where('id', $id)->delete();
+        $this->ensureSingleDefault();
         return true;
     }
 
     public function setDefault(int $id): bool
     {
         $template = $this->info($id);
-        $this->templateModel->where([
-            ['site_id', '=', $this->site_id],
-            ['scene', '=', $template['scene']],
-        ])->update(['is_default' => 0]);
-        $this->templateModel->where('id', $id)->update(['is_default' => 1, 'status' => 1]);
+        Db::transaction(function () use ($id, $template) {
+            $this->templateModel->where([
+                ['site_id', '=', $this->site_id],
+            ])->update(['is_default' => 0, 'status' => 0]);
+            $this->templateModel->where([
+                ['id', '=', $id],
+                ['site_id', '=', $this->site_id],
+            ])->update(['is_default' => 1, 'status' => 1]);
+        });
         return true;
     }
 
@@ -240,6 +252,7 @@ class RecycleCheckTemplateService extends BaseAdminService
         if ($save['group_id'] <= 0 || $save['field_key'] === '' || $save['field_name'] === '') {
             throw new CommonException('请填写字段分组、字段标识和字段名称');
         }
+        $this->assertSummaryFieldLimit($templateId, $id, $save['extra_config']);
         if ($id > 0) {
             $this->fieldModel->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->update($save);
             $this->touchTemplate($templateId);
@@ -317,16 +330,15 @@ class RecycleCheckTemplateService extends BaseAdminService
             $template = $this->info($templateId);
         } else {
             $scene = (string)($where['scene'] ?? 'phone');
+            $this->ensureSingleDefault();
             $template = $this->templateModel->where([
                 ['site_id', '=', $this->site_id],
-                ['scene', '=', $scene],
                 ['status', '=', 1],
             ])->order('is_default desc,sort asc,id asc')->findOrEmpty()->toArray();
             if (empty($template)) {
                 $this->initDefault();
                 $template = $this->templateModel->where([
                     ['site_id', '=', $this->site_id],
-                    ['scene', '=', $scene],
                     ['status', '=', 1],
                 ])->order('is_default desc,sort asc,id asc')->findOrEmpty()->toArray();
             }
@@ -376,6 +388,7 @@ class RecycleCheckTemplateService extends BaseAdminService
             ['template_key', '=', 'default_phone'],
         ])->findOrEmpty()->toArray();
         if (!empty($existing)) {
+            $this->ensureSingleDefault((int)$existing['id']);
             return $this->schema(['template_id' => (int)$existing['id']]);
         }
 
@@ -390,6 +403,7 @@ class RecycleCheckTemplateService extends BaseAdminService
             'version' => 1,
         ]);
         $templateId = (int)$template->id;
+        $this->ensureSingleDefault($templateId);
 
         $groups = [
             ['device_info', '设备信息', '容量、颜色、系统、保修、电池和锁', 10],
@@ -550,11 +564,80 @@ class RecycleCheckTemplateService extends BaseAdminService
         return [];
     }
 
+    private function assertSummaryFieldLimit(int $templateId, int $fieldId, array $extraConfig): void
+    {
+        if ((int)($extraConfig['summary_visible'] ?? 0) !== 1) {
+            return;
+        }
+
+        $fields = $this->fieldModel->where([
+            ['site_id', '=', $this->site_id],
+            ['template_id', '=', $templateId],
+        ])->when($fieldId > 0, function ($query) use ($fieldId) {
+            $query->where('id', '<>', $fieldId);
+        })->field('extra_config')->select()->toArray();
+
+        $count = 0;
+        foreach ($fields as $field) {
+            $config = $this->normalizeJsonConfig($field['extra_config'] ?? []);
+            if ((int)($config['summary_visible'] ?? 0) === 1) {
+                $count++;
+            }
+        }
+
+        if ($count >= 5) {
+            throw new CommonException('设备摘要最多展示5个字段');
+        }
+    }
+
     private function touchTemplate(int $templateId): void
     {
         $this->templateModel->where('id', $templateId)->update([
             'version' => Db::raw('version + 1'),
             'update_at' => time(),
         ]);
+    }
+
+    private function ensureSingleDefault(int $preferredId = 0): void
+    {
+        Db::transaction(function () use ($preferredId) {
+            if ($preferredId > 0) {
+                $preferred = $this->templateModel->where([
+                    ['id', '=', $preferredId],
+                    ['site_id', '=', $this->site_id],
+                ])->findOrEmpty()->toArray();
+                if (!empty($preferred)) {
+                    $this->templateModel->where([
+                        ['site_id', '=', $this->site_id],
+                    ])->update(['is_default' => 0, 'status' => 0]);
+                    $this->templateModel->where('id', $preferredId)->update(['is_default' => 1, 'status' => 1]);
+                    return;
+                }
+            }
+
+            $defaultIds = $this->templateModel->where([
+                ['site_id', '=', $this->site_id],
+                ['is_default', '=', 1],
+            ])->order('status desc,sort asc,id asc')->column('id');
+
+            if (!empty($defaultIds)) {
+                $keepId = (int)$defaultIds[0];
+                $this->templateModel->where([
+                    ['site_id', '=', $this->site_id],
+                ])->where('id', '<>', $keepId)->update(['is_default' => 0, 'status' => 0]);
+                $this->templateModel->where('id', $keepId)->update(['status' => 1]);
+                return;
+            }
+
+            $fallbackId = (int)$this->templateModel->where([
+                ['site_id', '=', $this->site_id],
+            ])->order('status desc,sort asc,id asc')->value('id');
+            if ($fallbackId > 0) {
+                $this->templateModel->where([
+                    ['site_id', '=', $this->site_id],
+                ])->where('id', '<>', $fallbackId)->update(['is_default' => 0, 'status' => 0]);
+                $this->templateModel->where('id', $fallbackId)->update(['is_default' => 1, 'status' => 1]);
+            }
+        });
     }
 }

@@ -91,10 +91,10 @@ export function useDeviceSelection(devicesRef: Ref<OrderDetailDevice[]>) {
     })
   }
 
-  // 获取选中的待确认设备
+  // 获取选中的可确认设备
   const getSelectedPendingDevices = () => {
     return devicesRef.value.filter(
-      device => selectedDeviceIds.value.includes(device.id) && device.status === 4
+      device => selectedDeviceIds.value.includes(device.id) && [3, 4, 7, 8].includes(Number(device.status))
     )
   }
 

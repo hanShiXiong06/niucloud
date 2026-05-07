@@ -80,6 +80,12 @@ export function deviceConfirm(id: number) {
   
   return request.put(`recycle/recycle_device/${id}/confirm_price`);
 }
+
+// 确认设备处理方式：出售或拒绝出售
+export function deviceConfirmHandle(id: number, data: { is_sell: boolean; remark?: string }) {
+  return request.put(`recycle/recycle_device/${id}/confirm`, data);
+}
+
 // 批量确认设备
 export function deviceAllConfirm(deviceIds: number[]) {
   return request.put(`recycle/recycle_device/all_confirm`, { device_ids: deviceIds });

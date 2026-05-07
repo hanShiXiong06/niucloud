@@ -2,96 +2,117 @@
   <el-dialog
     v-model="dialogVisible"
     title="订单详情"
-    :width="isMobile ? '95vw' : '820px'"
-    top="4vh"
+    :width="isMobile ? '96vw' : 'min(1180px, calc(100vw - 48px))'"
+    :top="isMobile ? '2vh' : '3vh'"
     class="diy-dialog-wrap order-detail-dialog"
     :destroy-on-close="true"
   >
     <div v-if="orderData" class="odd-wrap">
-
-      <!-- ===== 会员信息 ===== -->
-      <div class="odd-section" v-if="orderData.member">
-        <div class="odd-section-header">👤 会员信息</div>
-        <div class="odd-desc-grid">
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">会员ID</span>
-            <span class="odd-desc-value">{{ orderData.member.member_id }}</span>
+      <div class="odd-summary">
+        <div class="odd-summary__main">
+          <div class="odd-summary__label">订单编号</div>
+          <div class="odd-summary__no">{{ orderData.order_no || orderData.id || '暂无' }}</div>
+        </div>
+        <div class="odd-summary__metrics">
+          <div class="odd-metric">
+            <span>状态</span>
+            <el-tag :type="orderData.status === 7 ? 'success' : 'info'" size="small">
+              {{ orderData.status_name || '暂无' }}
+            </el-tag>
           </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">用户名</span>
-            <span class="odd-desc-value">{{ orderData.member.username || '暂无' }}</span>
+          <div class="odd-metric">
+            <span>设备</span>
+            <strong>{{ deviceCount }} 台</strong>
           </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">昵称</span>
-            <span class="odd-desc-value">{{ orderData.member.nickname || '暂无' }}</span>
+          <div class="odd-metric">
+            <span>总金额</span>
+            <strong class="odd-price">¥{{ totalAmount }}</strong>
           </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">手机号</span>
-            <span class="odd-desc-value odd-desc-value--mono">{{ orderData.member.mobile || '暂无' }}</span>
+          <div class="odd-metric">
+            <span>创建时间</span>
+            <strong>{{ orderData.create_at || '暂无' }}</strong>
           </div>
         </div>
       </div>
 
-      <!-- ===== 订单信息 ===== -->
-      <div class="odd-section">
-        <div class="odd-section-header">📦 订单信息</div>
-        <div class="odd-desc-grid odd-desc-grid--3col">
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">订单编号</span>
-            <span class="odd-desc-value odd-desc-value--mono">{{ orderData.id || '暂无' }}</span>
+      <div class="odd-info-layout">
+        <div class="odd-section" v-if="orderData.member">
+          <div class="odd-section-header">
+            <span>会员信息</span>
           </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">订单状态</span>
-            <el-tag :type="orderData.status === 7 ? 'success' : 'info'" size="small">{{ orderData.status_name }}</el-tag>
+          <div class="odd-desc-grid">
+            <div class="odd-desc-item">
+              <span class="odd-desc-label">会员ID</span>
+              <span class="odd-desc-value">{{ orderData.member.member_id }}</span>
+            </div>
+            <div class="odd-desc-item">
+              <span class="odd-desc-label">用户名</span>
+              <span class="odd-desc-value">{{ orderData.member.username || '暂无' }}</span>
+            </div>
+            <div class="odd-desc-item">
+              <span class="odd-desc-label">昵称</span>
+              <span class="odd-desc-value">{{ orderData.member.nickname || '暂无' }}</span>
+            </div>
+            <div class="odd-desc-item">
+              <span class="odd-desc-label">手机号</span>
+              <span class="odd-desc-value odd-desc-value--mono">{{ orderData.member.mobile || '暂无' }}</span>
+            </div>
           </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">总金额</span>
-            <span class="odd-desc-value odd-desc-value--price">¥{{ totalAmount }}</span>
+        </div>
+
+        <div class="odd-section">
+          <div class="odd-section-header">
+            <span>订单信息</span>
           </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">打款方式</span>
-            <span class="odd-desc-value">{{ orderData.pay_type || '暂无' }}</span>
-          </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">收款账号</span>
-            <span class="odd-desc-value odd-desc-value--mono">{{ orderData.pay_account || '暂无' }}</span>
-          </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">打款时间</span>
-            <span class="odd-desc-value">
-              {{ orderData.pay_time ? new Date(orderData.pay_time * 1000).toLocaleString() : '暂无' }}
-            </span>
-          </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">配送方式</span>
-            <span class="odd-desc-value">{{ orderData.delivery_type_name || '暂无' }}</span>
-          </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">快递公司</span>
-            <span class="odd-desc-value">{{ orderData.express_company || '暂无' }}</span>
-          </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">快递单号</span>
-            <span class="odd-desc-value odd-desc-value--mono">{{ orderData.express_no || '暂无' }}</span>
-          </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">设备数量</span>
-            <span class="odd-desc-value">{{ deviceCount }} 台</span>
-          </div>
-          <div class="odd-desc-item">
-            <span class="odd-desc-label">创建时间</span>
-            <span class="odd-desc-value">{{ orderData.create_at || '暂无' }}</span>
-          </div>
-          <div class="odd-desc-item odd-desc-item--full">
-            <span class="odd-desc-label">备注</span>
-            <span class="odd-desc-value">{{ orderData.remark || '暂无备注' }}</span>
+          <div class="odd-desc-grid">
+            <div class="odd-desc-item">
+              <span class="odd-desc-label">配送方式</span>
+              <span class="odd-desc-value">{{ orderData.delivery_type_name || '暂无' }}</span>
+            </div>
+            <div class="odd-desc-item">
+              <span class="odd-desc-label">快递公司</span>
+              <span class="odd-desc-value">{{ orderData.express_company || '暂无' }}</span>
+            </div>
+            <div class="odd-desc-item odd-desc-item--wide">
+              <span class="odd-desc-label">快递单号</span>
+              <span class="odd-desc-value odd-inline-action">
+                <span class="odd-desc-value--mono">{{ orderData.express_no || '暂无' }}</span>
+                <el-button
+                  v-if="orderData.express_no"
+                  link
+                  type="primary"
+                  size="small"
+                  @click="queryOrderExpress"
+                >
+                  查物流
+                </el-button>
+              </span>
+            </div>
+            <div class="odd-desc-item">
+              <span class="odd-desc-label">打款方式</span>
+              <span class="odd-desc-value">{{ orderData.pay_type || '暂无' }}</span>
+            </div>
+            <div class="odd-desc-item">
+              <span class="odd-desc-label">打款时间</span>
+              <span class="odd-desc-value">{{ formatTime(orderData.pay_time) }}</span>
+            </div>
+            <div class="odd-desc-item odd-desc-item--wide">
+              <span class="odd-desc-label">收款账号</span>
+              <span class="odd-desc-value odd-desc-value--mono">{{ orderData.pay_account || '暂无' }}</span>
+            </div>
+            <div class="odd-desc-item odd-desc-item--wide">
+              <span class="odd-desc-label">备注</span>
+              <span class="odd-desc-value">{{ orderData.remark || '暂无备注' }}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- ===== 打款凭证图片 ===== -->
       <div class="odd-section" v-if="paymentImageList.length > 0">
-        <div class="odd-section-header">📸 打款凭证</div>
+        <div class="odd-section-header">
+          <span>打款凭证</span>
+          <el-tag type="info" size="small" effect="plain">{{ paymentImageList.length }} 张</el-tag>
+        </div>
         <div class="odd-payment-images">
           <el-image
             v-for="(imgUrl, index) in paymentImageList"
@@ -111,25 +132,37 @@
         />
       </div>
 
-      <!-- ===== 设备清单 ===== -->
-      <div class="odd-section">
+      <div class="odd-section odd-section--devices">
         <div class="odd-section-header">
-          📱 设备清单
+          <span>设备清单</span>
           <el-tag type="info" size="small" effect="plain" class="ml-auto">{{ deviceCount }} 台</el-tag>
         </div>
 
-        <!-- PC 端表格 -->
         <el-table
           v-if="!isMobile"
-          :data="orderData.devices"
+          :data="orderData.devices || []"
           style="width: 100%"
           border
           stripe
           size="small"
+          :max-height="deviceTableHeight"
         >
-          <el-table-column prop="id" label="ID" width="55" />
-          <el-table-column prop="model" label="型号" min-width="110" />
-          <el-table-column label="串号" min-width="170">
+          <el-table-column label="型号" min-width="210" fixed>
+            <template #default="scope">
+              <div class="odd-model-cell">
+                <el-button
+                  class="odd-model-link"
+                  link
+                  type="primary"
+                  @click="openDeviceDetail(scope.row)"
+                >
+                  {{ scope.row.model || '未知型号' }}
+                </el-button>
+                <div class="odd-device-sub">ID {{ scope.row.id }} · {{ scope.row.status_name || '未知状态' }}</div>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="串号" min-width="220">
             <template #default="scope">
               <div class="odd-serial-cell">
                 <div v-if="scope.row.user_sn">用户：{{ scope.row.user_sn }}</div>
@@ -137,47 +170,51 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="规格" min-width="180">
+          <el-table-column label="规格" min-width="230">
             <template #default="scope">
               <div class="odd-spec-tags">
                 <el-tag v-if="scope.row.capacity" size="small" type="info" effect="plain">{{ scope.row.capacity }}</el-tag>
                 <el-tag v-if="scope.row.color" size="small" type="info" effect="plain">{{ scope.row.color }}</el-tag>
                 <el-tag v-if="scope.row.system_version" size="small" type="info" effect="plain">{{ scope.row.system_version }}</el-tag>
                 <el-tag v-if="scope.row.warranty_info" size="small" type="warning" effect="plain">{{ scope.row.warranty_info }}</el-tag>
-                <span v-if="!scope.row.capacity && !scope.row.color && !scope.row.system_version && !scope.row.warranty_info" class="odd-no-spec">—</span>
+                <span v-if="!scope.row.capacity && !scope.row.color && !scope.row.system_version && !scope.row.warranty_info" class="odd-no-spec">暂无</span>
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="final_price" label="最终价格" width="90">
+          <el-table-column label="初始价格" width="100" align="right">
             <template #default="scope">
-              <span class="odd-price">¥{{ scope.row.final_price }}</span>
+              <span>¥{{ scope.row.initial_price || '0.00' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="90">
+          <el-table-column label="最终价格" width="110" align="right">
+            <template #default="scope">
+              <span class="odd-price">¥{{ scope.row.final_price || '0.00' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="110">
             <template #default="scope">
               <el-tag :type="scope.row.status === 6 ? 'danger' : 'success'" size="small">
-                {{ scope.row.status_name }}
+                {{ scope.row.status_name || '暂无' }}
               </el-tag>
             </template>
           </el-table-column>
         </el-table>
 
-        <!-- 移动端卡片 -->
         <div v-else class="odd-device-cards">
           <div
             v-for="device in orderData.devices || []"
             :key="device.id"
             class="odd-device-card"
+            @click="openDeviceDetail(device)"
           >
             <div class="odd-device-card__top">
               <span class="odd-device-card__model">{{ device.model || '未知型号' }}</span>
               <el-tag size="small" :type="device.status === 6 ? 'danger' : 'success'">
-                {{ device.status_name }}
+                {{ device.status_name || '暂无' }}
               </el-tag>
             </div>
             <div v-if="device.user_sn" class="odd-device-card__imei">用户串号：{{ device.user_sn }}</div>
             <div class="odd-device-card__imei">管理串号：{{ device.imei || '暂无' }}</div>
-            <!-- 规格信息 -->
             <div class="odd-device-card__specs" v-if="device.capacity || device.color || device.system_version || device.warranty_info">
               <el-tag v-if="device.capacity" size="small" type="info" effect="plain">{{ device.capacity }}</el-tag>
               <el-tag v-if="device.color" size="small" type="info" effect="plain">{{ device.color }}</el-tag>
@@ -186,32 +223,43 @@
             </div>
             <div class="odd-device-card__bottom">
               <span class="odd-device-card__id">ID：{{ device.id }}</span>
-              <span class="odd-price">¥{{ device.final_price }}</span>
+              <span class="odd-price">¥{{ device.final_price || '0.00' }}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ===== 退货信息 ===== -->
       <template v-if="returnOrderList.length > 0">
         <div class="odd-section" v-for="returnOrder in returnOrderList" :key="returnOrder.id">
-          <div class="odd-section-header">🔄 退货信息</div>
-          <div class="odd-desc-grid">
+          <div class="odd-section-header">
+            <span>退货信息</span>
+            <el-tag size="small" :type="returnOrderStatusType(returnOrder.status)">
+              {{ returnOrder.status_name || '暂无' }}
+            </el-tag>
+          </div>
+          <div class="odd-desc-grid odd-desc-grid--return">
             <div class="odd-desc-item">
               <span class="odd-desc-label">退货单号</span>
-              <span class="odd-desc-value odd-desc-value--mono">{{ returnOrder.order_no }}</span>
-            </div>
-            <div class="odd-desc-item">
-              <span class="odd-desc-label">退货状态</span>
-              <el-tag size="small" :type="returnOrderStatusType(returnOrder.status)">{{ returnOrder.status_name }}</el-tag>
+              <span class="odd-desc-value odd-desc-value--mono">{{ returnOrder.order_no || '暂无' }}</span>
             </div>
             <div class="odd-desc-item">
               <span class="odd-desc-label">快递公司</span>
               <span class="odd-desc-value">{{ returnOrder.express_company || '暂无' }}</span>
             </div>
-            <div class="odd-desc-item">
+            <div class="odd-desc-item odd-desc-item--wide">
               <span class="odd-desc-label">快递单号</span>
-              <span class="odd-desc-value odd-desc-value--mono">{{ returnOrder.express_no || '暂无' }}</span>
+              <span class="odd-desc-value odd-inline-action">
+                <span class="odd-desc-value--mono">{{ returnOrder.express_no || '暂无' }}</span>
+                <el-button
+                  v-if="returnOrder.express_no"
+                  link
+                  type="primary"
+                  size="small"
+                  @click="queryReturnExpress(returnOrder)"
+                >
+                  查物流
+                </el-button>
+              </span>
             </div>
             <div class="odd-desc-item">
               <span class="odd-desc-label">创建时间</span>
@@ -221,33 +269,56 @@
               <span class="odd-desc-label">完成时间</span>
               <span class="odd-desc-value">{{ returnOrder.over_at || '暂无' }}</span>
             </div>
-            <div class="odd-desc-item odd-desc-item--full">
+            <div class="odd-desc-item odd-desc-item--wide">
               <span class="odd-desc-label">退货地址</span>
               <span class="odd-desc-value">{{ returnOrder.return_address || '暂无' }}</span>
             </div>
-            <div class="odd-desc-item odd-desc-item--full">
+            <div class="odd-desc-item odd-desc-item--wide">
               <span class="odd-desc-label">备注</span>
               <span class="odd-desc-value">{{ returnOrder.remark || returnOrder.comment || '暂无' }}</span>
             </div>
           </div>
-          <!-- 退货设备列表 -->
+
           <div v-if="returnOrder.return_devices?.length" class="odd-return-devices">
             <div class="odd-return-devices__title">退货设备</div>
-            <el-table v-if="!isMobile" :data="returnOrder.return_devices" size="small" border stripe>
-              <el-table-column label="IMEI" min-width="130">
+            <el-table
+              v-if="!isMobile"
+              :data="returnOrder.return_devices"
+              size="small"
+              border
+              stripe
+              max-height="260"
+            >
+              <el-table-column label="型号" min-width="160">
+                <template #default="scope">
+                  <el-button
+                    v-if="scope.row.device"
+                    class="odd-model-link"
+                    link
+                    type="primary"
+                    @click="openDeviceDetail(scope.row.device)"
+                  >
+                    {{ scope.row.device?.model || '暂无' }}
+                  </el-button>
+                  <span v-else>暂无</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="IMEI" min-width="170">
                 <template #default="scope">{{ scope.row.device?.imei || '暂无' }}</template>
               </el-table-column>
-              <el-table-column label="型号" min-width="100">
-                <template #default="scope">{{ scope.row.device?.model || '暂无' }}</template>
-              </el-table-column>
-              <el-table-column label="状态" width="100">
+              <el-table-column label="状态" width="110">
                 <template #default="scope">
                   <el-tag size="small">{{ scope.row.status_name || '暂无' }}</el-tag>
                 </template>
               </el-table-column>
             </el-table>
             <div v-else class="odd-device-cards">
-              <div v-for="rd in returnOrder.return_devices" :key="rd.id" class="odd-device-card">
+              <div
+                v-for="rd in returnOrder.return_devices"
+                :key="rd.id"
+                class="odd-device-card"
+                @click="rd.device && openDeviceDetail(rd.device)"
+              >
                 <div class="odd-device-card__top">
                   <span class="odd-device-card__model">{{ rd.device?.model || '暂无' }}</span>
                   <el-tag size="small">{{ rd.status_name || '暂无' }}</el-tag>
@@ -258,7 +329,6 @@
           </div>
         </div>
       </template>
-
     </div>
 
     <template #footer>
@@ -275,6 +345,7 @@ import { getReturnOrderList } from '@/addon/recycle/api/recycle_return_order'
 
 interface OrderDetail {
     id: number | string;
+    order_no?: string;
     status: number;
     status_name: string;
     pay_type?: string;
@@ -287,9 +358,11 @@ interface OrderDetail {
     create_at?: string;
     remark?: string;
     member?: { member_id: number | string; username?: string; nickname?: string; mobile?: string };
+    recycleUserAddress?: { mobile?: string; [key: string]: any };
     devices?: Array<{
         id: number | string;
         imei: string;
+        user_sn?: string;
         model: string;
         capacity?: string;
         color?: string;
@@ -308,7 +381,7 @@ const props = defineProps({
     orderDetail: { type: Object as () => OrderDetail | null, default: null }
 })
 
-const emit = defineEmits(['update:visible'])
+const emit = defineEmits(['update:visible', 'closed', 'view-device', 'query-express'])
 
 const dialogVisible = ref(props.visible)
 const orderData = ref<OrderDetail | null>(props.orderDetail)
@@ -320,6 +393,7 @@ const previewIndex = ref(0)
 const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
 
 const deviceCount = computed(() => orderData.value?.devices?.length || 0)
+const deviceTableHeight = computed(() => (deviceCount.value > 8 ? 430 : undefined))
 
 const totalAmount = computed(() => {
     if (!orderData.value?.devices) return '0.00'
@@ -332,6 +406,34 @@ const paymentImageList = computed(() => {
 })
 
 const handlePreview = (index: number) => { previewIndex.value = index; showImageViewer.value = true }
+
+const formatTime = (time?: number | string) => {
+    if (!time) return '暂无'
+    if (typeof time === 'number') return new Date(time * 1000).toLocaleString()
+    return time
+}
+
+const openDeviceDetail = (device: any) => {
+    if (!device?.id) return
+    emit('view-device', device)
+}
+
+const queryOrderExpress = () => {
+    if (!orderData.value?.express_no) return
+    emit('query-express', orderData.value)
+}
+
+const queryReturnExpress = (returnOrder: any) => {
+    if (!returnOrder?.express_no || !orderData.value) return
+    emit('query-express', {
+        ...returnOrder,
+        member: orderData.value.member,
+        recycleUserAddress: {
+            ...(orderData.value.recycleUserAddress || {}),
+            mobile: returnOrder.member_mobile || orderData.value.member?.mobile || orderData.value.recycleUserAddress?.mobile
+        }
+    })
+}
 
 const returnOrderStatusType = (status: number) => {
     const map: Record<number, string> = { 0: 'warning', 1: '', 2: 'success', 3: 'info' }
@@ -347,7 +449,10 @@ const loadReturnOrders = async (orderId: number | string) => {
 }
 
 watch(() => props.visible, (v) => { dialogVisible.value = v })
-watch(dialogVisible, (v) => { emit('update:visible', v) })
+watch(dialogVisible, (v) => {
+    emit('update:visible', v)
+    if (!v) emit('closed')
+})
 watch(() => props.orderDetail, (v) => {
     orderData.value = v
     returnOrderList.value = []
@@ -359,179 +464,326 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 </script>
 
 <style lang="scss" scoped>
-/* Dialog */
 .order-detail-dialog {
-  :deep(.el-dialog__body) { padding: 0; background: #f1f5f9; }
+  :deep(.el-dialog) {
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  :deep(.el-dialog__body) {
+    padding: 0;
+    background: #f4f6f8;
+    overflow: hidden;
+  }
 }
 
-/* 整体包裹 */
 .odd-wrap {
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 80vh;
+  max-height: calc(100vh - 150px);
   overflow-y: auto;
 
-  &::-webkit-scrollbar { width: 5px; }
-  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  &::-webkit-scrollbar { width: 6px; }
+  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 }
 
-/* section 卡片 */
+.odd-summary {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) 2fr;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.odd-summary__label {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.odd-summary__no {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+.odd-summary__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.odd-metric {
+  min-width: 0;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 6px;
+
+  span {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  strong {
+    display: block;
+    min-width: 0;
+    font-size: 13px;
+    color: #1e293b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.odd-info-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(420px, 1.15fr);
+  gap: 10px;
+}
+
 .odd-section {
   background: #fff;
   border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
+.odd-section--devices {
+  min-height: 0;
+}
+
 .odd-section-header {
+  min-height: 40px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 14px;
-  background: linear-gradient(to right, #f9fafb, #f3f4f6);
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
   border-bottom: 1px solid #e5e7eb;
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: #334155;
 }
 
-/* 描述 grid */
 .odd-desc-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 
-  &--3col { grid-template-columns: repeat(3, 1fr); }
+.odd-desc-grid--return {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .odd-desc-item {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #f3f4f6;
-  border-right: 1px solid #f3f4f6;
+  gap: 4px;
+  padding: 9px 12px;
+  border-right: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
 
   &:nth-child(2n) { border-right: none; }
-  &:last-child, &:nth-last-child(2):nth-child(2n+1) { border-bottom: none; }
 
-  &--full {
+  &--wide {
     grid-column: 1 / -1;
     border-right: none;
   }
+}
 
-  .odd-desc-label {
-    font-size: 10px;
-    color: #9ca3af;
-    font-weight: 500;
-  }
-  .odd-desc-value {
-    font-size: 13px;
-    color: #1e293b;
-    font-weight: 500;
-    word-break: break-all;
+.odd-desc-grid--return .odd-desc-item:nth-child(2n) {
+  border-right: 1px solid #f1f5f9;
+}
 
-    &--mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
-    &--price { color: #ea580c; font-weight: 700; font-size: 15px; }
+.odd-desc-label {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.2;
+}
+
+.odd-desc-value {
+  min-width: 0;
+  font-size: 13px;
+  color: #1e293b;
+  line-height: 1.45;
+  word-break: break-all;
+
+  &--mono {
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 12px;
   }
 }
 
-/* 打款凭证 */
+.odd-inline-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .odd-payment-images {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 12px 14px;
-}
-.odd-payment-img {
-  width: 100px;
-  height: 100px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  cursor: pointer;
-  transition: transform 0.2s;
-  &:hover { transform: scale(1.04); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+  gap: 8px;
+  padding: 10px 12px;
 }
 
-/* 规格标签 */
+.odd-payment-img {
+  width: 88px;
+  height: 88px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.14);
+  }
+}
+
+.odd-model-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.odd-model-link {
+  max-width: 100%;
+  justify-content: flex-start;
+  padding: 0;
+  height: auto;
+  line-height: 1.4;
+  white-space: normal;
+  text-align: left;
+}
+
+.odd-device-sub {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
 .odd-spec-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
-.odd-no-spec { font-size: 12px; color: #d1d5db; }
+
+.odd-no-spec {
+  font-size: 12px;
+  color: #94a3b8;
+}
 
 .odd-serial-cell {
   color: #475569;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.55;
   word-break: break-all;
 }
 
-/* 价格 */
 .odd-price {
   color: #ea580c;
   font-weight: 700;
-  font-size: 14px;
 }
 
-/* 设备卡片（移动端） */
 .odd-device-cards {
+  max-height: 52vh;
+  overflow-y: auto;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+
 .odd-device-card {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 10px 12px;
-  background: #f9fafb;
+  background: #f8fafc;
+  cursor: pointer;
 
-  &__top {
+  &__top,
+  &__bottom {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 4px;
+    gap: 8px;
   }
+
+  &__top { margin-bottom: 6px; }
   &__model { font-size: 13px; font-weight: 600; color: #1e293b; }
-  &__imei { font-size: 11px; color: #6b7280; font-family: monospace; margin-bottom: 6px; }
+  &__imei { font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 5px; word-break: break-all; }
   &__specs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-  &__bottom { display: flex; align-items: center; justify-content: space-between; }
-  &__id { font-size: 11px; color: #9ca3af; }
+  &__id { font-size: 11px; color: #94a3b8; }
 }
 
-/* 退货设备 */
 .odd-return-devices {
-  padding: 10px 14px;
-  border-top: 1px solid #f3f4f6;
+  padding: 10px 12px;
+  border-top: 1px solid #f1f5f9;
 
   &__title {
     font-size: 12px;
     font-weight: 600;
-    color: #6b7280;
+    color: #64748b;
     margin-bottom: 8px;
   }
 }
 
-/* Footer */
 .odd-footer {
   display: flex;
   justify-content: flex-end;
+
   &--mobile { width: 100%; }
 }
 
-/* 响应式 */
-@media (max-width: 768px) {
-  .odd-desc-grid { grid-template-columns: repeat(2, 1fr); }
-  .odd-desc-grid--3col { grid-template-columns: repeat(2, 1fr); }
+:deep(.el-table) {
+  --el-table-header-bg-color: #f8fafc;
 }
-@media (max-width: 480px) {
+
+:deep(.el-table .cell) {
+  line-height: 1.45;
+}
+
+@media (max-width: 960px) {
+  .odd-summary,
+  .odd-info-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .odd-summary__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .odd-desc-grid--return {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .odd-wrap {
+    max-height: calc(100vh - 128px);
+  }
+}
+
+@media (max-width: 520px) {
+  .odd-summary__metrics,
   .odd-desc-grid,
-  .odd-desc-grid--3col { grid-template-columns: 1fr; }
-  .odd-desc-item { border-right: none; }
+  .odd-desc-grid--return {
+    grid-template-columns: 1fr;
+  }
+
+  .odd-desc-item,
+  .odd-desc-grid--return .odd-desc-item:nth-child(2n) {
+    border-right: none;
+  }
 }
 </style>

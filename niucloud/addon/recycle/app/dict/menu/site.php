@@ -1114,7 +1114,7 @@ return [
                         'router_path' => 'order_config/submit',
                         'view_path' => 'order_config/submit',
                         'methods' => 'get',
-                        'sort' => '89',
+                        'sort' => '80',
                         'status' => '1',
                         'is_show' => '1',
                         'children' => [
@@ -1803,7 +1803,7 @@ return [
                         'router_path' => 'recycle_return_order/list',
                         'view_path' => 'recycle_return_order/list',
                         'methods' => 'get',
-                        'sort' => '1',
+                        'sort' => '100',
                         'status' => '1',
                         'is_show' => '1',
                         'children' => [

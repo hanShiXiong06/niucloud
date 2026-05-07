@@ -341,7 +341,7 @@ class ExpressOrderService
             // 准备记录数据
             $recordData = [
                 'site_id' => $siteId,
-                'order_no' => $apiResult['orderNo'] ?? '',
+                'order_no' => $apiResult['orderNo'] ?? $apiResult['orderCode'] ?? '',
                 'recycle_order_id' => $params['recycle_order_id'] ?? 0,
                 'recycle_device_id' => $params['recycle_device_id'] ?? 0,
 
@@ -349,7 +349,7 @@ class ExpressOrderService
                 'provider_name' => 'yisu',
                 'product_code' => $params['deliveryType'],
                 'product_name' => $productInfo['product_name'] ?? '',
-                'delivery_id' => $apiResult['deliveryId'] ?? '',
+                'delivery_id' => $apiResult['deliveryId'] ?? $apiResult['waybillNo'] ?? $apiResult['trackingNum'] ?? '',
 
                 // 发件人信息
                 'sender_name' => $params['senderName'],
@@ -400,7 +400,9 @@ class ExpressOrderService
                 ],
 
                 // API响应数据
-                'api_response' => $apiResult,
+                'api_response' => array_merge($apiResult, [
+                    'thirdOrderNo' => $params['thirdOrderNo'] ?? $params['third_order_no'] ?? '',
+                ]),
             ];
 
             ExpressOrderRecord::createRecord($recordData);
@@ -509,13 +511,18 @@ class ExpressOrderService
 
     private function buildCancelIdentifierParams(ExpressOrderRecord $record, array $params): array
     {
+        $apiResponse = $record->api_response ?? [];
         if (!empty($record->order_no)) {
             $params['order_no'] = $record->order_no;
         }
         if (!empty($record->delivery_id)) {
             $params['waybill_no'] = $record->delivery_id;
         }
-        if (empty($params['third_order_no']) && !empty($record->recycle_order_id)) {
+        if (!empty($apiResponse['thirdOrderNo'])) {
+            $params['third_order_no'] = $apiResponse['thirdOrderNo'];
+        } elseif (!empty($apiResponse['third_order_no'])) {
+            $params['third_order_no'] = $apiResponse['third_order_no'];
+        } elseif (empty($params['third_order_no']) && !empty($record->recycle_order_id)) {
             $params['third_order_no'] = 'recycle_' . (int)$record->site_id . '_' . (int)$record->recycle_order_id;
         }
 

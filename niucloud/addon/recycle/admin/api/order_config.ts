@@ -22,6 +22,7 @@ export interface OrderSubmitConfig {
         display_name: string
         free_shipping_min_count: number
     }
+    allow_user_reject_sale: number
 }
 
 export function getOrderSubmitConfig() {

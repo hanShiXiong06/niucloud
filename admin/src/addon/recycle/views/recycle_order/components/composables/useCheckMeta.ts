@@ -37,6 +37,9 @@ export interface CheckTemplateField {
   unit?: string
   placeholder?: string
   default_value?: any
+  is_show?: number
+  sort?: number
+  extra_config?: Record<string, any> | string | null
   result_visible?: number
   result_template?: string
   options?: DictOptionItem[]
@@ -59,11 +62,24 @@ interface DeviceFormLike {
   color?: string
 }
 
+const BUILT_IN_FIELD_KEYS = [
+  'battery',
+  'battery_num',
+  'screen_id',
+  'indisplay_id',
+  'appearance_id',
+  'function_ids',
+  'fix_ids',
+  'activation_lock',
+  'mdm_lock'
+] as const
+
 interface UseCheckMetaOptions {
   dictOptions: ComputedRef<CheckOptionsGroup>
   deviceForm: DeviceFormLike
   fieldConfigByKey?: ComputedRef<Record<string, CheckTemplateField>>
   templateInfo?: ComputedRef<Record<string, any> | null>
+  shouldRestoreMeta?: (meta: CheckMetaPayload) => boolean
 }
 
 interface TemplateSelections {
@@ -78,6 +94,8 @@ interface TemplateSelections {
   mdmLock: boolean
   customFields: Record<string, any>
 }
+
+type BuiltInFieldKey = typeof BUILT_IN_FIELD_KEYS[number]
 
 function toOptionalNumber(value: any): number | undefined {
   if (value === '' || value === null || value === undefined) return undefined
@@ -130,7 +148,7 @@ function renderResultTemplate(template: string, value: any, labels: string[], fi
     .replace(/\{unit\}/g, field?.unit || '')
 }
 
-export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templateInfo }: UseCheckMetaOptions) {
+export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templateInfo, shouldRestoreMeta }: UseCheckMetaOptions) {
   const templateSelections = reactive<TemplateSelections>({
     battery: undefined,
     battery_num: undefined,
@@ -143,6 +161,28 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     mdmLock: false,
     customFields: {}
   })
+
+  const builtInValueGetters: Record<BuiltInFieldKey, () => any> = {
+    battery: () => templateSelections.battery,
+    battery_num: () => templateSelections.battery_num,
+    screen_id: () => templateSelections.screenId,
+    indisplay_id: () => templateSelections.indisplayId,
+    appearance_id: () => templateSelections.appearanceId,
+    function_ids: () => templateSelections.functionIds,
+    fix_ids: () => templateSelections.fixIds,
+    activation_lock: () => templateSelections.activationLock,
+    mdm_lock: () => templateSelections.mdmLock
+  }
+
+  const getFieldValue = (fieldKey: string) => {
+    const getter = builtInValueGetters[fieldKey as BuiltInFieldKey]
+    if (getter) return getter()
+    if (fieldKey === 'capacity') return deviceForm.capacity
+    if (fieldKey === 'color') return deviceForm.color
+    if (fieldKey === 'system_version') return deviceForm.system_version
+    if (fieldKey === 'warranty_info') return deviceForm.warranty_info
+    return templateSelections.customFields[fieldKey]
+  }
 
   // ==================== 字典映射 ====================
 
@@ -185,23 +225,20 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
   // ==================== 计数 ====================
 
   const checkedCount = computed(() => {
-    let count = 0
-    if (templateSelections.battery !== undefined) count++
-    if (templateSelections.battery_num !== undefined) count++
-    if (templateSelections.screenId) count++
-    if (templateSelections.indisplayId) count++
-    if (templateSelections.appearanceId) count++
-    count += templateSelections.functionIds.length
-    count += templateSelections.fixIds.length
-    Object.values(templateSelections.customFields).forEach((value) => {
-      if (!isEmptyValue(value)) count++
-    })
-    return count
+    const fieldMap = fieldConfigByKey?.value || {}
+    return Object.keys(fieldMap).filter(fieldKey => !isEmptyValue(getFieldValue(fieldKey))).length
   })
 
   // ==================== 构建 / 提交 ====================
 
   const buildCheckMeta = (): CheckMetaPayload => {
+    const fieldMap = fieldConfigByKey?.value || {}
+    const schemaFields: Record<string, any> = {}
+    Object.keys(fieldMap).forEach((fieldKey) => {
+      const value = getFieldValue(fieldKey)
+      if (!isEmptyValue(value)) schemaFields[fieldKey] = value
+    })
+
     return {
       version: 2,
       battery: toOptionalNumber(templateSelections.battery),
@@ -213,7 +250,10 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
       fix_ids: templateSelections.fixIds.map((item) => toStringValue(item)),
       activation_lock: !!templateSelections.activationLock,
       mdm_lock: !!templateSelections.mdmLock,
-      custom_fields: { ...templateSelections.customFields },
+      custom_fields: {
+        ...templateSelections.customFields,
+        ...schemaFields
+      },
       template_id: templateInfo?.value?.id,
       template_version: templateInfo?.value?.version
     }
@@ -240,7 +280,7 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
 
     const pushKnownResult = (fieldKey: string, value: any, labels: string[], fallback: string) => {
       const field = fieldMap[fieldKey]
-      if (field && Number(field.result_visible) !== 1) return
+      if (!field || Number(field.result_visible) !== 1) return
       if (field?.result_template) {
         const text = renderResultTemplate(field.result_template, value, labels, field)
         if (text) results.push(text)
@@ -496,8 +536,14 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
   const restoreFromDevice = (device: DeviceCheckMetaSource) => {
     const checkMeta = resolveCheckMeta(device)
     if (checkMeta) {
-      applyCheckMeta(checkMeta)
-      updateCheckResult()
+      if (!shouldRestoreMeta || shouldRestoreMeta(checkMeta)) {
+        applyCheckMeta(checkMeta)
+        updateCheckResult()
+      } else {
+        resetTemplateSelections()
+        deviceForm.check_result_seller = ''
+        deviceForm.info = getSubmitInfo()
+      }
       return
     }
 
@@ -513,66 +559,13 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     deviceForm.info = getSubmitInfo()
   }
 
-  // ==================== 单选/多选操作 ====================
-
-  const selectScreenOption = (option: string | number) => {
-    const optionId = toStringValue(option)
-    templateSelections.screenId = templateSelections.screenId === optionId ? '' : optionId
-    updateCheckResult()
-  }
-
-  const selectIndisplayOption = (option: string | number) => {
-    const optionId = toStringValue(option)
-    templateSelections.indisplayId = templateSelections.indisplayId === optionId ? '' : optionId
-    updateCheckResult()
-  }
-
-  const selectAppearanceOption = (option: string | number) => {
-    const optionId = toStringValue(option)
-    templateSelections.appearanceId = templateSelections.appearanceId === optionId ? '' : optionId
-    updateCheckResult()
-  }
-
-  const toggleFunctionOption = (option: string | number) => {
-    const optionId = toStringValue(option)
-    const index = templateSelections.functionIds.indexOf(optionId)
-    if (index > -1) {
-      templateSelections.functionIds.splice(index, 1)
-    } else {
-      templateSelections.functionIds.push(optionId)
-    }
-    updateCheckResult()
-  }
-
-  const toggleFixOption = (option: string | number) => {
-    const optionId = toStringValue(option)
-    const index = templateSelections.fixIds.indexOf(optionId)
-    if (index > -1) {
-      templateSelections.fixIds.splice(index, 1)
-    } else {
-      templateSelections.fixIds.push(optionId)
-    }
-    updateCheckResult()
-  }
-
-  const setCustomFieldValue = (fieldKey: string, value: any) => {
-    templateSelections.customFields[fieldKey] = value
-    updateCheckResult()
-  }
-
   return {
     templateSelections,
     checkedCount,
     optionNameById,
-    setCustomFieldValue,
     getSubmitInfo,
     updateCheckResult,
     clearAllSelections,
-    restoreFromDevice,
-    selectScreenOption,
-    selectIndisplayOption,
-    selectAppearanceOption,
-    toggleFunctionOption,
-    toggleFixOption
+    restoreFromDevice
   }
 }

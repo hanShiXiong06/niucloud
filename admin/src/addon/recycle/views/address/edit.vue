@@ -192,6 +192,47 @@ const initialFormData = {
 
 const formData: Record<string, any> = reactive({ ...initialFormData })
 
+const getAreaName = (list: any[], id: number | string) => {
+    const item = list.find((item) => String(item.id) === String(id))
+    return item?.name || ''
+}
+
+const appendAreaName = (names: string[], name: string) => {
+    if (name && names[names.length - 1] !== name) names.push(name)
+}
+
+const getSelectedAreaName = (type: 'province' | 'city' | 'district') => {
+    if (type === 'province') {
+        return provinceRef.value?.selectedLabel || getAreaName(areaList.province, formData.province_id)
+    }
+    if (type === 'city') {
+        return cityRef.value?.selectedLabel || getAreaName(areaList.city, formData.city_id)
+    }
+    return districtRef.value?.selectedLabel || getAreaName(areaList.district, formData.district_id)
+}
+
+const getSelectedAreaNames = () => {
+    const names: string[] = []
+    if (formData.province_id) appendAreaName(names, getSelectedAreaName('province'))
+    if (formData.city_id) appendAreaName(names, getSelectedAreaName('city'))
+    if (formData.district_id) appendAreaName(names, getSelectedAreaName('district'))
+    return names
+}
+
+const buildFullAddress = () => {
+    const areaNames = getSelectedAreaNames()
+    const areaAddress = areaNames.join('')
+    let detailAddress = String(formData.address || '').trim()
+
+    areaNames.forEach((name) => {
+        if (detailAddress.startsWith(name)) {
+            detailAddress = detailAddress.slice(name.length)
+        }
+    })
+
+    return `${areaAddress}${detailAddress}`
+}
+
 const setFormData = async (id: number = 0) => {
     loading.value = true
     Object.assign(formData, initialFormData)
@@ -323,18 +364,9 @@ watch(() => formData.district_id, (nval) => {
 
 const areaChange = debounce(() => {
     setTimeout(() => {
-        let province = areaList.province.map((item) => { if (item.id == formData.province_id) { return item.name } })
-        let city = areaList.city.map((item) => { if (item.id == formData.city_id) { return item.name } })
-        let district = areaList.district.map((item) => { if (item.id == formData.district_id) { return item.name } })
+        formData.full_address = buildFullAddress()
 
-        const address = [
-            formData.province_id ? (provinceRef.value.selectedLabel || province) : '',
-            formData.city_id ? (cityRef.value.selectedLabel || city) : '',
-            formData.district_id ? (districtRef.value.selectedLabel || district) : '',
-            formData.address
-        ]
-
-        addressToLatLng({ mapKey, address: address.join('') }).then(({ message, result }) => {
+        addressToLatLng({ mapKey, address: formData.full_address }).then(({ message, result }) => {
             if (message == 'Success' || message == 'query ok') {
                 const latLng = new (window as any).TMap.LatLng(result.location.lat, result.location.lng)
                 map.setCenter(latLng)
@@ -392,14 +424,10 @@ const onSave = async (formEl: FormInstance | undefined) => {
         if (valid) {
             loading.value = true
 
-            const data = formData
-            const address = [
-                data.province_id ? provinceRef.value.selectedLabel : '',
-                data.city_id ? cityRef.value.selectedLabel : '',
-                data.district_id ? districtRef.value.selectedLabel : '',
-                data.address
-            ]
-            data.full_address = address.join('')
+            const data = {
+                ...formData,
+                full_address: buildFullAddress()
+            }
 
             const save = id ? editShopAddress : addShopAddress
             save(data).then(res => {

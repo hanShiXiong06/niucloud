@@ -192,29 +192,60 @@
 
         <el-dialog v-model="fieldDialog.visible" :title="fieldDialog.form.id ? '编辑字段' : '新增字段'" width="720px">
             <el-form label-width="108px" :model="fieldDialog.form" class="field-form">
-                <el-form-item label="字段名称"><el-input v-model="fieldDialog.form.field_name" /></el-form-item>
-                <el-form-item label="字段标识"><el-input v-model="fieldDialog.form.field_key" placeholder="screen_id" /></el-form-item>
+                <el-form-item label="字段名称">
+                    <el-input v-model="fieldDialog.form.field_name" placeholder="例如：外屏规格、电池健康度" />
+                    <div class="form-tip">显示在质检弹窗中间的字段标题；勾选设备摘要后，也会作为左侧摘要标题展示。</div>
+                </el-form-item>
+                <el-form-item label="字段标识">
+                    <el-input v-model="fieldDialog.form.field_key" placeholder="例如：screen_id、battery" />
+                    <div class="form-tip">用于保存数据、恢复草稿和 API 回填的唯一标识。已上线字段不要随意改，否则历史质检数据无法自动对应。</div>
+                </el-form-item>
                 <el-form-item label="组件类型">
                     <el-select v-model="fieldDialog.form.component" class="w-full">
                         <el-option v-for="item in componentOptions" :key="item.value" :label="item.label" :value="item.value" />
                     </el-select>
+                    <div class="form-tip">决定质检时的填写方式：输入框适合文本，数字输入适合电池/次数，单选/多选/下拉需要维护下方选项。</div>
                 </el-form-item>
                 <el-form-item label="选择模式">
                     <el-select v-model="fieldDialog.form.selection_mode" clearable class="w-full">
                         <el-option label="单选" value="single" />
                         <el-option label="多选" value="multiple" />
                     </el-select>
+                    <div class="form-tip">用于表达业务含义。单选表示只能取一个结果，多选表示可以同时记录多个问题或状态。</div>
                 </el-form-item>
-                <el-form-item label="单位"><el-input v-model="fieldDialog.form.unit" placeholder="%, 次" /></el-form-item>
-                <el-form-item label="提示语"><el-input v-model="fieldDialog.form.placeholder" /></el-form-item>
-                <el-form-item label="结果文案"><el-input v-model="fieldDialog.form.result_template" placeholder="外屏{label} / 电池健康度{value}%" /></el-form-item>
-                <el-form-item label="排序"><el-input-number v-model="fieldDialog.form.sort" :min="0" /></el-form-item>
+                <el-form-item label="单位">
+                    <el-input v-model="fieldDialog.form.unit" placeholder="例如：%、次、GB" />
+                    <div class="form-tip">显示在字段旁边，也会参与质检结果表达；没有单位可以留空。</div>
+                </el-form-item>
+                <el-form-item label="提示语">
+                    <el-input v-model="fieldDialog.form.placeholder" placeholder="例如：请输入电池健康度" />
+                    <div class="form-tip">显示在输入框或选择框内部，引导质检人员填写正确内容。</div>
+                </el-form-item>
+                <el-form-item label="结果文案">
+                    <el-input v-model="fieldDialog.form.result_template" placeholder="例如：外屏{label} / 电池健康度{value}%" />
+                    <div class="form-tip">参与自动生成质检结果。可用 {label} 表示选项名称，{value} 表示填写值；不填写则按字段名称和结果自动拼接。</div>
+                </el-form-item>
+                <el-form-item label="排序">
+                    <el-input-number v-model="fieldDialog.form.sort" :min="0" />
+                    <div class="form-tip">数字越小越靠前，影响质检弹窗中间表单、设备摘要和选项展示顺序。</div>
+                </el-form-item>
                 <el-form-item label="开关">
                     <div class="inline-switches">
                         <el-checkbox v-model="fieldDialog.form.is_show" :true-label="1" :false-label="0">显示</el-checkbox>
                         <el-checkbox v-model="fieldDialog.form.is_required" :true-label="1" :false-label="0">必填</el-checkbox>
                         <el-checkbox v-model="fieldDialog.form.result_visible" :true-label="1" :false-label="0">参与文案</el-checkbox>
                         <el-checkbox v-model="fieldDialog.form.api_fill_enabled" :true-label="1" :false-label="0">API回填</el-checkbox>
+                        <el-checkbox
+                            v-model="fieldDialog.form.extra_config.summary_visible"
+                            :true-label="1"
+                            :false-label="0"
+                            @change="handleSummaryVisibleChange"
+                        >设备摘要</el-checkbox>
+                    </div>
+                    <div class="form-tip">
+                        显示：控制质检弹窗是否出现这个字段；必填：提交质检时必须填写；
+                        参与文案：会进入卖家/买家质检结果；API回填：允许第三方查询结果自动写入；
+                        设备摘要：显示在左侧设备摘要中，最多可配置 5 个。
                     </div>
                 </el-form-item>
             </el-form>
@@ -241,7 +272,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     addCheckTemplate,
     deleteCheckField,
@@ -287,14 +318,56 @@ const optionDialog = reactive({ visible: false, form: {} as any })
 
 const currentFieldOptions = computed(() => currentField.value?.options || [])
 
+const normalizeExtraConfig = (config: any) => {
+    if (!config) return {}
+    if (typeof config === 'string') {
+        try {
+            const parsed = JSON.parse(config)
+            return parsed && typeof parsed === 'object' ? parsed : {}
+        } catch (error) {
+            return {}
+        }
+    }
+    return typeof config === 'object' ? { ...config } : {}
+}
+
+const normalizeFieldForm = (field: any) => ({
+    ...field,
+    extra_config: {
+        summary_visible: 0,
+        ...normalizeExtraConfig(field?.extra_config)
+    }
+})
+
+const selectedSummaryFieldCount = computed(() => {
+    return fields.value.filter((field: any) => {
+        const config = normalizeExtraConfig(field.extra_config)
+        const isCurrentField = fieldDialog.form?.id && String(field.id) === String(fieldDialog.form.id)
+        return !isCurrentField && Number(config.summary_visible || 0) === 1
+    }).length
+})
+
 const loadTemplates = async () => {
     templateLoading.value = true
     try {
+        const currentId = currentTemplate.value?.id
         const res: any = await getCheckTemplatePages({ ...templateQuery, page: 1, limit: 100 })
         templates.value = res.data.data || []
-        if (!currentTemplate.value && templates.value.length) {
-            await selectTemplate(templates.value[0])
+        if (!templates.value.length) {
+            currentTemplate.value = null
+            groups.value = []
+            fields.value = []
+            currentGroup.value = null
+            currentField.value = null
+            return
         }
+
+        const currentMatch = templates.value.find((item: any) => String(item.id) === String(currentId))
+        const defaultTemplate = templates.value.find((item: any) => Number(item.is_default) === 1 && Number(item.status) === 1)
+        const nextTemplate = currentTemplate.value
+            ? (currentMatch || defaultTemplate || templates.value[0])
+            : (defaultTemplate || templates.value[0])
+        await selectTemplate(nextTemplate)
     } finally {
         templateLoading.value = false
     }
@@ -334,7 +407,7 @@ const loadFields = async (preferredFieldId: number | string = currentField.value
     fieldLoading.value = true
     try {
         const res: any = await getCheckFields({ template_id: currentTemplate.value.id, group_id: currentGroup.value.id })
-        fields.value = res.data || []
+        fields.value = (res.data || []).map(normalizeFieldForm)
         currentField.value = fields.value.find((item: any) => String(item.id) === String(preferredFieldId)) || fields.value[0] || null
     } finally {
         fieldLoading.value = false
@@ -357,12 +430,15 @@ const openTemplateDialog = (row: any = null) => {
 }
 
 const submitTemplate = async () => {
+    let savedId = templateDialog.form.id || 0
     if (templateDialog.form.id) {
         await editCheckTemplate(templateDialog.form.id, templateDialog.form)
     } else {
-        await addCheckTemplate(templateDialog.form)
+        const res: any = await addCheckTemplate(templateDialog.form)
+        savedId = res.data?.id || 0
     }
     templateDialog.visible = false
+    currentTemplate.value = templateDialog.form.is_default ? null : (savedId ? { id: savedId } : currentTemplate.value)
     await loadTemplates()
 }
 
@@ -370,6 +446,7 @@ const handleTemplateCommand = async (cmd: string, row: any) => {
     if (cmd === 'edit') return openTemplateDialog(row)
     if (cmd === 'default') {
         await setDefaultCheckTemplate(row.id)
+        currentTemplate.value = null
         await loadTemplates()
         return
     }
@@ -405,7 +482,7 @@ const removeGroup = async (row: any) => {
 
 const openFieldDialog = (row: any = null) => {
     if (!currentTemplate.value || !currentGroup.value) return
-    fieldDialog.form = row ? { ...row } : {
+    fieldDialog.form = row ? normalizeFieldForm(row) : normalizeFieldForm({
         template_id: currentTemplate.value.id,
         group_id: currentGroup.value.id,
         field_name: '',
@@ -425,8 +502,15 @@ const openFieldDialog = (row: any = null) => {
         api_fill_policy: 'empty_only',
         sort: 0,
         extra_config: {}
-    }
+    })
     fieldDialog.visible = true
+}
+
+const handleSummaryVisibleChange = (value: any) => {
+    if (Number(value) !== 1) return
+    if (selectedSummaryFieldCount.value < 5) return
+    fieldDialog.form.extra_config.summary_visible = 0
+    ElMessage.warning('设备摘要最多展示 5 个字段')
 }
 
 const submitField = async () => {
@@ -511,6 +595,18 @@ onMounted(loadTemplates)
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+.inline-switches {
+    flex-wrap: wrap;
+}
+
+.form-tip {
+    width: 100%;
+    margin-top: 6px;
+    color: #909399;
+    font-size: 12px;
+    line-height: 1.5;
 }
 
 .workspace {

@@ -44,15 +44,84 @@
       </header>
 
       <el-form ref="formRef" :model="deviceForm" :rules="rules" label-position="top" class="cdd-main-form">
-        <div class="cdd-main">
+        <div v-if="isMobile" class="cdd-mobile-main">
+          <section class="cdd-panel cdd-summary-panel">
+            <div class="cdd-panel__title">设备摘要</div>
+            <div class="cdd-summary-list">
+              <div v-for="field in deviceSummaryFields" :key="field.field_key">
+                <span>{{ field.field_name }}</span>
+                <strong>{{ formatSummaryFieldValue(field) }}</strong>
+              </div>
+              <div v-if="!deviceSummaryFields.length" class="cdd-summary-empty">未配置摘要字段</div>
+            </div>
+          </section>
+
+          <section class="cdd-panel">
+            <div class="cdd-panel__title">联网查询</div>
+            <div class="cdd-query-stack">
+              <el-button v-for="action in visibleDeviceQueryActions" :key="action.code" plain :loading="isQueryActionLoading(action.code)" :disabled="!deviceForm.imei" @click="runDeviceQueryAction(action)">
+                <el-icon v-if="!isQueryActionLoading(action.code)"><component :is="getQueryActionIcon(action.result_handler)" /></el-icon>
+                {{ isQueryActionLoading(action.code) ? '查询中...' : action.name }}
+              </el-button>
+              <div v-if="visibleDeviceQueryActions.length === 0" class="cdd-muted">暂无可用查询服务</div>
+            </div>
+          </section>
+
+          <section class="cdd-panel">
+            <div class="cdd-panel__title">快捷操作</div>
+            <div class="cdd-action-stack">
+              <el-button type="danger" plain @click="clearAllSelections">清空选项</el-button>
+            </div>
+          </section>
+
+          <CheckTemplateMobilePanel
+            :groups="checkTemplateGroups"
+            :get-value="getTemplateFieldValue"
+            :get-options="getTemplateFieldOptions"
+            @change="handleTemplateFieldChange"
+          />
+
+          <section class="cdd-panel cdd-result-panel">
+            <div class="cdd-panel__title">卖家质检结果</div>
+            <el-form-item prop="check_result_seller" class="cdd-result-field"><el-input v-model="deviceForm.check_result_seller" type="textarea" :rows="6" placeholder="由质检选项自动生成，也可手动编辑..." maxlength="500" show-word-limit resize="none" /></el-form-item>
+          </section>
+
+          <section class="cdd-panel cdd-result-panel">
+            <div class="cdd-panel__title"><span>买家质检结果</span><el-button type="primary" link size="small" @click="syncSellerResultToBuyer"><el-icon><CopyDocument /></el-icon> 同步</el-button></div>
+            <el-form-item prop="check_result_buyer" class="cdd-result-field"><el-input v-model="deviceForm.check_result_buyer" type="textarea" :rows="5" placeholder="可同步卖家内容后单独调整..." maxlength="500" show-word-limit resize="none" /></el-form-item>
+          </section>
+
+          <section class="cdd-panel cdd-price-panel">
+            <div class="cdd-panel__title">定价</div>
+            <el-form-item prop="final_price" class="cdd-price-field">
+              <template #label><span>回收定价 <em v-if="deviceData.initial_price">参考 ¥{{ deviceData.initial_price }}</em></span></template>
+              <el-input-number v-model="deviceForm.final_price" :step="10" :precision="2" :min="0" :max="99999" controls-position="right" class="cdd-price-input" />
+            </el-form-item>
+            <el-form-item label="扣费说明" prop="remark" class="cdd-remark-field"><el-input v-model="deviceForm.remark" placeholder="扣费原因、特殊备注..." maxlength="200" clearable /></el-form-item>
+          </section>
+
+          <section class="cdd-panel cdd-upload-panel">
+            <el-collapse>
+              <el-collapse-item>
+                <template #title><span class="cdd-upload-title">质检图片  卖家 {{ checkImageCount }}/{{ maxCheckImageCount }}  买家 {{ buyerCheckImageCount }}/{{ buyerMaxCheckImageCount }}</span></template>
+                <div class="cdd-camera-row"><el-button type="primary" plain size="small" :loading="cameraUploading" :disabled="cameraUploading || checkImageCount >= maxCheckImageCount" @click="openCameraCapture">{{ cameraUploading ? '上传中...' : '拍照上传' }}</el-button><input ref="cameraInputRef" type="file" accept="image/*" capture="environment" multiple class="hidden" @change="handleCameraFilesChange" /></div>
+                <div class="cdd-upload-block"><div class="cdd-upload-label">卖家图片</div><upload-image v-model="deviceForm.check_images" :limit="9" /></div>
+                <div class="cdd-upload-block"><div class="cdd-upload-label">买家图片 <el-button type="primary" link size="small" @click="syncSellerImagesToBuyer">同步卖家</el-button></div><div class="cdd-camera-row"><el-button type="primary" plain size="small" :loading="buyerCameraUploading" :disabled="buyerCameraUploading || buyerCheckImageCount >= buyerMaxCheckImageCount" @click="openBuyerCameraCapture">{{ buyerCameraUploading ? '上传中...' : '拍照上传' }}</el-button><input ref="buyerCameraInputRef" type="file" accept="image/*" capture="environment" multiple class="hidden" @change="handleBuyerCameraFilesChange" /></div><upload-image v-model="deviceForm.check_images_buyer" :limit="6" /></div>
+              </el-collapse-item>
+            </el-collapse>
+          </section>
+        </div>
+
+        <div v-else class="cdd-main">
           <aside class="cdd-side cdd-side--left">
             <div class="cdd-panel cdd-summary-panel">
               <div class="cdd-panel__title">设备摘要</div>
               <div class="cdd-summary-list">
-                <div><span>容量</span><strong>{{ deviceForm.capacity || '-' }}</strong></div>
-                <div><span>颜色</span><strong>{{ deviceForm.color || '-' }}</strong></div>
-                <div><span>系统</span><strong>{{ deviceForm.system_version || '-' }}</strong></div>
-                <div><span>保修</span><strong>{{ deviceForm.warranty_info || '-' }}</strong></div>
+                <div v-for="field in deviceSummaryFields" :key="field.field_key">
+                  <span>{{ field.field_name }}</span>
+                  <strong>{{ formatSummaryFieldValue(field) }}</strong>
+                </div>
+                <div v-if="!deviceSummaryFields.length" class="cdd-summary-empty">未配置摘要字段</div>
               </div>
             </div>
 
@@ -83,84 +152,12 @@
             </div>
           </aside>
 
-          <section class="cdd-center">
-            <div class="cdd-anchor-bar">
-              <button type="button" @click.prevent.stop="scrollToCheckSection('cdd-device-info')">{{ groupLabel('device_info', '设备信息') }}</button>
-              <button type="button" @click.prevent.stop="scrollToCheckSection('cdd-appearance')">{{ groupLabel('appearance', '外观规格') }}</button>
-              <button type="button" @click.prevent.stop="scrollToCheckSection('cdd-issues')">{{ groupLabel('issues', '问题记录') }}</button>
-              <button v-if="customCheckGroups.length" type="button" @click.prevent.stop="scrollToCheckSection('cdd-custom')">自定义</button>
-            </div>
-
-            <div ref="centerScrollRef" class="cdd-center-scroll" @click.stop>
-              <section id="cdd-device-info" class="cdd-section cdd-work-section">
-                <div class="cdd-section-title">{{ groupLabel('device_info', '设备信息') }}</div>
-                <div class="cdd-info-grid">
-                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('capacity', '内存') }}</span><el-input v-model="deviceForm.capacity" size="small" :placeholder="fieldPlaceholder('capacity', '如 256GB')" @change="updateCheckResult" /></div>
-                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('color', '颜色') }}</span><el-input v-model="deviceForm.color" size="small" :placeholder="fieldPlaceholder('color', '如 深空黑色')" @change="updateCheckResult" /></div>
-                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('system_version', '系统版本') }}</span><el-input v-model="deviceForm.system_version" size="small" :placeholder="fieldPlaceholder('system_version', '如 iOS 17.3.1')" @change="updateCheckResult" /></div>
-                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('warranty_info', '保修信息') }}</span><el-input v-model="deviceForm.warranty_info" size="small" :placeholder="fieldPlaceholder('warranty_info', '保修日期/过保/未激活')" @change="updateCheckResult" /></div>
-                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('battery', '电池健康度') }}</span><div class="cdd-inline-control"><el-input-number v-model="templateSelections.battery" :min="0" :max="100" :step="1" size="small" controls-position="right" @change="updateCheckResult" /><span>{{ fieldUnit('battery', '%') }}</span></div></div>
-                  <div class="cdd-info-cell"><span class="cdd-info-cell__label">{{ fieldLabel('battery_num', '循环次数') }}</span><div class="cdd-inline-control"><el-input v-model="templateSelections.battery_num" type="number" size="small" @change="updateCheckResult" /><span>{{ fieldUnit('battery_num', '次') }}</span></div></div>
-                  <div class="cdd-info-cell cdd-info-cell--switch"><span class="cdd-info-cell__label">{{ fieldLabel('activation_lock', '激活锁') }}</span><el-switch v-model="templateSelections.activationLock" active-text="已开" inactive-text="未开" size="small" style="--el-switch-on-color:#ef4444;--el-switch-off-color:#22c55e" @change="updateCheckResult" /></div>
-                  <div class="cdd-info-cell cdd-info-cell--switch"><span class="cdd-info-cell__label">{{ fieldLabel('mdm_lock', '监管锁') }}</span><el-switch v-model="templateSelections.mdmLock" active-text="已开" inactive-text="未开" size="small" style="--el-switch-on-color:#ef4444;--el-switch-off-color:#22c55e" @change="updateCheckResult" /></div>
-                </div>
-              </section>
-
-              <section id="cdd-appearance" class="cdd-section cdd-work-section">
-                <div class="cdd-section-title"><span>{{ groupLabel('appearance', '外观规格') }}</span><em>已选 {{ [templateSelections.screenId, templateSelections.indisplayId, templateSelections.appearanceId].filter(Boolean).length }}/3</em></div>
-                <div class="cdd-sub-cols cdd-sub-cols--3">
-                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.screenId }">
-                    <div class="cdd-sub-header">{{ fieldLabel('screen_id', '外屏规格') }}</div>
-                    <div class="cdd-tag-grid"><el-tag v-for="opt in checkDictOptions.screen" :key="opt.value" :type="templateSelections.screenId === String(opt.value) ? 'primary' : undefined" :effect="templateSelections.screenId === String(opt.value) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="selectScreenOption(opt.value)">{{ opt.name }}</el-tag></div>
-                  </div>
-                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.indisplayId }">
-                    <div class="cdd-sub-header">{{ fieldLabel('indisplay_id', '内屏规格') }}</div>
-                    <div class="cdd-tag-grid"><el-tag v-for="opt in checkDictOptions.indisplay" :key="opt.value" :type="templateSelections.indisplayId === String(opt.value) ? 'primary' : undefined" :effect="templateSelections.indisplayId === String(opt.value) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="selectIndisplayOption(opt.value)">{{ opt.name }}</el-tag></div>
-                  </div>
-                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': !!templateSelections.appearanceId }">
-                    <div class="cdd-sub-header">{{ fieldLabel('appearance_id', '中框规格') }}</div>
-                    <div class="cdd-tag-grid"><el-tag v-for="opt in checkDictOptions.appearance" :key="opt.value" :type="templateSelections.appearanceId === String(opt.value) ? 'primary' : undefined" :effect="templateSelections.appearanceId === String(opt.value) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="selectAppearanceOption(opt.value)">{{ opt.name }}</el-tag></div>
-                  </div>
-                </div>
-              </section>
-
-              <section id="cdd-issues" class="cdd-section cdd-work-section">
-                <div class="cdd-section-title"><span>{{ groupLabel('issues', '问题记录') }}</span><em>已选 {{ templateSelections.functionIds.length + templateSelections.fixIds.length }} 项</em></div>
-                <div class="cdd-sub-cols cdd-sub-cols--2">
-                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': templateSelections.functionIds.length > 0 }">
-                    <div class="cdd-sub-header">{{ fieldLabel('function_ids', '功能') }} <em v-if="templateSelections.functionIds.length">{{ templateSelections.functionIds.length }} 项</em></div>
-                    <div class="cdd-tag-grid cdd-tag-grid--scroll"><el-tag v-for="opt in checkDictOptions.function" :key="opt.value" :type="templateSelections.functionIds.includes(String(opt.value)) ? 'danger' : undefined" :effect="templateSelections.functionIds.includes(String(opt.value)) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="toggleFunctionOption(opt.value)">{{ opt.name }}</el-tag></div>
-                  </div>
-                  <div class="cdd-sub-section" :class="{ 'cdd-sub-section--done': templateSelections.fixIds.length > 0 }">
-                    <div class="cdd-sub-header">{{ fieldLabel('fix_ids', '维修记录') }} <em v-if="templateSelections.fixIds.length">{{ templateSelections.fixIds.length }} 项</em></div>
-                    <div class="cdd-tag-grid cdd-tag-grid--scroll"><el-tag v-for="opt in checkDictOptions.fix" :key="opt.value" :type="templateSelections.fixIds.includes(String(opt.value)) ? 'warning' : undefined" :effect="templateSelections.fixIds.includes(String(opt.value)) ? 'dark' : 'plain'" size="small" class="cdd-check-tag" @click="toggleFixOption(opt.value)">{{ opt.name }}</el-tag></div>
-                  </div>
-                </div>
-              </section>
-
-              <section v-if="customCheckGroups.length" id="cdd-custom" class="cdd-section cdd-work-section">
-                <div class="cdd-section-title">自定义质检项</div>
-                <div class="cdd-custom-groups">
-                  <div v-for="group in customCheckGroups" :key="group.id || group.group_key" class="cdd-custom-group">
-                    <div class="cdd-sub-header">{{ group.group_name }}</div>
-                    <div class="cdd-custom-grid">
-                      <div v-for="field in group.fields" :key="field.field_key" class="cdd-custom-field">
-                        <div class="cdd-custom-field__label">{{ field.field_name }}<span v-if="field.unit" class="cdd-custom-field__unit">{{ field.unit }}</span></div>
-                        <el-input v-if="field.component === 'input'" :model-value="templateSelections.customFields[field.field_key]" :placeholder="field.placeholder" size="small" clearable @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
-                        <el-input v-else-if="field.component === 'textarea'" :model-value="templateSelections.customFields[field.field_key]" :placeholder="field.placeholder" type="textarea" :rows="2" resize="none" @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
-                        <el-input-number v-else-if="field.component === 'number'" :model-value="templateSelections.customFields[field.field_key]" :min="0" controls-position="right" size="small" class="cdd-custom-field__number" @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
-                        <el-switch v-else-if="field.component === 'switch'" :model-value="!!templateSelections.customFields[field.field_key]" active-text="是" inactive-text="否" size="small" @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
-                        <el-select v-else-if="field.component === 'select'" :model-value="templateSelections.customFields[field.field_key]" :placeholder="field.placeholder || '请选择'" size="small" clearable class="cdd-custom-field__select" @update:model-value="value => setCustomFieldValue(field.field_key, value)"><el-option v-for="option in field.options || []" :key="option.value" :label="option.name || option.label" :value="String(option.value)" /></el-select>
-                        <el-radio-group v-else-if="field.component === 'radio'" :model-value="templateSelections.customFields[field.field_key]" size="small" @update:model-value="value => setCustomFieldValue(field.field_key, value)"><el-radio-button v-for="option in field.options || []" :key="option.value" :label="String(option.value)">{{ option.name || option.label }}</el-radio-button></el-radio-group>
-                        <el-checkbox-group v-else-if="field.component === 'checkbox'" :model-value="templateSelections.customFields[field.field_key] || []" size="small" @update:model-value="value => setCustomFieldValue(field.field_key, value)"><el-checkbox-button v-for="option in field.options || []" :key="option.value" :label="String(option.value)">{{ option.name || option.label }}</el-checkbox-button></el-checkbox-group>
-                        <el-input v-else :model-value="templateSelections.customFields[field.field_key]" :placeholder="field.placeholder" size="small" clearable @update:model-value="value => setCustomFieldValue(field.field_key, value)" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
-          </section>
+          <CheckTemplateSchemaPanel
+            :groups="checkTemplateGroups"
+            :get-value="getTemplateFieldValue"
+            :get-options="getTemplateFieldOptions"
+            @change="handleTemplateFieldChange"
+          />
 
           <aside class="cdd-side cdd-side--right">
             <div class="cdd-right-scroll">
@@ -231,6 +228,8 @@ import {
   type CheckTemplateField
 } from './composables/useCheckMeta'
 import { useCameraUpload } from './composables/useCameraUpload'
+import CheckTemplateSchemaPanel from './CheckTemplateSchemaPanel.vue'
+import CheckTemplateMobilePanel from './CheckTemplateMobilePanel.vue'
 
 interface DeviceInfo {
   id?: string | number
@@ -255,24 +254,41 @@ interface DeviceInfo {
 
 const props = defineProps<{ visible: boolean; device: DeviceInfo }>()
 
-const emit = defineEmits<{
-  'update:visible': [value: boolean]
-  'confirm': [data: any]
-  'cancel': []
-  'save-draft': [data: any]
-}>()
+const emit = defineEmits(['update:visible', 'confirm', 'cancel', 'save-draft'])
 
 const dictOptions = useCheckDeviceDict()
 const checkSchemaLoading = ref(false)
 const checkTemplateInfo = ref<any>(null)
 const checkTemplateGroups = ref<any[]>([])
-const knownCheckFieldKeys = ['capacity', 'color', 'system_version', 'warranty_info', 'battery', 'battery_num', 'activation_lock', 'mdm_lock', 'screen_id', 'indisplay_id', 'appearance_id', 'function_ids', 'fix_ids']
-const schemaFieldKeyMap: Record<string, keyof CheckOptionsGroup> = {
+const knownFieldOptionKeys = ['screen_id', 'indisplay_id', 'appearance_id', 'function_ids', 'fix_ids'] as const
+type KnownFieldOptionKey = typeof knownFieldOptionKeys[number]
+type KnownOptionBucket = 'screen' | 'indisplay' | 'appearance' | 'function' | 'fix'
+
+const schemaFieldKeyMap: Record<KnownFieldOptionKey, KnownOptionBucket> = {
   screen_id: 'screen',
   indisplay_id: 'indisplay',
   appearance_id: 'appearance',
   function_ids: 'function',
   fix_ids: 'fix'
+}
+
+const builtInFieldAccessors: Record<string, {
+  get: () => any
+  set: (value: any) => void
+}> = {
+  capacity: { get: () => deviceForm.capacity, set: value => { deviceForm.capacity = value || '' } },
+  color: { get: () => deviceForm.color, set: value => { deviceForm.color = value || '' } },
+  system_version: { get: () => deviceForm.system_version, set: value => { deviceForm.system_version = value || '' } },
+  warranty_info: { get: () => deviceForm.warranty_info, set: value => { deviceForm.warranty_info = value || '' } },
+  battery: { get: () => templateSelections.battery, set: value => { templateSelections.battery = normalizeOptionalNumber(value) } },
+  battery_num: { get: () => templateSelections.battery_num, set: value => { templateSelections.battery_num = normalizeOptionalNumber(value) } },
+  activation_lock: { get: () => templateSelections.activationLock, set: value => { templateSelections.activationLock = !!value } },
+  mdm_lock: { get: () => templateSelections.mdmLock, set: value => { templateSelections.mdmLock = !!value } },
+  screen_id: { get: () => templateSelections.screenId, set: value => { templateSelections.screenId = normalizeStringValue(value) } },
+  indisplay_id: { get: () => templateSelections.indisplayId, set: value => { templateSelections.indisplayId = normalizeStringValue(value) } },
+  appearance_id: { get: () => templateSelections.appearanceId, set: value => { templateSelections.appearanceId = normalizeStringValue(value) } },
+  function_ids: { get: () => templateSelections.functionIds, set: value => { templateSelections.functionIds = normalizeStringArray(value) } },
+  fix_ids: { get: () => templateSelections.fixIds, set: value => { templateSelections.fixIds = normalizeStringArray(value) } }
 }
 
 const normalizeSchemaOption = (option: any) => ({
@@ -296,12 +312,44 @@ const fieldConfigByKey = computed<Record<string, CheckTemplateField>>(() => {
   return map
 })
 
-const groupConfigByKey = computed<Record<string, any>>(() => {
-  const map: Record<string, any> = {}
-  checkTemplateGroups.value.forEach((group: any) => {
-    map[group.group_key] = group
-  })
-  return map
+const checkTemplateFields = computed<CheckTemplateField[]>(() => {
+  return checkTemplateGroups.value.flatMap((group: any) => group.fields || [])
+})
+
+const getFieldExtraConfig = (field: CheckTemplateField) => {
+  const config = (field as any).extra_config
+  if (!config) return {}
+  if (typeof config === 'string') {
+    try {
+      const parsed = JSON.parse(config)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (error) {
+      return {}
+    }
+  }
+  return typeof config === 'object' ? config : {}
+}
+
+const isSummaryField = (field: CheckTemplateField) => {
+  const config = getFieldExtraConfig(field)
+  return Number(config.summary_visible || config.show_in_summary || 0) === 1
+}
+
+const fallbackSummaryKeys = ['capacity', 'color', 'system_version', 'warranty_info']
+
+const deviceSummaryFields = computed<CheckTemplateField[]>(() => {
+  const visibleFields = checkTemplateFields.value.filter(field => Number((field as any).is_show ?? 1) === 1)
+  const configuredFields = visibleFields
+    .filter(isSummaryField)
+    .sort((a: any, b: any) => Number(a.sort || 0) - Number(b.sort || 0))
+    .slice(0, 5)
+
+  if (configuredFields.length) return configuredFields
+
+  return fallbackSummaryKeys
+    .map(key => fieldConfigByKey.value[key])
+    .filter(Boolean)
+    .slice(0, 5)
 })
 
 const checkDictOptions = computed<CheckOptionsGroup>(() => {
@@ -315,14 +363,59 @@ const checkDictOptions = computed<CheckOptionsGroup>(() => {
   return options
 })
 
-const customCheckGroups = computed(() => {
-  return checkTemplateGroups.value
-    .map((group: any) => ({
-      ...group,
-      fields: (group.fields || []).filter((field: any) => !knownCheckFieldKeys.includes(field.field_key))
-    }))
-    .filter((group: any) => group.fields.length)
-})
+const normalizeOptionalNumber = (value: any): number | undefined => {
+  if (value === '' || value === null || value === undefined) return undefined
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? undefined : parsed
+}
+
+const normalizeStringValue = (value: any): string => {
+  if (value === null || value === undefined) return ''
+  return String(value)
+}
+
+const normalizeStringArray = (value: any): string[] => {
+  if (!Array.isArray(value)) return []
+  return value.map(item => normalizeStringValue(item)).filter(Boolean)
+}
+
+const getTemplateFieldValue = (field: CheckTemplateField) => {
+  return builtInFieldAccessors[field.field_key]?.get() ?? templateSelections.customFields[field.field_key]
+}
+
+const getTemplateFieldOptions = (field: CheckTemplateField) => {
+  const optionKey = schemaFieldKeyMap[field.field_key as KnownFieldOptionKey]
+  if (optionKey && checkDictOptions.value[optionKey]?.length) return checkDictOptions.value[optionKey]
+  return field.options || []
+}
+
+const formatSummaryFieldValue = (field: CheckTemplateField) => {
+  const value = getTemplateFieldValue(field)
+  if (value === '' || value === null || value === undefined || (Array.isArray(value) && !value.length)) return '-'
+
+  const options = getTemplateFieldOptions(field)
+  if (options.length) {
+    const labelMap = new Map(options.map((option: any) => [String(option.value), option.name || option.label || option.value]))
+    if (Array.isArray(value)) {
+      const labels = value.map(item => labelMap.get(String(item)) || String(item)).filter(Boolean)
+      return labels.length ? labels.join('、') : '-'
+    }
+    return labelMap.get(String(value)) || String(value)
+  }
+
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  return String(value)
+}
+
+const handleTemplateFieldChange = (field: CheckTemplateField, value: any) => {
+  const accessor = builtInFieldAccessors[field.field_key]
+  if (accessor) {
+    accessor.set(value)
+  } else {
+    templateSelections.customFields[field.field_key] = value
+  }
+  updateCheckResult()
+}
 
 const dialogVisible = ref(props.visible)
 const deviceData = ref<DeviceInfo>({ ...props.device })
@@ -331,7 +424,6 @@ const savingDraft = ref(false)
 const formRef = ref<FormInstance>()
 const imeiInputRef = ref()
 const modelInputRef = ref()
-const centerScrollRef = ref<HTMLElement | null>(null)
 const isEditingDeviceInfo = ref(false)
 const isMobile = ref(false)
 
@@ -381,15 +473,16 @@ const rules = reactive<FormRules>({
 const {
   templateSelections, checkedCount, getSubmitInfo,
   updateCheckResult, clearAllSelections,
-  restoreFromDevice,
-  setCustomFieldValue,
-  selectScreenOption, selectIndisplayOption, selectAppearanceOption,
-  toggleFunctionOption, toggleFixOption
+  restoreFromDevice
 } = useCheckMeta({
   dictOptions: checkDictOptions,
   deviceForm,
   fieldConfigByKey,
-  templateInfo: computed(() => checkTemplateInfo.value)
+  templateInfo: computed(() => checkTemplateInfo.value),
+  shouldRestoreMeta: (meta) => {
+    const currentTemplateId = checkTemplateInfo.value?.id
+    return !meta.template_id || !currentTemplateId || String(meta.template_id) === String(currentTemplateId)
+  }
 })
 
 const {
@@ -415,12 +508,12 @@ function parsePrice(value: any): number | undefined {
   return undefined
 }
 
-const updateDeviceMode = () => { isMobile.value = window.innerWidth <= 768 }
+const updateDeviceMode = () => { isMobile.value = window.innerWidth <= 980 }
 
 const loadCheckTemplateSchema = async () => {
   checkSchemaLoading.value = true
   try {
-    const res: any = await getCheckTemplateSchema({ scene: 'phone' })
+    const res: any = await getCheckTemplateSchema()
     const payload = res.data || {}
     checkTemplateInfo.value = payload.template || null
     checkTemplateGroups.value = payload.groups || []
@@ -431,22 +524,6 @@ const loadCheckTemplateSchema = async () => {
   } finally {
     checkSchemaLoading.value = false
   }
-}
-
-const fieldLabel = (fieldKey: string, fallback: string) => {
-  return fieldConfigByKey.value[fieldKey]?.field_name || fallback
-}
-
-const fieldPlaceholder = (fieldKey: string, fallback: string) => {
-  return fieldConfigByKey.value[fieldKey]?.placeholder || fallback
-}
-
-const fieldUnit = (fieldKey: string, fallback: string) => {
-  return fieldConfigByKey.value[fieldKey]?.unit || fallback
-}
-
-const groupLabel = (groupKey: string, fallback: string) => {
-  return groupConfigByKey.value[groupKey]?.group_name || fallback
 }
 
 const loadDeviceQueryActions = async () => {
@@ -615,14 +692,6 @@ const focusImeiInput = () => {
   imeiInputRef.value?.focus()
 }
 
-const scrollToCheckSection = (sectionId: string) => {
-  const scrollEl = centerScrollRef.value
-  const target = document.getElementById(sectionId)
-  if (!scrollEl || !target) return
-  const offset = target.offsetTop - scrollEl.offsetTop
-  scrollEl.scrollTo({ top: Math.max(offset - 8, 0), behavior: 'smooth' })
-}
-
 // 从接口返回数据中兼容提取 capacity / color / model
 const parseCoverageFields = (d: any) => {
   // capacity / color：安卓品牌放在 product 子对象，苹果直接在顶层
@@ -734,7 +803,12 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
 
 watch(() => props.visible, (val) => { dialogVisible.value = val })
 watch(() => props.device, (val) => { initializeFormFromDevice(val) }, { deep: true })
-watch(dialogVisible, (val) => { emit('update:visible', val) })
+watch(dialogVisible, async (val) => {
+  emit('update:visible', val)
+  if (!val) return
+  initializeFormFromDevice(props.device)
+  await loadCheckTemplateSchema()
+})
 watch(
   () => [
     checkDictOptions.value.screen, checkDictOptions.value.indisplay,
@@ -752,7 +826,7 @@ onMounted(async () => {
   window.addEventListener('resize', updateDeviceMode)
   initializeFormFromDevice(props.device)
   await dictOptions.loadDictionary()
-  await loadCheckTemplateSchema()
+  if (dialogVisible.value) await loadCheckTemplateSchema()
   await loadDeviceQueryActions()
 })
 onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) })
@@ -1828,7 +1902,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
 /* ============================================================
    响应式
    ============================================================ */
-@media (max-width: 768px) {
+@media (max-width: 980px) {
   .check-device-dialog {
     :deep(.el-dialog) {
       width: 96vw !important;
@@ -1957,6 +2031,1270 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
         margin-left: 0;
       }
     }
+  }
+}
+
+/* ============================================================
+   质检工作台统一样式
+   放在样式末尾作为最终规范层，覆盖上方历史样式差异。
+   ============================================================ */
+$cdd-border: #e5e7eb;
+$cdd-soft-border: #eef2f7;
+$cdd-text: #111827;
+$cdd-text-secondary: #4b5563;
+$cdd-text-muted: #94a3b8;
+$cdd-bg: #f5f7fa;
+$cdd-panel-bg: #ffffff;
+$cdd-primary: #2563eb;
+$cdd-success: #16a34a;
+$cdd-danger: #dc2626;
+$cdd-warning: #d97706;
+
+.check-device-dialog.cdd-workbench-dialog {
+  :deep(.el-dialog) {
+    width: min(1240px, 96vw);
+    height: min(90vh, 860px);
+    max-height: 860px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 10px;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  }
+
+  :deep(.el-dialog__header) {
+    flex: 0 0 auto;
+    padding: 12px 18px;
+    background: $cdd-panel-bg;
+    border-bottom: 1px solid $cdd-border;
+
+    .el-dialog__title {
+      color: $cdd-text;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+  }
+
+  :deep(.el-dialog__headerbtn) {
+    top: 11px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+
+    .el-dialog__close {
+      color: #6b7280;
+      font-size: 17px;
+
+      &:hover {
+        color: $cdd-text;
+      }
+    }
+  }
+
+  :deep(.el-dialog__body) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: block;
+    padding: 0;
+    overflow: hidden;
+    background: $cdd-bg;
+  }
+
+  :deep(.el-dialog__footer) {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    background: $cdd-panel-bg;
+    border-top: 1px solid $cdd-border;
+  }
+
+  :deep(.el-button) {
+    border-radius: 6px;
+  }
+
+  :deep(.el-input__wrapper),
+  :deep(.el-textarea__inner),
+  :deep(.el-input-number .el-input__wrapper) {
+    border-radius: 6px;
+    box-shadow: 0 0 0 1px #d8dee8 inset;
+  }
+
+  :deep(.el-input__wrapper:hover),
+  :deep(.el-textarea__inner:hover),
+  :deep(.el-input-number .el-input__wrapper:hover) {
+    box-shadow: 0 0 0 1px #b9c4d3 inset;
+  }
+
+  :deep(.el-input__wrapper.is-focus),
+  :deep(.el-textarea__inner:focus),
+  :deep(.el-input-number .el-input__wrapper.is-focus) {
+    box-shadow: 0 0 0 1px $cdd-primary inset, 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+}
+
+.cdd-workbench {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  color: $cdd-text;
+}
+
+.cdd-topbar {
+  flex: 0 0 auto;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: $cdd-panel-bg;
+  border-bottom: 1px solid $cdd-border;
+}
+
+.cdd-topbar__identity {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.cdd-model-title {
+  min-width: 0;
+  overflow: hidden;
+  color: $cdd-text;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cdd-imei-line {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid $cdd-soft-border;
+  border-radius: 6px;
+  background: #f8fafc;
+
+  span {
+    flex: 0 0 auto;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  strong {
+    min-width: 0;
+    overflow: hidden;
+    color: $cdd-text;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.cdd-topbar__model-input,
+.cdd-topbar__imei-input {
+  min-width: 0;
+}
+
+.cdd-topbar__model-input {
+  width: min(420px, 100%);
+}
+
+.cdd-topbar__imei-input {
+  width: 300px;
+}
+
+.cdd-topbar__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  :deep(.el-tag) {
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+}
+
+.cdd-main-form {
+  flex: 1 1 auto;
+  height: calc(min(90vh, 860px) - 68px - 59px - 49px);
+  min-height: 420px;
+  overflow: hidden;
+}
+
+.cdd-main {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 340px;
+  gap: 10px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.cdd-mobile-main {
+  display: none;
+}
+
+.cdd-side,
+.cdd-center {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.cdd-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.cdd-side--left,
+.cdd-right-scroll,
+.cdd-center-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #cbd5e1;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+.cdd-side--right {
+  display: flex;
+  flex-direction: column;
+}
+
+.cdd-center {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.cdd-panel,
+.cdd-work-section {
+  background: $cdd-panel-bg;
+  border: 1px solid $cdd-border;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.cdd-panel {
+  padding: 12px;
+}
+
+.cdd-work-section {
+  padding: 12px;
+  margin: 0;
+  scroll-margin-top: 8px;
+}
+
+.cdd-panel__title,
+.cdd-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  margin: 0 0 10px;
+  color: $cdd-text;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+
+  span {
+    min-width: 0;
+  }
+
+  em {
+    flex: 0 0 auto;
+    color: #6b7280;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 500;
+  }
+}
+
+.cdd-summary-list {
+  display: grid;
+  gap: 8px;
+
+  div {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  span {
+    color: #64748b;
+  }
+
+  strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: $cdd-text;
+    font-weight: 600;
+  }
+}
+
+.cdd-query-stack,
+.cdd-action-stack {
+  display: grid;
+  gap: 8px;
+
+  .el-button {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
+.cdd-muted {
+  padding: 8px 0;
+  color: $cdd-text-muted;
+  font-size: 12px;
+  text-align: center;
+}
+
+.cdd-anchor-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  background: $cdd-panel-bg;
+  border: 1px solid $cdd-border;
+  border-radius: 8px;
+
+  button {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: $cdd-text-secondary;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color 0.16s ease, color 0.16s ease;
+
+    &:hover,
+    &:focus-visible {
+      color: $cdd-primary;
+      background: #eff6ff;
+      outline: none;
+    }
+  }
+}
+
+.cdd-center-scroll,
+.cdd-right-scroll {
+  min-height: 0;
+  height: 100%;
+  padding-right: 4px;
+}
+
+.cdd-center-scroll > .cdd-work-section + .cdd-work-section,
+.cdd-right-scroll > .cdd-panel + .cdd-panel {
+  margin-top: 10px;
+}
+
+.cdd-work-section .cdd-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cdd-work-section .cdd-info-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+}
+
+.cdd-info-cell__label,
+.cdd-custom-field__label {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cdd-inline-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .el-input,
+  .el-input-number {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+
+  span {
+    flex: 0 0 auto;
+    color: $cdd-text-muted;
+    font-size: 12px;
+  }
+}
+
+.cdd-info-cell--switch {
+  min-height: 54px;
+  justify-content: space-between;
+}
+
+.cdd-work-section .cdd-sub-cols {
+  display: grid;
+  gap: 10px;
+}
+
+.cdd-sub-cols--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cdd-sub-cols--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cdd-work-section .cdd-sub-section {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid $cdd-soft-border;
+  border-radius: 6px;
+  background: #fbfdff;
+}
+
+.cdd-work-section .cdd-sub-section--done {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.cdd-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+
+  em {
+    flex: 0 0 auto;
+    color: #6b7280;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 600;
+  }
+}
+
+.cdd-tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 132px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.cdd-tag-grid--scroll {
+  max-height: 176px;
+}
+
+.cdd-check-tag {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+  }
+}
+
+.cdd-custom-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+}
+
+.cdd-custom-group {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid $cdd-soft-border;
+  border-radius: 6px;
+  background: #fbfdff;
+}
+
+.cdd-custom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cdd-custom-field {
+  min-width: 0;
+
+  &__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 5px;
+  }
+
+  &__unit {
+    color: $cdd-text-muted;
+    font-weight: 400;
+  }
+
+  &__number,
+  &__select {
+    width: 100%;
+  }
+
+  :deep(.el-radio-group),
+  :deep(.el-checkbox-group) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  :deep(.el-radio-button__inner),
+  :deep(.el-checkbox-button__inner) {
+    border-left: 1px solid var(--el-border-color);
+    border-radius: 6px;
+  }
+}
+
+.cdd-result-field,
+.cdd-price-field,
+.cdd-remark-field {
+  margin-bottom: 0 !important;
+}
+
+.cdd-result-field {
+  :deep(.el-form-item__content) {
+    line-height: 1;
+  }
+
+  :deep(.el-textarea__inner) {
+    min-height: 112px !important;
+    color: #1f2937;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+}
+
+.cdd-price-panel {
+  :deep(.el-form-item__label) {
+    display: block;
+    padding-bottom: 4px;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+
+    em {
+      margin-left: 6px;
+      color: $cdd-warning;
+      font-style: normal;
+      font-weight: 500;
+    }
+  }
+
+  .cdd-remark-field {
+    margin-top: 10px;
+  }
+}
+
+.cdd-price-input {
+  width: 100%;
+}
+
+.cdd-upload-panel {
+  padding: 0;
+  overflow: hidden;
+
+  :deep(.el-collapse) {
+    border: 0;
+  }
+
+  :deep(.el-collapse-item__header) {
+    height: auto;
+    min-height: 42px;
+    padding: 0 12px;
+    border-bottom-color: $cdd-border;
+    color: $cdd-text;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  :deep(.el-collapse-item__wrap) {
+    border-bottom: 0;
+  }
+
+  :deep(.el-collapse-item__content) {
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 10px 12px 12px;
+  }
+}
+
+.cdd-upload-title {
+  color: $cdd-text;
+  font-size: 13px;
+  white-space: normal;
+}
+
+.cdd-upload-block + .cdd-upload-block {
+  margin-top: 12px;
+}
+
+.cdd-upload-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: $cdd-text-secondary;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cdd-camera-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.cdd-footer {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  &__info {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  &__btns {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+
+    .el-button {
+      margin-left: 0;
+    }
+  }
+}
+
+@media (max-width: 1180px) {
+  .cdd-main {
+    grid-template-columns: 200px minmax(0, 1fr) 320px;
+  }
+
+  .cdd-work-section .cdd-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .cdd-main {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+
+  .cdd-side--left {
+    display: none;
+  }
+
+  .cdd-sub-cols--3,
+  .cdd-sub-cols--2,
+  .cdd-custom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .check-device-dialog.cdd-workbench-dialog {
+    :deep(.el-dialog) {
+      width: 96vw !important;
+      height: 92vh;
+      max-height: 92vh;
+      margin: 4vh auto !important;
+    }
+
+    :deep(.el-dialog__header) {
+      padding: 10px 42px 10px 14px;
+    }
+
+    :deep(.el-dialog__footer) {
+      padding: 10px 12px;
+    }
+  }
+
+  .cdd-topbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding: 10px 12px;
+  }
+
+  .cdd-topbar__identity {
+    width: 100%;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .cdd-model-title {
+    white-space: normal;
+  }
+
+  .cdd-imei-line {
+    width: 100%;
+  }
+
+  .cdd-topbar__model-input,
+  .cdd-topbar__imei-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .cdd-topbar__actions {
+    justify-content: flex-start;
+  }
+
+  .cdd-main-form {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .cdd-main {
+    height: 100%;
+    display: block;
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  .cdd-side,
+  .cdd-side--right,
+  .cdd-center {
+    height: auto;
+    overflow: visible;
+  }
+
+  .cdd-side--left {
+    display: flex;
+    margin-bottom: 8px;
+  }
+
+  .cdd-center {
+    display: block;
+  }
+
+  .cdd-center-scroll,
+  .cdd-right-scroll {
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .cdd-anchor-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin-bottom: 8px;
+  }
+
+  .cdd-work-section .cdd-info-grid,
+  .cdd-sub-cols--3,
+  .cdd-sub-cols--2,
+  .cdd-custom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cdd-right-scroll {
+    margin-top: 10px;
+  }
+
+  .cdd-footer {
+    align-items: stretch;
+    flex-direction: column;
+
+    &__info {
+      text-align: center;
+    }
+
+    &__btns {
+      flex-direction: column;
+      width: 100%;
+
+      .el-button {
+        width: 100%;
+        margin-left: 0;
+      }
+    }
+  }
+}
+
+/* ============================================================
+   质检工作台视觉刷新 v2
+   Element Plus Dialog 可能与 scoped 样式同级/teleport，这里用全局选择器确保命中。
+   ============================================================ */
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog) {
+  overflow: hidden;
+  border: 1px solid #d8e0ea;
+  border-radius: 12px;
+  background: #f3f6fa;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__header),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__header) {
+  min-height: 50px;
+  padding: 14px 52px 13px 18px;
+  background: linear-gradient(90deg, #ffffff 0%, #f4f8ff 55%, #eefdf7 100%);
+  border-bottom: 1px solid #dbe4ef;
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__title),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__title) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__title::before),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__title::before) {
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: #2563eb;
+  content: '';
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__body),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__body) {
+  background: #eef3f8;
+}
+
+:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__footer),
+:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__footer) {
+  background: #ffffff;
+  border-top: 1px solid #dbe4ef;
+  box-shadow: 0 -8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.cdd-topbar {
+  min-height: 74px;
+  padding: 12px 16px;
+  background: linear-gradient(90deg, #ffffff 0%, #f8fbff 100%);
+  border-bottom: 1px solid #dbe4ef;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+.cdd-model-title {
+  position: relative;
+  padding-left: 14px;
+  color: #0f172a;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.cdd-model-title::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 4px;
+  border-radius: 999px;
+  background: #22c55e;
+  content: '';
+}
+
+.cdd-imei-line {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-color: #cbd5e1;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cdd-topbar__actions {
+  :deep(.el-tag) {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  :deep(.el-tag.el-tag--success) {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #15803d;
+  }
+}
+
+.cdd-main {
+  grid-template-columns: 226px minmax(0, 1fr) 352px;
+  gap: 12px;
+  padding: 12px;
+  background: #eef3f8;
+}
+
+.cdd-panel,
+.cdd-work-section,
+.cdd-anchor-bar {
+  border-color: #dbe4ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cdd-panel {
+  padding: 13px;
+}
+
+.cdd-panel__title,
+.cdd-section-title {
+  margin: -3px -3px 12px;
+  padding: 0 0 9px;
+  border-bottom: 1px solid #edf2f7;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cdd-summary-panel {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.cdd-summary-list {
+  gap: 9px;
+
+  div {
+    grid-template-columns: 46px minmax(0, 1fr);
+    padding: 7px 8px;
+    border-radius: 7px;
+    background: #f8fafc;
+  }
+}
+
+.cdd-summary-empty {
+  display: block !important;
+  padding: 12px 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: center;
+  background: transparent !important;
+}
+
+.check-device-dialog.cdd-workbench-dialog {
+  :deep(.el-dialog),
+  :deep(.el-dialog__body) {
+    min-height: 0;
+  }
+}
+
+.cdd-workbench,
+.cdd-main-form,
+.cdd-main,
+.cdd-side,
+.cdd-side--right,
+.cdd-right-scroll,
+:deep(.cdd-center),
+:deep(.cdd-center-scroll) {
+  min-height: 0;
+}
+
+.cdd-main-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.cdd-main {
+  flex: 1 1 auto;
+}
+
+:deep(.cdd-center) {
+  height: 100%;
+  overflow: hidden;
+}
+
+.cdd-side--right {
+  overflow: hidden;
+}
+
+.cdd-right-scroll,
+:deep(.cdd-center-scroll) {
+  flex: 1 1 auto;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cdd-query-stack .el-button,
+.cdd-action-stack .el-button {
+  min-height: 32px;
+  border-color: #d7e0ea;
+  background: #ffffff;
+}
+
+.cdd-query-stack .el-button:hover,
+.cdd-action-stack .el-button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.cdd-anchor-bar {
+  gap: 7px;
+  padding: 9px;
+}
+
+.cdd-anchor-bar button {
+  min-height: 30px;
+  padding: 6px 11px;
+  border: 1px solid transparent;
+}
+
+.cdd-anchor-bar button:hover,
+.cdd-anchor-bar button:focus-visible {
+  border-color: #bfdbfe;
+}
+
+.cdd-work-section {
+  padding: 14px;
+}
+
+.cdd-work-section .cdd-info-grid {
+  gap: 12px;
+}
+
+.cdd-work-section .cdd-info-cell {
+  padding: 10px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.cdd-info-cell--switch {
+  justify-content: center;
+}
+
+.cdd-work-section .cdd-sub-section,
+.cdd-custom-group {
+  padding: 12px;
+  border-color: #dfe7f1;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.cdd-work-section .cdd-sub-section--done {
+  border-color: #86efac;
+  background: #f0fdf4;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08);
+}
+
+.cdd-sub-header {
+  margin-bottom: 9px;
+  color: #1f2937;
+  font-weight: 800;
+}
+
+.cdd-tag-grid {
+  gap: 7px;
+  max-height: 142px;
+}
+
+.cdd-tag-grid--scroll {
+  max-height: 188px;
+}
+
+.cdd-check-tag {
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-weight: 600;
+}
+
+.cdd-result-panel {
+  border-left: 4px solid #3b82f6;
+}
+
+.cdd-result-panel + .cdd-result-panel {
+  border-left-color: #10b981;
+}
+
+.cdd-result-field :deep(.el-textarea__inner) {
+  background: #fbfdff;
+}
+
+.cdd-price-panel {
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(180deg, #ffffff 0%, #fffaf0 100%);
+}
+
+.cdd-upload-panel {
+  border-left: 4px solid #8b5cf6;
+}
+
+.cdd-footer__info {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.cdd-footer__btns {
+  .el-button {
+    min-width: 104px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .cdd-main {
+    grid-template-columns: 210px minmax(0, 1fr) 326px;
+  }
+}
+
+@media (max-width: 980px) {
+  .cdd-main {
+    grid-template-columns: minmax(0, 1fr) 326px;
+  }
+}
+
+@media (max-width: 768px) {
+  .cdd-main {
+    display: block;
+    padding: 9px;
+  }
+
+  .cdd-topbar {
+    padding: 11px 12px;
+  }
+
+  .cdd-work-section .cdd-info-cell {
+    padding: 9px;
+  }
+}
+
+@media (max-width: 768px) {
+  .check-device-dialog.cdd-workbench-dialog {
+    :deep(.el-dialog) {
+      height: 92vh;
+      max-height: 92vh;
+      overflow: hidden;
+    }
+
+    :deep(.el-dialog__body) {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+  }
+
+  .cdd-workbench {
+    min-height: max-content;
+    overflow: visible;
+  }
+
+  .cdd-main-form {
+    display: block;
+    flex: none;
+    min-height: max-content;
+    height: auto;
+    overflow: visible;
+  }
+
+  .cdd-main {
+    display: none;
+  }
+
+  .cdd-mobile-main {
+    height: auto;
+    min-height: max-content;
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    padding: 10px;
+    overflow: visible;
+    overscroll-behavior: auto;
+    touch-action: pan-y;
+  }
+
+  .cdd-mobile-main,
+  .cdd-mobile-main *,
+  .cdd-panel {
+    touch-action: pan-y;
+  }
+
+  .cdd-price-input,
+  .cdd-price-input :deep(.el-input-number) {
+    width: 100%;
   }
 }
 </style>

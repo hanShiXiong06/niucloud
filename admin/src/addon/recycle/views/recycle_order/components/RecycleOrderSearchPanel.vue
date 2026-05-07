@@ -323,9 +323,9 @@ const handleMemberChange = (...args: any[]) => {
 }
 
 .search-form .search-item {
-  flex: 0 1 230px;
+  /* flex: 0 1 230px; */
   width: auto;
-  min-width: 210px;
+  /* min-width: 210px; */
   margin-right: 0;
   margin-bottom: 0;
 }
@@ -350,10 +350,7 @@ const handleMemberChange = (...args: any[]) => {
   flex-basis: 220px;
 }
 
-.search-form .search-item--member {
-  flex: 1 1 250px;
-  max-width: 360px;
-}
+
 
 .search-form .search-item--range {
   flex-basis: 250px;

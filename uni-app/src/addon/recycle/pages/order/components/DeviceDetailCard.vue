@@ -105,6 +105,15 @@
         议价
       </button>
       <button
+        v-if="allowRejectSale"
+        class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
+        style="background: linear-gradient(135deg, #f97316, #ef4444);"
+        @tap.stop="$emit('reject-sale')"
+      >
+        <up-icon name="close" size="13" color="#fff" class="mr-1"></up-icon>
+        拒绝出售
+      </button>
+      <button
         class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
         style="background: linear-gradient(135deg, #f472b6, #ec4899);"
         @tap.stop="$emit('confirm')"
@@ -126,6 +135,7 @@ interface Props {
   device: OrderDetailDevice
   index: number
   isSelected: boolean
+  allowRejectSale?: boolean
 }
 
 const props = defineProps<Props>()
@@ -134,6 +144,7 @@ defineEmits<{
   'toggle-select': []
   'confirm': []
   'negotiate': []
+  'reject-sale': []
 }>()
 
 const statusColor = computed(() => getDeviceStatusInfo(props.device.status).color)
@@ -163,7 +174,7 @@ const imageThumbList = computed(() => {
 // 是否有质检图片
 const hasCheckImages = computed(() => imageList.value.length > 0)
 
-const showActions = computed(() => props.device.status === 4)
+const showActions = computed(() => [3, 4, 7, 8].includes(Number(props.device.status)))
 
 const handleCopyIMEI = () => {
   uni.setClipboardData({

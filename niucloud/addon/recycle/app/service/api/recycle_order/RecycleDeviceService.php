@@ -4,9 +4,13 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\api\recycle_order;
 
 use addon\recycle\app\dict\order\RecycleOrderDict;
+use addon\recycle\app\dict\order\RecycleReturnOrderDict;
 use addon\recycle\app\model\order\RecycleDevice;
 use addon\recycle\app\model\order\RecycleDeviceLog;
 use addon\recycle\app\model\order\RecycleOrder;
+use addon\recycle\app\model\order\RecycleReturnDevice;
+use addon\recycle\app\model\order\RecycleReturnOrder;
+use addon\recycle\app\service\core\order\OrderSubmitConfigService;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleDeviceService;
 use core\base\BaseApiService;
 use core\exception\ApiException;
@@ -232,6 +236,12 @@ class RecycleDeviceService extends BaseApiService
      */
     public function confirm(int $id, bool $is_sell, string $remark = '')
     {
+        if (!$is_sell) {
+            $submitConfig = (new OrderSubmitConfigService())->getConfig($this->site_id);
+            if (empty($submitConfig['allow_user_reject_sale'])) {
+                throw new ApiException('当前不允许用户自主拒绝出售，请联系管理员处理');
+            }
+        }
        
         // 开启事务
         $this->model->startTrans();
@@ -249,19 +259,35 @@ class RecycleDeviceService extends BaseApiService
                 throw new ApiException('设备不存在');
             }
 
-            // 检查设备状态是否为已质检
-            if ($device['status'] != RecycleOrderDict::DEVICE_STATUS_CHECKED) {
-                throw new ApiException('设备未完成质检，不能确认');
+            $confirmableStatuses = [
+                RecycleOrderDict::DEVICE_STATUS_CHECKED,
+                RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM,
+                RecycleOrderDict::DEVICE_STATUS_PRICED,
+                RecycleOrderDict::DEVICE_STATUS_PRICED_REPRICE,
+            ];
+            if (!in_array((int)$device['status'], $confirmableStatuses, true)) {
+                throw new ApiException('设备当前状态不能确认');
+            }
+
+            $returnOrderId = 0;
+            if (!$is_sell) {
+                $returnOrderId = $this->ensureReturnOrderForDevice($device, $remark);
             }
 
             // 更新设备状态
             $new_status = $is_sell ? RecycleOrderDict::DEVICE_STATUS_RECYCLED : RecycleOrderDict::DEVICE_STATUS_RETURNED;
-            $device->save([
+            $deviceUpdate = [
                 'status' => $new_status,
                 'remark' => $remark,
                 'update_at' => time(),
                 'final_status' => 1
-            ]);
+            ];
+            if (!$is_sell && $returnOrderId > 0) {
+                $deviceUpdate['return_order_id'] = $returnOrderId;
+                $deviceUpdate['return_time'] = time();
+                $deviceUpdate['return_remark'] = $remark;
+            }
+            $device->save($deviceUpdate);
 
             // 更新订单状态
             $this->updateOrderStatus($device['order_id']);
@@ -272,6 +298,68 @@ class RecycleDeviceService extends BaseApiService
             $this->model->rollback();
             throw new ApiException($e->getMessage());
         }
+    }
+
+    private function ensureReturnOrderForDevice(RecycleDevice $device, string $remark = ''): int
+    {
+        if (!empty($device->return_order_id)) {
+            $returnOrderId = (int)$device->return_order_id;
+        } else {
+            $returnOrder = RecycleReturnOrder::where([
+                ['site_id', '=', $this->site_id],
+                ['order_id', '=', (int)$device->order_id],
+            ])->find();
+
+            if ($returnOrder) {
+                $returnOrderId = (int)$returnOrder->id;
+            } else {
+                $order = RecycleOrder::where([
+                    ['id', '=', (int)$device->order_id],
+                    ['site_id', '=', $this->site_id],
+                    ['member_id', '=', $this->member_id],
+                ])->find();
+                if (!$order) {
+                    throw new ApiException('原订单不存在');
+                }
+
+                $returnOrderId = (int)RecycleReturnOrder::insertGetId([
+                    'site_id' => $this->site_id,
+                    'order_id' => (int)$device->order_id,
+                    'order_no' => (string)($order->order_no ?? ''),
+                    'status' => RecycleReturnOrderDict::ORDER_STATUS_PENDING,
+                    'express_company' => '',
+                    'express_no' => '',
+                    'return_address' => '',
+                    'comment' => $remark,
+                    'operator_uid' => 0,
+                    'operator_name' => '用户',
+                    'member_id' => $this->member_id,
+                    'member_name' => (string)($order->customer_name ?? ''),
+                    'member_mobile' => (string)($order->customer_phone ?? ''),
+                    'create_at' => time(),
+                    'update_at' => time(),
+                ]);
+                if ($returnOrderId <= 0) {
+                    throw new ApiException('创建退货单失败');
+                }
+            }
+        }
+
+        $exists = RecycleReturnDevice::where([
+            ['return_order_id', '=', $returnOrderId],
+            ['device_id', '=', (int)$device->id],
+        ])->find();
+        if (!$exists) {
+            RecycleReturnDevice::create([
+                'return_order_id' => $returnOrderId,
+                'device_id' => (int)$device->id,
+                'status' => 0,
+                'remark' => $remark,
+                'create_at' => time(),
+            ]);
+        }
+
+        return $returnOrderId;
     }
 
     /**

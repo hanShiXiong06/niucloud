@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import type { OrderDetailInfo, OrderDetailDevice } from '../types/order'
-import { getOrderDetail, deviceConfirm, deviceAllConfirm, getOrderSubmitConfig } from '../api/order'
+import { getOrderDetail, deviceConfirm, deviceAllConfirm, deviceConfirmHandle, getOrderSubmitConfig } from '../api/order'
 import { getRecycleUserAddressInfo } from '../api/return_order'
 import { getPaymentList } from '../api/payment'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
@@ -23,6 +23,9 @@ export function useOrderDetail() {
     delivery_type_name: '自送',
     create_at: '',
     devices: []
+  })
+  const submitConfig = ref<any>({
+    allow_user_reject_sale: 1
   })
 
   // 是否为空状态（订单不存在）
@@ -92,6 +95,19 @@ export function useOrderDetail() {
     return false
   }
 
+  const loadSubmitConfig = async () => {
+    try {
+      const res = await getOrderSubmitConfig()
+      submitConfig.value = {
+        ...submitConfig.value,
+        ...(res?.data || {}),
+        allow_user_reject_sale: res?.data?.allow_user_reject_sale === 0 ? 0 : 1
+      }
+    } catch (error) {
+      submitConfig.value.allow_user_reject_sale = 1
+    }
+  }
+
   // 获取订单详情
   const loadOrderDetail = async (id: string | number) => {
     try {
@@ -102,11 +118,74 @@ export function useOrderDetail() {
       if (res.code === 1) {
         orderInfo.value = res.data
       }
+      await loadSubmitConfig()
     } catch (error) {
       console.error('获取订单详情失败:', error)
     } finally {
       loading.value = false
     }
+  }
+
+  const rejectDeviceSale = async (device: OrderDetailDevice): Promise<boolean> => {
+    if (submitConfig.value.allow_user_reject_sale === 0) {
+      uni.showToast({
+        title: '请联系管理员处理',
+        icon: 'none'
+      })
+      return false
+    }
+    if (orderInfo.value.status < 4 || ![3, 4, 7, 8].includes(Number(device.status))) {
+      uni.showToast({
+        title: '当前设备暂不能拒绝出售',
+        icon: 'none'
+      })
+      return false
+    }
+
+    return new Promise((resolve) => {
+      uni.showModal({
+        title: '拒绝出售',
+        content: '拒绝后该设备将进入退回处理，请确认是否继续。',
+        confirmText: '确认拒绝',
+        confirmColor: '#ef4444',
+        success: async (modalRes) => {
+          if (!modalRes.confirm) {
+            resolve(false)
+            return
+          }
+          try {
+            loading.value = true
+            const res = await deviceConfirmHandle(device.id, {
+              is_sell: false,
+              remark: '用户拒绝出售'
+            })
+            if (res.code === 1) {
+              uni.showToast({
+                title: '已拒绝出售',
+                icon: 'success'
+              })
+              await loadOrderDetail(orderInfo.value.id)
+              resolve(true)
+              return
+            }
+            uni.showToast({
+              title: res.msg || '操作失败',
+              icon: 'none'
+            })
+            resolve(false)
+          } catch (error) {
+            console.error('拒绝出售失败:', error)
+            uni.showToast({
+              title: '操作失败',
+              icon: 'none'
+            })
+            resolve(false)
+          } finally {
+            loading.value = false
+          }
+        }
+      })
+    })
   }
 
   // 确认单个设备
@@ -175,9 +254,9 @@ export function useOrderDetail() {
       // 请求订阅消息
       await useSubscribeMessage().request('recycle_order_pay')
 
-      // 只确认状态为待确认(4)的设备
+      // 只确认已经完成质检/定价并等待用户处理的设备
       const devicesToConfirm = orderInfo.value.devices.filter(
-        device => deviceIds.includes(device.id) && device.status === 4
+        device => deviceIds.includes(device.id) && [3, 4, 7, 8].includes(Number(device.status))
       )
 
       if (devicesToConfirm.length === 0) {
@@ -228,12 +307,14 @@ export function useOrderDetail() {
   return {
     loading,
     orderInfo,
+    submitConfig,
     isEmpty,
     hasNoDevices,
     totalPrice,
     loadOrderDetail,
     confirmDevice,
     confirmDevices,
+    rejectDeviceSale,
     negotiate
   }
 }

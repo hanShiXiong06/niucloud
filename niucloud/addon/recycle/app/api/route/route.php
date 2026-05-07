@@ -87,6 +87,8 @@ Route::group('recycle', function() {
     Route::get('recycle_device/order_devices/:order_id', 'addon\recycle\app\api\controller\recycle_order\RecycleDevice@orderDevices');
     // 确认价格
     Route::put('recycle_device/:id/confirm_price', 'addon\recycle\app\api\controller\recycle_order\RecycleDevice@confirmPrice');
+    // 确认设备处理方式
+    Route::put('recycle_device/:id/confirm', 'addon\recycle\app\api\controller\recycle_order\RecycleDevice@confirm');
     // 批量确认设备
     Route::put('recycle_device/all_confirm', 'addon\recycle\app\api\controller\recycle_order\RecycleDevice@deviceAllConfirm');
     // 获取用户退货地址

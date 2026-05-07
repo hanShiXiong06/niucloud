@@ -2,7 +2,7 @@
   <el-dialog
     v-model="dialogVisible"
     title=""
-    :width="isMobile ? '95vw' : '700px'"
+    :width="isMobile ? '95vw' : 'min(1060px, calc(100vw - 48px))'"
     :top="isMobile ? '0' : '3vh'"
     :fullscreen="isMobile"
     center
@@ -338,7 +338,11 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
     overflow: hidden;
   }
   :deep(.el-dialog__header) { padding: 0; border: none; }
-  :deep(.el-dialog__body) { padding: 0; background: #f1f5f9; }
+  :deep(.el-dialog__body) {
+    padding: 0;
+    background: #f1f5f9;
+    overflow: hidden;
+  }
   :deep(.el-dialog__headerbtn) {
     top: 12px; right: 12px; z-index: 10;
   }
@@ -352,7 +356,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 88vh;
+  max-height: calc(100vh - 110px);
   overflow-y: auto;
 
   &::-webkit-scrollbar { width: 5px; }

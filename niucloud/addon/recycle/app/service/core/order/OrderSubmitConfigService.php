@@ -53,6 +53,7 @@ class OrderSubmitConfigService
                 'display_name' => '京东快递',
                 'free_shipping_min_count' => 1,
             ],
+            'allow_user_reject_sale' => 1,
         ];
     }
 
@@ -90,6 +91,9 @@ class OrderSubmitConfigService
                 'display_name' => $platformDeliveryDisplayName ?: $default['platform_delivery']['display_name'],
                 'free_shipping_min_count' => $freeShippingMinCount,
             ],
+            'allow_user_reject_sale' => array_key_exists('allow_user_reject_sale', $data)
+                ? (!empty($data['allow_user_reject_sale']) ? 1 : 0)
+                : $default['allow_user_reject_sale'],
         ];
 
         if ($config['notice']['title'] === '') {
