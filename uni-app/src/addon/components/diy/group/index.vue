@@ -129,14 +129,11 @@
                 <template v-if="component.componentName == 'RecycleOrderOverview'">
                    <diy-recycle-order-overview ref="diyRecycleOrderOverviewRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleOrderOverview" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'RecycleQuotationList'">
-                   <diy-recycle-quotation-list ref="diyRecycleQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
+                <template v-if="component.componentName == 'RecycleSendButton'">
+                   <diy-recycle-send-button ref="diyRecycleSendButtonRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSendButton" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
                 <template v-if="component.componentName == 'RecycleSpiderQuotationList'">
                    <diy-recycle-spider-quotation-list ref="diyRecycleSpiderQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSpiderQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'RecycleSendButton'">
-                   <diy-recycle-send-button ref="diyRecycleSendButtonRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSendButton" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
                 <template v-if="component.componentName == 'PhoneGoodsCoupon'">
                    <diy-phone-goods-coupon ref="diyPhoneGoodsCouponRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneGoodsCoupon" @update:componentIsShow="component.componentIsShow = $event" />
@@ -162,6 +159,9 @@
                 <template v-if="component.componentName == 'PhoneShopSearch'">
                    <diy-phone-shop-search ref="diyPhoneShopSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopSearch" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'RecycleQuotationList'">
+                   <diy-recycle-quotation-list ref="diyRecycleQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 </view>
             </view>
         </template>
@@ -178,9 +178,8 @@
 <script lang="ts" setup>
    import diyRecycleCategory from '@/addon/recycle/components/diy/recycle-category/index.vue';
    import diyRecycleOrderOverview from '@/addon/recycle/components/diy/recycle-order-overview/index.vue';
-   import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
-   import diyRecycleSpiderQuotationList from '@/addon/recycle/components/diy/recycle-spider-quotation-list/index.vue';
    import diyRecycleSendButton from '@/addon/recycle/components/diy/recycle-send-button/index.vue';
+   import diyRecycleSpiderQuotationList from '@/addon/recycle/components/diy/recycle-spider-quotation-list/index.vue';
    import diyPhoneGoodsCoupon from '@/addon/phone_shop/components/diy/phone-goods-coupon/index.vue';
    import diyPhoneGoodsList from '@/addon/phone_shop/components/diy/phone-goods-list/index.vue';
    import diyPhoneManyGoodsList from '@/addon/phone_shop/components/diy/phone-many-goods-list/index.vue';
@@ -189,6 +188,7 @@
    import diyPhoneShopMemberInfo from '@/addon/phone_shop/components/diy/phone-shop-member-info/index.vue';
    import diyPhoneShopOrderInfo from '@/addon/phone_shop/components/diy/phone-shop-order-info/index.vue';
    import diyPhoneShopSearch from '@/addon/phone_shop/components/diy/phone-shop-search/index.vue';
+   import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';

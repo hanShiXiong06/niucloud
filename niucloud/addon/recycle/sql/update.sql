@@ -91,6 +91,59 @@ ADD COLUMN `sell_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '卖货价格' 
 -- 将已签收状态的订单设置签收时间为更新时间（临时数据修复）
 UPDATE `{{prefix}}recycle_order` SET `sign_at` = `update_at` WHERE `status` >= 2 AND `sign_at` = 0; 
 
+-- 打印模板兼容字段
+ALTER TABLE `{{prefix}}recycle_printer_template`
+ADD COLUMN `printer_id` int(11) NOT NULL DEFAULT 0 COMMENT '绑定打印机ID，0表示不指定' AFTER `is_default`,
+ADD COLUMN `trigger_event` varchar(50) NOT NULL DEFAULT '' COMMENT '旧版触发时机，兼容字段' AFTER `printer_id`;
+
+-- 回收打印场景表
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_print_scene` (
+    `scene_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '场景ID',
+    `site_id` int(11) NOT NULL DEFAULT 0 COMMENT '站点ID',
+    `scene_key` varchar(50) NOT NULL DEFAULT '' COMMENT '场景标识',
+    `scene_name` varchar(100) NOT NULL DEFAULT '' COMMENT '场景名称',
+    `biz_type` varchar(30) NOT NULL DEFAULT '' COMMENT '业务类型：device-设备，order-订单，return-退货',
+    `template_type` varchar(50) NOT NULL DEFAULT '' COMMENT '模板类型',
+    `auto_print` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否自动打印：0-否，1-是',
+    `template_id` int(11) NOT NULL DEFAULT 0 COMMENT '指定模板ID，0使用默认模板',
+    `printer_id` int(11) NOT NULL DEFAULT 0 COMMENT '指定打印机ID，0使用模板绑定或账号默认打印机',
+    `copies` int(11) NOT NULL DEFAULT 1 COMMENT '打印份数',
+    `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '状态：0-停用，1-启用',
+    `sort` int(11) NOT NULL DEFAULT 0 COMMENT '排序',
+    `create_time` int(11) NOT NULL DEFAULT 0 COMMENT '创建时间',
+    `update_time` int(11) NOT NULL DEFAULT 0 COMMENT '更新时间',
+    PRIMARY KEY (`scene_id`),
+    UNIQUE KEY `uk_site_scene` (`site_id`, `scene_key`)
+) COMMENT='回收打印场景表';
+
+-- 回收打印日志表
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_print_log` (
+    `log_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '日志ID',
+    `site_id` int(11) NOT NULL DEFAULT 0 COMMENT '站点ID',
+    `scene_key` varchar(50) NOT NULL DEFAULT '' COMMENT '场景标识',
+    `scene_name` varchar(100) NOT NULL DEFAULT '' COMMENT '场景名称',
+    `biz_type` varchar(30) NOT NULL DEFAULT '' COMMENT '业务类型',
+    `biz_id` int(11) NOT NULL DEFAULT 0 COMMENT '业务ID',
+    `order_id` int(11) NOT NULL DEFAULT 0 COMMENT '订单ID',
+    `device_id` int(11) NOT NULL DEFAULT 0 COMMENT '设备ID',
+    `template_id` int(11) NOT NULL DEFAULT 0 COMMENT '模板ID',
+    `template_name` varchar(100) NOT NULL DEFAULT '' COMMENT '模板名称',
+    `printer_id` int(11) NOT NULL DEFAULT 0 COMMENT '打印机ID',
+    `printer_name` varchar(100) NOT NULL DEFAULT '' COMMENT '打印机名称',
+    `copies` int(11) NOT NULL DEFAULT 1 COMMENT '打印份数',
+    `status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '状态：0-失败/跳过，1-成功',
+    `message` varchar(500) NOT NULL DEFAULT '' COMMENT '结果消息',
+    `operator_uid` int(11) NOT NULL DEFAULT 0 COMMENT '操作人ID',
+    `plan_snapshot` text NOT NULL COMMENT '打印计划快照',
+    `request_snapshot` text NOT NULL COMMENT '请求快照',
+    `response_snapshot` text NOT NULL COMMENT '响应快照',
+    `create_time` int(11) NOT NULL DEFAULT 0 COMMENT '创建时间',
+    PRIMARY KEY (`log_id`),
+    KEY `idx_site_scene` (`site_id`, `scene_key`),
+    KEY `idx_site_device` (`site_id`, `device_id`),
+    KEY `idx_site_order` (`site_id`, `order_id`)
+) COMMENT='回收打印日志表';
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}express_address_book` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',

@@ -27,7 +27,6 @@
           <template #default="{ row }">
             <div class="printer-name">
               <span>{{ row.printer_name }}</span>
-              <el-tag v-if="row.is_default" type="success" size="small" style="margin-left: 8px;">当前使用</el-tag>
             </div>
           </template>
         </el-table-column>
@@ -42,16 +41,19 @@
         
         <el-table-column prop="sn" label="序列号" min-width="150" />
         
-        <el-table-column prop="status" label="状态" width="120">
+        <el-table-column prop="status" label="启用状态" width="130">
           <template #default="{ row }">
             <div style="display: flex; align-items: center; gap: 8px;">
-            <el-switch
-              v-model="row.status"
-              :active-value="1"
-              :inactive-value="0"
-              @change="handleStatusChange(row)"
-              :loading="row.statusLoading"
-            />
+              <el-switch
+                v-model="row.status"
+                :active-value="1"
+                :inactive-value="0"
+                active-text="启用"
+                inactive-text="停用"
+                inline-prompt
+                @change="handleStatusChange(row)"
+                :loading="row.statusLoading"
+              />
               <el-button 
                 v-if="row.status" 
                 type="info" 
@@ -201,13 +203,7 @@ const handleStatusChange = async (row) => {
     row.statusLoading = true;
     const res = await togglePrinterStatus(row.printer_id, row.status);
     
-    if (res.code === 1) {
-
-      // 如果激活了这个打印机，需要刷新列表以更新is_default状态
-      if (row.status) {
-        await fetchPrinterList();
-      }
-    } else {
+    if (res.code !== 1) {
       // 如果失败，恢复原状态
       row.status = row.status ? 0 : 1;
     }
@@ -223,7 +219,7 @@ const handleStatusChange = async (row) => {
 // 测试打印
 const handleTest = (row) => {
   if (!row.status) {
-    ElMessage.warning('请先激活打印机');
+    ElMessage.warning('请先启用打印机');
     return;
   }
   
@@ -266,12 +262,8 @@ const handleQueryStatus = async (row) => {
     if (res.code === 1 && res.data) {
       row.printer_status = res.data.status;
       row.printer_status_text = res.data.status_text || '未知';
-      
-      if (res.data.status === 0) {
-        ElMessage.warning('打印机离线');
-      } else if (res.data.status === 2) {
-        ElMessage.warning('打印机状态异常（可能缺纸）');
-      } else {
+
+      if (res.data.status === 1) {
         ElMessage.success('打印机在线正常');
       }
     }
@@ -289,10 +281,10 @@ const handleBatchQueryStatus = async () => {
     return;
   }
   
-  // 只查询已激活的打印机
+  // 只查询已启用的打印机
   const activePrinters = printerList.value.filter(p => p.status === 1);
   if (activePrinters.length === 0) {
-    ElMessage.warning('没有已激活的打印机');
+    ElMessage.warning('没有已启用的打印机');
     return;
   }
   
@@ -367,4 +359,4 @@ onMounted(() => {
     align-items: center;
   }
 }
-</style> 
+</style>

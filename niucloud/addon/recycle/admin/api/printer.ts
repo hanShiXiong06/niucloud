@@ -120,12 +120,25 @@ export function printLabel(data: Record<string, any>) {
  * 打印设备标签
  * @param device_id 设备ID
  */
-export function printDeviceLabel(device_id: number) {
-  return request.post(`/recycle/printer/print_device_label/${device_id}`, {}, {
+export function printDeviceLabel(device_id: number, data: Record<string, any> = {}) {
+  return request.post(`/recycle/printer/print_device_label/${device_id}`, data, {
     showErrorMessage: true,
     showSuccessMessage: true
   });
 } 
+
+/**
+ * 获取设备标签打印计划
+ * @param device_id 设备ID
+ * @param params 查询参数
+ */
+export function getDeviceLabelPrintPlan(device_id: number, params: Record<string, any> = {}) {
+  return request.get(`/recycle/printer/print_device_label_plan/${device_id}`, {
+    params,
+    showErrorMessage: true,
+    showSuccessMessage: false
+  });
+}
 
 /**
  * 查询打印机状态
@@ -173,9 +186,51 @@ export function unbindPrinter() {
  * 打印设备标签
  * @param device_id 设备ID
  */
-export function _printDeviceLabel(device_id: number) {
-  return request.post(`/recycle/printer/print_device_label/${device_id}`, {}, {
+export function _printDeviceLabel(device_id: number, data: Record<string, any> = {}) {
+  return printDeviceLabel(device_id, data);
+}
+
+// ==================== 打印场景 ====================
+/**
+ * 获取打印场景列表
+ */
+export function getPrintSceneList() {
+  return request.get('/recycle/print_scene/lists', {
+    showSuccessMessage: false
+  });
+}
+
+/**
+ * 保存打印场景配置
+ * @param sceneKey 场景标识
+ * @param data 配置数据
+ */
+export function updatePrintScene(sceneKey: string, data: Record<string, any>) {
+  return request.put(`/recycle/print_scene/${sceneKey}`, data, {
     showErrorMessage: true,
     showSuccessMessage: true
   });
-} 
+}
+
+/**
+ * 修改打印场景状态
+ * @param sceneKey 场景标识
+ * @param status 状态
+ */
+export function modifyPrintSceneStatus(sceneKey: string, status: number) {
+  return request.post(`/recycle/print_scene/status/${sceneKey}`, { status }, {
+    showErrorMessage: true,
+    showSuccessMessage: true
+  });
+}
+
+/**
+ * 获取打印日志
+ * @param params 查询参数
+ */
+export function getPrintLogList(params: Record<string, any> = {}) {
+  return request.get('/recycle/print_log/lists', {
+    params,
+    showSuccessMessage: false
+  });
+}

@@ -17,17 +17,24 @@
                     v-if="showCategoryTabs && categoryTabs.length"
                     class="category-tabs"
                 >
-                    <up-tabs
+                    <quotation-category-tabs
                         :list="categoryTabList"
                         :current="activeCategoryIndex"
-                        :scrollable="true"
-                        :lineWidth="24"
-                        :lineHeight="3"
-                        :lineColor="buttonColor"
-                        :activeStyle="categoryActiveStyle"
-                        :inactiveStyle="categoryInactiveStyle"
+                        :variant="tabStyleType"
+                        :themeColor="tabThemeColor"
+                        :activeBgColor="tabActiveBgColor"
+                        :inactiveBgColor="tabInactiveBgColor"
+                        :activeTextColor="tabActiveTextColor"
+                        :inactiveTextColor="tabInactiveTextColor"
+                        :borderColor="tabBorderColor"
+                        :height="tabHeight"
+                        :radius="tabRadius"
+                        :fontSize="tabFontSize"
+                        :fontWeight="tabFontWeight"
+                        :sidePadding="tabSidePadding"
+                        :showScrollCue="showTabScrollCue"
                         @change="handleCategoryTabChange"
-                    ></up-tabs>
+                    ></quotation-category-tabs>
                 </view>
 
                 <view v-if="loading" class="state-box">
@@ -101,6 +108,7 @@ import { computed, onMounted, ref } from 'vue'
 import useDiyStore from '@/app/stores/diy'
 import { img, redirect } from '@/utils/common'
 import { getQuoteSpiderCategoryTree, getQuoteSpiderFeatured, type QuoteSpiderCategory, type QuoteSpiderItem } from '@/addon/recycle/api/quotation'
+import QuotationCategoryTabs from './components/QuotationCategoryTabs.vue'
 
 const props = defineProps({
     component: {
@@ -200,15 +208,37 @@ const activeCategoryIndex = computed(() => {
     const index = categoryTabs.value.findIndex(item => Number(item.id || 0) === activeCategoryId.value)
     return index >= 0 ? index : 0
 })
-const categoryActiveStyle = computed(() => ({
-    color: buttonColor.value,
-    fontWeight: '600',
-    fontSize: '14px'
-}))
-const categoryInactiveStyle = computed(() => ({
-    color: '#4b5563',
-    fontSize: '14px'
-}))
+const tabStyleType = computed(() => {
+    const value = diyComponent.value.tabStyleType || 'pill'
+    return ['pill', 'card', 'underline'].includes(value) ? value : 'pill'
+})
+const tabThemeColor = computed(() => diyComponent.value.tabThemeColor || buttonColor.value)
+const tabActiveBgColor = computed(() => diyComponent.value.tabActiveBgColor || '')
+const tabInactiveBgColor = computed(() => diyComponent.value.tabInactiveBgColor || '')
+const tabActiveTextColor = computed(() => diyComponent.value.tabActiveTextColor || '')
+const tabInactiveTextColor = computed(() => diyComponent.value.tabInactiveTextColor || '#475569')
+const tabBorderColor = computed(() => diyComponent.value.tabBorderColor || '')
+const tabHeight = computed(() => {
+    const value = Number(diyComponent.value.tabHeight || 64)
+    return Number.isFinite(value) ? Math.max(44, Math.min(value, 96)) : 64
+})
+const tabRadius = computed(() => {
+    const value = Number(diyComponent.value.tabRadius ?? 32)
+    return Number.isFinite(value) ? Math.max(0, Math.min(value, 48)) : 32
+})
+const tabFontSize = computed(() => {
+    const value = Number(diyComponent.value.tabFontSize || 26)
+    return Number.isFinite(value) ? Math.max(20, Math.min(value, 34)) : 26
+})
+const tabFontWeight = computed(() => {
+    const value = Number(diyComponent.value.tabFontWeight || 600)
+    return [400, 500, 600, 700].includes(value) ? value : 600
+})
+const tabSidePadding = computed(() => {
+    const value = Number(diyComponent.value.tabSidePadding || 18)
+    return Number.isFinite(value) ? Math.max(8, Math.min(value, 40)) : 18
+})
+const showTabScrollCue = computed(() => diyComponent.value.showTabScrollCue !== false)
 const groupTitleStyle = computed(() => {
     return `color:${groupTitleColor.value};font-size:${groupTitleSize.value}rpx;line-height:${Math.max(groupTitleSize.value + 10, 30)}rpx;font-weight:${groupTitleWeight.value};`
 })
@@ -495,7 +525,7 @@ onMounted(() => {
 
 .category-tabs {
     width: 100%;
-    padding: 0 12rpx 14rpx;
+    padding: 0 18rpx 16rpx;
     box-sizing: border-box;
 }
 

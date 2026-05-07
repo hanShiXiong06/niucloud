@@ -12,6 +12,7 @@ use addon\recycle\app\model\order\RecycleReturnOrder;
 use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
+use addon\recycle\app\service\admin\printer\RecyclePrintSceneService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\db\exception\DataNotFoundException;
@@ -571,29 +572,16 @@ class RecycleDeviceService extends BaseAdminService
                 Log::record('【质检完成】触发事件异常: ' . $e->getMessage(), 'error');
             }
 
-            // 根据触发时机自动打印标签
+            // 根据打印场景配置自动打印标签
             try {
-                $triggerEvent = $action === 'save_draft' ? 'draft' : 'complete';
-                $templateService = new \addon\recycle\app\service\admin\printer\RecyclePrinterTemplateService();
-                $template = $templateService->getTemplateByTrigger($triggerEvent);
-                Log::record("【自动打印】action={$action} triggerEvent={$triggerEvent} 找到模板=" . json_encode($template ? ($template['template_id'] ?? 'empty') : 'null'), 'info');
-                if (!empty($template)) {
-                    $templateInfo = $templateService->getInfo($template['template_id']);
-                    $deviceData = $templateService->getDevicePrintData($id);
-                     // 优先使用模板绑定的打印机，其次用当前操作员账号绑定的打印机
-                    $bindPrinterId = (int)($templateInfo['printer_id'] ?? 0);
-                    $printer = $templateService->getDefaultPrinter($bindPrinterId);
-                    if (!empty($printer) && !empty($templateInfo['instruction_content'])) {
-                        $printService = new \addon\recycle\app\service\admin\printer\template\TemplatePrintService();
-                        $copies = 1;
-                        if (!empty($templateInfo['content']) && is_array($templateInfo['content'])) {
-                            $copies = $templateInfo['content']['copies'] ?? 1;
-                        }
-                        for ($i = 0; $i < $copies; $i++) {
-                            $printService->printWithVariables($templateInfo['instruction_content'], $deviceData, $printer);
-                        }
-                        Log::record("【自动打印】触发时机={$triggerEvent} 设备ID={$id} 模板={$template['template_id']} 份数={$copies}", 'info');
-                    }
+                if ($action !== 'save_draft') {
+                    $printResult = (new RecyclePrintSceneService())->autoPrintAfterDeviceCheck($id);
+                    Log::record('【自动打印】质检完成场景执行结果: ' . json_encode([
+                        'device_id' => $id,
+                        'success' => $printResult['success'] ?? false,
+                        'can_print' => $printResult['can_print'] ?? false,
+                        'message' => $printResult['message'] ?? '',
+                    ], JSON_UNESCAPED_UNICODE), 'info');
                 }
             } catch (\Exception $e) {
                 Log::record('【自动打印】异常: ' . $e->getMessage(), 'error');

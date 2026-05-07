@@ -18,6 +18,7 @@ use think\db\exception\ModelNotFoundException;
 use app\service\core\notice\NoticeService;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\recycle\app\service\admin\printer\RecyclePrinterTemplateService;
+use addon\recycle\app\service\admin\printer\RecyclePrintSceneService;
 use addon\recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
 use think\facade\Db;
 use think\facade\Log;
@@ -525,6 +526,19 @@ class RecycleDeviceService extends BaseAdminService
                 Log::record('【质检完成】已触发质检完成事件: ' . json_encode($eventData), 'info');
             } catch (\Exception $e) {
                 Log::record('【质检完成】触发事件异常: ' . $e->getMessage(), 'error');
+            }
+
+            // 根据打印场景配置自动打印标签
+            try {
+                $printResult = (new RecyclePrintSceneService())->autoPrintAfterDeviceCheck($id);
+                Log::record('【自动打印】质检完成场景执行结果: ' . json_encode([
+                    'device_id' => $id,
+                    'success' => $printResult['success'] ?? false,
+                    'can_print' => $printResult['can_print'] ?? false,
+                    'message' => $printResult['message'] ?? '',
+                ], JSON_UNESCAPED_UNICODE), 'info');
+            } catch (\Exception $e) {
+                Log::record('【自动打印】异常: ' . $e->getMessage(), 'error');
             }
             
             Db::commit();

@@ -91,22 +91,13 @@ class RecyclePrinterService extends BaseAdminService
     public function bindPrinter(array $data)
     {
         try {
-            // 将当前用户下的所有打印机停用
-            $this->model->where([
-                ['site_id', '=', $this->site_id],
-                ['uid', '=', $this->uid]
-            ])->update([
-                'status' => 0,
-                'is_default' => 0,
-                'update_time' => time()
-            ]);
-            
             // 新增绑定
             $data['site_id'] = $this->site_id;
             $data['uid'] = $this->uid;
             $data['create_time'] = time();
             $data['update_time'] = time();
             $data['status'] = 1;
+            unset($data['is_default']);
             $data['type'] = RecyclePrinter::TYPE_LABEL; // 默认标签打印机
             
             $this->model->save($data);
@@ -409,23 +400,12 @@ class RecyclePrinterService extends BaseAdminService
         }
         
         // API调用成功，保存到数据库
-        // 先停用当前用户的所有打印机
-        $this->model->where([
-            ['site_id', '=', $this->site_id],
-            ['uid', '=', $this->uid]
-        ])->update([
-            'status' => 0,
-            'is_default' => 0,
-            'update_time' => time()
-        ]);
-        
-        // 添加新打印机并设置为默认
         $data['site_id'] = $this->site_id;
         $data['uid'] = $this->uid;
         $data['create_time'] = time();
         $data['update_time'] = time();
         $data['status'] = 1;
-        $data['is_default'] = 1;
+        unset($data['is_default']);
         
         $this->model->save($data);
         
@@ -791,43 +771,30 @@ class RecyclePrinterService extends BaseAdminService
     }
 
     /**
-     * 切换打印机状态（激活/停用）
+     * 切换打印机状态（启用/停用）
      * @param int $id
      * @param int $status
      * @return bool
      */
     public function toggleStatus(int $id, int $status)
     {
+        $status = $status ? 1 : 0;
         $where = [
             ['site_id', '=', $this->site_id],
-            ['uid', '=', $this->uid]
+            ['uid', '=', $this->uid],
+            ['printer_id', '=', $id]
         ];
-        
-        // 如果要激活当前打印机，先停用其他所有打印机
-        if ($status == 1) {
-            $this->model->where($where)->update([
-                'status' => 0, 
-                'is_default' => 0, 
-                'update_time' => time()
-            ]);
+
+        $printer = $this->model->where($where)->findOrEmpty();
+        if ($printer->isEmpty()) {
+            throw new CommonException('打印机不存在');
         }
-        
-        // 更新指定打印机状态
-        $where[] = ['printer_id', '=', $id];
-        $updateData = [
-            'status' => $status, 
+
+        $printer->save([
+            'status' => $status,
             'update_time' => time()
-        ];
-        
-        // 如果激活，同时设置为默认打印机
-        if ($status == 1) {
-            $updateData['is_default'] = 1;
-        } else {
-            $updateData['is_default'] = 0;
-        }
-        
-        $this->model->where($where)->update($updateData);
-        
+        ]);
+
         return true;
     }
-} 
+}

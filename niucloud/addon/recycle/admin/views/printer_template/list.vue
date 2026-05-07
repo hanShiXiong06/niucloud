@@ -58,7 +58,6 @@
           <template #default="{ row }">
             <div class="template-name">
               <span>{{ row.template_name }}</span>
-              <el-tag v-if="row.is_default" type="success" size="small" style="margin-left: 8px;">默认</el-tag>
             </div>
           </template>
         </el-table-column>
@@ -87,14 +86,6 @@
 
             <el-button type="success" size="small" @click="handleTest(row)">测试</el-button>
             <el-button type="warning" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button 
-              v-if="!row.is_default" 
-              type="info" 
-              size="small" 
-              @click="handleSetDefault(row)"
-            >
-              设为默认
-            </el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -150,7 +141,6 @@ import {
   getTemplateList, 
   deleteTemplate, 
   modifyTemplateStatus, 
-  setDefaultTemplate,
   previewTemplate,
   testPrintTemplate,
   getTemplateTypeList
@@ -273,16 +263,6 @@ const handleStatusChange = async (row) => {
   }
 };
 
-// 设置默认模板
-const handleSetDefault = async (row) => {
-  try {
-    await setDefaultTemplate(row.template_id);
-    await fetchTemplateList();
-  } catch (error) {
-    console.error('设置默认模板失败', error);
-  }
-};
-
 // 测试打印
 const handleTest = (row) => {
   currentTestTemplate.value = row;
@@ -327,7 +307,7 @@ onMounted(() => {
 <style lang="scss" scoped>
 .template-list-wrap {
   padding: 16px;
-  
+
   .card-header {
     display: flex;
     justify-content: space-between;
@@ -359,4 +339,4 @@ onMounted(() => {
     background: #f9f9f9;
   }
 }
-</style> 
+</style>

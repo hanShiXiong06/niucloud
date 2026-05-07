@@ -405,7 +405,9 @@ class RecycleDevice extends BaseAdminController
 
         if ($result['success']) {
             return success($result);
-        } 
+        }
+
+        return fail($result['message'] ?? '打印失败', $result);
     }
 
     /**

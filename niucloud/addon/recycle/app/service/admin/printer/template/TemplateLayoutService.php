@@ -249,30 +249,44 @@ class TemplateLayoutService extends BaseAdminService
      */
     public function calculateQrcodeSize(int $size, int $contentLength): array
     {
-        // 二维码大小计算（根据芯烨云文档）：
-        // size参数对应的实际尺寸（dot单位）
-        // 基础尺寸：size=1时约20dot，每增加1，增加约20-25dot
-        $baseSize = 20;
-        $sizeMultiplier = max(1, min(10, $size)); // 限制在1-10范围内
-        
-        // 根据内容长度调整（内容越长，二维码越大）
-        // 二维码内容最大256字符，根据内容长度调整基础尺寸
-        $contentMultiplier = 1.0;
-        if ($contentLength > 0) {
-            // 内容越长，需要更大的二维码容量
-            $contentMultiplier = 1.0 + ($contentLength / 256) * 0.3; // 最大增加30%
-        }
-        
-        // 计算实际尺寸
-        $dimension = (int)($baseSize * $sizeMultiplier * $contentMultiplier);
-        
-        // 确保最小尺寸
-        $dimension = max(20, $dimension);
+        $moduleCount = $this->estimateQrcodeModuleCount($contentLength);
+        $moduleSize = max(1, min(10, $size));
+        $dimension = $moduleCount * $moduleSize;
         
         return [
             'width' => $dimension,
             'height' => $dimension
         ];
+    }
+
+    /**
+     * 估算二维码矩阵模块数。
+     * 二维码 version 1 是 21×21，version 每增加 1，边长增加 4 个模块。
+     * 这里按内容长度做保守估计，用于后台预览和边界检测，不改变实际打印指令。
+     */
+    private function estimateQrcodeModuleCount(int $contentLength): int
+    {
+        if ($contentLength <= 20) {
+            $version = 1;
+        } elseif ($contentLength <= 38) {
+            $version = 2;
+        } elseif ($contentLength <= 61) {
+            $version = 3;
+        } elseif ($contentLength <= 90) {
+            $version = 4;
+        } elseif ($contentLength <= 122) {
+            $version = 5;
+        } elseif ($contentLength <= 154) {
+            $version = 6;
+        } elseif ($contentLength <= 180) {
+            $version = 7;
+        } elseif ($contentLength <= 213) {
+            $version = 8;
+        } else {
+            $version = 9;
+        }
+
+        return 21 + (($version - 1) * 4);
     }
 
     /**
@@ -508,4 +522,3 @@ class TemplateLayoutService extends BaseAdminService
         ];
     }
 }
-

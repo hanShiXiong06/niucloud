@@ -299,7 +299,10 @@ import { generateOrderShortLink } from "@/addon/recycle/api/shortlink";
 import { useClipboard } from "@vueuse/core";
 
 // 导入打印API
-import { _printDeviceLabel } from "@/addon/recycle/api/printer";
+import {
+  getDeviceLabelPrintPlan,
+  printDeviceLabel as submitDeviceLabelPrint,
+} from "@/addon/recycle/api/printer";
 
 // 导入代下单弹窗组件
 import AddOrderDialog from "./components/AddOrderDialog.vue";
@@ -748,16 +751,58 @@ const handleDeviceConfirm = async (data: {
 const printDeviceLabel = async (device: any) => {
   let loading: ReturnType<typeof ElLoading.service> | null = null;
   try {
+    const planRes = await getDeviceLabelPrintPlan(device.id);
+    if (planRes.code !== 1 || !planRes.data?.can_print) {
+      throw new Error(planRes.msg || planRes.data?.message || "打印计划不可用");
+    }
+
+    const plan = planRes.data;
+    const escapeHtml = (value: any) =>
+      String(value).replace(/[&<>"']/g, (char) => {
+        const map: Record<string, string> = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        };
+        return map[char] || char;
+      });
+    const safeText = (value: any, fallback = "未填写") =>
+      escapeHtml(value === undefined || value === null || value === "" ? fallback : value);
+    const confirmHtml = `
+      <div class="device-print-plan">
+        <div class="device-print-plan__title">请确认本次打印内容</div>
+        <div class="device-print-plan__grid">
+          <span>打印场景</span><strong>${safeText(plan.scene?.scene_name)}</strong>
+          <span>设备型号</span><strong>${safeText(plan.device?.model)}</strong>
+          <span>设备串号</span><strong>${safeText(plan.device?.imei || plan.device?.sn)}</strong>
+          <span>订单编号</span><strong>${safeText(plan.device?.order_no)}</strong>
+          <span>打印模板</span><strong>${safeText(plan.template?.template_name)}</strong>
+          <span>目标打印机</span><strong>${safeText(plan.printer?.printer_name)}</strong>
+          <span>打印份数</span><strong>${safeText(plan.copies, "1")} 份</strong>
+        </div>
+        <div class="device-print-plan__hint">确认后会立即发送到打印机。若模板或打印机不对，请先到打印模板中调整绑定关系。</div>
+      </div>
+    `;
+
+    await ElMessageBox.confirm(confirmHtml, "打印设备标签", {
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: "确认打印",
+      cancelButtonText: "取消",
+      type: "info",
+      customClass: "device-print-confirm-box",
+    });
+
     loading = ElLoading.service({
       lock: true,
-      text: "正在打印标签...",
+      text: "正在发送打印任务...",
       background: "rgba(0, 0, 0, 0.7)",
     });
 
-    const res = await _printDeviceLabel(device.id);
+    const res = await submitDeviceLabelPrint(device.id);
 
     if (res.code === 1) {
-      ElMessage.success("标签打印成功");
       // 检查是否是模拟打印
       if (res.data && res.data.simulated) {
         const printPreviewContent =
@@ -782,14 +827,11 @@ const printDeviceLabel = async (device: any) => {
         );
       }
     } else {
-      const errorMsg = res.message || "打印失败";
-      const debugInfo = res.debug_info ? JSON.stringify(res.debug_info) : "";
-      ElMessage.error(`${errorMsg} ${debugInfo}`);
       console.error("打印失败:", res);
     }
   } catch (error: any) {
+    if (error === "cancel" || error === "close") return;
     console.error("打印过程异常:", error);
-    ElMessage.error(`打印过程异常: ${error.message || "未知错误"}`);
   } finally {
     loading?.close();
   }
@@ -1290,5 +1332,54 @@ const shareOrder = async (row: any) => {
   color: #606266;
   font-size: 14px;
   line-height: 1.5;
+}
+
+:global(.device-print-confirm-box) {
+  width: min(560px, calc(100vw - 32px));
+}
+
+:global(.device-print-confirm-box .el-message-box__message) {
+  width: 100%;
+}
+
+:global(.device-print-plan) {
+  padding-top: 2px;
+}
+
+:global(.device-print-plan__title) {
+  margin-bottom: 12px;
+  color: #303133;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+:global(.device-print-plan__grid) {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px 12px;
+  padding: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+:global(.device-print-plan__grid span) {
+  color: #909399;
+}
+
+:global(.device-print-plan__grid strong) {
+  min-width: 0;
+  color: #303133;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+:global(.device-print-plan__hint) {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #ecf5ff;
+  color: #337ecc;
+  line-height: 1.6;
 }
 </style>

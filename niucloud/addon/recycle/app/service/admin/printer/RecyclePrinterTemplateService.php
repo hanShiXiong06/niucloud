@@ -10,6 +10,7 @@ use addon\recycle\app\service\admin\printer\template\TemplatePrintService;
 use addon\recycle\app\service\admin\printer\template\TemplateRenderService;
 use addon\recycle\app\service\admin\printer\template\TemplateValidatorService;
 use addon\recycle\app\service\admin\printer\template\VariableReplaceService;
+use addon\recycle\app\service\admin\printer\RecyclePrintSceneService;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 use core\exception\CommonException;
@@ -499,6 +500,17 @@ class RecyclePrinterTemplateService extends BaseAdminService
 
         return $printer;
     }
+
+    /**
+     * 解析设备标签打印计划
+     * @param int $device_id 设备ID
+     * @param string $template_type 模板类型
+     * @return array
+     */
+    public function resolveDeviceLabelPrintPlan(int $device_id, string $template_type = 'device_label'): array
+    {
+        return (new RecyclePrintSceneService())->resolveManualDeviceLabelPlan($device_id);
+    }
     
     /**
      * 测试打印模板
@@ -909,51 +921,27 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     public function printDeviceLabel(int $device_id, string $template_type = 'device_label'): array
     {
+        return (new RecyclePrintSceneService())->printManualDeviceLabel($device_id);
+    }
 
-
-        try {
-            // 获取默认模板
-            $template = $this->getDefaultTemplate($template_type);
-            if (empty($template)) {
-                throw new AdminException('未找到可用的模板，请先配置默认模板');
-            }
-        
-            // 获取完整模板信息
-            $template_info = $this->getInfo($template['template_id']);
-
-            
-            if (empty($template_info)) {
-                throw new AdminException('模板信息获取失败');
-            }
-            
-            // 获取设备打印数据
-            $device_data = $this->getDevicePrintData($device_id);
-            
-           
-            // 获取默认打印机
-            $printer = $this->getDefaultPrinter();
-            if (empty($printer)) {
-                throw new AdminException('未找到可用的打印机，请先配置打印机');
-            }
-            
-            // 使用模板的instruction_content进行打印
-            $print_content = $template_info['instruction_content'] ?? '';
-            if (empty($print_content)) {
-                throw new AdminException('模板缺少打印指令内容');
-            }
-            
-            
-            // 使用打印服务替换变量并打印
-            return $this->printService->printWithVariables($print_content, $device_data, $printer);
-            
-        } catch (AdminException $e) {
+    /**
+     * 使用指定模板、数据和打印机执行打印
+     * @param array $templateInfo
+     * @param array $deviceData
+     * @param array $printer
+     * @return array
+     */
+    public function printWithTemplateData(array $templateInfo, array $deviceData, array $printer): array
+    {
+        $printContent = $templateInfo['instruction_content'] ?? '';
+        if (empty($printContent)) {
             return [
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => '模板缺少打印指令内容'
             ];
-        } catch (\Exception $e) {
-            throw new AdminException('系统错误：' . $e->getMessage());
         }
+
+        return $this->printService->printWithVariables($printContent, $deviceData, $printer);
     }
 
     /**
@@ -1027,4 +1015,4 @@ class RecyclePrinterTemplateService extends BaseAdminService
         return $template;
     }
 
-} 
+}

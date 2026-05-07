@@ -5,7 +5,7 @@ use think\facade\Log;
 
 /**
  * 设备质检完成事件监听
- * 注意：自动打印已迁移到 RecycleDeviceService::completeCheck() 中通过 trigger_event 控制
+ * 注意：自动打印已迁移到 RecycleDeviceService::completeCheck() 中通过打印场景控制
  */
 class DeviceCheckCompleteListener
 {
@@ -26,7 +26,7 @@ class DeviceCheckCompleteListener
             'status' => $params['status'] ?? ''
         ]);
 
-        // 自动打印已由 RecycleDeviceService::completeCheck() 中的 trigger_event 逻辑统一处理
+        // 自动打印已由 RecycleDeviceService::completeCheck() 中的打印场景逻辑统一处理
         // 不再在此处重复打印
 
         return '';

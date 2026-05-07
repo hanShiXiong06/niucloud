@@ -14,12 +14,14 @@
           <el-option v-for="(s, k) in PAPER_PRESETS" :key="k" :label="s.name" :value="k" />
         </el-select>
         <template v-if="paperSize === 'custom'">
+          <span class="text-muted">宽</span>
           <el-input-number v-model="templateData.width" :min="20" :max="200" size="small" style="width:90px" @change="onCanvasSizeChange" />
-          <span class="text-muted">×</span>
+          <span class="text-muted">高</span>
           <el-input-number v-model="templateData.height" :min="20" :max="200" size="small" style="width:90px" @change="onCanvasSizeChange" />
           <span class="text-muted">mm</span>
         </template>
         <el-button @click="testPrint" v-if="isEdit" :icon="Printer" size="small" type="warning" :loading="testing">测试打印</el-button>
+        <el-button @click="goPrintScene" :icon="Setting" size="small">打印场景</el-button>
         <el-button @click="showSaveDialog" :icon="Document" size="small" type="primary" :loading="saving">保存模板</el-button>
       </div>
     </div>
@@ -36,6 +38,16 @@
             <div class="tool-btn" @click="addElement('barcode')"><el-icon><Minus /></el-icon><span>条形码</span></div>
             <div class="tool-btn" @click="addElement('line')"><el-icon><SemiSelect /></el-icon><span>线条</span></div>
             <div class="tool-btn" @click="addElement('rectangle')"><el-icon><FullScreen /></el-icon><span>矩形</span></div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-title">配置流程</div>
+          <div class="flow-steps">
+            <div><strong>1</strong><span>设计标签内容和尺寸</span></div>
+            <div><strong>2</strong><span>保存为对应模板类型</span></div>
+            <div><strong>3</strong><span>到打印场景选择模板、打印机和份数</span></div>
+            <div><strong>4</strong><span>测试打印后启用业务场景</span></div>
           </div>
         </div>
 
@@ -87,11 +99,23 @@
               @mousedown.stop="onElementMouseDown($event, el)"
             >
               <!-- 文本 -->
-              <div v-if="el.type === 'text'" class="el-text" :style="getTextStyle(el)">{{ getDisplayText(el) }}</div>
+              <div v-if="el.type === 'text'" class="el-text" :style="getTextStyle(el)">
+                <template v-if="shouldUsePrinterTextPreview(el)">
+                  <span
+                    v-for="(part, index) in getTextPreviewRuns(el)"
+                    :key="index"
+                    class="el-text-run"
+                    :style="{ width: part.width + 'px' }"
+                  >
+                    <span class="el-text-run__inner" :style="part.innerStyle">{{ part.text }}</span>
+                  </span>
+                </template>
+                <template v-else>{{ getDisplayText(el) }}</template>
+              </div>
               <!-- 二维码 -->
-              <canvas v-if="el.type === 'qrcode'" :ref="(r: any) => setQrRef(el.id, r)" class="el-qr"></canvas>
+              <canvas v-if="el.type === 'qrcode'" :ref="(r) => setQrRef(el.id, r)" class="el-qr"></canvas>
               <!-- 条形码 -->
-              <svg v-if="el.type === 'barcode'" :ref="(r: any) => setBcRef(el.id, r)" class="el-barcode"></svg>
+              <svg v-if="el.type === 'barcode'" :ref="(r) => setBcRef(el.id, r)" class="el-barcode"></svg>
               <!-- 线条 -->
               <div v-if="el.type === 'line'" class="el-line" :style="getLineStyle(el)"></div>
               <!-- 矩形 -->
@@ -106,7 +130,7 @@
               </template>
             </div>
           </div>
-          <div class="canvas-info">{{ templateData.width }}mm × {{ templateData.height }}mm | {{ templateData.elements.length }} 个元素</div>
+          <div class="canvas-info">宽 {{ templateData.width }}mm × 高 {{ templateData.height }}mm | {{ templateData.elements.length }} 个元素</div>
         </div>
       </div>
 
@@ -233,8 +257,12 @@
     </div>
 
     <!-- 保存对话框 -->
-    <el-dialog v-model="saveDialogVisible" title="保存模板" width="500px" :close-on-click-modal="false">
-      <el-form :model="saveForm" label-width="90px" size="default">
+    <el-dialog v-model="saveDialogVisible" title="保存模板" width="min(560px, calc(100vw - 32px))" :close-on-click-modal="false">
+      <div class="save-guide">
+        <div class="save-guide__title">模板只负责标签内容</div>
+        <div class="save-guide__text">打印机、自动打印、打印份数请在“打印场景”中配置，避免同一规则在多个地方冲突。</div>
+      </div>
+      <el-form :model="saveForm" label-width="90px" size="default" class="save-form">
         <el-form-item label="模板名称" required>
           <el-input v-model="saveForm.template_name" placeholder="请输入模板名称" />
         </el-form-item>
@@ -245,34 +273,6 @@
             <el-option value="return_label" label="退回标签" />
             <el-option value="custom" label="自定义模板" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="绑定打印机">
-          <el-select v-model="saveForm.printer_id" style="width:100%" placeholder="使用默认打印机">
-            <el-option :value="0" label="使用默认打印机" />
-            <el-option v-for="p in printerList" :key="p.printer_id" :value="p.printer_id" :label="p.printer_name" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="触发时机">
-          <el-select v-model="saveForm.trigger_event" style="width:100%">
-            <el-option v-for="t in TRIGGER_OPTIONS" :key="t.value" :value="t.value" :label="t.label" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="打印份数">
-          <el-input-number v-model="saveForm.copies" :min="1" :max="10" />
-        </el-form-item>
-        <el-form-item label="边距(mm)">
-          <div class="margin-inputs">
-            <el-input-number v-model="saveForm.margin.top" :min="0" :max="20" size="small" placeholder="上" controls-position="right" />
-            <el-input-number v-model="saveForm.margin.right" :min="0" :max="20" size="small" placeholder="右" controls-position="right" />
-            <el-input-number v-model="saveForm.margin.bottom" :min="0" :max="20" size="small" placeholder="下" controls-position="right" />
-            <el-input-number v-model="saveForm.margin.left" :min="0" :max="20" size="small" placeholder="左" controls-position="right" />
-          </div>
-          <div class="margin-labels">
-            <span>上</span><span>右</span><span>下</span><span>左</span>
-          </div>
-        </el-form-item>
-        <el-form-item label="设为默认">
-          <el-switch v-model="saveForm.is_default" :active-value="1" :inactive-value="0" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -287,15 +287,14 @@
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, EditPen, Grid, Minus, SemiSelect, FullScreen, Printer, Document } from '@element-plus/icons-vue'
+import { ArrowLeft, EditPen, Grid, Minus, SemiSelect, FullScreen, Printer, Document, Setting } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 import JsBarcode from 'jsbarcode'
 import { getTemplateInfo, addTemplate, editTemplate, testPrintTemplate } from '@/addon/recycle/api/printer_template'
-import { getPrinterList } from '@/addon/recycle/api/printer'
 import {
   type TemplateElement, type TemplateData,
-  FONT_LIST, VARIABLE_GROUPS, PAPER_PRESETS, TRIGGER_OPTIONS,
-  Units, replaceVariables, getFontDef, genId, SAMPLE_DATA
+  FONT_LIST, VARIABLE_GROUPS, PAPER_PRESETS,
+  Units, replaceVariables, getFontDef, genId
 } from './types'
 
 const route = useRoute()
@@ -308,7 +307,6 @@ const templateInfo = ref<Record<string, any>>({})
 const saving = ref(false)
 const testing = ref(false)
 const saveDialogVisible = ref(false)
-const printerList = ref<any[]>([])
 const selectedId = ref<string>('')
 const canvasRef = ref<HTMLElement>()
 const canvasWrapRef = ref<HTMLElement>()
@@ -316,6 +314,7 @@ const canvasWrapRef = ref<HTMLElement>()
 // QR/Barcode ref 映射
 const qrRefs: Record<string, HTMLCanvasElement> = {}
 const bcRefs: Record<string, SVGElement> = {}
+const HALF_WIDTH_PREVIEW_SCALE = 0.92
 
 function setQrRef(id: string, el: any) { if (el) qrRefs[id] = el }
 function setBcRef(id: string, el: any) { if (el) bcRefs[id] = el }
@@ -335,12 +334,7 @@ const paperSize = ref('58x40')
 // 保存表单
 const saveForm = reactive({
   template_name: '',
-  template_type: 'device_label',
-  printer_id: 0,
-  trigger_event: '',
-  copies: 1,
-  margin: { top: 0, right: 0, bottom: 0, left: 0 },
-  is_default: 0
+  template_type: 'device_label'
 })
 
 // 画布尺寸 px
@@ -460,12 +454,15 @@ function getTextStyle(el: TemplateElement): Record<string, string> {
   const ws = el.width_scale || 1
   const hs = el.height_scale || 1
   const fontSize = Units.dotToPx(fd.charHeight * hs)
-  const letterSpacing = ws > 1 ? Units.dotToPx(fd.charWidth * (ws - 1)) + 'px' : '0px'
+  const usePrinterPreview = shouldUsePrinterTextPreview(el)
+  const letterSpacing = !usePrinterPreview && ws > 1 ? Units.dotToPx(fd.charWidth * (ws - 1)) + 'px' : '0px'
   const transform = el.rotation ? `rotate(${el.rotation}deg)` : ''
   return {
+    display: usePrinterPreview ? 'inline-flex' : 'inline-block',
+    alignItems: 'flex-start',
     fontSize: fontSize + 'px',
     lineHeight: fontSize + 'px',
-    fontFamily: el.font === 9 ? '"SimSun","宋体",monospace' : 'monospace',
+    fontFamily: el.font === 9 ? '"Songti SC","STSong","SimSun","宋体",monospace' : 'monospace',
     letterSpacing,
     whiteSpace: 'nowrap',
     transform,
@@ -475,6 +472,45 @@ function getTextStyle(el: TemplateElement): Record<string, string> {
 
 function getDisplayText(el: TemplateElement): string {
   return replaceVariables(el.content || '')
+}
+
+function shouldUsePrinterTextPreview(el: TemplateElement): boolean {
+  return (el.font || 9) === 9
+}
+
+function isHalfWidthChar(char: string): boolean {
+  const code = char.codePointAt(0) || 0
+  return code <= 0x00ff || (code >= 0xff61 && code <= 0xffdc) || (code >= 0xffe8 && code <= 0xffee)
+}
+
+function getTextPreviewRuns(el: TemplateElement) {
+  const fd = getFontDef(el.font || 9)
+  const widthScale = el.width_scale || 1
+  const runs: Array<{ text: string; width: number; innerStyle: Record<string, string> }> = []
+
+  Array.from(getDisplayText(el)).forEach((char) => {
+    const halfWidth = isHalfWidthChar(char)
+    const last = runs[runs.length - 1]
+    const width = Units.dotToPx((halfWidth ? fd.charWidth / 2 : fd.charWidth) * widthScale)
+    const scaleX = (halfWidth ? HALF_WIDTH_PREVIEW_SCALE : 1) * widthScale
+
+    if (last && last.innerStyle.transform === `scaleX(${scaleX})`) {
+      last.text += char
+      last.width += width
+      return
+    }
+
+    runs.push({
+      text: char,
+      width,
+      innerStyle: {
+        transform: `scaleX(${scaleX})`,
+        transformOrigin: 'left top'
+      }
+    })
+  })
+
+  return runs
 }
 
 function getLineStyle(el: TemplateElement): Record<string, string> {
@@ -510,15 +546,34 @@ async function renderQr(el: TemplateElement) {
   const canvas = qrRefs[el.id]
   if (!canvas) return
   const text = replaceVariables(el.content || '') || 'SAMPLE'
-  const sz = (el.size || 4) * 8
-  const pxSize = Units.dotToPx(sz)
+  const errorLevel = (el.error_level || 'M') as any
+  const pxSize = getQrPreviewSizePx(text, Number(el.size || 4), errorLevel)
+  canvas.width = pxSize
+  canvas.height = pxSize
+  canvas.style.width = pxSize + 'px'
+  canvas.style.height = pxSize + 'px'
   try {
     await QRCode.toCanvas(canvas, text, {
       width: pxSize,
       margin: 0,
-      errorCorrectionLevel: (el.error_level || 'M') as any
+      errorCorrectionLevel: errorLevel
     })
   } catch { /* ignore invalid content */ }
+}
+
+function getQrPreviewSizePx(text: string, size: number, errorLevel: string): number {
+  const moduleCount = getQrModuleCount(text, errorLevel)
+  const moduleSizeDot = Math.max(1, Math.min(10, Math.round(size || 4)))
+  return Math.max(8, Math.round(Units.dotToPx(moduleCount * moduleSizeDot)))
+}
+
+function getQrModuleCount(text: string, errorLevel: string): number {
+  try {
+    const qr = (QRCode as any).create(text || 'SAMPLE', { errorCorrectionLevel: errorLevel })
+    return Number(qr?.modules?.size || 21)
+  } catch {
+    return 21
+  }
 }
 
 function renderBarcode(el: TemplateElement) {
@@ -617,7 +672,8 @@ function onResizeMove(e: MouseEvent) {
     }
   } else if (el.type === 'qrcode') {
     const delta = Math.max(dxDot, dyDot)
-    el.size = Math.max(1, Math.min(10, Math.round(resizeState.origSize + delta / 16)))
+    const moduleCount = getQrModuleCount(replaceVariables(el.content || '') || 'SAMPLE', el.error_level || 'M')
+    el.size = Math.max(1, Math.min(10, Math.round(resizeState.origSize + delta / moduleCount)))
   } else if (el.type === 'barcode') {
     if (handle.includes('s') || handle.includes('n')) {
       el.height = Math.max(20, Math.round(resizeState.origH + dyDot))
@@ -644,11 +700,6 @@ function onResizeEnd() {
 function showSaveDialog() {
   saveForm.template_name = templateInfo.value.template_name || ''
   saveForm.template_type = templateInfo.value.template_type || 'device_label'
-  saveForm.printer_id = templateInfo.value.printer_id || 0
-  saveForm.trigger_event = templateInfo.value.trigger_event || ''
-  saveForm.copies = templateData.copies || 1
-  saveForm.margin = { ...templateData.margin }
-  saveForm.is_default = templateInfo.value.is_default || 0
   saveDialogVisible.value = true
 }
 
@@ -659,9 +710,9 @@ async function handleSave() {
   }
   saving.value = true
   try {
-    // 将 copies 和 margin 存入 content JSON
-    templateData.copies = saveForm.copies
-    templateData.margin = { ...saveForm.margin }
+    // 打印份数和打印机由打印场景控制，模板保存时只保存标签内容。
+    templateData.copies = 1
+    templateData.margin = { top: 0, right: 0, bottom: 0, left: 0 }
 
     const payload: Record<string, any> = {
       template_name: saveForm.template_name,
@@ -669,9 +720,8 @@ async function handleSave() {
       width: templateData.width,
       height: templateData.height,
       template_data: JSON.parse(JSON.stringify(templateData)),
-      is_default: saveForm.is_default,
-      printer_id: saveForm.printer_id,
-      trigger_event: saveForm.trigger_event,
+      printer_id: 0,
+      trigger_event: '',
       status: 1
     }
 
@@ -700,7 +750,7 @@ async function testPrint() {
   try {
     await testPrintTemplate(templateId.value, {})
   } catch (e: any) {
-    ElMessage.error(e.message || '打印失败')
+    console.error('测试打印失败', e)
   } finally {
     testing.value = false
   }
@@ -710,6 +760,10 @@ async function testPrint() {
 
 function goBack() {
   router.back()
+}
+
+function goPrintScene() {
+  router.push('/recycle/print_scene/list')
 }
 
 async function loadTemplate() {
@@ -742,16 +796,8 @@ async function loadTemplate() {
   }
 }
 
-async function loadPrinters() {
-  try {
-    const res = await getPrinterList({})
-    printerList.value = res.data?.data || res.data || []
-  } catch { /* ignore */ }
-}
-
 onMounted(() => {
   loadTemplate()
-  loadPrinters()
 })
 
 // 监听元素变化重新渲染 QR/Barcode
@@ -762,7 +808,10 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
 .visual-editor-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - 120px);
+  max-height: calc(100vh - 120px);
+  box-sizing: border-box;
+  overflow: hidden;
   background: #f5f5f5;
 }
 
@@ -792,6 +841,7 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
 .editor-main {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -803,6 +853,8 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
   overflow-y: auto;
   flex-shrink: 0;
   padding: 12px;
+  box-sizing: border-box;
+  min-height: 0;
 }
 .panel-section { margin-bottom: 16px; }
 .panel-title {
@@ -838,6 +890,33 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
   background: #ecf5ff;
 }
 
+.flow-steps {
+  display: grid;
+  gap: 8px;
+}
+
+.flow-steps div {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  color: #606266;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.flow-steps strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 12px;
+}
+
 .var-group { margin-bottom: 10px; }
 .var-group-label {
   font-size: 12px;
@@ -851,15 +930,19 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
 /* 画布区域 */
 .panel-canvas {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
   display: flex;
   justify-content: center;
   padding: 24px;
+  box-sizing: border-box;
 }
 .canvas-scroll {
   display: flex;
   flex-direction: column;
   align-items: center;
+  min-width: max-content;
 }
 .canvas-paper {
   position: relative;
@@ -893,6 +976,17 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
   color: #000;
   pointer-events: none;
 }
+.el-text-run {
+  display: inline-block;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: visible;
+  white-space: pre;
+}
+.el-text-run__inner {
+  display: inline-block;
+  white-space: pre;
+}
 .el-qr, .el-barcode { display: block; pointer-events: none; }
 .el-line { pointer-events: none; }
 .el-rect { pointer-events: none; }
@@ -920,6 +1014,8 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
   overflow-y: auto;
   flex-shrink: 0;
   padding: 12px;
+  box-sizing: border-box;
+  min-height: 0;
 }
 .prop-form :deep(.el-form-item) { margin-bottom: 12px; }
 .prop-form :deep(.el-input-number) { width: 100%; }
@@ -941,19 +1037,26 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
   line-height: 1.8;
 }
 
-/* 保存对话框边距输入 */
-.margin-inputs {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
-  gap: 6px;
+.save-guide {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #d9ecff;
+  border-radius: 6px;
+  background: #f4f8ff;
 }
-.margin-labels {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
-  gap: 6px;
-  text-align: center;
-  font-size: 12px;
-  color: #999;
-  margin-top: 2px;
+
+.save-guide__title {
+  margin-bottom: 4px;
+  color: #303133;
+  font-weight: 600;
+}
+
+.save-guide__text {
+  color: #606266;
+  line-height: 1.6;
+}
+
+.save-form :deep(.el-select) {
+  width: 100%;
 }
 </style>

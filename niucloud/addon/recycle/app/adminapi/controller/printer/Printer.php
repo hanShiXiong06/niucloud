@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace addon\recycle\app\adminapi\controller\printer;
 
 use addon\recycle\app\service\admin\printer\RecyclePrinterService;
+use addon\recycle\app\service\admin\printer\RecyclePrinterTemplateService;
 use core\base\BaseAdminController;
 use think\App;
 use core\exception\CommonException;
@@ -32,10 +33,17 @@ class Printer extends BaseAdminController
      */
     protected $service;
 
+    /**
+     * 打印模板服务
+     * @var RecyclePrinterTemplateService
+     */
+    protected $templateService;
+
     public function __construct(App $app)
     {
         parent::__construct($app);
         $this->service = new RecyclePrinterService();
+        $this->templateService = new RecyclePrinterTemplateService();
     }
   
     /**
@@ -186,12 +194,36 @@ class Printer extends BaseAdminController
      */
     public function printDeviceLabel(int $id)
     {
-        $result = $this->service->printDeviceLabel($id);
+        $data = $this->request->params([
+            ['template_type', 'device_label']
+        ]);
+
+        $result = $this->templateService->printDeviceLabel($id, $data['template_type']);
         if ($result['success']) {
             return success($result);
         } else {
-            return fail($result['message']);
+            return fail($result['message'] ?? '打印失败', $result);
         }
+    }
+
+    /**
+     * 获取设备标签打印计划
+     * @param int $id 设备ID
+     * @return Response
+     */
+    public function getDeviceLabelPrintPlan(int $id)
+    {
+        $data = $this->request->params([
+            ['template_type', 'device_label']
+        ]);
+
+        $result = $this->templateService->resolveDeviceLabelPrintPlan($id, $data['template_type']);
+        if (!empty($result['can_print'])) {
+            unset($result['template_info'], $result['printer_info'], $result['device_data']);
+            return success($result);
+        }
+
+        return fail($result['message'] ?? '打印计划不可用', $result);
     }
 
     /**
@@ -332,7 +364,7 @@ class Printer extends BaseAdminController
         
         try {
         $this->service->toggleStatus($id, (int)$data['status']);
-        return success($data['status'] ? '打印机已激活' : '打印机已停用');
+        return success($data['status'] ? '打印机已启用' : '打印机已停用');
         } catch (\Exception $e) {
             return fail('操作失败：' . $e->getMessage());
         }
@@ -352,4 +384,4 @@ class Printer extends BaseAdminController
             return fail('查询失败：' . $e->getMessage());
         }
     }
-} 
+}

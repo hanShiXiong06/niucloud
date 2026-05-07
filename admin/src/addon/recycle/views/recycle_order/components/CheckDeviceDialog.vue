@@ -1460,14 +1460,11 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
     min-height: 0;
     padding: 0;
     overflow: hidden;
-    background: #f5f7fa;
     display: block;
   }
 
   :deep(.el-dialog__footer) {
     flex: 0 0 auto;
-    padding: 10px 16px;
-    background: #fff;
     border-top: 1px solid #e5e7eb;
   }
 }
@@ -2938,18 +2935,6 @@ $cdd-warning: #d97706;
   content: '';
 }
 
-:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__body),
-:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__body) {
-  background: #eef3f8;
-}
-
-:global(.el-dialog.check-device-dialog.cdd-workbench-dialog .el-dialog__footer),
-:global(.check-device-dialog.cdd-workbench-dialog .el-dialog__footer) {
-  background: #ffffff;
-  border-top: 1px solid #dbe4ef;
-  box-shadow: 0 -8px 20px rgba(15, 23, 42, 0.04);
-}
-
 .cdd-topbar {
   min-height: 74px;
   padding: 12px 16px;
@@ -3037,7 +3022,7 @@ $cdd-warning: #d97706;
   gap: 9px;
 
   div {
-    grid-template-columns: 46px minmax(0, 1fr);
+    grid-template-columns: 50px minmax(0, 1fr);
     padding: 7px 8px;
     border-radius: 7px;
     background: #f8fafc;

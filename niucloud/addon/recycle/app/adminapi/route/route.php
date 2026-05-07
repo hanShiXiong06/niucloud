@@ -75,9 +75,6 @@ Route::group('recycle', function () {
     Route::delete('recycle_order/:id', 'addon\recycle\app\adminapi\controller\order\RecycleOrder@delete');
      // 查询手机imei的信息
     Route::get('recycle_device/imei_info/:imei', 'addon\recycle\app\adminapi\controller\order\RecycleDevice@getImeiInfo');
-     // 设备信息打印 
-    Route::post('printer/print_device_label/:id', 'addon\recycle\app\adminapi\controller\order\RecycleDevice@printDeviceLabel');
-
     // 设备管理
     Route::get('recycle_device/:id', 'addon\recycle\app\adminapi\controller\order\RecycleDevice@getInfo');
     Route::post('recycle_device', 'addon\recycle\app\adminapi\controller\order\RecycleDevice@add');
@@ -277,8 +274,20 @@ Route::group('recycle', function () {
     Route::post('printer/test', 'addon\recycle\app\adminapi\controller\printer\Printer@testPrint');
     // 打印标签
     Route::post('printer/print_label', 'addon\recycle\app\adminapi\controller\printer\Printer@printLabel');
+    // 获取设备标签打印计划
+    Route::get('printer/print_device_label_plan/:id', 'addon\recycle\app\adminapi\controller\printer\Printer@getDeviceLabelPrintPlan');
     // 打印设备标签
     Route::post('printer/print_device_label/:id', 'addon\recycle\app\adminapi\controller\printer\Printer@printDeviceLabel');
+
+    // 打印场景配置
+    Route::get('print_scene/lists', 'addon\recycle\app\adminapi\controller\printer\PrintScene@lists');
+    Route::get('print_scene/options', 'addon\recycle\app\adminapi\controller\printer\PrintScene@options');
+    Route::get('print_scene/:sceneKey', 'addon\recycle\app\adminapi\controller\printer\PrintScene@info');
+    Route::put('print_scene/:sceneKey', 'addon\recycle\app\adminapi\controller\printer\PrintScene@edit');
+    Route::post('print_scene/status/:sceneKey', 'addon\recycle\app\adminapi\controller\printer\PrintScene@modifyStatus');
+
+    // 打印日志
+    Route::get('print_log/lists', 'addon\recycle\app\adminapi\controller\printer\PrintLog@lists');
     
     // 打印模板管理
     // 获取模板列表

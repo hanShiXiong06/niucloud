@@ -192,9 +192,7 @@ const testPrinterHandler = async () => {
       user_key: form.user_key,
     });
 
-    if (res.code === 1) {
-      ElMessage.success("测试打印成功");
-    }
+    if (res.code !== 1) return;
   } catch (error) {
     console.error("测试打印失败", error);
   } finally {

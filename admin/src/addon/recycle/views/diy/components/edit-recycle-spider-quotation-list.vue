@@ -39,6 +39,20 @@
               <el-radio :label="0">全部</el-radio>
             </el-radio-group>
           </el-form-item>
+          <template v-if="diyStore.editComponent.showCategoryTabs">
+            <el-form-item label="Tab样式">
+              <el-radio-group v-model="diyStore.editComponent.tabStyleType">
+                <el-radio label="pill">胶囊</el-radio>
+                <el-radio label="card">卡片</el-radio>
+                <el-radio label="underline">下划线</el-radio>
+              </el-radio-group>
+              <div class="form-tip">胶囊和卡片更像可点击按钮，适合首页报价导航。</div>
+            </el-form-item>
+            <el-form-item label="滑动提示">
+              <el-switch v-model="diyStore.editComponent.showTabScrollCue" />
+              <div class="form-tip">分类较多时右侧显示渐隐箭头，提示用户可以横向滑动。</div>
+            </el-form-item>
+          </template>
           <el-form-item label="列表分组">
             <el-radio-group v-model="diyStore.editComponent.flatGroupMode">
               <el-radio label="none">不分组</el-radio>
@@ -125,6 +139,51 @@
         </el-form>
       </div>
 
+      <div class="edit-attr-item-wrap" v-if="diyStore.editComponent.showCategoryTabs">
+        <h3 class="mb-[10px]">Tab样式</h3>
+        <el-form label-width="90px" class="px-[10px]">
+          <el-form-item label="主题色">
+            <el-color-picker v-model="diyStore.editComponent.tabThemeColor" show-alpha :predefine="diyStore.predefineColors" />
+          </el-form-item>
+          <el-form-item label="选中背景">
+            <el-color-picker v-model="diyStore.editComponent.tabActiveBgColor" show-alpha :predefine="diyStore.predefineColors" />
+            <div class="form-tip">不填时使用主题色或组件默认样式。</div>
+          </el-form-item>
+          <el-form-item label="未选背景">
+            <el-color-picker v-model="diyStore.editComponent.tabInactiveBgColor" show-alpha :predefine="diyStore.predefineColors" />
+          </el-form-item>
+          <el-form-item label="选中文字">
+            <el-color-picker v-model="diyStore.editComponent.tabActiveTextColor" show-alpha :predefine="diyStore.predefineColors" />
+          </el-form-item>
+          <el-form-item label="未选文字">
+            <el-color-picker v-model="diyStore.editComponent.tabInactiveTextColor" show-alpha :predefine="diyStore.predefineColors" />
+          </el-form-item>
+          <el-form-item label="边框颜色">
+            <el-color-picker v-model="diyStore.editComponent.tabBorderColor" show-alpha :predefine="diyStore.predefineColors" />
+          </el-form-item>
+          <el-form-item label="Tab高度">
+            <el-slider v-model="diyStore.editComponent.tabHeight" show-input size="small" class="ml-[10px]" :min="44" :max="96" />
+          </el-form-item>
+          <el-form-item label="圆角">
+            <el-slider v-model="diyStore.editComponent.tabRadius" show-input size="small" class="ml-[10px]" :min="0" :max="48" />
+          </el-form-item>
+          <el-form-item label="文字字号">
+            <el-slider v-model="diyStore.editComponent.tabFontSize" show-input size="small" class="ml-[10px]" :min="20" :max="34" />
+          </el-form-item>
+          <el-form-item label="文字粗细">
+            <el-radio-group v-model="diyStore.editComponent.tabFontWeight">
+              <el-radio :label="400">常规</el-radio>
+              <el-radio :label="500">中等</el-radio>
+              <el-radio :label="600">半粗</el-radio>
+              <el-radio :label="700">加粗</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="左右留白">
+            <el-slider v-model="diyStore.editComponent.tabSidePadding" show-input size="small" class="ml-[10px]" :min="8" :max="40" />
+          </el-form-item>
+        </el-form>
+      </div>
+
       <div class="edit-attr-item-wrap">
         <h3 class="mb-[10px]">报价项样式</h3>
         <el-form label-width="90px" class="px-[10px]">
@@ -189,6 +248,19 @@ onMounted(() => {
   if (diyStore.editComponent.showCategoryTabs === undefined) diyStore.editComponent.showCategoryTabs = true
   if (!diyStore.editComponent.categoryDefaultMode || diyStore.editComponent.categoryDefaultMode === 'all') diyStore.editComponent.categoryDefaultMode = 'first'
   if (diyStore.editComponent.categoryTabDepth === undefined) diyStore.editComponent.categoryTabDepth = 0
+  if (!diyStore.editComponent.tabStyleType) diyStore.editComponent.tabStyleType = 'pill'
+  if (diyStore.editComponent.showTabScrollCue === undefined) diyStore.editComponent.showTabScrollCue = true
+  if (!diyStore.editComponent.tabThemeColor) diyStore.editComponent.tabThemeColor = diyStore.editComponent.buttonColor || '#2563EB'
+  if (diyStore.editComponent.tabActiveBgColor === undefined) diyStore.editComponent.tabActiveBgColor = ''
+  if (diyStore.editComponent.tabInactiveBgColor === undefined) diyStore.editComponent.tabInactiveBgColor = ''
+  if (diyStore.editComponent.tabActiveTextColor === undefined) diyStore.editComponent.tabActiveTextColor = ''
+  if (!diyStore.editComponent.tabInactiveTextColor) diyStore.editComponent.tabInactiveTextColor = '#475569'
+  if (diyStore.editComponent.tabBorderColor === undefined) diyStore.editComponent.tabBorderColor = ''
+  if (!diyStore.editComponent.tabHeight) diyStore.editComponent.tabHeight = 64
+  if (diyStore.editComponent.tabRadius === undefined) diyStore.editComponent.tabRadius = 32
+  if (!diyStore.editComponent.tabFontSize) diyStore.editComponent.tabFontSize = 26
+  if (!diyStore.editComponent.tabFontWeight) diyStore.editComponent.tabFontWeight = 600
+  if (!diyStore.editComponent.tabSidePadding) diyStore.editComponent.tabSidePadding = 18
   if (!diyStore.editComponent.flatGroupMode) diyStore.editComponent.flatGroupMode = 'level2'
   if (diyStore.editComponent.showGroupCount === undefined) diyStore.editComponent.showGroupCount = true
   if (diyStore.editComponent.showRefresh === undefined) diyStore.editComponent.showRefresh = true

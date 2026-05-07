@@ -208,13 +208,6 @@ export const PAPER_PRESETS: Record<string, { name: string; width: number; height
   '100x50': { name: '100×50mm', width: 100, height: 50 },
 }
 
-// 触发时机选项
-export const TRIGGER_OPTIONS = [
-  { value: '', label: '手动触发' },
-  { value: 'draft', label: '暂存质检' },
-  { value: 'complete', label: '完成质检' },
-]
-
 // 单位转换工具
 export const Units = {
   mmToDot: (mm: number) => mm * 8,

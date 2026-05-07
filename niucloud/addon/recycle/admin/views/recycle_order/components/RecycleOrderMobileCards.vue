@@ -196,7 +196,7 @@
                   :icon="Printer"
                   @click="props.printDeviceLabel(device)"
                 >
-                  打印标签
+                  打印设备标签
                 </el-button>
                 <el-button
                   type="primary"

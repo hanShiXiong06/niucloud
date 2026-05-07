@@ -12,5 +12,7 @@ DROP TABLE IF EXISTS `{{prefix}}recycle_user_address`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_device_log`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_order_log`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_printer`;
-
+DROP TABLE IF EXISTS `{{prefix}}recycle_printer_template`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_print_scene`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_print_log`;
 
