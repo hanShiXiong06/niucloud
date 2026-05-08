@@ -5,6 +5,7 @@ namespace addon\recycle_quote_spider\app\service\admin;
 
 use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
+use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use addon\recycle_quote_spider\app\service\core\QuotePriceCalculator;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -108,6 +109,7 @@ class QuoteItemService extends BaseAdminService
             'source_hash' => md5($name . microtime(true)),
             'last_sync_at' => time(),
         ]);
+        $this->refreshApiCache();
         return (int)$record->id;
     }
 
@@ -169,6 +171,7 @@ class QuoteItemService extends BaseAdminService
             'raw_data' => ['manual' => true],
             'source_hash' => md5($modelName . json_encode($manualPrices, JSON_UNESCAPED_UNICODE)),
         ]);
+        $this->refreshApiCache();
         return (int)$record->id;
     }
 
@@ -196,6 +199,7 @@ class QuoteItemService extends BaseAdminService
                 (new QuoteRow())->where('id', $row['id'])->update(['final_prices' => $finalPrices]);
             }
         }
+        $this->refreshApiCache();
         return true;
     }
 
@@ -227,7 +231,13 @@ class QuoteItemService extends BaseAdminService
         if (!empty($save)) {
             $model->where('id', $id)->update($save);
         }
+        $this->refreshApiCache();
         return true;
+    }
+
+    private function refreshApiCache(): void
+    {
+        (new QuoteApiCacheService())->refresh($this->site_id);
     }
 
     private function buildAdjustSave(array $data, array $intFields = []): array

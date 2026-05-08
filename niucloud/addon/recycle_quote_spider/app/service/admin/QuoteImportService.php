@@ -6,6 +6,7 @@ namespace addon\recycle_quote_spider\app\service\admin;
 use addon\recycle_quote_spider\app\model\QuoteImportTask;
 use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
+use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -242,11 +243,17 @@ class QuoteImportService extends BaseAdminService
             'message' => '已导入并覆盖报价项',
         ]);
 
+        $this->refreshApiCache();
         return [
             'item_id' => $itemId,
             'rows' => count($parsed['rows']),
             'price_columns' => $parsed['price_columns'],
         ];
+    }
+
+    private function refreshApiCache(): void
+    {
+        (new QuoteApiCacheService())->refresh($this->site_id);
     }
 
     private function getSheets(string $filePath): array

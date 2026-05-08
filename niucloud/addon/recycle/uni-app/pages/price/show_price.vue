@@ -1,15 +1,15 @@
 <template>
-	<view class="show-price-page">
-		<view class="custom-navbar" :class="{ compact: isScrolled }">
-			<view class="navbar-content">
-				<view class="navbar-left" @click="goBack">
+	<view class="show-price-page" :style="pageStyleVars">
+		<view class="custom-navbar" :class="{ compact: isScrolled }" :style="customNavbarStyle">
+			<view class="navbar-content" :style="navbarContentStyle">
+				<view class="navbar-left" :style="navbarSideStyle" @click="goBack">
 					<u-icon name="arrow-left" color="#ffffff" size="42rpx"></u-icon>
 				</view>
-				<view class="navbar-center">
+				<view class="navbar-center" :style="navbarCenterStyle">
 					<text class="navbar-title">{{ navbarTitle }}</text>
 					<text v-if="isScrolled" class="navbar-subtitle">{{ priceDateDisplay }}</text>
 				</view>
-				<view class="navbar-capsule-space"></view>
+				<view class="navbar-capsule-space" :style="navbarSideStyle"></view>
 			</view>
 		</view>
 
@@ -22,7 +22,7 @@
 		</view>
 
 		<!-- 空状态 -->
-		<view v-else-if="groupedTables.length === 0 && !spiderImageUrl" class="empty-container">
+		<view v-else-if="tableData.length === 0 && !spiderImageUrl" class="empty-container">
 			<view class="empty-badge">暂无数据</view>
 			<text class="empty-title">没有可展示的报价</text>
 			<text class="empty-desc">你可以点击刷新重新拉取最新报价</text>
@@ -39,7 +39,7 @@
 				<image class="image-quote" :src="spiderImageUrl" mode="widthFix" @click="previewSpiderImage" />
 			</view>
 
-			<view v-if="groupedTables.length > 0" class="tool-card">
+			<view v-if="tableData.length > 0" class="tool-card">
 				<view class="tool-head">
 					<view class="data-meta">
 						<text>共 {{ filteredModelCount }} 个型号</text>
@@ -47,6 +47,9 @@
 						<text>{{ filteredRowCount }} 条价格</text>
 					</view>
 					<view class="tool-actions">
+						<view class="tool-action" :class="{ active: selectedModels.length > 0 }" @click="showModelFilter = true">
+							型号筛选{{ selectedModels.length ? `(${selectedModels.length})` : '' }}
+						</view>
 						<view class="tool-action" @click="openTypeSheet">切换报价单</view>
 						<view class="tool-action primary" @click="loadPriceData">刷新</view>
 					</view>
@@ -55,6 +58,20 @@
 					<text class="iconfont iconsousuo"></text>
 					<input v-model="keyword" class="search-input" placeholder="搜索型号 / 容量" placeholder-class="search-placeholder" />
 				</view>
+				<scroll-view v-if="selectedModels.length > 0" scroll-x class="selected-model-scroll">
+					<view class="selected-model-list">
+						<view
+							v-for="model in selectedModels"
+							:key="model"
+							class="selected-model-tag"
+							@click="removeSelectedModel(model)"
+						>
+							<text>{{ model }}</text>
+							<u-icon name="close" size="20rpx" color="#2563eb"></u-icon>
+						</view>
+						<view class="selected-model-clear" @click="applyModelFilter([])">清空</view>
+					</view>
+				</scroll-view>
 			</view>
 
 			<view v-if="groupedTables.length > 0" class="sheet-list">
@@ -159,6 +176,14 @@
 					</view>
 				</view>
 			</view>
+			<view v-else-if="tableData.length > 0" class="filter-result-empty">
+				<text class="filter-empty-title">没有匹配的报价</text>
+				<text class="filter-empty-desc">可以调整关键词或清空型号筛选后重新查看</text>
+				<view class="filter-empty-actions">
+					<view class="filter-empty-btn" @click="keyword = ''">清空搜索</view>
+					<view class="filter-empty-btn primary" @click="applyModelFilter([])">查看全部型号</view>
+				</view>
+			</view>
 		</view>
 
 		<view v-if="!loading" class="action-bar">
@@ -190,6 +215,13 @@
 				</view>
 			</view>
 		</view>
+		<ModelFilterPopup
+			:visible="showModelFilter"
+			:options="modelFilterOptions"
+			:selected="selectedModels"
+			@apply="applyModelFilter"
+			@close="showModelFilter = false"
+		/>
 	</view>
 </template>
 
@@ -198,6 +230,7 @@ import { computed, ref } from 'vue'
 import { onLoad, onPageScroll } from '@dcloudio/uni-app'
 import { getQuoteSpiderDetail, type QuoteSpiderItem } from '@/addon/recycle/api/quotation'
 import { getQuotationV2PriceList, getQuotationV2Types, type QuotationPriceData, type QuotationV2Type } from '@/addon/recycle_daheng_quote/api/quotation'
+import ModelFilterPopup from './components/ModelFilterPopup.vue'
 
 interface EnhancedPriceRow extends QuotationPriceData {
 	showAdjustment?: boolean
@@ -240,6 +273,12 @@ interface AdjustmentDisplayCell {
 interface ModelGroup {
 	modelName: string
 	rows: EnhancedPriceRow[]
+}
+
+interface ModelFilterOption {
+	name: string
+	rowCount: number
+	capacityCount: number
 }
 
 interface PricePageOptions {
@@ -296,8 +335,51 @@ const priceTypeName = ref('')
 const keyword = ref('')
 const isScrolled = ref(false)
 const showTypeSheet = ref(false)
+const showModelFilter = ref(false)
 const quotationTypes = ref<QuotationV2Type[]>([])
 const spiderImageUrl = ref('')
+const selectedModels = ref<string[]>([])
+const systemInfo = uni.getSystemInfoSync()
+const menuButtonInfo = (() => {
+	try {
+		// #ifdef MP-WEIXIN || MP-BAIDU || MP-TOUTIAO || MP-QQ
+		return uni.getMenuButtonBoundingClientRect()
+		// #endif
+	} catch (error) {
+		return null
+	}
+	return null
+})()
+const navStatusTopPx = Number(menuButtonInfo?.top ?? systemInfo.statusBarHeight ?? 0)
+const navCapsuleHeightPx = Number(menuButtonInfo?.height ?? 44)
+const navCapsuleWidthPx = Number(menuButtonInfo?.width ?? 87)
+const navBottomGapPx = 8
+const navContentHeightPx = navCapsuleHeightPx
+const navBarHeightPx = navStatusTopPx + navContentHeightPx + navBottomGapPx
+const navSideWidthRpx = Math.max(104, Math.ceil(navCapsuleWidthPx * 2 + 30))
+const pageStyleVars = computed(() => {
+	return [
+		`--price-navbar-height:${navBarHeightPx}px`,
+		`--price-navbar-top:${navStatusTopPx}px`,
+		`--price-navbar-content-height:${navContentHeightPx}px`,
+		`--price-navbar-side-width:${navSideWidthRpx}rpx`,
+		`--price-toolbar-sticky-top:${navBarHeightPx}px`
+	].join(';') + ';'
+})
+const customNavbarStyle = computed(() => `height:${navBarHeightPx}px;`)
+const navbarContentStyle = computed(() => {
+	return [
+		`height:${navContentHeightPx}px`,
+		`padding-top:${navStatusTopPx}px`,
+		`padding-bottom:${navBottomGapPx}px`,
+		'padding-left:18rpx',
+		'padding-right:18rpx'
+	].join(';') + ';'
+})
+const navbarSideStyle = computed(() => `width:${navSideWidthRpx}rpx;flex-basis:${navSideWidthRpx}rpx;height:${navContentHeightPx}px;`)
+const navbarCenterStyle = computed(() => {
+	return `top:${navStatusTopPx}px;height:${navContentHeightPx}px;width:calc(100% - ${navSideWidthRpx * 2}rpx);`
+})
 
 const groupedTables = computed<GroupedTable[]>(() => {
 	const normalizedData = filterRows(tableData.value).map(row => ({
@@ -387,6 +469,30 @@ const filteredModelCount = computed(() => {
 
 const filteredRowCount = computed(() => filterRows(tableData.value).length)
 
+const modelFilterOptions = computed<ModelFilterOption[]>(() => {
+	const map = new Map<string, { rowCount: number; capacities: Set<string> }>()
+	for (const row of tableData.value) {
+		const name = normalizeModelName(row.goods_name)
+		if (!name) continue
+		if (!map.has(name)) {
+			map.set(name, {
+				rowCount: 0,
+				capacities: new Set<string>()
+			})
+		}
+		const item = map.get(name)!
+		item.rowCount += 1
+		const capacity = String(row.capacity || '').trim()
+		if (capacity) item.capacities.add(capacity)
+	}
+
+	return Array.from(map.entries()).map(([name, item]) => ({
+		name,
+		rowCount: item.rowCount,
+		capacityCount: item.capacities.size || item.rowCount
+	}))
+})
+
 function getModelGroups(rows: EnhancedPriceRow[]): ModelGroup[] {
 	const groups: ModelGroup[] = []
 	let currentModelName = ''
@@ -439,13 +545,31 @@ function normalizePrices(value: unknown): Record<string, unknown> {
 
 function filterRows(rows: QuotationPriceData[]): QuotationPriceData[] {
 	const word = keyword.value.trim().toLowerCase()
-	if (!word) return rows
+	const selectedSet = new Set(selectedModels.value.map(normalizeModelName))
 
 	return rows.filter(row => {
+		if (selectedSet.size > 0 && !selectedSet.has(normalizeModelName(row.goods_name))) {
+			return false
+		}
+		if (!word) return true
 		const model = String(row.goods_name || '').toLowerCase()
 		const capacity = String(row.capacity || '').toLowerCase()
 		return model.includes(word) || capacity.includes(word)
 	})
+}
+
+function applyModelFilter(models: string[]) {
+	selectedModels.value = Array.from(new Set(models.map(normalizeModelName).filter(Boolean)))
+	showModelFilter.value = false
+}
+
+function removeSelectedModel(model: string) {
+	const target = normalizeModelName(model)
+	selectedModels.value = selectedModels.value.filter(item => normalizeModelName(item) !== target)
+}
+
+function normalizeModelName(value: unknown): string {
+	return String(value || '').replace(/\s+/g, ' ').trim()
 }
 
 function parsePriceValue(value: unknown): number | null {
@@ -1323,6 +1447,7 @@ function switchQuotation(item: QuotationV2Type) {
 	pageTitle.value = item.title || item.dataset_name || item.price_name || '报价查询'
 	showTypeSheet.value = false
 	keyword.value = ''
+	selectedModels.value = []
 	loadPriceData()
 }
 
@@ -1429,17 +1554,16 @@ onPageScroll((event) => {
 	border-bottom: 1rpx solid rgba(59, 130, 246, 0.16);
 
 	.navbar-content {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		height: 88rpx;
-		padding: env(safe-area-inset-top) 24rpx 0;
+		box-sizing: content-box;
 	}
 
 	.navbar-left,
 	.navbar-right {
-		width: 96rpx;
-		height: 64rpx;
+		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 	}
@@ -1477,7 +1601,7 @@ onPageScroll((event) => {
 .empty-container {
 	position: relative;
 	z-index: 1;
-	padding: calc(88rpx + env(safe-area-inset-top) + 24rpx) 6rpx calc(160rpx + env(safe-area-inset-bottom));
+	padding: calc(var(--price-navbar-height) + 18rpx) 6rpx calc(160rpx + env(safe-area-inset-bottom));
 }
 
 .loading-container {
@@ -1514,7 +1638,7 @@ onPageScroll((event) => {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	padding-top: calc(88rpx + env(safe-area-inset-top) + 120rpx);
+	padding-top: calc(var(--price-navbar-height) + 120rpx);
 
 	.empty-badge {
 		font-size: 22rpx;
@@ -1884,14 +2008,10 @@ onPageScroll((event) => {
 
 	.navbar-content {
 		position: relative;
-		height: 104rpx;
-		padding: env(safe-area-inset-top) 18rpx 0;
 	}
 
 	.navbar-left {
-		flex: 0 0 72rpx;
-		width: 72rpx;
-		height: 72rpx;
+		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1906,11 +2026,8 @@ onPageScroll((event) => {
 	.navbar-center {
 		position: absolute;
 		left: 50%;
-		top: env(safe-area-inset-top);
 		transform: translateX(-50%);
-		width: calc(100% - 440rpx);
 		min-width: 260rpx;
-		// height: 104rpx;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -1918,7 +2035,6 @@ onPageScroll((event) => {
 		padding: 0 10rpx;
 		box-sizing: border-box;
 		pointer-events: none;
-		margin-top: 20rpx;
 	}
 
 	.navbar-title {
@@ -1942,9 +2058,7 @@ onPageScroll((event) => {
 	}
 
 	.navbar-capsule-space {
-		flex: 0 0 190rpx;
-		width: 190rpx;
-		height: 72rpx;
+		flex-shrink: 0;
 	}
 }
 
@@ -1955,7 +2069,7 @@ onPageScroll((event) => {
 .price-content,
 .loading-container,
 .empty-container {
-	padding-top: calc(104rpx + env(safe-area-inset-top) + 18rpx);
+	padding-top: calc(var(--price-navbar-height) + 18rpx);
 }
 
 .skeleton-hero {
@@ -2059,11 +2173,15 @@ onPageScroll((event) => {
 }
 
 .tool-card {
+	position: sticky;
+	top: var(--price-toolbar-sticky-top);
+	z-index: 20;
 	margin-bottom: 10rpx;
 	padding: 12rpx;
 	border-radius: 10rpx;
 	background: #ffffff;
 	border: 1rpx solid #e5e7eb;
+	box-shadow: 0 10rpx 24rpx rgba(15, 23, 42, 0.08);
 }
 
 .tool-head {
@@ -2101,6 +2219,12 @@ onPageScroll((event) => {
 	color: #ffffff;
 }
 
+.tool-action.active {
+	border-color: #2563eb;
+	background: #eff6ff;
+	color: #2563eb;
+}
+
 .search-box {
 	height: 70rpx;
 	border-radius: 35rpx;
@@ -2125,6 +2249,53 @@ onPageScroll((event) => {
 
 .search-placeholder {
 	color: #9ca3af;
+}
+
+.selected-model-scroll {
+	width: 100%;
+	margin-top: 12rpx;
+	white-space: nowrap;
+}
+
+.selected-model-list {
+	display: inline-flex;
+	align-items: center;
+	gap: 10rpx;
+	min-width: 100%;
+}
+
+.selected-model-tag {
+	height: 52rpx;
+	padding: 0 14rpx;
+	border-radius: 26rpx;
+	background: #eff6ff;
+	border: 1rpx solid #bfdbfe;
+	color: #2563eb;
+	font-size: 23rpx;
+	font-weight: 700;
+	display: inline-flex;
+	align-items: center;
+	gap: 6rpx;
+	max-width: 360rpx;
+	box-sizing: border-box;
+}
+
+.selected-model-tag text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.selected-model-clear {
+	height: 52rpx;
+	line-height: 52rpx;
+	padding: 0 16rpx;
+	border-radius: 26rpx;
+	background: #f3f4f6;
+	color: #6b7280;
+	font-size: 23rpx;
+	font-weight: 700;
+	display: inline-block;
 }
 
 .data-meta {
@@ -2154,6 +2325,55 @@ onPageScroll((event) => {
 	display: flex;
 	flex-direction: column;
 	gap: 10rpx;
+}
+
+.filter-result-empty {
+	margin: 20rpx 0;
+	padding: 58rpx 28rpx;
+	border-radius: 18rpx;
+	background: #ffffff;
+	border: 1rpx solid #e5e7eb;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+}
+
+.filter-empty-title {
+	font-size: 30rpx;
+	line-height: 42rpx;
+	font-weight: 800;
+	color: #111827;
+}
+
+.filter-empty-desc {
+	margin-top: 8rpx;
+	font-size: 24rpx;
+	line-height: 36rpx;
+	color: #6b7280;
+}
+
+.filter-empty-actions {
+	margin-top: 24rpx;
+	display: flex;
+	align-items: center;
+	gap: 14rpx;
+}
+
+.filter-empty-btn {
+	height: 62rpx;
+	line-height: 62rpx;
+	padding: 0 22rpx;
+	border-radius: 31rpx;
+	background: #f3f4f6;
+	color: #374151;
+	font-size: 24rpx;
+	font-weight: 800;
+}
+
+.filter-empty-btn.primary {
+	background: #111827;
+	color: #ffffff;
 }
 
 .section-title {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle_quote_spider\app\service\admin;
 
 use addon\recycle_quote_spider\app\model\QuoteCategory;
+use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -72,6 +73,7 @@ class QuoteCategoryService extends BaseAdminService
             'raw_data' => ['manual' => true],
             'source_hash' => md5($name . microtime(true)),
         ]);
+        $this->refreshApiCache();
         return (int)$record->id;
     }
 
@@ -93,7 +95,13 @@ class QuoteCategoryService extends BaseAdminService
         if (!empty($save)) {
             $this->model->where('id', $id)->update($save);
         }
+        $this->refreshApiCache();
         return true;
+    }
+
+    private function refreshApiCache(): void
+    {
+        (new QuoteApiCacheService())->refresh($this->site_id);
     }
 
     private function buildTree(array $list, int $parentId = 0): array

@@ -206,9 +206,7 @@ export function useDiy(params: any = {}) {
     // 监听滚动事件
     const onPageScrollLifeCycle = () => {
         onPageScroll((e) => {
-            if (e.scrollTop > 0) {
-                diyStore.scrollTop = e.scrollTop;
-            }
+            diyStore.scrollTop = Math.max(0, Number(e.scrollTop || 0));
             // uni.$emit('scroll')
         })
     }

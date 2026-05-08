@@ -10,6 +10,7 @@ use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationField;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationModel as QuotationV2Model;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationNote;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationPrice;
+use addon\recycle_daheng_quote\app\service\core\quotation\QuotationV2CacheService;
 use core\base\BaseAdminService;
 use think\facade\Db;
 
@@ -51,6 +52,7 @@ class ImportService extends BaseAdminService
             ]);
 
             Db::commit();
+            $this->refreshApiCache();
             return $stats;
         } catch (\Exception $e) {
             Db::rollback();
@@ -65,6 +67,11 @@ class ImportService extends BaseAdminService
             ]);
             throw $e;
         }
+    }
+
+    private function refreshApiCache(): void
+    {
+        (new QuotationV2CacheService())->refresh($this->site_id);
     }
 
     private function upsertModels(array $dataset, array $models, array &$stats): array

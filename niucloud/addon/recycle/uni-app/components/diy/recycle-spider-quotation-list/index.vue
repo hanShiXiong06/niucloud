@@ -140,10 +140,10 @@ const showHeader = computed(() => diyComponent.value.showHeader !== false)
 const actionText = computed(() => diyComponent.value.actionText || '查看')
 const sourceId = computed(() => Number(diyComponent.value.sourceId || 0))
 const limit = computed(() => {
-    const value = Number(diyComponent.value.limit || 6)
+    const value = Number(diyComponent.value.limit ?? 6)
     if (!Number.isFinite(value)) return 6
-    if (value <= 0) return 100
-    return Math.min(value, 100)
+    if (value <= 0) return 0
+    return Math.floor(value)
 })
 const onlyHot = computed(() => diyComponent.value.onlyHot === true || diyComponent.value.onlyHot === 1)
 const showCategoryTabs = computed(() => diyComponent.value.showCategoryTabs !== false)
@@ -296,7 +296,7 @@ const mockList = computed<QuoteSpiderItem[]>(() => [
 
 const displayList = computed(() => {
     const list = diyStore.mode === 'decorate' && items.value.length === 0 ? mockList.value : items.value
-    return list.slice(0, limit.value)
+    return limit.value > 0 ? list.slice(0, limit.value) : list
 })
 const displayGroups = computed(() => {
     if (flatGroupMode.value === 'none') {

@@ -193,15 +193,127 @@
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';
    import { useDiyGroup } from './useDiyGroup';
-   import { ref,getCurrentInstance } from 'vue';
+   import { provide, ref } from 'vue';
 
    const props = defineProps(['data']);
-   const instance: any = getCurrentInstance();
+   const diyActiveCubeRef = ref<any[]>([]);
+   const diyCarouselSearchRef = ref<any[]>([]);
+   const diyFloatBtnRef = ref<any[]>([]);
+   const diyFormAddressRef = ref<any[]>([]);
+   const diyFormCheckboxRef = ref<any[]>([]);
+   const diyFormDateRef = ref<any[]>([]);
+   const diyFormDateScopeRef = ref<any[]>([]);
+   const diyFormEmailRef = ref<any[]>([]);
+   const diyFormFileRef = ref<any[]>([]);
+   const diyFormIdentityPrivacyRef = ref<any[]>([]);
+   const diyFormIdentityRef = ref<any[]>([]);
+   const diyFormImageRef = ref<any[]>([]);
+   const diyFormInputRef = ref<any[]>([]);
+   const diyFormLocationRef = ref<any[]>([]);
+   const diyFormMobileRef = ref<any[]>([]);
+   const diyFormNumberRef = ref<any[]>([]);
+   const diyFormPrivacyPopRef = ref<any[]>([]);
+   const diyFormPrivacyRef = ref<any[]>([]);
+   const diyFormRadioRef = ref<any[]>([]);
+   const diyFormSubmitRef = ref<any[]>([]);
+   const diyFormTableRef = ref<any[]>([]);
+   const diyFormTextareaRef = ref<any[]>([]);
+   const diyFormTimeRef = ref<any[]>([]);
+   const diyFormTimeScopeRef = ref<any[]>([]);
+   const diyFormVideoRef = ref<any[]>([]);
+   const diyFormWechatNameRef = ref<any[]>([]);
+   const diyGraphicNavRef = ref<any[]>([]);
+   const diyHorzBlankRef = ref<any[]>([]);
+   const diyHorzLineRef = ref<any[]>([]);
+   const diyHotAreaRef = ref<any[]>([]);
+   const diyImageAdsRef = ref<any[]>([]);
+   const diyMemberInfoRef = ref<any[]>([]);
+   const diyMemberLevelRef = ref<any[]>([]);
+   const diyNoticeRef = ref<any[]>([]);
+   const diyPhoneGoodsCouponRef = ref<any[]>([]);
+   const diyPhoneGoodsListRef = ref<any[]>([]);
+   const diyPhoneManyGoodsListRef = ref<any[]>([]);
+   const diyPhoneShopExchangeGoodsRef = ref<any[]>([]);
+   const diyPhoneShopExchangeInfoRef = ref<any[]>([]);
+   const diyPhoneShopMemberInfoRef = ref<any[]>([]);
+   const diyPhoneShopOrderInfoRef = ref<any[]>([]);
+   const diyPhoneShopSearchRef = ref<any[]>([]);
+   const diyPictureShowRef = ref<any[]>([]);
+   const diyRecycleCategoryRef = ref<any[]>([]);
+   const diyRecycleOrderOverviewRef = ref<any[]>([]);
+   const diyRecycleQuotationListRef = ref<any[]>([]);
+   const diyRecycleSendButtonRef = ref<any[]>([]);
+   const diyRecycleSpiderQuotationListRef = ref<any[]>([]);
+   const diyRichTextRef = ref<any[]>([]);
+   const diyRubikCubeRef = ref<any[]>([]);
+   const diyTextRef = ref<any[]>([]);
+   const popAbsRef = ref<any[]>([]);
+   const topTabbarRef = ref<any[]>([]);
+
+   const getComponentRefs = () => ({
+       diyActiveCubeRef: diyActiveCubeRef.value,
+       diyCarouselSearchRef: diyCarouselSearchRef.value,
+       diyFloatBtnRef: diyFloatBtnRef.value,
+       diyFormAddressRef: diyFormAddressRef.value,
+       diyFormCheckboxRef: diyFormCheckboxRef.value,
+       diyFormDateRef: diyFormDateRef.value,
+       diyFormDateScopeRef: diyFormDateScopeRef.value,
+       diyFormEmailRef: diyFormEmailRef.value,
+       diyFormFileRef: diyFormFileRef.value,
+       diyFormIdentityPrivacyRef: diyFormIdentityPrivacyRef.value,
+       diyFormIdentityRef: diyFormIdentityRef.value,
+       diyFormImageRef: diyFormImageRef.value,
+       diyFormInputRef: diyFormInputRef.value,
+       diyFormLocationRef: diyFormLocationRef.value,
+       diyFormMobileRef: diyFormMobileRef.value,
+       diyFormNumberRef: diyFormNumberRef.value,
+       diyFormPrivacyPopRef: diyFormPrivacyPopRef.value,
+       diyFormPrivacyRef: diyFormPrivacyRef.value,
+       diyFormRadioRef: diyFormRadioRef.value,
+       diyFormSubmitRef: diyFormSubmitRef.value,
+       diyFormTableRef: diyFormTableRef.value,
+       diyFormTextareaRef: diyFormTextareaRef.value,
+       diyFormTimeRef: diyFormTimeRef.value,
+       diyFormTimeScopeRef: diyFormTimeScopeRef.value,
+       diyFormVideoRef: diyFormVideoRef.value,
+       diyFormWechatNameRef: diyFormWechatNameRef.value,
+       diyGraphicNavRef: diyGraphicNavRef.value,
+       diyHorzBlankRef: diyHorzBlankRef.value,
+       diyHorzLineRef: diyHorzLineRef.value,
+       diyHotAreaRef: diyHotAreaRef.value,
+       diyImageAdsRef: diyImageAdsRef.value,
+       diyMemberInfoRef: diyMemberInfoRef.value,
+       diyMemberLevelRef: diyMemberLevelRef.value,
+       diyNoticeRef: diyNoticeRef.value,
+       diyPhoneGoodsCouponRef: diyPhoneGoodsCouponRef.value,
+       diyPhoneGoodsListRef: diyPhoneGoodsListRef.value,
+       diyPhoneManyGoodsListRef: diyPhoneManyGoodsListRef.value,
+       diyPhoneShopExchangeGoodsRef: diyPhoneShopExchangeGoodsRef.value,
+       diyPhoneShopExchangeInfoRef: diyPhoneShopExchangeInfoRef.value,
+       diyPhoneShopMemberInfoRef: diyPhoneShopMemberInfoRef.value,
+       diyPhoneShopOrderInfoRef: diyPhoneShopOrderInfoRef.value,
+       diyPhoneShopSearchRef: diyPhoneShopSearchRef.value,
+       diyPictureShowRef: diyPictureShowRef.value,
+       diyRecycleCategoryRef: diyRecycleCategoryRef.value,
+       diyRecycleOrderOverviewRef: diyRecycleOrderOverviewRef.value,
+       diyRecycleQuotationListRef: diyRecycleQuotationListRef.value,
+       diyRecycleSendButtonRef: diyRecycleSendButtonRef.value,
+       diyRecycleSpiderQuotationListRef: diyRecycleSpiderQuotationListRef.value,
+       diyRichTextRef: diyRichTextRef.value,
+       diyRubikCubeRef: diyRubikCubeRef.value,
+       diyTextRef: diyTextRef.value,
+       popAbsRef: popAbsRef.value,
+       topTabbarRef: topTabbarRef.value
+   });
+
    const getFormRef = () => {
        return {
-           componentRefs: instance.refs
+           componentRefs: getComponentRefs()
        }
    }
+   provide('diyGroupRefs', {
+       getComponentRefs
+   });
    const diyStore = useDiyStore();
    const diyGroup = useDiyGroup({
        ...props,

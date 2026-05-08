@@ -7,6 +7,7 @@ return [
         'action' => 'decorate',
         'type' => 'index'
     ],
+    
     // 'DIY_RUNNING_MEMBER_INDEX' => [
     //     // 'title' => get_lang('dict_diy.page_RUNNING_member_index'),
     //     'title' => '跑腿个人中心',

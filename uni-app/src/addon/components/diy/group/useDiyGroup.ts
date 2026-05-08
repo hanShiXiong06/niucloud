@@ -113,9 +113,9 @@ export function useDiyGroup(params: any = {}) {
         nextTick(() => {
             let time: any = null;
             let fn = () => {
-                diyStore.componentRefs = params.getFormRef().componentRefs;
-                data.value.componentRefs = params.getFormRef().componentRefs;
-                params.getFormRef().componentRefs.topTabbarRef?.refresh();
+                const componentRefs = params.getFormRef().componentRefs;
+                const topTabbarRef = Array.isArray(componentRefs.topTabbarRef) ? componentRefs.topTabbarRef[0] : componentRefs.topTabbarRef;
+                topTabbarRef?.refresh?.();
                 if (time) clearInterval(time);
             }
 

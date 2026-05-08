@@ -14,27 +14,60 @@
                 </view>
 
                 <view
-                    v-if="showCategoryTabs && categoryTabs.length"
+                    v-if="showCategoryTabs && primaryCategoryTabs.length"
+                    class="category-tabs-placeholder"
+                    :style="categoryTabsPlaceholderStyle"
+                ></view>
+                <view
+                    v-if="showCategoryTabs && primaryCategoryTabs.length"
+                    :id="categoryTabsId"
                     class="category-tabs"
+                    :class="{ fixed: categoryTabsFixed }"
+                    :style="categoryTabsStyle"
                 >
+                    <view class="category-tabs__level-row">
+                        <text class="category-tabs__label">一级分类</text>
+                    </view>
                     <quotation-category-tabs
-                        :list="categoryTabList"
-                        :current="activeCategoryIndex"
+                        :list="primaryCategoryTabList"
+                        :current="activePrimaryCategoryIndex"
                         :variant="tabStyleType"
                         :themeColor="tabThemeColor"
                         :activeBgColor="tabActiveBgColor"
                         :inactiveBgColor="tabInactiveBgColor"
                         :activeTextColor="tabActiveTextColor"
                         :inactiveTextColor="tabInactiveTextColor"
-                        :borderColor="tabBorderColor"
                         :height="tabHeight"
                         :radius="tabRadius"
                         :fontSize="tabFontSize"
                         :fontWeight="tabFontWeight"
                         :sidePadding="tabSidePadding"
                         :showScrollCue="showTabScrollCue"
-                        @change="handleCategoryTabChange"
+                        @change="handlePrimaryCategoryTabChange"
                     ></quotation-category-tabs>
+                    <template v-if="secondaryCategoryTabs.length">
+                        <view class="category-tabs__level-row secondary">
+                            <text class="category-tabs__label">二级分类</text>
+                            <text class="category-tabs__parent">{{ activePrimaryCategoryName }}</text>
+                        </view>
+                        <quotation-category-tabs
+                            :list="secondaryCategoryTabList"
+                            :current="activeSecondaryCategoryIndex"
+                            :variant="secondaryTabStyleType"
+                            :themeColor="secondaryTabThemeColor"
+                            :activeBgColor="secondaryTabActiveBgColor"
+                            :inactiveBgColor="secondaryTabInactiveBgColor"
+                            :activeTextColor="secondaryTabActiveTextColor"
+                            :inactiveTextColor="secondaryTabInactiveTextColor"
+                            :height="secondaryTabHeight"
+                            :radius="secondaryTabRadius"
+                            :fontSize="secondaryTabFontSize"
+                            :fontWeight="secondaryTabFontWeight"
+                            :sidePadding="secondaryTabSidePadding"
+                            :showScrollCue="showTabScrollCue"
+                            @change="handleSecondaryCategoryTabChange"
+                        ></quotation-category-tabs>
+                    </template>
                 </view>
 
                 <view v-if="loading" class="state-box">
@@ -104,9 +137,11 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
+import { onPageScroll } from '@dcloudio/uni-app'
 import useDiyStore from '@/app/stores/diy'
-import { img, redirect } from '@/utils/common'
+import useSystemStore from '@/stores/system'
+import { img, pxToRpx, redirect } from '@/utils/common'
 import { getQuoteSpiderCategoryTree, getQuoteSpiderFeatured, type QuoteSpiderCategory, type QuoteSpiderItem } from '@/addon/recycle/api/quotation'
 import QuotationCategoryTabs from './components/QuotationCategoryTabs.vue'
 
@@ -122,10 +157,22 @@ const props = defineProps({
 })
 
 const diyStore = useDiyStore()
+const systemStore = useSystemStore()
+const instance = getCurrentInstance()
 const loading = ref(false)
 const items = ref<QuoteSpiderItem[]>([])
 const categories = ref<QuoteSpiderCategory[]>([])
-const activeCategoryId = ref(0)
+const activePrimaryCategoryId = ref(0)
+const activeSecondaryCategoryId = ref(0)
+const pageScrollTop = ref(0)
+const categoryTabsFixed = ref(false)
+const categoryTabsMeasured = ref(false)
+const categoryTabsHeight = ref(0)
+const categoryTabsTriggerTop = ref(0)
+const componentBottomTop = ref(0)
+const categoryTabsLeft = ref(0)
+const categoryTabsWidth = ref(0)
+const isDecorateMode = computed(() => diyStore.mode === 'decorate')
 
 const diyComponent = computed(() => {
     if (diyStore.mode === 'decorate') {
@@ -140,16 +187,18 @@ const showHeader = computed(() => diyComponent.value.showHeader !== false)
 const actionText = computed(() => diyComponent.value.actionText || '查看')
 const sourceId = computed(() => Number(diyComponent.value.sourceId || 0))
 const limit = computed(() => {
-    const value = Number(diyComponent.value.limit || 6)
+    const value = Number(diyComponent.value.limit ?? 6)
     if (!Number.isFinite(value)) return 6
-    if (value <= 0) return 100
-    return Math.min(value, 100)
+    if (value <= 0) return 0
+    return Math.floor(value)
 })
 const onlyHot = computed(() => diyComponent.value.onlyHot === true || diyComponent.value.onlyHot === 1)
 const showCategoryTabs = computed(() => diyComponent.value.showCategoryTabs !== false)
-const categoryTabDepth = computed(() => {
-    const value = Number(diyComponent.value.categoryTabDepth ?? 0)
-    return Number.isFinite(value) && value >= 0 ? value : 0
+const stickyTabsEnabled = computed(() => diyComponent.value.stickyTabs === true || diyComponent.value.stickyTabs === 1)
+const stickyTabsOffsetMode = computed(() => diyComponent.value.stickyTabsOffsetMode || 'auto')
+const stickyTabsOffset = computed(() => {
+    const value = Number(diyComponent.value.stickyTabsOffset ?? 0)
+    return Number.isFinite(value) ? Math.max(0, Math.min(value, 260)) : 0
 })
 const flatGroupMode = computed(() => diyComponent.value.flatGroupMode || 'level2')
 const showGroupCount = computed(() => diyComponent.value.showGroupCount !== false)
@@ -191,22 +240,71 @@ const navItemStyle = computed(() => `width:${100 / navRowCount.value}%;`)
 const navImageStyle = computed(() => {
     return `width:${navImageSize.value * 2}rpx;height:${navImageSize.value * 2}rpx;border-radius:${itemImageRadius.value * 2}rpx;`
 })
-const flatCategories = computed(() => flattenCategories(categories.value))
-const categoryTabs = computed(() => {
-    const depth = categoryTabDepth.value
-    return depth > 0
-        ? flatCategories.value.filter(item => Number(item.level || 0) <= depth)
-        : flatCategories.value
+const previewCategories: QuoteSpiderCategory[] = [
+    {
+        id: 101,
+        source_id: 1,
+        parent_id: 0,
+        name: '环保回收',
+        level: 1,
+        sort: 1,
+        is_show: 1,
+        children: [
+            { id: 1101, source_id: 1, parent_id: 101, name: '手机数码', level: 2, sort: 1, is_show: 1, children: [] },
+            { id: 1102, source_id: 1, parent_id: 101, name: '电脑办公', level: 2, sort: 2, is_show: 1, children: [] },
+            { id: 1103, source_id: 1, parent_id: 101, name: '智能穿戴', level: 2, sort: 3, is_show: 1, children: [] }
+        ]
+    },
+    {
+        id: 102,
+        source_id: 1,
+        parent_id: 0,
+        name: '家电回收',
+        level: 1,
+        sort: 2,
+        is_show: 1,
+        children: [
+            { id: 1201, source_id: 1, parent_id: 102, name: '厨房电器', level: 2, sort: 1, is_show: 1, children: [] },
+            { id: 1202, source_id: 1, parent_id: 102, name: '生活电器', level: 2, sort: 2, is_show: 1, children: [] }
+        ]
+    }
+]
+const displayCategories = computed(() => {
+    return isDecorateMode.value && categories.value.length === 0 ? previewCategories : categories.value
 })
-const categoryTabList = computed(() => {
-    return categoryTabs.value.map(item => ({
+const primaryCategoryTabs = computed(() => displayCategories.value.filter(item => Number(item.level || 0) <= 1 || Number(item.parent_id || 0) === 0))
+const activePrimaryCategory = computed(() => {
+    return primaryCategoryTabs.value.find(item => Number(item.id || 0) === activePrimaryCategoryId.value) || primaryCategoryTabs.value[0] || null
+})
+const activePrimaryCategoryName = computed(() => String(activePrimaryCategory.value?.name || ''))
+const secondaryCategoryTabs = computed(() => {
+    const children = activePrimaryCategory.value?.children || []
+    return children.filter(item => Number(item.is_show ?? 1) === 1)
+})
+const primaryCategoryTabList = computed(() => {
+    return primaryCategoryTabs.value.map(item => ({
         name: String(item.name || '未命名分类'),
-        id: Number(item.id || 0)
+        id: Number(item.id || 0),
+        level: 1
     }))
 })
-const activeCategoryIndex = computed(() => {
-    const index = categoryTabs.value.findIndex(item => Number(item.id || 0) === activeCategoryId.value)
+const secondaryCategoryTabList = computed(() => {
+    return secondaryCategoryTabs.value.map(item => ({
+        name: String(item.name || '未命名分类'),
+        id: Number(item.id || 0),
+        level: 2
+    }))
+})
+const activePrimaryCategoryIndex = computed(() => {
+    const index = primaryCategoryTabs.value.findIndex(item => Number(item.id || 0) === activePrimaryCategoryId.value)
     return index >= 0 ? index : 0
+})
+const activeSecondaryCategoryIndex = computed(() => {
+    if (!activeSecondaryCategoryId.value) return -1
+    return secondaryCategoryTabs.value.findIndex(item => Number(item.id || 0) === activeSecondaryCategoryId.value)
+})
+const activeRequestCategoryId = computed(() => {
+    return activeSecondaryCategoryId.value || activePrimaryCategoryId.value || Number(activePrimaryCategory.value?.id || 0)
 })
 const tabStyleType = computed(() => {
     const value = diyComponent.value.tabStyleType || 'pill'
@@ -217,7 +315,6 @@ const tabActiveBgColor = computed(() => diyComponent.value.tabActiveBgColor || '
 const tabInactiveBgColor = computed(() => diyComponent.value.tabInactiveBgColor || '')
 const tabActiveTextColor = computed(() => diyComponent.value.tabActiveTextColor || '')
 const tabInactiveTextColor = computed(() => diyComponent.value.tabInactiveTextColor || '#475569')
-const tabBorderColor = computed(() => diyComponent.value.tabBorderColor || '')
 const tabHeight = computed(() => {
     const value = Number(diyComponent.value.tabHeight || 64)
     return Number.isFinite(value) ? Math.max(44, Math.min(value, 96)) : 64
@@ -238,7 +335,71 @@ const tabSidePadding = computed(() => {
     const value = Number(diyComponent.value.tabSidePadding || 18)
     return Number.isFinite(value) ? Math.max(8, Math.min(value, 40)) : 18
 })
+const secondaryTabCustom = computed(() => diyComponent.value.secondaryTabCustom === true || diyComponent.value.secondaryTabCustom === 1)
+const secondaryTabStyleType = computed(() => {
+    if (!secondaryTabCustom.value) return tabStyleType.value
+    const value = diyComponent.value.secondaryTabStyleType || tabStyleType.value
+    return ['pill', 'card', 'underline'].includes(value) ? value : tabStyleType.value
+})
+const secondaryTabThemeColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabThemeColor || tabThemeColor.value) : tabThemeColor.value)
+const secondaryTabActiveBgColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabActiveBgColor || '') : tabActiveBgColor.value)
+const secondaryTabInactiveBgColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabInactiveBgColor || '') : tabInactiveBgColor.value)
+const secondaryTabActiveTextColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabActiveTextColor || '') : tabActiveTextColor.value)
+const secondaryTabInactiveTextColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabInactiveTextColor || '#475569') : tabInactiveTextColor.value)
+const secondaryTabHeight = computed(() => {
+    if (!secondaryTabCustom.value) return tabHeight.value
+    const value = Number(diyComponent.value.secondaryTabHeight || tabHeight.value)
+    return Number.isFinite(value) ? Math.max(44, Math.min(value, 96)) : tabHeight.value
+})
+const secondaryTabRadius = computed(() => {
+    if (!secondaryTabCustom.value) return tabRadius.value
+    const value = Number(diyComponent.value.secondaryTabRadius ?? tabRadius.value)
+    return Number.isFinite(value) ? Math.max(0, Math.min(value, 48)) : tabRadius.value
+})
+const secondaryTabFontSize = computed(() => {
+    if (!secondaryTabCustom.value) return tabFontSize.value
+    const value = Number(diyComponent.value.secondaryTabFontSize || tabFontSize.value)
+    return Number.isFinite(value) ? Math.max(20, Math.min(value, 34)) : tabFontSize.value
+})
+const secondaryTabFontWeight = computed(() => {
+    if (!secondaryTabCustom.value) return tabFontWeight.value
+    const value = Number(diyComponent.value.secondaryTabFontWeight || tabFontWeight.value)
+    return [400, 500, 600, 700].includes(value) ? value : tabFontWeight.value
+})
+const secondaryTabSidePadding = computed(() => {
+    if (!secondaryTabCustom.value) return tabSidePadding.value
+    const value = Number(diyComponent.value.secondaryTabSidePadding || tabSidePadding.value)
+    return Number.isFinite(value) ? Math.max(8, Math.min(value, 40)) : tabSidePadding.value
+})
 const showTabScrollCue = computed(() => diyComponent.value.showTabScrollCue !== false)
+const categoryTabsId = computed(() => `spider-quotation-tabs-${diyComponent.value.id || props.index}`)
+const categoryTabsStyle = computed(() => {
+    if (!stickyTabsEnabled.value || isDecorateMode.value) {
+        return ''
+    }
+
+    if (!categoryTabsFixed.value) return ''
+    return `position:fixed;top:${stickyTabsTopPx.value}px;left:${categoryTabsLeft.value}px;width:${categoryTabsWidth.value}px;z-index:99;`
+})
+const categoryTabsPlaceholderStyle = computed(() => {
+    if (!categoryTabsFixed.value || !categoryTabsHeight.value) return ''
+    return `height:${categoryTabsHeight.value}px;`
+})
+const autoStickyOffset = computed(() => {
+    const info = systemStore.menuButtonInfo || {}
+    const topPx = Number(info.top || 0) + Number(info.height || 0) + 8
+    if (!topPx || !systemStore.systemInfo?.screenWidth) return 0
+    return Math.ceil(pxToRpx(topPx))
+})
+const stickyTabsTopRpx = computed(() => {
+    if (stickyTabsOffsetMode.value === 'top') return 0
+    if (stickyTabsOffsetMode.value === 'manual') return stickyTabsOffset.value
+    return autoStickyOffset.value + stickyTabsOffset.value
+})
+const stickyTabsTopPx = computed(() => {
+    const screenWidth = Number(systemStore.systemInfo?.screenWidth || 375)
+    return Math.round(stickyTabsTopRpx.value * screenWidth / 750)
+})
 const groupTitleStyle = computed(() => {
     return `color:${groupTitleColor.value};font-size:${groupTitleSize.value}rpx;line-height:${Math.max(groupTitleSize.value + 10, 30)}rpx;font-weight:${groupTitleWeight.value};`
 })
@@ -257,12 +418,13 @@ const mockList = computed<QuoteSpiderItem[]>(() => [
     {
         id: 1,
         source_id: 1,
-        category_id: 1,
+        category_id: 1101,
         brand: '苹果',
         tab: 'iPhone',
         name: 'iPhone 实时报价',
-        parent_name: '手机报价',
-        title: '手机报价 iPhone 实时报价',
+        parent_name: '环保回收 / 手机数码',
+        category_path: '环保回收 / 手机数码',
+        title: 'iPhone 实时报价',
         quote_type: 'manual',
         is_image_quote: 0,
         image: '',
@@ -276,12 +438,13 @@ const mockList = computed<QuoteSpiderItem[]>(() => [
     {
         id: 2,
         source_id: 1,
-        category_id: 2,
+        category_id: 1101,
         brand: '安卓',
         tab: '旗舰机',
         name: '安卓旗舰报价',
-        parent_name: '手机报价',
-        title: '手机报价 安卓旗舰报价',
+        parent_name: '环保回收 / 手机数码',
+        category_path: '环保回收 / 手机数码',
+        title: '安卓旗舰报价',
         quote_type: 'manual',
         is_image_quote: 0,
         image: '',
@@ -291,12 +454,103 @@ const mockList = computed<QuoteSpiderItem[]>(() => [
         is_hot: 0,
         model_count: 28,
         last_sync_at_text: '今日 10:00'
+    },
+    {
+        id: 3,
+        source_id: 1,
+        category_id: 1102,
+        brand: '苹果电脑',
+        tab: 'MacBook',
+        name: 'MacBook 报价',
+        parent_name: '环保回收 / 电脑办公',
+        category_path: '环保回收 / 电脑办公',
+        title: 'MacBook 报价',
+        quote_type: 'manual',
+        is_image_quote: 0,
+        image: '',
+        timage: '',
+        bimage: '',
+        icon: '',
+        is_hot: 1,
+        model_count: 18,
+        last_sync_at_text: '今日 09:30'
+    },
+    {
+        id: 4,
+        source_id: 1,
+        category_id: 1103,
+        brand: '智能手表',
+        tab: 'Watch',
+        name: '智能手表报价',
+        parent_name: '环保回收 / 智能穿戴',
+        category_path: '环保回收 / 智能穿戴',
+        title: '智能手表报价',
+        quote_type: 'manual',
+        is_image_quote: 0,
+        image: '',
+        timage: '',
+        bimage: '',
+        icon: '',
+        is_hot: 0,
+        model_count: 12,
+        last_sync_at_text: '昨日 18:20'
+    },
+    {
+        id: 5,
+        source_id: 1,
+        category_id: 1201,
+        brand: '厨房电器',
+        tab: '厨电',
+        name: '厨房电器报价',
+        parent_name: '家电回收 / 厨房电器',
+        category_path: '家电回收 / 厨房电器',
+        title: '厨房电器报价',
+        quote_type: 'manual',
+        is_image_quote: 0,
+        image: '',
+        timage: '',
+        bimage: '',
+        icon: '',
+        is_hot: 1,
+        model_count: 9,
+        last_sync_at_text: '今日 11:10'
+    },
+    {
+        id: 6,
+        source_id: 1,
+        category_id: 1202,
+        brand: '生活电器',
+        tab: '家电',
+        name: '生活电器报价',
+        parent_name: '家电回收 / 生活电器',
+        category_path: '家电回收 / 生活电器',
+        title: '生活电器报价',
+        quote_type: 'manual',
+        is_image_quote: 0,
+        image: '',
+        timage: '',
+        bimage: '',
+        icon: '',
+        is_hot: 0,
+        model_count: 16,
+        last_sync_at_text: '今日 08:45'
     }
 ])
 
 const displayList = computed(() => {
-    const list = diyStore.mode === 'decorate' && items.value.length === 0 ? mockList.value : items.value
-    return list.slice(0, limit.value)
+    let list = isDecorateMode.value && items.value.length === 0 ? mockList.value : items.value
+    if (isDecorateMode.value) {
+        if (onlyHot.value) {
+            list = list.filter(item => Number(item.is_hot || 0) === 1)
+        }
+        if (showCategoryTabs.value && activeRequestCategoryId.value) {
+            const categoryIds = collectPreviewCategoryIds(activeRequestCategoryId.value)
+            if (categoryIds.length) {
+                list = list.filter(item => categoryIds.includes(Number(item.category_id || 0)))
+            }
+        }
+    }
+    return limit.value > 0 ? list.slice(0, limit.value) : list
 })
 const displayGroups = computed(() => {
     if (flatGroupMode.value === 'none') {
@@ -322,15 +576,6 @@ const displayGroups = computed(() => {
 
     return groups
 })
-
-function flattenCategories(list: QuoteSpiderCategory[]): QuoteSpiderCategory[] {
-    const result: QuoteSpiderCategory[] = []
-    list.forEach(item => {
-        result.push(item)
-        result.push(...flattenCategories(item.children || []))
-    })
-    return result
-}
 
 const wrapStyle = computed(() => {
     const margin = diyComponent.value.margin || { top: 10, bottom: 10, both: 12 }
@@ -394,10 +639,40 @@ function showGroupHeader(group: { title: string }) {
     return Boolean(group.title)
 }
 
+function collectPreviewCategoryIds(categoryId: number): number[] {
+    if (!isDecorateMode.value) {
+        return [categoryId]
+    }
+
+    const ids: number[] = []
+    const walk = (list: QuoteSpiderCategory[]) => {
+        for (const item of list) {
+            const id = Number(item.id || 0)
+            if (id === categoryId) {
+                ids.push(id)
+                collectChildIds(item.children || [])
+                return
+            }
+            walk(item.children || [])
+        }
+    }
+    const collectChildIds = (list: QuoteSpiderCategory[]) => {
+        for (const item of list) {
+            const id = Number(item.id || 0)
+            if (id) ids.push(id)
+            collectChildIds(item.children || [])
+        }
+    }
+
+    walk(displayCategories.value)
+    return ids.length ? ids : [categoryId]
+}
+
 async function loadCategories() {
-    if (diyStore.mode === 'decorate') {
+    if (isDecorateMode.value) {
         categories.value = []
-        activeCategoryId.value = 0
+        activePrimaryCategoryId.value = Number(previewCategories[0]?.id || 0)
+        activeSecondaryCategoryId.value = 0
         return
     }
 
@@ -406,31 +681,47 @@ async function loadCategories() {
             source_id: sourceId.value || ''
         }) as any
         categories.value = res.code === 1 && Array.isArray(res.data) ? res.data : []
-        if (showCategoryTabs.value && activeCategoryId.value === 0 && categoryTabs.value.length) {
-            activeCategoryId.value = Number(categoryTabs.value[0].id || 0)
+        if (showCategoryTabs.value && activePrimaryCategoryId.value === 0 && primaryCategoryTabs.value.length) {
+            activePrimaryCategoryId.value = Number(primaryCategoryTabs.value[0].id || 0)
         }
     } catch (error) {
         categories.value = []
-        activeCategoryId.value = 0
+        activePrimaryCategoryId.value = 0
+        activeSecondaryCategoryId.value = 0
     }
 }
 
-function switchCategory(categoryId: number) {
-    if (activeCategoryId.value === categoryId) return
-    activeCategoryId.value = categoryId
+function switchPrimaryCategory(categoryId: number) {
+    if (activePrimaryCategoryId.value === categoryId && activeSecondaryCategoryId.value === 0) return
+    activePrimaryCategoryId.value = categoryId
+    activeSecondaryCategoryId.value = 0
     loadItems()
 }
 
-function handleCategoryTabChange(tab: any) {
+function switchSecondaryCategory(categoryId: number) {
+    if (activeSecondaryCategoryId.value === categoryId) return
+    activeSecondaryCategoryId.value = categoryId
+    loadItems()
+}
+
+function handlePrimaryCategoryTabChange(tab: any) {
     const index = Number(tab?.index ?? tab ?? 0)
-    const category = categoryTabs.value[index]
+    const category = primaryCategoryTabs.value[index]
     const categoryId = Number(category?.id ?? tab?.id ?? tab?.value ?? 0)
     if (!categoryId) return
-    switchCategory(categoryId)
+    switchPrimaryCategory(categoryId)
+}
+
+function handleSecondaryCategoryTabChange(tab: any) {
+    const index = Number(tab?.index ?? tab ?? 0)
+    const category = secondaryCategoryTabs.value[index]
+    const categoryId = Number(category?.id ?? tab?.id ?? tab?.value ?? 0)
+    if (!categoryId) return
+    switchSecondaryCategory(categoryId)
 }
 
 async function loadItems() {
-    if (diyStore.mode === 'decorate') {
+    if (isDecorateMode.value) {
         items.value = []
         return
     }
@@ -439,7 +730,7 @@ async function loadItems() {
     try {
         const res = await getQuoteSpiderFeatured({
             source_id: sourceId.value || '',
-            category_id: showCategoryTabs.value && activeCategoryId.value ? activeCategoryId.value : '',
+            category_id: showCategoryTabs.value && activeRequestCategoryId.value ? activeRequestCategoryId.value : '',
             limit: limit.value,
             only_hot: onlyHot.value ? 1 : ''
         }) as any
@@ -461,7 +752,92 @@ function openQuotation(item: QuoteSpiderItem) {
 
 onMounted(() => {
     loadCategories().finally(loadItems)
+    scheduleMeasureStickyTabs()
 })
+
+watch(
+    () => diyStore.scrollTop,
+    (value) => {
+        if (Number.isFinite(Number(value))) {
+            handlePageScroll(Number(value))
+        }
+    }
+)
+
+watch(
+    () => [
+        stickyTabsEnabled.value,
+        stickyTabsTopPx.value,
+        showCategoryTabs.value,
+        primaryCategoryTabs.value.length,
+        secondaryCategoryTabs.value.length,
+        activePrimaryCategoryId.value,
+        activeSecondaryCategoryId.value,
+        tabHeight.value,
+        tabFontSize.value,
+        tabSidePadding.value,
+        secondaryTabHeight.value,
+        secondaryTabFontSize.value,
+        secondaryTabSidePadding.value,
+        secondaryTabCustom.value
+    ],
+    () => {
+        categoryTabsMeasured.value = false
+        categoryTabsFixed.value = false
+        scheduleMeasureStickyTabs()
+    }
+)
+
+onPageScroll((event) => {
+    handlePageScroll(Number(event.scrollTop || 0))
+})
+
+function handlePageScroll(scrollTop: number) {
+    pageScrollTop.value = Math.max(0, scrollTop)
+    if (!stickyTabsEnabled.value || isDecorateMode.value || !showCategoryTabs.value || !primaryCategoryTabs.value.length) {
+        categoryTabsFixed.value = false
+        return
+    }
+
+    if (!categoryTabsMeasured.value) {
+        scheduleMeasureStickyTabs()
+        return
+    }
+
+    const top = pageScrollTop.value
+    const fixedBottom = top + stickyTabsTopPx.value + categoryTabsHeight.value
+    categoryTabsFixed.value = top >= categoryTabsTriggerTop.value && fixedBottom < componentBottomTop.value
+}
+
+function scheduleMeasureStickyTabs() {
+    if (isDecorateMode.value || !stickyTabsEnabled.value || !showCategoryTabs.value || !primaryCategoryTabs.value.length) return
+    nextTick(() => {
+        setTimeout(() => {
+            measureStickyTabs()
+        }, 80)
+    })
+}
+
+function measureStickyTabs() {
+    if (!instance || categoryTabsFixed.value) return
+    const query = uni.createSelectorQuery().in(instance)
+    query.select(`#${categoryTabsId.value}`).boundingClientRect()
+    query.select('.quotation-wrap').boundingClientRect()
+    query.exec((rects: any[]) => {
+        const tabsRect = rects?.[0]
+        const wrapRect = rects?.[1]
+        if (!tabsRect || !wrapRect) return
+
+        const scrollTop = pageScrollTop.value
+        categoryTabsLeft.value = Number(tabsRect.left || 0)
+        categoryTabsWidth.value = Number(tabsRect.width || systemStore.systemInfo?.screenWidth || 375)
+        categoryTabsHeight.value = Number(tabsRect.height || 0)
+        categoryTabsTriggerTop.value = scrollTop + Number(tabsRect.top || 0) - stickyTabsTopPx.value
+        componentBottomTop.value = scrollTop + Number(wrapRect.top || 0) + Number(wrapRect.height || 0)
+        categoryTabsMeasured.value = true
+        handlePageScroll(scrollTop)
+    })
+}
 </script>
 
 <style lang="scss" scoped>
@@ -471,7 +847,6 @@ onMounted(() => {
 
 .quotation-card {
     position: relative;
-    overflow: hidden;
     box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, 0.04);
 }
 
@@ -527,6 +902,43 @@ onMounted(() => {
     width: 100%;
     padding: 0 18rpx 16rpx;
     box-sizing: border-box;
+    background: #ffffff;
+}
+
+.category-tabs.fixed {
+    box-shadow: 0 8rpx 22rpx rgba(15, 23, 42, 0.08);
+}
+
+.category-tabs__level-row {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    padding: 2rpx 2rpx 10rpx;
+}
+
+.category-tabs__level-row.secondary {
+    padding-top: 14rpx;
+}
+
+.category-tabs__label {
+    flex-shrink: 0;
+    padding: 4rpx 12rpx;
+    border-radius: 999rpx;
+    background: #eef2ff;
+    color: #4f46e5;
+    font-size: 20rpx;
+    line-height: 28rpx;
+    font-weight: 600;
+}
+
+.category-tabs__parent {
+    min-width: 0;
+    color: #64748b;
+    font-size: 22rpx;
+    line-height: 30rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .dataset-list {

@@ -8,7 +8,7 @@
                 <template v-if="diyComponent.displayMode === 'singleSlide'">
                     <scroll-view scroll-x class="whitespace-nowrap py-2">
                     <view class="recycle-category-item inline-flex flex-col items-center box-border py-2"
-                              v-for="(item, index) in diyComponent.list" :key="item.id"
+                              v-for="(item, index) in manualCategoryList" :key="item.id"
                               :style="{ width: 100 / diyComponent.rowCount + '%' }"
                               @click="handleManualItemClick(item.link)">
                             <view class="category-img relative flex items-center justify-center"
@@ -28,7 +28,7 @@
                 <template v-else-if="diyComponent.displayMode === 'multiFixed'">
                     <view class="recycle-category-list-fixed flex flex-wrap py-2">
                         <view class="recycle-category-item flex flex-col items-center box-border py-2"
-                              v-for="(item, index) in diyComponent.list" :key="item.id"
+                              v-for="(item, index) in manualCategoryList" :key="item.id"
                               :style="{ width: 100 / diyComponent.rowCount + '%' }"
                               @click="handleManualItemClick(item.link)">
                             <view class="category-img relative flex items-center justify-center"
@@ -51,7 +51,7 @@
                 <template v-if="diyComponent.displayMode === 'singleSlide'">
                     <scroll-view scroll-x class="whitespace-nowrap py-2">
                         <view class="recycle-category-item inline-flex flex-col items-center box-border py-2"
-                              v-for="(item, index) in categoryListFromApi" :key="item.category_id"
+                              v-for="(item, index) in displayApiCategoryList" :key="item.category_id"
                               :style="{ width: 100 / diyComponent.rowCount + '%' }"
                               @click="handleApiItemClick(item)">
                             <view class="category-img relative flex items-center justify-center"
@@ -75,7 +75,7 @@
                 <template v-else-if="diyComponent.displayMode === 'multiFixed'">
                     <view class="recycle-category-list-fixed flex flex-wrap py-2">
                         <view class="recycle-category-item flex flex-col items-center box-border py-2"
-                              v-for="(item, index) in categoryListFromApi" :key="item.category_id"
+                              v-for="(item, index) in displayApiCategoryList" :key="item.category_id"
                               :style="{ width: 100 / diyComponent.rowCount + '%' }"
                               @click="handleApiItemClick(item)">
                             <view class="category-img relative flex items-center justify-center"
@@ -310,6 +310,163 @@ const props = defineProps({
 
 const diyStore = useDiyStore();
 const router = useRouter();
+const isDecorateMode = computed(() => diyStore.mode === 'decorate');
+
+const previewManualList = [
+    {
+        id: 'preview-phone',
+        title: '手机回收',
+        image: '',
+        images: '',
+        link: { name: '' }
+    },
+    {
+        id: 'preview-pad',
+        title: '平板电脑',
+        image: '',
+        images: '',
+        link: { name: '' }
+    },
+    {
+        id: 'preview-watch',
+        title: '智能手表',
+        image: '',
+        images: '',
+        link: { name: '' }
+    },
+    {
+        id: 'preview-notebook',
+        title: '笔记本',
+        image: '',
+        images: '',
+        link: { name: '' }
+    }
+];
+
+const previewApiList: RecycleCategoryFromApi[] = [
+    {
+        category_id: 9001,
+        category_name: '热门手机',
+        image: '',
+        images: ''
+    },
+    {
+        category_id: 9002,
+        category_name: '高价回收',
+        image: '',
+        images: ''
+    },
+    {
+        category_id: 9003,
+        category_name: '数码配件',
+        image: '',
+        images: ''
+    },
+    {
+        category_id: 9004,
+        category_name: '企业回收',
+        image: '',
+        images: ''
+    }
+];
+
+const previewTreeData: TreeCategoryItem[] = [
+    {
+        category_id: 9101,
+        category_name: '手机数码',
+        image: '',
+        images: '',
+        level: 1,
+        pid: 0,
+        category_full_name: '手机数码',
+        is_show: 1,
+        sort: 1,
+        site_id: 0,
+        need_vip: 0,
+        child_list: [
+            {
+                category_id: 910101,
+                category_name: '苹果手机',
+                image: '',
+                images: '',
+                level: 2,
+                pid: 9101,
+                category_full_name: '手机数码/苹果手机',
+                is_show: 1,
+                sort: 1,
+                site_id: 0,
+                need_vip: 0
+            },
+            {
+                category_id: 910102,
+                category_name: '安卓手机',
+                image: '',
+                images: '',
+                level: 2,
+                pid: 9101,
+                category_full_name: '手机数码/安卓手机',
+                is_show: 1,
+                sort: 2,
+                site_id: 0,
+                need_vip: 0
+            },
+            {
+                category_id: 910103,
+                category_name: '平板电脑',
+                image: '',
+                images: '',
+                level: 2,
+                pid: 9101,
+                category_full_name: '手机数码/平板电脑',
+                is_show: 1,
+                sort: 3,
+                site_id: 0,
+                need_vip: 0
+            }
+        ]
+    },
+    {
+        category_id: 9102,
+        category_name: '电脑办公',
+        image: '',
+        images: '',
+        level: 1,
+        pid: 0,
+        category_full_name: '电脑办公',
+        is_show: 1,
+        sort: 2,
+        site_id: 0,
+        need_vip: 0,
+        child_list: [
+            {
+                category_id: 910201,
+                category_name: '笔记本',
+                image: '',
+                images: '',
+                level: 2,
+                pid: 9102,
+                category_full_name: '电脑办公/笔记本',
+                is_show: 1,
+                sort: 1,
+                site_id: 0,
+                need_vip: 0
+            },
+            {
+                category_id: 910202,
+                category_name: '台式主机',
+                image: '',
+                images: '',
+                level: 2,
+                pid: 9102,
+                category_full_name: '电脑办公/台式主机',
+                is_show: 1,
+                sort: 2,
+                site_id: 0,
+                need_vip: 0
+            }
+        ]
+    }
+];
 
 const diyComponent = computed(() => {
     if (diyStore.mode == 'decorate') {
@@ -331,9 +488,29 @@ const diyComponent = computed(() => {
 
 // API 数据列表
 const categoryListFromApi = ref<RecycleCategoryFromApi[]>([]);
+const displayApiCategoryList = computed(() => {
+    if (isDecorateMode.value && categoryListFromApi.value.length === 0) {
+        return previewApiList.slice(0, diyComponent.value.apiItemLimit || 15);
+    }
+    return categoryListFromApi.value;
+});
+
+const manualCategoryList = computed(() => {
+    const list = Array.isArray(diyComponent.value.list) ? diyComponent.value.list : [];
+    if (isDecorateMode.value && list.length === 0) {
+        return previewManualList;
+    }
+    return list;
+});
 
 // 树形分类数据
 const treeData = ref<TreeCategoryItem[]>([]);
+const displayTreeData = computed(() => {
+    if (isDecorateMode.value && treeData.value.length === 0) {
+        return previewTreeData;
+    }
+    return treeData.value;
+});
 
 // 过滤后的树形数据（用于分组显示）
 const filteredTreeData = computed(() => {
@@ -341,7 +518,7 @@ const filteredTreeData = computed(() => {
     const maxCount = diyComponent.value.treeMaxCount || 20; // 获取配置的最大数量
     
     // 只处理有二级分类的一级分类
-    treeData.value.forEach((firstLevel: TreeCategoryItem) => {
+    displayTreeData.value.forEach((firstLevel: TreeCategoryItem) => {
         if (filtered.length >= maxCount) return; // 数量限制
         
         // 只有当一级分类有子分类时才处理，并且过滤显示状态
@@ -361,6 +538,7 @@ const filteredTreeData = computed(() => {
 
 // 获取API分类数据
 const fetchCategoryListFromApi = async () => {
+    if (isDecorateMode.value) return;
     if (diyComponent.value.dataSource === 'api') {
         try {
             const res = await getHot() as ApiResponse; // 修改调用以匹配实际API
@@ -380,6 +558,7 @@ const fetchCategoryListFromApi = async () => {
 
 // 获取树形分类数据
 const fetchTreeCategoryData = async () => {
+    if (isDecorateMode.value) return;
     if (diyComponent.value.dataSource === 'tree') {
         try {
             const res = await getCategoryTree() as TreeApiResponse;

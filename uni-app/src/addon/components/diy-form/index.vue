@@ -112,6 +112,11 @@ const verify = () => {
     let allPass = true; // 是否全部通过验证
 
     let componentRefs = diyGroupRef.value.getFormRef().componentRefs;
+    const getComponentRefList = (refKey: string) => {
+        const refs = componentRefs[refKey];
+        if (!refs) return [];
+        return Array.isArray(refs) ? refs : [refs];
+    }
 
     // 需要过滤 组件类型，筛选出来表单
     for (let i = 0; i < diyFormData.value.length; i++) {
@@ -119,9 +124,11 @@ const verify = () => {
         if (item.field.required || item.field.value) {
             let refKey = `diy${ item.componentName }Ref`;
             let isBreak = false;
-            if (componentRefs[refKey]) {
-                for (let k = 0; k < componentRefs[refKey].length; k++) {
-                    let compRef = componentRefs[refKey][k];
+            const componentRefList = getComponentRefList(refKey);
+            if (componentRefList.length) {
+                for (let k = 0; k < componentRefList.length; k++) {
+                    let compRef = componentRefList[k];
+                    if (!compRef?.verify) continue;
                     let verify = compRef.verify(); // 验证表单组件数据
                     if (verify && !verify.code) {
                         isBreak = true;

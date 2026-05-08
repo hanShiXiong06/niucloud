@@ -504,7 +504,8 @@
                 {
 					"path": "pages/price/show_price",
 					"style": {
-						"navigationBarTitleText": "二手机回收报价单"
+						"navigationBarTitleText": "二手机回收报价单",
+                        "navigationStyle": "custom"
 					},
 					"needLogin": true
 				},
@@ -512,10 +513,6 @@
         },
 // RECYCLE_PAGE_END
 // {{ PAGE_END }}
-        {
-            "root": "app/components",
-            "pages": []
-        },
         {
             "root": "app/pages/member",
             "pages": [

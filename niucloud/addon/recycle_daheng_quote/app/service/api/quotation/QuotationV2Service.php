@@ -8,6 +8,7 @@ use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationDataset;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationNote;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationPrice;
 use addon\recycle_daheng_quote\app\service\core\quotation\QuotationDisplayConfigService;
+use addon\recycle_daheng_quote\app\service\core\quotation\QuotationV2CacheService;
 use core\base\BaseApiService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -18,6 +19,20 @@ use think\facade\Db;
 class QuotationV2Service extends BaseApiService
 {
     public function getTypes(array $where = []): array
+    {
+        return (new QuotationV2CacheService())->rememberTypes($this->site_id, $this->normalizeCacheWhere($where), function () use ($where) {
+            return $this->buildTypes($where);
+        });
+    }
+
+    public function getList(array $where = []): array
+    {
+        return (new QuotationV2CacheService())->rememberList($this->site_id, $this->normalizeCacheWhere($where), function () use ($where) {
+            return $this->buildList($where);
+        });
+    }
+
+    private function buildTypes(array $where = []): array
     {
         $limit = (int)($where['limit'] ?? 20);
         if ($limit <= 0 || $limit > 50) {
@@ -76,7 +91,7 @@ class QuotationV2Service extends BaseApiService
         return $datasets;
     }
 
-    public function getList(array $where = []): array
+    private function buildList(array $where = []): array
     {
         $dataset = $this->resolveDataset($where);
         $priceDate = $this->resolvePriceDate((int)$dataset['id'], (string)($where['price_date'] ?? ''));
@@ -152,6 +167,22 @@ class QuotationV2Service extends BaseApiService
         }
 
         return array_values($rows);
+    }
+
+    private function normalizeCacheWhere(array $where): array
+    {
+        $result = [];
+        foreach ($where as $key => $value) {
+            if (is_array($value)) {
+                $value = array_values($value);
+                sort($value);
+            } elseif (is_string($value)) {
+                $value = trim($value);
+            }
+            $result[$key] = $value;
+        }
+        ksort($result);
+        return $result;
     }
 
     private function resolveDataset(array $where): array

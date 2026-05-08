@@ -10,6 +10,7 @@ use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationField;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationModel;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationNote;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationPrice;
+use addon\recycle_daheng_quote\app\service\core\quotation\QuotationV2CacheService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -51,6 +52,7 @@ class ManageService extends BaseAdminService
             'update_at' => time(),
         ]);
 
+        $this->refreshApiCache();
         return (int)$row->id;
     }
 
@@ -90,6 +92,7 @@ class ManageService extends BaseAdminService
             'update_at' => time(),
         ]);
 
+        $this->refreshApiCache();
         return (int)$row->id;
     }
 
@@ -119,6 +122,7 @@ class ManageService extends BaseAdminService
             'update_at' => time(),
         ]);
 
+        $this->refreshApiCache();
         return (int)$row->id;
     }
 
@@ -161,6 +165,7 @@ class ManageService extends BaseAdminService
             $lastId = $this->saveNoteContent($dataset->toArray(), $model->toArray(), $capacity->toArray(), $field->toArray(), $data, $contentHtml, $contentText);
         }
 
+        $this->refreshApiCache();
         return $lastId;
     }
 
@@ -213,7 +218,7 @@ class ManageService extends BaseAdminService
         }
         $this->assertUniqueModelName((int)$info['dataset_id'], $modelName, $id);
 
-        return $info->save([
+        $result = $info->save([
             'model_name' => $modelName,
             'group_key' => (int)($data['group_key'] ?? $info['group_key'] ?? 0),
             'sort' => (int)($data['sort'] ?? $info['sort'] ?? 0),
@@ -221,6 +226,8 @@ class ManageService extends BaseAdminService
             'follow_crawler' => (int)($data['follow_crawler'] ?? $info['follow_crawler'] ?? QuotationV2Dict::FOLLOW_CRAWLER),
             'update_at' => time(),
         ]);
+        $this->refreshApiCache();
+        return $result;
     }
 
     public function editCapacity(int $id, array $data): bool
@@ -264,6 +271,7 @@ class ManageService extends BaseAdminService
                 ])->update($relationData);
             }
             Db::commit();
+            $this->refreshApiCache();
             return $result;
         } catch (\Exception $e) {
             Db::rollback();
@@ -295,6 +303,7 @@ class ManageService extends BaseAdminService
             ]);
             $this->saveFieldOverride($info->toArray(), $fieldType, $fieldName);
             Db::commit();
+            $this->refreshApiCache();
             return $result;
         } catch (\Exception $e) {
             Db::rollback();
@@ -325,7 +334,7 @@ class ManageService extends BaseAdminService
         }
         $this->assertUniqueNote($datasetId, (int)$model['id'], (int)$capacity['id'], (int)$field['id'], $id);
 
-        return $info->save([
+        $result = $info->save([
             'model_id' => (int)$model['id'],
             'capacity_id' => (int)$capacity['id'],
             'field_id' => (int)$field['id'],
@@ -338,6 +347,8 @@ class ManageService extends BaseAdminService
             'follow_crawler' => (int)($data['follow_crawler'] ?? $info['follow_crawler'] ?? QuotationV2Dict::FOLLOW_CUSTOM),
             'update_at' => time(),
         ]);
+        $this->refreshApiCache();
+        return $result;
     }
 
     public function deleteModel(int $id): bool
@@ -359,6 +370,7 @@ class ManageService extends BaseAdminService
             ])->delete();
             $result = $info->delete();
             Db::commit();
+            $this->refreshApiCache();
             return $result;
         } catch (\Exception $e) {
             Db::rollback();
@@ -381,6 +393,7 @@ class ManageService extends BaseAdminService
             ])->delete();
             $result = $info->delete();
             Db::commit();
+            $this->refreshApiCache();
             return $result;
         } catch (\Exception $e) {
             Db::rollback();
@@ -403,6 +416,7 @@ class ManageService extends BaseAdminService
             ])->delete();
             $result = $info->delete();
             Db::commit();
+            $this->refreshApiCache();
             return $result;
         } catch (\Exception $e) {
             Db::rollback();
@@ -412,7 +426,14 @@ class ManageService extends BaseAdminService
 
     public function deleteNote(int $id): bool
     {
-        return $this->getRow(new QuotationNote(), $id, '说明内容不存在')->delete();
+        $result = $this->getRow(new QuotationNote(), $id, '说明内容不存在')->delete();
+        $this->refreshApiCache();
+        return $result;
+    }
+
+    private function refreshApiCache(): void
+    {
+        (new QuotationV2CacheService())->refresh($this->site_id);
     }
 
     private function getRow($model, int $id, string $message)

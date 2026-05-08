@@ -5,6 +5,7 @@ namespace addon\recycle_quote_spider\app\service\admin;
 
 use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\job\QuoteSpiderManualSync;
+use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use addon\recycle_quote_spider\app\service\core\QuoteSpiderClient;
 use addon\recycle_quote_spider\app\service\core\QuoteSyncService;
 use core\base\BaseAdminService;
@@ -48,6 +49,7 @@ class QuoteSourceService extends BaseAdminService
         $data = $this->filterData($data);
         $data['site_id'] = $this->site_id;
         $record = $this->model->create($data);
+        $this->refreshApiCache();
         return (int)$record->id;
     }
 
@@ -55,6 +57,7 @@ class QuoteSourceService extends BaseAdminService
     {
         $this->getInfo($id);
         $this->model->where('site_id', $this->site_id)->where('id', $id)->update($this->filterData($data));
+        $this->refreshApiCache();
         return true;
     }
 
@@ -62,7 +65,13 @@ class QuoteSourceService extends BaseAdminService
     {
         $this->getInfo($id);
         $this->model->where('site_id', $this->site_id)->where('id', $id)->delete();
+        $this->refreshApiCache();
         return true;
+    }
+
+    private function refreshApiCache(): void
+    {
+        (new QuoteApiCacheService())->refresh($this->site_id);
     }
 
     public function sync(int $id): array

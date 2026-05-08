@@ -8,6 +8,7 @@ use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\model\QuoteSyncLog;
+use app\service\core\upload\CoreFetchService;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -16,6 +17,7 @@ class QuoteSyncService extends BaseCoreService
 {
     private QuoteSpiderClient $client;
     private QuotePriceCalculator $calculator;
+    private array $imageCache = [];
 
     public function __construct()
     {
@@ -93,6 +95,7 @@ class QuoteSyncService extends BaseCoreService
             'last_status' => $status === 1 ? 1 : 3,
             'last_error' => '',
         ]);
+        (new QuoteApiCacheService())->refresh((int)$source['site_id']);
         return ['log_id' => $log->id, 'status' => $status, 'message' => $message, 'summary' => $stats];
     }
 
@@ -166,9 +169,9 @@ class QuoteSyncService extends BaseCoreService
             'sort' => (int)($data['sort_order'] ?? 0),
             'source_is_show' => (int)($data['is_show'] ?? 1),
             'source_is_hot' => (int)($data['is_hot'] ?? 0),
-            'icon' => (string)($data['icon'] ?? ''),
-            'image' => (string)($data['image'] ?? ''),
-            'pic' => (string)($data['pic'] ?? ''),
+            'icon' => $this->resolveSyncedImage($source, $data, $old, 'icon'),
+            'image' => $this->resolveSyncedImage($source, $data, $old, 'image'),
+            'pic' => $this->resolveSyncedImage($source, $data, $old, 'pic'),
             'raw_data' => $data,
             'source_hash' => $hash,
             'has_update' => !empty($old) && ($old['source_hash'] ?? '') !== $hash ? 1 : 0,
@@ -232,10 +235,10 @@ class QuoteSyncService extends BaseCoreService
             'parent_name' => (string)($data['parent_name'] ?? ''),
             'quote_type' => (string)($data['type'] ?? ''),
             'is_image_quote' => $isImageQuote ? 1 : 0,
-            'image' => (string)($data['image'] ?? ''),
-            'timage' => (string)($data['timage'] ?? ''),
-            'bimage' => (string)($data['bimage'] ?? ''),
-            'icon' => (string)($data['icon'] ?? ''),
+            'image' => $this->resolveSyncedImage($source, $data, $old, 'image'),
+            'timage' => $this->resolveSyncedImage($source, $data, $old, 'timage'),
+            'bimage' => $this->resolveSyncedImage($source, $data, $old, 'bimage'),
+            'icon' => $this->resolveSyncedImage($source, $data, $old, 'icon'),
             'keywords' => (string)($data['keywords'] ?? ''),
             'index1' => (string)($data['index1'] ?? ''),
             'source_is_show' => (int)($data['is_show'] ?? 1),
@@ -406,6 +409,59 @@ class QuoteSyncService extends BaseCoreService
         $stats['rows']++;
     }
 
+    private function resolveSyncedImage(array $source, array $data, array $old, string $field): string
+    {
+        $sourceUrl = trim((string)($data[$field] ?? ''));
+        $oldValue = trim((string)($old[$field] ?? ''));
+        if ($sourceUrl === '') {
+            return $oldValue;
+        }
+
+        if (!$this->isRemoteUrl($sourceUrl)) {
+            return $sourceUrl;
+        }
+
+        $oldRaw = $old['raw_data'] ?? [];
+        if (is_string($oldRaw)) {
+            $decoded = json_decode($oldRaw, true);
+            $oldRaw = is_array($decoded) ? $decoded : [];
+        }
+        $oldSourceUrl = trim((string)($oldRaw[$field] ?? ''));
+
+        if ($oldValue !== '' && $oldValue !== $sourceUrl && ($oldSourceUrl === '' || $oldValue !== $oldSourceUrl)) {
+            return $oldValue;
+        }
+
+        return $this->fetchRemoteImage($source, $sourceUrl) ?: $oldValue ?: $sourceUrl;
+    }
+
+    private function fetchRemoteImage(array $source, string $url): string
+    {
+        if (!$this->isRemoteUrl($url)) {
+            return $url;
+        }
+        if (isset($this->imageCache[$url])) {
+            return $this->imageCache[$url];
+        }
+
+        try {
+            $siteId = (int)($source['site_id'] ?? $this->site_id ?? 0);
+            $dir = 'file/image/' . $siteId . '/' . date('Ym') . '/' . date('d');
+            $result = (new CoreFetchService())->image($url, $siteId, $dir);
+            $localUrl = trim((string)($result['url'] ?? ''));
+            $this->imageCache[$url] = $localUrl !== '' ? $localUrl : $url;
+        } catch (\Throwable $e) {
+            $this->imageCache[$url] = $url;
+        }
+
+        return $this->imageCache[$url];
+    }
+
+    private function isRemoteUrl(string $url): bool
+    {
+        return preg_match('/^https?:\/\//i', $url) === 1;
+    }
+
     private function normalizeList($value): array
     {
         if (is_string($value)) {
@@ -506,5 +562,12 @@ class QuoteSyncService extends BaseCoreService
             'last_status' => 2,
             'last_error' => $e->getMessage(),
         ]);
+        try {
+            $source = $sourceModel->where('id', $sourceId)->findOrEmpty()->toArray();
+            if (!empty($source['site_id'])) {
+                (new QuoteApiCacheService())->refresh((int)$source['site_id']);
+            }
+        } catch (\Throwable $ignore) {
+        }
     }
 }

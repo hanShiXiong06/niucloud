@@ -11,6 +11,7 @@ use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationModel as Quotatio
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationNote;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationPrice;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationSyncLog;
+use addon\recycle_daheng_quote\app\service\core\quotation\QuotationV2CacheService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -75,6 +76,7 @@ class DatasetService extends BaseAdminService
             throw new CommonException('报价数据集创建失败');
         }
 
+        $this->refreshApiCache();
         return (int)$result->id;
     }
 
@@ -92,7 +94,9 @@ class DatasetService extends BaseAdminService
         $this->assertUnique((int)$data['quotation_id'], $id);
         $data['update_at'] = time();
 
-        return $info->save($data);
+        $result = $info->save($data);
+        $this->refreshApiCache();
+        return $result;
     }
 
     public function del(int $id): bool
@@ -119,6 +123,7 @@ class DatasetService extends BaseAdminService
             (new QuotationSyncLog())->where($where)->delete();
             $result = $info->delete();
             Db::commit();
+            $this->refreshApiCache();
             return $result;
         } catch (\Exception $e) {
             Db::rollback();
@@ -202,5 +207,10 @@ class DatasetService extends BaseAdminService
         if (!$query->findOrEmpty()->isEmpty()) {
             throw new CommonException('该报价单 ID 已存在');
         }
+    }
+
+    private function refreshApiCache(): void
+    {
+        (new QuotationV2CacheService())->refresh($this->site_id);
     }
 }

@@ -7,12 +7,20 @@ use addon\recycle_quote_spider\app\model\QuoteCategory;
 use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\model\QuoteSource;
+use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use core\base\BaseApiService;
 use core\exception\CommonException;
 
 class QuoteQueryService extends BaseApiService
 {
     public function sources(): array
+    {
+        return (new QuoteApiCacheService())->remember($this->site_id, 'sources', [], function () {
+            return $this->buildSources();
+        });
+    }
+
+    private function buildSources(): array
     {
         return (new QuoteSource())->where('site_id', $this->site_id)
             ->where('status', 1)
@@ -24,12 +32,14 @@ class QuoteQueryService extends BaseApiService
 
     public function featured(array $where = []): array
     {
+        return (new QuoteApiCacheService())->remember($this->site_id, 'featured', $this->normalizeCacheWhere($where), function () use ($where) {
+            return $this->buildFeatured($where);
+        });
+    }
+
+    private function buildFeatured(array $where = []): array
+    {
         $limit = (int)($where['limit'] ?? 10);
-        if ($limit <= 0) {
-            $limit = 100;
-        } elseif ($limit > 100) {
-            $limit = 100;
-        }
 
         $query = (new QuoteItem())->where('site_id', $this->site_id)->where('is_show', 1);
         if (!empty($where['source_id'])) {
@@ -43,11 +53,12 @@ class QuoteQueryService extends BaseApiService
             $query->where('is_hot', (int)$where['only_hot']);
         }
 
-        $items = $query->field('id,source_id,category_id,brand,tab,name,parent_name,quote_type,is_image_quote,image,timage,bimage,icon,is_hot,sort,last_sync_at,update_at')
-            ->order('is_hot desc,sort desc,id desc')
-            ->limit($limit)
-            ->select()
-            ->toArray();
+        $query->field('id,source_id,category_id,brand,tab,name,parent_name,quote_type,is_image_quote,image,timage,bimage,icon,is_hot,sort,last_sync_at,update_at')
+            ->order('is_hot desc,sort desc,id desc');
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+        $items = $query->select()->toArray();
 
         if (empty($items)) {
             return [];
@@ -70,6 +81,13 @@ class QuoteQueryService extends BaseApiService
 
     public function categoryTree(array $where = []): array
     {
+        return (new QuoteApiCacheService())->remember($this->site_id, 'category_tree', $this->normalizeCacheWhere($where), function () use ($where) {
+            return $this->buildCategoryTree($where);
+        });
+    }
+
+    private function buildCategoryTree(array $where = []): array
+    {
         $query = (new QuoteCategory())->where('site_id', $this->site_id)->where('is_show', 1);
         if (!empty($where['source_id'])) {
             $query->where('source_id', (int)$where['source_id']);
@@ -79,6 +97,13 @@ class QuoteQueryService extends BaseApiService
     }
 
     public function items(array $where = []): array
+    {
+        return (new QuoteApiCacheService())->remember($this->site_id, 'items', $this->normalizeCacheWhere($where), function () use ($where) {
+            return $this->buildItems($where);
+        });
+    }
+
+    private function buildItems(array $where = []): array
     {
         $query = (new QuoteItem())->where('site_id', $this->site_id)->where('is_show', 1);
         if (!empty($where['source_id'])) {
@@ -93,6 +118,13 @@ class QuoteQueryService extends BaseApiService
 
     public function detail(int $id): array
     {
+        return (new QuoteApiCacheService())->remember($this->site_id, 'detail', ['id' => $id], function () use ($id) {
+            return $this->buildDetail($id);
+        });
+    }
+
+    private function buildDetail(int $id): array
+    {
         $item = (new QuoteItem())->where('site_id', $this->site_id)->where('is_show', 1)->where('id', $id)->findOrEmpty()->toArray();
         if (empty($item)) {
             throw new CommonException('报价不存在');
@@ -100,6 +132,22 @@ class QuoteQueryService extends BaseApiService
         $rows = (new QuoteRow())->where('site_id', $this->site_id)->where('item_id', $id)->where('is_show', 1)->order('sort asc,id asc')->select()->toArray();
         $item['rows'] = $rows;
         return $item;
+    }
+
+    private function normalizeCacheWhere(array $where): array
+    {
+        $result = [];
+        foreach ($where as $key => $value) {
+            if (is_array($value)) {
+                $value = array_values($value);
+                sort($value);
+            } elseif (is_string($value)) {
+                $value = trim($value);
+            }
+            $result[$key] = $value;
+        }
+        ksort($result);
+        return $result;
     }
 
     private function countRowsByItem(array $itemIds): array

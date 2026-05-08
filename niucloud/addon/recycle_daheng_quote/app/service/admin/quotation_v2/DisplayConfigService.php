@@ -5,6 +5,7 @@ namespace addon\recycle_daheng_quote\app\service\admin\quotation_v2;
 
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationDataset;
 use addon\recycle_daheng_quote\app\service\core\quotation\QuotationDisplayConfigService as CoreQuotationDisplayConfigService;
+use addon\recycle_daheng_quote\app\service\core\quotation\QuotationV2CacheService;
 use core\base\BaseAdminService;
 
 /**
@@ -49,6 +50,8 @@ class DisplayConfigService extends BaseAdminService
 
     public function setConfig(array $data): bool
     {
-        return $this->coreService->setConfig($this->site_id, $data);
+        $result = $this->coreService->setConfig($this->site_id, $data);
+        (new QuotationV2CacheService())->refresh($this->site_id);
+        return $result;
     }
 }

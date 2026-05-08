@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle_daheng_quote\app\service\admin\quotation_v2;
 
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationPrice;
+use addon\recycle_daheng_quote\app\service\core\quotation\QuotationV2CacheService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -27,13 +28,15 @@ class PriceService extends BaseAdminService
         $crawlerPrice = (float)$info['crawler_price'];
         $finalPrice = $this->calcFinalPrice($crawlerPrice, $adjustType, $adjustValue);
 
-        return $info->save([
+        $result = $info->save([
             'adjust_type' => $adjustType,
             'adjust_value' => $adjustValue,
             'final_price' => $finalPrice,
             'locked' => (int)($data['locked'] ?? $info['locked'] ?? 0),
             'update_at' => time(),
         ]);
+        $this->refreshApiCache();
+        return $result;
     }
 
     public function batchAdjust(array $data): array
@@ -50,6 +53,11 @@ class PriceService extends BaseAdminService
         }
 
         return ['success' => $success, 'total' => count($ids)];
+    }
+
+    private function refreshApiCache(): void
+    {
+        (new QuotationV2CacheService())->refresh($this->site_id);
     }
 
     private function calcFinalPrice(float $crawlerPrice, int $adjustType, float $adjustValue): float
