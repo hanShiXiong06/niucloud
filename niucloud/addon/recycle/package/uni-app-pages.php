@@ -65,6 +65,16 @@ return [
 					},
 					"needLogin": true
 				},
+                {
+					"path": "pages/member/index",
+					"style": {
+                        // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                        "navigationBarTitleText": "%recycle.pages.member.index%"
+					},
+					"needLogin": true
+				}
 			]
         },
 // PAGE_END

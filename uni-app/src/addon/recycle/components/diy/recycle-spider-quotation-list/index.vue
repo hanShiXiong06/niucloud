@@ -93,6 +93,10 @@
                                 :style="navItemStyle"
                                 @click="openQuotation(item)"
                             >
+                                <view v-if="showHotBadge(item)" class="hot-badge hot-badge--graphic" :style="hotBadgeBoxStyle">
+                                    <image v-if="hotBadgeImage" class="hot-badge__image" :src="img(hotBadgeImage)" mode="aspectFit"></image>
+                                    <text v-else class="hot-badge__text" :style="hotBadgeTextStyle">热门</text>
+                                </view>
                                 <view class="quotation-nav-img" :style="navImageStyle">
                                     <image :src="img(resolveItemImage(item))" mode="aspectFill" :style="itemImageRadiusStyle"></image>
                                 </view>
@@ -117,7 +121,10 @@
                             <view class="dataset-main">
                                 <view class="dataset-title-row">
                                     <text class="dataset-title" :style="itemTitleStyle">{{ displayItemName(item) }}</text>
-                                    <text v-if="item.is_hot" class="hot-tag">热门</text>
+                                    <view v-if="showHotBadge(item)" class="hot-badge" :style="hotBadgeBoxStyle">
+                                        <image v-if="hotBadgeImage" class="hot-badge__image" :src="img(hotBadgeImage)" mode="aspectFit"></image>
+                                        <text v-else class="hot-badge__text" :style="hotBadgeTextStyle">热门</text>
+                                    </view>
                                 </view>
                                 <view class="dataset-meta" :style="itemMetaStyle">
                                     <text>{{ item.last_sync_at_text || '待同步' }}</text>
@@ -209,6 +216,7 @@ const subtitleColor = computed(() => diyComponent.value.subtitleColor || '#6B728
 const buttonColor = computed(() => diyComponent.value.buttonColor || '#2563EB')
 const groupTitleColor = computed(() => diyComponent.value.groupTitleColor || '#111827')
 const groupCountColor = computed(() => diyComponent.value.groupCountColor || '#94A3B8')
+const showGroupTitle = computed(() => diyComponent.value.showGroupTitle !== false)
 const groupTitleSize = computed(() => {
     const value = Number(diyComponent.value.groupTitleSize || 22)
     return Number.isFinite(value) ? Math.max(16, Math.min(value, 40)) : 22
@@ -218,6 +226,19 @@ const groupTitleWeight = computed(() => {
     return [400, 500, 600, 700].includes(value) ? value : 500
 })
 const groupTitleAlign = computed(() => diyComponent.value.groupTitleAlign === 'center' ? 'center' : 'left')
+const groupTitleBgColor = computed(() => diyComponent.value.groupTitleBgColor || 'transparent')
+const groupTitleRadius = computed(() => {
+    const value = Number(diyComponent.value.groupTitleRadius ?? 0)
+    return Number.isFinite(value) ? Math.max(0, Math.min(value, 48)) : 0
+})
+const groupTitlePaddingX = computed(() => {
+    const value = Number(diyComponent.value.groupTitlePaddingX ?? 0)
+    return Number.isFinite(value) ? Math.max(0, Math.min(value, 48)) : 0
+})
+const groupTitlePaddingY = computed(() => {
+    const value = Number(diyComponent.value.groupTitlePaddingY ?? 0)
+    return Number.isFinite(value) ? Math.max(0, Math.min(value, 32)) : 0
+})
 const itemTitleColor = computed(() => diyComponent.value.itemTitleColor || '#111827')
 const itemMetaColor = computed(() => diyComponent.value.itemMetaColor || '#6B7280')
 const itemTitleSize = computed(() => {
@@ -227,6 +248,22 @@ const itemTitleSize = computed(() => {
 const itemImageRadius = computed(() => {
     const value = Number(diyComponent.value.itemImageRadius ?? 20)
     return Number.isFinite(value) ? Math.max(0, Math.min(value, 50)) : 20
+})
+const showHotBadgeConfig = computed(() => diyComponent.value.showHotBadge !== false)
+const hotBadgeImage = computed(() => String(diyComponent.value.hotBadgeImage || '').trim())
+const hotBadgeSize = computed(() => {
+    const value = Number(diyComponent.value.hotBadgeSize || 38)
+    return Number.isFinite(value) ? Math.max(24, Math.min(value, 80)) : 38
+})
+const hotBadgeBoxStyle = computed(() => {
+    if (hotBadgeImage.value) {
+        return `width:${hotBadgeSize.value}rpx;height:${hotBadgeSize.value}rpx;`
+    }
+    return ''
+})
+const hotBadgeTextStyle = computed(() => {
+    const fontSize = Math.max(18, Math.round(hotBadgeSize.value * 0.46))
+    return `font-size:${fontSize}rpx;line-height:${Math.max(26, fontSize + 8)}rpx;`
 })
 const navRowCount = computed(() => {
     const value = Number(diyComponent.value.navRowCount || 4)
@@ -401,7 +438,7 @@ const stickyTabsTopPx = computed(() => {
     return Math.round(stickyTabsTopRpx.value * screenWidth / 750)
 })
 const groupTitleStyle = computed(() => {
-    return `color:${groupTitleColor.value};font-size:${groupTitleSize.value}rpx;line-height:${Math.max(groupTitleSize.value + 10, 30)}rpx;font-weight:${groupTitleWeight.value};`
+    return `color:${groupTitleColor.value};font-size:${groupTitleSize.value}rpx;line-height:${Math.max(groupTitleSize.value + 10, 30)}rpx;font-weight:${groupTitleWeight.value};background:${groupTitleBgColor.value};border-radius:${groupTitleRadius.value}rpx;padding:${groupTitlePaddingY.value}rpx ${groupTitlePaddingX.value}rpx;`
 })
 const groupCountStyle = computed(() => {
     return `color:${groupCountColor.value};font-size:${Math.max(groupTitleSize.value - 3, 18)}rpx;`
@@ -623,6 +660,10 @@ function displayItemName(item: QuoteSpiderItem) {
     return item.name || item.title || '报价单'
 }
 
+function showHotBadge(item: QuoteSpiderItem) {
+    return showHotBadgeConfig.value && Number(item.is_hot || 0) === 1
+}
+
 function displayCategoryPath(item: QuoteSpiderItem) {
     return String(item.category_path || item.parent_name || '').trim()
 }
@@ -636,7 +677,7 @@ function displayGroupTitle(item: QuoteSpiderItem) {
 }
 
 function showGroupHeader(group: { title: string }) {
-    return Boolean(group.title)
+    return Boolean(group.title) && showGroupTitle.value
 }
 
 function collectPreviewCategoryIds(categoryId: number): number[] {
@@ -745,8 +786,15 @@ async function loadItems() {
 function openQuotation(item: QuoteSpiderItem) {
     if (diyStore.mode === 'decorate') return
     const titleText = encodeURIComponent(displayItemName(item) || '报价查询')
+    const hotParams = [
+        `show_hot_badge=${showHotBadgeConfig.value ? 1 : 0}`,
+        `hot_badge_size=${encodeURIComponent(String(hotBadgeSize.value))}`
+    ]
+    if (hotBadgeImage.value) {
+        hotParams.push(`hot_badge_image=${encodeURIComponent(hotBadgeImage.value)}`)
+    }
     redirect({
-        url: `/addon/recycle/pages/price/show_price?source=spider&item_id=${item.id}&title=${titleText}`
+        url: `/addon/recycle/pages/price/show_price?source=spider&item_id=${item.id}&title=${titleText}&${hotParams.join('&')}`
     })
 }
 
@@ -973,6 +1021,8 @@ function measureStickyTabs() {
 
 .group-title-text {
     min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .dataset-group-head text:last-child,
@@ -1018,14 +1068,35 @@ function measureStickyTabs() {
     white-space: nowrap;
 }
 
-.hot-tag {
+.hot-badge {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hot-badge--graphic {
+    position: absolute;
+    top: 8rpx;
+    right: 14rpx;
+    z-index: 2;
+}
+
+.hot-badge__image {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.hot-badge__text {
+    display: block;
     padding: 2rpx 10rpx;
     border-radius: 999rpx;
-    background: #fff1f2;
+    background: linear-gradient(135deg, #ffedd5, #ffe4e6);
     color: #e11d48;
-    font-size: 20rpx;
-    line-height: 28rpx;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 4rpx 10rpx rgba(225, 29, 72, 0.12);
 }
 
 .dataset-meta {
@@ -1065,6 +1136,7 @@ function measureStickyTabs() {
 }
 
 .quotation-nav-item {
+    position: relative;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;

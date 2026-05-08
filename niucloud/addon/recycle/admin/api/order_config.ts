@@ -23,6 +23,11 @@ export interface OrderSubmitConfig {
         free_shipping_min_count: number
     }
     allow_user_reject_sale: number
+    price_detail_theme: {
+        template_key: string
+        theme_name: string
+        colors: Record<string, string>
+    }
 }
 
 export function getOrderSubmitConfig() {

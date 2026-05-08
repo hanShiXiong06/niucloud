@@ -23,6 +23,9 @@ export interface QuotationPriceData {
   price_name: string;
   goods_id: number;
   goods_name: string;
+  model_group_key?: number;
+  series_name?: string;
+  is_hot?: number;
   capacity: string;
   prices: Record<string, PriceDetail>;
   add_value_info: number;

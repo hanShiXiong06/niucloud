@@ -44,6 +44,8 @@ class ManageService extends BaseAdminService
             'external_goods_id' => $externalGoodsId,
             'model_name' => $modelName,
             'group_key' => (int)($data['group_key'] ?? 0),
+            'series_name' => mb_substr(trim((string)($data['series_name'] ?? '')), 0, 120),
+            'is_hot' => (int)($data['is_hot'] ?? 0) === 1 ? 1 : 0,
             'sort' => (int)($data['sort'] ?? 0),
             'status' => (int)($data['status'] ?? QuotationV2Dict::STATUS_ENABLED),
             'follow_crawler' => QuotationV2Dict::FOLLOW_CUSTOM,
@@ -221,6 +223,8 @@ class ManageService extends BaseAdminService
         $result = $info->save([
             'model_name' => $modelName,
             'group_key' => (int)($data['group_key'] ?? $info['group_key'] ?? 0),
+            'series_name' => mb_substr(trim((string)($data['series_name'] ?? $info['series_name'] ?? '')), 0, 120),
+            'is_hot' => (int)($data['is_hot'] ?? $info['is_hot'] ?? 0) === 1 ? 1 : 0,
             'sort' => (int)($data['sort'] ?? $info['sort'] ?? 0),
             'status' => (int)($data['status'] ?? $info['status'] ?? QuotationV2Dict::STATUS_ENABLED),
             'follow_crawler' => (int)($data['follow_crawler'] ?? $info['follow_crawler'] ?? QuotationV2Dict::FOLLOW_CRAWLER),

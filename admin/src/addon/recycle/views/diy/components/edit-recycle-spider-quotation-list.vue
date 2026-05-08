@@ -149,29 +149,47 @@
       <div class="edit-attr-item-wrap">
         <h3 class="mb-[10px]">分类样式</h3>
         <el-form label-width="90px" class="px-[10px]">
-          <el-form-item label="标题颜色">
-            <el-color-picker v-model="diyStore.editComponent.groupTitleColor" show-alpha :predefine="diyStore.predefineColors" />
+          <el-form-item label="分组标题">
+            <el-switch v-model="diyStore.editComponent.showGroupTitle" />
+            <div class="form-tip">关闭后整个分组头部隐藏，标题和右侧数量都会消失。</div>
           </el-form-item>
           <el-form-item label="数量颜色">
             <el-color-picker v-model="diyStore.editComponent.groupCountColor" show-alpha :predefine="diyStore.predefineColors" />
           </el-form-item>
-          <el-form-item label="标题字号">
-            <el-slider v-model="diyStore.editComponent.groupTitleSize" show-input size="small" class="ml-[10px]" :min="16" :max="40" />
-          </el-form-item>
-          <el-form-item label="标题粗细">
-            <el-radio-group v-model="diyStore.editComponent.groupTitleWeight">
-              <el-radio :label="400">常规</el-radio>
-              <el-radio :label="500">中等</el-radio>
-              <el-radio :label="600">半粗</el-radio>
-              <el-radio :label="700">加粗</el-radio>
-            </el-radio-group>
-          </el-form-item>
-          <el-form-item label="标题对齐">
-            <el-radio-group v-model="diyStore.editComponent.groupTitleAlign">
-              <el-radio label="left">居左</el-radio>
-              <el-radio label="center">居中</el-radio>
-            </el-radio-group>
-          </el-form-item>
+          <template v-if="diyStore.editComponent.showGroupTitle !== false">
+            <el-form-item label="标题颜色">
+              <el-color-picker v-model="diyStore.editComponent.groupTitleColor" show-alpha :predefine="diyStore.predefineColors" />
+            </el-form-item>
+            <el-form-item label="标题背景">
+              <el-color-picker v-model="diyStore.editComponent.groupTitleBgColor" show-alpha :predefine="diyStore.predefineColors" />
+            </el-form-item>
+            <el-form-item label="标题字号">
+              <el-slider v-model="diyStore.editComponent.groupTitleSize" show-input size="small" class="ml-[10px]" :min="16" :max="40" />
+            </el-form-item>
+            <el-form-item label="标题粗细">
+              <el-radio-group v-model="diyStore.editComponent.groupTitleWeight">
+                <el-radio :label="400">常规</el-radio>
+                <el-radio :label="500">中等</el-radio>
+                <el-radio :label="600">半粗</el-radio>
+                <el-radio :label="700">加粗</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="标题对齐">
+              <el-radio-group v-model="diyStore.editComponent.groupTitleAlign">
+                <el-radio label="left">居左</el-radio>
+                <el-radio label="center">居中</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="标题圆角">
+              <el-slider v-model="diyStore.editComponent.groupTitleRadius" show-input size="small" class="ml-[10px]" :min="0" :max="48" />
+            </el-form-item>
+            <el-form-item label="左右留白">
+              <el-slider v-model="diyStore.editComponent.groupTitlePaddingX" show-input size="small" class="ml-[10px]" :min="0" :max="48" />
+            </el-form-item>
+            <el-form-item label="上下留白">
+              <el-slider v-model="diyStore.editComponent.groupTitlePaddingY" show-input size="small" class="ml-[10px]" :min="0" :max="32" />
+            </el-form-item>
+          </template>
         </el-form>
       </div>
 
@@ -268,6 +286,18 @@
       <div class="edit-attr-item-wrap">
         <h3 class="mb-[10px]">报价项样式</h3>
         <el-form label-width="90px" class="px-[10px]">
+          <el-form-item label="热门标识">
+            <el-switch v-model="diyStore.editComponent.showHotBadge" />
+            <div class="form-tip">报价项开启热门后显示，列表、图文导航和详情页都会使用这个标识。</div>
+          </el-form-item>
+          <template v-if="diyStore.editComponent.showHotBadge !== false">
+            <el-form-item label="热门图标">
+              <upload-image v-model="diyStore.editComponent.hotBadgeImage" :limit="1" tips="不上传时使用默认热门样式，建议透明 PNG" />
+            </el-form-item>
+            <el-form-item label="图标大小">
+              <el-slider v-model="diyStore.editComponent.hotBadgeSize" show-input size="small" class="ml-[10px]" :min="24" :max="80" />
+            </el-form-item>
+          </template>
           <el-form-item label="文字颜色">
             <el-color-picker v-model="diyStore.editComponent.itemTitleColor" show-alpha :predefine="diyStore.predefineColors" />
           </el-form-item>
@@ -372,11 +402,19 @@ onMounted(() => {
   if (!diyStore.editComponent.titleColor) diyStore.editComponent.titleColor = '#111827'
   if (!diyStore.editComponent.subtitleColor) diyStore.editComponent.subtitleColor = '#6B7280'
   if (!diyStore.editComponent.buttonColor) diyStore.editComponent.buttonColor = '#2563EB'
+  if (diyStore.editComponent.showGroupTitle === undefined) diyStore.editComponent.showGroupTitle = true
   if (!diyStore.editComponent.groupTitleColor) diyStore.editComponent.groupTitleColor = '#111827'
+  if (diyStore.editComponent.groupTitleBgColor === undefined) diyStore.editComponent.groupTitleBgColor = 'transparent'
   if (!diyStore.editComponent.groupCountColor) diyStore.editComponent.groupCountColor = '#94A3B8'
   if (!diyStore.editComponent.groupTitleSize) diyStore.editComponent.groupTitleSize = 22
   if (!diyStore.editComponent.groupTitleWeight) diyStore.editComponent.groupTitleWeight = 500
   if (!diyStore.editComponent.groupTitleAlign) diyStore.editComponent.groupTitleAlign = 'left'
+  if (diyStore.editComponent.groupTitleRadius === undefined) diyStore.editComponent.groupTitleRadius = 0
+  if (diyStore.editComponent.groupTitlePaddingX === undefined) diyStore.editComponent.groupTitlePaddingX = 0
+  if (diyStore.editComponent.groupTitlePaddingY === undefined) diyStore.editComponent.groupTitlePaddingY = 0
+  if (diyStore.editComponent.showHotBadge === undefined) diyStore.editComponent.showHotBadge = true
+  if (diyStore.editComponent.hotBadgeImage === undefined) diyStore.editComponent.hotBadgeImage = ''
+  if (!diyStore.editComponent.hotBadgeSize) diyStore.editComponent.hotBadgeSize = 38
   if (!diyStore.editComponent.itemTitleColor) diyStore.editComponent.itemTitleColor = '#111827'
   if (!diyStore.editComponent.itemTitleSize) diyStore.editComponent.itemTitleSize = 28
   if (!diyStore.editComponent.itemMetaColor) diyStore.editComponent.itemMetaColor = '#6B7280'

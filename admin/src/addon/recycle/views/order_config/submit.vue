@@ -141,6 +141,63 @@
                     </div>
                 </section>
 
+                <section class="config-section">
+                    <div class="section-title">报价详情页配色</div>
+                    <div class="section-tip">用于移动端报价详情页。先选模板快速套色，再按品牌需要微调颜色，右侧会实时预览。</div>
+                    <div class="theme-layout">
+                        <div class="theme-config">
+                            <div class="theme-template-grid">
+                                <div
+                                    v-for="item in themeTemplates"
+                                    :key="item.key"
+                                    class="theme-template-card"
+                                    :class="{ active: form.price_detail_theme.template_key === item.key }"
+                                    @click="applyThemeTemplate(item.key)"
+                                >
+                                    <div class="theme-template-swatches">
+                                        <span :style="{ backgroundColor: item.colors.brand }"></span>
+                                        <span :style="{ backgroundColor: item.colors.price }"></span>
+                                        <span :style="{ backgroundColor: item.colors.series_active_bg }"></span>
+                                    </div>
+                                    <div class="theme-template-name">{{ item.name }}</div>
+                                </div>
+                            </div>
+                            <div class="theme-color-grid">
+                                <div v-for="item in themeColorFields" :key="item.key" class="theme-color-item">
+                                    <div>
+                                        <div class="setting-title">{{ item.label }}</div>
+                                        <div class="setting-desc">{{ item.desc }}</div>
+                                    </div>
+                                    <el-color-picker v-model="form.price_detail_theme.colors[item.key]" :predefine="themePredefineColors" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="theme-preview" :style="themePreviewStyle">
+                            <div class="preview-navbar">报价详情</div>
+                            <div class="preview-notice">报价仅供参考，最终价格以质检结果为准</div>
+                            <div class="preview-toolbar">
+                                <span>共 18 个型号</span>
+                                <button>刷新</button>
+                            </div>
+                            <div class="preview-series">
+                                <span class="active">iPhone 17 系列</span>
+                                <span>其他系列</span>
+                            </div>
+                            <div class="preview-card">
+                                <div class="preview-model-head">
+                                    <span>苹果</span>
+                                    <strong>iPhone 17 Pro Max</strong>
+                                    <em>4 个容量</em>
+                                </div>
+                                <div class="preview-price-row">
+                                    <span>256G</span>
+                                    <strong>5680</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <section class="config-section muted">
                     <div class="section-title">后续配置预留</div>
                     <div class="placeholder-list">
@@ -155,12 +212,167 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getOrderSubmitConfig, saveOrderSubmitConfig, type OrderSubmitConfig } from '@/addon/recycle/api/order_config'
 
 const loading = ref(false)
 const saving = ref(false)
+
+const themeTemplates = [
+    {
+        key: 'classic_blue',
+        name: '默认蓝',
+        colors: {
+            page_bg: '#F3F4F6',
+            card_bg: '#FFFFFF',
+            soft_bg: '#F7F7F8',
+            line: '#E5E7EB',
+            text_main: '#1F2937',
+            text_sub: '#6B7280',
+            brand: '#3B82F6',
+            brand_deep: '#4F46E5',
+            price: '#2563EB',
+            notice_bg: '#FFF8ED',
+            notice_text: '#F59E0B',
+            toolbar_bg: '#FFFFFF',
+            button_bg: '#111827',
+            button_text: '#FFFFFF',
+            series_active_bg: '#111827',
+            series_active_text: '#FFFFFF',
+            series_inactive_bg: '#F8FAFC',
+            series_inactive_text: '#475569',
+            model_head_bg: '#F8FAFC',
+            model_brand_bg: '#111827',
+            model_brand_text: '#FFFFFF'
+        }
+    },
+    {
+        key: 'eco_green',
+        name: '绿色环保',
+        colors: {
+            page_bg: '#F0FDF4',
+            card_bg: '#FFFFFF',
+            soft_bg: '#DCFCE7',
+            line: '#BBF7D0',
+            text_main: '#14532D',
+            text_sub: '#4B7560',
+            brand: '#16A34A',
+            brand_deep: '#15803D',
+            price: '#15803D',
+            notice_bg: '#ECFDF5',
+            notice_text: '#047857',
+            toolbar_bg: '#FFFFFF',
+            button_bg: '#166534',
+            button_text: '#FFFFFF',
+            series_active_bg: '#166534',
+            series_active_text: '#FFFFFF',
+            series_inactive_bg: '#ECFDF5',
+            series_inactive_text: '#166534',
+            model_head_bg: '#F0FDF4',
+            model_brand_bg: '#166534',
+            model_brand_text: '#FFFFFF'
+        }
+    },
+    {
+        key: 'warm_orange',
+        name: '橙色回收',
+        colors: {
+            page_bg: '#FFF7ED',
+            card_bg: '#FFFFFF',
+            soft_bg: '#FFEDD5',
+            line: '#FED7AA',
+            text_main: '#431407',
+            text_sub: '#9A5B21',
+            brand: '#F97316',
+            brand_deep: '#EA580C',
+            price: '#EA580C',
+            notice_bg: '#FFFBEB',
+            notice_text: '#D97706',
+            toolbar_bg: '#FFFFFF',
+            button_bg: '#C2410C',
+            button_text: '#FFFFFF',
+            series_active_bg: '#C2410C',
+            series_active_text: '#FFFFFF',
+            series_inactive_bg: '#FFEDD5',
+            series_inactive_text: '#9A3412',
+            model_head_bg: '#FFF7ED',
+            model_brand_bg: '#C2410C',
+            model_brand_text: '#FFFFFF'
+        }
+    },
+    {
+        key: 'dark_business',
+        name: '深色商务',
+        colors: {
+            page_bg: '#111827',
+            card_bg: '#1F2937',
+            soft_bg: '#374151',
+            line: '#4B5563',
+            text_main: '#F9FAFB',
+            text_sub: '#CBD5E1',
+            brand: '#60A5FA',
+            brand_deep: '#818CF8',
+            price: '#93C5FD',
+            notice_bg: '#1E3A8A',
+            notice_text: '#DBEAFE',
+            toolbar_bg: '#1F2937',
+            button_bg: '#60A5FA',
+            button_text: '#0F172A',
+            series_active_bg: '#60A5FA',
+            series_active_text: '#0F172A',
+            series_inactive_bg: '#374151',
+            series_inactive_text: '#E5E7EB',
+            model_head_bg: '#1F2937',
+            model_brand_bg: '#60A5FA',
+            model_brand_text: '#0F172A'
+        }
+    },
+    {
+        key: 'premium_red',
+        name: '红色高价',
+        colors: {
+            page_bg: '#FFF1F2',
+            card_bg: '#FFFFFF',
+            soft_bg: '#FFE4E6',
+            line: '#FECDD3',
+            text_main: '#4C0519',
+            text_sub: '#9F1239',
+            brand: '#E11D48',
+            brand_deep: '#BE123C',
+            price: '#E11D48',
+            notice_bg: '#FFF1F2',
+            notice_text: '#BE123C',
+            toolbar_bg: '#FFFFFF',
+            button_bg: '#BE123C',
+            button_text: '#FFFFFF',
+            series_active_bg: '#BE123C',
+            series_active_text: '#FFFFFF',
+            series_inactive_bg: '#FFE4E6',
+            series_inactive_text: '#BE123C',
+            model_head_bg: '#FFF1F2',
+            model_brand_bg: '#BE123C',
+            model_brand_text: '#FFFFFF'
+        }
+    }
+]
+
+const themeColorFields = [
+    { key: 'page_bg', label: '页面背景', desc: '详情页整体背景' },
+    { key: 'card_bg', label: '卡片背景', desc: '工具栏和报价卡片背景' },
+    { key: 'text_main', label: '主文字', desc: '标题和型号文字' },
+    { key: 'text_sub', label: '辅助文字', desc: '统计和说明文字' },
+    { key: 'brand', label: '主题色', desc: '筛选、按钮、强调色' },
+    { key: 'price', label: '价格颜色', desc: '报价数字颜色' },
+    { key: 'notice_bg', label: '提示背景', desc: '顶部提示区域背景' },
+    { key: 'notice_text', label: '提示文字', desc: '顶部提示文字颜色' },
+    { key: 'series_active_bg', label: '系列选中背景', desc: '系列 Tab 选中态' },
+    { key: 'series_inactive_bg', label: '系列未选背景', desc: '系列 Tab 未选态' },
+    { key: 'model_brand_bg', label: '型号品牌背景', desc: '型号左侧品牌标签' },
+    { key: 'button_bg', label: '按钮背景', desc: '刷新和底部按钮' }
+]
+
+const themePredefineColors = Array.from(new Set(themeTemplates.flatMap(item => Object.values(item.colors))))
 
 const form = reactive<OrderSubmitConfig>({
     device_add_enabled: 1,
@@ -184,7 +396,37 @@ const form = reactive<OrderSubmitConfig>({
         display_name: '京东快递',
         free_shipping_min_count: 1
     },
-    allow_user_reject_sale: 1
+    allow_user_reject_sale: 1,
+    price_detail_theme: {
+        template_key: 'classic_blue',
+        theme_name: '默认蓝',
+        colors: { ...themeTemplates[0].colors }
+    }
+})
+
+const themePreviewStyle = computed(() => {
+    const colors = form.price_detail_theme.colors || themeTemplates[0].colors
+    return {
+        '--preview-page-bg': colors.page_bg,
+        '--preview-card-bg': colors.card_bg,
+        '--preview-soft-bg': colors.soft_bg,
+        '--preview-line': colors.line,
+        '--preview-text-main': colors.text_main,
+        '--preview-text-sub': colors.text_sub,
+        '--preview-brand': colors.brand,
+        '--preview-price': colors.price,
+        '--preview-notice-bg': colors.notice_bg,
+        '--preview-notice-text': colors.notice_text,
+        '--preview-button-bg': colors.button_bg,
+        '--preview-button-text': colors.button_text,
+        '--preview-series-active-bg': colors.series_active_bg,
+        '--preview-series-active-text': colors.series_active_text,
+        '--preview-series-inactive-bg': colors.series_inactive_bg,
+        '--preview-series-inactive-text': colors.series_inactive_text,
+        '--preview-model-head-bg': colors.model_head_bg,
+        '--preview-model-brand-bg': colors.model_brand_bg,
+        '--preview-model-brand-text': colors.model_brand_text
+    }
 })
 
 const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
@@ -202,10 +444,28 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.platform_delivery.display_name = data.platform_delivery?.display_name || '京东快递'
     form.platform_delivery.free_shipping_min_count = Math.max(1, Math.min(99, Number(data.platform_delivery?.free_shipping_min_count || 1)))
     form.allow_user_reject_sale = data.allow_user_reject_sale === 0 ? 0 : 1
+    normalizeTheme(data.price_detail_theme)
     if (!form.delivery_modes.mail && !form.delivery_modes.self) {
         form.delivery_modes.mail = 1
         form.delivery_modes.self = 1
     }
+}
+
+const normalizeTheme = (theme: Partial<OrderSubmitConfig['price_detail_theme']> = {}) => {
+    const template = themeTemplates.find(item => item.key === theme.template_key) || themeTemplates[0]
+    form.price_detail_theme.template_key = template.key
+    form.price_detail_theme.theme_name = theme.theme_name || template.name
+    form.price_detail_theme.colors = {
+        ...template.colors,
+        ...(theme.colors || {})
+    }
+}
+
+const applyThemeTemplate = (key: string) => {
+    const template = themeTemplates.find(item => item.key === key) || themeTemplates[0]
+    form.price_detail_theme.template_key = template.key
+    form.price_detail_theme.theme_name = template.name
+    form.price_detail_theme.colors = { ...template.colors }
 }
 
 const load = async () => {
@@ -303,6 +563,13 @@ onMounted(load)
     color: #1f2937;
 }
 
+.section-tip {
+    margin: -4px 0 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #6b7280;
+}
+
 .setting-row {
     display: flex;
     align-items: center;
@@ -371,5 +638,204 @@ onMounted(load)
     background: #f3f4f6;
     color: #6b7280;
     font-size: 13px;
+}
+
+.theme-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 18px;
+    align-items: start;
+}
+
+.theme-config {
+    min-width: 0;
+}
+
+.theme-template-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.theme-template-card {
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #fff;
+}
+
+.theme-template-card.active {
+    border-color: var(--el-color-primary);
+    box-shadow: 0 0 0 2px var(--el-color-primary-light-8);
+}
+
+.theme-template-swatches {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.theme-template-swatches span {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.theme-template-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.theme-color-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.theme-color-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #edf0f5;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.theme-preview {
+    position: sticky;
+    top: 16px;
+    padding: 12px;
+    border-radius: 14px;
+    background: var(--preview-page-bg);
+    color: var(--preview-text-main);
+    border: 1px solid var(--preview-line);
+}
+
+.preview-navbar {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: var(--preview-button-bg);
+    color: var(--preview-button-text);
+    font-weight: 700;
+}
+
+.preview-notice {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    background: var(--preview-notice-bg);
+    color: var(--preview-notice-text);
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.preview-toolbar {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    background: var(--preview-card-bg);
+    color: var(--preview-text-sub);
+    font-size: 12px;
+}
+
+.preview-toolbar button {
+    border: 0;
+    border-radius: 6px;
+    padding: 5px 10px;
+    background: var(--preview-button-bg);
+    color: var(--preview-button-text);
+}
+
+.preview-series {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.preview-series span {
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: var(--preview-series-inactive-bg);
+    color: var(--preview-series-inactive-text);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.preview-series span.active {
+    background: var(--preview-series-active-bg);
+    color: var(--preview-series-active-text);
+}
+
+.preview-card {
+    margin-top: 10px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--preview-card-bg);
+    border: 1px solid var(--preview-line);
+}
+
+.preview-model-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    background: var(--preview-model-head-bg);
+}
+
+.preview-model-head span {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--preview-model-brand-bg);
+    color: var(--preview-model-brand-text);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.preview-model-head strong {
+    min-width: 0;
+    flex: 1;
+    font-size: 13px;
+}
+
+.preview-model-head em {
+    font-style: normal;
+    font-size: 12px;
+    color: var(--preview-text-sub);
+}
+
+.preview-price-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 10px;
+    font-size: 13px;
+}
+
+.preview-price-row strong {
+    color: var(--preview-price);
+    font-size: 18px;
+}
+
+@media (max-width: 1200px) {
+    .theme-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .theme-preview {
+        position: static;
+    }
 }
 </style>

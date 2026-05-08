@@ -8,6 +8,7 @@ use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\model\QuoteSyncLog;
+use app\service\core\upload\CoreBase64Service;
 use app\service\core\upload\CoreFetchService;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
@@ -432,7 +433,14 @@ class QuoteSyncService extends BaseCoreService
             return $oldValue;
         }
 
-        return $this->fetchRemoteImage($source, $sourceUrl) ?: $oldValue ?: $sourceUrl;
+        $localUrl = $this->fetchRemoteImage($source, $sourceUrl);
+        if ($localUrl !== '') {
+            return $localUrl;
+        }
+
+        // Do not persist third-party image URLs. If the fetch/upload failed, leave the
+        // field empty so the frontend never requests the crawler source directly.
+        return '';
     }
 
     private function fetchRemoteImage(array $source, string $url): string
@@ -447,14 +455,61 @@ class QuoteSyncService extends BaseCoreService
         try {
             $siteId = (int)($source['site_id'] ?? $this->site_id ?? 0);
             $dir = 'file/image/' . $siteId . '/' . date('Ym') . '/' . date('d');
-            $result = (new CoreFetchService())->image($url, $siteId, $dir);
+            $result = $this->fetchImageByStorage($url, $siteId, $dir);
             $localUrl = trim((string)($result['url'] ?? ''));
-            $this->imageCache[$url] = $localUrl !== '' ? $localUrl : $url;
+            $this->imageCache[$url] = ($localUrl !== '' && $localUrl !== $url) ? $localUrl : '';
         } catch (\Throwable $e) {
-            $this->imageCache[$url] = $url;
+            $this->imageCache[$url] = '';
         }
 
         return $this->imageCache[$url];
+    }
+
+    private function fetchImageByStorage(string $url, int $siteId, string $dir): array
+    {
+        try {
+            return (new CoreFetchService())->image($url, $siteId, $dir);
+        } catch (\Throwable $e) {
+            $content = $this->downloadRemoteImage($url);
+            if ($content === '') {
+                throw $e;
+            }
+            return (new CoreBase64Service())->image(base64_encode($content), $siteId, $dir);
+        }
+    }
+
+    private function downloadRemoteImage(string $url): string
+    {
+        $ch = curl_init($url);
+        if ($ch === false) {
+            return '';
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 3,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_ENCODING => '',
+            CURLOPT_HTTPHEADER => [
+                'Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Referer: https://servicewechat.com/',
+                'User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.49 Language/zh_CN',
+            ],
+        ]);
+        $content = curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!is_string($content) || $content === '' || $httpCode < 200 || $httpCode >= 300) {
+            return '';
+        }
+
+        $info = @getimagesizefromstring($content);
+        return is_array($info) ? $content : '';
     }
 
     private function isRemoteUrl(string $url): bool

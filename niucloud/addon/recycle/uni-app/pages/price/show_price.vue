@@ -1,5 +1,5 @@
 <template>
-	<view class="show-price-page" :style="pageStyleVars">
+	<view class="show-price-page" :style="[pageStyleVars, themeStyleVars]">
 		<view class="custom-navbar" :class="{ compact: isScrolled }" :style="customNavbarStyle">
 			<view class="navbar-content" :style="navbarContentStyle">
 				<view class="navbar-left" :style="navbarSideStyle" @click="goBack">
@@ -35,13 +35,17 @@
 				<text v-for="line in noticeLines" :key="line" class="notice-line">{{ line }}</text>
 			</view>
 
-			<view v-if="spiderImageUrl" class="image-quote-card">
+			<!-- <view v-if="spiderImageUrl" class="image-quote-card">
 				<image class="image-quote" :src="spiderImageUrl" mode="widthFix" @click="previewSpiderImage" />
-			</view>
+			</view> -->
 
 			<view v-if="tableData.length > 0" class="tool-card">
 				<view class="tool-head">
 					<view class="data-meta">
+						<view v-if="showSpiderHotBadge" class="spider-hot-badge" :style="hotBadgeBoxStyle">
+							<image v-if="hotBadgeImage" class="spider-hot-badge__image" :src="img(hotBadgeImage)" mode="aspectFit"></image>
+							<text v-else class="spider-hot-badge__text" :style="hotBadgeTextStyle">热门</text>
+						</view>
 						<text>共 {{ filteredModelCount }} 个型号</text>
 						<text class="dot">·</text>
 						<text>{{ filteredRowCount }} 条价格</text>
@@ -72,6 +76,20 @@
 						<view class="selected-model-clear" @click="applyModelFilter([])">清空</view>
 					</view>
 				</scroll-view>
+				<scroll-view v-if="seriesTabs.length > 1" scroll-x class="series-tab-scroll">
+					<view class="series-tab-list">
+						<view
+							v-for="item in seriesTabs"
+							:key="item.key"
+							class="series-tab"
+							:class="{ active: activeSeriesKey === item.key }"
+							@click="selectSeries(item.key)"
+						>
+							<text>{{ item.name }}</text>
+							<text class="series-tab-count">{{ item.modelCount }}</text>
+						</view>
+					</view>
+				</scroll-view>
 			</view>
 
 			<view v-if="groupedTables.length > 0" class="sheet-list">
@@ -82,7 +100,7 @@
 					class="sheet-section"
 				>
 					<view v-if="groupedTables.length > 1" class="section-title">
-						<text>价格结构 {{ table.id }}</text>
+						<text>{{ table.title }}</text>
 						<text class="section-sub">{{ table.configColumns.join(' / ') }}</text>
 					</view>
 
@@ -216,20 +234,25 @@
 			</view>
 		</view>
 		<ModelFilterPopup
+			v-if="showModelFilter"
 			:visible="showModelFilter"
 			:options="modelFilterOptions"
 			:selected="selectedModels"
+			:only-hot="onlyHotModels"
 			@apply="applyModelFilter"
+			@update:only-hot="onlyHotModels = $event"
 			@close="showModelFilter = false"
 		/>
 	</view>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad, onPageScroll } from '@dcloudio/uni-app'
 import { getQuoteSpiderDetail, type QuoteSpiderItem } from '@/addon/recycle/api/quotation'
 import { getQuotationV2PriceList, getQuotationV2Types, type QuotationPriceData, type QuotationV2Type } from '@/addon/recycle_daheng_quote/api/quotation'
+import { getOrderSubmitConfig } from '@/addon/recycle/api/order'
+import { img } from '@/utils/common'
 import ModelFilterPopup from './components/ModelFilterPopup.vue'
 
 interface EnhancedPriceRow extends QuotationPriceData {
@@ -243,6 +266,10 @@ interface EnhancedPriceRow extends QuotationPriceData {
 
 interface GroupedTable {
 	id: number
+	key: string
+	title: string
+	seriesKey: string
+	seriesName: string
 	configColumns: string[]
 	priceColumns: PriceColumn[]
 	adjustmentColumns: AdjustmentColumn[]
@@ -272,13 +299,22 @@ interface AdjustmentDisplayCell {
 
 interface ModelGroup {
 	modelName: string
+	isHot: boolean
 	rows: EnhancedPriceRow[]
+}
+
+interface SeriesTab {
+	key: string
+	name: string
+	modelCount: number
+	rowCount: number
 }
 
 interface ModelFilterOption {
 	name: string
 	rowCount: number
 	capacityCount: number
+	isHot: boolean
 }
 
 interface PricePageOptions {
@@ -289,6 +325,9 @@ interface PricePageOptions {
 	source?: string
 	title?: string
 	price_date?: string
+	show_hot_badge?: string
+	hot_badge_image?: string
+	hot_badge_size?: string
 }
 
 interface PriceListResponse {
@@ -338,7 +377,14 @@ const showTypeSheet = ref(false)
 const showModelFilter = ref(false)
 const quotationTypes = ref<QuotationV2Type[]>([])
 const spiderImageUrl = ref('')
+const spiderIsHot = ref(false)
+const showHotBadge = ref(true)
+const hotBadgeImage = ref('')
+const hotBadgeSize = ref(38)
 const selectedModels = ref<string[]>([])
+const activeSeriesKey = ref('all')
+const onlyHotModels = ref(false)
+const priceTheme = ref<Record<string, string>>({})
 const systemInfo = uni.getSystemInfoSync()
 const menuButtonInfo = (() => {
 	try {
@@ -356,7 +402,7 @@ const navCapsuleWidthPx = Number(menuButtonInfo?.width ?? 87)
 const navBottomGapPx = 8
 const navContentHeightPx = navCapsuleHeightPx
 const navBarHeightPx = navStatusTopPx + navContentHeightPx + navBottomGapPx
-const navSideWidthRpx = Math.max(104, Math.ceil(navCapsuleWidthPx * 2 + 30))
+const navSideWidthRpx = Math.max(1, Math.ceil(navCapsuleWidthPx * 2 + 30))
 const pageStyleVars = computed(() => {
 	return [
 		`--price-navbar-height:${navBarHeightPx}px`,
@@ -365,6 +411,39 @@ const pageStyleVars = computed(() => {
 		`--price-navbar-side-width:${navSideWidthRpx}rpx`,
 		`--price-toolbar-sticky-top:${navBarHeightPx}px`
 	].join(';') + ';'
+})
+const themeStyleVars = computed(() => {
+	const map: Record<string, string> = {
+		page_bg: '--bg-main',
+		card_bg: '--bg-card',
+		soft_bg: '--bg-soft',
+		line: '--line',
+		text_main: '--text-main',
+		text_sub: '--text-sub',
+		brand: '--brand',
+		brand_deep: '--brand-deep',
+		price: '--price',
+		notice_bg: '--notice-bg',
+		notice_text: '--notice-text',
+		toolbar_bg: '--toolbar-bg',
+		button_bg: '--button-bg',
+		button_text: '--button-text',
+		series_active_bg: '--series-active-bg',
+		series_active_text: '--series-active-text',
+		series_inactive_bg: '--series-inactive-bg',
+		series_inactive_text: '--series-inactive-text',
+		model_head_bg: '--model-head-bg',
+		model_brand_bg: '--model-brand-bg',
+		model_brand_text: '--model-brand-text'
+	}
+	const styles: string[] = []
+	for (const [key, cssVar] of Object.entries(map)) {
+		const value = priceTheme.value[key]
+		if (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)) {
+			styles.push(`${cssVar}:${value}`)
+		}
+	}
+	return styles.length ? styles.join(';') + ';' : ''
 })
 const customNavbarStyle = computed(() => `height:${navBarHeightPx}px;`)
 const navbarContentStyle = computed(() => {
@@ -376,7 +455,7 @@ const navbarContentStyle = computed(() => {
 		'padding-right:18rpx'
 	].join(';') + ';'
 })
-const navbarSideStyle = computed(() => `width:${navSideWidthRpx}rpx;flex-basis:${navSideWidthRpx}rpx;height:${navContentHeightPx}px;`)
+const navbarSideStyle = computed(() => `height:${navContentHeightPx}px;`)
 const navbarCenterStyle = computed(() => {
 	return `top:${navStatusTopPx}px;height:${navContentHeightPx}px;width:calc(100% - ${navSideWidthRpx * 2}rpx);`
 })
@@ -388,27 +467,35 @@ const groupedTables = computed<GroupedTable[]>(() => {
 	}))
 	if (normalizedData.length === 0) return []
 
-	const configGroupMap = new Map<string, QuotationPriceData[]>()
+	const configGroupMap = new Map<string, { seriesKey: string; seriesName: string; configColumns: string[]; rows: QuotationPriceData[] }>()
 
 	for (const row of normalizedData) {
 		if (!row.prices) continue
 
 		// 完全按接口返回顺序渲染，不做前端排序
 		const configColumns = Object.keys(row.prices)
-		const groupKey = configColumns.join('|||')
+		const seriesName = resolveRowSeriesName(row)
+		const seriesKey = resolveRowSeriesKey(row)
+		const columnKey = configColumns.join('|||')
+		const groupKey = `${seriesKey}::${columnKey}`
 
 		if (!configGroupMap.has(groupKey)) {
-			configGroupMap.set(groupKey, [])
+			configGroupMap.set(groupKey, {
+				seriesKey,
+				seriesName,
+				configColumns,
+				rows: []
+			})
 		}
-		configGroupMap.get(groupKey)!.push(row)
+		configGroupMap.get(groupKey)!.rows.push(row)
 	}
 
 	const tables: GroupedTable[] = []
 	let idx = 1
 
-	configGroupMap.forEach((rows, key) => {
-		const normalizedRows = rows.map(row => ({ ...row }))
-		const configColumns = key ? key.split('|||') : []
+	configGroupMap.forEach((group, key) => {
+		const normalizedRows = group.rows.map(row => ({ ...row }))
+		const configColumns = group.configColumns
 		const tableColumns = calculateTableColumnWidths(
 			configColumns,
 			collectAdjustmentColumns(normalizedRows),
@@ -417,6 +504,10 @@ const groupedTables = computed<GroupedTable[]>(() => {
 
 		tables.push({
 			id: idx++,
+			key,
+			title: group.seriesName || `价格结构 ${idx - 1}`,
+			seriesKey: group.seriesKey,
+			seriesName: group.seriesName,
 			configColumns,
 			priceColumns: tableColumns.priceColumns,
 			adjustmentColumns: tableColumns.adjustmentColumns,
@@ -425,6 +516,33 @@ const groupedTables = computed<GroupedTable[]>(() => {
 	})
 
 	return tables
+})
+
+const seriesTabs = computed<SeriesTab[]>(() => {
+	const map = new Map<string, { name: string; models: Set<string>; rowCount: number }>()
+	for (const row of tableData.value) {
+		if (onlyHotModels.value && Number(row.is_hot || 0) !== 1) continue
+		const key = resolveRowSeriesKey(row)
+		const name = resolveRowSeriesName(row)
+		if (!map.has(key)) {
+			map.set(key, {
+				name,
+				models: new Set<string>(),
+				rowCount: 0
+			})
+		}
+		const item = map.get(key)!
+		if (row.goods_name) item.models.add(normalizeModelName(row.goods_name))
+		item.rowCount += 1
+	}
+	const tabs = Array.from(map.entries()).map(([key, item]) => ({
+		key,
+		name: item.name,
+		modelCount: item.models.size,
+		rowCount: item.rowCount
+	}))
+	if (tabs.length <= 1) return tabs
+	return [{ key: 'all', name: '全部系列', modelCount: new Set(tableData.value.map(row => normalizeModelName(row.goods_name)).filter(Boolean)).size, rowCount: tableData.value.length }, ...tabs]
 })
 
 const priceDateDisplay = computed(() => {
@@ -459,6 +577,20 @@ const noticeLines = computed(() => [
 	'报价保签收当天，特殊机况以人工复核为准'
 ])
 
+const showSpiderHotBadge = computed(() => source.value === 'spider' && spiderIsHot.value && showHotBadge.value)
+const hotBadgeBoxStyle = computed(() => {
+	const size = Math.max(24, Math.min(Number(hotBadgeSize.value || 38), 80))
+	if (hotBadgeImage.value) {
+		return `width:${size}rpx;height:${size}rpx;`
+	}
+	return ''
+})
+const hotBadgeTextStyle = computed(() => {
+	const size = Math.max(24, Math.min(Number(hotBadgeSize.value || 38), 80))
+	const fontSize = Math.max(18, Math.round(size * 0.46))
+	return `font-size:${fontSize}rpx;line-height:${Math.max(26, fontSize + 8)}rpx;`
+})
+
 const filteredModelCount = computed(() => {
 	const modelSet = new Set<string>()
 	for (const row of filterRows(tableData.value)) {
@@ -470,18 +602,20 @@ const filteredModelCount = computed(() => {
 const filteredRowCount = computed(() => filterRows(tableData.value).length)
 
 const modelFilterOptions = computed<ModelFilterOption[]>(() => {
-	const map = new Map<string, { rowCount: number; capacities: Set<string> }>()
+	const map = new Map<string, { rowCount: number; capacities: Set<string>; isHot: boolean }>()
 	for (const row of tableData.value) {
 		const name = normalizeModelName(row.goods_name)
 		if (!name) continue
 		if (!map.has(name)) {
 			map.set(name, {
 				rowCount: 0,
-				capacities: new Set<string>()
+				capacities: new Set<string>(),
+				isHot: false
 			})
 		}
 		const item = map.get(name)!
 		item.rowCount += 1
+		item.isHot = item.isHot || Number(row.is_hot || 0) === 1
 		const capacity = String(row.capacity || '').trim()
 		if (capacity) item.capacities.add(capacity)
 	}
@@ -489,9 +623,19 @@ const modelFilterOptions = computed<ModelFilterOption[]>(() => {
 	return Array.from(map.entries()).map(([name, item]) => ({
 		name,
 		rowCount: item.rowCount,
-		capacityCount: item.capacities.size || item.rowCount
+		capacityCount: item.capacities.size || item.rowCount,
+		isHot: item.isHot
 	}))
 })
+
+watch(
+	seriesTabs,
+	(list) => {
+		if (activeSeriesKey.value !== 'all' && !list.some(item => item.key === activeSeriesKey.value)) {
+			activeSeriesKey.value = 'all'
+		}
+	}
+)
 
 function getModelGroups(rows: EnhancedPriceRow[]): ModelGroup[] {
 	const groups: ModelGroup[] = []
@@ -506,6 +650,7 @@ function getModelGroups(rows: EnhancedPriceRow[]): ModelGroup[] {
 			currentModelName = row.goods_name
 			currentGroup = {
 				modelName: row.goods_name,
+				isHot: Number(row.is_hot || 0) === 1,
 				rows: [row]
 			}
 		} else {
@@ -548,6 +693,12 @@ function filterRows(rows: QuotationPriceData[]): QuotationPriceData[] {
 	const selectedSet = new Set(selectedModels.value.map(normalizeModelName))
 
 	return rows.filter(row => {
+		if (onlyHotModels.value && Number(row.is_hot || 0) !== 1) {
+			return false
+		}
+		if (activeSeriesKey.value !== 'all' && resolveRowSeriesKey(row) !== activeSeriesKey.value) {
+			return false
+		}
 		if (selectedSet.size > 0 && !selectedSet.has(normalizeModelName(row.goods_name))) {
 			return false
 		}
@@ -556,6 +707,31 @@ function filterRows(rows: QuotationPriceData[]): QuotationPriceData[] {
 		const capacity = String(row.capacity || '').toLowerCase()
 		return model.includes(word) || capacity.includes(word)
 	})
+}
+
+function resolveRowSeriesName(row: Partial<QuotationPriceData>): string {
+	const seriesName = String(row.series_name || '').trim()
+	if (seriesName) return seriesName
+	const groupKey = Number(row.model_group_key || 0)
+	return groupKey > 0 ? `系列 ${groupKey}` : '其他系列'
+}
+
+function resolveRowSeriesKey(row: Partial<QuotationPriceData>): string {
+	const seriesName = String(row.series_name || '').trim()
+	if (seriesName) return `series:${seriesName}`
+	const groupKey = Number(row.model_group_key || 0)
+	return groupKey > 0 ? `group:${groupKey}` : 'series:other'
+}
+
+function selectSeries(key: string) {
+	activeSeriesKey.value = key || 'all'
+}
+
+function toggleHotModels() {
+	onlyHotModels.value = !onlyHotModels.value
+	if (onlyHotModels.value && activeSeriesKey.value !== 'all' && !seriesTabs.value.some(item => item.key === activeSeriesKey.value)) {
+		activeSeriesKey.value = 'all'
+	}
 }
 
 function applyModelFilter(models: string[]) {
@@ -666,6 +842,7 @@ async function loadSpiderPriceData() {
 		if (res.code === 1 && res.data) {
 			const item = res.data as QuoteSpiderItem
 			spiderImageUrl.value = resolveSpiderImage(item)
+			spiderIsHot.value = Number(item.is_hot || 0) === 1
 			tableData.value = normalizeSpiderRows(item)
 			priceTypeName.value = item.title || item.name || ''
 			if (!pageTitle.value || pageTitle.value === '报价查询') {
@@ -709,6 +886,9 @@ function normalizeSpiderRows(item: QuoteSpiderItem): QuotationPriceData[] {
 			price_name: title,
 			goods_id: row.id,
 			goods_name: row.model_name || item.name || title,
+			model_group_key: 0,
+			series_name: row.tab || item.tab || '',
+			is_hot: Number(item.is_hot || 0),
 			capacity: row.tab || row.brand || item.tab || item.brand || '报价',
 			prices,
 			add_value_info: 0,
@@ -1429,6 +1609,16 @@ async function loadQuotationTypes() {
 	}
 }
 
+async function loadPriceTheme() {
+	try {
+		const res = await getOrderSubmitConfig() as any
+		const colors = res?.data?.price_detail_theme?.colors
+		priceTheme.value = colors && typeof colors === 'object' ? colors : {}
+	} catch (error) {
+		priceTheme.value = {}
+	}
+}
+
 function openTypeSheet() {
 	if (source.value === 'spider') {
 		uni.showToast({ title: '当前报价暂不支持切换', icon: 'none' })
@@ -1448,6 +1638,8 @@ function switchQuotation(item: QuotationV2Type) {
 	showTypeSheet.value = false
 	keyword.value = ''
 	selectedModels.value = []
+	activeSeriesKey.value = 'all'
+	onlyHotModels.value = false
 	loadPriceData()
 }
 
@@ -1467,6 +1659,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 onLoad((options: PricePageOptions) => {
+	loadPriceTheme()
 	if (options?.source) {
 		source.value = options.source
 	}
@@ -1478,6 +1671,16 @@ onLoad((options: PricePageOptions) => {
 	}
 	if (options?.price_date) {
 		priceDate.value = options.price_date
+	}
+	if (options?.show_hot_badge !== undefined) {
+		showHotBadge.value = String(options.show_hot_badge) !== '0'
+	}
+	if (options?.hot_badge_image) {
+		hotBadgeImage.value = safeDecode(options.hot_badge_image)
+	}
+	if (options?.hot_badge_size) {
+		const size = Number(options.hot_badge_size)
+		if (Number.isFinite(size)) hotBadgeSize.value = Math.max(24, Math.min(size, 80))
 	}
 	if (source.value === 'spider' && spiderItemId.value) {
 		pageTitle.value = options?.title ? safeDecode(options.title) : '报价查询'
@@ -1505,17 +1708,9 @@ onPageScroll((event) => {
 </script>
 
 <style lang="scss" scoped>
+@import './price-theme.scss';
+
 .show-price-page {
-	--bg-main: #f3f4f6;
-	--bg-card: #ffffff;
-	--bg-soft: #f7f7f8;
-	--line: #e5e7eb;
-	--text-main: #1f2937;
-	--text-sub: #6b7280;
-	--brand: #3b82f6;
-	--brand-deep: #4f46e5;
-	--price: #2563eb;
-	--warning-bg: #eff6ff;
 	--radius: 20rpx;
 	--shadow: 0 10rpx 24rpx rgba(31, 41, 55, 0.08);
 	--table-font-size: 22rpx;
@@ -1538,7 +1733,7 @@ onPageScroll((event) => {
 	left: 0;
 	right: 0;
 	height: 420rpx;
-	background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 70%, rgba(243, 244, 246, 0) 100%);
+	background: linear-gradient(180deg, var(--bg-soft) 0%, var(--bg-main) 70%, rgba(243, 244, 246, 0) 100%);
 	z-index: 0;
 	pointer-events: none;
 }
@@ -1550,8 +1745,8 @@ onPageScroll((event) => {
 	right: 0;
 	z-index: 999;
 	backdrop-filter: blur(8rpx);
-	background: rgba(255, 255, 255, 0.9);
-	border-bottom: 1rpx solid rgba(59, 130, 246, 0.16);
+	background: var(--toolbar-bg);
+	border-bottom: 1rpx solid var(--line);
 
 	.navbar-content {
 		position: relative;
@@ -1582,7 +1777,7 @@ onPageScroll((event) => {
 			font-size: 24rpx;
 			color: var(--brand);
 			padding: 10rpx 14rpx;
-			background: rgba(59, 130, 246, 0.12);
+			background: var(--bg-soft);
 			border-radius: 999rpx;
 		}
 	}
@@ -1612,10 +1807,10 @@ onPageScroll((event) => {
 	.skeleton-card,
 	.skeleton-table {
 		border-radius: var(--radius);
-		background: linear-gradient(100deg, #eef1f4 30%, #f8f9fb 45%, #eef1f4 60%);
+		background: linear-gradient(100deg, var(--bg-soft) 30%, var(--bg-card) 45%, var(--bg-soft) 60%);
 		background-size: 260% 100%;
 		animation: skeleton-shimmer 1.2s linear infinite;
-		border: 1rpx solid #e5e7eb;
+		border: 1rpx solid var(--line);
 	}
 
 	.skeleton-card {
@@ -1645,7 +1840,7 @@ onPageScroll((event) => {
 		color: var(--brand-deep);
 		padding: 10rpx 22rpx;
 		border-radius: 999rpx;
-		background: rgba(59, 130, 246, 0.12);
+		background: var(--bg-soft);
 		margin-bottom: 28rpx;
 	}
 
@@ -1663,8 +1858,8 @@ onPageScroll((event) => {
 
 	.empty-action {
 		margin-top: 36rpx;
-		background: linear-gradient(120deg, #4f46e5, #3b82f6, #0ea5e9);
-		color: #fff;
+		background: var(--button-bg);
+		color: var(--button-text);
 		font-size: 28rpx;
 		font-weight: 600;
 		padding: 18rpx 56rpx;
@@ -1676,9 +1871,9 @@ onPageScroll((event) => {
 .summary-card {
 	padding: 26rpx;
 	border-radius: 22rpx;
-	background: #ffffff;
+	background: var(--bg-card);
 	box-shadow: var(--shadow);
-	border: 1rpx solid rgba(59, 130, 246, 0.16);
+	border: 1rpx solid var(--line);
 
 	animation: rise-in 320ms ease-out;
 
@@ -1691,7 +1886,7 @@ onPageScroll((event) => {
 	.summary-tag {
 		padding: 8rpx 20rpx;
 		border-radius: 999rpx;
-		background: rgba(59, 130, 246, 0.12);
+		background: var(--bg-soft);
 		color: var(--brand-deep);
 		font-size: 22rpx;
 		font-weight: 600;
@@ -1721,7 +1916,7 @@ onPageScroll((event) => {
 
 .table-container {
 	background: var(--bg-card);
-	border: 1rpx solid rgba(59, 130, 246, 0.14);
+	border: 1rpx solid var(--line);
 	border-radius: 18rpx;
 	overflow: hidden;
 	box-shadow: 0 8rpx 22rpx rgba(31, 41, 55, 0.06);
@@ -1738,7 +1933,7 @@ onPageScroll((event) => {
 
 .table-header {
 	display: flex;
-	background: #eff6ff;
+	background: var(--model-head-bg);
 	border-bottom: 1rpx solid var(--line);
 	position: sticky;
 	top: 0;
@@ -1746,7 +1941,7 @@ onPageScroll((event) => {
 }
 
 .table-body .model-group {
-	border-bottom: 1rpx solid #eceff3;
+	border-bottom: 1rpx solid var(--line);
 }
 
 .table-body .model-group:last-child {
@@ -1774,12 +1969,12 @@ onPageScroll((event) => {
 	display: flex;
 	height: var(--table-row-height);
 	min-height: var(--table-row-height);
-	border-bottom: 1rpx solid #eef1f4;
-	background: #fff;
+	border-bottom: 1rpx solid var(--line);
+	background: var(--bg-card);
 }
 
 .data-row:nth-child(2n) {
-	background: #fafbfc;
+	background: var(--bg-soft);
 }
 
 .data-row:last-child {
@@ -1795,7 +1990,7 @@ onPageScroll((event) => {
 	flex-direction: column;
 	position: relative;
 
-	background: #fff;
+	background: var(--bg-card);
 }
 
 .remark-cell-wrapper {
@@ -1812,7 +2007,7 @@ onPageScroll((event) => {
 	padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
 	font-size: var(--table-font-size);
 	box-sizing: border-box;
-	border-right: 1rpx solid #eceff3;
+	border-right: 1rpx solid var(--line);
 	word-break: break-word;
 	white-space: normal;
 	text-align: center;
@@ -1826,11 +2021,11 @@ onPageScroll((event) => {
 .header-cell {
 	font-weight: 700;
 	font-size: var(--table-font-size);
-	color: #374151;
+	color: var(--text-main);
 }
 
 .body-cell {
-	color: #4b5563;
+	color: var(--text-sub);
 	min-height: var(--table-row-height);
 	height: auto;
 }
@@ -1842,7 +2037,7 @@ onPageScroll((event) => {
 
 .col-model {
 	flex-shrink: 0;
-	background: #fafafa;
+	background: var(--bg-soft);
 }
 
 .col-capacity {
@@ -1885,7 +2080,7 @@ onPageScroll((event) => {
 	display: flex;
 	align-items: flex-start;
 	justify-content: flex-start;
-	border-bottom: 1rpx solid #ebe4e2;
+	border-bottom: 1rpx solid var(--line);
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -1919,14 +2114,14 @@ onPageScroll((event) => {
 }
 
 .empty-cell {
-	color: #94a3b8;
+	color: var(--text-sub);
 	font-size: 24rpx;
 }
 
 .remark-text {
 	font-size: var(--table-remark-font-size);
 	line-height: 1.45;
-	color: #6b7280;
+	color: var(--text-sub);
 	word-break: break-word;
 	white-space: pre-wrap;
 	text-align: left;
@@ -1949,9 +2144,9 @@ onPageScroll((event) => {
 	bottom: 0;
 	z-index: 1000;
 	padding: 12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));
-	background: rgba(255, 255, 255, 0.95);
+	background: var(--toolbar-bg);
 	backdrop-filter: blur(8rpx);
-	border-top: 1rpx solid rgba(59, 130, 246, 0.16);
+	border-top: 1rpx solid var(--line);
 	box-shadow: 0 -6rpx 20rpx rgba(31, 41, 55, 0.08);
 }
 
@@ -1975,9 +2170,9 @@ onPageScroll((event) => {
 	text-align: center;
 	font-size: 28rpx;
 	font-weight: 700;
-	color: #fff;
+	color: var(--button-text);
 	border-radius: 999rpx;
-	background: linear-gradient(120deg, #4f46e5, #3b82f6, #0ea5e9);
+	background: var(--button-bg);
 	box-shadow: 0 8rpx 18rpx rgba(59, 130, 246, 0.32);
 }
 
@@ -2002,9 +2197,9 @@ onPageScroll((event) => {
 }
 
 .custom-navbar {
-	background: rgba(17, 24, 39, 0.92);
-	border-bottom: 1rpx solid rgba(255, 255, 255, 0.08);
-	color: #ffffff;
+	background: var(--button-bg);
+	border-bottom: 1rpx solid var(--line);
+	color: var(--button-text);
 
 	.navbar-content {
 		position: relative;
@@ -2044,7 +2239,7 @@ onPageScroll((event) => {
 		line-height: 40rpx;
 		font-weight: 700;
 		text-align: center;
-		color: #ffffff;
+		color: var(--button-text);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -2054,7 +2249,7 @@ onPageScroll((event) => {
 		margin-top: 2rpx;
 		font-size: 20rpx;
 		line-height: 28rpx;
-		color: rgba(255, 255, 255, 0.72);
+		color: var(--button-text);
 	}
 
 	.navbar-capsule-space {
@@ -2063,7 +2258,7 @@ onPageScroll((event) => {
 }
 
 .custom-navbar.compact {
-	background: rgba(17, 24, 39, 0.96);
+	background: var(--button-bg);
 }
 
 .price-content,
@@ -2075,7 +2270,7 @@ onPageScroll((event) => {
 .skeleton-hero {
 	height: 220rpx;
 	border-radius: 0;
-	background: linear-gradient(100deg, #111827 30%, #374151 45%, #111827 60%);
+	background: linear-gradient(100deg, var(--button-bg) 30%, var(--brand) 45%, var(--button-bg) 60%);
 	background-size: 260% 100%;
 	animation: skeleton-shimmer 1.2s linear infinite;
 }
@@ -2089,7 +2284,7 @@ onPageScroll((event) => {
 	min-height: 230rpx;
 	margin: -18rpx -6rpx 0;
 	padding: 42rpx 28rpx 26rpx;
-	background: linear-gradient(100deg, #050505 0%, #202020 45%, #5a5a5a 100%);
+	background: linear-gradient(100deg, var(--button-bg) 0%, var(--brand-deep) 58%, var(--brand) 100%);
 	overflow: hidden;
 }
 
@@ -2108,7 +2303,7 @@ onPageScroll((event) => {
 	font-size: 42rpx;
 	line-height: 56rpx;
 	font-weight: 800;
-	color: #ffffff;
+	color: var(--button-text);
 	letter-spacing: 1rpx;
 }
 
@@ -2116,7 +2311,7 @@ onPageScroll((event) => {
 	flex-shrink: 0;
 	font-size: 22rpx;
 	line-height: 32rpx;
-	color: rgba(255, 255, 255, 0.82);
+	color: var(--button-text);
 	padding-bottom: 8rpx;
 }
 
@@ -2143,8 +2338,8 @@ onPageScroll((event) => {
 .notice-card {
 	margin: 0 -6rpx 12rpx;
 	padding: 24rpx 18rpx;
-	background: #fff8ed;
-	border-bottom: 1rpx solid #f3d7aa;
+	background: var(--notice-bg);
+	border-bottom: 1rpx solid var(--line);
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -2154,15 +2349,15 @@ onPageScroll((event) => {
 	font-size: 27rpx;
 	line-height: 42rpx;
 	font-weight: 700;
-	color: #f59e0b;
+	color: var(--notice-text);
 	text-align: center;
 }
 
 .image-quote-card {
 	margin-bottom: 12rpx;
 	padding: 12rpx;
-	background: #ffffff;
-	border: 1rpx solid #e5e7eb;
+	background: var(--bg-card);
+	border: 1rpx solid var(--line);
 	border-radius: 10rpx;
 }
 
@@ -2179,8 +2374,8 @@ onPageScroll((event) => {
 	margin-bottom: 10rpx;
 	padding: 12rpx;
 	border-radius: 10rpx;
-	background: #ffffff;
-	border: 1rpx solid #e5e7eb;
+	background: var(--toolbar-bg);
+	border: 1rpx solid var(--line);
 	box-shadow: 0 10rpx 24rpx rgba(15, 23, 42, 0.08);
 }
 
@@ -2205,30 +2400,30 @@ onPageScroll((event) => {
 	padding: 0 16rpx;
 	border-radius: 8rpx;
 	box-sizing: border-box;
-	border: 1rpx solid #e5e7eb;
-	background: #f3f4f6;
-	color: #374151;
+	border: 1rpx solid var(--line);
+	background: var(--bg-soft);
+	color: var(--text-main);
 	font-size: 22rpx;
 	font-weight: 700;
 	white-space: nowrap;
 }
 
 .tool-action.primary {
-	border-color: #111827;
-	background: #111827;
-	color: #ffffff;
+	border-color: var(--button-bg);
+	background: var(--button-bg);
+	color: var(--button-text);
 }
 
 .tool-action.active {
-	border-color: #2563eb;
-	background: #eff6ff;
-	color: #2563eb;
+	border-color: var(--brand);
+	background: var(--warning-bg);
+	color: var(--brand);
 }
 
 .search-box {
 	height: 70rpx;
 	border-radius: 35rpx;
-	background: #f3f4f6;
+	background: var(--bg-soft);
 	display: flex;
 	align-items: center;
 	padding: 0 22rpx;
@@ -2236,7 +2431,7 @@ onPageScroll((event) => {
 
 .search-box .iconfont {
 	font-size: 26rpx;
-	color: #9ca3af;
+	color: var(--text-sub);
 	margin-right: 10rpx;
 }
 
@@ -2244,11 +2439,11 @@ onPageScroll((event) => {
 	flex: 1;
 	height: 70rpx;
 	font-size: 26rpx;
-	color: #111827;
+	color: var(--text-main);
 }
 
 .search-placeholder {
-	color: #9ca3af;
+	color: var(--text-sub);
 }
 
 .selected-model-scroll {
@@ -2268,9 +2463,9 @@ onPageScroll((event) => {
 	height: 52rpx;
 	padding: 0 14rpx;
 	border-radius: 26rpx;
-	background: #eff6ff;
-	border: 1rpx solid #bfdbfe;
-	color: #2563eb;
+	background: var(--warning-bg);
+	border: 1rpx solid var(--brand);
+	color: var(--brand);
 	font-size: 23rpx;
 	font-weight: 700;
 	display: inline-flex;
@@ -2291,8 +2486,8 @@ onPageScroll((event) => {
 	line-height: 52rpx;
 	padding: 0 16rpx;
 	border-radius: 26rpx;
-	background: #f3f4f6;
-	color: #6b7280;
+	background: var(--bg-soft);
+	color: var(--text-sub);
 	font-size: 23rpx;
 	font-weight: 700;
 	display: inline-block;
@@ -2306,9 +2501,34 @@ onPageScroll((event) => {
 	justify-content: flex-start;
 	font-size: 23rpx;
 	line-height: 32rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 	white-space: nowrap;
 	overflow: hidden;
+}
+
+.spider-hot-badge {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-right: 10rpx;
+}
+
+.spider-hot-badge__image {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.spider-hot-badge__text {
+	display: block;
+	padding: 2rpx 10rpx;
+	border-radius: 999rpx;
+	background: linear-gradient(135deg, #ffedd5, #ffe4e6);
+	color: #e11d48;
+	font-weight: 700;
+	white-space: nowrap;
+	box-shadow: 0 4rpx 10rpx rgba(225, 29, 72, 0.12);
 }
 
 .dot {
@@ -2331,8 +2551,8 @@ onPageScroll((event) => {
 	margin: 20rpx 0;
 	padding: 58rpx 28rpx;
 	border-radius: 18rpx;
-	background: #ffffff;
-	border: 1rpx solid #e5e7eb;
+	background: var(--bg-card);
+	border: 1rpx solid var(--line);
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -2343,14 +2563,14 @@ onPageScroll((event) => {
 	font-size: 30rpx;
 	line-height: 42rpx;
 	font-weight: 800;
-	color: #111827;
+	color: var(--text-main);
 }
 
 .filter-empty-desc {
 	margin-top: 8rpx;
 	font-size: 24rpx;
 	line-height: 36rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 }
 
 .filter-empty-actions {
@@ -2365,15 +2585,15 @@ onPageScroll((event) => {
 	line-height: 62rpx;
 	padding: 0 22rpx;
 	border-radius: 31rpx;
-	background: #f3f4f6;
-	color: #374151;
+	background: var(--bg-soft);
+	color: var(--text-main);
 	font-size: 24rpx;
 	font-weight: 800;
 }
 
 .filter-empty-btn.primary {
-	background: #111827;
-	color: #ffffff;
+	background: var(--button-bg);
+	color: var(--button-text);
 }
 
 .section-title {
@@ -2384,21 +2604,21 @@ onPageScroll((event) => {
 	font-size: 26rpx;
 	line-height: 36rpx;
 	font-weight: 700;
-	color: #111827;
+	color: var(--text-main);
 }
 
 .section-sub {
 	max-width: 430rpx;
 	font-size: 22rpx;
 	font-weight: 400;
-	color: #6b7280;
+	color: var(--text-sub);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
 .model-card {
-	background: #ffffff;
+	background: var(--bg-card);
 	border: none;
 	border-radius: 0;
 	overflow: hidden;
@@ -2410,8 +2630,8 @@ onPageScroll((event) => {
 	align-items: center;
 	justify-content: space-between;
 	padding: 14rpx 10rpx 12rpx;
-	background: #f8fafc;
-	border-bottom: 1rpx solid #e5e7eb;
+	background: var(--model-head-bg);
+	border-bottom: 1rpx solid var(--line);
 }
 
 .model-name-block {
@@ -2427,17 +2647,71 @@ onPageScroll((event) => {
 	line-height: 32rpx;
 	padding: 0 9rpx;
 	border-radius: 4rpx;
-	background: #111827;
-	color: #ffffff;
+	background: var(--model-brand-bg);
+	color: var(--model-brand-text);
 	font-size: 19rpx;
 	font-weight: 700;
+}
+
+.series-tab-scroll {
+	width: 100%;
+	margin-top: 12rpx;
+	white-space: nowrap;
+}
+
+.series-tab-list {
+	display: flex;
+	align-items: center;
+	gap: 10rpx;
+	width: max-content;
+	min-width: max-content;
+	padding-right: 20rpx;
+}
+
+.series-tab {
+	flex-shrink: 0;
+	height: 56rpx;
+	padding: 0 18rpx;
+	border-radius: 28rpx;
+	background: var(--series-inactive-bg);
+	border: 1rpx solid var(--line);
+	color: var(--series-inactive-text);
+	font-size: 24rpx;
+	font-weight: 800;
+	display: inline-flex;
+	align-items: center;
+	gap: 8rpx;
+	box-sizing: border-box;
+	white-space: nowrap;
+}
+
+.series-tab.active {
+	background: var(--series-active-bg);
+	border-color: var(--series-active-bg);
+	color: var(--series-active-text);
+	box-shadow: 0 8rpx 18rpx rgba(15, 23, 42, 0.16);
+}
+
+.series-tab-count {
+	min-width: 30rpx;
+	height: 30rpx;
+	line-height: 30rpx;
+	padding: 0 8rpx;
+	border-radius: 15rpx;
+	background: rgba(148, 163, 184, 0.16);
+	text-align: center;
+	font-size: 20rpx;
+}
+
+.series-tab.active .series-tab-count {
+	background: rgba(255, 255, 255, 0.18);
 }
 
 .model-name {
 	font-size: 27rpx;
 	line-height: 36rpx;
 	font-weight: 800;
-	color: #2f343b;
+	color: var(--text-main);
 	text-align: left;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -2448,7 +2722,7 @@ onPageScroll((event) => {
 	flex-shrink: 0;
 	font-size: 20rpx;
 	line-height: 28rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 	margin-left: 16rpx;
 }
 
@@ -2465,7 +2739,7 @@ onPageScroll((event) => {
 	display: flex;
 	height: 78rpx;
 	min-height: 78rpx;
-	border-bottom: 1rpx solid #eeeeee;
+	border-bottom: 1rpx solid var(--line);
 }
 
 .price-row:last-child {
@@ -2475,8 +2749,8 @@ onPageScroll((event) => {
 .table-head {
 	height: 90rpx;
 	min-height: 90rpx;
-	background: linear-gradient(100deg, #050505 0%, #232323 58%, #5a5a5a 100%);
-	color: #ffffff;
+	background: var(--button-bg);
+	color: var(--button-text);
 }
 
 .price-cell {
@@ -2486,7 +2760,7 @@ onPageScroll((event) => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border-right: 1rpx solid #eeeeee;
+	border-right: 1rpx solid var(--line);
 	text-align: center;
 	word-break: break-word;
 }
@@ -2506,8 +2780,8 @@ onPageScroll((event) => {
 }
 
 .capacity-body {
-	background: #f9fafb;
-	color: #111827;
+	background: var(--bg-soft);
+	color: var(--text-main);
 	font-size: 22rpx;
 	line-height: 28rpx;
 	white-space: normal;
@@ -2519,7 +2793,7 @@ onPageScroll((event) => {
 	font-size: 17rpx;
 	line-height: 22rpx;
 	font-weight: 700;
-	color: #ffffff;
+	color: var(--button-text);
 	overflow: hidden;
 }
 
@@ -2538,8 +2812,8 @@ onPageScroll((event) => {
 	font-size: 18rpx;
 	line-height: 24rpx;
 	font-weight: 800;
-	color: #ffffff;
-	background: rgba(255, 255, 255, 0.08);
+	color: var(--button-text);
+	background: var(--brand-deep);
 }
 
 .price-body-wrap {
@@ -2554,25 +2828,25 @@ onPageScroll((event) => {
 
 .price-body-cell {
 	flex: 1 1 0;
-	background: #f0ffe4;
+	background: var(--bg-soft);
 	overflow: hidden;
 }
 
 .price-row:nth-child(2n + 1) .price-body-cell {
-	background: #ffffff;
+	background: var(--bg-card);
 }
 
 .price-value {
 	font-size: 22rpx;
 	line-height: 28rpx;
 	font-weight: 800;
-	color: #30343a;
+	color: var(--price);
 	white-space: nowrap;
 }
 
 .empty-cell {
 	font-size: 22rpx;
-	color: #9ca3af;
+	color: var(--text-sub);
 }
 
 .adjustment-column {
@@ -2581,14 +2855,14 @@ onPageScroll((event) => {
 	width: 228rpx;
 	min-width: 228rpx;
 	max-width: 228rpx;
-	background: #ffffff;
+	background: var(--bg-card);
 }
 
 .adjustment-cell-wrapper {
 	position: relative;
 	height: 68rpx;
 	min-height: 68rpx;
-	border-bottom: 1rpx solid #eeeeee;
+	border-bottom: 1rpx solid var(--line);
 	box-sizing: border-box;
 }
 
@@ -2606,9 +2880,9 @@ onPageScroll((event) => {
 	min-width: 228rpx;
 	max-width: 228rpx;
 	padding: 3rpx 5rpx;
-	background: #ffffff;
+	background: var(--bg-card);
 	border-right: none;
-	border-bottom: 1rpx solid #eeeeee;
+	border-bottom: 1rpx solid var(--line);
 	align-items: center;
 	justify-content: center;
 }
@@ -2628,7 +2902,7 @@ onPageScroll((event) => {
 	font-size: 15rpx;
 	line-height: 19rpx;
 	font-weight: 600;
-	color: #343941;
+	color: var(--text-main);
 	text-align: center;
 	white-space: pre-wrap;
 	word-break: break-word;
@@ -2639,7 +2913,7 @@ onPageScroll((event) => {
 	font-size: 15rpx;
 	line-height: 19rpx;
 	font-weight: 600;
-	color: #343941;
+	color: var(--text-main);
 	text-align: center;
 	white-space: pre-wrap;
 	word-break: break-word;
@@ -2647,8 +2921,8 @@ onPageScroll((event) => {
 
 .adjustment-box {
 	padding: 18rpx 20rpx 22rpx;
-	background: #ffffff;
-	border-top: 1rpx solid #e5e7eb;
+	background: var(--bg-card);
+	border-top: 1rpx solid var(--line);
 }
 
 .adjustment-title {
@@ -2656,7 +2930,7 @@ onPageScroll((event) => {
 	font-size: 25rpx;
 	line-height: 34rpx;
 	font-weight: 800;
-	color: #111827;
+	color: var(--text-main);
 }
 
 .adjustment-row {
@@ -2664,7 +2938,7 @@ onPageScroll((event) => {
 	align-items: flex-start;
 	gap: 14rpx;
 	padding: 10rpx 0;
-	border-top: 1rpx dashed #e5e7eb;
+	border-top: 1rpx dashed var(--line);
 }
 
 .adjustment-row:first-of-type {
@@ -2677,7 +2951,7 @@ onPageScroll((event) => {
 	font-size: 23rpx;
 	line-height: 34rpx;
 	font-weight: 700;
-	color: #374151;
+	color: var(--text-main);
 }
 
 .adjustment-text {
@@ -2685,7 +2959,7 @@ onPageScroll((event) => {
 	font-size: 24rpx;
 	line-height: 36rpx;
 	font-weight: 600;
-	color: #374151;
+	color: var(--text-main);
 	white-space: pre-wrap;
 	word-break: break-word;
 }
@@ -2706,7 +2980,7 @@ onPageScroll((event) => {
 	width: 100%;
 	max-height: 1100rpx;
 	padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom));
-	background: #ffffff;
+	background: var(--bg-card);
 	border-radius: 28rpx 28rpx 0 0;
 	box-sizing: border-box;
 	overflow-y: auto;
@@ -2723,14 +2997,14 @@ onPageScroll((event) => {
 	font-size: 32rpx;
 	line-height: 44rpx;
 	font-weight: 800;
-	color: #111827;
+	color: var(--text-main);
 }
 
 .type-close {
 	font-size: 24rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 	padding: 10rpx 18rpx;
-	background: #f3f4f6;
+	background: var(--bg-soft);
 	border-radius: 22rpx;
 }
 
@@ -2738,7 +3012,7 @@ onPageScroll((event) => {
 	padding: 50rpx 0;
 	text-align: center;
 	font-size: 26rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 }
 
 .type-item {
@@ -2746,7 +3020,7 @@ onPageScroll((event) => {
 	align-items: center;
 	justify-content: space-between;
 	padding: 22rpx 8rpx;
-	border-top: 1rpx solid #f1f5f9;
+	border-top: 1rpx solid var(--line);
 }
 
 .type-name {
@@ -2754,7 +3028,7 @@ onPageScroll((event) => {
 	font-size: 29rpx;
 	line-height: 40rpx;
 	font-weight: 700;
-	color: #111827;
+	color: var(--text-main);
 }
 
 .type-meta {
@@ -2762,13 +3036,13 @@ onPageScroll((event) => {
 	margin-top: 6rpx;
 	font-size: 23rpx;
 	line-height: 32rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 }
 
 .type-check {
 	display: none;
 	font-size: 30rpx;
-	color: #16a34a;
+	color: var(--brand);
 	font-weight: 800;
 }
 

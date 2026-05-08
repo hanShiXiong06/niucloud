@@ -31,7 +31,7 @@ class QueryService extends BaseAdminService
         $query = (new QuotationCapacity())->alias('c')
             ->leftJoin('recycle_quotation_v2_model m', 'c.model_id = m.id AND c.site_id = m.site_id')
             ->where([['c.site_id', '=', $this->site_id]])
-            ->field('c.*,m.model_name,m.group_key as model_group_key,m.sort as model_sort')
+            ->field('c.*,m.model_name,m.group_key as model_group_key,m.series_name as model_series_name,m.is_hot as model_is_hot,m.sort as model_sort')
             ->order('m.sort asc,m.id asc,c.sort asc,c.id asc');
 
         if (isset($where['dataset_id']) && $where['dataset_id'] !== '') {
@@ -63,7 +63,7 @@ class QueryService extends BaseAdminService
             ->leftJoin('recycle_quotation_v2_capacity c', 'p.capacity_id = c.id AND p.site_id = c.site_id')
             ->leftJoin('recycle_quotation_v2_field f', 'p.field_id = f.id AND p.site_id = f.site_id')
             ->where([['p.site_id', '=', $this->site_id]])
-            ->field('p.*,m.model_name,m.group_key as model_group_key,m.sort as model_sort,c.capacity_name,c.sort as capacity_sort,f.field_type,f.sort as field_sort')
+            ->field('p.*,m.model_name,m.group_key as model_group_key,m.series_name as model_series_name,m.is_hot as model_is_hot,m.sort as model_sort,c.capacity_name,c.sort as capacity_sort,f.field_type,f.sort as field_sort')
             ->order('m.sort asc,m.id asc,c.sort asc,c.id asc,f.sort asc,f.id asc,p.id asc');
 
         $this->applyCommonFilters($query, $where, 'p');
@@ -106,7 +106,7 @@ class QueryService extends BaseAdminService
             ->leftJoin('recycle_quotation_v2_capacity c', 'p.capacity_id = c.id AND p.site_id = c.site_id')
             ->leftJoin('recycle_quotation_v2_field f', 'p.field_id = f.id AND p.site_id = f.site_id')
             ->where([['p.site_id', '=', $this->site_id]])
-            ->field('p.*,m.model_name,m.group_key as model_group_key,m.sort as model_sort,c.capacity_name,c.sort as capacity_sort,f.field_type,f.sort as field_sort')
+            ->field('p.*,m.model_name,m.group_key as model_group_key,m.series_name as model_series_name,m.is_hot as model_is_hot,m.sort as model_sort,c.capacity_name,c.sort as capacity_sort,f.field_type,f.sort as field_sort')
             ->order('m.sort asc,m.id asc,c.sort asc,c.id asc,f.sort asc,f.id asc,p.id asc');
 
         $this->applyCommonFilters($query, $where, 'p');

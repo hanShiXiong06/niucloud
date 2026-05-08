@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_model` (
   `model_name` varchar(180) NOT NULL DEFAULT '',
   `model_label` varchar(180) NOT NULL DEFAULT '',
   `group_key` int NOT NULL DEFAULT 0,
+  `series_name` varchar(120) NOT NULL DEFAULT '',
+  `is_hot` tinyint NOT NULL DEFAULT 0,
   `sort` int NOT NULL DEFAULT 0,
   `status` tinyint NOT NULL DEFAULT 1,
   `raw_data` json DEFAULT NULL,

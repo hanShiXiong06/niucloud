@@ -344,6 +344,18 @@
                         <el-table :data="detailTable.models.data" v-loading="detailTable.models.loading" border>
                             <el-table-column prop="external_goods_id" label="型号ID" width="100" />
                             <el-table-column prop="model_name" label="型号名称" min-width="180" />
+                            <el-table-column prop="series_name" label="系列" min-width="120">
+                                <template #default="{ row }">
+                                    <el-tag v-if="row.series_name" size="small">{{ row.series_name }}</el-tag>
+                                    <span v-else class="muted">未分组</span>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="热门" width="90">
+                                <template #default="{ row }">
+                                    <el-tag v-if="Number(row.is_hot || 0) === 1" type="danger" size="small">热门</el-tag>
+                                    <span v-else class="muted">普通</span>
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="price_name" label="报价名称" width="120" />
                             <el-table-column prop="sort" label="排序" width="80" />
                             <status-column />
@@ -666,9 +678,17 @@
                 <template v-if="manageDialog.type === 'model'">
                     <el-alert type="success" :closable="false" class="mb-[12px]" title="新增型号会直接归属到当前报价单；不同报价单可以有同名型号，互不影响。" />
                     <el-form-item label="型号名称"><el-input v-model="manageDialog.form.model_name" /></el-form-item>
+                    <el-form-item label="系列名称">
+                        <el-input v-model="manageDialog.form.series_name" placeholder="例如 iPhone 17 系列、OPPO Reno 系列" clearable />
+                        <span class="form-tip">前端会按系列分组展示，留空时会按分组编号兜底。</span>
+                    </el-form-item>
                     <el-form-item label="系列分组">
                         <el-input-number v-model="manageDialog.form.group_key" :min="0" />
-                        <span class="form-tip">同一系列分组会在报价表中优先放到一起展示。</span>
+                        <span class="form-tip">保留给爬虫原始分组使用，同一编号会在报价表中优先放到一起展示。</span>
+                    </el-form-item>
+                    <el-form-item label="热门型号">
+                        <el-switch v-model="manageDialog.form.is_hot" :active-value="1" :inactive-value="0" />
+                        <span class="form-tip">开启后，移动端可通过热门筛选快速找到该型号。</span>
                     </el-form-item>
                 </template>
                 <template v-if="manageDialog.type === 'capacity'">
@@ -1567,7 +1587,7 @@ const openManageDialog = async (type: string, row?: any, fieldType = '') => {
     if (row) {
         manageDialog.form = { ...row }
     } else if (type === 'model') {
-        manageDialog.form = { ...base, model_name: '', group_key: 0 }
+        manageDialog.form = { ...base, model_name: '', group_key: 0, series_name: '', is_hot: 0 }
     } else if (type === 'capacity') {
         manageDialog.form = { ...base, model_id: '', capacity_name: '' }
     } else if (type === 'field') {

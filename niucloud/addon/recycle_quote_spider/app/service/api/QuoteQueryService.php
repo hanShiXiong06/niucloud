@@ -69,6 +69,7 @@ class QuoteQueryService extends BaseApiService
         $categoryPathMap = $this->getCategoryPathMap(array_unique(array_map(static fn($item) => (int)$item['category_id'], $items)));
 
         foreach ($items as &$item) {
+            $this->sanitizeItemImages($item);
             $item['title'] = $this->formatItemTitle($item);
             $item['category_path'] = (string)($categoryPathMap[(int)$item['category_id']] ?? '');
             $item['model_count'] = (int)($rowCountMap[(int)$item['id']] ?? 0);
@@ -130,6 +131,7 @@ class QuoteQueryService extends BaseApiService
             throw new CommonException('报价不存在');
         }
         $rows = (new QuoteRow())->where('site_id', $this->site_id)->where('item_id', $id)->where('is_show', 1)->order('sort asc,id asc')->select()->toArray();
+        $this->sanitizeItemImages($item);
         $item['rows'] = $rows;
         return $item;
     }
@@ -174,6 +176,34 @@ class QuoteQueryService extends BaseApiService
     private function formatItemTitle(array $item): string
     {
         return trim((string)($item['name'] ?? '')) ?: '报价单';
+    }
+
+    private function sanitizeItemImages(array &$item): void
+    {
+        foreach (['image', 'timage', 'bimage', 'icon'] as $field) {
+            if ($this->isThirdPartyImageUrl((string)($item[$field] ?? ''))) {
+                $item[$field] = '';
+            }
+        }
+    }
+
+    private function isThirdPartyImageUrl(string $url): bool
+    {
+        if (!preg_match('/^https?:\/\//i', $url)) {
+            return false;
+        }
+
+        $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?: ''));
+        if ($host === '') {
+            return false;
+        }
+
+        $requestHost = strtolower((string)(request()->host() ?: ''));
+        if ($requestHost !== '' && $host === $requestHost) {
+            return false;
+        }
+
+        return str_contains($host, 'ycdongxu.com');
     }
 
     private function getCategoryPathMap(array $categoryIds): array

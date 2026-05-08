@@ -109,7 +109,7 @@ class QuotationV2Service extends BaseApiService
                 ['f.status', '=', QuotationV2Dict::STATUS_ENABLED],
                 ['f.field_type', '=', QuotationV2Dict::FIELD_TYPE_PRICE],
             ])
-            ->field('p.id,p.site_id,p.dataset_id,p.quotation_id,p.model_id,p.capacity_id,p.field_id,p.external_goods_id,p.capacity_answer_id,p.field_name,p.crawler_price,p.adjust_type,p.adjust_value,p.final_price,p.price_date,p.create_at,p.update_at,m.model_name,m.group_key as model_group_key,m.sort as model_sort,c.capacity_name,c.sort as capacity_sort,f.sort as field_sort')
+            ->field('p.id,p.site_id,p.dataset_id,p.quotation_id,p.model_id,p.capacity_id,p.field_id,p.external_goods_id,p.capacity_answer_id,p.field_name,p.crawler_price,p.adjust_type,p.adjust_value,p.final_price,p.price_date,p.create_at,p.update_at,m.model_name,m.group_key as model_group_key,m.series_name as model_series_name,m.is_hot as model_is_hot,m.sort as model_sort,c.capacity_name,c.sort as capacity_sort,f.sort as field_sort')
             ->order('m.sort asc,m.id asc,c.sort asc,c.id asc,f.sort asc,f.id asc,p.id asc');
 
         if (!empty($where['model_name'])) {
@@ -140,6 +140,9 @@ class QuotationV2Service extends BaseApiService
                     'price_name' => $this->datasetTitle($dataset),
                     'goods_id' => (int)$item['external_goods_id'],
                     'goods_name' => (string)$item['model_name'],
+                    'model_group_key' => (int)($item['model_group_key'] ?? 0),
+                    'series_name' => $this->resolveSeriesName($item),
+                    'is_hot' => (int)($item['model_is_hot'] ?? 0),
                     'capacity_id' => (int)$item['capacity_id'],
                     'capacity_answer_id' => (int)$item['capacity_answer_id'],
                     'capacity' => (string)$item['capacity_name'],
@@ -183,6 +186,17 @@ class QuotationV2Service extends BaseApiService
         }
         ksort($result);
         return $result;
+    }
+
+    private function resolveSeriesName(array $item): string
+    {
+        $seriesName = trim((string)($item['model_series_name'] ?? ''));
+        if ($seriesName !== '') {
+            return $seriesName;
+        }
+
+        $groupKey = (int)($item['model_group_key'] ?? 0);
+        return $groupKey > 0 ? '系列 ' . $groupKey : '';
     }
 
     private function resolveDataset(array $where): array

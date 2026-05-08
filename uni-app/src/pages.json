@@ -509,6 +509,16 @@
 					},
 					"needLogin": true
 				},
+                {
+					"path": "pages/member/index",
+					"style": {
+                        // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                        "navigationBarTitleText": "%recycle.pages.member.index%"
+					},
+					"needLogin": true
+				}
 			]
         },
 // RECYCLE_PAGE_END

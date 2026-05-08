@@ -1,5 +1,5 @@
 <template>
-	<view v-show="visible" class="model-filter-mask" @click="close" @touchmove.stop.prevent catchtouchmove="noop">
+	<view v-if="visible" class="model-filter-mask" @click="close" @touchmove.stop.prevent catchtouchmove="noop">
 		<view class="model-filter-panel" @click.stop @touchmove.stop>
 			<view class="filter-head">
 				<view>
@@ -26,6 +26,7 @@
 
 			<view class="filter-toolbar">
 				<view class="toolbar-btn" @click="selectVisible">全选当前</view>
+				<view class="toolbar-btn hot" :class="{ active: draftOnlyHot }" @click="toggleOnlyHot">只看热门</view>
 				<view class="toolbar-btn" @click="clearDraft">清空</view>
 				<text class="toolbar-meta">共 {{ filteredOptions.length }} 个型号</text>
 			</view>
@@ -46,6 +47,7 @@
 						<text class="option-name">{{ item.name }}</text>
 						<text class="option-meta">{{ item.capacityCount }} 个容量 · {{ item.rowCount }} 条价格</text>
 					</view>
+					<text v-if="item.isHot" class="option-hot">热门</text>
 				</view>
 			</scroll-view>
 
@@ -64,45 +66,50 @@ interface ModelFilterOption {
 	name: string
 	rowCount: number
 	capacityCount: number
+	isHot?: boolean
 }
 
 const props = withDefaults(defineProps<{
 	visible: boolean
 	options: ModelFilterOption[]
 	selected: string[]
+	onlyHot: boolean
 }>(), {
 	visible: false,
 	options: () => [],
-	selected: () => []
+	selected: () => [],
+	onlyHot: false
 })
 
 const emit = defineEmits<{
 	'update:visible': [value: boolean]
+	'update:onlyHot': [value: boolean]
 	close: []
 	apply: [value: string[]]
 }>()
 
 const searchKeyword = ref('')
-const draftSelected = ref<string[]>([])
+const draftSelected = ref<string[]>([...props.selected])
+const draftOnlyHot = ref(props.onlyHot)
 
 watch(() => props.visible, value => {
 	if (value) {
 		draftSelected.value = [...props.selected]
+		draftOnlyHot.value = props.onlyHot
 		searchKeyword.value = ''
 	}
-})
+}, { immediate: true })
 
 watch(() => props.selected, value => {
-	if (!props.visible) {
-		draftSelected.value = [...value]
-	}
+	draftSelected.value = [...value]
 }, { deep: true })
 
 const filteredOptions = computed(() => {
 	const keyword = searchKeyword.value.trim().toLowerCase()
-	if (!keyword) return props.options
+	let list = draftOnlyHot.value ? props.options.filter(item => item.isHot) : props.options
+	if (!keyword) return list
 
-	return props.options.filter(item => item.name.toLowerCase().includes(keyword))
+	return list.filter(item => item.name.toLowerCase().includes(keyword))
 })
 
 function isSelected(name: string): boolean {
@@ -129,18 +136,21 @@ function clearDraft() {
 	draftSelected.value = []
 }
 
+function toggleOnlyHot() {
+	draftOnlyHot.value = !draftOnlyHot.value
+	emit('update:onlyHot', draftOnlyHot.value)
+}
+
 function clearAndApply() {
+	emit('update:onlyHot', false)
 	emit('apply', [])
-	close()
 }
 
 function confirm() {
 	emit('apply', draftSelected.value)
-	close()
 }
 
 function close() {
-	emit('update:visible', false)
 	emit('close')
 }
 
@@ -260,6 +270,16 @@ function noop() {
 	font-weight: 700;
 }
 
+.toolbar-btn.hot {
+	background: #fff7ed;
+	color: #ea580c;
+}
+
+.toolbar-btn.hot.active {
+	background: #ea580c;
+	color: #ffffff;
+}
+
 .toolbar-meta {
 	margin-left: auto;
 	font-size: 23rpx;
@@ -317,6 +337,19 @@ function noop() {
 .option-main {
 	flex: 1;
 	min-width: 0;
+}
+
+.option-hot {
+	flex-shrink: 0;
+	height: 34rpx;
+	line-height: 34rpx;
+	padding: 0 12rpx;
+	border-radius: 17rpx;
+	background: #fff1f2;
+	color: #e11d48;
+	font-size: 21rpx;
+	font-weight: 800;
+	margin-left: 12rpx;
 }
 
 .option-name {
