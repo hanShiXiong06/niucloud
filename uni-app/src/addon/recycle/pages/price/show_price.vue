@@ -76,11 +76,18 @@
 						<view class="selected-model-clear" @click="applyModelFilter([])">清空</view>
 					</view>
 				</scroll-view>
-				<scroll-view v-if="seriesTabs.length > 1" scroll-x class="series-tab-scroll">
+				<scroll-view
+					v-if="seriesTabs.length > 1"
+					scroll-x
+					class="series-tab-scroll"
+					:scroll-into-view="activeSeriesTabViewId"
+					:scroll-with-animation="true"
+				>
 					<view class="series-tab-list">
 						<view
 							v-for="item in seriesTabs"
 							:key="item.key"
+							:id="getSeriesTabDomId(item.key)"
 							class="series-tab"
 							:class="{ active: activeSeriesKey === item.key }"
 							@click="selectSeries(item.key)"
@@ -97,6 +104,7 @@
 					v-for="table in groupedTables"
 					:key="table.id"
 					:id="`table-${table.id}`"
+					:data-series-key="table.seriesKey"
 					class="sheet-section"
 				>
 					<view v-if="groupedTables.length > 1" class="section-title">
@@ -255,6 +263,8 @@ import { getOrderSubmitConfig } from '@/addon/recycle/api/order'
 import { img } from '@/utils/common'
 import ModelFilterPopup from './components/ModelFilterPopup.vue'
 
+const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准'
+
 interface EnhancedPriceRow extends QuotationPriceData {
 	showAdjustment?: boolean
 	adjustmentRowspan?: number
@@ -383,7 +393,13 @@ const hotBadgeImage = ref('')
 const hotBadgeSize = ref(38)
 const selectedModels = ref<string[]>([])
 const activeSeriesKey = ref('all')
+const activeSeriesTabViewId = ref('')
+const isSeriesClickScrolling = ref(false)
+let seriesClickTimer: ReturnType<typeof setTimeout> | null = null
+let seriesScrollMeasurePending = false
 const onlyHotModels = ref(false)
+const currentScrollTop = ref(0)
+const TOP_SERIES_RESET_THRESHOLD = 80
 const priceTheme = ref<Record<string, string>>({})
 const systemInfo = uni.getSystemInfoSync()
 const menuButtonInfo = (() => {
@@ -571,11 +587,12 @@ const navbarTitle = computed(() => {
 	return pageTitle.value || '报价查询'
 })
 
-const noticeLines = computed(() => [
-	'温馨提示：报价仅供参考，最终价格以质检结果为准',
-	'请确认设备型号、容量、成色与功能状态后再下单',
-	'报价保签收当天，特殊机况以人工复核为准'
-])
+const quoteNoticeText = ref(DEFAULT_NOTICE_TEXT)
+const noticeLines = computed(() => {
+	const text = (quoteNoticeText.value || DEFAULT_NOTICE_TEXT).replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+	const lines = text.split('\n').map(item => item.trim()).filter(Boolean)
+	return lines.length ? lines : [DEFAULT_NOTICE_TEXT]
+})
 
 const showSpiderHotBadge = computed(() => source.value === 'spider' && spiderIsHot.value && showHotBadge.value)
 const hotBadgeBoxStyle = computed(() => {
@@ -634,6 +651,10 @@ watch(
 		if (activeSeriesKey.value !== 'all' && !list.some(item => item.key === activeSeriesKey.value)) {
 			activeSeriesKey.value = 'all'
 		}
+		syncActiveSeriesTabView(activeSeriesKey.value)
+	},
+	{
+		immediate: true
 	}
 )
 
@@ -696,9 +717,6 @@ function filterRows(rows: QuotationPriceData[]): QuotationPriceData[] {
 		if (onlyHotModels.value && Number(row.is_hot || 0) !== 1) {
 			return false
 		}
-		if (activeSeriesKey.value !== 'all' && resolveRowSeriesKey(row) !== activeSeriesKey.value) {
-			return false
-		}
 		if (selectedSet.size > 0 && !selectedSet.has(normalizeModelName(row.goods_name))) {
 			return false
 		}
@@ -724,18 +742,101 @@ function resolveRowSeriesKey(row: Partial<QuotationPriceData>): string {
 }
 
 function selectSeries(key: string) {
-	activeSeriesKey.value = key || 'all'
+	const targetKey = key || 'all'
+	activeSeriesKey.value = targetKey
+	syncActiveSeriesTabView(targetKey)
+	scrollToSeries(targetKey)
+}
+
+function getSeriesTabDomId(key: string): string {
+	const index = seriesTabs.value.findIndex(item => item.key === key)
+	return index >= 0 ? `series-tab-${index}` : ''
+}
+
+function syncActiveSeriesTabView(key: string) {
+	activeSeriesTabViewId.value = getSeriesTabDomId(key)
+}
+
+function setActiveSeriesByScroll(key: string) {
+	if (!key || key === activeSeriesKey.value) return
+	activeSeriesKey.value = key
+	syncActiveSeriesTabView(key)
+}
+
+function scrollToSeries(key: string) {
+	const tables = groupedTables.value
+	if (!tables.length) return
+
+	const targetTable = key === 'all' ? tables[0] : tables.find(table => table.seriesKey === key)
+	if (!targetTable) return
+
+	isSeriesClickScrolling.value = true
+	if (seriesClickTimer) clearTimeout(seriesClickTimer)
+	seriesClickTimer = setTimeout(() => {
+		isSeriesClickScrolling.value = false
+	}, 700)
+
+	const selector = `#table-${targetTable.id}`
+	uni.createSelectorQuery()
+		.select(selector)
+		.boundingClientRect((rect) => {
+			if (!rect || Array.isArray(rect)) return
+			const top = Number(rect.top || 0)
+			const targetTop = Math.max(0, top + currentScrollTop.value - navBarHeightPx - 92)
+			uni.pageScrollTo({
+				scrollTop: targetTop,
+				duration: 240
+			})
+		})
+		.exec()
+}
+
+function updateActiveSeriesByScroll() {
+	if (isSeriesClickScrolling.value || seriesTabs.value.length <= 1 || groupedTables.value.length <= 1) {
+		return
+	}
+	if (currentScrollTop.value <= TOP_SERIES_RESET_THRESHOLD) {
+		setActiveSeriesByScroll('all')
+		return
+	}
+	if (seriesScrollMeasurePending) {
+		return
+	}
+	seriesScrollMeasurePending = true
+	setTimeout(() => {
+		seriesScrollMeasurePending = false
+		const tables = groupedTables.value
+		uni.createSelectorQuery()
+			.selectAll('.sheet-section')
+			.boundingClientRect((rects) => {
+				if (!Array.isArray(rects) || rects.length === 0) return
+				const anchorTop = navBarHeightPx + 122
+				let activeIndex = 0
+				for (let index = 0; index < rects.length; index++) {
+					const rect = rects[index] as any
+					if (Number(rect.top || 0) <= anchorTop) {
+						activeIndex = index
+					}
+				}
+				const table = tables[activeIndex]
+				if (table) setActiveSeriesByScroll(table.seriesKey)
+			})
+			.exec()
+	}, 80)
 }
 
 function toggleHotModels() {
 	onlyHotModels.value = !onlyHotModels.value
 	if (onlyHotModels.value && activeSeriesKey.value !== 'all' && !seriesTabs.value.some(item => item.key === activeSeriesKey.value)) {
 		activeSeriesKey.value = 'all'
+		syncActiveSeriesTabView('all')
 	}
 }
 
 function applyModelFilter(models: string[]) {
 	selectedModels.value = Array.from(new Set(models.map(normalizeModelName).filter(Boolean)))
+	activeSeriesKey.value = 'all'
+	syncActiveSeriesTabView('all')
 	showModelFilter.value = false
 }
 
@@ -812,6 +913,7 @@ async function loadPriceData() {
 		const res = await loadV2PriceData()
 
 		if (res.code === 1 && res.data) {
+			quoteNoticeText.value = DEFAULT_NOTICE_TEXT
 			tableData.value = res.data || []
 			if (tableData.value.length > 0) {
 				priceTypeName.value = tableData.value[0].price_name || ''
@@ -843,6 +945,7 @@ async function loadSpiderPriceData() {
 			const item = res.data as QuoteSpiderItem
 			spiderImageUrl.value = resolveSpiderImage(item)
 			spiderIsHot.value = Number(item.is_hot || 0) === 1
+			quoteNoticeText.value = String(item.notice_text || DEFAULT_NOTICE_TEXT)
 			tableData.value = normalizeSpiderRows(item)
 			priceTypeName.value = item.title || item.name || ''
 			if (!pageTitle.value || pageTitle.value === '报价查询') {
@@ -880,6 +983,7 @@ function normalizeSpiderRows(item: QuoteSpiderItem): QuotationPriceData[] {
 
 	return rows.map(row => {
 		const prices = normalizeSpiderPrices(row.final_prices || row.manual_prices || row.source_prices || {}, row.columns || [])
+		const seriesName = normalizeText(row.tab || item.tab || '')
 		return {
 			id: row.id,
 			quotation_id: item.id,
@@ -887,9 +991,9 @@ function normalizeSpiderRows(item: QuoteSpiderItem): QuotationPriceData[] {
 			goods_id: row.id,
 			goods_name: row.model_name || item.name || title,
 			model_group_key: 0,
-			series_name: row.tab || item.tab || '',
+			series_name: seriesName,
 			is_hot: Number(item.is_hot || 0),
-			capacity: row.tab || row.brand || item.tab || item.brand || '报价',
+			capacity: resolveSpiderCapacity(row, seriesName),
 			prices,
 			add_value_info: 0,
 			value_info: row.remark || '',
@@ -900,6 +1004,37 @@ function normalizeSpiderRows(item: QuoteSpiderItem): QuotationPriceData[] {
 			update_at: row.update_at || ''
 		}
 	})
+}
+
+function resolveSpiderCapacity(row: Record<string, any>, seriesName = ''): string {
+	const raw = isRecord(row.raw_data) ? row.raw_data : {}
+	const candidates = [
+		raw['内存'],
+		raw['容量'],
+		raw['规格'],
+		raw['存储'],
+		row.capacity_name,
+		row.capacity,
+		raw.capacity_name,
+		raw.capacity,
+		raw.memory,
+		raw.storage,
+		raw.rom
+	]
+	const value = candidates.find(item => isValidSpiderCapacity(item, seriesName))
+	return value === undefined ? '--' : normalizeText(value)
+}
+
+function isValidSpiderCapacity(value: unknown, seriesName = ''): boolean {
+	const text = normalizeText(value)
+	if (!text) return false
+	if (seriesName && text === seriesName) return false
+	if (/分组|系列/.test(text)) return false
+	return true
+}
+
+function normalizeText(value: unknown): string {
+	return String(value ?? '').replace(/\s+/g, ' ').trim()
 }
 
 function normalizeSpiderPrices(value: unknown, columns: string[] = []): Record<string, unknown> {
@@ -1639,6 +1774,7 @@ function switchQuotation(item: QuotationV2Type) {
 	keyword.value = ''
 	selectedModels.value = []
 	activeSeriesKey.value = 'all'
+	syncActiveSeriesTabView('all')
 	onlyHotModels.value = false
 	loadPriceData()
 }
@@ -1703,7 +1839,10 @@ onLoad((options: PricePageOptions) => {
 })
 
 onPageScroll((event) => {
-	isScrolled.value = event.scrollTop > 80
+	const scrollTop = Number(event.scrollTop || 0)
+	currentScrollTop.value = scrollTop
+	isScrolled.value = scrollTop > 80
+	updateActiveSeriesByScroll()
 })
 </script>
 
@@ -2597,10 +2736,15 @@ onPageScroll((event) => {
 }
 
 .section-title {
-	padding: 0 4rpx;
+	margin: 6rpx 0 2rpx;
+	padding: 18rpx 20rpx;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
+	gap: 18rpx;
+	border-radius: 12rpx;
+	background: var(--bg-soft);
+	border: 1rpx solid var(--line);
 	font-size: 26rpx;
 	line-height: 36rpx;
 	font-weight: 700;
@@ -2608,6 +2752,7 @@ onPageScroll((event) => {
 }
 
 .section-sub {
+	flex-shrink: 0;
 	max-width: 430rpx;
 	font-size: 22rpx;
 	font-weight: 400;

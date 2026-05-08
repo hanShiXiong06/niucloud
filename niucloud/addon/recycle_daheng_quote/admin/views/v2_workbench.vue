@@ -843,7 +843,7 @@
 	</template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, ElPagination, ElTableColumn } from 'element-plus'
 import {
     addQuotationV2Capacity,
@@ -931,6 +931,7 @@ const modelOptions = ref<any[]>([])
 const capacityOptions = ref<any[]>([])
 const fieldOptions = ref<any[]>([])
 const OPTION_LIMIT = 120
+const WORKBENCH_STATE_KEY = 'recycle_daheng_quote_v2_workbench_state'
 
 const datasetDialog = reactive<any>({ show: false, form: {} })
 const previewDialog = reactive<any>({ show: false, data: null })
@@ -953,6 +954,41 @@ const responseRows = (res: any) => Array.isArray(res.data) ? res.data : (res.dat
 const responseListRows = (res: any) => res.data?.list || res.data?.data || []
 const responseTotal = (res: any) => Number(res.data?.total || 0)
 const responseMatrix = (res: any) => res.data?.matrix || { columns: [], adjustment_columns: [], rows: [], groups: [] }
+
+const readWorkbenchState = () => {
+    try {
+        return JSON.parse(localStorage.getItem(WORKBENCH_STATE_KEY) || '{}')
+    } catch (error) {
+        return {}
+    }
+}
+
+const writeWorkbenchState = () => {
+    localStorage.setItem(WORKBENCH_STATE_KEY, JSON.stringify({
+        activeTab: activeTab.value,
+        selectedDatasetId: selectedDataset.value?.id || detailSearch.prices.dataset_id || '',
+        datasetPage: datasetTable.page,
+        datasetLimit: datasetTable.limit,
+        detailPages: Object.fromEntries(Object.entries(detailTable).map(([key, table]) => [key, table.page])),
+        detailLimits: Object.fromEntries(Object.entries(detailTable).map(([key, table]) => [key, table.limit]))
+    }))
+}
+
+const restoreWorkbenchState = () => {
+    const state = readWorkbenchState()
+    if (state.activeTab && detailTable[state.activeTab]) {
+        activeTab.value = state.activeTab
+    }
+    if (Number(state.datasetPage || 0) > 0) datasetTable.page = Number(state.datasetPage)
+    if (Number(state.datasetLimit || 0) > 0) datasetTable.limit = Number(state.datasetLimit)
+    Object.entries(state.detailPages || {}).forEach(([key, page]) => {
+        if (detailTable[key] && Number(page || 0) > 0) detailTable[key].page = Number(page)
+    })
+    Object.entries(state.detailLimits || {}).forEach(([key, limit]) => {
+        if (detailTable[key] && Number(limit || 0) > 0) detailTable[key].limit = Number(limit)
+    })
+    return state
+}
 
 const buildSpanMap = (rows: any[], keyGetter: (row: any) => string) => {
     const spans: Record<number, number> = {}
@@ -1202,6 +1238,56 @@ const loadDatasetOptions = async () => {
     datasetOptions.value = responseRows(res)
 }
 
+const patchRowById = (rows: any[], id: number, patch: Record<string, any>) => {
+    const index = rows.findIndex((item: any) => Number(item.id) === Number(id))
+    if (index < 0) return false
+    rows[index] = { ...rows[index], ...patch }
+    return true
+}
+
+const removeRowById = (rows: any[], id: number) => {
+    const index = rows.findIndex((item: any) => Number(item.id) === Number(id))
+    if (index < 0) return false
+    rows.splice(index, 1)
+    return true
+}
+
+const patchDatasetLocal = (id: number, patch: Record<string, any>) => {
+    patchRowById(datasetTable.data, id, patch)
+    if (selectedDataset.value && Number(selectedDataset.value.id) === Number(id)) {
+        selectedDataset.value = { ...selectedDataset.value, ...patch }
+        if (!detailSearch.prices.dataset_id) {
+            detailSearch.prices.dataset_id = selectedDataset.value.id
+        }
+    }
+
+    const optionIndex = datasetOptions.value.findIndex((item: any) => Number(item.id) === Number(id))
+    if (Number(patch.status ?? 1) === 1) {
+        if (optionIndex >= 0) {
+            datasetOptions.value[optionIndex] = { ...datasetOptions.value[optionIndex], ...patch }
+        } else if (selectedDataset.value && Number(selectedDataset.value.id) === Number(id)) {
+            datasetOptions.value.unshift({ ...selectedDataset.value })
+        }
+    } else if (optionIndex >= 0) {
+        datasetOptions.value.splice(optionIndex, 1)
+    }
+}
+
+const patchManagedLocal = (type: string, id: number, patch: Record<string, any>) => {
+    const table = detailTable[activeTab.value]
+    if (table?.data) {
+        patchRowById(table.data, id, patch)
+    }
+
+    if (type === 'model') {
+        patchRowById(modelOptions.value, id, patch)
+    } else if (type === 'capacity') {
+        patchRowById(capacityOptions.value, id, patch)
+    } else if (type === 'field') {
+        patchRowById(fieldOptions.value, id, patch)
+    }
+}
+
 const loadManageOptions = async (type = '') => {
     if (!selectedDataset.value?.id) return
     const datasetId = selectedDataset.value.id
@@ -1255,9 +1341,10 @@ const loadDatasets = async (page = 1) => {
         datasetTable.data = responseRows(res)
         datasetTable.total = responseTotal(res)
         if (!selectedDataset.value && datasetTable.data.length) {
-            selectedDataset.value = datasetTable.data[0]
+            const state = readWorkbenchState()
+            selectedDataset.value = datasetTable.data.find((item: any) => Number(item.id) === Number(state.selectedDatasetId || 0)) || datasetTable.data[0]
             detailSearch.prices.dataset_id = selectedDataset.value.id
-            await loadDetail(1)
+            await loadDetail(detailTable[activeTab.value]?.page || 1)
         } else if (selectedDataset.value) {
             const latest = datasetTable.data.find((item: any) => item.id === selectedDataset.value.id)
             if (latest) selectedDataset.value = latest
@@ -1442,6 +1529,7 @@ const getAdjustmentRuleClass = (rule: string) => {
 const selectDataset = async (row: any) => {
 	    selectedDataset.value = row
 	    detailSearch.prices.dataset_id = row.id
+        writeWorkbenchState()
 	    clearSelectedPrices()
 	    batchPriceMode.value = false
 	    resetDatasetScopedFilters()
@@ -1457,6 +1545,7 @@ const switchActiveDataset = async (datasetId: number) => {
     if (!dataset) return
 	    selectedDataset.value = dataset
 	    detailSearch.prices.dataset_id = dataset.id
+        writeWorkbenchState()
 	    clearSelectedPrices()
 	    batchPriceMode.value = false
 	    resetDatasetScopedFilters()
@@ -1552,6 +1641,10 @@ const openDatasetDialog = (row?: any) => {
 const saveDataset = async () => {
     if (datasetDialog.form.id) {
         await editQuotationV2Dataset(datasetDialog.form.id, datasetDialog.form)
+        patchDatasetLocal(Number(datasetDialog.form.id), { ...datasetDialog.form })
+        datasetDialog.show = false
+        ElMessage.success('保存成功')
+        return
     } else {
         await addQuotationV2Dataset(datasetDialog.form)
     }
@@ -1621,6 +1714,10 @@ const saveManaged = async () => {
     }
     if (id) {
         await editApiMap[manageDialog.type](id, manageDialog.form)
+        patchManagedLocal(manageDialog.type, Number(id), { ...manageDialog.form })
+        manageDialog.show = false
+        ElMessage.success('保存成功')
+        return
     } else {
         if (manageDialog.type === 'note' && !manageDialog.form.field_id && manageDialog.form.new_field_name) {
             const fieldRes = await addQuotationV2Field({
@@ -1709,7 +1806,18 @@ const deleteManaged = async (type: string, row: any) => {
         note: deleteQuotationV2Note
     }
     await apiMap[type](row.id)
-    await loadDetail(1)
+    const table = detailTable[activeTab.value]
+    if (table?.data && removeRowById(table.data, Number(row.id))) {
+        table.total = Math.max(0, Number(table.total || 0) - 1)
+    }
+    if (type === 'model') {
+        removeRowById(modelOptions.value, Number(row.id))
+    } else if (type === 'capacity') {
+        removeRowById(capacityOptions.value, Number(row.id))
+    } else if (type === 'field') {
+        removeRowById(fieldOptions.value, Number(row.id))
+    }
+    ElMessage.success('删除成功')
 }
 
 const openPriceDialog = (row: any) => {
@@ -1786,10 +1894,34 @@ const imageUrl = (value: string) => {
 }
 
 onMounted(async () => {
+    const state = restoreWorkbenchState()
     detailSearch.prices.price_date = todayDate()
+    if (state.selectedDatasetId) {
+        detailSearch.prices.dataset_id = Number(state.selectedDatasetId)
+    }
     await loadDatasetOptions()
-    await loadDatasets(1)
+    if (!selectedDataset.value && state.selectedDatasetId) {
+        selectedDataset.value = datasetOptions.value.find((item: any) => Number(item.id) === Number(state.selectedDatasetId)) || null
+    }
+    await loadDatasets(datasetTable.page || 1)
 })
+
+watch(
+    [
+        activeTab,
+        () => selectedDataset.value?.id,
+        () => datasetTable.page,
+        () => datasetTable.limit,
+        () => detailTable.prices.page,
+        () => detailTable.models.page,
+        () => detailTable.capacities.page,
+        () => detailTable.adjustments.page,
+        () => detailTable.fields.page,
+        () => detailTable.notes.page,
+        () => detailTable.logs.page
+    ],
+    writeWorkbenchState
+)
 </script>
 
 <style scoped lang="scss">

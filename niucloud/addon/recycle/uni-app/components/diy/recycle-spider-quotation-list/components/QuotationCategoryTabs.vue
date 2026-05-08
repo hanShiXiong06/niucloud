@@ -1,24 +1,30 @@
 <template>
     <view v-if="list.length" class="quote-category-tabs" :class="[`quote-category-tabs--${variant}`, { 'has-cue': showScrollCue }]" :style="wrapStyle">
-        <up-tabs
-            :list="list"
-            keyName="name"
-            :current="current"
-            :scrollable="true"
-            :lineWidth="lineWidthValue"
-            :lineHeight="lineHeightValue"
-            :lineColor="lineColorValue"
-            :activeStyle="activeTextStyle"
-            :inactiveStyle="inactiveTextStyle"
-            :itemStyle="itemStyle"
-            @change="handleChange"
+        <scroll-view
+            class="quote-category-tabs__scroll"
+            scroll-x
+            :show-scrollbar="false"
+            enable-flex
         >
-            <template #content="{ item, index }">
-                <view class="quote-category-tabs__chip" :style="getChipStyle(Number(index))">
+            <view class="quote-category-tabs__track" :style="trackStyle">
+                <view
+                    v-for="(item, index) in list"
+                    :key="item.id || index"
+                    class="quote-category-tabs__chip"
+                    :class="{ active: Number(index) === Number(current) }"
+                    :style="getChipStyle(Number(index))"
+                    @click="handleChange(item, Number(index))"
+                >
                     <text class="quote-category-tabs__text" :style="getTextStyle(Number(index))">{{ item.name }}</text>
+                    <text v-if="item.levelLabel" class="quote-category-tabs__level" :style="getLevelStyle(Number(index))">{{ item.levelLabel }}</text>
+                    <view
+                        v-if="variant === 'underline' && Number(index) === Number(current)"
+                        class="quote-category-tabs__line"
+                        :style="lineStyle"
+                    ></view>
                 </view>
-            </template>
-        </up-tabs>
+            </view>
+        </scroll-view>
         <view v-if="showScrollCue && list.length > 3" class="quote-category-tabs__cue" :style="cueStyle">
             <up-icon name="arrow-right" size="14" :color="inactiveTextColorValue"></up-icon>
         </view>
@@ -61,10 +67,6 @@ const props = defineProps({
         type: String,
         default: '#475569'
     },
-    borderColor: {
-        type: String,
-        default: ''
-    },
     height: {
         type: Number,
         default: 64
@@ -99,10 +101,6 @@ const activeBgColorValue = computed(() => props.activeBgColor || (variant.value 
 const inactiveBgColorValue = computed(() => props.inactiveBgColor || (variant.value === 'underline' ? 'transparent' : '#F1F5F9'))
 const activeTextColorValue = computed(() => props.activeTextColor || (variant.value === 'pill' ? '#ffffff' : themeColorValue.value))
 const inactiveTextColorValue = computed(() => props.inactiveTextColor || '#475569')
-const borderColorValue = computed(() => props.borderColor || (variant.value === 'card' ? '#E2E8F0' : 'transparent'))
-const lineWidthValue = computed(() => variant.value === 'underline' ? 34 : 0)
-const lineHeightValue = computed(() => variant.value === 'underline' ? 5 : 0)
-const lineColorValue = computed(() => variant.value === 'underline' ? themeColorValue.value : 'transparent')
 const itemHeight = computed(() => Math.max(Number(props.height || 64), 44))
 const itemRadius = computed(() => Math.max(Number(props.radius || 32), 0))
 const itemFontSize = computed(() => Math.max(Number(props.fontSize || 26), 20))
@@ -112,7 +110,7 @@ const itemSidePadding = computed(() => Math.max(Number(props.sidePadding || 18),
 const wrapStyle = computed(() => {
     let style = 'position:relative;box-sizing:border-box;'
     if (variant.value === 'card') {
-        style += `background:${inactiveBgColorValue.value};border:1rpx solid ${borderColorValue.value};border-radius:${itemRadius.value + 10}rpx;padding:8rpx;`
+        style += `background:${inactiveBgColorValue.value};border-radius:${itemRadius.value + 10}rpx;padding:8rpx;`
     } else if (variant.value === 'pill') {
         style += 'padding:2rpx 0;'
     } else {
@@ -121,25 +119,17 @@ const wrapStyle = computed(() => {
     return style
 })
 
-const itemStyle = computed(() => {
+const trackStyle = computed(() => {
     const height = variant.value === 'underline' ? itemHeight.value + 8 : itemHeight.value + 4
-    return `height:${height}rpx;padding-left:${Math.max(itemSidePadding.value - 6, 4)}rpx;padding-right:${Math.max(itemSidePadding.value - 6, 4)}rpx;`
+    return `min-height:${height}rpx;`
 })
-
-const activeTextStyle = computed(() => ({
-    color: activeTextColorValue.value,
-    fontWeight: String(itemFontWeight.value),
-    fontSize: `${itemFontSize.value}rpx`
-}))
-
-const inactiveTextStyle = computed(() => ({
-    color: inactiveTextColorValue.value,
-    fontWeight: '500',
-    fontSize: `${itemFontSize.value}rpx`
-}))
 
 const cueStyle = computed(() => {
     return `height:${itemHeight.value + 12}rpx;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.96) 42%,rgba(255,255,255,1));`
+})
+
+const lineStyle = computed(() => {
+    return `width:34rpx;height:5rpx;border-radius:999rpx;background:${themeColorValue.value};`
 })
 
 function getChipStyle(index: number) {
@@ -148,23 +138,23 @@ function getChipStyle(index: number) {
         return [
             `height:${itemHeight.value}rpx`,
             `padding:0 ${itemSidePadding.value}rpx`,
-            'display:flex;align-items:center;justify-content:center;box-sizing:border-box'
+            'position:relative;display:flex;align-items:center;justify-content:center;box-sizing:border-box;flex-shrink:0'
         ].join(';') + ';'
     }
 
     const bgColor = active ? activeBgColorValue.value : inactiveBgColorValue.value
-    const borderColor = active && variant.value === 'card' ? '#ffffff' : borderColorValue.value
     const shadow = active
         ? (variant.value === 'card' ? 'box-shadow:0 8rpx 22rpx rgba(15,23,42,.10);' : 'box-shadow:0 8rpx 18rpx rgba(37,99,235,.20);')
-        : ''
+        : 'box-shadow:0 4rpx 10rpx rgba(15,23,42,.04);'
+    const border = active ? `border:1rpx solid ${activeBgColorValue.value};` : 'border:1rpx solid #e2e8f0;'
 
     return [
         `height:${itemHeight.value}rpx`,
         `padding:0 ${itemSidePadding.value}rpx`,
         `border-radius:${itemRadius.value}rpx`,
         `background:${bgColor}`,
-        `border:1rpx solid ${borderColor}`,
-        'display:flex;align-items:center;justify-content:center;box-sizing:border-box',
+        border,
+        'display:flex;align-items:center;justify-content:center;box-sizing:border-box;flex-shrink:0',
         shadow
     ].join(';') + ';'
 }
@@ -180,8 +170,22 @@ function getTextStyle(index: number) {
     ].join(';') + ';'
 }
 
-function handleChange(tab: any) {
-    emit('change', tab)
+function getLevelStyle(index: number) {
+    const active = Number(index) === Number(props.current)
+    return [
+        `color:${active ? activeTextColorValue.value : inactiveTextColorValue.value}`,
+        'font-size:18rpx',
+        'line-height:24rpx',
+        'opacity:.68',
+        'margin-left:6rpx'
+    ].join(';') + ';'
+}
+
+function handleChange(item: Record<string, any>, index: number) {
+    emit('change', {
+        ...item,
+        index
+    })
 }
 </script>
 
@@ -191,8 +195,43 @@ function handleChange(tab: any) {
     overflow: hidden;
 }
 
+.quote-category-tabs__scroll {
+    width: 100%;
+    white-space: nowrap;
+}
+
+.quote-category-tabs__track {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    width: max-content;
+    box-sizing: border-box;
+}
+
 .quote-category-tabs__chip {
     transition: all .18s ease;
+    position: relative;
+}
+
+.quote-category-tabs__chip::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(15, 23, 42, 0);
+    transition: background .16s ease;
+    pointer-events: none;
+}
+
+.quote-category-tabs__chip:active::after {
+    background: rgba(15, 23, 42, 0.08);
+}
+
+.quote-category-tabs__line {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
 }
 
 .quote-category-tabs__cue {

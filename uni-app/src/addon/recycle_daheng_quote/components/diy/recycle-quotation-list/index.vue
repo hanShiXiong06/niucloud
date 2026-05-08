@@ -8,7 +8,7 @@
                         <text class="title" :style="{ color: titleColor }">{{ title }}</text>
                         <text class="subtitle" :style="{ color: subtitleColor }">{{ subtitle }}</text>
                     </view>
-                    <view class="refresh-btn" v-if="showRefresh" @click.stop="loadDatasets">
+                    <view class="refresh-btn" v-if="showRefresh" @click.stop="loadDatasets(true)">
                         <text class="iconfont iconrefresh"></text>
                     </view>
                 </view>
@@ -68,6 +68,7 @@
 <script lang="ts" setup>
 import { computed, onMounted, ref } from 'vue';
 import useDiyStore from '@/app/stores/diy';
+import useQuotationCacheStore, { buildQuotationCacheKey } from '@/stores/quotation-cache';
 import { img, redirect } from '@/utils/common';
 import { getQuotationV2Types, type QuotationV2Type } from '@/addon/recycle_daheng_quote/api/quotation';
 
@@ -83,6 +84,7 @@ const props = defineProps({
 });
 
 const diyStore = useDiyStore();
+const quotationCacheStore = useQuotationCacheStore();
 const loading = ref(false);
 const datasets = ref<QuotationV2Type[]>([]);
 
@@ -198,18 +200,30 @@ const maskLayerStyle = computed(() => {
     return `background:rgba(0,0,0,${alpha});`;
 });
 
-async function loadDatasets() {
+async function loadDatasets(forceRefresh = false) {
     if (diyStore.mode === 'decorate') {
         datasets.value = [];
         return;
     }
 
-    loading.value = true;
+    const params = { limit: limit.value };
+    const cacheKey = buildQuotationCacheKey('daheng-types', params);
+    if (!forceRefresh) {
+        const cached = quotationCacheStore.get<QuotationV2Type[]>(cacheKey);
+        if (cached) {
+            datasets.value = cached;
+            return;
+        }
+    }
+
+    loading.value = datasets.value.length === 0;
     try {
-        const res = await getQuotationV2Types({ limit: limit.value }) as any;
-        datasets.value = res.code === 1 && Array.isArray(res.data) ? res.data : [];
+        const res = await getQuotationV2Types(params) as any;
+        const list = res.code === 1 && Array.isArray(res.data) ? res.data : [];
+        datasets.value = list;
+        quotationCacheStore.set(cacheKey, list);
     } catch (error) {
-        datasets.value = [];
+        if (datasets.value.length === 0) datasets.value = [];
     } finally {
         loading.value = false;
     }

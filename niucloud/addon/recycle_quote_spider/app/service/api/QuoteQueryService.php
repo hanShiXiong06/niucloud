@@ -13,6 +13,8 @@ use core\exception\CommonException;
 
 class QuoteQueryService extends BaseApiService
 {
+    private const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准';
+
     public function sources(): array
     {
         return (new QuoteApiCacheService())->remember($this->site_id, 'sources', [], function () {
@@ -53,8 +55,8 @@ class QuoteQueryService extends BaseApiService
             $query->where('is_hot', (int)$where['only_hot']);
         }
 
-        $query->field('id,source_id,category_id,brand,tab,name,parent_name,quote_type,is_image_quote,image,timage,bimage,icon,is_hot,sort,last_sync_at,update_at')
-            ->order('is_hot desc,sort desc,id desc');
+        $query->field('id,source_id,category_id,brand,tab,name,parent_name,quote_type,is_image_quote,image,timage,bimage,icon,notice_text,is_hot,sort,last_sync_at,update_at')
+            ->order('is_hot desc,sort asc,id asc');
         if ($limit > 0) {
             $query->limit($limit);
         }
@@ -70,6 +72,7 @@ class QuoteQueryService extends BaseApiService
 
         foreach ($items as &$item) {
             $this->sanitizeItemImages($item);
+            $item['notice_text'] = $this->resolveNoticeText($item['notice_text'] ?? '');
             $item['title'] = $this->formatItemTitle($item);
             $item['category_path'] = (string)($categoryPathMap[(int)$item['category_id']] ?? '');
             $item['model_count'] = (int)($rowCountMap[(int)$item['id']] ?? 0);
@@ -93,7 +96,7 @@ class QuoteQueryService extends BaseApiService
         if (!empty($where['source_id'])) {
             $query->where('source_id', (int)$where['source_id']);
         }
-        $list = $query->order('sort asc,id asc')->select()->toArray();
+        $list = $query->order('sort desc,id desc')->select()->toArray();
         return $this->buildTree($list);
     }
 
@@ -132,6 +135,11 @@ class QuoteQueryService extends BaseApiService
         }
         $rows = (new QuoteRow())->where('site_id', $this->site_id)->where('item_id', $id)->where('is_show', 1)->order('sort asc,id asc')->select()->toArray();
         $this->sanitizeItemImages($item);
+        $item['notice_text'] = $this->resolveNoticeText($item['notice_text'] ?? '');
+        foreach ($rows as &$row) {
+            $this->appendRowDisplayFields($row);
+        }
+        unset($row);
         $item['rows'] = $rows;
         return $item;
     }
@@ -173,6 +181,47 @@ class QuoteQueryService extends BaseApiService
         return $map;
     }
 
+    private function appendRowDisplayFields(array &$row): void
+    {
+        $capacityName = $this->extractCapacityName($row['raw_data'] ?? [], (string)($row['tab'] ?? ''));
+        $row['capacity_name'] = $capacityName;
+        $row['capacity'] = $capacityName;
+    }
+
+    private function extractCapacityName($rawData, string $tab = ''): string
+    {
+        $raw = is_array($rawData) ? $rawData : [];
+        $candidates = [
+            $raw['内存'] ?? null,
+            $raw['容量'] ?? null,
+            $raw['规格'] ?? null,
+            $raw['存储'] ?? null,
+            $raw['capacity_name'] ?? null,
+            $raw['capacity'] ?? null,
+            $raw['memory'] ?? null,
+            $raw['storage'] ?? null,
+            $raw['rom'] ?? null,
+        ];
+        foreach ($candidates as $candidate) {
+            $value = trim((string)$candidate);
+            if ($this->isValidCapacityValue($value, $tab)) {
+                return $value;
+            }
+        }
+        return '';
+    }
+
+    private function isValidCapacityValue(string $value, string $tab = ''): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+        if ($tab !== '' && $value === trim($tab)) {
+            return false;
+        }
+        return !str_contains($value, '分组') && !str_contains($value, '系列');
+    }
+
     private function formatItemTitle(array $item): string
     {
         return trim((string)($item['name'] ?? '')) ?: '报价单';
@@ -185,6 +234,12 @@ class QuoteQueryService extends BaseApiService
                 $item[$field] = '';
             }
         }
+    }
+
+    private function resolveNoticeText($value): string
+    {
+        $text = str_replace(["\r\n", "\r"], "\n", trim((string)$value));
+        return $text !== '' ? $text : self::DEFAULT_NOTICE_TEXT;
     }
 
     private function isThirdPartyImageUrl(string $url): bool

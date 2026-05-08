@@ -145,13 +145,15 @@ function getChipStyle(index: number) {
     const bgColor = active ? activeBgColorValue.value : inactiveBgColorValue.value
     const shadow = active
         ? (variant.value === 'card' ? 'box-shadow:0 8rpx 22rpx rgba(15,23,42,.10);' : 'box-shadow:0 8rpx 18rpx rgba(37,99,235,.20);')
-        : ''
+        : 'box-shadow:0 4rpx 10rpx rgba(15,23,42,.04);'
+    const border = active ? `border:1rpx solid ${activeBgColorValue.value};` : 'border:1rpx solid #e2e8f0;'
 
     return [
         `height:${itemHeight.value}rpx`,
         `padding:0 ${itemSidePadding.value}rpx`,
         `border-radius:${itemRadius.value}rpx`,
         `background:${bgColor}`,
+        border,
         'display:flex;align-items:center;justify-content:center;box-sizing:border-box;flex-shrink:0',
         shadow
     ].join(';') + ';'
@@ -208,6 +210,21 @@ function handleChange(item: Record<string, any>, index: number) {
 
 .quote-category-tabs__chip {
     transition: all .18s ease;
+    position: relative;
+}
+
+.quote-category-tabs__chip::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(15, 23, 42, 0);
+    transition: background .16s ease;
+    pointer-events: none;
+}
+
+.quote-category-tabs__chip:active::after {
+    background: rgba(15, 23, 42, 0.08);
 }
 
 .quote-category-tabs__line {

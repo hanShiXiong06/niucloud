@@ -8,7 +8,7 @@
                         <text class="title" :style="{ color: titleColor }">{{ title }}</text>
                         <text class="subtitle" :style="{ color: subtitleColor }">{{ subtitle }}</text>
                     </view>
-                    <view class="refresh-btn" v-if="showRefresh" @click.stop="loadItems">
+                    <view class="refresh-btn" v-if="showRefresh" @click.stop="loadItems(true)">
                         <up-icon name="reload" size="18" color="#4b5563"></up-icon>
                     </view>
                 </view>
@@ -25,48 +25,46 @@
                     :class="{ fixed: categoryTabsFixed }"
                     :style="categoryTabsStyle"
                 >
-                    <view class="category-tabs__level-row">
-                        <text class="category-tabs__label">一级分类</text>
-                    </view>
-                    <quotation-category-tabs
-                        :list="primaryCategoryTabList"
-                        :current="activePrimaryCategoryIndex"
-                        :variant="tabStyleType"
-                        :themeColor="tabThemeColor"
-                        :activeBgColor="tabActiveBgColor"
-                        :inactiveBgColor="tabInactiveBgColor"
-                        :activeTextColor="tabActiveTextColor"
-                        :inactiveTextColor="tabInactiveTextColor"
-                        :height="tabHeight"
-                        :radius="tabRadius"
-                        :fontSize="tabFontSize"
-                        :fontWeight="tabFontWeight"
-                        :sidePadding="tabSidePadding"
-                        :showScrollCue="showTabScrollCue"
-                        @change="handlePrimaryCategoryTabChange"
-                    ></quotation-category-tabs>
-                    <template v-if="secondaryCategoryTabs.length">
-                        <view class="category-tabs__level-row secondary">
-                            <text class="category-tabs__label">二级分类</text>
-                            <text class="category-tabs__parent">{{ activePrimaryCategoryName }}</text>
-                        </view>
+                    <view class="category-tabs__primary">
                         <quotation-category-tabs
-                            :list="secondaryCategoryTabList"
-                            :current="activeSecondaryCategoryIndex"
-                            :variant="secondaryTabStyleType"
-                            :themeColor="secondaryTabThemeColor"
-                            :activeBgColor="secondaryTabActiveBgColor"
-                            :inactiveBgColor="secondaryTabInactiveBgColor"
-                            :activeTextColor="secondaryTabActiveTextColor"
-                            :inactiveTextColor="secondaryTabInactiveTextColor"
-                            :height="secondaryTabHeight"
-                            :radius="secondaryTabRadius"
-                            :fontSize="secondaryTabFontSize"
-                            :fontWeight="secondaryTabFontWeight"
-                            :sidePadding="secondaryTabSidePadding"
+                            :list="primaryCategoryTabList"
+                            :current="activePrimaryCategoryIndex"
+                            :variant="tabStyleType"
+                            :themeColor="tabThemeColor"
+                            :activeBgColor="tabActiveBgColor"
+                            :inactiveBgColor="tabInactiveBgColor"
+                            :activeTextColor="tabActiveTextColor"
+                            :inactiveTextColor="tabInactiveTextColor"
+                            :height="tabHeight"
+                            :radius="tabRadius"
+                            :fontSize="tabFontSize"
+                            :fontWeight="tabFontWeight"
+                            :sidePadding="tabSidePadding"
                             :showScrollCue="showTabScrollCue"
-                            @change="handleSecondaryCategoryTabChange"
+                            @change="handlePrimaryCategoryTabChange"
                         ></quotation-category-tabs>
+                    </view>
+                    <template v-if="secondaryCategoryTabs.length">
+                        <view class="category-tabs__secondary-panel">
+                            <quotation-category-tabs
+                                class="category-tabs__secondary-tabs"
+                                :list="secondaryCategoryTabList"
+                                :current="activeSecondaryCategoryIndex"
+                                :variant="secondaryTabStyleType"
+                                :themeColor="secondaryTabThemeColor"
+                                :activeBgColor="secondaryTabActiveBgColor"
+                                :inactiveBgColor="secondaryTabInactiveBgColor"
+                                :activeTextColor="secondaryTabActiveTextColor"
+                                :inactiveTextColor="secondaryTabInactiveTextColor"
+                                :height="secondaryTabHeight"
+                                :radius="secondaryTabRadius"
+                                :fontSize="secondaryTabFontSize"
+                                :fontWeight="secondaryTabFontWeight"
+                                :sidePadding="secondaryTabSidePadding"
+                                :showScrollCue="showTabScrollCue"
+                                @change="handleSecondaryCategoryTabChange"
+                            ></quotation-category-tabs>
+                        </view>
                     </template>
                 </view>
 
@@ -76,7 +74,7 @@
 
                 <view v-else-if="displayList.length === 0" class="state-box empty">
                     <text class="state-title">暂无报价</text>
-                    <text class="state-text">请先在报价爬虫插件中同步并开启展示</text>
+                    <text class="state-text">请先在报价插件中导入报价并开启展示</text>
                 </view>
 
                 <view v-else-if="displayStyle === 'graphic'" class="quotation-group-list">
@@ -148,6 +146,7 @@ import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'v
 import { onPageScroll } from '@dcloudio/uni-app'
 import useDiyStore from '@/app/stores/diy'
 import useSystemStore from '@/stores/system'
+import useQuotationCacheStore, { buildQuotationCacheKey } from '@/stores/quotation-cache'
 import { img, pxToRpx, redirect } from '@/utils/common'
 import { getQuoteSpiderCategoryTree, getQuoteSpiderFeatured, type QuoteSpiderCategory, type QuoteSpiderItem } from '@/addon/recycle/api/quotation'
 import QuotationCategoryTabs from './components/QuotationCategoryTabs.vue'
@@ -165,6 +164,7 @@ const props = defineProps({
 
 const diyStore = useDiyStore()
 const systemStore = useSystemStore()
+const quotationCacheStore = useQuotationCacheStore()
 const instance = getCurrentInstance()
 const loading = ref(false)
 const items = ref<QuoteSpiderItem[]>([])
@@ -717,11 +717,24 @@ async function loadCategories() {
         return
     }
 
+    const params = {
+        source_id: sourceId.value || ''
+    }
+    const cacheKey = buildQuotationCacheKey('spider-category-tree', params)
+    const cached = quotationCacheStore.get<QuoteSpiderCategory[]>(cacheKey)
+    if (cached) {
+        categories.value = cached
+        if (showCategoryTabs.value && activePrimaryCategoryId.value === 0 && primaryCategoryTabs.value.length) {
+            activePrimaryCategoryId.value = Number(primaryCategoryTabs.value[0].id || 0)
+        }
+        return
+    }
+
     try {
-        const res = await getQuoteSpiderCategoryTree({
-            source_id: sourceId.value || ''
-        }) as any
-        categories.value = res.code === 1 && Array.isArray(res.data) ? res.data : []
+        const res = await getQuoteSpiderCategoryTree(params) as any
+        const list = res.code === 1 && Array.isArray(res.data) ? res.data : []
+        categories.value = list
+        quotationCacheStore.set(cacheKey, list)
         if (showCategoryTabs.value && activePrimaryCategoryId.value === 0 && primaryCategoryTabs.value.length) {
             activePrimaryCategoryId.value = Number(primaryCategoryTabs.value[0].id || 0)
         }
@@ -761,23 +774,35 @@ function handleSecondaryCategoryTabChange(tab: any) {
     switchSecondaryCategory(categoryId)
 }
 
-async function loadItems() {
+async function loadItems(forceRefresh = false) {
     if (isDecorateMode.value) {
         items.value = []
         return
     }
 
-    loading.value = true
+    const params = {
+        source_id: sourceId.value || '',
+        category_id: showCategoryTabs.value && activeRequestCategoryId.value ? activeRequestCategoryId.value : '',
+        limit: limit.value,
+        only_hot: onlyHot.value ? 1 : ''
+    }
+    const cacheKey = buildQuotationCacheKey('spider-featured', params)
+    if (!forceRefresh) {
+        const cached = quotationCacheStore.get<QuoteSpiderItem[]>(cacheKey)
+        if (cached) {
+            items.value = cached
+            return
+        }
+    }
+
+    loading.value = items.value.length === 0
     try {
-        const res = await getQuoteSpiderFeatured({
-            source_id: sourceId.value || '',
-            category_id: showCategoryTabs.value && activeRequestCategoryId.value ? activeRequestCategoryId.value : '',
-            limit: limit.value,
-            only_hot: onlyHot.value ? 1 : ''
-        }) as any
-        items.value = res.code === 1 && Array.isArray(res.data) ? res.data : []
+        const res = await getQuoteSpiderFeatured(params) as any
+        const list = res.code === 1 && Array.isArray(res.data) ? res.data : []
+        items.value = list
+        quotationCacheStore.set(cacheKey, list)
     } catch (error) {
-        items.value = []
+        if (items.value.length === 0) items.value = []
     } finally {
         loading.value = false
     }
@@ -785,6 +810,18 @@ async function loadItems() {
 
 function openQuotation(item: QuoteSpiderItem) {
     if (diyStore.mode === 'decorate') return
+    if (isImageQuotation(item)) {
+        const imageUrl = resolveQuotationPreviewImage(item)
+        if (!imageUrl) {
+            uni.showToast({ title: '暂无报价图片', icon: 'none' })
+            return
+        }
+        uni.previewImage({
+            urls: [img(imageUrl)],
+            current: 0
+        })
+        return
+    }
     const titleText = encodeURIComponent(displayItemName(item) || '报价查询')
     const hotParams = [
         `show_hot_badge=${showHotBadgeConfig.value ? 1 : 0}`,
@@ -796,6 +833,14 @@ function openQuotation(item: QuoteSpiderItem) {
     redirect({
         url: `/addon/recycle/pages/price/show_price?source=spider&item_id=${item.id}&title=${titleText}&${hotParams.join('&')}`
     })
+}
+
+function isImageQuotation(item: QuoteSpiderItem): boolean {
+    return Number(item.is_image_quote || 0) === 1 && Boolean(resolveQuotationPreviewImage(item))
+}
+
+function resolveQuotationPreviewImage(item: QuoteSpiderItem): string {
+    return item.bimage || item.image || item.timage || ''
 }
 
 onMounted(() => {
@@ -948,7 +993,7 @@ function measureStickyTabs() {
 
 .category-tabs {
     width: 100%;
-    padding: 0 18rpx 16rpx;
+    padding: 0 18rpx 18rpx;
     box-sizing: border-box;
     background: #ffffff;
 }
@@ -957,36 +1002,52 @@ function measureStickyTabs() {
     box-shadow: 0 8rpx 22rpx rgba(15, 23, 42, 0.08);
 }
 
-.category-tabs__level-row {
+.category-tabs__primary {
+    padding: 2rpx 0 4rpx;
+}
+
+.category-tabs__secondary-panel {
+    position: relative;
+    margin-top: 12rpx;
+    padding: 14rpx 14rpx 12rpx;
+    border-radius: 18rpx;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    border: 1rpx solid #e2e8f0;
+    box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.9);
+}
+
+.category-tabs__relation {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
-    gap: 10rpx;
-    padding: 2rpx 2rpx 10rpx;
+    gap: 8rpx;
+    margin-bottom: 10rpx;
 }
 
-.category-tabs__level-row.secondary {
-    padding-top: 14rpx;
-}
-
-.category-tabs__label {
-    flex-shrink: 0;
-    padding: 4rpx 12rpx;
-    border-radius: 999rpx;
-    background: #eef2ff;
-    color: #4f46e5;
-    font-size: 20rpx;
-    line-height: 28rpx;
-    font-weight: 600;
-}
-
-.category-tabs__parent {
+.category-tabs__parent-name {
     min-width: 0;
-    color: #64748b;
-    font-size: 22rpx;
-    line-height: 30rpx;
+    max-width: 420rpx;
+    color: #0f172a;
+    font-size: 24rpx;
+    line-height: 34rpx;
+    font-weight: 800;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.category-tabs__arrow {
+    flex-shrink: 0;
+    color: #64748b;
+    font-size: 22rpx;
+    line-height: 32rpx;
+    font-weight: 600;
+}
+
+.category-tabs__secondary-tabs {
+    position: relative;
+    z-index: 1;
 }
 
 .dataset-list {

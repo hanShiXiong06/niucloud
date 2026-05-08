@@ -363,17 +363,42 @@
                             <el-form-item label="新报价项">
                                 <el-input v-model="excelImportForm.item_name" placeholder="不选覆盖项时必填" />
                             </el-form-item>
+                            <el-form-item label="报价提示">
+                                <el-input
+                                    v-model="excelImportForm.notice_text"
+                                    type="textarea"
+                                    :rows="2"
+                                    class="excel-notice-input"
+                                    placeholder="默认使用系统提示；Excel 中“报价提示”列有内容时会自动读取，换行会保存为 \\n"
+                                />
+                            </el-form-item>
                             <el-form-item>
                                 <el-button type="primary" :loading="excelImporting" @click="confirmExcelImport">导入并覆盖</el-button>
                             </el-form-item>
                         </el-form>
                         <div class="form-tip">导入并覆盖会清空所选报价项下原有行价格，再用当前 Excel 重新生成。适合每天上传新报价单覆盖旧报价单。</div>
                     </el-card>
-                    <el-table :data="excelPreview.rows" v-if="excelPreview.rows?.length">
-                        <el-table-column prop="row_number" label="行号" width="80" />
-                        <el-table-column label="数据">
+                    <el-table
+                        v-if="excelPreviewTable.rows.length"
+                        :data="excelPreviewTable.rows"
+                        border
+                        size="large"
+                        max-height="520"
+                        class="excel-matrix-table"
+                    >
+                        <el-table-column prop="row_number" label="行号" width="76" fixed />
+                        <el-table-column
+                            v-for="column in excelPreviewTable.columns"
+                            :key="column.key"
+                            :prop="column.key"
+                            :label="column.label"
+                            :min-width="column.minWidth"
+                            show-overflow-tooltip
+                        >
                             <template #default="{ row }">
-                                <pre class="json-preview">{{ formatJson(row.data) }}</pre>
+                                <span :class="column.isPrice ? 'excel-price-cell' : 'excel-plain-cell'">
+                                    {{ row[column.key] || '-' }}
+                                </span>
                             </template>
                         </el-table-column>
                     </el-table>
@@ -445,21 +470,32 @@
 
                         <el-table
                             v-loading="rowLoading"
-                            :data="rowTable.data"
+                            :data="rowMatrixRows"
                             border
                             size="large"
                             height="620"
                             row-key="id"
-                            @selection-change="rowSelection = $event"
+                            :span-method="rowMatrixSpanMethod"
+                            class="excel-matrix-table row-price-matrix"
+                            @selection-change="handleRowSelectionChange"
                         >
                             <el-table-column type="selection" width="44" />
+                            <el-table-column prop="group_name" label="分组/系列" width="136" show-overflow-tooltip>
+                                <template #default="{ row }">
+                                    <div class="matrix-group-cell">{{ row.group_name || '-' }}</div>
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="model_name" label="型号" min-width="220" show-overflow-tooltip>
                                 <template #default="{ row }">
                                     <div class="name-main">{{ row.model_name || '-' }}</div>
+                                    <div v-if="getDisplayBrand(row)" class="name-sub">{{ getDisplayBrand(row) }}</div>
                                 </template>
                             </el-table-column>
+                            <el-table-column prop="capacity_name" label="内存/规格" width="120" show-overflow-tooltip>
+                                <template #default="{ row }">{{ row.capacity_name || '-' }}</template>
+                            </el-table-column>
                             <el-table-column
-                                v-for="column in rowExcelColumns"
+                                v-for="column in rowMatrixPriceColumns"
                                 :key="column.key"
                                 :label="column.label"
                                 :min-width="column.minWidth"
@@ -468,34 +504,28 @@
                             >
                                 <template #default="{ row }">
                                     <span :class="column.isRemark ? 'excel-remark-cell' : 'excel-price-cell'">
-                                        {{ getRowExcelCell(row, column) }}
+                                        {{ getRowMatrixCell(row, column) }}
                                     </span>
                                 </template>
                             </el-table-column>
-                            <el-table-column prop="brand" label="品牌" width="110" show-overflow-tooltip>
-                                <template #default="{ row }">{{ row.brand || '-' }}</template>
-                            </el-table-column>
-                            <el-table-column prop="tab" label="分组" width="120" show-overflow-tooltip>
-                                <template #default="{ row }">{{ row.tab || '-' }}</template>
-                            </el-table-column>
                             <el-table-column label="排序" width="100">
                                 <template #default="{ row }">
-                                    <el-input-number v-model="row.sort" :min="0" :controls="false" class="sort-input" @change="saveRow(row, true)" />
+                                    <el-input-number v-model="row.source.sort" :min="0" :controls="false" class="sort-input" @change="saveRow(row.source, true)" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="跟随" width="86">
                                 <template #default="{ row }">
-                                    <el-switch v-model="row.follow_source" :active-value="1" :inactive-value="0" @change="saveRow(row, true)" />
+                                    <el-switch v-model="row.source.follow_source" :active-value="1" :inactive-value="0" @change="saveRow(row.source, true)" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="显示" width="86">
                                 <template #default="{ row }">
-                                    <el-switch v-model="row.is_show" :active-value="1" :inactive-value="0" @change="saveRow(row, true)" />
+                                    <el-switch v-model="row.source.is_show" :active-value="1" :inactive-value="0" @change="saveRow(row.source, true)" />
                                 </template>
                             </el-table-column>
                             <el-table-column label="操作" width="82" fixed="right">
                                 <template #default="{ row }">
-                                    <el-button link type="primary" @click.stop="openEditDialog('row', row)">编辑</el-button>
+                                    <el-button link type="primary" @click.stop="openEditDialog('row', row.source)">编辑</el-button>
                                 </template>
                             </el-table-column>
                         </el-table>
@@ -547,15 +577,40 @@
                                         <el-option v-for="item in itemTable.data" :key="item.id" :label="item.name" :value="item.id" />
                                     </el-select>
                                 </el-form-item>
+                                <el-form-item label="报价提示">
+                                    <el-input
+                                        v-model="excelImportForm.notice_text"
+                                        type="textarea"
+                                        :rows="2"
+                                        class="excel-notice-input"
+                                        placeholder="默认使用系统提示；Excel 中“报价提示”列有内容时会自动读取，换行会保存为 \\n"
+                                    />
+                                </el-form-item>
                                 <el-form-item>
                                     <el-button type="primary" :loading="excelImporting" :disabled="!excelTaskId" @click="confirmExcelImport">确认覆盖</el-button>
                                 </el-form-item>
                             </el-form>
-                            <el-table :data="excelPreview.rows" v-if="excelPreview.rows?.length" max-height="360">
-                                <el-table-column prop="row_number" label="行号" width="80" />
-                                <el-table-column label="预览数据">
+                            <el-table
+                                v-if="excelPreviewTable.rows.length"
+                                :data="excelPreviewTable.rows"
+                                border
+                                size="large"
+                                max-height="360"
+                                class="excel-matrix-table"
+                            >
+                                <el-table-column prop="row_number" label="行号" width="76" fixed />
+                                <el-table-column
+                                    v-for="column in excelPreviewTable.columns"
+                                    :key="column.key"
+                                    :prop="column.key"
+                                    :label="column.label"
+                                    :min-width="column.minWidth"
+                                    show-overflow-tooltip
+                                >
                                     <template #default="{ row }">
-                                        <pre class="json-preview">{{ formatJson(row.data) }}</pre>
+                                        <span :class="column.isPrice ? 'excel-price-cell' : 'excel-plain-cell'">
+                                            {{ row[column.key] || '-' }}
+                                        </span>
                                     </template>
                                 </el-table-column>
                             </el-table>
@@ -574,6 +629,16 @@
                                     <el-descriptions-item label="排序">{{ rowDrawer.item.sort ?? 0 }}</el-descriptions-item>
                                     <el-descriptions-item label="关键词">{{ rowDrawer.item.keywords || '-' }}</el-descriptions-item>
                                 </el-descriptions>
+                                <div class="mt-[14px]">
+                                    <div class="image-setting-title mb-[8px]">报价详情提示</div>
+                                    <el-input
+                                        v-model="rowDrawer.item.notice_text"
+                                        type="textarea"
+                                        :rows="4"
+                                        placeholder="温馨提示：报价仅供参考，最终价格以质检结果为准"
+                                    />
+                                    <div class="form-tip">移动端报价详情 notice-card 会展示这段文案；多行文案按换行展示。</div>
+                                </div>
                             </section>
                             <section class="row-edit-section">
                                 <div class="section-title">展示图片</div>
@@ -590,7 +655,7 @@
                                     </div>
                                 </div>
                                 <div class="mt-[12px]">
-                                    <el-button type="primary" @click="saveDrawerItem">保存展示图片</el-button>
+                                    <el-button type="primary" @click="saveDrawerItem">保存基础信息</el-button>
                                 </div>
                             </section>
                         </div>
@@ -773,6 +838,15 @@
                     <el-form-item label="关键词">
                         <el-input v-model="editDialog.form.keywords" placeholder="多个关键词可用逗号分隔" />
                         <div class="form-tip">用于搜索命中，不会改变第三方原始数据。</div>
+                    </el-form-item>
+                    <el-form-item label="报价提示">
+                        <el-input
+                            v-model="editDialog.form.notice_text"
+                            type="textarea"
+                            :rows="4"
+                            placeholder="温馨提示：报价仅供参考，最终价格以质检结果为准"
+                        />
+                        <div class="form-tip">展示在移动端报价详情顶部的提示卡片里。Excel 导入时也可以通过“报价提示”列写入，换行会按多行展示。</div>
                     </el-form-item>
                     <el-form-item label="显示">
                         <el-switch v-model="editDialog.form.is_show" :active-value="1" :inactive-value="0" />
@@ -1047,6 +1121,7 @@ const excelImportForm = reactive({
     category_id: '' as number | '',
     item_id: '' as number | '',
     item_name: '',
+    notice_text: '',
     brand: '',
     tab: ''
 })
@@ -1142,7 +1217,35 @@ const rowPriceTable = computed(() => {
     }))
 })
 
-const rowExcelColumns = computed(() => {
+const getCapacityName = (row: any) => {
+    const raw = row?.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {}
+    const candidates = [
+        raw['内存'],
+        raw['容量'],
+        raw['规格'],
+        raw['存储'],
+        row.capacity_name,
+        row.capacity,
+        raw.capacity_name,
+        raw.capacity,
+        raw.memory,
+        raw.storage,
+        raw.rom
+    ]
+    const groupName = String(row.group_name || row.tab || '').trim()
+    const value = candidates.find(item => isValidCapacityValue(item, groupName))
+    return value === undefined ? '' : String(value).trim()
+}
+
+const isValidCapacityValue = (value: any, groupName = '') => {
+    const text = String(value ?? '').trim()
+    if (!text) return false
+    if (groupName && text === groupName) return false
+    if (/分组|系列/.test(text)) return false
+    return true
+}
+
+const rowMatrixPriceColumns = computed(() => {
     const labels: string[] = []
     rowTable.data.forEach(row => {
         normalizePriceArray(row.columns).forEach((column: any, index: number) => {
@@ -1160,6 +1263,108 @@ const rowExcelColumns = computed(() => {
         align: isRemarkColumn(label) ? 'left' : 'right',
         minWidth: isRemarkColumn(label) ? 180 : Math.max(110, Math.min(180, label.length * 16 + 44))
     }))
+})
+
+const rowMatrixRows = computed(() => {
+    return rowTable.data.map((row, index) => ({
+        ...row,
+        id: row.id,
+        source: row,
+        rowIndex: index,
+        group_name: row.tab || row.parent_name || '未分组',
+        model_name: row.model_name || row.name || '-',
+        capacity_name: getCapacityName(row),
+        modelSpanKey: `${row.tab || ''}__${row.model_name || ''}`,
+        groupSpanKey: row.tab || '未分组'
+    }))
+})
+
+const getDisplayBrand = (row: any) => {
+    const brand = String(row.brand || '').trim()
+    if (!brand || brand === row.group_name || brand === row.tab || /分组|系列/.test(brand)) {
+        return ''
+    }
+    return brand
+}
+
+const buildSpanMap = (rows: any[], keyGetter: (row: any) => string) => {
+    const spans: Record<number, number> = {}
+    let start = 0
+    while (start < rows.length) {
+        const key = keyGetter(rows[start])
+        let end = start + 1
+        while (end < rows.length && keyGetter(rows[end]) === key) {
+            end++
+        }
+        spans[start] = end - start
+        for (let index = start + 1; index < end; index++) {
+            spans[index] = 0
+        }
+        start = end
+    }
+    return spans
+}
+
+const rowMatrixSpanMaps = computed(() => {
+    const rows = rowMatrixRows.value
+    return {
+        group: buildSpanMap(rows, row => row.groupSpanKey),
+        model: buildSpanMap(rows, row => row.modelSpanKey)
+    }
+})
+
+const rowMatrixSpanMethod = ({ rowIndex, columnIndex }: { rowIndex: number; columnIndex: number }) => {
+    if (columnIndex === 1) {
+        const rowspan = rowMatrixSpanMaps.value.group[rowIndex] ?? 1
+        return { rowspan, colspan: rowspan === 0 ? 0 : 1 }
+    }
+    if (columnIndex === 2) {
+        const rowspan = rowMatrixSpanMaps.value.model[rowIndex] ?? 1
+        return { rowspan, colspan: rowspan === 0 ? 0 : 1 }
+    }
+    return { rowspan: 1, colspan: 1 }
+}
+
+const handleRowSelectionChange = (rows: any[]) => {
+    rowSelection.value = rows.map(row => row.source || row)
+}
+
+const getRowMatrixCell = (row: any, column: any) => {
+    const source = row.source || row
+    const columns = normalizePriceArray(source.columns).map((item: any, index: number) => String(item || `价格${index + 1}`).trim())
+    const prices = normalizePriceArray(source.final_prices)
+    const matchedIndex = columns.findIndex((label: string) => label === column.label)
+    const value = matchedIndex > -1 ? prices[matchedIndex] : ''
+    if ((value === '' || value === null || value === undefined) && column.isRemark) {
+        return source.remark || '-'
+    }
+    return formatMoney(value)
+}
+
+const excelPreviewTable = computed(() => {
+    const headers = Array.isArray(excelPreview.value.headers) ? excelPreview.value.headers : []
+    const rows = Array.isArray(excelPreview.value.rows) ? excelPreview.value.rows : []
+    const columns = headers.map((label: string, index: number) => {
+        const key = `col_${index}`
+        const isPrice = isPriceColumn(label)
+        return {
+            key,
+            label,
+            isPrice,
+            minWidth: isPrice ? Math.max(110, Math.min(180, String(label).length * 16 + 44)) : Math.max(120, Math.min(220, String(label).length * 16 + 56))
+        }
+    })
+    return {
+        columns,
+        rows: rows.map((row: any) => {
+            const data = row.data || {}
+            const tableRow: Record<string, any> = { row_number: row.row_number }
+            headers.forEach((header: string, index: number) => {
+                tableRow[`col_${index}`] = data[header]
+            })
+            return tableRow
+        })
+    }
 })
 
 const batchAdjustRowsPreview = computed(() => rowSelection.value.slice(0, 6))
@@ -1418,6 +1623,7 @@ const prepareExcelImport = (row: any) => {
     excelImportForm.category_id = Number(row?.category_id || selectedCategoryId.value || '')
     excelImportForm.item_id = Number(row?.id || selectedItemId.value || '')
     excelImportForm.item_name = row?.name || selectedItemName.value || ''
+    excelImportForm.notice_text = row?.notice_text || ''
     excelImportForm.brand = row?.brand || ''
     excelImportForm.tab = row?.tab || ''
     if (row?.id) {
@@ -1608,6 +1814,7 @@ const saveItem = (row: any, notify = false) => editQuoteItem(row.id, {
     timage: row.timage,
     bimage: row.bimage,
     icon: row.icon,
+    notice_text: row.notice_text,
     sort: row.sort,
     is_show: row.is_show,
     is_hot: row.is_hot,
@@ -1686,6 +1893,7 @@ const openCreateDialog = (type: EditType) => {
             timage: '',
             bimage: '',
             icon: '',
+            notice_text: '',
             is_show: 1,
             is_hot: 0,
             follow_source: 0,
@@ -1849,6 +2057,7 @@ const handleExcelChange = async (file: UploadFile) => {
     excelImportForm.category_id = Number(excelImportForm.category_id || selectedCategoryId.value || drawerItem.category_id || '')
     excelImportForm.item_id = excelImportForm.item_id || selectedItemId.value || drawerItem.id || ''
     excelImportForm.item_name = excelImportForm.item_name || selectedItemName.value || drawerItem.name || file.name.replace(/\.(xls|xlsx)$/i, '')
+    excelImportForm.notice_text = excelImportForm.notice_text || previewRes.data?.notice_text || ''
     if (rowDrawer.visible) {
         rowDrawer.activeTab = 'import'
     } else {
@@ -1858,16 +2067,20 @@ const handleExcelChange = async (file: UploadFile) => {
 
 const downloadExcelTemplate = () => {
     const rows = [
-        ['型号', '品牌', '分组', '靓机', '小花', '内爆', '备注'],
-        ['iPhone 15 Pro Max 256G', '苹果', '国行', 5200, 5000, 4300, '示例：正常回收报价'],
-        ['iPhone 15 Pro 128G', '苹果', '国行', 4500, 4300, 3600, ''],
-        ['Mate 60 Pro 512G', '华为', '全网通', 4100, 3900, 3300, '']
+        ['报价提示', '温馨提示：报价仅供参考，最终价格以质检结果为准\n请确认设备型号、容量、成色与功能状态后再下单'],
+        ['分组', '型号', '品牌', '内存', '靓机', '小花', '内爆', '备注'],
+        ['17系列', 'iPhone 17', '苹果', '128GB', 5200, 5000, 4300, '正常回收报价'],
+        ['17系列', 'iPhone 17 Pro', '苹果', '256GB', 6500, 6200, 5400, ''],
+        ['17系列', 'iPhone 17 Pro Max', '苹果', '256GB', 7200, 6900, 6100, ''],
+        ['Mate系列', 'Mate 60 Pro', '华为', '12+256GB', 4100, 3900, 3300, '']
     ]
     const tips = [
         ['字段', '是否必填', '说明'],
+        ['报价提示', '选填', '固定写在第一行：第一列写“报价提示”，第二列写提示内容；单元格内换行会保存为 \\n。'],
+        ['分组/系列', '选填', '用于把 17、17 Pro、17 Pro Max 等型号归到同一个系列，后台表格会按它跨行展示。'],
         ['型号', '必填', '每一行会导入为一个行价格；没有型号的行会被跳过。'],
         ['品牌', '选填', '为空时使用导入表单里填写的品牌。'],
-        ['分组', '选填', '用于行级筛选，例如国行、外版、靓机、花机。'],
+        ['内存', '选填', '会写入行价格原始数据，用于后台 Excel 表格展示。'],
         ['价格列', '至少一列', '列名可以是靓机、小花、内爆、外爆、开机、不开机等；系统会识别为价格列。'],
         ['备注', '选填', '导入到行价格备注。'],
         ['覆盖报价项', '-', '会清空所选报价项原有行价格，再用 Excel 重新生成。Excel 里有的新型号会新增，Excel 里没有的旧型号会被删除。'],
@@ -1892,6 +2105,7 @@ const confirmExcelImport = async () => {
             category_id: excelImportForm.category_id,
             item_id: excelImportForm.item_id,
             item_name: excelImportForm.item_name,
+            notice_text: excelImportForm.notice_text,
             brand: excelImportForm.brand,
             tab: excelImportForm.tab,
             mapping: excelPreview.value.suggested_mapping || [],
@@ -1925,16 +2139,7 @@ const formatPrices = (columns: any[] = [], prices: any[] = []) => {
 
 const isRemarkColumn = (label: string) => /备注|说明|描述|note|remark/i.test(label)
 
-const getRowExcelCell = (row: any, column: any) => {
-    const columns = normalizePriceArray(row.columns).map((item: any, index: number) => String(item || `价格${index + 1}`).trim())
-    const prices = normalizePriceArray(row.final_prices)
-    const matchedIndex = columns.findIndex((label: string) => label === column.label)
-    const value = matchedIndex > -1 ? prices[matchedIndex] : ''
-    if ((value === '' || value === null || value === undefined) && column.isRemark) {
-        return row.remark || '-'
-    }
-    return formatMoney(value)
-}
+const isPriceColumn = (label: string) => /价|靓机|小花|内爆|外爆|开机|不开机|废板|屏好|屏坏|成色|回收|报价/u.test(String(label))
 
 const formatMoney = (value: any) => {
     if (value === '' || value === null || value === undefined) return '-'
@@ -1954,8 +2159,6 @@ const normalizeManualPrices = (value: any, minLength = 0) => {
 const parseColumnsText = (value: string) => {
     return value.split(/[,，\n]/).map(item => item.trim()).filter(Boolean)
 }
-
-const formatJson = (value: any) => JSON.stringify(value, null, 2)
 
 const parseJsonObject = (value: string) => {
     if (!value.trim()) return {}
@@ -2182,6 +2385,10 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
 }
 
+.excel-notice-input {
+    width: 360px;
+}
+
 .manage-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2357,10 +2564,41 @@ onBeforeUnmount(() => {
     font-weight: 600;
 }
 
+.excel-plain-cell {
+    display: block;
+    min-height: 24px;
+    color: #303133;
+}
+
 .excel-remark-cell {
     display: block;
     min-height: 24px;
     color: #606266;
+}
+
+.excel-matrix-table {
+    --el-table-border-color: #dcdfe6;
+}
+
+.excel-matrix-table :deep(.el-table__header th) {
+    background: #f7f8fa;
+    color: #303133;
+    font-weight: 600;
+}
+
+.excel-matrix-table :deep(.el-table__cell) {
+    padding: 8px 0;
+}
+
+.row-price-matrix :deep(.el-table__body td:nth-child(2)),
+.row-price-matrix :deep(.el-table__body td:nth-child(3)) {
+    background: #fbfcfe;
+}
+
+.matrix-group-cell {
+    color: #303133;
+    font-weight: 600;
+    line-height: 1.45;
 }
 
 .item-info-layout {

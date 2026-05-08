@@ -12,6 +12,8 @@ use core\exception\CommonException;
 
 class QuoteItemService extends BaseAdminService
 {
+    private const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准';
+
     private QuotePriceCalculator $calculator;
 
     public function __construct()
@@ -97,6 +99,7 @@ class QuoteItemService extends BaseAdminService
             'timage' => (string)($data['timage'] ?? ''),
             'bimage' => (string)($data['bimage'] ?? ''),
             'icon' => (string)($data['icon'] ?? ''),
+            'notice_text' => $this->normalizeNoticeText($data['notice_text'] ?? ''),
             'keywords' => (string)($data['keywords'] ?? ''),
             'source_is_show' => 1,
             'source_is_hot' => 0,
@@ -129,7 +132,9 @@ class QuoteItemService extends BaseAdminService
                 'keyword',
             ], $where)
             ->order('sort asc,id asc');
-        return $this->pageQuery($search);
+        return $this->pageQuery($search, function ($row) {
+            return $this->appendRowDisplayFields($row);
+        });
     }
 
     public function addRow(array $data): int
@@ -183,6 +188,9 @@ class QuoteItemService extends BaseAdminService
             if (array_key_exists($field, $data)) {
                 $save[$field] = (string)$data[$field];
             }
+        }
+        if (array_key_exists('notice_text', $data)) {
+            $save['notice_text'] = $this->normalizeNoticeText($data['notice_text']);
         }
         if (array_key_exists('is_image_quote', $data) && $data['is_image_quote'] !== '') {
             $save['is_image_quote'] = (int)$data['is_image_quote'];
@@ -238,6 +246,61 @@ class QuoteItemService extends BaseAdminService
     private function refreshApiCache(): void
     {
         (new QuoteApiCacheService())->refresh($this->site_id);
+    }
+
+    private function appendRowDisplayFields($row)
+    {
+        $rawData = is_array($row) ? ($row['raw_data'] ?? []) : ($row->raw_data ?? []);
+        $tab = is_array($row) ? (string)($row['tab'] ?? '') : (string)($row->tab ?? '');
+        $capacityName = $this->extractCapacityName($rawData, $tab);
+        if (is_array($row)) {
+            $row['capacity_name'] = $capacityName;
+            $row['capacity'] = $capacityName;
+            return $row;
+        }
+        $row->setAttr('capacity_name', $capacityName);
+        $row->setAttr('capacity', $capacityName);
+        return $row;
+    }
+
+    private function extractCapacityName($rawData, string $tab = ''): string
+    {
+        $raw = is_array($rawData) ? $rawData : [];
+        $candidates = [
+            $raw['内存'] ?? null,
+            $raw['容量'] ?? null,
+            $raw['规格'] ?? null,
+            $raw['存储'] ?? null,
+            $raw['capacity_name'] ?? null,
+            $raw['capacity'] ?? null,
+            $raw['memory'] ?? null,
+            $raw['storage'] ?? null,
+            $raw['rom'] ?? null,
+        ];
+        foreach ($candidates as $candidate) {
+            $value = trim((string)$candidate);
+            if ($this->isValidCapacityValue($value, $tab)) {
+                return $value;
+            }
+        }
+        return '';
+    }
+
+    private function isValidCapacityValue(string $value, string $tab = ''): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+        if ($tab !== '' && $value === trim($tab)) {
+            return false;
+        }
+        return !str_contains($value, '分组') && !str_contains($value, '系列');
+    }
+
+    private function normalizeNoticeText($value): string
+    {
+        $text = str_replace(["\r\n", "\r"], "\n", trim((string)$value));
+        return $text !== '' ? $text : self::DEFAULT_NOTICE_TEXT;
     }
 
     private function buildAdjustSave(array $data, array $intFields = []): array

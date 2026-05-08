@@ -14,6 +14,8 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class QuoteImportService extends BaseAdminService
 {
+    private const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准';
+
     public function __construct()
     {
         parent::__construct();
@@ -84,21 +86,27 @@ class QuoteImportService extends BaseAdminService
 
         $highestRow = $sheet->getHighestRow();
         $highestColumn = $sheet->getHighestColumn();
+        [$headerRow, $noticeText] = $this->resolveHeaderRowAndNotice($sheet, $headerRow, $highestRow);
         $headers = [];
+        $headerColumns = [];
         $highestColumnIndex = Coordinate::columnIndexFromString($highestColumn);
         for ($colIndex = 1; $colIndex <= $highestColumnIndex; $colIndex++) {
             $col = Coordinate::stringFromColumnIndex($colIndex);
             $value = trim((string)$sheet->getCell($col . $headerRow)->getFormattedValue());
             if ($value !== '') {
                 $headers[$col] = $value;
+                $headerColumns[] = [
+                    'col' => $col,
+                    'label' => $value,
+                ];
             }
         }
 
         $rows = [];
         for ($row = $headerRow + 1; $row <= min($highestRow, $headerRow + $previewCount); $row++) {
             $rowData = [];
-            foreach ($headers as $col => $header) {
-                $rowData[$header] = $sheet->getCell($col . $row)->getFormattedValue();
+            foreach ($headerColumns as $header) {
+                $rowData[$header['label']] = $sheet->getCell($header['col'] . $row)->getFormattedValue();
             }
             if (!empty(array_filter($rowData, fn($value) => $value !== null && $value !== ''))) {
                 $rows[] = ['row_number' => $row, 'data' => $rowData];
@@ -111,6 +119,7 @@ class QuoteImportService extends BaseAdminService
             'rows' => $rows,
             'total_rows' => max(0, $highestRow - $headerRow),
             'suggested_mapping' => $this->suggestMapping(array_values($headers)),
+            'notice_text' => $noticeText,
         ];
 
         if (!empty($data['task_id'])) {
@@ -157,6 +166,11 @@ class QuoteImportService extends BaseAdminService
         if (empty($parsed['rows'])) {
             throw new CommonException('没有可导入的报价行');
         }
+        $noticeText = $this->resolveNoticeText($data['notice_text'] ?? '', $parsed['notice_text'] ?? '');
+        $importBrand = $this->normalizeImportFallback((string)($data['brand'] ?? ''), ['分组', '系列']);
+        if ($importBrand === '') {
+            $importBrand = $this->firstParsedValue($parsed['rows'], 'brand');
+        }
 
         $itemId = (int)($data['item_id'] ?? 0);
         if ($itemId <= 0) {
@@ -169,11 +183,12 @@ class QuoteImportService extends BaseAdminService
                 'source_id' => $sourceId,
                 'category_id' => $categoryId,
                 'source_item_id' => 'manual_import_' . uniqid('', true),
-                'brand' => (string)($data['brand'] ?? ''),
+                'brand' => $importBrand,
                 'tab' => (string)($data['tab'] ?? ''),
                 'name' => $itemName,
                 'quote_type' => 'manual_excel',
                 'is_image_quote' => 0,
+                'notice_text' => $noticeText,
                 'is_show' => 1,
                 'is_hot' => 0,
                 'follow_source' => 0,
@@ -189,13 +204,17 @@ class QuoteImportService extends BaseAdminService
             if (empty($oldItem)) {
                 throw new CommonException('报价项不存在');
             }
+            $itemBrand = $importBrand !== ''
+                ? $importBrand
+                : $this->normalizeImportFallback((string)($oldItem['brand'] ?? ''), ['分组', '系列']);
             $itemModel->where('site_id', $this->site_id)->where('id', $itemId)->update([
                 'source_id' => $sourceId,
                 'category_id' => $categoryId > 0 ? $categoryId : (int)$oldItem['category_id'],
-                'brand' => (string)($data['brand'] ?? ''),
+                'brand' => $itemBrand,
                 'tab' => (string)($data['tab'] ?? ''),
                 'quote_type' => 'manual_excel',
                 'is_image_quote' => 0,
+                'notice_text' => $noticeText,
                 'follow_source' => 0,
                 'columns' => $parsed['price_columns'],
                 'last_sync_at' => time(),
@@ -214,7 +233,7 @@ class QuoteImportService extends BaseAdminService
                 'source_id' => $sourceId,
                 'item_id' => $itemId,
                 'source_row_id' => 'manual_import_' . md5($row['model_name'] . '#' . $index),
-                'brand' => $row['brand'] ?: (string)($data['brand'] ?? ''),
+                'brand' => $row['brand'] ?: $importBrand,
                 'tab' => $row['tab'] ?: (string)($data['tab'] ?? ''),
                 'model_name' => $row['model_name'],
                 'columns' => $parsed['price_columns'],
@@ -270,6 +289,16 @@ class QuoteImportService extends BaseAdminService
         return $sheets;
     }
 
+    private function resolveHeaderRowAndNotice($sheet, int $headerRow, int $highestRow): array
+    {
+        $noticeLabel = trim((string)$sheet->getCell('A' . $headerRow)->getFormattedValue());
+        if ($noticeLabel === '报价提示' && $headerRow < $highestRow) {
+            $noticeText = $this->normalizeNoticeText((string)$sheet->getCell('B' . $headerRow)->getFormattedValue());
+            return [$headerRow + 1, $noticeText];
+        }
+        return [$headerRow, ''];
+    }
+
     private function parseRows(string $filePath, string $sheetName, int $headerRow, array $mapping): array
     {
         if ($filePath === '' || !is_file(public_path() . $filePath)) {
@@ -284,25 +313,28 @@ class QuoteImportService extends BaseAdminService
         $headerRow = max(1, $headerRow);
         $highestRow = $sheet->getHighestRow();
         $highestColumn = $sheet->getHighestColumn();
+        [$headerRow, $firstRowNoticeText] = $this->resolveHeaderRowAndNotice($sheet, $headerRow, $highestRow);
         $headers = [];
+        $headerColumns = [];
         $highestColumnIndex = Coordinate::columnIndexFromString($highestColumn);
         for ($colIndex = 1; $colIndex <= $highestColumnIndex; $colIndex++) {
             $col = Coordinate::stringFromColumnIndex($colIndex);
             $value = trim((string)$sheet->getCell($col . $headerRow)->getFormattedValue());
             if ($value !== '') {
                 $headers[$col] = $value;
+                $headerColumns[] = [
+                    'col' => $col,
+                    'label' => $value,
+                    'field' => $this->resolveMappingField($mapping, count($headerColumns), $value),
+                ];
             }
         }
 
-        $fieldByHeader = [];
-        foreach ($headers as $index => $header) {
-            $mapKey = array_search($header, array_values($headers), true);
-            $fieldByHeader[$header] = $mapping[$mapKey] ?? '';
-        }
         $priceColumns = [];
-        foreach ($fieldByHeader as $header => $field) {
+        foreach ($headerColumns as $header) {
+            $field = $header['field'];
             if (is_string($field) && str_starts_with($field, 'price:')) {
-                $priceColumns[] = substr($field, 6) ?: $header;
+                $priceColumns[] = substr($field, 6) ?: $header['label'];
             }
         }
         if (empty($priceColumns)) {
@@ -312,16 +344,17 @@ class QuoteImportService extends BaseAdminService
         $rows = [];
         for ($rowNumber = $headerRow + 1; $rowNumber <= $highestRow; $rowNumber++) {
             $raw = [];
-            foreach ($headers as $col => $header) {
-                $raw[$header] = trim((string)$sheet->getCell($col . $rowNumber)->getFormattedValue());
+            foreach ($headerColumns as $header) {
+                $raw[$header['label']] = trim((string)$sheet->getCell($header['col'] . $rowNumber)->getFormattedValue());
             }
             if (empty(array_filter($raw, fn($value) => $value !== ''))) {
                 continue;
             }
 
-            $row = ['model_name' => '', 'brand' => '', 'tab' => '', 'remark' => '', 'prices' => [], 'raw' => $raw];
-            foreach ($raw as $header => $value) {
-                $field = $fieldByHeader[$header] ?? '';
+            $row = ['model_name' => '', 'brand' => '', 'tab' => '', 'remark' => '', 'notice_text' => '', 'prices' => [], 'raw' => $raw];
+            foreach ($headerColumns as $header) {
+                $value = trim((string)$sheet->getCell($header['col'] . $rowNumber)->getFormattedValue());
+                $field = $header['field'] ?? '';
                 if ($field === 'model_name') {
                     $row['model_name'] = $value;
                 } elseif ($field === 'brand') {
@@ -330,6 +363,11 @@ class QuoteImportService extends BaseAdminService
                     $row['tab'] = $value;
                 } elseif ($field === 'remark') {
                     $row['remark'] = $value;
+                } elseif ($field === 'notice_text') {
+                    $row['notice_text'] = $value;
+                } elseif ($field === 'capacity_name') {
+                    $row['raw']['capacity_name'] = $value;
+                    $row['raw']['capacity'] = $value;
                 } elseif (is_string($field) && str_starts_with($field, 'price:')) {
                     $row['prices'][] = $value;
                 }
@@ -340,28 +378,122 @@ class QuoteImportService extends BaseAdminService
             $rows[] = $row;
         }
 
-        return ['price_columns' => $priceColumns, 'rows' => $rows];
+        $noticeText = $firstRowNoticeText;
+        foreach ($rows as $row) {
+            if ($noticeText !== '') {
+                break;
+            }
+            $noticeText = $this->normalizeNoticeText($row['notice_text'] ?? '');
+            if ($noticeText !== '') {
+                break;
+            }
+        }
+
+        return ['price_columns' => $priceColumns, 'rows' => $rows, 'notice_text' => $noticeText];
+    }
+
+    private function resolveMappingField(array $mapping, int $index, string $header): string
+    {
+        $inferredField = $this->inferHeaderField($header);
+        if ($inferredField !== '') {
+            return $inferredField;
+        }
+        if ($this->isMetaOnlyHeader($header)) {
+            return '';
+        }
+
+        $field = $mapping[$index] ?? '';
+        if (is_string($field) && $field !== '') {
+            return $field;
+        }
+
+        return '';
     }
 
     private function suggestMapping(array $headers): array
     {
         $mapping = [];
         foreach ($headers as $index => $header) {
-            $name = trim((string)$header);
-            if (str_contains($name, '品牌')) {
-                $mapping[$index] = 'brand';
-            } elseif (str_contains($name, '分类')) {
-                $mapping[$index] = 'category';
-            } elseif (str_contains($name, '分组') || str_contains($name, '标签') || strtolower($name) === 'tab') {
-                $mapping[$index] = 'tab';
-            } elseif (str_contains($name, '型号') || str_contains($name, '名称') || str_contains($name, '机型')) {
-                $mapping[$index] = 'model_name';
-            } elseif (str_contains($name, '备注')) {
-                $mapping[$index] = 'remark';
-            } elseif (preg_match('/价|靓机|小花|内爆|外爆|开机|不开机|废板/u', $name)) {
-                $mapping[$index] = 'price:' . $name;
+            $field = $this->inferHeaderField((string)$header);
+            if ($field !== '') {
+                $mapping[$index] = $field;
             }
         }
         return $mapping;
+    }
+
+    private function inferHeaderField(string $header): string
+    {
+        $name = trim($header);
+        if ($name === '') {
+            return '';
+        }
+        if (str_contains($name, '品牌')) {
+            return 'brand';
+        }
+        if (str_contains($name, '分类')) {
+            return 'category';
+        }
+        if (str_contains($name, '分组') || str_contains($name, '系列') || str_contains($name, '标签') || strtolower($name) === 'tab') {
+            return 'tab';
+        }
+        if (str_contains($name, '型号') || str_contains($name, '名称') || str_contains($name, '机型')) {
+            return 'model_name';
+        }
+        if (preg_match('/报价提示|提示文案|详情提示|温馨提示|notice_text|notice|tips/i', $name)) {
+            return 'notice_text';
+        }
+        if ($this->isMetaOnlyHeader($name)) {
+            return 'capacity_name';
+        }
+        if (str_contains($name, '备注')) {
+            return 'remark';
+        }
+        if (preg_match('/价|靓机|小花|内爆|外爆|开机|不开机|废板/u', $name)) {
+            return 'price:' . $name;
+        }
+        return '';
+    }
+
+    private function isMetaOnlyHeader(string $header): bool
+    {
+        return preg_match('/内存|容量|规格|存储|memory|capacity|storage|rom/i', trim($header)) === 1;
+    }
+
+    private function normalizeImportFallback(string $value, array $blockedKeywords): string
+    {
+        $value = trim($value);
+        foreach ($blockedKeywords as $keyword) {
+            if ($keyword !== '' && str_contains($value, $keyword)) {
+                return '';
+            }
+        }
+        return $value;
+    }
+
+    private function firstParsedValue(array $rows, string $field): string
+    {
+        foreach ($rows as $row) {
+            $value = trim((string)($row[$field] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+        return '';
+    }
+
+    private function resolveNoticeText($formValue, $excelValue): string
+    {
+        $formText = $this->normalizeNoticeText($formValue);
+        if ($formText !== '') {
+            return $formText;
+        }
+        $excelText = $this->normalizeNoticeText($excelValue);
+        return $excelText !== '' ? $excelText : self::DEFAULT_NOTICE_TEXT;
+    }
+
+    private function normalizeNoticeText($value): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", trim((string)$value));
     }
 }

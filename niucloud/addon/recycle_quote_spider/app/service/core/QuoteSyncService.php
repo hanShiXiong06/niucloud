@@ -13,12 +13,16 @@ use app\service\core\upload\CoreFetchService;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
 use think\facade\Db;
+use think\facade\Log;
 
 class QuoteSyncService extends BaseCoreService
 {
+    private const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准';
+
     private QuoteSpiderClient $client;
     private QuotePriceCalculator $calculator;
     private array $imageCache = [];
+    private array $imageErrors = [];
 
     public function __construct()
     {
@@ -170,9 +174,9 @@ class QuoteSyncService extends BaseCoreService
             'sort' => (int)($data['sort_order'] ?? 0),
             'source_is_show' => (int)($data['is_show'] ?? 1),
             'source_is_hot' => (int)($data['is_hot'] ?? 0),
-            'icon' => $this->resolveSyncedImage($source, $data, $old, 'icon'),
-            'image' => $this->resolveSyncedImage($source, $data, $old, 'image'),
-            'pic' => $this->resolveSyncedImage($source, $data, $old, 'pic'),
+            'icon' => $this->resolveSyncedImage($source, $data, $old, 'icon', $stats),
+            'image' => $this->resolveSyncedImage($source, $data, $old, 'image', $stats),
+            'pic' => $this->resolveSyncedImage($source, $data, $old, 'pic', $stats),
             'raw_data' => $data,
             'source_hash' => $hash,
             'has_update' => !empty($old) && ($old['source_hash'] ?? '') !== $hash ? 1 : 0,
@@ -236,10 +240,11 @@ class QuoteSyncService extends BaseCoreService
             'parent_name' => (string)($data['parent_name'] ?? ''),
             'quote_type' => (string)($data['type'] ?? ''),
             'is_image_quote' => $isImageQuote ? 1 : 0,
-            'image' => $this->resolveSyncedImage($source, $data, $old, 'image'),
-            'timage' => $this->resolveSyncedImage($source, $data, $old, 'timage'),
-            'bimage' => $this->resolveSyncedImage($source, $data, $old, 'bimage'),
-            'icon' => $this->resolveSyncedImage($source, $data, $old, 'icon'),
+            'image' => $this->resolveSyncedImage($source, $data, $old, 'image', $stats),
+            'timage' => $this->resolveSyncedImage($source, $data, $old, 'timage', $stats),
+            'bimage' => $this->resolveSyncedImage($source, $data, $old, 'bimage', $stats),
+            'icon' => $this->resolveSyncedImage($source, $data, $old, 'icon', $stats),
+            'notice_text' => $this->resolveNoticeText($data, $old),
             'keywords' => (string)($data['keywords'] ?? ''),
             'index1' => (string)($data['index1'] ?? ''),
             'source_is_show' => (int)($data['is_show'] ?? 1),
@@ -410,7 +415,7 @@ class QuoteSyncService extends BaseCoreService
         $stats['rows']++;
     }
 
-    private function resolveSyncedImage(array $source, array $data, array $old, string $field): string
+    private function resolveSyncedImage(array $source, array $data, array $old, string $field, array &$stats): string
     {
         $sourceUrl = trim((string)($data[$field] ?? ''));
         $oldValue = trim((string)($old[$field] ?? ''));
@@ -433,17 +438,19 @@ class QuoteSyncService extends BaseCoreService
             return $oldValue;
         }
 
-        $localUrl = $this->fetchRemoteImage($source, $sourceUrl);
+        $localUrl = $this->fetchRemoteImage($source, $sourceUrl, $field, (string)($data['id'] ?? ''));
         if ($localUrl !== '') {
+            $stats['image_success']++;
             return $localUrl;
         }
 
         // Do not persist third-party image URLs. If the fetch/upload failed, leave the
         // field empty so the frontend never requests the crawler source directly.
+        $stats['image_failed']++;
         return '';
     }
 
-    private function fetchRemoteImage(array $source, string $url): string
+    private function fetchRemoteImage(array $source, string $url, string $field, string $sourceId): string
     {
         if (!$this->isRemoteUrl($url)) {
             return $url;
@@ -460,6 +467,7 @@ class QuoteSyncService extends BaseCoreService
             $this->imageCache[$url] = ($localUrl !== '' && $localUrl !== $url) ? $localUrl : '';
         } catch (\Throwable $e) {
             $this->imageCache[$url] = '';
+            $this->recordImageError($url, $field, $sourceId, $e->getMessage());
         }
 
         return $this->imageCache[$url];
@@ -482,7 +490,7 @@ class QuoteSyncService extends BaseCoreService
     {
         $ch = curl_init($url);
         if ($ch === false) {
-            return '';
+            throw new \RuntimeException('curl 初始化失败');
         }
 
         curl_setopt_array($ch, [
@@ -501,15 +509,41 @@ class QuoteSyncService extends BaseCoreService
             ],
         ]);
         $content = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $curlErrno = curl_errno($ch);
         $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
+        if ($curlErrno !== 0) {
+            throw new \RuntimeException('curl 下载失败：' . $curlError . '，错误码：' . $curlErrno);
+        }
+
         if (!is_string($content) || $content === '' || $httpCode < 200 || $httpCode >= 300) {
-            return '';
+            throw new \RuntimeException('图片下载 HTTP 状态异常：' . $httpCode);
         }
 
         $info = @getimagesizefromstring($content);
-        return is_array($info) ? $content : '';
+        if (!is_array($info)) {
+            throw new \RuntimeException('下载内容不是有效图片');
+        }
+
+        return $content;
+    }
+
+    private function recordImageError(string $url, string $field, string $sourceId, string $message): void
+    {
+        $key = md5($field . '|' . $url);
+        if (isset($this->imageErrors[$key])) {
+            return;
+        }
+
+        $this->imageErrors[$key] = true;
+        Log::warning('回收报价爬虫图片同步失败', [
+            'source_item_id' => $sourceId,
+            'field' => $field,
+            'url' => $url,
+            'error' => $message,
+        ]);
     }
 
     private function isRemoteUrl(string $url): bool
@@ -543,6 +577,23 @@ class QuoteSyncService extends BaseCoreService
         return is_string($last) && !$this->calculator->isNumericPrice($last) ? $last : '';
     }
 
+    private function resolveNoticeText(array $data, array $old): string
+    {
+        $oldNotice = str_replace(["\r\n", "\r"], "\n", trim((string)($old['notice_text'] ?? '')));
+        if ($oldNotice !== '') {
+            return $oldNotice;
+        }
+
+        foreach (['notice_text', 'notice', 'tips', 'remark_text'] as $field) {
+            $text = str_replace(["\r\n", "\r"], "\n", trim((string)($data[$field] ?? '')));
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return self::DEFAULT_NOTICE_TEXT;
+    }
+
     private function hash(array $data): string
     {
         return md5(json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
@@ -556,6 +607,8 @@ class QuoteSyncService extends BaseCoreService
             'rows' => 0,
             'detail_success' => 0,
             'detail_failed' => 0,
+            'image_success' => 0,
+            'image_failed' => 0,
         ];
     }
 

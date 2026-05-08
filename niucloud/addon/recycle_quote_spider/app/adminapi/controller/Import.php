@@ -35,6 +35,7 @@ class Import extends BaseAdminController
             ['category_id', 0],
             ['item_id', 0],
             ['item_name', ''],
+            ['notice_text', ''],
             ['brand', ''],
             ['tab', ''],
             ['sheet_name', ''],

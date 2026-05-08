@@ -451,7 +451,8 @@
 				{
 					"path": "pages/index",
 					"style": {
-						"navigationBarTitleText": "回收主页"
+						"navigationBarTitleText": "回收主页",
+                        "navigationStyle": "custom"
 					}
 				},{
 					"path": "pages/price",

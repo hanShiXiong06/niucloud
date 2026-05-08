@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quote_spider_item` (
   `timage` varchar(1000) NOT NULL DEFAULT '',
   `bimage` varchar(1000) NOT NULL DEFAULT '',
   `icon` varchar(1000) NOT NULL DEFAULT '',
+  `notice_text` text COMMENT '报价详情提示文案',
   `keywords` varchar(500) NOT NULL DEFAULT '',
   `index1` varchar(64) NOT NULL DEFAULT '',
   `source_is_show` tinyint(1) NOT NULL DEFAULT '1',

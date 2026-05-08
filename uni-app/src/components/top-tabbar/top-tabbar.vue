@@ -105,6 +105,9 @@ const topStatusBarData = computed(() => {
 });
 
 // 导航栏内部盒子的样式
+const NAVBAR_BOTTOM_GAP = 8;
+const DEFAULT_NAVBAR_CONTENT_HEIGHT = 44;
+
 const navbarInnerStyle = computed(() => {
     let style = '';
     if (isBackShow) {
@@ -120,11 +123,13 @@ const navbarInnerStyle = computed(() => {
     // #ifdef MP
     // 导航栏宽度，如果在小程序下，导航栏宽度为胶囊的左边到屏幕左边的距离
     style += 'height:' + systemStore.menuButtonInfo.height + 'px;';
-    style += 'padding-top:' + systemStore.menuButtonInfo.top + 'px;';
-    style += 'padding-bottom: 8px;';
+    style += 'top:' + systemStore.menuButtonInfo.top + 'px;';
+    style += 'padding-top: 0;';
+    style += 'padding-bottom: 0;';
     // #endif
     // #ifdef APP-PLUS
-     style += 'padding-top:' + systemStore.systemInfo.statusBarHeight + 'px;';
+    style += 'top:' + systemStore.systemInfo.statusBarHeight + 'px;';
+    style += 'padding-top: 0;';
     // #endif
     return style;
 })
@@ -234,20 +239,35 @@ const capsuleWidth = computed(() => {
 // 导航栏塌陷的高度
 const placeholderHeight = ref(0);
 const instance = getCurrentInstance();
+const getSafeNavbarHeight = () => {
+    // #ifdef MP
+    const menuButton = systemStore.menuButtonInfo || {};
+    const capsuleHeight = Number(menuButton.height || DEFAULT_NAVBAR_CONTENT_HEIGHT);
+    const capsuleTop = Number(menuButton.top || systemStore.systemInfo?.statusBarHeight || 0);
+    return capsuleTop + capsuleHeight + NAVBAR_BOTTOM_GAP;
+    // #endif
+
+    // #ifdef APP-PLUS
+    return Number(systemStore.systemInfo?.statusBarHeight || 0) + DEFAULT_NAVBAR_CONTENT_HEIGHT;
+    // #endif
+
+    return DEFAULT_NAVBAR_CONTENT_HEIGHT;
+}
+const setPlaceholderHeight = (height: number) => {
+    placeholderHeight.value = Math.max(getSafeNavbarHeight(), Number(height || 0));
+    systemStore.setTopTabbar({ height: placeholderHeight.value })
+    diyStore.$patch((state) => {
+        state.topTabarHeight = placeholderHeight.value
+    })
+}
 // #ifdef MP
-let statusBarHeight = systemStore.menuButtonInfo.height + systemStore.menuButtonInfo.top + 8;
-placeholderHeight.value = statusBarHeight || 0;
-systemStore.setTopTabbar({ height: placeholderHeight.value })
+setPlaceholderHeight(getSafeNavbarHeight());
 // #endif
 const navbarPlaceholderHeight = () => {
     nextTick(() => {
         const query = uni.createSelectorQuery().in(instance);
         query.select('.ns-navbar-wrap .u-navbar .content-wrap').boundingClientRect(data => {
-            placeholderHeight.value = data ? data.height : 0;
-            systemStore.setTopTabbar({ height: placeholderHeight.value })
-            diyStore.$patch((state) => {
-                state.topTabarHeight = placeholderHeight.value
-            })
+            setPlaceholderHeight(data ? data.height : 0);
         }).exec();
     })
 }
@@ -330,6 +350,7 @@ defineExpose({
     height: 60rpx;
     text-align: center;
     flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 .title-wrap {

@@ -75,6 +75,7 @@ export interface QuoteSpiderItem {
   timage: string;
   bimage: string;
   icon: string;
+  notice_text?: string;
   is_hot: number;
   model_count: number;
   last_sync_at_text: string;
