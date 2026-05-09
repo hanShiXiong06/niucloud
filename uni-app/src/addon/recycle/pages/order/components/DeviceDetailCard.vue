@@ -96,6 +96,27 @@
 
     <!-- 操作按钮 -->
     <view v-if="showActions" class="flex gap-2 px-3 py-2 border-t border-gray-50">
+      <!-- #ifdef MP-WEIXIN -->
+      <button
+        v-if="useWechatContact"
+        class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
+        style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
+        open-type="contact"
+      >
+        <up-icon name="chat-fill" size="13" color="#fff" class="mr-1"></up-icon>
+        议价
+      </button>
+      <button
+        v-else
+        class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
+        style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
+        @tap.stop="$emit('negotiate')"
+      >
+        <up-icon name="chat-fill" size="13" color="#fff" class="mr-1"></up-icon>
+        议价
+      </button>
+      <!-- #endif -->
+      <!-- #ifndef MP-WEIXIN -->
       <button
         class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
         style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
@@ -104,6 +125,7 @@
         <up-icon name="chat-fill" size="13" color="#fff" class="mr-1"></up-icon>
         议价
       </button>
+      <!-- #endif -->
       <button
         v-if="allowRejectSale"
         class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
@@ -136,6 +158,7 @@ interface Props {
   index: number
   isSelected: boolean
   allowRejectSale?: boolean
+  useWechatContact?: boolean
 }
 
 const props = defineProps<Props>()

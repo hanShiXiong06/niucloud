@@ -25,7 +25,10 @@ export function useOrderDetail() {
     devices: []
   })
   const submitConfig = ref<any>({
-    allow_user_reject_sale: 1
+    allow_user_reject_sale: 1,
+    price_detail_theme: {
+      colors: {}
+    }
   })
 
   // 是否为空状态（订单不存在）

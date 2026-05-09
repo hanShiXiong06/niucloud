@@ -53,15 +53,14 @@ const handleToOrderList = () => {
 
 <style scoped lang="scss">
 .nav-header {
-  background: linear-gradient(120deg, #4f46e5, #3b82f6, #0ea5e9);
+  background: linear-gradient(100deg, var(--recycle-button-bg) 0%, var(--recycle-brand-deep) 58%, var(--recycle-brand) 100%);
   border-radius: 12px;
   padding: 16px;
-  margin-bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   color: #fff;
-  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.15), 0 2px 4px -2px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 10rpx 24rpx rgba(31, 41, 55, 0.12);
   position: relative;
   overflow: hidden;
 
@@ -93,7 +92,7 @@ const handleToOrderList = () => {
 
   &.active {
     background: #fff;
-    color: #4f46e5;
+    color: var(--recycle-brand-deep);
     font-weight: 500;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     transform: translateY(-1px);

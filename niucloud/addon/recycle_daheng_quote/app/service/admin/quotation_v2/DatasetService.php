@@ -29,9 +29,15 @@ class DatasetService extends BaseAdminService
         $this->model = new QuotationDataset();
     }
 
+    public function setSiteId(int $siteId): self
+    {
+        $this->site_id = $siteId;
+        return $this;
+    }
+
     public function getPage(array $where = []): array
     {
-        $field = 'id,site_id,quotation_id,price_name,dataset_name,channel_key,nav_image,sort,status,follow_crawler,request_params,parse_rule,last_sync_at,last_sync_status,last_sync_message,last_sync_summary,create_at,update_at';
+        $field = 'id,site_id,quotation_id,price_name,dataset_name,channel_key,nav_image,sort,status,follow_crawler,sync_enabled,sync_interval,request_params,parse_rule,last_sync_at,last_sync_status,last_sync_message,last_sync_summary,create_at,update_at';
         $query = $this->model->where([['site_id', '=', $this->site_id]])
             ->withSearch(['quotation_id', 'dataset_name', 'status'], $where)
             ->field($field)
@@ -188,6 +194,8 @@ class DatasetService extends BaseAdminService
             'sort' => (int)($data['sort'] ?? $old['sort'] ?? 0),
             'status' => (int)($data['status'] ?? $old['status'] ?? QuotationV2Dict::STATUS_ENABLED),
             'follow_crawler' => (int)($data['follow_crawler'] ?? $old['follow_crawler'] ?? QuotationV2Dict::FOLLOW_CRAWLER),
+            'sync_enabled' => (int)($data['sync_enabled'] ?? $old['sync_enabled'] ?? 0),
+            'sync_interval' => max(3600, (int)($data['sync_interval'] ?? $old['sync_interval'] ?? 86400)),
             'request_params' => is_array($requestParams) ? $requestParams : [],
             'parse_rule' => is_array($parseRule) ? $parseRule : [],
             'remark' => (string)($data['remark'] ?? $old['remark'] ?? ''),

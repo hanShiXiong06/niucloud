@@ -5,6 +5,7 @@ namespace addon\recycle\app\service\core\order;
 
 use addon\recycle\app\dict\config\RecycleConfigKeyDict;
 use app\service\core\sys\CoreConfigService;
+use core\exception\CommonException;
 
 /**
  * 回收下单配置
@@ -26,7 +27,7 @@ class OrderSubmitConfigService
 
     public function setConfig(int $siteId, array $data): bool
     {
-        return (bool)$this->configService->setConfig($siteId, RecycleConfigKeyDict::ORDER_SUBMIT, $this->sanitizeConfig($data));
+        return (bool)$this->configService->setConfig($siteId, RecycleConfigKeyDict::ORDER_SUBMIT, $this->sanitizeConfig($data, true));
     }
 
     public function defaultConfig(): array
@@ -53,18 +54,34 @@ class OrderSubmitConfigService
                 'display_name' => '京东快递',
                 'free_shipping_min_count' => 1,
             ],
+            'follow_official_account' => [
+                'enabled' => 0,
+                'wechat_name' => '',
+                'qr_code' => '',
+                'title' => '关注公众号',
+                'content' => '关注公众号，及时接收订单状态通知',
+            ],
+            'customer_service' => [
+                'enabled' => 0,
+                'type' => 'wechat',
+                'qrcode' => '',
+                'title' => '联系客服',
+                'content' => '如需议价或咨询订单进度，请联系客服处理',
+            ],
             'allow_user_reject_sale' => 1,
             'price_detail_theme' => $this->defaultPriceDetailTheme(),
         ];
     }
 
-    public function sanitizeConfig(array $data): array
+    public function sanitizeConfig(array $data, bool $strict = false): array
     {
         $default = $this->defaultConfig();
         $deliveryModes = is_array($data['delivery_modes'] ?? null) ? $data['delivery_modes'] : [];
         $notice = is_array($data['notice'] ?? null) ? $data['notice'] : [];
         $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
         $platformDelivery = is_array($data['platform_delivery'] ?? null) ? $data['platform_delivery'] : [];
+        $followOfficialAccount = is_array($data['follow_official_account'] ?? null) ? $data['follow_official_account'] : [];
+        $customerService = is_array($data['customer_service'] ?? null) ? $data['customer_service'] : [];
         $priceDetailTheme = is_array($data['price_detail_theme'] ?? null) ? $data['price_detail_theme'] : [];
         $defaultCount = max(1, min(99, (int)($data['default_count'] ?? $default['default_count'])));
         $paymentMinCount = max(1, min(5, (int)($profile['payment_min_count'] ?? $default['profile']['payment_min_count'])));
@@ -93,6 +110,20 @@ class OrderSubmitConfigService
                 'display_name' => $platformDeliveryDisplayName ?: $default['platform_delivery']['display_name'],
                 'free_shipping_min_count' => $freeShippingMinCount,
             ],
+            'follow_official_account' => [
+                'enabled' => !empty($followOfficialAccount['enabled']) ? 1 : 0,
+                'wechat_name' => mb_substr(trim((string)($followOfficialAccount['wechat_name'] ?? '')), 0, 30),
+                'qr_code' => trim((string)($followOfficialAccount['qr_code'] ?? '')),
+                'title' => mb_substr(trim((string)($followOfficialAccount['title'] ?? $default['follow_official_account']['title'])), 0, 30),
+                'content' => mb_substr(trim((string)($followOfficialAccount['content'] ?? $default['follow_official_account']['content'])), 0, 120),
+            ],
+            'customer_service' => [
+                'enabled' => !empty($customerService['enabled']) ? 1 : 0,
+                'type' => in_array(($customerService['type'] ?? 'wechat'), ['wechat', 'qrcode'], true) ? $customerService['type'] : 'wechat',
+                'qrcode' => trim((string)($customerService['qrcode'] ?? '')),
+                'title' => mb_substr(trim((string)($customerService['title'] ?? $default['customer_service']['title'])), 0, 30),
+                'content' => mb_substr(trim((string)($customerService['content'] ?? $default['customer_service']['content'])), 0, 120),
+            ],
             'allow_user_reject_sale' => array_key_exists('allow_user_reject_sale', $data)
                 ? (!empty($data['allow_user_reject_sale']) ? 1 : 0)
                 : $default['allow_user_reject_sale'],
@@ -105,6 +136,32 @@ class OrderSubmitConfigService
 
         if ($config['notice']['content'] === '') {
             $config['notice']['enabled'] = 0;
+        }
+
+        if ($config['follow_official_account']['title'] === '') {
+            $config['follow_official_account']['title'] = $default['follow_official_account']['title'];
+        }
+        if ($config['follow_official_account']['content'] === '') {
+            $config['follow_official_account']['content'] = $default['follow_official_account']['content'];
+        }
+        if ($config['follow_official_account']['enabled'] && $config['follow_official_account']['qr_code'] === '') {
+            if ($strict) {
+                throw new CommonException('开启公众号关注提醒前，请先上传公众号二维码图片');
+            }
+            $config['follow_official_account']['enabled'] = 0;
+        }
+
+        if ($config['customer_service']['title'] === '') {
+            $config['customer_service']['title'] = $default['customer_service']['title'];
+        }
+        if ($config['customer_service']['content'] === '') {
+            $config['customer_service']['content'] = $default['customer_service']['content'];
+        }
+        if ($config['customer_service']['enabled'] && $config['customer_service']['type'] === 'qrcode' && $config['customer_service']['qrcode'] === '') {
+            if ($strict) {
+                throw new CommonException('选择客服二维码模式前，请先上传客服二维码图片');
+            }
+            $config['customer_service']['enabled'] = 0;
         }
 
         if (empty($config['delivery_modes']['mail']) && empty($config['delivery_modes']['self'])) {

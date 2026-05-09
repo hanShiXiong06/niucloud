@@ -9,6 +9,8 @@ export function useWechatFollow() {
   const showFollowPopup = ref(false)
   const wechatName = ref('')
   const qrCode = ref('')
+  const title = ref('关注公众号')
+  const content = ref('关注公众号，及时接收订单状态通知')
 
   // 本地缓存 key 和过期天数
   const CACHE_KEY = 'recycle_follow_wechat_dismiss'
@@ -48,6 +50,8 @@ export function useWechatFollow() {
 
         wechatName.value = res.data.wechat_name || ''
         qrCode.value = res.data.qr_code || ''
+        title.value = res.data.title || '关注公众号'
+        content.value = res.data.content || '关注公众号，及时接收订单状态通知'
         showFollowPopup.value = true
         console.log('[WechatFollow] 显示关注弹窗')
         return true
@@ -73,6 +77,8 @@ export function useWechatFollow() {
     showFollowPopup,
     wechatName,
     qrCode,
+    title,
+    content,
     checkAndShowFollow,
     dismissFollow
   }

@@ -2,7 +2,7 @@
   <view class="bg-white rounded-lg shadow-sm mx-3 mb-3 overflow-hidden">
     <!-- 区块标题 -->
     <view class="flex items-center gap-1.5 px-4 pt-3 pb-2">
-      <view class="w-1 h-4 rounded" :style="{ background: BRAND.primary }"></view>
+      <view class="w-1 h-4 rounded" style="background: var(--recycle-brand);"></view>
       <text class="text-base font-bold text-gray-800">订单信息</text>
     </view>
 
@@ -39,7 +39,7 @@
       <!-- 总价值 -->
       <view class="flex items-center justify-between pt-1 border-t border-gray-50">
         <text class="text-sm text-gray-400">订单总价</text>
-        <text class="text-lg font-bold" style="color: #ff6b00;">¥{{ totalPrice }}</text>
+        <text class="text-lg font-bold" style="color: var(--recycle-price);">¥{{ totalPrice }}</text>
       </view>
     </view>
 
@@ -54,7 +54,6 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { BRAND } from '../../../utils/theme'
 import { copyOrderNo } from '../../../utils/clipboard'
 import ExpressTrackingModal from './ExpressTrackingModal.vue'
 

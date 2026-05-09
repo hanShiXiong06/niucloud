@@ -19,6 +19,12 @@ use think\facade\Db;
  */
 class ImportService extends BaseAdminService
 {
+    public function setSiteId(int $siteId): self
+    {
+        $this->site_id = $siteId;
+        return $this;
+    }
+
     public function import(array $dataset, array $parsed): array
     {
         $datasetId = (int)$dataset['id'];

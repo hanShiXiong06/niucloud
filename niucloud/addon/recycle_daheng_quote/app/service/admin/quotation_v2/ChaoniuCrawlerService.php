@@ -20,6 +20,12 @@ class ChaoniuCrawlerService extends BaseAdminService
         $this->configService = new QuotationCrawlerConfigService();
     }
 
+    public function setSiteId(int $siteId): self
+    {
+        $this->site_id = $siteId;
+        return $this;
+    }
+
     public function fetch(array $dataset): array
     {
         $providerConfig = $this->configService->getProviderConfig($this->site_id, 'chaoniu', false);

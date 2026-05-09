@@ -73,6 +73,37 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_stats_yearly` (
 -- 为回收订单表添加签收时间字段
 ALTER TABLE `{{prefix}}recycle_order` ADD COLUMN `sign_at` int NOT NULL DEFAULT '0' COMMENT '签收时间' AFTER `update_at`;
 
+-- 为回收订单表添加提交设备数量字段
+ALTER TABLE `{{prefix}}recycle_order` ADD COLUMN `count` int NOT NULL DEFAULT '1' COMMENT '提交设备数量' AFTER `device_count`;
+
+-- 用已有设备数量回填提交设备数量
+UPDATE `{{prefix}}recycle_order` SET `count` = IF(`device_count` > 0, `device_count`, 1) WHERE `count` <= 0;
+
+-- 为回收订单表补充后台订单流程字段
+ALTER TABLE `{{prefix}}recycle_order`
+ADD COLUMN `pay_status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '打款状态：0-未打款，1-已打款' AFTER `pay_account`,
+ADD COLUMN `pay_name` varchar(50) NOT NULL DEFAULT '' COMMENT '收款人姓名' AFTER `pay_status`,
+ADD COLUMN `pay_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '打款备注' AFTER `pay_name`,
+ADD COLUMN `pay_url` varchar(500) NOT NULL DEFAULT '' COMMENT '打款凭证' AFTER `pay_remark`,
+ADD COLUMN `payment_images` text COMMENT '打款凭证图片' AFTER `pay_url`,
+ADD COLUMN `delivery_platform` varchar(50) NOT NULL DEFAULT '' COMMENT '快递平台' AFTER `express_no`,
+ADD COLUMN `delivery_status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '快递状态：0-未下单，1-已下单，2-运输中，3-已签收，4-已取消' AFTER `delivery_platform`,
+ADD COLUMN `delivery_fee` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '快递费用' AFTER `delivery_status`,
+ADD COLUMN `delivery_order_id` varchar(100) NOT NULL DEFAULT '' COMMENT '第三方快递订单号' AFTER `delivery_fee`,
+ADD COLUMN `pickup_time` varchar(50) NOT NULL DEFAULT '' COMMENT '预约揽收时间' AFTER `delivery_order_id`,
+ADD COLUMN `delivery_data` text COMMENT '快递扩展数据' AFTER `pickup_time`,
+ADD COLUMN `confirm_time` int NOT NULL DEFAULT 0 COMMENT '确认价格时间' AFTER `complete_at`,
+ADD COLUMN `receipt_confirm_time` int NOT NULL DEFAULT 0 COMMENT '用户确认收货时间' AFTER `confirm_time`,
+ADD COLUMN `cancel_time` int NOT NULL DEFAULT 0 COMMENT '取消时间' AFTER `receipt_confirm_time`,
+ADD COLUMN `cancel_reason` varchar(500) NOT NULL DEFAULT '' COMMENT '取消原因' AFTER `cancel_time`,
+ADD COLUMN `close_time` int NOT NULL DEFAULT 0 COMMENT '关闭时间' AFTER `cancel_reason`,
+ADD COLUMN `close_reason` varchar(500) NOT NULL DEFAULT '' COMMENT '关闭原因' AFTER `close_time`,
+ADD COLUMN `negotiate_time` int NOT NULL DEFAULT 0 COMMENT '议价时间' AFTER `close_reason`,
+ADD COLUMN `expected_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '用户期望价格' AFTER `negotiate_time`,
+ADD COLUMN `negotiate_reason` varchar(500) NOT NULL DEFAULT '' COMMENT '议价原因' AFTER `expected_price`,
+ADD COLUMN `is_negotiating` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否议价中' AFTER `negotiate_reason`,
+ADD COLUMN `is_force_confirm` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否强制确认' AFTER `is_negotiating`;
+
 -- 为设备表添加分类ID字段
 ALTER TABLE `{{prefix}}recycle_device` ADD COLUMN `category_id` int NOT NULL DEFAULT '1' COMMENT '设备分类ID' AFTER `order_id`;
 ALTER TABLE `{{prefix}}recycle_device` ADD INDEX `idx_category_id` (`category_id`);

@@ -76,8 +76,8 @@ watch(
   border: 1px solid;
 
   &.primary {
-    background: linear-gradient(to right, #8C7575, #5F758A);
-    color: #fff;
+    background: var(--recycle-button-bg);
+    color: var(--recycle-button-text);
     border-color: transparent;
 
     &:active {
@@ -86,12 +86,12 @@ watch(
   }
 
   &.secondary {
-    background: #fff;
-    color: #64748b;
-    border-color: #e2e8f0;
+    background: var(--recycle-bg-card);
+    color: var(--recycle-text-sub);
+    border-color: var(--recycle-line);
 
     &:active {
-      background: #f8fafc;
+      background: var(--recycle-bg-soft);
     }
   }
 
@@ -106,9 +106,9 @@ watch(
   }
 
   &.return-info {
-    background: #fff;
-    color: #f59e0b;
-    border-color: #fde68a;
+    background: var(--recycle-notice-bg);
+    color: var(--recycle-notice-text);
+    border-color: rgba(245, 158, 11, 0.24);
 
     &:active {
       background: #fffbeb;

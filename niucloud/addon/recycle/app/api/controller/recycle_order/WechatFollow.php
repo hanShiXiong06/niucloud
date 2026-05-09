@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace addon\recycle\app\api\controller\recycle_order;
 
 use core\base\BaseApiController;
+use addon\recycle\app\service\core\order\OrderSubmitConfigService;
 use app\service\core\wechat\CoreWechatApiService;
-use app\service\core\wechat\CoreWechatConfigService;
 use app\model\member\Member;
 use app\model\wechat\WechatFans;
 use think\App;
@@ -48,6 +48,20 @@ class WechatFollow extends BaseApiController
                 'is_follow' => 0,
                 'wechat_name' => '',
                 'qr_code' => '',
+                'title' => '',
+                'content' => '',
+            ]);
+        }
+
+        $submitConfig = (new OrderSubmitConfigService())->getConfig((int)$this->site_id);
+        $followConfig = $submitConfig['follow_official_account'] ?? [];
+        if (empty($followConfig['enabled'])) {
+            return success([
+                'is_follow' => 0,
+                'wechat_name' => '',
+                'qr_code' => '',
+                'title' => '',
+                'content' => '',
             ]);
         }
 
@@ -79,14 +93,12 @@ class WechatFollow extends BaseApiController
             }
         }
 
-        // 4. 获取公众号配置（名称 + 二维码）
-        $wechatConfigService = new CoreWechatConfigService();
-        $wechat_config = $wechatConfigService->getWechatConfig($this->site_id);
-
         return success([
             'is_follow' => $is_follow,
-            'wechat_name' => $wechat_config['wechat_name'] ?? '',
-            'qr_code' => $wechat_config['qr_code'] ?? '',
+            'wechat_name' => $followConfig['wechat_name'] ?? '',
+            'qr_code' => $followConfig['qr_code'] ?? '',
+            'title' => $followConfig['title'] ?? '关注公众号',
+            'content' => $followConfig['content'] ?? '关注公众号，及时接收订单状态通知',
         ]);
     }
 }

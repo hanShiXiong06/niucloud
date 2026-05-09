@@ -9,7 +9,7 @@
                         <text class="subtitle" :style="{ color: subtitleColor }">{{ subtitle }}</text>
                     </view>
                     <view class="refresh-btn" v-if="showRefresh" @click.stop="loadItems(true)">
-                        <up-icon name="reload" size="18" color="#4b5563"></up-icon>
+                        <up-icon name="reload" size="18" color="#6b7280"></up-icon>
                     </view>
                 </view>
 
@@ -146,7 +146,7 @@ import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'v
 import { onPageScroll } from '@dcloudio/uni-app'
 import useDiyStore from '@/app/stores/diy'
 import useSystemStore from '@/stores/system'
-import useQuotationCacheStore, { buildQuotationCacheKey } from '@/stores/quotation-cache'
+import useQuotationCacheStore, { buildQuotationCacheKey } from '@/addon/recycle/stores/quotation-cache'
 import { img, pxToRpx, redirect } from '@/utils/common'
 import { getQuoteSpiderCategoryTree, getQuoteSpiderFeatured, type QuoteSpiderCategory, type QuoteSpiderItem } from '@/addon/recycle/api/quotation'
 import QuotationCategoryTabs from './components/QuotationCategoryTabs.vue'
@@ -211,11 +211,11 @@ const flatGroupMode = computed(() => diyComponent.value.flatGroupMode || 'level2
 const showGroupCount = computed(() => diyComponent.value.showGroupCount !== false)
 const showRefresh = computed(() => diyComponent.value.showRefresh !== false)
 const displayStyle = computed(() => diyComponent.value.displayStyle || 'list')
-const titleColor = computed(() => diyComponent.value.titleColor || '#111827')
-const subtitleColor = computed(() => diyComponent.value.subtitleColor || '#6B7280')
-const buttonColor = computed(() => diyComponent.value.buttonColor || '#2563EB')
-const groupTitleColor = computed(() => diyComponent.value.groupTitleColor || '#111827')
-const groupCountColor = computed(() => diyComponent.value.groupCountColor || '#94A3B8')
+const titleColor = computed(() => diyComponent.value.titleColor || '#1f2937')
+const subtitleColor = computed(() => diyComponent.value.subtitleColor || '#6b7280')
+const buttonColor = computed(() => diyComponent.value.buttonColor || '#3b82f6')
+const groupTitleColor = computed(() => diyComponent.value.groupTitleColor || '#1f2937')
+const groupCountColor = computed(() => diyComponent.value.groupCountColor || '#6b7280')
 const showGroupTitle = computed(() => diyComponent.value.showGroupTitle !== false)
 const groupTitleSize = computed(() => {
     const value = Number(diyComponent.value.groupTitleSize || 22)
@@ -239,8 +239,8 @@ const groupTitlePaddingY = computed(() => {
     const value = Number(diyComponent.value.groupTitlePaddingY ?? 0)
     return Number.isFinite(value) ? Math.max(0, Math.min(value, 32)) : 0
 })
-const itemTitleColor = computed(() => diyComponent.value.itemTitleColor || '#111827')
-const itemMetaColor = computed(() => diyComponent.value.itemMetaColor || '#6B7280')
+const itemTitleColor = computed(() => diyComponent.value.itemTitleColor || '#1f2937')
+const itemMetaColor = computed(() => diyComponent.value.itemMetaColor || '#6b7280')
 const itemTitleSize = computed(() => {
     const value = Number(diyComponent.value.itemTitleSize || 28)
     return Number.isFinite(value) ? Math.max(20, Math.min(value, 36)) : 28
@@ -351,7 +351,7 @@ const tabThemeColor = computed(() => diyComponent.value.tabThemeColor || buttonC
 const tabActiveBgColor = computed(() => diyComponent.value.tabActiveBgColor || '')
 const tabInactiveBgColor = computed(() => diyComponent.value.tabInactiveBgColor || '')
 const tabActiveTextColor = computed(() => diyComponent.value.tabActiveTextColor || '')
-const tabInactiveTextColor = computed(() => diyComponent.value.tabInactiveTextColor || '#475569')
+const tabInactiveTextColor = computed(() => diyComponent.value.tabInactiveTextColor || '#6b7280')
 const tabHeight = computed(() => {
     const value = Number(diyComponent.value.tabHeight || 64)
     return Number.isFinite(value) ? Math.max(44, Math.min(value, 96)) : 64
@@ -382,7 +382,7 @@ const secondaryTabThemeColor = computed(() => secondaryTabCustom.value ? (diyCom
 const secondaryTabActiveBgColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabActiveBgColor || '') : tabActiveBgColor.value)
 const secondaryTabInactiveBgColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabInactiveBgColor || '') : tabInactiveBgColor.value)
 const secondaryTabActiveTextColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabActiveTextColor || '') : tabActiveTextColor.value)
-const secondaryTabInactiveTextColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabInactiveTextColor || '#475569') : tabInactiveTextColor.value)
+const secondaryTabInactiveTextColor = computed(() => secondaryTabCustom.value ? (diyComponent.value.secondaryTabInactiveTextColor || '#6b7280') : tabInactiveTextColor.value)
 const secondaryTabHeight = computed(() => {
     if (!secondaryTabCustom.value) return tabHeight.value
     const value = Number(diyComponent.value.secondaryTabHeight || tabHeight.value)
@@ -635,13 +635,14 @@ const cardStyle = computed(() => {
     } else if (startColor) {
         style += `background-color:${startColor};`
     } else {
-        style += 'background:#ffffff;'
+        style += 'background:var(--bg-card);'
     }
     if (bgUrl) {
         style += `background-image:url('${img(bgUrl)}');background-size:cover;background-repeat:no-repeat;background-position:center;`
     }
     style += `border-top-left-radius:${topRounded}rpx;border-top-right-radius:${topRounded}rpx;`
     style += `border-bottom-left-radius:${bottomRounded}rpx;border-bottom-right-radius:${bottomRounded}rpx;`
+    style += 'border:1rpx solid var(--line);'
     return style
 })
 
@@ -935,12 +936,25 @@ function measureStickyTabs() {
 
 <style lang="scss" scoped>
 .quotation-wrap {
+    --bg-main: #f3f4f6;
+    --bg-card: #ffffff;
+    --bg-soft: #f7f7f8;
+    --line: #e5e7eb;
+    --text-main: #1f2937;
+    --text-sub: #6b7280;
+    --brand: #3b82f6;
+    --brand-deep: #4f46e5;
+    --notice-bg: #fff8ed;
+    --notice-text: #f59e0b;
+    --button-bg: #111827;
+    --button-text: #ffffff;
     box-sizing: border-box;
 }
 
 .quotation-card {
     position: relative;
-    box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+    box-shadow: 0 10rpx 24rpx rgba(31, 41, 55, 0.08);
 }
 
 .quotation-mask {
@@ -983,11 +997,11 @@ function measureStickyTabs() {
     width: 56rpx;
     height: 56rpx;
     border-radius: 28rpx;
-    background: #f3f4f6;
+    background: var(--bg-soft);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #4b5563;
+    color: var(--text-sub);
     font-size: 28rpx;
 }
 
@@ -995,7 +1009,7 @@ function measureStickyTabs() {
     width: 100%;
     padding: 0 18rpx 18rpx;
     box-sizing: border-box;
-    background: #ffffff;
+    background: var(--bg-card);
 }
 
 .category-tabs.fixed {
@@ -1011,8 +1025,8 @@ function measureStickyTabs() {
     margin-top: 12rpx;
     padding: 14rpx 14rpx 12rpx;
     border-radius: 18rpx;
-    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
-    border: 1rpx solid #e2e8f0;
+    background: linear-gradient(180deg, var(--bg-soft) 0%, var(--bg-card) 100%);
+    border: 1rpx solid var(--line);
     box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.9);
 }
 
@@ -1028,7 +1042,7 @@ function measureStickyTabs() {
 .category-tabs__parent-name {
     min-width: 0;
     max-width: 420rpx;
-    color: #0f172a;
+    color: var(--text-main);
     font-size: 24rpx;
     line-height: 34rpx;
     font-weight: 800;
@@ -1039,7 +1053,7 @@ function measureStickyTabs() {
 
 .category-tabs__arrow {
     flex-shrink: 0;
-    color: #64748b;
+    color: var(--text-sub);
     font-size: 22rpx;
     line-height: 32rpx;
     font-weight: 600;
@@ -1098,7 +1112,7 @@ function measureStickyTabs() {
     justify-content: space-between;
     min-height: 106rpx;
     padding: 18rpx 8rpx;
-    border-top: 1rpx solid #f1f5f9;
+    border-top: 1rpx solid var(--line);
 }
 
 .dataset-item:first-child {
@@ -1123,7 +1137,7 @@ function measureStickyTabs() {
     font-size: 29rpx;
     line-height: 40rpx;
     font-weight: 600;
-    color: #111827;
+    color: var(--text-main);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1153,8 +1167,8 @@ function measureStickyTabs() {
     display: block;
     padding: 2rpx 10rpx;
     border-radius: 999rpx;
-    background: linear-gradient(135deg, #ffedd5, #ffe4e6);
-    color: #e11d48;
+    background: var(--notice-bg);
+    color: var(--notice-text);
     font-weight: 700;
     white-space: nowrap;
     box-shadow: 0 4rpx 10rpx rgba(225, 29, 72, 0.12);
@@ -1166,7 +1180,7 @@ function measureStickyTabs() {
     align-items: center;
     font-size: 23rpx;
     line-height: 32rpx;
-    color: #6b7280;
+    color: var(--text-sub);
 }
 
 .dot {
@@ -1193,7 +1207,7 @@ function measureStickyTabs() {
 }
 
 .quotation-group + .quotation-group {
-    border-top: 1rpx solid #f1f5f9;
+    border-top: 1rpx solid var(--line);
 }
 
 .quotation-nav-item {
@@ -1207,7 +1221,7 @@ function measureStickyTabs() {
 
 .quotation-nav-img {
     overflow: hidden;
-    background: #f3f4f6;
+    background: var(--bg-soft);
 
     image {
         width: 100%;
@@ -1237,7 +1251,7 @@ function measureStickyTabs() {
 .state-title {
     font-size: 28rpx;
     line-height: 40rpx;
-    color: #111827;
+    color: var(--text-main);
     font-weight: 600;
 }
 
@@ -1245,6 +1259,6 @@ function measureStickyTabs() {
     margin-top: 6rpx;
     font-size: 24rpx;
     line-height: 34rpx;
-    color: #6b7280;
+    color: var(--text-sub);
 }
 </style>

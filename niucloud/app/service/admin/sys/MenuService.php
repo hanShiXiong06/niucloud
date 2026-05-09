@@ -205,9 +205,10 @@ class MenuService extends BaseAdminService
         $menu_list = cache_remember(
             $cache_name,
             function() use ($status, $is_tree, $is_button, $app_type, $site_id) {
+                $addons = (new AddonService())->getAddonKeysBySiteId($site_id);
                 $where = [
                     [ 'app_type', '=', $app_type ],
-                    [ 'addon', 'in', array_merge([ '' ], get_site_addons($site_id)) ]
+                    [ 'addon', 'in', array_merge([ '' ], $addons) ]
                 ];
                 if ($status != 'all') {
                     $where[] = [ 'status', '=', $status ];
@@ -216,7 +217,7 @@ class MenuService extends BaseAdminService
                 // 排除菜单
                 $delete_menu_addon = [];
                 $addon_loader = new DictLoader("Menu");
-                foreach (get_site_addons($site_id) as $addon) {
+                foreach ($addons as $addon) {
                     $delete_menu = $addon_loader->load([ "addon" => $addon, "app_type" => $app_type ])[ 'delete' ] ?? [];
                     if (!empty($delete_menu) && is_array($delete_menu)) $delete_menu_addon[] = $delete_menu;
                 }

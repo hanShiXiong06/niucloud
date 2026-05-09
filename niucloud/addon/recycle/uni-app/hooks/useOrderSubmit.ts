@@ -12,6 +12,8 @@ export function useOrderSubmit() {
     showFollowPopup,
     wechatName,
     qrCode,
+    title: followTitle,
+    content: followContent,
     checkAndShowFollow,
     dismissFollow
   } = useWechatFollow()
@@ -183,6 +185,8 @@ export function useOrderSubmit() {
     showFollowPopup,
     wechatName,
     qrCode,
+    followTitle,
+    followContent,
     dismissFollow
   }
 }

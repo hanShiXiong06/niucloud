@@ -1,25 +1,28 @@
 <template>
-  <view class=" bg-gradient-to-b from-gray-50 to-gray-100 p-3">
-    <!-- 顶部导航栏 -->
-    <DeliveryModeToggle
-      v-model="currentTab"
-      :tabs="deliveryTabs"
-      @to-order-list="toOrderList"
-    />
+  <view class="recycle-order-page" :style="themeVars">
+    <RecyclePageHeader title="立即下单" subtitle="提交设备信息并选择交付方式" />
+    <view class="order-page-content">
+      <view class="delivery-sticky">
+        <DeliveryModeToggle
+          v-model="currentTab"
+          :tabs="deliveryTabs"
+          @to-order-list="toOrderList"
+        />
+      </view>
 
-    <OrderNoticeBar
-      :enabled="orderSubmitConfig.notice.enabled"
-      :title="orderSubmitConfig.notice.title"
-      :content="orderSubmitConfig.notice.content"
-    />
+      <OrderNoticeBar
+        :enabled="orderSubmitConfig.notice.enabled"
+        :title="orderSubmitConfig.notice.title"
+        :content="orderSubmitConfig.notice.content"
+      />
 
-    <u-form :model="form" :rules="rules" ref="formRef" label-position="left">
+      <u-form :model="form" :rules="rules" ref="formRef" label-position="left">
       <!-- 出货信息 -->
-      <view class="bg-white rounded-lg p-3 mb-3 border-l-4" style="border-color: #D8C1C1;">
+      <view class="order-section shipment-section">
         <view class="shipment-header">
           <view class="shipment-title">
-            <up-icon name="info-circle" size="16" color="#8C7575"></up-icon>
-            <text class="text-sm font-medium" style="color: #8C7575;">出货信息</text>
+            <up-icon name="info-circle" size="16" color="var(--recycle-brand)"></up-icon>
+            <text>出货信息</text>
           </view>
           <view v-if="orderSubmitConfig.device_add_enabled" class="shipment-add-button" @click="openInlineDeviceAdd">
             <up-icon name="plus" size="14" color="#fff"></up-icon>
@@ -78,7 +81,7 @@
         @copy="copyShopInfo"
         @open-location="openLocation"
       />
-      <view class="mt-2  bg-[#fff] rounded  shadow-md p-2 ">
+      <view class="order-section agreement-section">
        
       <!-- 回收协议 -->
         <AgreementCheckbox
@@ -88,13 +91,17 @@
           agreement-title="回收服务协议"
         />
 
-        <!-- 提交按钮 -->
-       
       </view>
-       <view class="mt-2">
-          <up-button type="primary" @click="handleSubmitOrder" text="确认发货"></up-button>
-        </view>
-    </u-form>
+      </u-form>
+    </view>
+
+    <view class="submit-bar">
+      <view class="submit-bar__meta">
+        <text class="submit-bar__title">{{ currentTab === 0 ? '邮寄到店' : '自送到店' }}</text>
+        <text class="submit-bar__desc">共 {{ deviceCount }} 台设备</text>
+      </view>
+      <view class="submit-bar__button" @click="handleSubmitOrder">确认发货</view>
+    </view>
 
     <!-- 设备输入弹窗 -->
     <DeviceInputModal
@@ -110,6 +117,8 @@
       :visible="showFollowPopup"
       :wechat-name="wechatName"
       :qr-code="qrCode"
+      :title="followTitle"
+      :content="followContent"
       @close="handleFollowPopupClose"
     />
 
@@ -125,6 +134,8 @@ import { getRecycleUserAddressInfo } from '@/addon/recycle/api/return_order'
 import { checkExpressEnabled } from '@/addon/recycle/api/express'
 import { getOrderSubmitConfig } from '@/addon/recycle/api/order'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
+import RecyclePageHeader from '../components/RecyclePageHeader.vue'
+import { buildRecycleThemeVars } from '../../utils/theme'
 
 // 导入组件
 import DeliveryModeToggle from './components/DeliveryModeToggle.vue'
@@ -169,8 +180,13 @@ const orderSubmitConfig = ref({
   platform_delivery: {
     display_name: '京东快递',
     free_shipping_min_count: 1
+  },
+  price_detail_theme: {
+    colors: {}
   }
 })
+
+const themeVars = computed(() => buildRecycleThemeVars(orderSubmitConfig.value.price_detail_theme?.colors || {}))
 
 const deliveryTabs = computed(() => {
   const tabs: Array<{ label: string; value: number }> = []
@@ -215,7 +231,7 @@ const {
 const { shopInfo, fetchShopInfo, copyShopInfo, openLocation } = useShopInfo()
 
 // 订单提交
-const { submitOrder, showFollowPopup, wechatName, qrCode, dismissFollow } = useOrderSubmit()
+const { submitOrder, showFollowPopup, wechatName, qrCode, followTitle, followContent, dismissFollow } = useOrderSubmit()
 
 // 协议勾选
 const isAgreeRecycle = ref(false)
@@ -260,7 +276,8 @@ const normalizeOrderSubmitConfig = (data: any = {}) => {
     platform_delivery: {
       display_name: data.platform_delivery?.display_name || '京东快递',
       free_shipping_min_count: normalizePositiveNumber(data.platform_delivery?.free_shipping_min_count, 1)
-    }
+    },
+    price_detail_theme: data.price_detail_theme || { colors: {} }
   }
 }
 
@@ -551,6 +568,43 @@ fetchShopInfo()
 </script>
 
 <style scoped lang="scss">
+.recycle-order-page {
+  min-height: 100vh;
+  background: var(--recycle-bg-main);
+  color: var(--recycle-text-main);
+}
+
+.order-page-content {
+  padding: 20rpx 20rpx calc(20rpx + env(safe-area-inset-bottom));
+}
+
+.delivery-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  padding-top: 12rpx;
+  margin: -12rpx -4rpx 16rpx;
+  background: var(--recycle-bg-main);
+}
+
+.order-section {
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: var(--recycle-bg-card);
+  border: 1rpx solid var(--recycle-line);
+  box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.06);
+}
+
+.shipment-section {
+  border-left: 6rpx solid var(--recycle-brand);
+}
+
+.agreement-section {
+  margin-top: 28rpx;
+  padding: 24rpx 22rpx;
+}
+
 .shipment-header {
   display: flex;
   align-items: center;
@@ -564,6 +618,69 @@ fetchShopInfo()
   align-items: center;
   gap: 8rpx;
   min-width: 0;
+  color: var(--recycle-brand);
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 800;
+}
+
+:deep(.u-button--primary) {
+  background: var(--recycle-button-bg) !important;
+  border-color: var(--recycle-button-bg) !important;
+  color: var(--recycle-button-text) !important;
+}
+
+.submit-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(50px + env(safe-area-inset-bottom));
+  z-index: 9998;
+  padding: 18rpx 20rpx;
+  background: var(--recycle-toolbar-bg);
+  border-top: 1rpx solid var(--recycle-line);
+  box-shadow: 0 -8rpx 22rpx rgba(31, 41, 55, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.submit-bar__meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.submit-bar__title {
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 800;
+  color: var(--recycle-text-main);
+}
+
+.submit-bar__desc {
+  margin-top: 2rpx;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: var(--recycle-text-sub);
+}
+
+.submit-bar__button {
+  flex-shrink: 0;
+  min-width: 230rpx;
+  height: 78rpx;
+  line-height: 78rpx;
+  text-align: center;
+  border-radius: 39rpx;
+  background: var(--recycle-button-bg);
+  color: var(--recycle-button-text);
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+:deep(.u-form) {
+  color: var(--recycle-text-main);
 }
 
 .shipment-add-button {
@@ -575,8 +692,8 @@ fetchShopInfo()
   align-items: center;
   justify-content: center;
   gap: 8rpx;
-  background: var(--primary-color);
-  color: #fff;
+  background: var(--recycle-button-bg);
+  color: var(--recycle-button-text);
   border-radius: 999rpx;
   font-size: 12px;
   font-weight: 500;
@@ -584,7 +701,7 @@ fetchShopInfo()
 
 .label {
   font-size: 14px;
-  color: #374151;
+  color: var(--recycle-text-main);
 }
 
 .input-wrapper {
@@ -592,8 +709,10 @@ fetchShopInfo()
   overflow: hidden;
 }
 
-:deep(.up-button--primary) {
-  background: linear-gradient(to right, #8C7575, #5F758A);
-  border: none;
+:deep(.up-button--primary),
+:deep(.u-button--primary) {
+  background: var(--recycle-button-bg) !important;
+  border: none !important;
+  color: var(--recycle-button-text) !important;
 }
 </style>

@@ -49,7 +49,7 @@ const props = defineProps({
     },
     themeColor: {
         type: String,
-        default: '#2563EB'
+        default: '#3b82f6'
     },
     activeBgColor: {
         type: String,
@@ -65,7 +65,7 @@ const props = defineProps({
     },
     inactiveTextColor: {
         type: String,
-        default: '#475569'
+        default: '#6b7280'
     },
     height: {
         type: Number,
@@ -96,11 +96,11 @@ const props = defineProps({
 const emit = defineEmits(['change'])
 
 const variant = computed(() => ['pill', 'card', 'underline'].includes(props.variant) ? props.variant : 'pill')
-const themeColorValue = computed(() => props.themeColor || '#2563EB')
+const themeColorValue = computed(() => props.themeColor || '#3b82f6')
 const activeBgColorValue = computed(() => props.activeBgColor || (variant.value === 'card' ? '#ffffff' : themeColorValue.value))
-const inactiveBgColorValue = computed(() => props.inactiveBgColor || (variant.value === 'underline' ? 'transparent' : '#F1F5F9'))
+const inactiveBgColorValue = computed(() => props.inactiveBgColor || (variant.value === 'underline' ? 'transparent' : '#f7f7f8'))
 const activeTextColorValue = computed(() => props.activeTextColor || (variant.value === 'pill' ? '#ffffff' : themeColorValue.value))
-const inactiveTextColorValue = computed(() => props.inactiveTextColor || '#475569')
+const inactiveTextColorValue = computed(() => props.inactiveTextColor || '#6b7280')
 const itemHeight = computed(() => Math.max(Number(props.height || 64), 44))
 const itemRadius = computed(() => Math.max(Number(props.radius || 32), 0))
 const itemFontSize = computed(() => Math.max(Number(props.fontSize || 26), 20))
@@ -110,7 +110,7 @@ const itemSidePadding = computed(() => Math.max(Number(props.sidePadding || 18),
 const wrapStyle = computed(() => {
     let style = 'position:relative;box-sizing:border-box;'
     if (variant.value === 'card') {
-        style += `background:${inactiveBgColorValue.value};border-radius:${itemRadius.value + 10}rpx;padding:8rpx;`
+        style += `background:${inactiveBgColorValue.value};border-radius:${itemRadius.value + 10}rpx;padding:8rpx;border:1rpx solid #e5e7eb;`
     } else if (variant.value === 'pill') {
         style += 'padding:2rpx 0;'
     } else {
@@ -144,9 +144,9 @@ function getChipStyle(index: number) {
 
     const bgColor = active ? activeBgColorValue.value : inactiveBgColorValue.value
     const shadow = active
-        ? (variant.value === 'card' ? 'box-shadow:0 8rpx 22rpx rgba(15,23,42,.10);' : 'box-shadow:0 8rpx 18rpx rgba(37,99,235,.20);')
+        ? (variant.value === 'card' ? 'box-shadow:0 8rpx 22rpx rgba(31,41,55,.10);' : 'box-shadow:0 8rpx 18rpx rgba(59,130,246,.20);')
         : 'box-shadow:0 4rpx 10rpx rgba(15,23,42,.04);'
-    const border = active ? `border:1rpx solid ${activeBgColorValue.value};` : 'border:1rpx solid #e2e8f0;'
+    const border = active ? `border:1rpx solid ${activeBgColorValue.value};` : 'border:1rpx solid #e5e7eb;'
 
     return [
         `height:${itemHeight.value}rpx`,
@@ -248,6 +248,6 @@ function handleChange(item: Record<string, any>, index: number) {
 }
 
 .quote-category-tabs--underline {
-    border-bottom: 1rpx solid #f1f5f9;
+    border-bottom: 1rpx solid #e5e7eb;
 }
 </style>

@@ -179,14 +179,19 @@ class RecycleOrder extends BaseModel
         }
     }
     
-    // 搜索器 通过设备IMEI搜索订单
+    // 搜索器 通过设备 IMEI / 用户提交 SN 搜索订单
     public function searchImeiAttr($query, $value, $data)
     {
         if (!empty($value)) {
             $query->whereExists(function($subQuery) use ($value) {
                 $subQuery->table($this->getTable('recycle_device'))
                          ->whereRaw($this->getTable('recycle_device') . '.order_id = ' . $this->getTable() . '.id')
-                         ->where('imei', 'like', "%{$value}%");
+                         ->where(function($deviceQuery) use ($value) {
+                             $deviceQuery->whereOr([
+                                 ['imei', 'like', "%{$value}%"],
+                                 ['user_sn', 'like', "%{$value}%"]
+                             ]);
+                         });
             });
         }
     }
@@ -316,6 +321,7 @@ class RecycleOrder extends BaseModel
                                ->where(function($deviceSubQuery) use ($value) {
                                    $deviceSubQuery->whereOr([
                                        ['imei', 'like', "%{$value}%"],
+                                       ['user_sn', 'like', "%{$value}%"],
                                        ['model', 'like', "%{$value}%"]
                                    ]);
                                });

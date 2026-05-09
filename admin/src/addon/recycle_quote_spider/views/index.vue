@@ -55,9 +55,12 @@
                                 <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ row.status === 1 ? '启用' : '停用' }}</el-tag>
                             </template>
                         </el-table-column>
-                        <el-table-column label="自动同步" width="100">
+                        <el-table-column label="自动同步" min-width="180">
                             <template #default="{ row }">
-                                <el-tag :type="row.sync_enabled === 1 ? 'success' : 'info'">{{ row.sync_enabled === 1 ? '开启' : '关闭' }}</el-tag>
+                                <div class="auto-sync-cell">
+                                    <el-tag :type="row.sync_enabled === 1 ? 'success' : 'info'">{{ row.sync_enabled === 1 ? '开启' : '关闭' }}</el-tag>
+                                    <span>{{ sourceSyncText(row) }}</span>
+                                </div>
                             </template>
                         </el-table-column>
                         <el-table-column label="最近同步" min-width="180">
@@ -713,9 +716,15 @@
                     <el-switch v-model="sourceDialog.form.sync_enabled" :active-value="1" :inactive-value="0" />
                     <div class="form-tip">开启后需要队列/定时任务正常运行。手动同步不受这个开关影响。</div>
                 </el-form-item>
-                <el-form-item label="同步间隔秒">
-                    <el-input-number v-model="sourceDialog.form.sync_interval" :min="60" />
-                    <div class="form-tip">自动同步的最小间隔，建议不要低于 3600 秒，避免第三方接口压力过大。</div>
+                <el-form-item label="同步间隔">
+                    <el-select v-model="sourceDialog.form.sync_interval" class="w-[220px]">
+                        <el-option label="每 6 小时" :value="21600" />
+                        <el-option label="每 12 小时" :value="43200" />
+                        <el-option label="每天一次" :value="86400" />
+                        <el-option label="每 3 天" :value="259200" />
+                        <el-option label="每 7 天" :value="604800" />
+                    </el-select>
+                    <div class="form-tip">系统计划任务每小时检查一次。这里控制同一个报价源两次自动同步之间的最短间隔，手动同步不受限制。</div>
                 </el-form-item>
                 <el-form-item label="请求配置JSON">
                     <el-input
@@ -1247,7 +1256,11 @@ const isValidCapacityValue = (value: any, groupName = '') => {
 
 const rowMatrixPriceColumns = computed(() => {
     const labels: string[] = []
+    let hasRowRemark = false
     rowTable.data.forEach(row => {
+        if (String(row.remark || '').trim()) {
+            hasRowRemark = true
+        }
         normalizePriceArray(row.columns).forEach((column: any, index: number) => {
             const label = String(column || `价格${index + 1}`).trim()
             if (label && !labels.includes(label)) {
@@ -1255,6 +1268,9 @@ const rowMatrixPriceColumns = computed(() => {
             }
         })
     })
+    if (hasRowRemark && !labels.some(label => isRemarkColumn(label))) {
+        labels.push('备注')
+    }
     return labels.map((label, index) => ({
         key: `${index}-${label}`,
         label,
@@ -1331,6 +1347,9 @@ const handleRowSelectionChange = (rows: any[]) => {
 
 const getRowMatrixCell = (row: any, column: any) => {
     const source = row.source || row
+    if (column.isRemark && column.label === '备注') {
+        return source.remark || '-'
+    }
     const columns = normalizePriceArray(source.columns).map((item: any, index: number) => String(item || `价格${index + 1}`).trim())
     const prices = normalizePriceArray(source.final_prices)
     const matchedIndex = columns.findIndex((label: string) => label === column.label)
@@ -2132,6 +2151,20 @@ const formatTime = (value: number) => {
     return new Date(value * 1000).toLocaleString()
 }
 
+const syncIntervalText = (seconds: number) => {
+    const value = Number(seconds || 0)
+    if (value >= 86400) return `每 ${Math.round(value / 86400)} 天`
+    if (value >= 3600) return `每 ${Math.round(value / 3600)} 小时`
+    return `每 ${Math.max(1, Math.round(value / 60))} 分钟`
+}
+
+const sourceSyncText = (row: any) => {
+    if (row.sync_enabled !== 1) return '手动同步可用'
+    const last = Number(row.last_sync_at || 0)
+    const next = last ? `，下次最早 ${formatTime(last + Number(row.sync_interval || 86400))}` : '，等待首次自动同步'
+    return `${syncIntervalText(Number(row.sync_interval || 86400))}${next}`
+}
+
 const formatPrices = (columns: any[] = [], prices: any[] = []) => {
     if (!Array.isArray(prices)) return ''
     return prices.map((price, index) => columns?.[index] ? `${columns[index]}:${price}` : price).join(' / ')
@@ -2357,8 +2390,31 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .quote-spider-page {
-    --panel-border: #ebeef5;
-    --muted-text: #909399;
+    min-height: calc(100vh - 84px);
+    padding: 14px;
+    border-radius: 10px;
+    background: #f5f7fa;
+    color: var(--el-text-color-primary);
+}
+
+.quote-spider-page :deep(.el-card) {
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: none;
+}
+
+.quote-spider-page :deep(.table-search-wrap) {
+    background: #fff;
+    border: 1px solid var(--el-border-color-lighter);
+    box-shadow: none;
+}
+
+.quote-spider-page :deep(.el-table) {
+    --el-table-header-bg-color: var(--el-fill-color-light);
+    --el-table-header-text-color: var(--el-text-color-primary);
+    --el-table-border-color: var(--el-border-color-lighter);
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 .panel-head {
@@ -2373,7 +2429,7 @@ onBeforeUnmount(() => {
 .panel-subtitle,
 .muted,
 .name-sub {
-    color: var(--muted-text);
+    color: var(--el-text-color-secondary);
     font-size: 12px;
     line-height: 1.5;
 }
@@ -2397,11 +2453,12 @@ onBeforeUnmount(() => {
 }
 
 .panel {
-    border: 1px solid var(--panel-border);
-    border-radius: 4px;
-    padding: 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    padding: 14px;
     min-width: 0;
     background: #fff;
+    box-shadow: none;
 }
 
 .category-nav-panel {
@@ -2423,6 +2480,13 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
 }
 
+.auto-sync-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
 .panel-tools {
     margin-bottom: 10px;
 }
@@ -2436,10 +2500,10 @@ onBeforeUnmount(() => {
     max-height: 240px;
     margin-bottom: 10px;
     padding: 10px;
-    border: 1px solid var(--panel-border);
-    border-radius: 4px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
     overflow: auto;
-    background: #fafafa;
+    background: var(--el-fill-color-lighter);
 }
 
 .root-category-select {
@@ -2491,9 +2555,9 @@ onBeforeUnmount(() => {
     flex: 0 0 auto;
     width: 40px;
     height: 40px;
-    border: 1px solid var(--panel-border);
-    border-radius: 6px;
-    background: #f7f8fa;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
 }
 
 .quote-item-copy {
@@ -2532,11 +2596,11 @@ onBeforeUnmount(() => {
     justify-content: space-between;
     gap: 16px;
     padding-bottom: 14px;
-    border-bottom: 1px solid var(--panel-border);
+    border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .drawer-title {
-    color: #303133;
+    color: var(--el-text-color-primary);
     font-size: 18px;
     font-weight: 600;
     line-height: 1.4;
@@ -2559,7 +2623,7 @@ onBeforeUnmount(() => {
 .excel-price-cell {
     display: block;
     min-height: 24px;
-    color: #1f2d3d;
+    color: var(--el-color-primary);
     font-variant-numeric: tabular-nums;
     font-weight: 600;
 }
@@ -2567,22 +2631,22 @@ onBeforeUnmount(() => {
 .excel-plain-cell {
     display: block;
     min-height: 24px;
-    color: #303133;
+    color: var(--el-text-color-primary);
 }
 
 .excel-remark-cell {
     display: block;
     min-height: 24px;
-    color: #606266;
+    color: var(--el-text-color-secondary);
 }
 
 .excel-matrix-table {
-    --el-table-border-color: #dcdfe6;
+    --el-table-border-color: var(--el-border-color-lighter);
 }
 
 .excel-matrix-table :deep(.el-table__header th) {
-    background: #f7f8fa;
-    color: #303133;
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-primary);
     font-weight: 600;
 }
 
@@ -2592,11 +2656,11 @@ onBeforeUnmount(() => {
 
 .row-price-matrix :deep(.el-table__body td:nth-child(2)),
 .row-price-matrix :deep(.el-table__body td:nth-child(3)) {
-    background: #fbfcfe;
+    background: var(--el-fill-color-extra-light);
 }
 
 .matrix-group-cell {
-    color: #303133;
+    color: var(--el-text-color-primary);
     font-weight: 600;
     line-height: 1.45;
 }
@@ -2616,14 +2680,14 @@ onBeforeUnmount(() => {
 .image-setting-card {
     min-width: 0;
     padding: 12px;
-    border: 1px solid var(--panel-border);
-    border-radius: 4px;
-    background: #fafafa;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
 }
 
 .image-setting-title {
     margin-bottom: 10px;
-    color: #303133;
+    color: var(--el-text-color-primary);
     font-size: 13px;
     font-weight: 600;
 }
@@ -2648,7 +2712,7 @@ onBeforeUnmount(() => {
 .form-tip {
     width: 100%;
     margin-top: 6px;
-    color: var(--muted-text);
+    color: var(--el-text-color-secondary);
     font-size: 12px;
     line-height: 1.5;
 }
@@ -2665,10 +2729,10 @@ onBeforeUnmount(() => {
     width: 100%;
     margin: 8px 0 0;
     padding: 10px 12px;
-    border: 1px solid var(--panel-border);
-    border-radius: 4px;
-    background: #f7f8fa;
-    color: #606266;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
+    color: var(--el-text-color-secondary);
     font-size: 12px;
     line-height: 1.5;
     white-space: pre-wrap;
@@ -2681,9 +2745,10 @@ onBeforeUnmount(() => {
 }
 
 .row-edit-section {
-    border: 1px solid var(--panel-border);
-    border-radius: 4px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
     padding: 12px;
+    background: #fff;
 }
 
 .section-title {
@@ -2723,15 +2788,15 @@ onBeforeUnmount(() => {
 .adjust-preview-card {
     margin-top: 10px;
     padding: 12px;
-    border: 1px solid var(--panel-border);
-    border-radius: 4px;
-    background: #f7f8fa;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
 }
 
 .adjust-preview-main {
     margin-top: 6px;
     font-weight: 600;
-    color: #303133;
+    color: var(--el-text-color-primary);
 }
 
 @media (max-width: 1400px) {

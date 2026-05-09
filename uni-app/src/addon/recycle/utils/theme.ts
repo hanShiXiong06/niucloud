@@ -7,9 +7,11 @@
 
 // ============ 品牌色 ============
 export const BRAND = {
-  primary: '#5F758A',
-  primaryLight: 'rgba(95, 117, 138, 0.1)',
-  gradient: 'linear-gradient(to right, #8C7575, #5F758A)',
+  primary: '#3b82f6',
+  primaryDeep: '#4f46e5',
+  primaryDark: '#111827',
+  primaryLight: 'rgba(59, 130, 246, 0.1)',
+  gradient: 'linear-gradient(100deg, #111827 0%, #4f46e5 58%, #3b82f6 100%)',
 } as const
 
 // ============ 语义色 ============
@@ -22,18 +24,20 @@ export const COLORS = {
 
   // 中性色
   textPrimary: '#1e293b',
-  textSecondary: '#64748b',
+  textSecondary: '#6b7280',
   textMuted: '#94a3b8',
   textDisabled: '#cbd5e1',
 
-  border: '#e2e8f0',
-  borderLight: '#f1f5f9',
-  bgPage: '#f8fafc',
+  border: '#e5e7eb',
+  borderLight: '#f7f7f8',
+  bgPage: '#f3f4f6',
   bgCard: '#ffffff',
-  bgMuted: '#f1f5f9',
+  bgMuted: '#f7f7f8',
+  noticeBg: '#fff8ed',
+  noticeText: '#f59e0b',
 
   // 价格
-  price: '#ff6b00',
+  price: '#2563eb',
 } as const
 
 // ============ 订单状态 ============
@@ -97,4 +101,72 @@ export const getReturnOrderStatusInfo = (status: number | string) => {
 /** 获取配送方式信息 */
 export const getDeliveryTypeInfo = (type: number | string) => {
   return DELIVERY_TYPE[Number(type) as keyof typeof DELIVERY_TYPE] || { text: '未知', color: '#6b7280' }
+}
+
+export const RECYCLE_THEME_COLORS = {
+  page_bg: COLORS.bgPage,
+  card_bg: COLORS.bgCard,
+  soft_bg: COLORS.bgMuted,
+  line: COLORS.border,
+  text_main: '#1f2937',
+  text_sub: COLORS.textSecondary,
+  brand: BRAND.primary,
+  brand_deep: BRAND.primaryDeep,
+  price: COLORS.price,
+  notice_bg: COLORS.noticeBg,
+  notice_text: COLORS.noticeText,
+  toolbar_bg: COLORS.bgCard,
+  button_bg: BRAND.primaryDark,
+  button_text: '#ffffff',
+  series_active_bg: BRAND.primaryDark,
+  series_active_text: '#ffffff',
+  series_inactive_bg: '#f8fafc',
+  series_inactive_text: '#475569',
+  model_head_bg: '#f8fafc',
+  model_brand_bg: BRAND.primaryDark,
+  model_brand_text: '#ffffff'
+} as const
+
+export type RecycleThemeColors = Partial<Record<keyof typeof RECYCLE_THEME_COLORS, string>>
+
+const isHexColor = (value: unknown): value is string => {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
+}
+
+export const mergeRecycleThemeColors = (colors: RecycleThemeColors = {}) => {
+  const merged: Record<string, string> = { ...RECYCLE_THEME_COLORS }
+  Object.entries(colors).forEach(([key, value]) => {
+    if (isHexColor(value)) {
+      merged[key] = value
+    }
+  })
+  return merged
+}
+
+export const buildRecycleThemeVars = (colors: RecycleThemeColors = {}) => {
+  const merged = mergeRecycleThemeColors(colors)
+  const map: Record<string, string> = {
+    page_bg: '--recycle-bg-main',
+    card_bg: '--recycle-bg-card',
+    soft_bg: '--recycle-bg-soft',
+    line: '--recycle-line',
+    text_main: '--recycle-text-main',
+    text_sub: '--recycle-text-sub',
+    brand: '--recycle-brand',
+    brand_deep: '--recycle-brand-deep',
+    price: '--recycle-price',
+    notice_bg: '--recycle-notice-bg',
+    notice_text: '--recycle-notice-text',
+    toolbar_bg: '--recycle-toolbar-bg',
+    button_bg: '--recycle-button-bg',
+    button_text: '--recycle-button-text',
+    series_active_bg: '--recycle-series-active-bg',
+    series_active_text: '--recycle-series-active-text',
+    series_inactive_bg: '--recycle-series-inactive-bg',
+    series_inactive_text: '--recycle-series-inactive-text',
+    model_head_bg: '--recycle-model-head-bg',
+    model_brand_bg: '--recycle-model-brand-bg',
+    model_brand_text: '--recycle-model-brand-text'
+  }
+  return Object.entries(map).map(([key, cssVar]) => `${cssVar}:${merged[key]}`).join(';') + ';'
 }

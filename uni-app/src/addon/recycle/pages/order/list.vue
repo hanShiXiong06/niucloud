@@ -1,48 +1,61 @@
 <template>
-    <up-sticky bgColor="#fff" class="!top-0 !z-10 p-2">
-        <OrderListFilters
-        v-model:currentStatus="currentStatus"
-        v-model:deliveryType="deliveryType"
-        v-model:searchKeyword="searchKeyword"
-        :statusOptions="statusOptions"
-        :deliveryOptions="deliveryOptions"
-        @search="handleSearch"
-        />
-        </up-sticky>
-  <view class="min-h-screen bg-gray-50">
-    <!-- 筛选栏 -->
-      <!-- 状态标签栏 - 使用 up-tabs -->
-    
-    <!-- 订单列表 -->
-    <mescroll-body
-      ref="mescrollRef"
-      @down="mescrollDown"
-      @up="mescrollUp"
-      :up="upOption"
-      :down="downOption"
+  <view class="recycle-order-list-page" :style="pageVars">
+    <RecyclePageHeader title="我的订单" subtitle="查看回收进度和物流状态" />
+    <z-paging
+      ref="pagingRef"
+      v-model="orderList"
+      class="order-z-paging"
+      :paging-style="pagingStyle"
+      :fixed="false"
+      :safe-area-inset-bottom="false"
+      :default-page-size="10"
+      :auto-clean-list-when-reload="false"
+      :hide-no-more-inside="true"
+      :show-loading-more-no-more-line="false"
+      empty-view-text="暂无订单数据"
+      loading-more-no-more-text="没有更多订单了"
+      loading-more-loading-text="正在加载订单..."
+      @query="queryOrderList"
     >
-      <OrderCard
-        v-for="order in orderList"
-        :key="order.id"
-        :order="order"
-        @action-success="handleActionSuccess"
-      />
+      <template #top>
+        <view class="order-list-filter-shell">
+          <OrderListFilters
+            v-model:currentStatus="currentStatus"
+            v-model:deliveryType="deliveryType"
+            v-model:searchKeyword="searchKeyword"
+            :statusOptions="statusOptions"
+            :deliveryOptions="deliveryOptions"
+            @search="handleSearch"
+          />
+        </view>
+      </template>
 
-      <!-- 空状态 -->
-      <mescroll-empty
-        v-if="orderList.length === 0"
-        :option="emptyOption"
-      />
-    </mescroll-body>
+      <view class="order-list-content">
+        <OrderCard
+          v-for="order in orderList"
+          :key="order.id"
+          :order="order"
+          @action-success="handleActionSuccess"
+        />
+
+      </view>
+
+      <template #bottom>
+        <view class="order-list-bottom-safe"></view>
+      </template>
+    </z-paging>
 
     <tabbar addon="recycle" />
   </view>
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue'
-import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue'
-import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue'
+import { onShow } from '@dcloudio/uni-app'
+import { computed, watch } from 'vue'
+import ZPaging from '../../components/z-paging/z-paging/z-paging.vue'
+import RecyclePageHeader from '../components/RecyclePageHeader.vue'
+import { useRecyclePageTheme } from '../../hooks/useRecyclePageTheme'
+import { getRecycleNavbarMetrics } from '../../hooks/useRecycleNavbar'
 
 // 导入组件
 import OrderListFilters from './components/OrderListFilters.vue'
@@ -66,20 +79,28 @@ const {
 // 订单列表管理
 const {
   orderList,
-  mescrollRef,
-  upOption,
-  downOption,
-  emptyOption,
-  mescrollDown,
-  mescrollUp: mescrollUpBase,
+  pagingRef,
+  queryList,
   refreshList,
   removeOrder,
   updateOrderStatus
 } = useOrderList()
 
-// 包装 mescrollUp 以传递筛选条件
-const mescrollUp = (mescroll: any) => {
-  mescrollUpBase(mescroll, filters.value)
+const { themeVars, loadTheme } = useRecyclePageTheme()
+const navbarMetrics = getRecycleNavbarMetrics()
+const pageVars = computed(() => `${themeVars.value}--recycle-navbar-height:${navbarMetrics.navbarHeightPx}px;`)
+const pagingStyle = computed(() => ({
+  height: `calc(100vh - ${navbarMetrics.navbarHeightPx}px)`,
+  background: 'var(--recycle-bg-main)'
+}))
+
+onShow(() => {
+  loadTheme()
+  fetchStatusCounts()
+})
+
+const queryOrderList = (pageNo: number, pageSize: number) => {
+  queryList(pageNo, pageSize, filters.value)
 }
 
 // 监听筛选条件变化，刷新列表
@@ -103,5 +124,23 @@ const handleActionSuccess = (action: string) => {
 </script>
 
 <style scoped lang="scss">
-// 使用 Windi CSS，无需额外样式
+.recycle-order-list-page {
+  min-height: 100vh;
+  background: var(--recycle-bg-main);
+  color: var(--recycle-text-main);
+}
+
+.order-list-filter-shell {
+  padding: 12rpx 16rpx;
+  background: var(--recycle-bg-main);
+}
+
+.order-list-content {
+  padding: 0 0 12rpx;
+}
+
+.order-list-bottom-safe {
+  height: calc(120rpx + env(safe-area-inset-bottom));
+  background: var(--recycle-bg-main);
+}
 </style>

@@ -58,6 +58,8 @@ class RecycleOrder extends BaseApiController
             ["order_no", ""],              // 订单号
             ["express_no", ""],            // 快递单号
             ["search",''],
+            ["customer_phone", ""],
+            ["imei", ""],
             ["delivery_type", ""],         // 配送方式
             ["status", ""],                // 订单状态
             ["create_at", ["", ""]],       // 创建时间范围

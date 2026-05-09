@@ -160,6 +160,17 @@ function noop() {
 
 <style scoped lang="scss">
 .model-filter-mask {
+	--bg-card: #ffffff;
+	--bg-soft: #f7f7f8;
+	--line: #e5e7eb;
+	--text-main: #1f2937;
+	--text-sub: #6b7280;
+	--brand: #3b82f6;
+	--brand-deep: #4f46e5;
+	--notice-bg: #fff8ed;
+	--notice-text: #f59e0b;
+	--button-bg: #111827;
+	--button-text: #ffffff;
 	position: fixed;
 	left: 0;
 	right: 0;
@@ -177,7 +188,7 @@ function noop() {
 	padding: 26rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
 	box-sizing: border-box;
 	border-radius: 28rpx 28rpx 0 0;
-	background: #ffffff;
+	background: var(--bg-card);
 	display: flex;
 	flex-direction: column;
 }
@@ -195,7 +206,7 @@ function noop() {
 	font-size: 34rpx;
 	line-height: 44rpx;
 	font-weight: 800;
-	color: #111827;
+	color: var(--text-main);
 }
 
 .filter-desc {
@@ -203,14 +214,14 @@ function noop() {
 	margin-top: 6rpx;
 	font-size: 24rpx;
 	line-height: 34rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 }
 
 .filter-close {
 	width: 58rpx;
 	height: 58rpx;
 	border-radius: 50%;
-	background: #f3f4f6;
+	background: var(--bg-soft);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -220,7 +231,7 @@ function noop() {
 .filter-search {
 	height: 76rpx;
 	border-radius: 38rpx;
-	background: #f3f4f6;
+	background: var(--bg-soft);
 	display: flex;
 	align-items: center;
 	padding: 0 22rpx;
@@ -229,7 +240,7 @@ function noop() {
 
 .filter-search .iconfont {
 	font-size: 28rpx;
-	color: #9ca3af;
+	color: var(--text-sub);
 	margin-right: 12rpx;
 }
 
@@ -237,11 +248,11 @@ function noop() {
 	flex: 1;
 	height: 76rpx;
 	font-size: 28rpx;
-	color: #111827;
+	color: var(--text-main);
 }
 
 .filter-search-placeholder {
-	color: #9ca3af;
+	color: var(--text-sub);
 }
 
 .search-clear {
@@ -264,26 +275,26 @@ function noop() {
 	line-height: 54rpx;
 	padding: 0 18rpx;
 	border-radius: 27rpx;
-	background: #eef2ff;
-	color: #2563eb;
+	background: var(--bg-soft);
+	color: var(--brand);
 	font-size: 24rpx;
 	font-weight: 700;
 }
 
 .toolbar-btn.hot {
-	background: #fff7ed;
-	color: #ea580c;
+	background: var(--notice-bg);
+	color: var(--notice-text);
 }
 
 .toolbar-btn.hot.active {
-	background: #ea580c;
-	color: #ffffff;
+	background: var(--notice-text);
+	color: var(--button-text);
 }
 
 .toolbar-meta {
 	margin-left: auto;
 	font-size: 23rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 }
 
 .model-list {
@@ -295,7 +306,7 @@ function noop() {
 	padding: 70rpx 0;
 	text-align: center;
 	font-size: 26rpx;
-	color: #9ca3af;
+	color: var(--text-sub);
 }
 
 .model-option {
@@ -303,8 +314,8 @@ function noop() {
 	padding: 16rpx 18rpx;
 	margin-bottom: 12rpx;
 	border-radius: 18rpx;
-	background: #f9fafb;
-	border: 1rpx solid #e5e7eb;
+	background: var(--bg-soft);
+	border: 1rpx solid var(--line);
 	display: flex;
 	align-items: center;
 	gap: 16rpx;
@@ -312,16 +323,16 @@ function noop() {
 }
 
 .model-option.active {
-	background: #eff6ff;
-	border-color: #93c5fd;
+	background: var(--bg-card);
+	border-color: var(--brand);
 }
 
 .option-check {
 	width: 38rpx;
 	height: 38rpx;
 	border-radius: 50%;
-	border: 2rpx solid #cbd5e1;
-	background: #ffffff;
+	border: 2rpx solid var(--line);
+	background: var(--bg-card);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -330,8 +341,8 @@ function noop() {
 }
 
 .model-option.active .option-check {
-	border-color: #2563eb;
-	background: #2563eb;
+	border-color: var(--brand);
+	background: var(--brand);
 }
 
 .option-main {
@@ -345,8 +356,8 @@ function noop() {
 	line-height: 34rpx;
 	padding: 0 12rpx;
 	border-radius: 17rpx;
-	background: #fff1f2;
-	color: #e11d48;
+	background: var(--notice-bg);
+	color: var(--notice-text);
 	font-size: 21rpx;
 	font-weight: 800;
 	margin-left: 12rpx;
@@ -357,7 +368,7 @@ function noop() {
 	font-size: 28rpx;
 	line-height: 38rpx;
 	font-weight: 700;
-	color: #111827;
+	color: var(--text-main);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -368,7 +379,7 @@ function noop() {
 	margin-top: 4rpx;
 	font-size: 23rpx;
 	line-height: 32rpx;
-	color: #6b7280;
+	color: var(--text-sub);
 }
 
 .filter-footer {
@@ -388,12 +399,12 @@ function noop() {
 }
 
 .footer-btn.ghost {
-	background: #f3f4f6;
-	color: #374151;
+	background: var(--bg-soft);
+	color: var(--text-main);
 }
 
 .footer-btn.primary {
-	background: #111827;
-	color: #ffffff;
+	background: var(--button-bg);
+	color: var(--button-text);
 }
 </style>

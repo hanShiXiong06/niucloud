@@ -243,16 +243,17 @@ const handleDelete = async () => {
 
 <style scoped lang="scss">
 .order-card {
-  background: #fff;
-  border-radius: 8px;
+  background: var(--recycle-bg-card);
+  border: 1rpx solid var(--recycle-line);
+  border-radius: 16rpx;
   padding: 12px;
   margin: 8px 12px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.06);
 }
 
 .order-header {
   padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--recycle-line);
 }
 
 .header-top {
@@ -271,9 +272,8 @@ const handleDelete = async () => {
 .express-row {
   margin-top: 6px;
   padding: 6px 8px;
-  background: #eff6ff;
-  border-radius: 4px;
-  border-left: 2px solid #3b82f6;
+  background: var(--recycle-bg-soft);
+  border-radius: 10rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -294,7 +294,7 @@ const handleDelete = async () => {
 .arrow-btn {
   font-size: 24rpx;
   line-height: 1;
-  color: #3b82f6;
+  color: var(--recycle-brand);
   font-weight: 700;
 }
 
@@ -312,16 +312,16 @@ const handleDelete = async () => {
 .empty-devices {
   padding: 12px;
   text-align: center;
-  background: #f8fafc;
-  border-radius: 6px;
-  border: 1px dashed #e2e8f0;
+  background: var(--recycle-bg-soft);
+  border-radius: 12rpx;
+  border: 1px dashed var(--recycle-line);
 }
 
 .delivery-tag {
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--recycle-bg-soft);
   border-radius: 8px;
   font-size: 10px;
   font-weight: 500;

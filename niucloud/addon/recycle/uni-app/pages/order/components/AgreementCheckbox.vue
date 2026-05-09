@@ -1,20 +1,18 @@
 <template>
-  <view class="bg-white rounded-lg  ">
-    <view class="flex items-center">
+  <view class="agreement-checkbox">
+    <view class="agreement-checkbox__inner">
       <u-checkbox-group>
         <u-checkbox
-          activeColor="var(--primary-color)"
+          activeColor="var(--recycle-brand, var(--primary-color))"
           :checked="modelValue"
           shape="circle"
-          size="14"
-          @change="handleChange"
+          size="20"
+          @change="setAgreement"
         />
       </u-checkbox-group>
-      <view class="flex items-center ml-2 text-sm">
-        <text class="text-xs text-[#666]">{{ agreementText }}</text>
-        <view @click="toAgreementPage" class="ml-1">
-          <text class="text-primary">《{{ agreementTitle }}》</text>
-        </view>
+      <view class="agreement-checkbox__content">
+        <text class="agreement-checkbox__text" @tap="toggleAgreement">{{ agreementText }}</text>
+        <text class="agreement-checkbox__link" @tap.stop="toAgreementPage">《{{ agreementTitle }}》</text>
       </view>
     </view>
   </view>
@@ -37,8 +35,16 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const handleChange = () => {
+const toggleAgreement = () => {
   emit('update:modelValue', !props.modelValue)
+}
+
+const setAgreement = (value: boolean) => {
+  if (typeof value === 'boolean') {
+    emit('update:modelValue', value)
+    return
+  }
+  toggleAgreement()
 }
 
 const toAgreementPage = () => {
@@ -49,7 +55,35 @@ const toAgreementPage = () => {
 </script>
 
 <style scoped lang="scss">
-.text-primary {
-  color: var(--primary-color);
+.agreement-checkbox {
+  width: 100%;
+  background: var(--recycle-bg-card, #fff);
+}
+
+.agreement-checkbox__inner {
+  min-height: 56rpx;
+  display: flex;
+  align-items: center;
+}
+
+.agreement-checkbox__content {
+  min-height: 56rpx;
+  margin-left: 14rpx;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 26rpx;
+  line-height: 38rpx;
+}
+
+.agreement-checkbox__text {
+  color: var(--recycle-text-sub, #666);
+  padding: 10rpx 0;
+}
+
+.agreement-checkbox__link {
+  color: var(--recycle-brand, var(--primary-color));
+  padding: 10rpx 0;
+  font-weight: 600;
 }
 </style>

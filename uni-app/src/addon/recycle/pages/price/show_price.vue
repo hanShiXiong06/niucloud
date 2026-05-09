@@ -71,7 +71,7 @@
 							@click="removeSelectedModel(model)"
 						>
 							<text>{{ model }}</text>
-							<u-icon name="close" size="20rpx" color="#2563eb"></u-icon>
+							<u-icon name="close" size="20rpx" color="var(--brand)"></u-icon>
 						</view>
 						<view class="selected-model-clear" @click="applyModelFilter([])">清空</view>
 					</view>
@@ -2663,11 +2663,11 @@ onPageScroll((event) => {
 	display: block;
 	padding: 2rpx 10rpx;
 	border-radius: 999rpx;
-	background: linear-gradient(135deg, #ffedd5, #ffe4e6);
-	color: #e11d48;
+	background: var(--notice-bg);
+	color: var(--notice-text);
 	font-weight: 700;
 	white-space: nowrap;
-	box-shadow: 0 4rpx 10rpx rgba(225, 29, 72, 0.12);
+	box-shadow: 0 4rpx 10rpx rgba(245, 158, 11, 0.12);
 }
 
 .dot {

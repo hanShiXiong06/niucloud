@@ -10,6 +10,19 @@ interface StatusOption {
   actions?: number[]
 }
 
+const defaultStatusList: StatusOption[] = [
+  { key: 'all', text: '全部', count: 0 },
+  { key: '1', text: '待签收', count: 0 },
+  { key: '2', text: '已签收', count: 0 },
+  { key: '3', text: '质检中', count: 0 },
+  { key: '4', text: '已质检', count: 0 },
+  { key: '5', text: '待确认', count: 0 },
+  { key: '6', text: '待打款', count: 0 },
+  { key: '7', text: '已完成', count: 0 },
+  { key: '8', text: '已关闭', count: 0 },
+  { key: '9', text: '已取消', count: 0 }
+]
+
 /**
  * 订单筛选管理
  * 管理状态筛选、配送方式筛选、搜索关键词
@@ -26,7 +39,7 @@ export function useOrderFilters() {
   const searchKeyword = ref('')
 
   // 从接口获取的状态列表
-  const statusList = ref<StatusOption[]>([])
+  const statusList = ref<StatusOption[]>(defaultStatusList)
 
   // 状态字典（设备状态和订单状态）
   const statusDict = ref<{
@@ -55,7 +68,7 @@ export function useOrderFilters() {
   const filters = computed<OrderFilters>(() => ({
     status: currentStatus.value,
     delivery_type: deliveryType.value,
-    search_keyword: searchKeyword.value
+    search_keyword: searchKeyword.value.trim()
   }))
 
   // 获取订单状态统计
@@ -64,7 +77,7 @@ export function useOrderFilters() {
       const res: any = await getOrderStatusCount()
       if (res.code === 1 && res.data) {
         // 更新状态列表
-        statusList.value = res.data.list || []
+        statusList.value = Array.isArray(res.data.list) && res.data.list.length ? res.data.list : defaultStatusList
         // 更新状态字典
         statusDict.value = res.data.status_dict || {}
       }
@@ -99,7 +112,7 @@ export function useOrderFilters() {
   const hasFilters = computed(() => {
     return currentStatus.value !== 'all' ||
            deliveryType.value !== 0 ||
-           searchKeyword.value !== ''
+           searchKeyword.value.trim() !== ''
   })
 
   // 初始化时获取状态统计

@@ -1,5 +1,6 @@
 <template>
-  <view class="min-h-screen bg-gray-50 pb-20">
+  <view class="recycle-order-detail-page" :style="themeVars">
+    <RecyclePageHeader title="订单详情" :subtitle="orderInfo.order_no || '查看设备质检和确认状态'" />
     <!-- 骨架屏加载状态 -->
     <view v-if="loading" class="skeleton-container">
       <view class="mx-3 mt-2 rounded-lg overflow-hidden">
@@ -63,6 +64,48 @@
         :mobile="orderInfo.member?.mobile"
       />
 
+      <!-- 客服入口 -->
+      <view v-if="customerServiceEnabled" class="mx-3 mb-3">
+        <!-- #ifdef MP-WEIXIN -->
+        <button
+          v-if="customerServiceType === 'wechat'"
+          class="customer-service-card"
+          open-type="contact"
+        >
+          <view class="customer-service-icon">
+            <up-icon name="server-man" size="18" color="var(--recycle-brand)"></up-icon>
+          </view>
+          <view class="customer-service-copy">
+            <text class="customer-service-title">{{ customerServiceConfig.title || '联系客服' }}</text>
+            <text class="customer-service-desc">{{ customerServiceConfig.content || '如需议价或咨询订单进度，请联系客服处理' }}</text>
+          </view>
+          <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
+        </button>
+        <view v-else class="customer-service-card" @tap="openCustomerService">
+          <view class="customer-service-icon">
+            <up-icon name="server-man" size="18" color="var(--recycle-brand)"></up-icon>
+          </view>
+          <view class="customer-service-copy">
+            <text class="customer-service-title">{{ customerServiceConfig.title || '联系客服' }}</text>
+            <text class="customer-service-desc">{{ customerServiceConfig.content || '长按识别二维码添加工作人员' }}</text>
+          </view>
+          <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
+        </view>
+        <!-- #endif -->
+        <!-- #ifndef MP-WEIXIN -->
+        <view class="customer-service-card" @tap="openCustomerService">
+          <view class="customer-service-icon">
+            <up-icon name="server-man" size="18" color="var(--recycle-brand)"></up-icon>
+          </view>
+          <view class="customer-service-copy">
+            <text class="customer-service-title">{{ customerServiceConfig.title || '联系客服' }}</text>
+            <text class="customer-service-desc">{{ customerServiceConfig.content || '如需议价或咨询订单进度，请联系客服处理' }}</text>
+          </view>
+          <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
+        </view>
+        <!-- #endif -->
+      </view>
+
       <!-- 退货信息入口 -->
       <view v-if="hasReturnOrder" class="mx-3 mb-3">
         <view
@@ -115,9 +158,10 @@
           :index="index"
           :isSelected="isDeviceSelected(device.id)"
           :allowRejectSale="submitConfig.allow_user_reject_sale !== 0"
+          :useWechatContact="customerServiceEnabled && customerServiceType === 'wechat'"
           @toggle-select="toggleDeviceSelection(device.id)"
           @confirm="handleDeviceConfirm(device)"
-          @negotiate="negotiate"
+          @negotiate="openCustomerService"
           @reject-sale="handleDeviceRejectSale(device)"
         />
       </view>
@@ -136,12 +180,20 @@
           确认选中设备 ({{ selectedCount }})
         </button>
       </view>
+
+      <CustomerServicePopup
+        :visible="showCustomerServicePopup"
+        :qr-code="customerServiceConfig.qrcode || ''"
+        :title="customerServiceConfig.title"
+        :content="customerServiceConfig.content"
+        @close="showCustomerServicePopup = false"
+      />
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 import { useOrderDetail } from '../../hooks/useOrderDetail'
@@ -151,15 +203,23 @@ import OrderStatusProgress from './components/OrderStatusProgress.vue'
 import OrderDetailHeader from './components/OrderDetailHeader.vue'
 import DeviceBatchToolbar from './components/DeviceBatchToolbar.vue'
 import DeviceDetailCard from './components/DeviceDetailCard.vue'
+import CustomerServicePopup from './components/CustomerServicePopup.vue'
+import RecyclePageHeader from '../components/RecyclePageHeader.vue'
+import { buildRecycleThemeVars } from '../../utils/theme'
 
 const {
   loading, orderInfo, isEmpty, hasNoDevices, totalPrice,
-  submitConfig, loadOrderDetail, confirmDevice, confirmDevices, rejectDeviceSale, negotiate
+  submitConfig, loadOrderDetail, confirmDevice, confirmDevices, rejectDeviceSale
 } = useOrderDetail()
 
 const { returnOrderList, hasReturnOrder, loadReturnOrders, goToReturnOrder } = useReturnOrder()
 
 const devicesRef = computed(() => orderInfo.value.devices)
+const themeVars = computed(() => buildRecycleThemeVars(submitConfig.value?.price_detail_theme?.colors || {}))
+const showCustomerServicePopup = ref(false)
+const customerServiceConfig = computed(() => submitConfig.value?.customer_service || {})
+const customerServiceEnabled = computed(() => Number(customerServiceConfig.value?.enabled || 0) === 1)
+const customerServiceType = computed(() => customerServiceConfig.value?.type === 'qrcode' ? 'qrcode' : 'wechat')
 
 const {
   isAllSelected, selectedCount, isDeviceSelected,
@@ -182,6 +242,28 @@ const handleConfirmSelected = async () => {
   const deviceIds = pendingDevices.map(d => d.id)
   const success = await confirmDevices(deviceIds)
   if (success) resetSelection()
+}
+
+const openCustomerService = () => {
+  if (!customerServiceEnabled.value) {
+    uni.navigateTo({
+      url: '/app/pages/member/contact'
+    })
+    return
+  }
+
+  if (customerServiceType.value === 'qrcode' && customerServiceConfig.value?.qrcode) {
+    showCustomerServicePopup.value = true
+    return
+  }
+
+  // #ifdef MP-WEIXIN
+  if (customerServiceType.value === 'wechat') return
+  // #endif
+
+  uni.navigateTo({
+    url: '/app/pages/member/contact'
+  })
 }
 
 const goBack = () => {
@@ -210,6 +292,13 @@ onShow(async () => {
 </script>
 
 <style lang="scss">
+.recycle-order-detail-page {
+  min-height: 100vh;
+  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  background: var(--recycle-bg-main);
+  color: var(--recycle-text-main);
+}
+
 .skeleton-container {
   animation: skeleton-fade-in 0.3s ease-in-out;
 }
@@ -229,5 +318,55 @@ onShow(async () => {
 }
 .shadow-up {
   box-shadow: 0 -2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.customer-service-card {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: var(--recycle-bg-card);
+  box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  text-align: left;
+  line-height: 1;
+}
+
+.customer-service-card::after {
+  border: 0;
+}
+
+.customer-service-icon {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.customer-service-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.customer-service-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--recycle-text-main);
+}
+
+.customer-service-desc {
+  font-size: 24rpx;
+  color: var(--recycle-text-sub);
+  line-height: 1.4;
 }
 </style>

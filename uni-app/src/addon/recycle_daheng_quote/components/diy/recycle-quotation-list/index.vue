@@ -68,7 +68,7 @@
 <script lang="ts" setup>
 import { computed, onMounted, ref } from 'vue';
 import useDiyStore from '@/app/stores/diy';
-import useQuotationCacheStore, { buildQuotationCacheKey } from '@/stores/quotation-cache';
+import useQuotationCacheStore, { buildQuotationCacheKey } from '@/addon/recycle_daheng_quote/stores/quotation-cache';
 import { img, redirect } from '@/utils/common';
 import { getQuotationV2Types, type QuotationV2Type } from '@/addon/recycle_daheng_quote/api/quotation';
 

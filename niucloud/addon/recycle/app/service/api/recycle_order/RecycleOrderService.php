@@ -135,15 +135,26 @@ class RecycleOrderService extends BaseApiService
             unset($where['status']);
         }
 
-        // 构建基础查询模型
-        $search_model = $this->buildBaseQuery($where);
-
-        // 处理搜索关键词
-        if (!empty($where['search']) && trim($where['search']) !== '') {
-            $search_model = $this->buildSearchQuery($search_model, $where['search']);
-        }
-        // 查询的订单状态不能是 10
-        $search_model = $search_model->where('status', '<>', 10);
+        // 构建基础查询模型，并复用模型层搜索器
+        $search_model = $this->model
+            ->where([
+                ['site_id', '=', $this->site_id],
+                ['member_id', '=', $this->member_id],
+                ['status', '<>', 10],
+                ['delete_at', '=', 0]
+            ])
+            ->withSearch([
+                'order_no',
+                'express_no',
+                'search',
+                'customer_name',
+                'customer_phone',
+                'imei',
+                'delivery_type',
+                'status',
+                'create_at',
+                'remark'
+            ], $where);
 
         // 设置查询字段、关联、排序和附加属性
         $search_model = $search_model
@@ -161,143 +172,13 @@ class RecycleOrderService extends BaseApiService
     }
 
     /**
-     * 构建基础查询条件
-     * @param array $where
-     * @return \think\db\Query
-     */
-    private function buildBaseQuery(array $where)
-    {
-        // 基础条件
-        $conditions = [
-            ['site_id', '=', $this->site_id],
-            ['member_id', '=', $this->member_id],
-            ['status', '<>', 10],
-            ['delete_at', '=', 0]
-        ];
-
-        // 动态添加查询条件
-        $this->addSearchConditions($conditions, $where);
-
-        return $this->model->where($conditions);
-    }
-
-    /**
-     * 添加搜索条件
-     * @param array &$conditions
-     * @param array $where
-     * @return void
-     */
-    private function addSearchConditions(array &$conditions, array $where)
-    {
-        // 订单号搜索
-        if (!empty($where['order_no'])) {
-            $conditions[] = ['order_no', 'like', "%{$where['order_no']}%"];
-        }
-
-        // 快递单号搜索
-        if (!empty($where['express_no'])) {
-            $conditions[] = ['express_no', 'like', "%{$where['express_no']}%"];
-        }
-
-        // 客户姓名搜索
-        if (!empty($where['customer_name'])) {
-            $conditions[] = ['customer_name', 'like', "%{$where['customer_name']}%"];
-        }
-
-        // 客户电话搜索
-        if (!empty($where['customer_phone'])) {
-            $conditions[] = ['customer_phone', 'like', "%{$where['customer_phone']}%"];
-        }
-
-        // 订单状态筛选
-        if (isset($where['status']) && $where['status'] !== '') {
-            $conditions[] = ['status', '=', $where['status']];
-        }
-
-        // 配送方式筛选
-        if (isset($where['delivery_type']) && $where['delivery_type'] !== '') {
-            $conditions[] = ['delivery_type', '=', $where['delivery_type']];
-        }
-
-        // 创建时间范围搜索
-        if (!empty($where['create_at']) && is_array($where['create_at'])) {
-            $start_time = strtotime($where['create_at'][0]);
-            $end_time = strtotime($where['create_at'][1]);
-            if ($start_time && $end_time) {
-                $conditions[] = ['create_at', 'between', [$start_time, $end_time]];
-            }
-        }
-
-        // 备注搜索
-        if (!empty($where['remark'])) {
-            $conditions[] = ['remark', 'like', "%{$where['remark']}%"];
-        }
-    }
-
-    /**
-     * 构建复合搜索查询（订单基本信息 + 设备IMEI和型号）
-     * @param \think\db\Query $query
-     * @param string $search
-     * @return \think\db\Query
-     */
-    private function buildSearchQuery($query, string $search)
-    {
-        return $query->where(function($subQuery) use ($search) {
-            // 搜索订单基本信息
-            $this->addOrderBasicSearch($subQuery, $search);
-
-            // 搜索关联设备信息
-            $this->addDeviceSearch($subQuery, $search);
-        });
-    }
-
-    /**
-     * 添加订单基本信息搜索
-     * @param \think\db\Query $query
-     * @param string $search
-     * @return void
-     */
-    private function addOrderBasicSearch($query, string $search)
-    {
-        $query->whereOr([
-            ['id', 'like', "%{$search}%"],
-            ['express_no', 'like', "%{$search}%"],
-            ['order_no', 'like', "%{$search}%"],
-        ]);
-    }
-
-    /**
-     * 添加设备信息搜索（IMEI和型号）
-     * @param \think\db\Query $query
-     * @param string $search
-     * @return void
-     */
-    private function addDeviceSearch($query, string $search)
-    {
-        $query->whereOr(function($deviceQuery) use ($search) {
-            $deviceQuery->whereExists(function($existsQuery) use ($search) {
-                $deviceModel = new RecycleDevice();
-                $existsQuery->table($deviceModel->getTable())
-                           ->whereColumn($deviceModel->getTable() . '.order_id', $this->model->getTable() . '.id')
-                           ->where(function($deviceCondition) use ($search) {
-                               $deviceCondition->whereOr([
-                                   ['imei', 'like', "%{$search}%"],
-                                   ['user_sn', 'like', "%{$search}%"],
-                                   ['model', 'like', "%{$search}%"]
-                               ]);
-                           });
-            });
-        });
-    }
-
-    /**
      * 获取订单信息
      * @param int $id
      * @return array
      */
     public function getInfo(int $id)
     {
-        $field = 'id,order_no,site_id,member_id,delivery_type,express_no,customer_name,customer_phone,remark,status,create_at,update_at';
+        $field = 'id,order_no,site_id,member_id,delivery_type,express_no,count,customer_name,customer_phone,remark,status,create_at,update_at';
 
         $info = $this->model
             ->where([

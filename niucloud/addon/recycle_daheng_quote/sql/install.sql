@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_dataset` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_dataset` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL DEFAULT 0,
   `quotation_id` int unsigned NOT NULL DEFAULT 0,
@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_dataset` (
   `sort` int NOT NULL DEFAULT 0,
   `status` tinyint NOT NULL DEFAULT 1,
   `follow_crawler` tinyint NOT NULL DEFAULT 1,
+  `sync_enabled` tinyint NOT NULL DEFAULT 0,
+  `sync_interval` int NOT NULL DEFAULT 86400,
   `request_params` json DEFAULT NULL,
   `parse_rule` json DEFAULT NULL,
   `remark` varchar(500) NOT NULL DEFAULT '',
@@ -23,7 +25,7 @@ CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_dataset` (
   KEY `idx_site_quotation` (`site_id`,`quotation_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价数据集';
 
-CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_model` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_model` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL DEFAULT 0,
   `dataset_id` int unsigned NOT NULL DEFAULT 0,
@@ -46,7 +48,7 @@ CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_model` (
   KEY `idx_dataset_status_sort` (`site_id`,`dataset_id`,`status`,`sort`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价型号';
 
-CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_capacity` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_capacity` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL DEFAULT 0,
   `dataset_id` int unsigned NOT NULL DEFAULT 0,
@@ -67,7 +69,7 @@ CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_capacity` (
   KEY `idx_dataset_model` (`site_id`,`dataset_id`,`model_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价容量';
 
-CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_field` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_field` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL DEFAULT 0,
   `dataset_id` int unsigned NOT NULL DEFAULT 0,
@@ -85,7 +87,7 @@ CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_field` (
   KEY `idx_dataset_type_sort` (`site_id`,`dataset_id`,`field_type`,`sort`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价字段';
 
-CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_price` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_price` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL DEFAULT 0,
   `dataset_id` int unsigned NOT NULL DEFAULT 0,
@@ -112,7 +114,7 @@ CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_price` (
   KEY `idx_model_capacity` (`site_id`,`model_id`,`capacity_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价价格';
 
-CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_note` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_note` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL DEFAULT 0,
   `dataset_id` int unsigned NOT NULL DEFAULT 0,
@@ -136,7 +138,7 @@ CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_note` (
   KEY `idx_dataset_field` (`site_id`,`dataset_id`,`field_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价说明';
 
-CREATE TABLE IF NOT EXISTS `saas_recycle_quotation_v2_sync_log` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_sync_log` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int unsigned NOT NULL DEFAULT 0,
   `dataset_id` int unsigned NOT NULL DEFAULT 0,

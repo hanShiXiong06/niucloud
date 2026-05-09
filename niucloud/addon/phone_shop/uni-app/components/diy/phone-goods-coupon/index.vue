@@ -10,8 +10,7 @@
 						<block v-if="couponList.length > 1">
 							<view v-for="(item, index) in couponList" :key="index"
 								class="box-border pt-[14rpx] inline-flex flex-col items-center relative w-[150rpx] h-[130rpx]"
-								:class="{ 'mr-[20rpx]': index != couponList.length - 1 }"
-								:style="{ 'background-image': 'url(' + img('addon/phone_shop/diy/goods_coupon/coupon_item_bg.png') + ')', 'background-size': '100%', 'background-repeat': 'no-repeat' }">
+								:style="getStyle1CouponItemStyle(index, couponList.length)">
 								<view
 									class="truncate w-full flex items-baseline justify-center price-font text-[var(--price-text-color)]">
 									<text class="text-[26rpx] font-500">￥</text>
@@ -67,8 +66,7 @@
 				<scroll-view scroll-x="true" class="coupon-list">
 					<view v-for="(item, index) in couponList" :key="index"
 						class="box-border pt-[14rpx] inline-flex flex-col items-center relative w-[140rpx] h-[130rpx] rounded-[10rpx]"
-						:class="{ 'mr-[20rpx]': index != couponList.length - 1, 'mr-[290rpx]': index == couponList.length - 1 }"
-						:style="{ 'background-image': 'url(' + img('addon/phone_shop/diy/goods_coupon/coupon_item_bg.png') + ')', 'background-size': '100%', 'background-repeat': 'no-repeat' }">
+						:style="getStyle2CouponItemStyle(index, couponList.length)">
 						<view
 							class="flex items-baseline justify-center w-full truncate price-font text-[var(--price-text-color)]">
 							<text class="text-[24rpx]">￥</text>
@@ -144,6 +142,19 @@ watch(
 const toLink = (url: any) => {
 	if (diyStore.mode == 'decorate') return;
 	redirect({ url })
+}
+
+const couponItemBgStyle = () => {
+	return 'background-image:url(' + img('addon/phone_shop/diy/goods_coupon/coupon_item_bg.png') + ');background-size:100%;background-repeat:no-repeat;';
+}
+
+const getStyle1CouponItemStyle = (index: number, total: number) => {
+	return couponItemBgStyle() + (index != total - 1 ? 'margin-right:20rpx;' : '');
+}
+
+const getStyle2CouponItemStyle = (index: number, total: number) => {
+	if (index == total - 1) return couponItemBgStyle() + 'margin-right:290rpx;';
+	return couponItemBgStyle() + 'margin-right:20rpx;';
 }
 
 const couponList: any = ref([])

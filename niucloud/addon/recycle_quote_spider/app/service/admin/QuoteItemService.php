@@ -253,14 +253,33 @@ class QuoteItemService extends BaseAdminService
         $rawData = is_array($row) ? ($row['raw_data'] ?? []) : ($row->raw_data ?? []);
         $tab = is_array($row) ? (string)($row['tab'] ?? '') : (string)($row->tab ?? '');
         $capacityName = $this->extractCapacityName($rawData, $tab);
+        $remark = $this->extractRemarkText($rawData);
         if (is_array($row)) {
             $row['capacity_name'] = $capacityName;
             $row['capacity'] = $capacityName;
+            if (trim((string)($row['remark'] ?? '')) === '' && $remark !== '') {
+                $row['remark'] = $remark;
+            }
             return $row;
         }
         $row->setAttr('capacity_name', $capacityName);
         $row->setAttr('capacity', $capacityName);
+        if (trim((string)($row->remark ?? '')) === '' && $remark !== '') {
+            $row->setAttr('remark', $remark);
+        }
         return $row;
+    }
+
+    private function extractRemarkText($rawData): string
+    {
+        $raw = is_array($rawData) ? $rawData : [];
+        foreach (['备注', '说明', '描述', 'remark', 'remark_text', 'note', 'notes', 'content_text', 'text'] as $field) {
+            $value = trim((string)($raw[$field] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+        return '';
     }
 
     private function extractCapacityName($rawData, string $tab = ''): string

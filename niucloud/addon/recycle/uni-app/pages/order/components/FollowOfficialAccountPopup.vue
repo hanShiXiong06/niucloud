@@ -14,13 +14,13 @@
 
       <!-- 标题 -->
       <view class="popup-title">
-        <up-icon name="bell" size="24" color="#8C7575"></up-icon>
-        <text class="title-text">关注公众号</text>
+        <up-icon name="bell" size="24" color="var(--recycle-brand)"></up-icon>
+        <text class="title-text">{{ title || '关注公众号' }}</text>
       </view>
 
       <!-- 提示文字 -->
       <view class="popup-desc">
-        <text>关注公众号，及时接收订单状态通知</text>
+        <text>{{ content || '关注公众号，及时接收订单状态通知' }}</text>
       </view>
 
       <!-- 公众号名称 -->
@@ -31,7 +31,7 @@
       <!-- 二维码图片 -->
       <view class="qr-code-wrapper">
         <image
-          :src="qrCode"
+          :src="img(qrCode)"
           mode="aspectFit"
           class="qr-code-image"
           show-menu-by-longpress
@@ -48,7 +48,7 @@
           text="我知道了"
           shape="circle"
           @click="handleClose"
-          custom-style="background: linear-gradient(to right, #8C7575, #5F758A); border: none;"
+          custom-style="background: var(--recycle-button-bg); border: none; color: var(--recycle-button-text);"
         ></up-button>
       </view>
     </view>
@@ -56,10 +56,14 @@
 </template>
 
 <script setup lang="ts">
+import { img } from '@/utils/common'
+
 defineProps<{
   visible: boolean
   wechatName: string
   qrCode: string
+  title?: string
+  content?: string
 }>()
 
 const emit = defineEmits<{
@@ -76,7 +80,7 @@ const handleClose = () => {
   width: 580rpx;
   padding: 40rpx 30rpx 30rpx;
   position: relative;
-  background: #fff;
+  background: var(--recycle-bg-card);
   border-radius: 16rpx;
 }
 
@@ -98,7 +102,7 @@ const handleClose = () => {
   .title-text {
     font-size: 36rpx;
     font-weight: 600;
-    color: #333;
+    color: var(--recycle-text-main);
   }
 }
 
@@ -108,7 +112,7 @@ const handleClose = () => {
 
   text {
     font-size: 28rpx;
-    color: #666;
+    color: var(--recycle-text-sub);
   }
 }
 
@@ -119,7 +123,7 @@ const handleClose = () => {
   .name-text {
     font-size: 30rpx;
     font-weight: 500;
-    color: #8C7575;
+    color: var(--recycle-brand);
   }
 }
 

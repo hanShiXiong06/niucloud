@@ -1,7 +1,7 @@
 import { nextTick } from 'vue'
 import { getAppPages, getSubPackagesPages} from "@/utils/pages"
 
-class Language {
+export class Language {
     private i18n: any
     private loadLocale: Array<string> = [] //已加载的语言
 

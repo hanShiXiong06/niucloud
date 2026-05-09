@@ -1,8 +1,8 @@
 <template>
-  <view class="bg-white rounded-lg p-3 mt-3 border-l-4" style="border-color: #B4C7D6;">
-    <view class="flex items-center gap-1 mb-2">
-      <up-icon name="car" size="16" color="#5F758A"></up-icon>
-      <text class="text-sm font-medium" style="color: #5F758A;">寄件信息</text>
+  <view class="express-info-section">
+    <view class="express-section-title">
+      <up-icon name="car" size="16" color="var(--recycle-brand)"></up-icon>
+      <text>寄件信息</text>
     </view>
 
     <!-- 快递方式选择 -->
@@ -64,7 +64,7 @@
     </up-row>
 
     <view v-if="!canUsePlatformDelivery" class="platform-threshold-tip">
-      <up-icon name="info-circle" size="14" color="#b45309"></up-icon>
+      <up-icon name="info-circle" size="14" color="var(--recycle-notice-text)"></up-icon>
       <text>满 {{ freeShippingMinCount }} 台可使用{{ platformDeliveryName }}包邮；当前可手动填写快递单号。</text>
     </view>
 
@@ -88,11 +88,11 @@
               </view>
             </view>
             <view class="edit-btn-small">
-              <up-icon name="edit-pen" size="12" color="#3b82f6"></up-icon>
+              <up-icon name="edit-pen" size="12" color="var(--recycle-brand)"></up-icon>
             </view>
           </view>
           <view class="address-text-compact">
-            <up-icon name="map-fill" size="12" color="#94a3b8"></up-icon>
+            <up-icon name="map-fill" size="12" color="var(--recycle-text-sub)"></up-icon>
             <text>{{ platformDeliveryForm.area_text }} {{ platformDeliveryForm.detail_address }}</text>
           </view>
         </view>
@@ -101,8 +101,8 @@
       <!-- 未选择地址 - 显示选择按钮 -->
       <view v-else class="select-address-row" @click="showAddressPopup = true">
         <view class="flex items-center gap-2">
-          <up-icon name="map" size="16" color="#3b82f6"></up-icon>
-          <text class="text-sm" style="color: #64748b;">请选择寄件地址</text>
+          <up-icon name="map" size="16" color="var(--recycle-brand)"></up-icon>
+          <text class="text-sm" style="color: var(--recycle-text-sub);">请选择寄件地址</text>
         </view>
         <up-icon name="arrow-right" size="14" color="#94a3b8"></up-icon>
       </view>
@@ -237,7 +237,7 @@ const handleAddressSelect = (address: any) => {
 <style scoped lang="scss">
 .label {
   font-size: 14px;
-  color: #374151;
+  color: var(--recycle-text-main);
 }
 
 .input-wrapper {
@@ -245,9 +245,30 @@ const handleAddressSelect = (address: any) => {
   overflow: hidden;
 }
 
+.express-info-section {
+  margin-top: 20rpx;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: var(--recycle-bg-card);
+  border: 1rpx solid var(--recycle-line);
+  border-left: 6rpx solid var(--recycle-brand);
+  box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.06);
+}
+
+.express-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 18rpx;
+  color: var(--recycle-brand);
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 800;
+}
+
 .delivery-mode-toggle {
   display: flex;
-  background: #f1f5f9;
+  background: var(--recycle-bg-soft);
   border-radius: 8px;
   padding: 4px;
   gap: 4px;
@@ -258,13 +279,13 @@ const handleAddressSelect = (address: any) => {
     padding: 8px 12px;
     border-radius: 6px;
     font-size: 14px;
-    color: #64748b;
+    color: var(--recycle-text-sub);
     cursor: pointer;
     transition: all 0.3s;
 
     &.active {
-      background: #3b82f6;
-      color: #fff;
+      background: var(--recycle-button-bg);
+      color: var(--recycle-button-text);
       box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
     }
 
@@ -274,8 +295,8 @@ const handleAddressSelect = (address: any) => {
 
     &.disabled {
       opacity: 0.56;
-      background: #e5e7eb;
-      color: #94a3b8;
+      background: var(--recycle-line);
+      color: var(--recycle-text-sub);
     }
   }
 }
@@ -284,23 +305,23 @@ const handleAddressSelect = (address: any) => {
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
-  background: linear-gradient(135deg, #fab505, #f49d06);
+  background: var(--recycle-notice-text);
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(245, 158, 11, 0.3);
 
   .free-tag-text {
     font-size: 10px;
     font-weight: 600;
-    color: #fff;
+    color: var(--recycle-button-text);
     line-height: 1;
   }
 }
 
 .toggle-item.active .free-tag {
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  background: var(--recycle-notice-bg);
 
   .free-tag-text {
-    color: #92400e;
+    color: var(--recycle-notice-text);
   }
 }
 
@@ -310,11 +331,11 @@ const handleAddressSelect = (address: any) => {
   gap: 8rpx;
   padding: 16rpx 18rpx;
   margin-bottom: 16rpx;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
+  background: var(--recycle-notice-bg);
+  border: 1px solid rgba(245, 158, 11, 0.24);
   border-radius: 12rpx;
   font-size: 12px;
-  color: #92400e;
+  color: var(--recycle-notice-text);
   line-height: 1.5;
 }
 
@@ -325,30 +346,30 @@ const handleAddressSelect = (address: any) => {
     align-items: center;
     padding: 12px;
     margin-bottom: 12px;
-    background: #f8fafc;
-    border: 1px dashed #cbd5e1;
+    background: var(--recycle-bg-soft);
+    border: 1px dashed var(--recycle-line);
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.3s;
 
     &:active {
-      background: #f1f5f9;
-      border-color: #3b82f6;
+      background: var(--recycle-bg-soft);
+      border-color: var(--recycle-brand);
     }
   }
 
   .address-card-clickable {
-    background: #fff;
+    background: var(--recycle-bg-card);
     border-radius: 8px;
     padding: 12px;
     margin-bottom: 12px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--recycle-line);
     cursor: pointer;
     transition: all 0.2s;
 
     &:active {
-      background: #f8fafc;
-      border-color: #3b82f6;
+      background: var(--recycle-bg-soft);
+      border-color: var(--recycle-brand);
     }
 
     .address-compact {
@@ -360,7 +381,7 @@ const handleAddressSelect = (address: any) => {
         width: 28px;
         height: 28px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        background: var(--recycle-button-bg);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -375,22 +396,22 @@ const handleAddressSelect = (address: any) => {
         .user-name-compact {
           font-size: 14px;
           font-weight: 500;
-          color: #1e293b;
+          color: var(--recycle-text-main);
         }
 
         .user-phone-compact {
           font-size: 13px;
-          color: #64748b;
+          color: var(--recycle-text-sub);
         }
       }
 
       .edit-btn-small {
         padding: 4px;
-        background: #f1f5f9;
+        background: var(--recycle-bg-soft);
         border-radius: 4px;
 
         &:active {
-          background: #e2e8f0;
+          background: var(--recycle-line);
         }
       }
 
@@ -402,7 +423,7 @@ const handleAddressSelect = (address: any) => {
 
         text {
           font-size: 13px;
-          color: #64748b;
+          color: var(--recycle-text-sub);
           line-height: 1.5;
         }
       }
@@ -415,8 +436,8 @@ const handleAddressSelect = (address: any) => {
   padding: 12px;
   text-align: center;
   font-size: 13px;
-  color: #94a3b8;
-  background: #f8fafc;
+  color: var(--recycle-text-sub);
+  background: var(--recycle-bg-soft);
   border-radius: 8px;
   margin-bottom: 12px;
 }

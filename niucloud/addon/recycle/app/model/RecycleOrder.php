@@ -298,6 +298,7 @@ class RecycleOrder extends BaseModel
                                ->where(function($deviceSubQuery) use ($value) {
                                    $deviceSubQuery->whereOr([
                                        ['imei', 'like', "%{$value}%"],
+                                       ['user_sn', 'like', "%{$value}%"],
                                        ['model', 'like', "%{$value}%"]
                                    ]);
                                });

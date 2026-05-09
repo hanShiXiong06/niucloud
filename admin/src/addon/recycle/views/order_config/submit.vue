@@ -131,6 +131,91 @@
                 </section>
 
                 <section class="config-section">
+                    <div class="section-title">公众号关注提醒</div>
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">下单成功后弹出公众号二维码</div>
+                            <div class="setting-desc">开启后，用户提交订单成功会看到关注公众号弹窗；必须先上传公众号二维码图片。</div>
+                        </div>
+                        <el-switch v-model="form.follow_official_account.enabled" :active-value="1" :inactive-value="0" />
+                    </div>
+                    <div v-if="form.follow_official_account.enabled" class="media-config-panel">
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">公众号名称</div>
+                                <div class="setting-desc">展示在二维码上方，方便用户确认关注对象。</div>
+                            </div>
+                            <el-input v-model.trim="form.follow_official_account.wechat_name" maxlength="30" show-word-limit class="setting-input" placeholder="请输入公众号名称" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">弹窗标题</div>
+                                <div class="setting-desc">默认显示“关注公众号”。</div>
+                            </div>
+                            <el-input v-model.trim="form.follow_official_account.title" maxlength="30" show-word-limit class="setting-input" placeholder="关注公众号" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">提示文案</div>
+                                <div class="setting-desc">展示在二维码上方，说明关注后的用途。</div>
+                            </div>
+                            <el-input v-model.trim="form.follow_official_account.content" maxlength="120" show-word-limit class="setting-input" placeholder="关注公众号，及时接收订单状态通知" />
+                        </div>
+                        <div class="setting-row align-start">
+                            <div>
+                                <div class="setting-title">公众号二维码</div>
+                                <div class="setting-desc">开启提醒时必填，用户可长按识别关注。</div>
+                            </div>
+                            <upload-image v-model="form.follow_official_account.qr_code" :limit="1" width="120px" height="120px" image-text="上传二维码" />
+                        </div>
+                    </div>
+                </section>
+
+                <section class="config-section">
+                    <div class="section-title">订单客服</div>
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">开启订单详情客服入口</div>
+                            <div class="setting-desc">开启后，用户可在订单详情中联系工作人员，支持微信客服或自定义客服二维码。</div>
+                        </div>
+                        <el-switch v-model="form.customer_service.enabled" :active-value="1" :inactive-value="0" />
+                    </div>
+                    <div v-if="form.customer_service.enabled" class="media-config-panel">
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">客服方式</div>
+                                <div class="setting-desc">微信客服适合小程序原生客服；二维码客服适合添加指定工作人员。</div>
+                            </div>
+                            <el-radio-group v-model="form.customer_service.type">
+                                <el-radio-button label="wechat">微信客服</el-radio-button>
+                                <el-radio-button label="qrcode">客服二维码</el-radio-button>
+                            </el-radio-group>
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">入口标题</div>
+                                <div class="setting-desc">展示在订单详情客服入口和弹窗标题中。</div>
+                            </div>
+                            <el-input v-model.trim="form.customer_service.title" maxlength="30" show-word-limit class="setting-input" placeholder="联系客服" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">提示文案</div>
+                                <div class="setting-desc">说明客服可以处理的事项。</div>
+                            </div>
+                            <el-input v-model.trim="form.customer_service.content" maxlength="120" show-word-limit class="setting-input" placeholder="如需议价或咨询订单进度，请联系客服处理" />
+                        </div>
+                        <div v-if="form.customer_service.type === 'qrcode'" class="setting-row align-start">
+                            <div>
+                                <div class="setting-title">客服二维码</div>
+                                <div class="setting-desc">选择二维码客服时必填，用户可长按添加工作人员。</div>
+                            </div>
+                            <upload-image v-model="form.customer_service.qrcode" :limit="1" width="120px" height="120px" image-text="上传二维码" />
+                        </div>
+                    </div>
+                </section>
+
+                <section class="config-section">
                     <div class="section-title">订单确认</div>
                     <div class="setting-row">
                         <div>
@@ -142,8 +227,8 @@
                 </section>
 
                 <section class="config-section">
-                    <div class="section-title">报价详情页配色</div>
-                    <div class="section-tip">用于移动端报价详情页。先选模板快速套色，再按品牌需要微调颜色，右侧会实时预览。</div>
+                    <div class="section-title">报价产品配色</div>
+                    <div class="section-tip">用于移动端报价详情页、报价筛选弹窗、报价导航组件的默认视觉。先选模板快速套色，再按品牌需要微调颜色，右侧会实时预览。</div>
                     <div class="theme-layout">
                         <div class="theme-config">
                             <div class="theme-template-grid">
@@ -396,6 +481,20 @@ const form = reactive<OrderSubmitConfig>({
         display_name: '京东快递',
         free_shipping_min_count: 1
     },
+    follow_official_account: {
+        enabled: 0,
+        wechat_name: '',
+        qr_code: '',
+        title: '关注公众号',
+        content: '关注公众号，及时接收订单状态通知'
+    },
+    customer_service: {
+        enabled: 0,
+        type: 'wechat',
+        qrcode: '',
+        title: '联系客服',
+        content: '如需议价或咨询订单进度，请联系客服处理'
+    },
     allow_user_reject_sale: 1,
     price_detail_theme: {
         template_key: 'classic_blue',
@@ -443,6 +542,16 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.profile.id_card_required = data.profile?.id_card_required === 0 ? 0 : 1
     form.platform_delivery.display_name = data.platform_delivery?.display_name || '京东快递'
     form.platform_delivery.free_shipping_min_count = Math.max(1, Math.min(99, Number(data.platform_delivery?.free_shipping_min_count || 1)))
+    form.follow_official_account.enabled = data.follow_official_account?.enabled ? 1 : 0
+    form.follow_official_account.wechat_name = data.follow_official_account?.wechat_name || ''
+    form.follow_official_account.qr_code = data.follow_official_account?.qr_code || ''
+    form.follow_official_account.title = data.follow_official_account?.title || '关注公众号'
+    form.follow_official_account.content = data.follow_official_account?.content || '关注公众号，及时接收订单状态通知'
+    form.customer_service.enabled = data.customer_service?.enabled ? 1 : 0
+    form.customer_service.type = data.customer_service?.type === 'qrcode' ? 'qrcode' : 'wechat'
+    form.customer_service.qrcode = data.customer_service?.qrcode || ''
+    form.customer_service.title = data.customer_service?.title || '联系客服'
+    form.customer_service.content = data.customer_service?.content || '如需议价或咨询订单进度，请联系客服处理'
     form.allow_user_reject_sale = data.allow_user_reject_sale === 0 ? 0 : 1
     normalizeTheme(data.price_detail_theme)
     if (!form.delivery_modes.mail && !form.delivery_modes.self) {
@@ -497,6 +606,14 @@ const save = async () => {
     }
     if (form.profile.enabled && form.profile.payment_required && form.profile.payment_min_count < 1) {
         ElMessage.warning('最低收款方式数量不能小于 1')
+        return
+    }
+    if (form.follow_official_account.enabled && !form.follow_official_account.qr_code) {
+        ElMessage.warning('开启公众号关注提醒前，请先上传公众号二维码')
+        return
+    }
+    if (form.customer_service.enabled && form.customer_service.type === 'qrcode' && !form.customer_service.qrcode) {
+        ElMessage.warning('选择客服二维码模式前，请先上传客服二维码')
         return
     }
 
@@ -556,6 +673,14 @@ onMounted(load)
     border-top: 1px dashed #e5e7eb;
 }
 
+.media-config-panel {
+    display: grid;
+    gap: 18px;
+    padding-top: 18px;
+    margin-top: 18px;
+    border-top: 1px dashed #e5e7eb;
+}
+
 .section-title {
     margin-bottom: 14px;
     font-size: 15px;
@@ -579,6 +704,10 @@ onMounted(load)
     & + & {
         margin-top: 18px;
     }
+}
+
+.setting-row.align-start {
+    align-items: flex-start;
 }
 
 .setting-input {

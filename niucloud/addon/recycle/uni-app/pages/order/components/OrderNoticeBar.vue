@@ -1,7 +1,7 @@
 <template>
   <view v-if="visible" class="order-notice">
     <view class="notice-icon">
-      <up-icon name="bell" size="14" color="#8C7575"></up-icon>
+      <up-icon name="bell" size="14" color="var(--recycle-notice-text)"></up-icon>
     </view>
     <view class="notice-content">
       <text class="notice-title">{{ title }}</text>
@@ -28,8 +28,8 @@ const visible = computed(() => !!props.enabled && !!String(props.content || '').
   gap: 16rpx;
   padding: 20rpx;
   margin-bottom: 20rpx;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+  background: var(--recycle-notice-bg);
+  border: 1px solid rgba(245, 158, 11, 0.24);
   border-radius: 16rpx;
 }
 
@@ -40,7 +40,7 @@ const visible = computed(() => !!props.enabled && !!String(props.content || '').
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffedd5;
+  background: rgba(245, 158, 11, 0.12);
   border-radius: 50%;
 }
 
@@ -53,7 +53,7 @@ const visible = computed(() => !!props.enabled && !!String(props.content || '').
   display: block;
   font-size: 13px;
   font-weight: 600;
-  color: #7c2d12;
+  color: var(--recycle-notice-text);
   line-height: 1.4;
 }
 
@@ -61,7 +61,7 @@ const visible = computed(() => !!props.enabled && !!String(props.content || '').
   display: block;
   margin-top: 6rpx;
   font-size: 12px;
-  color: #9a3412;
+  color: var(--recycle-text-main);
   line-height: 1.55;
   white-space: pre-wrap;
 }

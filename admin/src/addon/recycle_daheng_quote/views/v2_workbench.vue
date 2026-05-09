@@ -28,7 +28,7 @@
                 </div>
                 <div class="guide-item">
                     <strong>同步策略</strong>
-                    <span>先预览再导入；字段类型调整会写入解析规则。</span>
+                    <span>系统每小时检查一次，只同步已开启自动同步且到达间隔的报价单。</span>
                 </div>
             </div>
 
@@ -83,6 +83,22 @@
                     <template #default="{ row }">
                         <div>{{ formatTime(row.last_sync_at) }}</div>
                         <div class="muted">{{ row.last_sync_message || '暂无同步' }}</div>
+                    </template>
+                </el-table-column>
+                <el-table-column label="自动同步" min-width="190">
+                    <template #default="{ row }">
+                        <div class="auto-sync-cell">
+                            <el-switch
+                                v-model="row.sync_enabled"
+                                :active-value="1"
+                                :inactive-value="0"
+                                :loading="autoSyncLoadingId === row.id"
+                                @click.stop
+                                @change="toggleDatasetAutoSync(row)"
+                            />
+                            <span>{{ row.sync_enabled ? '已开启' : '未开启' }}</span>
+                        </div>
+                        <div class="muted">{{ autoSyncText(row) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="最近结果" min-width="230">
@@ -658,6 +674,20 @@
                 <el-form-item label="渠道"><el-input v-model="datasetDialog.form.channel_key" placeholder="默认 chaoniu" /></el-form-item>
                 <el-form-item label="排序"><el-input-number v-model="datasetDialog.form.sort" :min="0" /></el-form-item>
                 <el-form-item label="状态"><el-switch v-model="datasetDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
+                <el-form-item label="自动同步">
+                    <el-switch v-model="datasetDialog.form.sync_enabled" :active-value="1" :inactive-value="0" />
+                    <div class="form-tip">开启后系统计划任务每小时检查一次。只有报价单启用且到达同步间隔时才会真正请求第三方。</div>
+                </el-form-item>
+                <el-form-item label="同步间隔">
+                    <el-select v-model="datasetDialog.form.sync_interval" class="w-[220px]">
+                        <el-option label="每 6 小时" :value="21600" />
+                        <el-option label="每 12 小时" :value="43200" />
+                        <el-option label="每天一次" :value="86400" />
+                        <el-option label="每 3 天" :value="259200" />
+                        <el-option label="每 7 天" :value="604800" />
+                    </el-select>
+                    <div class="form-tip">这是同一张报价单两次自动同步之间的最短间隔。手动同步不受限制。</div>
+                </el-form-item>
                 <el-form-item label="备注"><el-input v-model="datasetDialog.form.remark" type="textarea" :rows="2" /></el-form-item>
             </el-form>
             <template #footer>
@@ -926,6 +956,7 @@ const activeTab = ref('prices')
 const importLoading = ref(false)
 const previewLoadingId = ref(0)
 const syncLoadingId = ref(0)
+const autoSyncLoadingId = ref(0)
 const datasetOptions = ref<any[]>([])
 const modelOptions = ref<any[]>([])
 const capacityOptions = ref<any[]>([])
@@ -1231,6 +1262,35 @@ const todayDate = () => {
     const date = new Date()
     const pad = (num: number) => String(num).padStart(2, '0')
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+const syncIntervalOptions = [
+    { label: '每 6 小时', value: 21600 },
+    { label: '每 12 小时', value: 43200 },
+    { label: '每天一次', value: 86400 },
+    { label: '每 3 天', value: 259200 },
+    { label: '每 7 天', value: 604800 }
+]
+
+const syncIntervalText = (seconds: number) => {
+    const value = Number(seconds || 0)
+    const option = syncIntervalOptions.find((item) => item.value === value)
+    if (option) return option.label
+    if (value >= 86400) return `每 ${Math.round(value / 86400)} 天`
+    if (value >= 3600) return `每 ${Math.round(value / 3600)} 小时`
+    return `每 ${Math.max(1, Math.round(value / 60))} 分钟`
+}
+
+const nextSyncTime = (row: any) => {
+    if (!row.sync_enabled) return ''
+    const last = Number(row.last_sync_at || 0)
+    if (!last) return '等待首次自动同步'
+    return `下次最早 ${formatTime(last + Number(row.sync_interval || 86400))}`
+}
+
+const autoSyncText = (row: any) => {
+    if (!row.sync_enabled) return '开启后按所选间隔自动抓取'
+    return `${syncIntervalText(Number(row.sync_interval || 86400))}，${nextSyncTime(row)}`
 }
 
 const loadDatasetOptions = async () => {
@@ -1624,6 +1684,27 @@ const syncNow = async (row: any) => {
     }
 }
 
+const toggleDatasetAutoSync = async (row: any) => {
+    autoSyncLoadingId.value = row.id
+    const nextValue = Number(row.sync_enabled || 0)
+    const oldValue = nextValue ? 0 : 1
+    try {
+        const payload = {
+            ...row,
+            sync_enabled: nextValue,
+            sync_interval: Number(row.sync_interval || 86400)
+        }
+        await editQuotationV2Dataset(row.id, payload)
+        patchDatasetLocal(Number(row.id), payload)
+        ElMessage.success(nextValue ? '已开启自动同步' : '已关闭自动同步')
+    } catch (error) {
+        row.sync_enabled = oldValue
+        throw error
+    } finally {
+        autoSyncLoadingId.value = 0
+    }
+}
+
 const openDatasetDialog = (row?: any) => {
     datasetDialog.form = row ? { ...row } : {
         quotation_id: 0,
@@ -1633,6 +1714,8 @@ const openDatasetDialog = (row?: any) => {
         channel_key: 'chaoniu',
         sort: 0,
         status: 1,
+        sync_enabled: 0,
+        sync_interval: 86400,
         remark: ''
     }
     datasetDialog.show = true
@@ -2028,6 +2111,15 @@ watch(
 
     .dataset-name-main {
         min-width: 0;
+    }
+
+    .auto-sync-cell {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #111827;
+        font-size: 13px;
+        font-weight: 600;
     }
 
     .filter-form {

@@ -22,6 +22,20 @@ export interface OrderSubmitConfig {
         display_name: string
         free_shipping_min_count: number
     }
+    follow_official_account: {
+        enabled: number
+        wechat_name: string
+        qr_code: string
+        title: string
+        content: string
+    }
+    customer_service: {
+        enabled: number
+        type: 'wechat' | 'qrcode'
+        qrcode: string
+        title: string
+        content: string
+    }
     allow_user_reject_sale: number
     price_detail_theme: {
         template_key: string
