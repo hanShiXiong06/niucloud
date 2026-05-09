@@ -47,9 +47,6 @@
                                 :value="item.label_id" />
                         </el-select>
                     </el-form-item>
-
-
-
                     <el-form-item :label="t('skuPrice')" prop="sku_price">
                         <div class="region-input">
                             <input type="text" :placeholder="t('startPricePlaceholder')" maxlength="10"
@@ -59,9 +56,16 @@
                                 v-model.trim="goodsTable.searchParam.end_price" @keyup="filterDigit($event)">
                         </div>
                     </el-form-item>
-                    <!-- 只看自己 -->
-                    <el-form-item>
-                        <el-checkbox v-model="goodsTable.searchParam.only_self" :label="t('只看自己')" />
+
+                    <!--  库龄筛选 -->
+                    <el-form-item :label="t('库龄')" prop="inventory_age">
+                        <el-select v-model="goodsTable.searchParam.inventory_age" :placeholder="t('请选择库龄')"
+                            clearable>
+                            <el-option label="0-10天" value="0-10" />
+                            <el-option label="11-30天" value="11-30" />
+                            <el-option label="30-50天" value="30-50" />
+                            <el-option label="50天以上" value="50+" />
+                        </el-select>
                     </el-form-item>
 
                     <el-form-item>
@@ -72,8 +76,8 @@
             </el-card>
 
             <div class="mt-[10px]">
-
                 <el-tabs v-model="goodsTable.searchParam.status" class="goods-tabs" @tab-click="tabHandleClick">
+                    <el-tab-pane  v-if="userStore().siteInfo.site_id != '100005'" :label="t('自营')" name="2"></el-tab-pane>
                     <el-tab-pane :label="t('statusOn')" name="1"></el-tab-pane>
                     <el-tab-pane :label="t('statusOff')" name="0"></el-tab-pane>
                     <el-tab-pane :label="t('statusAll')" name=""></el-tab-pane>
@@ -87,6 +91,7 @@
                     <el-button @click="batchGoodsStatus(0)" size="small" v-if="goodsTable.searchParam.status != '0'">{{
                         t('batchOffGoods') }}</el-button>
                     <el-button @click="batchDeleteGoods" size="small">{{ t('batchDeleteGoods') }}</el-button>
+                    <el-button @click="batchShareGoods" size="small" type="success">批量分享</el-button>
                 </div>
 
                 <el-table :data="goodsTable.data" size="large" v-loading="goodsTable.loading" ref="goodsListTableRef"
@@ -124,6 +129,11 @@
 
                                 </div>
                             </div>
+                        </template>
+                    </el-table-column>
+                       <el-table-column :label="t('goodsCategory')" min-width="120">
+                        <template #default="{ row }">
+                            <span>{{ row.category_full_name || '-' }}</span>
                         </template>
                     </el-table-column>
                     <el-table-column prop="sku_no" :label="t('sn')" min-width="130">
@@ -184,6 +194,7 @@
                         </template>
                     </el-table-column>
 
+                 
                     <el-table-column prop="site_name" :label="t('来源')" min-width="120" />
                     <el-table-column prop="join_time" v-if="goodsTable.searchParam.status == 1" :label="t('库龄')"
                         min-width="120" />
@@ -198,10 +209,11 @@
                         </template>
                     </el-table-column>
 
-                    <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
+                    <el-table-column :label="t('operation')" fixed="right" align="right" min-width="150">
                         <template #default="{ row }">
-                            <div v-if="siteId == row.site_id">
+
                                 <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
+                                <el-button type="success" link @click="offlineSaleEvent(row)" v-if="row.status == 1 && row.stock > 0">销售</el-button>
                                 <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods')
                                     }}</el-button>
 
@@ -214,12 +226,8 @@
                                 <el-button type="primary" v-if="row.status != 1" link
                                     @click="deleteEvent(row.goods_id)">{{
                                         t('delete') }}</el-button>
-                            </div>
-                            <div v-else>
-                                <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods')
-                                    }}</el-button>
 
-                            </div>
+         
 
                         </template>
                     </el-table-column>
@@ -249,10 +257,13 @@
         <goods-price-edit-popup ref="goodsPriceEditPopupRef" @load="loadGoodsList" />
 
         <!-- 商品推广弹出框 -->
-        <goods-spread-popup ref="goodsSpreadPopupRef" />
+        <spread-popup ref="spreadPopupRef" />
 
         <!-- 会员价弹出框 -->
         <goods-member-price-popup ref="memberPricePopupRef" @load="loadGoodsList" />
+
+        <!-- 线下销售弹出框 -->
+        <goods-offline-order-popup ref="offlineSalePopupRef" @success="loadGoodsList" />
     </div>
 </template>
 
@@ -260,14 +271,17 @@
 import { reactive, ref ,watch } from 'vue'
 import { t } from '@/lang'
 import { debounce, img, filterDigit } from '@/utils/common'
-import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
+import { ElMessage, ElMessageBox, ElLoading, FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { cloneDeep } from 'lodash-es'
+import { useClipboard } from '@vueuse/core'
 import goodsMemberPricePopup from '@/addon/phone_shop/views/goods/components/goods-member-price-popup.vue'
 import goodsStockEditPopup from '@/addon/phone_shop/views/goods/components/goods-stock-edit-popup.vue'
 import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods-price-edit-popup.vue'
-import goodsSpreadPopup from '@/addon/phone_shop/views/goods/components/goods-spread-popup.vue'
-import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods, syncGoodsList } from '@/addon/phone_shop/api/goods'
+import spreadPopup from '@/components/spread-popup/index.vue'
+import goodsOfflineOrderPopup from '@/addon/phone_shop/views/goods/components/goods-offline-order-popup.vue'
+import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods } from '@/addon/phone_shop/api/goods'
+import { batchGenerateShortLink } from '@/addon/phone_shop/api/shortlink'
 import { getMemberLevelAll } from '@/app/api/member'
 import { usePaginationStore } from '@/stores/modules/paginationStore'
 import userStore from '@/stores/modules/user'
@@ -278,8 +292,7 @@ const route = useRoute()
 const pageName = route.meta.title
 const repeat = ref(false)
 const paginationStore = usePaginationStore();
-// 获取当前站点
-const siteId = userStore().siteInfo?.site_id
+
 
 
 const goodsTable = reactive({
@@ -301,7 +314,9 @@ const goodsTable = reactive({
         status: route.query.status || '1',
         order: '',
         sort: '',
-        sku_no: ''
+        sku_no: '',
+        inventory_age: '',
+        source: ''  // 商品来源站点筛选
     }
 })
 
@@ -396,7 +411,20 @@ initData()
 
 // 当前选中tab页面
 const tabHandleClick = (tab: any, event: Event) => {
-    goodsTable.searchParam.status = tab.props.name
+    const tabName = tab.props.name
+    
+    // 如果点击的是 "source" 标签（name="2"）
+    if (tabName === '2') {
+        // 设置 source 为当前站点的 site_id
+        goodsTable.searchParam.source = userStore().siteInfo.site_id
+        // status 设为空，不按状态筛选（或者设为 '1' 只显示上架的）
+        goodsTable.searchParam.status = '1'
+    } else {
+        // 其他标签清空 source 筛选
+        goodsTable.searchParam.source = ''
+        goodsTable.searchParam.status = tabName
+    }
+    
     loadGoodsList()
 }
 
@@ -695,10 +723,17 @@ const editStockEvent = (data: any) => {
 }
 
 // 商品推广
-const goodsSpreadPopupRef: any = ref(null)
+const spreadPopupRef = ref(null)
+
 
 const spreadEvent = (data: any) => {
-    goodsSpreadPopupRef.value.show(data)
+    const pagePath = '/addon/shop/pages/goods/detail'
+    const paramsArr = [
+        { name: 'goods_id', value: data.goods_id },
+    ];
+    const title = '商品推广'
+    const folder = 'goods'
+    spreadPopupRef.value?.show(pagePath, paramsArr, title, folder);
 }
 
 /** ***************** 会员价-start *************************/
@@ -716,6 +751,16 @@ const memberPriceEvent = (data: any) => {
     memberPricePopupRef.value.show(data, memberLevel.value)
 }
 /** ***************** 会员价-end *************************/
+
+/** ***************** 线下销售-start *************************/
+// 线下销售弹窗
+const offlineSalePopupRef: any = ref(null)
+const offlineSaleEvent = (data: any) => {
+
+    
+    offlineSalePopupRef.value.show(data)
+}
+/** ***************** 线下销售-end *************************/
 
 // 复制商品
 const copyEvent = (data: any) => {
@@ -771,31 +816,113 @@ const resetForm = (formEl: FormInstance | undefined) => {
     goodsTable.searchParam.end_price = ''
     goodsTable.searchParam.start_sale_num = ''
     goodsTable.searchParam.end_sale_num = ''
-    goodsTable.searchParam.only_self = 0
+    goodsTable.searchParam.sku_no=''
+    goodsTable.searchParam.goods_name=''
+    goodsTable.searchParam.inventory_age=''
+
 
     loadGoodsList()
 }
 
-// hsx----
-const syncGoods = () => {
-    goodsTable.loading = true;
+// 初始化剪贴板功能
+const { copy, isSupported } = useClipboard()
 
-    // 创建提示框，duration 为 0 表示不会自动消失
-    const messageInstance = ElMessage({
-        message: '同步中...',
-        type: 'warning',
-        duration: 0 // 提示框不自动消失
+/**
+ * 批量分享商品
+ */
+const batchShareGoods = async () => {
+    // 1. 检查是否有选中商品
+    if (multipleSelection.value.length == 0) {
+        ElMessage({
+            type: 'warning',
+            message: '请先选择要分享的商品'
+        })
+        return
+    }
+
+    // 2. 显示加载提示
+    const loading = ElLoading.service({
+        lock: true,
+        text: `正在生成 ${multipleSelection.value.length} 个商品的分享链接...`,
+        background: 'rgba(0, 0, 0, 0.7)'
     })
 
-    syncGoodsList().then(res => {
-        if (res.code == 1) {
-            loadGoodsList()
+    try {
+        // 3. 准备商品列表数据
+        const goodsList = multipleSelection.value.map((item: any) => ({
+            goods_id: item.goods_id,
+            goods_name: item.goods_name,
+            sub_title: item.sub_title || ''
+        }))
+
+        // 4. 调用批量生成 API
+        const res = await batchGenerateShortLink({
+            goods_list: goodsList
+        })
+
+        loading.close()
+
+        if (res.code !== 1) {
+            ElMessage({
+                type: 'error',
+                message: res.msg || '生成分享链接失败'
+            })
+            return
         }
-    }).finally(() => {
-        // 请求完成后，手动关闭提示框和 loading 状态
-        goodsTable.loading = false
-        messageInstance.close()
-    })
+
+        // 5. 处理返回结果
+        const successList = res.data.filter((item: any) => item.success)
+
+        if (successList.length === 0) {
+            ElMessage({
+                type: 'error',
+                message: '所有商品的分享链接生成失败，请稍后重试'
+            })
+            return
+        }
+
+        // 6. 格式化分享文本
+        // 格式：商品名称(含sub_title) #小程序://xxx/xxxx
+        const shareLines = successList.map((item: any) => {
+            let title = item.goods_name
+            if (item.sub_title) {
+                title += ' ' + item.sub_title
+            }
+            return `${title} ${item.short_link}`
+        })
+
+        const shareText = shareLines.join('\n')
+
+        // 7. 复制到剪贴板
+        if (isSupported.value) {
+            copy(shareText)
+
+            const failedCount = res.data.length - successList.length
+            let message = `已成功生成 ${successList.length} 个分享链接并复制到剪贴板`
+            if (failedCount > 0) {
+                message += `，${failedCount} 个失败`
+            }
+
+            ElMessage({
+                type: 'success',
+                message: message,
+                duration: 3000
+            })
+        } else {
+            // 如果不支持复制，显示弹窗让用户手动复制
+            ElMessageBox.alert(shareText, '分享链接（请手动复制）', {
+                confirmButtonText: '关闭',
+                type: 'success'
+            })
+        }
+
+    } catch (error: any) {
+        loading.close()
+        ElMessage({
+            type: 'error',
+            message: '生成分享链接失败：' + (error.message || '未知错误')
+        })
+    }
 }
 
 </script>

@@ -78,7 +78,7 @@ defineExpose({
   right: 0;
   top: 0;
   z-index: 999;
-  background: linear-gradient(100deg, var(--recycle-button-bg) 0%, var(--recycle-brand-deep) 58%, var(--recycle-brand) 100%);
+  background: var(--recycle-button-bg);
   color: var(--recycle-button-text);
   box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.14);
 }

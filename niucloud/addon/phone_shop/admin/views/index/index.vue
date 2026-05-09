@@ -119,35 +119,26 @@
         </el-card>
         <!-- 代办事项 end -->
 
-        <!-- 商品上下架趋势 -->
-        <el-card shadow="never" class="mt-[15px] !border-none">
-            <template #header>
-                <div class="flex items-center justify-between">
-                    <span class="text-lg font-extrabold">商品上下架趋势</span>
-                    <el-select v-model="timeRange" @change="handleTimeRangeChange" style="width: 120px" size="default" placeholder="选择时间范围">
-                        <el-option label="今日" value="today" />
-                        <el-option label="昨日" value="yesterday" />
-                        <el-option label="本周" value="week" />
-                        <el-option label="本月" value="month" />
-                    </el-select>
-                </div>
-            </template>
-            <el-row :gutter="15">
-                <el-col :span="12">
-                    <div class="text-center mb-[10px]">
-                        <span class="text-base font-semibold">{{t('categoryUnshelfComparison')}}</span>
-                    </div>
-                    <div ref="unshelfChartRef" :style="{ width: '100%', height: '300px' }"></div>
-                </el-col>
-                <el-col :span="12">
-                    <div class="text-center mb-[10px]">
-                        <span class="text-base font-semibold">{{t('categoryShelfComparison')}}</span>
-                    </div>
-                    <div ref="shelfChartRef" :style="{ width: '100%', height: '300px' }"></div>
-                </el-col>
-            </el-row>
-        </el-card>
-        <!-- 商品上下架趋势 end -->
+        <!-- 订单趋势 -->
+        <el-row :gutter="15" class="mt-[15px]">
+            <el-col :span="12">
+                <el-card shadow="never" class="!border-none">
+                    <template #header>
+                        <span class="text-lg font-extrabold">订单量趋势</span>
+                    </template>
+                    <div ref="visitStat" :style="{ width: '100%', height: '300px' }"></div>
+                </el-card>
+            </el-col>
+            <el-col :span="12">
+                <el-card shadow="never" class="!border-none">
+                    <template #header>
+                        <span class="text-lg font-extrabold">销售额（元）</span>
+                    </template>
+                    <div ref="hourStat" :style="{ width: '100%', height: '300px' }"></div>
+                </el-card>
+            </el-col>
+        </el-row>
+        <!-- 订单趋势 end -->
     </div>
 </template>
 
@@ -167,8 +158,8 @@ import { useRouter } from 'vue-router'
 import { QuestionFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
-const unshelfChartRef = ref<HTMLElement | null>(null)
-const shelfChartRef = ref<HTMLElement | null>(null)
+const visitStat = ref<HTMLElement | null>(null)
+const hourStat = ref<HTMLElement | null>(null)
 
 interface StatTotalType {
     order_num: number
@@ -190,14 +181,10 @@ interface StatGoodsType {
     sale_goods_over_30_unsold_num: number
     sale_goods_over_90_unsold_num: number
 }
-interface TrendSeries {
-    name: string
-    data: number[]
-}
-interface TrendPayload {
-    legend: string[]
-    categories: string[]
-    series: TrendSeries[]
+interface StatCountType {
+    order_num: number[]
+    time: string[]
+    sale_money: number[]
 }
 
 const defaultTotal: StatTotalType = { order_num: 0, sale_money: 0, refund_money: 0, access_sum: 0 }
@@ -213,11 +200,7 @@ const statTotal = ref<StatTotalType>({ ...defaultTotal })
 const statToday = ref<StatDayType>({ ...defaultDay })
 const statYesterday = ref<StatDayType>({ ...defaultDay })
 const statGoods = ref<StatGoodsType>({ ...defaultGoods })
-const categoryTrend = ref<{ shelf: TrendPayload; unshelf: TrendPayload }>({
-    shelf: { legend: [], categories: [], series: [] },
-    unshelf: { legend: [], categories: [], series: [] }
-})
-const timeRange = ref<string>('today')
+const statCount = ref<StatCountType>({ order_num: [], time: [], sale_money: [] })
 
 const normalizeNumberMap = (payload: Record<string, any>) => {
     const result: Record<string, number> = {}
@@ -228,145 +211,92 @@ const normalizeNumberMap = (payload: Record<string, any>) => {
     return result
 }
 
-const renderTrendChart = (el: HTMLElement | null, trend: TrendPayload, emptyText: string) => {
-    if (!el) return
-    let chart = echarts.getInstanceByDom(el)
-    if (!chart) chart = echarts.init(el)
-
-    // 过滤掉所有值为0的分类
-    const validIndices: number[] = []
-    const categoryCounts = new Array(trend.categories.length).fill(0)
-    
-    // 计算每个分类在所有系列中的总和
-    trend.series.forEach((series) => {
-        series.data.forEach((value, index) => {
-            if (value > 0) {
-                categoryCounts[index] += value
-            }
-        })
-    })
-    
-    // 找出有数据的分类索引
-    categoryCounts.forEach((count, index) => {
-        if (count > 0) {
-            validIndices.push(index)
-        }
-    })
-
-    // 如果没有有效数据，显示空状态
-    if (validIndices.length === 0) {
-        const option: EChartsOption = {
-            legend: { data: [] },
-            xAxis: { type: 'category', data: [] },
-            yAxis: { type: 'value' },
-            series: [],
-            graphic: [
-                {
-                    type: 'text',
-                    left: 'center',
-                    top: 'middle',
-                    style: {
-                        text: emptyText,
-                        fill: '#909399',
-                        fontSize: 16
-                    }
-                }
-            ]
-        }
-        chart.setOption(option, true)
-        return
-    }
-
-    // 过滤分类和系列数据
-    const filteredCategories = validIndices.map((idx) => trend.categories[idx])
-    const filteredSeries = trend.series.map((series) => ({
-        ...series,
-        type: 'bar',
-        barMaxWidth: 28,
-        data: validIndices.map((idx) => series.data[idx] || 0)
-    }))
-
-    const option: EChartsOption = {
-        tooltip: { 
-            trigger: 'axis',
-            formatter: (params: any) => {
-                if (!params || params.length === 0) return ''
-                let result = params[0].axisValue + '<br/>'
-                params.forEach((item: any) => {
-                    if (item.value > 0) {
-                        result += `${item.seriesName}: ${item.value}<br/>`
-                    }
-                })
-                return result
-            }
-        },
-        legend: { data: trend.legend },
+const drawChart = () => {
+    const value = statCount.value.order_num
+    if (!visitStat.value) return
+    const visitStatChart = echarts.init(visitStat.value)
+    const visitStatOption = {
+        legend: {},
         xAxis: {
-            type: 'category',
-            data: filteredCategories,
-            axisLabel: { 
-                interval: 0,
-                rotate: filteredCategories.length > 5 ? 45 : 0
+            data: statCount.value.time
+        },
+        yAxis: {},
+        tooltip: {
+            trigger: 'axis',
+            formatter: (params: any[]) => {
+                if (!params.length) return ''
+                const date = params[0].axisValue
+                const data = params[0].data
+                return `${date}<br/>订单量: ${data} 单`
             }
         },
-        yAxis: { type: 'value' },
-        series: filteredSeries
+        series: [
+            {
+                type: 'line',
+                data: value
+            }
+        ]
     }
-
-    chart.setOption(option, true)
+    visitStatChart.setOption(visitStatOption)
 }
 
-const refreshTrendCharts = () => {
-    renderTrendChart(unshelfChartRef.value, categoryTrend.value.unshelf, '暂无数据')
-    renderTrendChart(shelfChartRef.value, categoryTrend.value.shelf, '暂无数据')
+const drawChartTo = () => {
+    const valueTo = statCount.value.sale_money
+    if (!hourStat.value) return
+    const hourStatChart = echarts.init(hourStat.value)
+    const hourStatOption = {
+        legend: {},
+        xAxis: {
+            data: statCount.value.time
+        },
+        yAxis: {},
+        tooltip: {
+            trigger: 'axis',
+            formatter: (params: any[]) => {
+                if (!params.length) return ''
+                const date = params[0].axisValue
+                const data = params[0].data
+                return `${date}<br/>销售额: ${data} 元`
+            }
+        },
+        series: [
+            {
+                type: 'line',
+                data: valueTo
+            }
+        ]
+    }
+    hourStatChart.setOption(hourStatOption)
 }
 
 const getStatInfoFn = async () => {
-    const [totalRes, todayRes, yesterdayRes, goodsRes, trendRes] = await Promise.all([
+    const [totalRes, todayRes, yesterdayRes, goodsRes, statRes] = await Promise.all([
         getShopCountList(),
         getShopTodayCountList(),
         getShopYesterdayCountList(),
         getShopGoodsStat(),
-        getShopStat(timeRange.value)
+        getShopStat()
     ])
 
     statTotal.value = { ...defaultTotal, ...normalizeNumberMap(totalRes.data || {}) }
     statToday.value = { ...defaultDay, ...normalizeNumberMap(todayRes.data || {}) }
     statYesterday.value = { ...defaultDay, ...normalizeNumberMap(yesterdayRes.data || {}) }
     statGoods.value = { ...defaultGoods, ...normalizeNumberMap(goodsRes.data || {}) }
-
-    const trendData = trendRes.data || {}
-    const defaultTrend: TrendPayload = { legend: [], categories: [], series: [] }
-    categoryTrend.value = {
-        shelf: trendData.shelf || { ...defaultTrend },
-        unshelf: trendData.unshelf || { ...defaultTrend }
-    }
+    statCount.value = statRes.data || { order_num: [], time: [], sale_money: [] }
 
     await nextTick()
-    refreshTrendCharts()
+    drawChart()
+    drawChartTo()
 }
-
-const handleTimeRangeChange = async () => {
-    const trendRes = await getShopStat(timeRange.value)
-    const trendData = trendRes.data || {}
-    const defaultTrend: TrendPayload = { legend: [], categories: [], series: [] }
-    categoryTrend.value = {
-        shelf: trendData.shelf || { ...defaultTrend },
-        unshelf: trendData.unshelf || { ...defaultTrend }
-    }
-    await nextTick()
-    refreshTrendCharts()
-}
-
 getStatInfoFn()
 
 onBeforeUnmount(() => {
-    if (unshelfChartRef.value) {
-        const chart = echarts.getInstanceByDom(unshelfChartRef.value)
+    if (visitStat.value) {
+        const chart = echarts.getInstanceByDom(visitStat.value)
         chart?.dispose()
     }
-    if (shelfChartRef.value) {
-        const chart = echarts.getInstanceByDom(shelfChartRef.value)
+    if (hourStat.value) {
+        const chart = echarts.getInstanceByDom(hourStat.value)
         chart?.dispose()
     }
 })

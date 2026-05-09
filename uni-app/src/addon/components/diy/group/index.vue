@@ -122,31 +122,7 @@
                 </template>
                 <template v-if="component.componentName == 'Text'">
                    <diy-text ref="diyTextRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.Text" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'PhoneGoodsCoupon'">
-                   <diy-phone-goods-coupon ref="diyPhoneGoodsCouponRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneGoodsCoupon" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'PhoneGoodsList'">
-                   <diy-phone-goods-list ref="diyPhoneGoodsListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneGoodsList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'PhoneManyGoodsList'">
-                   <diy-phone-many-goods-list ref="diyPhoneManyGoodsListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneManyGoodsList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'PhoneShopExchangeGoods'">
-                   <diy-phone-shop-exchange-goods ref="diyPhoneShopExchangeGoodsRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopExchangeGoods" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'PhoneShopExchangeInfo'">
-                   <diy-phone-shop-exchange-info ref="diyPhoneShopExchangeInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopExchangeInfo" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'PhoneShopMemberInfo'">
-                   <diy-phone-shop-member-info ref="diyPhoneShopMemberInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopMemberInfo" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'PhoneShopOrderInfo'">
-                   <diy-phone-shop-order-info ref="diyPhoneShopOrderInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopOrderInfo" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'PhoneShopSearch'">
-                   <diy-phone-shop-search ref="diyPhoneShopSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopSearch" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
+                </template>  
                 <template v-if="component.componentName == 'RecycleCategory'">
                    <diy-recycle-category ref="diyRecycleCategoryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleCategory" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -176,14 +152,6 @@
     </view>
 </template>
 <script lang="ts" setup>
-   import diyPhoneGoodsCoupon from '@/addon/phone_shop/components/diy/phone-goods-coupon/index.vue';
-   import diyPhoneGoodsList from '@/addon/phone_shop/components/diy/phone-goods-list/index.vue';
-   import diyPhoneManyGoodsList from '@/addon/phone_shop/components/diy/phone-many-goods-list/index.vue';
-   import diyPhoneShopExchangeGoods from '@/addon/phone_shop/components/diy/phone-shop-exchange-goods/index.vue';
-   import diyPhoneShopExchangeInfo from '@/addon/phone_shop/components/diy/phone-shop-exchange-info/index.vue';
-   import diyPhoneShopMemberInfo from '@/addon/phone_shop/components/diy/phone-shop-member-info/index.vue';
-   import diyPhoneShopOrderInfo from '@/addon/phone_shop/components/diy/phone-shop-order-info/index.vue';
-   import diyPhoneShopSearch from '@/addon/phone_shop/components/diy/phone-shop-search/index.vue';
    import diyRecycleCategory from '@/addon/recycle/components/diy/recycle-category/index.vue';
    import diyRecycleOrderOverview from '@/addon/recycle/components/diy/recycle-order-overview/index.vue';
    import diyRecycleSendButton from '@/addon/recycle/components/diy/recycle-send-button/index.vue';
@@ -193,127 +161,15 @@
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';
    import { useDiyGroup } from './useDiyGroup';
-   import { provide, ref } from 'vue';
+   import { ref,getCurrentInstance } from 'vue';
 
    const props = defineProps(['data']);
-   const diyActiveCubeRef = ref<any[]>([]);
-   const diyCarouselSearchRef = ref<any[]>([]);
-   const diyFloatBtnRef = ref<any[]>([]);
-   const diyFormAddressRef = ref<any[]>([]);
-   const diyFormCheckboxRef = ref<any[]>([]);
-   const diyFormDateRef = ref<any[]>([]);
-   const diyFormDateScopeRef = ref<any[]>([]);
-   const diyFormEmailRef = ref<any[]>([]);
-   const diyFormFileRef = ref<any[]>([]);
-   const diyFormIdentityPrivacyRef = ref<any[]>([]);
-   const diyFormIdentityRef = ref<any[]>([]);
-   const diyFormImageRef = ref<any[]>([]);
-   const diyFormInputRef = ref<any[]>([]);
-   const diyFormLocationRef = ref<any[]>([]);
-   const diyFormMobileRef = ref<any[]>([]);
-   const diyFormNumberRef = ref<any[]>([]);
-   const diyFormPrivacyPopRef = ref<any[]>([]);
-   const diyFormPrivacyRef = ref<any[]>([]);
-   const diyFormRadioRef = ref<any[]>([]);
-   const diyFormSubmitRef = ref<any[]>([]);
-   const diyFormTableRef = ref<any[]>([]);
-   const diyFormTextareaRef = ref<any[]>([]);
-   const diyFormTimeRef = ref<any[]>([]);
-   const diyFormTimeScopeRef = ref<any[]>([]);
-   const diyFormVideoRef = ref<any[]>([]);
-   const diyFormWechatNameRef = ref<any[]>([]);
-   const diyGraphicNavRef = ref<any[]>([]);
-   const diyHorzBlankRef = ref<any[]>([]);
-   const diyHorzLineRef = ref<any[]>([]);
-   const diyHotAreaRef = ref<any[]>([]);
-   const diyImageAdsRef = ref<any[]>([]);
-   const diyMemberInfoRef = ref<any[]>([]);
-   const diyMemberLevelRef = ref<any[]>([]);
-   const diyNoticeRef = ref<any[]>([]);
-   const diyPhoneGoodsCouponRef = ref<any[]>([]);
-   const diyPhoneGoodsListRef = ref<any[]>([]);
-   const diyPhoneManyGoodsListRef = ref<any[]>([]);
-   const diyPhoneShopExchangeGoodsRef = ref<any[]>([]);
-   const diyPhoneShopExchangeInfoRef = ref<any[]>([]);
-   const diyPhoneShopMemberInfoRef = ref<any[]>([]);
-   const diyPhoneShopOrderInfoRef = ref<any[]>([]);
-   const diyPhoneShopSearchRef = ref<any[]>([]);
-   const diyPictureShowRef = ref<any[]>([]);
-   const diyRecycleCategoryRef = ref<any[]>([]);
-   const diyRecycleOrderOverviewRef = ref<any[]>([]);
-   const diyRecycleQuotationListRef = ref<any[]>([]);
-   const diyRecycleSendButtonRef = ref<any[]>([]);
-   const diyRecycleSpiderQuotationListRef = ref<any[]>([]);
-   const diyRichTextRef = ref<any[]>([]);
-   const diyRubikCubeRef = ref<any[]>([]);
-   const diyTextRef = ref<any[]>([]);
-   const popAbsRef = ref<any[]>([]);
-   const topTabbarRef = ref<any[]>([]);
-
-   const getComponentRefs = () => ({
-       diyActiveCubeRef: diyActiveCubeRef.value,
-       diyCarouselSearchRef: diyCarouselSearchRef.value,
-       diyFloatBtnRef: diyFloatBtnRef.value,
-       diyFormAddressRef: diyFormAddressRef.value,
-       diyFormCheckboxRef: diyFormCheckboxRef.value,
-       diyFormDateRef: diyFormDateRef.value,
-       diyFormDateScopeRef: diyFormDateScopeRef.value,
-       diyFormEmailRef: diyFormEmailRef.value,
-       diyFormFileRef: diyFormFileRef.value,
-       diyFormIdentityPrivacyRef: diyFormIdentityPrivacyRef.value,
-       diyFormIdentityRef: diyFormIdentityRef.value,
-       diyFormImageRef: diyFormImageRef.value,
-       diyFormInputRef: diyFormInputRef.value,
-       diyFormLocationRef: diyFormLocationRef.value,
-       diyFormMobileRef: diyFormMobileRef.value,
-       diyFormNumberRef: diyFormNumberRef.value,
-       diyFormPrivacyPopRef: diyFormPrivacyPopRef.value,
-       diyFormPrivacyRef: diyFormPrivacyRef.value,
-       diyFormRadioRef: diyFormRadioRef.value,
-       diyFormSubmitRef: diyFormSubmitRef.value,
-       diyFormTableRef: diyFormTableRef.value,
-       diyFormTextareaRef: diyFormTextareaRef.value,
-       diyFormTimeRef: diyFormTimeRef.value,
-       diyFormTimeScopeRef: diyFormTimeScopeRef.value,
-       diyFormVideoRef: diyFormVideoRef.value,
-       diyFormWechatNameRef: diyFormWechatNameRef.value,
-       diyGraphicNavRef: diyGraphicNavRef.value,
-       diyHorzBlankRef: diyHorzBlankRef.value,
-       diyHorzLineRef: diyHorzLineRef.value,
-       diyHotAreaRef: diyHotAreaRef.value,
-       diyImageAdsRef: diyImageAdsRef.value,
-       diyMemberInfoRef: diyMemberInfoRef.value,
-       diyMemberLevelRef: diyMemberLevelRef.value,
-       diyNoticeRef: diyNoticeRef.value,
-       diyPhoneGoodsCouponRef: diyPhoneGoodsCouponRef.value,
-       diyPhoneGoodsListRef: diyPhoneGoodsListRef.value,
-       diyPhoneManyGoodsListRef: diyPhoneManyGoodsListRef.value,
-       diyPhoneShopExchangeGoodsRef: diyPhoneShopExchangeGoodsRef.value,
-       diyPhoneShopExchangeInfoRef: diyPhoneShopExchangeInfoRef.value,
-       diyPhoneShopMemberInfoRef: diyPhoneShopMemberInfoRef.value,
-       diyPhoneShopOrderInfoRef: diyPhoneShopOrderInfoRef.value,
-       diyPhoneShopSearchRef: diyPhoneShopSearchRef.value,
-       diyPictureShowRef: diyPictureShowRef.value,
-       diyRecycleCategoryRef: diyRecycleCategoryRef.value,
-       diyRecycleOrderOverviewRef: diyRecycleOrderOverviewRef.value,
-       diyRecycleQuotationListRef: diyRecycleQuotationListRef.value,
-       diyRecycleSendButtonRef: diyRecycleSendButtonRef.value,
-       diyRecycleSpiderQuotationListRef: diyRecycleSpiderQuotationListRef.value,
-       diyRichTextRef: diyRichTextRef.value,
-       diyRubikCubeRef: diyRubikCubeRef.value,
-       diyTextRef: diyTextRef.value,
-       popAbsRef: popAbsRef.value,
-       topTabbarRef: topTabbarRef.value
-   });
-
+   const instance: any = getCurrentInstance();
    const getFormRef = () => {
        return {
-           componentRefs: getComponentRefs()
+           componentRefs: instance.refs
        }
    }
-   provide('diyGroupRefs', {
-       getComponentRefs
-   });
    const diyStore = useDiyStore();
    const diyGroup = useDiyGroup({
        ...props,

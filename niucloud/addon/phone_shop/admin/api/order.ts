@@ -263,3 +263,15 @@ export function getOrderBatchDeliveryState() {
 export function getOrderBatchDeliveryType() {
   return request.get(`phone_shop/order_batch_delivery/get_type`);
 }
+
+/**
+ * 挂单确认收款 - 逐步推进订单状态
+ * 用于财务人员确认挂单客户已付款，并逐步推进订单状态
+ * 状态流转：HOLD(10) → WAIT_DELIVERY(2) → WAIT_TAKE(3) → FINISH(5)
+ * @return
+ */
+export function confirmHoldOrderPayment(params: Record<string, any>) {
+  return request.post(`phone_shop/offlineorder/confirm_payment`, params, {
+    showSuccessMessage: true,
+  });
+}

@@ -13,6 +13,12 @@ return [
                 'is_share' => 1,
                 'action' => 'decorate'
             ], [
+                'name' => 'DIY_RECYCLE_MEMBER_INDEX',
+                'title' => '回收个人中心',
+                'url' => '/addon/recycle/pages/member/index',
+                'is_share' => 0,
+                'action' => 'decorate'
+            ], [
                 'name' => 'recycle_ORDER',
                 'title' => '立即下单',
                 'url' => '/addon/recycle/pages/order/order',

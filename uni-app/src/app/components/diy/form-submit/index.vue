@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 // 表单提交组件
-import { computed, inject, nextTick, onMounted, ref, watch, getCurrentInstance } from 'vue';
+import { ref, computed, watch, onMounted, nextTick, getCurrentInstance } from 'vue';
 import useDiyStore from '@/app/stores/diy';
 import { img, redirect, getValidTime, deepClone, getToken } from '@/utils/common';
 import { useLogin } from "@/hooks/useLogin";
@@ -28,14 +28,6 @@ import { addFormRecord, editFormRecord } from '@/app/api/diy_form';
 const props = defineProps(['component', 'index', 'global']);
 const diyStore = useDiyStore();
 const tabbarInfo = ref();
-const diyGroupRefs = inject<any>('diyGroupRefs', null);
-
-const getComponentRefList = (refKey: string) => {
-    const componentRefs = diyGroupRefs?.getComponentRefs?.() || {};
-    const refs = componentRefs[refKey];
-    if (!refs) return [];
-    return Array.isArray(refs) ? refs : [refs];
-}
 
 const diyComponent = computed(() => {
     if (diyStore.mode == 'decorate') {
@@ -226,11 +218,9 @@ const submit = () => {
         if (item.field.required || item.field.value) {
             let refKey = `diy${ item.componentName }Ref`;
             let isBreak = false;
-            const componentRefList = getComponentRefList(refKey);
-            if (componentRefList.length) {
-                for (let k = 0; k < componentRefList.length; k++) {
-                    let compRef = componentRefList[k];
-                    if (!compRef?.verify) continue;
+            if (diyStore.componentRefs[refKey]) {
+                for (let k = 0; k < diyStore.componentRefs[refKey].length; k++) {
+                    let compRef = diyStore.componentRefs[refKey][k];
                     let verify = compRef.verify(); // 验证表单组件数据
                     if (verify && !verify.code) {
                         isBreak = true;
@@ -318,9 +308,8 @@ const reset = () => {
     for (let i = 0; i < formComponent.value.length; i++) {
         let item = formComponent.value[i];
         let refKey = `diy${ item.componentName }Ref`;
-        const componentRefList = getComponentRefList(refKey);
-        if (componentRefList.length) {
-            componentRefList.forEach((compRef: any) => {
+        if (diyStore.componentRefs[refKey]) {
+            diyStore.componentRefs[refKey].forEach((compRef: any) => {
                 if (compRef.reset) compRef.reset(item);
             })
         }

@@ -1,6 +1,6 @@
 <template>
     <view class="ns-navbar-wrap" v-if="diyStore.mode !='decorate' && topStatusBarData" :class="topStatusBarData.style">
-        <view class="u-navbar z-100" :class="{'fixed': props.scrollBool != -1, 'absolute': props.scrollBool == -1}" :style="{ backgroundColor: bgColor}">
+        <view class="u-navbar z-100" :class="{'fixed': isFixed, 'absolute': !isFixed}" :style="{ backgroundColor: bgColor}">
             <view class="navbar-inner" :style="{ width: '100%', height: placeholderHeight + 'px' }">
                 <view v-if="topStatusBarData.style == 'style-1'" class="content-wrap" :class="[topStatusBarData.textAlign]" :style="navbarInnerStyle">
                     <view v-if="isBackShow" class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :class="{'!text-transparent': !isBackShow}" :style="{ color: titleTextColor }" @tap="goBack"></view>
@@ -82,6 +82,10 @@ const props = defineProps({
     isFill: {
         type: Boolean,
         default: true
+    },
+    fixed: {
+        type: Boolean,
+        default: false
     }
 })
 
@@ -102,6 +106,10 @@ const data = computed(() => {
 
 const topStatusBarData = computed(() => {
     if (props.data && props.data.topStatusBar) return props.data.topStatusBar;
+});
+
+const isFixed = computed(() => {
+    return props.fixed || props.scrollBool != -1;
 });
 
 // 导航栏内部盒子的样式
@@ -316,6 +324,14 @@ defineExpose({
     right: 0;
     top: 0;
     z-index: 991;
+}
+
+.u-navbar.fixed {
+    position: fixed;
+}
+
+.u-navbar.absolute {
+    position: absolute;
 }
 
 .navbar-inner {

@@ -54,7 +54,7 @@
             "sdkConfigs": {
                 "maps": {
                     "tencent": {
-                        "key": "CFGBZ-LJBCX-5624W-T6VYB-5HIAH-54FXP"
+                        "key": ""
                     }
                 }
             }
@@ -103,7 +103,7 @@
         "sdkConfigs": {
             "maps": {
                 "qqmap": {
-                    "key": "CFGBZ-LJBCX-5624W-T6VYB-5HIAH-54FXP"
+                    "key": ""
                 }
             }
         },

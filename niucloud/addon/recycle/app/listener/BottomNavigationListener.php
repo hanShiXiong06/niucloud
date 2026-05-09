@@ -82,8 +82,8 @@ class BottomNavigationListener
                         "text" => "我的",
                         "link" => [
                             "parent" => "RECYCLE_LINK",
-                            "name" => "RECYCLE_MEMBER_INDEX",
-                            "title" => "个人中心",
+                            "name" => "DIY_RECYCLE_MEMBER_INDEX",
+                            "title" => "回收个人中心",
                             "url" => "/addon/recycle/pages/member/index"
                         ],
                         "iconPath" => "addon/recycle/diy/tabbar/system-my.png",

@@ -40,9 +40,6 @@
 
       </view>
 
-      <template #bottom>
-        <view class="order-list-bottom-safe"></view>
-      </template>
     </z-paging>
 
     <tabbar addon="recycle" />
@@ -88,9 +85,13 @@ const {
 
 const { themeVars, loadTheme } = useRecyclePageTheme()
 const navbarMetrics = getRecycleNavbarMetrics()
-const pageVars = computed(() => `${themeVars.value}--recycle-navbar-height:${navbarMetrics.navbarHeightPx}px;`)
+const pageVars = computed(() => [
+  themeVars.value,
+  `--recycle-navbar-height:${navbarMetrics.navbarHeightPx}px;`,
+  `--recycle-tabbar-height:50px;`
+].join(''))
 const pagingStyle = computed(() => ({
-  height: `calc(100vh - ${navbarMetrics.navbarHeightPx}px)`,
+  height: `calc(100vh - ${navbarMetrics.navbarHeightPx}px - var(--recycle-tabbar-height) - env(safe-area-inset-bottom))`,
   background: 'var(--recycle-bg-main)'
 }))
 
@@ -139,8 +140,4 @@ const handleActionSuccess = (action: string) => {
   padding: 0 0 12rpx;
 }
 
-.order-list-bottom-safe {
-  height: calc(120rpx + env(safe-area-inset-bottom));
-  background: var(--recycle-bg-main);
-}
 </style>

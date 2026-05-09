@@ -21,6 +21,7 @@ interface Diy {
     topFixedStatus: string, // 置顶组件的状态
     scrollTop: number,
     topTabarHeight: number,
+    componentRefs: any,
     imageAdsSameScreen: any // 图片广告, 是否设置沉浸式
 }
 
@@ -54,6 +55,7 @@ const useDiyStore = defineStore('diy', {
             topFixedStatus: 'home', // 顶部 置顶组件状态，home：展示首页数据、diy：展示置顶组件定义的子页面
             scrollTop: 0, // 滚动位置
             topTabarHeight: 0,
+            componentRefs: null,
             imageAdsSameScreen: false
         }
     },
