@@ -3,7 +3,7 @@
         <loading-page :loading="loading && memberInfo"></loading-page>
         <view v-if="!loading && memberInfo && list && list.length" class="min-h-[100vh] overflow-hidden flex flex-col" :style="{backgroundColor: currLevelInfo.level_style.bg_color }">
             <!-- #ifdef MP || APP-PLUS -->
-            <top-tabbar :data="topTabbarData" :scrollBool="1" />
+            <top-tabbar :data="levelTopTabbarData" :scrollBool="-1" fixed />
             <!-- #endif -->
             <view>
                 <view class="pt-[40rpx] mb-[40rpx]">
@@ -150,6 +150,20 @@ let topTabbarDataEmpty =ref({
 	    textColor: '#333',
 	    rollTextColor: '#333'
 	}
+})
+const levelTopTabbarData = computed(() => {
+    const bgColor = currLevelInfo.value?.level_style?.bg_color || topTabbarData.topStatusBar.bgColor
+    const textColor = currLevelInfo.value?.level_style?.level_color || topTabbarData.topStatusBar.textColor
+    return {
+        ...topTabbarData,
+        topStatusBar: {
+            ...topTabbarData.topStatusBar,
+            bgColor,
+            rollBgColor: bgColor,
+            textColor,
+            rollTextColor: textColor
+        }
+    }
 })
 /********* 自定义头部 - end ***********/
 

@@ -1,6 +1,6 @@
 <template>
     <view class="ns-navbar-wrap" v-if="diyStore.mode !='decorate' && topStatusBarData" :class="topStatusBarData.style">
-        <view class="u-navbar z-100" :class="{'fixed': isFixed, 'absolute': !isFixed}" :style="{ backgroundColor: bgColor}">
+        <view class="u-navbar z-100" :class="{'fixed': isFixed, 'absolute': !isFixed}" :style="navbarStyle">
             <view class="navbar-inner" :style="{ width: '100%', height: placeholderHeight + 'px' }">
                 <view v-if="topStatusBarData.style == 'style-1'" class="content-wrap" :class="[topStatusBarData.textAlign]" :style="navbarInnerStyle">
                     <view v-if="isBackShow" class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :class="{'!text-transparent': !isBackShow}" :style="{ color: titleTextColor }" @tap="goBack"></view>
@@ -185,6 +185,10 @@ const bgColor = computed(() => {
         color = topStatusBarData.value.bgColor;
     }
     return color;
+})
+
+const navbarStyle = computed(() => {
+    return { background: bgColor.value };
 })
 
 /******************************* 存储滚动值-start ***********************/
