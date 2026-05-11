@@ -1,11 +1,11 @@
 {
   "title": "剪贴板图片上传",
-  "desc": "支持剪贴板快速上传图片的便捷工具",
+  "desc": "支持剪贴板快速上传图片的便捷工具,支持CTRLC、CTRLV上传图片支持拖拽上传图片，支持拖文件夹上传图片支持上传视频",
   "key": "hsx_clipboard_upload",
   "version": "0.0.4",
   "author": "hsx",
   "type": "addon",
   "support_app": "",
   "compile":[],
-  "support_version": "1.2.0"
+  "support_version": "1.2.1"
 }

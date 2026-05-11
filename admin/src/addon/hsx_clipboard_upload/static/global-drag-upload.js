@@ -36,7 +36,7 @@ import storage from '@/utils/storage'
                 ], // 允许的文件类型
                 maxImageFileSize: 10 * 1024 * 1024, // 图片最大文件大小 10MB
                 maxVideoFileSize: 50 * 1024 * 1024, // 视频最大文件大小 50MB (降低限制避免413错误)
-                maxFiles: 5, // 最大文件数量
+                maxFiles: 50, // 最大文件数量，支持文件夹拖拽时需要更高上限
                 toastZIndex: 3000,
                 modalZIndex: 3001,
                 ...options // 合并用户配置
@@ -266,19 +266,78 @@ import storage from '@/utils/storage'
         }
 
         // 处理文件放置
-        handleDrop(e) {
+        async handleDrop(e) {
             this.log('文件放置事件触发', 'event');
             
             this.dragCounter = 0;
             this.isDragActive = false;
             this.hideDragOverlay();
             
-            const files = Array.from(e.dataTransfer.files);
-            this.log('放置的文件数量：' + files.length, 'info', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
+            const files = await this.getDroppedFiles(e.dataTransfer);
+            this.log('放置的文件数量：' + files.length, 'info', files.map(f => ({ name: f.name, type: f.type, size: f.size, path: f.relativePath || '' })));
             
             if (files.length > 0) {
                 this.handleFiles(files);
             }
+        }
+
+        // 读取拖拽文件。Chromium 浏览器支持 webkitGetAsEntry，可递归读取文件夹。
+        async getDroppedFiles(dataTransfer) {
+            const items = Array.from(dataTransfer?.items || []);
+            const entryItems = items
+                .map((item) => typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null)
+                .filter(Boolean);
+
+            if (!entryItems.length) {
+                return Array.from(dataTransfer?.files || []);
+            }
+
+            const files = [];
+            for (const entry of entryItems) {
+                const entryFiles = await this.readEntryFiles(entry);
+                files.push(...entryFiles);
+                if (files.length >= this.config.maxFiles) break;
+            }
+            return files.slice(0, this.config.maxFiles);
+        }
+
+        async readEntryFiles(entry, path = '') {
+            if (!entry) return [];
+            if (entry.isFile) {
+                const file = await this.readEntryFile(entry);
+                if (!file) return [];
+                file.relativePath = path + file.name;
+                return [file];
+            }
+            if (!entry.isDirectory) return [];
+
+            const reader = entry.createReader();
+            const entries = [];
+            let batch = [];
+            do {
+                batch = await this.readDirectoryEntries(reader);
+                entries.push(...batch);
+            } while (batch.length > 0);
+
+            const files = [];
+            for (const child of entries) {
+                const childFiles = await this.readEntryFiles(child, `${path}${entry.name}/`);
+                files.push(...childFiles);
+                if (files.length >= this.config.maxFiles) break;
+            }
+            return files.slice(0, this.config.maxFiles);
+        }
+
+        readEntryFile(entry) {
+            return new Promise((resolve) => {
+                entry.file((file) => resolve(file), () => resolve(null));
+            });
+        }
+
+        readDirectoryEntries(reader) {
+            return new Promise((resolve) => {
+                reader.readEntries((entries) => resolve(entries), () => resolve([]));
+            });
         }
 
         // 检查是否包含文件
@@ -326,7 +385,7 @@ import storage from '@/utils/storage'
                 ">
                     <div style="font-size: 48px; margin-bottom: 16px;">📁</div>
                     <div style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">释放文件开始上传</div>
-                    <div style="font-size: 14px; opacity: 0.9;">支持拖拽图片和视频文件</div>
+                    <div style="font-size: 14px; opacity: 0.9;">支持拖拽图片、视频和文件夹</div>
                 </div>
             `;
             
@@ -372,7 +431,7 @@ import storage from '@/utils/storage'
             for (const file of files) {
                 // 检查文件类型
                 if (!this.config.allowedTypes.includes(file.type)) {
-                    errors.push(`${file.name}: 不支持的文件类型 (${file.type})`);
+                    errors.push(`${file.relativePath || file.name}: 不支持的文件类型 (${file.type || '未知'})`);
                     continue;
                 }
                 
@@ -384,7 +443,7 @@ import storage from '@/utils/storage'
                     const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
                     const maxSizeInMB = (maxSize / (1024 * 1024)).toFixed(2);
                     const fileType = isVideo ? '视频' : '图片';
-                    errors.push(`${file.name}: ${fileType}文件过大 (${sizeInMB}MB > ${maxSizeInMB}MB)`);
+                    errors.push(`${file.relativePath || file.name}: ${fileType}文件过大 (${sizeInMB}MB > ${maxSizeInMB}MB)`);
                     continue;
                 }
                 
