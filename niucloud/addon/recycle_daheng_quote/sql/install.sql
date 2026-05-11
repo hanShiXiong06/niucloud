@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_sync_log` (
   `request_params` json DEFAULT NULL,
   `http_code` int NOT NULL DEFAULT 0,
   `duration` int NOT NULL DEFAULT 0,
+  `sync_source` varchar(20) NOT NULL DEFAULT 'manual',
   `raw_response` json DEFAULT NULL,
   `parsed_preview` json DEFAULT NULL,
   `stats` json DEFAULT NULL,
@@ -159,5 +160,6 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_sync_log` (
   `update_at` int unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_dataset_time` (`site_id`,`dataset_id`,`create_at`),
-  KEY `idx_status` (`site_id`,`status`)
+  KEY `idx_status` (`site_id`,`status`),
+  KEY `idx_source` (`site_id`,`sync_source`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价同步日志';

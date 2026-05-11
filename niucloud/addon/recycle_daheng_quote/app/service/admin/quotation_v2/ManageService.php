@@ -131,7 +131,6 @@ class ManageService extends BaseAdminService
     public function addNote(array $data): int
     {
         $dataset = $this->getDataset((int)($data['dataset_id'] ?? 0));
-        $model = $this->getDatasetRow(new QuotationModel(), (int)($data['model_id'] ?? 0), (int)$dataset['id'], '型号不存在');
         $field = $this->getDatasetRow(new QuotationField(), (int)($data['field_id'] ?? 0), (int)$dataset['id'], '字段项不存在');
         if (!in_array((string)$field['field_type'], [QuotationV2Dict::FIELD_TYPE_ADJUSTMENT, QuotationV2Dict::FIELD_TYPE_NOTE], true)) {
             throw new CommonException('只能给价格调整项或附加说明项添加内容');
@@ -146,25 +145,12 @@ class ManageService extends BaseAdminService
             throw new CommonException('内容不能为空');
         }
 
-        $capacityIds = $data['capacity_ids'] ?? [];
-        if (!is_array($capacityIds)) {
-            $capacityIds = [];
-        }
-        if (empty($capacityIds)) {
-            $capacityIds = [(int)($data['capacity_id'] ?? 0)];
-        }
-        $capacityIds = array_values(array_unique(array_filter(array_map('intval', $capacityIds))));
-        if (empty($capacityIds)) {
-            throw new CommonException('请选择容量');
-        }
-
+        $targets = $this->resolveNoteTargets($dataset->toArray(), $data);
+        $mergeItems = $this->buildMergeItems($targets);
+        $data['merge_items'] = $mergeItems;
         $lastId = 0;
-        foreach ($capacityIds as $capacityId) {
-            $capacity = $this->getDatasetRow(new QuotationCapacity(), $capacityId, (int)$dataset['id'], '容量不存在');
-            if ((int)$capacity['model_id'] !== (int)$model['id']) {
-                throw new CommonException('容量不属于当前型号');
-            }
-            $lastId = $this->saveNoteContent($dataset->toArray(), $model->toArray(), $capacity->toArray(), $field->toArray(), $data, $contentHtml, $contentText);
+        foreach ($targets as $target) {
+            $lastId = $this->saveNoteContent($dataset->toArray(), $target['model'], $target['capacity'], $field->toArray(), $data, $contentHtml, $contentText);
         }
 
         $this->refreshApiCache();
@@ -194,7 +180,7 @@ class ManageService extends BaseAdminService
             'field_name' => (string)$field['field_name'],
             'content_html' => $contentHtml !== '' ? $contentHtml : $contentText,
             'content_text' => $contentText,
-            'merge_items' => [],
+            'merge_items' => $data['merge_items'] ?? [],
             'status' => (int)($data['status'] ?? QuotationV2Dict::STATUS_ENABLED),
             'follow_crawler' => QuotationV2Dict::FOLLOW_CUSTOM,
             'raw_item' => ['source' => 'manual'],
@@ -318,6 +304,7 @@ class ManageService extends BaseAdminService
     public function editNote(int $id, array $data): bool
     {
         $info = $this->getRow(new QuotationNote(), $id, '说明内容不存在');
+        $oldInfo = $info->toArray();
         $datasetId = (int)$info['dataset_id'];
         $model = $this->getDatasetRow(new QuotationModel(), (int)($data['model_id'] ?? $info['model_id']), $datasetId, '型号不存在');
         $capacity = $this->getDatasetRow(new QuotationCapacity(), (int)($data['capacity_id'] ?? $info['capacity_id']), $datasetId, '容量不存在');
@@ -329,7 +316,9 @@ class ManageService extends BaseAdminService
             throw new CommonException('只能维护价格调整项或附加说明项内容');
         }
         $contentHtml = (string)($data['content_html'] ?? $info['content_html'] ?? '');
-        $contentText = (string)($data['content_text'] ?? '');
+        $contentText = array_key_exists('content_html', $data)
+            ? $this->htmlToText($contentHtml)
+            : trim((string)($data['content_text'] ?? ''));
         if ($contentText === '') {
             $contentText = $this->htmlToText($contentHtml);
         }
@@ -338,21 +327,115 @@ class ManageService extends BaseAdminService
         }
         $this->assertUniqueNote($datasetId, (int)$model['id'], (int)$capacity['id'], (int)$field['id'], $id);
 
-        $result = $info->save([
+        $saveData = [
             'model_id' => (int)$model['id'],
             'capacity_id' => (int)$capacity['id'],
             'field_id' => (int)$field['id'],
             'external_goods_id' => (int)$model['external_goods_id'],
             'capacity_answer_id' => (int)$capacity['capacity_answer_id'],
             'field_name' => (string)$field['field_name'],
-            'content_html' => $contentHtml,
+            'content_html' => $contentHtml !== '' ? $contentHtml : $contentText,
             'content_text' => $contentText,
             'status' => (int)($data['status'] ?? $info['status'] ?? QuotationV2Dict::STATUS_ENABLED),
             'follow_crawler' => (int)($data['follow_crawler'] ?? $info['follow_crawler'] ?? QuotationV2Dict::FOLLOW_CUSTOM),
             'update_at' => time(),
-        ]);
+        ];
+        $result = $info->save($saveData);
+
+        if ((int)($data['update_shared'] ?? 0) === 1) {
+            $this->updateSharedNotes($oldInfo, $id, $saveData);
+        }
+
         $this->refreshApiCache();
         return $result;
+    }
+
+    public function editNoteGroup(int $id, array $data): bool
+    {
+        $info = $this->getRow(new QuotationNote(), $id, '说明内容不存在');
+        $oldInfo = $info->toArray();
+        $dataset = $this->getDataset((int)$oldInfo['dataset_id']);
+        $field = $this->getDatasetRow(new QuotationField(), (int)($data['field_id'] ?? $oldInfo['field_id']), (int)$dataset['id'], '字段项不存在');
+        if (!in_array((string)$field['field_type'], [QuotationV2Dict::FIELD_TYPE_ADJUSTMENT, QuotationV2Dict::FIELD_TYPE_NOTE], true)) {
+            throw new CommonException('只能维护价格调整项或附加说明项内容');
+        }
+
+        $contentHtml = (string)($data['content_html'] ?? $oldInfo['content_html'] ?? '');
+        $contentText = $this->htmlToText($contentHtml);
+        if ($contentText === '') {
+            $contentText = trim((string)($data['content_text'] ?? $oldInfo['content_text'] ?? ''));
+        }
+        if ($contentText === '') {
+            throw new CommonException('内容不能为空');
+        }
+
+        $targets = $this->resolveNoteTargets($dataset->toArray(), $data);
+        $mergeItems = $this->buildMergeItems($targets);
+        $status = (int)($data['status'] ?? $oldInfo['status'] ?? QuotationV2Dict::STATUS_ENABLED);
+        $followCrawler = (int)($data['follow_crawler'] ?? $oldInfo['follow_crawler'] ?? QuotationV2Dict::FOLLOW_CUSTOM);
+        $sharedNotes = $this->findSharedNotes($oldInfo, $id);
+        $oldIds = array_merge([$id], array_map(function ($note) {
+            return (int)$note->id;
+        }, $sharedNotes));
+        $targetKeys = [];
+
+        Db::startTrans();
+        try {
+            $lastResult = true;
+            foreach ($targets as $target) {
+                $targetKeys[] = (int)$target['model']['id'] . '#' . (int)$target['capacity']['id'];
+                $saveData = [
+                    'site_id' => $this->site_id,
+                    'dataset_id' => (int)$dataset['id'],
+                    'quotation_id' => (int)$dataset['quotation_id'],
+                    'model_id' => (int)$target['model']['id'],
+                    'capacity_id' => (int)$target['capacity']['id'],
+                    'field_id' => (int)$field['id'],
+                    'external_goods_id' => (int)$target['model']['external_goods_id'],
+                    'capacity_answer_id' => (int)$target['capacity']['capacity_answer_id'],
+                    'field_name' => (string)$field['field_name'],
+                    'content_html' => $contentHtml !== '' ? $contentHtml : $contentText,
+                    'content_text' => $contentText,
+                    'merge_items' => $mergeItems,
+                    'status' => $status,
+                    'follow_crawler' => $followCrawler,
+                    'raw_item' => $oldInfo['raw_item'] ?? ['source' => 'manual'],
+                    'update_at' => time(),
+                ];
+                $row = (new QuotationNote())->where([
+                    ['site_id', '=', $this->site_id],
+                    ['dataset_id', '=', (int)$dataset['id']],
+                    ['model_id', '=', (int)$target['model']['id']],
+                    ['capacity_id', '=', (int)$target['capacity']['id']],
+                    ['field_id', '=', (int)$field['id']],
+                ])->findOrEmpty();
+                if ($row->isEmpty()) {
+                    $saveData['create_at'] = time();
+                    (new QuotationNote())->create($saveData);
+                } else {
+                    $lastResult = $row->save($saveData);
+                }
+            }
+
+            $targetKeys = array_values(array_unique($targetKeys));
+            foreach ($oldIds as $oldId) {
+                $oldRow = $this->getRow(new QuotationNote(), (int)$oldId, '说明内容不存在')->toArray();
+                $oldKey = (int)$oldRow['model_id'] . '#' . (int)$oldRow['capacity_id'];
+                if (!in_array($oldKey, $targetKeys, true)) {
+                    (new QuotationNote())->where([
+                        ['site_id', '=', $this->site_id],
+                        ['id', '=', (int)$oldId],
+                    ])->delete();
+                }
+            }
+
+            Db::commit();
+            $this->refreshApiCache();
+            return (bool)$lastResult;
+        } catch (\Throwable $e) {
+            Db::rollback();
+            throw $e;
+        }
     }
 
     public function deleteModel(int $id): bool
@@ -435,6 +518,19 @@ class ManageService extends BaseAdminService
         return $result;
     }
 
+    public function deleteNoteGroup(int $id): bool
+    {
+        $info = $this->getRow(new QuotationNote(), $id, '说明内容不存在');
+        $note = $info->toArray();
+        $sharedNotes = $this->findSharedNotes($note, $id);
+        $info->delete();
+        foreach ($sharedNotes as $sharedNote) {
+            $sharedNote->delete();
+        }
+        $this->refreshApiCache();
+        return true;
+    }
+
     private function refreshApiCache(): void
     {
         (new QuotationV2CacheService())->refresh($this->site_id);
@@ -455,6 +551,145 @@ class ManageService extends BaseAdminService
     private function getDataset(int $datasetId)
     {
         return $this->getDatasetRow(new QuotationDataset(), $datasetId, 0, '报价单不存在');
+    }
+
+    private function resolveNoteTargets(array $dataset, array $data): array
+    {
+        $rawTargets = $data['targets'] ?? [];
+        if (!is_array($rawTargets)) {
+            $rawTargets = [];
+        }
+
+        $targets = [];
+        foreach ($rawTargets as $target) {
+            if (!is_array($target)) {
+                continue;
+            }
+            $modelId = (int)($target['model_id'] ?? 0);
+            $capacityId = (int)($target['capacity_id'] ?? 0);
+            if ($modelId > 0 && $capacityId > 0) {
+                $targets[] = ['model_id' => $modelId, 'capacity_id' => $capacityId];
+            }
+        }
+
+        if (empty($targets)) {
+            $modelId = (int)($data['model_id'] ?? 0);
+            $capacityIds = $data['capacity_ids'] ?? [];
+            if (!is_array($capacityIds)) {
+                $capacityIds = [];
+            }
+            if (empty($capacityIds)) {
+                $capacityIds = [(int)($data['capacity_id'] ?? 0)];
+            }
+            foreach ($capacityIds as $capacityId) {
+                $targets[] = ['model_id' => $modelId, 'capacity_id' => (int)$capacityId];
+            }
+        }
+
+        $targets = array_values(array_unique(array_filter(array_map(function ($target) {
+            $modelId = (int)($target['model_id'] ?? 0);
+            $capacityId = (int)($target['capacity_id'] ?? 0);
+            if ($modelId <= 0 || $capacityId <= 0) {
+                return null;
+            }
+            return $modelId . '#' . $capacityId;
+        }, $targets))));
+
+        if (empty($targets)) {
+            throw new CommonException('请选择型号和容量');
+        }
+
+        $result = [];
+        foreach ($targets as $targetKey) {
+            [$modelId, $capacityId] = array_map('intval', explode('#', $targetKey));
+            $model = $this->getDatasetRow(new QuotationModel(), $modelId, (int)$dataset['id'], '型号不存在');
+            $capacity = $this->getDatasetRow(new QuotationCapacity(), $capacityId, (int)$dataset['id'], '容量不存在');
+            if ((int)$capacity['model_id'] !== (int)$model['id']) {
+                throw new CommonException('容量不属于当前型号');
+            }
+            $result[] = [
+                'model' => $model->toArray(),
+                'capacity' => $capacity->toArray(),
+            ];
+        }
+
+        return $result;
+    }
+
+    private function buildMergeItems(array $targets): array
+    {
+        $items = [];
+        foreach ($targets as $target) {
+            $model = $target['model'] ?? [];
+            $capacity = $target['capacity'] ?? [];
+            $externalGoodsId = (int)($model['external_goods_id'] ?? 0);
+            $capacityAnswerId = (int)($capacity['capacity_answer_id'] ?? 0);
+            if ($externalGoodsId > 0 && $capacityAnswerId > 0) {
+                $items[] = $externalGoodsId . '#' . $capacityAnswerId;
+            }
+        }
+
+        return array_values(array_unique($items));
+    }
+
+    private function updateSharedNotes(array $oldInfo, int $ignoreId, array $saveData): void
+    {
+        $sharedNotes = $this->findSharedNotes($oldInfo, $ignoreId);
+        if (empty($sharedNotes)) {
+            return;
+        }
+
+        $allowFields = [
+            'content_html',
+            'content_text',
+            'status',
+            'follow_crawler',
+            'update_at',
+        ];
+        $sharedData = array_intersect_key($saveData, array_flip($allowFields));
+        foreach ($sharedNotes as $note) {
+            $note->save($sharedData);
+        }
+    }
+
+    private function findSharedNotes(array $note, int $ignoreId = 0): array
+    {
+        $query = (new QuotationNote())->where([
+            ['site_id', '=', $this->site_id],
+            ['dataset_id', '=', (int)($note['dataset_id'] ?? 0)],
+            ['field_id', '=', (int)($note['field_id'] ?? 0)],
+        ]);
+        if ($ignoreId > 0) {
+            $query->where('id', '<>', $ignoreId);
+        }
+
+        $mergeSignature = $this->mergeItemsSignature($note['merge_items'] ?? []);
+        $contentText = (string)($note['content_text'] ?? '');
+        $result = [];
+        foreach ($query->select() as $candidate) {
+            $candidateData = $candidate->toArray();
+            if ($mergeSignature !== '') {
+                if ($this->mergeItemsSignature($candidateData['merge_items'] ?? []) === $mergeSignature) {
+                    $result[] = $candidate;
+                }
+                continue;
+            }
+            if ($contentText !== '' && (string)($candidateData['content_text'] ?? '') === $contentText) {
+                $result[] = $candidate;
+            }
+        }
+
+        return $result;
+    }
+
+    private function mergeItemsSignature($mergeItems): string
+    {
+        if (!is_array($mergeItems)) {
+            return '';
+        }
+        $items = array_values(array_unique(array_filter(array_map('strval', $mergeItems))));
+        sort($items, SORT_NATURAL);
+        return implode('|', $items);
     }
 
     private function getDatasetRow($model, int $id, int $datasetId, string $message)

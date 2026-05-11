@@ -412,27 +412,153 @@ class QueryService extends BaseAdminService
             $query->where('n.field_name', 'like', '%' . $where['field_name'] . '%');
         }
 
-        return $this->pageQuery($query, function ($item) {
-            $item['field_type_name'] = QuotationV2Dict::getFieldTypeName((string)($item['field_type'] ?? ''));
-            $item['content_type_name'] = $item['field_type_name'];
-            return $item;
-        });
+        $rows = $query->select()->toArray();
+        $groups = $this->groupNoteRows($rows);
+        $pageParams = $this->getPageParam();
+        $page = max(1, (int)($pageParams['page'] ?? 1));
+        $limit = max(1, (int)($pageParams['limit'] ?? 15));
+        $total = count($groups);
+        $pageRows = array_slice($groups, ($page - 1) * $limit, $limit);
+
+        return [
+            'total' => $total,
+            'per_page' => $limit,
+            'current_page' => $page,
+            'last_page' => (int)ceil($total / $limit),
+            'data' => $pageRows,
+        ];
     }
 
     public function getLogs(array $where = []): array
     {
         $query = (new QuotationSyncLog())->where([['site_id', '=', $this->site_id]])
             ->withSearch(['dataset_id'], $where)
-            ->field('id,site_id,dataset_id,quotation_id,channel_key,http_code,duration,request_url,request_params,stats,warnings,status,imported,error_message,create_at,update_at')
+            ->field('id,site_id,dataset_id,quotation_id,channel_key,http_code,duration,sync_source,request_url,request_params,stats,warnings,status,imported,error_message,create_at,update_at')
             ->order('id desc');
 
         return $this->pageQuery($query, function ($item) {
             $item['create_at_text'] = $this->formatTimeValue($item['create_at'] ?? 0);
             $item['update_at_text'] = $this->formatTimeValue($item['update_at'] ?? 0);
             $item['status_name'] = (int)($item['status'] ?? 0) === QuotationV2Dict::SYNC_STATUS_SUCCESS ? '成功' : '失败';
+            $item['sync_source_name'] = QuotationV2Dict::getSyncSourceName((string)($item['sync_source'] ?? ''));
             $item['imported_name'] = (int)($item['imported'] ?? 0) === 1 ? '已导入' : '仅预览';
             return $item;
         });
+    }
+
+    private function groupNoteRows(array $rows): array
+    {
+        $groups = [];
+        foreach ($rows as $row) {
+            $key = $this->noteGroupKey($row);
+            if (!isset($groups[$key])) {
+                $groups[$key] = $this->makeNoteGroup($row, $key);
+            }
+
+            $groups[$key]['row_ids'][] = (int)($row['id'] ?? 0);
+            $groups[$key]['target_count']++;
+            $groups[$key]['targets'][] = [
+                'id' => (int)($row['id'] ?? 0),
+                'model_id' => (int)($row['model_id'] ?? 0),
+                'model_name' => (string)($row['model_name'] ?? ''),
+                'capacity_id' => (int)($row['capacity_id'] ?? 0),
+                'capacity_name' => (string)($row['capacity_name'] ?? ''),
+                'external_goods_id' => (int)($row['external_goods_id'] ?? 0),
+                'capacity_answer_id' => (int)($row['capacity_answer_id'] ?? 0),
+            ];
+            $groups[$key]['model_names'][(int)($row['model_id'] ?? 0)] = (string)($row['model_name'] ?? '');
+            $groups[$key]['capacity_names'][] = (string)($row['capacity_name'] ?? '');
+            $groups[$key]['update_at'] = $this->maxTimeValue($groups[$key]['update_at'] ?? '', $row['update_at'] ?? '');
+        }
+
+        foreach ($groups as &$group) {
+            $group['row_ids'] = array_values(array_unique(array_filter($group['row_ids'])));
+            $group['model_names'] = array_values(array_filter(array_unique($group['model_names'])));
+            $group['capacity_names'] = array_values(array_filter(array_unique($group['capacity_names'])));
+            $group['model_summary'] = $this->summarizeNames($group['model_names'], '型号');
+            $group['capacity_summary'] = $this->summarizeNames($group['capacity_names'], '容量');
+            $group['target_summary'] = $group['model_summary'] . ' / ' . $group['capacity_summary'];
+            $group['is_shared'] = (int)$group['target_count'] > 1 ? 1 : 0;
+            $group['field_type_name'] = QuotationV2Dict::getFieldTypeName((string)($group['field_type'] ?? ''));
+            $group['content_type_name'] = $group['field_type_name'];
+        }
+        unset($group);
+
+        return array_values($groups);
+    }
+
+    private function makeNoteGroup(array $row, string $key): array
+    {
+        return [
+            'id' => (int)($row['id'] ?? 0),
+            'group_key' => $key,
+            'site_id' => (int)($row['site_id'] ?? 0),
+            'dataset_id' => (int)($row['dataset_id'] ?? 0),
+            'quotation_id' => (int)($row['quotation_id'] ?? 0),
+            'model_id' => (int)($row['model_id'] ?? 0),
+            'capacity_id' => (int)($row['capacity_id'] ?? 0),
+            'field_id' => (int)($row['field_id'] ?? 0),
+            'external_goods_id' => (int)($row['external_goods_id'] ?? 0),
+            'capacity_answer_id' => (int)($row['capacity_answer_id'] ?? 0),
+            'field_name' => (string)($row['field_name'] ?? ''),
+            'content_text' => (string)($row['content_text'] ?? ''),
+            'content_html' => (string)($row['content_html'] ?? ''),
+            'merge_items' => $row['merge_items'] ?? [],
+            'follow_crawler' => (int)($row['follow_crawler'] ?? 1),
+            'status' => (int)($row['status'] ?? 1),
+            'raw_item' => $row['raw_item'] ?? [],
+            'create_at' => $row['create_at'] ?? '',
+            'update_at' => $row['update_at'] ?? '',
+            'model_name' => (string)($row['model_name'] ?? ''),
+            'capacity_name' => (string)($row['capacity_name'] ?? ''),
+            'field_type' => (string)($row['field_type'] ?? ''),
+            'content_type' => (string)($row['content_type'] ?? ''),
+            'row_ids' => [],
+            'targets' => [],
+            'target_count' => 0,
+            'model_names' => [],
+            'capacity_names' => [],
+        ];
+    }
+
+    private function noteGroupKey(array $row): string
+    {
+        $mergeSignature = $this->mergeItemsSignature($row['merge_items'] ?? []);
+        $base = [
+            (int)($row['dataset_id'] ?? 0),
+            (int)($row['field_id'] ?? 0),
+            md5((string)($row['content_text'] ?? '') . '|' . (string)($row['content_html'] ?? '')),
+        ];
+        if ($mergeSignature !== '') {
+            $base[] = $mergeSignature;
+        } else {
+            $base[] = (int)($row['model_id'] ?? 0) . '#' . (int)($row['capacity_id'] ?? 0);
+        }
+
+        return md5(implode('|', $base));
+    }
+
+    private function mergeItemsSignature($mergeItems): string
+    {
+        if (!is_array($mergeItems)) {
+            return '';
+        }
+        $items = array_values(array_unique(array_filter(array_map('strval', $mergeItems))));
+        sort($items, SORT_NATURAL);
+        return implode('|', $items);
+    }
+
+    private function summarizeNames(array $names, string $fallback): string
+    {
+        $names = array_values(array_filter(array_unique(array_map('strval', $names))));
+        if (empty($names)) {
+            return '0 个' . $fallback;
+        }
+        $summary = implode('、', array_slice($names, 0, 3));
+        if (count($names) > 3) {
+            $summary .= ' 等 ' . count($names) . ' 个' . $fallback;
+        }
+        return $summary;
     }
 
     private function applyCommonFilters($query, array $where, string $alias): void
@@ -469,5 +595,22 @@ class QueryService extends BaseAdminService
             return '';
         }
         return date('Y-m-d H:i:s', $timestamp);
+    }
+
+    private function maxTimeValue($current, $incoming): string
+    {
+        $currentTime = $this->timeValueToTimestamp($current);
+        $incomingTime = $this->timeValueToTimestamp($incoming);
+        return $this->formatTimeValue(max($currentTime, $incomingTime));
+    }
+
+    private function timeValueToTimestamp($value): int
+    {
+        if (is_string($value) && strpos($value, '-') !== false) {
+            $timestamp = strtotime($value);
+            return $timestamp === false ? 0 : $timestamp;
+        }
+
+        return (int)$value;
     }
 }

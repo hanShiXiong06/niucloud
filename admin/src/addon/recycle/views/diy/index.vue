@@ -1,6 +1,6 @@
 <template>
   <div class="w-full">
-    <component :is="diyEditComponent" v-if="diyStore.currentComponent != 'edit-page'">
+    <component :is="diyEditComponent" v-if="diyEditComponent">
       <template #style>
         <!-- 样式设置区域 -->
       </template>
@@ -9,18 +9,109 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, markRaw } from 'vue';
+import { computed, markRaw, watch } from 'vue';
 import useDiyStore from '@/stores/modules/diy';
+import EditPage from '@/app/views/diy/components/edit-page.vue';
 import EditRecycleCategory from './components/edit-recycle-category.vue';
 import EditRecycleOrderOverview from './components/edit-recycle-order-overview.vue';
+import EditRecycleSendButton from './components/edit-recycle-send-button.vue';
 import EditRecycleSpiderQuotationList from './components/edit-recycle-spider-quotation-list.vue';
 
 const diyStore = useDiyStore();
 
+const isPlainObject = (value: any) => value && typeof value == 'object' && !Array.isArray(value);
+
+const cloneDefault = (value: any): any => {
+  if (!isPlainObject(value)) return value;
+
+  const data: any = {};
+  Object.keys(value).forEach((key) => {
+    data[key] = cloneDefault(value[key]);
+  });
+  return data;
+};
+
+const fillDefaults = (target: any, defaults: any) => {
+  Object.keys(defaults).forEach((key) => {
+    if (target[key] === undefined || target[key] === null) {
+      target[key] = cloneDefault(defaults[key]);
+      return;
+    }
+
+    if (isPlainObject(target[key]) && isPlainObject(defaults[key])) {
+      fillDefaults(target[key], defaults[key]);
+    }
+  });
+};
+
+const recyclePageGlobalDefaults = {
+  topStatusBar: {
+    control: true,
+    isShow: true,
+    bgColor: '#ffffff',
+    rollBgColor: '#ffffff',
+    style: 'style-1',
+    styleName: '风格1',
+    textColor: '#333333',
+    rollTextColor: '#333333',
+    textAlign: 'center',
+    inputPlaceholder: '请输入搜索关键词',
+    imgUrl: '',
+    link: { name: '' }
+  },
+  bottomTabBar: {
+    control: true,
+    isShow: true,
+    designNav: {
+      title: '',
+      key: 'recycle'
+    }
+  },
+  copyright: {
+    control: true,
+    isShow: false,
+    textColor: '#ccc'
+  },
+  popWindow: {
+    imgUrl: '',
+    imgWidth: '',
+    imgHeight: '',
+    count: 'once',
+    show: 0,
+    link: { name: '' }
+  },
+  template: {
+    margin: {
+      top: 0,
+      bottom: 0,
+      both: 0
+    }
+  }
+};
+
+const ensureRecyclePageGlobal = () => {
+  if (diyStore.currentComponent !== 'edit-page') return;
+
+  diyStore.global = diyStore.global || {};
+  fillDefaults(diyStore.global, recyclePageGlobalDefaults);
+};
+
+watch(
+  () => [diyStore.currentComponent, diyStore.global],
+  () => ensureRecyclePageGlobal(),
+  { immediate: true }
+);
+
 // 编辑组件映射
 const componentMap: Record<string, any> = {
+  'edit-page': EditPage,
+  'edit-recycle-category': EditRecycleCategory,
+  'edit-recycle-order-overview': EditRecycleOrderOverview,
+  'edit-recycle-send-button': EditRecycleSendButton,
+  'edit-recycle-spider-quotation-list': EditRecycleSpiderQuotationList,
   EditRecycleCategory,
   EditRecycleOrderOverview,
+  EditRecycleSendButton,
   EditRecycleSpiderQuotationList
 };
 
@@ -109,6 +200,38 @@ const recycleComponents = [
         bgColor: '#ffffff',
         textColor: '#333333',
         imageUrl: ''
+      },
+      {
+        name: 'RecycleSendButton',
+        title: '去发货',
+        icon: 'iconfont iconfenlei',
+        componentTitle: '去发货',
+        componentName: 'RecycleSendButton',
+        componentType: 'EditRecycleSendButton',
+        isDelete: false,
+        isDisabled: false,
+        allPages: true,
+        defaultDataList: {},
+        extra: {},
+        marginTop: 5,
+        paddingTop: 10,
+        paddingBottom: 10,
+        marginBottom: 5,
+        value: {
+          title: '去发货',
+          buttonText: '去发货',
+          buttonColor: '#FFFFFF',
+          buttonBgColor: '#FF6B00',
+          buttonBgUrl: '',
+          buttonBgAlpha: 0,
+          buttonBgSize: '100% 100%',
+          buttonBgRadius: 8,
+          buttonBgMargin: {
+            top: 10,
+            bottom: 10,
+            both: 10
+          }
+        }
       },
       {
         name: 'RecycleSpiderQuotationList',

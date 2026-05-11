@@ -73,9 +73,21 @@ class Manage extends BaseAdminController
         return success('EDIT_SUCCESS');
     }
 
+    public function editNoteGroup(int $id)
+    {
+        (new ManageService())->editNoteGroup($id, $this->request->post());
+        return success('EDIT_SUCCESS');
+    }
+
     public function deleteNote(int $id)
     {
         (new ManageService())->deleteNote($id);
+        return success('DELETE_SUCCESS');
+    }
+
+    public function deleteNoteGroup(int $id)
+    {
+        (new ManageService())->deleteNoteGroup($id);
         return success('DELETE_SUCCESS');
     }
 }

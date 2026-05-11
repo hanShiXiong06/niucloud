@@ -681,12 +681,17 @@ const handlePaymentConfirm = async (paymentData) => {
       return;
     }
 
-    // 调用确认打款API
-    await paymentConfirm(orderId, {
+    const paymentInfo = {
       pay_type: paymentData.payType,
       account: paymentData.account,
       payment_images: paymentData.paymentImages,
       remark: "财务已确认打款",
+    };
+
+    // 调用确认打款API
+    await paymentConfirm(orderId, {
+      ...paymentInfo,
+      payment_info: paymentInfo,
     });
 
     ElMessage.success("确认打款成功");

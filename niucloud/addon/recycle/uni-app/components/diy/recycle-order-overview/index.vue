@@ -80,6 +80,13 @@ const orderData = ref<OrderData>({
     pending_payment: 0
 });
 
+const decorateOrderData: OrderData = {
+    pending_sign: 3,
+    checking: 5,
+    pending_confirm: 2,
+    pending_payment: 1
+};
+
 // 组件配置
 const title = computed(() => props.component.title || '回收订单');
 const viewAllText = computed(() => props.component.viewAllText || '全部');
@@ -121,9 +128,13 @@ const handleStatusClick = (status: string) => {
 
 // 获取订单状态统计数据
 const getOrderDataCount = async () => {
+    if (diyStore.mode === 'decorate') {
+        orderData.value = decorateOrderData;
+        return;
+    }
+
     try {
         const res: any = await getOrderStatusCount();
-        console.log('获取订单状态数量:', res);
         if (res.code === 1 && res.data && res.data.list) {
             // 从接口返回的 list 中按 key 提取各状态数量
             const statusMap: Record<string, number> = {};
@@ -218,9 +229,7 @@ const maskLayer = computed(() => {
 });
 
 onMounted(() => {
-    // 获取真实数据
     getOrderDataCount();
-    console.log('回收订单概况组件已挂载');
 });
 </script>
 

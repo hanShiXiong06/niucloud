@@ -21,16 +21,22 @@ class SyncService extends BaseAdminService
         return $this;
     }
 
-    public function preview(int $datasetId): array
+    public function preview(int $datasetId, string $source = QuotationV2Dict::SYNC_SOURCE_PREVIEW): array
     {
         $dataset = (new DatasetService())->setSiteId((int)$this->site_id)->getInfo($datasetId);
         if ((int)($dataset['status'] ?? 0) !== QuotationV2Dict::STATUS_ENABLED) {
             throw new CommonException('报价数据集未启用');
         }
 
-        $fetch = (new ChaoniuCrawlerService())->setSiteId((int)$this->site_id)->fetch($dataset);
-        $parsed = (new ChaoniuParserService())->parse($dataset, $fetch['response']);
-        $logId = $this->createLog($dataset, $fetch, $parsed, false);
+        try {
+            $fetch = (new ChaoniuCrawlerService())->setSiteId((int)$this->site_id)->fetch($dataset);
+            $parsed = (new ChaoniuParserService())->parse($dataset, $fetch['response']);
+        } catch (\Throwable $e) {
+            $this->createFailedLog($dataset, $source, $e->getMessage());
+            $this->markDatasetFailed((int)$dataset['id'], $e->getMessage());
+            throw $e;
+        }
+        $logId = $this->createLog($dataset, $fetch, $parsed, false, $source);
 
         return [
             'log_id' => $logId,
@@ -77,9 +83,9 @@ class SyncService extends BaseAdminService
         ];
     }
 
-    public function syncNow(int $datasetId): array
+    public function syncNow(int $datasetId, string $source = QuotationV2Dict::SYNC_SOURCE_MANUAL): array
     {
-        $preview = $this->preview($datasetId);
+        $preview = $this->preview($datasetId, $source);
         return $this->importFromPreview((int)$preview['log_id']);
     }
 
@@ -108,26 +114,18 @@ class SyncService extends BaseAdminService
 
             $result['total']++;
             try {
-                (new self())->setSiteId((int)$dataset['site_id'])->syncNow((int)$dataset['id']);
+                (new self())->setSiteId((int)$dataset['site_id'])->syncNow((int)$dataset['id'], QuotationV2Dict::SYNC_SOURCE_AUTO);
                 $result['success']++;
             } catch (\Throwable $e) {
                 $result['failed']++;
                 $result['messages'][] = ($dataset['dataset_name'] ?? $dataset['id']) . ':' . $e->getMessage();
-                (new QuotationDataset())->where([
-                    ['site_id', '=', (int)$dataset['site_id']],
-                    ['id', '=', (int)$dataset['id']],
-                ])->update([
-                    'last_sync_at' => time(),
-                    'last_sync_status' => QuotationV2Dict::SYNC_STATUS_FAILED,
-                    'last_sync_message' => mb_substr($e->getMessage(), 0, 500),
-                    'update_at' => time(),
-                ]);
+                (new self())->setSiteId((int)$dataset['site_id'])->markDatasetFailed((int)$dataset['id'], $e->getMessage());
             }
         }
         return $result;
     }
 
-    private function createLog(array $dataset, array $fetch, array $parsed, bool $imported): int
+    private function createLog(array $dataset, array $fetch, array $parsed, bool $imported, string $source): int
     {
         $result = (new QuotationSyncLog())->create([
             'site_id' => $this->site_id,
@@ -140,6 +138,7 @@ class SyncService extends BaseAdminService
             ]),
             'http_code' => (int)$fetch['http_code'],
             'duration' => (int)$fetch['duration'],
+            'sync_source' => $this->normalizeSyncSource($source),
             'raw_response' => $this->compactResponse($fetch['response'] ?? []),
             'parsed_preview' => $parsed,
             'stats' => $parsed['stats'] ?? [],
@@ -151,6 +150,60 @@ class SyncService extends BaseAdminService
         ]);
 
         return (int)$result->id;
+    }
+
+    private function createFailedLog(array $dataset, string $source, string $message): int
+    {
+        $result = (new QuotationSyncLog())->create([
+            'site_id' => $this->site_id,
+            'dataset_id' => (int)$dataset['id'],
+            'quotation_id' => (int)$dataset['quotation_id'],
+            'channel_key' => (string)($dataset['channel_key'] ?? 'chaoniu'),
+            'request_url' => '',
+            'request_params' => [
+                'quotation_id' => (int)($dataset['quotation_id'] ?? 0),
+                'price_name' => (string)($dataset['price_name'] ?? ''),
+            ],
+            'http_code' => 0,
+            'duration' => 0,
+            'sync_source' => $this->normalizeSyncSource($source),
+            'raw_response' => [],
+            'parsed_preview' => [],
+            'stats' => [],
+            'warnings' => [],
+            'status' => QuotationV2Dict::SYNC_STATUS_FAILED,
+            'imported' => 0,
+            'error_message' => mb_substr($message, 0, 500),
+            'create_at' => time(),
+            'update_at' => time(),
+        ]);
+
+        return (int)$result->id;
+    }
+
+    private function markDatasetFailed(int $datasetId, string $message): void
+    {
+        (new QuotationDataset())->where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $datasetId],
+        ])->update([
+            'last_sync_at' => time(),
+            'last_sync_status' => QuotationV2Dict::SYNC_STATUS_FAILED,
+            'last_sync_message' => mb_substr($message, 0, 500),
+            'last_sync_summary' => [
+                'sync_source' => 'failed',
+            ],
+            'update_at' => time(),
+        ]);
+    }
+
+    private function normalizeSyncSource(string $source): string
+    {
+        return in_array($source, [
+            QuotationV2Dict::SYNC_SOURCE_MANUAL,
+            QuotationV2Dict::SYNC_SOURCE_AUTO,
+            QuotationV2Dict::SYNC_SOURCE_PREVIEW,
+        ], true) ? $source : QuotationV2Dict::SYNC_SOURCE_MANUAL;
     }
 
     private function compactResponse(array $response): array

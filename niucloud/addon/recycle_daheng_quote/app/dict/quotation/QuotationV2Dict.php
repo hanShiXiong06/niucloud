@@ -23,6 +23,10 @@ class QuotationV2Dict
     const SYNC_STATUS_SUCCESS = 1;
     const SYNC_STATUS_FAILED = 2;
 
+    const SYNC_SOURCE_MANUAL = 'manual';
+    const SYNC_SOURCE_AUTO = 'auto';
+    const SYNC_SOURCE_PREVIEW = 'preview';
+
     public static function getFieldTypeName(string $type): string
     {
         $map = [
@@ -33,5 +37,16 @@ class QuotationV2Dict
         ];
 
         return $map[$type] ?? '未知字段';
+    }
+
+    public static function getSyncSourceName(string $source): string
+    {
+        $map = [
+            self::SYNC_SOURCE_MANUAL => '手动同步',
+            self::SYNC_SOURCE_AUTO => '自动同步',
+            self::SYNC_SOURCE_PREVIEW => '手动预览',
+        ];
+
+        return $map[$source] ?? '未记录';
     }
 }

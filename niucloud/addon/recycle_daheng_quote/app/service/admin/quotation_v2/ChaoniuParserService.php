@@ -120,12 +120,7 @@ class ChaoniuParserService extends BaseAdminService
                         if ($contentHtml === '') {
                             continue;
                         }
-                        $scopeItems = $fieldType === QuotationV2Dict::FIELD_TYPE_ADJUSTMENT
-                            ? [[
-                                'external_goods_id' => $externalGoodsId,
-                                'capacity_answer_id' => $capacity['capacity_answer_id'],
-                            ]]
-                            : $this->resolveMergeItems($attr, $externalGoodsId, $capacity['capacity_answer_id']);
+                        $scopeItems = $this->resolveMergeItems($attr, $externalGoodsId, $capacity['capacity_answer_id']);
                         foreach ($scopeItems as $mergeItem) {
                             $notes[] = [
                                 'external_goods_id' => $mergeItem['external_goods_id'],
@@ -137,7 +132,7 @@ class ChaoniuParserService extends BaseAdminService
                                 'content_text' => $this->htmlToText($contentHtml),
                                 'merge_items' => $attr['merge_item'] ?? [],
                                 'raw_item' => array_merge($this->compactAttr($attr), [
-                                    'scope_mode' => $fieldType === QuotationV2Dict::FIELD_TYPE_ADJUSTMENT ? 'current_sku' : 'merge_item',
+                                    'scope_mode' => !empty($attr['merge_item'] ?? []) ? 'merge_item' : 'current_sku',
                                 ]),
                             ];
                         }

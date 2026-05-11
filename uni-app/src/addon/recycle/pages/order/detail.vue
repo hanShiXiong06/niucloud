@@ -275,12 +275,35 @@ const goBack = () => {
   })
 }
 
+const goHome = () => {
+  uni.reLaunch({ url: '/app/pages/index/index' })
+}
+
 watch(() => orderInfo.value.id, (newId) => {
   if (newId) loadReturnOrders(newId)
 })
 
+const getOrderIdFromOptions = (options?: Record<string, any>) => {
+  const sceneParams: Record<string, string> = {}
+  const scene = options?.scene ? decodeURIComponent(String(options.scene)) : ''
+  if (scene) {
+    scene.split('&').filter(Boolean).forEach(item => {
+      const [key, value = ''] = item.split('=')
+      if (key) sceneParams[key] = decodeURIComponent(value)
+    })
+  }
+
+  return options?.id || options?.order_id || sceneParams.id || sceneParams.order_id
+}
+
 onLoad((options?: Record<string, any>) => {
-  if (options?.id) loadOrderDetail(options.id)
+  const orderId = getOrderIdFromOptions(options)
+  if (orderId) {
+    loadOrderDetail(orderId)
+    return
+  }
+  loading.value = false
+  goHome()
 })
 
 onShow(async () => {

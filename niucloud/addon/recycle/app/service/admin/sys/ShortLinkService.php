@@ -72,7 +72,7 @@ class ShortLinkService extends BaseAdminService
             throw new CommonException('订单ID不能为空');
         }
 
-        $page_url = "addon/recycle/pages/order/detail?order_id={$order_id}";
+        $page_url = "addon/recycle/pages/order/detail?id={$order_id}";
         $page_title = $order_no ? "回收订单{$order_no}" : "回收订单详情";
 
         $short_link = $this->generateShortLink([

@@ -211,8 +211,12 @@ class RecycleOrder extends BaseAdminController
             ['pay_name', ''],
             ['pay_remark', ''],
             ['pay_url', ''],
-            ['remark', '']
+            ['remark', ''],
+            ['account', ''],
+            ['payment_images', ''],
+            ['payment_info', []]
         ]);
+        $data = $this->fillPaymentInfo($data);
 
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
@@ -236,8 +240,10 @@ class RecycleOrder extends BaseAdminController
             ['pay_url', ''],
             ['remark', ''],
             ['account', ''],           // 收款账号
-            ['payment_images', '']     // 打款凭证图片
+            ['payment_images', ''],    // 打款凭证图片
+            ['payment_info', []]
         ]);
+        $data = $this->fillPaymentInfo($data);
 
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
@@ -446,5 +452,24 @@ class RecycleOrder extends BaseAdminController
         $result = $deviceService->removeDeviceFromOrder($deviceId, $data['reason']);
 
         return success($result);
+    }
+
+    /**
+     * 兼容旧的扁平打款参数，流程引擎校验需要 payment_info。
+     * @param array $data
+     * @return array
+     */
+    private function fillPaymentInfo(array $data): array
+    {
+        if (empty($data['payment_info']) || !is_array($data['payment_info'])) {
+            $data['payment_info'] = [
+                'pay_type' => $data['pay_type'] ?? '',
+                'account' => $data['account'] ?? '',
+                'payment_images' => $data['payment_images'] ?? '',
+                'remark' => $data['remark'] ?? ''
+            ];
+        }
+
+        return $data;
     }
 }

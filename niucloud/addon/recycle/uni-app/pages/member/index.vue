@@ -11,6 +11,10 @@
     <!-- #ifdef MP-WEIXIN -->
     <wx-privacy-popup ref="wxPrivacyPopupRef"></wx-privacy-popup>
     <!-- #endif -->
+
+    <template v-if="diyStore && diyStore.mode == '' && diyStore.global && diyStore.global.bottomTabBar && diyStore.global.bottomTabBar.isShow">
+      <tabbar :addon="diyStore.global.bottomTabBar.designNav?.key || 'recycle'" />
+    </template>
   </view>
 </template>
 
@@ -18,11 +22,13 @@
 import { ref, nextTick } from 'vue'
 import { useDiy } from '@/hooks/useDiy'
 import diyGroup from '@/addon/components/diy/group/index.vue'
+import useDiyStore from '@/app/stores/diy'
 
 const diy = useDiy({
   name: 'DIY_RECYCLE_MEMBER_INDEX'
 })
 
+const diyStore = useDiyStore()
 const diyGroupRef = ref<InstanceType<typeof diyGroup> | null>(null)
 const wxPrivacyPopupRef: any = ref(null)
 

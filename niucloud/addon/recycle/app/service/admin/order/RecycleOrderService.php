@@ -199,8 +199,28 @@ class RecycleOrderService extends BaseAdminService
      */
     public function payment(int $orderId, array $data): bool
     {
+        $data = $this->fillPaymentInfo($data);
         $result = $this->execute($orderId, 'payment', $data);
         return $result['success'];
+    }
+
+    /**
+     * 兼容旧的扁平打款参数，流程配置要求 payment_info。
+     * @param array $data
+     * @return array
+     */
+    private function fillPaymentInfo(array $data): array
+    {
+        if (empty($data['payment_info']) || !is_array($data['payment_info'])) {
+            $data['payment_info'] = [
+                'pay_type' => $data['pay_type'] ?? '',
+                'account' => $data['account'] ?? '',
+                'payment_images' => $data['payment_images'] ?? '',
+                'remark' => $data['remark'] ?? ''
+            ];
+        }
+
+        return $data;
     }
 
     // ==================== CRUD 和工具方法 ====================

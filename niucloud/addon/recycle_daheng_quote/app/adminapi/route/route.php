@@ -43,7 +43,9 @@ Route::group('recycle_daheng_quote', function () {
     Route::put('quotation_v2/field/:id', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Manage@editField');
     Route::delete('quotation_v2/field/:id', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Manage@deleteField');
     Route::post('quotation_v2/note', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Manage@addNote');
+    Route::put('quotation_v2/note/:id/group', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Manage@editNoteGroup');
     Route::put('quotation_v2/note/:id', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Manage@editNote');
+    Route::delete('quotation_v2/note/:id/group', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Manage@deleteNoteGroup');
     Route::delete('quotation_v2/note/:id', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Manage@deleteNote');
     Route::put('quotation_v2/price/:id/adjust', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Price@adjust');
     Route::post('quotation_v2/price/batch_adjust', 'addon\recycle_daheng_quote\app\adminapi\controller\quotation_v2\Price@batchAdjust');

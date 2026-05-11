@@ -50,14 +50,15 @@ class PaymentHandler extends BaseFlowHandler
         }
 
         // 2. 记录打款信息
+        $requestPaymentInfo = is_array($data['payment_info'] ?? null) ? $data['payment_info'] : [];
         $paymentInfo = [
             'pay_time' => time(),
             'pay_account' => $totalAmount,
-            'pay_type' => $data['pay_type'] ?? '',
-            'account' => $data['account'] ?? '',
-            'payment_images' => $data['payment_images'] ?? '',
+            'pay_type' => $requestPaymentInfo['pay_type'] ?? $data['pay_type'] ?? '',
+            'account' => $requestPaymentInfo['account'] ?? $data['account'] ?? '',
+            'payment_images' => $requestPaymentInfo['payment_images'] ?? $data['payment_images'] ?? '',
             'operator_id' => $this->getOperatorId($context),
-            'remark' => $data['remark'] ?? ''
+            'remark' => $requestPaymentInfo['remark'] ?? $data['remark'] ?? ''
         ];
 
         // 3. 更新订单打款信息

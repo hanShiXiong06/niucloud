@@ -128,8 +128,16 @@ export function editQuotationV2Note(id: number, params: Record<string, any>) {
     return request.put(`recycle_daheng_quote/quotation_v2/note/${id}`, params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
+export function editQuotationV2NoteGroup(id: number, params: Record<string, any>) {
+    return request.put(`recycle_daheng_quote/quotation_v2/note/${id}/group`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
 export function deleteQuotationV2Note(id: number) {
     return request.delete(`recycle_daheng_quote/quotation_v2/note/${id}`, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+export function deleteQuotationV2NoteGroup(id: number) {
+    return request.delete(`recycle_daheng_quote/quotation_v2/note/${id}/group`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 export function getQuotationV2Logs(params: Record<string, any>) {

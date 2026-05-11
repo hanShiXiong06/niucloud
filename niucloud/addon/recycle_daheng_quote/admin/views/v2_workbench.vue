@@ -456,18 +456,20 @@
                             <el-button type="primary" @click="openManageDialog('note', null, 'adjustment')">新增调整项内容</el-button>
                         </div>
                         <el-table :data="detailTable.adjustments.data" v-loading="detailTable.adjustments.loading" border>
-                            <el-table-column prop="external_goods_id" label="型号ID" width="90" />
-                            <el-table-column prop="capacity_answer_id" label="容量ID" width="90" />
-                            <el-table-column prop="model_name" label="型号" min-width="160" />
-                            <el-table-column prop="capacity_name" label="容量" width="100" />
+                            <el-table-column prop="target_summary" label="覆盖范围" min-width="260" show-overflow-tooltip />
+                            <el-table-column label="覆盖数量" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.is_shared ? 'success' : 'info'">{{ row.target_count || 1 }} 个</el-tag>
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="field_name" label="调整项" width="130" />
                             <el-table-column prop="content_text" label="规则内容" min-width="360" show-overflow-tooltip />
                             <status-column />
                             <follow-column />
-                            <el-table-column label="操作" width="140">
+                            <el-table-column label="操作" width="170">
                                 <template #default="{ row }">
-                                    <el-button link type="primary" @click="openManageDialog('note', row)">编辑</el-button>
-                                    <el-button link type="danger" @click="deleteManaged('note', row)">删除</el-button>
+                                    <el-button link type="primary" @click="openManageDialog('note', row)">编辑规则</el-button>
+                                    <el-button link type="danger" @click="deleteManaged('note', row)">删除规则</el-button>
                                 </template>
                             </el-table-column>
                         </el-table>
@@ -516,6 +518,7 @@
                         <table-pagination :table="detailTable.fields" @load="loadDetail" />
                     </el-tab-pane>
 
+                    <!-- 暂时隐藏附加说明入口：价格调整页已经覆盖当前规则编辑体验。
                     <el-tab-pane label="附加说明" name="notes">
                         <div class="section-toolbar">
                             <el-form :inline="true" :model="detailSearch.notes">
@@ -552,8 +555,12 @@
                             <el-button type="primary" @click="openManageDialog('note', null, 'note')">新增说明内容</el-button>
                         </div>
                         <el-table :data="detailTable.notes.data" v-loading="detailTable.notes.loading" border>
-                            <el-table-column prop="model_name" label="型号" min-width="160" />
-                            <el-table-column prop="capacity_name" label="容量" width="100" />
+                            <el-table-column prop="target_summary" label="覆盖范围" min-width="260" show-overflow-tooltip />
+                            <el-table-column label="覆盖数量" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.is_shared ? 'success' : 'info'">{{ row.target_count || 1 }} 个</el-tag>
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="field_name" label="说明项" width="130" />
                             <el-table-column label="类型" width="120">
                                 <template #default="{ row }">
@@ -565,13 +572,14 @@
                             <follow-column />
                             <el-table-column label="操作" width="140">
                                 <template #default="{ row }">
-                                    <el-button link type="primary" @click="openManageDialog('note', row)">编辑</el-button>
-                                    <el-button link type="danger" @click="deleteManaged('note', row)">删除</el-button>
+                                    <el-button link type="primary" @click="openManageDialog('note', row)">编辑规则</el-button>
+                                    <el-button link type="danger" @click="deleteManaged('note', row)">删除规则</el-button>
                                 </template>
                             </el-table-column>
                         </el-table>
                         <table-pagination :table="detailTable.notes" @load="loadDetail" />
                     </el-tab-pane>
+                    -->
 
                     <el-tab-pane label="同步记录" name="logs">
                         <el-table :data="detailTable.logs.data" v-loading="detailTable.logs.loading" border>
@@ -579,6 +587,11 @@
                             <el-table-column label="状态" width="90">
                                 <template #default="{ row }">
                                     <el-tag :type="row.status === 1 ? 'success' : 'danger'">{{ row.status_name || (row.status === 1 ? '成功' : '失败') }}</el-tag>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="触发方式" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="syncSourceTag(row.sync_source)">{{ row.sync_source_name || '未记录' }}</el-tag>
                                 </template>
                             </el-table-column>
                             <el-table-column prop="duration" label="耗时(ms)" width="100" />
@@ -744,21 +757,40 @@
                     <el-alert type="info" :closable="false" title="字段类型会写入该报价单的解析规则，下次同步仍按这里的设置解析。" />
                 </template>
                 <template v-if="manageDialog.type === 'note'">
-                    <el-alert type="success" :closable="false" class="mb-[12px]" title="内容会精确绑定到一个型号、一个容量、一个字段。比如 256G 的颜色加/扣钱项可以和 512G 不一样。" />
-                    <el-form-item label="所属型号">
-                        <el-select v-model="manageDialog.form.model_id" filterable placeholder="请选择型号" @change="onManageModelChange">
+                    <el-alert type="success" :closable="false" class="mb-[12px]" title="同一段价格调整或说明可以同时应用到多个型号、多个容量；后续编辑共用项时可以一次同步修改同一批规则。" />
+                    <el-form-item label="筛选型号">
+                        <el-select
+                            v-model="manageDialog.form.model_filter_ids"
+                            multiple
+                            collapse-tags
+                            collapse-tags-tooltip
+                            filterable
+                            clearable
+                            placeholder="可先选型号，再勾选容量"
+                            class="w-full"
+                            @change="onNoteTargetModelFilterChange"
+                        >
                             <el-option v-for="item in modelOptions" :key="item.id" :label="item.model_name" :value="item.id" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="容量" v-if="manageDialog.form.id">
-                        <el-select v-model="manageDialog.form.capacity_id" filterable placeholder="请先选择型号，再选择容量">
-                            <el-option v-for="item in capacityOptions" :key="item.id" :label="item.capacity_name" :value="item.id" />
+                    <el-form-item label="应用范围">
+                        <el-select
+                            v-model="manageDialog.form.target_keys"
+                            multiple
+                            collapse-tags
+                            collapse-tags-tooltip
+                            filterable
+                            placeholder="选择多个型号/容量共用同一段内容"
+                            class="w-full"
+                        >
+                            <el-option
+                                v-for="item in capacityOptions"
+                                :key="item.id"
+                                :label="`${item.model_name || '未命名型号'} / ${item.capacity_name}`"
+                                :value="`${item.model_id}#${item.id}`"
+                            />
                         </el-select>
-                    </el-form-item>
-                    <el-form-item label="容量" v-else>
-                        <el-select v-model="manageDialog.form.capacity_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="可选择多个容量共用同一段内容">
-                            <el-option v-for="item in capacityOptions" :key="item.id" :label="item.capacity_name" :value="item.id" />
-                        </el-select>
+                        <span class="form-tip">列表支持搜索型号或容量。爬虫带来的共用规则会回显全部覆盖范围，保存后按这里的选择整体更新。</span>
                     </el-form-item>
                     <el-form-item label="字段类型" v-if="!manageDialog.form.id">
                         <el-radio-group v-model="manageDialog.form.field_type" @change="onManageFieldTypeChange">
@@ -888,11 +920,13 @@ import {
     deleteQuotationV2Field,
     deleteQuotationV2Model,
     deleteQuotationV2Note,
+    deleteQuotationV2NoteGroup,
     editQuotationV2Capacity,
     editQuotationV2Dataset,
     editQuotationV2Field,
     editQuotationV2Model,
     editQuotationV2Note,
+    editQuotationV2NoteGroup,
     getQuotationV2Capacities,
     getQuotationV2DatasetAll,
     getQuotationV2DatasetList,
@@ -985,6 +1019,21 @@ const responseRows = (res: any) => Array.isArray(res.data) ? res.data : (res.dat
 const responseListRows = (res: any) => res.data?.list || res.data?.data || []
 const responseTotal = (res: any) => Number(res.data?.total || 0)
 const responseMatrix = (res: any) => res.data?.matrix || { columns: [], adjustment_columns: [], rows: [], groups: [] }
+const loadAllOptionRows = async (api: Function, params: Record<string, any>) => {
+    const limit = OPTION_LIMIT
+    let page = 1
+    let total = 0
+    const rows: any[] = []
+    do {
+        const res = await api({ ...params, page, limit })
+        const pageRows = responseRows(res)
+        rows.push(...pageRows)
+        total = responseTotal(res)
+        if (!pageRows.length || pageRows.length < limit) break
+        page++
+    } while (!total || rows.length < total)
+    return rows
+}
 
 const readWorkbenchState = () => {
     try {
@@ -1007,7 +1056,7 @@ const writeWorkbenchState = () => {
 
 const restoreWorkbenchState = () => {
     const state = readWorkbenchState()
-    if (state.activeTab && detailTable[state.activeTab]) {
+    if (state.activeTab && state.activeTab !== 'notes' && detailTable[state.activeTab]) {
         activeTab.value = state.activeTab
     }
     if (Number(state.datasetPage || 0) > 0) datasetTable.page = Number(state.datasetPage)
@@ -1352,30 +1401,36 @@ const loadManageOptions = async (type = '') => {
     if (!selectedDataset.value?.id) return
     const datasetId = selectedDataset.value.id
     if (type === 'capacity' || type === 'note' || type === '') {
-        const modelRes = await getQuotationV2Models({ page: 1, limit: OPTION_LIMIT, dataset_id: datasetId })
-        modelOptions.value = responseRows(modelRes)
+        modelOptions.value = await loadAllOptionRows(getQuotationV2Models, { dataset_id: datasetId })
     }
     if (type === 'note' || type === '') {
-        const capacityRes = await getQuotationV2Capacities({
-            page: 1,
-            limit: OPTION_LIMIT,
+        const modelFilterIds = Array.isArray(manageDialog.form?.model_filter_ids)
+            ? manageDialog.form.model_filter_ids
+            : []
+        const capacityRows = await loadAllOptionRows(getQuotationV2Capacities, {
             dataset_id: datasetId,
-            model_id: manageDialog.form?.model_id || ''
+            model_id: ''
         })
-        capacityOptions.value = responseRows(capacityRes)
-        const fieldRes = await getQuotationV2Fields({
-            page: 1,
-            limit: OPTION_LIMIT,
+        capacityOptions.value = modelFilterIds.length
+            ? capacityRows.filter((item: any) => modelFilterIds.includes(Number(item.model_id || 0)))
+            : capacityRows
+        const fieldRows = await loadAllOptionRows(getQuotationV2Fields, {
             dataset_id: datasetId,
             field_type: manageDialog.form?.field_type || ''
         })
-        fieldOptions.value = responseRows(fieldRes).filter((item: any) => ['adjustment', 'note'].includes(item.field_type))
+        fieldOptions.value = fieldRows.filter((item: any) => ['adjustment', 'note'].includes(item.field_type))
     }
 }
 
 const onManageModelChange = async () => {
     manageDialog.form.capacity_id = ''
     await loadManageOptions('note')
+}
+
+const onNoteTargetModelFilterChange = async () => {
+    await loadManageOptions('note')
+    const availableKeys = new Set(capacityOptions.value.map((item: any) => `${item.model_id}#${item.id}`))
+    manageDialog.form.target_keys = (manageDialog.form.target_keys || []).filter((key: string) => availableKeys.has(key))
 }
 
 const onManageFieldTypeChange = async () => {
@@ -1485,8 +1540,7 @@ const loadPriceMatrix = async () => {
 
 const ensureModelOptions = async () => {
     if (!selectedDataset.value?.id || modelOptions.value.length) return
-    const modelRes = await getQuotationV2Models({ page: 1, limit: OPTION_LIMIT, dataset_id: selectedDataset.value.id })
-    modelOptions.value = responseRows(modelRes)
+    modelOptions.value = await loadAllOptionRows(getQuotationV2Models, { dataset_id: selectedDataset.value.id })
 }
 
 const normalizeMatrixGroups = (groups: any[]) => {
@@ -1761,7 +1815,19 @@ const openManageDialog = async (type: string, row?: any, fieldType = '') => {
         sort: 0
     }
     if (row) {
-        manageDialog.form = { ...row }
+        const targets = Array.isArray(row.targets) ? row.targets : []
+        const targetKeys = targets
+            .map((item: any) => `${item.model_id}#${item.capacity_id}`)
+            .filter((key: string) => !key.startsWith('0#') && !key.endsWith('#0'))
+        const modelFilterIds = Array.from(new Set(targets.map((item: any) => Number(item.model_id || 0)).filter(Boolean)))
+        manageDialog.form = {
+            ...row,
+            model_id: targets[0]?.model_id || row.model_id,
+            capacity_id: targets[0]?.capacity_id || row.capacity_id,
+            model_filter_ids: modelFilterIds,
+            target_keys: targetKeys,
+            update_shared: sharedTargetCount(row) > 1 ? 1 : 0
+        }
     } else if (type === 'model') {
         manageDialog.form = { ...base, model_name: '', group_key: 0, series_name: '', is_hot: 0 }
     } else if (type === 'capacity') {
@@ -1769,7 +1835,7 @@ const openManageDialog = async (type: string, row?: any, fieldType = '') => {
     } else if (type === 'field') {
         manageDialog.form = { ...base, field_name: '', field_type: 'adjustment' }
     } else if (type === 'note') {
-        manageDialog.form = { ...base, model_id: '', capacity_id: '', capacity_ids: [], field_id: '', field_type: fieldType || 'adjustment', new_field_name: '', content_html: '', content_text: '' }
+        manageDialog.form = { ...base, model_id: '', capacity_id: '', capacity_ids: [], model_filter_ids: [], target_keys: [], field_id: '', field_type: fieldType || 'adjustment', new_field_name: '', content_html: '', content_text: '', update_shared: 0 }
     } else {
         manageDialog.form = { ...base }
     }
@@ -1796,7 +1862,12 @@ const saveManaged = async () => {
         note: addQuotationV2Note
     }
     if (id) {
-        await editApiMap[manageDialog.type](id, manageDialog.form)
+        if (manageDialog.type === 'note') {
+            manageDialog.form.targets = buildNoteTargets()
+            await editQuotationV2NoteGroup(id, manageDialog.form)
+        } else {
+            await editApiMap[manageDialog.type](id, manageDialog.form)
+        }
         patchManagedLocal(manageDialog.type, Number(id), { ...manageDialog.form })
         manageDialog.show = false
         ElMessage.success('保存成功')
@@ -1814,6 +1885,9 @@ const saveManaged = async () => {
                 sort: 0
             })
             manageDialog.form.field_id = fieldRes.data?.id || fieldRes.data?.data?.id || 0
+        }
+        if (manageDialog.type === 'note') {
+            manageDialog.form.targets = buildNoteTargets()
         }
         await addApiMap[manageDialog.type](manageDialog.form)
     }
@@ -1849,17 +1923,9 @@ const validateManageForm = () => {
         }
     }
     if (manageDialog.type === 'note') {
-        if (!form.model_id) {
-            ElMessage.warning('请选择所属型号')
-            return false
-        }
-        if (form.id) {
-            if (!form.capacity_id) {
-                ElMessage.warning('请选择容量')
-                return false
-            }
-        } else if (!Array.isArray(form.capacity_ids) || !form.capacity_ids.length) {
-            ElMessage.warning('请选择至少一个容量')
+        const targets = buildNoteTargets()
+        if (!targets.length) {
+            ElMessage.warning('请选择至少一个型号/容量')
             return false
         }
         if (!form.field_id && !String(form.new_field_name || '').trim()) {
@@ -1879,14 +1945,14 @@ const deleteManaged = async (type: string, row: any) => {
         model: row.model_name,
         capacity: row.capacity_name,
         field: row.field_name,
-        note: row.field_name
+        note: `${row.field_name || '该规则'}（${row.target_count || 1} 个型号/容量）`
     }
     await ElMessageBox.confirm(`确定删除 ${nameMap[type] || '该记录'} 吗？相关明细会一并清理。`, '删除确认', { type: 'warning' })
     const apiMap: Record<string, Function> = {
         model: deleteQuotationV2Model,
         capacity: deleteQuotationV2Capacity,
         field: deleteQuotationV2Field,
-        note: deleteQuotationV2Note
+        note: deleteQuotationV2NoteGroup
     }
     await apiMap[type](row.id)
     const table = detailTable[activeTab.value]
@@ -1956,6 +2022,13 @@ const fieldTypeTag = (type: string) => {
     return 'info'
 }
 
+const syncSourceTag = (source: string) => {
+    if (source === 'auto') return 'success'
+    if (source === 'manual') return 'primary'
+    if (source === 'preview') return 'warning'
+    return 'info'
+}
+
 const formatTime = (time: number) => {
     if (!time) return '暂无'
     const date = new Date(Number(time) * 1000)
@@ -1974,6 +2047,22 @@ const imageUrl = (value: string) => {
     if (!url) return ''
     if (/^(https?:)?\/\//.test(url) || url.startsWith('data:')) return url
     return url.startsWith('/') ? url : `/${url}`
+}
+
+const normalizeMergeItems = (value: any) => Array.isArray(value) ? value.filter(Boolean).map(String) : []
+
+const sharedTargetCount = (row: any) => {
+    if (Number(row?.target_count || 0) > 0) return Number(row.target_count)
+    const mergeItems = normalizeMergeItems(row?.merge_items)
+    return mergeItems.length || 1
+}
+
+const buildNoteTargets = () => {
+    const keys = Array.isArray(manageDialog.form.target_keys) ? manageDialog.form.target_keys : []
+    return keys.map((key: string) => {
+        const [modelId, capacityId] = String(key).split('#').map((item) => Number(item || 0))
+        return { model_id: modelId, capacity_id: capacityId }
+    }).filter((item: any) => item.model_id > 0 && item.capacity_id > 0)
 }
 
 onMounted(async () => {

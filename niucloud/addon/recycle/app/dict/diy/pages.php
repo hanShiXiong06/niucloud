@@ -35,6 +35,19 @@ return [
                         ]
                     ],
                     "bottomTabBarSwitch" => true,
+                    "bottomTabBar" => [
+                        'control' => true,
+                        'isShow' => true,
+                        'designNav' => [
+                            'title' => '',
+                            'key' => 'recycle'
+                        ]
+                    ],
+                    "copyright" => [
+                        'control' => true,
+                        'isShow' => false,
+                        'textColor' => '#ccc'
+                    ],
                     "popWindow" => [
                         "imgUrl" => "",
                         "imgWidth" => "",
@@ -152,6 +165,19 @@ return [
                         ]
                     ],
                     "bottomTabBarSwitch" => true,
+                    "bottomTabBar" => [
+                        'control' => true,
+                        'isShow' => true,
+                        'designNav' => [
+                            'title' => '',
+                            'key' => 'recycle'
+                        ]
+                    ],
+                    "copyright" => [
+                        'control' => true,
+                        'isShow' => false,
+                        'textColor' => '#ccc'
+                    ],
                     "popWindow" => [
                         "imgUrl" => "",
                         "imgWidth" => "",
@@ -184,7 +210,40 @@ return [
                         ]
                     ]
                 ],
-                "value" => []
+                "value" => [
+                    [
+                        "path" => "edit-member-info",
+                        "id" => "recycle-member-info",
+                        "componentName" => "MemberInfo",
+                        "componentTitle" => "会员信息",
+                        "uses" => 1,
+                        "ignore" => [],
+                        'pageStartBgColor' => '',
+                        'pageEndBgColor' => '',
+                        'pageGradientAngle' => 'to bottom',
+                        'componentBgUrl' => '',
+                        'componentBgAlpha' => 2,
+                        "componentStartBgColor" => "",
+                        "componentEndBgColor" => "",
+                        "componentGradientAngle" => "to bottom",
+                        "topRounded" => 0,
+                        "bottomRounded" => 0,
+                        "elementBgColor" => "",
+                        "topElementRounded" => 0,
+                        "bottomElementRounded" => 0,
+                        "margin" => [
+                            "top" => 0,
+                            "bottom" => 0,
+                            "both" => 0
+                        ],
+                        "style" => "style-1",
+                        "styleName" => "风格1",
+                        "textColor" => "#303133",
+                        "bgUrl" => "",
+                        "bgColorStart" => "",
+                        "bgColorEnd" => ""
+                    ]
+                ]
             ]
         ]
     ]

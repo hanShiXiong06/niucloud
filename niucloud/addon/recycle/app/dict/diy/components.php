@@ -4,6 +4,42 @@ return [
     'RECYCLE_COMPONENT' => [
         'title' => '回收系统组件',
         'list' => [
+            'MemberInfo' => [
+                'title' => '会员信息',
+                'icon' => 'iconfont iconhuiyuanqiandaopc',
+                'path' => 'edit-member-info',
+                'support_page' => [ 'DIY_RECYCLE_MEMBER_INDEX' ],
+                'uses' => 1,
+                'sort' => 10001,
+                'value' => [
+                    "style" => "style-1",
+                    "styleName" => "风格1",
+                    'bgUrl' => '',
+                    'bgColorStart' => '',
+                    'bgColorEnd' => ''
+                ],
+                'template' => [
+                    "textColor" => "#303133",
+                    'pageStartBgColor' => '',
+                    'pageEndBgColor' => '',
+                    'pageGradientAngle' => 'to bottom',
+                    'componentBgUrl' => '',
+                    'componentBgAlpha' => 2,
+                    "componentStartBgColor" => "",
+                    "componentEndBgColor" => "",
+                    "componentGradientAngle" => "to bottom",
+                    "topRounded" => 0,
+                    "bottomRounded" => 0,
+                    "elementBgColor" => "",
+                    "topElementRounded" => 0,
+                    "bottomElementRounded" => 0,
+                    "margin" => [
+                        "top" => 0,
+                        "bottom" => 0,
+                        "both" => 0
+                    ],
+                ],
+            ],
             'RecycleSpiderQuotationList' => [
                 'title' => '爬虫报价单',
                 'icon' => 'iconfont iconshangpinliebiaopc',

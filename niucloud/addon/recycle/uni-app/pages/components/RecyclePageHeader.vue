@@ -2,8 +2,8 @@
   <view class="recycle-page-header" :class="{ compact }" :style="headerStyle">
     <view class="recycle-page-header__content" :style="contentStyle">
       <view class="recycle-page-header__side" :style="sideStyle">
-        <view v-if="showBack" class="recycle-page-header__back" @tap="goBack">
-          <up-icon name="arrow-left" size="40rpx" color="var(--recycle-button-text)"></up-icon>
+        <view v-if="showBack" class="recycle-page-header__back" @tap="handleNavAction">
+          <up-icon :name="navIcon" size="40rpx" color="var(--recycle-button-text)"></up-icon>
         </view>
       </view>
       <view class="recycle-page-header__center" :style="centerStyle">
@@ -53,16 +53,25 @@ const contentStyle = computed(() => [
 ].join(';') + ';')
 const sideStyle = computed(() => `width:${navSideWidthRpx}rpx;height:${navContentHeightPx}px;`)
 const centerStyle = computed(() => `height:${navContentHeightPx}px;`)
+const canGoBack = computed(() => {
+  const pages = getCurrentPages()
+  return pages.length > 1
+})
+const navIcon = computed(() => canGoBack.value ? 'arrow-left' : 'home')
 
-const goBack = () => {
+const goHome = () => {
+  uni.reLaunch({ url: '/app/pages/index/index' })
+}
+
+const handleNavAction = () => {
+  if (!canGoBack.value) {
+    goHome()
+    return
+  }
+
   uni.navigateBack({
     delta: 1,
-    fail: () => {
-      uni.switchTab({
-        url: '/addon/recycle/pages/index',
-        fail: () => uni.navigateTo({ url: '/addon/recycle/pages/index' })
-      })
-    }
+    fail: goHome
   })
 }
 
@@ -78,7 +87,7 @@ defineExpose({
   right: 0;
   top: 0;
   z-index: 999;
-  background: linear-gradient(100deg, var(--recycle-button-bg) 0%, var(--recycle-brand-deep) 58%, var(--recycle-brand) 100%);
+  background: var(--recycle-button-bg);
   color: var(--recycle-button-text);
   box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.14);
 }

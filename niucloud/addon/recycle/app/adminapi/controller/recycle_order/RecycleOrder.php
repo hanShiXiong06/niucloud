@@ -214,8 +214,19 @@ class RecycleOrder extends BaseAdminController
             ['pay_name', ''],
             ['pay_remark', ''],
             ['pay_url', ''],
-            ['remark', '']
+            ['remark', ''],
+            ['account', ''],
+            ['payment_images', ''],
+            ['payment_info', []]
         ]);
+        if (empty($data['payment_info'])) {
+            $data['payment_info'] = [
+                'pay_type' => $data['pay_type'] ?? '',
+                'account' => $data['account'] ?? '',
+                'payment_images' => $data['payment_images'] ?? '',
+                'remark' => $data['remark'] ?? ''
+            ];
+        }
 
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));

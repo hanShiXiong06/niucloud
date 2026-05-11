@@ -1,6 +1,6 @@
 <template>
-    <view class="payment-page">
-
+    <view class="payment-page" :style="themeVars">
+        <RecyclePageHeader title="收款管理" subtitle="管理您的收款方式" />
         <!-- 实名认证信息卡片 (已认证状态可折叠) -->
         <view class="auth-card" v-if="orderSubmitConfig.profile.enabled" :class="{'auth-card-certified': !!authInfoId}">
             <view class="auth-header" @tap="toggleAuthExpand">
@@ -296,10 +296,13 @@ import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { getPaymentList, addPayment, updatePayment, deletePayment, setDefaultPayment, type PaymentInfo } from '../../api/payment'
 import { getRecycleUserAddressInfo, addRecycleUserAddress, editRecycleUserAddress } from '@/addon/recycle/api/return_order'
 import { getOrderSubmitConfig } from '@/addon/recycle/api/order'
-
+import RecyclePageHeader from '../components/RecyclePageHeader.vue'
 import { img } from '@/utils/common'
 import { uploadImage } from '@/app/api/system'
 import areaSelect from './area-select.vue'
+import { buildRecycleThemeVars } from '../../utils/theme'
+
+const themeVars = computed(() => buildRecycleThemeVars(orderSubmitConfig.value.price_detail_theme?.colors || {}))
 
 // --- API Response Interface (from address.vue) ---
 interface ApiResponse<T = any> {
