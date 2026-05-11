@@ -37,6 +37,8 @@ import storage from '@/utils/storage'
                 maxImageFileSize: 10 * 1024 * 1024, // 图片最大文件大小 10MB
                 maxVideoFileSize: 50 * 1024 * 1024, // 视频最大文件大小 50MB (降低限制避免413错误)
                 maxFiles: 5, // 最大文件数量
+                toastZIndex: 3000,
+                modalZIndex: 3001,
                 ...options // 合并用户配置
             };
             
@@ -173,7 +175,7 @@ import storage from '@/utils/storage'
                 top: 0;
                 left: 0;
                 pointer-events: none;
-                z-index: 99999;
+                z-index: ${this.config.toastZIndex};
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             `;
             
@@ -303,7 +305,7 @@ import storage from '@/utils/storage'
                 height: 100%;
                 background: rgba(59, 130, 246, 0.1);
                 backdrop-filter: blur(2px);
-                z-index: 99998;
+                z-index: ${this.config.toastZIndex - 1};
                 pointer-events: none;
                 display: flex;
                 align-items: center;
@@ -473,7 +475,7 @@ import storage from '@/utils/storage'
                 min-width: 400px;
                 max-width: 500px;
                 pointer-events: auto;
-                z-index: 100001;
+                z-index: ${this.config.modalZIndex};
                 animation: slideIn 0.3s ease;
                 text-align: center;
             `;
@@ -655,16 +657,16 @@ import storage from '@/utils/storage'
             const modal = document.createElement('div');
             modal.style.cssText = `
                 position: fixed;
-                top: 80px;
-                right: 20px;
+                bottom: 24px;
+                left: 24px;
                 background: white;
                 border-radius: 16px;
                 box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-                max-width: 400px;
-                max-height: 500px;
+                max-width: min(420px, calc(100vw - 48px));
+                max-height: min(500px, calc(100vh - 48px));
                 pointer-events: auto;
-                z-index: 100000;
-                animation: slideInRight 0.3s ease;
+                z-index: ${this.config.modalZIndex};
+                animation: slideInUp 0.3s ease;
                 border-left: 4px solid ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#f59e0b'};
                 overflow: hidden;
             `;
@@ -820,7 +822,7 @@ import storage from '@/utils/storage'
         // }
 
         // 创建提示框 (复用并简化剪贴板组件的方法)
-        createTip(content, type = 'info', position = 'top-right') {
+        createTip(content, type = 'info', position = 'bottom-left') {
             const tip = document.createElement('div');
             tip.className = `drag-upload-tip drag-upload-tip-${type}`;
             
@@ -828,7 +830,7 @@ import storage from '@/utils/storage'
                 'top-right': 'top: 80px; right: 20px;',
                 'top-left': 'top: 80px; left: 20px;',
                 'bottom-right': 'bottom: 20px; right: 20px;',
-                'bottom-left': 'bottom: 20px; left: 20px;',
+                'bottom-left': 'bottom: 24px; left: 24px;',
                 'center': 'top: 50%; left: 50%; transform: translate(-50%, -50%);'
             };
             
@@ -841,9 +843,9 @@ import storage from '@/utils/storage'
                 border-radius: 12px;
                 box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
                 pointer-events: auto;
-                max-width: 350px;
-                z-index: 100000;
-                animation: slideInRight 0.3s ease;
+                max-width: min(360px, calc(100vw - 48px));
+                z-index: ${this.config.toastZIndex};
+                animation: slideInUp 0.3s ease;
                 font-size: 14px;
                 font-weight: 500;
                 display: flex;
@@ -888,15 +890,15 @@ import storage from '@/utils/storage'
             const modal = document.createElement('div');
             modal.style.cssText = `
                 position: fixed;
-                top: 80px;
-                right: 20px;
+                bottom: 24px;
+                left: 24px;
                 background: white;
                 border-radius: 16px;
                 box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-                max-width: 350px;
+                max-width: min(380px, calc(100vw - 48px));
                 pointer-events: auto;
-                z-index: 100000;
-                animation: slideInRight 0.3s ease;
+                z-index: ${this.config.modalZIndex};
+                animation: slideInUp 0.3s ease;
                 border-left: 4px solid ${type === 'success' ? '#10b981' : '#ef4444'};
             `;
             

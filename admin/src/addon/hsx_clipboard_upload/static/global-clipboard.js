@@ -13,13 +13,16 @@ import storage from '@/utils/storage'
             this.isUploading = false;
             this.uploadProgress = 0;
             this.currentFileName = '';
+            this.lastPasteHandledAt = 0;
             
             // 配置
             this.config = {
                 baseURL: '',
                 imgDomain: '',
                 headers: {},
-                debug: false // 禁用调试模式
+                debug: false, // 禁用调试模式
+                toastZIndex: 3000,
+                modalZIndex: 3001
             };
             
             // 定时器
@@ -199,7 +202,7 @@ import storage from '@/utils/storage'
                 top: 0;
                 left: 0;
                 pointer-events: none;
-                z-index: 99999;
+                z-index: ${this.config.toastZIndex};
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             `;
             
@@ -209,7 +212,7 @@ import storage from '@/utils/storage'
         }
 
         // 创建提示框
-        createTip(content, type = 'info', position = 'top-right') {
+        createTip(content, type = 'info', position = 'bottom-left') {
 
             
             const tip = document.createElement('div');
@@ -219,7 +222,7 @@ import storage from '@/utils/storage'
                 'top-right': 'top: 80px; right: 20px;',
                 'top-left': 'top: 80px; left: 20px;',
                 'bottom-right': 'bottom: 20px; right: 20px;',
-                'bottom-left': 'bottom: 20px; left: 20px;',
+                'bottom-left': 'bottom: 24px; left: 24px;',
                 'center': 'top: 50%; left: 50%; transform: translate(-50%, -50%);'
             };
             
@@ -232,9 +235,9 @@ import storage from '@/utils/storage'
                 border-radius: 12px;
                 box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
                 pointer-events: auto;
-                max-width: 350px;
-                z-index: 100000;
-                animation: slideInRight 0.3s ease;
+                max-width: min(360px, calc(100vw - 48px));
+                z-index: ${this.config.toastZIndex};
+                animation: slideInUp 0.3s ease;
                 font-size: 14px;
                 font-weight: 500;
                 display: flex;
@@ -289,7 +292,7 @@ import storage from '@/utils/storage'
                 box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
                 min-width: 320px;
                 pointer-events: auto;
-                z-index: 100001;
+                z-index: ${this.config.modalZIndex};
                 animation: slideIn 0.3s ease;
                 text-align: center;
             `;
@@ -320,15 +323,15 @@ import storage from '@/utils/storage'
             const modal = document.createElement('div');
             modal.style.cssText = `
                 position: fixed;
-                top: 80px;
-                right: 20px;
+                bottom: 24px;
+                left: 24px;
                 background: white;
                 border-radius: 16px;
                 box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-                max-width: 350px;
+                max-width: min(380px, calc(100vw - 48px));
                 pointer-events: auto;
-                z-index: 100000;
-                animation: slideInRight 0.3s ease;
+                z-index: ${this.config.modalZIndex};
+                animation: slideInUp 0.3s ease;
                 border-left: 4px solid ${type === 'success' ? '#10b981' : '#ef4444'};
             `;
             
@@ -408,8 +411,11 @@ import storage from '@/utils/storage'
                     
                     if (!isInInput) {
 
-                        event.preventDefault();
-                        this.handlePasteFromKeyboard();
+                        setTimeout(() => {
+                            if (Date.now() - this.lastPasteHandledAt > 500) {
+                                this.handlePasteFromKeyboard();
+                            }
+                        }, 120);
                     } 
                 }
                 
@@ -447,28 +453,38 @@ import storage from '@/utils/storage'
                 // 使用传统方式直接处理文件
                 const files = event.clipboardData.files;
                 if (files && files.length > 0) {
-                    event.preventDefault();
-                    const file = files[0];
-                    this.log('通过paste事件检测到文件：', 'success', file);
-                    
-                    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-                        this.uploadFile(file);
+                    const mediaFiles = Array.from(files)
+                        .filter((item) => this.isSupportedMediaFile(item))
+                        .map((item) => this.normalizeClipboardFile(item));
+                    if (mediaFiles.length) {
+                        event.preventDefault();
+                        this.lastPasteHandledAt = Date.now();
+                        this.log('通过paste事件检测到文件：', 'success', mediaFiles);
+                        this.uploadFiles(mediaFiles);
                     } else {
-                        this.createResultModal('warning', '不支持的文件类型', `文件类型 ${file.type} 不支持，请使用图片或视频文件`);
+                        event.preventDefault();
+                        this.lastPasteHandledAt = Date.now();
+                        const unsupportedFile = files[0];
+                        this.createResultModal('warning', '不支持的文件类型', `文件类型 ${unsupportedFile.type || unsupportedFile.name || '未知'} 不支持，请使用图片或视频文件`);
                     }
                     return;
                 }
                 
                 // 检查items作为备选
+                const itemFiles = [];
                 for (const item of items) {
                     if (item.kind === 'file') {
-                        event.preventDefault();
                         const file = item.getAsFile();
-                        if (file && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
-                            this.uploadFile(file);
-                            return;
+                        if (file && this.isSupportedMediaFile(file)) {
+                            itemFiles.push(this.normalizeClipboardFile(file));
                         }
                     }
+                }
+                if (itemFiles.length) {
+                    event.preventDefault();
+                    this.lastPasteHandledAt = Date.now();
+                    this.uploadFiles(itemFiles);
+                    return;
                 }
 
             }, true);
@@ -577,6 +593,7 @@ import storage from '@/utils/storage'
                 }
 
                 // 方法1：直接处理文件类型
+                const clipboardFiles = [];
                 for (const item of items) {
                     // 处理文件类型 - 这是关键部分
                     for (const type of item.types) {
@@ -587,9 +604,9 @@ import storage from '@/utils/storage'
                             try {
                                 const blob = await item.getType(type);
                                 const file = new File([blob], `clipboard-${Date.now()}.${this.getFileExtension(type)}`, { type });
-                                this.uploadFile(file);
+                                clipboardFiles.push(file);
                                 processed = true;
-                                return;
+                                break;
                             } catch (e) {
                                 this.log('图片处理失败：' + e.message, 'error');
                             }
@@ -601,9 +618,9 @@ import storage from '@/utils/storage'
                                 const blob = await item.getType(type);
                                 const extension = this.getVideoExtension(type);
                                 const file = new File([blob], `clipboard-${Date.now()}.${extension}`, { type });
-                                this.uploadFile(file);
+                                clipboardFiles.push(file);
                                 processed = true;
-                                return;
+                                break;
                             } catch (e) {
                                 this.log('视频处理失败：' + e.message, 'error');
                             }
@@ -621,7 +638,7 @@ import storage from '@/utils/storage'
                                 const fileNameMatch = filePath.match(/[^\\\/]+$/);
                                 const fileName = fileNameMatch ? fileNameMatch[0] : '';
                                 
-                                if (filePath.match(/\.(jpg|jpeg|png|gif|webp|mp4|avi|mov|mkv|webm|3gp|flv)$/i)) {
+                                if (!clipboardFiles.length && filePath.match(/\.(jpg|jpeg|png|gif|webp|mp4|avi|mov|mkv|webm|3gp|flv)$/i)) {
                                     this.log('检测到文件路径：' + filePath, 'info');
                                     this.showFilePathUploadPrompt(filePath, fileName);
                                     processed = true;
@@ -633,49 +650,14 @@ import storage from '@/utils/storage'
                         }
                     }
                 }
+                if (clipboardFiles.length) {
+                    this.uploadFiles(clipboardFiles);
+                    return;
+                }
 
                 // 方法2：使用传统ClipboardEvent方式作为备选
                 if (!processed) {
-                    this.createResultModal('info', '检测中', '尝试使用传统方式检测文件...');
-                    
-                    // 创建一个临时的paste事件监听器来获取文件
-                    const handlePasteEvent = (event) => {
-                        const clipboardData = event.clipboardData || window.clipboardData;
-                        if (clipboardData && clipboardData.files && clipboardData.files.length > 0) {
-                            const file = clipboardData.files[0];
-                            this.log('通过传统方式检测到文件：', 'success', file);
-                            this.uploadFile(file);
-                            processed = true;
-                        }
-                        document.removeEventListener('paste', handlePasteEvent);
-                    };
-                    
-                    document.addEventListener('paste', handlePasteEvent);
-                    
-                    // 触发一次paste事件
-                    const pasteEvent = new ClipboardEvent('paste', {
-                        bubbles: true,
-                        cancelable: true,
-                        clipboardData: null
-                    });
-                    document.dispatchEvent(pasteEvent);
-                    
-                    // 延迟检查是否成功
-                    setTimeout(() => {
-                        if (!processed) {
-                            this.createResultModal('warning', '系统限制提示', `
-                                💡 当前检测到的是文件路径文本，而非文件数据<br><br>
-                                <strong>原因：</strong><br>
-                                从电脑文件管理器复制时，系统只保存了文件路径<br><br>
-                                <strong>解决方案：</strong><br>
-                                1. 📁 直接拖拽文件到网页上传（推荐）<br>
-                                2. 🖼️ 先用图片查看器打开图片，再复制<br>
-                                3. 📸 先截图，再复制截图<br><br>
-                                <strong>注意：</strong><br>
-                                这是浏览器安全限制，不是网站问题
-                            `);
-                        }
-                    }, 500);
+                    this.showFilePathUploadPrompt();
                 }
                 
             } catch (error) {
@@ -842,6 +824,291 @@ import storage from '@/utils/storage'
             }
         }
 
+        async uploadFiles(files) {
+            const normalizedFiles = Array.from(files || [])
+                .filter((file) => this.isSupportedMediaFile(file))
+                .map((file) => this.normalizeClipboardFile(file));
+            if (!normalizedFiles.length) {
+                this.createResultModal('warning', '没有有效文件', '请复制图片或视频文件后再粘贴');
+                return;
+            }
+            if (normalizedFiles.length === 1) {
+                await this.uploadFile(normalizedFiles[0]);
+                return;
+            }
+            if (this.isUploading) {
+                this.createTip('❌ 正在上传中，请稍候...', 'error');
+                return;
+            }
+            if (!this.checkAuthStatus()) {
+                return;
+            }
+
+            const validFiles = [];
+            const rejectedResults = [];
+            normalizedFiles.forEach((file) => {
+                const isVideo = file.type.startsWith('video/');
+                const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+                if (file.size > maxSize) {
+                    rejectedResults.push({
+                        file,
+                        success: false,
+                        error: new Error(`${isVideo ? '视频' : '图片'}文件过大`)
+                    });
+                } else {
+                    validFiles.push(file);
+                }
+            });
+
+            if (!validFiles.length) {
+                this.showBatchUploadResults(rejectedResults);
+                return;
+            }
+
+            this.isUploading = true;
+            const progressModal = this.createBatchProgressModal(validFiles);
+            const results = [...rejectedResults];
+
+            try {
+                for (let i = 0; i < validFiles.length; i++) {
+                    const file = validFiles[i];
+                    try {
+                        const result = await this.uploadSingleFile(file, i, validFiles.length, progressModal);
+                        results.push({ file, result, success: true });
+                    } catch (error) {
+                        results.push({ file, error, success: false });
+                    }
+                }
+                progressModal.remove();
+                this.showBatchUploadResults(results);
+                if (results.some((item) => item.success)) {
+                    this.clearClipboard();
+                }
+            } finally {
+                this.isUploading = false;
+                this.uploadProgress = 0;
+                this.currentFileName = '';
+            }
+        }
+
+        createBatchProgressModal(files) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                border-radius: 16px;
+                padding: 24px;
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+                min-width: 400px;
+                max-width: min(500px, calc(100vw - 48px));
+                pointer-events: auto;
+                z-index: ${this.config.modalZIndex};
+                animation: slideIn 0.3s ease;
+                text-align: center;
+            `;
+
+            modal.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px;">
+                    <span style="font-size: 28px;">📤</span>
+                    <span style="font-size: 18px; font-weight: 600; color: #1f2937;">批量上传进度</span>
+                </div>
+                <div id="batch-upload-info" style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">
+                    准备上传 ${files.length} 个文件...
+                </div>
+                <div style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
+                    <div id="batch-progress-fill" style="height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width 0.3s ease; width: 0%;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #6b7280;">
+                    <span id="batch-progress-text">0%</span>
+                    <span id="batch-current-file">等待开始...</span>
+                </div>
+                <div id="batch-file-list" style="margin-top: 16px; max-height: 200px; overflow-y: auto; text-align: left;">
+                    ${files.map((file, index) => `
+                        <div id="clipboard-file-item-${index}" style="display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; color: #6b7280;">
+                            <span class="file-status" style="width: 16px;">⏳</span>
+                            <span class="file-name" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file.name}</span>
+                            <span class="file-size" style="font-size: 10px; color: #9ca3af;">${this.formatFileSize(file.size)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            this.elements.container.appendChild(modal);
+            return modal;
+        }
+
+        async uploadSingleFile(file, index, totalFiles, progressModal) {
+            this.updateBatchProgress(progressModal, index, totalFiles, file.name);
+            this.updateFileStatus(progressModal, index, '🔄', '#3b82f6');
+
+            return new Promise((resolve, reject) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('cate_id', '0');
+
+                const xhr = new XMLHttpRequest();
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        try {
+                            const result = JSON.parse(xhr.responseText);
+                            if (result.code >= 1) {
+                                this.updateFileStatus(progressModal, index, '✅', '#10b981');
+                                resolve(result);
+                            } else {
+                                this.updateFileStatus(progressModal, index, '❌', '#ef4444');
+                                reject(new Error(result.msg || '上传失败'));
+                            }
+                        } catch (e) {
+                            this.updateFileStatus(progressModal, index, '❌', '#ef4444');
+                            reject(new Error('响应格式错误'));
+                        }
+                    } else {
+                        this.updateFileStatus(progressModal, index, '❌', '#ef4444');
+                        reject(new Error(`HTTP ${xhr.status}`));
+                    }
+                };
+                xhr.onerror = () => {
+                    this.updateFileStatus(progressModal, index, '❌', '#ef4444');
+                    reject(new Error('网络错误'));
+                };
+                xhr.onreadystatechange = () => {
+                    if (xhr.readyState === 4) {
+                        if (xhr.status === 413) {
+                            this.updateFileStatus(progressModal, index, '❌', '#ef4444');
+                            reject(new Error('文件过大，服务器拒绝上传'));
+                        } else if (xhr.status === 0) {
+                            this.updateFileStatus(progressModal, index, '❌', '#ef4444');
+                            reject(new Error('网络连接错误或服务器无响应'));
+                        }
+                    }
+                };
+
+                const uploadEndpoint = file.type.startsWith('video/') ? 'sys/video' : 'sys/image';
+                xhr.open('POST', `${this.config.baseURL}${uploadEndpoint}`);
+                const currentToken = this.getAuthToken();
+                const currentSiteId = this.getSiteId();
+                if (currentToken) {
+                    xhr.setRequestHeader('token', currentToken);
+                }
+                xhr.setRequestHeader('Site-Id', currentSiteId);
+                xhr.send(formData);
+            });
+        }
+
+        updateBatchProgress(modal, currentIndex, totalFiles, currentFileName) {
+            const progress = Math.round(((currentIndex + 1) / totalFiles) * 100);
+            const progressFill = modal.querySelector('#batch-progress-fill');
+            const progressText = modal.querySelector('#batch-progress-text');
+            const currentFile = modal.querySelector('#batch-current-file');
+            const info = modal.querySelector('#batch-upload-info');
+            if (progressFill) progressFill.style.width = progress + '%';
+            if (progressText) progressText.textContent = progress + '%';
+            if (currentFile) currentFile.textContent = currentFileName;
+            if (info) info.textContent = `正在上传第 ${currentIndex + 1} 个文件，共 ${totalFiles} 个`;
+        }
+
+        updateFileStatus(modal, index, icon, color) {
+            const fileItem = modal.querySelector(`#clipboard-file-item-${index}`);
+            if (!fileItem) return;
+            const statusIcon = fileItem.querySelector('.file-status');
+            if (statusIcon) {
+                statusIcon.textContent = icon;
+                statusIcon.style.color = color;
+            }
+        }
+
+        showBatchUploadResults(results) {
+            const successCount = results.filter((item) => item.success).length;
+            const failCount = results.length - successCount;
+            const hasSizeError = results.some((item) => !item.success && item.error && item.error.message.includes('文件过大'));
+
+            if (successCount > 0 && failCount === 0) {
+                this.createBatchResultModal('success', '上传完成', `成功上传 ${successCount} 个文件`, results);
+            } else if (successCount === 0) {
+                let message = `${failCount} 个文件上传失败`;
+                if (hasSizeError) message += '<br><span style="color:#f59e0b;">部分文件过大，建议压缩后再试</span>';
+                this.createBatchResultModal('error', '上传失败', message, results);
+            } else {
+                let message = `成功 ${successCount} 个，失败 ${failCount} 个`;
+                if (hasSizeError) message += '<br><span style="color:#f59e0b;">部分文件过大，建议压缩后再试</span>';
+                this.createBatchResultModal('warning', '部分上传成功', message, results);
+            }
+        }
+
+        createBatchResultModal(type, title, summary, results) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                bottom: 24px;
+                left: 24px;
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+                max-width: min(420px, calc(100vw - 48px));
+                max-height: min(500px, calc(100vh - 48px));
+                pointer-events: auto;
+                z-index: ${this.config.modalZIndex};
+                animation: slideInUp 0.3s ease;
+                border-left: 4px solid ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#f59e0b'};
+                overflow: hidden;
+            `;
+
+            const successResults = results.filter((item) => item.success);
+            const failResults = results.filter((item) => !item.success);
+            let content = `
+                <div style="padding: 16px 20px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                        <span style="font-size: 20px;">${type === 'success' ? '✅' : type === 'error' ? '❌' : '⚠️'}</span>
+                        <span style="flex: 1; font-size: 16px; font-weight: 600; color: #1f2937;">${title}</span>
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: none; border: none; color: #6b7280; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px;">✕</button>
+                    </div>
+                    <div style="color: #6b7280; font-size: 14px; margin-bottom: 12px;">${summary}</div>
+            `;
+            if (successResults.length) {
+                content += `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; font-weight: 600; color: #10b981; margin-bottom: 6px;">上传成功 (${successResults.length})</div>
+                        <div style="max-height: 150px; overflow-y: auto;">
+                            ${successResults.map((item) => {
+                                const url = item.result?.data?.url || '';
+                                return `
+                                    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px; margin: 2px 0; background: #f0fdf4; border-radius: 6px; font-size: 11px;">
+                                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #15803d;">${item.file.name}</span>
+                                        <button onclick="window.globalClipboardUpload.copyToClipboard(window.globalClipboardUpload.getImageUrl('${url}'))" style="background: #dcfce7; color: #15803d; border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 10px;">复制</button>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            if (failResults.length) {
+                content += `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; font-weight: 600; color: #ef4444; margin-bottom: 6px;">上传失败 (${failResults.length})</div>
+                        <div style="max-height: 100px; overflow-y: auto;">
+                            ${failResults.map((item) => `
+                                <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px; margin: 2px 0; background: #fef2f2; border-radius: 6px; font-size: 11px;">
+                                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #dc2626;">${item.file.name}</span>
+                                    <span style="font-size: 10px; color: #991b1b;" title="${item.error?.message || '上传失败'}">失败</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            content += '</div>';
+            modal.innerHTML = content;
+            this.elements.container.appendChild(modal);
+            setTimeout(() => {
+                if (modal.parentElement) modal.remove();
+            }, 10000);
+            return modal;
+        }
+
         // 获取视频文件扩展名
         getVideoExtension(mimeType) {
             const mimeMap = {
@@ -872,6 +1139,56 @@ import storage from '@/utils/storage'
                 return this.getVideoExtension(mimeType);
             }
             return 'file';
+        }
+
+        getMimeTypeByFileName(fileName = '') {
+            const ext = String(fileName).split('.').pop()?.toLowerCase() || '';
+            const map = {
+                jpg: 'image/jpeg',
+                jpeg: 'image/jpeg',
+                png: 'image/png',
+                gif: 'image/gif',
+                webp: 'image/webp',
+                bmp: 'image/bmp',
+                svg: 'image/svg+xml',
+                mp4: 'video/mp4',
+                mov: 'video/quicktime',
+                avi: 'video/x-msvideo',
+                mkv: 'video/x-matroska',
+                webm: 'video/webm',
+                '3gp': 'video/3gpp',
+                flv: 'video/x-flv'
+            };
+            return map[ext] || '';
+        }
+
+        isSupportedMediaFile(file) {
+            if (!file) return false;
+            const type = file.type || this.getMimeTypeByFileName(file.name);
+            return type.startsWith('image/') || type.startsWith('video/');
+        }
+
+        normalizeClipboardFile(file) {
+            if (!file || file.type) return file;
+            const type = this.getMimeTypeByFileName(file.name);
+            if (!type) return file;
+            return new File([file], file.name || `clipboard-${Date.now()}.${this.getFileExtension(type)}`, {
+                type,
+                lastModified: file.lastModified || Date.now()
+            });
+        }
+
+        showFilePathUploadPrompt(filePath = '', fileName = '') {
+            const nameHtml = fileName ? `<br><span style="color:#9ca3af;">文件：${fileName}</span>` : '';
+            this.createResultModal('warning', '无法直接读取本地路径', `
+                当前剪贴板里只有文件路径文本，不是浏览器可上传的文件数据。${nameHtml}<br><br>
+                <strong>可以这样操作：</strong><br>
+                1. 直接把桌面文件拖到网页里上传<br>
+                2. 在图片查看器里打开图片后复制图片内容<br>
+                3. 截图后直接粘贴截图<br><br>
+                <strong>说明：</strong><br>
+                网页不能根据本地路径读取电脑文件；如果浏览器在真实粘贴事件里提供文件对象，本页面现在会优先自动上传。
+            `);
         }
 
         // 复制到剪贴板
@@ -953,9 +1270,9 @@ import storage from '@/utils/storage'
             helpTip.style.cssText = `
                 position: fixed;
                 bottom: 20px;
-                right: 20px;
+                left: 24px;
                 pointer-events: auto;
-                z-index: 100000;
+                z-index: ${this.config.toastZIndex};
                 animation: slideInUp 0.3s ease;
             `;
             helpTip.innerHTML = helpContent;
