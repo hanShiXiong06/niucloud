@@ -7,7 +7,9 @@ use addon\recycle\app\dict\express\ExpressProviderDict;
 use addon\recycle\app\model\express\ExpressProviderConfig;
 use addon\recycle\app\model\express\ExpressOrderRecord;
 use addon\recycle\app\model\order\RecycleOrder;
+use addon\recycle\app\model\yisu\YisuProductConfig;
 use addon\recycle\app\service\core\ExpressOrderService;
+use addon\recycle\app\service\core\order\OrderSubmitConfigService;
 use addon\recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -183,13 +185,9 @@ class RecycleExpressService
     {
         $expressService = new ExpressOrderService();
 
-        // 如果前端没传 product_code，自动取第一个启用的亿速产品
-        $productCode = $config['product_code'] ?? '';
-        if (empty($productCode)) {
-            $enabledProducts = \addon\recycle\app\model\yisu\YisuProductConfig::getEnabledProducts($siteId);
-            if (!empty($enabledProducts)) {
-                $productCode = $enabledProducts[0]['product_code'];
-            }
+        $productCode = $this->resolveYisuProductCode($siteId, $config);
+        if (empty($config['product_code'])) {
+            $config['product_code'] = $productCode;
         }
         if (empty($productCode)) {
             throw new CommonException('未配置可用的亿速快递产品，请先在后台启用快递产品');
@@ -285,6 +283,27 @@ class RecycleExpressService
             'provider' => ExpressProviderDict::PROVIDER_YISU,
             'provider_name' => $params['provider_name'] ?? ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
         ];
+    }
+
+    private function resolveYisuProductCode(int $siteId, array $config): string
+    {
+        $productCode = trim((string)($config['product_code'] ?? ''));
+        if ($productCode !== '') {
+            return $productCode;
+        }
+
+        try {
+            $submitConfig = (new OrderSubmitConfigService())->getConfig($siteId);
+            $defaultProductCode = trim((string)($submitConfig['platform_delivery']['product_code'] ?? ''));
+            if ($defaultProductCode !== '' && YisuProductConfig::isProductEnabled($siteId, $defaultProductCode)) {
+                return $defaultProductCode;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('读取平台快递默认线路失败：' . $e->getMessage(), ['site_id' => $siteId]);
+        }
+
+        $enabledProducts = YisuProductConfig::getEnabledProducts($siteId);
+        return !empty($enabledProducts) ? (string)($enabledProducts[0]['product_code'] ?? '') : '';
     }
 
     /**

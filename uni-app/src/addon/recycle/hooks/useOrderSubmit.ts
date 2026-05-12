@@ -42,6 +42,12 @@ export function useOrderSubmit() {
           message: '请选择快递服务商'
         }
       }
+      if (!params.platformDeliveryForm.product_code) {
+        return {
+          valid: false,
+          message: '请选择快递线路'
+        }
+      }
       if (!params.platformDeliveryForm.sender_name) {
         return {
           valid: false,
@@ -121,7 +127,9 @@ export function useOrderSubmit() {
         pickup_time: params.platformDeliveryForm.pickup_time,
         weight: parseFloat(params.platformDeliveryForm.weight) || 1.0,
         provider: params.platformDeliveryForm.provider || '',
-        provider_name: params.platformDeliveryForm.provider_name || ''
+        provider_name: params.platformDeliveryForm.provider_name || '',
+        product_code: params.platformDeliveryForm.product_code || '',
+        product_name: params.platformDeliveryForm.product_name || ''
       }
     }
 

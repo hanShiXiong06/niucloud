@@ -27,7 +27,7 @@ class ExpressOrderRecordService extends BaseAdminService
      */
     public function getPage(array $where = []): array
     {
-        $field = 'id, site_id, order_no, recycle_order_id, recycle_device_id, provider_name, product_code, product_name, delivery_id,
+        $field = 'id, site_id, order_no, third_order_no, recycle_order_id, recycle_device_id, provider_name, product_code, product_name, delivery_id,
                   sender_name, sender_mobile, sender_province, sender_city, sender_district, sender_address,
                   receiver_name, receiver_mobile, receiver_province, receiver_city, receiver_district, receiver_address,
                   goods_name, package_count, estimated_weight, actual_weight, weight_diff,
@@ -37,7 +37,7 @@ class ExpressOrderRecordService extends BaseAdminService
         $order = 'create_at desc';
         $where['site_id'] = $this->site_id;
 
-        $searchModel = $this->model->withSearch(['site_id', 'keyword', 'order_no', 'delivery_id', 'order_status',
+        $searchModel = $this->model->withSearch(['site_id', 'keyword', 'order_no', 'third_order_no', 'delivery_id', 'order_status',
                                                   'recycle_order_id', 'recycle_device_id', 'provider_name',
                                                   'product_code', 'sender_mobile', 'receiver_mobile', 'create_time'], $where)
             ->field($field)

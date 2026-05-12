@@ -34,7 +34,9 @@ export function usePlatformDelivery() {
     pickup_time: '',
     weight: '1.0',
     provider: '',
-    provider_name: ''
+    provider_name: '',
+    product_code: '',
+    product_name: ''
   })
 
   /**
@@ -149,7 +151,9 @@ export function usePlatformDelivery() {
       pickup_time: '',
       weight: '1.0',
       provider: '',
-      provider_name: ''
+      provider_name: '',
+      product_code: '',
+      product_name: ''
     }
     enablePlatformDelivery.value = false
   }

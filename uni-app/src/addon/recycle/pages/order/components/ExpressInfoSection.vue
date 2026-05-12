@@ -16,8 +16,8 @@
             :class="['toggle-item', usePlatformDelivery && currentChannelValue === channel.value ? 'active' : '', !canUsePlatformDelivery ? 'disabled' : '']"
             @click="handleChannelClick(channel)"
           >
-            <view class="flex flex-col items-center justify-center gap-1">
-              <text>{{ channel.provider_name || channel.name || platformDeliveryDisplayName }}</text>
+            <view class="flex items-center justify-center gap-1">
+              <text>{{ getChannelDisplayName(channel) }}</text>
               <view class="free-tag">
                 <text class="free-tag-text">{{ platformDeliveryTag }}</text>
               </view>
@@ -136,12 +136,20 @@ interface Props {
   orderCount?: number
   freeShippingMinCount?: number
   platformDeliveryName?: string
+  defaultProvider?: string
+  defaultProviderName?: string
+  defaultProductCode?: string
+  defaultProductName?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   orderCount: 1,
   freeShippingMinCount: 1,
-  platformDeliveryName: '京东快递'
+  platformDeliveryName: '京东快递',
+  defaultProvider: '',
+  defaultProviderName: '',
+  defaultProductCode: '',
+  defaultProductName: ''
 })
 
 // 预约时间选择器显示状态
@@ -158,7 +166,6 @@ const {
   channels,
   loading,
   defaultChannelValue,
-  getDefaultPlatformDeliveryState,
   isPlatformChannel
 } = useReceivingChannels()
 
@@ -175,20 +182,28 @@ const syncSelectedProvider = (channel?: ChannelItem) => {
   emit('update:platformDeliveryForm', {
     ...props.platformDeliveryForm,
     provider: channel.provider,
-    provider_name: channel.provider_name || channel.name || ''
+    provider_name: channel.provider_name || channel.name || props.defaultProviderName || '',
+    product_code: props.defaultProductCode || props.platformDeliveryForm.product_code || '',
+    product_name: props.defaultProductName || props.platformDeliveryForm.product_name || ''
   })
+}
+
+const resolveDefaultChannel = () => {
+  return channels.value.find(channel => channel.provider === props.defaultProvider)
+    || channels.value.find(channel => channel.value === defaultChannelValue.value)
+    || channels.value[0]
 }
 
 // 监听渠道加载完成后设置默认值
 watch(
-  () => loading.value,
-  (isLoading) => {
+  () => [loading.value, props.defaultProvider, props.defaultProductCode],
+  ([isLoading]) => {
     if (!isLoading) {
       // 渠道加载完成，设置默认状态
-      selectedChannelValue.value = defaultChannelValue.value
-      const defaultState = getDefaultPlatformDeliveryState()
-      const defaultChannel = channels.value.find(channel => channel.value === defaultChannelValue.value)
+      const defaultChannel = resolveDefaultChannel()
+      selectedChannelValue.value = defaultChannel?.value || defaultChannelValue.value
       syncSelectedProvider(defaultChannel)
+      const defaultState = !!defaultChannel && isPlatformChannel(defaultChannel.value)
       emit('update:usePlatformDelivery', defaultState && canUsePlatformDelivery.value)
     }
   },
@@ -209,8 +224,21 @@ const platformDeliveryTag = computed(() => {
 })
 
 const platformDeliveryDisplayName = computed(() => {
-  return String(props.platformDeliveryName || '京东快递').trim() || '京东快递'
+  return String(props.platformDeliveryName || props.defaultProductName || '京东快递').trim() || '京东快递'
 })
+
+const getChannelDisplayName = (channel: ChannelItem) => {
+  return String(
+    props.platformDeliveryName
+    || props.defaultProductName
+    || channel.front_name
+    || channel.display_name
+    || channel.product_name
+    || channel.name
+    || channel.provider_name
+    || '平台快递'
+  ).trim()
+}
 
 // 处理渠道点击
 const handleChannelClick = (channel: ChannelItem) => {

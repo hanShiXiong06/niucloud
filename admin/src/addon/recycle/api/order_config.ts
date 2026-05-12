@@ -23,13 +23,22 @@ export interface OrderSubmitConfig {
         free_shipping_min_count: number
         provider: string
         provider_name: string
-        provider_options?: Array<{
+        provider_options: Array<{
             provider: string
             provider_name: string
             is_default: number
-            support_quote: boolean
-            support_cancel: boolean
-            support_track: boolean
+            support_quote?: boolean
+            support_cancel?: boolean
+            support_track?: boolean
+        }>
+        product_code: string
+        product_name: string
+        product_options: Array<{
+            provider: string
+            product_code: string
+            product_name: string
+            express_type?: string
+            logo?: string
         }>
     }
     follow_official_account: {

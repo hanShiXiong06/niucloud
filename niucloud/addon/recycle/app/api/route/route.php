@@ -14,6 +14,13 @@ use app\api\middleware\ApiLog;
 use app\api\middleware\ApiChannel;
 use think\facade\Route;
 
+// 易速快递推送回调：第三方不会携带 site-id，不能挂 ApiCheckToken/ApiChannel，否则会被站点校验拦截。
+Route::any('recycle/yisunotice', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush')
+    ->middleware(ApiLog::class);
+Route::any('recycle/express/yisu_push', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush')
+    ->middleware(ApiLog::class);
+Route::any('tk_jhkd/yisunotice', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush')
+    ->middleware(ApiLog::class);
 
 Route::group('tk_vip', function() {
     /***************************************************** vip 登录接口 ****************************************************/
@@ -25,8 +32,6 @@ Route::group('tk_vip', function() {
     ->middleware(ApiLog::class);
 
 Route::group('tk_jhkd', function() {
-    // 易速快递推送回调兼容入口，外部地址：https://gl.hsxbk.top/api/tk_jhkd/yisunotice
-    Route::post('yisunotice', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush');
 
 })->middleware(ApiChannel::class)
     ->middleware(ApiCheckToken::class, false)
@@ -36,9 +41,6 @@ Route::group('recycle', function() {
      // 获取热门分类
      Route::get('recycle_category/hot', 'addon\recycle\app\api\controller\category\RecycleCategory@hot');
      Route::get('recycle_category_tree', 'addon\recycle\app\api\controller\category\RecycleCategory@tree');
-     // 易速快递推送回调
-     Route::post('yisunotice', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush');
-     Route::post('express/yisu_push', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush');
 
 })->middleware(ApiChannel::class)
 ->middleware(ApiCheckToken::class, false) //false表示不验证登录

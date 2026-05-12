@@ -109,8 +109,10 @@
             <el-table v-loading="loading" :data="orderList" class="mt-[16px]" stripe border>
                 <el-table-column label="运单信息" min-width="230">
                     <template #default="{ row }">
-                        <div class="primary-text">{{ row.delivery_id || '-' }}</div>
+                        <div v-if="row.delivery_id" class="primary-text clickable-text" @click="openExpressTrack(row)">{{ row.delivery_id }}</div>
+                        <div v-else class="primary-text">-</div>
                         <div class="muted-text">平台订单：{{ row.order_no || '-' }}</div>
+                        <div class="muted-text">快递公司：{{ row.provider_name || row.express_company || '-' }}</div>
                         <div v-if="row.recycle_order_id" class="muted-text">回收订单：{{ row.recycle_order_id }}</div>
                     </template>
                 </el-table-column>
@@ -152,6 +154,7 @@
                         <el-button link type="primary" @click="handleViewDetail(row)">详情</el-button>
                         <el-button link type="warning" @click="handleUpdateActual(row)">更新费用</el-button>
                         <el-button v-if="row.order_no || row.delivery_id" link type="primary" :loading="operationLoading[row.id] === 'waybill'" @click="handleWaybillPdf(row)">面单</el-button>
+                        <el-button v-if="row.delivery_id" link type="primary" @click="openExpressTrack(row)">查物流</el-button>
                         <el-button v-if="canCancel(row)" link type="danger" :loading="operationLoading[row.id] === 'cancel'" @click="handleCloseOrder(row)">取消</el-button>
                         <el-button v-if="canIntercept(row)" link type="danger" :loading="operationLoading[row.id] === 'intercept'" @click="handleCloseOrder(row)">拦截</el-button>
                     </template>
@@ -176,6 +179,7 @@
                 <el-descriptions :column="2" border>
                     <el-descriptions-item label="平台订单">{{ currentOrder.order_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="运单号">{{ currentOrder.delivery_id || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="快递公司">{{ currentOrder.provider_name || currentOrder.express_company || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="快递产品">{{ currentOrder.product_name || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="状态">
                         <el-tag :type="statusMeta(currentOrder.order_status).type">{{ currentOrder.status_text || statusMeta(currentOrder.order_status).label }}</el-tag>
@@ -430,14 +434,26 @@
 
             <template #footer>
                 <el-button @click="createDialogVisible = false">关闭</el-button>
-                <el-button type="primary" :disabled="!quoteState.valid" :loading="shipmentLoading.create" @click="runShipmentCreate">按选中快递下单</el-button>
+                <el-tooltip :disabled="canCreateShipment" :content="createShipmentDisabledTip" placement="top">
+                    <span>
+                        <el-button type="primary" :disabled="!canCreateShipment" :loading="shipmentLoading.create" @click="runShipmentCreate">按选中快递下单</el-button>
+                    </span>
+                </el-tooltip>
             </template>
         </el-dialog>
+
+        <ExpressTrackDialog
+            v-model:visible="expressTrackDialogVisible"
+            :express-no="currentTrackOrder?.delivery_id || ''"
+            :mobile="currentTrackMobile"
+            :company-name="currentTrackOrder?.provider_name || currentTrackOrder?.express_company || '快递公司'"
+        />
     </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     cancelOrInterceptExpressOrder,
@@ -455,7 +471,10 @@ import {
 } from '@/addon/recycle/api/express'
 import { parseThirdPartyAddress } from '@/addon/recycle/api/third_party'
 import { getShopAddressList } from '@/addon/recycle/api/shop_address'
+import ExpressTrackDialog from '@/addon/recycle/components/ExpressTrackDialog.vue'
 
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const orderList = ref<any[]>([])
 const total = ref(0)
@@ -463,7 +482,9 @@ const statistics = ref<any>({})
 const detailDialogVisible = ref(false)
 const updateDialogVisible = ref(false)
 const createDialogVisible = ref(false)
+const expressTrackDialogVisible = ref(false)
 const currentOrder = ref<any>(null)
+const currentTrackOrder = ref<any>(null)
 const operationLoading = reactive<Record<number, '' | 'cancel' | 'intercept' | 'waybill'>>({})
 const shopAddressList = ref<any[]>([])
 const addressBookList = ref<any[]>([])
@@ -535,7 +556,7 @@ const defaultShipmentForm = () => ({
     packageCount: 1,
     guaranteeValueAmount: 0,
     estimated_cost: 0,
-    orderSendTime: '',
+    orderSendTime: getDefaultOrderSendTime(),
     remark: '',
     thirdOrderNo: ''
 })
@@ -571,6 +592,14 @@ const selectedQuoteName = computed(() => {
     const quote = quoteList.value.find(item => quoteKey(item) === quoteState.selectedKey)
     return quote?.productName || quote?.product_name || shipmentForm.deliveryType || '快递产品'
 })
+const createShipmentDisabledTip = computed(() => {
+    if (shipmentLoading.create) return ''
+    if (!quoteList.value.length) return '请先获取报价'
+    if (!quoteState.valid || !shipmentForm.deliveryType) return '请先选择一个报价'
+    if (quoteState.signature !== quoteSignature()) return '当前报价已失效，请重新获取报价'
+    return ''
+})
+const canCreateShipment = computed(() => !shipmentLoading.create && !createShipmentDisabledTip.value)
 
 const buildParams = () => {
     const params: Record<string, any> = {
@@ -652,6 +681,25 @@ const handleViewDetail = async (row: any) => {
     } catch (error) {
         ElMessage.error('获取运单详情失败')
     }
+}
+
+const currentTrackMobile = computed(() => {
+    if (!currentTrackOrder.value) return ''
+    return currentTrackOrder.value.sender_mobile || currentTrackOrder.value.receiver_mobile || ''
+})
+
+const openExpressTrack = (row: any) => {
+    if (!row.delivery_id) {
+        ElMessage.warning('当前运单没有快递单号')
+        return
+    }
+    const mobile = row.sender_mobile || row.receiver_mobile || ''
+    if (!mobile) {
+        ElMessage.warning('无法获取手机号后四位，无法查询快递信息')
+        return
+    }
+    currentTrackOrder.value = row
+    expressTrackDialogVisible.value = true
 }
 
 const handleUpdateActual = (row: any) => {
@@ -762,6 +810,20 @@ const resetQuoteState = () => {
     quoteState.signature = ''
     quoteState.selectedKey = ''
     shipmentForm.estimated_cost = 0
+}
+
+function getDefaultOrderSendTime() {
+    const date = new Date()
+    const addHours = date.getMinutes() >= 30 ? 2 : 1
+    date.setHours(date.getHours() + addHours, 0, 0, 0)
+    const pad = (num: number) => String(num).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:00:00`
+}
+
+const ensureOrderSendTime = () => {
+    if (!shipmentForm.orderSendTime) {
+        shipmentForm.orderSendTime = getDefaultOrderSendTime()
+    }
 }
 
 const quoteSignature = () => JSON.stringify({
@@ -1008,6 +1070,7 @@ const validateShipment = (requireProduct = true) => {
 }
 
 const runShipmentQuote = async () => {
+    ensureOrderSendTime()
     if (!validateShipment(false)) return
     shipmentLoading.quote = true
     try {
@@ -1023,6 +1086,7 @@ const runShipmentQuote = async () => {
 }
 
 const runShipmentCreate = async () => {
+    ensureOrderSendTime()
     if (!validateShipment()) return
     if (!quoteState.valid || quoteState.signature !== quoteSignature()) {
         ElMessage.warning('当前报价已失效，请重新获取报价后再下单')
@@ -1137,8 +1201,22 @@ const formatTime = (value: any) => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-onMounted(() => {
-    refreshPage()
+const handleRouteQuickAction = async () => {
+    if (route.query.quick_action !== 'create') {
+        return
+    }
+
+    await openCreateDialog()
+    const { quick_action, t, ...query } = route.query
+    router.replace({
+        path: route.path,
+        query
+    })
+}
+
+onMounted(async () => {
+    await refreshPage()
+    await handleRouteQuickAction()
 })
 </script>
 
@@ -1202,6 +1280,11 @@ onMounted(() => {
     margin-top: 4px;
     color: #6b7280;
     font-size: 12px;
+}
+
+.clickable-text {
+    cursor: pointer;
+    color: #2563eb;
 }
 
 .text-line {

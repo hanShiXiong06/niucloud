@@ -27,6 +27,27 @@
 
           <!-- 快速筛选按钮组 -->
           <div class="flex flex-wrap items-center gap-3">
+            <el-dropdown trigger="click" @command="handleExpressQuickCommand">
+              <el-button type="primary">
+                快递
+                <el-icon class="el-icon--right">
+                  <ArrowDown />
+                </el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="ship">
+                    <el-icon><Box /></el-icon>
+                    快速寄件
+                  </el-dropdown-item>
+                  <!-- <el-dropdown-item command="track">
+                    <el-icon><Search /></el-icon>
+                    快速查件
+                  </el-dropdown-item> -->
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+
             <!-- 快速时间筛选 -->
             <div class="flex bg-gray-100 rounded-lg p-1">
               <button
@@ -72,6 +93,47 @@
         </div>
       </div>
     </div>
+
+    <el-dialog
+      v-model="quickTrackDialogVisible"
+      title="快速查件"
+      width="420px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <el-form label-width="96px">
+        <el-form-item label="快递单号" required>
+          <el-input
+            v-model.trim="quickTrackForm.express_no"
+            clearable
+            placeholder="请输入快递运单号"
+            @keyup.enter="openQuickTrackLog"
+          />
+        </el-form-item>
+        <el-form-item label="手机号后四位" required>
+          <el-input
+            v-model.trim="quickTrackForm.mobile"
+            clearable
+            maxlength="11"
+            placeholder="请输入手机号或后四位"
+            @keyup.enter="openQuickTrackLog"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="quickTrackDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="openQuickTrackLog">查询物流</el-button>
+      </template>
+    </el-dialog>
+
+    <ExpressTrackDialog
+      v-model:visible="quickTrackLogVisible"
+      :express-no="quickTrackTarget.express_no"
+      :mobile="quickTrackTarget.mobile"
+      company-name="快递公司"
+      title="快速查件"
+      empty-description="暂无物流轨迹"
+    />
 
     <!-- 主要内容区域 -->
     <div class="mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -484,7 +546,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
+import { useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 import {
+  ArrowDown,
   DataAnalysis,
   Search,
   User,
@@ -507,6 +572,7 @@ import {
 import StatCard from "./components/StatCard.vue";
 import ChartCard from "./components/ChartCard.vue";
 import SectionHeader from "./components/SectionHeader.vue";
+import ExpressTrackDialog from "@/addon/recycle/components/ExpressTrackDialog.vue";
 
 // 导入 hooks
 import { useStatsData } from "./hooks/useStatsData";
@@ -568,8 +634,56 @@ const {
   getPeriodLabel,
 } = useDateFilter();
 
+const router = useRouter();
+
 // 选中的用户ID
 const selectedUserId = ref("");
+const quickTrackDialogVisible = ref(false);
+const quickTrackLogVisible = ref(false);
+const quickTrackForm = ref({
+  express_no: "",
+  mobile: "",
+});
+const quickTrackTarget = ref({
+  express_no: "",
+  mobile: "",
+});
+
+const handleExpressQuickCommand = (command: "ship" | "track") => {
+  if (command === "ship") {
+    router.push({
+      path: "/express/order_record",
+      query: {
+        quick_action: "create",
+        t: String(Date.now()),
+      },
+    });
+    return;
+  }
+
+  quickTrackDialogVisible.value = true;
+};
+
+const openQuickTrackLog = () => {
+  const expressNo = quickTrackForm.value.express_no.trim();
+  const mobile = quickTrackForm.value.mobile.trim();
+
+  if (!expressNo) {
+    ElMessage.warning("请输入快递单号");
+    return;
+  }
+  if (mobile.length < 4) {
+    ElMessage.warning("请输入手机号或手机号后四位");
+    return;
+  }
+
+  quickTrackTarget.value = {
+    express_no: expressNo,
+    mobile,
+  };
+  quickTrackDialogVisible.value = false;
+  quickTrackLogVisible.value = true;
+};
 
 // 包装 hooks 方法
 const handleQuickPeriod = (period: string) => {

@@ -48,6 +48,13 @@ class ExpressOrderRecord extends BaseModel
         }
     }
 
+    public function searchThirdOrderNoAttr($query, $value, $data)
+    {
+        if ($value) {
+            $query->where('third_order_no', 'like', '%' . $value . '%');
+        }
+    }
+
     /**
      * 搜索器：运单号
      * @param $query
@@ -100,6 +107,7 @@ class ExpressOrderRecord extends BaseModel
         if ($value) {
             $query->where(function ($query) use ($value) {
                 $query->where('order_no', 'like', '%' . $value . '%')
+                    ->whereOr('third_order_no', 'like', '%' . $value . '%')
                     ->whereOr('delivery_id', 'like', '%' . $value . '%')
                     ->whereOr('sender_name', 'like', '%' . $value . '%')
                     ->whereOr('sender_mobile', 'like', '%' . $value . '%')

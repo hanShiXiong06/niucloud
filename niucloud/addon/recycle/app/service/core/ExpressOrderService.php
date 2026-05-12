@@ -342,6 +342,7 @@ class ExpressOrderService
             $recordData = [
                 'site_id' => $siteId,
                 'order_no' => $apiResult['orderNo'] ?? $apiResult['orderCode'] ?? '',
+                'third_order_no' => $params['thirdOrderNo'] ?? $params['third_order_no'] ?? '',
                 'recycle_order_id' => $params['recycle_order_id'] ?? 0,
                 'recycle_device_id' => $params['recycle_device_id'] ?? 0,
 

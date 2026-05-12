@@ -434,7 +434,11 @@
 
             <template #footer>
                 <el-button @click="createDialogVisible = false">关闭</el-button>
-                <el-button type="primary" :disabled="!quoteState.valid" :loading="shipmentLoading.create" @click="runShipmentCreate">按选中快递下单</el-button>
+                <el-tooltip :disabled="canCreateShipment" :content="createShipmentDisabledTip" placement="top">
+                    <span>
+                        <el-button type="primary" :disabled="!canCreateShipment" :loading="shipmentLoading.create" @click="runShipmentCreate">按选中快递下单</el-button>
+                    </span>
+                </el-tooltip>
             </template>
         </el-dialog>
 
@@ -449,6 +453,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     cancelOrInterceptExpressOrder,
@@ -468,6 +473,8 @@ import { parseThirdPartyAddress } from '@/addon/recycle/api/third_party'
 import { getShopAddressList } from '@/addon/recycle/api/shop_address'
 import ExpressTrackDialog from '@/addon/recycle/components/ExpressTrackDialog.vue'
 
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const orderList = ref<any[]>([])
 const total = ref(0)
@@ -549,7 +556,7 @@ const defaultShipmentForm = () => ({
     packageCount: 1,
     guaranteeValueAmount: 0,
     estimated_cost: 0,
-    orderSendTime: '',
+    orderSendTime: getDefaultOrderSendTime(),
     remark: '',
     thirdOrderNo: ''
 })
@@ -585,6 +592,14 @@ const selectedQuoteName = computed(() => {
     const quote = quoteList.value.find(item => quoteKey(item) === quoteState.selectedKey)
     return quote?.productName || quote?.product_name || shipmentForm.deliveryType || '快递产品'
 })
+const createShipmentDisabledTip = computed(() => {
+    if (shipmentLoading.create) return ''
+    if (!quoteList.value.length) return '请先获取报价'
+    if (!quoteState.valid || !shipmentForm.deliveryType) return '请先选择一个报价'
+    if (quoteState.signature !== quoteSignature()) return '当前报价已失效，请重新获取报价'
+    return ''
+})
+const canCreateShipment = computed(() => !shipmentLoading.create && !createShipmentDisabledTip.value)
 
 const buildParams = () => {
     const params: Record<string, any> = {
@@ -795,6 +810,20 @@ const resetQuoteState = () => {
     quoteState.signature = ''
     quoteState.selectedKey = ''
     shipmentForm.estimated_cost = 0
+}
+
+function getDefaultOrderSendTime() {
+    const date = new Date()
+    const addHours = date.getMinutes() >= 30 ? 2 : 1
+    date.setHours(date.getHours() + addHours, 0, 0, 0)
+    const pad = (num: number) => String(num).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:00:00`
+}
+
+const ensureOrderSendTime = () => {
+    if (!shipmentForm.orderSendTime) {
+        shipmentForm.orderSendTime = getDefaultOrderSendTime()
+    }
 }
 
 const quoteSignature = () => JSON.stringify({
@@ -1041,6 +1070,7 @@ const validateShipment = (requireProduct = true) => {
 }
 
 const runShipmentQuote = async () => {
+    ensureOrderSendTime()
     if (!validateShipment(false)) return
     shipmentLoading.quote = true
     try {
@@ -1056,6 +1086,7 @@ const runShipmentQuote = async () => {
 }
 
 const runShipmentCreate = async () => {
+    ensureOrderSendTime()
     if (!validateShipment()) return
     if (!quoteState.valid || quoteState.signature !== quoteSignature()) {
         ElMessage.warning('当前报价已失效，请重新获取报价后再下单')
@@ -1170,8 +1201,22 @@ const formatTime = (value: any) => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-onMounted(() => {
-    refreshPage()
+const handleRouteQuickAction = async () => {
+    if (route.query.quick_action !== 'create') {
+        return
+    }
+
+    await openCreateDialog()
+    const { quick_action, t, ...query } = route.query
+    router.replace({
+        path: route.path,
+        query
+    })
+}
+
+onMounted(async () => {
+    await refreshPage()
+    await handleRouteQuickAction()
 })
 </script>
 

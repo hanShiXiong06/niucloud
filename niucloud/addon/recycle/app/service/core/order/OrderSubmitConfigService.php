@@ -6,6 +6,7 @@ namespace addon\recycle\app\service\core\order;
 use addon\recycle\app\dict\config\RecycleConfigKeyDict;
 use addon\recycle\app\dict\express\ExpressProviderDict;
 use addon\recycle\app\model\express\ExpressProviderConfig;
+use addon\recycle\app\model\yisu\YisuProductConfig;
 use app\service\core\sys\CoreConfigService;
 use core\exception\CommonException;
 
@@ -25,8 +26,10 @@ class OrderSubmitConfigService
     {
         $saved = $this->configService->getConfigValue($siteId, RecycleConfigKeyDict::ORDER_SUBMIT);
         $providers = $this->getPlatformDeliveryProviderOptions($siteId);
-        $config = $this->sanitizeConfig(is_array($saved) ? $saved : [], false, $providers);
+        $products = $this->getPlatformDeliveryProductOptions($siteId);
+        $config = $this->sanitizeConfig(is_array($saved) ? $saved : [], false, $providers, $products);
         $config['platform_delivery']['provider_options'] = $providers;
+        $config['platform_delivery']['product_options'] = $products;
 
         return $config;
     }
@@ -36,7 +39,12 @@ class OrderSubmitConfigService
         return (bool)$this->configService->setConfig(
             $siteId,
             RecycleConfigKeyDict::ORDER_SUBMIT,
-            $this->sanitizeConfig($data, true, $this->getPlatformDeliveryProviderOptions($siteId))
+            $this->sanitizeConfig(
+                $data,
+                true,
+                $this->getPlatformDeliveryProviderOptions($siteId),
+                $this->getPlatformDeliveryProductOptions($siteId)
+            )
         );
     }
 
@@ -61,10 +69,12 @@ class OrderSubmitConfigService
                 'id_card_required' => 1,
             ],
             'platform_delivery' => [
-                'display_name' => '京东快递',
+                'display_name' => '',
                 'free_shipping_min_count' => 1,
                 'provider' => ExpressProviderDict::PROVIDER_YISU,
                 'provider_name' => ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
+                'product_code' => '',
+                'product_name' => '',
             ],
             'follow_official_account' => [
                 'enabled' => 0,
@@ -85,7 +95,7 @@ class OrderSubmitConfigService
         ];
     }
 
-    public function sanitizeConfig(array $data, bool $strict = false, array $platformDeliveryProviders = []): array
+    public function sanitizeConfig(array $data, bool $strict = false, array $platformDeliveryProviders = [], array $platformDeliveryProducts = []): array
     {
         $default = $this->defaultConfig();
         $deliveryModes = is_array($data['delivery_modes'] ?? null) ? $data['delivery_modes'] : [];
@@ -104,10 +114,19 @@ class OrderSubmitConfigService
                 $providerMap[(string)$provider['provider']] = $provider;
             }
         }
+        $platformDeliveryProducts = array_values($platformDeliveryProducts);
+        $productMap = [];
+        foreach ($platformDeliveryProducts as $product) {
+            $provider = (string)($product['provider'] ?? '');
+            $productCode = (string)($product['product_code'] ?? '');
+            if ($provider !== '' && $productCode !== '') {
+                $productMap[$provider][$productCode] = $product;
+            }
+        }
         $defaultCount = max(1, min(99, (int)($data['default_count'] ?? $default['default_count'])));
         $paymentMinCount = max(1, min(5, (int)($profile['payment_min_count'] ?? $default['profile']['payment_min_count'])));
         $freeShippingMinCount = max(1, min(99, (int)($platformDelivery['free_shipping_min_count'] ?? $default['platform_delivery']['free_shipping_min_count'])));
-        $platformDeliveryDisplayName = mb_substr(trim((string)($platformDelivery['display_name'] ?? $default['platform_delivery']['display_name'])), 0, 20);
+        $platformDeliveryDisplayName = mb_substr(trim((string)($platformDelivery['display_name'] ?? '')), 0, 20);
         $platformDeliveryProvider = trim((string)($platformDelivery['provider'] ?? $default['platform_delivery']['provider']));
         if ($platformDeliveryProvider === '' || !isset($providerMap[$platformDeliveryProvider])) {
             $platformDeliveryProvider = (string)($platformDeliveryProviders[0]['provider'] ?? $default['platform_delivery']['provider']);
@@ -115,6 +134,14 @@ class OrderSubmitConfigService
         $platformDeliveryProviderName = trim((string)($platformDelivery['provider_name'] ?? ($providerMap[$platformDeliveryProvider]['provider_name'] ?? '')));
         if ($platformDeliveryProviderName === '') {
             $platformDeliveryProviderName = (string)($providerMap[$platformDeliveryProvider]['provider_name'] ?? ExpressProviderDict::getProviderName($platformDeliveryProvider));
+        }
+        $platformDeliveryProductCode = trim((string)($platformDelivery['product_code'] ?? $default['platform_delivery']['product_code']));
+        if ($platformDeliveryProductCode === '' || !isset($productMap[$platformDeliveryProvider][$platformDeliveryProductCode])) {
+            $platformDeliveryProductCode = (string)array_key_first($productMap[$platformDeliveryProvider] ?? []);
+        }
+        $platformDeliveryProductName = trim((string)($platformDelivery['product_name'] ?? ($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '')));
+        if ($platformDeliveryProductName === '') {
+            $platformDeliveryProductName = (string)($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '');
         }
 
         $config = [
@@ -136,10 +163,12 @@ class OrderSubmitConfigService
                 'id_card_required' => !empty($profile['id_card_required']) ? 1 : 0,
             ],
             'platform_delivery' => [
-                'display_name' => $platformDeliveryDisplayName ?: $default['platform_delivery']['display_name'],
+                'display_name' => $platformDeliveryDisplayName ?: ($platformDeliveryProductName ?: '京东快递'),
                 'free_shipping_min_count' => $freeShippingMinCount,
                 'provider' => $platformDeliveryProvider,
                 'provider_name' => $platformDeliveryProviderName ?: $default['platform_delivery']['provider_name'],
+                'product_code' => $platformDeliveryProductCode,
+                'product_name' => $platformDeliveryProductName,
             ],
             'follow_official_account' => [
                 'enabled' => !empty($followOfficialAccount['enabled']) ? 1 : 0,
@@ -425,6 +454,29 @@ class OrderSubmitConfigService
 
         if (empty($result)) {
             return $this->getDefaultPlatformDeliveryProviders();
+        }
+
+        return $result;
+    }
+
+    private function getPlatformDeliveryProductOptions(int $siteId): array
+    {
+        $products = YisuProductConfig::getEnabledProducts($siteId);
+        $result = [];
+
+        foreach ($products as $product) {
+            $productCode = (string)($product['product_code'] ?? '');
+            if ($productCode === '') {
+                continue;
+            }
+
+            $result[] = [
+                'provider' => ExpressProviderDict::PROVIDER_YISU,
+                'product_code' => $productCode,
+                'product_name' => (string)($product['product_name'] ?? $productCode),
+                'express_type' => (string)($product['express_type'] ?? ''),
+                'logo' => (string)($product['logo'] ?? ''),
+            ];
         }
 
         return $result;

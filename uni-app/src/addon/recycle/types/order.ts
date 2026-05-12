@@ -35,6 +35,8 @@ export interface PlatformDeliveryForm {
   weight: string
   provider?: string
   provider_name?: string
+  product_code?: string
+  product_name?: string
 }
 
 // 商家信息

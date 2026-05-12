@@ -75,6 +75,10 @@ export interface ExpressQuoteResult {
 export interface ExpressProvider {
   provider: string;
   provider_name: string;
+  display_name?: string;
+  product_code?: string;
+  product_name?: string;
+  front_name?: string;
   is_default: number;
   support_quote: boolean;
   support_cancel: boolean;
@@ -86,6 +90,10 @@ export interface ExpressCheckResult {
   enabled: boolean;
   provider: string;
   provider_name?: string;
+  display_name?: string;
+  product_code?: string;
+  product_name?: string;
+  front_name?: string;
   has_shop_address: boolean;
   prompt?: string;
   memo?: string;

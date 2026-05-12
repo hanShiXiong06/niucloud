@@ -117,28 +117,9 @@
                     <div class="setting-row">
                         <div>
                             <div class="setting-title">前台快递名称</div>
-                            <div class="setting-desc">展示给用户看的快递名称，不影响管理端真实快递服务商配置。</div>
+                            <div class="setting-desc">展示给用户看的名称，选择快递线路时会自动填入线路名，保存前可手动改成更短的展示名。</div>
                         </div>
                         <el-input v-model.trim="form.platform_delivery.display_name" maxlength="20" show-word-limit class="setting-input" placeholder="京东快递" />
-                    </div>
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">默认快递服务商</div>
-                            <div class="setting-desc">用户选择平台快递时，默认使用这里选中的已启用服务商。</div>
-                        </div>
-                        <el-select v-model="form.platform_delivery.provider" class="setting-input" placeholder="请选择服务商">
-                            <el-option
-                                v-for="item in form.platform_delivery.provider_options"
-                                :key="item.provider"
-                                :label="item.provider_name"
-                                :value="item.provider"
-                            >
-                                <div class="provider-option">
-                                    <span>{{ item.provider_name }}</span>
-                                    <el-tag v-if="item.is_default" size="small" effect="plain">默认</el-tag>
-                                </div>
-                            </el-option>
-                        </el-select>
                     </div>
                     <div class="setting-row">
                         <div>
@@ -147,14 +128,46 @@
                         </div>
                         <el-input-number v-model="form.platform_delivery.free_shipping_min_count" :min="1" :max="99" controls-position="right" />
                     </div>
-                    <el-alert
-                        v-if="!form.platform_delivery.provider_options.length"
-                        class="mt-[14px]"
-                        type="warning"
-                        :closable="false"
-                        show-icon
-                        title="没有可用的快递服务商，请先到第三方配置中启用服务商。"
-                    />
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">默认快递服务商</div>
+                            <div class="setting-desc">用户端使用平台快递时实际下单的服务商，来源于第三方快递配置中已开启的服务商。</div>
+                        </div>
+                        <el-select
+                            v-model="form.platform_delivery.provider"
+                            class="setting-input"
+                            placeholder="请选择快递服务商"
+                            :disabled="!form.platform_delivery.provider_options.length"
+                            @change="handleProviderChange"
+                        >
+                            <el-option
+                                v-for="item in form.platform_delivery.provider_options"
+                                :key="item.provider"
+                                :label="item.provider_name"
+                                :value="item.provider"
+                            />
+                        </el-select>
+                    </div>
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">默认快递线路</div>
+                            <div class="setting-desc">用户端平台快递实际使用的产品线路，来源于第三方配置中已启用的亿速产品。</div>
+                        </div>
+                        <el-select
+                            v-model="form.platform_delivery.product_code"
+                            class="setting-input"
+                            placeholder="请选择快递线路"
+                            :disabled="!currentProductOptions.length"
+                            @change="handleProductChange"
+                        >
+                            <el-option
+                                v-for="item in currentProductOptions"
+                                :key="item.product_code"
+                                :label="formatProductLabel(item)"
+                                :value="item.product_code"
+                            />
+                        </el-select>
+                    </div>
                 </section>
 
                 <section class="config-section">
@@ -509,7 +522,10 @@ const form = reactive<OrderSubmitConfig>({
         free_shipping_min_count: 1,
         provider: 'yisu',
         provider_name: '亿速物流',
-        provider_options: []
+        provider_options: [],
+        product_code: '',
+        product_name: '',
+        product_options: []
     },
     follow_official_account: {
         enabled: 0,
@@ -570,13 +586,19 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.profile.payment_required = data.profile?.payment_required === 0 ? 0 : 1
     form.profile.payment_min_count = Math.max(1, Math.min(5, Number(data.profile?.payment_min_count || 1)))
     form.profile.id_card_required = data.profile?.id_card_required === 0 ? 0 : 1
-    form.platform_delivery.display_name = data.platform_delivery?.display_name || '京东快递'
+    form.platform_delivery.display_name = data.platform_delivery?.display_name || ''
     form.platform_delivery.free_shipping_min_count = Math.max(1, Math.min(99, Number(data.platform_delivery?.free_shipping_min_count || 1)))
-    form.platform_delivery.provider_options = Array.isArray(data.platform_delivery?.provider_options) ? data.platform_delivery.provider_options : []
-    const providerOptions = form.platform_delivery.provider_options
-    const provider = data.platform_delivery?.provider || providerOptions[0]?.provider || 'yisu'
-    form.platform_delivery.provider = provider
-    form.platform_delivery.provider_name = data.platform_delivery?.provider_name || providerOptions.find(item => item.provider === provider)?.provider_name || '亿速物流'
+    form.platform_delivery.provider_options = normalizeProviderOptions(data.platform_delivery?.provider_options)
+    form.platform_delivery.provider = data.platform_delivery?.provider || form.platform_delivery.provider_options[0]?.provider || 'yisu'
+    form.platform_delivery.provider_name = data.platform_delivery?.provider_name || ''
+    form.platform_delivery.product_options = normalizeProductOptions(data.platform_delivery?.product_options)
+    form.platform_delivery.product_code = data.platform_delivery?.product_code || ''
+    form.platform_delivery.product_name = data.platform_delivery?.product_name || ''
+    ensureProviderSelection()
+    ensureProductSelection()
+    if (!form.platform_delivery.display_name) {
+        form.platform_delivery.display_name = form.platform_delivery.product_name || '京东快递'
+    }
     form.follow_official_account.enabled = data.follow_official_account?.enabled ? 1 : 0
     form.follow_official_account.wechat_name = data.follow_official_account?.wechat_name || ''
     form.follow_official_account.qr_code = data.follow_official_account?.qr_code || ''
@@ -593,6 +615,91 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
         form.delivery_modes.mail = 1
         form.delivery_modes.self = 1
     }
+}
+
+const normalizeProviderOptions = (options: OrderSubmitConfig['platform_delivery']['provider_options'] = []) => {
+    const list = Array.isArray(options) ? options : []
+    const result = list
+        .filter(item => item && item.provider)
+        .map(item => ({
+            provider: item.provider,
+            provider_name: item.provider_name || item.provider,
+            is_default: Number(item.is_default || 0),
+            support_quote: Boolean(item.support_quote),
+            support_cancel: Boolean(item.support_cancel),
+            support_track: Boolean(item.support_track)
+        }))
+
+    return result.length ? result : [{
+        provider: 'yisu',
+        provider_name: '亿速物流',
+        is_default: 1,
+        support_quote: true,
+        support_cancel: true,
+        support_track: true
+    }]
+}
+
+const ensureProviderSelection = (syncProductDisplayName = false) => {
+    const selected = form.platform_delivery.provider_options.find(item => item.provider === form.platform_delivery.provider)
+        || form.platform_delivery.provider_options.find(item => item.is_default)
+        || form.platform_delivery.provider_options[0]
+
+    if (!selected) {
+        form.platform_delivery.provider = ''
+        form.platform_delivery.provider_name = ''
+        return
+    }
+
+    form.platform_delivery.provider = selected.provider
+    form.platform_delivery.provider_name = selected.provider_name
+    ensureProductSelection(syncProductDisplayName)
+}
+
+const handleProviderChange = () => {
+    ensureProviderSelection(true)
+}
+
+const normalizeProductOptions = (options: OrderSubmitConfig['platform_delivery']['product_options'] = []) => {
+    const list = Array.isArray(options) ? options : []
+    return list
+        .filter(item => item && item.provider && item.product_code)
+        .map(item => ({
+            provider: item.provider,
+            product_code: item.product_code,
+            product_name: item.product_name || item.product_code,
+            express_type: item.express_type || '',
+            logo: item.logo || ''
+        }))
+}
+
+const currentProductOptions = computed(() => {
+    return form.platform_delivery.product_options.filter(item => item.provider === form.platform_delivery.provider)
+})
+
+const ensureProductSelection = (syncDisplayName = false) => {
+    const selected = currentProductOptions.value.find(item => item.product_code === form.platform_delivery.product_code)
+        || currentProductOptions.value[0]
+
+    if (!selected) {
+        form.platform_delivery.product_code = ''
+        form.platform_delivery.product_name = ''
+        return
+    }
+
+    form.platform_delivery.product_code = selected.product_code
+    form.platform_delivery.product_name = selected.product_name
+    if (syncDisplayName) {
+        form.platform_delivery.display_name = selected.product_name
+    }
+}
+
+const handleProductChange = () => {
+    ensureProductSelection(true)
+}
+
+const formatProductLabel = (item: OrderSubmitConfig['platform_delivery']['product_options'][number]) => {
+    return item.express_type ? `${item.product_name}（${item.express_type}）` : item.product_name
 }
 
 const normalizeTheme = (theme: Partial<OrderSubmitConfig['price_detail_theme']> = {}) => {
@@ -639,8 +746,14 @@ const save = async () => {
         ElMessage.warning('请填写前台快递名称')
         return
     }
+    ensureProviderSelection()
     if (!form.platform_delivery.provider) {
         ElMessage.warning('请选择默认快递服务商')
+        return
+    }
+    ensureProductSelection()
+    if (!form.platform_delivery.product_code) {
+        ElMessage.warning('请选择默认快递线路，请先在第三方快递配置中启用至少一条产品线路')
         return
     }
     if (form.profile.enabled && form.profile.payment_required && form.profile.payment_min_count < 1) {
@@ -752,14 +865,6 @@ onMounted(load)
 .setting-input {
     width: 280px;
     flex-shrink: 0;
-}
-
-.provider-option {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    min-width: 0;
 }
 
 .setting-title,

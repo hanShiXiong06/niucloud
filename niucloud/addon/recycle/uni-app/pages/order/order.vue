@@ -68,6 +68,10 @@
         :order-count="deviceCount"
         :free-shipping-min-count="orderSubmitConfig.platform_delivery.free_shipping_min_count"
         :platform-delivery-name="orderSubmitConfig.platform_delivery.display_name"
+        :default-provider="orderSubmitConfig.platform_delivery.provider"
+        :default-provider-name="orderSubmitConfig.platform_delivery.provider_name"
+        :default-product-code="orderSubmitConfig.platform_delivery.product_code"
+        :default-product-name="orderSubmitConfig.platform_delivery.product_name"
         @update:use-platform-delivery="handlePlatformDeliveryChange"
         @update:express-no="form.express_no = $event"
         @update:platform-delivery-form="platformDeliveryForm = $event"
@@ -81,23 +85,17 @@
         @copy="copyShopInfo"
         @open-location="openLocation"
       />
-      <view class="order-section agreement-section">
-       
-      <!-- 回收协议 -->
+      </u-form>
+    </view>
+
+    <view class="submit-bar">
+      <view class="submit-bar__meta">
         <AgreementCheckbox
           v-model="isAgreeRecycle"
           agreement-text="我已阅读并同意"
           agreement-key="recycle_service"
           agreement-title="回收服务协议"
         />
-
-      </view>
-      </u-form>
-    </view>
-
-    <view class="submit-bar">
-      <view class="submit-bar__meta">
-        <text class="submit-bar__title">{{ currentTab === 0 ? '邮寄到店' : '自送到店' }}</text>
         <text class="submit-bar__desc">共 {{ deviceCount }} 台设备</text>
       </view>
       <view class="submit-bar__button" @click="handleSubmitOrder">确认发货</view>
@@ -179,7 +177,26 @@ const orderSubmitConfig = ref({
   },
   platform_delivery: {
     display_name: '京东快递',
-    free_shipping_min_count: 1
+    free_shipping_min_count: 1,
+    provider: 'yisu',
+    provider_name: '亿速物流',
+    product_code: '',
+    product_name: '',
+    provider_options: [] as Array<{
+      provider: string
+      provider_name: string
+      is_default: number
+      support_quote?: boolean
+      support_cancel?: boolean
+      support_track?: boolean
+    }>,
+    product_options: [] as Array<{
+      provider: string
+      product_code: string
+      product_name: string
+      express_type?: string
+      logo?: string
+    }>
   },
   price_detail_theme: {
     colors: {}
@@ -275,7 +292,13 @@ const normalizeOrderSubmitConfig = (data: any = {}) => {
     },
     platform_delivery: {
       display_name: data.platform_delivery?.display_name || '京东快递',
-      free_shipping_min_count: normalizePositiveNumber(data.platform_delivery?.free_shipping_min_count, 1)
+      free_shipping_min_count: normalizePositiveNumber(data.platform_delivery?.free_shipping_min_count, 1),
+      provider: data.platform_delivery?.provider || 'yisu',
+      provider_name: data.platform_delivery?.provider_name || '亿速物流',
+      product_code: data.platform_delivery?.product_code || '',
+      product_name: data.platform_delivery?.product_name || '',
+      provider_options: Array.isArray(data.platform_delivery?.provider_options) ? data.platform_delivery.provider_options : [],
+      product_options: Array.isArray(data.platform_delivery?.product_options) ? data.platform_delivery.product_options : []
     },
     price_detail_theme: data.price_detail_theme || { colors: {} }
   }
@@ -575,7 +598,7 @@ fetchShopInfo()
 }
 
 .order-page-content {
-  padding: 20rpx 20rpx calc(20rpx + env(safe-area-inset-bottom));
+  padding: 20rpx 20rpx calc(140rpx + 50px + env(safe-area-inset-bottom));
 }
 
 .delivery-sticky {
@@ -598,11 +621,6 @@ fetchShopInfo()
 
 .shipment-section {
   border-left: 6rpx solid var(--recycle-brand);
-}
-
-.agreement-section {
-  margin-top: 28rpx;
-  padding: 24rpx 22rpx;
 }
 
 .shipment-header {
@@ -652,15 +670,8 @@ fetchShopInfo()
   flex-direction: column;
 }
 
-.submit-bar__title {
-  font-size: 28rpx;
-  line-height: 38rpx;
-  font-weight: 800;
-  color: var(--recycle-text-main);
-}
-
 .submit-bar__desc {
-  margin-top: 2rpx;
+  margin-top: 4rpx;
   font-size: 22rpx;
   line-height: 32rpx;
   color: var(--recycle-text-sub);
@@ -677,6 +688,32 @@ fetchShopInfo()
   color: var(--recycle-button-text);
   font-size: 28rpx;
   font-weight: 800;
+}
+
+.submit-bar :deep(.agreement-checkbox) {
+  width: 100%;
+  background: transparent;
+}
+
+.submit-bar :deep(.agreement-checkbox__inner) {
+  min-height: 44rpx;
+  align-items: flex-start;
+}
+
+.submit-bar :deep(.u-checkbox) {
+  margin-top: 4rpx;
+}
+
+.submit-bar :deep(.agreement-checkbox__content) {
+  min-height: 44rpx;
+  margin-left: 8rpx;
+  font-size: 23rpx;
+  line-height: 32rpx;
+}
+
+.submit-bar :deep(.agreement-checkbox__text),
+.submit-bar :deep(.agreement-checkbox__link) {
+  padding: 0;
 }
 
 :deep(.u-form) {

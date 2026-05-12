@@ -672,6 +672,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}express_order_record` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
   `order_no` varchar(100) NOT NULL DEFAULT '' COMMENT '第三方订单号',
+  `third_order_no` varchar(100) NOT NULL DEFAULT '' COMMENT '商户订单号',
   `recycle_order_id` int NOT NULL DEFAULT '0' COMMENT '回收订单ID',
   `recycle_device_id` int NOT NULL DEFAULT '0' COMMENT '回收设备ID',
   `provider_name` varchar(50) NOT NULL DEFAULT '' COMMENT '服务商',
@@ -719,6 +720,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}express_order_record` (
   PRIMARY KEY (`id`),
   KEY `idx_site_create` (`site_id`,`create_at`),
   KEY `idx_order_no` (`site_id`,`order_no`),
+  KEY `idx_third_order_no` (`site_id`,`third_order_no`),
   KEY `idx_delivery_id` (`site_id`,`delivery_id`),
   KEY `idx_recycle_order` (`site_id`,`recycle_order_id`),
   KEY `idx_status` (`site_id`,`order_status`)

@@ -15,6 +15,10 @@ export interface ChannelItem {
   memo: string
   provider: string
   provider_name: string
+  display_name?: string
+  product_code?: string
+  product_name?: string
+  front_name?: string
   support_quote?: boolean
   support_cancel?: boolean
   support_track?: boolean
@@ -51,16 +55,25 @@ export function useReceivingChannels() {
       const providers = Array.isArray(providersRes?.data) ? providersRes.data : []
 
       if (isEnabled && providersRes?.code === 1 && providers.length > 0) {
+        const frontName = String(checkData.front_name || checkData.display_name || checkData.product_name || '').trim()
         channels.value = providers
           .map((provider: ExpressProvider, index: number): ChannelItem => {
             const isDefault = Number(provider.is_default || 0) === 1
+            const isActiveProvider = provider.provider === checkData.provider
+            const providerDisplayName = isActiveProvider
+              ? (frontName || provider.front_name || provider.display_name || provider.product_name || provider.provider_name || '平台快递')
+              : (provider.front_name || provider.display_name || provider.product_name || provider.provider_name || '平台快递')
             return {
-              name: provider.provider_name || '平台快递',
+              name: providerDisplayName,
               value: provider.provider,
               sort: isDefault ? 1000 : 100 - index,
               memo: '',
               provider: provider.provider,
               provider_name: provider.provider_name || '',
+              display_name: isActiveProvider ? (checkData.display_name || provider.display_name || '') : (provider.display_name || ''),
+              product_code: isActiveProvider ? (checkData.product_code || provider.product_code || '') : (provider.product_code || ''),
+              product_name: isActiveProvider ? (checkData.product_name || provider.product_name || '') : (provider.product_name || ''),
+              front_name: providerDisplayName,
               support_quote: provider.support_quote,
               support_cancel: provider.support_cancel,
               support_track: provider.support_track

@@ -6,6 +6,7 @@ namespace addon\recycle\app\api\controller\express;
 use addon\recycle\app\dict\express\ExpressProviderDict;
 use addon\recycle\app\service\core\express\YisuExpressPushService;
 use addon\recycle\app\service\core\express\RecycleExpressService;
+use addon\recycle\app\service\core\order\OrderSubmitConfigService;
 use core\base\BaseApiController;
 use think\Response;
 
@@ -118,14 +119,23 @@ class ExpressController extends BaseApiController
         }
 
         $providerName = $provider ? ExpressProviderDict::getProviderName($provider) : '';
+        $submitConfig = (new OrderSubmitConfigService())->getConfig($siteId);
+        $platformDelivery = $submitConfig['platform_delivery'] ?? [];
+        $displayName = trim((string)($platformDelivery['display_name'] ?? ''));
+        $productName = trim((string)($platformDelivery['product_name'] ?? ''));
+        $frontName = $displayName ?: ($productName ?: $providerName);
 
         return success([
             'enabled' => $enabled,
             'provider' => $provider,
             'provider_name' => $providerName,
+            'display_name' => $displayName,
+            'product_code' => (string)($platformDelivery['product_code'] ?? ''),
+            'product_name' => $productName,
+            'front_name' => $frontName,
             'has_shop_address' => !empty($shopAddress),
-            'prompt' => $enabled && !empty($shopAddress) && $providerName
-                ? '将使用' . $providerName . '进行平台快递下单，请确认寄件地址准确。'
+            'prompt' => $enabled && !empty($shopAddress) && $frontName
+                ? '将使用' . $frontName . '进行平台快递下单，请确认寄件地址准确。'
                 : '',
         ]);
     }
@@ -171,15 +181,45 @@ class ExpressController extends BaseApiController
     {
         $requestParams = $this->request->param();
         $bodyParams = json_decode(file_get_contents('php://input') ?: '{}', true) ?: [];
-        $payload = array_merge($requestParams, $bodyParams);
+        $payload = $this->isListArray($bodyParams) ? $bodyParams : array_merge($requestParams, $bodyParams);
 
         try {
-            $siteId = (int)($payload['site_id'] ?? $this->request->param('site_id', $this->request->siteId()));
-            (new YisuExpressPushService())->handle($siteId, $payload);
-        } catch (\Exception $e) {
+            foreach ($this->normalizeYisuPushPayloads($payload) as $payload) {
+                (new YisuExpressPushService())->handle($payload);
+            }
+        } catch (\Throwable $e) {
             \think\facade\Log::error('易速推送处理失败：' . $e->getMessage(), ['payload' => $payload]);
         }
 
         return response('SUCCESS');
+    }
+
+    private function normalizeYisuPushPayloads(array $payload): array
+    {
+        $items = $this->isListArray($payload) ? $payload : [$payload];
+        $result = [];
+
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            if (isset($item['data']) && is_string($item['data'])) {
+                $item['data'] = json_decode($item['data'], true) ?: [];
+            }
+            if (empty($item['orderNo']) && empty($item['waybillNo']) && empty($item['thirdOrderNo'])) {
+                continue;
+            }
+            $result[] = $item;
+        }
+
+        return $result;
+    }
+
+    private function isListArray(array $payload): bool
+    {
+        if ($payload === []) {
+            return false;
+        }
+        return array_keys($payload) === range(0, count($payload) - 1);
     }
 }

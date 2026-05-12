@@ -111,6 +111,7 @@
                             </el-icon> 详情
                         </el-button>
                         <el-button v-if="scope.row.express_no" type="primary" plain size="small"
+                            :loading="expressTrackLoading && activeTrackId === scope.row.id"
                             @click="openReturnExpressTrack(scope.row)">查状态</el-button>
                         <el-button v-if="canPerformAction('CONFIRM', scope.row.status)" type="success" size="small"
                             :loading="operationLoading && activeOperationId === scope.row.id"
@@ -365,12 +366,49 @@
             </template>
         </el-dialog>
 
-        <ExpressTrackDialog
-            v-model:visible="expressTrackDialogVisible"
-            :express-no="currentTrackOrder?.express_no || ''"
-            :mobile="currentTrackMobile"
-            :company-name="currentTrackOrder?.express_company || '快递公司'"
-        />
+        <!-- 快递物流信息 -->
+        <el-dialog v-model="expressTrackDialogVisible" title="快递物流信息" width="600px" :close-on-click-modal="false" destroy-on-close>
+            <div v-if="expressInfo" class="express-info-container">
+                <div class="express-header">
+                    <div class="express-header-main">
+                        <div>
+                            <h3>{{ expressInfo.logisticsCompanyName || currentTrackOrder?.express_company || '快递公司' }}</h3>
+                            <p>运单号：{{ expressInfo.mailNo || currentTrackOrder?.express_no }}</p>
+                        </div>
+                        <el-tag :type="getExpressStatusType(expressInfo.logisticsStatus)" size="large">
+                            {{ expressInfo.logisticsStatusDesc || '未知状态' }}
+                        </el-tag>
+                    </div>
+                    <div class="express-latest">
+                        <p>最新状态：{{ expressInfo.theLastMessage || '-' }}</p>
+                        <p>更新时间：{{ expressInfo.theLastTime || '-' }}</p>
+                    </div>
+                </div>
+
+                <div class="express-trace">
+                    <h4>物流轨迹</h4>
+                    <el-timeline>
+                        <el-timeline-item
+                            v-for="(item, index) in expressInfo.logisticsTraceDetailList"
+                            :key="index"
+                            :timestamp="item.timeDesc"
+                            :type="index === 0 ? 'primary' : 'info'"
+                            :size="index === 0 ? 'large' : 'normal'"
+                        >
+                            <div class="trace-item">
+                                <div class="trace-location">{{ item.areaName }}</div>
+                                <div class="trace-desc">{{ item.desc }}</div>
+                            </div>
+                        </el-timeline-item>
+                    </el-timeline>
+                </div>
+            </div>
+            <el-empty v-else description="暂无快递信息" :image-size="90" />
+            <template #footer>
+                <el-button @click="expressTrackDialogVisible = false">关闭</el-button>
+                <el-button type="primary" :loading="expressTrackLoading" @click="refreshCurrentExpressTrack">刷新状态</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -400,7 +438,7 @@ import {
     RETURN_ORDER_STATUS_TYPE,
     STATUS_ACTION_PERMISSIONS
 } from '../../constants/recycle_return_order'
-import ExpressTrackDialog from '@/addon/recycle/components/ExpressTrackDialog.vue'
+import { getExpress } from '../../api/device_query_api'
 
 
 const router = useRouter()
@@ -443,7 +481,10 @@ const canBatchDelete = computed(() => {
 // 操作加载状态
 const operationLoading = ref(false)
 const activeOperationId = ref<number | null>(null)
+const expressTrackLoading = ref(false)
+const activeTrackId = ref<number | null>(null)
 const expressTrackDialogVisible = ref(false)
+const expressInfo = ref<any>(null)
 const currentTrackOrder = ref<any>(null)
 
 // 状态统计数据
@@ -827,9 +868,47 @@ const runReturnQuote = async () => {
     }
 }
 
-const openReturnExpressTrack = (row: any) => {
+const queryReturnExpressTrack = async (row: any) => {
+    if (!row?.express_no) {
+        ElMessage.warning('当前退回订单没有快递单号')
+        return
+    }
+    const mobile = row.member?.mobile || row.member_mobile || row.memberInfo?.mobile || ''
+    const mobileLast4 = String(mobile).slice(-4)
+    if (!mobileLast4) {
+        ElMessage.warning('无法获取用户手机号后四位，无法查询快递信息')
+        return
+    }
+    expressTrackLoading.value = true
+    activeTrackId.value = row.id
+    try {
+        const res = await getExpress(row.express_no, mobileLast4)
+        const data = res.data?.data || res.data || null
+        if (!data?.logisticsTraceDetailList?.length) {
+            expressInfo.value = null
+            ElMessage.info('暂无物流信息')
+            return
+        }
+        expressInfo.value = data
+    } catch (error: any) {
+        expressInfo.value = null
+        ElMessage.error(error.message || '查询运单状态失败')
+    } finally {
+        expressTrackLoading.value = false
+        activeTrackId.value = null
+    }
+}
+
+const openReturnExpressTrack = async (row: any) => {
     currentTrackOrder.value = row
+    expressInfo.value = null
     expressTrackDialogVisible.value = true
+    await queryReturnExpressTrack(row)
+}
+
+const refreshCurrentExpressTrack = async () => {
+    if (!currentTrackOrder.value) return
+    await queryReturnExpressTrack(currentTrackOrder.value)
 }
 
 // 获取设备列表信息
@@ -837,6 +916,9 @@ const getDeviceList = (row: any) => {
     if (!row.returnDevices || row.returnDevices.length === 0) {
         return '暂无设备信息'
     }
+
+console.log(row);
+
 
     return row.returnDevices.map((device: any, index: number) =>
         `${index + 1}. ${device.device?.model || '未知设备'} (${device.device?.imei || 'IMEI未知'})`
@@ -1007,6 +1089,18 @@ const handleCurrentChange = (val: number) => {
 // 获取状态类型
 const getStatusType = (status: number) => {
     return RETURN_ORDER_STATUS_TYPE[status as RETURN_ORDER_STATUS] || ''
+}
+
+const getExpressStatusType = (status: string) => {
+    const statusMap: Record<string, string> = {
+        ACCEPT: 'info',
+        TRANSPORT: 'warning',
+        DELIVER: 'primary',
+        SIGN: 'success',
+        REJECT: 'danger',
+        EXCEPTION: 'danger'
+    }
+    return statusMap[status] || 'info'
 }
 
 // 查看详情
@@ -1537,6 +1631,67 @@ onMounted(() => {
 
 .clickable-text:hover {
     text-decoration: underline;
+}
+
+.express-info-container {
+    max-height: 500px;
+    overflow: auto;
+}
+
+.express-header {
+    border-bottom: 1px solid #ebeef5;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+}
+
+.express-header-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.express-header-main h3 {
+    margin: 0 0 6px;
+    color: #303133;
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.express-header-main p,
+.express-latest p {
+    margin: 0;
+    color: #606266;
+    font-size: 13px;
+}
+
+.express-latest {
+    margin-top: 10px;
+}
+
+.express-latest p + p {
+    margin-top: 4px;
+    color: #909399;
+    font-size: 12px;
+}
+
+.express-trace h4 {
+    margin: 0 0 12px;
+    color: #303133;
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.trace-item .trace-location {
+    margin-bottom: 4px;
+    color: #303133;
+    font-weight: 500;
+}
+
+.trace-item .trace-desc {
+    color: #606266;
+    font-size: 14px;
+    line-height: 1.5;
 }
 
 .scan-tip {
