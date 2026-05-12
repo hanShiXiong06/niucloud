@@ -32,7 +32,9 @@ export function usePlatformDelivery() {
     area_text: '',
     detail_address: '',
     pickup_time: '',
-    weight: '1.0'
+    weight: '1.0',
+    provider: '',
+    provider_name: ''
   })
 
   /**
@@ -145,7 +147,9 @@ export function usePlatformDelivery() {
       area_text: '',
       detail_address: '',
       pickup_time: '',
-      weight: '1.0'
+      weight: '1.0',
+      provider: '',
+      provider_name: ''
     }
     enablePlatformDelivery.value = false
   }

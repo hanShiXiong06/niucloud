@@ -204,6 +204,8 @@ class RecycleExpressService
         $params = [
             // 快递产品
             'deliveryType' => $productCode,
+            'provider' => ExpressProviderDict::PROVIDER_YISU,
+            'provider_name' => trim((string)($config['provider_name'] ?? ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU))),
 
             // 寄件人(用户)
             'senderName' => $config['sender_name'] ?? '',
@@ -253,6 +255,7 @@ class RecycleExpressService
             'delivery_order_id' => $orderNo,
             'delivery_data' => json_encode([
                 'provider' => ExpressProviderDict::PROVIDER_YISU,
+                'provider_name' => $params['provider_name'] ?? ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
                 'sender' => [
                     'name' => $config['sender_name'] ?? '',
                     'mobile' => $config['sender_mobile'] ?? '',
@@ -280,6 +283,7 @@ class RecycleExpressService
             'delivery_id' => $expressNo,
             'estimated_cost' => $estimatedCost,
             'provider' => ExpressProviderDict::PROVIDER_YISU,
+            'provider_name' => $params['provider_name'] ?? ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
         ];
     }
 

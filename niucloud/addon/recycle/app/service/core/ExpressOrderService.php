@@ -346,7 +346,7 @@ class ExpressOrderService
                 'recycle_device_id' => $params['recycle_device_id'] ?? 0,
 
                 // 快递服务商信息
-                'provider_name' => 'yisu',
+                'provider_name' => trim((string)($params['provider_name'] ?? '亿速物流')),
                 'product_code' => $params['deliveryType'],
                 'product_name' => $productInfo['product_name'] ?? '',
                 'delivery_id' => $apiResult['deliveryId'] ?? $apiResult['waybillNo'] ?? $apiResult['trackingNum'] ?? '',

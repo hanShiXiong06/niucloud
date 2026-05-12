@@ -123,11 +123,38 @@
                     </div>
                     <div class="setting-row">
                         <div>
+                            <div class="setting-title">默认快递服务商</div>
+                            <div class="setting-desc">用户选择平台快递时，默认使用这里选中的已启用服务商。</div>
+                        </div>
+                        <el-select v-model="form.platform_delivery.provider" class="setting-input" placeholder="请选择服务商">
+                            <el-option
+                                v-for="item in form.platform_delivery.provider_options"
+                                :key="item.provider"
+                                :label="item.provider_name"
+                                :value="item.provider"
+                            >
+                                <div class="provider-option">
+                                    <span>{{ item.provider_name }}</span>
+                                    <el-tag v-if="item.is_default" size="small" effect="plain">默认</el-tag>
+                                </div>
+                            </el-option>
+                        </el-select>
+                    </div>
+                    <div class="setting-row">
+                        <div>
                             <div class="setting-title">最低包邮数量</div>
                             <div class="setting-desc">用户选择“邮寄到店”时，只有达到该数量才允许使用平台快递下单；未达到时仍可手动填写快递单号。</div>
                         </div>
                         <el-input-number v-model="form.platform_delivery.free_shipping_min_count" :min="1" :max="99" controls-position="right" />
                     </div>
+                    <el-alert
+                        v-if="!form.platform_delivery.provider_options.length"
+                        class="mt-[14px]"
+                        type="warning"
+                        :closable="false"
+                        show-icon
+                        title="没有可用的快递服务商，请先到第三方配置中启用服务商。"
+                    />
                 </section>
 
                 <section class="config-section">
@@ -479,7 +506,10 @@ const form = reactive<OrderSubmitConfig>({
     },
     platform_delivery: {
         display_name: '京东快递',
-        free_shipping_min_count: 1
+        free_shipping_min_count: 1,
+        provider: 'yisu',
+        provider_name: '亿速物流',
+        provider_options: []
     },
     follow_official_account: {
         enabled: 0,
@@ -542,6 +572,11 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.profile.id_card_required = data.profile?.id_card_required === 0 ? 0 : 1
     form.platform_delivery.display_name = data.platform_delivery?.display_name || '京东快递'
     form.platform_delivery.free_shipping_min_count = Math.max(1, Math.min(99, Number(data.platform_delivery?.free_shipping_min_count || 1)))
+    form.platform_delivery.provider_options = Array.isArray(data.platform_delivery?.provider_options) ? data.platform_delivery.provider_options : []
+    const providerOptions = form.platform_delivery.provider_options
+    const provider = data.platform_delivery?.provider || providerOptions[0]?.provider || 'yisu'
+    form.platform_delivery.provider = provider
+    form.platform_delivery.provider_name = data.platform_delivery?.provider_name || providerOptions.find(item => item.provider === provider)?.provider_name || '亿速物流'
     form.follow_official_account.enabled = data.follow_official_account?.enabled ? 1 : 0
     form.follow_official_account.wechat_name = data.follow_official_account?.wechat_name || ''
     form.follow_official_account.qr_code = data.follow_official_account?.qr_code || ''
@@ -602,6 +637,10 @@ const save = async () => {
     }
     if (!form.platform_delivery.display_name.trim()) {
         ElMessage.warning('请填写前台快递名称')
+        return
+    }
+    if (!form.platform_delivery.provider) {
+        ElMessage.warning('请选择默认快递服务商')
         return
     }
     if (form.profile.enabled && form.profile.payment_required && form.profile.payment_min_count < 1) {
@@ -713,6 +752,14 @@ onMounted(load)
 .setting-input {
     width: 280px;
     flex-shrink: 0;
+}
+
+.provider-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
 }
 
 .setting-title,

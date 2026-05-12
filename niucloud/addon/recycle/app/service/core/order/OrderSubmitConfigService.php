@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\core\order;
 
 use addon\recycle\app\dict\config\RecycleConfigKeyDict;
+use addon\recycle\app\dict\express\ExpressProviderDict;
+use addon\recycle\app\model\express\ExpressProviderConfig;
 use app\service\core\sys\CoreConfigService;
 use core\exception\CommonException;
 
@@ -22,12 +24,20 @@ class OrderSubmitConfigService
     public function getConfig(int $siteId): array
     {
         $saved = $this->configService->getConfigValue($siteId, RecycleConfigKeyDict::ORDER_SUBMIT);
-        return $this->sanitizeConfig(is_array($saved) ? $saved : []);
+        $providers = $this->getPlatformDeliveryProviderOptions($siteId);
+        $config = $this->sanitizeConfig(is_array($saved) ? $saved : [], false, $providers);
+        $config['platform_delivery']['provider_options'] = $providers;
+
+        return $config;
     }
 
     public function setConfig(int $siteId, array $data): bool
     {
-        return (bool)$this->configService->setConfig($siteId, RecycleConfigKeyDict::ORDER_SUBMIT, $this->sanitizeConfig($data, true));
+        return (bool)$this->configService->setConfig(
+            $siteId,
+            RecycleConfigKeyDict::ORDER_SUBMIT,
+            $this->sanitizeConfig($data, true, $this->getPlatformDeliveryProviderOptions($siteId))
+        );
     }
 
     public function defaultConfig(): array
@@ -53,6 +63,8 @@ class OrderSubmitConfigService
             'platform_delivery' => [
                 'display_name' => '京东快递',
                 'free_shipping_min_count' => 1,
+                'provider' => ExpressProviderDict::PROVIDER_YISU,
+                'provider_name' => ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
             ],
             'follow_official_account' => [
                 'enabled' => 0,
@@ -73,7 +85,7 @@ class OrderSubmitConfigService
         ];
     }
 
-    public function sanitizeConfig(array $data, bool $strict = false): array
+    public function sanitizeConfig(array $data, bool $strict = false, array $platformDeliveryProviders = []): array
     {
         $default = $this->defaultConfig();
         $deliveryModes = is_array($data['delivery_modes'] ?? null) ? $data['delivery_modes'] : [];
@@ -83,10 +95,27 @@ class OrderSubmitConfigService
         $followOfficialAccount = is_array($data['follow_official_account'] ?? null) ? $data['follow_official_account'] : [];
         $customerService = is_array($data['customer_service'] ?? null) ? $data['customer_service'] : [];
         $priceDetailTheme = is_array($data['price_detail_theme'] ?? null) ? $data['price_detail_theme'] : [];
+        $platformDeliveryProviders = !empty($platformDeliveryProviders)
+            ? array_values($platformDeliveryProviders)
+            : $this->getDefaultPlatformDeliveryProviders();
+        $providerMap = [];
+        foreach ($platformDeliveryProviders as $provider) {
+            if (!empty($provider['provider'])) {
+                $providerMap[(string)$provider['provider']] = $provider;
+            }
+        }
         $defaultCount = max(1, min(99, (int)($data['default_count'] ?? $default['default_count'])));
         $paymentMinCount = max(1, min(5, (int)($profile['payment_min_count'] ?? $default['profile']['payment_min_count'])));
         $freeShippingMinCount = max(1, min(99, (int)($platformDelivery['free_shipping_min_count'] ?? $default['platform_delivery']['free_shipping_min_count'])));
         $platformDeliveryDisplayName = mb_substr(trim((string)($platformDelivery['display_name'] ?? $default['platform_delivery']['display_name'])), 0, 20);
+        $platformDeliveryProvider = trim((string)($platformDelivery['provider'] ?? $default['platform_delivery']['provider']));
+        if ($platformDeliveryProvider === '' || !isset($providerMap[$platformDeliveryProvider])) {
+            $platformDeliveryProvider = (string)($platformDeliveryProviders[0]['provider'] ?? $default['platform_delivery']['provider']);
+        }
+        $platformDeliveryProviderName = trim((string)($platformDelivery['provider_name'] ?? ($providerMap[$platformDeliveryProvider]['provider_name'] ?? '')));
+        if ($platformDeliveryProviderName === '') {
+            $platformDeliveryProviderName = (string)($providerMap[$platformDeliveryProvider]['provider_name'] ?? ExpressProviderDict::getProviderName($platformDeliveryProvider));
+        }
 
         $config = [
             'device_add_enabled' => !empty($data['device_add_enabled']) ? 1 : 0,
@@ -109,6 +138,8 @@ class OrderSubmitConfigService
             'platform_delivery' => [
                 'display_name' => $platformDeliveryDisplayName ?: $default['platform_delivery']['display_name'],
                 'free_shipping_min_count' => $freeShippingMinCount,
+                'provider' => $platformDeliveryProvider,
+                'provider_name' => $platformDeliveryProviderName ?: $default['platform_delivery']['provider_name'],
             ],
             'follow_official_account' => [
                 'enabled' => !empty($followOfficialAccount['enabled']) ? 1 : 0,
@@ -345,6 +376,58 @@ class OrderSubmitConfigService
                 ],
             ],
         ];
+    }
+
+    private function getDefaultPlatformDeliveryProviders(): array
+    {
+        $providers = ExpressProviderDict::getProviders();
+        $result = [];
+
+        foreach ($providers as $key => $provider) {
+            $result[] = [
+                'provider' => $key,
+                'provider_name' => $provider['name'] ?? $key,
+                'is_default' => 1,
+                'support_quote' => !empty($provider['support_quote']),
+                'support_cancel' => !empty($provider['support_cancel']),
+                'support_track' => !empty($provider['support_track']),
+            ];
+        }
+
+        return $result;
+    }
+
+    private function getPlatformDeliveryProviderOptions(int $siteId): array
+    {
+        $list = ExpressProviderConfig::getEnabledProviders($siteId);
+        if (empty($list)) {
+            ExpressProviderConfig::initSiteConfig($siteId);
+            $list = ExpressProviderConfig::getEnabledProviders($siteId);
+        }
+
+        $providers = ExpressProviderDict::getProviders();
+        $result = [];
+        foreach ($list as $item) {
+            $provider = (string)($item['provider'] ?? '');
+            if ($provider === '') {
+                continue;
+            }
+            $providerInfo = $providers[$provider] ?? [];
+            $result[] = [
+                'provider' => $provider,
+                'provider_name' => (string)($item['provider_name'] ?? ($providerInfo['name'] ?? $provider)),
+                'is_default' => (int)($item['is_default'] ?? 0),
+                'support_quote' => !empty($providerInfo['support_quote']),
+                'support_cancel' => !empty($providerInfo['support_cancel']),
+                'support_track' => !empty($providerInfo['support_track']),
+            ];
+        }
+
+        if (empty($result)) {
+            return $this->getDefaultPlatformDeliveryProviders();
+        }
+
+        return $result;
     }
 
     public function isDeliveryModeEnabled(int $siteId, int $deliveryType): bool

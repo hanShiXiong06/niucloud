@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle\app\service\api\recycle_order;
 
 use addon\recycle\app\dict\order\RecycleOrderDict;
+use addon\recycle\app\dict\express\ExpressProviderDict;
 use addon\recycle\app\model\order\RecycleDevice;
 use addon\recycle\app\model\order\RecycleOrder;
 use addon\recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
@@ -127,7 +128,7 @@ class RecycleOrderService extends BaseApiService
      */
     public function getPage(array $where = [])
     {
-        $field = 'id,order_no,site_id,member_id,delivery_type,express_no,count,customer_name,customer_phone,remark,status,create_at,update_at';
+        $field = 'id,order_no,site_id,member_id,delivery_type,express_company,express_no,delivery_platform,delivery_status,delivery_fee,delivery_order_id,pickup_time,count,customer_name,customer_phone,remark,status,create_at,update_at';
         $order = 'create_at desc';
 
         // 如果 state = all
@@ -178,7 +179,7 @@ class RecycleOrderService extends BaseApiService
      */
     public function getInfo(int $id)
     {
-        $field = 'id,order_no,site_id,member_id,delivery_type,express_no,count,customer_name,customer_phone,remark,status,create_at,update_at';
+        $field = 'id,order_no,site_id,member_id,delivery_type,express_company,express_no,delivery_platform,delivery_status,delivery_fee,delivery_order_id,pickup_time,count,customer_name,customer_phone,remark,status,create_at,update_at';
 
         $info = $this->model
             ->where([
@@ -244,6 +245,17 @@ class RecycleOrderService extends BaseApiService
                         $data['express_config'],
                         $operatorInfo
                     );
+
+                    $provider = (string)($expressResult['provider'] ?? ($data['express_config']['provider'] ?? ExpressProviderDict::PROVIDER_YISU));
+                    $providerName = trim((string)($expressResult['provider_name'] ?? ($data['express_config']['provider_name'] ?? '')));
+                    if ($providerName === '') {
+                        $providerName = ExpressProviderDict::getProviderName($provider);
+                    }
+                    $order->save([
+                        'express_company' => $providerName,
+                        'delivery_platform' => $provider,
+                        'update_at' => time(),
+                    ]);
 
                     // 刷新订单数据（快递服务内部已更新了订单字段）
                     $order->refresh();

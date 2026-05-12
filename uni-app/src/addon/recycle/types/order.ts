@@ -33,6 +33,8 @@ export interface PlatformDeliveryForm {
   detail_address: string
   pickup_time: string
   weight: string
+  provider?: string
+  provider_name?: string
 }
 
 // 商家信息

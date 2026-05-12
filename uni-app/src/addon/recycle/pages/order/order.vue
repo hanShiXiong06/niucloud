@@ -179,7 +179,17 @@ const orderSubmitConfig = ref({
   },
   platform_delivery: {
     display_name: '京东快递',
-    free_shipping_min_count: 1
+    free_shipping_min_count: 1,
+    provider: '',
+    provider_name: '',
+    provider_options: [] as Array<{
+      provider: string
+      provider_name: string
+      is_default: number
+      support_quote?: boolean
+      support_cancel?: boolean
+      support_track?: boolean
+    }>
   },
   price_detail_theme: {
     colors: {}
@@ -275,7 +285,10 @@ const normalizeOrderSubmitConfig = (data: any = {}) => {
     },
     platform_delivery: {
       display_name: data.platform_delivery?.display_name || '京东快递',
-      free_shipping_min_count: normalizePositiveNumber(data.platform_delivery?.free_shipping_min_count, 1)
+      free_shipping_min_count: normalizePositiveNumber(data.platform_delivery?.free_shipping_min_count, 1),
+      provider: data.platform_delivery?.provider || '',
+      provider_name: data.platform_delivery?.provider_name || '',
+      provider_options: Array.isArray(data.platform_delivery?.provider_options) ? data.platform_delivery.provider_options : []
     },
     price_detail_theme: data.price_detail_theme || { colors: {} }
   }

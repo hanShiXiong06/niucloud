@@ -37,6 +37,7 @@ Route::group('recycle', function() {
      Route::get('recycle_category/hot', 'addon\recycle\app\api\controller\category\RecycleCategory@hot');
      Route::get('recycle_category_tree', 'addon\recycle\app\api\controller\category\RecycleCategory@tree');
      // 易速快递推送回调
+     Route::post('yisunotice', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush');
      Route::post('express/yisu_push', 'addon\recycle\app\api\controller\express\ExpressController@yisuPush');
 
 })->middleware(ApiChannel::class)

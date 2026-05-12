@@ -36,6 +36,12 @@ export function useOrderSubmit() {
 
     // 如果是邮寄模式且使用平台快递，需要验证平台快递表单
     if (params.currentTab === 0 && params.usePlatformDelivery) {
+      if (!params.platformDeliveryForm.provider) {
+        return {
+          valid: false,
+          message: '请选择快递服务商'
+        }
+      }
       if (!params.platformDeliveryForm.sender_name) {
         return {
           valid: false,
@@ -113,7 +119,9 @@ export function useOrderSubmit() {
         sender_district: params.platformDeliveryForm.district,
         sender_address: params.platformDeliveryForm.detail_address,
         pickup_time: params.platformDeliveryForm.pickup_time,
-        weight: parseFloat(params.platformDeliveryForm.weight) || 1.0
+        weight: parseFloat(params.platformDeliveryForm.weight) || 1.0,
+        provider: params.platformDeliveryForm.provider || '',
+        provider_name: params.platformDeliveryForm.provider_name || ''
       }
     }
 

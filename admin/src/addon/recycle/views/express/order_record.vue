@@ -109,8 +109,10 @@
             <el-table v-loading="loading" :data="orderList" class="mt-[16px]" stripe border>
                 <el-table-column label="运单信息" min-width="230">
                     <template #default="{ row }">
-                        <div class="primary-text">{{ row.delivery_id || '-' }}</div>
+                        <div v-if="row.delivery_id" class="primary-text clickable-text" @click="openExpressTrack(row)">{{ row.delivery_id }}</div>
+                        <div v-else class="primary-text">-</div>
                         <div class="muted-text">平台订单：{{ row.order_no || '-' }}</div>
+                        <div class="muted-text">快递公司：{{ row.provider_name || row.express_company || '-' }}</div>
                         <div v-if="row.recycle_order_id" class="muted-text">回收订单：{{ row.recycle_order_id }}</div>
                     </template>
                 </el-table-column>
@@ -152,6 +154,7 @@
                         <el-button link type="primary" @click="handleViewDetail(row)">详情</el-button>
                         <el-button link type="warning" @click="handleUpdateActual(row)">更新费用</el-button>
                         <el-button v-if="row.order_no || row.delivery_id" link type="primary" :loading="operationLoading[row.id] === 'waybill'" @click="handleWaybillPdf(row)">面单</el-button>
+                        <el-button v-if="row.delivery_id" link type="primary" @click="openExpressTrack(row)">查物流</el-button>
                         <el-button v-if="canCancel(row)" link type="danger" :loading="operationLoading[row.id] === 'cancel'" @click="handleCloseOrder(row)">取消</el-button>
                         <el-button v-if="canIntercept(row)" link type="danger" :loading="operationLoading[row.id] === 'intercept'" @click="handleCloseOrder(row)">拦截</el-button>
                     </template>
@@ -176,6 +179,7 @@
                 <el-descriptions :column="2" border>
                     <el-descriptions-item label="平台订单">{{ currentOrder.order_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="运单号">{{ currentOrder.delivery_id || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="快递公司">{{ currentOrder.provider_name || currentOrder.express_company || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="快递产品">{{ currentOrder.product_name || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="状态">
                         <el-tag :type="statusMeta(currentOrder.order_status).type">{{ currentOrder.status_text || statusMeta(currentOrder.order_status).label }}</el-tag>
@@ -433,6 +437,13 @@
                 <el-button type="primary" :disabled="!quoteState.valid" :loading="shipmentLoading.create" @click="runShipmentCreate">按选中快递下单</el-button>
             </template>
         </el-dialog>
+
+        <ExpressTrackDialog
+            v-model:visible="expressTrackDialogVisible"
+            :express-no="currentTrackOrder?.delivery_id || ''"
+            :mobile="currentTrackMobile"
+            :company-name="currentTrackOrder?.provider_name || currentTrackOrder?.express_company || '快递公司'"
+        />
     </div>
 </template>
 
@@ -455,6 +466,7 @@ import {
 } from '@/addon/recycle/api/express'
 import { parseThirdPartyAddress } from '@/addon/recycle/api/third_party'
 import { getShopAddressList } from '@/addon/recycle/api/shop_address'
+import ExpressTrackDialog from '@/addon/recycle/components/ExpressTrackDialog.vue'
 
 const loading = ref(false)
 const orderList = ref<any[]>([])
@@ -463,7 +475,9 @@ const statistics = ref<any>({})
 const detailDialogVisible = ref(false)
 const updateDialogVisible = ref(false)
 const createDialogVisible = ref(false)
+const expressTrackDialogVisible = ref(false)
 const currentOrder = ref<any>(null)
+const currentTrackOrder = ref<any>(null)
 const operationLoading = reactive<Record<number, '' | 'cancel' | 'intercept' | 'waybill'>>({})
 const shopAddressList = ref<any[]>([])
 const addressBookList = ref<any[]>([])
@@ -652,6 +666,25 @@ const handleViewDetail = async (row: any) => {
     } catch (error) {
         ElMessage.error('获取运单详情失败')
     }
+}
+
+const currentTrackMobile = computed(() => {
+    if (!currentTrackOrder.value) return ''
+    return currentTrackOrder.value.sender_mobile || currentTrackOrder.value.receiver_mobile || ''
+})
+
+const openExpressTrack = (row: any) => {
+    if (!row.delivery_id) {
+        ElMessage.warning('当前运单没有快递单号')
+        return
+    }
+    const mobile = row.sender_mobile || row.receiver_mobile || ''
+    if (!mobile) {
+        ElMessage.warning('无法获取手机号后四位，无法查询快递信息')
+        return
+    }
+    currentTrackOrder.value = row
+    expressTrackDialogVisible.value = true
 }
 
 const handleUpdateActual = (row: any) => {
@@ -1202,6 +1235,11 @@ onMounted(() => {
     margin-top: 4px;
     color: #6b7280;
     font-size: 12px;
+}
+
+.clickable-text {
+    cursor: pointer;
+    color: #2563eb;
 }
 
 .text-line {

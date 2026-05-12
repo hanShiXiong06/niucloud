@@ -29,6 +29,7 @@ class YisuExpressPushService
         $pushType = (int)($payload['pushType'] ?? 0);
         $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
         $apiResponse = $record->api_response ?? [];
+        $oldOrderStatus = (string)$record->order_status;
         $apiResponse['last_push'] = $payload;
         $apiResponse['push_history'][] = [
             'push_type' => $pushType,
@@ -38,6 +39,12 @@ class YisuExpressPushService
 
         $update = ['api_response' => $apiResponse];
         $eventType = 'unknown';
+        $waybillNo = trim((string)($payload['waybillNo'] ?? ''));
+        if ($waybillNo !== '' && $waybillNo !== (string)$record->delivery_id) {
+            $update['delivery_id'] = $waybillNo;
+            $apiResponse['last_waybill_no'] = $waybillNo;
+            $update['api_response'] = $apiResponse;
+        }
 
         if ($pushType === 1) {
             $eventType = 'status_changed';
@@ -62,18 +69,28 @@ class YisuExpressPushService
             $eventType = 'billing_changed';
             $actualCost = (float)($data['totalFee'] ?? 0);
             $actualWeight = (float)($data['weightFinal'] ?? $data['weightFee'] ?? 0);
-            if ($actualCost > 0 || $actualWeight > 0) {
+            if ($actualCost > 0) {
                 $update['actual_cost'] = $actualCost;
-                $update['actual_weight'] = $actualWeight;
                 $update['cost_diff'] = $actualCost - (float)$record->estimated_cost;
+            }
+            if ($actualWeight > 0) {
+                $update['actual_weight'] = $actualWeight;
                 $update['weight_diff'] = $actualWeight - (float)$record->estimated_weight;
             }
         } elseif ($pushType === 3) {
             $eventType = 'courier_changed';
+            $apiResponse['courier'] = [
+                'courier_info' => (string)($data['courierInfo'] ?? ''),
+                'courier_phone' => (string)($data['courierPhone'] ?? ''),
+                'time' => time(),
+            ];
+            $update['api_response'] = $apiResponse;
         } elseif ($pushType === 4) {
             $eventType = 'waybill_changed';
             if (!empty($data['newWaybillNo'])) {
                 $update['delivery_id'] = $data['newWaybillNo'];
+                $apiResponse['new_waybill_no'] = $data['newWaybillNo'];
+                $update['api_response'] = $apiResponse;
             }
         }
 
@@ -90,6 +107,8 @@ class YisuExpressPushService
             'order_no' => $record->order_no,
             'delivery_id' => $update['delivery_id'] ?? $record->delivery_id,
             'recycle_order_id' => (int)$record->recycle_order_id,
+            'old_order_status' => $oldOrderStatus,
+            'new_order_status' => (string)($update['order_status'] ?? $record->order_status),
             'payload' => $payload,
             'update' => $update,
         ]);
@@ -190,9 +209,11 @@ class YisuExpressPushService
             'exception' => 2,
         ];
         $orderUpdate = [
-            'delivery_fee' => (float)($update['actual_cost'] ?? $record->actual_cost ?? 0),
             'update_at' => time(),
         ];
+        if (array_key_exists('actual_cost', $update)) {
+            $orderUpdate['delivery_fee'] = (float)$update['actual_cost'];
+        }
         if (!empty($update['delivery_id'])) {
             $orderUpdate['express_no'] = $update['delivery_id'];
         }

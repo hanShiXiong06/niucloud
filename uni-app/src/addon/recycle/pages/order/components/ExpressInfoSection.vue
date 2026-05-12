@@ -16,8 +16,8 @@
             :class="['toggle-item', usePlatformDelivery && currentChannelValue === channel.value ? 'active' : '', !canUsePlatformDelivery ? 'disabled' : '']"
             @click="handleChannelClick(channel)"
           >
-            <view class="flex items-center justify-center gap-1">
-              <text>{{ platformDeliveryDisplayName }}</text>
+            <view class="flex flex-col items-center justify-center gap-1">
+              <text>{{ channel.provider_name || channel.name || platformDeliveryDisplayName }}</text>
               <view class="free-tag">
                 <text class="free-tag-text">{{ platformDeliveryTag }}</text>
               </view>
@@ -170,6 +170,15 @@ const emit = defineEmits<{
   'scan-express': []
 }>()
 
+const syncSelectedProvider = (channel?: ChannelItem) => {
+  if (!channel) return
+  emit('update:platformDeliveryForm', {
+    ...props.platformDeliveryForm,
+    provider: channel.provider,
+    provider_name: channel.provider_name || channel.name || ''
+  })
+}
+
 // 监听渠道加载完成后设置默认值
 watch(
   () => loading.value,
@@ -178,6 +187,8 @@ watch(
       // 渠道加载完成，设置默认状态
       selectedChannelValue.value = defaultChannelValue.value
       const defaultState = getDefaultPlatformDeliveryState()
+      const defaultChannel = channels.value.find(channel => channel.value === defaultChannelValue.value)
+      syncSelectedProvider(defaultChannel)
       emit('update:usePlatformDelivery', defaultState && canUsePlatformDelivery.value)
     }
   },
@@ -214,6 +225,7 @@ const handleChannelClick = (channel: ChannelItem) => {
 
   if (isPlatformChannel(channel.value)) {
     selectedChannelValue.value = channel.value
+    syncSelectedProvider(channel)
     emit('update:usePlatformDelivery', true)
   }
 }
