@@ -52,6 +52,10 @@
               <span>份数</span>
               <strong>{{ scene.copies }} 份</strong>
             </div>
+            <div>
+              <span>重复规则</span>
+              <strong>{{ scene.idempotency_scope_name || '-' }}</strong>
+            </div>
           </div>
 
           <div class="scene-actions">
@@ -110,6 +114,22 @@
           <el-input-number v-model="sceneForm.copies" :min="1" :max="20" controls-position="right" />
           <div class="form-tip">自动打印建议控制在 1-3 份，避免业务动作触发时重复出纸。</div>
         </el-form-item>
+        <el-form-item label="重复规则">
+          <el-select v-model="sceneForm.idempotency_scope" :disabled="currentScene?.scene_key === 'manual_device_label'">
+            <el-option label="不限制重复打印" value="none" />
+            <el-option label="同一业务同一场景只自动打印一次" value="site_scene_biz" />
+            <el-option label="同一设备同一场景只自动打印一次" value="site_scene_device" />
+            <el-option label="同一订单同一场景只自动打印一次" value="site_scene_order" />
+          </el-select>
+          <div class="form-tip">只限制自动打印；后台手动补打不受影响。</div>
+        </el-form-item>
+        <el-form-item label="失败重试">
+          <div class="retry-row">
+            <el-switch v-model="sceneForm.retry_enabled" :active-value="1" :inactive-value="0" />
+            <el-input-number v-model="sceneForm.max_attempts" :min="1" :max="10" controls-position="right" :disabled="sceneForm.retry_enabled !== 1" />
+          </div>
+          <div class="form-tip">当前版本先记录任务重试配置，后续接入异步队列后可自动消费失败任务。</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="sceneDialogVisible = false">取消</el-button>
@@ -164,7 +184,6 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
 import {
   getPrinterList,
   getPrintLogList,
@@ -191,7 +210,10 @@ const sceneForm = reactive({
   auto_print: 0,
   template_id: 0,
   printer_id: 0,
-  copies: 1
+  copies: 1,
+  idempotency_scope: 'site_scene_biz',
+  retry_enabled: 1,
+  max_attempts: 3
 });
 
 const logSearch = reactive({
@@ -243,6 +265,9 @@ const openSceneDialog = (scene) => {
   sceneForm.template_id = Number(scene.template_id || 0);
   sceneForm.printer_id = Number(scene.printer_id || 0);
   sceneForm.copies = Number(scene.copies || 1);
+  sceneForm.idempotency_scope = scene.scene_key === 'manual_device_label' ? 'none' : (scene.idempotency_scope || 'site_scene_biz');
+  sceneForm.retry_enabled = Number(scene.retry_enabled ?? 1);
+  sceneForm.max_attempts = Number(scene.max_attempts || 3);
   sceneDialogVisible.value = true;
 };
 
@@ -294,12 +319,8 @@ const fetchLogs = async () => {
   }
 };
 
-onMounted(async () => {
-  try {
-    await fetchAll();
-  } catch (error) {
-    ElMessage.error('获取打印场景失败');
-  }
+onMounted(() => {
+  fetchAll();
 });
 </script>
 
@@ -460,6 +481,12 @@ onMounted(async () => {
   :deep(.el-select) {
     width: 100%;
   }
+}
+
+.retry-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .form-tip {

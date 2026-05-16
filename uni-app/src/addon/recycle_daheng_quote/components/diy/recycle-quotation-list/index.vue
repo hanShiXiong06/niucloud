@@ -163,10 +163,7 @@ const displayList = computed(() => {
 });
 
 const wrapStyle = computed(() => {
-    const margin = diyComponent.value.margin || { top: 10, bottom: 10, both: 12 };
-    let style = 'position:relative;';
-    style += `margin:${Number(margin.top || 0) * 2}rpx ${Number(margin.both || 0) * 2}rpx ${Number(margin.bottom || 0) * 2}rpx;`;
-    return style;
+    return 'position:relative;';
 });
 
 const cardStyle = computed(() => {

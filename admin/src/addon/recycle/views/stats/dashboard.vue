@@ -27,7 +27,11 @@
 
           <!-- 快速筛选按钮组 -->
           <div class="flex flex-wrap items-center gap-3">
-            <el-dropdown trigger="click" @command="handleExpressQuickCommand">
+            <el-dropdown
+              v-if="canShowWidget('quick_express_ship') || canShowWidget('quick_express_track')"
+              trigger="click"
+              @command="handleExpressQuickCommand"
+            >
               <el-button type="primary">
                 快递
                 <el-icon class="el-icon--right">
@@ -36,14 +40,14 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="ship">
+                  <el-dropdown-item v-if="canShowWidget('quick_express_ship')" command="ship">
                     <el-icon><Box /></el-icon>
                     快速寄件
                   </el-dropdown-item>
-                  <!-- <el-dropdown-item command="track">
+                  <el-dropdown-item v-if="canShowWidget('quick_express_track')" command="track">
                     <el-icon><Search /></el-icon>
                     快速查件
-                  </el-dropdown-item> -->
+                  </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -94,47 +98,6 @@
       </div>
     </div>
 
-    <el-dialog
-      v-model="quickTrackDialogVisible"
-      title="快速查件"
-      width="420px"
-      :close-on-click-modal="false"
-      destroy-on-close
-    >
-      <el-form label-width="96px">
-        <el-form-item label="快递单号" required>
-          <el-input
-            v-model.trim="quickTrackForm.express_no"
-            clearable
-            placeholder="请输入快递运单号"
-            @keyup.enter="openQuickTrackLog"
-          />
-        </el-form-item>
-        <el-form-item label="手机号后四位" required>
-          <el-input
-            v-model.trim="quickTrackForm.mobile"
-            clearable
-            maxlength="11"
-            placeholder="请输入手机号或后四位"
-            @keyup.enter="openQuickTrackLog"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="quickTrackDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="openQuickTrackLog">查询物流</el-button>
-      </template>
-    </el-dialog>
-
-    <ExpressTrackDialog
-      v-model:visible="quickTrackLogVisible"
-      :express-no="quickTrackTarget.express_no"
-      :mobile="quickTrackTarget.mobile"
-      company-name="快递公司"
-      title="快速查件"
-      empty-description="暂无物流轨迹"
-    />
-
     <!-- 主要内容区域 -->
     <div class="mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <!-- 普通用户视图 -->
@@ -164,6 +127,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
           <!-- 签收统计 -->
           <StatCard
+            v-if="canShowWidget('my_signed_devices')"
             title="签收订单"
             :mainValue="userWorkStats.signed_order_count || 0"
             :subValue="`${userWorkStats.signed_device_count || 0} 台`"
@@ -175,8 +139,9 @@
           <!-- 质检统计 -->
           <StatCard
             v-if="
-              userWorkStats.check_count > 0 ||
-              ['checker', 'admin'].includes(userRole)
+              canShowWidget('my_check_count') &&
+              (userWorkStats.check_count > 0 ||
+                ['checker', 'admin'].includes(userRole))
             "
             title="质检设备"
             :mainValue="userWorkStats.check_count || 0"
@@ -189,8 +154,9 @@
           <!-- 定价统计 -->
           <StatCard
             v-if="
-              userWorkStats.price_count > 0 ||
-              ['pricer', 'admin'].includes(userRole)
+              canShowWidget('my_price_count') &&
+              (userWorkStats.price_count > 0 ||
+                ['pricer', 'admin'].includes(userRole))
             "
             title="定价设备"
             :mainValue="userWorkStats.price_count || 0"
@@ -203,8 +169,9 @@
           <!-- 打款统计 -->
           <StatCard
             v-if="
-              userWorkStats.payment_count > 0 ||
-              ['pricer', 'admin'].includes(userRole)
+              canShowWidget('my_payment_count') &&
+              (userWorkStats.payment_count > 0 ||
+                ['pricer', 'admin'].includes(userRole))
             "
             title="打款设备"
             :mainValue="userWorkStats.payment_count || 0"
@@ -241,6 +208,7 @@
                     class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
                   >
                     <StatCard
+                      v-if="canShowWidget('site_today_order_count')"
                       :title="getOrderLabel()"
                       :mainValue="overviewStats.today_order_count || 0"
                       :subValue="`昨日 ${
@@ -252,6 +220,7 @@
                     />
 
                     <StatCard
+                      v-if="canShowWidget('site_today_check_count')"
                       :title="getCheckLabel()"
                       :mainValue="overviewStats.today_check_count || 0"
                       color="green"
@@ -261,6 +230,7 @@
                     />
 
                     <StatCard
+                      v-if="canShowWidget('site_today_payment_amount')"
                       :title="getPaymentLabel()"
                       :mainValue="`¥${overviewStats.today_payment_amount || 0}`"
                       :subValue="`${overviewStats.today_payment_count || 0} 台`"
@@ -270,6 +240,7 @@
                     />
 
                     <StatCard
+                      v-if="canShowWidget('site_today_return_count')"
                       :title="getReturnLabel()"
                       :mainValue="overviewStats.today_return_count || 0"
                       subValue="设备数量"
@@ -279,7 +250,7 @@
                     />
                   </div>
                 </el-col>
-                <el-col :span="12">
+                <el-col v-if="canShowWidget('today_check_breakdown')" :span="12">
                   <!-- 运营概览环形图 -->
                   <ChartCard
                     title="业务分布"
@@ -290,7 +261,7 @@
                     <div ref="overviewRingChart" class="w-full h-80"></div>
                   </ChartCard>
                 </el-col>
-                <el-col :span="12"  class="mt-4">
+                <el-col v-if="canShowWidget('staff_work_chart')" :span="12"  class="mt-4">
                   <!-- 员工工作统计区块 - 优化布局 -->
                   <div class="h-full flex flex-col bg-white rounded-lg ">
 
@@ -300,7 +271,7 @@
                     ></div>
                   </div>
                 </el-col>
-                <el-col :xs="24" :lg="24" class="mt-4">
+                <el-col v-if="canShowWidget('staff_work_table')" :xs="24" :lg="24" class="mt-4">
                   <ChartCard title="员工工作统计" :icon="UserFilled">
                     <template #header-right v-if="userList.length > 0">
                       <div class="flex items-center gap-2">
@@ -370,7 +341,7 @@
               </el-row>
             </div>
           </el-col>
-          <el-col :span="12">
+          <el-col v-if="canShowWidget('member_stats_overview')" :span="12">
             <!-- 会员统计区块 -->
             <div class="space-y-4">
               <SectionHeader
@@ -547,7 +518,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
 import {
   ArrowDown,
   DataAnalysis,
@@ -572,7 +542,6 @@ import {
 import StatCard from "./components/StatCard.vue";
 import ChartCard from "./components/ChartCard.vue";
 import SectionHeader from "./components/SectionHeader.vue";
-import ExpressTrackDialog from "@/addon/recycle/components/ExpressTrackDialog.vue";
 
 // 导入 hooks
 import { useStatsData } from "./hooks/useStatsData";
@@ -597,6 +566,7 @@ const {
   memberLoading,
   fetchUserDetailStats,
   fetchData,
+  canShowWidget,
 } = useStatsData();
 
 // 使用 hooks - 图表管理
@@ -638,16 +608,6 @@ const router = useRouter();
 
 // 选中的用户ID
 const selectedUserId = ref("");
-const quickTrackDialogVisible = ref(false);
-const quickTrackLogVisible = ref(false);
-const quickTrackForm = ref({
-  express_no: "",
-  mobile: "",
-});
-const quickTrackTarget = ref({
-  express_no: "",
-  mobile: "",
-});
 
 const handleExpressQuickCommand = (command: "ship" | "track") => {
   if (command === "ship") {
@@ -661,28 +621,13 @@ const handleExpressQuickCommand = (command: "ship" | "track") => {
     return;
   }
 
-  quickTrackDialogVisible.value = true;
-};
-
-const openQuickTrackLog = () => {
-  const expressNo = quickTrackForm.value.express_no.trim();
-  const mobile = quickTrackForm.value.mobile.trim();
-
-  if (!expressNo) {
-    ElMessage.warning("请输入快递单号");
-    return;
-  }
-  if (mobile.length < 4) {
-    ElMessage.warning("请输入手机号或手机号后四位");
-    return;
-  }
-
-  quickTrackTarget.value = {
-    express_no: expressNo,
-    mobile,
-  };
-  quickTrackDialogVisible.value = false;
-  quickTrackLogVisible.value = true;
+  router.push({
+    path: "/express/order_record",
+    query: {
+      quick_action: "search",
+      t: String(Date.now()),
+    },
+  });
 };
 
 // 包装 hooks 方法

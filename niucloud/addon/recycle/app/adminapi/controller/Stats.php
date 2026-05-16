@@ -7,6 +7,7 @@ namespace addon\recycle\app\adminapi\controller;
 use core\base\BaseAdminController;
 use addon\recycle\app\service\admin\stats\StatsService;
 use addon\recycle\app\service\admin\stats\RecycleStatsService;
+use addon\recycle\app\service\admin\dashboard\RecycleDashboardWidgetService;
 use think\Response;
 use think\App;
 
@@ -212,10 +213,14 @@ class Stats extends BaseAdminController
         // 获取用户统计列表
         $userStats = $this->recycleStatsService->getUserStats($params);
 
+        // 配置型首页数据，兼容旧首页字段，前端可逐步切换到该结构渲染
+        $dashboardConfig = (new RecycleDashboardWidgetService())->getVisibleDashboard($params);
+
         return success([
             'today_stats' => $todayStats,
             'category_stats' => $categoryStats,
-            'user_stats' => $userStats
+            'user_stats' => $userStats,
+            'dashboard_config' => $dashboardConfig
         ]);
     }
 
@@ -384,4 +389,4 @@ class Stats extends BaseAdminController
         $data = $this->recycleStatsService->getMemberActivityStats($params);
         return success($data);
     }
-} 
+}

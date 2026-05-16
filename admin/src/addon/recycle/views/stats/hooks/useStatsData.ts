@@ -1,5 +1,4 @@
 import { ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import {
   getTodayStats,
   getUserStats,
@@ -10,7 +9,8 @@ import {
   getMemberRegisterTrend,
   getMemberChannelStats,
   getMemberInviteRank,
-  getMemberActivityStats
+  getMemberActivityStats,
+  getVisibleDashboard
 } from '@/addon/recycle/api/stats'
 
 /**
@@ -21,6 +21,11 @@ export function useStatsData() {
   const userRole = ref('user')
   const currentUserName = ref('')
   const currentUserId = ref(0)
+  const dashboardConfig = ref<any>({
+    widgets: null,
+    permissions: {},
+    auth: {}
+  })
 
   // 查询参数
   const queryParams = ref({
@@ -71,6 +76,23 @@ export function useStatsData() {
   const memberInviteRank = ref<any[]>([])
   const memberActivityStats = ref<any[]>([])
   const memberLoading = ref(false)
+
+  const fetchDashboardConfig = async () => {
+    try {
+      const res = await getVisibleDashboard(queryParams.value)
+      dashboardConfig.value = res.data || { widgets: [], permissions: {}, auth: {} }
+    } catch (e) {
+      console.error('获取首页配置失败', e)
+      dashboardConfig.value = { widgets: null, permissions: {}, auth: {} }
+    }
+  }
+
+  const canShowWidget = (widgetKey: string) => {
+    const widgets = dashboardConfig.value?.widgets
+    if (widgets === null) return true
+    if (!Array.isArray(widgets)) return false
+    return widgets.some((item: any) => item.widget_key === widgetKey)
+  }
 
   // 获取用户角色和基本信息
   const fetchUserRole = async () => {
@@ -130,7 +152,6 @@ export function useStatsData() {
       }
     } catch (e) {
       console.error('获取用户工作统计失败', e)
-      ElMessage.error('获取工作统计失败')
     }
   }
 
@@ -141,7 +162,6 @@ export function useStatsData() {
       overviewStats.value = res.data || {}
     } catch (e) {
       console.error('获取概况统计失败', e)
-      ElMessage.error('获取概况统计失败')
     }
   }
 
@@ -167,7 +187,6 @@ export function useStatsData() {
       userDetailStats.value = res.data || []
     } catch (e) {
       console.error('获取用户详细统计失败', e)
-      ElMessage.error('获取用户统计失败')
     } finally {
       userLoading.value = false
     }
@@ -181,7 +200,6 @@ export function useStatsData() {
       memberStatsOverview.value = res.data || {}
     } catch (e) {
       console.error('获取会员统计概览失败', e)
-      ElMessage.error('获取会员统计概览失败')
     } finally {
       memberLoading.value = false
     }
@@ -194,7 +212,6 @@ export function useStatsData() {
       memberRegisterTrend.value = res.data || []
     } catch (e) {
       console.error('获取会员注册趋势失败', e)
-      ElMessage.error('获取会员注册趋势失败')
     }
   }
 
@@ -205,7 +222,6 @@ export function useStatsData() {
       memberChannelStats.value = res.data || []
     } catch (e) {
       console.error('获取会员渠道统计失败', e)
-      ElMessage.error('获取会员渠道统计失败')
     }
   }
 
@@ -216,7 +232,6 @@ export function useStatsData() {
       memberInviteRank.value = res.data || []
     } catch (e) {
       console.error('获取拉新排行榜失败', e)
-      ElMessage.error('获取拉新排行榜失败')
     }
   }
 
@@ -227,7 +242,6 @@ export function useStatsData() {
       memberActivityStats.value = res.data || []
     } catch (e) {
       console.error('获取会员活跃度统计失败', e)
-      ElMessage.error('获取会员活跃度统计失败')
     }
   }
 
@@ -244,6 +258,7 @@ export function useStatsData() {
 
   // 获取所有数据
   const fetchData = async () => {
+    await fetchDashboardConfig()
     await fetchUserRole()
 
     if (userRole.value === 'admin') {
@@ -261,6 +276,7 @@ export function useStatsData() {
     userRole,
     currentUserName,
     currentUserId,
+    dashboardConfig,
     queryParams,
     userWorkStats,
     overviewStats,
@@ -275,6 +291,8 @@ export function useStatsData() {
     memberActivityStats,
     memberLoading,
     // 方法
+    fetchDashboardConfig,
+    canShowWidget,
     fetchUserRole,
     fetchUserWorkStats,
     fetchOverviewStats,
@@ -290,5 +308,3 @@ export function useStatsData() {
     fetchAllMemberStats
   }
 }
-
-

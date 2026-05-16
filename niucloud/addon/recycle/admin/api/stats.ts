@@ -50,6 +50,27 @@ export function getDashboardStats(params: any) {
 }
 
 /**
+ * 获取首页组件配置
+ */
+export function getDashboardWidgets() {
+    return request.get('recycle/dashboard/widgets')
+}
+
+/**
+ * 保存首页组件配置
+ */
+export function saveDashboardWidgets(data: any) {
+    return request.post('recycle/dashboard/widgets', data, { showSuccessMessage: true })
+}
+
+/**
+ * 获取当前用户可见首页组件
+ */
+export function getVisibleDashboard(params: any) {
+    return request.get('recycle/dashboard/visible', { params })
+}
+
+/**
  * 获取质检员绩效统计（兼容旧接口）
  */
 export function getInspectorPerformance(params: any) {
@@ -131,4 +152,4 @@ export function getMemberInviteRank(params: Record<string, any>) {
  */
 export function getMemberActivityStats(params: Record<string, any>) {
     return request.get(`recycle/stats/getMemberActivityStats`, { params })
-} 
+}

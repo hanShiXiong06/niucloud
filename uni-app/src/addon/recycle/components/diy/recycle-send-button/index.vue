@@ -111,10 +111,6 @@ const wrapStyle = computed(() => {
         style += 'border-bottom-right-radius:' + props.component.bottomRounded * 2 + 'rpx;';
     }
     
-    // 组件边距设置
-    const margin = props.component.margin || { top: 0, bottom: 0, both: 0 };
-    style += `margin: ${margin.top * 2}rpx ${margin.both * 2}rpx ${margin.bottom * 2}rpx;`;
-    
     return style;
 });
 

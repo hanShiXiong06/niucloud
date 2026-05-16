@@ -31,6 +31,7 @@ export interface TemplateElement {
   // QR 码属性
   size?: number       // 1-10
   error_level?: QRErrorLevel
+  quiet_zone?: number // 0-10，二维码静区模块数
 
   // 线条属性
   width?: number      // dot

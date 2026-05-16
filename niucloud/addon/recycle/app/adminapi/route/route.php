@@ -24,6 +24,17 @@ Route::group('recycle', function () {
     AdminLog::class
 ]);
 
+// 回收首页配置
+Route::group('recycle', function () {
+    Route::get('dashboard/widgets', 'addon\recycle\app\adminapi\controller\dashboard\DashboardConfig@widgets');
+    Route::post('dashboard/widgets', 'addon\recycle\app\adminapi\controller\dashboard\DashboardConfig@save');
+    Route::get('dashboard/visible', 'addon\recycle\app\adminapi\controller\dashboard\DashboardConfig@visible');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+
 // ✅ USER_CODE_BEGIN -- recycle_recycle_category
 /**
  * 设备分类管理

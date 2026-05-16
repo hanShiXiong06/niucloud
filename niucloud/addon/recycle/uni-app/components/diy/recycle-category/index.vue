@@ -736,10 +736,6 @@ const warpCss = computed(() => {
         style += 'border-bottom-left-radius:' + currentComponent.bottomRounded * 2 + 'rpx;';
         style += 'border-bottom-right-radius:' + currentComponent.bottomRounded * 2 + 'rpx;';
     }
-    if (currentComponent.margin) {
-        const margin = currentComponent.margin;
-        style += `margin: ${margin.top * 2}rpx ${margin.both * 2}rpx ${margin.bottom * 2}rpx ${margin.both * 2}rpx;`;
-    }
     return style;
 });
 

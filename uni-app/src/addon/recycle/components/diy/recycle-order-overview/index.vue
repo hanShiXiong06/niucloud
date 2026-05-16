@@ -193,10 +193,6 @@ const warpCss = computed(() => {
         style += 'border-bottom-right-radius: 8rpx;';
     }
     
-    // 边距设置
-    const margin = props.component.margin || { top: 10, bottom: 10, both: 10 };
-    style += `margin: ${margin.top * 2}rpx ${margin.both * 2}rpx ${margin.bottom * 2}rpx;`;
-    
     return style;
 });
 

@@ -72,6 +72,13 @@ class TemplateValidatorService extends BaseAdminService
                     }
                 }
             }
+
+            if ($widthDot > 0 && $heightDot > 0) {
+                $qrcodeWarnings = $this->validateQrcodeSafety($templateData['elements'], $widthDot, $heightDot);
+                foreach ($qrcodeWarnings as $warning) {
+                    $errors[] = $warning;
+                }
+            }
             
             // 检测元素重叠（警告级别，不阻止保存）
             $overlaps = $this->validateOverlap($templateData['elements']);
@@ -154,6 +161,9 @@ class TemplateValidatorService extends BaseAdminService
                 if (isset($element['error_level']) && !in_array($element['error_level'], ['L', 'M', 'Q', 'H'])) {
                     $errors[] = '二维码纠错等级必须是L、M、Q或H';
                 }
+                if (isset($element['quiet_zone']) && ($element['quiet_zone'] < 0 || $element['quiet_zone'] > 10)) {
+                    $errors[] = '二维码静区必须在0-10个模块之间';
+                }
                 break;
                 
             case 'barcode':
@@ -219,6 +229,49 @@ class TemplateValidatorService extends BaseAdminService
     }
 
     /**
+     * 校验二维码安全区域，重点检查静区是否被其他元素占用
+     * @param array $elements
+     * @param int $templateWidth
+     * @param int $templateHeight
+     * @return array
+     */
+    private function validateQrcodeSafety(array $elements, int $templateWidth, int $templateHeight): array
+    {
+        $warnings = [];
+
+        foreach ($elements as $index => $element) {
+            if (($element['type'] ?? '') !== 'qrcode') {
+                continue;
+            }
+
+            $safeBox = $this->getQrcodeSafeBoundingBox($element);
+            $qrBox = $this->getElementBoundingBox($element);
+            if (!$safeBox || !$qrBox) {
+                continue;
+            }
+
+            if ($safeBox['left'] < 0 || $safeBox['top'] < 0 || $safeBox['right'] > $templateWidth || $safeBox['bottom'] > $templateHeight) {
+                $warnings[] = "元素{$index}: 二维码静区超出纸张范围，可能无法识别";
+            }
+
+            foreach ($elements as $otherIndex => $otherElement) {
+                if ($otherIndex === $index) {
+                    continue;
+                }
+                $otherBox = $this->getElementBoundingBox($otherElement);
+                if (!$otherBox) {
+                    continue;
+                }
+                if ($this->boxesOverlap($safeBox, $otherBox) && !$this->boxesOverlap($qrBox, $otherBox)) {
+                    $warnings[] = "警告: 元素{$otherIndex}侵入二维码元素{$index}的安全留白，可能影响扫码";
+                }
+            }
+        }
+
+        return array_values(array_unique($warnings));
+    }
+
+    /**
      * 验证坐标是否在模板范围内（已废弃，使用layoutService->checkElementBounds）
      * @param array $element 元素数据
      * @param int $templateWidth 模板宽度（dot单位）
@@ -279,10 +332,32 @@ class TemplateValidatorService extends BaseAdminService
         }
         
         // 检查矩形是否重叠
-        return !($bbox1['right'] < $bbox2['left'] || 
-                 $bbox1['left'] > $bbox2['right'] || 
-                 $bbox1['bottom'] < $bbox2['top'] || 
-                 $bbox1['top'] > $bbox2['bottom']);
+        return $this->boxesOverlap($bbox1, $bbox2);
+    }
+
+    private function boxesOverlap(array $bbox1, array $bbox2): bool
+    {
+        return !($bbox1['right'] < $bbox2['left'] ||
+            $bbox1['left'] > $bbox2['right'] ||
+            $bbox1['bottom'] < $bbox2['top'] ||
+            $bbox1['top'] > $bbox2['bottom']);
+    }
+
+    private function getQrcodeSafeBoundingBox(array $element): ?array
+    {
+        $x = $element['x'] ?? 0;
+        $y = $element['y'] ?? 0;
+        $size = (int)($element['size'] ?? 2);
+        $quietZone = (int)($element['quiet_zone'] ?? 4);
+        $contentLength = mb_strlen($element['content'] ?? '', 'UTF-8');
+        $safeSize = $this->layoutService->calculateQrcodeSafeSize($size, $contentLength, $quietZone);
+
+        return [
+            'left' => $x - $safeSize['quiet_dot'],
+            'top' => $y - $safeSize['quiet_dot'],
+            'right' => $x + $safeSize['qrcode_width'] + $safeSize['quiet_dot'],
+            'bottom' => $y + $safeSize['qrcode_height'] + $safeSize['quiet_dot'],
+        ];
     }
 
     /**
@@ -462,4 +537,3 @@ class TemplateValidatorService extends BaseAdminService
         ];
     }
 }
-

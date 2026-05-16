@@ -59,6 +59,9 @@ class PrintScene extends BaseAdminController
             ['copies', 1],
             ['status', 1],
             ['sort', 0],
+            ['idempotency_scope', 'site_scene_biz'],
+            ['retry_enabled', 1],
+            ['max_attempts', 3],
         ]);
 
         $this->service->saveScene($sceneKey, $data);

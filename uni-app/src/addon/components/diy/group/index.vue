@@ -156,6 +156,9 @@
                 <template v-if="component.componentName == 'RecycleSendButton'">
                    <diy-recycle-send-button ref="diyRecycleSendButtonRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSendButton" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'RecycleQuotationList'">
+                   <diy-recycle-quotation-list ref="diyRecycleQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 <template v-if="component.componentName == 'RecycleSpiderQuotationList'">
                    <diy-recycle-spider-quotation-list ref="diyRecycleSpiderQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSpiderQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -184,7 +187,8 @@
    import diyRecycleCategory from '@/addon/recycle/components/diy/recycle-category/index.vue';
    import diyRecycleOrderOverview from '@/addon/recycle/components/diy/recycle-order-overview/index.vue';
    import diyRecycleSendButton from '@/addon/recycle/components/diy/recycle-send-button/index.vue';
-   import diyRecycleSpiderQuotationList from '@/addon/recycle/components/diy/recycle-spider-quotation-list/index.vue';
+   import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
+   import diyRecycleSpiderQuotationList from '@/addon/recycle_quote_spider/components/diy/recycle-spider-quotation-list/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';

@@ -74,6 +74,18 @@ const BUILT_IN_FIELD_KEYS = [
   'mdm_lock'
 ] as const
 
+const FORM_FIELD_KEYS = [
+  'capacity',
+  'color',
+  'system_version',
+  'warranty_info'
+] as const
+
+const RESERVED_FIELD_KEYS = new Set<string>([
+  ...BUILT_IN_FIELD_KEYS,
+  ...FORM_FIELD_KEYS
+])
+
 interface UseCheckMetaOptions {
   dictOptions: ComputedRef<CheckOptionsGroup>
   deviceForm: DeviceFormLike
@@ -125,7 +137,18 @@ export function normalizeInfo(rawInfo: any): Record<string, any> {
 
 function isEmptyValue(value: any): boolean {
   if (value === '' || value === null || value === undefined) return true
+  if (value === false) return true
   return Array.isArray(value) && value.length === 0
+}
+
+function toBooleanValue(value: any): boolean {
+  return value === true ||
+    value === 1 ||
+    value === '1' ||
+    value === 'true' ||
+    value === '开启' ||
+    value === '有锁' ||
+    value === 'On'
 }
 
 function optionLabels(options: DictOptionItem[] = [], value: any): string[] {
@@ -233,8 +256,15 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
 
   const buildCheckMeta = (): CheckMetaPayload => {
     const fieldMap = fieldConfigByKey?.value || {}
+    const normalizedCustomFields = Object.entries(templateSelections.customFields).reduce<Record<string, any>>((fields, [fieldKey, value]) => {
+      if (!RESERVED_FIELD_KEYS.has(fieldKey) && !isEmptyValue(value)) {
+        fields[fieldKey] = value
+      }
+      return fields
+    }, {})
     const schemaFields: Record<string, any> = {}
     Object.keys(fieldMap).forEach((fieldKey) => {
+      if (RESERVED_FIELD_KEYS.has(fieldKey)) return
       const value = getFieldValue(fieldKey)
       if (!isEmptyValue(value)) schemaFields[fieldKey] = value
     })
@@ -251,7 +281,7 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
       activation_lock: !!templateSelections.activationLock,
       mdm_lock: !!templateSelections.mdmLock,
       custom_fields: {
-        ...templateSelections.customFields,
+        ...normalizedCustomFields,
         ...schemaFields
       },
       template_id: templateInfo?.value?.id,
@@ -278,15 +308,21 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     const results: string[] = []
     const fieldMap = fieldConfigByKey?.value || {}
 
+    const pushResult = (text: string) => {
+      const value = text.trim()
+      if (value) results.push(value)
+    }
+
     const pushKnownResult = (fieldKey: string, value: any, labels: string[], fallback: string) => {
       const field = fieldMap[fieldKey]
       if (!field || Number(field.result_visible) !== 1) return
+      if (isEmptyValue(value)) return
       if (field?.result_template) {
         const text = renderResultTemplate(field.result_template, value, labels, field)
-        if (text) results.push(text)
+        if (text) pushResult(text)
         return
       }
-      if (fallback) results.push(fallback)
+      if (fallback) pushResult(fallback)
     }
 
     const screenName = checkMeta.screen_id ? optionNameById.value.screen[checkMeta.screen_id] : ''
@@ -334,16 +370,17 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     }
 
     Object.entries(templateSelections.customFields).forEach(([fieldKey, value]) => {
+      if (RESERVED_FIELD_KEYS.has(fieldKey)) return
       if (isEmptyValue(value)) return
       const field = fieldMap[fieldKey]
       if (!field || Number(field.result_visible) !== 1) return
       const labels = optionLabels(field.options || [], value)
       if (field.result_template) {
         const text = renderResultTemplate(field.result_template, value, labels, field)
-        if (text) results.push(text)
-      return
+        if (text) pushResult(text)
+        return
       }
-      results.push(`${field.field_name}: ${labels.length ? labels.join('、') : toStringValue(value)}${field.unit || ''}`)
+      pushResult(`${field.field_name}: ${labels.length ? labels.join('、') : toStringValue(value)}${field.unit || ''}`)
     })
 
     // 从 info 中读取保修信息，保证不会被质检选项覆盖丢失
@@ -352,15 +389,15 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     if (coverage) {
       const status = coverage.status || ''
       if (status === 'Out Of Warranty') {
-        results.push('保修: 过保')
+        pushResult('保修: 过保')
       } else if (status === 'Not Activated' || !coverage.date) {
-        results.push('保修: 未激活')
+        pushResult('保修: 未激活')
       } else {
-        results.push(`保修: 在保 到期${coverage.date}`)
+        pushResult(`保修: 在保 到期${coverage.date}`)
       }
     }
 
-    deviceForm.check_result_seller = results.join(';\n')
+    deviceForm.check_result_seller = Array.from(new Set(results)).join(';\n')
     deviceForm.info = getSubmitInfo()
   }
 
@@ -399,9 +436,14 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     templateSelections.fixIds = (meta.fix_ids || [])
       .map((item) => toStringValue(item))
       .filter(Boolean)
-    templateSelections.activationLock = !!meta.activation_lock
-    templateSelections.mdmLock = !!meta.mdm_lock
-    templateSelections.customFields = { ...(meta.custom_fields || {}) }
+    templateSelections.activationLock = toBooleanValue(meta.activation_lock)
+    templateSelections.mdmLock = toBooleanValue(meta.mdm_lock)
+    templateSelections.customFields = Object.entries(meta.custom_fields || {}).reduce<Record<string, any>>((fields, [fieldKey, value]) => {
+      if (!RESERVED_FIELD_KEYS.has(fieldKey) && !isEmptyValue(value)) {
+        fields[fieldKey] = value
+      }
+      return fields
+    }, {})
   }
 
   const parseCheckMeta = (source: any): CheckMetaPayload | null => {
@@ -436,8 +478,8 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
       appearance_id: toStringValue(parsed.appearance_id ?? parsed.appearanceId) || undefined,
       function_ids: functionIds,
       fix_ids: fixIds,
-      activation_lock: !!(parsed.activation_lock ?? parsed.activationLock),
-      mdm_lock: !!(parsed.mdm_lock ?? parsed.mdmLock),
+      activation_lock: toBooleanValue(parsed.activation_lock ?? parsed.activationLock),
+      mdm_lock: toBooleanValue(parsed.mdm_lock ?? parsed.mdmLock),
       custom_fields: typeof parsed.custom_fields === 'object' && parsed.custom_fields ? { ...parsed.custom_fields } : {},
       template_id: parsed.template_id,
       template_version: parsed.template_version

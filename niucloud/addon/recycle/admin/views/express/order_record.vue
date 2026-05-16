@@ -453,7 +453,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     cancelOrInterceptExpressOrder,
@@ -474,7 +474,6 @@ import { getShopAddressList } from '@/addon/recycle/api/shop_address'
 import ExpressTrackDialog from '@/addon/recycle/components/ExpressTrackDialog.vue'
 
 const route = useRoute()
-const router = useRouter()
 const loading = ref(false)
 const orderList = ref<any[]>([])
 const total = ref(0)
@@ -1201,17 +1200,28 @@ const formatTime = (value: any) => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+const clearQuickActionQuery = () => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('quick_action')
+    url.searchParams.delete('t')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
 const handleRouteQuickAction = async () => {
-    if (route.query.quick_action !== 'create') {
+    if (!['create', 'search'].includes(String(route.query.quick_action || ''))) {
         return
     }
 
-    await openCreateDialog()
-    const { quick_action, t, ...query } = route.query
-    router.replace({
-        path: route.path,
-        query
-    })
+    if (route.query.quick_action === 'create') {
+        await openCreateDialog()
+    }
+
+    if (route.query.quick_action === 'search') {
+        const keywordInput = document.querySelector<HTMLInputElement>('.filter-panel input')
+        keywordInput?.focus()
+    }
+
+    clearQuickActionQuery()
 }
 
 onMounted(async () => {

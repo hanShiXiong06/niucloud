@@ -97,9 +97,14 @@
               :class="{ selected: selectedId === el.id }"
               :style="getElementStyle(el)"
               @mousedown.stop="onElementMouseDown($event, el)"
-            >
-              <!-- 文本 -->
-              <div v-if="el.type === 'text'" class="el-text" :style="getTextStyle(el)">
+              >
+                <div
+                  v-if="el.type === 'qrcode'"
+                  class="qr-safe-zone"
+                  :style="getQrSafeZoneStyle(el)"
+                ></div>
+                <!-- 文本 -->
+                <div v-if="el.type === 'text'" class="el-text" :style="getTextStyle(el)">
                 <template v-if="shouldUsePrinterTextPreview(el)">
                   <span
                     v-for="(part, index) in getTextPreviewRuns(el)"
@@ -188,6 +193,10 @@
                   <el-option value="Q" label="Q - 较高" />
                   <el-option value="H" label="H - 高" />
                 </el-select>
+              </el-form-item>
+              <el-form-item label="静区">
+                <el-input-number v-model="selectedElement.quiet_zone" :min="0" :max="10" @change="renderAll" />
+                <div class="prop-tip">二维码四周安全留白，建议保留 4 个模块，贴边或被文字侵入会影响扫码。</div>
               </el-form-item>
             </template>
 
@@ -401,7 +410,7 @@ function addElement(type: string) {
       Object.assign(base, { content: '示例文本', font: 9, width_scale: 1, height_scale: 1, rotation: 0 })
       break
     case 'qrcode':
-      Object.assign(base, { content: '{{imei}}', size: 4, error_level: 'M' })
+      Object.assign(base, { content: '{{imei}}', size: 4, error_level: 'M', quiet_zone: 4 })
       break
     case 'barcode':
       Object.assign(base, { content: '{{imei}}', barcode_type: 'BC128', height: 60, narrow_width: 2, wide_width: 4, human_readable: 1, rotation: 0 })
@@ -565,6 +574,23 @@ function getQrPreviewSizePx(text: string, size: number, errorLevel: string): num
   const moduleCount = getQrModuleCount(text, errorLevel)
   const moduleSizeDot = Math.max(1, Math.min(10, Math.round(size || 4)))
   return Math.max(8, Math.round(Units.dotToPx(moduleCount * moduleSizeDot)))
+}
+
+function getQrSafeZoneStyle(el: TemplateElement): Record<string, string> {
+  const text = replaceVariables(el.content || '') || 'SAMPLE'
+  const errorLevel = (el.error_level || 'M') as any
+  const moduleCount = getQrModuleCount(text, errorLevel)
+  const moduleSizeDot = Math.max(1, Math.min(10, Math.round(el.size || 4)))
+  const quietZone = Math.max(0, Math.min(10, Math.round(el.quiet_zone ?? 4)))
+  const quietPx = Units.dotToPx(moduleSizeDot * quietZone)
+  const qrPx = Units.dotToPx(moduleCount * moduleSizeDot)
+  return {
+    position: 'absolute',
+    left: -quietPx + 'px',
+    top: -quietPx + 'px',
+    width: qrPx + quietPx * 2 + 'px',
+    height: qrPx + quietPx * 2 + 'px'
+  }
 }
 
 function getQrModuleCount(text: string, errorLevel: string): number {
@@ -734,9 +760,8 @@ async function handleSave() {
       }
     }
     saveDialogVisible.value = false
-    ElMessage.success('保存成功')
   } catch (e: any) {
-    ElMessage.error(e.message || '保存失败')
+    console.error('保存模板失败', e)
   } finally {
     saving.value = false
   }
@@ -792,7 +817,7 @@ async function loadTemplate() {
 
     nextTick(() => renderAll())
   } catch (e: any) {
-    ElMessage.error('加载模板失败')
+    console.error('加载模板失败', e)
   }
 }
 
@@ -990,6 +1015,20 @@ watch(() => templateData.elements.length, () => nextTick(() => renderAll()))
 .el-qr, .el-barcode { display: block; pointer-events: none; }
 .el-line { pointer-events: none; }
 .el-rect { pointer-events: none; }
+.qr-safe-zone {
+  border: 1px dashed rgba(245, 108, 108, 0.75);
+  background: rgba(245, 108, 108, 0.08);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.prop-tip {
+  width: 100%;
+  margin-top: 4px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.45;
+}
 
 /* Resize 手柄 */
 .resize-handle {

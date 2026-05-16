@@ -260,6 +260,29 @@ class TemplateLayoutService extends BaseAdminService
     }
 
     /**
+     * 计算二维码安全区域尺寸，包含静区留白
+     * @param int $size 二维码模块大小
+     * @param int $contentLength 内容长度
+     * @param int $quietZone 静区模块数
+     * @return array
+     */
+    public function calculateQrcodeSafeSize(int $size, int $contentLength, int $quietZone = 4): array
+    {
+        $qrcodeSize = $this->calculateQrcodeSize($size, $contentLength);
+        $moduleSize = max(1, min(10, $size));
+        $quietZone = max(0, min(10, $quietZone));
+        $quietDot = $quietZone * $moduleSize;
+
+        return [
+            'width' => $qrcodeSize['width'] + ($quietDot * 2),
+            'height' => $qrcodeSize['height'] + ($quietDot * 2),
+            'quiet_dot' => $quietDot,
+            'qrcode_width' => $qrcodeSize['width'],
+            'qrcode_height' => $qrcodeSize['height'],
+        ];
+    }
+
+    /**
      * 估算二维码矩阵模块数。
      * 二维码 version 1 是 21×21，version 每增加 1，边长增加 4 个模块。
      * 这里按内容长度做保守估计，用于后台预览和边界检测，不改变实际打印指令。
@@ -461,8 +484,10 @@ class TemplateLayoutService extends BaseAdminService
                 
             case 'qrcode':
                 $size = $element['size'] ?? 2;
+                $quietZone = (int)($element['quiet_zone'] ?? 4);
                 $contentLength = mb_strlen($element['content'] ?? '', 'UTF-8');
                 $qrcodeSize = $this->calculateQrcodeSize($size, $contentLength);
+                $safeSize = $this->calculateQrcodeSafeSize($size, $contentLength, $quietZone);
                 
                 if ($x + $qrcodeSize['width'] > $templateWidth) {
                     return [
@@ -475,6 +500,17 @@ class TemplateLayoutService extends BaseAdminService
                     return [
                         'out_of_bounds' => true,
                         'message' => "二维码超出下边界"
+                    ];
+                }
+
+                if ($x - $safeSize['quiet_dot'] < 0
+                    || $y - $safeSize['quiet_dot'] < 0
+                    || $x + $qrcodeSize['width'] + $safeSize['quiet_dot'] > $templateWidth
+                    || $y + $qrcodeSize['height'] + $safeSize['quiet_dot'] > $templateHeight
+                ) {
+                    return [
+                        'out_of_bounds' => true,
+                        'message' => "二维码静区留白不足，可能无法识别"
                     ];
                 }
                 break;

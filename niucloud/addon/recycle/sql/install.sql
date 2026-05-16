@@ -317,10 +317,15 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_print_scene` (
     `scene_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '场景ID',
     `site_id` int(11) NOT NULL DEFAULT 0 COMMENT '站点ID',
     `scene_key` varchar(50) NOT NULL DEFAULT '' COMMENT '场景标识',
+    `trigger_key` varchar(100) NOT NULL DEFAULT '' COMMENT '触发事件标识',
     `scene_name` varchar(100) NOT NULL DEFAULT '' COMMENT '场景名称',
     `biz_type` varchar(30) NOT NULL DEFAULT '' COMMENT '业务类型：device-设备，order-订单，return-退货',
     `template_type` varchar(50) NOT NULL DEFAULT '' COMMENT '模板类型',
     `auto_print` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否自动打印：0-否，1-是',
+    `idempotency_scope` varchar(50) NOT NULL DEFAULT 'site_scene_biz' COMMENT '幂等范围：none/site_scene_biz/site_scene_device/site_scene_order',
+    `retry_enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否失败重试：0-否，1-是',
+    `max_attempts` int(11) NOT NULL DEFAULT 3 COMMENT '最大尝试次数',
+    `condition_config` text NOT NULL COMMENT '触发条件配置',
     `template_id` int(11) NOT NULL DEFAULT 0 COMMENT '指定模板ID，0使用默认模板',
     `printer_id` int(11) NOT NULL DEFAULT 0 COMMENT '指定打印机ID，0使用模板绑定或账号默认打印机',
     `copies` int(11) NOT NULL DEFAULT 1 COMMENT '打印份数',
@@ -331,6 +336,48 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_print_scene` (
     PRIMARY KEY (`scene_id`),
     UNIQUE KEY `uk_site_scene` (`site_id`, `scene_key`)
 ) COMMENT='回收打印场景表';
+
+-- 回收打印任务表
+DROP TABLE IF EXISTS `{{prefix}}recycle_print_task`;
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_print_task` (
+    `task_id` int(11) NOT NULL AUTO_INCREMENT COMMENT '任务ID',
+    `site_id` int(11) NOT NULL DEFAULT 0 COMMENT '站点ID',
+    `scene_key` varchar(50) NOT NULL DEFAULT '' COMMENT '场景标识',
+    `scene_name` varchar(100) NOT NULL DEFAULT '' COMMENT '场景名称',
+    `trigger_key` varchar(100) NOT NULL DEFAULT '' COMMENT '触发事件标识',
+    `biz_type` varchar(30) NOT NULL DEFAULT '' COMMENT '业务类型',
+    `biz_id` int(11) NOT NULL DEFAULT 0 COMMENT '业务ID',
+    `order_id` int(11) NOT NULL DEFAULT 0 COMMENT '订单ID',
+    `device_id` int(11) NOT NULL DEFAULT 0 COMMENT '设备ID',
+    `template_id` int(11) NOT NULL DEFAULT 0 COMMENT '模板ID',
+    `template_name` varchar(100) NOT NULL DEFAULT '' COMMENT '模板名称',
+    `printer_id` int(11) NOT NULL DEFAULT 0 COMMENT '打印机ID',
+    `printer_name` varchar(100) NOT NULL DEFAULT '' COMMENT '打印机名称',
+    `copies` int(11) NOT NULL DEFAULT 1 COMMENT '打印份数',
+    `priority` int(11) NOT NULL DEFAULT 100 COMMENT '优先级，越小越优先',
+    `mode` varchar(20) NOT NULL DEFAULT 'auto' COMMENT '打印模式：auto/manual/reprint',
+    `unique_key` varchar(191) NOT NULL DEFAULT '' COMMENT '幂等键',
+    `payload` text NOT NULL COMMENT '业务入参快照',
+    `variables_snapshot` text NOT NULL COMMENT '变量快照',
+    `instruction_snapshot` mediumtext COMMENT '打印指令快照',
+    `response_snapshot` text NOT NULL COMMENT '打印响应快照',
+    `status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '状态：0待执行 1执行中 2成功 3失败 4跳过 5取消',
+    `fail_reason` varchar(500) NOT NULL DEFAULT '' COMMENT '失败原因',
+    `attempts` int(11) NOT NULL DEFAULT 0 COMMENT '已尝试次数',
+    `max_attempts` int(11) NOT NULL DEFAULT 3 COMMENT '最大尝试次数',
+    `next_retry_at` int(11) NOT NULL DEFAULT 0 COMMENT '下次重试时间',
+    `operator_uid` int(11) NOT NULL DEFAULT 0 COMMENT '操作人ID',
+    `create_time` int(11) NOT NULL DEFAULT 0 COMMENT '创建时间',
+    `update_time` int(11) NOT NULL DEFAULT 0 COMMENT '更新时间',
+    `finish_time` int(11) NOT NULL DEFAULT 0 COMMENT '完成时间',
+    PRIMARY KEY (`task_id`),
+    UNIQUE KEY `uk_site_unique` (`site_id`, `unique_key`),
+    KEY `idx_status_retry` (`status`, `next_retry_at`),
+    KEY `idx_site_scene` (`site_id`, `scene_key`),
+    KEY `idx_site_biz` (`site_id`, `biz_type`, `biz_id`),
+    KEY `idx_site_device` (`site_id`, `device_id`),
+    KEY `idx_site_order` (`site_id`, `order_id`)
+) COMMENT='回收打印任务表';
 
 -- 回收打印日志表
 DROP TABLE IF EXISTS `{{prefix}}recycle_print_log`;
@@ -740,6 +787,27 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_express_provider_config` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_site_provider` (`site_id`,`provider`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收快递服务商配置';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_dashboard_widget` (
+  `widget_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '组件ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `widget_key` varchar(100) NOT NULL DEFAULT '' COMMENT '组件标识',
+  `widget_name` varchar(100) NOT NULL DEFAULT '' COMMENT '组件名称',
+  `widget_type` varchar(30) NOT NULL DEFAULT 'stat' COMMENT '组件类型 stat/chart/table/action/section',
+  `data_key` varchar(100) NOT NULL DEFAULT '' COMMENT '指标标识',
+  `data_scope` varchar(30) NOT NULL DEFAULT 'own' COMMENT '数据范围 own/site/assigned/none',
+  `role_ids` text COMMENT '可见角色ID JSON数组，空表示不限制',
+  `uids` text COMMENT '可见用户ID JSON数组，空表示不限制',
+  `config` text COMMENT '组件扩展配置',
+  `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态 0停用 1启用',
+  `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `create_time` int NOT NULL DEFAULT '0' COMMENT '创建时间',
+  `update_time` int NOT NULL DEFAULT '0' COMMENT '更新时间',
+  PRIMARY KEY (`widget_id`),
+  UNIQUE KEY `uk_site_widget` (`site_id`,`widget_key`),
+  KEY `idx_site_status` (`site_id`,`status`),
+  KEY `idx_site_type` (`site_id`,`widget_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收首页组件配置表';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}yisu_product_config` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',

@@ -146,9 +146,9 @@ import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'v
 import { onPageScroll } from '@dcloudio/uni-app'
 import useDiyStore from '@/app/stores/diy'
 import useSystemStore from '@/stores/system'
-import useQuotationCacheStore, { buildQuotationCacheKey } from '@/addon/recycle/stores/quotation-cache'
+import useQuotationCacheStore, { buildQuotationCacheKey } from '@/addon/recycle_quote_spider/stores/quotation-cache'
 import { img, pxToRpx, redirect } from '@/utils/common'
-import { getQuoteSpiderCategoryTree, getQuoteSpiderFeatured, type QuoteSpiderCategory, type QuoteSpiderItem } from '@/addon/recycle/api/quotation'
+import { getQuoteSpiderCategoryTree, getQuoteSpiderFeatured, type QuoteSpiderCategory, type QuoteSpiderItem } from '@/addon/recycle_quote_spider/api/quotation'
 import QuotationCategoryTabs from './components/QuotationCategoryTabs.vue'
 
 const props = defineProps({
@@ -615,10 +615,7 @@ const displayGroups = computed(() => {
 })
 
 const wrapStyle = computed(() => {
-    const margin = diyComponent.value.margin || { top: 10, bottom: 10, both: 12 }
-    let style = 'position:relative;'
-    style += `margin:${Number(margin.top || 0) * 2}rpx ${Number(margin.both || 0) * 2}rpx ${Number(margin.bottom || 0) * 2}rpx;`
-    return style
+    return 'position:relative;'
 })
 
 const cardStyle = computed(() => {

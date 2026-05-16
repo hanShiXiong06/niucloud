@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\admin\printer;
 
-use addon\recycle\app\model\printer\RecyclePrintLog;
 use addon\recycle\app\model\printer\RecyclePrintScene;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
@@ -102,6 +101,9 @@ class RecyclePrintSceneService extends BaseAdminService
             'copies' => $copies,
             'status' => empty($data['status']) ? 0 : 1,
             'sort' => (int)($data['sort'] ?? 0),
+            'idempotency_scope' => $this->normalizeIdempotencyScope((string)($data['idempotency_scope'] ?? $scene['idempotency_scope'] ?? 'site_scene_biz')),
+            'retry_enabled' => empty($data['retry_enabled']) ? 0 : 1,
+            'max_attempts' => max(1, min(10, (int)($data['max_attempts'] ?? $scene['max_attempts'] ?? 3))),
         ];
 
         if ($payload['template_id'] > 0) {
@@ -177,23 +179,57 @@ class RecyclePrintSceneService extends BaseAdminService
      */
     public function autoPrintAfterDeviceCheck(int $deviceId): array
     {
-        $plan = $this->resolveDeviceScenePlan('device_check_complete', $deviceId, true);
-        if (empty($plan['can_print'])) {
-            $this->recordPlanLog($plan, 0, $plan['message'] ?? '打印计划不可用');
-            return $plan;
+        return (new RecyclePrintTriggerService())->auto('device.check.saved', [
+            'device_id' => $deviceId,
+        ]);
+    }
+
+    /**
+     * 根据触发事件解析打印计划
+     * @param string $triggerKey
+     * @param array $payload
+     * @param bool $requireAuto
+     * @return array
+     */
+    public function resolvePlansByTrigger(string $triggerKey, array $payload = [], bool $requireAuto = false): array
+    {
+        $this->ensureBuiltinScenes();
+
+        $scenes = $this->model
+            ->where([
+                ['site_id', '=', $this->site_id],
+                ['trigger_key', '=', $triggerKey],
+            ])
+            ->order('sort asc, scene_id asc')
+            ->select()
+            ->toArray();
+
+        $plans = [];
+        foreach ($scenes as $scene) {
+            $plans[] = $this->resolveDeviceScenePlan((string)$scene['scene_key'], (int)($payload['device_id'] ?? 0), $requireAuto, $scene);
         }
 
-        if ($this->hasSuccessfulAutoPrintLog($plan)) {
-            $message = '该设备已自动打印过，已跳过重复打印';
-            $this->recordPlanLog($plan, 0, $message);
-            return array_merge($plan, [
-                'success' => true,
-                'skipped' => true,
-                'message' => $message,
-            ]);
+        if (empty($plans)) {
+            $plans[] = $this->disabledPlan([
+                'scene_key' => '',
+                'scene_name' => $triggerKey,
+                'trigger_key' => $triggerKey,
+            ], '未配置可用打印场景');
         }
 
-        return $this->executeDevicePrintPlan($plan);
+        return $plans;
+    }
+
+    /**
+     * 根据场景标识解析打印计划
+     * @param string $sceneKey
+     * @param array $payload
+     * @param bool $requireAuto
+     * @return array
+     */
+    public function resolvePlanBySceneKey(string $sceneKey, array $payload = [], bool $requireAuto = false): array
+    {
+        return $this->resolveDeviceScenePlan($sceneKey, (int)($payload['device_id'] ?? 0), $requireAuto);
     }
 
     /**
@@ -203,10 +239,10 @@ class RecyclePrintSceneService extends BaseAdminService
      * @param bool $requireAuto
      * @return array
      */
-    public function resolveDeviceScenePlan(string $sceneKey, int $deviceId, bool $requireAuto = false): array
+    public function resolveDeviceScenePlan(string $sceneKey, int $deviceId, bool $requireAuto = false, array $sceneData = []): array
     {
         try {
-            $scene = $this->getInfo($sceneKey);
+            $scene = !empty($sceneData) ? $this->appendSceneMeta($sceneData) : $this->getInfo($sceneKey);
             if ((int)$scene['status'] !== 1) {
                 return $this->disabledPlan($scene, '打印场景未启用');
             }
@@ -250,8 +286,11 @@ class RecyclePrintSceneService extends BaseAdminService
                 'scene' => [
                     'scene_key' => $scene['scene_key'],
                     'scene_name' => $scene['scene_name'],
+                    'trigger_key' => $scene['trigger_key'] ?? '',
                     'trigger_name' => $scene['trigger_name'] ?? '',
                     'auto_print' => (int)$scene['auto_print'],
+                    'idempotency_scope' => $scene['idempotency_scope'] ?? 'site_scene_biz',
+                    'max_attempts' => (int)($scene['max_attempts'] ?? 3),
                 ],
                 'device' => [
                     'device_id' => (int)$deviceData['device_id'],
@@ -356,16 +395,32 @@ class RecyclePrintSceneService extends BaseAdminService
                 ->findOrEmpty();
 
             if (!$exists->isEmpty()) {
+                $builtin = RecyclePrintScene::sceneList()[$scene['scene_key']] ?? [];
+                $patch = [];
+                if (($exists['trigger_key'] ?? '') === '' && !empty($builtin['trigger_key'])) {
+                    $patch['trigger_key'] = $builtin['trigger_key'];
+                }
+                if (($exists['idempotency_scope'] ?? '') === '' && !empty($builtin['idempotency_scope'])) {
+                    $patch['idempotency_scope'] = $builtin['idempotency_scope'];
+                }
+                if (!empty($patch)) {
+                    $exists->save($patch);
+                }
                 continue;
             }
 
             $this->model->create([
                 'site_id' => $this->site_id,
                 'scene_key' => $scene['scene_key'],
+                'trigger_key' => $scene['trigger_key'] ?? '',
                 'scene_name' => $scene['scene_name'],
                 'biz_type' => $scene['biz_type'],
                 'template_type' => $scene['template_type'],
                 'auto_print' => $scene['auto_print'],
+                'idempotency_scope' => $scene['idempotency_scope'] ?? 'site_scene_biz',
+                'retry_enabled' => 1,
+                'max_attempts' => 3,
+                'condition_config' => '',
                 'template_id' => 0,
                 'printer_id' => 0,
                 'copies' => 1,
@@ -383,11 +438,16 @@ class RecyclePrintSceneService extends BaseAdminService
     private function appendSceneMeta(array $row): array
     {
         $builtin = RecyclePrintScene::sceneList()[$row['scene_key']] ?? [];
+        $row['trigger_key'] = $row['trigger_key'] ?? ($builtin['trigger_key'] ?? '');
         $row['trigger_name'] = $builtin['trigger_name'] ?? '';
         $row['description'] = $builtin['description'] ?? '';
         $row['template_type_name'] = $this->templateService->getTypeList()[$row['template_type']] ?? $row['template_type'];
         $row['auto_print_name'] = (int)$row['auto_print'] === 1 ? '自动打印' : '手动确认';
         $row['status_name'] = (int)$row['status'] === 1 ? '启用' : '停用';
+        $row['idempotency_scope'] = $row['idempotency_scope'] ?? ($builtin['idempotency_scope'] ?? 'site_scene_biz');
+        $row['retry_enabled'] = (int)($row['retry_enabled'] ?? 1);
+        $row['max_attempts'] = (int)($row['max_attempts'] ?? 3);
+        $row['idempotency_scope_name'] = $this->getIdempotencyScopeList()[$row['idempotency_scope']] ?? $row['idempotency_scope'];
 
         if (!empty($row['template_id'])) {
             try {
@@ -410,6 +470,21 @@ class RecyclePrintSceneService extends BaseAdminService
         return $row;
     }
 
+    public function getIdempotencyScopeList(): array
+    {
+        return [
+            'none' => '不限制重复打印',
+            'site_scene_biz' => '同一业务同一场景只自动打印一次',
+            'site_scene_device' => '同一设备同一场景只自动打印一次',
+            'site_scene_order' => '同一订单同一场景只自动打印一次',
+        ];
+    }
+
+    private function normalizeIdempotencyScope(string $scope): string
+    {
+        return array_key_exists($scope, $this->getIdempotencyScopeList()) ? $scope : 'site_scene_biz';
+    }
+
     /**
      * 返回未执行计划
      * @param array $scene
@@ -424,30 +499,14 @@ class RecyclePrintSceneService extends BaseAdminService
             'scene' => [
                 'scene_key' => $scene['scene_key'] ?? '',
                 'scene_name' => $scene['scene_name'] ?? '',
+                'trigger_key' => $scene['trigger_key'] ?? '',
             ],
         ];
     }
 
-    /**
-     * 判断当前设备在自动场景下是否已经成功打印过
-     * @param array $plan
-     * @return bool
-     */
-    private function hasSuccessfulAutoPrintLog(array $plan): bool
+    public function recordSkippedPlan(array $plan, string $message): void
     {
-        $sceneKey = (string)($plan['scene']['scene_key'] ?? '');
-        $deviceId = (int)($plan['device']['device_id'] ?? 0);
-
-        if ($sceneKey === '' || $deviceId <= 0) {
-            return false;
-        }
-
-        return RecyclePrintLog::where([
-            ['site_id', '=', $this->site_id],
-            ['scene_key', '=', $sceneKey],
-            ['device_id', '=', $deviceId],
-            ['status', '=', 1],
-        ])->count() > 0;
+        $this->recordPlanLog($plan, 0, $message);
     }
 
     /**

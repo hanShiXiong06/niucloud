@@ -15,7 +15,6 @@ import EditPage from '@/app/views/diy/components/edit-page.vue';
 import EditRecycleCategory from './components/edit-recycle-category.vue';
 import EditRecycleOrderOverview from './components/edit-recycle-order-overview.vue';
 import EditRecycleSendButton from './components/edit-recycle-send-button.vue';
-import EditRecycleSpiderQuotationList from './components/edit-recycle-spider-quotation-list.vue';
 
 const diyStore = useDiyStore();
 
@@ -108,11 +107,9 @@ const componentMap: Record<string, any> = {
   'edit-recycle-category': EditRecycleCategory,
   'edit-recycle-order-overview': EditRecycleOrderOverview,
   'edit-recycle-send-button': EditRecycleSendButton,
-  'edit-recycle-spider-quotation-list': EditRecycleSpiderQuotationList,
   EditRecycleCategory,
   EditRecycleOrderOverview,
-  EditRecycleSendButton,
-  EditRecycleSpiderQuotationList
+  EditRecycleSendButton
 };
 
 const diyEditComponent = computed(() => {
@@ -230,100 +227,6 @@ const recycleComponents = [
             top: 10,
             bottom: 10,
             both: 10
-          }
-        }
-      },
-      {
-        name: 'RecycleSpiderQuotationList',
-        title: '爬虫报价单',
-        icon: 'iconfont iconshangpinliebiaopc',
-        componentTitle: '爬虫报价单',
-        componentName: 'RecycleSpiderQuotationList',
-        componentType: 'EditRecycleSpiderQuotationList',
-        isDelete: false,
-        isDisabled: false,
-        allPages: true,
-        defaultDataList: {},
-        extra: {},
-        marginTop: 5,
-        paddingTop: 10,
-        paddingBottom: 10,
-        marginBottom: 5,
-        value: {
-          title: '实时报价',
-          subtitle: '按数据源同步展示回收报价',
-          showHeader: true,
-          actionText: '查看',
-          sourceId: 0,
-          limit: 6,
-          onlyHot: false,
-          showCategoryTabs: true,
-          categoryDefaultMode: 'first',
-          tabStyleType: 'pill',
-          showTabScrollCue: true,
-          stickyTabs: false,
-          stickyTabsOffsetMode: 'auto',
-          stickyTabsOffset: 0,
-          tabThemeColor: '#2563EB',
-          tabActiveBgColor: '',
-          tabInactiveBgColor: '',
-          tabActiveTextColor: '',
-          tabInactiveTextColor: '#475569',
-          tabHeight: 64,
-          tabRadius: 32,
-          tabFontSize: 26,
-          tabFontWeight: 600,
-          tabSidePadding: 18,
-          secondaryTabCustom: false,
-          secondaryTabStyleType: 'pill',
-          secondaryTabThemeColor: '#2563EB',
-          secondaryTabActiveBgColor: '',
-          secondaryTabInactiveBgColor: '',
-          secondaryTabActiveTextColor: '',
-          secondaryTabInactiveTextColor: '#475569',
-          secondaryTabHeight: 64,
-          secondaryTabRadius: 32,
-          secondaryTabFontSize: 26,
-          secondaryTabFontWeight: 600,
-          secondaryTabSidePadding: 18,
-          flatGroupMode: 'level2',
-          showGroupCount: true,
-          showRefresh: true,
-          displayStyle: 'list',
-          navRowCount: 4,
-          navImageSize: 40,
-          navAroundRadius: 20,
-          componentStartBgColor: '',
-          componentEndBgColor: '',
-          componentGradientAngle: 'to bottom',
-          componentBgUrl: '',
-          componentBgAlpha: 0,
-          topRounded: 0,
-          bottomRounded: 0,
-          titleColor: '#111827',
-          subtitleColor: '#6B7280',
-          buttonColor: '#2563EB',
-          showGroupTitle: true,
-          groupTitleColor: '#111827',
-          groupTitleBgColor: 'transparent',
-          groupCountColor: '#94A3B8',
-          groupTitleSize: 22,
-          groupTitleWeight: 500,
-          groupTitleAlign: 'left',
-          groupTitleRadius: 0,
-          groupTitlePaddingX: 0,
-          groupTitlePaddingY: 0,
-          showHotBadge: true,
-          hotBadgeImage: '',
-          hotBadgeSize: 38,
-          itemTitleColor: '#111827',
-          itemTitleSize: 28,
-          itemMetaColor: '#6B7280',
-          itemImageRadius: 20,
-          margin: {
-            top: 10,
-            bottom: 10,
-            both: 12
           }
         }
       }
