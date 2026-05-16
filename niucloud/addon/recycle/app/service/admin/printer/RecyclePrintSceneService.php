@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\recycle\app\service\admin\printer;
 
+use addon\recycle\app\model\printer\RecyclePrintLog;
 use addon\recycle\app\model\printer\RecyclePrintScene;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
@@ -180,6 +181,16 @@ class RecyclePrintSceneService extends BaseAdminService
         if (empty($plan['can_print'])) {
             $this->recordPlanLog($plan, 0, $plan['message'] ?? '打印计划不可用');
             return $plan;
+        }
+
+        if ($this->hasSuccessfulAutoPrintLog($plan)) {
+            $message = '该设备已自动打印过，已跳过重复打印';
+            $this->recordPlanLog($plan, 0, $message);
+            return array_merge($plan, [
+                'success' => true,
+                'skipped' => true,
+                'message' => $message,
+            ]);
         }
 
         return $this->executeDevicePrintPlan($plan);
@@ -415,6 +426,28 @@ class RecyclePrintSceneService extends BaseAdminService
                 'scene_name' => $scene['scene_name'] ?? '',
             ],
         ];
+    }
+
+    /**
+     * 判断当前设备在自动场景下是否已经成功打印过
+     * @param array $plan
+     * @return bool
+     */
+    private function hasSuccessfulAutoPrintLog(array $plan): bool
+    {
+        $sceneKey = (string)($plan['scene']['scene_key'] ?? '');
+        $deviceId = (int)($plan['device']['device_id'] ?? 0);
+
+        if ($sceneKey === '' || $deviceId <= 0) {
+            return false;
+        }
+
+        return RecyclePrintLog::where([
+            ['site_id', '=', $this->site_id],
+            ['scene_key', '=', $sceneKey],
+            ['device_id', '=', $deviceId],
+            ['status', '=', 1],
+        ])->count() > 0;
     }
 
     /**

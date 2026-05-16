@@ -143,6 +143,10 @@ class OrderSubmitConfigService
         if ($platformDeliveryProductName === '') {
             $platformDeliveryProductName = (string)($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '');
         }
+        $customerServiceType = (string)($customerService['type'] ?? $default['customer_service']['type']);
+        if (!in_array($customerServiceType, ['wechat', 'qrcode'], true)) {
+            $customerServiceType = $default['customer_service']['type'];
+        }
 
         $config = [
             'device_add_enabled' => !empty($data['device_add_enabled']) ? 1 : 0,
@@ -179,7 +183,7 @@ class OrderSubmitConfigService
             ],
             'customer_service' => [
                 'enabled' => !empty($customerService['enabled']) ? 1 : 0,
-                'type' => in_array(($customerService['type'] ?? 'wechat'), ['wechat', 'qrcode'], true) ? $customerService['type'] : 'wechat',
+                'type' => $customerServiceType,
                 'qrcode' => trim((string)($customerService['qrcode'] ?? '')),
                 'title' => mb_substr(trim((string)($customerService['title'] ?? $default['customer_service']['title'])), 0, 30),
                 'content' => mb_substr(trim((string)($customerService['content'] ?? $default['customer_service']['content'])), 0, 120),

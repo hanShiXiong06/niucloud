@@ -535,6 +535,13 @@ class RecycleDeviceService extends BaseAdminService
                 $updateData['info'] = $checkData['info'];
             }
 
+            $checkMeta = $this->extractCheckMeta($checkData);
+            foreach (['check_result', 'check_result_seller', 'check_result_buyer'] as $resultField) {
+                if (isset($updateData[$resultField])) {
+                    $updateData[$resultField] = $this->normalizeCheckResultText((string)$updateData[$resultField], $checkMeta);
+                }
+            }
+
             $device->save($updateData);
 
             // 记录日志
@@ -572,17 +579,16 @@ class RecycleDeviceService extends BaseAdminService
                 Log::record('【质检完成】触发事件异常: ' . $e->getMessage(), 'error');
             }
 
-            // 根据打印场景配置自动打印标签
+            // 根据打印场景配置自动打印标签。生产场景要求暂存质检数据后立即打印标签。
             try {
-                if ($action !== 'save_draft') {
-                    $printResult = (new RecyclePrintSceneService())->autoPrintAfterDeviceCheck($id);
-                    Log::record('【自动打印】质检完成场景执行结果: ' . json_encode([
-                        'device_id' => $id,
-                        'success' => $printResult['success'] ?? false,
-                        'can_print' => $printResult['can_print'] ?? false,
-                        'message' => $printResult['message'] ?? '',
-                    ], JSON_UNESCAPED_UNICODE), 'info');
-                }
+                $printResult = (new RecyclePrintSceneService())->autoPrintAfterDeviceCheck($id);
+                Log::record('【自动打印】质检' . ($action === 'save_draft' ? '暂存' : '完成') . '场景执行结果: ' . json_encode([
+                    'device_id' => $id,
+                    'action' => $action,
+                    'success' => $printResult['success'] ?? false,
+                    'can_print' => $printResult['can_print'] ?? false,
+                    'message' => $printResult['message'] ?? '',
+                ], JSON_UNESCAPED_UNICODE), 'info');
             } catch (\Exception $e) {
                 Log::record('【自动打印】异常: ' . $e->getMessage(), 'error');
             }
@@ -593,6 +599,82 @@ class RecycleDeviceService extends BaseAdminService
             Db::rollback();
             throw new CommonException($e->getMessage());
         }
+    }
+
+    /**
+     * 提取质检元数据
+     * @param array $checkData
+     * @return array
+     */
+    private function extractCheckMeta(array $checkData): array
+    {
+        $info = $checkData['info'] ?? [];
+        if (is_string($info)) {
+            $decoded = json_decode($info, true);
+            $info = is_array($decoded) ? $decoded : [];
+        }
+
+        $checkMeta = $info['check_meta'] ?? [];
+        if (is_string($checkMeta)) {
+            $decoded = json_decode($checkMeta, true);
+            $checkMeta = is_array($decoded) ? $decoded : [];
+        }
+
+        return is_array($checkMeta) ? $checkMeta : [];
+    }
+
+    /**
+     * 规范化质检结果文本：去重，并移除未开启锁项的自动生成文案
+     * @param string $text
+     * @param array $checkMeta
+     * @return string
+     */
+    private function normalizeCheckResultText(string $text, array $checkMeta = []): string
+    {
+        if ($text === '') {
+            return '';
+        }
+
+        $hasActivationLockMeta = array_key_exists('activation_lock', $checkMeta) || array_key_exists('activationLock', $checkMeta);
+        $hasMdmLockMeta = array_key_exists('mdm_lock', $checkMeta) || array_key_exists('mdmLock', $checkMeta);
+        $activationLockSelected = $this->truthyCheckMetaValue($checkMeta['activation_lock'] ?? $checkMeta['activationLock'] ?? false);
+        $mdmLockSelected = $this->truthyCheckMetaValue($checkMeta['mdm_lock'] ?? $checkMeta['mdmLock'] ?? false);
+        $items = preg_split('/[;\r\n]+/u', $text) ?: [];
+        $results = [];
+
+        foreach ($items as $item) {
+            $item = trim((string)$item);
+            if ($item === '') {
+                continue;
+            }
+            if ($hasActivationLockMeta && !$activationLockSelected && $item === '激活锁开启') {
+                continue;
+            }
+            if ($hasMdmLockMeta && !$mdmLockSelected && $item === '监管锁开启') {
+                continue;
+            }
+            if (!in_array($item, $results, true)) {
+                $results[] = $item;
+            }
+        }
+
+        return implode(";\n", $results);
+    }
+
+    /**
+     * 判断质检元数据中的布尔值
+     * @param mixed $value
+     * @return bool
+     */
+    private function truthyCheckMetaValue($value): bool
+    {
+        return $value === true
+            || $value === 1
+            || $value === '1'
+            || $value === 'true'
+            || $value === '开启'
+            || $value === '有锁'
+            || $value === 'On';
     }
 
     /**
