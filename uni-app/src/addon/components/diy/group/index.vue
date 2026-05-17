@@ -184,9 +184,9 @@
    import diyXiaoyuanOrderHall from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-order-hall/index.vue';
    import diyXiaoyuanPromoCard from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-promo-card/index.vue';
    import diyXiaoyuanSearch from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-search/index.vue';
-   import diyRecycleCategory from '@/addon/recycle/components/diy/recycle-category/index.vue';
-   import diyRecycleOrderOverview from '@/addon/recycle/components/diy/recycle-order-overview/index.vue';
-   import diyRecycleSendButton from '@/addon/recycle/components/diy/recycle-send-button/index.vue';
+   import diyRecycleCategory from '@/addon/hsx_recycle/components/diy/recycle-category/index.vue';
+   import diyRecycleOrderOverview from '@/addon/hsx_recycle/components/diy/recycle-order-overview/index.vue';
+   import diyRecycleSendButton from '@/addon/hsx_recycle/components/diy/recycle-send-button/index.vue';
    import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
    import diyRecycleSpiderQuotationList from '@/addon/recycle_quote_spider/components/diy/recycle-spider-quotation-list/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'

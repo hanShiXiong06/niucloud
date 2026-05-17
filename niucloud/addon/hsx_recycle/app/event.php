@@ -1,0 +1,52 @@
+<?php
+
+return [
+    'bind' => [
+
+    ],
+    'listen' => [
+       // 协议
+        'AgreementType' => [ 'addon\hsx_recycle\app\listener\AgreementType' ],
+        // 主题色
+        'ThemeColor' => [ 'addon\hsx_recycle\app\listener\diy\ThemeColorListener' ],
+        // 添加wapIndex的监听(添加到首页)
+        'WapIndex' => [ 'addon\hsx_recycle\app\listener\WapIndexListener' ],
+        // 添加DIY页面配置监听器
+        'DiyWapIndex' => [ 'addon\hsx_recycle\app\listener\diy\WapIndexListener' ],
+        // 底部导航
+        'BottomNavigation' => [ 'addon\hsx_recycle\app\listener\BottomNavigationListener' ],
+
+        //通知
+        'NoticeData' => [
+            // 签收通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderSign',
+            // 下单通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderAdd',
+            // 同意通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderAgree',
+            // 打款通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderPay',
+            // 订单完成奖励通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderReward',
+        ],
+        // 应用信息
+        'RecyclePromotion' => [ 'addon\hsx_recycle\app\listener\app\RecyclePromotionListener' ],
+        
+        // 设备质检完成事件
+        'AfterDeviceCheckComplete' => [ 'addon\hsx_recycle\app\listener\device\DeviceCheckCompleteListener' ],
+
+        // 快递回调事件。易速推送统一在此分发，后续 ERP、通知、财务流水可挂载扩展。
+        'RecycleExpressEvent' => [ 'addon\hsx_recycle\app\listener\express\RecycleExpressEventListener' ],
+        
+        // 微信转账场景
+        'GetWechatTransferTradeScene' => [ 'addon\hsx_recycle\app\listener\pay\RecycleTransferSceneListener' ],
+        
+        // 导出数据类型
+        'ExportDataType' => [ 'addon\hsx_recycle\app\listener\export\RecycleDeviceExportDataListener' ],
+        
+        // 导出数据
+        'ExportData' => [ 'addon\hsx_recycle\app\listener\export\RecycleDeviceExportListener' ],
+    ],
+    'subscribe' => [
+    ],
+];

@@ -59,8 +59,6 @@
     "vipcard.pages.service.list": "项目列表",
     "vipcard.pages.card.list": "卡项列表",
     "vipcard.pages.card.detail": "卡项详情",
-    "wj_books.pages.index": "旧书回收平台",
-    "wj_books.pages.home.index": "旧书回收平台",
     "shop.pages.goods.search": "搜索",
     "shop.pages.goods.cart": "购物车",
     "shop.pages.goods.collect": "商品收藏",
@@ -97,5 +95,7 @@
     "shop.pages.invoice.invoice_edit": "编辑发票信息",
     "shop.pages.invoice.invoice_order": "发票订单",
     "shop.pages.pay.index": "待支付",
-    "shop.pages.pay.result": ""
+    "shop.pages.pay.result": "",
+    "wj_books.pages.index": "旧书回收平台",
+    "wj_books.pages.home.index": "旧书回收平台"
 }

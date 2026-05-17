@@ -5,7 +5,7 @@
   "version": "0.0.1",
   "author": "hsx",
   "type": "addon",
-  "support_app": "recycle",
+  "support_app": "hsx_recycle",
   "compile":[],
   "support_version": "1.2.1"
 }
