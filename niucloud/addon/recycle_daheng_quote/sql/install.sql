@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_dataset` (
   PRIMARY KEY (`id`),
   KEY `idx_site_status_sort` (`site_id`,`status`,`sort`),
   KEY `idx_site_quotation` (`site_id`,`quotation_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价数据集';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DH速收报价数据集';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_model` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_model` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_dataset_goods` (`site_id`,`dataset_id`,`external_goods_id`),
   KEY `idx_dataset_status_sort` (`site_id`,`dataset_id`,`status`,`sort`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价型号';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DH速收报价型号';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_capacity` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_capacity` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_model_capacity` (`site_id`,`dataset_id`,`model_id`,`capacity_answer_id`),
   KEY `idx_dataset_model` (`site_id`,`dataset_id`,`model_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价容量';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DH速收报价容量';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_field` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_field` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_dataset_question_type` (`site_id`,`dataset_id`,`question_id`,`field_type`),
   KEY `idx_dataset_type_sort` (`site_id`,`dataset_id`,`field_type`,`sort`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价字段';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DH速收报价字段';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_price` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_price` (
   UNIQUE KEY `uk_dataset_model_capacity_field_date` (`site_id`,`dataset_id`,`model_id`,`capacity_id`,`field_id`,`price_date`),
   KEY `idx_dataset_current` (`site_id`,`dataset_id`,`is_current`),
   KEY `idx_model_capacity` (`site_id`,`model_id`,`capacity_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价价格';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DH速收报价价格';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_note` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_note` (
   PRIMARY KEY (`id`),
   KEY `idx_dataset_model_capacity` (`site_id`,`dataset_id`,`model_id`,`capacity_id`),
   KEY `idx_dataset_field` (`site_id`,`dataset_id`,`field_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价说明';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DH速收报价说明';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_sync_log` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -162,4 +162,4 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quotation_v2_sync_log` (
   KEY `idx_dataset_time` (`site_id`,`dataset_id`,`create_at`),
   KEY `idx_status` (`site_id`,`status`),
   KEY `idx_source` (`site_id`,`sync_source`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='大亨速收报价同步日志';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DH速收报价同步日志';

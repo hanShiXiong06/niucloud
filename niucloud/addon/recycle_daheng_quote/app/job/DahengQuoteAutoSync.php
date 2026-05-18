@@ -14,9 +14,9 @@ class DahengQuoteAutoSync extends BaseJob
         try {
             $siteId = !empty($params['site_id']) ? (int)$params['site_id'] : null;
             $result = (new SyncService())->syncDueDatasets($siteId);
-            Log::info('大亨速收报价自动同步完成', $result);
+            Log::info('DH速收报价自动同步完成', $result);
         } catch (\Throwable $e) {
-            Log::error('大亨速收报价自动同步失败：' . $e->getMessage());
+            Log::error('DH速收报价自动同步失败：' . $e->getMessage());
         }
     }
 }

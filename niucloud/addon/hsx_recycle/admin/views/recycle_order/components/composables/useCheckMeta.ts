@@ -6,11 +6,11 @@ export interface DictOptionItem {
 }
 
 export interface CheckOptionsGroup {
-  screen: DictOptionItem[]      // 外屏规格 (recycle_display)
-  indisplay: DictOptionItem[]   // 内屏规格 (recycle_indisplay)
-  appearance: DictOptionItem[]  // 中框规格 (recycle_appearance)
-  function: DictOptionItem[]    // 功能规格 (recycle_function)
-  fix: DictOptionItem[]         // 维修规格 (recycle_fix)
+  screen: DictOptionItem[]      // 外屏规格
+  indisplay: DictOptionItem[]   // 内屏规格
+  appearance: DictOptionItem[]  // 中框规格
+  function: DictOptionItem[]    // 功能规格
+  fix: DictOptionItem[]         // 维修规格
 }
 
 export interface CheckMetaPayload {

@@ -1,9 +1,9 @@
 <?php
 return [
     [
-        'menu_name' => '大亨速收报价',
+        'menu_name' => 'DH速收报价',
         'menu_key' => 'recycle_daheng_quote',
-        'menu_short_name' => '大亨报价',
+        'menu_short_name' => 'DH报价',
         'parent_select_key' => '',
         'parent_key' => 'recycle_category_manage',
         'menu_type' => '0',
@@ -17,7 +17,7 @@ return [
         'is_show' => '0',
     ],
     [
-        'menu_name' => '大亨报价工作台',
+        'menu_name' => 'DH报价工作台',
         'menu_key' => 'recycle_daheng_quote_workbench',
         'menu_short_name' => '报价工作台',
         'parent_select_key' => '',
@@ -95,7 +95,7 @@ return [
         ],
     ],
     [
-        'menu_name' => '大亨爬虫配置',
+        'menu_name' => 'DH爬虫配置',
         'menu_key' => 'recycle_daheng_quote_config',
         'menu_short_name' => '爬虫配置',
         'parent_select_key' => '',

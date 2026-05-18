@@ -6,7 +6,7 @@ use app\model\sys\SysSchedule;
 use think\facade\Db;
 
 /**
- * 大亨速收报价插件
+ * DH速收报价插件
  */
 class Addon
 {

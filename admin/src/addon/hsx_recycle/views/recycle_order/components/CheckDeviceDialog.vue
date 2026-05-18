@@ -219,7 +219,6 @@ import {
 import { queryDeviceByService } from '@/addon/hsx_recycle/api/device_query_api'
 import { getDeviceQueryConfigList } from '@/addon/hsx_recycle/api/device_query_config'
 import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
-import { useCheckDeviceDict } from '@/addon/hsx_recycle/hooks/useCheckDeviceDict'
 import {
   normalizeInfo,
   useCheckMeta,
@@ -256,7 +255,6 @@ const props = defineProps<{ visible: boolean; device: DeviceInfo }>()
 
 const emit = defineEmits(['update:visible', 'confirm', 'cancel', 'save-draft'])
 
-const dictOptions = useCheckDeviceDict()
 const checkSchemaLoading = ref(false)
 const checkTemplateInfo = ref<any>(null)
 const checkTemplateGroups = ref<any[]>([])
@@ -353,7 +351,13 @@ const deviceSummaryFields = computed<CheckTemplateField[]>(() => {
 })
 
 const checkDictOptions = computed<CheckOptionsGroup>(() => {
-  const options = { ...(dictOptions.options.value as CheckOptionsGroup) }
+  const options: CheckOptionsGroup = {
+    screen: [],
+    indisplay: [],
+    appearance: [],
+    function: [],
+    fix: []
+  }
   Object.entries(schemaFieldKeyMap).forEach(([fieldKey, optionKey]) => {
     const field = fieldConfigByKey.value[fieldKey]
     if (field?.options?.length) {
@@ -825,7 +829,6 @@ onMounted(async () => {
   updateDeviceMode()
   window.addEventListener('resize', updateDeviceMode)
   initializeFormFromDevice(props.device)
-  await dictOptions.loadDictionary()
   if (dialogVisible.value) await loadCheckTemplateSchema()
   await loadDeviceQueryActions()
 })

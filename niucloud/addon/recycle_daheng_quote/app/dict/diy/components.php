@@ -2,10 +2,10 @@
 
 return [
     'RECYCLE_DAHENG_QUOTE_COMPONENT' => [
-        'title' => '大亨速收报价',
+        'title' => 'DH速收报价',
         'list' => [
             'RecycleQuotationList' => [
-                'title' => '大亨报价单',
+                'title' => 'DH报价单',
                 'icon' => 'iconfont iconshangpinliebiaopc',
                 'path' => 'edit-recycle-quotation-list',
                 'support_page' => [],

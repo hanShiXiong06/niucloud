@@ -829,7 +829,7 @@ function openQuotation(item: QuoteSpiderItem) {
         hotParams.push(`hot_badge_image=${encodeURIComponent(hotBadgeImage.value)}`)
     }
     redirect({
-        url: `/addon/hsx_recycle/pages/price/show_price?source=spider&item_id=${item.id}&title=${titleText}&${hotParams.join('&')}`
+        url: `/addon/recycle_quote_spider/pages/price/show_price?source=spider&item_id=${item.id}&title=${titleText}&${hotParams.join('&')}`
     })
 }
 

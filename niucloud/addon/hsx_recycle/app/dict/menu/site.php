@@ -37,7 +37,7 @@ return [
                 'menu_short_name' => '报价分类',
                 'parent_select_key' => '',
                 'menu_type' => '0',
-                'icon' => 'recycle recycle-fenlei',
+                'icon' => 'nc-iconfont nc-icon-liebiaoV6xx',
                 'api_url' => '',
                 'router_path' => '',
                 'view_path' => '',

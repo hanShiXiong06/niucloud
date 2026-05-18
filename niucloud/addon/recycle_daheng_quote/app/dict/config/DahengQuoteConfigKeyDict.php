@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle_daheng_quote\app\dict\config;
 
 /**
- * 大亨速收报价插件配置键
+ * DH速收报价插件配置键
  */
 class DahengQuoteConfigKeyDict
 {

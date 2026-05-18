@@ -230,7 +230,7 @@ function openQuotation(item: QuotationV2Type) {
     if (diyStore.mode === 'decorate') return;
     const titleText = encodeURIComponent(item.title || item.dataset_name || item.price_name || '报价查询');
     redirect({
-        url: `/addon/hsx_recycle/pages/price/show_price?source=v2&dataset_id=${item.dataset_id}&quotation_id=${item.quotation_id}&title=${titleText}`
+        url: `/addon/recycle_daheng_quote/pages/price/show_price?source=v2&dataset_id=${item.dataset_id}&quotation_id=${item.quotation_id}&title=${titleText}`
     });
 }
 

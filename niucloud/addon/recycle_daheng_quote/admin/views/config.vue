@@ -4,7 +4,7 @@
             <div class="page-head">
                 <div>
                     <div class="text-page-title">爬虫配置</div>
-                    <div class="page-desc">配置大亨速收报价同步需要的公共请求参数。报价源、价格策略和同步操作在报价工作台维护。</div>
+                    <div class="page-desc">配置DH速收报价同步需要的公共请求参数。报价源、价格策略和同步操作在报价工作台维护。</div>
                 </div>
                 <div class="head-actions">
                     <el-button :loading="loading" @click="loadConfig">刷新</el-button>

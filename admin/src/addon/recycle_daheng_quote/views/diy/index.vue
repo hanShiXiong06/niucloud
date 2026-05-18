@@ -25,13 +25,13 @@ const diyEditComponent = computed(() => {
 const dahengQuoteComponents = [
   {
     type: 'recycle_daheng_quote',
-    name: '大亨速收报价',
+    name: 'DH速收报价',
     components: [
       {
         name: 'RecycleQuotationList',
-        title: '大亨报价单',
+        title: 'DH报价单',
         icon: 'iconfont iconshangpinliebiaopc',
-        componentTitle: '大亨报价单',
+        componentTitle: 'DH报价单',
         componentName: 'RecycleQuotationList',
         componentType: 'EditRecycleQuotationList',
         isDelete: false,
