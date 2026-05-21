@@ -72,6 +72,10 @@ class DeviceQueryConfigController extends BaseAdminController
             ['enabled', 1],
             ['show_in_check', 0],
             ['result_handler', 'generic'],
+            ['mapping_channel_key', ''],
+            ['mapping_endpoint_type', ''],
+            ['mapping_endpoint_value', ''],
+            ['mapping_query_param', ''],
         ]);
         $id = (new DeviceQueryConfigService())->add($data);
         return success('ADD_SUCCESS', ['id' => $id]);
@@ -94,6 +98,10 @@ class DeviceQueryConfigController extends BaseAdminController
             ['enabled', 1],
             ['show_in_check', 0],
             ['result_handler', 'generic'],
+            ['mapping_channel_key', ''],
+            ['mapping_endpoint_type', ''],
+            ['mapping_endpoint_value', ''],
+            ['mapping_query_param', ''],
         ]);
         (new DeviceQueryConfigService())->edit($id, $data);
         return success('EDIT_SUCCESS');

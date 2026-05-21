@@ -322,6 +322,7 @@ class DeviceQueryConfigService extends BaseAdminService
     {
         $config = $this->coreConfigService->getConfig($this->site_id, false);
         $services = $config['services'] ?? [];
+        $mappings = $config['mappings'] ?? [];
         $serviceCode = trim((string)($data['code'] ?? ''));
         if ($serviceCode === '') {
             throw new CommonException('请填写查询项编码');
@@ -354,8 +355,95 @@ class DeviceQueryConfigService extends BaseAdminService
         }
 
         $config['services'] = array_values($services);
+        $config['mappings'] = $this->syncServiceMapping($mappings, array_merge($record, [
+            'mapping_channel_key' => (string)($data['mapping_channel_key'] ?? ''),
+            'mapping_endpoint_type' => (string)($data['mapping_endpoint_type'] ?? ''),
+            'mapping_endpoint_value' => (string)($data['mapping_endpoint_value'] ?? ''),
+            'mapping_query_param' => (string)($data['mapping_query_param'] ?? ''),
+        ]));
         $this->coreConfigService->setConfig($this->site_id, $config);
 
         return true;
+    }
+
+    private function syncServiceMapping(array $mappings, array $service): array
+    {
+        $serviceCode = (string)($service['code'] ?? '');
+        if ($serviceCode === '') {
+            return array_values($mappings);
+        }
+
+        $mappingChannelKey = trim((string)($service['mapping_channel_key'] ?? ''));
+        $mappingEndpointType = trim((string)($service['mapping_endpoint_type'] ?? ''));
+        $mappingEndpointValue = trim((string)($service['mapping_endpoint_value'] ?? ''));
+        $mappingQueryParam = trim((string)($service['mapping_query_param'] ?? ''));
+        $serviceQueryType = trim((string)($service['query_type'] ?? ''));
+
+        foreach ($mappings as $index => $mapping) {
+            if (!is_array($mapping) || (string)($mapping['service_code'] ?? '') !== $serviceCode) {
+                continue;
+            }
+
+            $shouldUpdate = false;
+            if ($mappingChannelKey !== '' && $mappingChannelKey === (string)($mapping['channel_key'] ?? '')) {
+                $shouldUpdate = true;
+            }
+            if ($mappingEndpointValue !== '' && $mappingEndpointValue === (string)($mapping['endpoint_value'] ?? '')) {
+                $shouldUpdate = true;
+            }
+            if ($mappingChannelKey === '' && $mappingEndpointValue === '') {
+                $shouldUpdate = true;
+            }
+
+            if (!$shouldUpdate) {
+                continue;
+            }
+
+            if ($mappingChannelKey !== '') {
+                $mappings[$index]['channel_key'] = $mappingChannelKey;
+            }
+            if ($mappingEndpointType !== '') {
+                $mappings[$index]['endpoint_type'] = $mappingEndpointType;
+            }
+            if ($mappingEndpointValue !== '') {
+                $mappings[$index]['endpoint_value'] = $mappingEndpointValue;
+            }
+            if ($mappingQueryParam !== '') {
+                $mappings[$index]['query_param'] = $mappingQueryParam;
+            } elseif ($serviceQueryType !== '') {
+                $mappings[$index]['query_param'] = $serviceQueryType;
+            }
+        }
+
+        if ($mappingChannelKey !== '' && $mappingEndpointValue !== '') {
+            $exists = false;
+            foreach ($mappings as $mapping) {
+                if (
+                    (string)($mapping['service_code'] ?? '') === $serviceCode
+                    && (string)($mapping['channel_key'] ?? '') === $mappingChannelKey
+                    && (string)($mapping['endpoint_value'] ?? '') === $mappingEndpointValue
+                ) {
+                    $exists = true;
+                    break;
+                }
+            }
+
+            if (!$exists) {
+                $mappings[] = [
+                    'service_code' => $serviceCode,
+                    'channel_key' => $mappingChannelKey,
+                    'enabled' => 1,
+                    'endpoint_type' => $mappingEndpointType !== '' ? $mappingEndpointType : 'path',
+                    'endpoint_value' => $mappingEndpointValue,
+                    'query_param' => $mappingQueryParam !== '' ? $mappingQueryParam : $serviceQueryType,
+                    'cost_price' => (float)($service['cost_price'] ?? 0),
+                    'retry_on' => [410, 502, 503],
+                    'switch_on_404' => 0,
+                    'switch_on_no_data' => 0,
+                ];
+            }
+        }
+
+        return array_values($mappings);
     }
 }

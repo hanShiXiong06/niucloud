@@ -143,8 +143,10 @@ class DeviceQueryConfigService
     private function defaultMappings(): array
     {
         $priceMap = [];
+        $queryTypeMap = [];
         foreach ($this->catalog->defaultServices() as $service) {
             $priceMap[$service['code']] = (float)($service['cost_price'] ?? 0);
+            $queryTypeMap[$service['code']] = (string)($service['query_type'] ?? '');
         }
 
         $mappings = [];
@@ -155,7 +157,7 @@ class DeviceQueryConfigService
                 'enabled' => 1,
                 'endpoint_type' => 'path',
                 'endpoint_value' => $endpoint,
-                'query_param' => str_starts_with($endpoint, '/apple/') ? 'sn' : $this->inferQueryParam($endpoint),
+                'query_param' => $this->resolveQueryParam($queryTypeMap[$serviceCode] ?? '', $endpoint),
                 'cost_price' => $priceMap[$serviceCode] ?? 0,
                 'retry_on' => [410, 502, 503],
                 'switch_on_404' => 0,
@@ -287,10 +289,30 @@ class DeviceQueryConfigService
             $mapping['retry_on'] = is_array($mapping['retry_on'] ?? null) ? $mapping['retry_on'] : [410, 502, 503];
             $mapping['switch_on_404'] = (int)(bool)($mapping['switch_on_404'] ?? 0);
             $mapping['switch_on_no_data'] = (int)(bool)($mapping['switch_on_no_data'] ?? 0);
+            $mapping['query_param'] = $this->resolveQueryParam(
+                (string)($mapping['query_param'] ?? ''),
+                (string)($mapping['endpoint_value'] ?? ''),
+                (string)($service['query_type'] ?? '')
+            );
             $result[] = $mapping;
         }
 
         return $result;
+    }
+
+    private function resolveQueryParam(string $mappingQueryParam, string $endpoint, string $serviceQueryType = ''): string
+    {
+        $mappingQueryParam = trim($mappingQueryParam);
+        if ($mappingQueryParam !== '') {
+            return $mappingQueryParam;
+        }
+
+        $serviceQueryType = trim($serviceQueryType);
+        if ($serviceQueryType !== '') {
+            return $serviceQueryType;
+        }
+
+        return $this->inferQueryParam($endpoint);
     }
 
     private function maskSecret(array $config): array
