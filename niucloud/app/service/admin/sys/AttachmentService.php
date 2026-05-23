@@ -136,7 +136,11 @@ class AttachmentService extends BaseAdminService
         }
         return $this->getPageList($this->model, $where, 'att_id,path,real_name,att_type,url', 'att_id desc', each:function($item, $key)
     {
-        $item[ 'thumb' ] = get_thumb_images($this->site_id, $item[ 'url' ], FileDict::SMALL);
+        if ($item['att_type'] == 'image') {
+            $item[ 'thumb' ] = get_thumb_images($this->site_id, $item[ 'url' ], FileDict::SMALL);
+        } else {
+            $item[ 'thumb' ] = $item[ 'url' ];
+        }
     });
     }
 
@@ -249,46 +253,6 @@ class AttachmentService extends BaseAdminService
             $where[] = [ 'name', 'like', '%' . $this->model->handelSpecialCharacter($data[ 'name' ]) . '%' ];
         }
         return SysAttachmentCategory::where($where)->field('id,name,type')->order('id desc')->select()->toArray();
-    }
-
-    /**
-     * 上传Base64图片
-     * @param string $content
-     * @param int $cate_id
-     * @return array
-     * @throws \Exception
-     */
-    public function uploadBase64Image(string $content, int $cate_id = 0)
-    {
-        if (empty($content)) {
-            throw new AdminException('图片内容不能为空');
-        }
-
-        // 使用CoreBase64Service上传图片
-        $base64_service = new \app\service\core\upload\CoreBase64Service(true);
-        $file_dir = 'attachment/' . date('Ymd');
-
-        try {
-            $result = $base64_service->image($content, $this->site_id, $file_dir);
-
-            // 保存附件记录
-            $attachment_data = [
-                'site_id' => $this->site_id,
-                'cate_id' => $cate_id,
-                'url' => $result['url'],
-                'path' => $result['url'],
-                'real_name' => 'base64_upload_' . time() . '.jpg',
-                'att_type' => FileDict::IMAGE,
-                'create_time' => time(),
-                'update_time' => time()
-            ];
-
-            $this->model->create($attachment_data);
-
-            return $result;
-        } catch (\Exception $e) {
-            throw new AdminException($e->getMessage());
-        }
     }
 
 }

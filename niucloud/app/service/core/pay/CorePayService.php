@@ -329,12 +329,10 @@ class CorePayService extends BaseCoreService
         if (!is_array($event_result)) {
             $event_result = [];
         }
-
         // 过滤掉 false/null 等无效值，只保留有效的数组元素
         $filtered = array_values(array_filter($event_result, function($item) {
             return is_array($item) && !empty($item);
         }));
-
         $data = !empty($filtered) ? $filtered[0] : [];
         if (empty($data)) throw new PayException('PAY_NOT_FOUND_TRADE');//找不到可支付的交易
 

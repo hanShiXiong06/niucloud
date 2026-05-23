@@ -1,13 +1,13 @@
 <template>
     <view class="ns-navbar-wrap" v-if="diyStore.mode !='decorate' && topStatusBarData" :class="topStatusBarData.style">
-        <view class="u-navbar z-100" :class="{'fixed': isFixed, 'absolute': !isFixed}" :style="navbarStyle">
+        <view class="u-navbar z-100" :class="{'fixed': props.scrollBool != -1, 'absolute': props.scrollBool == -1}" :style="{ backgroundColor: bgColor}">
             <view class="navbar-inner" :style="{ width: '100%', height: placeholderHeight + 'px' }">
                 <view v-if="topStatusBarData.style == 'style-1'" class="content-wrap" :class="[topStatusBarData.textAlign]" :style="navbarInnerStyle">
-                    <view v-if="isBackShow" class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :class="{'!text-transparent': !isBackShow}" :style="{ color: titleTextColor }" @tap="goBack"></view>
+                    <view v-if="isBackShow" class="back-wrap nc-iconfont nc-icon-zuoV6xx" :class="{'!text-transparent': !isBackShow}" :style="{ color: titleTextColor }" @tap="goBack"></view>
                     <view class="title-wrap" :style="styleOneFontSize">{{ data.title }}</view>
                 </view>
                 <view v-if="topStatusBarData.style == 'style-2'" class="content-wrap" :style="navbarInnerStyle" @click="diyStore.toRedirect(topStatusBarData.link)">
-                    <view class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" :class="{'!text-transparent': !isBackShow}" @tap="goBack"></view>
+                    <view class="back-wrap nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" :class="{'!text-transparent': !isBackShow}" @tap="goBack"></view>
                     <view class="title-wrap" :style="{ color: topStatusBarData.textColor }">
                         <view>
                             <image :src="img(topStatusBarData.imgUrl)" mode="heightFix"/>
@@ -17,7 +17,7 @@
                 </view>
 
                 <view v-if="topStatusBarData.style == 'style-3'" :style="navbarInnerStyle" class="content-wrap">
-                    <view v-if="isBackShow" class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" @tap="goBack" :class="{'!text-transparent': !isBackShow}"></view>
+                    <view v-if="isBackShow" class="back-wrap nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" @tap="goBack" :class="{'!text-transparent': !isBackShow}"></view>
                     <view class="title-wrap" @click="diyStore.toRedirect(topStatusBarData.link)">
                         <image :src="img(topStatusBarData.imgUrl)" mode="heightFix"/>
                     </view>
@@ -29,7 +29,7 @@
                 </view>
 
                 <view v-if="topStatusBarData.style == 'style-4'" :style="navbarInnerStyle" class="content-wrap">
-                    <view class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" @tap="goBack" :class="{'!text-transparent': !isBackShow}"></view>
+                    <view class="back-wrap nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" @tap="goBack" :class="{'!text-transparent': !isBackShow}"></view>
                     <text class="nc-iconfont nc-icon-dizhiguanliV6xx text-[28rpx]" :style="{ color: topStatusBarData.textColor }"></text>
                     <view class="title-wrap" @click.stop="locationVal.reposition()" :style="{ color: topStatusBarData.textColor }" v-if="systemStore.diyAddressInfo">{{ systemStore.diyAddressInfo.community }}</view>
                     <view class="title-wrap" @click.stop="locationVal.reposition()" :style="{ color: topStatusBarData.textColor }" v-else>{{ systemStore.defaultPositionAddress }}</view>
@@ -82,10 +82,6 @@ const props = defineProps({
     isFill: {
         type: Boolean,
         default: true
-    },
-    fixed: {
-        type: Boolean,
-        default: false
     }
 })
 
@@ -108,14 +104,7 @@ const topStatusBarData = computed(() => {
     if (props.data && props.data.topStatusBar) return props.data.topStatusBar;
 });
 
-const isFixed = computed(() => {
-    return props.fixed || props.scrollBool != -1;
-});
-
 // 导航栏内部盒子的样式
-const NAVBAR_BOTTOM_GAP = 8;
-const DEFAULT_NAVBAR_CONTENT_HEIGHT = 44;
-
 const navbarInnerStyle = computed(() => {
     let style = '';
     if (isBackShow) {
@@ -131,13 +120,11 @@ const navbarInnerStyle = computed(() => {
     // #ifdef MP
     // 导航栏宽度，如果在小程序下，导航栏宽度为胶囊的左边到屏幕左边的距离
     style += 'height:' + systemStore.menuButtonInfo.height + 'px;';
-    style += 'top:' + systemStore.menuButtonInfo.top + 'px;';
-    style += 'padding-top: 0;';
-    style += 'padding-bottom: 0;';
+    style += 'padding-top:' + systemStore.menuButtonInfo.top + 'px;';
+    style += 'padding-bottom: 8px;';
     // #endif
     // #ifdef APP-PLUS
-    style += 'top:' + systemStore.systemInfo.statusBarHeight + 'px;';
-    style += 'padding-top: 0;';
+     style += 'padding-top:' + systemStore.systemInfo.statusBarHeight + 'px;';
     // #endif
     return style;
 })
@@ -185,10 +172,6 @@ const bgColor = computed(() => {
         color = topStatusBarData.value.bgColor;
     }
     return color;
-})
-
-const navbarStyle = computed(() => {
-    return { background: bgColor.value };
 })
 
 /******************************* 存储滚动值-start ***********************/
@@ -251,35 +234,20 @@ const capsuleWidth = computed(() => {
 // 导航栏塌陷的高度
 const placeholderHeight = ref(0);
 const instance = getCurrentInstance();
-const getSafeNavbarHeight = () => {
-    // #ifdef MP
-    const menuButton = systemStore.menuButtonInfo || {};
-    const capsuleHeight = Number(menuButton.height || DEFAULT_NAVBAR_CONTENT_HEIGHT);
-    const capsuleTop = Number(menuButton.top || systemStore.systemInfo?.statusBarHeight || 0);
-    return capsuleTop + capsuleHeight + NAVBAR_BOTTOM_GAP;
-    // #endif
-
-    // #ifdef APP-PLUS
-    return Number(systemStore.systemInfo?.statusBarHeight || 0) + DEFAULT_NAVBAR_CONTENT_HEIGHT;
-    // #endif
-
-    return DEFAULT_NAVBAR_CONTENT_HEIGHT;
-}
-const setPlaceholderHeight = (height: number) => {
-    placeholderHeight.value = Math.max(getSafeNavbarHeight(), Number(height || 0));
-    systemStore.setTopTabbar({ height: placeholderHeight.value })
-    diyStore.$patch((state) => {
-        state.topTabarHeight = placeholderHeight.value
-    })
-}
 // #ifdef MP
-setPlaceholderHeight(getSafeNavbarHeight());
+let statusBarHeight = systemStore.menuButtonInfo.height + systemStore.menuButtonInfo.top + 8;
+placeholderHeight.value = statusBarHeight || 0;
+systemStore.setTopTabbar({ height: placeholderHeight.value })
 // #endif
 const navbarPlaceholderHeight = () => {
     nextTick(() => {
         const query = uni.createSelectorQuery().in(instance);
         query.select('.ns-navbar-wrap .u-navbar .content-wrap').boundingClientRect(data => {
-            setPlaceholderHeight(data ? data.height : 0);
+            placeholderHeight.value = data ? data.height : 0;
+            systemStore.setTopTabbar({ height: placeholderHeight.value })
+            diyStore.$patch((state) => {
+                state.topTabarHeight = placeholderHeight.value
+            })
         }).exec();
     })
 }
@@ -330,14 +298,6 @@ defineExpose({
     z-index: 991;
 }
 
-.u-navbar.fixed {
-    position: fixed;
-}
-
-.u-navbar.absolute {
-    position: absolute;
-}
-
 .navbar-inner {
     display: flex;
     justify-content: space-between;
@@ -352,6 +312,8 @@ defineExpose({
 .back-wrap {
     padding-right: 10rpx;
     line-height: 1;
+    margin-left: -16rpx;
+    font-size: 26rpx;
 
     .iconfont {
         font-size: 40rpx;
@@ -370,7 +332,6 @@ defineExpose({
     height: 60rpx;
     text-align: center;
     flex-shrink: 0;
-    box-sizing: border-box;
 }
 
 .title-wrap {

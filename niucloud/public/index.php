@@ -11,9 +11,6 @@
 
 // [ 应用入口文件 ]
 namespace think;
-
-//
-
 if (PHP_VERSION_ID < 80000)
     die('require PHP > 8.0.0 !');
 require __DIR__ . '/../vendor/autoload.php';
