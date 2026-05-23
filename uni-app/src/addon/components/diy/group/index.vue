@@ -123,30 +123,6 @@
                 <template v-if="component.componentName == 'Text'">
                    <diy-text ref="diyTextRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.Text" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'XiaoyuanBanner'">
-                   <diy-xiaoyuan-banner ref="diyXiaoyuanBannerRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanBanner" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanCommunity'">
-                   <diy-xiaoyuan-community ref="diyXiaoyuanCommunityRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanCommunity" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanHeader'">
-                   <diy-xiaoyuan-header ref="diyXiaoyuanHeaderRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanHeader" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanMenuGrid'">
-                   <diy-xiaoyuan-menu-grid ref="diyXiaoyuanMenuGridRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanMenuGrid" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanNotice'">
-                   <diy-xiaoyuan-notice ref="diyXiaoyuanNoticeRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanNotice" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanOrderHall'">
-                   <diy-xiaoyuan-order-hall ref="diyXiaoyuanOrderHallRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanOrderHall" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanPromoCard'">
-                   <diy-xiaoyuan-promo-card ref="diyXiaoyuanPromoCardRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanPromoCard" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'XiaoyuanSearch'">
-                   <diy-xiaoyuan-search ref="diyXiaoyuanSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.XiaoyuanSearch" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
                 <template v-if="component.componentName == 'RecycleCategory'">
                    <diy-recycle-category ref="diyRecycleCategoryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleCategory" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -176,14 +152,6 @@
     </view>
 </template>
 <script lang="ts" setup>
-   import diyXiaoyuanBanner from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-banner/index.vue';
-   import diyXiaoyuanCommunity from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-community/index.vue';
-   import diyXiaoyuanHeader from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-header/index.vue';
-   import diyXiaoyuanMenuGrid from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-menu-grid/index.vue';
-   import diyXiaoyuanNotice from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-notice/index.vue';
-   import diyXiaoyuanOrderHall from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-order-hall/index.vue';
-   import diyXiaoyuanPromoCard from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-promo-card/index.vue';
-   import diyXiaoyuanSearch from '@/addon/sd_xiaoyuan/components/diy/xiaoyuan-search/index.vue';
    import diyRecycleCategory from '@/addon/hsx_recycle/components/diy/recycle-category/index.vue';
    import diyRecycleOrderOverview from '@/addon/hsx_recycle/components/diy/recycle-order-overview/index.vue';
    import diyRecycleSendButton from '@/addon/hsx_recycle/components/diy/recycle-send-button/index.vue';

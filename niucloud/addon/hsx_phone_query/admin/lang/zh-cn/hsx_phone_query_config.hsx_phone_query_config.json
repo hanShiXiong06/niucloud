@@ -1,0 +1,13 @@
+{
+      "id":"主键",
+      "idPlaceholder":"请输入主键",
+      "appid":"appid",
+      "appidPlaceholder":"请输入appid",
+      "secret":"密钥",
+      "secretPlaceholder":"请输入密钥",
+      "addHsxPhoneQueryConfig":"添加配置信息",
+      "updateHsxPhoneQueryConfig":"编辑配置信息",
+      "hsxPhoneQueryConfigDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}

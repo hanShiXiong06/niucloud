@@ -467,6 +467,7 @@ class ImagickDriver extends Driver implements DriverInterface
                 break;
             case 'filled_rectangle':
             case 'filledRectangle':
+                $draw->setFillColor($color);
                 $draw->rectangle($x1, $y1, $x2, $y2);
                 break;
             default:

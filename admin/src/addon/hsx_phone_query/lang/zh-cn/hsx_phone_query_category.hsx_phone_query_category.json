@@ -1,0 +1,15 @@
+{
+      "id":"",
+      "idPlaceholder":"请输入",
+      "typeId":"分类id",
+      "typeIdPlaceholder":"请输入分类id",
+      "name":"分类名称",
+      "namePlaceholder":"请输入分类名称",
+      "price":"价格",
+      "pricePlaceholder":"请输入价格",
+      "addHsxPhoneQueryCategory":"添加分类",
+      "updateHsxPhoneQueryCategory":"编辑分类",
+      "hsxPhoneQueryCategoryDeleteTips":"确定要删除该数据吗？",
+      "startDate":"请选择开始时间",
+      "endDate":"请选择结束时间"
+}
