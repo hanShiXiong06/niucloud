@@ -615,6 +615,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'system_version' => 'iOS 17.3.1',
             'warranty_info' => '2025-12-31',
             'battery' => '100',
+            'battery_num' => '10',
+            'battery_cycle' => '10',
 
             // 设备序号信息
             'device_index' => '1',
@@ -626,6 +628,10 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'check_result' => '外观良好功能正常电池健康度85%屏幕无划痕摄像头清晰充电接口正常',
             'check_result_seller' => '外观良好功能正常',
             'check_result_buyer' => '电池健康度85%',
+            'check_info' => '外观良好功能正常',
+            'inspection_info' => '外观良好功能正常',
+            'check_summary' => '外观良好功能正常',
+            'inspection_summary' => '外观良好功能正常',
             'check_staff' => $staff_name,
             'check_staff_name' => $staff_name,
             'check_time' => date('Y-m-d H:i:s'),
@@ -714,6 +720,105 @@ class RecyclePrinterTemplateService extends BaseAdminService
     }
 
     /**
+     * 解析设备 info JSON，兼容模型已转数组和数据库原始字符串两种状态。
+     * @param mixed $info
+     * @return array
+     */
+    private function normalizeDeviceInfo($info): array
+    {
+        if (is_array($info)) {
+            return $info;
+        }
+
+        if (is_string($info) && $info !== '') {
+            $decoded = json_decode($info, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
+    /**
+     * 获取质检元数据。新版本保存在 info.check_meta，旧版本可能直接在 check_meta。
+     * @param array $device
+     * @param array $info
+     * @return array
+     */
+    private function getDeviceCheckMeta(array $device, array $info): array
+    {
+        $checkMeta = $info['check_meta'] ?? $device['check_meta'] ?? [];
+        if (is_string($checkMeta) && $checkMeta !== '') {
+            $decoded = json_decode($checkMeta, true);
+            $checkMeta = is_array($decoded) ? $decoded : [];
+        }
+
+        return is_array($checkMeta) ? $checkMeta : [];
+    }
+
+    /**
+     * 空值判断。数字 0 是有效值，不能当成未检测。
+     * @param mixed $value
+     * @return bool
+     */
+    private function isBlankPrintValue($value): bool
+    {
+        return $value === null || $value === '' || $value === [];
+    }
+
+    /**
+     * 从多个来源取第一个非空值。
+     * @param mixed ...$values
+     * @return mixed
+     */
+    private function firstNotBlank(...$values)
+    {
+        foreach ($values as $value) {
+            if (!$this->isBlankPrintValue($value)) {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * 从质检结果文案兜底提取数值，例如“电池健康度100%”“循环10次”。
+     * @param string $text
+     * @param string $pattern
+     * @return string
+     */
+    private function extractValueFromCheckText(string $text, string $pattern): string
+    {
+        if ($text === '') {
+            return '';
+        }
+
+        return preg_match($pattern, $text, $matches) ? (string)($matches[1] ?? '') : '';
+    }
+
+    /**
+     * 将打印变量值转成字符串，数组用于调试时也能看清楚内容。
+     * @param mixed $value
+     * @return string
+     */
+    private function stringifyPrintValue($value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (is_bool($value)) {
+            return $value ? '是' : '否';
+        }
+
+        if (is_array($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE);
+        }
+
+        return (string)$value;
+    }
+
+    /**
      * 获取快递状态名称
      * @param int $status
      * @return string
@@ -750,6 +855,23 @@ class RecyclePrinterTemplateService extends BaseAdminService
         if (empty($device)) {
             throw new AdminException('设备不存在');
         }
+
+        $deviceInfo = $this->normalizeDeviceInfo($device['info'] ?? []);
+        $checkMeta = $this->getDeviceCheckMeta($device, $deviceInfo);
+        $checkResult = (string)($device['check_result'] ?? '');
+        $checkResultSeller = (string)($device['check_result_seller'] ?? '');
+        $checkResultBuyer = (string)($device['check_result_buyer'] ?? '');
+        $mainCheckResult = (string)$this->firstNotBlank($checkResultSeller, $checkResult, $checkResultBuyer);
+        $battery = $this->firstNotBlank(
+            $checkMeta['battery'] ?? null,
+            $deviceInfo['battery'] ?? null,
+            $this->extractValueFromCheckText($mainCheckResult, '/电池健康度\s*(\d{1,3})\s*%/u')
+        );
+        $batteryNum = $this->firstNotBlank(
+            $checkMeta['battery_num'] ?? $checkMeta['batteryNum'] ?? null,
+            $deviceInfo['battery_num'] ?? $deviceInfo['batteryNum'] ?? null,
+            $this->extractValueFromCheckText($mainCheckResult, '/循环\s*(\d+)\s*次/u')
+        );
 
         // 获取订单信息（如果需要）
         $order_model = new \addon\hsx_recycle\app\model\order\RecycleOrder();
@@ -820,11 +942,13 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'imei2' => $device['imei2'] ?? '',
             'sn' => $device['sn'] ?? '',
             'model' => $device['model'] ?? '',
-            'system_version' => $device['system_version'] ?? '',
-            'warranty_info' => $device['warranty_info'] ?? '',
-            'capacity' => $device['capacity'] ?? '',
-            'color' => $device['color'] ?? '',
-            'battery' => $device['check_meta']['battery']  ?? '未检测',
+            'system_version' => $this->stringifyPrintValue($this->firstNotBlank($device['system_version'] ?? null, $deviceInfo['system_version'] ?? null)),
+            'warranty_info' => $this->stringifyPrintValue($this->firstNotBlank($device['warranty_info'] ?? null, $deviceInfo['warranty_info'] ?? null)),
+            'capacity' => $this->stringifyPrintValue($this->firstNotBlank($device['capacity'] ?? null, $deviceInfo['capacity'] ?? null)),
+            'color' => $this->stringifyPrintValue($this->firstNotBlank($device['color'] ?? null, $deviceInfo['color'] ?? null)),
+            'battery' => $this->isBlankPrintValue($battery) ? '未检测' : $this->stringifyPrintValue($battery),
+            'battery_num' => $this->isBlankPrintValue($batteryNum) ? '未检测' : $this->stringifyPrintValue($batteryNum),
+            'battery_cycle' => $this->isBlankPrintValue($batteryNum) ? '未检测' : $this->stringifyPrintValue($batteryNum),
             
             // 设备序号信息
             'device_index' => (string)$device_index,
@@ -865,16 +989,22 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'final_status_name' => $device['final_status'] ? '已确认' : '未确认',
 
             // 质检信息
-            'check_result' => $device['check_result'] ?? '',
-            'check_result_seller' => $device['check_result_seller'] ?? '',
-            'check_result_buyer' => $device['check_result_buyer'] ?? '',
+            'check_result' => $checkResult,
+            'check_result_seller' => $checkResultSeller,
+            'check_result_buyer' => $checkResultBuyer,
+            'check_info' => $mainCheckResult,
+            'inspection_info' => $mainCheckResult,
+            'check_summary' => $mainCheckResult,
+            'inspection_summary' => $mainCheckResult,
+            'check_meta' => $checkMeta,
             'check_staff' => $device['checkUser']['username'] ?? '',
+            'check_staff_name' => $device['checkUser']['real_name'] ?? $device['checkUser']['username'] ?? '',
             'check_date' => $this->formatSafeTime($device['check_at'], 'Y-m-d'),
             'check_time' => $this->formatSafeTime($device['check_at']),
 
             // 定价信息
-            'price_staff' => $device['checkUser']['username'] ?? '',
-            'price_staff_name' => $device['checkUser']['real_name'] ?? $device['price_user']['username'] ?? '',
+            'price_staff' => $device['priceUser']['username'] ?? '',
+            'price_staff_name' => $device['priceUser']['real_name'] ?? $device['priceUser']['username'] ?? '',
             'price_time' => $this->formatSafeTime($device['price_at']),
 
             // 快递信息

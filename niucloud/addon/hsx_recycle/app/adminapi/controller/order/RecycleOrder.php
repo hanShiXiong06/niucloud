@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\adminapi\controller\order;
 
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderService as OrderFlowService;
+use addon\hsx_recycle\app\service\admin\order\RecycleDevicePaymentService;
 use addon\hsx_recycle\app\validate\RecycleOrderValidate;
 use core\base\BaseAdminController;
 use core\exception\CommonException;
@@ -75,6 +76,12 @@ class RecycleOrder extends BaseAdminController
             ['sign_at', []],
             ['complete_at', []],
             ['pay_time', []],
+            ['filter_key', ''],
+            ['view_mode', ''],
+            ['check_timeout_hours', 24],
+            ['quote_timeout_hours', 2],
+            ['pay_timeout_hours', 2],
+            ['high_cost_amount', 3000],
         ]);
 
 
@@ -221,6 +228,8 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
+        (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
+
         return success($this->flowService->payment($id, $data));
     }
 
@@ -248,7 +257,72 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
+        (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
+
         return success($this->flowService->payment($id, $data));
+    }
+
+    /**
+     * 按设备确认打款
+     * @param int $id
+     * @return mixed
+     */
+    public function devicePaymentConfirm($id)
+    {
+        $id = intval($id);
+        $data = $this->request->params([
+            ['device_ids', []],
+            ['pay_account', ''],
+            ['pay_type', ''],
+            ['pay_name', ''],
+            ['pay_remark', ''],
+            ['pay_url', ''],
+            ['remark', ''],
+            ['account', ''],
+            ['payment_images', ''],
+            ['payment_info', []]
+        ]);
+        $data = $this->fillPaymentInfo($data);
+
+        return success((new RecycleDevicePaymentService())->payDevices($id, $data));
+    }
+
+    /**
+     * 设备打款记录
+     * @param int $id
+     * @return mixed
+     */
+    public function devicePaymentLogs(int $id)
+    {
+        return success((new RecycleDevicePaymentService())->getPaymentLogs($id));
+    }
+
+    /**
+     * 订单通知记录
+     * @param int $id
+     * @return mixed
+     */
+    public function noticeLogs(int $id)
+    {
+        $this->validate->scene('detail')->check(['id' => $id]);
+
+        return success($this->service->getNoticeLogs($id));
+    }
+
+    /**
+     * 按设备确认报价
+     * @param int $id
+     * @return mixed
+     */
+    public function deviceConfirm(int $id)
+    {
+        $data = $this->request->params([
+            ['device_ids', []],
+            ['confirm_status', 1],
+            ['remark', '']
+        ]);
+
+        return success($this->service->confirmDevices($id, $data));
     }
 
     /**

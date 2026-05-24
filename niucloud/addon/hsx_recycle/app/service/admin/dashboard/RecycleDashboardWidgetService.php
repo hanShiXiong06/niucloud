@@ -34,6 +34,60 @@ class RecycleDashboardWidgetService extends BaseAdminService
     public static function builtinWidgets(): array
     {
         return [
+            'business_dashboard_metrics' => [
+                'widget_key' => 'business_dashboard_metrics',
+                'widget_name' => '业务看板指标',
+                'widget_type' => 'section',
+                'data_key' => 'business_dashboard_metrics',
+                'data_scope' => 'site',
+                'sort' => 1,
+                'config' => ['board' => 'business', 'default_visible' => false],
+            ],
+            'business_dashboard_trend' => [
+                'widget_key' => 'business_dashboard_trend',
+                'widget_name' => '业务趋势图',
+                'widget_type' => 'chart',
+                'data_key' => 'business_dashboard_trend',
+                'data_scope' => 'site',
+                'sort' => 2,
+                'config' => ['board' => 'business', 'default_visible' => false],
+            ],
+            'finance_dashboard_metrics' => [
+                'widget_key' => 'finance_dashboard_metrics',
+                'widget_name' => '财务看板指标',
+                'widget_type' => 'section',
+                'data_key' => 'finance_dashboard_metrics',
+                'data_scope' => 'site',
+                'sort' => 3,
+                'config' => ['board' => 'finance', 'default_visible' => false],
+            ],
+            'finance_dashboard_trend' => [
+                'widget_key' => 'finance_dashboard_trend',
+                'widget_name' => '财务趋势图',
+                'widget_type' => 'chart',
+                'data_key' => 'finance_dashboard_trend',
+                'data_scope' => 'site',
+                'sort' => 4,
+                'config' => ['board' => 'finance', 'default_visible' => false],
+            ],
+            'user_dashboard_work' => [
+                'widget_key' => 'user_dashboard_work',
+                'widget_name' => '用户工作看板',
+                'widget_type' => 'section',
+                'data_key' => 'user_dashboard_work',
+                'data_scope' => 'own',
+                'sort' => 5,
+                'config' => ['board' => 'user'],
+            ],
+            'user_category_chart' => [
+                'widget_key' => 'user_category_chart',
+                'widget_name' => '用户设备分类图',
+                'widget_type' => 'chart',
+                'data_key' => 'user_category_chart',
+                'data_scope' => 'own',
+                'sort' => 6,
+                'config' => ['board' => 'user'],
+            ],
             'my_signed_devices' => [
                 'widget_key' => 'my_signed_devices',
                 'widget_name' => '我的签收设备',
@@ -366,6 +420,10 @@ class RecycleDashboardWidgetService extends BaseAdminService
         $uids = $widget['uids'] ?? [];
 
         if (empty($roleIds) && empty($uids)) {
+            $config = $widget['config'] ?? [];
+            if (is_array($config) && array_key_exists('default_visible', $config) && empty($config['default_visible'])) {
+                return false;
+            }
             return true;
         }
 
@@ -439,6 +497,12 @@ class RecycleDashboardWidgetService extends BaseAdminService
 
         $metricMap['quick_express_ship'] = true;
         $metricMap['quick_express_track'] = true;
+        $metricMap['business_dashboard_metrics'] = true;
+        $metricMap['business_dashboard_trend'] = true;
+        $metricMap['finance_dashboard_metrics'] = true;
+        $metricMap['finance_dashboard_trend'] = true;
+        $metricMap['user_dashboard_work'] = true;
+        $metricMap['user_category_chart'] = true;
         $metricMap['staff_work_chart'] = true;
         $metricMap['staff_work_table'] = true;
 

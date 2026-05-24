@@ -31,6 +31,14 @@ class RecycleStatsService extends BaseAdminService
     }
 
     /**
+     * 通过模型获取真实表名，交给框架处理表前缀。
+     */
+    private function orderTable(): string
+    {
+        return (new RecycleOrder())->getTable();
+    }
+
+    /**
      * 获取用户的角色名称
      * @param int $userId 用户ID
      * @param int $siteId 站点ID
@@ -244,7 +252,7 @@ class RecycleStatsService extends BaseAdminService
         }
 
         $query = RecycleOrderLog::alias('l')
-            ->join('recycle_order o', 'l.order_id = o.id')
+            ->join($this->orderTable() . ' o', 'l.order_id = o.id')
             ->where([
                 ['o.site_id', '=', $this->site_id],
                 ['l.operator_id', '=', $userId],
@@ -396,7 +404,7 @@ class RecycleStatsService extends BaseAdminService
         
         // 修复：今日打款数据 - 统一逻辑，只使用pay_time > 0条件
         $todayPaymentQuery = RecycleDevice::alias('d')
-            ->join('recycle_order o', 'd.order_id = o.id')
+            ->join($this->orderTable() . ' o', 'd.order_id = o.id')
             ->where([
                 ['d.site_id', '=', $this->site_id],
                 ['d.final_price', '>', 0],
@@ -591,7 +599,7 @@ class RecycleStatsService extends BaseAdminService
             
             // 修复：打款统计 - 基于实际打款操作人员
             $paymentQuery = RecycleDevice::alias('d')
-                ->join('recycle_order o', 'd.order_id = o.id')
+                ->join($this->orderTable() . ' o', 'd.order_id = o.id')
                 ->where([
                     ['d.site_id', '=', $this->site_id],
                     ['o.pay_uid', '=', $userId], // 改为基于打款操作人员
@@ -709,7 +717,7 @@ class RecycleStatsService extends BaseAdminService
             
             // 修复：打款金额统计 - 基于实际打款操作人员
             $amountQuery = RecycleDevice::alias('d')
-                ->join('recycle_order o', 'd.order_id = o.id')
+                ->join($this->orderTable() . ' o', 'd.order_id = o.id')
                 ->where([
                     ['d.site_id', '=', $this->site_id],
                     ['d.category_id', '=', $categoryId],
@@ -797,7 +805,7 @@ class RecycleStatsService extends BaseAdminService
 
             // 获取所有有签收操作的用户ID
             $signUserIds = RecycleOrderLog::alias('l')
-                ->join('recycle_order o', 'l.order_id = o.id')
+                ->join($this->orderTable() . ' o', 'l.order_id = o.id')
                 ->where([
                     ['o.site_id', '=', $this->site_id],
                     ['l.operator_id', '>', 0],
@@ -936,7 +944,7 @@ class RecycleStatsService extends BaseAdminService
                 
             // 修复：打款统计和分类 - 基于实际打款操作人员，而不是定价人员
             $paymentQuery = RecycleDevice::alias('d')
-                ->join('recycle_order o', 'd.order_id = o.id')
+                ->join($this->orderTable() . ' o', 'd.order_id = o.id')
                 ->where([
                     ['d.site_id', '=', $this->site_id],
                     ['o.pay_uid', '=', $uid], // 改为基于打款操作人员
@@ -965,7 +973,7 @@ class RecycleStatsService extends BaseAdminService
             }
             
             $paymentCategoryQuery = RecycleDevice::alias('d')
-                ->join('recycle_order o', 'd.order_id = o.id')
+                ->join($this->orderTable() . ' o', 'd.order_id = o.id')
                 ->where($paymentCategoryWhere)
                 ->field('d.category_id, count(*) as count')
                 ->group('d.category_id')
@@ -982,7 +990,7 @@ class RecycleStatsService extends BaseAdminService
             
             // 修复：金额统计 - 基于实际打款操作人员统计金额
             $totalAmountQuery = RecycleDevice::alias('d')
-                ->join('recycle_order o', 'd.order_id = o.id')
+                ->join($this->orderTable() . ' o', 'd.order_id = o.id')
                 ->where([
                     ['d.site_id', '=', $this->site_id],
                     ['o.pay_uid', '=', $uid], // 改为基于打款操作人员
@@ -1081,7 +1089,7 @@ class RecycleStatsService extends BaseAdminService
         
         if ($rankType === 'amount') {
             $query = RecycleDevice::alias('d')
-                          ->join('recycle_order o', 'd.order_id = o.id')
+                          ->join($this->orderTable() . ' o', 'd.order_id = o.id')
                           ->where([
                               ['d.site_id', '=', $this->site_id],
                               ['d.final_price', '>', 0],
@@ -1191,7 +1199,7 @@ class RecycleStatsService extends BaseAdminService
         }
         
         $signedDeviceCount = RecycleDevice::alias('d')
-            ->join('recycle_order o', 'd.order_id = o.id')
+            ->join($this->orderTable() . ' o', 'd.order_id = o.id')
             ->where($deviceWhere)
             ->where('o.status', '>=', RecycleOrderDict::ORDER_STATUS_SIGNED)
             ->where('o.sign_at', '>', 0)
@@ -1249,7 +1257,7 @@ class RecycleStatsService extends BaseAdminService
             
             // 统计该分类的签收设备数量
             $signedDeviceCount = RecycleDevice::alias('d')
-                ->join('recycle_order o', 'd.order_id = o.id')
+                ->join($this->orderTable() . ' o', 'd.order_id = o.id')
                 ->where($deviceWhere)
                 ->where('o.status', '>=', RecycleOrderDict::ORDER_STATUS_SIGNED)
                 ->where('o.sign_at', '>', 0)

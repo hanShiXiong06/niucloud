@@ -134,7 +134,7 @@ class RecycleCheckTemplateService extends BaseAdminService
         Db::transaction(function () use ($id, $template) {
             $this->templateModel->where([
                 ['site_id', '=', $this->site_id],
-            ])->update(['is_default' => 0, 'status' => 0]);
+            ])->update(['is_default' => 0]);
             $this->templateModel->where([
                 ['id', '=', $id],
                 ['site_id', '=', $this->site_id],
@@ -609,7 +609,7 @@ class RecycleCheckTemplateService extends BaseAdminService
                 if (!empty($preferred)) {
                     $this->templateModel->where([
                         ['site_id', '=', $this->site_id],
-                    ])->update(['is_default' => 0, 'status' => 0]);
+                    ])->update(['is_default' => 0]);
                     $this->templateModel->where('id', $preferredId)->update(['is_default' => 1, 'status' => 1]);
                     return;
                 }
@@ -624,7 +624,7 @@ class RecycleCheckTemplateService extends BaseAdminService
                 $keepId = (int)$defaultIds[0];
                 $this->templateModel->where([
                     ['site_id', '=', $this->site_id],
-                ])->where('id', '<>', $keepId)->update(['is_default' => 0, 'status' => 0]);
+                ])->where('id', '<>', $keepId)->update(['is_default' => 0]);
                 $this->templateModel->where('id', $keepId)->update(['status' => 1]);
                 return;
             }
@@ -635,7 +635,7 @@ class RecycleCheckTemplateService extends BaseAdminService
             if ($fallbackId > 0) {
                 $this->templateModel->where([
                     ['site_id', '=', $this->site_id],
-                ])->where('id', '<>', $fallbackId)->update(['is_default' => 0, 'status' => 0]);
+                ])->where('id', '<>', $fallbackId)->update(['is_default' => 0]);
                 $this->templateModel->where('id', $fallbackId)->update(['is_default' => 1, 'status' => 1]);
             }
         });

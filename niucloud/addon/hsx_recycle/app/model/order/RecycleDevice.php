@@ -67,6 +67,8 @@ class RecycleDevice extends BaseModel
         'check_images_thumb_small',
         'check_images_seller_thumb_small',
         'check_images_buyer_thumb_small',
+        'pay_status_name',
+        'confirm_status_name',
     ];
 
     /**
@@ -78,6 +80,28 @@ class RecycleDevice extends BaseModel
     public function getStatusNameAttr($value, $data)
     {
         return RecycleOrderDict::getDeviceStatus($data['status'] ?? '');
+    }
+
+    /**
+     * 获取设备打款状态名称
+     * @param $value
+     * @param $data
+     * @return string
+     */
+    public function getPayStatusNameAttr($value, $data)
+    {
+        return RecycleOrderDict::getPayStatus($data['pay_status'] ?? RecycleOrderDict::PAY_STATUS_UNPAID);
+    }
+
+    /**
+     * 获取设备报价确认状态名称
+     * @param $value
+     * @param $data
+     * @return string
+     */
+    public function getConfirmStatusNameAttr($value, $data)
+    {
+        return RecycleOrderDict::getConfirmStatus($data['confirm_status'] ?? RecycleOrderDict::CONFIRM_STATUS_PENDING);
     }
 
     /**

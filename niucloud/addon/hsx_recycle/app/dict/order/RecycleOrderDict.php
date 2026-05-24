@@ -32,6 +32,17 @@ class RecycleOrderDict
     const DEVICE_STATUS_RETURNED = 6;           // 已退回
     const DEVICE_STATUS_PRICED = 7;             // 已定价
     const DEVICE_STATUS_PRICED_REPRICE = 8;     // 已定价（重新定价）
+    // 订单流转模式
+    const FLOW_MODE_ORDER = 'order';             // 整单流转
+    const FLOW_MODE_DEVICE = 'device';           // 按设备流转
+    // 设备报价确认状态
+    const CONFIRM_STATUS_PENDING = 0;            // 待确认
+    const CONFIRM_STATUS_CONFIRMED = 1;          // 已确认
+    const CONFIRM_STATUS_REJECTED = 2;           // 已拒绝/退回
+    // 打款状态
+    const PAY_STATUS_UNPAID = 0;                // 未打款
+    const PAY_STATUS_PAID = 1;                  // 已打款
+    const PAY_STATUS_PARTIAL = 2;               // 部分打款（订单维度）
     // 质检结果状态
     const CHECK_STATUS_PASS = 1;               // 质检通过
     const CHECK_STATUS_RETURN = 2;             // 退回
@@ -42,6 +53,7 @@ class RecycleOrderDict
     const DEVICE_OP_TYPE_PRICE = 4;            // 定价
     const DEVICE_OP_TYPE_RETURN = 5;           // 确认
     const DEVICE_OP_TYPE_REPRICE = 8;          // 重新定价
+    const DEVICE_OP_TYPE_PAYMENT = 9;           // 设备打款
 
     // 设备状态文本映射
     const DEVICE_STATUS_TEXT = [
@@ -247,7 +259,8 @@ class RecycleOrderDict
             self::DEVICE_OP_TYPE_PRICE => '定价',
             self::DEVICE_OP_TYPE_CHECK_RESULT => '质检完成',
             self::DEVICE_OP_TYPE_RETURN => '确认',
-            self::DEVICE_OP_TYPE_REPRICE => '重新定价'
+            self::DEVICE_OP_TYPE_REPRICE => '重新定价',
+            self::DEVICE_OP_TYPE_PAYMENT => '设备打款'
         ];
 
         return empty($type) ? $data : ($data[$type] ?? '');
@@ -267,6 +280,53 @@ class RecycleOrderDict
         ];
 
         return empty($type) ? $data : ($data[$type] ?? '');
+    }
+
+    /**
+     * 获取打款状态
+     * @param string|int $status
+     * @return array|string
+     */
+    public static function getPayStatus($status = '')
+    {
+        $data = [
+            self::PAY_STATUS_UNPAID => '未打款',
+            self::PAY_STATUS_PAID => '已打款',
+            self::PAY_STATUS_PARTIAL => '部分打款',
+        ];
+
+        return $status === '' ? $data : ($data[(int)$status] ?? '');
+    }
+
+    /**
+     * 获取订单流转模式
+     * @param string $mode
+     * @return array|string
+     */
+    public static function getFlowMode($mode = '')
+    {
+        $data = [
+            self::FLOW_MODE_ORDER => '整单流转',
+            self::FLOW_MODE_DEVICE => '按设备流转',
+        ];
+
+        return $mode === '' ? $data : ($data[(string)$mode] ?? $data[self::FLOW_MODE_ORDER]);
+    }
+
+    /**
+     * 获取设备报价确认状态
+     * @param string|int $status
+     * @return array|string
+     */
+    public static function getConfirmStatus($status = '')
+    {
+        $data = [
+            self::CONFIRM_STATUS_PENDING => '待客户确认',
+            self::CONFIRM_STATUS_CONFIRMED => '已确认',
+            self::CONFIRM_STATUS_REJECTED => '已拒绝',
+        ];
+
+        return $status === '' ? $data : ($data[(int)$status] ?? '');
     }
 
     /**

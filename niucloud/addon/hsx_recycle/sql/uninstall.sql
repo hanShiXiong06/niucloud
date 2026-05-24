@@ -1,6 +1,9 @@
 DROP TABLE IF EXISTS `{{prefix}}express_order_record`;
 DROP TABLE IF EXISTS `{{prefix}}express_address_book`;
 DROP TABLE IF EXISTS `{{prefix}}yisu_product_config`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_print_variable`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_alert_rule`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_dashboard_widget`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_express_provider_config`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_check_option`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_check_field`;
@@ -19,6 +22,8 @@ DROP TABLE IF EXISTS `{{prefix}}recycle_print_scene`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_printer_template`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_printer`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_order_log`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_notice_log`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_payment`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_device_log`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_user_address`;
 DROP TABLE IF EXISTS `{{prefix}}payment_info`;

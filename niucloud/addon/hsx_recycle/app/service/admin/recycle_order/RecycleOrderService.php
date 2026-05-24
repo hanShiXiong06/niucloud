@@ -88,7 +88,7 @@ class RecycleOrderService extends BaseAdminService
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,imei,user_sn,model,initial_price,status,category_id,final_price')
+                    $query->field('id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price')
                         ->append(['status_name', 'category_name']);
                 },
                 'member' => function($query) {
@@ -218,7 +218,7 @@ class RecycleOrderService extends BaseAdminService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,imei,user_sn,model,initial_price, category_id , status,check_result,final_price')
+                    $query->field('id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id, status,check_result,final_price')
                         ->append(['status_name','category_name']);
                 },
                 'member' => function($query) {

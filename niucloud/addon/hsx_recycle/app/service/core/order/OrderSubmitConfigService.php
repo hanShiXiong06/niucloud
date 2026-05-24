@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\service\core\order;
 
 use addon\hsx_recycle\app\dict\config\RecycleConfigKeyDict;
 use addon\hsx_recycle\app\dict\express\ExpressProviderDict;
+use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\express\ExpressProviderConfig;
 use addon\hsx_recycle\app\model\yisu\YisuProductConfig;
 use app\model\diy\DiyTheme;
@@ -73,6 +74,12 @@ class OrderSubmitConfigService
                 'payment_min_count' => 1,
                 'id_card_required' => 1,
             ],
+            'payment' => [
+                'mode' => RecycleOrderDict::FLOW_MODE_ORDER,
+            ],
+            'flow' => [
+                'mode' => RecycleOrderDict::FLOW_MODE_ORDER,
+            ],
             'platform_delivery' => [
                 'display_name' => '',
                 'free_shipping_min_count' => 1,
@@ -106,6 +113,8 @@ class OrderSubmitConfigService
         $deliveryModes = is_array($data['delivery_modes'] ?? null) ? $data['delivery_modes'] : [];
         $notice = is_array($data['notice'] ?? null) ? $data['notice'] : [];
         $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
+        $payment = is_array($data['payment'] ?? null) ? $data['payment'] : [];
+        $flow = is_array($data['flow'] ?? null) ? $data['flow'] : [];
         $platformDelivery = is_array($data['platform_delivery'] ?? null) ? $data['platform_delivery'] : [];
         $followOfficialAccount = is_array($data['follow_official_account'] ?? null) ? $data['follow_official_account'] : [];
         $customerService = is_array($data['customer_service'] ?? null) ? $data['customer_service'] : [];
@@ -152,6 +161,10 @@ class OrderSubmitConfigService
         if (!in_array($customerServiceType, ['wechat', 'qrcode'], true)) {
             $customerServiceType = $default['customer_service']['type'];
         }
+        $flowMode = (string)($flow['mode'] ?? $payment['mode'] ?? $default['flow']['mode']);
+        if (!in_array($flowMode, [RecycleOrderDict::FLOW_MODE_ORDER, RecycleOrderDict::FLOW_MODE_DEVICE], true)) {
+            $flowMode = $default['flow']['mode'];
+        }
 
         $config = [
             'device_add_enabled' => !empty($data['device_add_enabled']) ? 1 : 0,
@@ -170,6 +183,12 @@ class OrderSubmitConfigService
                 'payment_required' => !empty($profile['payment_required']) ? 1 : 0,
                 'payment_min_count' => $paymentMinCount,
                 'id_card_required' => !empty($profile['id_card_required']) ? 1 : 0,
+            ],
+            'payment' => [
+                'mode' => $flowMode,
+            ],
+            'flow' => [
+                'mode' => $flowMode,
             ],
             'platform_delivery' => [
                 'display_name' => $platformDeliveryDisplayName ?: ($platformDeliveryProductName ?: '京东快递'),

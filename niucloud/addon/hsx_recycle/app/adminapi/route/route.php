@@ -26,6 +26,10 @@ Route::group('recycle', function () {
 
 // 回收首页配置
 Route::group('recycle', function () {
+    Route::get('dashboard/overview', 'addon\hsx_recycle\app\adminapi\controller\dashboard\RecycleDashboard@overview');
+    Route::get('dashboard/trend', 'addon\hsx_recycle\app\adminapi\controller\dashboard\RecycleDashboard@trend');
+    Route::get('dashboard/metrics', 'addon\hsx_recycle\app\adminapi\controller\dashboard\RecycleDashboard@metrics');
+    Route::get('dashboard/filters', 'addon\hsx_recycle\app\adminapi\controller\dashboard\RecycleDashboard@filters');
     Route::get('dashboard/widgets', 'addon\hsx_recycle\app\adminapi\controller\dashboard\DashboardConfig@widgets');
     Route::post('dashboard/widgets', 'addon\hsx_recycle\app\adminapi\controller\dashboard\DashboardConfig@save');
     Route::get('dashboard/visible', 'addon\hsx_recycle\app\adminapi\controller\dashboard\DashboardConfig@visible');
@@ -107,6 +111,10 @@ Route::group('recycle', function () {
     Route::get('recycle_order/merchant_pay_info/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@getMerchantPayInfo');
     // 财务确认打款
     Route::put('recycle_order/:id/payment_confirm', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@paymentConfirm');
+    Route::post('recycle_order/:id/device_payment_confirm', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@devicePaymentConfirm');
+    Route::get('recycle_order/:id/device_payment_logs', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@devicePaymentLogs');
+    Route::get('recycle_order/:id/notice_logs', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@noticeLogs');
+    Route::post('recycle_order/:id/device_confirm', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@deviceConfirm');
     
     // 推送订单确认通知
     Route::post('recycle_order/:id/push_notify', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@pushNotify');

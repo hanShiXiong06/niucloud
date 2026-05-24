@@ -23,6 +23,7 @@ interface UseRecycleOrderActionsOptions {
   priceDeviceLogVisible: Ref<boolean>
   paymentDialogVisible: Ref<boolean>
   paymentInfo: Ref<any[]>
+  paymentMode: Ref<'order' | 'device'>
   selectedPayTypeIndex: Ref<number>
   orderDetailVisible: Ref<boolean>
   orderDetail: Ref<any>
@@ -49,6 +50,7 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
     priceDeviceLogVisible,
     paymentDialogVisible,
     paymentInfo,
+    paymentMode,
     selectedPayTypeIndex,
     orderDetailVisible,
     orderDetail
@@ -96,7 +98,16 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
         user_sn: device.user_sn,
         final_price: device.final_price || 0,
         status: device.status,
-        status_name: device.status_name || ''
+        status_name: device.status_name || '',
+        pay_status: Number(device.pay_status || 0),
+        pay_status_name: device.pay_status_name || (Number(device.pay_status || 0) === 1 ? '已打款' : '未打款'),
+        confirm_status: Number(device.confirm_status || 0),
+        confirm_status_name: device.confirm_status_name || (Number(device.confirm_status || 0) === 1 ? '已确认' : '待客户确认'),
+        can_pay: Boolean(device.can_pay),
+        pay_disabled_reason: device.pay_disabled_reason || device.disabled_reason || '',
+        pay_amount: device.pay_amount || 0,
+        pay_time: device.pay_time || 0,
+        pay_no: device.pay_no || ''
       }))
     }
   }
@@ -104,7 +115,11 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
   const handlePushNotify = async (row: any) => {
     let loading: ReturnType<typeof ElLoading.service> | null = null
     try {
-      await ElMessageBox.confirm('确定要推送订单确认通知给用户吗？', '推送通知', {
+      const count = Number(row.flow_summary?.pending_confirm || 0)
+      const content = count > 0
+        ? `当前订单有 ${count} 台设备待客户确认，确定要推送订单处理提醒吗？`
+        : '确定要推送订单处理提醒给用户吗？'
+      await ElMessageBox.confirm(content, '推送通知', {
         confirmButtonText: '确定推送',
         cancelButtonText: '取消',
         type: 'info'
@@ -203,17 +218,27 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
       paymentDialogVisible.value = true
 
       const res = await getMerchantPayInfo(row.member_id)
-      if (res.data && Array.isArray(res.data)) {
-        const orderSummary = buildPaymentOrderSummary(row)
+      const orderSummary = buildPaymentOrderSummary(row)
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
         const paymentInfoWithOrder = res.data.map((item) => ({
           ...item,
+          payment_mode: row.flow_mode || row.payment_mode || paymentMode.value || 'order',
+          device_payment_summary: row.device_payment_summary || null,
           order_summary: orderSummary
         }))
         paymentInfo.value = paymentInfoWithOrder
         selectedPayTypeIndex.value = paymentInfoWithOrder.length > 0 ? 0 : -1
         return
       }
-      paymentInfo.value = []
+      paymentInfo.value = [{
+        pay_type: '自定义',
+        account: '',
+        qrcode_image: '',
+        payment_mode: row.flow_mode || row.payment_mode || paymentMode.value || 'order',
+        device_payment_summary: row.device_payment_summary || null,
+        order_summary: orderSummary
+      }]
+      selectedPayTypeIndex.value = 0
     },
     order_detail: async (row: any) => {
       const order = list.value.find((item) => item.id === row.id)

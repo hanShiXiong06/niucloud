@@ -122,8 +122,8 @@ export const VARIABLE_GROUPS: VariableGroup[] = [
       { key: 'device_index', label: '设备序号', sampleValue: '1' },
       { key: 'device_total', label: '设备总数', sampleValue: '4' },
       { key: 'device_number', label: '设备编号', sampleValue: '1/4' },
-      //电池状态
-      { key: 'battery', label: '电池', sampleValue: '100' },
+      { key: 'battery', label: '电池健康度', sampleValue: '100' },
+      { key: 'battery_num', label: '循环次数', sampleValue: '10' },
     ]
   },
   {
@@ -132,6 +132,8 @@ export const VARIABLE_GROUPS: VariableGroup[] = [
       { key: 'check_result', label: '质检结果', sampleValue: '外观良好功能正常' },
       { key: 'check_result_seller', label: '卖家可见质检', sampleValue: '外观良好' },
       { key: 'check_result_buyer', label: '买家可见质检', sampleValue: '功能正常' },
+      { key: 'check_info', label: '验机信息', sampleValue: '外观良好功能正常' },
+      { key: 'inspection_info', label: '验机信息别名', sampleValue: '外观良好功能正常' },
       { key: 'check_staff', label: '质检员', sampleValue: '李四' },
       { key: 'check_date', label: '质检日期', sampleValue: '2026-01-01' },
       { key: 'check_time', label: '质检时间', sampleValue: '2026-01-01 12:00' },

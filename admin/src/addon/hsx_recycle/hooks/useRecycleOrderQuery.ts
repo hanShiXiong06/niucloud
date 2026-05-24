@@ -126,6 +126,10 @@ export function useRecycleOrderQuery<T = any>(options: UseRecycleOrderQueryOptio
   const loading = ref(false)
   const list = ref<T[]>([])
   const statusCounts = ref<Record<string, number>>({})
+  const filterMeta = ref<Record<string, any>>({})
+  const viewMode = ref('')
+  const paymentMode = ref<'order' | 'device'>('order')
+  const flowMode = ref<'order' | 'device'>('order')
 
   const quickSearchForm = reactive<QuickSearchFormModel>(createQuickSearchForm())
   const advancedSearchForm = reactive<AdvancedSearchFormModel>(createAdvancedSearchForm())
@@ -163,6 +167,10 @@ export function useRecycleOrderQuery<T = any>(options: UseRecycleOrderQueryOptio
 
       const total = res.data.total || res.data.count || 0
       statusCounts.value = res.data.status_counts || {}
+      filterMeta.value = res.data.filter_meta || {}
+      viewMode.value = res.data.view_mode || ''
+      flowMode.value = res.data.flow_mode === 'device' ? 'device' : 'order'
+      paymentMode.value = res.data.payment_mode === 'device' ? 'device' : flowMode.value
       setPagination({ total })
     } catch (error) {
       console.error('获取列表失败:', error)
@@ -250,6 +258,10 @@ export function useRecycleOrderQuery<T = any>(options: UseRecycleOrderQueryOptio
     loading,
     list,
     statusCounts,
+    filterMeta,
+    viewMode,
+    paymentMode,
+    flowMode,
     quickSearchForm,
     advancedSearchForm,
     showAdvancedSearch,

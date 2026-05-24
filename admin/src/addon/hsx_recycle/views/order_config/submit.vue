@@ -113,6 +113,27 @@
                 </section>
 
                 <section class="config-section">
+                    <div class="section-title">订单流转模式</div>
+                    <div class="mode-grid">
+                        <div class="mode-card" :class="{ active: form.flow.mode === 'order' }" @click="handleFlowModeChange('order')">
+                            <div class="mode-title">整单流转</div>
+                            <div class="mode-desc">所有设备完成质检后，客户统一确认，财务统一打款。适合批量统一结算的商家。</div>
+                        </div>
+                        <div class="mode-card" :class="{ active: form.flow.mode === 'device' }" @click="handleFlowModeChange('device')">
+                            <div class="mode-title">按设备流转</div>
+                            <div class="mode-desc">设备可独立质检、确认、打款。适合一单多机、客户需要部分先回款的场景。</div>
+                        </div>
+                    </div>
+                    <div class="payment-mode-tip">
+                        <div class="setting-title">{{ flowModeMeta.title }}</div>
+                        <div class="setting-desc">{{ flowModeMeta.desc }}</div>
+                    </div>
+                    <el-alert class="mt-[14px]" type="warning" :closable="false" show-icon>
+                        <template #title>切换后需要点击“保存设置”才会生效。保存后只影响新订单，历史订单仍按创建时的流转模式执行。</template>
+                    </el-alert>
+                </section>
+
+                <section class="config-section">
                     <div class="section-title">平台快递包邮</div>
                     <div class="setting-row">
                         <div>
@@ -294,7 +315,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getOrderSubmitConfig, saveOrderSubmitConfig, type OrderSubmitConfig } from '@/addon/hsx_recycle/api/order_config'
 
 const loading = ref(false)
@@ -342,6 +363,12 @@ const form = reactive<OrderSubmitConfig>({
         payment_required: 1,
         payment_min_count: 1,
         id_card_required: 1
+    },
+    payment: {
+        mode: 'order'
+    },
+    flow: {
+        mode: 'order'
     },
     platform_delivery: {
         display_name: '京东快递',
@@ -391,6 +418,8 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.profile.payment_required = data.profile?.payment_required === 0 ? 0 : 1
     form.profile.payment_min_count = Math.max(1, Math.min(5, Number(data.profile?.payment_min_count || 1)))
     form.profile.id_card_required = data.profile?.id_card_required === 0 ? 0 : 1
+    form.flow.mode = data.flow?.mode === 'device' || data.payment?.mode === 'device' ? 'device' : 'order'
+    form.payment.mode = form.flow.mode
     form.platform_delivery.display_name = data.platform_delivery?.display_name || ''
     form.platform_delivery.free_shipping_min_count = Math.max(1, Math.min(99, Number(data.platform_delivery?.free_shipping_min_count || 1)))
     form.platform_delivery.provider_options = normalizeProviderOptions(data.platform_delivery?.provider_options)
@@ -503,6 +532,40 @@ const handleProductChange = () => {
     ensureProductSelection(true)
 }
 
+const flowModeMeta = computed(() => {
+    if (form.flow.mode === 'device') {
+        return {
+            title: '按设备流转',
+            desc: '新订单下的设备可以部分质检、部分确认、部分打款。订单只做整体进度汇总，全部设备闭环后才会完成。'
+        }
+    }
+    return {
+        title: '整单流转',
+        desc: '新订单需要等待全部设备完成质检后统一确认、统一打款。适合流程简单、按批次结算的商家。'
+    }
+})
+
+const handleFlowModeChange = async (value: 'order' | 'device') => {
+    if (form.flow.mode === value) return
+    const oldValue = form.flow.mode
+    const message = value === 'device'
+        ? '确认切换为按设备流转吗？保存后，新订单将支持部分设备先确认、先打款。历史订单仍保持创建时的流转模式，不会自动改变。'
+        : '确认切换为整单流转吗？保存后，新订单将按整单统一确认、统一打款。历史订单仍保持创建时的流转模式，不会自动改变。'
+    try {
+        await ElMessageBox.confirm(message, '切换订单流转模式', {
+            confirmButtonText: '确认切换',
+            cancelButtonText: '取消',
+            type: 'warning'
+        })
+        form.flow.mode = value
+        form.payment.mode = value
+        ElMessage.info('已切换选项，点击保存设置后生效')
+    } catch (e) {
+        form.flow.mode = oldValue
+        form.payment.mode = oldValue
+    }
+}
+
 const formatProductLabel = (item: OrderSubmitConfig['platform_delivery']['product_options'][number]) => {
     return item.express_type ? `${item.product_name}（${item.express_type}）` : item.product_name
 }
@@ -568,7 +631,9 @@ const save = async () => {
 
     saving.value = true
     try {
+        form.payment.mode = form.flow.mode
         await saveOrderSubmitConfig(form)
+        ElMessage.success(form.flow.mode === 'device' ? '已保存：新订单将按设备流转' : '已保存：新订单将整单流转')
     } finally {
         saving.value = false
     }
@@ -702,6 +767,17 @@ onMounted(load)
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
+}
+
+.payment-mode-group {
+    margin-bottom: 14px;
+}
+
+.payment-mode-tip {
+    padding: 14px;
+    border: 1px solid #edf0f5;
+    border-radius: 8px;
+    background: #fafafa;
 }
 
 .placeholder-list {

@@ -19,7 +19,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="角色和员工都为空时，表示该组件默认对普通员工可见；站点管理员始终可见。"
+        title="站点管理员始终可见；普通员工是否可见由“默认可见、可见角色、指定员工”共同控制。业务/财务看板默认不对普通员工开放，需要勾选角色或员工后展示。"
       />
 
       <el-table :data="widgetList" size="large" row-key="widget_id">
@@ -36,7 +36,19 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="所属看板" width="120">
+          <template #default="{ row }">
+            <el-tag type="info">{{ boardName(row.config?.board) }}</el-tag>
+          </template>
+        </el-table-column>
+
         <el-table-column prop="data_key" label="指标标识" min-width="180" show-overflow-tooltip />
+
+        <el-table-column label="普通员工默认可见" width="150" align="center">
+          <template #default="{ row }">
+            <el-checkbox v-model="row.config.default_visible">默认可见</el-checkbox>
+          </template>
+        </el-table-column>
 
         <el-table-column prop="data_scope" label="数据范围" width="150">
           <template #default="{ row }">
@@ -128,6 +140,15 @@ const typeName = (type: string) => {
   return map[type] || type
 }
 
+const boardName = (board: string) => {
+  const map: Record<string, string> = {
+    business: '业务看板',
+    finance: '财务看板',
+    user: '用户看板'
+  }
+  return map[board] || '通用'
+}
+
 const userLabel = (user: any) => {
   return user.real_name || user.username || `UID ${user.uid}`
 }
@@ -137,6 +158,10 @@ const normalizeWidget = (row: any) => {
     ...row,
     role_ids: Array.isArray(row.role_ids) ? row.role_ids.map((id: any) => Number(id)).filter(Boolean) : [],
     uids: Array.isArray(row.uids) ? row.uids.map((id: any) => Number(id)).filter(Boolean) : [],
+    config: {
+      ...(row.config && typeof row.config === 'object' ? row.config : {}),
+      default_visible: row.config?.default_visible !== false
+    },
     status: Number(row.status || 0),
     sort: Number(row.sort || 0)
   }

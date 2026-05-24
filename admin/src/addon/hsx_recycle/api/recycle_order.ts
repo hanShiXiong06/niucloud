@@ -105,6 +105,24 @@ export function paymentConfirm(orderId: number, data: any) {
   );
 }
 
+// 按设备确认打款
+export function devicePaymentConfirm(orderId: number, data: any) {
+  return request.post(
+    `/recycle/recycle_order/${orderId}/device_payment_confirm`,
+    data
+  );
+}
+
+// 获取设备打款记录
+export function getDevicePaymentLogs(orderId: number) {
+  return request.get(`/recycle/recycle_order/${orderId}/device_payment_logs`);
+}
+
+// 获取订单通知记录
+export function getOrderNoticeLogs(orderId: number) {
+  return request.get(`/recycle/recycle_order/${orderId}/notice_logs`);
+}
+
 // 批量更新设备状态
 export function batchUpdateDeviceStatus(data: any) {
   return request.post(

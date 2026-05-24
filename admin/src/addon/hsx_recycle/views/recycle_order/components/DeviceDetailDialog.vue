@@ -579,6 +579,13 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   display: flex;
   flex-direction: column;
   gap: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  &::-webkit-scrollbar { width: 5px; }
+  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  &::-webkit-scrollbar-track { background: transparent; }
 }
 
 .ddd-log-item {
@@ -664,6 +671,10 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 @media (max-width: 640px) {
   .ddd-two-col {
     grid-template-columns: 1fr;
+  }
+
+  .ddd-log-list {
+    max-height: 300px;
   }
 }
 </style>

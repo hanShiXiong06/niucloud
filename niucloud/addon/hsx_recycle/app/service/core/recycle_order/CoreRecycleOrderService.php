@@ -6,6 +6,7 @@ namespace addon\hsx_recycle\app\service\core\recycle_order;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -44,8 +45,14 @@ class CoreRecycleOrderService extends BaseCoreService
             }
 
             // 创建订单
+            $submitConfig = (new OrderSubmitConfigService())->getConfig((int)$data['site_id']);
+            $flowMode = (string)($submitConfig['flow']['mode'] ?? $submitConfig['payment']['mode'] ?? RecycleOrderDict::FLOW_MODE_ORDER);
+            if (!in_array($flowMode, [RecycleOrderDict::FLOW_MODE_ORDER, RecycleOrderDict::FLOW_MODE_DEVICE], true)) {
+                $flowMode = RecycleOrderDict::FLOW_MODE_ORDER;
+            }
             $order = RecycleOrder::create([
                 'site_id' => $data['site_id'],
+                'flow_mode' => $flowMode,
                 'member_id' => $data['member_id'] ?? 0,
                 'order_no' => $this->createOrderNo(),
                 'customer_name' => $data['customer_name'] ?? '',

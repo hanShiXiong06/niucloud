@@ -71,6 +71,34 @@ export function getVisibleDashboard(params: any) {
 }
 
 /**
+ * 获取 0.0.2 经营看板概览
+ */
+export function getRecycleDashboardOverview(params: any) {
+    return request.get('recycle/dashboard/overview', { params })
+}
+
+/**
+ * 获取 0.0.2 经营看板趋势
+ */
+export function getRecycleDashboardTrend(params: any) {
+    return request.get('recycle/dashboard/trend', { params })
+}
+
+/**
+ * 获取 0.0.2 看板指标字典
+ */
+export function getRecycleDashboardMetrics() {
+    return request.get('recycle/dashboard/metrics')
+}
+
+/**
+ * 获取 0.0.2 看板下钻过滤字典
+ */
+export function getRecycleDashboardFilters() {
+    return request.get('recycle/dashboard/filters')
+}
+
+/**
  * 获取质检员绩效统计（兼容旧接口）
  */
 export function getInspectorPerformance(params: any) {

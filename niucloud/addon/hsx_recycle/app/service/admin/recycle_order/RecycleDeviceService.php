@@ -497,6 +497,11 @@ class RecycleDeviceService extends BaseAdminService
                 // 将info 转换为 json 字符串
                 $updateData['info'] = json_encode($checkData['info']);
             }
+            $checkMeta = $this->extractCheckMeta($checkData);
+            $templateId = (int)($checkData['check_template_id'] ?? ($checkMeta['template_id'] ?? 0));
+            if ($templateId > 0) {
+                $updateData['check_template_id'] = $templateId;
+            }
             
             $device->save($updateData);
             
@@ -547,6 +552,28 @@ class RecycleDeviceService extends BaseAdminService
             Db::rollback();
             throw new CommonException($e->getMessage());
         }
+    }
+
+    /**
+     * 提取质检元数据
+     * @param array $checkData
+     * @return array
+     */
+    private function extractCheckMeta(array $checkData): array
+    {
+        $info = $checkData['info'] ?? [];
+        if (is_string($info)) {
+            $decoded = json_decode($info, true);
+            $info = is_array($decoded) ? $decoded : [];
+        }
+
+        $checkMeta = $info['check_meta'] ?? [];
+        if (is_string($checkMeta)) {
+            $decoded = json_decode($checkMeta, true);
+            $checkMeta = is_array($decoded) ? $decoded : [];
+        }
+
+        return is_array($checkMeta) ? $checkMeta : [];
     }
 
     /**
@@ -626,9 +653,27 @@ class RecycleDeviceService extends BaseAdminService
                 }
             }
             
-            // 如果所有设备都已确认价格，触发通知
-            if ($allConfirmed) {
-                $this->notifyService->orderAgreeNotify(['order_id' => $device->order_id, 'site_id' => $this->site_id]);
+            $order = \addon\hsx_recycle\app\model\order\RecycleOrder::where([
+                ['id', '=', $device->order_id],
+                ['site_id', '=', $this->site_id],
+            ])->findOrEmpty();
+            $flowMode = $order->isEmpty()
+                ? RecycleOrderDict::FLOW_MODE_ORDER
+                : (new \addon\hsx_recycle\app\service\admin\order\RecycleOrderFlowModeService())->getOrderFlowMode($order->toArray());
+
+            if ($flowMode === RecycleOrderDict::FLOW_MODE_DEVICE) {
+                $this->notifyService->orderAgreeNotify([
+                    'order_id' => $device->order_id,
+                    'site_id' => $this->site_id,
+                    'device_ids' => [(int)$device->id],
+                    'scene' => 'device_confirm',
+                ]);
+            } elseif ($allConfirmed) {
+                $this->notifyService->orderAgreeNotify([
+                    'order_id' => $device->order_id,
+                    'site_id' => $this->site_id,
+                    'scene' => 'order_confirm',
+                ]);
             }
             
             Db::commit();
@@ -662,6 +707,10 @@ class RecycleDeviceService extends BaseAdminService
             
             $old_status = $device->status;
             $device->status = RecycleOrderDict::DEVICE_STATUS_RECYCLED;
+            $device->confirm_status = RecycleOrderDict::CONFIRM_STATUS_CONFIRMED;
+            $device->confirm_time = time();
+            $device->confirm_member_id = (int)($device->member_id ?? 0);
+            $device->confirm_remark = $remark;
             $device->update_time = time();
             $device->save();
             

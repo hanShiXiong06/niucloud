@@ -77,15 +77,23 @@
             {{ action.value }}
           </el-button>
           <el-button
-            type="success"
+            v-if="row.available_actions?.can_pay_devices && !props.orderStatusMap[row.status]?.action?.some((action: any) => action.key === 'order_payment')"
+            type="primary"
             size="small"
-            :icon="Share"
-            @click="props.shareOrder(row)"
+            :icon="props.getActionIcon('order_payment')"
+            @click="props.handleAction(row, { key: 'order_payment', value: '去打款' })"
           >
-            分享
+            去打款
           </el-button>
-        </div>
-        <div v-else class="mb-2 flex flex-wrap gap-2">
+          <el-button
+            v-if="row.available_actions?.can_push_confirm_notice && !props.orderStatusMap[row.status]?.action?.some((action: any) => action.key === 'order_push_notify')"
+            type="warning"
+            size="small"
+            :icon="Bell"
+            @click="props.handleAction(row, { key: 'order_push_notify', value: '推送通知' })"
+          >
+            推送通知
+          </el-button>
           <el-button
             type="success"
             size="small"
@@ -93,6 +101,50 @@
             @click="props.shareOrder(row)"
           >
             分享
+          </el-button>
+          <el-button
+            type="info"
+            size="small"
+            :icon="Bell"
+            @click="props.viewNoticeLogs(row)"
+          >
+            通知记录
+          </el-button>
+        </div>
+        <div v-else class="mb-2 flex flex-wrap gap-2">
+          <el-button
+            v-if="row.available_actions?.can_pay_devices"
+            type="primary"
+            size="small"
+            :icon="props.getActionIcon('order_payment')"
+            @click="props.handleAction(row, { key: 'order_payment', value: '去打款' })"
+          >
+            去打款
+          </el-button>
+          <el-button
+            v-if="row.available_actions?.can_push_confirm_notice"
+            type="warning"
+            size="small"
+            :icon="Bell"
+            @click="props.handleAction(row, { key: 'order_push_notify', value: '推送通知' })"
+          >
+            推送通知
+          </el-button>
+          <el-button
+            type="success"
+            size="small"
+            :icon="Share"
+            @click="props.shareOrder(row)"
+          >
+            分享
+          </el-button>
+          <el-button
+            type="info"
+            size="small"
+            :icon="Bell"
+            @click="props.viewNoticeLogs(row)"
+          >
+            通知记录
           </el-button>
         </div>
 
@@ -122,6 +174,11 @@
                 <span class="text-sm font-semibold text-red-500">{{ props.formatPrice(device.final_price) }}</span>
                 <el-tag :type="props.getDeviceStatusType(device.status)" size="small">
                   {{ device.status_name }}
+                </el-tag>
+              </div>
+              <div v-if="device.status === 5" class="mt-2">
+                <el-tag :type="Number(device.pay_status || 0) === 1 ? 'success' : 'warning'" size="small">
+                  {{ device.pay_status_name || (Number(device.pay_status || 0) === 1 ? '已打款' : '未打款') }}
                 </el-tag>
               </div>
 
@@ -237,6 +294,7 @@ import {
   User,
   Loading,
   Share,
+  Bell,
 } from "@element-plus/icons-vue";
 
 interface Props {
@@ -274,6 +332,7 @@ interface Props {
   handleExpressHover: (row: any) => void;
   handleExpressLeave: () => void;
   shareOrder: (row: any) => void;
+  viewNoticeLogs: (row: any) => void;
 }
 
 const props = defineProps<Props>();

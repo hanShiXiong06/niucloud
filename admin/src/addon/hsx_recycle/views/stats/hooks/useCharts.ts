@@ -8,6 +8,8 @@ export function useCharts() {
   const userCategoryChart = ref<HTMLElement>()
   const adminUserChart = ref<HTMLElement>()
   const overviewRingChart = ref<HTMLElement>()
+  const businessTrendChart = ref<HTMLElement>()
+  const financeTrendChart = ref<HTMLElement>()
   const memberRegisterTrendChart = ref<HTMLElement>()
   const memberChannelChart = ref<HTMLElement>()
   const memberActivityChart = ref<HTMLElement>()
@@ -15,6 +17,8 @@ export function useCharts() {
   let userCategoryChartInstance: echarts.ECharts | null = null
   let adminUserChartInstance: echarts.ECharts | null = null
   let overviewRingChartInstance: echarts.ECharts | null = null
+  let businessTrendChartInstance: echarts.ECharts | null = null
+  let financeTrendChartInstance: echarts.ECharts | null = null
   let memberRegisterTrendChartInstance: echarts.ECharts | null = null
   let memberChannelChartInstance: echarts.ECharts | null = null
   let memberActivityChartInstance: echarts.ECharts | null = null
@@ -464,6 +468,120 @@ export function useCharts() {
     }
 
     overviewRingChartInstance.setOption(option)
+  }
+
+  // 初始化会员注册趋势图
+  const initBusinessTrendChart = () => {
+    if (!businessTrendChart.value) return
+    businessTrendChartInstance = echarts.init(businessTrendChart.value)
+  }
+
+  const buildTrendOption = (trendData: any, onlyUnits: string[] = []) => {
+    const xAxis = trendData?.x_axis || []
+    const series = Array.isArray(trendData?.series) ? trendData.series : []
+    const displaySeries = onlyUnits.length
+      ? series.filter((item: any) => onlyUnits.includes(item.unit))
+      : series
+    const hasData = displaySeries.some((item: any) => Array.isArray(item.data) && item.data.some((value: any) => Number(value) > 0))
+
+    return {
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: any[]) => {
+          if (!params || !params.length) return ''
+          const date = params[0].axisValue
+          const lines = params.map((item) => {
+            const unit = displaySeries[item.seriesIndex]?.unit || ''
+            return `${item.marker}${item.seriesName}: ${item.value}${unit}`
+          })
+          return [date, ...lines].join('<br/>')
+        }
+      },
+      legend: {
+        top: 0,
+        type: 'scroll'
+      },
+      grid: {
+        top: 48,
+        left: 44,
+        right: 44,
+        bottom: 34,
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: xAxis,
+        axisLabel: {
+          color: '#667085'
+        }
+      },
+      yAxis: [
+        {
+          type: 'value',
+          name: '数量/金额',
+          axisLabel: {
+            color: '#667085'
+          },
+          splitLine: {
+            lineStyle: {
+              color: '#EAECF0'
+            }
+          }
+        },
+        {
+          type: 'value',
+          name: '比例',
+          min: 0,
+          max: 100,
+          axisLabel: {
+            formatter: '{value}%',
+            color: '#667085'
+          },
+          splitLine: {
+            show: false
+          }
+        }
+      ],
+      graphic: hasData ? [] : {
+        type: 'text',
+        left: 'center',
+        top: 'middle',
+        style: {
+          text: '暂无趋势数据',
+          fontSize: 14,
+          fill: '#98A2B3'
+        }
+      },
+      series: displaySeries.map((item: any, index: number) => ({
+        name: item.name,
+        type: item.type || 'line',
+        data: item.data || [],
+        smooth: item.type !== 'bar',
+        yAxisIndex: item.unit === '%' ? 1 : 0,
+        barMaxWidth: 28,
+        itemStyle: {
+          color: ['#2563EB', '#12B76A', '#F79009', '#7C3AED', '#F04438'][index % 5]
+        },
+        lineStyle: {
+          width: 2
+        }
+      }))
+    }
+  }
+
+  const updateBusinessTrendChart = (trendData: any) => {
+    if (!businessTrendChartInstance) return
+    businessTrendChartInstance.setOption(buildTrendOption(trendData), true)
+  }
+
+  const initFinanceTrendChart = () => {
+    if (!financeTrendChart.value) return
+    financeTrendChartInstance = echarts.init(financeTrendChart.value)
+  }
+
+  const updateFinanceTrendChart = (trendData: any) => {
+    if (!financeTrendChartInstance) return
+    financeTrendChartInstance.setOption(buildTrendOption(trendData, ['元']), true)
   }
 
   // 初始化会员注册趋势图
@@ -1030,6 +1148,8 @@ export function useCharts() {
     userCategoryChartInstance?.resize()
     adminUserChartInstance?.resize()
     overviewRingChartInstance?.resize()
+    businessTrendChartInstance?.resize()
+    financeTrendChartInstance?.resize()
     memberRegisterTrendChartInstance?.resize()
     memberChannelChartInstance?.resize()
     memberActivityChartInstance?.resize()
@@ -1040,6 +1160,8 @@ export function useCharts() {
     userCategoryChartInstance?.dispose()
     adminUserChartInstance?.dispose()
     overviewRingChartInstance?.dispose()
+    businessTrendChartInstance?.dispose()
+    financeTrendChartInstance?.dispose()
     memberRegisterTrendChartInstance?.dispose()
     memberChannelChartInstance?.dispose()
     memberActivityChartInstance?.dispose()
@@ -1050,6 +1172,8 @@ export function useCharts() {
     userCategoryChart,
     adminUserChart,
     overviewRingChart,
+    businessTrendChart,
+    financeTrendChart,
     memberRegisterTrendChart,
     memberChannelChart,
     memberActivityChart,
@@ -1060,6 +1184,10 @@ export function useCharts() {
     updateAdminUserChart,
     initOverviewRingChart,
     updateOverviewRingChart,
+    initBusinessTrendChart,
+    updateBusinessTrendChart,
+    initFinanceTrendChart,
+    updateFinanceTrendChart,
     initMemberRegisterTrendChart,
     updateMemberRegisterTrendChart,
     initMemberChannelChart,
@@ -1070,5 +1198,3 @@ export function useCharts() {
     disposeCharts
   }
 }
-
-

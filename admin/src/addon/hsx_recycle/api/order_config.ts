@@ -18,6 +18,12 @@ export interface OrderSubmitConfig {
         payment_min_count: number
         id_card_required: number
     }
+    payment: {
+        mode: 'order' | 'device'
+    }
+    flow: {
+        mode: 'order' | 'device'
+    }
     platform_delivery: {
         display_name: string
         free_shipping_min_count: number

@@ -2,11 +2,12 @@
   <el-dialog
     v-model="dialogVisible"
     title="收款方式"
-    :width="isMobile ? '95vw' : '700px'"
+    :width="isMobile ? '95vw' : '780px'"
     top="4vh"
     class="payment-method-dialog"
     :destroy-on-close="true"
   >
+    <div class="payment-dialog-scroll">
     <div v-if="paymentInfoData && paymentInfoData.length > 0">
       <!-- 订单摘要信息卡片 -->
       <el-card v-if="currentPaymentInfo && currentPaymentInfo.order_summary" shadow="never" class="mb-4">
@@ -19,10 +20,23 @@
           </div>
         </template>
 
+        <el-alert v-if="isDevicePaymentMode" class="mb-4" type="warning" :closable="false" show-icon>
+          <template #title>
+            当前为按设备打款模式，请选择本次要打款的设备。未选择的设备会继续保持未打款状态。
+          </template>
+        </el-alert>
+
         <!-- 设备详情 -->
         <el-collapse>
           <el-collapse-item title="设备详情列表" name="devices">
-            <el-table v-if="!isMobile" :data="currentPaymentInfo.order_summary.devices" size="small" border>
+            <el-table
+              v-if="!isMobile"
+              :data="currentPaymentInfo.order_summary.devices"
+              size="small"
+              border
+              @selection-change="handleDeviceSelectionChange"
+            >
+              <el-table-column v-if="isDevicePaymentMode" type="selection" width="46" :selectable="isDeviceSelectable" />
               <el-table-column prop="model" label="型号" min-width="120" />
               <el-table-column prop="imei" label="IMEI" min-width="120" show-overflow-tooltip />
               <el-table-column prop="final_price" label="价格" width="80">
@@ -37,6 +51,20 @@
                   </el-tag>
                 </template>
               </el-table-column>
+              <el-table-column v-if="isDevicePaymentMode" prop="pay_status_name" label="打款" width="90">
+                <template #default="scope">
+                  <el-tag size="small" :type="scope.row.pay_status === 1 ? 'success' : 'warning'">
+                    {{ scope.row.pay_status_name || (scope.row.pay_status === 1 ? '已打款' : '未打款') }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="isDevicePaymentMode" label="说明" min-width="120">
+                <template #default="scope">
+                  <span class="text-xs" :class="isDeviceSelectable(scope.row) ? 'text-green-600' : 'text-gray-400'">
+                    {{ isDeviceSelectable(scope.row) ? '可打款' : (scope.row.pay_disabled_reason || scope.row.disabled_reason || '暂不可打款') }}
+                  </span>
+                </template>
+              </el-table-column>
             </el-table>
             <div v-else class="space-y-2">
               <div
@@ -45,17 +73,37 @@
                 class="rounded-lg border border-gray-200 bg-gray-50 p-3"
               >
                 <div class="mb-1 flex items-start justify-between gap-2">
-                  <div class="text-sm font-semibold text-gray-800">{{ device.model || '未知型号' }}</div>
+                  <div class="flex items-center gap-2">
+                    <el-checkbox
+                      v-if="isDevicePaymentMode"
+                      :model-value="selectedDeviceIds.includes(device.id)"
+                      :disabled="!isDeviceSelectable(device)"
+                      @change="toggleMobileDevice(device, $event)"
+                    />
+                    <div class="text-sm font-semibold text-gray-800">{{ device.model || '未知型号' }}</div>
+                  </div>
                   <el-tag size="small" :type="device.status === 6 ? 'danger' : 'success'">
                     {{ device.status_name }}
                   </el-tag>
                 </div>
                 <div class="text-xs text-gray-500 break-all">{{ device.imei || '无IMEI' }}</div>
-                <div class="mt-2 text-sm font-semibold text-orange-500">¥{{ device.final_price }}</div>
+                <div class="mt-2 flex items-center justify-between">
+                  <div class="text-sm font-semibold text-orange-500">¥{{ device.final_price }}</div>
+                  <el-tag v-if="isDevicePaymentMode" size="small" :type="device.pay_status === 1 ? 'success' : 'warning'">
+                    {{ device.pay_status_name || (device.pay_status === 1 ? '已打款' : '未打款') }}
+                  </el-tag>
+                </div>
+                <div v-if="isDevicePaymentMode" class="mt-1 text-xs" :class="isDeviceSelectable(device) ? 'text-green-600' : 'text-gray-400'">
+                  {{ isDeviceSelectable(device) ? '可打款' : (device.pay_disabled_reason || device.disabled_reason || '暂不可打款') }}
+                </div>
               </div>
             </div>
           </el-collapse-item>
         </el-collapse>
+        <div v-if="isDevicePaymentMode" class="device-payment-summary">
+          <span>已选 {{ selectedDevices.length }} 台</span>
+          <strong>本次打款 ¥{{ selectedDeviceAmount.toFixed(2) }}</strong>
+        </div>
       </el-card>
 
       <!-- 支付方式选择 -->
@@ -165,6 +213,7 @@
         </template>
       </el-empty>
     </div>
+    </div>
 
     <!-- 对话框底部按钮 -->
     <template #footer>
@@ -177,7 +226,7 @@
           :disabled="!canConfirm"
           :loading="confirming"
         >
-          确认已打款
+          {{ confirmButtonText }}
         </el-button>
       </div>
     </template>
@@ -194,6 +243,8 @@ interface PaymentInfoItem {
   pay_type: string
   account: string
   qrcode_image?: string
+  payment_mode?: 'order' | 'device'
+  device_payment_summary?: Record<string, any> | null
   order_summary?: {
     order_id: number | string
     status?: number
@@ -207,11 +258,19 @@ interface PaymentInfoItem {
     success_count?: number
     returned_count?: number
     devices?: Array<{
+      id: number | string
       model: string
       imei: string
       final_price: number | string
       status: number
       status_name: string
+      pay_status?: number
+      pay_status_name?: string
+      confirm_status?: number
+      confirm_status_name?: string
+      can_pay?: boolean
+      pay_disabled_reason?: string
+      disabled_reason?: string
     }>
   }
   [key: string]: any
@@ -230,6 +289,8 @@ const emit = defineEmits<{
     payType: string
     account?: string
     paymentImages?: string
+    paymentMode?: 'order' | 'device'
+    selectedDeviceIds?: Array<number | string>
   }]
 }>()
 
@@ -239,6 +300,7 @@ const paymentInfoData = ref<PaymentInfoItem[]>(props.paymentInfo)
 const selectedPayTypeIndex = ref(0)
 const confirming = ref(false)
 const isMobile = ref(false)
+const selectedDevices = ref<any[]>([])
 
 // 自定义支付信息（无收款码时使用）
 const customPayType = ref('')
@@ -259,9 +321,49 @@ const currentPaymentInfo = computed(() => {
   return paymentInfoData.value[selectedPayTypeIndex.value]
 })
 
+const isDevicePaymentMode = computed(() => currentPaymentInfo.value?.payment_mode === 'device')
+
+const selectedDeviceIds = computed(() => selectedDevices.value.map((item) => item.id))
+
+const selectedDeviceAmount = computed(() => {
+  return selectedDevices.value.reduce((sum, item) => sum + Number(item.final_price || 0), 0)
+})
+
+const confirmButtonText = computed(() => {
+  if (isDevicePaymentMode.value) {
+    return selectedDevices.value.length > 0 ? `确认给 ${selectedDevices.value.length} 台设备打款` : '请选择设备'
+  }
+  return '确认已打款'
+})
+
+const isDeviceSelectable = (device: any) => {
+  if (typeof device.can_pay !== 'undefined') {
+    return Boolean(device.can_pay)
+  }
+  return Number(device.status) === 5 && Number(device.pay_status || 0) !== 1 && Number(device.final_price || 0) > 0
+}
+
+const handleDeviceSelectionChange = (rows: any[]) => {
+  selectedDevices.value = rows.filter(isDeviceSelectable)
+}
+
+const toggleMobileDevice = (device: any, checked: string | number | boolean) => {
+  const index = selectedDevices.value.findIndex((item) => item.id === device.id)
+  if (checked && index === -1 && isDeviceSelectable(device)) {
+    selectedDevices.value.push(device)
+  }
+  if (!checked && index > -1) {
+    selectedDevices.value.splice(index, 1)
+  }
+}
+
 // 判断当前支付方式是否有收款码
 const hasQrCode = computed(() => {
   return currentPaymentInfo.value?.qrcode_image ? true : false
+})
+
+const needsCustomPayType = computed(() => {
+  return !currentPaymentInfo.value?.pay_type || currentPaymentInfo.value?.pay_type === '自定义'
 })
 
 // 判断是否可以确认打款
@@ -271,7 +373,7 @@ const canConfirm = computed(() => {
     // 必须有订单信息
     if (!currentPaymentInfo.value?.order_summary) return false
     // 如果没有收款码，必须填写自定义支付方式
-    if (!hasQrCode.value && !customPayType.value) return false
+    if (needsCustomPayType.value && !customPayType.value) return false
     return true
   }
   // 无支付方式数据时，必须填写自定义支付方式
@@ -286,6 +388,7 @@ watch(() => props.visible, (newVal) => {
     customPayType.value = ''
     customAccount.value = ''
     paymentImages.value = ''
+    selectedDevices.value = []
   }
 })
 
@@ -298,6 +401,7 @@ watch(dialogVisible, (newVal) => {
 watch(() => props.paymentInfo, (newVal) => {
   paymentInfoData.value = newVal
   selectedPayTypeIndex.value = newVal.length > 0 ? 0 : -1
+  selectedDevices.value = []
 })
 
 // 确认打款
@@ -309,7 +413,7 @@ const handleConfirmPayment = () => {
   let orderId: number | string = currentPaymentInfo.value?.order_summary?.order_id || props.orderId || ''
 
   if (paymentInfoData.value && paymentInfoData.value.length > 0 && currentPaymentInfo.value) {
-    if (hasQrCode.value) {
+    if (hasQrCode.value && currentPaymentInfo.value.pay_type !== '自定义') {
       // 有收款码，使用选择的支付方式
       finalPayType = currentPaymentInfo.value.pay_type
       finalAccount = currentPaymentInfo.value.account
@@ -329,6 +433,11 @@ const handleConfirmPayment = () => {
     return
   }
 
+  if (isDevicePaymentMode.value && selectedDevices.value.length === 0) {
+    ElMessage.warning('请选择本次需要打款的设备')
+    return
+  }
+
   confirming.value = true
 
   // 发送确认事件
@@ -336,7 +445,9 @@ const handleConfirmPayment = () => {
     orderId,
     payType: finalPayType,
     account: finalAccount,
-    paymentImages: paymentImages.value
+    paymentImages: paymentImages.value,
+    paymentMode: isDevicePaymentMode.value ? 'device' : 'order',
+    selectedDeviceIds: selectedDeviceIds.value
   })
 
   // 关闭对话框
@@ -357,6 +468,50 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+:global(.payment-method-dialog) {
+  --payment-dialog-max-height: min(88vh, 820px);
+}
+
+:global(.payment-method-dialog .el-dialog) {
+  max-height: var(--payment-dialog-max-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-bottom: 4vh;
+}
+
+:global(.payment-method-dialog .el-dialog__header),
+:global(.payment-method-dialog .el-dialog__footer) {
+  flex-shrink: 0;
+}
+
+:global(.payment-method-dialog .el-dialog__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.payment-dialog-scroll {
+  height: 100%;
+  max-height: calc(var(--payment-dialog-max-height) - 132px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -468,7 +623,27 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
+.device-payment-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+
+  strong {
+    color: #111827;
+  }
+}
+
 @media (max-width: 768px) {
+  :global(.payment-method-dialog) {
+    --payment-dialog-max-height: calc(100dvh - 24px);
+  }
+
   .card-header {
     align-items: flex-start;
     gap: 8px;

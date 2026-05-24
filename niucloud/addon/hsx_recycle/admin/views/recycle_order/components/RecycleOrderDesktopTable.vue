@@ -44,6 +44,22 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column prop="confirm_status_name" label="确认状态" width="110">
+              <template #default="{ row: deviceRow }">
+                <el-tag v-if="deviceRow.status >= 4" :type="Number(deviceRow.confirm_status || 0) === 1 || deviceRow.status === 5 ? 'success' : 'warning'" size="small">
+                  {{ deviceRow.confirm_status_name || (Number(deviceRow.confirm_status || 0) === 1 || deviceRow.status === 5 ? '已确认' : '待客户确认') }}
+                </el-tag>
+                <span v-else class="text-xs text-gray-400">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="pay_status_name" label="打款状态" width="100">
+              <template #default="{ row: deviceRow }">
+                <el-tag v-if="deviceRow.status === 5" :type="Number(deviceRow.pay_status || 0) === 1 ? 'success' : 'warning'" size="small">
+                  {{ deviceRow.pay_status_name || (Number(deviceRow.pay_status || 0) === 1 ? '已打款' : '未打款') }}
+                </el-tag>
+                <span v-else class="text-xs text-gray-400">-</span>
+              </template>
+            </el-table-column>
             <el-table-column label="操作"  fixed="right">
               <template #default="{ row: deviceRow }">
                 <el-button-group>
@@ -223,6 +239,19 @@
         <el-tag :type="props.getStatusType(row.status)" :effect="props.getStatusEffect(row.status)">
           {{ row.status_name }}
         </el-tag>
+        <div class="mt-1 text-[11px] text-gray-500">{{ row.flow_mode_name || '整单流转' }}</div>
+      </template>
+    </el-table-column>
+
+    <el-table-column label="设备进度" min-width="260">
+      <template #default="{ row }">
+        <div class="flex flex-wrap gap-1 text-xs">
+          <el-tag size="small" type="info" effect="plain">共 {{ row.flow_summary?.total || row.devices?.length || 0 }} 台</el-tag>
+          <el-tag size="small" type="warning" effect="plain">待质检 {{ row.flow_summary?.pending_check || 0 }}</el-tag>
+          <el-tag size="small" type="primary" effect="plain">待确认 {{ row.flow_summary?.pending_confirm || 0 }}</el-tag>
+          <el-tag size="small" type="success" effect="plain">待打款 {{ row.flow_summary?.pending_pay || 0 }}</el-tag>
+          <el-tag size="small" type="success">已打款 {{ row.flow_summary?.paid || 0 }}</el-tag>
+        </div>
       </template>
     </el-table-column>
 
@@ -250,29 +279,32 @@
       </template>
     </el-table-column>
 
-    <el-table-column label="操作" width="280" fixed="right">
+    <el-table-column label="操作" width="96" fixed="right" align="center">
       <template #default="{ row }">
-        <el-button-group v-if="props.orderStatusMap[row.status]?.action">
-          <el-button
-            v-for="action in props.orderStatusMap[row.status].action"
-            :key="action.key"
-            size="small"
-            :type="props.getActionButtonType(action.key)"
-            :icon="props.getActionIcon(action.key)"
-            @click="props.handleAction(row, action)"
-          >
-            {{ action.value }}
-          </el-button>
-        </el-button-group>
-        <el-button
-          type="success"
-          size="small"
-          :icon="Share"
-          @click="props.shareOrder(row)"
-          class="ml-1"
+        <el-popover
+          placement="left-start"
+          trigger="hover"
+          :width="184"
+          popper-class="recycle-order-action-popover"
         >
-          分享
-        </el-button>
+          <div class="recycle-order-action-list">
+            <button
+              v-for="item in getRowActions(row)"
+              :key="item.key"
+              type="button"
+              class="recycle-order-action-item"
+              @click="handleRowAction(row, item)"
+            >
+              <el-icon>
+                <component :is="item.icon" />
+              </el-icon>
+              <span>{{ item.value }}</span>
+            </button>
+          </div>
+          <template #reference>
+            <el-button type="primary" plain size="small" :icon="MoreFilled">更多</el-button>
+          </template>
+        </el-popover>
       </template>
     </el-table-column>
   </el-table>
@@ -293,6 +325,8 @@ import {
   User,
   Loading,
   Share,
+  Bell,
+  MoreFilled,
 } from "@element-plus/icons-vue";
 
 interface Props {
@@ -326,6 +360,7 @@ interface Props {
   handleExpressHover: (row: any) => void;
   handleExpressLeave: () => void;
   shareOrder: (row: any) => void;
+  viewNoticeLogs: (row: any) => void;
 }
 
 const props = defineProps<Props>();
@@ -341,6 +376,62 @@ const getSubmittedDeviceCount = (row: any) => normalizeDeviceCount(row.count)
 const getSignedDeviceCount = (row: any) => props.getDeviceCount(row.devices)
 
 const isDeviceCountMatched = (row: any) => getSubmittedDeviceCount(row) === getSignedDeviceCount(row)
+
+const getRowActions = (row: any) => {
+  const statusActions = props.orderStatusMap[row.status]?.action || []
+  const actions = statusActions.map((action: any) => ({
+    key: action.key,
+    value: action.value,
+    type: 'order',
+    icon: props.getActionIcon(action.key),
+    raw: action,
+  }))
+
+  if (
+    row.available_actions?.can_pay_devices &&
+    !statusActions.some((action: any) => action.key === 'order_payment')
+  ) {
+    actions.push({
+      key: 'order_payment',
+      value: '去打款',
+      type: 'order',
+      icon: props.getActionIcon('order_payment'),
+      raw: { key: 'order_payment', value: '去打款' },
+    })
+  }
+
+  if (
+    row.available_actions?.can_push_confirm_notice &&
+    !statusActions.some((action: any) => action.key === 'order_push_notify')
+  ) {
+    actions.push({
+      key: 'order_push_notify',
+      value: '推送通知',
+      type: 'order',
+      icon: Bell,
+      raw: { key: 'order_push_notify', value: '推送通知' },
+    })
+  }
+
+  actions.push(
+    { key: 'share_order', value: '分享订单', type: 'share', icon: Share, raw: null },
+    { key: 'notice_logs', value: '通知记录', type: 'notice_logs', icon: Bell, raw: null },
+  )
+
+  return actions
+}
+
+const handleRowAction = (row: any, item: any) => {
+  if (item.type === 'share') {
+    props.shareOrder(row)
+    return
+  }
+  if (item.type === 'notice_logs') {
+    props.viewNoticeLogs(row)
+    return
+  }
+  props.handleAction(row, item.raw)
+}
 
 // 获取用户显示名称（优先级：nickname → recycleUserAddress.name → "未知用户"）
 const getUserDisplayName = (row: any) => {
@@ -394,3 +485,43 @@ const handleEditUsername = async (row: any) => {
   }
 }
 </script>
+
+<style scoped>
+:deep(.el-table__fixed-right .el-table__cell) {
+  overflow: visible;
+}
+</style>
+
+<style>
+.recycle-order-action-popover {
+  padding: 8px !important;
+}
+
+.recycle-order-action-list {
+  display: grid;
+  gap: 4px;
+}
+
+.recycle-order-action-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 8px 10px;
+  color: #334155;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.recycle-order-action-item:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+  transform: translateX(-2px);
+}
+</style>

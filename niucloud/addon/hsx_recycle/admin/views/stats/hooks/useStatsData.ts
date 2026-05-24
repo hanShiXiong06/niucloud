@@ -262,7 +262,6 @@ export function useStatsData() {
     await fetchUserRole()
 
     if (userRole.value === 'admin') {
-      await fetchOverviewStats()
       await fetchUserList()
       await fetchUserDetailStats()
       await fetchAllMemberStats()

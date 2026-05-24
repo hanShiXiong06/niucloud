@@ -8,6 +8,7 @@ use addon\hsx_recycle\app\service\admin\order\RecycleOrderSignService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderCheckService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderPriceService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderPaymentService;
+use addon\hsx_recycle\app\service\admin\order\RecycleDevicePaymentService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderCloseService;
 use addon\hsx_recycle\app\validate\RecycleOrderValidate;
 use core\base\BaseAdminController;
@@ -231,6 +232,8 @@ class RecycleOrder extends BaseAdminController
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
 
+        (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
+
         $paymentService = new RecycleOrderPaymentService();
         return success($paymentService->payment($id, $data));
     }
@@ -253,6 +256,8 @@ class RecycleOrder extends BaseAdminController
 
         // 参数验证
         $this->validate->scene('payment')->check(array_merge(['id' => $id], $data));
+
+        (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
 
         $paymentService = new RecycleOrderPaymentService();
         return success($paymentService->confirmPayment($id, $data));

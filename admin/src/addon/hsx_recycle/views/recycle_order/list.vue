@@ -16,9 +16,23 @@
           :order-status-map="orderStatusMap"
           @toggle-mobile-search="mobileSearchVisible = !mobileSearchVisible"
           @advanced-search="advancedSearch"
-          @reset-search="resetAdvancedSearch"
+          @reset-search="resetAllSearch"
           @member-change="handleMemberChange"
         />
+
+        <div
+          v-if="hasDashboardFilter"
+          class="mb-3 flex flex-col gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 md:flex-row md:items-center md:justify-between"
+        >
+          <div>
+            <span class="font-medium">看板下钻：</span>
+            <span>{{ dashboardFilterTitle }}</span>
+            <span v-if="filterMeta.description" class="ml-2 text-blue-600">{{ filterMeta.description }}</span>
+            <span v-if="dashboardDateRangeText" class="ml-2 text-blue-600">{{ dashboardDateRangeText }}</span>
+            <span v-if="viewMode === 'device_expand'" class="ml-2 text-blue-600">已按设备展开口径过滤</span>
+          </div>
+          <el-button size="small" @click="clearDashboardFilter">查看全部订单</el-button>
+        </div>
 
         <!-- 状态标签页 -->
         <el-tabs
@@ -91,6 +105,7 @@
           :handle-express-hover="handleExpressHover"
           :handle-express-leave="handleExpressLeave"
           :share-order="shareOrder"
+          :view-notice-logs="viewNoticeLogs"
           @refresh="getList"
 
         />
@@ -127,6 +142,7 @@
           :handle-express-hover="handleExpressHover"
           :handle-express-leave="handleExpressLeave"
           :share-order="shareOrder"
+          :view-notice-logs="viewNoticeLogs"
         />
       </div>
 
@@ -197,6 +213,12 @@
       :order-detail="orderDetail"
       @view-device="viewDetail"
       @query-express="handleExpressQuery"
+    />
+
+    <NoticeLogDialog
+      v-model:visible="noticeLogVisible"
+      :order-id="noticeLogOrderId"
+      :is-mobile="isMobile"
     />
     <!-- 支付方式 -->
     <PaymentMethodDialog
@@ -270,7 +292,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from "vue";
+import { ref, onMounted, onBeforeUnmount, computed, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import {
   ElMessage,
   ElMessageBox,
@@ -293,6 +316,7 @@ import {
   updateRecycleOrder,
   getDevice,
   paymentConfirm,
+  devicePaymentConfirm,
 } from "@/addon/hsx_recycle/api/recycle_order";
 import { getExpress } from "@/addon/hsx_recycle/api/device_query_api";
 import { generateOrderShortLink } from "@/addon/hsx_recycle/api/shortlink";
@@ -324,6 +348,7 @@ import DeviceDetailDialog from "./components/DeviceDetailDialog.vue";
 import RecycleOrderSearchPanel from "./components/RecycleOrderSearchPanel.vue";
 import RecycleOrderDesktopTable from "./components/RecycleOrderDesktopTable.vue";
 import RecycleOrderMobileCards from "./components/RecycleOrderMobileCards.vue";
+import NoticeLogDialog from "./components/NoticeLogDialog.vue";
 
 // 引入图片预览工具
 import { img } from "@/utils/common";
@@ -390,6 +415,8 @@ interface OrderDetail {
 
 // 状态管理
 const orderStatusMap = ref<Record<string, OrderStatus>>({});
+const route = useRoute();
+const router = useRouter();
 
 // 分页
 const {
@@ -402,6 +429,9 @@ const {
 const {
   loading,
   list,
+  filterMeta,
+  viewMode,
+  paymentMode,
   advancedSearchForm,
   activeTab,
   getList,
@@ -409,13 +439,17 @@ const {
   handleCurrentChange,
   getStatusCount,
   advancedSearch,
-  resetAdvancedSearch,
+  resetQuickSearchForm,
+  resetAdvancedSearchForm,
   handleMemberChange,
   handleTabClick,
 } = useRecycleOrderQuery<OrderItem>({
   pagination,
   setPagination,
-  fetchList: getRecycleOrderList,
+  fetchList: (params: Record<string, any>) => getRecycleOrderList({
+    ...params,
+    ...getDashboardDrilldownParams(),
+  }),
   onError: (message: string) => ElMessage.error(message),
 });
 
@@ -451,6 +485,76 @@ const priceDeviceLogVisible = ref(false);
 const isMobile = ref(false);
 const mobileSearchVisible = ref(false);
 const mobileExpandedOrders = ref<Array<number | string>>([]);
+const noticeLogVisible = ref(false);
+const noticeLogOrderId = ref<number | string>(0);
+
+const getRouteQueryString = (key: string) => {
+  const value = route.query[key];
+  return Array.isArray(value) ? (value[0] || "") : (value || "");
+};
+
+const getDashboardDrilldownParams = () => {
+  const filterKey = getRouteQueryString("filter_key");
+  if (!filterKey) return {};
+
+  return {
+    filter_key: filterKey,
+    view_mode: getRouteQueryString("view_mode"),
+    start_time: getRouteQueryString("start_time"),
+    end_time: getRouteQueryString("end_time"),
+  };
+};
+
+const hasDashboardFilter = computed(() => !!getRouteQueryString("filter_key"));
+const dashboardFilterTitle = computed(() => {
+  return getRouteQueryString("dashboard_title") || filterMeta.value.name || "看板筛选";
+});
+const dashboardDateRangeText = computed(() => {
+  const startTime = getRouteQueryString("start_time");
+  const endTime = getRouteQueryString("end_time");
+  if (!startTime && !endTime) return "";
+  if (startTime && endTime && startTime !== endTime) return `${startTime} 至 ${endTime}`;
+  return startTime || endTime;
+});
+
+const dashboardQueryKeys = [
+  "filter_key",
+  "view_mode",
+  "start_time",
+  "end_time",
+  "dashboard_title",
+  "t",
+];
+
+const clearDashboardQuery = async () => {
+  const nextQuery = { ...route.query };
+  dashboardQueryKeys.forEach((key) => {
+    delete nextQuery[key];
+  });
+
+  await router.replace({
+    path: route.path,
+    query: nextQuery,
+  });
+};
+
+const clearDashboardFilter = async () => {
+  await clearDashboardQuery();
+};
+
+const resetAllSearch = async () => {
+  resetQuickSearchForm();
+  resetAdvancedSearchForm();
+  activeTab.value = "";
+  setPagination({ page: 1 });
+
+  if (hasDashboardFilter.value) {
+    await clearDashboardQuery();
+    return;
+  }
+
+  await getList(1);
+};
 
 const { handleAction } = useRecycleOrderActions({
   list,
@@ -463,6 +567,7 @@ const { handleAction } = useRecycleOrderActions({
   priceDeviceLogVisible,
   paymentDialogVisible,
   paymentInfo,
+  paymentMode,
   selectedPayTypeIndex,
   orderDetailVisible,
   orderDetail,
@@ -582,6 +687,11 @@ const handleMobileDeviceSelection = (
 
 const deviceLogVisible = ref(false);
 
+const viewNoticeLogs = (row: any) => {
+  noticeLogOrderId.value = row.id;
+  noticeLogVisible.value = true;
+};
+
 // viewDetail
 const viewDetail = async (row) => {
   // 直接通过 getDevice 获取设备信息
@@ -663,6 +773,13 @@ onMounted(async () => {
   await handleDeviceDeepLink();
 });
 
+watch(
+  () => route.fullPath,
+  async () => {
+    await getList(1);
+  }
+);
+
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateResponsiveState);
   if (hoverTimer.value) {
@@ -688,20 +805,26 @@ const handlePaymentConfirm = async (paymentData) => {
       remark: "财务已确认打款",
     };
 
-    // 调用确认打款API
-    await paymentConfirm(orderId, {
-      ...paymentInfo,
-      payment_info: paymentInfo,
-    });
+    if (paymentData.paymentMode === "device") {
+      await devicePaymentConfirm(Number(orderId), {
+        ...paymentInfo,
+        device_ids: paymentData.selectedDeviceIds || [],
+        payment_info: paymentInfo,
+      });
+    } else {
+      await paymentConfirm(Number(orderId), {
+        ...paymentInfo,
+        payment_info: paymentInfo,
+      });
+    }
 
-    ElMessage.success("确认打款成功");
+    ElMessage.success(paymentData.paymentMode === "device" ? "设备打款成功" : "确认打款成功");
     paymentDialogVisible.value = false;
 
     // 刷新订单列表
     await getList();
   } catch (error) {
     console.error("确认打款失败", error);
-    ElMessage.error("确认打款失败");
   }
 };
 

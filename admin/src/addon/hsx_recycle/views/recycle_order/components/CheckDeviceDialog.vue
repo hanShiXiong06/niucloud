@@ -31,7 +31,34 @@
         </div>
 
         <div class="cdd-topbar__actions">
-          <el-tag size="small" effect="plain">{{ checkTemplateInfo?.template_name || '默认质检模板' }}</el-tag>
+          <div class="cdd-template-switch">
+            <div class="cdd-template-switch__meta">
+              <span>质检模板</span>
+              <strong>{{ checkTemplateInfo?.template_name || '未选择模板' }}</strong>
+              <em>{{ checkTemplateStatsText }}</em>
+            </div>
+            <el-select
+              v-model="selectedCheckTemplateId"
+              size="small"
+              filterable
+              class="cdd-template-switch__select"
+              :loading="checkTemplateLoading || checkSchemaLoading"
+              placeholder="选择模板"
+              @change="handleCheckTemplateChange"
+            >
+              <el-option
+                v-for="template in checkTemplateList"
+                :key="template.id"
+                :label="template.template_name"
+                :value="Number(template.id)"
+              >
+                <div class="cdd-template-option">
+                  <span>{{ template.template_name }}</span>
+                  <em>{{ formatTemplateScene(template.scene) }}{{ Number(template.is_default) === 1 ? ' / 默认' : '' }}</em>
+                </div>
+              </el-option>
+            </el-select>
+          </div>
           <el-tag size="small" type="success" effect="plain">已填 {{ checkedCount }} 项</el-tag>
           <template v-if="!isEditingDeviceInfo">
             <el-button size="small" :icon="Edit" @click="startEditDeviceInfo">编辑设备</el-button>
@@ -211,14 +238,14 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, computed, nextTick, onMounted, onBeforeUnmount, toRef } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   Cellphone, Edit, Postcard, Aim, Monitor, Check, Close, Headset, Lock, CopyDocument
 } from '@element-plus/icons-vue'
 
 import { queryDeviceByService } from '@/addon/hsx_recycle/api/device_query_api'
 import { getDeviceQueryConfigList } from '@/addon/hsx_recycle/api/device_query_config'
-import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
+import { getCheckTemplateAll, getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
 import {
   normalizeInfo,
   useCheckMeta,
@@ -241,6 +268,7 @@ interface DeviceInfo {
   check_result_seller?: string
   check_result_buyer?: string
   check_meta?: CheckMetaPayload | string | null
+  check_template_id?: number | string
   check_images?: string
   check_images_seller?: string
   check_images_buyer?: string
@@ -256,8 +284,11 @@ const props = defineProps<{ visible: boolean; device: DeviceInfo }>()
 const emit = defineEmits(['update:visible', 'confirm', 'cancel', 'save-draft'])
 
 const checkSchemaLoading = ref(false)
+const checkTemplateLoading = ref(false)
 const checkTemplateInfo = ref<any>(null)
 const checkTemplateGroups = ref<any[]>([])
+const checkTemplateList = ref<any[]>([])
+const selectedCheckTemplateId = ref<number>(0)
 const knownFieldOptionKeys = ['screen_id', 'indisplay_id', 'appearance_id', 'function_ids', 'fix_ids'] as const
 type KnownFieldOptionKey = typeof knownFieldOptionKeys[number]
 type KnownOptionBucket = 'screen' | 'indisplay' | 'appearance' | 'function' | 'fix'
@@ -312,6 +343,14 @@ const fieldConfigByKey = computed<Record<string, CheckTemplateField>>(() => {
 
 const checkTemplateFields = computed<CheckTemplateField[]>(() => {
   return checkTemplateGroups.value.flatMap((group: any) => group.fields || [])
+})
+
+const checkTemplateStatsText = computed(() => {
+  const groupCount = checkTemplateGroups.value.length
+  const fieldCount = checkTemplateFields.value.length
+  const sceneName = formatTemplateScene(checkTemplateInfo.value?.scene)
+  if (!groupCount && !fieldCount) return sceneName
+  return `${sceneName} / ${groupCount}组 ${fieldCount}项`
 })
 
 const getFieldExtraConfig = (field: CheckTemplateField) => {
@@ -514,19 +553,78 @@ function parsePrice(value: any): number | undefined {
 
 const updateDeviceMode = () => { isMobile.value = window.innerWidth <= 980 }
 
-const loadCheckTemplateSchema = async () => {
+const formatTemplateScene = (scene?: string) => {
+  const sceneMap: Record<string, string> = {
+    phone: '手机',
+    fold: '折叠屏',
+    watch: '手表',
+    tablet: '平板',
+    computer: '电脑',
+    common: '通用'
+  }
+  return sceneMap[String(scene || '')] || '通用'
+}
+
+const resolveDeviceTemplateId = (device: DeviceInfo) => {
+  const info = normalizeInfo(device.info)
+  const rawId = device.check_template_id || info?.check_meta?.template_id || device.check_meta?.template_id || 0
+  const templateId = Number(rawId)
+  return Number.isNaN(templateId) ? 0 : templateId
+}
+
+const loadCheckTemplateList = async () => {
+  checkTemplateLoading.value = true
+  try {
+    const res: any = await getCheckTemplateAll({ status: 1 })
+    checkTemplateList.value = Array.isArray(res.data) ? res.data : (res.data?.list || [])
+  } catch (error) {
+    checkTemplateList.value = []
+  } finally {
+    checkTemplateLoading.value = false
+  }
+}
+
+const loadCheckTemplateSchema = async (templateId = selectedCheckTemplateId.value, restoreDevice = true) => {
   checkSchemaLoading.value = true
   try {
-    const res: any = await getCheckTemplateSchema()
+    const params = templateId ? { template_id: templateId } : {}
+    const res: any = await getCheckTemplateSchema(params)
     const payload = res.data || {}
     checkTemplateInfo.value = payload.template || null
     checkTemplateGroups.value = payload.groups || []
-    restoreFromDevice(deviceData.value)
+    selectedCheckTemplateId.value = Number(payload.template?.id || templateId || 0)
+    if (restoreDevice) {
+      restoreFromDevice(deviceData.value)
+    } else {
+      clearAllSelections()
+    }
   } catch (error) {
     checkTemplateInfo.value = null
     checkTemplateGroups.value = []
+    selectedCheckTemplateId.value = 0
   } finally {
     checkSchemaLoading.value = false
+  }
+}
+
+const handleCheckTemplateChange = async (templateId: number) => {
+  const previousTemplateId = Number(checkTemplateInfo.value?.id || 0)
+  if (!templateId || templateId === previousTemplateId) return
+
+  try {
+    await ElMessageBox.confirm(
+      '切换模板后会重新加载质检项，已填写的模板选项将清空，设备型号、IMEI、容量、颜色等基础信息会保留。',
+      '切换质检模板',
+      {
+        confirmButtonText: '确认切换',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    await loadCheckTemplateSchema(templateId, false)
+    ElMessage.success('质检模板已切换')
+  } catch (error: any) {
+    selectedCheckTemplateId.value = previousTemplateId
   }
 }
 
@@ -767,7 +865,8 @@ function buildSubmitPayload(action: 'check' | 'save_draft') {
     sell_price: deviceForm.sell_price,
     action,
     imei: deviceForm.imei,
-    model: deviceData.value.model,
+    model: deviceForm.model,
+    check_template_id: selectedCheckTemplateId.value || checkTemplateInfo.value?.id || 0,
     info: getSubmitInfo(),
     system_version: deviceForm.system_version,
     warranty_info: deviceForm.warranty_info,
@@ -798,20 +897,24 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
   deviceForm.info = normalizeInfo(device.info)
   deviceForm.system_version = device.system_version || ''
   deviceForm.warranty_info = device.warranty_info || ''
+  selectedCheckTemplateId.value = resolveDeviceTemplateId(device)
   const restoredInfo = normalizeInfo(device.info)
   deviceForm.capacity = device.capacity || restoredInfo.capacity || ''
   deviceForm.color = device.color || restoredInfo.color || ''
-  restoreFromDevice(device)
   nextTick(() => { formRef.value?.clearValidate() })
 }
 
 watch(() => props.visible, (val) => { dialogVisible.value = val })
-watch(() => props.device, (val) => { initializeFormFromDevice(val) }, { deep: true })
+watch(() => props.device, async (val) => {
+  initializeFormFromDevice(val)
+  if (dialogVisible.value) await loadCheckTemplateSchema(selectedCheckTemplateId.value)
+}, { deep: true })
 watch(dialogVisible, async (val) => {
   emit('update:visible', val)
   if (!val) return
   initializeFormFromDevice(props.device)
-  await loadCheckTemplateSchema()
+  if (!checkTemplateList.value.length) await loadCheckTemplateList()
+  await loadCheckTemplateSchema(selectedCheckTemplateId.value)
 })
 watch(
   () => [
@@ -829,7 +932,8 @@ onMounted(async () => {
   updateDeviceMode()
   window.addEventListener('resize', updateDeviceMode)
   initializeFormFromDevice(props.device)
-  if (dialogVisible.value) await loadCheckTemplateSchema()
+  await loadCheckTemplateList()
+  if (dialogVisible.value) await loadCheckTemplateSchema(selectedCheckTemplateId.value)
   await loadDeviceQueryActions()
 })
 onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) })
@@ -1552,6 +1656,71 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.cdd-template-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 380px;
+  max-width: 520px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.cdd-template-switch__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+
+  span {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  strong {
+    max-width: 220px;
+    overflow: hidden;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  em {
+    color: #2563eb;
+    font-size: 11px;
+    font-style: normal;
+  }
+}
+
+.cdd-template-switch__select {
+  width: 180px;
+  flex: 0 0 auto;
+}
+
+.cdd-template-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  em {
+    color: #94a3b8;
+    font-size: 12px;
+    font-style: normal;
+  }
 }
 
 .cdd-main {

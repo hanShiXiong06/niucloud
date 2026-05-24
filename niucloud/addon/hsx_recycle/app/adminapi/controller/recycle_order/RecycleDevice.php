@@ -147,6 +147,10 @@ class RecycleDevice extends BaseAdminController
             if (isset($data['data']['model'])) {
                 $checkData['model'] = $data['data']['model'];
             }
+            // check_template_id
+            if (isset($data['data']['check_template_id'])) {
+                $checkData['check_template_id'] = $data['data']['check_template_id'];
+            }
             
 
             // 调用质检完成方法
@@ -206,6 +210,9 @@ class RecycleDevice extends BaseAdminController
         $checkData = $data['check_data'];
         if (isset($data['final_price']) && $data['final_price'] > 0) {
             $checkData['final_price'] = $data['final_price'];
+        }
+        if (isset($data['check_data']['check_template_id'])) {
+            $checkData['check_template_id'] = $data['check_data']['check_template_id'];
         }
 
         return success($this->service->completeCheck($id, $checkData, $data['remark']));

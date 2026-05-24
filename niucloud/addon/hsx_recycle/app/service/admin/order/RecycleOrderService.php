@@ -5,9 +5,10 @@ namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\service\admin\dashboard\RecycleDashboardFilterService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
+use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderService;
-use app\service\core\notice\NoticeService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -28,6 +29,9 @@ class RecycleOrderService extends BaseAdminService
      */
     private $flowService;
 
+    private RecycleDevicePaymentService $devicePaymentService;
+    private RecycleOrderFlowModeService $flowModeService;
+
     /**
      * @var RecycleOrder
      */
@@ -37,6 +41,8 @@ class RecycleOrderService extends BaseAdminService
     {
         parent::__construct();
         $this->flowService = new CoreRecycleOrderFlowService();
+        $this->devicePaymentService = new RecycleDevicePaymentService();
+        $this->flowModeService = new RecycleOrderFlowModeService();
         $this->model = new RecycleOrder();
     }
 
@@ -263,6 +269,9 @@ class RecycleOrderService extends BaseAdminService
     {
         $field = '*';
         $order = 'create_at desc';
+        $filterKey = trim((string)($where['filter_key'] ?? ''));
+        $viewMode = (string)($where['view_mode'] ?? '');
+        $filterService = $filterKey !== '' ? new RecycleDashboardFilterService() : null;
 
         // 使用 Model 的参数映射方法
         $searchParams = RecycleOrder::mapSearchParams($where);
@@ -272,9 +281,12 @@ class RecycleOrderService extends BaseAdminService
             ->withSearch(RecycleOrder::getSearchFields(), $searchParams)
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->with([
-                'devices' => function($query) {
-                    $query->field('id,order_id,imei,user_sn,model,initial_price,status,category_id,final_price')
-                        ->append(['status_name', 'category_name']);
+                'devices' => function($query) use ($filterKey, $viewMode, $where, $filterService) {
+                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark')
+                        ->append(['status_name', 'category_name', 'pay_status_name', 'confirm_status_name']);
+                    if ($filterService && $viewMode === 'device_expand') {
+                        $filterService->applyDeviceFilter($query, $filterKey, $where);
+                    }
                 },
                 'member' => function($query) {
                     $query->field('member_id,username,nickname,mobile,headimg');
@@ -287,6 +299,12 @@ class RecycleOrderService extends BaseAdminService
             ->order($order)
             ->append(['status_name', 'delivery_type_name']);
 
+        $filterMeta = [];
+        if ($filterService) {
+            $search_model = $filterService->applyOrderFilter($search_model, $filterKey, $where);
+            $filterMeta = $filterService->getFilterMeta($filterKey);
+        }
+
         // 获取分页数据
         $result = $this->pageQuery($search_model);
 
@@ -295,6 +313,16 @@ class RecycleOrderService extends BaseAdminService
 
         // 将状态统计添加到返回结果中
         $result['status_counts'] = $statusCounts;
+        $result['filter_meta'] = $filterMeta;
+        $result['view_mode'] = $viewMode;
+        $result['flow_mode'] = $this->flowModeService->getDefaultFlowMode();
+        $result['payment_mode'] = $result['flow_mode'];
+        if (isset($result['data']) && is_array($result['data'])) {
+            $result['data'] = array_map(fn($item) => $this->flowModeService->decorateOrder($item), $result['data']);
+        }
+        if (isset($result['list']) && is_array($result['list'])) {
+            $result['list'] = array_map(fn($item) => $this->flowModeService->decorateOrder($item), $result['list']);
+        }
 
         return $result;
     }
@@ -312,8 +340,8 @@ class RecycleOrderService extends BaseAdminService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,imei,user_sn,model,initial_price, category_id , status,check_result,final_price')
-                        ->append(['status_name','category_name']);
+                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id, status,check_result,final_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark')
+                        ->append(['status_name','category_name', 'pay_status_name', 'confirm_status_name']);
                 },
                 'member' => function($query) {
                     $query->field('member_id,username,nickname,mobile,headimg');
@@ -327,7 +355,20 @@ class RecycleOrderService extends BaseAdminService
             throw new CommonException('ORDER_NOT_FOUND');
         }
 
+        $info = $this->flowModeService->decorateOrder($info);
+        $info['device_payment_summary'] = $this->devicePaymentService->getPaymentSummary($id);
+
         return $info;
+    }
+
+    public function confirmDevices(int $id, array $data): array
+    {
+        return $this->flowModeService->confirmDevices(
+            $id,
+            is_array($data['device_ids'] ?? null) ? $data['device_ids'] : [],
+            trim((string)($data['remark'] ?? '')),
+            (int)($data['confirm_status'] ?? RecycleOrderDict::CONFIRM_STATUS_CONFIRMED)
+        );
     }
 
     /**
@@ -459,23 +500,30 @@ class RecycleOrderService extends BaseAdminService
                 throw new CommonException('订单不存在');
             }
 
-            // 验证订单状态 - 只有待确认状态的订单才能推送通知
-            if ($order['status'] != RecycleOrderDict::ORDER_STATUS_PENDING_CONFIRM) {
-                throw new CommonException('只有待确认状态的订单才能推送通知');
-            }
-
             // 验证订单是否有用户
             if (empty($order['member_id'])) {
                 throw new CommonException('订单没有关联用户，无法推送通知');
             }
 
-            // 调用通知服务推送OrderAgree通知
-            $noticeService = new NoticeService();
-            $result = $noticeService->send($this->site_id, 'recycle_order_agree', [
+            $devices = $order['devices'] ?? [];
+            $pendingDeviceIds = [];
+            foreach ($devices as $device) {
+                $status = (int)($device['status'] ?? 0);
+                $confirmStatus = (int)($device['confirm_status'] ?? RecycleOrderDict::CONFIRM_STATUS_PENDING);
+                if ($status === RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM && $confirmStatus !== RecycleOrderDict::CONFIRM_STATUS_CONFIRMED) {
+                    $pendingDeviceIds[] = (int)$device['id'];
+                }
+            }
+
+            if (empty($pendingDeviceIds)) {
+                throw new CommonException('当前订单没有待客户确认的设备，暂不需要推送');
+            }
+
+            (new CoreRecycleOrderNotifyService())->orderAgreeNotify([
                 'order_id' => $id,
-                'order_no' => $order['order_no'],
-                'time' => date('Y-m-d H:i:s'),
-                'status' => '待确认'
+                'site_id' => $this->site_id,
+                'scene' => 'manual_order_confirm',
+                'device_ids' => $pendingDeviceIds,
             ]);
 
             return [
@@ -489,6 +537,21 @@ class RecycleOrderService extends BaseAdminService
             Log::record('推送订单通知失败：' . $e->getMessage(), 'error');
             throw new CommonException('推送通知失败：' . $e->getMessage());
         }
+    }
+
+    public function getNoticeLogs(int $id): array
+    {
+        $order = RecycleOrder::where([
+            ['id', '=', $id],
+            ['site_id', '=', $this->site_id],
+            ['delete_at', '=', 0],
+        ])->findOrEmpty();
+
+        if ($order->isEmpty()) {
+            throw new CommonException('订单不存在');
+        }
+
+        return (new RecycleNoticeLogService())->getOrderLogs($id);
     }
 
     /**
@@ -509,6 +572,11 @@ class RecycleOrderService extends BaseAdminService
         $baseQuery = (new RecycleOrder())
             ->withSearch(RecycleOrder::getSearchFields(), $searchParams)
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]]);
+
+        $filterKey = trim((string)($where['filter_key'] ?? ''));
+        if ($filterKey !== '') {
+            $baseQuery = (new RecycleDashboardFilterService())->applyOrderFilter($baseQuery, $filterKey, $where);
+        }
 
         // 获取所有状态的定义
         $allStatuses = RecycleOrderDict::getOrderStatus();

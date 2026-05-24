@@ -19,6 +19,8 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
      */
     protected $noticeService;
 
+    private CoreRecycleNoticeLogService $noticeLogService;
+
     /**
      * 小程序订单详情页路径
      */
@@ -28,6 +30,7 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
     {
         parent::__construct();
         $this->noticeService = new NoticeService();
+        $this->noticeLogService = new CoreRecycleNoticeLogService();
     }
 
     /**
@@ -35,9 +38,10 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
      * @param int $orderId
      * @return string
      */
-    private function getWeappOrderPage(int $orderId): string
+    private function getWeappOrderPage(int $orderId, array $params = []): string
     {
-        return self::WEAPP_ORDER_DETAIL_PAGE . '?id=' . $orderId;
+        $params = array_merge(['id' => $orderId], $params);
+        return self::WEAPP_ORDER_DETAIL_PAGE . '?' . http_build_query($params);
     }
 
     /**
@@ -280,14 +284,39 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
                 return;
             }
 
-            $this->noticeService->send((int)$data['site_id'], 'recycle_order_agree', [
+            $deviceIds = array_values(array_unique(array_filter(array_map('intval', $data['device_ids'] ?? []))));
+            $scene = (string)($data['scene'] ?? ($deviceIds ? 'device_confirm' : 'order_confirm'));
+            $pageParams = [];
+            if ($deviceIds) {
+                $pageParams = [
+                    'scene' => 'device_confirm',
+                    'device_ids' => implode(',', $deviceIds),
+                ];
+            }
+            $targetPage = $this->getWeappOrderPage((int)$data['order_id'], $pageParams);
+            $payload = [
                 'order_id' => (int)$data['order_id'],
                 'member_id' => $memberId,
                 'order_no' => $orderInfo['order_no'] ?? '',
                 'time' => date('Y-m-d H:i:s'),
                 'status' => '待确认',
-                '__weapp_page' => $this->getWeappOrderPage((int)$data['order_id']),
+                '__weapp_page' => $targetPage,
+            ];
+
+            $sendResult = $this->noticeLogService->sendWithLog((int)$data['site_id'], 'recycle_order_agree', $payload, [
+                'order_id' => (int)$data['order_id'],
+                'order_no' => (string)($orderInfo['order_no'] ?? ''),
+                'member_id' => $memberId,
+                'scene' => $scene,
+                'device_ids' => $deviceIds,
+                'device_count' => count($deviceIds),
+                'target_page' => $targetPage,
             ]);
+
+            if (empty($sendResult['success'])) {
+                Log::error('【回收通知】订单确认通知发送失败: ' . ($sendResult['message'] ?? ''), $data);
+                return;
+            }
 
             Log::info('【回收通知】订单确认通知发送成功: ' . $data['order_id']);
         } catch (\Exception $e) {

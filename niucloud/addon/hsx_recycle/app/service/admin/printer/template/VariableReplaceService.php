@@ -88,6 +88,10 @@ class VariableReplaceService extends BaseAdminService
         // 定义需要换行处理的字段
         $wrapFields = [
             'check_result',    // 质检结果
+            'check_info',      // 验机信息
+            'inspection_info', // 验机信息别名
+            'check_summary',   // 质检摘要
+            'inspection_summary', // 验机摘要
             'remark',          // 备注
             'price_remark',    // 定价备注
             'description',     // 描述
@@ -216,4 +220,3 @@ class VariableReplaceService extends BaseAdminService
         return $default;
     }
 }
-

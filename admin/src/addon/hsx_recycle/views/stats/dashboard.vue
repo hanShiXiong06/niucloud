@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50"
-  >
+  <div class="min-h-screen bg-gray-50">
     <!-- 页面标题和快速筛选 -->
     <div class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-10">
       <div class="mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -11,7 +9,7 @@
           <!-- 页面标题 -->
           <div class="flex items-center space-x-3">
             <div
-              class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center"
+              class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"
             >
               <el-icon :size="18" color="white">
                 <DataAnalysis />
@@ -84,7 +82,7 @@
                 class="custom-date-picker"
               />
               <button
-                @click="fetchData"
+                @click="handleRefresh"
                 class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm"
               >
                 <el-icon :size="14" color="white" class="mr-1">
@@ -100,10 +98,140 @@
 
     <!-- 主要内容区域 -->
     <div class="mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <section class="mb-6 rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div class="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <el-icon class="text-blue-600"><DataBoard /></el-icon>
+              <h2 class="text-lg font-semibold text-gray-900">数据看板</h2>
+            </div>
+            <p class="mt-1 text-sm text-gray-500">
+              按业务、财务、用户拆分数据场景，点击指标可进入真实订单或设备明细。
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <el-tag size="small" type="info">
+              {{ businessDashboard.date_range?.start_time || queryParams.start_time || "今日" }}
+              <template v-if="businessDashboard.date_range?.end_time && businessDashboard.date_range.end_time !== businessDashboard.date_range.start_time">
+                至 {{ businessDashboard.date_range.end_time }}
+              </template>
+            </el-tag>
+            <el-button size="small" :loading="businessLoading" @click="fetchBusinessDashboard">
+              刷新
+            </el-button>
+          </div>
+        </div>
+
+        <div class="p-5">
+          <BoardTabs
+            v-if="dashboardTabs.length"
+            v-model="activeDashboard"
+            :tabs="dashboardTabs"
+            class="mb-5"
+          />
+
+          <DashboardEmptyState
+            v-if="!dashboardTabs.length"
+            title="当前账号暂无可见看板"
+            description="可到首页配置中开启业务、财务或用户看板，并按角色或员工分配可见权限。"
+          />
+          <el-skeleton v-else-if="businessLoading && !businessDashboard.cards.length" :rows="4" animated />
+          <div
+            v-else-if="activeDashboard === 'business'"
+            class="space-y-4"
+          >
+            <DashboardSummary
+              board="business"
+              :cards="businessDashboard.cards"
+              :todo="businessDashboard.todo"
+              :date-label="dashboardDateLabel"
+            />
+
+            <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+              <MetricGrid
+                v-if="canShowWidget('business_dashboard_metrics')"
+                :cards="businessMetricCards"
+                tone="business"
+                columns="business"
+                @drilldown="handleMetricDrilldown"
+              />
+
+              <TodoPanel
+                v-if="canShowWidget('business_dashboard_metrics')"
+                :items="businessDashboard.todo"
+                @drilldown="handleMetricDrilldown"
+              />
+            </div>
+          </div>
+
+          <div v-else-if="activeDashboard === 'finance'" class="space-y-4">
+            <DashboardSummary
+              board="finance"
+              :cards="businessDashboard.cards"
+              :todo="businessDashboard.todo"
+              :date-label="dashboardDateLabel"
+            />
+
+            <MetricGrid
+              v-if="canShowWidget('finance_dashboard_metrics')"
+              :cards="financeMetricCards"
+              tone="finance"
+              columns="finance"
+              @drilldown="handleMetricDrilldown"
+            />
+
+            <ChartCard
+              v-if="canShowWidget('finance_dashboard_trend')"
+              title="资金趋势"
+              :icon="TrendCharts"
+              contentClass="py-2"
+            >
+              <template #header-right>
+                <span class="text-xs text-gray-500">按所选时间展示打款金额变化</span>
+              </template>
+              <div
+                ref="financeTrendChart"
+                class="w-full h-[320px]"
+                v-loading="businessTrendLoading"
+              ></div>
+            </ChartCard>
+          </div>
+
+          <div v-else class="space-y-4">
+            <DashboardSummary
+              board="user"
+              :cards="businessDashboard.cards"
+              :todo="businessDashboard.todo"
+              :date-label="dashboardDateLabel"
+            />
+          </div>
+        </div>
+      </section>
+
+      <ChartCard
+        v-if="activeDashboard === 'business' && canShowWidget('business_dashboard_trend')"
+        title="业务趋势"
+        :icon="TrendCharts"
+        contentClass="py-2"
+        class="mb-6"
+      >
+        <template #header-right>
+          <span class="text-xs text-gray-500">
+            {{ businessTrend.explain || "按所选时间逐日展示核心业务变化" }}
+          </span>
+        </template>
+        <div
+          ref="businessTrendChart"
+          class="w-full h-[360px]"
+          v-loading="businessTrendLoading"
+        ></div>
+      </ChartCard>
+
       <!-- 普通用户视图 -->
       <div
         v-if="
-          userRole === 'user' || userRole === 'checker' || userRole === 'pricer'
+          activeDashboard === 'user' &&
+          (userRole === 'user' || userRole === 'checker' || userRole === 'pricer')
         "
         class="space-y-6"
       >
@@ -183,340 +311,201 @@
         </div>
 
         <!-- 设备分类图表 -->
-        <ChartCard title="设备分类分布" :icon="PieChart">
+        <ChartCard v-if="canShowWidget('user_category_chart')" title="设备分类分布" :icon="PieChart">
           <div ref="userCategoryChart" class="w-full h-80"></div>
         </ChartCard>
       </div>
 
       <!-- 管理员视图 -->
-      <div v-else-if="userRole === 'admin'" class="space-y-6">
-        <!-- 运营概览区块 -->
-        <el-row gutter="16">
-          <el-col :span="12">
-            <div class="space-y-4">
-              <SectionHeader
-                title="运营概览"
-                :subtitle="`${getTimePeriodText()} 业务数据`"
-                :icon="DataBoard"
-                bgClass="bg-gradient-to-r from-blue-400 to-blue-500"
-              />
+      <div v-if="activeDashboard === 'user' && userRole === 'admin'" class="space-y-6">
+        <section class="space-y-4">
+          <SectionHeader
+            title="团队工作统计"
+            :subtitle="`${getTimePeriodText()} 员工处理数据`"
+            :icon="DataBoard"
+            bgClass="bg-blue-600"
+          />
 
-              <!-- 统计卡片 -->
-              <el-row :gutter="16">
-                <el-col :span="24">
+          <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+            <ChartCard
+              v-if="canShowWidget('staff_work_chart')"
+              title="员工工作量对比"
+              :icon="DataBoard"
+              contentClass="py-2"
+            >
+              <div ref="adminUserChart" class="w-full min-h-[360px]"></div>
+            </ChartCard>
+
+            <ChartCard v-if="canShowWidget('staff_work_table')" title="员工工作明细" :icon="UserFilled">
+              <template #header-right v-if="userList.length > 0">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-gray-600 whitespace-nowrap">员工筛选：</span>
+                  <el-select
+                    v-model="selectedUserId"
+                    placeholder="全部员工"
+                    clearable
+                    @change="handleFetchUserDetailStats"
+                  >
+                    <el-option label="全部员工" value="" />
+                    <el-option
+                      v-for="user in userList"
+                      :key="user.uid"
+                      :label="user.real_name || user.username"
+                      :value="String(user.uid)"
+                    />
+                  </el-select>
+                </div>
+              </template>
+
+              <el-table
+                :data="userDetailStats"
+                v-loading="userLoading"
+                size="small"
+                class="w-full min-h-[360px]"
+              >
+                <el-table-column prop="user_name" label="员工" min-width="120" fixed />
+                <el-table-column prop="user_type_name" label="角色" min-width="100" />
+                <el-table-column prop="signed_order_count" label="签收单" min-width="90" />
+                <el-table-column prop="signed_device_count" label="签收台" min-width="90" />
+                <el-table-column prop="check_count" label="质检" min-width="80" />
+                <el-table-column prop="price_count" label="定价" min-width="80" />
+                <el-table-column prop="payment_count" label="打款" min-width="80" />
+              </el-table>
+            </ChartCard>
+          </div>
+        </section>
+
+        <section v-if="canShowWidget('member_stats_overview')" class="space-y-4">
+          <SectionHeader
+            title="会员统计"
+            :subtitle="`${getTimePeriodText()} 用户数据`"
+            :icon="User"
+            bgClass="bg-indigo-600"
+          />
+
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="总用户数"
+              :mainValue="memberStatsOverview.total_members || 0"
+              subValue="注册用户"
+              color="purple"
+              :icon="User"
+            />
+
+            <StatCard
+              title="新增用户"
+              :mainValue="memberStatsOverview.new_members || 0"
+              :subValue="`期间注册`"
+              color="blue"
+              :icon="UserFilled"
+            />
+
+            <StatCard
+              title="活跃用户"
+              :mainValue="memberStatsOverview.active_members || 0"
+              subValue="期间活跃"
+              color="green"
+              :icon="View"
+            />
+
+            <StatCard
+              title="拉新用户"
+              :mainValue="memberStatsOverview.invite_members || 0"
+              subValue="被推广注册"
+              color="orange"
+              :icon="Share"
+            />
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div class="space-y-4 xl:col-span-2">
+              <ChartCard title="注册趋势" :icon="TrendCharts" contentClass="py-2">
+                <div
+                  ref="memberRegisterTrendChart"
+                  class="w-full h-80"
+                  v-loading="memberLoading"
+                ></div>
+              </ChartCard>
+
+              <ChartCard title="用户活跃度" :icon="DataLine" contentClass="py-2">
+                <div
+                  ref="memberActivityChart"
+                  class="w-full h-80"
+                  v-loading="memberLoading"
+                ></div>
+              </ChartCard>
+            </div>
+
+            <div class="space-y-4">
+              <ChartCard title="注册渠道" :icon="PieChart" contentClass="py-2">
+                <div
+                  ref="memberChannelChart"
+                  class="w-full h-80"
+                  v-loading="memberLoading"
+                ></div>
+              </ChartCard>
+
+              <ChartCard title="拉新排行榜 TOP10" :icon="Trophy" contentClass="py-2">
+                <div
+                  class="w-full h-80 overflow-y-auto"
+                  v-loading="memberLoading"
+                >
                   <div
-                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+                    v-if="memberInviteRank.length === 0"
+                    class="flex items-center justify-center h-full text-gray-400"
                   >
-                    <StatCard
-                      v-if="canShowWidget('site_today_order_count')"
-                      :title="getOrderLabel()"
-                      :mainValue="overviewStats.today_order_count || 0"
-                      :subValue="`昨日 ${
-                        overviewStats.yesterday_order_count || 0
-                      }`"
-                      color="blue"
-                      link="/recycle_order/list"
-                      :icon="Document"
-                    />
-
-                    <StatCard
-                      v-if="canShowWidget('site_today_check_count')"
-                      :title="getCheckLabel()"
-                      :mainValue="overviewStats.today_check_count || 0"
-                      color="green"
-                      link="/recycle_order/list"
-                      :icon="Search"
-                      :extraInfo="(overviewStats.today_check_breakdown || []).slice(0, 2).map((item: any) => `${item.category_name} ${item.count}`)"
-                    />
-
-                    <StatCard
-                      v-if="canShowWidget('site_today_payment_amount')"
-                      :title="getPaymentLabel()"
-                      :mainValue="`¥${overviewStats.today_payment_amount || 0}`"
-                      :subValue="`${overviewStats.today_payment_count || 0} 台`"
-                      color="orange"
-                      link="/recycle_order/list"
-                      :icon="Money"
-                    />
-
-                    <StatCard
-                      v-if="canShowWidget('site_today_return_count')"
-                      :title="getReturnLabel()"
-                      :mainValue="overviewStats.today_return_count || 0"
-                      subValue="设备数量"
-                      link="/recycle_return_order/list"
-                      color="red"
-                      :icon="RefreshLeft"
-                    />
+                    暂无数据
                   </div>
-                </el-col>
-                <el-col v-if="canShowWidget('today_check_breakdown')" :span="12">
-                  <!-- 运营概览环形图 -->
-                  <ChartCard
-                    title="业务分布"
-                    :icon="PieChart"
-                    contentClass="py-2 "
-                    class="mt-4"
-                  >
-                    <div ref="overviewRingChart" class="w-full h-80"></div>
-                  </ChartCard>
-                </el-col>
-                <el-col v-if="canShowWidget('staff_work_chart')" :span="12"  class="mt-4">
-                  <!-- 员工工作统计区块 - 优化布局 -->
-                  <div class="h-full flex flex-col bg-white rounded-lg ">
-
+                  <div v-else class="space-y-2 p-2">
                     <div
-                      ref="adminUserChart"
-                      class="flex-1 min-h-[380px]"
-                    ></div>
-                  </div>
-                </el-col>
-                <el-col v-if="canShowWidget('staff_work_table')" :xs="24" :lg="24" class="mt-4">
-                  <ChartCard title="员工工作统计" :icon="UserFilled">
-                    <template #header-right v-if="userList.length > 0">
-                      <div class="flex items-center gap-2">
-                        <span class="text-xs text-gray-600 whitespace-nowrap"
-                          >员工筛选：</span
+                      v-for="(item, index) in memberInviteRank"
+                      :key="item.member_id"
+                      class="flex items-center justify-between rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100"
+                    >
+                      <div class="flex min-w-0 items-center gap-3">
+                        <div
+                          :class="[
+                            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold',
+                            index === 0
+                              ? 'bg-yellow-400 text-white'
+                              : index === 1
+                              ? 'bg-gray-300 text-white'
+                              : index === 2
+                              ? 'bg-orange-400 text-white'
+                              : 'bg-blue-100 text-blue-600',
+                          ]"
                         >
-                        <el-select
-                          v-model="selectedUserId"
-                          placeholder="全部员工"
-                          clearable
-                          @change="handleFetchUserDetailStats"
-                        >
-                          <el-option label="全部员工" value="" />
-                          <el-option
-                            v-for="user in userList"
-                            :key="user.uid"
-                            :label="user.real_name || user.username"
-                            :value="String(user.uid)"
-                          />
-                        </el-select>
+                          {{ index + 1 }}
+                        </div>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-medium text-gray-900">
+                            {{ item.nickname }}
+                          </div>
+                          <div class="truncate text-xs text-gray-500">
+                            {{ item.mobile }}
+                          </div>
+                        </div>
                       </div>
-                    </template>
-
-                    <!-- 采用左右布局：表格在左，图表在右 -->
-                    <el-row :gutter="16">
-                      <!-- 左侧：数据表格 -->
-                      <el-col :xs="24" :lg="24">
-                        <div class="w-full">
-                          <el-table
-                            :data="userDetailStats"
-                            v-loading="userLoading"
-                            size="small"
-                            class="w-full min-h-[293px]"
-                          >
-                            <el-table-column
-                              prop="user_name"
-                              label="员工"
-                              fixed
-                            />
-                            <el-table-column
-                              prop="user_type_name"
-                              label="角色"
-                            />
-                            <el-table-column
-                              prop="signed_order_count"
-                              label="签收单"
-                            />
-                            <el-table-column
-                              prop="signed_device_count"
-                              label="签收台"
-                            />
-                            <el-table-column prop="check_count" label="质检" />
-                            <el-table-column prop="price_count" label="定价" />
-                            <el-table-column
-                              prop="payment_count"
-                              label="打款"
-                            />
-                          </el-table>
+                      <div class="ml-3 shrink-0 text-right">
+                        <div class="text-lg font-bold text-blue-600">
+                          {{ item.invite_count }}
                         </div>
-                      </el-col>
-
-                      <!-- 右侧：对比图表 -->
-                    </el-row>
-                  </ChartCard>
-                 
-                </el-col>
-              </el-row>
+                        <div class="text-xs text-gray-500">人</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </ChartCard>
             </div>
-          </el-col>
-          <el-col v-if="canShowWidget('member_stats_overview')" :span="12">
-            <!-- 会员统计区块 -->
-            <div class="space-y-4">
-              <SectionHeader
-                title="会员统计"
-                :subtitle="`${getTimePeriodText()} 用户数据`"
-                :icon="User"
-                bgClass="bg-gradient-to-r from-purple-500 to-pink-500"
-              />
-
-              <!-- 会员统计概览卡片 -->
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                  title="总用户数"
-                  :mainValue="memberStatsOverview.total_members || 0"
-                  subValue="注册用户"
-                  color="purple"
-                  :icon="User"
-                />
-
-                <StatCard
-                  title="新增用户"
-                  :mainValue="memberStatsOverview.new_members || 0"
-                  :subValue="`期间注册`"
-                  color="blue"
-                  :icon="UserFilled"
-                />
-
-                <StatCard
-                  title="活跃用户"
-                  :mainValue="memberStatsOverview.active_members || 0"
-                  subValue="期间活跃"
-                  color="green"
-                  :icon="View"
-                />
-
-                <StatCard
-                  title="拉新用户"
-                  :mainValue="memberStatsOverview.invite_members || 0"
-                  subValue="被推广注册"
-                  color="orange"
-                  :icon="Share"
-                />
-              </div>
-
-              <!-- 会员统计图表区域 -->
-              <el-row :gutter="16">
-                <!-- 左侧：注册趋势 + 渠道分布 -->
-                <el-col :xs="24" :lg="16">
-                  <el-row :gutter="16">
-                    <!-- 注册趋势图 -->
-                    <el-col :span="24">
-                      <ChartCard
-                        title="注册趋势"
-                        :icon="TrendCharts"
-                        contentClass="py-2"
-                      >
-                        <div
-                          ref="memberRegisterTrendChart"
-                          class="w-full h-80"
-                          v-loading="memberLoading"
-                        ></div>
-                      </ChartCard>
-                    </el-col>
-
-                    <!-- 活跃度统计图 -->
-                    <el-col :span="24" class="mt-4">
-                      <ChartCard
-                        title="用户活跃度"
-                        :icon="DataLine"
-                        contentClass="py-2"
-                      >
-                        <div
-                          ref="memberActivityChart"
-                          class="w-full h-80"
-                          v-loading="memberLoading"
-                        ></div>
-                      </ChartCard>
-                    </el-col>
-                  </el-row>
-                </el-col>
-
-                <!-- 右侧：注册渠道 + 拉新排行 -->
-                <el-col :xs="24" :lg="8">
-                  <el-row :gutter="16">
-                    <!-- 注册渠道分布 -->
-                    <el-col :span="24">
-                      <ChartCard
-                        title="注册渠道"
-                        :icon="PieChart"
-                        contentClass="py-2"
-                      >
-                        <div
-                          ref="memberChannelChart"
-                          class="w-full h-80"
-                          v-loading="memberLoading"
-                        ></div>
-                      </ChartCard>
-                    </el-col>
-
-                    <!-- 拉新排行榜 -->
-                    <el-col :span="24" class="mt-4">
-                      <ChartCard
-                        title="拉新排行榜 TOP10"
-                        :icon="Trophy"
-                        contentClass="py-2"
-                      >
-                        <div
-                          class="w-full h-80 overflow-y-auto"
-                          v-loading="memberLoading"
-                        >
-                          <div
-                            v-if="memberInviteRank.length === 0"
-                            class="flex items-center justify-center h-full text-gray-400"
-                          >
-                            暂无数据
-                          </div>
-                          <div v-else class="space-y-2 p-2">
-                            <div
-                              v-for="(item, index) in memberInviteRank"
-                              :key="item.member_id"
-                              class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                            >
-                              <div class="flex items-center gap-3">
-                                <!-- 排名 -->
-                                <div
-                                  :class="[
-                                    'w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold',
-                                    index === 0
-                                      ? 'bg-yellow-400 text-white'
-                                      : index === 1
-                                      ? 'bg-gray-300 text-white'
-                                      : index === 2
-                                      ? 'bg-orange-400 text-white'
-                                      : 'bg-blue-100 text-blue-600',
-                                  ]"
-                                >
-                                  {{ index + 1 }}
-                                </div>
-                                <!-- 用户信息 -->
-                                <div>
-                                  <div
-                                    class="text-sm font-medium text-gray-900"
-                                  >
-                                    {{ item.nickname }}
-                                  </div>
-                                  <div class="text-xs text-gray-500">
-                                    {{ item.mobile }}
-                                  </div>
-                                </div>
-                              </div>
-                              <!-- 拉新数量 -->
-                              <div class="text-right">
-                                <div class="text-lg font-bold text-blue-600">
-                                  {{ item.invite_count }}
-                                </div>
-                                <div class="text-xs text-gray-500">人</div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </ChartCard>
-                    </el-col>
-                  </el-row>
-                </el-col>
-              </el-row>
-            </div>
-          </el-col>
-        </el-row>
+          </div>
+        </section>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
+import { computed, ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   ArrowDown,
@@ -528,8 +517,6 @@ import {
   Money,
   PieChart,
   DataBoard,
-  Document,
-  RefreshLeft,
   UserFilled,
   TrendCharts,
   DataLine,
@@ -542,11 +529,26 @@ import {
 import StatCard from "./components/StatCard.vue";
 import ChartCard from "./components/ChartCard.vue";
 import SectionHeader from "./components/SectionHeader.vue";
+import BoardTabs from "./components/dashboard/BoardTabs.vue";
+import DashboardEmptyState from "./components/dashboard/DashboardEmptyState.vue";
+import DashboardSummary from "./components/dashboard/DashboardSummary.vue";
+import MetricGrid from "./components/dashboard/MetricGrid.vue";
+import TodoPanel from "./components/dashboard/TodoPanel.vue";
 
 // 导入 hooks
 import { useStatsData } from "./hooks/useStatsData";
 import { useCharts } from "./hooks/useCharts";
 import { useDateFilter } from "./hooks/useDateFilter";
+import {
+  getRecycleDashboardOverview,
+  getRecycleDashboardTrend,
+} from "@/addon/hsx_recycle/api/stats";
+import type {
+  BusinessDashboard,
+  BusinessTrend,
+  DashboardMetricCard,
+  DashboardTabItem,
+} from "./types/dashboard";
 
 // 使用 hooks - 数据管理
 const {
@@ -554,7 +556,6 @@ const {
   currentUserName,
   queryParams,
   userWorkStats,
-  overviewStats,
   userDetailStats,
   userList,
   userLoading,
@@ -573,7 +574,8 @@ const {
 const {
   userCategoryChart,
   adminUserChart,
-  overviewRingChart,
+  businessTrendChart,
+  financeTrendChart,
   memberRegisterTrendChart,
   memberChannelChart,
   memberActivityChart,
@@ -581,8 +583,10 @@ const {
   updateUserCategoryChart,
   initAdminUserChart,
   updateAdminUserChart,
-  initOverviewRingChart,
-  updateOverviewRingChart,
+  initBusinessTrendChart,
+  updateBusinessTrendChart,
+  initFinanceTrendChart,
+  updateFinanceTrendChart,
   initMemberRegisterTrendChart,
   updateMemberRegisterTrendChart,
   initMemberChannelChart,
@@ -601,13 +605,146 @@ const {
   handleQuickPeriod: handleQuickPeriodBase,
   handleDateChange: handleDateChangeBase,
   getTimePeriodText: getTimePeriodTextBase,
-  getPeriodLabel,
 } = useDateFilter();
 
 const router = useRouter();
+const activeDashboard = ref("business");
+const businessLoading = ref(false);
+const businessTrendLoading = ref(false);
+const businessDashboard = ref<BusinessDashboard>({
+  date_range: {},
+  thresholds: {},
+  cards: [],
+  todo: [],
+  explain: "",
+});
+const businessTrend = ref<BusinessTrend>({
+  date_range: {},
+  x_axis: [],
+  series: [],
+  explain: "",
+});
 
 // 选中的用户ID
 const selectedUserId = ref("");
+
+const dashboardTabs = computed<DashboardTabItem[]>(() => {
+  const tabs = [
+    {
+      key: "business",
+      label: "业务看板",
+      visible: canShowWidget("business_dashboard_metrics") || canShowWidget("business_dashboard_trend"),
+    },
+    {
+      key: "finance",
+      label: "财务看板",
+      visible: canShowWidget("finance_dashboard_metrics") || canShowWidget("finance_dashboard_trend"),
+    },
+    {
+      key: "user",
+      label: userRole.value === "admin" ? "用户看板" : "我的看板",
+      visible:
+        canShowWidget("user_dashboard_work") ||
+        canShowWidget("my_signed_devices") ||
+        canShowWidget("my_check_count") ||
+        canShowWidget("my_price_count") ||
+        canShowWidget("my_payment_count") ||
+        canShowWidget("staff_work_chart") ||
+        canShowWidget("staff_work_table") ||
+        canShowWidget("member_stats_overview"),
+    },
+  ];
+
+  return tabs.filter((tab) => tab.visible);
+});
+
+const businessMetricCards = computed(() => {
+  return businessDashboard.value.cards.filter((card) => !["资金", "库存"].includes(card.category));
+});
+
+const financeMetricCards = computed(() => {
+  return businessDashboard.value.cards.filter((card) => ["资金", "库存"].includes(card.category));
+});
+
+const dashboardDateLabel = computed(() => {
+  const startTime = businessDashboard.value.date_range?.start_time || queryParams.value.start_time || "今日";
+  const endTime = businessDashboard.value.date_range?.end_time || queryParams.value.end_time || "";
+
+  if (startTime && endTime && startTime !== endTime) {
+    return `${startTime} 至 ${endTime}`;
+  }
+
+  return startTime || "今日";
+});
+
+const fetchBusinessDashboard = async () => {
+  businessLoading.value = true;
+  try {
+    const res = await getRecycleDashboardOverview(queryParams.value);
+    businessDashboard.value = {
+      date_range: res.data?.date_range || {},
+      thresholds: res.data?.thresholds || {},
+      cards: Array.isArray(res.data?.cards) ? res.data.cards : [],
+      todo: Array.isArray(res.data?.todo) ? res.data.todo : [],
+      explain: res.data?.explain || "",
+    };
+  } catch (error) {
+    console.error("获取经营看板失败", error);
+    businessDashboard.value = {
+      date_range: {},
+      thresholds: {},
+      cards: [],
+      todo: [],
+      explain: "经营看板暂时无法加载，请稍后重试。",
+    };
+  } finally {
+    businessLoading.value = false;
+  }
+};
+
+const fetchBusinessTrend = async () => {
+  businessTrendLoading.value = true;
+  try {
+    const res = await getRecycleDashboardTrend(queryParams.value);
+    businessTrend.value = {
+      date_range: res.data?.date_range || {},
+      x_axis: Array.isArray(res.data?.x_axis) ? res.data.x_axis : [],
+      series: Array.isArray(res.data?.series) ? res.data.series : [],
+      explain: res.data?.explain || "",
+    };
+  } catch (error) {
+    console.error("获取经营趋势失败", error);
+    businessTrend.value = {
+      date_range: {},
+      x_axis: [],
+      series: [],
+      explain: "经营趋势暂时无法加载，请稍后重试。",
+    };
+  } finally {
+    businessTrendLoading.value = false;
+  }
+};
+
+const handleRefresh = async () => {
+  await Promise.all([fetchData(), fetchBusinessDashboard(), fetchBusinessTrend()]);
+};
+
+const handleMetricDrilldown = (card: DashboardMetricCard) => {
+  const drilldown = card.drilldown;
+  if (!drilldown?.filter_key) return;
+
+  router.push({
+    path: "/recycle_order/list",
+    query: {
+      filter_key: drilldown.filter_key,
+      view_mode: drilldown.view_mode || "",
+      start_time: queryParams.value.start_time || "",
+      end_time: queryParams.value.end_time || "",
+      dashboard_title: card.title,
+      t: String(Date.now()),
+    },
+  });
+};
 
 const handleExpressQuickCommand = (command: "ship" | "track") => {
   if (command === "ship") {
@@ -635,7 +772,7 @@ const handleQuickPeriod = (period: string) => {
   handleQuickPeriodBase(period, (start, end) => {
     queryParams.value.start_time = start;
     queryParams.value.end_time = end;
-    fetchData();
+    handleRefresh();
   });
 };
 
@@ -643,7 +780,7 @@ const handleDateChange = (dates: string[]) => {
   handleDateChangeBase(dates, (start, end) => {
     queryParams.value.start_time = start;
     queryParams.value.end_time = end;
-    fetchData();
+    handleRefresh();
   });
 };
 
@@ -666,11 +803,6 @@ const getTotalDevices = () => {
     (userWorkStats.value.payment_count || 0)
   );
 };
-
-const getOrderLabel = () => getPeriodLabel("order");
-const getCheckLabel = () => getPeriodLabel("check");
-const getPaymentLabel = () => getPeriodLabel("payment");
-const getReturnLabel = () => getPeriodLabel("return");
 
 // 监听数据变化，更新图表
 watch(
@@ -697,17 +829,55 @@ watch(
   { deep: true, immediate: true }
 );
 
-// 监听运营概览数据变化，更新环形图
 watch(
-  () => overviewStats.value,
+  () => businessTrend.value,
   (newData) => {
     nextTick(() => {
-      if (!overviewRingChart.value) return;
-      initOverviewRingChart();
-      updateOverviewRingChart(newData || {});
+      if (!businessTrendChart.value) return;
+      initBusinessTrendChart();
+      updateBusinessTrendChart(newData || {});
     });
   },
   { deep: true, immediate: true }
+);
+
+watch(
+  () => businessTrend.value,
+  (newData) => {
+    nextTick(() => {
+      if (!financeTrendChart.value) return;
+      initFinanceTrendChart();
+      updateFinanceTrendChart(newData || {});
+    });
+  },
+  { deep: true, immediate: true }
+);
+
+watch(
+  dashboardTabs,
+  (tabs) => {
+    if (!tabs.length) return;
+    if (!tabs.some((tab) => tab.key === activeDashboard.value)) {
+      activeDashboard.value = tabs[0].key;
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  activeDashboard,
+  () => {
+    nextTick(() => {
+      if (businessTrendChart.value) {
+        initBusinessTrendChart();
+        updateBusinessTrendChart(businessTrend.value || {});
+      }
+      if (financeTrendChart.value) {
+        initFinanceTrendChart();
+        updateFinanceTrendChart(businessTrend.value || {});
+      }
+    });
+  }
 );
 
 // 监听会员注册趋势数据变化
@@ -751,7 +921,7 @@ watch(
 
 // 初始化
 onMounted(() => {
-  fetchData();
+  handleRefresh();
   window.addEventListener("resize", handleResize);
 });
 
