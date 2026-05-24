@@ -12,6 +12,7 @@ namespace core\poster;
 
 use core\exception\CommonException;
 use Kkokk\Poster\Facades\Poster as PosterInstance;
+use think\facade\Log;
 
 class Poster extends BasePoster
 {
@@ -56,7 +57,33 @@ class Poster extends BasePoster
         $align_array = [
             'center', 'left', 'right', 'top', 'bottom'
         ];
-        foreach ($poster_data[ 'value' ] as $k => $v) {
+        $poster_values = $poster_data[ 'value' ] ?? [];
+        usort($poster_values, function($a, $b) {
+            $a_z_index = (int)($a[ 'zIndex' ] ?? 0);
+            $b_z_index = (int)($b[ 'zIndex' ] ?? 0);
+            if ($a_z_index === $b_z_index) {
+                return 0;
+            }
+
+            return $a_z_index <=> $b_z_index;
+        });
+        Log::info('[poster-debug] render_order ' . json_encode(array_map(function($item) {
+            return [
+                'id' => $item[ 'id' ] ?? '',
+                'type' => $item[ 'type' ] ?? '',
+                'componentName' => $item[ 'componentName' ] ?? '',
+                'zIndex' => $item[ 'zIndex' ] ?? null,
+                'x' => $item[ 'x' ] ?? null,
+                'y' => $item[ 'y' ] ?? null,
+                'width' => $item[ 'width' ] ?? null,
+                'height' => $item[ 'height' ] ?? null,
+                'draw_type' => $item[ 'draw_type' ] ?? ($item[ 'drawType' ] ?? ''),
+                'bgColor' => $item[ 'bgColor' ] ?? '',
+                'fontColor' => $item[ 'fontColor' ] ?? '',
+                'points' => $item[ 'points' ] ?? [],
+            ];
+        }, $poster_values), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        foreach ($poster_values as $k => $v) {
             $type = $v[ 'type' ];
             switch ($type) {
                 case 'text':
@@ -78,7 +105,8 @@ class Poster extends BasePoster
                     }
                     break;
                 case 'draw':
-                    if (!empty($v[ 'draw_type' ]) && $v[ 'draw_type' ] == 'Polygon') {
+                    $draw_type = $v[ 'draw_type' ] ?? $v[ 'drawType' ] ?? '';
+                    if (!empty($draw_type) && $draw_type == 'Polygon') {
                         $points = $v[ 'points' ];
                         $im = $im->buildLine($points[ 0 ][ 0 ], $points[ 0 ][ 1 ], $points[ 2 ][ 0 ], $points[ 2 ][ 1 ], $this->getRgbColor($v[ 'bgColor' ]), 'filled_rectangle');
                     }

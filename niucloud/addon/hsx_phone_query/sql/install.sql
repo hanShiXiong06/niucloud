@@ -45,6 +45,11 @@ CREATE TABLE `{{prefix}}hsx_phone_query_info` (
   `query_param` varchar(50) NOT NULL DEFAULT '' COMMENT '查询参数名',
   `pid` int NOT NULL DEFAULT 0 COMMENT '前端分类索引',
   `info` longtext NULL COMMENT '查询结果JSON',
+  `query_status` tinyint NOT NULL DEFAULT 3 COMMENT '查询状态：3成功 -1失败',
+  `refund_status` tinyint NOT NULL DEFAULT 0 COMMENT '退款状态：0未退款 1已退款',
+  `refund_money` decimal(10,3) NOT NULL DEFAULT 0.000 COMMENT '单条退款金额',
+  `refund_point` int NOT NULL DEFAULT 0 COMMENT '单条退款积分',
+  `fail_reason` varchar(1000) NOT NULL DEFAULT '' COMMENT '失败原因',
   `is_look` tinyint NOT NULL DEFAULT 0 COMMENT '是否已读：0未读 1已读',
   `pay_type` varchar(32) NOT NULL DEFAULT '' COMMENT '支付类型：money现金 point积分 balance旧余额',
   `money` decimal(10,3) NOT NULL DEFAULT 0.000 COMMENT '本次查询金额',
@@ -55,6 +60,7 @@ CREATE TABLE `{{prefix}}hsx_phone_query_info` (
   KEY `idx_site_channel_time` (`site_id`, `channel_key`, `create_time`),
   KEY `idx_site_service_time` (`site_id`, `service_code`, `create_time`),
   KEY `idx_site_member_time` (`site_id`, `member_id`, `create_time`),
+  KEY `idx_site_status_time` (`site_id`, `query_status`, `create_time`),
   KEY `idx_sn_type_time` (`sn`, `type_id`, `create_time`),
   KEY `idx_member_look_time` (`member_id`, `is_look`, `create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='手机查询结果记录表';

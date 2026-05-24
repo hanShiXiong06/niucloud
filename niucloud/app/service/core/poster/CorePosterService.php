@@ -19,6 +19,7 @@ use core\base\BaseCoreService;
 use core\dict\DictLoader;
 use core\exception\CommonException;
 use core\poster\PosterLoader;
+use think\facade\Log;
 use Throwable;
 
 /**
@@ -166,8 +167,26 @@ class CorePosterService extends BaseCoreService
             //判断当前海报是否存在,存在直接返回地址,不存在的话则创建
 
             if (is_file($path)) {
+                Log::info('[poster-debug] cache_hit ' . json_encode([
+                    'site_id' => $site_id,
+                    'id' => $id,
+                    'type' => $type,
+                    'channel' => $channel,
+                    'path' => $path,
+                    'poster_hash' => $temp1,
+                    'data_hash' => $temp2,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 return $path;
             } else {
+                Log::info('[poster-debug] cache_miss_create ' . json_encode([
+                    'site_id' => $site_id,
+                    'id' => $id,
+                    'type' => $type,
+                    'channel' => $channel,
+                    'path' => $path,
+                    'poster_hash' => $temp1,
+                    'data_hash' => $temp2,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 return $this->create($site_id, $poster, $poster_data, $dir, $file_path, $channel);
             }
         } catch (Throwable $e) {

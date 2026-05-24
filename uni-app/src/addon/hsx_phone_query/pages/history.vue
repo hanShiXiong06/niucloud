@@ -75,7 +75,7 @@
 
             <!-- 列表内容 -->
             <view class="list-content" v-if="modelList.length">
-                <view class="history-item" v-for="(item, index ) in modelList" :key="item.order_id || item.id"
+                <view class="history-item" v-for="(item, index ) in modelList" :key="item.id"
                     @click="handleItemClick(item)">
                     <!-- 顶部信息 -->
                     <view class="item-top">
@@ -96,6 +96,9 @@
                     <view class="item-main" v-if="item.can_view_detail && getDeviceInfo(item.info)">
                         <view class="device-name">
                             <text class="model">{{ getDeviceModel(item.info) || '查询报告已生成' }}</text>
+                            <view class="sn-list" v-if="getSerialListText(item)">
+                                <text>{{ getSerialListText(item) }}</text>
+                            </view>
                             <view class="specs" v-if="getDeviceCapacity(item.info) || getDeviceColor(item.info)">
                                 <text>{{ getDeviceCapacity(item.info) }}</text>
                                 <text v-if="getDeviceColor(item.info)">· {{ getDeviceColor(item.info) }}</text>
@@ -120,16 +123,19 @@
                     <view class="item-main state-main" v-else>
                         <view class="state-title">{{ getOrderStateTitle(item) }}</view>
                         <view class="state-desc">{{ getOrderStateDesc(item) }}</view>
-                        <view class="fail-reason" v-if="Number(item.status) === -1 && item.fail_reason">
+                        <!-- <view class="fail-reason" v-if="Number(item.status) === -1 && item.fail_reason">
                             {{ item.fail_reason }}
                         </view>
+                        <view class="fail-reason" v-if="Number(item.status) === -1 && item.refund_text">
+                            {{ item.refund_text }}
+                        </view> -->
                     </view>
 
                     <!-- 底部信息 -->
                     <view class="item-bottom">
                         <view class="bottom-meta">
                             <text class="time">{{ formatTime(item.create_time) }}</text>
-                            <text class="pay">{{ item.pay_text }} · {{ item.query_count || 1 }}次</text>
+                            <text class="pay">{{ item.pay_text }}</text>
                         </view>
                         <u-icon v-if="item.can_view_detail" name="arrow-right" color="#c0c4cc" size="28"></u-icon>
                     </view>
@@ -361,20 +367,24 @@ const getDeviceColor = (info: any) => {
     return data.颜色 || data.color || ''
 }
 
+const getSerialListText = (item: any) => {
+    return item.sn ? `串号：${item.sn}` : ''
+}
+
 const getStatusText = (status: number | string) => {
     const value = Number(status)
+    if (value === -1) return '查询失败'
     if (value === 1) return '已支付'
     if (value === 2) return '查询中'
     if (value === 3) return '查询成功'
-    if (value === -1) return '查询失败'
     return '处理中'
 }
 
 const getStatusClass = (status: number | string) => {
     const value = Number(status)
-    if (value === 3) return 'success'
+    if (value === 1 || value === 3) return 'success'
     if (value === -1) return 'fail'
-    if (value === 1 || value === 2) return 'processing'
+    if (value === 2) return 'processing'
     return 'default'
 }
 
@@ -697,6 +707,15 @@ onShow(() => {
                     color: #333;
                     margin-bottom: 8rpx;
                     line-height: 1.4;
+                }
+
+                .sn-list {
+                    display: block;
+                    font-size: 22rpx;
+                    color: #6b7280;
+                    margin-bottom: 6rpx;
+                    line-height: 1.4;
+                    word-break: break-all;
                 }
 
                 .specs {

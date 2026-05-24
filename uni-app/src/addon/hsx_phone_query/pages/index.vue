@@ -115,6 +115,7 @@ import { ref, computed } from 'vue';
 import { getCategoryTree, createQueryOrder, queryByPoint } from '@/addon/hsx_phone_query/api/index'
 import { onShow } from '@dcloudio/uni-app'
 import pay from '@/components/pay/pay.vue'
+import { useSubscribeMessage } from '@/hooks/useSubscribeMessage'
 
 import useMemberStore from "@/stores/member";
 import { getMemberInfo } from '@/app/api/member'
@@ -214,6 +215,7 @@ const handleInput = (e: any) => {
 // 查询方式：花钱查走框架支付组件，积分查由后端直接扣积分
 const queryMode = ref('money')
 const payRef = ref<any>(null)
+const queryNoticeKeys = 'hsx_phone_query_success,hsx_phone_query_fail'
 
 // 修改查询方法
 const handleQuery = async (id: number) => {
@@ -241,6 +243,7 @@ const handleQuery = async (id: number) => {
 
     try {
         loading.value = true
+        await useSubscribeMessage().request(queryNoticeKeys)
         // 将多行IMEI合并为一个字符串，用逗号分隔
         const imeiString = imeiList.join(',')
 

@@ -32,6 +32,8 @@ const LABELS: Record<string, string> = {
   warranty: '保修状态',
   coverage: '保修状态',
   activationlock: '激活锁',
+  fmi: '查找我的 iPhone',
+  locked: '激活锁状态',
   icloud: 'ID状态',
   simlock: '网络锁',
   carrier: '运营商',

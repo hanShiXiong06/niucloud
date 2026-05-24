@@ -57,6 +57,10 @@ class HsxPhoneQueryResultDict
             'activationlock.email' => '绑定邮箱',
             'activationlock.message.phone' => '锁定联系电话',
             'activationlock.message.content' => '锁定留言',
+            'fmi' => '查找我的 iPhone',
+            'locked' => '激活锁状态',
+            'state' => '状态',
+            'status' => '状态',
             'icloud' => 'ID状态',
             'simlock' => '网络锁',
             'carrier' => '运营商',
@@ -189,6 +193,18 @@ class HsxPhoneQueryResultDict
             return in_array(strtolower($stringValue), ['1', 'true', 'yes', 'on'], true) ? '已开启' : '未开启';
         }
 
+        if (in_array($path, ['fmi', 'locked'], true)) {
+            return in_array(strtolower($stringValue), ['1', 'true', 'yes', 'on', 'off', '0', 'false', 'no'], true)
+                ? (in_array(strtolower($stringValue), ['1', 'true', 'yes', 'on'], true) ? '已开启' : '未开启')
+                : self::valueLabels()[$stringValue] ?? $stringValue;
+        }
+
+        if (in_array($path, ['state', 'status'], true)) {
+            if (in_array(strtolower($stringValue), ['none', 'null', 'n/a', '-'], true)) {
+                return '无状态';
+            }
+        }
+
         if (in_array($path, ['activationlock.lost'], true)) {
             return in_array(strtolower($stringValue), ['1', 'true', 'yes', 'lost'], true) ? '丢失模式' : '正常';
         }
@@ -211,6 +227,8 @@ class HsxPhoneQueryResultDict
             'coverage.unable' => $value ? '暂不可查' : '可查询',
             'activationlock.locked' => $value ? '已开启' : '未开启',
             'activationlock.lost' => $value ? '丢失模式' : '正常',
+            'fmi', 'locked' => $value ? '已开启' : '未开启',
+            'state', 'status' => '无状态',
             'refurbished', 'demo', 'applecare', 'replaced', 'purchase.validated' => $value ? '是' : '否',
             default => $value ? '是' : '否',
         };

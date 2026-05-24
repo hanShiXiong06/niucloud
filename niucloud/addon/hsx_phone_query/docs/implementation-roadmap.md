@@ -218,6 +218,62 @@
 
 - 当前渠道为 3023 时，爱查项目无法下单。
 - 当前渠道为爱查时，3023 项目无法下单。
+
+### 4. 框架通知系统接入
+
+状态：`[done]`
+
+目标：
+
+- 不自研通知系统，使用框架 `NoticeService`、`NoticeData` 事件、后台通知模板配置、通知记录。
+- 后台能看到设备查询插件的通知配置项。
+- 查询完成和查询失败都能通过框架通知链路发送。
+- 一次查询多个串号时，成功通知要展示成功数、失败数和退款说明，避免用户误解。
+
+实现方式：
+
+- 插件新增 `app/dict/notice/notice.php`，注册通知项：
+  - `hsx_phone_query_success`：设备查询完成通知。
+  - `hsx_phone_query_fail`：设备查询失败通知。
+- 插件新增 `app/dict/notice/weapp.php`、`wechat.php`、`sms.php`，声明各渠道默认模板结构。
+- 小程序订阅消息已接入微信模板：
+  - 模板编号：`4075`
+  - 标题：查询结果通知
+  - 类目：信息查询
+  - 关键词：查询编号、查询结果、查询时间
+- 复用已有 `NoticeData` listener：
+  - `QuerySuccess`
+  - `QueryFail`
+- 补齐通知变量：
+  - 查询结果、成功数、失败数、支付说明、退款说明。
+  - 失败通知补齐退款说明。
+- 用户端查询入口已接入框架 `useSubscribeMessage()`：
+  - 现金支付创建订单前请求订阅 `hsx_phone_query_success,hsx_phone_query_fail`。
+  - 积分查询扣积分前请求订阅 `hsx_phone_query_success,hsx_phone_query_fail`。
+  - 用户拒绝订阅不阻断查询。
+
+涉及文件：
+
+- `niucloud/addon/hsx_phone_query/app/dict/notice/notice.php`
+- `niucloud/addon/hsx_phone_query/app/dict/notice/weapp.php`
+- `niucloud/addon/hsx_phone_query/app/dict/notice/wechat.php`
+- `niucloud/addon/hsx_phone_query/app/dict/notice/sms.php`
+- `niucloud/addon/hsx_phone_query/app/listener/notice/QuerySuccess.php`
+- `niucloud/addon/hsx_phone_query/app/listener/notice/QueryFail.php`
+- `uni-app/src/addon/hsx_phone_query/pages/index.vue`
+- `niucloud/addon/hsx_phone_query/uni-app/pages/index.vue`
+
+配置说明：
+
+- 插件只负责把通知类型、变量、默认模板结构注册给框架。
+- 是否开启小程序/公众号/短信通知、模板 ID、短信模板等，仍在框架后台通知配置中维护。
+- 微信小程序真机发送订阅消息，需要站点已配置小程序 `app_id` / `app_secret`，会员有 `weapp_openid`，并且用户完成订阅授权。
+- 微信模板 ID 不建议写死在插件业务代码里；如果微信后台已有合适模板，可以在框架通知配置中填写或同步。
+
+验证结果：
+
+- PHP 语法检查通过。
+- 通知配置现在能被框架 `DictLoader('Notice')` 识别。
 - 支付成功重复回调不重复查询。
 
 当前结果：

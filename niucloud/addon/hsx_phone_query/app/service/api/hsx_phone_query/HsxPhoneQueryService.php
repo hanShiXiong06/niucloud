@@ -85,7 +85,7 @@ class HsxPhoneQueryService extends BaseApiService
         $imeis = $this->parseImeiList($params['imeis']);
         $queryConfig = $this->getQueryConfig((int)$params['id']);
         $queryCount = count($imeis);
-        $payMoney = round((float)$queryConfig['price'] * $queryCount, 3);
+        $payMoney = round((float)$queryConfig['price'] * $queryCount, 2);
         $orderSnapshot = $this->buildOrderSnapshot($queryConfig);
 
         $orderId = $this->orderModel->insertGetId([
@@ -122,7 +122,7 @@ class HsxPhoneQueryService extends BaseApiService
         return [
             'order_id' => $orderId,
             'order_no' => $this->orderModel->where('order_id', $orderId)->value('order_no'),
-            'pay_money' => $payMoney,
+            'pay_money' => $this->formatMoney($payMoney),
             'query_count' => $queryCount,
             'trade_type' => HsxPhoneQueryOrderDict::TRADE_TYPE,
         ];
@@ -137,7 +137,7 @@ class HsxPhoneQueryService extends BaseApiService
         $imeis = $this->parseImeiList($params['imeis']);
         $queryConfig = $this->getQueryConfig((int)$params['id']);
         $queryCount = count($imeis);
-        $payMoney = round((float)$queryConfig['price'] * $queryCount, 3);
+        $payMoney = round((float)$queryConfig['price'] * $queryCount, 2);
         $payPoint = (int)round($payMoney * 100);
         $orderSnapshot = $this->buildOrderSnapshot($queryConfig);
 
@@ -262,11 +262,11 @@ class HsxPhoneQueryService extends BaseApiService
     public function getPage(array $params = [])
     {
         try {
-            $query = $this->buildUserOrderListModel($params);
+            $query = $this->buildUserQueryListModel($params);
             $result = $this->pageQuery($query);
 
             if (!empty($result['data'])) {
-                $result['data'] = $this->formatOrderResults($result['data']);
+                $result['data'] = $this->formatResultRows($result['data']);
             }
 
             return $result;
@@ -281,12 +281,11 @@ class HsxPhoneQueryService extends BaseApiService
      */
     public function getInfo(array $params = [])
     {
-        $field = 'id, sn, type_id, info, create_time, is_look';
+        $field = 'id, sn, type_id, info, create_time, is_look, member_id';
 
         $data = $this->queryInfoModel
             ->where([
                 ['site_id', '=', $this->site_id],
-                ['member_id', '=', $this->member_id],
             ])
             ->where($params)
             ->field($field)
@@ -309,7 +308,9 @@ class HsxPhoneQueryService extends BaseApiService
         $data['display_title'] = $display['title'];
         $data['display_subtitle'] = $display['subtitle'];
         $data['display_image'] = $display['image'];
-        $this->updateViewStatus((int)$data['id']);
+        if ((int)($data['member_id'] ?? 0) === (int)$this->member_id) {
+            $this->updateViewStatus((int)$data['id']);
+        }
 
         return $data;
     }
@@ -375,28 +376,38 @@ class HsxPhoneQueryService extends BaseApiService
                 }
                 $results[] = $data;
             } catch (\Throwable $e) {
-                $errors[] = $imei . '：' . $e->getMessage();
-                Log::error('手机串号查询失败：' . $imei . ' ' . $e->getMessage());
+                $errorMessage = $e->getMessage();
+                $errors[] = $imei . '：' . $errorMessage;
+                $resultId = $this->insertQueryInfo($imei, $order->toArray(), json_encode([
+                    'sn' => $imei,
+                    'status' => 'fail',
+                    'message' => $errorMessage,
+                ], JSON_UNESCAPED_UNICODE), HsxPhoneQueryOrderDict::FAIL, $errorMessage);
+                $resultIds[] = $resultId;
+                Log::error('手机串号查询失败：' . $imei . ' ' . $errorMessage);
             }
         }
 
         $status = empty($results) ? HsxPhoneQueryOrderDict::FAIL : HsxPhoneQueryOrderDict::SUCCESS;
         $failReason = implode("\n", $errors);
-        $profitMoney = round((float)$order['pay_money'] - $costMoney, 3);
+        $refundCount = count($errors);
+        $refundMoney = $refundCount > 0 ? round((float)$order['unit_price'] * $refundCount, 2) : 0.0;
+        $refundPoint = $refundCount > 0 ? (int)round(((int)$order['pay_point']) / max((int)$order['query_count'], 1) * $refundCount) : 0;
         $refundStatus = 0;
         $refundTime = 0;
-        if ($status == HsxPhoneQueryOrderDict::FAIL) {
-            if ($this->refundPointIfNeeded($order->toArray(), $failReason ?: '查询失败')) {
+        if ($refundCount > 0) {
+            if ($this->refundFailedItemsIfNeeded($order->toArray(), $refundMoney, $refundPoint, $failReason ?: '查询失败')) {
                 $refundStatus = 1;
                 $refundTime = time();
             }
         }
+        $profitMoney = round((float)$order['pay_money'] - $refundMoney - $costMoney, 3);
 
         $order->save([
             'status' => $status,
             'success_count' => count($results),
             'fail_count' => count($errors),
-            'cost_money' => round($costMoney, 3),
+            'cost_money' => round($costMoney, 2),
             'profit_money' => $profitMoney,
             'provider_name' => !empty($providers) ? implode(',', array_values(array_unique($providers))) : (string)($order['provider_name'] ?? ''),
             'channel_name' => !empty($channels) ? implode(',', array_values(array_unique($channels))) : (string)($order['channel_name'] ?? ''),
@@ -408,6 +419,10 @@ class HsxPhoneQueryService extends BaseApiService
             'finish_time' => time(),
             'update_time' => time(),
         ]);
+
+        if ($refundCount > 0) {
+            $this->markFailedResultRefunds((int)$order['site_id'], (int)$order['order_id'], $refundStatus, $refundMoney, $refundPoint);
+        }
 
         $this->sendQueryNotice($orderId, $status, $failReason);
 
@@ -537,7 +552,7 @@ class HsxPhoneQueryService extends BaseApiService
             ->find();
     }
 
-    private function insertQueryInfo(string $imei, array $order, string $infoJson): int
+    private function insertQueryInfo(string $imei, array $order, string $infoJson, int $queryStatus = HsxPhoneQueryOrderDict::SUCCESS, string $failReason = ''): int
     {
         return (int)$this->queryInfoModel->insertGetId([
             'site_id' => (int)$order['site_id'],
@@ -549,7 +564,9 @@ class HsxPhoneQueryService extends BaseApiService
             'query_param' => (string)($order['query_param'] ?? ''),
             'member_id' => (int)$order['member_id'],
             'info' => $infoJson,
-            'is_look' => 0,
+            'query_status' => $queryStatus,
+            'fail_reason' => mb_substr($failReason, 0, 1000),
+            'is_look' => $queryStatus === HsxPhoneQueryOrderDict::FAIL ? 1 : 0,
             'pid' => (int)($order['pid'] ?? 0),
             'pay_type' => $order['pay_type'] ?? HsxPhoneQueryOrderDict::PAY_TYPE_MONEY,
             'money' => (float)($order['pay_money'] ?? 0) / max((int)($order['query_count'] ?? 1), 1),
@@ -627,6 +644,110 @@ class HsxPhoneQueryService extends BaseApiService
             Log::error('手机查询积分返还失败：order_id=' . (int)$order['order_id'] . ' ' . $e->getMessage());
             return false;
         }
+    }
+
+    private function refundFailedItemsIfNeeded(array $order, float $refundMoney, int $refundPoint, string $reason): bool
+    {
+        if (($order['pay_type'] ?? '') === HsxPhoneQueryOrderDict::PAY_TYPE_POINT) {
+            return $this->refundPointAmountIfNeeded($order, $refundPoint, $reason);
+        }
+
+        return $this->refundMoneyAmountIfNeeded($order, $refundMoney, '', $reason);
+    }
+
+    private function refundPointAmountIfNeeded(array $order, int $refundPoint, string $reason): bool
+    {
+        if (($order['pay_type'] ?? '') !== HsxPhoneQueryOrderDict::PAY_TYPE_POINT || $refundPoint <= 0) {
+            return false;
+        }
+        if ((int)($order['refund_status'] ?? 0) === 1) {
+            return true;
+        }
+
+        try {
+            $this->accountService->addLog(
+                (int)$order['site_id'],
+                (int)$order['member_id'],
+                MemberAccountTypeDict::POINT,
+                $refundPoint,
+                'hsx_phone_query_refund',
+                '手机查询失败返还：' . mb_substr($reason, 0, 120),
+                (int)$order['order_id']
+            );
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('手机查询积分部分返还失败：order_id=' . (int)$order['order_id'] . ' ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function refundMoneyAmountIfNeeded(array $order, float $refundMoney, string $outTradeNo = '', string $reason = ''): bool
+    {
+        if (($order['pay_type'] ?? '') !== HsxPhoneQueryOrderDict::PAY_TYPE_MONEY || $refundMoney <= 0) {
+            return false;
+        }
+        if ((int)($order['refund_status'] ?? 0) === 1) {
+            return true;
+        }
+
+        $siteId = (int)($order['site_id'] ?? 0);
+        $orderId = (int)($order['order_id'] ?? 0);
+        if ($siteId <= 0 || $orderId <= 0) {
+            return false;
+        }
+
+        try {
+            if ($outTradeNo === '') {
+                $pay = (new CorePayService())->findPayInfoByTrade($siteId, HsxPhoneQueryOrderDict::TRADE_TYPE, $orderId);
+                $outTradeNo = (string)($pay['out_trade_no'] ?? '');
+            }
+            if ($outTradeNo === '') {
+                throw new CommonException('支付流水不存在，无法退款');
+            }
+
+            $refundService = new CoreRefundService();
+            $refundNo = $refundService->create(
+                $siteId,
+                $outTradeNo,
+                $refundMoney,
+                '手机查询失败部分退款：' . mb_substr($reason ?: '查询失败', 0, 80),
+                HsxPhoneQueryOrderDict::TRADE_TYPE,
+                (string)$orderId
+            );
+            $refundService->refund($siteId, $refundNo, '', RefundDict::BACK, 'system', 0);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('手机查询现金部分退款失败：order_id=' . $orderId . ' ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function markFailedResultRefunds(int $siteId, int $orderId, int $refundStatus, float $refundMoney, int $refundPoint): void
+    {
+        if ($siteId <= 0 || $orderId <= 0 || $refundStatus !== 1) {
+            return;
+        }
+
+        $failedCount = $this->queryInfoModel->where([
+            ['site_id', '=', $siteId],
+            ['order_id', '=', $orderId],
+            ['query_status', '=', HsxPhoneQueryOrderDict::FAIL],
+        ])->count();
+        if ($failedCount <= 0) {
+            return;
+        }
+
+        $this->queryInfoModel->where([
+            ['site_id', '=', $siteId],
+            ['order_id', '=', $orderId],
+            ['query_status', '=', HsxPhoneQueryOrderDict::FAIL],
+        ])->update([
+            'refund_status' => 1,
+            'refund_money' => $refundMoney > 0 ? round($refundMoney / $failedCount, 2) : 0,
+            'refund_point' => $refundPoint > 0 ? (int)floor($refundPoint / $failedCount) : 0,
+            'update_time' => time(),
+        ]);
     }
 
     private function refundMoneyIfNeeded(array $order, string $outTradeNo = '', string $reason = ''): bool
@@ -880,7 +1001,7 @@ class HsxPhoneQueryService extends BaseApiService
                 'response_code' => $this->readResponseCode($response),
                 'response_message' => $this->readResponseMessage($response),
                 'response_data' => $this->encodeLogJson($response),
-                'cost_price' => round((float)($data['cost_price'] ?? 0), 3),
+                'cost_price' => round((float)($data['cost_price'] ?? 0), 2),
                 'duration_ms' => (int)($data['duration_ms'] ?? 0),
                 'status' => (string)($data['status'] ?? 'success'),
                 'error_message' => mb_substr((string)($data['error_message'] ?? ''), 0, 1000),
@@ -1021,35 +1142,76 @@ class HsxPhoneQueryService extends BaseApiService
 
     private function buildUserQueryListModel(array $params)
     {
-        $field = 'id, sn, type_id, pid, info, create_time, is_look, pay_type, money';
+        $orderTable = $this->orderModel->getTable();
+        $field = [
+            'hsx_phone_query_info.id',
+            'hsx_phone_query_info.sn',
+            'hsx_phone_query_info.type_id',
+            'hsx_phone_query_info.pid',
+            'hsx_phone_query_info.order_id',
+            'hsx_phone_query_info.service_code',
+            'hsx_phone_query_info.channel_key',
+            'hsx_phone_query_info.query_param',
+            'hsx_phone_query_info.info',
+            'hsx_phone_query_info.query_status',
+            'hsx_phone_query_info.refund_status',
+            'hsx_phone_query_info.refund_money',
+            'hsx_phone_query_info.refund_point',
+            'hsx_phone_query_info.fail_reason',
+            'hsx_phone_query_info.create_time',
+            'hsx_phone_query_info.is_look',
+            'hsx_phone_query_info.pay_type',
+            'hsx_phone_query_info.money',
+            'query_order.order_no',
+            'query_order.service_name',
+            'query_order.pay_money',
+            'query_order.pay_point',
+            'query_order.unit_price',
+            'query_order.query_count',
+            'query_order.success_count',
+            'query_order.fail_count',
+            'query_order.status as order_status',
+            'query_order.refund_status as order_refund_status',
+            'query_order.channel_name',
+            'query_order.finish_time',
+        ];
 
-        $query = $this->queryInfoModel->where([
-            ['site_id', '=', $this->site_id],
-            ['member_id', '=', $this->member_id],
-        ]);
+        $query = $this->queryInfoModel
+            ->alias('hsx_phone_query_info')
+            ->leftJoin($orderTable . ' query_order', 'query_order.order_id = hsx_phone_query_info.order_id and query_order.site_id = hsx_phone_query_info.site_id')
+            ->where([
+                ['hsx_phone_query_info.site_id', '=', $this->site_id],
+                ['hsx_phone_query_info.member_id', '=', $this->member_id],
+            ]);
 
         if (!empty($params['keyword'])) {
-            $query->where('sn', 'like', "%{$params['keyword']}%");
+            $keyword = trim((string)$params['keyword']);
+            $query->where(function ($query) use ($keyword) {
+                $query->where('hsx_phone_query_info.sn', 'like', "%{$keyword}%")
+                    ->whereOr('query_order.order_no', 'like', "%{$keyword}%")
+                    ->whereOr('query_order.service_name', 'like', "%{$keyword}%");
+            });
         }
 
-        if (!empty($params['pid'])) {
-            $query->where('pid', '=', (int)$params['pid'] - 1);
+        if ($params['pid'] !== '' && $params['pid'] !== null) {
+            $query->where('hsx_phone_query_info.pid', '=', (int)$params['pid']);
         }
 
         if (!empty($params['start_time'])) {
-            $query->where('create_time', '>=', strtotime($params['start_time']));
+            $query->where('hsx_phone_query_info.create_time', '>=', strtotime($params['start_time']));
         }
 
         if (!empty($params['end_time'])) {
-            $query->where('create_time', '<=', strtotime($params['end_time'] . ' 23:59:59'));
+            $query->where('hsx_phone_query_info.create_time', '<=', strtotime($params['end_time'] . ' 23:59:59'));
         }
 
         return $query
             ->field($field)
             ->append(['type_name'])
             ->order([
-                'is_look' => 'asc',
-                'create_time' => 'desc',
+                'hsx_phone_query_info.is_look' => 'asc',
+                'hsx_phone_query_info.create_time' => 'desc',
+                'hsx_phone_query_info.id' => 'desc',
             ]);
     }
 
@@ -1089,6 +1251,63 @@ class HsxPhoneQueryService extends BaseApiService
             ->order('create_time desc');
     }
 
+    private function formatResultRows(array $data): array
+    {
+        foreach ($data as &$item) {
+            $item['result_id'] = (int)($item['id'] ?? 0);
+            $item['type_name'] = (string)($item['service_name'] ?? $item['type_name'] ?? '');
+            $item['info'] = $this->formatJsonField($item['info'] ?? []);
+            $queryStatus = (int)($item['query_status'] ?? HsxPhoneQueryOrderDict::SUCCESS);
+            $item['status'] = $queryStatus;
+            $item['status_name'] = $this->buildResultStatusName($item);
+            $display = $this->resultFormatter->format($item['info'], [
+                'type_name' => $item['type_name'],
+                'create_time' => $this->formatTimestamp($item['create_time'] ?? 0),
+            ]);
+            $item['display_info'] = $display['fields'];
+            $item['display_summary'] = $display['summary'];
+            $item['display_status_tags'] = $display['status_tags'];
+            $item['display_title'] = $display['title'];
+            $item['display_subtitle'] = $display['subtitle'];
+            $item['display_image'] = $display['image'];
+            $item['can_view_detail'] = $queryStatus !== HsxPhoneQueryOrderDict::FAIL;
+            $item['create_time'] = $this->formatTimestamp($item['create_time']);
+            $item['finish_time'] = $this->formatTimestamp($item['finish_time'] ?? 0);
+            $item['pay_text'] = ($item['pay_type'] ?? '') === HsxPhoneQueryOrderDict::PAY_TYPE_POINT
+                ? ((int)round(((int)($item['pay_point'] ?? 0)) / max((int)($item['query_count'] ?? 1), 1)) . '积分')
+                : ('￥' . number_format((float)($item['money'] ?? 0), 2));
+            $item['refund_text'] = $this->buildResultRefundText($item);
+            $item['fail_reason'] = mb_substr((string)($item['fail_reason'] ?? ''), 0, 160);
+            $this->formatMoneyOutput($item, ['money', 'pay_money', 'unit_price', 'refund_money']);
+        }
+
+        return $data;
+    }
+
+    private function buildResultStatusName(array $item): string
+    {
+        if ((int)($item['query_status'] ?? 0) === HsxPhoneQueryOrderDict::FAIL) {
+            return (int)($item['refund_status'] ?? 0) === 1 ? '查询失败，已退款' : '查询失败';
+        }
+
+        return '查询成功';
+    }
+
+    private function buildResultRefundText(array $item): string
+    {
+        if ((int)($item['query_status'] ?? 0) !== HsxPhoneQueryOrderDict::FAIL) {
+            return '';
+        }
+        if ((int)($item['refund_status'] ?? 0) === 1) {
+            if (($item['pay_type'] ?? '') === HsxPhoneQueryOrderDict::PAY_TYPE_POINT) {
+                return '积分已退还' . ((int)($item['refund_point'] ?? 0) > 0 ? ' ' . (int)$item['refund_point'] . '积分' : '');
+            }
+            return '已退款' . ((float)($item['refund_money'] ?? 0) > 0 ? ' ￥' . number_format((float)$item['refund_money'], 2) : '');
+        }
+
+        return ($item['pay_type'] ?? '') === HsxPhoneQueryOrderDict::PAY_TYPE_POINT ? '积分退还处理中' : '退款处理中';
+    }
+
     private function formatOrderResults(array $data): array
     {
         foreach ($data as &$item) {
@@ -1101,6 +1320,7 @@ class HsxPhoneQueryService extends BaseApiService
             $item['id'] = $firstResultId;
             $item['result_id'] = $firstResultId;
             $item['result_ids'] = $resultIds;
+            $item['imeis_list'] = $imeis;
             $item['sn'] = count($imeis) > 1 ? $firstCode . ' 等' . count($imeis) . '个' : $firstCode;
             $item['type_name'] = (string)($item['service_name'] ?? '');
             $item['info'] = $firstResultId > 0 ? $this->getResultInfo($firstResultId) : [];
@@ -1125,6 +1345,7 @@ class HsxPhoneQueryService extends BaseApiService
             $item['refund_text'] = $this->buildRefundText($item);
             $item['can_view_detail'] = $firstResultId > 0 && !$isFail;
             $item['fail_reason'] = mb_substr((string)($item['fail_reason'] ?? ''), 0, 160);
+            $this->formatMoneyOutput($item, ['unit_price', 'pay_money']);
         }
 
         return $data;
@@ -1186,6 +1407,7 @@ class HsxPhoneQueryService extends BaseApiService
         foreach ($data as &$item) {
             $item['info'] = $this->formatJsonField($item['info']);
             $item['create_time'] = $this->formatTimestamp($item['create_time']);
+            $this->formatMoneyOutput($item, ['money', 'pay_money', 'unit_price', 'refund_money']);
         }
 
         return $data;
@@ -1207,6 +1429,20 @@ class HsxPhoneQueryService extends BaseApiService
         }
 
         return is_numeric($timestamp) ? date('Y-m-d H:i:s', (int)$timestamp) : $timestamp;
+    }
+
+    private function formatMoney($value): string
+    {
+        return number_format((float)$value, 2, '.', '');
+    }
+
+    private function formatMoneyOutput(array &$item, array $fields): void
+    {
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $item)) {
+                $item[$field] = $this->formatMoney($item[$field]);
+            }
+        }
     }
 
     private function updateViewStatus(int $id): bool

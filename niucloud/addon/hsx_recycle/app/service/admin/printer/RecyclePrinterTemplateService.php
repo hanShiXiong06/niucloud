@@ -614,7 +614,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'capacity' => '256GB',
             'system_version' => 'iOS 17.3.1',
             'warranty_info' => '2025-12-31',
-            'bettery'=>'100',
+            'battery' => '100',
 
             // 设备序号信息
             'device_index' => '1',

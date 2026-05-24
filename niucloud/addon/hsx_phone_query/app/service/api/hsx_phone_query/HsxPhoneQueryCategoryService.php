@@ -100,7 +100,7 @@ class HsxPhoneQueryCategoryService extends BaseApiService
                 'id' => (int)$item['id'],
                 'type_id' => $typeId,
                 'name' => (string)($item['name'] ?: ($providerItem['name'] ?? '')),
-                'price' => $item['price'],
+                'price' => $this->formatMoney($item['price'] ?? 0),
                 'service_code' => $serviceCode,
                 'channel_key' => $providerContext['channel_key'],
                 'channel_name' => $providerContext['channel_name'],
@@ -162,6 +162,11 @@ class HsxPhoneQueryCategoryService extends BaseApiService
         if (!empty($rows)) {
             $this->model->insertAll($rows);
         }
+    }
+
+    private function formatMoney($value): string
+    {
+        return number_format((float)$value, 2, '.', '');
     }
 
     

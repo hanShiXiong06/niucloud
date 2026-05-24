@@ -10,6 +10,7 @@ use addon\hsx_phone_query\app\service\core\report\QueryResultFormatter;
 use app\model\member\Member;
 use app\service\core\sys\CoreConfigService;
 use app\service\core\sys\CoreSysConfigService;
+use think\facade\Log;
 
 /**
  * 手机查询报告海报数据
@@ -30,10 +31,20 @@ class QueryReportPoster
         $param = is_array($data['param'] ?? null) ? $data['param'] : [];
         $resultId = (int)($param['result_id'] ?? $param['id'] ?? $param['posterId'] ?? 0);
         $inviteMemberId = (int)($param['invite_member_id'] ?? $param['member_id'] ?? 0);
+        Log::info('[poster-debug] query_report_input ' . json_encode([
+            'site_id' => $siteId,
+            'param' => $param,
+            'result_id' => $resultId,
+            'invite_member_id' => $inviteMemberId,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
         $config = $this->getDisplayConfig($siteId);
         $record = $this->getRecord($siteId, $resultId);
         if (empty($record)) {
+            Log::info('[poster-debug] query_report_empty_record ' . json_encode([
+                'site_id' => $siteId,
+                'result_id' => $resultId,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
             return [];
         }
         $info = $this->decodeInfo($record['info'] ?? []);
@@ -47,7 +58,7 @@ class QueryReportPoster
         $title = $display['title'] ?: ($serviceName ?: '设备查询报告');
         $summaryLines = $this->buildSummaryLines($display['summary'] ?? [], $info);
 
-        return [
+        $payload = [
             'brand_name' => $config['brand_name'] ?: '手机查询报告',
             'report_title' => $this->limitText($title, 28),
             'service_name' => $serviceName ?: '设备查询',
@@ -75,6 +86,8 @@ class QueryReportPoster
                 ],
             ],
         ];
+        Log::info('[poster-debug] query_report_payload ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        return $payload;
     }
 
     private function formatTime($value): string

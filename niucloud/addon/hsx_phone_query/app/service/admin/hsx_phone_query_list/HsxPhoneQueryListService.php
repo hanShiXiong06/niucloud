@@ -36,6 +36,11 @@ class HsxPhoneQueryListService extends BaseAdminService
             'hsx_phone_query_info.channel_key',
             'hsx_phone_query_info.query_param',
             'hsx_phone_query_info.info', 
+            'hsx_phone_query_info.query_status',
+            'hsx_phone_query_info.refund_status',
+            'hsx_phone_query_info.refund_money',
+            'hsx_phone_query_info.refund_point',
+            'hsx_phone_query_info.fail_reason',
             'hsx_phone_query_info.create_time', 
             'hsx_phone_query_info.is_look', 
             'hsx_phone_query_info.member_id',
@@ -145,7 +150,7 @@ class HsxPhoneQueryListService extends BaseAdminService
      */
     public function getInfo($id)
     {
-        $field = 'id,sn,type_id,order_id,service_code,channel_key,query_param,info,create_time,is_look,member_id,pay_type,money';
+        $field = 'id,sn,type_id,order_id,service_code,channel_key,query_param,info,query_status,refund_status,refund_money,refund_point,fail_reason,create_time,is_look,member_id,pay_type,money';
         
         $info = (new HsxPhoneQueryInfo())->where([['id', '=', $id]])
             ->where('site_id', '=', $this->site_id)
