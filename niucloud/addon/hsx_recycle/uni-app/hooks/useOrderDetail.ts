@@ -26,6 +26,11 @@ export function useOrderDetail() {
   })
   const submitConfig = ref<any>({
     allow_user_reject_sale: 1,
+    consignment: {
+      enabled: 0,
+      user_entry_enabled: 0,
+      user_view_enabled: 0
+    },
     price_detail_theme: {
       colors: {}
     }
@@ -101,10 +106,18 @@ export function useOrderDetail() {
   const loadSubmitConfig = async () => {
     try {
       const res = await getOrderSubmitConfig()
+      const consignment = res?.data?.consignment || {}
       submitConfig.value = {
         ...submitConfig.value,
         ...(res?.data || {}),
-        allow_user_reject_sale: res?.data?.allow_user_reject_sale === 0 ? 0 : 1
+        allow_user_reject_sale: res?.data?.allow_user_reject_sale === 0 ? 0 : 1,
+        consignment: {
+          ...submitConfig.value.consignment,
+          ...consignment,
+          enabled: Number(consignment.enabled || 0) === 1 ? 1 : 0,
+          user_entry_enabled: Number(consignment.user_entry_enabled || 0) === 1 ? 1 : 0,
+          user_view_enabled: Number(consignment.user_view_enabled || 0) === 1 ? 1 : 0
+        }
       }
     } catch (error) {
       submitConfig.value.allow_user_reject_sale = 1

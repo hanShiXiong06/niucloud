@@ -158,11 +158,16 @@
           :index="index"
           :isSelected="isDeviceSelected(device.id)"
           :allowRejectSale="submitConfig.allow_user_reject_sale !== 0"
+          :allowApplyConsignment="canApplyConsignment(device)"
+          :allowViewConsignment="canViewConsignment(device)"
           :useWechatContact="customerServiceEnabled && customerServiceType === 'wechat'"
           @toggle-select="toggleDeviceSelection(device.id)"
           @confirm="handleDeviceConfirm(device)"
           @negotiate="openCustomerService"
           @reject-sale="handleDeviceRejectSale(device)"
+          @apply-consignment="handleApplyConsignment(device)"
+          @view-consignment="handleViewConsignment(device)"
+          @view-report="openInspectionReport(device)"
         />
       </view>
 
@@ -188,6 +193,11 @@
         :content="customerServiceConfig.content"
         @close="showCustomerServicePopup = false"
       />
+      <InspectionReportPopup
+        :visible="showInspectionReport"
+        :device="currentReportDevice"
+        @close="closeInspectionReport"
+      />
     </view>
   </view>
 </template>
@@ -204,8 +214,10 @@ import OrderDetailHeader from './components/OrderDetailHeader.vue'
 import DeviceBatchToolbar from './components/DeviceBatchToolbar.vue'
 import DeviceDetailCard from './components/DeviceDetailCard.vue'
 import CustomerServicePopup from './components/CustomerServicePopup.vue'
+import InspectionReportPopup from './components/InspectionReportPopup.vue'
 import RecyclePageHeader from '../components/RecyclePageHeader.vue'
 import { buildRecycleThemeVars } from '../../utils/theme'
+import type { OrderDetailDevice } from '../../types/order'
 
 const {
   loading, orderInfo, isEmpty, hasNoDevices, totalPrice,
@@ -217,9 +229,18 @@ const { returnOrderList, hasReturnOrder, loadReturnOrders, goToReturnOrder } = u
 const devicesRef = computed(() => orderInfo.value.devices)
 const themeVars = computed(() => buildRecycleThemeVars(submitConfig.value?.price_detail_theme?.colors || {}))
 const showCustomerServicePopup = ref(false)
+const showInspectionReport = ref(false)
+const currentReportDevice = ref<OrderDetailDevice | null>(null)
 const customerServiceConfig = computed(() => submitConfig.value?.customer_service || {})
 const customerServiceEnabled = computed(() => Number(customerServiceConfig.value?.enabled || 0) === 1)
 const customerServiceType = computed(() => customerServiceConfig.value?.type === 'qrcode' ? 'qrcode' : 'wechat')
+const consignmentConfig = computed(() => submitConfig.value?.consignment || {})
+const consignmentEntryEnabled = computed(() => {
+  return Number(consignmentConfig.value?.enabled || 0) === 1 && Number(consignmentConfig.value?.user_entry_enabled || 0) === 1
+})
+const consignmentViewEnabled = computed(() => {
+  return Number(consignmentConfig.value?.enabled || 0) === 1 && Number(consignmentConfig.value?.user_view_enabled || 0) === 1
+})
 
 const {
   isAllSelected, selectedCount, isDeviceSelected,
@@ -235,6 +256,57 @@ const handleDeviceConfirm = async (device: any) => {
 const handleDeviceRejectSale = async (device: any) => {
   const success = await rejectDeviceSale(device)
   if (success) resetSelection()
+}
+
+const canApplyConsignment = (device: OrderDetailDevice) => {
+  if (!consignmentEntryEnabled.value) return false
+  if (![3, 4, 7, 8].includes(Number(device.status))) return false
+  if (Number(device.consignment_order_id || 0) > 0) return false
+  return true
+}
+
+const getConsignmentOrderId = (device: OrderDetailDevice) => {
+  return Number(device.consignmentOrder?.id || device.consignment_order_id || 0)
+}
+
+const canViewConsignment = (device: OrderDetailDevice) => {
+  if (!consignmentViewEnabled.value) return false
+  return getConsignmentOrderId(device) > 0
+}
+
+const handleApplyConsignment = (device: OrderDetailDevice) => {
+  uni.showModal({
+    title: '申请代卖',
+    content: `当前设备可申请转入代卖：${device.model || device.imei || ''}。用户端申请接口尚未接入，请联系工作人员确认代卖方案。`,
+    confirmText: customerServiceEnabled.value ? '联系客服' : '知道了',
+    cancelText: '取消',
+    success: (res) => {
+      if (res.confirm && customerServiceEnabled.value) {
+        openCustomerService()
+      }
+    }
+  })
+}
+
+const handleViewConsignment = (device: OrderDetailDevice) => {
+  const consignmentId = getConsignmentOrderId(device)
+  if (!consignmentId) {
+    uni.showToast({ title: '暂无代卖订单信息', icon: 'none' })
+    return
+  }
+  uni.navigateTo({
+    url: `/addon/hsx_recycle/pages/consignment/detail?id=${consignmentId}`
+  })
+}
+
+const openInspectionReport = (device: OrderDetailDevice) => {
+  currentReportDevice.value = device
+  showInspectionReport.value = true
+}
+
+const closeInspectionReport = () => {
+  showInspectionReport.value = false
+  currentReportDevice.value = null
 }
 
 const handleConfirmSelected = async () => {

@@ -282,8 +282,11 @@ class RecycleOrderService extends BaseAdminService
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->with([
                 'devices' => function($query) use ($filterKey, $viewMode, $where, $filterService) {
-                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark')
-                        ->append(['status_name', 'category_name', 'pay_status_name', 'confirm_status_name']);
+                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,dispose_type,dispose_status,settlement_mode,consignment_order_id')
+                        ->with(['consignmentOrder' => function($q) {
+                            $q->field('id,consignment_no,source_device_id,status,listing_price,sold_price,settlement_amount,pay_status');
+                        }])
+                        ->append(['status_name', 'category_name', 'pay_status_name', 'confirm_status_name', 'dispose_type_name', 'dispose_status_name']);
                     if ($filterService && $viewMode === 'device_expand') {
                         $filterService->applyDeviceFilter($query, $filterKey, $where);
                     }
@@ -340,8 +343,11 @@ class RecycleOrderService extends BaseAdminService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id, status,check_result,final_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark')
-                        ->append(['status_name','category_name', 'pay_status_name', 'confirm_status_name']);
+                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id, status,check_result,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,dispose_type,dispose_status,settlement_mode,consignment_order_id')
+                        ->with(['consignmentOrder' => function($q) {
+                            $q->field('id,consignment_no,source_device_id,status,listing_price,sold_price,settlement_amount,pay_status');
+                        }])
+                        ->append(['status_name','category_name', 'pay_status_name', 'confirm_status_name', 'dispose_type_name', 'dispose_status_name']);
                 },
                 'member' => function($query) {
                     $query->field('member_id,username,nickname,mobile,headimg');
@@ -519,16 +525,21 @@ class RecycleOrderService extends BaseAdminService
                 throw new CommonException('当前订单没有待客户确认的设备，暂不需要推送');
             }
 
-            (new CoreRecycleOrderNotifyService())->orderAgreeNotify([
+            $notifyResult = (new CoreRecycleOrderNotifyService())->orderAgreeNotify([
                 'order_id' => $id,
                 'site_id' => $this->site_id,
                 'scene' => 'manual_order_confirm',
                 'device_ids' => $pendingDeviceIds,
             ]);
 
+            if (empty($notifyResult['success'])) {
+                throw new CommonException($notifyResult['message'] ?? '通知发送失败');
+            }
+
             return [
                 'success' => true,
-                'message' => '推送通知已发送',
+                'message' => !empty($notifyResult['skipped']) ? '短时间内已推送过，本次已跳过重复发送' : '推送通知已发送',
+                'skipped' => !empty($notifyResult['skipped']),
                 'order_no' => $order['order_no'],
                 'push_time' => date('Y-m-d H:i:s')
             ];

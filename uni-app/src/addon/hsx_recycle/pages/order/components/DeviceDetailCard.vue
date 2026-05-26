@@ -53,53 +53,47 @@
       </view>
     </view>
 
-   
-
-    <!-- 检测结果 / 价格说明 -->
-    <view v-if="checkResult || device.remark || device.price_remark || device.check_at" class="px-3 pb-2 space-y-1">
-      <view v-if="checkResult" class="flex text-xs">
-        <text class="text-gray-400 w-14 flex-shrink-0">检测结果</text>
-        <text class="text-gray-600 flex-1">{{ checkResult }}</text>
-      </view>
-      <view v-if="device.remark" class="flex text-xs">
-        <text class="text-gray-400 w-14 flex-shrink-0">扣费说明</text>
-        <text class="text-gray-600 flex-1">{{ device.remark }}</text>
-      </view>
-      <view v-if="device.price_remark" class="flex text-xs">
-        <text class="text-gray-400 w-14 flex-shrink-0">价格说明</text>
-        <text class="text-gray-600 flex-1">{{ device.price_remark }}</text>
-      </view>
-      <view v-if="device.check_at" class="flex text-xs">
-        <text class="text-gray-400 w-14 flex-shrink-0">检测时间</text>
-        <text class="text-gray-500">{{ formatTime(device.check_at) }}</text>
+    <!-- 验机报告入口 -->
+    <view v-if="hasInspectionReport" class="px-3 pb-2">
+      <view class="inspection-entry" @tap.stop="$emit('view-report')">
+        <view class="inspection-icon">
+          <up-icon name="file-text" size="16" color="#2563eb"></up-icon>
+        </view>
+        <view class="inspection-main">
+          <view class="inspection-title-row">
+            <text class="inspection-title">验机报告</text>
+            <text v-if="styledCount" class="inspection-warning">{{ styledCount }}项标识</text>
+            <text v-else class="inspection-normal">已生成</text>
+          </view>
+          <text class="inspection-desc">{{ reportSummary }}</text>
+        </view>
+        <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
       </view>
     </view>
-     <!-- 检测图片 -->
-    <view v-if="hasCheckImages" class="px-3 pb-2">
-      <scroll-view scroll-x class="whitespace-nowrap">
-        <view class="inline-flex gap-1.5 py-0.5">
-          <view
-            v-for="(img_url, imgIndex) in imageThumbList"
-            :key="imgIndex"
-            class="w-14 h-14 rounded-lg overflow-hidden bg-gray-100"
-          >
-            <image
-              :src="img(img_url)"
-              mode="aspectFill"
-              class="w-full h-full"
-              @tap.stop="handlePreviewImage(imgIndex)"
-            />
-          </view>
+
+    <!-- 代卖信息入口 -->
+    <view v-if="allowViewConsignment" class="px-3 pb-2">
+      <view class="consignment-entry" @tap.stop="$emit('view-consignment')">
+        <view class="consignment-icon">
+          <up-icon name="order" size="16" color="#4f46e5"></up-icon>
         </view>
-      </scroll-view>
+        <view class="consignment-main">
+          <view class="consignment-title-row">
+            <text class="consignment-title">已转代卖</text>
+            <text class="consignment-status">{{ consignmentStatusText }}</text>
+          </view>
+          <text class="consignment-desc">{{ consignmentSummary }}</text>
+        </view>
+        <up-icon name="arrow-right" size="16" color="#cbd5e1"></up-icon>
+      </view>
     </view>
 
     <!-- 操作按钮 -->
-    <view v-if="showActions" class="flex gap-2 px-3 py-2 border-t border-gray-50">
+    <view v-if="showActions" class="action-grid px-3 py-2 border-t border-gray-50">
       <!-- #ifdef MP-WEIXIN -->
       <button
         v-if="useWechatContact"
-        class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
+        class="action-btn"
         style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
         open-type="contact"
       >
@@ -108,7 +102,7 @@
       </button>
       <button
         v-else
-        class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
+        class="action-btn"
         style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
         @tap.stop="$emit('negotiate')"
       >
@@ -118,7 +112,7 @@
       <!-- #endif -->
       <!-- #ifndef MP-WEIXIN -->
       <button
-        class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
+        class="action-btn"
         style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
         @tap.stop="$emit('negotiate')"
       >
@@ -127,8 +121,26 @@
       </button>
       <!-- #endif -->
       <button
+        v-if="allowApplyConsignment"
+        class="action-btn"
+        style="background: linear-gradient(135deg, #6366f1, #2563eb);"
+        @tap.stop="$emit('apply-consignment')"
+      >
+        <up-icon name="order" size="13" color="#fff" class="mr-1"></up-icon>
+        申请代卖
+      </button>
+      <button
+        v-if="allowViewConsignment"
+        class="action-btn"
+        style="background: linear-gradient(135deg, #4f46e5, #2563eb);"
+        @tap.stop="$emit('view-consignment')"
+      >
+        <up-icon name="order" size="13" color="#fff" class="mr-1"></up-icon>
+        查看代卖
+      </button>
+      <button
         v-if="allowRejectSale"
-        class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
+        class="action-btn"
         style="background: linear-gradient(135deg, #f97316, #ef4444);"
         @tap.stop="$emit('reject-sale')"
       >
@@ -136,7 +148,7 @@
         拒绝出售
       </button>
       <button
-        class="flex-1 h-8 rounded-full flex items-center justify-center text-white text-xs"
+        class="action-btn"
         style="background: linear-gradient(135deg, #f472b6, #ec4899);"
         @tap.stop="$emit('confirm')"
       >
@@ -150,7 +162,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { OrderDetailDevice } from '../../../types/order'
-import { timeStampTurnTime, img } from '@/utils/common'
 import { getDeviceStatusInfo } from '../../../utils/theme'
 
 interface Props {
@@ -158,6 +169,8 @@ interface Props {
   index: number
   isSelected: boolean
   allowRejectSale?: boolean
+  allowApplyConsignment?: boolean
+  allowViewConsignment?: boolean
   useWechatContact?: boolean
 }
 
@@ -168,6 +181,9 @@ defineEmits<{
   'confirm': []
   'negotiate': []
   'reject-sale': []
+  'apply-consignment': []
+  'view-consignment': []
+  'view-report': []
 }>()
 
 const statusColor = computed(() => getDeviceStatusInfo(props.device.status).color)
@@ -178,26 +194,76 @@ const checkResult = computed(() => {
   return props.device.check_result_seller || props.device.check_result || ''
 })
 
-// 原图列表（用于预览大图）：优先取 check_images_seller，fallback 到 check_images
-const imageList = computed(() => {
-  const raw = props.device.check_images_seller || props.device.check_images
-  if (!raw) return []
-  return raw.split(',').map(s => s.trim()).filter(s => s)
-})
-
-// 缩略图列表（用于列表展示，节省CDN）：优先取后端返回的缩略图，fallback 到原图
-const imageThumbList = computed(() => {
-  const thumbs = props.device.check_images_seller_thumb_small
-  if (thumbs && Array.isArray(thumbs) && thumbs.length > 0) {
-    return thumbs
-  }
-  return imageList.value
-})
-
-// 是否有质检图片
-const hasCheckImages = computed(() => imageList.value.length > 0)
-
 const showActions = computed(() => [3, 4, 7, 8].includes(Number(props.device.status)))
+
+const imageCount = computed(() => {
+  const raw = props.device.check_images_seller || props.device.check_images
+  if (!raw) return 0
+  return raw.split(',').map(s => s.trim()).filter(Boolean).length
+})
+
+const normalizeInfo = (value: any) => {
+  if (!value) return {}
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (error) {
+      return {}
+    }
+  }
+  return typeof value === 'object' ? value : {}
+}
+
+const structuredResultItems = computed(() => {
+  const meta = normalizeInfo(normalizeInfo(props.device.info).check_meta)
+  return Array.isArray(meta.result_items) ? meta.result_items : []
+})
+
+const reportSegments = computed(() => {
+  if (structuredResultItems.value.length) return structuredResultItems.value.map((item: any) => item.text || item.field_name || '').filter(Boolean)
+  if (!checkResult.value) return []
+  return checkResult.value
+    .replace(/\r\n/g, '\n')
+    .split(/[;\n；|]+/)
+    .map(item => item.trim())
+    .filter(Boolean)
+})
+
+const warningPattern = /(划痕|损坏|异常|故障|维修|更换|进水|有锁|账号锁|不可|坏|严重|漏液|破|裂|老化|低于|不通过|缺失|失灵|暗病|花屏|烧屏|磕碰|变形|拆修|无面容|面容异常|指纹异常)/i
+const normalPattern = /^(无|正常|良好|通过|完好|无划痕|无异常|未发现异常)$/
+
+const styledCount = computed(() => {
+  if (structuredResultItems.value.length) {
+    return structuredResultItems.value.filter((item: any) => {
+      const style = item?.style || {}
+      const optionStyles = item?.option_styles || {}
+      return !!(style.text_color || style.background_color || style.border_color || Object.keys(optionStyles).length)
+    }).length
+  }
+  return reportSegments.value.filter(item => warningPattern.test(item) && !normalPattern.test(item)).length
+})
+
+const hasInspectionReport = computed(() => {
+  return !!checkResult.value || !!props.device.remark || !!props.device.price_remark || !!props.device.check_at || imageCount.value > 0
+})
+
+const reportSummary = computed(() => {
+  const parts: string[] = []
+  if (reportSegments.value.length) parts.push(`${reportSegments.value.length}项检测`)
+  if (imageCount.value) parts.push(`${imageCount.value}张图片`)
+  if (props.device.price_remark || props.device.remark) parts.push('含价格说明')
+  return parts.length ? parts.join(' · ') : '查看检测明细'
+})
+
+const consignmentStatusText = computed(() => {
+  return props.device.consignmentOrder?.status_name || '代卖中'
+})
+
+const consignmentSummary = computed(() => {
+  const no = props.device.consignmentOrder?.consignment_no
+  return no ? `代卖单号：${no}` : '查看代卖进度、成交与结算信息'
+})
 
 const handleCopyIMEI = () => {
   uni.setClipboardData({
@@ -208,13 +274,158 @@ const handleCopyIMEI = () => {
   })
 }
 
-const handlePreviewImage = (current: number) => {
-  const formattedImages = imageList.value.map(item => img(item))
-  uni.previewImage({
-    urls: formattedImages,
-    current: formattedImages[current]
-  })
+</script>
+
+<style scoped lang="scss">
+.action-grid {
+  display: flex;
+  flex-wrap: wrap;
+  padding-left: 18rpx;
+  padding-right: 18rpx;
+  box-sizing: border-box;
 }
 
-const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
-</script>
+.action-btn {
+  width: 48%;
+  height: 64rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 24rpx;
+  line-height: 1;
+  margin: 7rpx 1%;
+  padding: 0 14rpx;
+  box-sizing: border-box;
+}
+
+.action-btn::after {
+  border: 0;
+}
+
+.inspection-entry {
+  padding: 18rpx;
+  border-radius: 16rpx;
+  background: #f8fafc;
+  border: 1rpx solid #eef2f7;
+  display: flex;
+  align-items: center;
+}
+
+.inspection-icon {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 14rpx;
+  background: #eff6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+}
+
+.inspection-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-right: 12rpx;
+}
+
+.inspection-title-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.inspection-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.inspection-normal,
+.inspection-warning {
+  padding: 3rpx 10rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  margin-left: 12rpx;
+}
+
+.inspection-normal {
+  color: #059669;
+  background: #dcfce7;
+}
+
+.inspection-warning {
+  color: #ea580c;
+  background: #ffedd5;
+}
+
+.inspection-desc {
+  font-size: 22rpx;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consignment-entry {
+  padding: 18rpx;
+  border-radius: 16rpx;
+  background: #f8f7ff;
+  border: 1rpx solid #e5e7ff;
+  display: flex;
+  align-items: center;
+}
+
+.consignment-icon {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 14rpx;
+  background: #eef2ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+}
+
+.consignment-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-right: 12rpx;
+}
+
+.consignment-title-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.consignment-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1e1b4b;
+}
+
+.consignment-status {
+  padding: 3rpx 10rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  color: #4f46e5;
+  background: #e0e7ff;
+  margin-left: 12rpx;
+}
+
+.consignment-desc {
+  font-size: 22rpx;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

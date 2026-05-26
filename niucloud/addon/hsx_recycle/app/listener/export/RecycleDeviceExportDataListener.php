@@ -53,6 +53,18 @@ class RecycleDeviceExportDataListener
                     'final_price'=>[
                         'name' =>'最终价格'
                     ],
+                    'sell_price'=>[
+                        'name' =>'销售/挂牌价'
+                    ],
+                    'warehouse_type_name'=>[
+                        'name' =>'入库类型'
+                    ],
+                    'is_merchant_owned'=>[
+                        'name' =>'是否商家自有'
+                    ],
+                    'consignment_no'=>[
+                        'name' =>'代卖单号'
+                    ],
                     'nickname' => [
                         'name' => '供应商',
                     ],

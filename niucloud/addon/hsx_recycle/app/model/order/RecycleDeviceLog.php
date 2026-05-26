@@ -70,7 +70,7 @@ class RecycleDeviceLog extends BaseModel
 
         $count = $this->where($condition)->count();
         $data = array_map(function($item) {
-            $item['status_name'] = RecycleOrderDict::getDeviceOpType($item['new_status']);
+            $item['status_name'] = RecycleOrderDict::getDeviceLogOperationName($item);
             // 检查 $item['operator'] 是否存在且不为 null，再获取 username
             $item['operator_name'] = isset($item['operator']) && $item['operator'] ? $item['operator']['username'] : ($item['operator_name'] ?? '未知操作员'); // 保留模型中可能已有的 operator_name 或设为默认值
             // 删除 operator 字段

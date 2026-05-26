@@ -14,6 +14,7 @@ export interface QuickSearchFormModel {
 }
 
 export interface AdvancedSearchFormModel {
+  order_id: string | number
   order_no: string
   express_no: string
   status: Array<string | number>
@@ -47,6 +48,7 @@ const createQuickSearchForm = (): QuickSearchFormModel => ({
 })
 
 const createAdvancedSearchForm = (): AdvancedSearchFormModel => ({
+  order_id: '',
   order_no: '',
   express_no: '',
   status: [],
@@ -82,6 +84,7 @@ export const buildOrderQueryParams = (params: {
   if (quickSearchForm.status) queryParams.status = quickSearchForm.status
   if (quickSearchForm.delivery_type) queryParams.delivery_type = quickSearchForm.delivery_type
 
+  if (advancedSearchForm.order_id) queryParams.order_id = advancedSearchForm.order_id
   if (advancedSearchForm.order_no) queryParams.order_no = advancedSearchForm.order_no
   if (advancedSearchForm.express_no) queryParams.express_no = advancedSearchForm.express_no
   if (advancedSearchForm.status && advancedSearchForm.status.length > 0) {

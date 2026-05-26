@@ -35,6 +35,22 @@
                     <text class="status-name" :style="{ color: labelColor }">{{ pendingPaymentText }}</text>
                 </view>
             </view>
+
+            <view
+                v-if="showConsignmentEntry"
+                class="consignment-entry mx-4 mb-3"
+                @click="handleConsignmentClick"
+            >
+                <view>
+                    <text class="consignment-title" :style="{ color: titleColor }">{{ consignmentTitle }}</text>
+                    <text class="consignment-desc" :style="{ color: labelColor }">{{ consignmentDesc }}</text>
+                </view>
+                <view class="consignment-count">
+                    <text class="count" :style="{ color: numberColor }">{{ consignmentTotal }}</text>
+                    <text class="label" :style="{ color: labelColor }">单</text>
+                    <text class="iconfont iconarrow-right ml-1" :style="{ color: viewAllColor }"></text>
+                </view>
+            </view>
         </view>
     </view>
 </template>
@@ -46,6 +62,7 @@ import { img , getToken, redirect } from '@/utils/common';
 import { useRouter } from 'vue-router';
 import useDiyStore from '@/app/stores/diy';
 import { getOrderStatusCount } from '@/addon/hsx_recycle/api/order';
+import { getConsignmentStatusCount } from '@/addon/hsx_recycle/api/consignment';
 import { useLogin } from "@/hooks/useLogin";
 
 
@@ -79,6 +96,10 @@ const orderData = ref<OrderData>({
     pending_confirm: 0,
     pending_payment: 0
 });
+const consignmentEnabled = ref(false);
+const consignmentTotal = ref(0);
+const consignmentServerTitle = ref('');
+const consignmentServerDesc = ref('');
 
 const decorateOrderData: OrderData = {
     pending_sign: 3,
@@ -94,6 +115,13 @@ const pendingSignText = computed(() => props.component.pendingSignText || '待�
 const checkingText = computed(() => props.component.checkingText || '质检中');
 const pendingConfirmText = computed(() => props.component.pendingConfirmText || '待确认');
 const pendingPaymentText = computed(() => props.component.pendingPaymentText || '待打款');
+const consignmentTitle = computed(() => props.component.consignmentText || consignmentServerTitle.value || '代卖订单');
+const consignmentDesc = computed(() => props.component.consignmentDesc || consignmentServerDesc.value || '查看代卖进度、成交与结算结果');
+const showConsignmentEntry = computed(() => {
+    if (props.component.showConsignment === 0 || props.component.showConsignment === false) return false;
+    if (diyStore.mode === 'decorate') return true;
+    return consignmentEnabled.value;
+});
 
 // 颜色设置
 const titleColor = computed(() => props.component.titleColor || '#333333');
@@ -126,6 +154,17 @@ const handleStatusClick = (status: string) => {
    redirect({url:'/addon/hsx_recycle/pages/order/list?status='+status})
 };
 
+const handleConsignmentClick = () => {
+    if (diyStore.mode === 'decorate') {
+        return;
+    }
+
+    if (!getToken()) {
+        useLogin().setLoginBack({ url: '/addon/hsx_recycle/pages/consignment/list' });
+    }
+    redirect({ url: '/addon/hsx_recycle/pages/consignment/list' });
+};
+
 // 获取订单状态统计数据
 const getOrderDataCount = async () => {
     if (diyStore.mode === 'decorate') {
@@ -151,6 +190,35 @@ const getOrderDataCount = async () => {
         }
     } catch (error) {
         console.error('获取订单状态数量失败:', error);
+    }
+};
+
+const getConsignmentDataCount = async () => {
+    if (props.component.showConsignment === 0 || props.component.showConsignment === false) {
+        consignmentEnabled.value = false;
+        return;
+    }
+
+    if (diyStore.mode === 'decorate') {
+        consignmentEnabled.value = true;
+        consignmentTotal.value = 2;
+        return;
+    }
+
+    try {
+        const res: any = await getConsignmentStatusCount();
+        if (res.code === 1 && res.data?.enabled) {
+            consignmentEnabled.value = true;
+            consignmentTotal.value = Number(res.data.total || 0);
+            consignmentServerTitle.value = res.data.title || '';
+            consignmentServerDesc.value = res.data.desc || '';
+            return;
+        }
+        consignmentEnabled.value = false;
+        consignmentTotal.value = 0;
+    } catch (error) {
+        consignmentEnabled.value = false;
+        console.error('获取代卖订单数量失败:', error);
     }
 };
 
@@ -226,6 +294,7 @@ const maskLayer = computed(() => {
 
 onMounted(() => {
     getOrderDataCount();
+    getConsignmentDataCount();
 });
 </script>
 
@@ -269,5 +338,47 @@ onMounted(() => {
             }
         }
     }
+
+    .consignment-entry {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20rpx;
+        padding: 22rpx 24rpx;
+        border-radius: 16rpx;
+        background: #f8fafc;
+    }
+
+    .consignment-title,
+    .consignment-desc {
+        display: block;
+    }
+
+    .consignment-title {
+        font-size: 28rpx;
+        font-weight: 600;
+    }
+
+    .consignment-desc {
+        margin-top: 6rpx;
+        font-size: 22rpx;
+        line-height: 1.4;
+    }
+
+    .consignment-count {
+        display: flex;
+        align-items: baseline;
+        flex-shrink: 0;
+    }
+
+    .consignment-count .count {
+        font-size: 34rpx;
+        font-weight: 700;
+    }
+
+    .consignment-count .label {
+        margin-left: 4rpx;
+        font-size: 22rpx;
+    }
 }
-</style> 
+</style>

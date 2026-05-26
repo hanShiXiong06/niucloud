@@ -86,6 +86,7 @@ class RecycleOrderFlowModeService extends BaseAdminService
             'pending_pay' => 0,
             'paid' => 0,
             'returned' => 0,
+            'consigned' => 0,
             'closed' => 0,
             'payable_count' => 0,
             'payable_amount' => 0.0,
@@ -111,8 +112,14 @@ class RecycleOrderFlowModeService extends BaseAdminService
                 RecycleOrderDict::DEVICE_STATUS_RETURNED,
                 RecycleOrderDict::DEVICE_STATUS_PRICED,
                 RecycleOrderDict::DEVICE_STATUS_PRICED_REPRICE,
+                RecycleOrderDict::DEVICE_STATUS_CONSIGNED,
             ], true)) {
                 $summary['checked']++;
+            }
+            if ($status === RecycleOrderDict::DEVICE_STATUS_CONSIGNED || ($device['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN) {
+                $summary['consigned'] = (int)($summary['consigned'] ?? 0) + 1;
+                $summary['closed']++;
+                continue;
             }
             if ($status === RecycleOrderDict::DEVICE_STATUS_RETURNED || $confirmStatus === RecycleOrderDict::CONFIRM_STATUS_REJECTED) {
                 $summary['returned']++;
@@ -155,6 +162,9 @@ class RecycleOrderFlowModeService extends BaseAdminService
         if ($status === RecycleOrderDict::DEVICE_STATUS_RETURNED || $confirmStatus === RecycleOrderDict::CONFIRM_STATUS_REJECTED) {
             return ['allowed' => false, 'reason' => '设备已退回'];
         }
+        if ($status === RecycleOrderDict::DEVICE_STATUS_CONSIGNED || ($device['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN) {
+            return ['allowed' => false, 'reason' => '设备已转代卖，请在代卖订单中结算'];
+        }
         if ($amount <= 0) {
             return ['allowed' => false, 'reason' => '金额为0，不可打款'];
         }
@@ -179,6 +189,9 @@ class RecycleOrderFlowModeService extends BaseAdminService
         if ($status === RecycleOrderDict::DEVICE_STATUS_RETURNED || $confirmStatus === RecycleOrderDict::CONFIRM_STATUS_REJECTED) {
             return ['allowed' => false, 'reason' => '设备已退回'];
         }
+        if ($status === RecycleOrderDict::DEVICE_STATUS_CONSIGNED || ($device['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN) {
+            return ['allowed' => false, 'reason' => '设备已转代卖'];
+        }
         if ($status !== RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM) {
             return ['allowed' => false, 'reason' => '待质检或待定价'];
         }
@@ -194,6 +207,9 @@ class RecycleOrderFlowModeService extends BaseAdminService
         }
         if ($status === RecycleOrderDict::DEVICE_STATUS_RETURNED) {
             return RecycleOrderDict::CONFIRM_STATUS_REJECTED;
+        }
+        if ($status === RecycleOrderDict::DEVICE_STATUS_CONSIGNED) {
+            return RecycleOrderDict::CONFIRM_STATUS_CONFIRMED;
         }
         if (array_key_exists('confirm_status', $device) && $device['confirm_status'] !== null) {
             return (int)$device['confirm_status'];
@@ -248,6 +264,15 @@ class RecycleOrderFlowModeService extends BaseAdminService
                     'status' => $confirmStatus === RecycleOrderDict::CONFIRM_STATUS_CONFIRMED
                         ? RecycleOrderDict::DEVICE_STATUS_RECYCLED
                         : RecycleOrderDict::DEVICE_STATUS_RETURNED,
+                    'settlement_mode' => $confirmStatus === RecycleOrderDict::CONFIRM_STATUS_CONFIRMED
+                        ? RecycleOrderDict::DISPOSE_TYPE_RECYCLE
+                        : RecycleOrderDict::DISPOSE_TYPE_RETURN,
+                    'dispose_type' => $confirmStatus === RecycleOrderDict::CONFIRM_STATUS_CONFIRMED
+                        ? RecycleOrderDict::DISPOSE_TYPE_RECYCLE
+                        : RecycleOrderDict::DISPOSE_TYPE_RETURN,
+                    'dispose_status' => $confirmStatus === RecycleOrderDict::CONFIRM_STATUS_CONFIRMED
+                        ? RecycleOrderDict::DISPOSE_STATUS_RECYCLED
+                        : RecycleOrderDict::DISPOSE_STATUS_RETURNED,
                     'update_at' => $now,
                 ]);
 

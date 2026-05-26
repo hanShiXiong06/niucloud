@@ -8,6 +8,7 @@ use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleReturnDevice;
 use addon\hsx_recycle\app\model\order\RecycleReturnOrder;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\service\admin\printer\RecyclePrintTriggerService;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -215,6 +216,40 @@ class RecycleReturnOrderService extends BaseCoreService
         }
     }
 
+    private function triggerReturnPrint(int $status, int $returnOrderId): void
+    {
+        $triggerKeys = [];
+        if ($status === RecycleReturnOrderDict::ORDER_STATUS_RETURNING) {
+            $triggerKeys[] = 'return.confirmed';
+            $triggerKeys[] = 'return.express.saved';
+        }
+        if ($status === RecycleReturnOrderDict::ORDER_STATUS_COMPLETED) {
+            $triggerKeys[] = 'return.completed';
+        }
+
+        if (empty($triggerKeys)) {
+            return;
+        }
+
+        foreach ($triggerKeys as $triggerKey) {
+            try {
+                $result = (new RecyclePrintTriggerService())->auto($triggerKey, [
+                    'return_order_id' => $returnOrderId,
+                ]);
+                Log::info('【退货打印】自动触发结果', [
+                    'trigger_key' => $triggerKey,
+                    'return_order_id' => $returnOrderId,
+                    'success' => $result['success'] ?? false,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('【退货打印】自动触发失败：' . $e->getMessage(), [
+                    'trigger_key' => $triggerKey,
+                    'return_order_id' => $returnOrderId,
+                ]);
+            }
+        }
+    }
+
     /**
      * 更新退回订单状态
      * @param int $id
@@ -296,6 +331,8 @@ class RecycleReturnOrderService extends BaseCoreService
                 }
             }
             Db::commit();
+
+            $this->triggerReturnPrint($status, $id);
             
             return [
                 'code' => 0, 
@@ -496,4 +533,4 @@ class RecycleReturnOrderService extends BaseCoreService
             return ['code' => -1, 'msg' => '批量创建退回订单失败：' . $e->getMessage(), 'data' => []];
         }
     }
-} 
+}

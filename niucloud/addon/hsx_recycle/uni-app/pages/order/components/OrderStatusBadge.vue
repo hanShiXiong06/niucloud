@@ -1,23 +1,24 @@
 <template>
   <view
     class="inline-flex  items-center px-2 py-1 rounded text-[22rpx] font-medium"
-    :style="{
-      color: color,
-      backgroundColor: bgColor
-    }"
+    :style="badgeStyle"
   >
     <text>{{ text }}</text>
   </view>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 interface Props {
   text: string
   color: string
   bgColor: string
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+
+const badgeStyle = computed(() => `color:${props.color};background-color:${props.bgColor}`)
 </script>
 
 <style scoped lang="scss">

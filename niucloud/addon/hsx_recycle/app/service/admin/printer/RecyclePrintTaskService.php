@@ -59,18 +59,21 @@ class RecyclePrintTaskService extends BaseAdminService
         }
 
         $scene = $plan['scene'] ?? [];
+        $biz = $plan['biz'] ?? [];
         $device = $plan['device'] ?? [];
         $template = $plan['template'] ?? [];
         $printer = $plan['printer'] ?? [];
+        $bizType = (string)($biz['biz_type'] ?? $scene['biz_type'] ?? 'device');
+        $bizId = (int)($biz['biz_id'] ?? $device['device_id'] ?? 0);
 
         $task = $this->model->create([
             'site_id' => $this->site_id,
             'scene_key' => $scene['scene_key'] ?? '',
             'scene_name' => $scene['scene_name'] ?? '',
             'trigger_key' => $scene['trigger_key'] ?? '',
-            'biz_type' => 'device',
-            'biz_id' => (int)($device['device_id'] ?? 0),
-            'order_id' => (int)($device['order_id'] ?? 0),
+            'biz_type' => $bizType,
+            'biz_id' => $bizId,
+            'order_id' => (int)($biz['order_id'] ?? $device['order_id'] ?? 0),
             'device_id' => (int)($device['device_id'] ?? 0),
             'template_id' => (int)($template['template_id'] ?? 0),
             'template_name' => $template['template_name'] ?? '',
@@ -81,7 +84,7 @@ class RecyclePrintTaskService extends BaseAdminService
             'mode' => $mode,
             'unique_key' => $uniqueKey !== '' ? $uniqueKey : $this->buildOneTimeUniqueKey($plan, $mode),
             'payload' => $payload,
-            'variables_snapshot' => $plan['device_data'] ?? [],
+            'variables_snapshot' => $plan['print_data'] ?? $plan['device_data'] ?? [],
             'instruction_snapshot' => $plan['template_info']['instruction_content'] ?? '',
             'response_snapshot' => [],
             'status' => RecyclePrintTask::STATUS_PENDING,
@@ -163,6 +166,7 @@ class RecyclePrintTaskService extends BaseAdminService
         }
 
         $scene = $plan['scene'] ?? [];
+        $biz = $plan['biz'] ?? [];
         $device = $plan['device'] ?? [];
         $scope = $scene['idempotency_scope'] ?? 'site_scene_biz';
         if ($scope === 'none') {
@@ -180,12 +184,12 @@ class RecyclePrintTaskService extends BaseAdminService
         }
 
         if ($scope === 'site_scene_order') {
-            $orderId = (int)($device['order_id'] ?? 0);
+            $orderId = (int)($biz['order_id'] ?? $device['order_id'] ?? 0);
             return $orderId > 0 ? "scene:{$sceneKey}|order:{$orderId}" : '';
         }
 
-        $bizType = 'device';
-        $bizId = (int)($device['device_id'] ?? 0);
+        $bizType = (string)($biz['biz_type'] ?? $scene['biz_type'] ?? 'device');
+        $bizId = (int)($biz['biz_id'] ?? $device['device_id'] ?? 0);
         return $bizId > 0 ? "scene:{$sceneKey}|biz:{$bizType}:{$bizId}" : '';
     }
 

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core\recycle_order;
 
+use addon\hsx_recycle\app\model\order\RecycleConsignmentOrder;
 use app\service\core\notice\NoticeService;
 use core\base\BaseCoreService;
 use think\facade\Log;
@@ -25,6 +26,7 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
      * 小程序订单详情页路径
      */
     private const WEAPP_ORDER_DETAIL_PAGE = '/addon/hsx_recycle/pages/order/detail';
+    private const WEAPP_CONSIGNMENT_DETAIL_PAGE = '/addon/hsx_recycle/pages/consignment/detail';
 
     public function __construct()
     {
@@ -42,6 +44,12 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
     {
         $params = array_merge(['id' => $orderId], $params);
         return self::WEAPP_ORDER_DETAIL_PAGE . '?' . http_build_query($params);
+    }
+
+    private function getWeappConsignmentPage(int $consignmentId, array $params = []): string
+    {
+        $params = array_merge(['id' => $consignmentId], $params);
+        return self::WEAPP_CONSIGNMENT_DETAIL_PAGE . '?' . http_build_query($params);
     }
 
     /**
@@ -258,16 +266,16 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
      * 订单确认通知（通知用户确认报价）
      * 变量与 OrderAgree listener 和模板定义保持一致：order_no, time, status
      * @param array $data
-     * @return void
+     * @return array
      */
-    public function orderAgreeNotify(array $data): void
+    public function orderAgreeNotify(array $data): array
     {
         try {
             Log::info('【回收通知】订单确认通知', $data);
 
             if (empty($data['order_id']) || empty($data['site_id'])) {
                 Log::error('【回收通知】订单确认通知参数不完整', $data);
-                return;
+                return ['success' => false, 'message' => '订单确认通知参数不完整'];
             }
 
             $coreService = new CoreRecycleOrderService();
@@ -275,13 +283,13 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
 
             if (empty($orderInfo)) {
                 Log::error('【回收通知】订单不存在: ' . $data['order_id']);
-                return;
+                return ['success' => false, 'message' => '订单不存在'];
             }
 
             $memberId = (int)($orderInfo['member_id'] ?? 0);
             if ($memberId <= 0) {
                 Log::error('【回收通知】订单确认通知 member_id 为空，跳过通知');
-                return;
+                return ['success' => false, 'message' => '订单没有关联用户，无法推送通知'];
             }
 
             $deviceIds = array_values(array_unique(array_filter(array_map('intval', $data['device_ids'] ?? []))));
@@ -311,16 +319,105 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
                 'device_ids' => $deviceIds,
                 'device_count' => count($deviceIds),
                 'target_page' => $targetPage,
+                'dedupe' => true,
+                'dedupe_window' => strpos($scene, 'manual_') === 0 ? 120 : 300,
             ]);
+
+            if (!empty($sendResult['skipped'])) {
+                Log::info('【回收通知】订单确认通知重复跳过: ' . ($sendResult['message'] ?? ''), $data);
+                return $sendResult;
+            }
 
             if (empty($sendResult['success'])) {
                 Log::error('【回收通知】订单确认通知发送失败: ' . ($sendResult['message'] ?? ''), $data);
-                return;
+                return $sendResult;
             }
 
             Log::info('【回收通知】订单确认通知发送成功: ' . $data['order_id']);
+            return $sendResult;
         } catch (\Exception $e) {
             Log::error('【回收通知】订单确认通知发送失败: ' . $e->getMessage(), $data);
+            return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    public function consignmentStatusNotify(array $data): array
+    {
+        try {
+            Log::info('【回收通知】代卖进度通知', $data);
+
+            $consignmentId = (int)($data['consignment_id'] ?? 0);
+            $siteId = (int)($data['site_id'] ?? 0);
+            if ($consignmentId <= 0 || $siteId <= 0) {
+                return ['success' => false, 'message' => '代卖通知参数不完整'];
+            }
+
+            $info = (new RecycleConsignmentOrder())
+                ->where([
+                    ['site_id', '=', $siteId],
+                    ['id', '=', $consignmentId],
+                ])
+                ->append(['status_name', 'pay_status_name'])
+                ->findOrEmpty()
+                ->toArray();
+
+            if (empty($info)) {
+                return ['success' => false, 'message' => '代卖订单不存在'];
+            }
+
+            $memberId = (int)($info['member_id'] ?? 0);
+            if ($memberId <= 0) {
+                return ['success' => false, 'message' => '代卖订单没有关联用户，无法推送通知'];
+            }
+
+            $targetPage = $this->getWeappConsignmentPage($consignmentId);
+            $statusName = (string)($info['status_name'] ?? '代卖进度更新');
+            $payload = [
+                'site_id' => $siteId,
+                'consignment_id' => $consignmentId,
+                'order_id' => (int)($info['source_order_id'] ?? 0),
+                'member_id' => $memberId,
+                'order_no' => (string)($info['consignment_no'] ?? ''),
+                'source_order_no' => (string)($info['source_order_no'] ?? ''),
+                'device_name' => (string)($info['device_model'] ?? ''),
+                'device_imei' => (string)($info['device_imei'] ?? ''),
+                'status' => $statusName,
+                'time' => date('Y-m-d H:i:s'),
+                'remark' => $this->buildConsignmentNotifyRemark($info),
+                '__weapp_page' => $targetPage,
+            ];
+
+            return $this->noticeLogService->sendWithLog($siteId, 'recycle_consignment_status', $payload, [
+                'order_id' => (int)($info['source_order_id'] ?? 0),
+                'order_no' => (string)($info['source_order_no'] ?? ''),
+                'member_id' => $memberId,
+                'scene' => (string)($data['scene'] ?? 'consignment_status'),
+                'device_ids' => [(int)($info['source_device_id'] ?? 0)],
+                'device_count' => 1,
+                'target_page' => $targetPage,
+                'dedupe' => true,
+                'dedupe_window' => strpos((string)($data['scene'] ?? ''), 'manual_') === 0 ? 60 : 120,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('【回收通知】代卖进度通知发送失败: ' . $e->getMessage(), $data);
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    private function buildConsignmentNotifyRemark(array $info): string
+    {
+        $status = (int)($info['status'] ?? 0);
+        $listing = number_format((float)($info['listing_price'] ?? 0), 2);
+        $sold = number_format((float)($info['sold_price'] ?? 0), 2);
+        $settlement = number_format((float)($info['settlement_amount'] ?? 0), 2);
+
+        return match ($status) {
+            1 => '设备已进入代卖中，当前挂牌价 ¥' . $listing,
+            2, 3 => '设备已成交，成交价 ¥' . $sold . '，待结算金额 ¥' . $settlement,
+            4 => '代卖已完成结算，结算金额 ¥' . $settlement,
+            5 => '代卖已取消，如有疑问请联系商家',
+            6 => '代卖已结束，设备已退回',
+            default => '设备已转入代卖，商家会持续更新处理进度',
+        };
     }
 }

@@ -3,6 +3,7 @@
 namespace addon\hsx_recycle\app\listener\export;
 
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 
 /**
  * 回收设备导出监听器
@@ -24,21 +25,28 @@ class RecycleDeviceExportListener
         $data = [];
         if (isset($param['type']) && $param['type'] == 'recycle_device') {
             $model = new RecycleDevice();
-            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, color,capacity,warranty_info, status, final_price, update_at, order_id, price_uid';
+            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, color,capacity,warranty_info, status, final_price, sell_price, update_at, order_id, price_uid, dispose_type, dispose_status, settlement_mode, consignment_order_id';
 
             $where = $param['where'] ?? [];
 
             // 查询导出数据 - 使用与列表页相同的逻辑
             $search_model = $model->where([['site_id', '=', $param['site_id'] ?? 0]])
-                ->withSearch(['imei', 'model', 'status', 'update_at','export_status', 'device_ids'], $where)
+                ->withSearch(['imei', 'model', 'status', 'update_at','export_status', 'device_ids', 'warehouse_type'], $where)
+                ->whereIn('status', !empty($where['status']) ? [(int)$where['status']] : [
+                    RecycleOrderDict::DEVICE_STATUS_RECYCLED,
+                    RecycleOrderDict::DEVICE_STATUS_CONSIGNED,
+                ])
                 ->with([
                     'order',
                     'priceUser' => function($query) {
                         $query->field('uid,username,real_name');
+                    },
+                    'consignmentOrder' => function($query) {
+                        $query->field('id,consignment_no,source_device_id,status,listing_price,sold_price,settlement_amount');
                     }
                 ])
                 ->field($field)
-                ->append(['status_name', 'category_name', 'nickname','code'])
+                ->append(['status_name', 'category_name', 'nickname','code', 'dispose_type_name', 'dispose_status_name'])
                 ->order('update_at desc');
             
             // 筛选分类
@@ -67,6 +75,11 @@ class RecycleDeviceExportListener
             foreach ($data as $key => $value) {
                 $data[$key]['order_no'] = $value['order']['order_no'] ?? '';
                 $data[$key]['create_at'] = !empty($value['update_at']) ? $value['update_at'] : '';
+                $isConsign = ($value['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN
+                    || (int)($value['status'] ?? 0) === RecycleOrderDict::DEVICE_STATUS_CONSIGNED;
+                $data[$key]['warehouse_type_name'] = $isConsign ? '代卖入库' : '回收入库';
+                $data[$key]['is_merchant_owned'] = $isConsign ? '否' : '是';
+                $data[$key]['consignment_no'] = $value['consignment_order']['consignment_no'] ?? $value['consignmentOrder']['consignment_no'] ?? '';
 
                 // 获取报价人姓名 - 兼容多种键名
                 $data[$key]['quoter_name'] = '';
@@ -107,7 +120,7 @@ class RecycleDeviceExportListener
                     $data[$key]['code'] = "\t" . $value['code'];
                 }
 
-                unset($data[$key]['order'], $data[$key]['price_user'], $data[$key]['priceUser'], $data[$key]['id'], $data[$key]['category_id'], $data[$key]['status'], $data[$key]['order_id'], $data[$key]['update_at'], $data[$key]['price_uid']);
+                unset($data[$key]['order'], $data[$key]['price_user'], $data[$key]['priceUser'], $data[$key]['consignment_order'], $data[$key]['consignmentOrder'], $data[$key]['id'], $data[$key]['category_id'], $data[$key]['status'], $data[$key]['order_id'], $data[$key]['update_at'], $data[$key]['price_uid'], $data[$key]['dispose_type'], $data[$key]['dispose_status'], $data[$key]['settlement_mode'], $data[$key]['consignment_order_id']);
             }
         }
         return $data;

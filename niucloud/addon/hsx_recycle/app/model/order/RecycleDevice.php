@@ -69,6 +69,8 @@ class RecycleDevice extends BaseModel
         'check_images_buyer_thumb_small',
         'pay_status_name',
         'confirm_status_name',
+        'dispose_type_name',
+        'dispose_status_name',
     ];
 
     /**
@@ -102,6 +104,28 @@ class RecycleDevice extends BaseModel
     public function getConfirmStatusNameAttr($value, $data)
     {
         return RecycleOrderDict::getConfirmStatus($data['confirm_status'] ?? RecycleOrderDict::CONFIRM_STATUS_PENDING);
+    }
+
+    public function getDisposeTypeNameAttr($value, $data): string
+    {
+        $map = [
+            RecycleOrderDict::DISPOSE_TYPE_PENDING => '未处置',
+            RecycleOrderDict::DISPOSE_TYPE_RECYCLE => '商家自有',
+            RecycleOrderDict::DISPOSE_TYPE_RETURN => '退回客户',
+            RecycleOrderDict::DISPOSE_TYPE_CONSIGN => '代卖',
+        ];
+        return $map[$data['dispose_type'] ?? RecycleOrderDict::DISPOSE_TYPE_PENDING] ?? '未处置';
+    }
+
+    public function getDisposeStatusNameAttr($value, $data): string
+    {
+        $map = [
+            RecycleOrderDict::DISPOSE_STATUS_PENDING => '未处置',
+            RecycleOrderDict::DISPOSE_STATUS_RECYCLED => '已回收',
+            RecycleOrderDict::DISPOSE_STATUS_RETURNED => '已退回',
+            RecycleOrderDict::DISPOSE_STATUS_CONSIGNED => '已转代卖',
+        ];
+        return $map[(int)($data['dispose_status'] ?? RecycleOrderDict::DISPOSE_STATUS_PENDING)] ?? '未处置';
     }
 
     /**
@@ -166,6 +190,11 @@ class RecycleDevice extends BaseModel
     public function returnDevice()
     {
         return $this->hasOne(RecycleReturnDevice::class, 'device_id', 'id');
+    }
+
+    public function consignmentOrder()
+    {
+        return $this->hasOne(RecycleConsignmentOrder::class, 'source_device_id', 'id');
     }
 
     /**
@@ -307,6 +336,19 @@ class RecycleDevice extends BaseModel
     {
         if (!empty($value) && is_array($value)) {
             $query->whereIn('id', $value);
+        }
+    }
+
+    public function searchWarehouseTypeAttr($query, $value, $data)
+    {
+        if ($value === 'consign') {
+            $query->where('dispose_type', RecycleOrderDict::DISPOSE_TYPE_CONSIGN);
+        } elseif ($value === 'owned') {
+            $query->where(function ($q) {
+                $q->where('dispose_type', '<>', RecycleOrderDict::DISPOSE_TYPE_CONSIGN)
+                    ->whereOr('dispose_type', null)
+                    ->whereOr('dispose_type', '');
+            });
         }
     }
     // 质检员关联查询 sys_user  本表 check_uid 关联 sys_user 的 id

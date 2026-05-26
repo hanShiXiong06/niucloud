@@ -105,8 +105,7 @@ Route::group('recycle', function() {
 
 
     // 获取快递信息
-    // Route::get('device_query_api/express', 'addon\hsx_recycle\app\adminapi\controller\DeviceQueryApiController@getExpress');
-    Route::get('device_query_api/express', 'addon\hsx_recycle\app\api\controller\hsx_recycle\DeviceQueryApiController@getExpress');
+    Route::get('device_query_api/express', 'addon\hsx_recycle\app\api\controller\recycle\DeviceQueryApiController@getExpress');
 
     // ---------------------------------------------------------------------------------------------------------------
     // 退货订单相关接口
@@ -114,6 +113,13 @@ Route::group('recycle', function() {
     Route::get('recycle_return_order/by_order/:order_id', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleReturnOrder@getByOrderId');
     // 获取退货订单详情
     Route::get('recycle_return_order/:id', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleReturnOrder@detail');
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // 代卖订单相关接口
+    Route::get('consignment_order/status_count', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleConsignmentOrder@statusCount');
+    Route::get('consignment_order/status', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleConsignmentOrder@status');
+    Route::get('consignment_order', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleConsignmentOrder@lists');
+    Route::get('consignment_order/:id', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleConsignmentOrder@detail');
 
     // ---------------------------------------------------------------------------------------------------------------
     // 公众号关注状态检查

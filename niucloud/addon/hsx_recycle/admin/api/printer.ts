@@ -201,6 +201,15 @@ export function getPrintSceneList() {
 }
 
 /**
+ * 获取打印场景配置选项
+ */
+export function getPrintSceneOptions() {
+  return request.get('/recycle/print_scene/options', {
+    showSuccessMessage: false
+  });
+}
+
+/**
  * 保存打印场景配置
  * @param sceneKey 场景标识
  * @param data 配置数据
@@ -213,12 +222,63 @@ export function updatePrintScene(sceneKey: string, data: Record<string, any>) {
 }
 
 /**
+ * 新增自定义打印场景
+ */
+export function addPrintScene(data: Record<string, any>) {
+  return request.post('/recycle/print_scene', data, {
+    showErrorMessage: true,
+    showSuccessMessage: true
+  });
+}
+
+/**
+ * 删除自定义打印场景
+ */
+export function deletePrintScene(sceneKey: string) {
+  return request.delete(`/recycle/print_scene/${sceneKey}`, {
+    showErrorMessage: true,
+    showSuccessMessage: true
+  });
+}
+
+/**
  * 修改打印场景状态
  * @param sceneKey 场景标识
  * @param status 状态
  */
 export function modifyPrintSceneStatus(sceneKey: string, status: number) {
   return request.post(`/recycle/print_scene/status/${sceneKey}`, { status }, {
+    showErrorMessage: true,
+    showSuccessMessage: true
+  });
+}
+
+/**
+ * 获取手动打印动作
+ */
+export function getPrintSceneManualActions(params: Record<string, any> = {}) {
+  return request.get('/recycle/print_scene/manual_actions', {
+    params,
+    showSuccessMessage: false
+  });
+}
+
+/**
+ * 获取场景打印计划
+ */
+export function getPrintScenePlan(sceneKey: string, params: Record<string, any> = {}) {
+  return request.get(`/recycle/print_scene/${sceneKey}/plan`, {
+    params,
+    showErrorMessage: true,
+    showSuccessMessage: false
+  });
+}
+
+/**
+ * 按场景打印
+ */
+export function printByScene(sceneKey: string, data: Record<string, any> = {}) {
+  return request.post(`/recycle/print_scene/${sceneKey}/print`, data, {
     showErrorMessage: true,
     showSuccessMessage: true
   });

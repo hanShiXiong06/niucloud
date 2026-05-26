@@ -305,6 +305,26 @@
                     "needLogin": true
                 },
                 {
+                    "path": "pages/consignment/list",
+                    "style": {
+                        "navigationBarTitleText": "代卖订单",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/consignment/detail",
+                    "style": {
+                        "navigationBarTitleText": "代卖详情",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                    },
+                    "needLogin": true
+                },
+                {
 					"path": "pages/price/show_price",
 					"style": {
 						"navigationBarTitleText": "二手机回收报价单",

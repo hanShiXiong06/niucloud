@@ -32,6 +32,7 @@ class RecycleOrderDict
     const DEVICE_STATUS_RETURNED = 6;           // 已退回
     const DEVICE_STATUS_PRICED = 7;             // 已定价
     const DEVICE_STATUS_PRICED_REPRICE = 8;     // 已定价（重新定价）
+    const DEVICE_STATUS_CONSIGNED = 9;          // 已转代卖
     // 订单流转模式
     const FLOW_MODE_ORDER = 'order';             // 整单流转
     const FLOW_MODE_DEVICE = 'device';           // 按设备流转
@@ -43,6 +44,16 @@ class RecycleOrderDict
     const PAY_STATUS_UNPAID = 0;                // 未打款
     const PAY_STATUS_PAID = 1;                  // 已打款
     const PAY_STATUS_PARTIAL = 2;               // 部分打款（订单维度）
+    // 设备处置类型
+    const DISPOSE_TYPE_PENDING = 'pending';      // 未处置
+    const DISPOSE_TYPE_RECYCLE = 'recycle';      // 普通回收
+    const DISPOSE_TYPE_RETURN = 'return';        // 退回
+    const DISPOSE_TYPE_CONSIGN = 'consign';      // 代卖
+    // 设备处置状态
+    const DISPOSE_STATUS_PENDING = 0;            // 未处置
+    const DISPOSE_STATUS_RECYCLED = 1;           // 已回收
+    const DISPOSE_STATUS_RETURNED = 2;           // 已退回
+    const DISPOSE_STATUS_CONSIGNED = 3;          // 已转代卖
     // 质检结果状态
     const CHECK_STATUS_PASS = 1;               // 质检通过
     const CHECK_STATUS_RETURN = 2;             // 退回
@@ -54,6 +65,8 @@ class RecycleOrderDict
     const DEVICE_OP_TYPE_RETURN = 5;           // 确认
     const DEVICE_OP_TYPE_REPRICE = 8;          // 重新定价
     const DEVICE_OP_TYPE_PAYMENT = 9;           // 设备打款
+    const DEVICE_OP_TYPE_CONSIGNMENT = 10;      // 转入代卖
+    const DEVICE_OP_TYPE_CONSIGNMENT_PAYMENT = 11; // 代卖结算
 
     // 设备状态文本映射
     const DEVICE_STATUS_TEXT = [
@@ -63,7 +76,8 @@ class RecycleOrderDict
         self::DEVICE_STATUS_PENDING_CONFIRM => '待确认',
         self::DEVICE_STATUS_RECYCLED => '已回收',
         self::DEVICE_STATUS_RETURNED => '已退回',
-        self::DEVICE_STATUS_PRICED => '已定价'
+        self::DEVICE_STATUS_PRICED => '已定价',
+        self::DEVICE_STATUS_CONSIGNED => '已转代卖'
     ];
 
     // 设备操作类型文本映射
@@ -71,9 +85,12 @@ class RecycleOrderDict
         self::DEVICE_OP_TYPE_CHECK => '质检',
         self::DEVICE_OP_TYPE_CHECK_RESULT => '质检完成',
         self::DEVICE_OP_TYPE_PRICE => '定价',
-        self::DEVICE_OP_TYPE_RETURN => '确认',
-        self::DEVICE_OP_TYPE_REPRICE => '重新定价'
-    ];
+            self::DEVICE_OP_TYPE_RETURN => '确认',
+            self::DEVICE_OP_TYPE_REPRICE => '重新定价',
+            self::DEVICE_OP_TYPE_PAYMENT => '设备打款',
+            self::DEVICE_OP_TYPE_CONSIGNMENT => '转入代卖',
+            self::DEVICE_OP_TYPE_CONSIGNMENT_PAYMENT => '代卖结算'
+        ];
 
     
 
@@ -100,7 +117,8 @@ class RecycleOrderDict
         self::DEVICE_STATUS_PENDING_CONFIRM => [self::DEVICE_STATUS_RECYCLED, self::DEVICE_STATUS_RETURNED],
         self::DEVICE_STATUS_RECYCLED => [],
         self::DEVICE_STATUS_RETURNED => [],
-        self::DEVICE_STATUS_PRICED => [self::DEVICE_STATUS_RETURNED, self::DEVICE_STATUS_RECYCLED]
+        self::DEVICE_STATUS_PRICED => [self::DEVICE_STATUS_RETURNED, self::DEVICE_STATUS_RECYCLED, self::DEVICE_STATUS_CONSIGNED],
+        self::DEVICE_STATUS_CONSIGNED => []
     ];
 
     // 状态流转规则 - 订单
@@ -240,6 +258,9 @@ class RecycleOrderDict
             self::DEVICE_STATUS_PENDING_CONFIRM => '待确认',
             self::DEVICE_STATUS_RECYCLED => '已回收',
             self::DEVICE_STATUS_RETURNED => '已退回',
+            self::DEVICE_STATUS_PRICED => '已定价',
+            self::DEVICE_STATUS_PRICED_REPRICE => '已定价（重新定价）',
+            self::DEVICE_STATUS_CONSIGNED => '已转代卖',
         ];
 
         return empty($status) ? $data : ($data[$status] ?? '');
@@ -260,11 +281,61 @@ class RecycleOrderDict
             self::DEVICE_OP_TYPE_CHECK_RESULT => '质检完成',
             self::DEVICE_OP_TYPE_RETURN => '确认',
             self::DEVICE_OP_TYPE_REPRICE => '重新定价',
-            self::DEVICE_OP_TYPE_PAYMENT => '设备打款'
+            self::DEVICE_OP_TYPE_PAYMENT => '设备打款',
+            self::DEVICE_OP_TYPE_CONSIGNMENT => '转入代卖',
+            self::DEVICE_OP_TYPE_CONSIGNMENT_PAYMENT => '代卖结算'
         ];
 
         return empty($type) ? $data : ($data[$type] ?? '');
         
+    }
+
+    /**
+     * 获取设备日志操作名称。优先按 operation_type/action 识别，避免设备状态值和操作类型值冲突。
+     * @param array $log
+     * @return string
+     */
+    public static function getDeviceLogOperationName(array $log): string
+    {
+        $operationType = (string)($log['operation_type'] ?? '');
+        $action = (string)($log['action'] ?? '');
+
+        $operationMap = [
+            'sign' => '设备签收',
+            'check_start' => '开始质检',
+            'check_complete' => '质检完成',
+            'price' => '设备定价',
+            'confirm_price' => '价格确认',
+            'recycle' => '设备回收',
+            'return' => '设备退回',
+            'add' => '设备添加',
+            'remove' => '设备移除',
+            'device_confirm' => '设备确认',
+            'device_payment' => '设备打款',
+            'device_consignment' => '转入代卖',
+            'consignment_payment' => '代卖结算',
+        ];
+
+        $actionMap = [
+            'transfer_consignment' => '转入代卖',
+            'consignment_settle' => '代卖结算',
+            'device_payment' => '设备打款',
+            'device_confirm' => '设备确认',
+            'check_start' => '开始质检',
+            'check_complete' => '质检完成',
+            'price' => '设备定价',
+            'confirm_price' => '价格确认',
+        ];
+
+        if ($operationType !== '' && isset($operationMap[$operationType])) {
+            return $operationMap[$operationType];
+        }
+        if ($action !== '' && isset($actionMap[$action])) {
+            return $actionMap[$action];
+        }
+
+        $legacyName = self::getDeviceOpType($log['new_status'] ?? '');
+        return $legacyName !== '' ? $legacyName : '操作记录';
     }
 
     /**

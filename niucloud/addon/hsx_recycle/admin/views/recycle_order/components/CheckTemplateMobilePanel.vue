@@ -84,7 +84,11 @@
               :key="String(option.value)"
               :label="option.name || option.label"
               :value="String(option.value)"
-            />
+            >
+              <span class="cdd-mobile-schema__option-chip" :style="getOptionChipStyle(option)">
+                {{ option.name || option.label }}
+              </span>
+            </el-option>
           </el-select>
 
           <el-radio-group
@@ -97,6 +101,7 @@
               v-for="option in getOptions(field)"
               :key="String(option.value)"
               :label="String(option.value)"
+              :style="getSelectedOptionButtonStyle(field, option)"
             >
               {{ option.name || option.label }}
             </el-radio-button>
@@ -112,6 +117,7 @@
               v-for="option in getOptions(field)"
               :key="String(option.value)"
               :label="String(option.value)"
+              :style="getSelectedOptionButtonStyle(field, option)"
             >
               {{ option.name || option.label }}
             </el-checkbox-button>
@@ -141,6 +147,7 @@ interface CheckTemplateOption {
   name?: string
   label?: string
   value: string | number
+  extra_config?: Record<string, any> | string | null
 }
 
 interface CheckTemplateField {
@@ -210,6 +217,56 @@ const toNumberValue = (value: any) => {
   if (value === '' || value === null || value === undefined) return undefined
   const parsed = Number(value)
   return Number.isNaN(parsed) ? undefined : parsed
+}
+
+const normalizeExtraConfig = (config: any) => {
+  if (!config) return {}
+  if (typeof config === 'string') {
+    try {
+      const parsed = JSON.parse(config)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (error) {
+      return {}
+    }
+  }
+  return typeof config === 'object' ? config : {}
+}
+
+const getOptionResultStyle = (option: CheckTemplateOption) => {
+  const extra = normalizeExtraConfig(option.extra_config)
+  return normalizeExtraConfig(extra.result_style || extra.option_style || {})
+}
+
+const hasCustomOptionStyle = (option: CheckTemplateOption) => {
+  const style = getOptionResultStyle(option)
+  return !!(style.text_color || style.background_color || style.border_color)
+}
+
+const getOptionChipStyle = (option: CheckTemplateOption) => {
+  if (!hasCustomOptionStyle(option)) return {}
+  const style = getOptionResultStyle(option)
+  return {
+    color: style.text_color || '',
+    backgroundColor: style.background_color || '',
+    borderColor: style.border_color || style.background_color || ''
+  }
+}
+
+const isOptionSelected = (field: CheckTemplateField, option: CheckTemplateOption) => {
+  const current = props.getValue(field)
+  const optionValue = String(option.value)
+  if (Array.isArray(current)) return current.map(item => String(item)).includes(optionValue)
+  return normalizeSingleValue(current) === optionValue
+}
+
+const getSelectedOptionButtonStyle = (field: CheckTemplateField, option: CheckTemplateOption) => {
+  if (!isOptionSelected(field, option) || !hasCustomOptionStyle(option)) return {}
+  const style = getOptionResultStyle(option)
+  return {
+    '--cdd-selected-option-text-color': style.text_color || '#fff',
+    '--cdd-selected-option-bg-color': style.background_color || '#409eff',
+    '--cdd-selected-option-border-color': style.border_color || style.background_color || '#409eff'
+  }
 }
 
 const emitChange = (field: CheckTemplateField, value: any) => {
@@ -344,12 +401,29 @@ const emitChange = (field: CheckTemplateField, value: any) => {
 
   :deep(.el-radio-button__inner),
   :deep(.el-checkbox-button__inner) {
-    border-left: var(--el-border);
     border-radius: 7px;
     padding: 7px 10px;
     line-height: 1.25;
     white-space: normal;
   }
+
+  :deep(.el-radio-button.is-active .el-radio-button__inner),
+  :deep(.el-checkbox-button.is-checked .el-checkbox-button__inner) {
+    border-color: var(--cdd-selected-option-border-color, var(--el-color-primary));
+    background: var(--cdd-selected-option-bg-color, var(--el-color-primary));
+    color: var(--cdd-selected-option-text-color, #fff);
+    box-shadow: -1px 0 0 0 var(--cdd-selected-option-border-color, var(--el-color-primary));
+  }
+}
+
+.cdd-mobile-schema__option-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  line-height: 1.4;
 }
 
 .cdd-mobile-schema__empty {

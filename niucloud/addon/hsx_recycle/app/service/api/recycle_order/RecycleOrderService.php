@@ -5,6 +5,8 @@ namespace addon\hsx_recycle\app\service\api\recycle_order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\express\ExpressProviderDict;
+use addon\hsx_recycle\app\model\check\RecycleCheckField;
+use addon\hsx_recycle\app\model\check\RecycleCheckOption;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
@@ -190,7 +192,10 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,site_id,imei,user_sn,model,initial_price,status,final_price,remark,check_images,check_images_seller,check_result,check_result_seller,price_remark')
+                    $query->field('id,order_id,site_id,imei,user_sn,model,capacity,color,initial_price,status,final_price,remark,check_images,check_images_seller,check_result,check_result_seller,check_at,price_remark,consignment_order_id,info')
+                        ->with(['consignmentOrder' => function($q) {
+                            $q->field('id,consignment_no,source_device_id,status');
+                        }])
                         ->append(['status_name', 'check_images_seller_thumb_small']);
                 },
                 'member' => function($query) {
@@ -205,7 +210,165 @@ class RecycleOrderService extends BaseApiService
             throw new ApiException('订单不存在');
         }
 
+        $info['devices'] = $this->fillInspectionReportMeta($info['devices'] ?? []);
+
         return $info;
+    }
+
+    /**
+     * 补全用户端验机报告结构。
+     *
+     * 历史质检结果可能只有 result_items / option_styles，无法支撑多选项独立样式。
+     * 这里按模板选项配置补出 option_items，只增强接口返回，不修改存量数据库。
+     */
+    private function fillInspectionReportMeta(array $devices): array
+    {
+        $templateIds = [];
+        foreach ($devices as $device) {
+            $info = $this->normalizeArray($device['info'] ?? []);
+            $checkMeta = $this->normalizeArray($info['check_meta'] ?? []);
+            $templateId = (int)($checkMeta['template_id'] ?? 0);
+            if ($templateId > 0) {
+                $templateIds[$templateId] = $templateId;
+            }
+        }
+
+        if (empty($templateIds)) {
+            return $devices;
+        }
+
+        $templateOptionMap = $this->getTemplateOptionMap(array_values($templateIds));
+        foreach ($devices as &$device) {
+            $info = $this->normalizeArray($device['info'] ?? []);
+            $checkMeta = $this->normalizeArray($info['check_meta'] ?? []);
+            $templateId = (int)($checkMeta['template_id'] ?? 0);
+            if ($templateId <= 0 || empty($checkMeta['result_items']) || !is_array($checkMeta['result_items'])) {
+                continue;
+            }
+
+            foreach ($checkMeta['result_items'] as &$item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $fieldKey = (string)($item['field_key'] ?? '');
+                $fieldOptions = $templateOptionMap[$templateId][$fieldKey] ?? [];
+                $values = $this->normalizeStringList($item['values'] ?? $item['value'] ?? []);
+                $labels = $this->normalizeStringList($item['labels'] ?? []);
+
+                $optionItems = [];
+                foreach ($values as $index => $value) {
+                    $option = $fieldOptions[$value] ?? [];
+                    $style = $this->extractResultStyle($option['extra_config'] ?? []);
+                    $label = $labels[$index] ?? ($option['label'] ?? $option['name'] ?? $value);
+                    $optionItem = [
+                        'value' => $value,
+                        'label' => $label,
+                    ];
+                    if (!empty($style)) {
+                        $optionItem['style'] = $style;
+                    }
+                    $optionItems[] = $optionItem;
+                }
+
+                if (!empty($optionItems)) {
+                    $item['option_items'] = $optionItems;
+                }
+                if (count($optionItems) > 1) {
+                    unset($item['style']);
+                } elseif (count($optionItems) === 1 && !empty($optionItems[0]['style'])) {
+                    $item['style'] = $optionItems[0]['style'];
+                }
+            }
+            unset($item);
+
+            $info['check_meta'] = $checkMeta;
+            $device['info'] = $info;
+        }
+        unset($device);
+
+        return $devices;
+    }
+
+    private function getTemplateOptionMap(array $templateIds): array
+    {
+        $fields = (new RecycleCheckField())->where([
+            ['site_id', '=', $this->site_id],
+        ])->whereIn('template_id', $templateIds)->field('id,template_id,field_key')->select()->toArray();
+
+        if (empty($fields)) {
+            return [];
+        }
+
+        $fieldMap = [];
+        $fieldIds = [];
+        foreach ($fields as $field) {
+            $fieldId = (int)$field['id'];
+            $fieldIds[] = $fieldId;
+            $fieldMap[$fieldId] = [
+                'template_id' => (int)$field['template_id'],
+                'field_key' => (string)$field['field_key'],
+            ];
+        }
+
+        $options = (new RecycleCheckOption())->where([
+            ['site_id', '=', $this->site_id],
+        ])->whereIn('field_id', $fieldIds)->field('field_id,option_label,option_value,extra_config')->select()->toArray();
+
+        $map = [];
+        foreach ($options as $option) {
+            $fieldId = (int)$option['field_id'];
+            if (empty($fieldMap[$fieldId])) {
+                continue;
+            }
+            $templateId = $fieldMap[$fieldId]['template_id'];
+            $fieldKey = $fieldMap[$fieldId]['field_key'];
+            $value = (string)$option['option_value'];
+            $map[$templateId][$fieldKey][$value] = [
+                'name' => (string)$option['option_label'],
+                'label' => (string)$option['option_label'],
+                'value' => $value,
+                'extra_config' => $this->normalizeArray($option['extra_config'] ?? []),
+            ];
+        }
+
+        return $map;
+    }
+
+    private function normalizeArray($value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+        return [];
+    }
+
+    private function normalizeStringList($value): array
+    {
+        if (!is_array($value)) {
+            $value = [$value];
+        }
+        return array_values(array_filter(array_map(static function ($item) {
+            if ($item === null) {
+                return '';
+            }
+            return (string)$item;
+        }, $value), static fn($item) => $item !== ''));
+    }
+
+    private function extractResultStyle($config): array
+    {
+        $config = $this->normalizeArray($config);
+        $style = $this->normalizeArray($config['result_style'] ?? ($config['option_style'] ?? $config));
+        $result = [
+            'text_color' => (string)($style['text_color'] ?? ''),
+            'background_color' => (string)($style['background_color'] ?? ($style['bg_color'] ?? '')),
+            'border_color' => (string)($style['border_color'] ?? ''),
+        ];
+        return array_filter($result, static fn($value) => $value !== '');
     }
 
     /**

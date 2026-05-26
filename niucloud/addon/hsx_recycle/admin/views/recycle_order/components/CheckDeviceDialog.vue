@@ -31,34 +31,15 @@
         </div>
 
         <div class="cdd-topbar__actions">
-          <div class="cdd-template-switch">
-            <div class="cdd-template-switch__meta">
-              <span>质检模板</span>
-              <strong>{{ checkTemplateInfo?.template_name || '未选择模板' }}</strong>
-              <em>{{ checkTemplateStatsText }}</em>
-            </div>
-            <el-select
-              v-model="selectedCheckTemplateId"
-              size="small"
-              filterable
-              class="cdd-template-switch__select"
-              :loading="checkTemplateLoading || checkSchemaLoading"
-              placeholder="选择模板"
-              @change="handleCheckTemplateChange"
-            >
-              <el-option
-                v-for="template in checkTemplateList"
-                :key="template.id"
-                :label="template.template_name"
-                :value="Number(template.id)"
-              >
-                <div class="cdd-template-option">
-                  <span>{{ template.template_name }}</span>
-                  <em>{{ formatTemplateScene(template.scene) }}{{ Number(template.is_default) === 1 ? ' / 默认' : '' }}</em>
-                </div>
-              </el-option>
-            </el-select>
-          </div>
+          <CheckTemplateSelector
+            v-model="selectedCheckTemplateId"
+            :template-info="checkTemplateInfo"
+            :templates="checkTemplateList"
+            :group-count="checkTemplateGroups.length"
+            :field-count="checkTemplateFields.length"
+            :loading="checkTemplateLoading || checkSchemaLoading"
+            @change="handleCheckTemplateChange"
+          />
           <el-tag size="small" type="success" effect="plain">已填 {{ checkedCount }} 项</el-tag>
           <template v-if="!isEditingDeviceInfo">
             <el-button size="small" :icon="Edit" @click="startEditDeviceInfo">编辑设备</el-button>
@@ -256,6 +237,7 @@ import {
 import { useCameraUpload } from './composables/useCameraUpload'
 import CheckTemplateSchemaPanel from './CheckTemplateSchemaPanel.vue'
 import CheckTemplateMobilePanel from './CheckTemplateMobilePanel.vue'
+import CheckTemplateSelector from './CheckTemplateSelector.vue'
 
 interface DeviceInfo {
   id?: string | number
@@ -325,7 +307,8 @@ const normalizeSchemaOption = (option: any) => ({
   label: option.label || option.name || option.option_label || '',
   value: String(option.value ?? option.option_value ?? ''),
   sort: Number(option.sort || 0),
-  memo: option.memo || ''
+  memo: option.memo || '',
+  extra_config: option.extra_config || {}
 })
 
 const fieldConfigByKey = computed<Record<string, CheckTemplateField>>(() => {
@@ -343,14 +326,6 @@ const fieldConfigByKey = computed<Record<string, CheckTemplateField>>(() => {
 
 const checkTemplateFields = computed<CheckTemplateField[]>(() => {
   return checkTemplateGroups.value.flatMap((group: any) => group.fields || [])
-})
-
-const checkTemplateStatsText = computed(() => {
-  const groupCount = checkTemplateGroups.value.length
-  const fieldCount = checkTemplateFields.value.length
-  const sceneName = formatTemplateScene(checkTemplateInfo.value?.scene)
-  if (!groupCount && !fieldCount) return sceneName
-  return `${sceneName} / ${groupCount}组 ${fieldCount}项`
 })
 
 const getFieldExtraConfig = (field: CheckTemplateField) => {
@@ -552,18 +527,6 @@ function parsePrice(value: any): number | undefined {
 }
 
 const updateDeviceMode = () => { isMobile.value = window.innerWidth <= 980 }
-
-const formatTemplateScene = (scene?: string) => {
-  const sceneMap: Record<string, string> = {
-    phone: '手机',
-    fold: '折叠屏',
-    watch: '手表',
-    tablet: '平板',
-    computer: '电脑',
-    common: '通用'
-  }
-  return sceneMap[String(scene || '')] || '通用'
-}
 
 const resolveDeviceTemplateId = (device: DeviceInfo) => {
   const info = normalizeInfo(device.info)
@@ -1656,71 +1619,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.cdd-template-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 380px;
-  max-width: 520px;
-  padding: 6px 8px 6px 12px;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
-  background: #f8fbff;
-}
-
-.cdd-template-switch__meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.2;
-
-  span {
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  strong {
-    max-width: 220px;
-    overflow: hidden;
-    color: #0f172a;
-    font-size: 13px;
-    font-weight: 700;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  em {
-    color: #2563eb;
-    font-size: 11px;
-    font-style: normal;
-  }
-}
-
-.cdd-template-switch__select {
-  width: 180px;
-  flex: 0 0 auto;
-}
-
-.cdd-template-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-
-  span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  em {
-    color: #94a3b8;
-    font-size: 12px;
-    font-style: normal;
-  }
 }
 
 .cdd-main {

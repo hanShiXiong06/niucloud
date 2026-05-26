@@ -74,10 +74,8 @@ class RecycleDevice extends BaseAdminController
 
         $data = $this->service->getInfo($id);
         
-        // 获取设备日志
-        $logModel = new \addon\hsx_recycle\app\model\order\RecycleDeviceLog();
-        $logs = $logModel->getDeviceLogList(['device_id' => $id], 1, 20, 'id desc');
-        $data['logs'] = $logs['list'];
+        // 获取设备完整操作链路日志：设备主流程 + 关联代卖流程
+        $data['logs'] = $this->service->getTimelineLogs($id, 50);
         
         return success($data);
     }

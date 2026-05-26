@@ -23,7 +23,8 @@ class DeviceExportController extends BaseAdminController
             ['model', ''],
             ['category_id', ''],
             ['update_at', []],
-            ['status', 5], // 固定为已回收状态
+            ['status', ''], // 默认导出已回收和已转代卖设备
+            ['warehouse_type', ''],
             ['export_status', ''],
         ]);
 
@@ -41,7 +42,8 @@ class DeviceExportController extends BaseAdminController
             ['model', ''],
             ['category_id', ''],
             ['update_at', []],
-            ['status', 5], // 固定为已回收状态
+            ['status', ''],
+            ['warehouse_type', ''],
             ['export_status', ''],
              ['device_ids', []],
         ]);

@@ -62,6 +62,17 @@ export interface OrderSubmitConfig {
         content: string
     }
     allow_user_reject_sale: number
+    consignment: {
+        enabled: number
+        user_entry_enabled: number
+        user_view_enabled: number
+        transfer_confirm_required: number
+        notice_enabled: number
+        print_enabled: number
+        show_service_fee: number
+        user_title: string
+        user_desc: string
+    }
     price_detail_theme: {
         template_key: string
         theme_name: string

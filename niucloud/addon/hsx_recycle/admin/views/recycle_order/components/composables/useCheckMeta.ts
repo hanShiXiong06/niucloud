@@ -3,6 +3,33 @@ import { computed, reactive, type ComputedRef } from 'vue'
 export interface DictOptionItem {
   name: string
   value: string
+  label?: string
+  extra_config?: Record<string, any> | string | null
+}
+
+export interface CheckResultStyle {
+  text_color?: string
+  background_color?: string
+  border_color?: string
+}
+
+export interface CheckResultItemMeta {
+  field_key: string
+  field_name: string
+  component: string
+  value: any
+  values: string[]
+  labels: string[]
+  option_items?: CheckResultOptionItemMeta[]
+  text: string
+  style?: CheckResultStyle
+  option_styles?: Record<string, CheckResultStyle>
+}
+
+export interface CheckResultOptionItemMeta {
+  value: string
+  label: string
+  style?: CheckResultStyle
 }
 
 export interface CheckOptionsGroup {
@@ -25,6 +52,7 @@ export interface CheckMetaPayload {
   activation_lock: boolean
   mdm_lock: boolean
   custom_fields?: Record<string, any>
+  result_items?: CheckResultItemMeta[]
   template_id?: number | string
   template_version?: number | string
 }
@@ -155,9 +183,64 @@ function optionLabels(options: DictOptionItem[] = [], value: any): string[] {
   const values = Array.isArray(value) ? value.map((item) => toStringValue(item)) : [toStringValue(value)]
   const map: Record<string, string> = {}
   options.forEach((item) => {
-    map[toStringValue(item.value)] = item.name
+    map[toStringValue(item.value)] = item.name || item.label || toStringValue(item.value)
   })
   return values.map((item) => map[item] || item).filter(Boolean)
+}
+
+function normalizeExtraConfig(config: any): Record<string, any> {
+  if (!config) return {}
+  if (typeof config === 'string') {
+    try {
+      const parsed = JSON.parse(config)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (error) {
+      return {}
+    }
+  }
+  return typeof config === 'object' ? { ...config } : {}
+}
+
+function sanitizeStyle(style: any): CheckResultStyle | undefined {
+  const normalized = normalizeExtraConfig(style)
+  const result: CheckResultStyle = {
+    text_color: normalized.text_color || '',
+    background_color: normalized.background_color || normalized.bg_color || '',
+    border_color: normalized.border_color || ''
+  }
+  if (!result.text_color && !result.background_color && !result.border_color) return undefined
+  return result
+}
+
+function optionStyle(option?: DictOptionItem): CheckResultStyle | undefined {
+  if (!option) return undefined
+  const extra = normalizeExtraConfig(option.extra_config)
+  return sanitizeStyle(extra.result_style || extra.option_style || extra)
+}
+
+function optionStyleMap(options: DictOptionItem[] = [], value: any): Record<string, CheckResultStyle> {
+  const values = Array.isArray(value) ? value.map(item => toStringValue(item)) : [toStringValue(value)]
+  const optionByValue = new Map(options.map(option => [toStringValue(option.value), option]))
+  return values.reduce<Record<string, CheckResultStyle>>((map, item) => {
+    const style = optionStyle(optionByValue.get(item))
+    if (style) map[item] = style
+    return map
+  }, {})
+}
+
+function buildOptionItems(options: DictOptionItem[] = [], value: any, labels: string[]): CheckResultOptionItemMeta[] {
+  const values = Array.isArray(value) ? value.map(item => toStringValue(item)).filter(Boolean) : [toStringValue(value)].filter(Boolean)
+  const optionByValue = new Map(options.map(option => [toStringValue(option.value), option]))
+  return values.map((item, index) => {
+    const option = optionByValue.get(item)
+    const label = labels[index] || option?.name || option?.label || item
+    const style = optionStyle(option)
+    return {
+      value: item,
+      label,
+      ...(style ? { style } : {})
+    }
+  })
 }
 
 function renderResultTemplate(template: string, value: any, labels: string[], field?: CheckTemplateField): string {
@@ -195,6 +278,79 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     fix_ids: () => templateSelections.fixIds,
     activation_lock: () => templateSelections.activationLock,
     mdm_lock: () => templateSelections.mdmLock
+  }
+
+  const getFieldOptions = (fieldKey: string): DictOptionItem[] => {
+    const field = fieldConfigByKey?.value?.[fieldKey]
+    return field?.options || []
+  }
+
+  const buildResultItem = (fieldKey: string, value: any, labels: string[], text: string): CheckResultItemMeta | null => {
+    const field = fieldConfigByKey?.value?.[fieldKey]
+    if (!field || isEmptyValue(value) || !text.trim()) return null
+    const options = getFieldOptions(fieldKey)
+    const optionStyles = optionStyleMap(options, value)
+    const values = Array.isArray(value) ? value.map(item => toStringValue(item)).filter(Boolean) : [toStringValue(value)].filter(Boolean)
+    const optionItems = buildOptionItems(options, value, labels)
+    return {
+      field_key: fieldKey,
+      field_name: field.field_name,
+      component: field.component,
+      value,
+      values,
+      labels,
+      option_items: optionItems,
+      text: text.trim(),
+      style: optionItems.length === 1 ? optionItems[0].style : undefined,
+      option_styles: optionStyles
+    }
+  }
+
+  const buildResultItems = (): CheckResultItemMeta[] => {
+    const fieldMap = fieldConfigByKey?.value || {}
+    const items: CheckResultItemMeta[] = []
+    const appendItem = (fieldKey: string, value: any, labels: string[], fallback: string) => {
+      const field = fieldMap[fieldKey]
+      if (!field || Number(field.result_visible) !== 1 || isEmptyValue(value)) return
+      const text = field.result_template
+        ? renderResultTemplate(field.result_template, value, labels, field)
+        : fallback
+      const item = buildResultItem(fieldKey, value, labels, text)
+      if (item) items.push(item)
+    }
+
+    ;(['capacity', 'color', 'system_version', 'warranty_info'] as const).forEach((fieldKey) => {
+      const value = deviceForm[fieldKey]
+      if (!isEmptyValue(value)) appendItem(fieldKey, value, [toStringValue(value)], '')
+    })
+
+    if (templateSelections.battery !== undefined) appendItem('battery', templateSelections.battery, [toStringValue(templateSelections.battery)], `电池健康度${templateSelections.battery}%`)
+    if (templateSelections.battery_num !== undefined) appendItem('battery_num', templateSelections.battery_num, [toStringValue(templateSelections.battery_num)], `循环${templateSelections.battery_num}次`)
+    if (templateSelections.activationLock) appendItem('activation_lock', true, ['开启'], '激活锁开启')
+    if (templateSelections.mdmLock) appendItem('mdm_lock', true, ['开启'], '监管锁开启')
+
+    const screenName = templateSelections.screenId ? optionLabels(getFieldOptions('screen_id'), templateSelections.screenId)[0] : ''
+    const indisplayName = templateSelections.indisplayId ? optionLabels(getFieldOptions('indisplay_id'), templateSelections.indisplayId)[0] : ''
+    const appearanceName = templateSelections.appearanceId ? optionLabels(getFieldOptions('appearance_id'), templateSelections.appearanceId)[0] : ''
+    const functionNames = optionLabels(getFieldOptions('function_ids'), templateSelections.functionIds)
+    const fixNames = optionLabels(getFieldOptions('fix_ids'), templateSelections.fixIds)
+
+    if (screenName) appendItem('screen_id', templateSelections.screenId, [screenName], `外屏${screenName}`)
+    if (indisplayName) appendItem('indisplay_id', templateSelections.indisplayId, [indisplayName], `内屏${indisplayName}`)
+    if (appearanceName) appendItem('appearance_id', templateSelections.appearanceId, [appearanceName], `中框${appearanceName}`)
+    if (functionNames.length) appendItem('function_ids', templateSelections.functionIds, functionNames, `功能: ${functionNames.join('、')}`)
+    if (fixNames.length) appendItem('fix_ids', templateSelections.fixIds, fixNames, `维修记录: ${fixNames.join('、')}`)
+
+    Object.entries(templateSelections.customFields).forEach(([fieldKey, value]) => {
+      if (RESERVED_FIELD_KEYS.has(fieldKey) || isEmptyValue(value)) return
+      const field = fieldMap[fieldKey]
+      if (!field || Number(field.result_visible) !== 1) return
+      const labels = optionLabels(field.options || [], value)
+      const fallback = `${field.field_name}: ${labels.length ? labels.join('、') : toStringValue(value)}${field.unit || ''}`
+      appendItem(fieldKey, value, labels, fallback)
+    })
+
+    return items
   }
 
   const getFieldValue = (fieldKey: string) => {
@@ -284,6 +440,7 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
         ...normalizedCustomFields,
         ...schemaFields
       },
+      result_items: buildResultItems(),
       template_id: templateInfo?.value?.id,
       template_version: templateInfo?.value?.version
     }
@@ -481,6 +638,7 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
       activation_lock: toBooleanValue(parsed.activation_lock ?? parsed.activationLock),
       mdm_lock: toBooleanValue(parsed.mdm_lock ?? parsed.mdmLock),
       custom_fields: typeof parsed.custom_fields === 'object' && parsed.custom_fields ? { ...parsed.custom_fields } : {},
+      result_items: Array.isArray(parsed.result_items) ? parsed.result_items : [],
       template_id: parsed.template_id,
       template_version: parsed.template_version
     }

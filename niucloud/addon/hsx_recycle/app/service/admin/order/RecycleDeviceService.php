@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\admin\order;
 
+use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\model\order\RecycleConsignmentLog;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
@@ -89,6 +91,184 @@ class RecycleDeviceService extends BaseAdminService
         ->toArray();
        
         return $info;
+    }
+
+    /**
+     * 获取设备完整操作链路日志，包含设备主日志和关联代卖日志
+     * @param int $deviceId
+     * @param int $limit
+     * @return array
+     */
+    public function getTimelineLogs(int $deviceId, int $limit = 50): array
+    {
+        $deviceLogs = (new RecycleDeviceLog())
+            ->getDeviceLogList(['device_id' => $deviceId], 1, $limit, 'id desc')['list'] ?? [];
+
+        $timeline = [];
+        $deviceActionKeys = [];
+        foreach ($deviceLogs as $log) {
+            $log['source_type'] = 'device';
+            $log['source_id'] = (int)($log['id'] ?? 0);
+            $log['sort_time'] = (int)($log['create_at'] ?? 0);
+            $timeline[] = $log;
+
+            $operationType = (string)($log['operation_type'] ?? '');
+            $action = (string)($log['action'] ?? '');
+            if ($operationType !== '') {
+                $deviceActionKeys[$operationType] = true;
+            }
+            if ($action !== '') {
+                $deviceActionKeys[$action] = true;
+            }
+        }
+
+        $consignmentLogs = (new RecycleConsignmentLog())
+            ->where([
+                ['site_id', '=', $this->site_id],
+                ['source_device_id', '=', $deviceId],
+            ])
+            ->order('id desc')
+            ->limit($limit)
+            ->select()
+            ->toArray();
+
+        foreach ($consignmentLogs as $log) {
+            $action = (string)($log['action'] ?? '');
+
+            // 转代卖和结算已写入设备主日志时，避免在设备详情里出现重复节点。
+            if (
+                ($action === 'create' && (isset($deviceActionKeys['device_consignment']) || isset($deviceActionKeys['transfer_consignment']))) ||
+                ($action === 'settle' && (isset($deviceActionKeys['consignment_payment']) || isset($deviceActionKeys['consignment_settle'])))
+            ) {
+                continue;
+            }
+
+            $timeline[] = $this->formatConsignmentTimelineLog($log);
+        }
+
+        usort($timeline, function ($a, $b) {
+            $timeCompare = (int)($b['sort_time'] ?? 0) <=> (int)($a['sort_time'] ?? 0);
+            if ($timeCompare !== 0) {
+                return $timeCompare;
+            }
+            return (int)($b['source_id'] ?? 0) <=> (int)($a['source_id'] ?? 0);
+        });
+
+        return array_slice(array_map(function ($log) {
+            unset($log['sort_time']);
+            return $log;
+        }, $timeline), 0, $limit);
+    }
+
+    private function formatConsignmentTimelineLog(array $log): array
+    {
+        $action = (string)($log['action'] ?? '');
+        $before = $this->normalizeLogData($log['before_data'] ?? []);
+        $after = $this->normalizeLogData($log['after_data'] ?? []);
+        $remark = trim((string)($log['remark'] ?? ''));
+
+        return [
+            'id' => 'consignment-' . (int)($log['id'] ?? 0),
+            'source_type' => 'consignment',
+            'source_id' => (int)($log['id'] ?? 0),
+            'device_id' => (int)($log['source_device_id'] ?? 0),
+            'order_id' => (int)($log['source_order_id'] ?? 0),
+            'operator_id' => (int)($log['operator_id'] ?? 0),
+            'operator_name' => (string)($log['operator_name'] ?? '未知操作员'),
+            'operation_type' => 'consignment_' . $action,
+            'action' => $action,
+            'old_status' => (int)($log['old_status'] ?? 0),
+            'new_status' => (int)($log['new_status'] ?? 0),
+            'status_name' => RecycleConsignmentDict::getActionName($action),
+            'remark' => $this->buildConsignmentTimelineRemark(
+                $action,
+                $before,
+                $after,
+                $remark,
+                (int)($log['old_status'] ?? 0),
+                (int)($log['new_status'] ?? 0)
+            ),
+            'create_at' => (int)($log['create_time'] ?? 0),
+            'sort_time' => (int)($log['create_time'] ?? 0),
+        ];
+    }
+
+    private function normalizeLogData($data): array
+    {
+        if (is_array($data)) {
+            return $data;
+        }
+        if (is_string($data) && $data !== '') {
+            $decoded = json_decode($data, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+        return [];
+    }
+
+    private function buildConsignmentTimelineRemark(
+        string $action,
+        array $before,
+        array $after,
+        string $remark = '',
+        int $oldStatusValue = 0,
+        int $newStatusValue = 0
+    ): string
+    {
+        $consignmentNo = (string)($after['consignment_no'] ?? $before['consignment_no'] ?? '');
+        $parts = [];
+        $prefixMap = [
+            'create' => '设备转入代卖',
+            'listing' => '代卖上架',
+            'sold' => '代卖成交',
+            'settle' => '代卖结算',
+            'cancel' => '取消代卖',
+            'return' => '代卖退回',
+            'notify' => '代卖通知',
+        ];
+        $parts[] = $prefixMap[$action] ?? RecycleConsignmentDict::getActionName($action);
+
+        if ($consignmentNo !== '') {
+            $parts[] = '代卖单号: ' . $consignmentNo;
+        }
+
+        $oldStatus = isset($before['status']) ? RecycleConsignmentDict::getStatus((int)$before['status']) : RecycleConsignmentDict::getStatus($oldStatusValue);
+        $newStatus = isset($after['status']) ? RecycleConsignmentDict::getStatus((int)$after['status']) : RecycleConsignmentDict::getStatus($newStatusValue);
+        if ($oldStatus !== '' && $newStatus !== '' && $oldStatus !== $newStatus) {
+            $parts[] = '状态变更: ' . $oldStatus . ' → ' . $newStatus;
+        }
+
+        $priceParts = [];
+        $this->appendPriceChange($priceParts, '挂牌价', $before['listing_price'] ?? null, $after['listing_price'] ?? null);
+        $this->appendPriceChange($priceParts, '成交价', $before['sold_price'] ?? null, $after['sold_price'] ?? null);
+        $this->appendPriceChange($priceParts, '结算金额', $before['settlement_amount'] ?? null, $after['settlement_amount'] ?? null);
+        $this->appendPriceChange($priceParts, '服务费', $before['service_fee'] ?? null, $after['service_fee'] ?? null);
+        if (!empty($priceParts)) {
+            $parts[] = implode(' | ', $priceParts);
+        }
+
+        if ($remark !== '') {
+            $parts[] = '备注: ' . $remark;
+        }
+
+        return implode(' | ', array_filter($parts, static fn($part) => $part !== ''));
+    }
+
+    private function appendPriceChange(array &$parts, string $label, $beforeValue, $afterValue): void
+    {
+        if ($afterValue === null || $afterValue === '') {
+            return;
+        }
+
+        $beforeAmount = round((float)$beforeValue, 2);
+        $afterAmount = round((float)$afterValue, 2);
+        if ($beforeValue !== null && $beforeValue !== '' && $beforeAmount !== $afterAmount) {
+            $parts[] = sprintf('%s: %.2f → %.2f', $label, $beforeAmount, $afterAmount);
+            return;
+        }
+
+        if ($afterAmount > 0) {
+            $parts[] = sprintf('%s: %.2f', $label, $afterAmount);
+        }
     }
 
 
@@ -820,6 +1000,9 @@ class RecycleDeviceService extends BaseAdminService
             $device->confirm_time = time();
             $device->confirm_member_id = (int)($device->member_id ?? 0);
             $device->confirm_remark = $remark;
+            $device->settlement_mode = RecycleOrderDict::DISPOSE_TYPE_RECYCLE;
+            $device->dispose_type = RecycleOrderDict::DISPOSE_TYPE_RECYCLE;
+            $device->dispose_status = RecycleOrderDict::DISPOSE_STATUS_RECYCLED;
             $device->update_time = time();
             $device->save();
             
@@ -924,6 +1107,9 @@ class RecycleDeviceService extends BaseAdminService
             
             // 更新设备状态为退回中
             $device->status = RecycleReturnOrderDict::DEVICE_STATUS_RETURNING; // 使用RecycleOrderDict中的常量
+            $device->settlement_mode = RecycleOrderDict::DISPOSE_TYPE_RETURN;
+            $device->dispose_type = RecycleOrderDict::DISPOSE_TYPE_RETURN;
+            $device->dispose_status = RecycleOrderDict::DISPOSE_STATUS_RETURNED;
             $device->return_order_id = $returnOrderId;
             $device->return_time = time();
             $device->return_remark = $remark;
@@ -1211,7 +1397,8 @@ class RecycleDeviceService extends BaseAdminService
             RecycleOrderDict::DEVICE_STATUS_CHECKED => 0,
             RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM => 0,
             RecycleOrderDict::DEVICE_STATUS_RECYCLED => 0,
-            RecycleOrderDict::DEVICE_STATUS_RETURNED => 0
+            RecycleOrderDict::DEVICE_STATUS_RETURNED => 0,
+            RecycleOrderDict::DEVICE_STATUS_CONSIGNED => 0
         ];
         
         $allDevicesPriced = true; // 检查所有设备是否都已定价
@@ -1224,8 +1411,8 @@ class RecycleDeviceService extends BaseAdminService
                 $deviceStatusCounts[$device->status]++;
             }
             
-            // 检查非退回设备是否都已定价
-            if ($device->status != RecycleOrderDict::DEVICE_STATUS_RETURNED && empty($device->final_price)) {
+            // 检查非退回、非代卖设备是否都已定价
+            if (!in_array((int)$device->status, [RecycleOrderDict::DEVICE_STATUS_RETURNED, RecycleOrderDict::DEVICE_STATUS_CONSIGNED], true) && empty($device->final_price)) {
                 $allDevicesPriced = false;
             }
             
@@ -1235,9 +1422,10 @@ class RecycleDeviceService extends BaseAdminService
                 $allDevicesChecked = false;
             }
             
-            // 检查设备是否处于终态（已回收或已退回）
+            // 检查设备是否处于终态（已回收、已退回或已转代卖）
             if ($device->status != RecycleOrderDict::DEVICE_STATUS_RECYCLED && 
-                $device->status != RecycleOrderDict::DEVICE_STATUS_RETURNED) {
+                $device->status != RecycleOrderDict::DEVICE_STATUS_RETURNED &&
+                $device->status != RecycleOrderDict::DEVICE_STATUS_CONSIGNED) {
                 $allDevicesInFinalState = false;
             }
         }
@@ -1297,6 +1485,11 @@ class RecycleDeviceService extends BaseAdminService
             else if ($deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_RECYCLED] > 0) {
                 $orderStatus = RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT;
                 $this->addDeviceLog(0, 0, 0, "所有设备都处于终态，有{$deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_RECYCLED]}台设备已回收，订单进入待打款状态", $orderId);
+            }
+            // 如果没有普通回收设备，但存在代卖设备，主回收订单处理已闭环
+            else if ($deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED] > 0) {
+                $orderStatus = RecycleOrderDict::ORDER_STATUS_COMPLETED;
+                $this->addDeviceLog(0, 0, 0, "所有设备都处于终态，有{$deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED]}台设备已转代卖，订单进入已完成状态", $orderId);
             }
             
             // 直接更新订单状态并返回，不再执行后续的逻辑
@@ -1400,6 +1593,20 @@ class RecycleDeviceService extends BaseAdminService
                             $orderStatus = RecycleOrderDict::ORDER_STATUS_CHECKED;
                             $this->addDeviceLog(0, 0, 0, "所有非退回设备已完成质检，订单进入已质检状态", $orderId);
                         }
+                    }
+                }
+                break;
+            case RecycleOrderDict::DEVICE_STATUS_CONSIGNED:
+                $terminalDevices = $deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_RECYCLED]
+                    + $deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_RETURNED]
+                    + $deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED];
+                if ($terminalDevices == $devices->count()) {
+                    if ($deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_RECYCLED] > 0) {
+                        $orderStatus = RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT;
+                    } elseif ($deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED] > 0) {
+                        $orderStatus = RecycleOrderDict::ORDER_STATUS_COMPLETED;
+                    } else {
+                        $orderStatus = RecycleOrderDict::ORDER_STATUS_CLOSED;
                     }
                 }
                 break;

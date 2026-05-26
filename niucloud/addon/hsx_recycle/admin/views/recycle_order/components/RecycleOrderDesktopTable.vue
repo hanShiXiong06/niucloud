@@ -42,6 +42,11 @@
                 <el-tag :type="props.getDeviceStatusType(deviceRow.status)" size="small">
                   {{ deviceRow.status_name }}
                 </el-tag>
+                <div v-if="deviceRow.consignment_order_id || deviceRow.consignmentOrder" class="mt-1">
+                  <el-button link type="primary" size="small" @click="props.viewConsignment(deviceRow)">
+                    {{ deviceRow.consignmentOrder?.consignment_no || '查看代卖单' }}
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
             <el-table-column prop="confirm_status_name" label="确认状态" width="110">
@@ -120,16 +125,46 @@
                   >
                     拒绝
                   </el-button>
-
                   <el-button
-                    v-if="deviceRow.status >= 3"
+                    v-if="[3,4,7,8].includes(Number(deviceRow.status)) && !deviceRow.consignment_order_id"
                     type="info"
                     size="small"
-                    :icon="Printer"
-                    @click="props.printDeviceLabel(deviceRow)"
+                    :icon="Switch"
+                    @click="props.transferConsignment(deviceRow)"
                   >
-                    打印设备标签
+                    转代卖
                   </el-button>
+
+                  <template v-if="props.getVisibleDevicePrintActions(deviceRow).length === 1">
+                    <el-button
+                      type="info"
+                      size="small"
+                      :icon="Printer"
+                      @click="props.printDeviceByScene(deviceRow, props.getVisibleDevicePrintActions(deviceRow)[0])"
+                    >
+                      {{ props.getVisibleDevicePrintActions(deviceRow)[0].button_text || '打印' }}
+                    </el-button>
+                  </template>
+                  <el-dropdown
+                    v-else-if="props.getVisibleDevicePrintActions(deviceRow).length > 1"
+                    trigger="click"
+                    @command="(action) => props.printDeviceByScene(deviceRow, action)"
+                  >
+                    <el-button type="info" size="small" :icon="Printer">
+                      打印
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item
+                          v-for="action in props.getVisibleDevicePrintActions(deviceRow)"
+                          :key="action.scene_key"
+                          :command="action"
+                        >
+                          {{ action.button_text || action.scene_name || '打印' }}
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                 </el-button-group>
 
                 <el-button
@@ -322,6 +357,7 @@ import {
   Close,
   Printer,
   View,
+  Switch,
   User,
   Loading,
   Share,
@@ -354,7 +390,11 @@ interface Props {
   batchRecycleDevice: (id: number | string) => void;
   batchReturnDevice: (id: number | string) => void;
   batchRecycleDevices: (orderId: number | string) => void;
-  printDeviceLabel: (device: any) => void;
+  manualPrintActions: any[];
+  getVisibleDevicePrintActions: (device: any) => any[];
+  printDeviceByScene: (device: any, action: any) => void;
+  transferConsignment: (device: any) => void;
+  viewConsignment: (device: any) => void;
   viewDetail: (device: any) => void;
   handleAction: (row: any, action: any) => void;
   handleExpressHover: (row: any) => void;

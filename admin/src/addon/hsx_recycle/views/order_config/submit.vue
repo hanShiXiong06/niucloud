@@ -10,6 +10,11 @@
             </div>
 
             <div class="config-layout">
+                <div class="config-group-title">
+                    <span>用户端配置</span>
+                    <em>控制用户提交订单、查看进度、联系客服时看到的内容。</em>
+                </div>
+
                 <section class="config-section">
                     <div class="section-title">前台通知</div>
                     <div class="setting-row">
@@ -112,6 +117,11 @@
                     </div>
                 </section>
 
+                <div class="config-group-title">
+                    <span>管理端配置</span>
+                    <em>控制后台处理订单、转代卖、通知和打印时的业务规则。</em>
+                </div>
+
                 <section class="config-section">
                     <div class="section-title">订单流转模式</div>
                     <div class="mode-grid">
@@ -131,6 +141,77 @@
                     <el-alert class="mt-[14px]" type="warning" :closable="false" show-icon>
                         <template #title>切换后需要点击“保存设置”才会生效。保存后只影响新订单，历史订单仍按创建时的流转模式执行。</template>
                     </el-alert>
+                </section>
+
+                <section class="config-section">
+                    <div class="section-title">代卖业务</div>
+                    <div class="section-tip">代卖是独立订单，来源回收订单只保留追溯关系。开启后，后台可将单台设备转入代卖，用户端可进入代卖订单查看进度。</div>
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">启用代卖业务</div>
+                            <div class="setting-desc">关闭后，后台隐藏转代卖入口，用户端不展示代卖入口，通知和打印也不会自动触发代卖场景。</div>
+                        </div>
+                        <el-switch v-model="form.consignment.enabled" :active-value="1" :inactive-value="0" />
+                    </div>
+
+                    <div class="consignment-panel" :class="{ disabled: !form.consignment.enabled }">
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">后台转代卖二次确认</div>
+                                <div class="setting-desc">开启后，管理员点击“转代卖”时必须再次确认，避免误把已报价设备转入代卖。</div>
+                            </div>
+                            <el-switch v-model="form.consignment.transfer_confirm_required" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">用户端展示代卖入口</div>
+                                <div class="setting-desc">开启后，装修组件和用户中心可展示代卖入口，用户能直接进入代卖订单列表。</div>
+                            </div>
+                            <el-switch v-model="form.consignment.user_entry_enabled" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">允许用户查看代卖进度</div>
+                                <div class="setting-desc">开启后，用户可查看代卖状态、上架价、成交价、结算金额和操作日志。</div>
+                            </div>
+                            <el-switch v-model="form.consignment.user_view_enabled" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">用户端入口标题</div>
+                                <div class="setting-desc">显示在低代码组件和代卖列表顶部，建议短一点。</div>
+                            </div>
+                            <el-input v-model.trim="form.consignment.user_title" maxlength="20" show-word-limit class="setting-input" :disabled="!form.consignment.enabled" placeholder="代卖订单" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">用户端入口说明</div>
+                                <div class="setting-desc">说明用户点进去能看到什么，避免入口含义不清楚。</div>
+                            </div>
+                            <el-input v-model.trim="form.consignment.user_desc" maxlength="80" show-word-limit class="setting-input" :disabled="!form.consignment.enabled" placeholder="查看代卖进度、成交与结算结果" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">代卖通知</div>
+                                <div class="setting-desc">开启后，转入代卖、上架、成交、结算、退回等动作会走系统通知，并写入通知日志。</div>
+                            </div>
+                            <el-switch v-model="form.consignment.notice_enabled" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">代卖打印</div>
+                                <div class="setting-desc">开启后，代卖动作可以绑定打印场景。具体何时打印、打印哪个模板，在打印场景里配置。</div>
+                            </div>
+                            <el-switch v-model="form.consignment.print_enabled" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
+                        </div>
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-title">用户端显示服务收益</div>
+                                <div class="setting-desc">默认不显示。开启后用户能看到成交价和结算金额之间的服务收益，建议谨慎开启。</div>
+                            </div>
+                            <el-switch v-model="form.consignment.show_service_fee" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
+                        </div>
+                    </div>
                 </section>
 
                 <section class="config-section">
@@ -395,6 +476,17 @@ const form = reactive<OrderSubmitConfig>({
         content: '如需议价或咨询订单进度，请联系客服处理'
     },
     allow_user_reject_sale: 1,
+    consignment: {
+        enabled: 0,
+        user_entry_enabled: 1,
+        user_view_enabled: 1,
+        transfer_confirm_required: 1,
+        notice_enabled: 1,
+        print_enabled: 1,
+        show_service_fee: 0,
+        user_title: '代卖订单',
+        user_desc: '查看代卖进度、成交与结算结果'
+    },
     price_detail_theme: {
         template_key: 'classic_blue',
         theme_name: '默认蓝',
@@ -444,6 +536,15 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.customer_service.title = data.customer_service?.title || '联系客服'
     form.customer_service.content = data.customer_service?.content || '如需议价或咨询订单进度，请联系客服处理'
     form.allow_user_reject_sale = data.allow_user_reject_sale === 0 ? 0 : 1
+    form.consignment.enabled = data.consignment?.enabled ? 1 : 0
+    form.consignment.user_entry_enabled = data.consignment?.user_entry_enabled === 0 ? 0 : 1
+    form.consignment.user_view_enabled = data.consignment?.user_view_enabled === 0 ? 0 : 1
+    form.consignment.transfer_confirm_required = data.consignment?.transfer_confirm_required === 0 ? 0 : 1
+    form.consignment.notice_enabled = data.consignment?.notice_enabled === 0 ? 0 : 1
+    form.consignment.print_enabled = data.consignment?.print_enabled === 0 ? 0 : 1
+    form.consignment.show_service_fee = data.consignment?.show_service_fee ? 1 : 0
+    form.consignment.user_title = data.consignment?.user_title || '代卖订单'
+    form.consignment.user_desc = data.consignment?.user_desc || '查看代卖进度、成交与结算结果'
     normalizeTheme(data.price_detail_theme)
     if (!form.delivery_modes.mail && !form.delivery_modes.self) {
         form.delivery_modes.mail = 1
@@ -628,6 +729,10 @@ const save = async () => {
         ElMessage.warning('选择客服二维码模式前，请先上传客服二维码')
         return
     }
+    if (form.consignment.enabled && !form.consignment.user_title.trim()) {
+        ElMessage.warning('请填写代卖用户端入口标题')
+        return
+    }
 
     saving.value = true
     try {
@@ -662,6 +767,26 @@ onMounted(load)
     margin-top: 20px;
 }
 
+.config-group-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 4px 2px 0;
+
+    span {
+        font-size: 16px;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    em {
+        font-style: normal;
+        font-size: 13px;
+        color: #6b7280;
+    }
+}
+
 .config-section {
     padding: 18px;
     border: 1px solid #ebeef5;
@@ -693,6 +818,18 @@ onMounted(load)
     padding-top: 18px;
     margin-top: 18px;
     border-top: 1px dashed #e5e7eb;
+}
+
+.consignment-panel {
+    display: grid;
+    gap: 18px;
+    padding-top: 18px;
+    margin-top: 18px;
+    border-top: 1px dashed #e5e7eb;
+}
+
+.consignment-panel.disabled {
+    opacity: 0.72;
 }
 
 .section-title {
@@ -806,6 +943,12 @@ onMounted(load)
 }
 
 @media (max-width: 768px) {
+    .config-group-title {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+
     .theme-entry {
         align-items: flex-start;
         flex-direction: column;

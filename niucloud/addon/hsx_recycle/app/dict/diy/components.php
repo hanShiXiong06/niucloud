@@ -90,6 +90,9 @@ return [
                     'checkingText' => '质检中', // 质检中文本
                     'pendingConfirmText' => '待确认', // 待确认文本
                     'pendingPaymentText' => '待打款', // 待打款文本
+                    'showConsignment' => 1, // 是否展示代卖入口
+                    'consignmentText' => '代卖订单', // 代卖入口标题
+                    'consignmentDesc' => '查看代卖进度、成交与结算结果', // 代卖入口说明
                     'titleColor' => '#333333', // 标题颜色
                     'viewAllColor' => '#999999', // 查看全部颜色
                     'numberColor' => '#FF6B00', // 数字颜色

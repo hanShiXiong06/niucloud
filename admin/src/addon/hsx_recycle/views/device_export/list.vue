@@ -31,6 +31,14 @@
                         </el-select>
                     </el-form-item>
 
+                    <el-form-item label="入库类型" prop="warehouse_type">
+                        <el-select v-model="deviceTableData.searchParam.warehouse_type" class="!w-[150px]">
+                            <el-option label="全部" value="" />
+                            <el-option label="回收入库" value="owned" />
+                            <el-option label="代卖入库" value="consign" />
+                        </el-select>
+                    </el-form-item>
+
                     <el-form-item :label="t('回收时间')" prop="update_at">
                         <el-date-picker
                             v-model="deviceTableData.searchParam.update_at"
@@ -112,6 +120,17 @@
                     <el-table-column prop="status_name" :label="t('status')" min-width="100" align="center">
                         <template #default="{ row }">
                             <el-tag type="success">{{ row.status_name }}</el-tag>
+                        </template>
+                    </el-table-column>
+
+                    <el-table-column label="入库类型" min-width="120" align="center">
+                        <template #default="{ row }">
+                            <el-tag :type="row.dispose_type === 'consign' || row.status === 9 ? 'warning' : 'success'">
+                                {{ row.dispose_type === 'consign' || row.status === 9 ? '代卖入库' : '回收入库' }}
+                            </el-tag>
+                            <div v-if="row.consignmentOrder?.consignment_no || row.consignment_order?.consignment_no" class="mt-1 text-xs text-blue-600">
+                                {{ row.consignmentOrder?.consignment_no || row.consignment_order?.consignment_no }}
+                            </div>
                         </template>
                     </el-table-column>
 
@@ -323,12 +342,13 @@ const deviceTableData = reactive({
     loading: true,
     data: [],
     searchParam: {
-        imei: '',
-        model: '',
-        category_id: '',
+        imei: String(route.query.imei || ''),
+        model: String(route.query.model || ''),
+        category_id: String(route.query.category_id || ''),
         update_at: [],
-        status: 5,  // 固定为已回收状态
-        export_status: ''
+        status: '',
+        warehouse_type: String(route.query.warehouse_type || ''),
+        export_status: String(route.query.export_status || '')
     }
 })
 
@@ -391,6 +411,8 @@ const handleSearch = () => {
 const resetForm = (formEl: FormInstance | undefined) => {
     if (!formEl) return
     formEl.resetFields()
+    deviceTableData.searchParam.warehouse_type = ''
+    deviceTableData.searchParam.export_status = ''
     setDefaultDateRange()
     deviceTableData.page = 1
     loadDeviceList()

@@ -180,6 +180,8 @@ export interface OrderDetailDevice {
   status: number
   status_name: string
   remark?: string
+  capacity?: string
+  color?: string
   check_result?: string
   check_result_seller?: string
   check_status: number
@@ -188,6 +190,14 @@ export interface OrderDetailDevice {
   check_images_seller?: string
   check_images_seller_thumb_small?: string[]
   price_remark?: string
+  info?: any
+  consignment_order_id?: number
+  consignmentOrder?: {
+    id?: number
+    consignment_no?: string
+    status?: number
+    status_name?: string
+  }
   create_at: number
   update_at?: number
 }

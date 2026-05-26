@@ -40,6 +40,7 @@ class RecycleNoticeLogService extends BaseAdminService
             0 => '待发送',
             1 => '发送成功',
             2 => '发送失败',
+            3 => '重复跳过',
         ][$status] ?? '未知';
     }
 

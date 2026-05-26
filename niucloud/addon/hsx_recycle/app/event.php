@@ -28,6 +28,8 @@ return [
             'addon\hsx_recycle\app\listener\notice_template\OrderPay',
             // 订单完成奖励通知
             'addon\hsx_recycle\app\listener\notice_template\OrderReward',
+            // 代卖进度通知
+            'addon\hsx_recycle\app\listener\notice_template\ConsignmentStatus',
         ],
         // 应用信息
         'RecyclePromotion' => [ 'addon\hsx_recycle\app\listener\app\RecyclePromotionListener' ],

@@ -69,6 +69,7 @@ const isMobile = computed(() => Boolean(props.isMobile));
 const getStatusType = (status: number) => {
   if (Number(status) === 1) return "success";
   if (Number(status) === 2) return "danger";
+  if (Number(status) === 3) return "info";
   return "warning";
 };
 
@@ -97,6 +98,7 @@ const showDetail = async (row: any) => {
     request_data: row.request_data,
     response_data: row.response_data,
     fail_reason: row.fail_reason,
+    status_name: row.status_name,
   };
 
   await ElMessageBox.alert(`<pre class="notice-log-pre">${escapeHtml(JSON.stringify(detail, null, 2))}</pre>`, "通知详情", {

@@ -96,6 +96,7 @@ Route::group('recycle', function () {
 
     // 确认设备价格
     Route::put('recycle_device/:id/confirm_price', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@confirmPrice');
+    Route::post('recycle_device/:id/transfer_consignment', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@transferDevice');
     Route::put('recycle_device/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@update');
     Route::delete('recycle_device/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@delete');
     // 批量设备操作
@@ -151,6 +152,23 @@ Route::group('recycle', function () {
     AdminLog::class
 ]);
 // USER_CODE_END -- recycle_recycle_order
+
+// 代卖订单
+Route::group('recycle', function () {
+    Route::get('consignment_order/lists', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@lists');
+    Route::get('consignment_order/status', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@status');
+    Route::get('consignment_order/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@info');
+    Route::get('consignment_order/:id/logs', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@logs');
+    Route::put('consignment_order/:id/listing', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@listing');
+    Route::put('consignment_order/:id/sold', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@sold');
+    Route::put('consignment_order/:id/settle', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@settle');
+    Route::put('consignment_order/:id/close', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@close');
+    Route::post('consignment_order/:id/push_notify', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleConsignmentOrder@pushNotify');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
 
 // ✅ USER_CODE_BEGIN -- recycle_recycle_return_order
 /**
@@ -301,8 +319,13 @@ Route::group('recycle', function () {
     // 打印场景配置
     Route::get('print_scene/lists', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@lists');
     Route::get('print_scene/options', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@options');
+    Route::get('print_scene/manual_actions', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@manualActions');
+    Route::post('print_scene', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@add');
+    Route::get('print_scene/:sceneKey/plan', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@plan');
+    Route::post('print_scene/:sceneKey/print', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@print');
     Route::get('print_scene/:sceneKey', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@info');
     Route::put('print_scene/:sceneKey', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@edit');
+    Route::delete('print_scene/:sceneKey', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@del');
     Route::post('print_scene/status/:sceneKey', 'addon\hsx_recycle\app\adminapi\controller\printer\PrintScene@modifyStatus');
 
     // 打印日志

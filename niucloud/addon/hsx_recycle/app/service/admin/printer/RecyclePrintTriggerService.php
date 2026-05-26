@@ -86,7 +86,7 @@ class RecyclePrintTriggerService extends BaseAdminService
         $task = $taskResult['task'] ?? [];
         if (!empty($taskResult['duplicate'])) {
             $message = ((int)($task['status'] ?? 0) === RecyclePrintTask::STATUS_SUCCESS)
-                ? '该设备已自动打印过，已跳过重复打印'
+                ? '该业务已自动打印过，已跳过重复打印'
                 : '该打印任务已存在，已跳过重复自动打印';
             $this->sceneService->recordSkippedPlan($plan, $message);
             return $this->taskService->skippedResult($task, $message);
@@ -97,7 +97,7 @@ class RecyclePrintTriggerService extends BaseAdminService
             $this->taskService->markRunning($taskId);
         }
 
-        $response = $this->sceneService->executeDevicePrintPlan($plan);
+        $response = $this->sceneService->executePrintPlan($plan);
         if ($taskId > 0) {
             $this->taskService->finish($taskId, $response);
             $response['task_id'] = $taskId;

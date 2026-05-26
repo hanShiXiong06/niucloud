@@ -90,6 +90,38 @@
 - 已提供后台设备确认接口，但客户前台“确认这几台报价”的完整交互还需要在用户端页面继续接入。
 - `update_0.0.2.sql` 是标准升级脚本，按框架升级链路执行一次；如果手工重复执行，已有字段可能触发重复列错误。
 
+## 0.0.2 代卖订单实施路径
+
+| 步骤 | 解决问题 | 文件 | 状态 |
+| --- | --- | --- | --- |
+| 1 | 将代卖作为独立订单，不让来源回收订单继续承载销售中的设备状态 | `app/model/order/RecycleConsignmentOrder.php`、`app/dict/order/RecycleConsignmentDict.php`、`sql/install.sql`、`sql/update_0.0.2.sql` | 已完成 |
+| 2 | 设备转入代卖时记录来源订单、来源设备、客户、价格、状态和日志，保证后续可追溯 | `app/service/admin/order/RecycleConsignmentOrderService.php`、`app/model/order/RecycleConsignmentLog.php` | 已完成 |
+| 3 | 后台增加代卖订单列表，支持查看来源订单、设置挂牌价、登记成交、结算客户、取消代卖 | `admin/views/consignment_order/list.vue`、`admin/api/consignment_order.ts`、`app/adminapi/controller/order/RecycleConsignmentOrder.php` | 已完成 |
+| 4 | 用户端增加代卖列表和详情，用户可独立查看代卖进度、成交与结算结果 | `uni-app/pages/consignment/list.vue`、`uni-app/pages/consignment/detail.vue`、`app/api/controller/recycle_order/RecycleConsignmentOrder.php` | 已完成 |
+| 5 | 下单配置增加代卖业务开关，并区分用户端入口、用户查看、通知、打印、服务费展示 | `app/service/core/order/OrderSubmitConfigService.php`、`admin/views/order_config/submit.vue` | 已完成 |
+| 6 | 低代码订单概况组件增加代卖入口，入口展示由后台配置和组件配置共同控制 | `app/dict/diy/components.php`、`uni-app/components/diy/recycle-order-overview/index.vue`、`admin/views/diy/components/edit-recycle-order-overview.vue` | 已完成 |
+| 7 | 接入系统通知 hook，代卖状态变化和手动推送都走统一通知日志，便于复盘成功/失败 | `app/service/core/recycle_order/CoreRecycleOrderNotifyService.php`、`app/listener/notice_template/ConsignmentStatus.php`、`app/event.php` | 已完成 |
+| 8 | 接入打印场景系统，由后端下发代卖触发节点、按钮位置、展示状态、模板变量 | `app/model/printer/RecyclePrintScene.php`、`app/service/admin/printer/RecyclePrintSceneService.php`、`app/service/admin/printer/RecyclePrinterTemplateService.php` | 已完成 |
+| 9 | 代卖列表支持手动推送通知和手动打印，按钮由打印场景配置控制，不在页面硬编码 | `admin/views/consignment_order/list.vue`、`app/adminapi/controller/printer/PrintScene.php` | 已完成 |
+| 10 | 同步插件包后台和用户端文件，保证安装包与开发源码一致 | `niucloud/addon/hsx_recycle/admin/*`、`niucloud/addon/hsx_recycle/uni-app/*` | 已完成 |
+| 11 | PHP 语法检查、空白检查、管理端 Vite 构建 | PHP 文件、`admin` 前端 | 已完成 |
+
+### 代卖订单业务规则
+
+- 代卖是独立订单，来源回收订单只作为追溯入口。来源订单完成或关闭后，代卖订单仍可继续查看和处理。
+- 单台设备只能转入一个代卖订单。已打款、待质检、质检中、已退回的设备不能转入代卖。
+- 转入代卖后，来源设备状态变为 `已转代卖`，并记录 `consignment_order_id`，方便从设备和订单反查代卖单。
+- 代卖订单状态包括：`待上架`、`代卖中`、`已售出`、`待结算`、`已结算`、`已取消`、`已退回`。
+- 客户结算后会生成一条设备打款记录，`pay_type=consignment`，用于财务对账和日志追溯。
+- 通知和打印都受下单配置里的代卖开关控制；打印的具体触发节点、模板、打印机、按钮展示状态由打印场景页面控制。
+- 代卖打印模板变量由后端统一注入，包含代卖单号、来源订单号、设备信息、状态、挂牌价、成交价、客户结算、服务收益、客户信息等。
+
+### 代卖订单当前边界
+
+- 当前实现的是回收插件内的代卖管理与结算闭环，不计算商城销售利润；未来和商城/ERP 打通后，才能计算设备全生命周期利润。
+- 代卖入库导出已保留入口，现阶段用于区分“代卖入库”和“回收入库”；后续可扩展为对接外部 ERP 的固定导出模板。
+- 代卖退回已经预留状态和打印/通知触发节点，退货快递单号、退货物流打印可在后续接入退货信息后完善。
+
 ## 第一批指标口径
 
 | 指标 | 含义 | 下钻 |
@@ -144,6 +176,7 @@
 | 2026-05-24 | 管理端 `npx vite build`：只做前端编译，不执行发布脚本 | 通过 |
 | 2026-05-24 | 设备级打款：PHP 语法检查、`git diff --check`、管理端 `npx vite build` | 通过 |
 | 2026-05-24 | 订单流转模式：核心 PHP 文件语法检查、`git diff --check`、管理端 `npx vite build` | 通过 |
+| 2026-05-25 | 代卖订单：核心 PHP 文件语法检查、`git diff --check`、管理端 `npx vite build --outDir /private/tmp/hsx_recycle_consignment_build --emptyOutDir` | 通过 |
 
 ## 当前接口
 

@@ -103,7 +103,7 @@
                     </template>
                 </el-table-column>
                 <el-table-column prop="create_at" label="创建时间" min-width="180" sortable />
-                <el-table-column label="操作" width="260" fixed="right">
+                <el-table-column label="操作" width="340" fixed="right">
                     <template #default="scope">
                         <el-button type="primary" size="small" @click="handleDetail(scope.row)">
                             <el-icon>
@@ -125,6 +125,26 @@
                         <el-button v-if="canPerformAction('DELETE', scope.row.status)" type="danger" size="small"
                             :loading="operationLoading && activeOperationId === scope.row.id"
                             @click="handleDelete(scope.row.id)">删除</el-button>
+                        <el-dropdown
+                            v-if="getVisibleReturnPrintActions(scope.row).length"
+                            trigger="click"
+                            @command="(action) => printReturnByScene(scope.row, action)"
+                        >
+                            <el-button size="small" plain>
+                                打印<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                            </el-button>
+                            <template #dropdown>
+                                <el-dropdown-menu>
+                                    <el-dropdown-item
+                                        v-for="action in getVisibleReturnPrintActions(scope.row)"
+                                        :key="action.scene_key"
+                                        :command="action"
+                                    >
+                                        {{ action.button_text || action.scene_name }}
+                                    </el-dropdown-item>
+                                </el-dropdown-menu>
+                            </template>
+                        </el-dropdown>
                     </template>
                 </el-table-column>
             </el-table>
@@ -416,7 +436,7 @@
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { Download, Search, Refresh, View } from '@element-plus/icons-vue'
+import { Download, Search, Refresh, View, ArrowDown } from '@element-plus/icons-vue'
 
 import {
     getReturnOrderList,
@@ -431,6 +451,7 @@ import {
 import { getShopAddressList } from '../../api/shop_address'
 import { getExpressQuote, createExpressOrderDirect } from '../../api/express'
 import { parseThirdPartyAddress } from '../../api/third_party'
+import { getPrintSceneManualActions, getPrintScenePlan, printByScene } from '../../api/printer'
 import { IReturnOrderListParams, IReturnOrder, IStatusCount } from '../../interface/recycle_return_order'
 import {
     RETURN_ORDER_STATUS,
@@ -486,6 +507,7 @@ const activeTrackId = ref<number | null>(null)
 const expressTrackDialogVisible = ref(false)
 const expressInfo = ref<any>(null)
 const currentTrackOrder = ref<any>(null)
+const returnPrintActions = ref<any[]>([])
 
 // 状态统计数据
 const statusCounts = ref<{
@@ -1518,6 +1540,78 @@ const printOrderDetail = () => {
     // 实现打印功能
 }
 
+const escapePrintHtml = (value: any) => String(value ?? '').replace(/[&<>"']/g, (char) => {
+    const map: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }
+    return map[char] || char
+})
+
+const safePrintText = (value: any, fallback = '未填写') => escapePrintHtml(value === undefined || value === null || value === '' ? fallback : value)
+
+const buildReturnPrintConfirmHtml = (plan: any) => `
+    <div class="return-print-plan">
+        <div class="return-print-plan__title">请确认本次打印内容</div>
+        <div class="return-print-plan__grid">
+            <span>打印场景</span><strong>${safePrintText(plan.scene?.scene_name)}</strong>
+            <span>退货单号</span><strong>${safePrintText(plan.biz?.title || plan.device?.order_no)}</strong>
+            <span>当前状态</span><strong>${safePrintText(plan.biz?.subtitle || plan.device?.status_name)}</strong>
+            <span>打印模板</span><strong>${safePrintText(plan.template?.template_name)}</strong>
+            <span>目标打印机</span><strong>${safePrintText(plan.printer?.printer_name)}</strong>
+            <span>打印份数</span><strong>${safePrintText(plan.copies, '1')} 份</strong>
+        </div>
+        <div class="return-print-plan__hint">确认后会立即发送到打印机。若模板或打印机不对，请先到打印场景中调整绑定关系。</div>
+    </div>
+`
+
+const loadReturnPrintActions = async () => {
+    try {
+        const res = await getPrintSceneManualActions({ biz_type: 'return' })
+        returnPrintActions.value = res.code === 1 && Array.isArray(res.data) ? res.data : []
+    } catch (error) {
+        returnPrintActions.value = []
+    }
+}
+
+const getVisibleReturnPrintActions = (row: any) => {
+    return returnPrintActions.value.filter((action) => {
+        if (action.button_position && action.button_position !== 'return_order_actions') return false
+        const statuses = Array.isArray(action.visible_device_status) ? action.visible_device_status.map((item: any) => Number(item)) : []
+        return !statuses.length || statuses.includes(Number(row.status))
+    })
+}
+
+const printReturnByScene = async (row: any, action: any) => {
+    const sceneKey = action?.scene_key
+    if (!sceneKey) return
+    const params = { return_order_id: row.id, biz_id: row.id }
+    try {
+        const planRes = await getPrintScenePlan(sceneKey, params)
+        if (planRes.code !== 1 || !planRes.data?.can_print) {
+            throw new Error(planRes.msg || planRes.data?.message || '打印计划不可用')
+        }
+        const plan = planRes.data
+        if (Number(action?.confirm_required ?? 1) === 1) {
+            await ElMessageBox.confirm(buildReturnPrintConfirmHtml(plan), action?.button_text || plan.scene?.button_text || '打印', {
+                dangerouslyUseHTMLString: true,
+                confirmButtonText: '确认打印',
+                cancelButtonText: '取消'
+            })
+        }
+        const res = await printByScene(sceneKey, params)
+        if (res.code !== 1) {
+            throw new Error(res.msg || '打印失败')
+        }
+    } catch (error: any) {
+        if (error === 'cancel' || error === 'close') return
+        ElMessage.error(error?.message || '打印失败')
+    }
+}
+
 // 检查操作权限
 const canPerformAction = (action: 'DELETE' | 'CANCEL' | 'CONFIRM' | 'COMPLETE', status: number) => {
     return STATUS_ACTION_PERMISSIONS[action].includes(status)
@@ -1526,6 +1620,7 @@ const canPerformAction = (action: 'DELETE' | 'CANCEL' | 'CONFIRM' | 'COMPLETE', 
 onMounted(() => {
     getList()
     getStatusCount()
+    loadReturnPrintActions()
 })
 </script>
 
@@ -1853,6 +1948,41 @@ onMounted(() => {
     border-radius: 8px;
     color: #065f46;
     background: #ecfdf5;
+}
+
+:global(.return-print-plan) {
+    padding: 4px 0;
+}
+
+:global(.return-print-plan__title) {
+    margin-bottom: 12px;
+    color: #111827;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+:global(.return-print-plan__grid) {
+    display: grid;
+    grid-template-columns: 92px 1fr;
+    gap: 8px 12px;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f9fafb;
+}
+
+:global(.return-print-plan__grid span) {
+    color: #6b7280;
+}
+
+:global(.return-print-plan__grid strong) {
+    color: #111827;
+}
+
+:global(.return-print-plan__hint) {
+    margin-top: 10px;
+    color: #6b7280;
+    font-size: 12px;
 }
 
 @media (max-width: 900px) {

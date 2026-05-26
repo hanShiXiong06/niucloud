@@ -47,6 +47,7 @@ class RecyclePrinterTemplate extends BaseModel
     const TYPE_DEVICE_LABEL = 'device_label';     // 设备标签
     const TYPE_ORDER_RECEIPT = 'order_receipt';   // 订单小票
     const TYPE_RETURN_LABEL = 'return_label';     // 退回标签
+    const TYPE_CONSIGNMENT_RECEIPT = 'consignment_receipt'; // 代卖凭证
     const TYPE_CUSTOM = 'custom';                 // 自定义
 
     /**
@@ -63,8 +64,9 @@ class RecyclePrinterTemplate extends BaseModel
     {
         return [
             self::TYPE_DEVICE_LABEL => '设备标签',
-            self::TYPE_ORDER_RECEIPT => '订单小票', 
+            self::TYPE_ORDER_RECEIPT => '订单小票',
             self::TYPE_RETURN_LABEL => '退回标签',
+            self::TYPE_CONSIGNMENT_RECEIPT => '代卖凭证',
             self::TYPE_CUSTOM => '自定义模板'
         ];
     }
@@ -93,6 +95,7 @@ class RecyclePrinterTemplate extends BaseModel
             self::TYPE_DEVICE_LABEL => '设备标签',
             self::TYPE_ORDER_RECEIPT => '订单小票',
             self::TYPE_RETURN_LABEL => '退回标签',
+            self::TYPE_CONSIGNMENT_RECEIPT => '代卖凭证',
             self::TYPE_CUSTOM => '自定义模板'
         ];
         return $types[$data['template_type']] ?? '';
@@ -127,4 +130,4 @@ class RecyclePrinterTemplate extends BaseModel
         ];
         return $is_default[$data['is_default']] ?? '';
     }
-} 
+}

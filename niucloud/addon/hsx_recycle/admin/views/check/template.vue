@@ -145,6 +145,16 @@
                 <el-table :data="currentFieldOptions" height="260" border>
                     <el-table-column prop="option_label" label="选项名称" min-width="150" />
                     <el-table-column prop="option_value" label="选项值" width="110" />
+                    <el-table-column label="展示样式" width="140">
+                        <template #default="{ row }">
+                            <div class="option-style-preview">
+                                <span
+                                    class="option-style-chip"
+                                    :style="getOptionPreviewStyle(row)"
+                                >{{ row.option_label || '预览' }}</span>
+                            </div>
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="sort" label="排序" width="80" />
                     <el-table-column label="状态" width="86">
                         <template #default="{ row }">
@@ -259,6 +269,28 @@
             <el-form label-width="92px" :model="optionDialog.form">
                 <el-form-item label="选项名称"><el-input v-model="optionDialog.form.option_label" /></el-form-item>
                 <el-form-item label="选项值"><el-input v-model="optionDialog.form.option_value" /></el-form-item>
+                <el-form-item label="文字颜色">
+                    <el-color-picker v-model="optionDialog.form.extra_config.result_style.text_color" show-alpha />
+                    <span class="color-value">{{ optionDialog.form.extra_config.result_style.text_color || '默认' }}</span>
+                </el-form-item>
+                <el-form-item label="背景颜色">
+                    <el-color-picker v-model="optionDialog.form.extra_config.result_style.background_color" show-alpha />
+                    <span class="color-value">{{ optionDialog.form.extra_config.result_style.background_color || '默认' }}</span>
+                </el-form-item>
+                <el-form-item label="边框颜色">
+                    <el-color-picker v-model="optionDialog.form.extra_config.result_style.border_color" show-alpha />
+                    <span class="color-value">{{ optionDialog.form.extra_config.result_style.border_color || '默认' }}</span>
+                </el-form-item>
+                <el-form-item label="效果预览">
+                    <div class="option-style-preview">
+                        <span
+                            class="option-style-chip option-style-chip--large"
+                            :style="getOptionPreviewStyle(optionDialog.form)"
+                        >{{ optionDialog.form.option_label || '选项预览' }}</span>
+                        <el-button link type="primary" @click="resetOptionStyle">清空样式</el-button>
+                    </div>
+                    <div class="form-tip">颜色会随质检结果元数据保存，用户移动端验机报告会按这里的配置展示。</div>
+                </el-form-item>
                 <el-form-item label="排序"><el-input-number v-model="optionDialog.form.sort" :min="0" /></el-form-item>
                 <el-form-item label="显示"><el-switch v-model="optionDialog.form.is_show" :active-value="1" :inactive-value="0" /></el-form-item>
             </el-form>
@@ -314,7 +346,18 @@ const componentOptions = [
 const templateDialog = reactive({ visible: false, form: {} as any })
 const groupDialog = reactive({ visible: false, form: {} as any })
 const fieldDialog = reactive({ visible: false, form: {} as any })
-const optionDialog = reactive({ visible: false, form: {} as any })
+const optionDialog = reactive({
+    visible: false,
+    form: {
+        extra_config: {
+            result_style: {
+                text_color: '',
+                background_color: '',
+                border_color: ''
+            }
+        }
+    } as any
+})
 
 const currentFieldOptions = computed(() => currentField.value?.options || [])
 
@@ -331,12 +374,38 @@ const normalizeExtraConfig = (config: any) => {
     return typeof config === 'object' ? { ...config } : {}
 }
 
+const defaultOptionStyle = () => ({
+    text_color: '',
+    background_color: '',
+    border_color: ''
+})
+
+const normalizeOptionExtraConfig = (config: any) => {
+    const extra = normalizeExtraConfig(config)
+    const rawStyle = normalizeExtraConfig(extra.result_style || extra.option_style || {})
+    return {
+        ...extra,
+        result_style: {
+            ...defaultOptionStyle(),
+            ...rawStyle,
+            text_color: rawStyle.text_color || extra.text_color || '',
+            background_color: rawStyle.background_color || extra.background_color || extra.bg_color || '',
+            border_color: rawStyle.border_color || extra.border_color || ''
+        }
+    }
+}
+
 const normalizeFieldForm = (field: any) => ({
     ...field,
     extra_config: {
         summary_visible: 0,
         ...normalizeExtraConfig(field?.extra_config)
     }
+})
+
+const normalizeOptionForm = (option: any) => ({
+    ...option,
+    extra_config: normalizeOptionExtraConfig(option?.extra_config)
 })
 
 const selectedSummaryFieldCount = computed(() => {
@@ -535,13 +604,39 @@ const fieldNeedsOptions = (field: any) => ['radio', 'checkbox', 'select'].includ
 
 const openOptionDialog = (row: any = null) => {
     if (!currentField.value) return
-    optionDialog.form = row ? { ...row } : { field_id: currentField.value.id, option_label: '', option_value: '', sort: 0, is_show: 1, is_default: 0 }
+    optionDialog.form = row
+        ? normalizeOptionForm(row)
+        : normalizeOptionForm({ field_id: currentField.value.id, option_label: '', option_value: '', sort: 0, is_show: 1, is_default: 0, extra_config: {} })
     optionDialog.visible = true
+}
+
+const getOptionStyleConfig = (option: any) => {
+    return normalizeOptionExtraConfig(option?.extra_config).result_style
+}
+
+const getOptionPreviewStyle = (option: any) => {
+    const style = getOptionStyleConfig(option)
+    return {
+        color: style.text_color || '#334155',
+        backgroundColor: style.background_color || '#f8fafc',
+        borderColor: style.border_color || style.background_color || '#dbe4ef'
+    }
+}
+
+const resetOptionStyle = () => {
+    optionDialog.form.extra_config = {
+        ...normalizeOptionExtraConfig(optionDialog.form.extra_config),
+        result_style: defaultOptionStyle(),
+        text_color: '',
+        background_color: '',
+        bg_color: '',
+        border_color: ''
+    }
 }
 
 const submitOption = async () => {
     const fieldId = currentField.value.id
-    await saveCheckOption({ ...optionDialog.form, field_id: currentField.value.id })
+    await saveCheckOption({ ...normalizeOptionForm(optionDialog.form), field_id: currentField.value.id })
     optionDialog.visible = false
     await loadFields(fieldId)
 }
@@ -607,6 +702,42 @@ onMounted(loadTemplates)
     color: #909399;
     font-size: 12px;
     line-height: 1.5;
+}
+
+.color-value {
+    margin-left: 10px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.option-style-preview {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.option-style-chip {
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 2px 10px;
+    border: 1px solid #dbe4ef;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-all;
+}
+
+.option-style-chip--large {
+    min-height: 30px;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .workspace {

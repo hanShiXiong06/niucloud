@@ -103,6 +103,17 @@ class OrderSubmitConfigService
                 'content' => '如需议价或咨询订单进度，请联系客服处理',
             ],
             'allow_user_reject_sale' => 1,
+            'consignment' => [
+                'enabled' => 0,
+                'user_entry_enabled' => 1,
+                'user_view_enabled' => 1,
+                'transfer_confirm_required' => 1,
+                'notice_enabled' => 1,
+                'print_enabled' => 1,
+                'show_service_fee' => 0,
+                'user_title' => '代卖订单',
+                'user_desc' => '查看代卖进度、成交与结算结果',
+            ],
             'price_detail_theme' => $this->defaultPriceDetailTheme(),
         ];
     }
@@ -118,6 +129,7 @@ class OrderSubmitConfigService
         $platformDelivery = is_array($data['platform_delivery'] ?? null) ? $data['platform_delivery'] : [];
         $followOfficialAccount = is_array($data['follow_official_account'] ?? null) ? $data['follow_official_account'] : [];
         $customerService = is_array($data['customer_service'] ?? null) ? $data['customer_service'] : [];
+        $consignment = is_array($data['consignment'] ?? null) ? $data['consignment'] : [];
         $priceDetailTheme = is_array($data['price_detail_theme'] ?? null) ? $data['price_detail_theme'] : [];
         $platformDeliveryProviders = !empty($platformDeliveryProviders)
             ? array_values($platformDeliveryProviders)
@@ -215,6 +227,17 @@ class OrderSubmitConfigService
             'allow_user_reject_sale' => array_key_exists('allow_user_reject_sale', $data)
                 ? (!empty($data['allow_user_reject_sale']) ? 1 : 0)
                 : $default['allow_user_reject_sale'],
+            'consignment' => [
+                'enabled' => !empty($consignment['enabled']) ? 1 : 0,
+                'user_entry_enabled' => array_key_exists('user_entry_enabled', $consignment) ? (!empty($consignment['user_entry_enabled']) ? 1 : 0) : $default['consignment']['user_entry_enabled'],
+                'user_view_enabled' => array_key_exists('user_view_enabled', $consignment) ? (!empty($consignment['user_view_enabled']) ? 1 : 0) : $default['consignment']['user_view_enabled'],
+                'transfer_confirm_required' => array_key_exists('transfer_confirm_required', $consignment) ? (!empty($consignment['transfer_confirm_required']) ? 1 : 0) : $default['consignment']['transfer_confirm_required'],
+                'notice_enabled' => array_key_exists('notice_enabled', $consignment) ? (!empty($consignment['notice_enabled']) ? 1 : 0) : $default['consignment']['notice_enabled'],
+                'print_enabled' => array_key_exists('print_enabled', $consignment) ? (!empty($consignment['print_enabled']) ? 1 : 0) : $default['consignment']['print_enabled'],
+                'show_service_fee' => !empty($consignment['show_service_fee']) ? 1 : 0,
+                'user_title' => mb_substr(trim((string)($consignment['user_title'] ?? $default['consignment']['user_title'])), 0, 20),
+                'user_desc' => mb_substr(trim((string)($consignment['user_desc'] ?? $default['consignment']['user_desc'])), 0, 80),
+            ],
             'price_detail_theme' => $this->sanitizePriceDetailTheme($priceDetailTheme),
         ];
 
@@ -254,6 +277,19 @@ class OrderSubmitConfigService
 
         if (empty($config['delivery_modes']['mail']) && empty($config['delivery_modes']['self'])) {
             $config['delivery_modes'] = $default['delivery_modes'];
+        }
+
+        if ($config['consignment']['user_title'] === '') {
+            $config['consignment']['user_title'] = $default['consignment']['user_title'];
+        }
+        if ($config['consignment']['user_desc'] === '') {
+            $config['consignment']['user_desc'] = $default['consignment']['user_desc'];
+        }
+        if (!$config['consignment']['enabled']) {
+            $config['consignment']['user_entry_enabled'] = 0;
+            $config['consignment']['user_view_enabled'] = 0;
+            $config['consignment']['notice_enabled'] = 0;
+            $config['consignment']['print_enabled'] = 0;
         }
 
         return $config;
@@ -610,5 +646,29 @@ class OrderSubmitConfigService
         $config = $this->getConfig($siteId);
         $minCount = max(1, (int)($config['platform_delivery']['free_shipping_min_count'] ?? 1));
         return $count >= $minCount;
+    }
+
+    public function isConsignmentEnabled(int $siteId): bool
+    {
+        $config = $this->getConfig($siteId);
+        return !empty($config['consignment']['enabled']);
+    }
+
+    public function canUserViewConsignment(int $siteId): bool
+    {
+        $config = $this->getConfig($siteId);
+        return !empty($config['consignment']['enabled']) && !empty($config['consignment']['user_view_enabled']);
+    }
+
+    public function isConsignmentNoticeEnabled(int $siteId): bool
+    {
+        $config = $this->getConfig($siteId);
+        return !empty($config['consignment']['enabled']) && !empty($config['consignment']['notice_enabled']);
+    }
+
+    public function isConsignmentPrintEnabled(int $siteId): bool
+    {
+        $config = $this->getConfig($siteId);
+        return !empty($config['consignment']['enabled']) && !empty($config['consignment']['print_enabled']);
     }
 }

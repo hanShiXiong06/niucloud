@@ -99,7 +99,11 @@
           :batch-recycle-device="batchRecycleDevice"
           :batch-return-device="batchReturnDevice"
           :batch-recycle-devices="batchRecycleDevices"
-          :print-device-label="printDeviceLabel"
+          :manual-print-actions="manualPrintActions"
+          :get-visible-device-print-actions="getVisibleDevicePrintActions"
+          :print-device-by-scene="printDeviceByScene"
+          :transfer-consignment="openTransferConsignmentDialog"
+          :view-consignment="viewConsignmentOrder"
           :view-detail="viewDetail"
           :handle-action="handleAction"
           :handle-express-hover="handleExpressHover"
@@ -136,7 +140,11 @@
           :batch-recycle-device="batchRecycleDevice"
           :batch-return-device="batchReturnDevice"
           :batch-recycle-devices="batchRecycleDevices"
-          :print-device-label="printDeviceLabel"
+          :manual-print-actions="manualPrintActions"
+          :get-visible-device-print-actions="getVisibleDevicePrintActions"
+          :print-device-by-scene="printDeviceByScene"
+          :transfer-consignment="openTransferConsignmentDialog"
+          :view-consignment="viewConsignmentOrder"
           :view-detail="viewDetail"
           :handle-action="handleAction"
           :handle-express-hover="handleExpressHover"
@@ -220,6 +228,35 @@
       :order-id="noticeLogOrderId"
       :is-mobile="isMobile"
     />
+
+    <el-dialog v-model="consignmentDialog.visible" title="设备转入代卖" width="460px" destroy-on-close>
+      <div v-if="consignmentDialog.device" class="mb-4 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+        <div class="font-medium">{{ consignmentDialog.device.model || '未知型号' }}</div>
+        <div>串号：{{ consignmentDialog.device.imei || consignmentDialog.device.user_sn || '-' }}</div>
+        <div>原回收报价：{{ formatPrice(consignmentDialog.device.final_price || consignmentDialog.device.initial_price || 0) }}</div>
+      </div>
+      <el-form :model="consignmentForm" label-width="110px">
+        <el-form-item label="客户期望价">
+          <el-input-number v-model="consignmentForm.expected_price" :min="0" :precision="2" class="!w-full" />
+        </el-form-item>
+        <el-form-item label="最低结算价">
+          <el-input-number v-model="consignmentForm.min_settlement_price" :min="0" :precision="2" class="!w-full" />
+        </el-form-item>
+        <el-form-item label="挂牌价">
+          <el-input-number v-model="consignmentForm.listing_price" :min="0" :precision="2" class="!w-full" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="consignmentForm.remark" type="textarea" rows="3" placeholder="例如：客户不接受回收报价，要求代卖" />
+        </el-form-item>
+      </el-form>
+      <div class="rounded bg-amber-50 px-3 py-2 text-xs text-amber-700">
+        确认后，该设备会在原回收订单中变为“已转代卖”，同时生成独立代卖订单。后续售出和结算在代卖订单中处理。
+      </div>
+      <template #footer>
+        <el-button @click="consignmentDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="consignmentDialog.loading" @click="submitTransferConsignment">确认转代卖</el-button>
+      </template>
+    </el-dialog>
     <!-- 支付方式 -->
     <PaymentMethodDialog
       v-model:visible="paymentDialogVisible"
@@ -292,7 +329,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch } from "vue";
+import { ref, onMounted, onBeforeUnmount, computed,reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   ElMessage,
@@ -318,6 +355,7 @@ import {
   paymentConfirm,
   devicePaymentConfirm,
 } from "@/addon/hsx_recycle/api/recycle_order";
+import { transferDeviceToConsignment } from "@/addon/hsx_recycle/api/consignment_order";
 import { getExpress } from "@/addon/hsx_recycle/api/device_query_api";
 import { generateOrderShortLink } from "@/addon/hsx_recycle/api/shortlink";
 import { useClipboard } from "@vueuse/core";
@@ -325,6 +363,9 @@ import { useClipboard } from "@vueuse/core";
 // 导入打印API
 import {
   getDeviceLabelPrintPlan,
+  getPrintSceneManualActions,
+  getPrintScenePlan,
+  printByScene,
   printDeviceLabel as submitDeviceLabelPrint,
 } from "@/addon/hsx_recycle/api/printer";
 
@@ -487,6 +528,17 @@ const mobileSearchVisible = ref(false);
 const mobileExpandedOrders = ref<Array<number | string>>([]);
 const noticeLogVisible = ref(false);
 const noticeLogOrderId = ref<number | string>(0);
+const consignmentDialog = reactive({
+  visible: false,
+  loading: false,
+  device: null as any,
+});
+const consignmentForm = reactive({
+  expected_price: 0,
+  min_settlement_price: 0,
+  listing_price: 0,
+  remark: "",
+});
 
 const getRouteQueryString = (key: string) => {
   const value = route.query[key];
@@ -525,6 +577,26 @@ const dashboardQueryKeys = [
   "dashboard_title",
   "t",
 ];
+
+const applyRouteSearchParams = () => {
+  const orderId = getRouteQueryString("order_id");
+  const orderNo = getRouteQueryString("order_no");
+  const deviceImei = getRouteQueryString("device_imei") || getRouteQueryString("imei");
+  const keyword = getRouteQueryString("keyword");
+
+  if (orderId) {
+    advancedSearchForm.order_id = orderId;
+  }
+  if (orderNo) {
+    advancedSearchForm.order_no = orderNo;
+  }
+  if (deviceImei) {
+    advancedSearchForm.device_imei = deviceImei;
+  }
+  if (keyword && !orderId && !orderNo && !deviceImei) {
+    advancedSearchForm.order_no = keyword;
+  }
+};
 
 const clearDashboardQuery = async () => {
   const nextQuery = { ...route.query };
@@ -619,6 +691,30 @@ const loadStatusList = async () => {
   }
 };
 
+const manualPrintActions = ref<any[]>([]);
+
+const loadManualPrintActions = async () => {
+  try {
+    const res = await getPrintSceneManualActions({ biz_type: "device" });
+    manualPrintActions.value = res.code === 1 && Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.error("获取手动打印动作失败:", error);
+    manualPrintActions.value = [];
+  }
+};
+
+const getVisibleDevicePrintActions = (device: any) => {
+  return manualPrintActions.value.filter((action: any) => {
+    if ((action.button_position || "device_actions") !== "device_actions") {
+      return false;
+    }
+    const visibleStatuses = Array.isArray(action.visible_device_status)
+      ? action.visible_device_status.map((item: any) => Number(item))
+      : [];
+    return !visibleStatuses.length || visibleStatuses.includes(Number(device.status));
+  });
+};
+
 const updateResponsiveState = () => {
   isMobile.value = window.innerWidth <= 768;
   if (!isMobile.value) {
@@ -690,6 +786,46 @@ const deviceLogVisible = ref(false);
 const viewNoticeLogs = (row: any) => {
   noticeLogOrderId.value = row.id;
   noticeLogVisible.value = true;
+};
+
+const openTransferConsignmentDialog = (device: any) => {
+  consignmentDialog.device = device;
+  consignmentForm.expected_price = Number(device.final_price || device.initial_price || 0);
+  consignmentForm.min_settlement_price = Number(device.final_price || device.initial_price || 0);
+  consignmentForm.listing_price = Number(device.sell_price || device.final_price || device.initial_price || 0);
+  consignmentForm.remark = "";
+  consignmentDialog.visible = true;
+};
+
+const submitTransferConsignment = async () => {
+  if (!consignmentDialog.device?.id) return;
+  consignmentDialog.loading = true;
+  try {
+    const res: any = await transferDeviceToConsignment(consignmentDialog.device.id, {
+      expected_price: consignmentForm.expected_price,
+      min_settlement_price: consignmentForm.min_settlement_price,
+      listing_price: consignmentForm.listing_price,
+      remark: consignmentForm.remark,
+    });
+    if (res.code !== 1) {
+      ElMessage.error(res.msg || "转入代卖失败");
+      return;
+    }
+    ElMessage.success("已转入代卖订单");
+    consignmentDialog.visible = false;
+    await getList();
+  } finally {
+    consignmentDialog.loading = false;
+  }
+};
+
+const viewConsignmentOrder = (device: any) => {
+  const consignmentId = device.consignment_order_id || device.consignmentOrder?.id;
+  if (!consignmentId) {
+    ElMessage.warning("该设备还没有关联代卖订单");
+    return;
+  }
+  router.push({ path: "/site/consignment_order/list", query: { keyword: device.consignmentOrder?.consignment_no || "", source_order_id: device.order_id || "", t: Date.now() } });
 };
 
 // viewDetail
@@ -767,8 +903,10 @@ onMounted(async () => {
   updateResponsiveState();
   window.addEventListener("resize", updateResponsiveState);
   await loadStatusList();
+  await loadManualPrintActions();
+  applyRouteSearchParams();
   // 使用保存的页码获取数据
-  await getList(pagination.value.page);
+  await getList(getRouteQueryString("order_id") || getRouteQueryString("order_no") || getRouteQueryString("device_imei") || getRouteQueryString("imei") || getRouteQueryString("keyword") ? 1 : pagination.value.page);
   // 处理设备深链接（扫码跳转）
   await handleDeviceDeepLink();
 });
@@ -776,6 +914,10 @@ onMounted(async () => {
 watch(
   () => route.fullPath,
   async () => {
+    resetQuickSearchForm();
+    resetAdvancedSearchForm();
+    activeTab.value = "";
+    applyRouteSearchParams();
     await getList(1);
   }
 );
@@ -875,50 +1017,77 @@ const handleDeviceConfirm = async (data: {
   }
 };
 
-// 打印设备标签
-const printDeviceLabel = async (device: any) => {
+const escapePrintHtml = (value: any) =>
+  String(value).replace(/[&<>"']/g, (char) => {
+    const map: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return map[char] || char;
+  });
+
+const safePrintText = (value: any, fallback = "未填写") =>
+  escapePrintHtml(value === undefined || value === null || value === "" ? fallback : value);
+
+const buildPrintConfirmHtml = (plan: any) => `
+  <div class="device-print-plan">
+    <div class="device-print-plan__title">请确认本次打印内容</div>
+    <div class="device-print-plan__grid">
+      <span>打印场景</span><strong>${safePrintText(plan.scene?.scene_name)}</strong>
+      <span>设备型号</span><strong>${safePrintText(plan.device?.model)}</strong>
+      <span>设备串号</span><strong>${safePrintText(plan.device?.imei || plan.device?.sn)}</strong>
+      <span>订单编号</span><strong>${safePrintText(plan.device?.order_no)}</strong>
+      <span>打印模板</span><strong>${safePrintText(plan.template?.template_name)}</strong>
+      <span>目标打印机</span><strong>${safePrintText(plan.printer?.printer_name)}</strong>
+      <span>打印份数</span><strong>${safePrintText(plan.copies, "1")} 份</strong>
+    </div>
+    <div class="device-print-plan__hint">确认后会立即发送到打印机。若模板或打印机不对，请先到打印模板中调整绑定关系。</div>
+  </div>
+`;
+
+const showSimulatedPrintPreview = (res: any) => {
+  if (!res.data?.simulated) return;
+  const printPreviewContent =
+    typeof res.data.content === "string"
+      ? res.data.content
+      : JSON.stringify(res.data.content || {}, null, 2);
+
+  ElNotification({
+    title: "模拟打印",
+    message: "已生成打印内容，但未连接实际打印机",
+    type: "warning",
+    duration: 5000,
+  });
+  ElMessageBox.alert(printPreviewContent || "暂无打印内容", "打印内容预览", {
+    confirmButtonText: "关闭",
+    callback: () => {},
+  });
+};
+
+// 按配置的打印场景执行设备打印
+const printDeviceByScene = async (device: any, action: any = null) => {
   let loading: ReturnType<typeof ElLoading.service> | null = null;
+  const sceneKey = action?.scene_key || "manual_device_label";
+  const confirmRequired = Number(action?.confirm_required ?? 1) === 1;
   try {
-    const planRes = await getDeviceLabelPrintPlan(device.id);
+    const planRes = action?.scene_key
+      ? await getPrintScenePlan(sceneKey, { device_id: device.id })
+      : await getDeviceLabelPrintPlan(device.id);
     if (planRes.code !== 1 || !planRes.data?.can_print) {
       throw new Error(planRes.msg || planRes.data?.message || "打印计划不可用");
     }
 
     const plan = planRes.data;
-    const escapeHtml = (value: any) =>
-      String(value).replace(/[&<>"']/g, (char) => {
-        const map: Record<string, string> = {
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        };
-        return map[char] || char;
+    if (confirmRequired) {
+      await ElMessageBox.confirm(buildPrintConfirmHtml(plan), action?.button_text || plan.scene?.button_text || "打印", {
+        dangerouslyUseHTMLString: true,
+        confirmButtonText: "确认打印",
+        cancelButtonText: "取消",
       });
-    const safeText = (value: any, fallback = "未填写") =>
-      escapeHtml(value === undefined || value === null || value === "" ? fallback : value);
-    const confirmHtml = `
-      <div class="device-print-plan">
-        <div class="device-print-plan__title">请确认本次打印内容</div>
-        <div class="device-print-plan__grid">
-          <span>打印场景</span><strong>${safeText(plan.scene?.scene_name)}</strong>
-          <span>设备型号</span><strong>${safeText(plan.device?.model)}</strong>
-          <span>设备串号</span><strong>${safeText(plan.device?.imei || plan.device?.sn)}</strong>
-          <span>订单编号</span><strong>${safeText(plan.device?.order_no)}</strong>
-          <span>打印模板</span><strong>${safeText(plan.template?.template_name)}</strong>
-          <span>目标打印机</span><strong>${safeText(plan.printer?.printer_name)}</strong>
-          <span>打印份数</span><strong>${safeText(plan.copies, "1")} 份</strong>
-        </div>
-        <div class="device-print-plan__hint">确认后会立即发送到打印机。若模板或打印机不对，请先到打印模板中调整绑定关系。</div>
-      </div>
-    `;
-
-    await ElMessageBox.confirm(confirmHtml, "打印设备标签", {
-      dangerouslyUseHTMLString: true,
-      confirmButtonText: "确认打印",
-      cancelButtonText: "取消",
-    });
+    }
 
     loading = ElLoading.service({
       lock: true,
@@ -926,32 +1095,12 @@ const printDeviceLabel = async (device: any) => {
       background: "rgba(0, 0, 0, 0.7)",
     });
 
-    const res = await submitDeviceLabelPrint(device.id);
+    const res = action?.scene_key
+      ? await printByScene(sceneKey, { device_id: device.id })
+      : await submitDeviceLabelPrint(device.id);
 
     if (res.code === 1) {
-      // 检查是否是模拟打印
-      if (res.data && res.data.simulated) {
-        const printPreviewContent =
-          typeof res.data.content === "string"
-            ? res.data.content
-            : JSON.stringify(res.data.content || {}, null, 2);
-
-        ElNotification({
-          title: "模拟打印",
-          message: "已生成打印内容，但未连接实际打印机",
-          type: "warning",
-          duration: 5000,
-        });
-        // 弹出打印内容预览窗口（纯文本，避免 HTML 注入）
-        ElMessageBox.alert(
-          printPreviewContent || "暂无打印内容",
-          "打印内容预览",
-          {
-            confirmButtonText: "关闭",
-            callback: () => {},
-          }
-        );
-      }
+      showSimulatedPrintPreview(res);
     } else {
       console.error("打印失败:", res);
     }
@@ -962,6 +1111,8 @@ const printDeviceLabel = async (device: any) => {
     loading?.close();
   }
 };
+
+const printDeviceLabel = (device: any) => printDeviceByScene(device);
 
 // 查询快递的物流信息
 const queryExpress = async (express_code: string, mobile: string) => {

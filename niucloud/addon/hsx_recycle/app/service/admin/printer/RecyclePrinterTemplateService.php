@@ -11,6 +11,9 @@ use addon\hsx_recycle\app\service\admin\printer\template\TemplateRenderService;
 use addon\hsx_recycle\app\service\admin\printer\template\TemplateValidatorService;
 use addon\hsx_recycle\app\service\admin\printer\template\VariableReplaceService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
+use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
+use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 use core\exception\CommonException;
@@ -1040,6 +1043,244 @@ class RecyclePrinterTemplateService extends BaseAdminService
 
             // 其他常用字段
             'site_name' => '回收中心'
+        ];
+    }
+
+    public function getOrderPrintData(int $orderId): array
+    {
+        $order = (new \addon\hsx_recycle\app\model\order\RecycleOrder())->where([
+            ['id', '=', $orderId],
+            ['site_id', '=', $this->site_id],
+        ])->findOrEmpty()->toArray();
+
+        if (empty($order)) {
+            throw new AdminException('订单不存在');
+        }
+
+        $devices = (new \addon\hsx_recycle\app\model\order\RecycleDevice())->where([
+            ['order_id', '=', $orderId],
+            ['site_id', '=', $this->site_id],
+        ])->order('id asc')->select()->toArray();
+
+        $firstDevice = $devices[0] ?? [];
+        $deviceSummary = [];
+        foreach ($devices as $device) {
+            $parts = array_filter([
+                $device['model'] ?? '',
+                $device['imei'] ?? '',
+                !empty($device['final_price']) ? number_format((float)$device['final_price'], 2) : '',
+            ]);
+            if (!empty($parts)) {
+                $deviceSummary[] = implode(' / ', $parts);
+            }
+        }
+
+        $statusInfo = RecycleOrderDict::getOrderStatus((int)($order['status'] ?? 0));
+
+        return [
+            'biz_type' => 'order',
+            'biz_id' => (string)$orderId,
+            'order_id' => (string)$orderId,
+            'order_no' => $order['order_no'] ?? '',
+            'origin_order_no' => $order['order_no'] ?? '',
+            'customer_name' => $order['customer_name'] ?? '',
+            'customer_phone' => $order['customer_phone'] ?? '',
+            'member_id' => (string)($order['member_id'] ?? 0),
+            'pay_type' => $order['pay_type'] ?? '',
+            'pay_account' => $order['pay_account'] ?? '',
+            'pay_name' => $order['pay_name'] ?? '',
+            'total_amount' => number_format((float)($order['total_amount'] ?? 0), 2),
+            'expected_price' => number_format((float)($order['expected_price'] ?? 0), 2),
+            'device_count' => (string)($order['device_count'] ?? count($devices)),
+            'count' => (string)($order['count'] ?? count($devices)),
+            'order_status' => (string)($order['status'] ?? 0),
+            'order_status_name' => $statusInfo['name'] ?? '',
+            'delivery_type' => ($order['delivery_type'] ?? '') == '1' ? '快递' : '自送',
+            'express_company' => $order['express_company'] ?? '',
+            'express_no' => $order['express_no'] ?? '',
+            'delivery_fee' => number_format((float)($order['delivery_fee'] ?? 0), 2),
+            'remark' => $order['remark'] ?? '',
+            'device_summary' => implode("\n", $deviceSummary),
+            'first_device_imei' => $firstDevice['imei'] ?? '',
+            'first_device_model' => $firstDevice['model'] ?? '',
+            'create_time' => $this->formatSafeTime($order['create_at'] ?? 0),
+            'update_time' => $this->formatSafeTime($order['update_at'] ?? 0),
+            'sign_time' => $this->formatSafeTime($order['sign_at'] ?? 0),
+            'complete_time' => $this->formatSafeTime($order['complete_at'] ?? 0),
+            'pay_time' => $this->formatSafeTime($order['pay_time'] ?? 0),
+            'current_time' => date('Y-m-d H:i:s'),
+            'current_date' => date('Y-m-d'),
+            'qrcode_content' => $order['order_no'] ?? (string)$orderId,
+            'barcode_content' => $order['order_no'] ?? (string)$orderId,
+            'site_name' => '回收中心',
+        ];
+    }
+
+    public function getReturnPrintData(int $returnOrderId): array
+    {
+        $returnOrder = (new \addon\hsx_recycle\app\model\order\RecycleReturnOrder())->where([
+            ['id', '=', $returnOrderId],
+            ['site_id', '=', $this->site_id],
+        ])->findOrEmpty()->toArray();
+
+        if (empty($returnOrder)) {
+            throw new AdminException('退货单不存在');
+        }
+
+        $originOrder = [];
+        if (!empty($returnOrder['order_id'])) {
+            $originOrder = (new \addon\hsx_recycle\app\model\order\RecycleOrder())->where([
+                ['id', '=', (int)$returnOrder['order_id']],
+                ['site_id', '=', $this->site_id],
+            ])->findOrEmpty()->toArray();
+        }
+
+        $returnDevices = (new \addon\hsx_recycle\app\model\order\RecycleReturnDevice())->where([
+            ['return_order_id', '=', $returnOrderId],
+        ])->select()->toArray();
+        $deviceIds = array_values(array_filter(array_map(static fn($item) => (int)($item['device_id'] ?? 0), $returnDevices)));
+        $devices = [];
+        if (!empty($deviceIds)) {
+            $devices = (new \addon\hsx_recycle\app\model\order\RecycleDevice())->where([
+                ['site_id', '=', $this->site_id],
+            ])->whereIn('id', $deviceIds)->order('id asc')->select()->toArray();
+        }
+
+        $deviceSummary = [];
+        foreach ($devices as $device) {
+            $parts = array_filter([
+                $device['model'] ?? '',
+                $device['imei'] ?? '',
+                !empty($device['final_price']) ? number_format((float)$device['final_price'], 2) : '',
+            ]);
+            if (!empty($parts)) {
+                $deviceSummary[] = implode(' / ', $parts);
+            }
+        }
+        $firstDevice = $devices[0] ?? [];
+        $statusInfo = RecycleReturnOrderDict::getOrderStatus((int)($returnOrder['status'] ?? 0));
+
+        return [
+            'biz_type' => 'return',
+            'biz_id' => (string)$returnOrderId,
+            'return_order_id' => (string)$returnOrderId,
+            'return_order_no' => $returnOrder['order_no'] ?? '',
+            'order_id' => (string)($returnOrder['order_id'] ?? 0),
+            'origin_order_no' => $originOrder['order_no'] ?? '',
+            'order_no' => $returnOrder['order_no'] ?? '',
+            'express_company' => $returnOrder['express_company'] ?? '',
+            'express_no' => $returnOrder['express_no'] ?? '',
+            'return_address' => $returnOrder['return_address'] ?? '',
+            'comment' => $returnOrder['comment'] ?? '',
+            'remark' => $returnOrder['remark'] ?? '',
+            'operator_name' => $returnOrder['operator_name'] ?? '',
+            'member_id' => (string)($returnOrder['member_id'] ?? 0),
+            'member_name' => $returnOrder['member_name'] ?? ($originOrder['customer_name'] ?? ''),
+            'member_mobile' => $returnOrder['member_mobile'] ?? ($originOrder['customer_phone'] ?? ''),
+            'status' => (string)($returnOrder['status'] ?? 0),
+            'status_name' => $statusInfo['name'] ?? '',
+            'return_status_name' => $statusInfo['name'] ?? '',
+            'device_count' => (string)count($devices),
+            'device_summary' => implode("\n", $deviceSummary),
+            'first_device_imei' => $firstDevice['imei'] ?? '',
+            'first_device_model' => $firstDevice['model'] ?? '',
+            'first_device_sn' => $firstDevice['sn'] ?? '',
+            'create_time' => $this->formatSafeTime($returnOrder['create_at'] ?? 0),
+            'update_time' => $this->formatSafeTime($returnOrder['update_at'] ?? 0),
+            'over_time' => $returnOrder['over_at'] ?? '',
+            'current_time' => date('Y-m-d H:i:s'),
+            'current_date' => date('Y-m-d'),
+            'qrcode_content' => $returnOrder['express_no'] ?: ($returnOrder['order_no'] ?? (string)$returnOrderId),
+            'barcode_content' => $returnOrder['express_no'] ?: ($returnOrder['order_no'] ?? (string)$returnOrderId),
+            'site_name' => '回收中心',
+        ];
+    }
+
+    public function getConsignmentPrintData(int $consignmentId): array
+    {
+        $consignment = (new \addon\hsx_recycle\app\model\order\RecycleConsignmentOrder())->where([
+            ['id', '=', $consignmentId],
+            ['site_id', '=', $this->site_id],
+        ])->findOrEmpty()->toArray();
+
+        if (empty($consignment)) {
+            throw new AdminException('代卖订单不存在');
+        }
+
+        $sourceOrder = [];
+        if (!empty($consignment['source_order_id'])) {
+            $sourceOrder = (new \addon\hsx_recycle\app\model\order\RecycleOrder())->where([
+                ['id', '=', (int)$consignment['source_order_id']],
+                ['site_id', '=', $this->site_id],
+            ])->findOrEmpty()->toArray();
+        }
+
+        $sourceDevice = [];
+        if (!empty($consignment['source_device_id'])) {
+            $sourceDevice = (new \addon\hsx_recycle\app\model\order\RecycleDevice())->where([
+                ['id', '=', (int)$consignment['source_device_id']],
+                ['site_id', '=', $this->site_id],
+            ])->findOrEmpty()->toArray();
+        }
+
+        $statusName = RecycleConsignmentDict::getStatus((int)($consignment['status'] ?? 0));
+        $payStatusName = RecycleConsignmentDict::getPayStatus((int)($consignment['pay_status'] ?? 0));
+        $deviceInfo = $this->normalizeDeviceInfo($sourceDevice['info'] ?? []);
+        $deviceName = (string)$this->firstNotBlank(
+            $consignment['device_model'] ?? null,
+            $sourceDevice['model'] ?? null,
+            $sourceDevice['imei'] ?? null,
+            $consignment['device_imei'] ?? null
+        );
+
+        return [
+            'biz_type' => 'consignment',
+            'biz_id' => (string)$consignmentId,
+            'consignment_id' => (string)$consignmentId,
+            'consignment_no' => $consignment['consignment_no'] ?? '',
+            'source_order_id' => (string)($consignment['source_order_id'] ?? 0),
+            'source_order_no' => $consignment['source_order_no'] ?? ($sourceOrder['order_no'] ?? ''),
+            'source_device_id' => (string)($consignment['source_device_id'] ?? 0),
+            'order_id' => (string)($consignment['source_order_id'] ?? 0),
+            'order_no' => $consignment['source_order_no'] ?? ($sourceOrder['order_no'] ?? ''),
+            'device_id' => (string)($consignment['source_device_id'] ?? 0),
+            'device_imei' => $consignment['device_imei'] ?? ($sourceDevice['imei'] ?? ''),
+            'imei' => $consignment['device_imei'] ?? ($sourceDevice['imei'] ?? ''),
+            'imei2' => $sourceDevice['imei2'] ?? '',
+            'device_sn' => $sourceDevice['sn'] ?? '',
+            'sn' => $sourceDevice['sn'] ?? '',
+            'device_model' => $deviceName,
+            'model' => $deviceName,
+            'capacity' => $sourceDevice['capacity'] ?? ($deviceInfo['capacity'] ?? ''),
+            'color' => $sourceDevice['color'] ?? ($deviceInfo['color'] ?? ''),
+            'customer_name' => $consignment['customer_name'] ?? ($sourceOrder['customer_name'] ?? ''),
+            'customer_phone' => $consignment['customer_phone'] ?? ($sourceOrder['customer_phone'] ?? ''),
+            'member_id' => (string)($consignment['member_id'] ?? 0),
+            'status' => (string)($consignment['status'] ?? 0),
+            'status_name' => $statusName,
+            'consignment_status_name' => $statusName,
+            'pay_status' => (string)($consignment['pay_status'] ?? 0),
+            'pay_status_name' => $payStatusName,
+            'quote_price' => number_format((float)($consignment['quote_price'] ?? 0), 2),
+            'expected_price' => number_format((float)($consignment['expected_price'] ?? 0), 2),
+            'min_settlement_price' => number_format((float)($consignment['min_settlement_price'] ?? 0), 2),
+            'listing_price' => number_format((float)($consignment['listing_price'] ?? 0), 2),
+            'sold_price' => number_format((float)($consignment['sold_price'] ?? 0), 2),
+            'settlement_amount' => number_format((float)($consignment['settlement_amount'] ?? 0), 2),
+            'service_fee' => number_format((float)($consignment['service_fee'] ?? 0), 2),
+            'remark' => $consignment['remark'] ?? '',
+            'listed_time' => $this->formatSafeTime($consignment['listed_time'] ?? 0),
+            'sold_time' => $this->formatSafeTime($consignment['sold_time'] ?? 0),
+            'settle_time' => $this->formatSafeTime($consignment['settle_time'] ?? 0),
+            'pay_time' => $this->formatSafeTime($consignment['pay_time'] ?? 0),
+            'cancel_time' => $this->formatSafeTime($consignment['cancel_time'] ?? 0),
+            'create_time' => $this->formatSafeTime($consignment['create_time'] ?? 0),
+            'update_time' => $this->formatSafeTime($consignment['update_time'] ?? 0),
+            'current_time' => date('Y-m-d H:i:s'),
+            'current_date' => date('Y-m-d'),
+            'qrcode_content' => $consignment['consignment_no'] ?? (string)$consignmentId,
+            'barcode_content' => $consignment['consignment_no'] ?? (string)$consignmentId,
+            'site_name' => '回收中心',
         ];
     }
 

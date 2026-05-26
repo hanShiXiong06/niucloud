@@ -181,6 +181,11 @@
                   {{ device.pay_status_name || (Number(device.pay_status || 0) === 1 ? '已打款' : '未打款') }}
                 </el-tag>
               </div>
+              <div v-if="device.consignment_order_id || device.consignmentOrder" class="mt-2">
+                <el-button link type="primary" size="small" @click="props.viewConsignment(device)">
+                  {{ device.consignmentOrder?.consignment_no || '查看代卖单' }}
+                </el-button>
+              </div>
 
               <div v-if="row.status == 4" class="mt-2 border-t border-dashed border-gray-200 pt-2">
                 <el-checkbox
@@ -247,13 +252,23 @@
                   拒绝
                 </el-button>
                 <el-button
-                  v-if="device.status >= 3"
+                  v-if="canTransferConsignment(device)"
+                  type="info"
+                  size="small"
+                  :icon="Switch"
+                  @click="props.transferConsignment(device)"
+                >
+                  转代卖
+                </el-button>
+                <el-button
+                  v-for="action in props.getVisibleDevicePrintActions(device)"
+                  :key="action.scene_key"
                   type="info"
                   size="small"
                   :icon="Printer"
-                  @click="props.printDeviceLabel(device)"
+                  @click="props.printDeviceByScene(device, action)"
                 >
-                  打印设备标签
+                  {{ action.button_text || action.scene_name || '打印' }}
                 </el-button>
                 <el-button
                   type="primary"
@@ -291,6 +306,7 @@ import {
   Close,
   Printer,
   View,
+  Switch,
   User,
   Loading,
   Share,
@@ -326,7 +342,11 @@ interface Props {
   batchRecycleDevice: (id: number | string) => void;
   batchReturnDevice: (id: number | string) => void;
   batchRecycleDevices: (orderId: number | string) => void;
-  printDeviceLabel: (device: any) => void;
+  manualPrintActions: any[];
+  getVisibleDevicePrintActions: (device: any) => any[];
+  printDeviceByScene: (device: any, action: any) => void;
+  transferConsignment: (device: any) => void;
+  viewConsignment: (device: any) => void;
   viewDetail: (device: any) => void;
   handleAction: (row: any, action: any) => void;
   handleExpressHover: (row: any) => void;
@@ -347,4 +367,8 @@ const getSubmittedDeviceCount = (row: any) => normalizeDeviceCount(row.count)
 const getSignedDeviceCount = (row: any) => props.getDeviceCount(row.devices)
 
 const isDeviceCountMatched = (row: any) => getSubmittedDeviceCount(row) === getSignedDeviceCount(row)
+
+const canTransferConsignment = (device: any) => {
+  return [3, 4, 7, 8].includes(Number(device.status)) && !device.consignment_order_id
+}
 </script>
