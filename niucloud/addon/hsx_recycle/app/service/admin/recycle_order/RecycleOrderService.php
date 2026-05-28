@@ -88,7 +88,7 @@ class RecycleOrderService extends BaseAdminService
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price')
+                    $query->field('id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price,return_order_id')
                         ->append(['status_name', 'category_name']);
                 },
                 'member' => function($query) {
@@ -958,14 +958,21 @@ class RecycleOrderService extends BaseAdminService
             $searchParams['search'] = $countWhere['search'];
         }
         
-        // 获取基础查询模型（不包含状态筛选）
-        $baseQuery = (new RecycleOrder())
-            ->withSearch([
-                'id', 'order_no', 'express_no', 'customer_name', 'customer_phone', 
-                'delivery_type', 'create_at', 'remark', 'imei', 
-                'device_model', 'search', 'keyword'
-            ], $searchParams)
-            ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]]);
+        $buildCountQuery = function (array $extraWhere = []) use ($searchParams) {
+            $query = (new RecycleOrder())
+                ->withSearch([
+                    'id', 'order_no', 'express_no', 'customer_name', 'customer_phone',
+                    'delivery_type', 'create_at', 'remark', 'imei',
+                    'device_model', 'search', 'keyword'
+                ], $searchParams)
+                ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]]);
+
+            foreach ($extraWhere as $condition) {
+                $query->where($condition[0], $condition[1], $condition[2]);
+            }
+
+            return $query;
+        };
         
         // 获取所有状态的定义
         $allStatuses = RecycleOrderDict::getOrderStatus();
@@ -976,11 +983,13 @@ class RecycleOrderService extends BaseAdminService
         ];
         
         // 计算总数
-        $statusCounts['all'] = (clone $baseQuery)->count();
+        $statusCounts['all'] = $buildCountQuery()->count();
         
         // 计算各个状态的数量
         foreach ($allStatuses as $statusKey => $statusInfo) {
-            $statusCounts[$statusKey] = (clone $baseQuery)->where('status', $statusKey)->count();
+            $statusCounts[$statusKey] = $buildCountQuery([
+                ['status', '=', $statusKey]
+            ])->count();
         }
         
         // 添加一些特殊的状态统计

@@ -717,7 +717,7 @@ class MenuService extends BaseAdminService
                 $addons[] = '';
 
                 //查询满足前置应用或插件的菜单
-                $support_addons = ( new AddonService() )->getAddonCache();
+                $support_addons = array_keys(( new AddonService() )->getAddonCache());
                 $support_addons = array_map(function($item) { return '%"' . $item . '"%'; }, $support_addons);
                 $support_addons[] = '';
                 $where[] = ['support_addon', 'like', $support_addons, 'or'];
@@ -849,7 +849,7 @@ class MenuService extends BaseAdminService
                 $where[] = ['addon', 'in', $addons];
 
                 //查询满足前置应用或插件的菜单
-                $support_addons = ( new AddonService() )->getAddonCache();
+                $support_addons = array_keys(( new AddonService() )->getAddonCache());
                 $support_addons = array_map(function($item) { return '%"' . $item . '"%'; }, $support_addons);
                 $support_addons[] = '';
                 $where[] = ['support_addon', 'like', $support_addons, 'or'];

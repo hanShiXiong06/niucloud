@@ -12,7 +12,7 @@
 			</view>
 			<scroll-view :scroll-x="true" class="tab-style-2">
 				<view class="tab-content">
-					<view class="tab-items mr-[40rpx]" :class="{ 'class-select': refundState === item.status.toString() }" @click="refundStateFn(item.status)" v-for="(item, index) in refundStateList">{{ item.name }}</view>
+					<view :class="getRefundTabClass(item.status)" @click="refundStateFn(item.status)" v-for="(item, index) in refundStateList">{{ item.name }}</view>
 				</view>
 			</scroll-view>
 		</view>
@@ -115,8 +115,10 @@ const refundState = ref('')
 const refundStateList = ref<any>([]);
 const keyword = ref('');
 
-
-
+const getRefundTabClass = (status: any) => {
+	const base = 'tab-items mr-[40rpx]'
+	return refundState.value === status.toString() ? `${ base } class-select` : base
+}
 
 onLoad((option: any) => {
 	refundState.value = option.status || '';

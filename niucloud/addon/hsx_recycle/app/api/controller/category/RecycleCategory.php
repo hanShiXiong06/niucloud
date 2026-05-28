@@ -22,7 +22,7 @@ use core\base\BaseAdminController;
  */
 class RecycleCategory extends BaseAdminController
 {
-   
+
      /**
      * 获取商品分类树结构
      * @return \think\Response
@@ -37,5 +37,14 @@ class RecycleCategory extends BaseAdminController
     public function hot(){
         return success(( new RecycleCategoryService() )->hot());
     }
-    
+
+    /**
+     * 报价单浏览埋点
+     */
+    public function recordView(int $id)
+    {
+        (new RecycleCategoryService())->recordView($id);
+        return success('ok');
+    }
+
 }

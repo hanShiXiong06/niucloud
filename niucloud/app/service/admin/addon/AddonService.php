@@ -244,6 +244,6 @@ class AddonService extends BaseAdminService
      * @return array
      */
     public function getAddonCache(){
-        return (new CoreAddonService())->getAddonCache();
+        return (new CoreAddonService())->getInstallAddonList();
     }
 }

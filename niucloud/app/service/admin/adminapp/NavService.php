@@ -31,24 +31,24 @@ class NavService extends BaseAdminService
     public function getNavList(array $param = []){
         $list = [
             [
-                'iconPath' => 'addon/mall/site/tabbar/home.png',
-                'iconSelectPath' => 'addon/mall/site/tabbar/home-selected.png',
+                'iconPath' => 'static/resource/images/tabbar/index.png',
+                'iconSelectPath' => 'static/resource/images/tabbar/index-selected.png',
                 'text' => '工作台',
                 'link' => [
                     'url' => '/app/pages/index/index',
                 ]
             ],
             [
-                'iconPath' => 'addon/mall/site/tabbar/menu.png',
-                'iconSelectPath' => 'addon/mall/site/tabbar/menu-selected.png',
+                'iconPath' => 'static/resource/images/tabbar/index.png',
+                'iconSelectPath' => 'static/resource/images/tabbar/index-selected.png',
                 'text' => '应用',
                 'link' => [
                     'url' => '/app/pages/index/menu',
                 ]
             ],
             [
-                'iconPath' => 'addon/mall/site/tabbar/my.png',
-                'iconSelectPath' => 'addon/mall/site/tabbar/my-selected.png',
+                'iconPath' => 'static/resource/images/tabbar/my.png',
+                'iconSelectPath' => 'static/resource/images/tabbar/my-selected.png',
                 'text' => '我的',
                 'link' => [
                     'url' => '/app/pages/site/index',

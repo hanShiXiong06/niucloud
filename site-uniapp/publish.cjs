@@ -15,6 +15,7 @@ const main = () => {
             if (mode == 'build') {
                 handleWeappAddonComponents(mode)
                 handleWeappLanguage(mode)
+                handleWeappWxmlEscapes(mode)
             } else if (mode == 'dev') {
                 listenWeappRunDev()
             }
@@ -97,6 +98,50 @@ const handleWeappLanguage = (mode) => {
     }
 }
 
+const handleWeappWxmlEscapes = (mode) => {
+    const root = `./dist/${mode}/mp-weixin`
+
+    const normalizeExpressionQuotes = (content) => {
+        return content.replace(/\{\{([\s\S]*?)\}\}/g, (match, expression) => {
+            let nextExpression = expression
+            nextExpression = nextExpression.replace(/\\'([^'\n]*)\\'/g, (_, text) => `'${text}'`)
+            nextExpression = nextExpression.replace(/\\"([^"\n]*)\\"/g, (_, text) => `'${text.replace(/'/g, "\\'")}'`)
+            nextExpression = nextExpression.replace(/"([^"\n]*)"/g, (_, text) => `'${text.replace(/'/g, "\\'")}'`)
+            return `{{${nextExpression}}}`
+        })
+    }
+
+    const walk = (dir) => {
+        let files = []
+        try {
+            files = fs.readdirSync(dir, { withFileTypes: true })
+        } catch (err) {
+            return
+        }
+
+        files.forEach(file => {
+            const filePath = path.join(dir, file.name)
+            if (file.isDirectory()) {
+                walk(filePath)
+                return
+            }
+
+            if (!file.name.endsWith('.wxml')) return
+
+            try {
+                const content = fs.readFileSync(filePath, 'utf8')
+                const nextContent = normalizeExpressionQuotes(content)
+                if (nextContent !== content) {
+                    fs.writeFileSync(filePath, nextContent, 'utf8')
+                }
+            } catch (err) {
+            }
+        })
+    }
+
+    walk(root)
+}
+
 const listenWeappRunDev = () => {
     const devProcess = spawn('npm', ['run', 'dev:niu-mp-weixin'], {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -109,10 +154,11 @@ const listenWeappRunDev = () => {
     devProcess.stdout.on('data', (data) => {
         const message = data.toString();
         console.log(message)
-        if (!serverReady && message.includes('DONE  Build complete')) {
+        if (message.includes('DONE  Build complete')) {
             serverReady = true;
             handleWeappAddonComponents('dev')
             handleWeappLanguage('dev')
+            handleWeappWxmlEscapes('dev')
         }
     });
 

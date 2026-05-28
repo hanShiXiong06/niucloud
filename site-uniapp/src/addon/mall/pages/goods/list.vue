@@ -10,7 +10,7 @@
                 <view class="flex items-center">
                     <view class="text-[#666]" @click="selectData.isShow = !selectData.isShow">
                         <text class="nc-iconfont nc-icon-fuzhiV6xx1 text-[24rpx]" v-if="!selectData.isShow"></text>
-                        <text class="text-[24rpx]" :class="{'text-primary': selectData.isShow}">{{ selectData.isShow ? '取消批量' : '批量' }}</text>
+                        <text :class="getBatchTextClass()">{{ selectData.isShow ? '取消批量' : '批量' }}</text>
                     </view>
                     <view class="ml-[20rpx] text-[#666]" @click="handleScreen">
                         <text class="nc-iconfont nc-icon-shaixuanV6xx1 text-[24rpx]"></text>
@@ -21,7 +21,7 @@
             <view>
                 <scroll-view :scroll-x="true" class="tab-style-2">
                     <view class="tab-content">
-                        <view class="tab-items mr-[40rpx]" :class="{ 'class-select': searchParam.status === item.value }" @click="handleStatus(item.value)" v-for="(item, key) in goodsStatus" :key="key">{{ item.label }}</view>
+                        <view :class="getStatusTabClass(item.value)" @click="handleStatus(item.value)" v-for="(item, key) in goodsStatus" :key="key">{{ item.label }}</view>
                     </view>
                 </scroll-view>
             </view>
@@ -53,7 +53,7 @@
                         </view>
                         <view class="text-[28rpx] mb-[30rpx]">商品类型</view>
                         <view class="flex flex-wrap">
-                            <text @click="changeGoodsType(item.type)" v-for="(item, index) in goodsType" :key="index" :class="{ 'label-select': searchParam.goods_type == item.type}" class="truncate text-[#333] px-[10rpx] border-[2rpx] border-solid border-transparent w-[120rpx] h-[56rpx] flex items-center justify-center mr-[30rpx] mb-[30rpx] box-border bg-[var(--temp-bg)] rounded-[8rpx] text-[22rpx]">
+                            <text @click="changeGoodsType(item.type)" v-for="(item, index) in goodsType" :key="index" :class="getGoodsTypeClass(item.type)">
                                 {{ item.name }}
                             </text>
                         </view>
@@ -68,7 +68,7 @@
         <mescroll-body ref="mescrollRef" top="176rpx" bottom="50px" @init="mescrollInit" :down="{ use: false }"  @up="getAllAppListFn">
             <view class="sidebar-margin pt-[var(--top-m)]" v-if="goodsList.length">
                 <view v-for="(item, index) in goodsList" :key="index" class="flex">
-                    <text v-if="selectData.isShow" class="self-center iconfont text-color text-[34rpx] mr-[32rpx] w-[34rpx] h-[34rpx] rounded-[17rpx] overflow-hidden flex-shrink-0 box-border" :class="{ 'iconxuanze1 text-primary': item.checked,'bg-[#fff] border-solid border-[2rpx] border-[#ccc]':!item.checked}" @click.stop="handleSelectItem(item)"></text>
+                    <text v-if="selectData.isShow" :class="getGoodsCheckClass(item.checked)" @click.stop="handleSelectItem(item)"></text>
                     <view class="mb-[var(--top-m)] card-template flex-1">
                         <view class="flex box-border">
                             <up-image width="120rpx" height="120rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.goods_cover_thumb_small ? item.goods_cover_thumb_small : '')" mode="aspectFill">
@@ -113,7 +113,7 @@
                 <view class="flex items-center justify-between">
                     <view class="flex flex-col justify-between flex-shrink-0">
                         <view class="flex items-center mb-[10rpx]">
-                            <text class="box-border iconfont text-color text-[34rpx] mr-[20rpx] w-[34rpx] h-[34rpx] rounded-[17rpx] overflow-hidden flex-shrink-0" :class="{ 'iconxuanze1 text-primary': selectData.checkAll,'bg-[#fff] border-solid border-[2rpx] border-[#ccc]': !selectData.checkAll }" @click="handleSelectAll()"></text>
+                            <text :class="getSelectAllClass()" @click="handleSelectAll()"></text>
                             <text class="text-[24rpx]">全选</text>
                         </view>
                         <view class="text-[22rpx] text-[#999]">已选<text class="text-primary">{{ selectData.checkList.length }}</text>个商品</view>
@@ -214,6 +214,30 @@ const selectData = reactive({
     checkAll: false, // 全选
     checkList: [] // 选中的
 })
+
+const getBatchTextClass = () => {
+    return selectData.isShow ? 'text-[24rpx] text-primary' : 'text-[24rpx]'
+}
+
+const getStatusTabClass = (value: string) => {
+    const base = 'tab-items mr-[40rpx]'
+    return searchParam.status === value ? `${ base } class-select` : base
+}
+
+const getGoodsTypeClass = (type: string) => {
+    const base = 'truncate text-[#333] px-[10rpx] border-[2rpx] border-solid border-transparent w-[120rpx] h-[56rpx] flex items-center justify-center mr-[30rpx] mb-[30rpx] box-border bg-[var(--temp-bg)] rounded-[8rpx] text-[22rpx]'
+    return searchParam.goods_type == type ? `${ base } label-select` : base
+}
+
+const getGoodsCheckClass = (checked: boolean) => {
+    const base = 'self-center iconfont text-color text-[34rpx] mr-[32rpx] w-[34rpx] h-[34rpx] rounded-[17rpx] overflow-hidden flex-shrink-0 box-border'
+    return checked ? `${ base } iconxuanze1 text-primary` : `${ base } bg-[#fff] border-solid border-[2rpx] border-[#ccc]`
+}
+
+const getSelectAllClass = () => {
+    const base = 'box-border iconfont text-color text-[34rpx] mr-[20rpx] w-[34rpx] h-[34rpx] rounded-[17rpx] overflow-hidden flex-shrink-0'
+    return selectData.checkAll ? `${ base } iconxuanze1 text-primary` : `${ base } bg-[#fff] border-solid border-[2rpx] border-[#ccc]`
+}
 
 const getGoodsStatusFn = () => {
     goodsStatus.value = []

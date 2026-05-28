@@ -9,7 +9,7 @@ return [
         'menu_key' => 'setting_system_basic_info',
         'sort' => 1,
         'page' => '/app/pages/site/setting',
-        'icon' => '/addon/mall/site/menu/site_manage.png'
+        'icon' => '/addon/home_service/admin/icon-1.png'
     ],
     [
         'name' => '商家信息',
@@ -18,7 +18,7 @@ return [
         'menu_key' => 'shop_setting_index',
         'sort' => 2,
         'page' => '/app/pages/site/info',
-        'icon' => '/addon/mall/site/menu/site_detail.png'
+        'icon' => '/addon/home_service/admin/icon-2.png'
     ],
 //    [
 //        'name' => '运费模板',
@@ -36,7 +36,7 @@ return [
        'menu_key' => 'site_address',
        'sort' => 2,
        'page' => '/app/pages/site_address/list',
-       'icon' => '/addon/mall/site/menu/delivery_address.png'
+       'icon' => '/addon/home_service/admin/icon-3.png'
    ],
     [
         'name' => '客户管理',
@@ -45,7 +45,7 @@ return [
         'menu_key' => 'shop_member_list',
         'sort' => 1,
         'page' => '/app/pages/member/index',
-        'icon' => '/addon/mall/site/menu/member.png'
+        'icon' => '/addon/home_service/admin/icon-4.png'
     ],
 //    [
 //        'name' => '客户标签',
@@ -81,7 +81,7 @@ return [
         'menu_key' => '',
         'sort' => 3,
         'page' => '/app/pages/verify/index',
-        'icon' => '/addon/mall/site/menu/verify.png'
+        'icon' => '/addon/home_service/admin/icon-5.png'
     ],
     [
         'name' => '核销记录',
@@ -90,7 +90,7 @@ return [
         'menu_key' => '',
         'sort' => 4,
         'page' => '/app/pages/verify/record',
-        'icon' => '/addon/mall/site/menu/verify_record.png'
+        'icon' => '/addon/home_service/admin/link_icon-1.png'
     ],
 
     // [
@@ -146,7 +146,7 @@ return [
         'menu_key' => 'attachment',
         'sort' => 4,
         'page' => '/addon/mall/pages/goods/album?att_type=image',
-        'icon' => '/addon/mall/site/menu/image.png'
+        'icon' => '/addon/home_service/admin/link_icon-2.png'
     ],
     [
         'name' => '视频空间',
@@ -155,7 +155,7 @@ return [
         'menu_key' => 'attachment',
         'sort' => 5,
         'page' => '/addon/mall/pages/goods/album?att_type=video',
-        'icon' => '/addon/mall/site/menu/video.png'
+        'icon' => '/addon/home_service/admin/link_icon-3.png'
     ],
     [
         'name' => '新闻资讯',
@@ -165,7 +165,7 @@ return [
         'sort' => 49,
         // 'page' => '/app/pages/article/list',
         'page' => '/addon/mall/pages/goods/album?att_type=image',
-        'icon' => '/addon/mall/site/menu/image.png'
+        'icon' => '/addon/home_service/admin/link_icon-4.png'
         // 'icon' => '/addon/mall/site/menu/article.png'
     ]
 ];

@@ -25,7 +25,7 @@
             </view>   
         </view>  
         <view class="px-[20rpx] bg-[#fff] mb-[20rpx]">
-            <view class="h-[100rpx] box-border flex items-center justify-between border-0" :class="{'border-t-[1rpx] border-solid border-[#ebebeb]': index}" v-for="(item,index) in centerList" :key="index" @click="redirect({url: item.page})">
+            <view :class="getCenterItemClass(index)" v-for="(item,index) in centerList" :key="index" @click="redirect({url: item.page})">
                 <text>{{ item.name }}</text>
                 <text class="nc-iconfont nc-icon-youV6xx text-[30rpx] text-[#c4c4c4] font-500"></text>
             </view>
@@ -63,6 +63,11 @@ const siteInfo = computed(() => userStore.siteInfo)
 const userInfo = computed(() => userStore.userInfo)
 
 const centerList = ref([])
+const getCenterItemClass = (index: number) => {
+    const base = 'h-[100rpx] box-border flex items-center justify-between border-0'
+    return index ? `${ base } border-t-[1rpx] border-solid border-[#ebebeb]` : base
+}
+
 const getSiteCenterFn = () => {
     getSiteCenter().then((res:any) => {
         centerList.value = res.data

@@ -60,7 +60,7 @@ import { pxToRpx, img, redirect, setToken } from '@/utils/common'
 import { topTabar } from '@/utils/topTabbar'
 import {  getLoginConfig, siteRegister } from '@/app/api/auth'
 import useUserStore from '@/stores/user'
-import Verify from '@/components/verifition/verify.vue'
+import Verify from '@/components/verify/verify.vue'
 
 /********* 自定义头部 - start ***********/
 const topTabarObj = topTabar()

@@ -70,7 +70,7 @@ class ConfigService extends BaseAdminService
     public function getWebSite($site_id = 0)
     {
         $site_id = $site_id != 0 ? $site_id : $this->site_id;
-        $info = ( new SiteService() )->getInfo($site_id);
+        $info = ( new SiteService() )->getInfo((int)$site_id);
         $service_info = $this->getService();
         $info['site_login_logo'] = $service_info[ 'site_login_logo' ];
         $info['site_login_bg_img'] = $service_info[ 'site_login_bg_img' ];

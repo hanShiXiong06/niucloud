@@ -13,6 +13,7 @@ namespace addon\hsx_recycle\app\adminapi\controller\category;
 
 use core\base\BaseAdminController;
 use addon\hsx_recycle\app\service\admin\category\RecycleCategoryService;
+use addon\hsx_recycle\app\service\admin\category\RecycleCategoryQuoteHistoryService;
 
 
 /**
@@ -51,13 +52,42 @@ class RecycleCategory extends BaseAdminController
         return success((new RecycleCategoryService())->getInfo($id));
     }
      /**
-     * 获取商品分类树结构
+     * 获取商品分类树结构（支持按日期查看历史报价单）
      * @return \think\Response
      */
     public function tree()
     {
-    
-        return success(( new RecycleCategoryService() )->getTree());
+        $date = (string)$this->request->param('date', '');
+        return success((new RecycleCategoryService())->getTree($date ?: null));
+    }
+
+    /**
+     * 报价单历史列表（支持按分类、日期筛选）
+     */
+    public function quoteHistory()
+    {
+        $data = $this->request->params([
+            ['category_id', 0],
+            ['date', ''],
+            ['start_time', 0],
+            ['end_time', 0],
+        ]);
+        return success((new RecycleCategoryQuoteHistoryService())->getPage($data));
+    }
+
+    /**
+     * 单分类的全部历史快照（分页）
+     */
+    public function quoteHistoryByCategory(int $id)
+    {
+        $data = $this->request->params([
+            ['category_id', $id],
+            ['date', ''],
+            ['start_time', 0],
+            ['end_time', 0],
+        ]);
+        $data['category_id'] = $id;
+        return success((new RecycleCategoryQuoteHistoryService())->getPage($data));
     }
 
     /**

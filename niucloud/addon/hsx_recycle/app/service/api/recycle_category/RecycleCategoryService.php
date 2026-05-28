@@ -14,6 +14,7 @@ namespace addon\hsx_recycle\app\service\api\recycle_category;
 use addon\hsx_recycle\app\model\address\ShopAddress;
 use addon\hsx_recycle\app\model\category\RecycleCategory;
 use addon\hsx_recycle\app\model\category\RecycleCategoryConfig;
+use addon\hsx_recycle\app\model\category\RecycleCategoryQuoteHistory;
 use addon\hsx_recycle\app\service\core\category\CoreRecycleCategoryService;
 use app\model\member\Member;
 use core\base\BaseApiService;
@@ -95,5 +96,22 @@ class RecycleCategoryService extends BaseApiService
             ->findOrEmpty()->toArray();
 
         return $member_info;
+    }
+
+    /**
+     * 报价单浏览量 +1（记录到该分类最新的一条历史快照上）
+     */
+    public function recordView(int $category_id): void
+    {
+        if ($category_id <= 0) return;
+        $historyModel = new RecycleCategoryQuoteHistory();
+        $latest = $historyModel->where([
+            ['site_id', '=', $this->site_id],
+            ['category_id', '=', $category_id],
+        ])->order('create_time desc, id desc')->findOrEmpty();
+
+        if (!$latest->isEmpty()) {
+            $latest->inc('view_count')->update();
+        }
     }
 }

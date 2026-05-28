@@ -5,7 +5,13 @@
             <div class="flex justify-between items-center mb-[5px]">
                 <span class="text-page-title">{{ pageName }}</span>
                 <div class="flex items-center">
-                    <el-button class="ml-2 mr-2" type="primary" @click="addEvent">
+                    <el-date-picker v-model="historyDate" type="date" :placeholder="t('查看历史日期（默认最新）')"
+                        value-format="YYYY-MM-DD" :disabled-date="disabledFutureDate" :clearable="true"
+                        class="mr-2" style="width: 220px" @change="loadCategoryList" />
+                    <el-tag v-if="isHistoryMode" type="warning" effect="plain" class="mr-2">
+                        {{ t('历史查看模式 · 只读') }}
+                    </el-tag>
+                    <el-button class="ml-2 mr-2" type="primary" @click="addEvent" :disabled="isHistoryMode">
                         {{ t('添加报价单') }}
                     </el-button>
                 </div>
@@ -24,7 +30,7 @@
                     </template>
                     <el-table-column :label="t('categoryName')" min-width="120">
                         <template #default="{ row }">
-                            <i class="order-0 iconfont icontuodong vues-rank mr-[8px]"></i>
+                            <i v-if="!isHistoryMode" class="order-0 iconfont icontuodong vues-rank mr-[8px]"></i>
                             <span class="order-2">{{ row.category_name }}</span>
                         </template>
                     </el-table-column>
@@ -45,26 +51,32 @@
 
                     <el-table-column prop="is_show" :label="t('是否显示')">
                         <template #default="{ row }">
-                          
+
                             <el-switch v-model="row.is_show" :active-value="1" :inactive-value="0"
-                                @change="switchShow(row)"></el-switch>
+                                :disabled="isHistoryMode" @change="switchShow(row)"></el-switch>
 
                         </template>
                     </el-table-column>
 
                     <el-table-column prop="need_vip" :label="t('热门')">
                         <template #default="{ row }">
-                          
+
                             <el-switch v-model="row.need_vip" :active-value="1" :inactive-value="0"
-                                @change="switchShow(row)"></el-switch>
+                                :disabled="isHistoryMode" @change="switchShow(row)"></el-switch>
 
                         </template>
                     </el-table-column>
-                   
+
+                    <el-table-column prop="view_count" :label="t('浏览量')" width="90" align="center">
+                        <template #default="{ row }">
+                            <span class="text-gray-500 text-sm">{{ row.view_count || 0 }}</span>
+                        </template>
+                    </el-table-column>
+
 
                     <el-table-column :label="t('报价')" width="170" align="left">
                         <template #default="{ row }">
-                            <div class="h-[30px]">
+                            <div class="h-[30px]" v-if="row.images">
                                 <el-image class="w-[30px] h-[30px] " @click="previewImage(row)" :src="img(row.images)"
                                     fit="contain">
                                     <template #error>
@@ -75,16 +87,23 @@
                                     </template>
                                 </el-image>
                             </div>
+                            <span v-else class="text-gray-400 text-xs">{{ t('暂无') }}</span>
                         </template>
                     </el-table-column>
-                    <el-table-column :label="t('operation')" fixed="right" align="right" width="200">
+                    <el-table-column :label="t('operation')" fixed="right" align="right" width="260">
                         <template #default="{ row }">
 
-                            <el-button type="primary"  link
+                            <el-button type="primary" link @click="openHistoryDrawer(row)">
+                                {{ t('历史报价单') }}
+                            </el-button>
+
+                            <el-button type="primary" link
+                                :disabled="isHistoryMode"
                                 @click="editEvent(row)">{{ t('edit') }}</el-button>
 
 
-                            <el-button type="primary"  link
+                            <el-button type="primary" link
+                                :disabled="isHistoryMode"
                                 @click="deleteEvent(row)">{{ t('delete') }}</el-button>
                         </template>
                     </el-table-column>
@@ -101,16 +120,55 @@
         <el-image-viewer :url-list="previewImageList" v-if="imageViewer.show" @close="imageViewer.show = false"
             :initial-index="imageViewer.index" :zoom-rate="1" />
 
+        <!-- 历史报价单抽屉 -->
+        <el-drawer v-model="historyDrawer.show" :title="historyDrawer.title" size="520px" :destroy-on-close="true">
+            <div v-loading="historyDrawer.loading">
+                <div v-if="!historyDrawer.list.length && !historyDrawer.loading"
+                    class="text-center text-gray-400 py-10">
+                    {{ t('该分类暂无历史报价单') }}
+                </div>
+                <el-timeline v-else>
+                    <el-timeline-item v-for="item in historyDrawer.list" :key="item.id"
+                        :timestamp="(item.create_time)" placement="top">
+                        <el-card shadow="hover">
+                            <div class="flex items-start gap-3">
+                                <el-image v-if="item.images" class="w-[80px] h-[80px] flex-shrink-0 cursor-pointer"
+                                    :src="img(item.images)" fit="cover"
+                                    @click="previewHistoryImage(item)" />
+                                <div class="flex-1 text-sm">
+                                    <div class="text-gray-600">
+                                        {{ t('操作人') }}：{{ item.operator_name || t('系统') }}
+                                    </div>
+                                    <div v-if="item.remark" class="text-gray-500 mt-1">
+                                        {{ t('备注') }}：{{ item.remark }}
+                                    </div>
+                                </div>
+                            </div>
+                        </el-card>
+                    </el-timeline-item>
+                </el-timeline>
+                <div v-if="historyDrawer.total > historyDrawer.pageSize" class="flex justify-center mt-4">
+                    <el-pagination
+                        v-model:current-page="historyDrawer.page"
+                        :page-size="historyDrawer.pageSize"
+                        :total="historyDrawer.total"
+                        layout="prev, pager, next"
+                        @current-change="loadHistoryPage"
+                    />
+                </div>
+            </div>
+        </el-drawer>
+
 
     </div>
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref, onMounted, nextTick } from 'vue'
+import { reactive, ref, onMounted, nextTick, computed } from 'vue'
 import { t } from '@/lang'
 // import { updateCategory, editCategory } from '@/addon/hsx_recycle/api/goods'
 
-import { getCategoryTree, deleteRecycleCategory, editRecycleCategory, updateRecycleCategory } from '@/addon/hsx_recycle/api/recycle_category'
+import { getCategoryTree, deleteRecycleCategory, editRecycleCategory, updateRecycleCategory, getQuoteHistoryByCategory } from '@/addon/hsx_recycle/api/recycle_category'
 
 import { img } from '@/utils/common'
 import { ElMessageBox } from 'element-plus'
@@ -129,6 +187,13 @@ const pageName = route.meta.title
 const tableRef = useTemplateRefsList<HTMLElement>()
 
 
+// 历史日期：为空表示「最新」；选了日期表示进入历史只读模式
+const historyDate = ref<string>('')
+const isHistoryMode = computed(() => !!historyDate.value)
+
+const disabledFutureDate = (d: Date) => {
+    return d.getTime() > Date.now()
+}
 
 const categoryTable = reactive({
     loading: true,
@@ -221,7 +286,10 @@ const treeToTile = (treeData: any, childKey = 'child_list') => {
 const loadCategoryList = () => {
     categoryTable.loading = true
 
-    getCategoryTree().then(res => {
+    const params: Record<string, any> = {}
+    if (historyDate.value) params.date = historyDate.value
+
+    getCategoryTree(params).then(res => {
         categoryTable.loading = false
         categoryTable.data = res.data
     }).catch(() => {
@@ -252,6 +320,65 @@ const getImageUrl = (url) => {
         return import.meta.env.VITE_IMG_DOMAIN + url;
     }
 };
+
+// 历史报价单抽屉
+const historyDrawer = reactive<{
+    show: boolean
+    title: string
+    loading: boolean
+    list: any[]
+    categoryId: number
+    page: number
+    pageSize: number
+    total: number
+}>({
+    show: false,
+    title: '',
+    loading: false,
+    list: [],
+    categoryId: 0,
+    page: 1,
+    pageSize: 20,
+    total: 0
+})
+
+const openHistoryDrawer = (row: any) => {
+    historyDrawer.show = true
+    historyDrawer.title = `${row.category_name} · ${t('历史报价单')}`
+    historyDrawer.categoryId = row.category_id
+    historyDrawer.page = 1
+    historyDrawer.list = []
+    historyDrawer.total = 0
+    loadHistoryPage(1)
+}
+
+const loadHistoryPage = (page: number) => {
+    historyDrawer.page = page
+    historyDrawer.loading = true
+    getQuoteHistoryByCategory(historyDrawer.categoryId, {
+        page: historyDrawer.page,
+        limit: historyDrawer.pageSize
+    }).then((res: any) => {
+        historyDrawer.list = res.data?.data || res.data || []
+        historyDrawer.total = res.data?.total || historyDrawer.list.length
+        historyDrawer.loading = false
+    }).catch(() => {
+        historyDrawer.loading = false
+    })
+}
+
+const previewHistoryImage = (item: any) => {
+    if (!item.images) return
+    imageViewer.show = true
+    previewImageList.value = [getImageUrl(item.images)]
+}
+
+const formatTime = (ts: number) => {
+    if (!ts) return ''
+    const d = new Date(ts * 1000)
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
 const switchShow = (row: any) => {
     const obj = cloneDeep(row)

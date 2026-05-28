@@ -1,5 +1,5 @@
 <template>
-    <view class="text-[26rpx]" :class="{'text-primary': sendSms.canGetCode.value, 'text-gray-300': !sendSms.canGetCode.value}" @click="handleSend">{{ sendSms.tips.value }}</view>
+    <view :class="getSmsCodeClass()" @click="handleSend">{{ sendSms.tips.value }}</view>
     <u-code :seconds="sendSms.seconds" :change-text="sendSms.changeText" ref="smsRef" @change="sendSms.codeChange"></u-code>
 </template>
 
@@ -37,8 +37,13 @@ const sendSms = useSendSms(smsRef)
 const formData: any = reactive({
     mobile: '',
     captcha_code: '',
+    captcha_type: '',
     type: prop.type
 })
+
+const getSmsCodeClass = () => {
+    return sendSms.canGetCode.value ? 'text-[26rpx] text-primary' : 'text-[26rpx] text-gray-300'
+}
 
 const handleSend = async() => {
     if (smsRef.value.canGetCode) {
@@ -60,6 +65,7 @@ const handleSend = async() => {
 }
 const handleConfirm = async(data: any, callback: any = null ) => {
     formData.captcha_code = data.captcha_code
+    formData.captcha_type = data.captcha_type
     const sendRes = await sendSms.send(formData)
 
     if (sendRes) {

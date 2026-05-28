@@ -153,7 +153,8 @@
 				"navigationBarTitleText": "%pages.weapp.order_shipping%"
 			},
 			"needLogin": true
-		},
+		}
+		,
 		{
 			"path": "app/pages/article/list",
 			"style": {
@@ -174,106 +175,106 @@
 	"subPackages": [
 		// {{ PAGE_BEGAIN }}
         // MALL_PAGE_BEGIN
-		{
-			"root": "addon/mall",
-			"pages": [
-				// *********************************** 商城 ***********************************
-				{
-					"path": "pages/goods/list",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.goods.list%"
-					},
-					"needLogin": true
-				},{
-					"path": "pages/goods/album",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.goods.album%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/goods/edit",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.goods.edit%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/goods/spec",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.goods.spec%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/goods/content",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.goods.content%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order/detail",
-					"style": {
-						// #ifndef H5
-						"navigationStyle": "custom",
-						// #endif
-						"navigationBarTitleText": "%mall.pages.order.detail%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order/list",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.order.list%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order/adjust_price",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.order.adjust_price%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order/edit_address",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.order.edit_address%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/order/delivery",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.order.delivery%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/refund/list",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.refund.list%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/refund/detail",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.refund.detail%"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/refund/log",
-					"style": {
-						"navigationBarTitleText": "%mall.pages.refund.log%"
-					},
-					"needLogin": true
-				}
-			]
+		// {
+		// 	"root": "addon/mall",
+		// 	"pages": [
+		// 		// *********************************** 商城 ***********************************
+		// 		{
+		// 			"path": "pages/goods/list",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.list%"
+		// 			},
+		// 			"needLogin": true
+		// 		},{
+		// 			"path": "pages/goods/album",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.album%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/goods/edit",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.edit%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/goods/spec",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.spec%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/goods/content",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.content%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/detail",
+		// 			"style": {
+		// 				// #ifndef H5
+		// 				"navigationStyle": "custom",
+		// 				// #endif
+		// 				"navigationBarTitleText": "%mall.pages.order.detail%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/list",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.order.list%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/adjust_price",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.order.adjust_price%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/edit_address",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.order.edit_address%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/delivery",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.order.delivery%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/refund/list",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.refund.list%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/refund/detail",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.refund.detail%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/refund/log",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.refund.log%"
+		// 			},
+		// 			"needLogin": true
+		// 		}
+		// 	]
             
-		},
+		// },
 		// MALL_PAGE_END
 		// {{ PAGE_BEGAIN }}
         // RECYCLE_PAGE_BEGIN
@@ -287,7 +288,79 @@
 						"navigationBarTitleText": "首页"
 					},
 					"needLogin": true
-				}
+				},
+				{
+					"path": "pages/order/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "回收订单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/detail",
+					"style": {
+						"navigationBarTitleText": "订单详情"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/check/scan",
+					"style": {
+						"navigationBarTitleText": "扫码处理"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/consignment/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "代卖订单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/consignment/detail",
+					"style": {
+						"navigationBarTitleText": "代卖详情"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/return/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "退回订单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/return/detail",
+					"style": {
+						"navigationBarTitleText": "退回详情"
+					},
+					"needLogin": true
+				},
+				// {
+				// 	"path": "pages/express/list",
+				// 	"style": {
+				// 		"navigationBarTitleText": "快递运单"
+				// 	},
+				// 	"needLogin": true
+				// },
+				// {
+				// 	"path": "pages/express/detail",
+				// 	"style": {
+				// 		"navigationBarTitleText": "运单详情"
+				// 	},
+				// 	"needLogin": true
+				// }
 			]
 		}
 		// RECYCLE_PAGE_END
@@ -314,7 +387,8 @@
 		"custom": {
 			"^u-(.*)": "uview-plus/components/u-$1/u-$1.vue",
 			"^up-(.*)": "uview-plus/components/u-$1/u-$1.vue",
-			"^u-([^-].*)": "uview-plus/components/u-$1/u-$1.vue"
+			"^u-([^-].*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^z-paging$": "z-paging/components/z-paging/z-paging.vue"
 		}
 	}
 }

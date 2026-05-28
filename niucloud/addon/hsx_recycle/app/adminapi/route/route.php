@@ -58,6 +58,10 @@ Route::group('recycle', function () {
     Route::get('recycle_category_tree', 'addon\hsx_recycle\app\adminapi\controller\category\RecycleCategory@tree');
     //编辑商品分类
     Route::post('recycle_category/category/update', 'addon\hsx_recycle\app\adminapi\controller\category\RecycleCategory@updateCategory');
+    //报价单历史列表
+    Route::get('recycle_category/quote_history', 'addon\hsx_recycle\app\adminapi\controller\category\RecycleCategory@quoteHistory');
+    //单分类报价单历史
+    Route::get('recycle_category/:id/quote_history', 'addon\hsx_recycle\app\adminapi\controller\category\RecycleCategory@quoteHistoryByCategory');
 })->middleware([
     AdminCheckToken::class,
     AdminLog::class

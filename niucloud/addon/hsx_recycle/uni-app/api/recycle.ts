@@ -21,6 +21,11 @@ export function getHot() {
   return request.get("recycle/recycle_category/hot");
 }
 
+// 报价单浏览埋点
+export function recordCategoryView(categoryId: number) {
+  return request.post(`recycle/recycle_category/${categoryId}/view`);
+}
+
 export function getModelList(data: any) {
   // recycle_model/list
   return request.get("recycle/recycle_model/list", {

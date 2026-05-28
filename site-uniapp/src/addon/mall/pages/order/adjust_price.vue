@@ -23,8 +23,8 @@
                 </view>
                 <view class="flex items-center">
                     <view class="flex items-center h-[40rpx] bg-[var(--page-bg-color)] text-[24rpx] rounded-[8rpx] mr-[30rpx]">
-                        <text class="w-[80rpx] h-full rounded-[8rpx] leading-[40rpx] text-center" :class="{'text-[#fff] bg-[#38cb33]': item.type == 'jian'}" @click="handleType(item, 'jian')">减</text>
-                        <text class="w-[80rpx] h-full rounded-[8rpx] leading-[40rpx] text-center" :class="{'text-[#fff] bg-[#f98249]': item.type == 'jia'}" @click="handleType(item, 'jia')">涨</text>
+                        <text :class="getAdjustTypeClass(item.type, 'jian')" @click="handleType(item, 'jian')">减</text>
+                        <text :class="getAdjustTypeClass(item.type, 'jia')" @click="handleType(item, 'jia')">涨</text>
                     </view>
                     <view class="w-[140rpx] h-[40rpx]  bg-[var(--page-bg-color)] text-[24rpx] rounded-[8rpx] ">
                         <input class="text-[24rpx] h-full text-center" type="digit" placeholder="0.00" v-model="item.adjust_money" @input="(event) => {handleInput(event, item)}" />
@@ -113,6 +113,12 @@ const orderDetailFn = (id: any) => {
 
 const handleType = (data: any, type: string) => {
     data.type = type;
+}
+
+const getAdjustTypeClass = (currentType: string, targetType: string) => {
+    const base = 'w-[80rpx] h-full rounded-[8rpx] leading-[40rpx] text-center'
+    if (currentType !== targetType) return base
+    return targetType === 'jian' ? `${ base } text-[#fff] bg-[#38cb33]` : `${ base } text-[#fff] bg-[#f98249]`
 }
 
 const handleFree = (data: any) => {

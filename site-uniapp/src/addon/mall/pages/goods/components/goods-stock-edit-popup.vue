@@ -13,7 +13,7 @@
                     <view>
                         <view class="mb-[20rpx]" v-for="(item, index) in goodsTable" :key="index">
                             <view class="flex items-center mb-[20rpx]"  @click="handleCheckedChange(item)">
-                                <text v-if="selectData.isShow" class="iconfont text-color text-[34rpx] mr-[32rpx] w-[34rpx] h-[34rpx] rounded-[17rpx] overflow-hidden flex-shrink-0" :class="{ 'iconxuanze1 text-primary': item.checked,'bg-[#F5F5F5]':!item.checked}"></text>
+                                <text v-if="selectData.isShow" :class="getSkuCheckClass(item.checked)"></text>
                                 <view class="flex flex-1">
                                     <up-image class="rounded-[10rpx] overflow-hidden" width="60rpx" height="60rpx" :src="img(item.sku_image)" mode="aspectFill">
                                         <template #error>
@@ -43,7 +43,7 @@
                 </scroll-view>
                 <view class="btn-wrap flex justify-between items-center" v-if="selectData.isShow">
                     <view class="mr-[20rpx] flex items-center">
-                        <text class="iconfont text-color text-[34rpx] mr-[20rpx] w-[34rpx] h-[34rpx] rounded-[17rpx] overflow-hidden flex-shrink-0" :class="{ 'iconxuanze1 text-primary': selectData.allCheck,'bg-[#F5F5F5]': !selectData.allCheck }" @click="handleCheckAllChange()"></text>
+                        <text :class="getAllCheckClass()" @click="handleCheckAllChange()"></text>
                         <text>全选</text>
                     </view>
                     <button class="btn border-[0] rounded-[100rpx] primary-btn-bg mr-0  !w-[300rpx] !h-[60rpx] flex-center" shape="circle" hover-class="none" @click="setBatch">批量修改库存</button>
@@ -91,6 +91,16 @@ const emit = defineEmits(['load'])
 
 const loading = ref(true)
 const goodsTable = ref<any>([])
+
+const getSkuCheckClass = (checked: boolean) => {
+    const base = 'iconfont text-color text-[34rpx] mr-[32rpx] w-[34rpx] h-[34rpx] rounded-[17rpx] overflow-hidden flex-shrink-0'
+    return checked ? `${ base } iconxuanze1 text-primary` : `${ base } bg-[#F5F5F5]`
+}
+
+const getAllCheckClass = () => {
+    const base = 'iconfont text-color text-[34rpx] mr-[20rpx] w-[34rpx] h-[34rpx] rounded-[17rpx] overflow-hidden flex-shrink-0'
+    return selectData.allCheck ? `${ base } iconxuanze1 text-primary` : `${ base } bg-[#F5F5F5]`
+}
 
 /**
  * 获取商品列表

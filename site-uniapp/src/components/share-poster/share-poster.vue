@@ -1,14 +1,14 @@
 <template>
     <!-- 分享弹窗 -->
     <view @touchmove.prevent.stop class="share-popup">
-        <u-popup :show="sharePopupShow" @close="sharePopupClose" overlayOpacity="0.8">
+        <u-popup :show="sharePopupShow" type="bottom" @close="sharePopupClose" overlayOpacity="0.8">
             <view @touchmove.prevent.stop>
                 <view class="poster-img-wrap" :style="{'top': shareTop}">
                     <image v-if="isPosterAnimation" class="poster-animation" :src="img('addon/shop/poster_animation.gif')" mode="aspectFit"/>
                     <image v-if="isPosterImg" class="poster-img" :src="img(poster)" mode="aspectFit" :show-menu-by-longpress="true"/>
                 </view>
                 <view class="share-content">
-                    <!-- #ifdef MP -->
+                    <!-- #ifdef MP || APP-PLUS  -->
                     <view class="share-box">
                         <button class="share-btn" :plain="true" open-type="share">
                             <view class="text-[#07c160] iconfont iconweixin11"></view>
@@ -29,29 +29,6 @@
                         <button class="share-btn" :plain="true">
                             <view class="text-[#07c160] iconfont iconfuzhilianjie"></view>
                             <text>复制链接</text>
-                        </button>
-                    </view>
-                    <!-- #endif -->
-                    
-                    <!-- #ifdef APP-PLUS  -->
-                    <view class="share-box">
-                        <button class="share-btn" :plain="true" @click="shareSession">
-                            <view class="text-[#07c160] iconfont iconweixin11"></view>
-                            <text>分享给好友</text>
-                        </button>
-                    </view>
-                    
-                    <view class="share-box">
-                        <button class="share-btn" :plain="true" @click="shareWechatMoments">
-                            <image :src="img('static/resource/images/app/wechat_moments.png')"></image>
-                            <text>分享到朋友圈</text>
-                        </button>
-                    </view>
-                    
-                    <view class="share-box">
-                        <button class="share-btn" :plain="true" @click="savePoster()">
-                            <view class="text-[#07c160] iconfont iconpengyouquan"></view>
-                            <text>保存海报</text>
                         </button>
                     </view>
                     <!-- #endif -->
@@ -80,12 +57,10 @@
 import { ref } from 'vue';
 import { img, copy } from '@/utils/common';
 import { getPoster } from '@/app/api/system'
-import useSystemStore from "@/stores/system";
-import { useShare } from '@/hooks/useShare'
 
 const props = defineProps({
     posterId: {
-        type: [String, Number],
+        type: String || Number,
         default: 0
     },
     posterType: {
@@ -94,33 +69,28 @@ const props = defineProps({
     },
     posterParam: {
         type: Object,
-        default: () => ({})
+        default: {}
     },
-    copyUrl: { // 例 "/wap/addon/shop/pages/goods"
+    copyUrl: { // 例 "/wap/addon/shop_fenxiao/pages/goods"
         type: String,
         default: ''
     },
     copyUrlParam: {
         type: String,
         default: ''
-    },
-    isPreload: {
-        type: Boolean,
-        default: true
     }
 })
 
 const emits = defineEmits(['close'])
 
 const sharePopupShow = ref(false);
-const posterType = ref(props.posterType)
-const posterId = ref(props.posterId)
 
 // 复制
 const copyUrl = () => {
     let data = ''
     if (props.copyUrl) {
         let pathName = location.pathname;
+
         let packageArr: any = ['/app/', '/addon/'];
         for (let i = 0; i < packageArr.length; i++) {
             if (pathName.indexOf(packageArr[i]) != -1) {
@@ -136,12 +106,9 @@ const copyUrl = () => {
     });
 }
 
-const openShare = (data: any = {}) => {
-    posterType.value = data?.type || posterType.value || ''
-    posterId.value = data?.id ?? props.posterId
-    runtimePosterParam.value = normalizePosterParam(data?.param ?? props.posterParam)
+const openShare = () => {
     sharePopupShow.value = true
-    loadPoster(true);
+    loadPoster();
 }
 
 //生成海报
@@ -149,47 +116,22 @@ const isPosterAnimation = ref(false)
 const isPosterImg = ref(false)
 // 获取分享海报
 const poster = ref('');
-const normalizePosterParam = (param: any) => {
-    if (param && typeof param === 'object' && !Array.isArray(param)) {
-        return { ...param }
-    }
-
-    return {}
-}
-
-const runtimePosterParam = ref(normalizePosterParam(props.posterParam))
-const posterCacheKey = ref('')
-
-const buildPosterKey = () => {
-    return JSON.stringify({
-        id: posterId.value,
-        type: posterType.value,
-        param: runtimePosterParam.value || {},
-    })
-}
-
-const loadPoster = (force = false) => {
-    const currentKey = buildPosterKey()
-    if (!force && poster.value && props.isPreload && posterCacheKey.value === currentKey) {
+const loadPoster = () => {
+    if (poster.value) {
         // 预加载
         isPosterAnimation.value = false;
         isPosterImg.value = true;
     } else {
-        if (posterCacheKey.value !== currentKey) {
-            poster.value = '';
-        }
-        posterCacheKey.value = currentKey
         isPosterAnimation.value = true;
         isPosterImg.value = false;
         let obj = {
-            id: posterId.value,
-            type: posterType.value,
-            param: runtimePosterParam.value
+            id: props.posterId,
+            type: props.posterType,
+            param: props.posterParam
         }
         let startTime = Date.parse(new Date());
         getPoster(obj).then((res: any) => {
             poster.value = res.data && img(res.data) || '';
-            posterCacheKey.value = currentKey;
 
             let endTime = Date.parse(new Date());
             let time = endTime - startTime;
@@ -257,22 +199,14 @@ const savePoster = () => {
 }
 // #endif
 
-// #ifdef APP-PLUS
-const shareSession = () => {
-    useShare().onShareAppMessage();
-}
-
-const shareWechatMoments = () => {
-    useShare().onShareTimeline();
-}
-// #endif
-
 const shareTop: any = ref(0)
 /************ 获取微信头部-start ****************/
-const systemStore = useSystemStore()
+// 获取系统状态栏的高度
+let menuButtonInfo: any = {};
 // 如果是小程序，获取右上角胶囊的尺寸信息，避免导航栏右侧内容与胶囊重叠(支付宝小程序非本API，尚未兼容)
 // #ifdef MP-WEIXIN || MP-BAIDU || MP-TOUTIAO || MP-QQ
-shareTop.value = systemStore.menuButtonInfo.top + systemStore.menuButtonInfo.height + 'px';
+menuButtonInfo = uni.getMenuButtonBoundingClientRect();
+shareTop.value = menuButtonInfo.top + menuButtonInfo.height + 'px';
 // #endif
 /************ 获取微信头部-end ****************/
 
@@ -280,6 +214,7 @@ const sharePopupClose = () => {
     sharePopupShow.value = false;
     isPosterAnimation.value = false;
     isPosterImg.value = false;
+    poster.value = '';
     emits('close');
 }
 
@@ -290,10 +225,9 @@ defineExpose({
 </script>
 <style lang="scss" scoped>
 .share-popup {
-    //  苹果手机下要白色背景
-    // :deep(.u-transition), :deep(.u-popup__content) {
-    //     background-color: transparent;
-    // }
+    :deep(.u-transition), :deep(.u-popup__content) {
+        background-color: transparent;
+    }
 
     .share-content {
         border-top-left-radius: 40rpx;
@@ -327,11 +261,6 @@ defineExpose({
                     display: block;
                     color: #333;
                 }
-            }
-            
-            image {
-                width: 80rpx;
-                height: 80rpx;
             }
 
             .iconfont {

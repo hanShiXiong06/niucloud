@@ -14,6 +14,20 @@ export function getCategoryTree(params: Record<string, any>) {
 }
 
 /**
+ * 报价单历史列表（支持按分类/日期筛选 + 分页）
+ */
+export function getQuoteHistoryList(params: Record<string, any>) {
+  return request.get(`recycle/recycle_category/quote_history`, { params });
+}
+
+/**
+ * 单分类报价单历史时间轴
+ */
+export function getQuoteHistoryByCategory(category_id: number, params: Record<string, any> = {}) {
+  return request.get(`recycle/recycle_category/${category_id}/quote_history`, { params });
+}
+
+/**
  * 获取二手机分类详情
  * @param category_id 二手机分类category_id
  * @returns

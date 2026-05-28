@@ -282,7 +282,7 @@ class RecycleOrderService extends BaseAdminService
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->with([
                 'devices' => function($query) use ($filterKey, $viewMode, $where, $filterService) {
-                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,dispose_type,dispose_status,settlement_mode,consignment_order_id')
+                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,dispose_type,dispose_status,settlement_mode,consignment_order_id,return_order_id')
                         ->with(['consignmentOrder' => function($q) {
                             $q->field('id,consignment_no,source_device_id,status,listing_price,sold_price,settlement_amount,pay_status');
                         }])
@@ -343,7 +343,7 @@ class RecycleOrderService extends BaseAdminService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id, status,check_result,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,dispose_type,dispose_status,settlement_mode,consignment_order_id')
+                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id, status,check_result,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,dispose_type,dispose_status,settlement_mode,consignment_order_id,return_order_id')
                         ->with(['consignmentOrder' => function($q) {
                             $q->field('id,consignment_no,source_device_id,status,listing_price,sold_price,settlement_amount,pay_status');
                         }])
@@ -579,15 +579,22 @@ class RecycleOrderService extends BaseAdminService
         // 使用 Model 的参数映射方法（与 getPage 保持一致）
         $searchParams = RecycleOrder::mapSearchParams($countWhere);
 
-        // 获取基础查询模型（不包含状态筛选）
-        $baseQuery = (new RecycleOrder())
-            ->withSearch(RecycleOrder::getSearchFields(), $searchParams)
-            ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]]);
-
         $filterKey = trim((string)($where['filter_key'] ?? ''));
-        if ($filterKey !== '') {
-            $baseQuery = (new RecycleDashboardFilterService())->applyOrderFilter($baseQuery, $filterKey, $where);
-        }
+        $buildCountQuery = function (array $extraWhere = []) use ($searchParams, $filterKey, $where) {
+            $query = (new RecycleOrder())
+                ->withSearch(RecycleOrder::getSearchFields(), $searchParams)
+                ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]]);
+
+            foreach ($extraWhere as $condition) {
+                $query->where($condition[0], $condition[1], $condition[2]);
+            }
+
+            if ($filterKey !== '') {
+                $query = (new RecycleDashboardFilterService())->applyOrderFilter($query, $filterKey, $where);
+            }
+
+            return $query;
+        };
 
         // 获取所有状态的定义
         $allStatuses = RecycleOrderDict::getOrderStatus();
@@ -598,11 +605,13 @@ class RecycleOrderService extends BaseAdminService
         ];
 
         // 计算总数
-        $statusCounts['all'] = (clone $baseQuery)->count();
+        $statusCounts['all'] = $buildCountQuery()->count();
 
         // 计算各个状态的数量
         foreach ($allStatuses as $statusKey => $statusInfo) {
-            $statusCounts[$statusKey] = (clone $baseQuery)->where('status', $statusKey)->count();
+            $statusCounts[$statusKey] = $buildCountQuery([
+                ['status', '=', $statusKey]
+            ])->count();
         }
 
         // 添加一些特殊的状态统计

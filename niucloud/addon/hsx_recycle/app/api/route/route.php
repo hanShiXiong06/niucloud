@@ -41,6 +41,8 @@ Route::group('recycle', function() {
      // 获取热门分类
      Route::get('recycle_category/hot', 'addon\hsx_recycle\app\api\controller\category\RecycleCategory@hot');
      Route::get('recycle_category_tree', 'addon\hsx_recycle\app\api\controller\category\RecycleCategory@tree');
+     // 报价单浏览埋点
+     Route::post('recycle_category/:id/view', 'addon\hsx_recycle\app\api\controller\category\RecycleCategory@recordView');
 
 })->middleware(ApiChannel::class)
 ->middleware(ApiCheckToken::class, false) //false表示不验证登录

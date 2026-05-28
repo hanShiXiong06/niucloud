@@ -8,8 +8,8 @@
             <!-- #endif -->
             <view class="mx-[40rpx] pt-[100rpx]">
                 <view class="mb-[80rpx] flex whitespace-nowrap  box-border">
-                    <view class="mr-[60rpx] text-[30rpx] leading-[60rpx] text-center text-[#999]" :class="{'class-select': type == 'username'}" @click="setType('username')">密码登录</view>
-                    <view class="text-[30rpx] leading-[60rpx] text-center text-[#999]" :class="{'class-select': type == 'mobile'}" @click="setType('mobile')">手机号登录</view>
+                    <view :class="getLoginTypeClass('username')" @click="setType('username')">密码登录</view>
+                    <view :class="getLoginTypeClass('mobile')" @click="setType('mobile')">手机号登录</view>
                 </view>
                 <u-form labelPosition="left" :model="formData" errorType='toast' :rules="rules" ref="formRef">
                     <template v-if="type == 'username'">
@@ -60,7 +60,7 @@ import { useLogin } from '@/hooks/useLogin'
 import { t } from '@/locale'
 import { pxToRpx, img, redirect } from '@/utils/common'
 import { topTabar } from '@/utils/topTabbar'
-import Verify from '@/components/verifition/verify.vue'
+import Verify from '@/components/verify/verify.vue'
 import useSystemStore from '@/stores/system'
 import { useSendSms } from '@/hooks/useSendSms'
 
@@ -126,6 +126,13 @@ onMounted(() => {
 
 const setType = (val:any) => {
     type.value = val
+}
+
+const getLoginTypeClass = (value: string) => {
+    const base = value === 'username'
+        ? 'mr-[60rpx] text-[30rpx] leading-[60rpx] text-center text-[#999]'
+        : 'text-[30rpx] leading-[60rpx] text-center text-[#999]'
+    return type.value === value ? `${ base } class-select` : base
 }
 
 const loading = ref(false)

@@ -47,18 +47,61 @@ class RecycleCategoryService extends BaseAdminService
 
     /**
      * 查询商品分类树结构
+     * @param string|null $date 指定日期（YYYY-MM-DD）查看该日及之前最新的报价单快照；为空取当前最新
      * @return array
      */
-    public function getTree()
+    public function getTree(?string $date = null)
     {
         if($this->site_id !== 0) {
             $config = (new RecycleCategoryConfig())->where([
                 ['site_id', '=', $this->site_id]
             ])->findOrEmpty()->toArray();
         }
-        
+
         $site_id = empty($config) || empty($config['is_enable']) ? $this->site_id : $this->site_id.",0";
-        return (new CoreRecycleCategoryService())->getTree([['site_id', 'in', "{$site_id}"]]);
+        $tree = (new CoreRecycleCategoryService())->getTree([['site_id', 'in', "{$site_id}"]]);
+
+        if ($date) {
+            $this->applyHistoryImagesToTree($tree, $date);
+        }
+
+        return $tree;
+    }
+
+    /**
+     * 根据指定日期，把 tree 里每个节点的 images 替换为该日期的历史快照
+     */
+    private function applyHistoryImagesToTree(array &$tree, string $date): void
+    {
+        $category_ids = [];
+        $this->collectCategoryIds($tree, $category_ids);
+        if (empty($category_ids)) {
+            return;
+        }
+
+        $map = (new RecycleCategoryQuoteHistoryService())->getSnapshotMapByDate($date, $category_ids);
+        $this->fillImagesByMap($tree, $map);
+    }
+
+    private function collectCategoryIds(array $nodes, array &$ids): void
+    {
+        foreach ($nodes as $node) {
+            $ids[] = (int)$node['category_id'];
+            if (!empty($node['child_list'])) {
+                $this->collectCategoryIds($node['child_list'], $ids);
+            }
+        }
+    }
+
+    private function fillImagesByMap(array &$nodes, array $map): void
+    {
+        foreach ($nodes as &$node) {
+            $cid = (int)$node['category_id'];
+            $node['images'] = isset($map[$cid]) ? $map[$cid]['images'] : '';
+            if (!empty($node['child_list'])) {
+                $this->fillImagesByMap($node['child_list'], $map);
+            }
+        }
     }
   
 
@@ -110,6 +153,15 @@ class RecycleCategoryService extends BaseAdminService
         $data[ 'site_id' ] = $this->site_id;
         $data[ 'create_time' ] = time();
         $res = $this->model->create($data);
+
+        if (!empty($data['images'])) {
+            (new RecycleCategoryQuoteHistoryService())->snapshot(
+                (int)$res->category_id,
+                (string)$data['images'],
+                $data['quote_remark'] ?? ''
+            );
+        }
+
         return $res->category_id;
     }
 
@@ -156,6 +208,17 @@ class RecycleCategoryService extends BaseAdminService
         $data['need_vip'] = $data['need_vip'];
         $data[ 'update_time' ] = time();
         $this->model->where([ [ 'category_id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->update($data);
+
+        $old_images = (string)($category_info['images'] ?? '');
+        $new_images = (string)($data['images'] ?? '');
+        if ($new_images !== '' && $new_images !== $old_images) {
+            (new RecycleCategoryQuoteHistoryService())->snapshot(
+                $id,
+                $new_images,
+                $data['quote_remark'] ?? ''
+            );
+        }
+
         return true;
     }
 

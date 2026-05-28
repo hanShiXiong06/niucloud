@@ -58,7 +58,8 @@ ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `settlement_mode` varchar(20) NOT NULL DEFAULT 'recycle' COMMENT '结算模式：recycle-普通回收，consign-代卖' AFTER `pay_no`,
   ADD COLUMN `dispose_type` varchar(20) NOT NULL DEFAULT 'pending' COMMENT '处置类型：pending-未处置，recycle-普通回收，return-退回，consign-代卖' AFTER `settlement_mode`,
   ADD COLUMN `dispose_status` tinyint NOT NULL DEFAULT 0 COMMENT '处置状态：0-未处置，1-已回收，2-已退回，3-已转代卖' AFTER `dispose_type`,
-  ADD COLUMN `consignment_order_id` int NOT NULL DEFAULT 0 COMMENT '关联代卖订单ID' AFTER `dispose_status`;
+  ADD COLUMN `consignment_order_id` int NOT NULL DEFAULT 0 COMMENT '关联代卖订单ID' AFTER `dispose_status`,
+  ADD COLUMN `return_order_id` int NOT NULL DEFAULT 0 COMMENT '关联退回订单ID' AFTER `consignment_order_id`;
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_consignment_order` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '代卖订单ID',
@@ -260,3 +261,34 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_print_log` (
     KEY `idx_site_device` (`site_id`, `device_id`),
     KEY `idx_site_order` (`site_id`, `order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收打印日志表';
+
+-- 分类报价单历史快照表
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_category_quote_history` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `category_id` int NOT NULL DEFAULT '0' COMMENT '分类ID',
+  `images` text NOT NULL COMMENT '报价单图片快照',
+  `operator_id` int NOT NULL DEFAULT '0' COMMENT '操作人ID',
+  `operator_name` varchar(100) NOT NULL DEFAULT '' COMMENT '操作人名称',
+  `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
+  `create_time` int NOT NULL DEFAULT '0' COMMENT '生成时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_cat_time` (`site_id`,`category_id`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收分类报价单历史快照表';
+
+-- 老数据回填：将现有非空 images 按分类回填一条历史
+INSERT INTO `{{prefix}}recycle_category_quote_history`
+  (`site_id`, `category_id`, `images`, `operator_id`, `operator_name`, `remark`, `create_time`)
+SELECT
+  `site_id`,
+  `category_id`,
+  `images`,
+  0,
+  '',
+  '初始化历史记录',
+  IF(`update_time` > 0, `update_time`, IF(`create_time` > 0, `create_time`, UNIX_TIMESTAMP()))
+FROM `{{prefix}}recycle_category`
+WHERE `images` IS NOT NULL AND `images` <> '';
+
+-- 历史表新增浏览量字段
+ALTER TABLE `{{prefix}}recycle_category_quote_history` ADD COLUMN `view_count` int NOT NULL DEFAULT 0 COMMENT '该报价单浏览次数' AFTER `create_time`;

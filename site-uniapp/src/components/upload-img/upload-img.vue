@@ -13,7 +13,7 @@
             </view>
         </template>
         <template v-else>
-            <view v-for="(item, index) in images.data" class="mb-[20rpx] relative" :class="{'mr-[18rpx]': (index + 1) % 5 != 0 }">
+            <view v-for="(item, index) in images.data" :class="getImageItemClass(index)">
                 <up-image  width="110rpx" height="110rpx" radius="var(--goods-rounded-big)" :src="img(item || '')" mode="aspectFill" @click="imgListPreview(item)">
                     <template #error>
                         <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
@@ -72,6 +72,11 @@ const value: any = computed({
 const images: Record<string, any> = reactive({
     data: []
 })
+
+const getImageItemClass = (index: number) => {
+    const base = 'mb-[20rpx] relative'
+    return (index + 1) % 5 != 0 ? `${ base } mr-[18rpx]` : base
+}
 
 let previewImageList: string[] = reactive([])
 const setValue = () => {

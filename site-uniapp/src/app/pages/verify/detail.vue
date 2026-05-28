@@ -41,14 +41,14 @@
                 </view>
                 <view v-for="(item,index) in verifyInfo.value.content.diy" :key="index" class="card-template mb-[20rpx]">
                     <view class="title">{{ item.title }}</view>
-                    <view class="card-template-item justify-between" v-for="(subItem,subIndex) in item.list" :key="subIndex" :class="{'mt-30rpx' : subIndex == '0'}">
+                    <view class="card-template-item justify-between" v-for="(subItem,subIndex) in item.list" :key="subIndex" :class="getVerifySectionItemClass(subIndex)">
                         <text class="text-[28rpx] text-[#333]">{{ subItem.title }}</text>
                         <view class="text-[28rpx] text-[#333]">{{ subItem.value }}</view>
                     </view>
                 </view>
 
                 <view class="flex flex-col card-template">
-                    <view class="flex" :class="{'mb-[20rpx]': verifyInfo.value.list.length-1 != index}" v-for="(item,index) in verifyInfo.value.list" :key="index">
+                    <view class="flex" :class="getVerifyGoodsItemClass(index)" v-for="(item,index) in verifyInfo.value.list" :key="index">
                         <image class="w-[150rpx] h-[150rpx] rounded-[var(--goods-rounded-big)]" mode="aspectFill" v-if="item.cover" :src="img(item.cover)"/>
                         <image class="w-[150rpx] h-[150rpx] rounded-[var(--goods-rounded-big)]" mode="aspectFill" v-else :src="img('/addon/mall/goods_template.png')"/>
                         <view class="flex flex-col flex-1 ml-[20rpx] py-[4rpx]">
@@ -90,5 +90,14 @@ const getVerifyDetailFn = () => {
         verifyInfo.value = res.data;
         loading.value = false;
     })
+}
+
+const getVerifySectionItemClass = (subIndex: number | string) => {
+    return Number(subIndex) === 0 ? 'card-template-item justify-between mt-[30rpx]' : 'card-template-item justify-between'
+}
+
+const getVerifyGoodsItemClass = (index: number) => {
+    const goodsList = (verifyInfo.value as any)?.list || []
+    return goodsList.length - 1 !== index ? 'flex mb-[20rpx]' : 'flex'
 }
 </script>

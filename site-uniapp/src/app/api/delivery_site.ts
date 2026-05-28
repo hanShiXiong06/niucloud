@@ -32,3 +32,20 @@ export function getCompanyList(params: Record<string, any>) {
 export function getOrderRefundAddress() {
     return request.get('delivery/site/order/refund/address')
 }
+
+// TODO
+export function getDeliveryStoreListAll (){
+    return true
+}
+
+// TODO
+export function getShopDeliverList (){
+    return true
+}
+
+// TODO
+export function getInUseLocalDeliveryList (){
+    return true
+}
+// getDeliveryStoreListAll
+

@@ -120,16 +120,21 @@ class AppsService extends BaseAdminService
         usort($apps, function($app_a, $app_b) {
             return $app_a['sort'] <=> $app_b['sort'];
         });
+
+        foreach($app_groups as &$app_group){
+            if(!isset($app_group['childs'])){
+                $app_group['childs'] = [];
+            }
+        }
+
         if(!empty($apps)){
             foreach($apps  as $app){
                 $group = $app['group'] ?? '';
-                foreach($app_groups as &$app_group){{
+                foreach($app_groups as &$app_group){
                     if($group == $app_group['key']){
                         $app_group['childs'][] = $app;
                         break;
                     }
-                }
-
                 }
             }
         }
@@ -153,7 +158,7 @@ class AppsService extends BaseAdminService
                 'menu_key' => 'shop_setting_index',
                 'sort' => 2,
                 'page' => '/app/pages/site/info',
-                'icon' => '/addon/mall/site/menu/site_detail.png'
+                'icon' => '/addon/home_service/admin/icon-2.png'
             ],
             [
                 'name' => '客户管理',
@@ -162,7 +167,7 @@ class AppsService extends BaseAdminService
                 'menu_key' => 'shop_member_list',
                 'sort' => 1,
                 'page' => '/app/pages/member/index',
-                'icon' => '/addon/mall/site/menu/member.png'
+                'icon' => '/addon/home_service/admin/icon-4.png'
             ],
         ];
 

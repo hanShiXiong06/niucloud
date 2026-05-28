@@ -104,6 +104,7 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `dispose_type` varchar(20) NOT NULL DEFAULT 'pending' COMMENT '处置类型：pending-未处置，recycle-普通回收，return-退回，consign-代卖',
   `dispose_status` tinyint NOT NULL DEFAULT 0 COMMENT '处置状态：0-未处置，1-已回收，2-已退回，3-已转代卖',
   `consignment_order_id` int NOT NULL DEFAULT 0 COMMENT '关联代卖订单ID',
+  `return_order_id` int NOT NULL DEFAULT 0 COMMENT '关联退回订单ID',
   `price_remark` varchar(255)   DEFAULT '' COMMENT '价格备注',
   `remark` varchar(255)   DEFAULT '' COMMENT '备注',
   `create_at` int not null DEFAULT 0 COMMENT '创建时间',
@@ -298,6 +299,21 @@ CREATE TABLE `{{prefix}}recycle_category` (
   `update_time` int NOT NULL DEFAULT 0 COMMENT '更新时间',
   PRIMARY KEY (`category_id`)
 )  COMMENT='回收分类表';
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_category_quote_history`;
+CREATE TABLE `{{prefix}}recycle_category_quote_history` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `category_id` int NOT NULL DEFAULT '0' COMMENT '分类ID',
+  `images` text NOT NULL COMMENT '报价单图片快照',
+  `operator_id` int NOT NULL DEFAULT '0' COMMENT '操作人ID',
+  `operator_name` varchar(100) NOT NULL DEFAULT '' COMMENT '操作人名称',
+  `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
+  `create_time` int NOT NULL DEFAULT '0' COMMENT '生成时间',
+  `view_count` int NOT NULL DEFAULT 0 COMMENT '该报价单浏览次数',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_cat_time` (`site_id`,`category_id`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收分类报价单历史快照表';
 
 
 
