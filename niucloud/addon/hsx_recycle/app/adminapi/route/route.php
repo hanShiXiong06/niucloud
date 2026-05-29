@@ -14,6 +14,49 @@ use app\adminapi\middleware\AdminCheckRole;
 use app\adminapi\middleware\AdminCheckToken;
 use app\adminapi\middleware\AdminLog;
 
+/**
+ * 店铺移动管理端
+ */
+Route::group('adminapp', function () {
+    // 首页应用
+    Route::get('site/apps_of_index', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Apps@getAppsOfIndex');
+    // 设置首页应用
+    Route::post('site/apps_of_index', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Apps@setAppsOfIndex');
+    // 全部应用
+    Route::get('site/apps', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Apps@getApps');
+    // 个人中心应用
+    Route::get('site/apps_of_user_center', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Apps@getAppOfUserCenter');
+    // 底部导航
+    Route::get('site/navs', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Apps@getBottomNav');
+
+    // 待办
+    Route::get('site/todo', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Index@getTodoList');
+    // 全部待办
+    Route::get('site/todo_of_all', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Index@getAllTodoList');
+    // 设置待办
+    Route::post('site/todo', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Index@setTodoList');
+
+    // 统计
+    Route::get('site/stat', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Index@getStatList');
+    // 全部统计
+    Route::get('site/stat_of_all', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Index@getAllStatList');
+    // 设置统计
+    Route::post('site/stat', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Index@setStatList');
+
+    // 附件配置
+    Route::get('site/attachment_config', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Attachment@getConfig');
+    // 附件分类列表
+    Route::get('site/attachment_category_list', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Attachment@categoryLists');
+    // 附件列表
+    Route::get('site/attachment_list', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Attachment@lists');
+    // 上传Base64图片
+    Route::post('site/upload_image_base64', 'addon\hsx_recycle\app\adminapi\controller\adminapp\site\Attachment@uploadImageBase64');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+
 // ✅ 概况页面路由
 Route::group('recycle', function () {
     // 概况页面

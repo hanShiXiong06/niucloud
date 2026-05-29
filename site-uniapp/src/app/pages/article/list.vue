@@ -2,7 +2,7 @@
 	<view class="bg-white min-h-[100vh]" :style="themeColor()">
 		<mescroll-body ref="mescrollRef" @init="mescrollInit" top="0" @down="downCallback" @up="getArticleListFn">
 			<view class="px-[24rpx]" v-if="articleList.length">
-				<view v-for="(item,index) in articleList" :key="index" class=" flex align-center py-[30rpx] border-0 border-b-[1rpx] border-solid border-[#eee]" :class="{'mb-[20rpx]': articleList.length-1 !== index}" @click="toLink(item.id)">
+				<view v-for="(item,index) in articleList" :key="index" class=" flex align-center py-[30rpx] border-0 border-b-[1rpx] border-solid border-[#eee]" :style="articleList.length-1 !== index ? 'margin-bottom: 20rpx;' : ''" @click="toLink(item.id)">
 					<up-image width="210rpx" height="170rpx" radius="8rpx" :src="img(item.image)" model="aspectFill">
 						<template #error>
 							<u-icon name="photo" color="#999" size="50"></u-icon>

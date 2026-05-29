@@ -222,12 +222,12 @@ const resetSearch = () => {
 
 // 添加模板
 const handleAdd = () => {
-  router.push('/hsx_recycle/printer_template/add');
+  router.push('/recycle/printer_template/add');
 };
 
 // 编辑模板
 const handleEdit = (row) => {
-  router.push({ path: '/hsx_recycle/printer_template/add', query: { id: row.template_id } });
+  router.push({ path: '/recycle/printer_template/add', query: { id: row.template_id } });
 };
 
 // 删除模板

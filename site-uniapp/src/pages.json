@@ -1,5 +1,13 @@
 {
 	"pages": [ // pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+		
+		{
+			"path": "app/pages/index/menu",
+			"style": {
+				"navigationBarTitleText": "%pages.index.menu%"
+			},
+			"needLogin": true
+		},
 		{
 			"path": "app/pages/index/index",
 			"style": {
@@ -7,13 +15,6 @@
                 "navigationStyle": "custom",
                 // #endif
 				"navigationBarTitleText": "%pages.index.index%"
-			},
-			"needLogin": true
-		},
-		{
-			"path": "app/pages/index/menu",
-			"style": {
-				"navigationBarTitleText": "%pages.index.menu%"
 			},
 			"needLogin": true
 		},
@@ -279,7 +280,7 @@
 		// {{ PAGE_BEGAIN }}
         // RECYCLE_PAGE_BEGIN
 		{
-			"root": "addon/recycle",
+			"root": "addon/hsx_recycle",
 			"pages": [
 				// *********************************** 商城 ***********************************
 				{
@@ -347,20 +348,20 @@
 					},
 					"needLogin": true
 				},
-				// {
-				// 	"path": "pages/express/list",
-				// 	"style": {
-				// 		"navigationBarTitleText": "快递运单"
-				// 	},
-				// 	"needLogin": true
-				// },
-				// {
-				// 	"path": "pages/express/detail",
-				// 	"style": {
-				// 		"navigationBarTitleText": "运单详情"
-				// 	},
-				// 	"needLogin": true
-				// }
+				{
+					"path": "pages/express/list",
+					"style": {
+						"navigationBarTitleText": "快递运单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/express/detail",
+					"style": {
+						"navigationBarTitleText": "运单详情"
+					},
+					"needLogin": true
+				}
 			]
 		}
 		// RECYCLE_PAGE_END

@@ -1,6 +1,21 @@
 -- hsx_recycle 0.0.2
 -- 可控经营看板：异常阈值配置、打印变量配置预留
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}sys_adminapp` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `uid` int NOT NULL DEFAULT '0' COMMENT '用户id',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点id',
+  `type` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '设置项类型  app  应用  stat统计  todo 待办事项',
+  `value` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '配置数据',
+  `create_time` int NOT NULL DEFAULT '0' COMMENT '添加时间',
+  `update_time` int NOT NULL DEFAULT '0' COMMENT '添加时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `create_time` (`create_time`) USING BTREE,
+  KEY `site_id` (`site_id`) USING BTREE,
+  KEY `uid` (`uid`) USING BTREE,
+  KEY `type` (`type`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='用户手机管理端偏好设置表';
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_alert_rule` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',

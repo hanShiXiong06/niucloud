@@ -8,9 +8,7 @@
 				<img :src="'data:image/png;base64,'+backImgBase" alt="" style="width:100%;height:100%;display:block">
 				<view class="verify-refresh" @click="refresh" v-show="showRefresh"><i class="nc-iconfont nc-icon-shuaxinV6xx  icon-refresh"></i>
 				</view>
-				<transition name="tips">
-					<text class="verify-tips" v-if="tipWords" :class="passFlag ?'suc-bg':'err-bg'">{{tipWords}}</text>
-				</transition>
+				<text class="verify-tips" v-if="tipWords" :class="passFlag ?'suc-bg':'err-bg'">{{tipWords}}</text>
 			</view>
 		</view>
 		<!-- 公共部分 -->

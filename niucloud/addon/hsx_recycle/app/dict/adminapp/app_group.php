@@ -4,7 +4,7 @@
 return [
     [
         'name' => '回收系统',
-        'key' => 'recycle',
+        'key' => 'hsx_recycle',
         'sort' => 1
     ]
 ];

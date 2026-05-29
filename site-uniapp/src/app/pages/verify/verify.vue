@@ -22,7 +22,7 @@
                 </view>
             </view>
             <view class="card-template mt-[var(--top-m)] sidebar-margin">
-                <view class="flex" :class="{'mb-[var(--top-m)]': (verifyInfo.value.list.length - 1 != index)}" v-for="(item,index) in verifyInfo.value.list" :key="index">
+                <view class="flex" :style="verifyInfo.value.list.length - 1 != index ? 'margin-bottom: var(--top-m);' : ''" v-for="(item,index) in verifyInfo.value.list" :key="index">
                     <image class="w-[150rpx] h-[150rpx] rounded-[var(--goods-rounded-big)]" mode="aspectFill" v-if="item.cover" :src="img(item.cover)"/>
                     <image class="w-[150rpx] h-[150rpx] rounded-[var(--goods-rounded-big)]" mode="aspectFill" v-else :src="img('addon/tourism/tourism/member/hotel.png')"/>
                     <view class="flex flex-col flex-1 ml-[20rpx] py-[4rpx]">

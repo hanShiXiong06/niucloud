@@ -67,12 +67,6 @@
                         </template>
                     </el-table-column>
 
-                    <el-table-column prop="view_count" :label="t('浏览量')" width="90" align="center">
-                        <template #default="{ row }">
-                            <span class="text-gray-500 text-sm">{{ row.view_count || 0 }}</span>
-                        </template>
-                    </el-table-column>
-
 
                     <el-table-column :label="t('报价')" width="170" align="left">
                         <template #default="{ row }">
@@ -141,6 +135,9 @@
                                     </div>
                                     <div v-if="item.remark" class="text-gray-500 mt-1">
                                         {{ t('备注') }}：{{ item.remark }}
+                                    </div>
+                                    <div class="text-gray-400 mt-1">
+                                        {{ t('浏览量') }}：{{ item.view_count || 0 }}
                                     </div>
                                 </div>
                             </div>

@@ -11,7 +11,8 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, watch, nextTick, getCurrentInstance } from 'vue'
+import { reactive, computed, watch, nextTick, getCurrentInstance, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { redirect, currRoute, currShareRoute, img } from '@/utils/common'
 import useConfigStore from '@/stores/config'
 
@@ -67,6 +68,23 @@ const itemBtn = (url: any) => {
         redirect({ url, mode: 'reLaunch' })
     }
 }
+
+const hideNativeTabbar = () => {
+    // #ifdef MP
+    uni.hideTabBar({
+        animation: false,
+        fail: () => {}
+    })
+    // #endif
+}
+
+onMounted(() => {
+    hideNativeTabbar()
+})
+
+onShow(() => {
+    hideNativeTabbar()
+})
 
 const instance = getCurrentInstance();
 nextTick(() => {

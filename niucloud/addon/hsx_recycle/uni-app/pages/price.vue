@@ -78,7 +78,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
-import { getCategoryTree, recordCategoryView } from '@/addon/hsx_recycle/api/recycle';
+import { getCategoryTree } from '@/addon/hsx_recycle/api/recycle';
 import { getPaymentList } from '@/addon/hsx_recycle/api/payment';
 
 import { img, redirect } from '@/utils/common';
@@ -208,10 +208,7 @@ const getFilteredChildList = (item) => item.child_list.filter(listItem => listIt
 const handleClick = (id: number) => {
     const category = flattenCategoryList.value.find(item => item.category_id === id);
     if (!category) return;
-
-    // 埋点：报价单浏览量 +1
-    recordCategoryView(id).catch(() => {});
-
+    
     // 直接预览图片
     if (category.images) {
         previewImages(category.images);

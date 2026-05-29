@@ -53,7 +53,8 @@ export function getSubPackagesPages() {
  * 获取tabbar
  */
 export function getTabbarPages() {
-    return pagesJson.tabBar.list.map(item => {
+    const list = pagesJson.tabBar?.list || []
+    return list.map(item => {
         return `/${ item.pagePath }`
     })
 }

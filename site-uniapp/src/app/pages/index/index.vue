@@ -102,7 +102,7 @@ const appList = ref<any>([])
 onShow(() => {
     // getStatInfoFn()
     // getTodoInfoFn()
-    // getAppOfIndexFn()
+    getAppOfIndexFn()
     // getArticleListFn()
 })
 

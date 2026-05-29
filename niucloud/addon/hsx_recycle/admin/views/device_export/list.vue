@@ -32,7 +32,7 @@
                     </el-form-item>
 
                     <el-form-item label="入库类型" prop="warehouse_type">
-                        <el-select v-model="deviceTableData.searchParam.warehouse_type" class="!w-[180px]">
+                        <el-select v-model="deviceTableData.searchParam.warehouse_type" class="!w-[150px]">
                             <el-option label="全部" value="" />
                             <el-option label="回收入库" value="owned" />
                             <el-option label="代卖入库" value="consign" />

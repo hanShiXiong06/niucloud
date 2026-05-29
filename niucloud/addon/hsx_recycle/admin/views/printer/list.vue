@@ -163,12 +163,12 @@ const fetchPrinterList = async () => {
 
 // 添加打印机
 const handleAdd = () => {
-  router.push('/hsx_recycle/printer/add');
+  router.push('/recycle/printer/add');
 };
 
 // 编辑打印机
 const handleEdit = (row) => {
-  router.push(`/hsx_recycle/printer/edit/${row.printer_id}`);
+  router.push(`/recycle/printer/edit/${row.printer_id}`);
 };
 
 // 删除打印机
