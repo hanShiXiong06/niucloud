@@ -23,22 +23,23 @@
             <scroll-view scroll-y class="check-content">
                 <view class="section">
                     <view class="section-title">质检结论</view>
-                    <view class="chip-row">
-                        <view
-                            class="chip"
-                            :class="{ 'chip--active': checkConclusion === 1 }"
-                            @click="checkConclusion = 1"
-                        >
-                            正常回收
-                        </view>
-                        <view
-                            class="chip chip--danger"
-                            :class="{ 'chip--active-danger': checkConclusion === 2 }"
-                            @click="checkConclusion = 2"
-                        >
-                            退回设备
-                        </view>
-                    </view>
+                    <u-radio-group v-model="checkConclusion" placement="row" iconPlacement="left">
+                        <u-radio
+                            activeColor="var(--primary-color)"
+                            :name="1"
+                            label="正常回收"
+                            labelColor="#334155"
+                            :labelSize="'28rpx'"
+                            :customStyle="{ marginRight: '48rpx' }"
+                        ></u-radio>
+                        <u-radio
+                            activeColor="#ef4444"
+                            :name="2"
+                            label="退回设备"
+                            labelColor="#334155"
+                            :labelSize="'28rpx'"
+                        ></u-radio>
+                    </u-radio-group>
                     <view class="section-tip">
                         {{ checkConclusion === 2 ? '该设备将按退回处理，无需填写回收报价。' : '完成质检后可继续定价、确认回收或进入后续处理。' }}
                     </view>
@@ -89,13 +90,18 @@
                         </view>
 
                         <view v-if="isTextField(field)" class="field-control">
-                            <input
+                            <u-input
                                 v-model="fieldValues[field.field_key]"
                                 class="field-input"
                                 :type="field.component === 'number' ? 'digit' : 'text'"
                                 :placeholder="field.placeholder || `请输入${ field.field_name }`"
+                                border="none"
+                                clearable
+                                inputAlign="right"
+                                fontSize="26rpx"
+                                placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
                                 @input="handleTemplateValueChange"
-                            />
+                            ></u-input>
                         </view>
 
                         <view v-else-if="field.component === 'switch'" class="field-switch">
@@ -147,12 +153,17 @@
                     </view>
                     <view class="price-box">
                         <text class="price-box__symbol">¥</text>
-                        <input
+                        <u-input
                             v-model="formData.final_price"
                             class="price-box__input"
                             type="digit"
                             placeholder="选填，可后续在定价环节处理"
-                        />
+                            border="none"
+                            clearable
+                            inputAlign="right"
+                            fontSize="34rpx"
+                            placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
+                        ></u-input>
                     </view>
                     <view v-if="Number(deviceData?.initial_price || 0) > 0" class="section-tip">
                         参考预估：¥{{ formatMoney(deviceData?.initial_price || 0) }}
@@ -203,7 +214,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { getCheckTemplateAll, getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
-import { getDevice, updateDevice } from '@/addon/hsx_recycle/api/order'
+import { batchReturnDevices, getDevice, updateDevice } from '@/addon/hsx_recycle/api/order'
 import RecycleImageUploader from '@/addon/hsx_recycle/components/RecycleImageUploader.vue'
 
 interface Props {
@@ -516,7 +527,10 @@ const submitForm = async (action: 'check' | 'save_draft') => {
         const payload = buildSubmitPayload(action)
         // 兼容 PC 端格式：后端期望数据包在 data 字段中
         await updateDevice(deviceData.value.id, { data: payload })
-        uni.showToast({ title: action === 'save_draft' ? '已暂存质检数据' : '质检提交成功', icon: 'success' })
+        if (shouldCreateReturnOrder(action)) {
+            await createReturnOrder()
+        }
+        uni.showToast({ title: getSuccessMessage(action), icon: 'success' })
         emit('success')
         handleClose()
     } catch (error: any) {
@@ -527,6 +541,31 @@ const submitForm = async (action: 'check' | 'save_draft') => {
     }
 }
 
+const shouldCreateReturnOrder = (action: 'check' | 'save_draft') => {
+    if (action !== 'check') return false
+    if (Number(checkConclusion.value) !== 2) return false
+    if (Number(deviceData.value.return_order_id || 0) > 0) return false
+    return true
+}
+
+const createReturnOrder = async () => {
+    const remark = formData.value.remark.trim()
+        || normalizeSummaryText(formData.value.check_result_seller)
+        || generatedSummary.value
+        || '移动端质检退回设备'
+
+    await batchReturnDevices({
+        ids: String(deviceData.value.id),
+        remark
+    })
+}
+
+const getSuccessMessage = (action: 'check' | 'save_draft') => {
+    if (action === 'save_draft') return '已暂存质检数据'
+    if (Number(checkConclusion.value) === 2) return '已创建退回处理'
+    return '质检提交成功'
+}
+
 const buildSubmitPayload = (action: 'check' | 'save_draft') => {
     const paymentPrice = checkConclusion.value === 2 ? '' : normalizeOptionalNumber(formData.value.final_price)
     const checkMeta = buildCheckMeta()
@@ -535,7 +574,7 @@ const buildSubmitPayload = (action: 'check' | 'save_draft') => {
     const buyerSummary = String(deviceData.value.check_result_buyer || '').trim()
     const buyerImages = normalizeImageValue(deviceData.value.check_images_buyer)
     const sellerImages = normalizeImageValue(checkImages.value)
-    const info = {
+    const info: Record<string, any> = {
         ...originalInfo.value,
         ...infoFields,
         goods_category: resolveGoodsCategory(),

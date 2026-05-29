@@ -74,7 +74,9 @@ ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `dispose_type` varchar(20) NOT NULL DEFAULT 'pending' COMMENT '处置类型：pending-未处置，recycle-普通回收，return-退回，consign-代卖' AFTER `settlement_mode`,
   ADD COLUMN `dispose_status` tinyint NOT NULL DEFAULT 0 COMMENT '处置状态：0-未处置，1-已回收，2-已退回，3-已转代卖' AFTER `dispose_type`,
   ADD COLUMN `consignment_order_id` int NOT NULL DEFAULT 0 COMMENT '关联代卖订单ID' AFTER `dispose_status`,
-  ADD COLUMN `return_order_id` int NOT NULL DEFAULT 0 COMMENT '关联退回订单ID' AFTER `consignment_order_id`;
+  ADD COLUMN `return_order_id` int NOT NULL DEFAULT 0 COMMENT '关联退回订单ID' AFTER `consignment_order_id`,
+  ADD COLUMN `return_time` int NOT NULL DEFAULT 0 COMMENT '退回处理时间' AFTER `return_order_id`,
+  ADD COLUMN `return_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '退回备注' AFTER `return_time`;
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_consignment_order` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '代卖订单ID',

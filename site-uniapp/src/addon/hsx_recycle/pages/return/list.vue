@@ -117,32 +117,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { copy, img, pxToRpx, redirect } from '@/utils/common'
+import { copy, redirect } from '@/utils/common'
 import { getReturnOrderList, getReturnOrderStatusList } from '@/addon/hsx_recycle/api/return-order'
 import { formatTime, makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
-import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
+import { useRecycleListHeader } from '@/addon/hsx_recycle/hooks/useRecycleListHeader'
+import { useRecyclePaging } from '@/addon/hsx_recycle/hooks/useRecyclePaging'
+import { getStatusKey, getStatusLabel, getStatusValue, hasStatusCount, isSameStatus } from '@/addon/hsx_recycle/hooks/useRecycleStatusTabs'
+import { getRecycleMemberAvatar, getRecycleMemberInitial, getRecycleMemberMobile, getRecycleMemberName } from '@/addon/hsx_recycle/hooks/useRecycleMember'
 
-const pagingRef = ref()
-const list = ref<any[]>([])
+const { pagingRef, list, reload, complete } = useRecyclePaging()
 const keyword = ref('')
 const currentStatus = ref<number | string>('')
 const statusTabs = ref<any[]>([{ status: '', name: '全部' }])
-const isMp = ref(false)
-
-// #ifdef MP
-isMp.value = true
-// #endif
-
-const navbarMetrics = getRecycleNavbarMetrics()
-const navbarHeightPx = navbarMetrics.navbarHeightPx
-const navbarHeightRpx = pxToRpx(navbarHeightPx)
-const statusTabsHeight = 82
-const pageHeaderStyle = computed(() => isMp.value ? `top: ${ navbarHeightPx }px;` : '')
-const pagingTop = computed(() => `${ isMp.value ? navbarHeightRpx + statusTabsHeight : 186 }rpx`)
-const pagingStyle = computed(() => ({ top: pagingTop.value }))
+const { pageHeaderStyle, pagingStyle } = useRecycleListHeader()
 const pendingStatus = '0'
 
 const loadStatuses = async () => {
@@ -154,7 +144,7 @@ const queryList = async (pageNo: number, pageSize: number) => {
     try {
         if (String(currentStatus.value) === pendingStatus) {
             const pendingList = await queryPendingList(pageNo, pageSize)
-            pagingRef.value?.complete(pendingList)
+            complete(pendingList)
             return
         }
 
@@ -166,9 +156,9 @@ const queryList = async (pageNo: number, pageSize: number) => {
             status: currentStatus.value,
             create_at: []
         })
-        pagingRef.value?.complete(res.data?.data || [])
+        complete(res.data?.data || [])
     } catch (e) {
-        pagingRef.value?.complete(false)
+        complete(false)
     }
 }
 
@@ -196,31 +186,15 @@ const queryPendingList = async (pageNo: number, pageSize: number) => {
     return matched.slice(start, end)
 }
 
-const reloadList = () => pagingRef.value?.reload()
+const reloadList = () => reload()
 
 const switchStatus = (status: number | string) => {
     currentStatus.value = status
     reloadList()
 }
 
-const getStatusValue = (item: any) => {
-    return item?.status ?? item?.value ?? ''
-}
-
-const getStatusLabel = (item: any) => {
-    return item?.name || item?.label || item?.title || '-'
-}
-
-const getStatusKey = (item: any, index: number) => {
-    return `${ getStatusValue(item) }-${ index }`
-}
-
-const hasStatusCount = (item: any) => {
-    return typeof item?.count !== 'undefined'
-}
-
 const isActiveStatus = (status: number | string) => {
-    return String(currentStatus.value) === String(status)
+    return isSameStatus(currentStatus.value, status)
 }
 
 const toDetail = (id: number | string) => {
@@ -230,21 +204,19 @@ const toDetail = (id: number | string) => {
 const copyNo = (value: string) => copy(value || '')
 
 const getMemberName = (item: any) => {
-    return item.member_name || item.member?.nickname || item.member?.username || '未知会员'
+    return getRecycleMemberName(item, '未知会员')
 }
 
 const getMemberMobile = (item: any) => {
-    return item.member_mobile || item.member?.mobile || item.member?.username || '-'
+    return getRecycleMemberMobile(item)
 }
 
 const getMemberAvatar = (item: any) => {
-    const headimg = item.member?.headimg || item.member?.head_img || item.member?.avatar || ''
-    return headimg ? img(headimg) : ''
+    return getRecycleMemberAvatar(item)
 }
 
 const getMemberInitial = (item: any) => {
-    const name = getMemberName(item)
-    return name ? String(name).slice(0, 1).toUpperCase() : '?'
+    return getRecycleMemberInitial(item, '未知会员')
 }
 
 const getDeviceCount = (item: any) => {
@@ -260,7 +232,7 @@ const getStatusClass = (status: number) => {
 
 onShow(() => {
     loadStatuses()
-    pagingRef.value?.reload()
+    reload()
 })
 </script>
 

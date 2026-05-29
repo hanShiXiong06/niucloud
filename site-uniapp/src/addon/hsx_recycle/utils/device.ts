@@ -95,6 +95,65 @@ export const getDevicePriceSubLabel = (device: Record<string, any> = {}) => {
     return ''
 }
 
+export const getDeviceListPriceMeta = (device: Record<string, any> = {}) => {
+    const initialPrice = Number(device.initial_price || 0)
+    const finalPrice = Number(device.final_price || 0)
+    const payAmount = Number(device.pay_amount || 0)
+
+    if (isReturnedDevice(device)) {
+        const referencePrice = finalPrice > 0 ? finalPrice : initialPrice
+        return {
+            label: device.status_name || '已退回',
+            subLabel: referencePrice > 0 ? `参考 ¥${formatMoney(referencePrice)}` : '',
+            tone: 'muted'
+        }
+    }
+
+    if (isConsignedDevice(device)) {
+        const consignment = device.consignmentOrder || {}
+        const settlementAmount = Number(consignment.settlement_amount || 0)
+        const soldPrice = Number(consignment.sold_price || 0)
+        const listingPrice = Number(consignment.listing_price || 0)
+        const referencePrice = settlementAmount > 0 ? settlementAmount : (soldPrice > 0 ? soldPrice : listingPrice)
+
+        return {
+            label: consignment.status_name || device.dispose_status_name || '已转代卖',
+            subLabel: referencePrice > 0 ? `代卖参考 ¥${formatMoney(referencePrice)}` : '',
+            tone: 'muted'
+        }
+    }
+
+    if (payAmount > 0) {
+        return {
+            label: `已打款 ¥${formatMoney(payAmount)}`,
+            subLabel: finalPrice > 0 && finalPrice !== payAmount ? `定价 ¥${formatMoney(finalPrice)}` : '',
+            tone: 'strong'
+        }
+    }
+
+    if (finalPrice > 0) {
+        return {
+            label: `定价 ¥${formatMoney(finalPrice)}`,
+            subLabel: initialPrice > 0 && initialPrice !== finalPrice ? `质检 ¥${formatMoney(initialPrice)}` : '',
+            tone: 'strong'
+        }
+    }
+
+    if (initialPrice > 0) {
+        return {
+            label: `质检 ¥${formatMoney(initialPrice)}`,
+            subLabel: '待定价',
+            tone: 'info'
+        }
+    }
+
+    return {
+        label: '待定价',
+        subLabel: '',
+        tone: 'info'
+    }
+}
+
 export const buildDeviceFlowHighlights = (device: Record<string, any> = {}) => {
     const highlights: Array<{ label: string, value: string }> = []
 
@@ -120,4 +179,3 @@ export const buildDeviceFlowHighlights = (device: Record<string, any> = {}) => {
 
     return highlights
 }
-

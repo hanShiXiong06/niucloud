@@ -64,16 +64,36 @@
                         />
                     </view>
 
-                    <view v-if="needCustomFields" class="custom-form">
-                        <view class="field">
-                            <view class="field-label">支付方式</view>
-                            <input v-model="customPayType" class="field-input" placeholder="如：微信转账 / 银行卡" />
-                        </view>
-                        <view class="field">
-                            <view class="field-label">收款账号</view>
-                            <input v-model="customAccount" class="field-input" placeholder="请输入收款账号" />
-                        </view>
-                    </view>
+                    <u-form
+                        v-if="needCustomFields"
+                        class="custom-form"
+                        labelPosition="left"
+                        labelWidth="150rpx"
+                        errorType="toast"
+                    >
+                        <u-form-item label="支付方式" :border-bottom="false">
+                            <u-input
+                                v-model="customPayType"
+                                border="none"
+                                clearable
+                                placeholder="如：微信转账 / 银行卡"
+                                inputAlign="right"
+                                fontSize="26rpx"
+                                placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
+                            ></u-input>
+                        </u-form-item>
+                        <u-form-item label="收款账号" :border-bottom="false">
+                            <u-input
+                                v-model="customAccount"
+                                border="none"
+                                clearable
+                                placeholder="请输入收款账号"
+                                inputAlign="right"
+                                fontSize="26rpx"
+                                placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
+                            ></u-input>
+                        </u-form-item>
+                    </u-form>
                 </view>
 
                 <view v-if="isDeviceMode" class="section">
@@ -552,26 +572,6 @@ const getDevicePaymentLabel = (device: any) => {
     margin-top: 20rpx;
     border-radius: 12rpx;
     background: #fff;
-}
-
-.field + .field {
-    margin-top: 18rpx;
-}
-
-.field-label {
-    margin-bottom: 10rpx;
-    font-size: 24rpx;
-    color: #475569;
-}
-
-.field-input {
-    height: 78rpx;
-    padding: 0 20rpx;
-    border-radius: 12rpx;
-    background: #fff;
-    border: 1rpx solid #dbe2ea;
-    font-size: 26rpx;
-    box-sizing: border-box;
 }
 
 .empty-card {

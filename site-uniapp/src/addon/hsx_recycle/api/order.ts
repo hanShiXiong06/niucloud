@@ -16,6 +16,10 @@ export function getOrderStatus() {
     return request.get('recycle/recycle_order/status')
 }
 
+export function searchMemberList(params: Record<string, any>) {
+    return request.get('member/member', params)
+}
+
 export function updateOrder(id: number | string, data: Record<string, any>) {
     return request.put(`recycle/recycle_order/${id}`, data)
 }

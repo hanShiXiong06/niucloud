@@ -101,9 +101,9 @@ import { onShow } from '@dcloudio/uni-app'
 import { redirect } from '@/utils/common'
 import { getExpressOrderRecordList, getExpressOrderStatistics } from '@/addon/hsx_recycle/api/express'
 import { formatMoney } from '@/addon/hsx_recycle/utils/helper'
+import { useRecyclePaging } from '@/addon/hsx_recycle/hooks/useRecyclePaging'
 
-const pagingRef = ref()
-const list = ref<any[]>([])
+const { pagingRef, list, reload, complete } = useRecyclePaging()
 const stats = ref<any>(null)
 const keyword = ref('')
 const currentStatus = ref('')
@@ -131,13 +131,13 @@ const queryList = async (pageNo: number, pageSize: number) => {
             keyword: keyword.value,
             order_status: currentStatus.value
         })
-        pagingRef.value?.complete(res.data?.data || [])
+        complete(res.data?.data || [])
     } catch (e) {
-        pagingRef.value?.complete(false)
+        complete(false)
     }
 }
 
-const reloadList = () => pagingRef.value?.reload()
+const reloadList = () => reload()
 
 const switchStatus = (value: string) => {
     currentStatus.value = value
@@ -158,7 +158,7 @@ const getStatusClass = (status: string) => {
 
 onShow(() => {
     loadStats()
-    pagingRef.value?.reload()
+    reload()
 })
 </script>
 

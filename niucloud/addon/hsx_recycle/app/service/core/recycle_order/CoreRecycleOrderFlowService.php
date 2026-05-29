@@ -95,6 +95,11 @@ class CoreRecycleOrderFlowService extends BaseCoreService
                 $this->executeStatusTransition($orderId, $transitionConfig['to_status'], $data, $context);
             }
 
+            // 取消主订单后，已签收/已入库设备需要同步生成退回处理。
+            if ($action === 'cancel') {
+                (new CoreRecycleOrderCancelReturnService())->sync($orderId, $data, $context);
+            }
+
             // 9. 触发后置事件
             $this->triggerAfterEvent($orderId, $transitionConfig, $context);
 

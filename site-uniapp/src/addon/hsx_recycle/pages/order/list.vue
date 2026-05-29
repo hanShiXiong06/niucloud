@@ -145,7 +145,15 @@
                         >
                             <view class="device-preview__top">
                                 <text class="device-preview__model">{{ device.model || '未知型号' }}</text>
-                                <text class="device-preview__price">{{ getDevicePriceLabel(device) }}</text>
+                                <view class="device-preview__price-wrap">
+                                    <text
+                                        class="device-preview__price"
+                                        :class="getDevicePriceClass(device)"
+                                    >{{ getDeviceListPriceMeta(device).label }}</text>
+                                    <text v-if="getDeviceListPriceMeta(device).subLabel" class="device-preview__price-sub">
+                                        {{ getDeviceListPriceMeta(device).subLabel }}
+                                    </text>
+                                </view>
                             </view>
                             <view class="device-preview__bottom">
                                 <text>{{ device.imei || device.user_sn || '-' }}</text>
@@ -186,34 +194,23 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getOrderList, pushOrderNotify, updateOrder } from '@/addon/hsx_recycle/api/order'
-import { copy, img, pxToRpx, redirect } from '@/utils/common'
+import { copy, redirect } from '@/utils/common'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
 import OrderFilterDrawer from './components/OrderFilterDrawer.vue'
-import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
-import { getDevicePriceLabel, isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
+import { getDeviceListPriceMeta, isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
+import { useRecycleListHeader } from '@/addon/hsx_recycle/hooks/useRecycleListHeader'
+import { useRecyclePaging } from '@/addon/hsx_recycle/hooks/useRecyclePaging'
+import { getRecycleMemberAvatar, getRecycleMemberInitial, getRecycleMemberMobile, getRecycleMemberName } from '@/addon/hsx_recycle/hooks/useRecycleMember'
 
-const pagingRef = ref()
-const list = ref<any[]>([])
+const { pagingRef, list, reload, complete } = useRecyclePaging()
 const keyword = ref('')
 const currentStatus = ref('')
 const filterVisible = ref(false)
 const filterParams = ref<Record<string, any>>({})
-const isMp = ref(false)
 const needRefresh = ref(false) // 标记是否需要刷新
 
-// #ifdef MP
-isMp.value = true
-// #endif
-
-const navbarMetrics = getRecycleNavbarMetrics()
-const navbarHeightPx = navbarMetrics.navbarHeightPx
-const navbarHeightRpx = pxToRpx(navbarHeightPx)
-
-const statusTabsHeight = 82
-const pageHeaderStyle = computed(() => isMp.value ? `top: ${ navbarHeightPx }px;` : '')
-const pagingTop = computed(() => `${ isMp.value ? navbarHeightRpx + statusTabsHeight : 186 }rpx`)
-const pagingStyle = computed(() => ({ top: pagingTop.value }))
+const { pageHeaderStyle, pagingStyle } = useRecycleListHeader()
 
 const statusList = ref<Array<{ label: string, value: string, count?: number|boolean }>>([
     { label: '全部', value: '' , count:false},
@@ -248,7 +245,7 @@ onLoad((option: any) => {
 
 onShow(() => {
     if (needRefresh.value) {
-        pagingRef.value?.reload()
+        reload()
         needRefresh.value = false
     }
 })
@@ -266,9 +263,9 @@ const queryList = async (pageNo: number, pageSize: number) => {
         const res: any = await getOrderList(params)
         const pageData = res?.data || {}
         syncStatusCounts(pageData.status_counts || {})
-        pagingRef.value?.complete(pageData.data || [])
+        complete(pageData.data || [])
     } catch (error) {
-        pagingRef.value?.complete(false)
+        complete(false)
     }
 }
 
@@ -282,7 +279,7 @@ const syncStatusCounts = (statusCounts: Record<string, any>) => {
     })
 }
 
-const onSearch = () => pagingRef.value?.reload()
+const onSearch = () => reload()
 
 const switchStatus = (value: string) => {
     currentStatus.value = value
@@ -292,7 +289,7 @@ const switchStatus = (value: string) => {
         delete next.status
         filterParams.value = next
     }
-    pagingRef.value?.reload()
+    reload()
 }
 
 const openFilter = () => {
@@ -303,14 +300,14 @@ const openFilter = () => {
 const onFilterConfirm = (params: Record<string, any>) => {
     filterParams.value = { ...params }
     currentStatus.value = String(params.status || '')
-    pagingRef.value?.reload()
+    reload()
 }
 
 const onFilterReset = () => {
     filterParams.value = {}
     currentStatus.value = ''
     keyword.value = ''
-    pagingRef.value?.reload()
+    reload()
 }
 
 const buildRouteFilters = (option: Record<string, any>) => {
@@ -370,7 +367,7 @@ const handleAction = async (type: string, item: any) => {
         try {
             await pushOrderNotify(item.id)
             uni.showToast({ title: '通知已推送', icon: 'success' })
-            pagingRef.value?.reload()
+            reload()
         } catch (error: any) {
             uni.showToast({ title: error?.msg || error?.message || '推送失败', icon: 'none' })
         }
@@ -404,7 +401,7 @@ const submitAction = async (id: number | string, payload: Record<string, any>, s
     try {
         await updateOrder(id, payload)
         uni.showToast({ title: successText, icon: 'success' })
-        pagingRef.value?.reload()
+        reload()
     } catch (error: any) {
         uni.showToast({ title: error?.msg || error?.message || '操作失败', icon: 'none' })
     }
@@ -423,21 +420,19 @@ const getDeviceCount = (item: any) => {
 }
 
 const getMemberName = (item: any) => {
-    return item.member?.nickname || item.member?.username || item.sender_name || item.customer_name || '未知客户'
+    return getRecycleMemberName(item)
 }
 
 const getMemberMobile = (item: any) => {
-    return item.member?.mobile || item.member?.username || item.sender_mobile || item.customer_phone || '-'
+    return getRecycleMemberMobile(item)
 }
 
 const getMemberAvatar = (item: any) => {
-    const headimg = item.member?.headimg || item.member?.head_img || item.member?.avatar || ''
-    return headimg ? img(headimg) : ''
+    return getRecycleMemberAvatar(item)
 }
 
 const getMemberInitial = (item: any) => {
-    const name = getMemberName(item)
-    return name ? String(name).slice(0, 1).toUpperCase() : '?'
+    return getRecycleMemberInitial(item)
 }
 
 const getDeviceSecondaryStatus = (device: any) => {
@@ -448,6 +443,10 @@ const getDeviceSecondaryStatus = (device: any) => {
         return device.confirm_status_name
     }
     return device.status_name || '-'
+}
+
+const getDevicePriceClass = (device: any) => {
+    return `device-preview__price--${ getDeviceListPriceMeta(device).tone }`
 }
 
 const getSummaryValue = (item: any, key: string) => {
@@ -919,12 +918,44 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     font-size: 23rpx;
     color: #334155;
     font-weight: 500;
+    flex: 1;
+    min-width: 0;
+}
+
+.device-preview__price-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    max-width: 260rpx;
 }
 
 .device-preview__price {
-    font-size: 23rpx;
-    color: #ea580c;
+    font-size: 22rpx;
     font-weight: 700;
+    line-height: 1.25;
+    text-align: right;
+}
+
+.device-preview__price--strong {
+    color: #ea580c;
+}
+
+.device-preview__price--info {
+    color: #2563eb;
+}
+
+.device-preview__price--muted {
+    color: #64748b;
+    font-weight: 600;
+}
+
+.device-preview__price-sub {
+    margin-top: 2rpx;
+    font-size: 18rpx;
+    line-height: 1.2;
+    color: #94a3b8;
+    text-align: right;
 }
 
 .device-preview__bottom {

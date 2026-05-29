@@ -24,7 +24,7 @@
             </view>
 
             <!-- 表单内容 -->
-            <view class="price-content">
+            <scroll-view scroll-y class="price-content">
                 <!-- 质检结果展示 -->
                 <view v-if="device.check_result || device.check_result_seller" class="form-section">
                     <view class="section-title">
@@ -82,12 +82,17 @@
                     </view>
                     <view class="price-input-wrapper">
                         <text class="price-symbol">¥</text>
-                        <input
+                        <u-input
                             v-model="formData.final_price"
                             type="digit"
                             placeholder="请输入回收价格"
                             class="price-input"
-                        />
+                            border="none"
+                            clearable
+                            inputAlign="right"
+                            fontSize="34rpx"
+                            placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
+                        ></u-input>
                     </view>
                     <view v-if="device.initial_price && Number(device.initial_price) > 0" class="text-[22rpx] text-[#999] mt-[8rpx]">
                         参考预估：¥{{ device.initial_price }}
@@ -99,12 +104,17 @@
                     <view class="section-title">卖货价格 <text class="text-[22rpx] text-[#999]">（选填，内部使用）</text></view>
                     <view class="price-input-wrapper">
                         <text class="price-symbol">¥</text>
-                        <input
+                        <u-input
                             v-model="formData.sell_price"
                             type="digit"
                             placeholder="选填"
                             class="price-input"
-                        />
+                            border="none"
+                            clearable
+                            inputAlign="right"
+                            fontSize="34rpx"
+                            placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
+                        ></u-input>
                     </view>
                 </view>
 
@@ -119,7 +129,7 @@
                         count
                     ></u-textarea>
                 </view>
-            </view>
+            </scroll-view>
 
             <!-- 底部按钮 -->
             <view class="price-footer">
@@ -357,6 +367,7 @@ const handleSubmit = async () => {
     flex: 1;
     padding: 20rpx 30rpx;
     overflow-y: auto;
+    box-sizing: border-box;
 }
 
 .form-section {

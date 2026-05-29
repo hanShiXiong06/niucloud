@@ -59,13 +59,49 @@
 
                 <view class="filter-section">
                     <view class="filter-section__title">用户与设备</view>
-                    <view class="form-row">
-                        <text class="form-row__label">手机号</text>
-                        <input v-model="form.user_mobile" class="form-row__input" placeholder="用户手机号" type="number" confirm-type="search" />
-                    </view>
-                    <view class="form-row">
-                        <text class="form-row__label">用户昵称</text>
-                        <input v-model="form.user_nickname" class="form-row__input" placeholder="昵称/用户名" confirm-type="search" />
+                    <view class="member-search">
+                        <view class="member-search__bar">
+                            <input
+                                v-model="memberKeyword"
+                                class="member-search__input"
+                                placeholder="手机号/昵称/会员编号"
+                                confirm-type="search"
+                                @confirm="handleMemberSearch"
+                            />
+                            <view v-if="memberKeyword" class="member-search__clear" @click="clearMemberKeyword">
+                                <text class="nc-iconfont nc-icon-cuohaoV6xx1"></text>
+                            </view>
+                            <view class="member-search__btn" :class="{ 'member-search__btn--loading': memberLoading }" @click="handleMemberSearch">
+                                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1"></text>
+                            </view>
+                        </view>
+                        <view v-if="selectedMember" class="selected-member">
+                            <u-avatar :src="selectedMember.headimg || selectedMember.head_img || ''" :size="'58rpx'" />
+                            <view class="selected-member__info">
+                                <view class="selected-member__name">{{ getMemberName(selectedMember) }}</view>
+                                <view class="selected-member__meta">{{ getMemberMobile(selectedMember) }}</view>
+                            </view>
+                            <view class="selected-member__remove" @click="clearSelectedMember">清除</view>
+                        </view>
+                        <view v-if="memberOptions.length" class="member-result">
+                            <view
+                                v-for="item in memberOptions"
+                                :key="item.member_id"
+                                class="member-result__item"
+                                :class="{ 'member-result__item--active': String(form.member_id) === String(item.member_id) }"
+                                @click="selectMember(item)"
+                            >
+                                <u-avatar :src="item.headimg || item.head_img || ''" :size="'52rpx'" />
+                                <view class="member-result__info">
+                                    <view class="member-result__name">{{ getMemberName(item) }}</view>
+                                    <view class="member-result__meta">
+                                        {{ getMemberMobile(item) }}
+                                        <text v-if="item.member_no"> / {{ item.member_no }}</text>
+                                    </view>
+                                </view>
+                            </view>
+                        </view>
+                        <view v-else-if="memberSearched && !memberLoading" class="member-empty">未找到匹配会员</view>
                     </view>
                     <view class="form-row">
                         <text class="form-row__label">IMEI</text>
@@ -103,19 +139,29 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
+import { searchMemberList } from '@/addon/hsx_recycle/api/order'
 
 type FilterForm = {
     status: string
     order_no: string
     express_no: string
     delivery_type: string
-    user_mobile: string
-    user_nickname: string
+    member_id: string
     device_imei: string
     device_model: string
     create_time_start: string
     create_time_end: string
+}
+
+type MemberOption = {
+    member_id: number | string
+    member_no?: string
+    nickname?: string
+    username?: string
+    mobile?: string
+    headimg?: string
+    head_img?: string
 }
 
 const props = withDefaults(defineProps<{
@@ -134,8 +180,7 @@ const createDefaultForm = (): FilterForm => ({
     order_no: '',
     express_no: '',
     delivery_type: '',
-    user_mobile: '',
-    user_nickname: '',
+    member_id: '',
     device_imei: '',
     device_model: '',
     create_time_start: '',
@@ -143,6 +188,11 @@ const createDefaultForm = (): FilterForm => ({
 })
 
 const form = reactive<FilterForm>(createDefaultForm())
+const memberKeyword = ref('')
+const memberOptions = ref<MemberOption[]>([])
+const memberLoading = ref(false)
+const memberSearched = ref(false)
+const selectedMember = ref<MemberOption | null>(null)
 
 watch(() => props.visible, (value) => {
     if (value) fillForm(props.modelValue || {})
@@ -158,19 +208,70 @@ const fillForm = (value: Record<string, any>) => {
         order_no: stringifyValue(value.order_no),
         express_no: stringifyValue(value.express_no),
         delivery_type: stringifyValue(value.delivery_type),
-        user_mobile: stringifyValue(value.user_mobile),
-        user_nickname: stringifyValue(value.user_nickname),
+        member_id: stringifyValue(value.member_id),
         device_imei: stringifyValue(value.device_imei || value.imei),
         device_model: stringifyValue(value.device_model),
         create_time_start: stringifyValue(value.create_time_start),
         create_time_end: stringifyValue(value.create_time_end)
     })
+    if (!form.member_id || String(selectedMember.value?.member_id || '') !== form.member_id) {
+        selectedMember.value = null
+    }
 }
 
 const stringifyValue = (value: any) => value === undefined || value === null ? '' : String(value)
 
 const onDateChange = (field: 'create_time_start' | 'create_time_end', event: any) => {
     form[field] = event?.detail?.value || ''
+}
+
+const normalizeMemberList = (res: any): MemberOption[] => {
+    const data = res?.data?.data || res?.data || []
+    return Array.isArray(data) ? data : []
+}
+
+const getMemberName = (item: MemberOption | null) => {
+    return item?.nickname || item?.username || item?.member_no || `会员${item?.member_id || ''}`
+}
+
+const getMemberMobile = (item: MemberOption | null) => {
+    return item?.mobile || item?.username || '未绑定手机号'
+}
+
+const handleMemberSearch = () => {
+    const keyword = memberKeyword.value.trim()
+    if (!keyword || memberLoading.value) return
+    memberLoading.value = true
+    memberSearched.value = true
+    searchMemberList({ page: 1, limit: 8, keyword })
+        .then((res: any) => {
+            memberOptions.value = normalizeMemberList(res)
+        })
+        .catch(() => {
+            memberOptions.value = []
+        })
+        .finally(() => {
+            memberLoading.value = false
+        })
+}
+
+const selectMember = (item: MemberOption) => {
+    selectedMember.value = item
+    form.member_id = stringifyValue(item.member_id)
+    memberKeyword.value = `${getMemberName(item)} ${getMemberMobile(item)}`.trim()
+    memberOptions.value = []
+    memberSearched.value = false
+}
+
+const clearSelectedMember = () => {
+    selectedMember.value = null
+    form.member_id = ''
+}
+
+const clearMemberKeyword = () => {
+    memberKeyword.value = ''
+    memberOptions.value = []
+    memberSearched.value = false
 }
 
 const buildParams = () => {
@@ -183,6 +284,10 @@ const buildParams = () => {
 }
 
 const handleConfirm = () => {
+    if (memberKeyword.value.trim() && !form.member_id) {
+        uni.showToast({ title: '请先选择会员', icon: 'none' })
+        return
+    }
     const params = buildParams()
     emit('update:modelValue', params)
     emit('confirm', params)
@@ -191,6 +296,10 @@ const handleConfirm = () => {
 
 const handleReset = () => {
     Object.assign(form, createDefaultForm())
+    selectedMember.value = null
+    memberKeyword.value = ''
+    memberOptions.value = []
+    memberSearched.value = false
     emit('update:modelValue', {})
     emit('reset')
 }
@@ -352,6 +461,128 @@ const handleClose = () => {
     background: #eff6ff;
     color: #2563eb;
     font-weight: 700;
+}
+
+.member-search {
+    padding-bottom: 10rpx;
+}
+
+.member-search__bar {
+    height: 68rpx;
+    padding-left: 20rpx;
+    border-radius: 12rpx;
+    background: #f6f8fb;
+    display: flex;
+    align-items: center;
+}
+
+.member-search__input {
+    flex: 1;
+    min-width: 0;
+    height: 68rpx;
+    font-size: 24rpx;
+    color: #111827;
+}
+
+.member-search__clear,
+.member-search__btn {
+    width: 64rpx;
+    height: 68rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 24rpx;
+}
+
+.member-search__btn {
+    color: #2563eb;
+}
+
+.member-search__btn--loading {
+    opacity: .45;
+}
+
+.selected-member {
+    margin-top: 14rpx;
+    padding: 14rpx;
+    border-radius: 12rpx;
+    background: #eff6ff;
+    display: flex;
+    align-items: center;
+}
+
+.selected-member__info {
+    flex: 1;
+    min-width: 0;
+    margin-left: 14rpx;
+}
+
+.selected-member__name,
+.member-result__name {
+    font-size: 24rpx;
+    line-height: 32rpx;
+    color: #111827;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.selected-member__meta,
+.member-result__meta {
+    margin-top: 2rpx;
+    font-size: 21rpx;
+    line-height: 28rpx;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.selected-member__remove {
+    flex-shrink: 0;
+    margin-left: 12rpx;
+    font-size: 22rpx;
+    color: #2563eb;
+}
+
+.member-result {
+    margin-top: 10rpx;
+    border-radius: 12rpx;
+    background: #f8fafc;
+    overflow: hidden;
+}
+
+.member-result__item {
+    padding: 12rpx 14rpx;
+    display: flex;
+    align-items: center;
+    border-bottom: 1rpx solid #eef2f7;
+}
+
+.member-result__item:last-child {
+    border-bottom: 0;
+}
+
+.member-result__item--active {
+    background: #eff6ff;
+}
+
+.member-result__info {
+    flex: 1;
+    min-width: 0;
+    margin-left: 14rpx;
+}
+
+.member-empty {
+    margin-top: 10rpx;
+    height: 56rpx;
+    line-height: 56rpx;
+    border-radius: 10rpx;
+    background: #f8fafc;
+    text-align: center;
+    font-size: 22rpx;
+    color: #94a3b8;
 }
 
 .order-filter__footer {

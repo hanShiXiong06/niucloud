@@ -15,6 +15,7 @@ use addon\hsx_recycle\app\service\admin\order\RecycleOrderCloseService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderCheckService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderPriceService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderPaymentService;
+use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderCancelReturnService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderService;
 use addon\hsx_recycle\app\service\admin\recycle_order\RecycleDeviceService;
 
@@ -457,6 +458,10 @@ class RecycleOrderService extends BaseAdminService
             ];
             
             $this->updateStatus($id, RecycleOrderDict::ORDER_STATUS_CANCELLED, $data['remark'] ?? '', $updateData);
+            (new CoreRecycleOrderCancelReturnService())->sync($id, $data, [
+                'operator_id' => $this->uid ?? 0,
+                'site_id' => $this->site_id ?? 0
+            ]);
             
             Db::commit();
             return true;

@@ -144,32 +144,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { copy, img, pxToRpx, redirect } from '@/utils/common'
+import { copy, redirect } from '@/utils/common'
 import { getConsignmentOrderList, getConsignmentStatusOptions } from '@/addon/hsx_recycle/api/consignment'
 import { formatMoney, formatTime, makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
-import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
+import { useRecycleListHeader } from '@/addon/hsx_recycle/hooks/useRecycleListHeader'
+import { useRecyclePaging } from '@/addon/hsx_recycle/hooks/useRecyclePaging'
+import { getStatusKey, getStatusLabel, getStatusValue, hasStatusCount, isSameStatus } from '@/addon/hsx_recycle/hooks/useRecycleStatusTabs'
+import { getRecycleMemberAvatar, getRecycleMemberInitial, getRecycleMemberMobile, getRecycleMemberName } from '@/addon/hsx_recycle/hooks/useRecycleMember'
 
-const pagingRef = ref()
-const list = ref<any[]>([])
+const { pagingRef, list, reload, complete } = useRecyclePaging()
 const keyword = ref('')
 const currentStatus = ref<number | string>('')
 const statusTabs = ref<any[]>([{ label: '全部', value: '' as number | string }])
-const isMp = ref(false)
-
-// #ifdef MP
-isMp.value = true
-// #endif
-
-const navbarMetrics = getRecycleNavbarMetrics()
-const navbarHeightPx = navbarMetrics.navbarHeightPx
-const navbarHeightRpx = pxToRpx(navbarHeightPx)
-const statusTabsHeight = 82
-const pageHeaderStyle = computed(() => isMp.value ? `top: ${ navbarHeightPx }px;` : '')
-const pagingTop = computed(() => `${ isMp.value ? navbarHeightRpx + statusTabsHeight : 186 }rpx`)
-const pagingStyle = computed(() => ({ top: pagingTop.value }))
+const { pageHeaderStyle, pagingStyle } = useRecycleListHeader()
 
 const loadStatusTabs = async () => {
     const res: any = await getConsignmentStatusOptions()
@@ -184,14 +174,14 @@ const queryList = async (pageNo: number, pageSize: number) => {
             keyword: keyword.value,
             status: currentStatus.value
         })
-        pagingRef.value?.complete(res.data?.data || [])
+        complete(res.data?.data || [])
     } catch (e) {
-        pagingRef.value?.complete(false)
+        complete(false)
     }
 }
 
 const reloadList = () => {
-    pagingRef.value?.reload()
+    reload()
 }
 
 const switchStatus = (value: number | string) => {
@@ -199,24 +189,8 @@ const switchStatus = (value: number | string) => {
     reloadList()
 }
 
-const getStatusValue = (item: any) => {
-    return item?.value ?? item?.status ?? ''
-}
-
-const getStatusLabel = (item: any) => {
-    return item?.label || item?.name || item?.title || '-'
-}
-
-const getStatusKey = (item: any, index: number) => {
-    return `${ getStatusValue(item) }-${ index }`
-}
-
-const hasStatusCount = (item: any) => {
-    return typeof item?.count !== 'undefined'
-}
-
 const isActiveStatus = (value: number | string) => {
-    return String(currentStatus.value) === String(value)
+    return isSameStatus(currentStatus.value, value)
 }
 
 const toDetail = (id: number | string) => {
@@ -226,21 +200,19 @@ const toDetail = (id: number | string) => {
 const copyNo = (value: string) => copy(value || '')
 
 const getMemberName = (item: any) => {
-    return item.member?.nickname || item.member?.username || item.customer_name || '未知客户'
+    return getRecycleMemberName(item)
 }
 
 const getMemberMobile = (item: any) => {
-    return item.member?.mobile || item.member?.username || item.customer_phone || '-'
+    return getRecycleMemberMobile(item)
 }
 
 const getMemberAvatar = (item: any) => {
-    const headimg = item.member?.headimg || item.member?.head_img || item.member?.avatar || ''
-    return headimg ? img(headimg) : ''
+    return getRecycleMemberAvatar(item)
 }
 
 const getMemberInitial = (item: any) => {
-    const name = getMemberName(item)
-    return name ? String(name).slice(0, 1).toUpperCase() : '?'
+    return getRecycleMemberInitial(item)
 }
 
 const getOrderStatusClass = (status: number) => {
@@ -252,7 +224,7 @@ const getOrderStatusClass = (status: number) => {
 
 onShow(() => {
     loadStatusTabs()
-    pagingRef.value?.reload()
+    reload()
 })
 </script>
 

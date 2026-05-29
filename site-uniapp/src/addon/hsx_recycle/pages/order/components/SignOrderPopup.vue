@@ -14,9 +14,7 @@
 
             <!-- 设备列表 -->
             <scroll-view scroll-y class="device-list">
-                <view v-if="devices.length === 0" class="empty-state">
-                    <text class="empty-text">暂无设备，请点击下方添加</text>
-                </view>
+                <u-empty v-if="devices.length === 0" text="暂无设备，请点击下方添加" mode="list"></u-empty>
 
                 <view v-for="(device, index) in devices" :key="device.id || index" class="device-card">
                     <view class="card-top">
@@ -56,11 +54,10 @@
 
             <!-- 底部 -->
             <view class="popup-footer">
-                <view class="footer-btn footer-btn--cancel" @click="handleClose">取消</view>
-                <view class="footer-btn footer-btn--primary" @click="handleSubmit">
-                    <text v-if="submitting">签收中...</text>
-                    <text v-else>确认签收</text>
-                </view>
+                <u-button @click="handleClose" :customStyle="{ flex: 1 }">取消</u-button>
+                <u-button type="primary" :loading="submitting" @click="handleSubmit" :customStyle="{ flex: 2 }">
+                    确认签收
+                </u-button>
             </view>
         </view>
 
@@ -73,45 +70,76 @@
                 </view>
 
                 <scroll-view scroll-y class="edit-body">
-                    <view class="form-item">
-                        <view class="form-label">IMEI串号 <text class="required">*</text></view>
-                        <input class="form-input" v-model="editForm.imei" placeholder="请输入15位IMEI" maxlength="15" type="number" />
-                    </view>
+                    <u-form labelPosition="left" labelWidth="160rpx" errorType="toast">
+                        <u-form-item label="IMEI串号" required :border-bottom="false">
+                            <view class="form-control">
+                                <ScanCodeInput
+                                    v-model="editForm.imei"
+                                    type="number"
+                                    :maxlength="15"
+                                    border="none"
+                                    clearable
+                                    placeholder="请输入15位IMEI"
+                                    inputAlign="right"
+                                    fontSize="28rpx"
+                                    placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
+                                    @scan="handleImeiScan"
+                                />
+                            </view>
+                        </u-form-item>
 
-                    <view class="form-item">
-                        <view class="form-label">设备型号 <text class="required">*</text></view>
-                        <input class="form-input" v-model="editForm.model" placeholder="请输入设备型号" />
-                    </view>
+                        <u-form-item label="设备型号" required :border-bottom="false">
+                            <u-input
+                                v-model="editForm.model"
+                                border="none"
+                                clearable
+                                placeholder="请输入设备型号"
+                                inputAlign="right"
+                                fontSize="28rpx"
+                                placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
+                            ></u-input>
+                        </u-form-item>
+                    </u-form>
 
                     <view class="form-item">
                         <view class="form-label">分类</view>
-                        <view class="category-select">
-                            <view v-for="cat in categories" :key="cat.id"
-                                class="category-tag"
-                                :class="{ 'category-tag--active': editForm.category_id == cat.id }"
-                                @click="editForm.category_id = cat.id">
-                                {{ cat.name }}
-                            </view>
-                        </view>
+                        <u-radio-group v-model="editForm.category_id" placement="row" iconPlacement="left" class="category-select">
+                            <u-radio
+                                v-for="cat in categories"
+                                :key="cat.id"
+                                activeColor="var(--primary-color)"
+                                :name="cat.id"
+                                :label="cat.name"
+                                labelColor="#333"
+                                :labelSize="'26rpx'"
+                                :customStyle="{ marginRight: '28rpx', marginBottom: '18rpx' }"
+                            ></u-radio>
+                        </u-radio-group>
                     </view>
 
                     <view class="form-item">
                         <view class="form-label">预估价格 <text class="text-[22rpx] text-[#999]">（选填）</text></view>
                         <view class="price-input-wrap">
                             <text class="price-symbol">¥</text>
-                            <input class="form-input price-input" v-model="editForm.initial_price" type="digit" placeholder="0.00" />
+                            <u-input
+                                v-model="editForm.initial_price"
+                                type="digit"
+                                border="none"
+                                clearable
+                                placeholder="0.00"
+                                class="price-input"
+                                inputAlign="right"
+                                fontSize="28rpx"
+                                placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
+                            ></u-input>
                         </view>
                     </view>
 
-                    <view class="form-item">
-                        <view class="form-label">用户串号 <text class="text-[22rpx] text-[#999]">（用户提交的串号）</text></view>
-                        <input class="form-input" v-model="editForm.user_sn" placeholder="选填" />
-                    </view>
                 </scroll-view>
 
                 <view class="popup-footer">
-                    <view class="footer-btn footer-btn--cancel" @click="closeEdit">取消</view>
-                    <view class="footer-btn footer-btn--primary" @click="saveEdit">保存</view>
+                    <u-button @click="closeEdit" :customStyle="{ flex: 1 }">取消</u-button>
+                    <u-button type="primary" @click="saveEdit" :customStyle="{ flex: 2 }">保存</u-button>
                 </view>
             </view>
         </u-popup>
@@ -121,6 +149,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { updateOrder } from '@/addon/hsx_recycle/api/order'
+import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 
 interface Props {
     visible: boolean
@@ -226,6 +255,10 @@ const saveEdit = () => {
         devices.value[editingIndex.value] = { ...devices.value[editingIndex.value], ...data }
     }
     closeEdit()
+}
+
+const handleImeiScan = () => {
+    uni.showToast({ title: '已录入扫码结果', icon: 'success' })
 }
 
 const handleSubmit = async () => {
@@ -419,27 +452,6 @@ const handleSubmit = async () => {
     box-sizing: border-box;
 }
 
-.footer-btn {
-    flex: 1;
-    height: 80rpx;
-    line-height: 80rpx;
-    text-align: center;
-    border-radius: 40rpx;
-    font-size: 28rpx;
-    box-sizing: border-box;
-}
-
-.footer-btn--cancel {
-    background: #f5f5f5;
-    color: #666;
-}
-
-.footer-btn--primary {
-    background: #2979ff;
-    color: #fff;
-    flex: 2;
-}
-
 /* 编辑弹窗 */
 .edit-body {
     flex: 1;
@@ -451,6 +463,12 @@ const handleSubmit = async () => {
 
 .form-item {
     margin-bottom: 28rpx;
+}
+
+.form-control {
+    width: 100%;
+    flex: 1;
+    min-width: 0;
 }
 
 .form-label {
@@ -475,16 +493,12 @@ const handleSubmit = async () => {
     background: #fff;
 }
 
-.form-input:focus {
-    border-color: #2979ff;
-}
-
 .price-input-wrap {
     display: flex;
     align-items: center;
     border: 1rpx solid #e0e0e0;
     border-radius: 8rpx;
-    padding-left: 20rpx;
+    padding: 20rpx;
     box-sizing: border-box;
 }
 
@@ -503,21 +517,5 @@ const handleSubmit = async () => {
 .category-select {
     display: flex;
     flex-wrap: wrap;
-    gap: 16rpx;
-}
-
-.category-tag {
-    padding: 12rpx 28rpx;
-    border-radius: 32rpx;
-    font-size: 24rpx;
-    background: #f5f5f5;
-    color: #666;
-    box-sizing: border-box;
-}
-
-.category-tag--active {
-    background: #e8f4ff;
-    color: #2979ff;
-    border: 1rpx solid #2979ff;
 }
 </style>

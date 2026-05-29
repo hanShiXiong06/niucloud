@@ -123,6 +123,8 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `dispose_status` tinyint NOT NULL DEFAULT 0 COMMENT '处置状态：0-未处置，1-已回收，2-已退回，3-已转代卖',
   `consignment_order_id` int NOT NULL DEFAULT 0 COMMENT '关联代卖订单ID',
   `return_order_id` int NOT NULL DEFAULT 0 COMMENT '关联退回订单ID',
+  `return_time` int NOT NULL DEFAULT 0 COMMENT '退回处理时间',
+  `return_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '退回备注',
   `price_remark` varchar(255)   DEFAULT '' COMMENT '价格备注',
   `remark` varchar(255)   DEFAULT '' COMMENT '备注',
   `create_at` int not null DEFAULT 0 COMMENT '创建时间',
