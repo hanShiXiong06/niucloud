@@ -207,11 +207,11 @@ const basicRows = computed<RowItem[]>(() => compactRows([
 ]))
 
 const statusRows = computed<RowItem[]>(() => compactRows([
-    row('设备状态', getDeviceStatusText(device.value.status, device.value.status_name)),
-    row('确认状态', isConsigned.value ? '' : getConfirmStatusText(device.value.confirm_status, device.value.confirm_status_name)),
-    row('打款状态', isConsigned.value ? '' : getPayStatusText(device.value.pay_status, device.value.pay_status_name)),
-    row('处置类型', isConsigned.value ? '' : getDisposeTypeText(device.value.dispose_type || device.value.settlement_mode, device.value.dispose_type_name)),
-    row('处置状态', isConsigned.value ? '' : getDisposeStatusText(device.value.dispose_status, device.value.dispose_status_name)),
+    row('设备状态', resolveBackendText(device.value.status_name, device.value.status)),
+    row('确认状态', isConsigned.value ? '' : resolveBackendText(device.value.confirm_status_name, device.value.confirm_status)),
+    row('打款状态', isConsigned.value ? '' : resolveBackendText(device.value.pay_status_name, device.value.pay_status)),
+    row('处置类型', isConsigned.value ? '' : resolveBackendText(device.value.dispose_type_name, device.value.dispose_type || device.value.settlement_mode)),
+    row('处置状态', isConsigned.value ? '' : resolveBackendText(device.value.dispose_status_name, device.value.dispose_status)),
     priceRow('预估价', device.value.initial_price),
     priceRow(isConsigned.value ? '转代卖前报价' : '回收报价', device.value.final_price),
     priceRow(isConsigned.value ? '代卖参考价' : '代卖/卖货价', device.value.sell_price),
@@ -275,11 +275,11 @@ const consignmentRows = computed<RowItem[]>(() => {
     const order = device.value.consignmentOrder || {}
     return compactRows([
         row('代卖单号', order.consignment_no || device.value.consignment_order_id),
-        row('代卖状态', order.status_name || getDisposeStatusText(device.value.dispose_status, device.value.dispose_status_name)),
+        row('代卖状态', resolveBackendText(order.status_name, device.value.dispose_status_name || device.value.dispose_status)),
         priceRow('挂牌价', order.listing_price),
         priceRow('成交价', order.sold_price),
         priceRow('结算金额', order.settlement_amount),
-        row('结算状态', getPayStatusText(order.pay_status, order.pay_status_name)),
+        row('结算状态', resolveBackendText(order.pay_status_name, order.pay_status)),
         row('创建时间', formatTimeValue(order.create_at)),
         row('备注', order.remark, true)
     ])
@@ -342,47 +342,10 @@ const formatCheckMetaItemValue = (item: any) => {
     return item?.text || ''
 }
 
-const getDeviceStatusText = (status: any, fallback = '') => fallback || mapText(status, {
-    1: '待质检',
-    2: '质检中',
-    3: '已质检',
-    4: '待确认',
-    5: '已回收',
-    6: '已退回',
-    7: '已定价',
-    8: '已定价（重新定价）',
-    9: '已转代卖'
-})
-
-const getConfirmStatusText = (status: any, fallback = '') => fallback || mapText(status, {
-    0: '待客户确认',
-    1: '已确认',
-    2: '已拒绝'
-})
-
-const getPayStatusText = (status: any, fallback = '') => fallback || mapText(status, {
-    0: '未打款',
-    1: '已打款',
-    2: '部分打款'
-})
-
-const getDisposeTypeText = (type: any, fallback = '') => fallback || mapText(type, {
-    pending: '未处置',
-    recycle: '普通回收',
-    return: '退回',
-    consign: '代卖'
-})
-
-const getDisposeStatusText = (status: any, fallback = '') => fallback || mapText(status, {
-    0: '未处置',
-    1: '已回收',
-    2: '已退回',
-    3: '已转代卖'
-})
-
-const mapText = (value: any, map: Record<string | number, string>) => {
-    if (value === undefined || value === null || value === '') return ''
-    return map[value] || map[String(value)] || String(value)
+const resolveBackendText = (name: any, rawValue: any) => {
+    if (name !== undefined && name !== null && String(name).trim() !== '') return String(name)
+    if (rawValue === undefined || rawValue === null || rawValue === '') return ''
+    return String(rawValue)
 }
 
 const formatTimeValue = (value: any) => {

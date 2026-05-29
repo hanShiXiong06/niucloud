@@ -39,6 +39,18 @@ class RecycleReturnOrderDict
     const DEVICE_STATUS_RETURNING = 6;
 
     /**
+     * 退货发货方式
+     */
+    // 系统快递
+    const SHIPMENT_MODE_SYSTEM = 'system';
+    // 手动录入快递
+    const SHIPMENT_MODE_MANUAL = 'manual';
+    // 物流车
+    const SHIPMENT_MODE_LOGISTICS_CAR = 'logistics_car';
+    // 自取
+    const SHIPMENT_MODE_SELF_PICKUP = 'self_pickup';
+
+    /**
      * 获取订单状态列表
      * @return array
      */
@@ -109,6 +121,48 @@ class RecycleReturnOrderDict
     }
 
     /**
+     * 获取退货发货方式列表
+     * @return array
+     */
+    public static function getShipmentModeList(): array
+    {
+        return [
+            self::SHIPMENT_MODE_SYSTEM => [
+                'value' => self::SHIPMENT_MODE_SYSTEM,
+                'name' => '系统快递',
+                'desc' => '通过已配置的快递 API 获取报价并创建运单',
+                'require_express_no' => true,
+                'need_quote' => true,
+                'express_company' => '系统快递'
+            ],
+            self::SHIPMENT_MODE_MANUAL => [
+                'value' => self::SHIPMENT_MODE_MANUAL,
+                'name' => '手动快递',
+                'desc' => '使用自己的快递，手动录入快递公司和单号',
+                'require_express_no' => true,
+                'need_quote' => false,
+                'express_company' => ''
+            ],
+            self::SHIPMENT_MODE_LOGISTICS_CAR => [
+                'value' => self::SHIPMENT_MODE_LOGISTICS_CAR,
+                'name' => '物流车',
+                'desc' => '线下物流车配送，无需快递单号',
+                'require_express_no' => false,
+                'need_quote' => false,
+                'express_company' => '物流车'
+            ],
+            self::SHIPMENT_MODE_SELF_PICKUP => [
+                'value' => self::SHIPMENT_MODE_SELF_PICKUP,
+                'name' => '自取',
+                'desc' => '客户到店自取，无需快递单号',
+                'require_express_no' => false,
+                'need_quote' => false,
+                'express_company' => '自取'
+            ]
+        ];
+    }
+
+    /**
      * 获取订单状态信息
      * @param int $status
      * @return array
@@ -128,6 +182,17 @@ class RecycleReturnOrderDict
     {
         $list = self::getDeviceStatusList();
         return $list[$status] ?? [];
+    }
+
+    /**
+     * 获取退货发货方式信息
+     * @param string $mode
+     * @return array
+     */
+    public static function getShipmentMode(string $mode): array
+    {
+        $list = self::getShipmentModeList();
+        return $list[$mode] ?? [];
     }
 
     /**
@@ -163,4 +228,4 @@ class RecycleReturnOrderDict
             'COMPLETE' => [self::ORDER_STATUS_RETURNING]
         ];
     }
-} 
+}

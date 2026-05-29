@@ -16,6 +16,10 @@ export function getReturnOrderStatusList() {
     return request.get('recycle/recycle_return_order/status_list')
 }
 
+export function getReturnShipmentModes() {
+    return request.get('recycle/recycle_return_order/shipment_modes')
+}
+
 export function confirmReturnOrder(id: number | string, data: Record<string, any>) {
     return request.put(`recycle/recycle_return_order/${id}/confirm`, data)
 }

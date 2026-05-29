@@ -90,7 +90,7 @@ const normalizeScanResult = (value: any) => {
     const text = decodeURIComponent(String(value || '').trim())
     if (!text) return ''
 
-    const queryMatch = text.match(/[?&](?:imei|sn|code|id)=([^&#]+)/i)
+    const queryMatch = text.match(/[?&](?:imei|imei2|sn|user_sn|code|id|express_no|expressNo|express|waybill_no|waybillNo|tracking_no|trackingNo|mail_no|mailNo)=([^&#]+)/i)
     if (queryMatch?.[1]) return decodeURIComponent(queryMatch[1]).trim()
 
     return text

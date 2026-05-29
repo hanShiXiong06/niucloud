@@ -99,7 +99,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { redirect } from '@/utils/common'
-import { getExpressOrderRecordList, getExpressOrderStatistics } from '@/addon/hsx_recycle/api/express'
+import { getExpressOrderRecordList, getExpressOrderStatistics, getExpressOrderStatusOptions } from '@/addon/hsx_recycle/api/express'
 import { formatMoney } from '@/addon/hsx_recycle/utils/helper'
 import { useRecyclePaging } from '@/addon/hsx_recycle/hooks/useRecyclePaging'
 
@@ -107,16 +107,24 @@ const { pagingRef, list, reload, complete } = useRecyclePaging()
 const stats = ref<any>(null)
 const keyword = ref('')
 const currentStatus = ref('')
+const initialized = ref(false)
+const statusTabs = ref<Array<{ label: string, value: string }>>([{ label: '全部', value: '' }])
 
-const statusTabs = [
-    { label: '全部', value: '' },
-    { label: '待揽收', value: 'pending' },
-    { label: '已揽收', value: 'picked' },
-    { label: '运输中', value: 'in_transit' },
-    { label: '已签收', value: 'delivered' },
-    { label: '已关闭', value: 'cancelled' },
-    { label: '异常', value: 'exception' }
-]
+const loadStatusTabs = async () => {
+    try {
+        const res: any = await getExpressOrderStatusOptions()
+        const rows = Array.isArray(res?.data) ? res.data : []
+        statusTabs.value = [
+            { label: '全部', value: '' },
+            ...rows.map((item: any) => ({
+                label: item?.label || item?.name || item?.title || String(item?.value || ''),
+                value: String(item?.value ?? '')
+            }))
+        ]
+    } catch (error) {
+        statusTabs.value = [{ label: '全部', value: '' }]
+    }
+}
 
 const loadStats = async () => {
     const res: any = await getExpressOrderStatistics({})
@@ -156,9 +164,14 @@ const getStatusClass = (status: string) => {
     return 'text-[#2979ff]'
 }
 
-onShow(() => {
+onShow(async () => {
+    await loadStatusTabs()
     loadStats()
-    reload()
+    if (initialized.value) {
+        reload()
+        return
+    }
+    initialized.value = true
 })
 </script>
 

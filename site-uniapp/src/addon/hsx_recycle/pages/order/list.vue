@@ -4,20 +4,18 @@
         <RecyclePageHeader title="回收订单" :fill="false" class="order-list-header">
             <view class="nav-search-box" @tap.stop>
                 <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 nav-search-icon" @click="onSearch()"></text>
-                <input
+                <ScanCodeInput
                     v-model="keyword"
                     class="nav-search-input"
-                    maxlength="50"
-                    type="text"
                     placeholder="搜索订单号、客户、手机号、IMEI"
-                    confirm-type="search"
+                    :maxlength="80"
+                    input-align="left"
+                    font-size="24rpx"
+                    placeholder-class="text-[var(--text-color-light9)] text-[24rpx]"
+                    :show-scan-text="false"
                     @confirm="onSearch"
+                    @scan="onScanSearch"
                 />
-                <text
-                    v-if="keyword"
-                    class="nc-iconfont nc-icon-cuohaoV6mm nav-search-clear"
-                    @click="keyword = ''; onSearch()"
-                ></text>
                 <view class="nav-filter-btn" @click="openFilter">
                     <text class="nc-iconfont nc-icon-shaixuanV6xx"></text>
                     <text v-if="activeFilterCount" class="filter-dot">{{ activeFilterCount }}</text>
@@ -29,21 +27,19 @@
         <view class="page-header" :style="pageHeaderStyle">
             <!-- #ifndef MP -->
             <view class="search-box">
-                <input
+                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 search-icon" @click="onSearch()"></text>
+                <ScanCodeInput
                     v-model="keyword"
                     class="search-input"
-                    maxlength="50"
-                    type="text"
                     placeholder="搜索订单号、客户、手机号、IMEI"
-                    confirm-type="search"
+                    :maxlength="80"
+                    input-align="left"
+                    font-size="26rpx"
+                    placeholder-class="text-[var(--text-color-light9)] text-[26rpx]"
+                    :show-scan-text="false"
                     @confirm="onSearch"
+                    @scan="onScanSearch"
                 />
-                <text
-                    v-if="keyword"
-                    class="nc-iconfont nc-icon-cuohaoV6xx1 search-clear"
-                    @click="keyword = ''; onSearch()"
-                ></text>
-                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 search-icon" @click="onSearch()"></text>
                 <view class="search-filter-btn" @click="openFilter">
                     <text class="nc-iconfont nc-icon-shaixuanV6xx"></text>
                     <text v-if="activeFilterCount" class="filter-dot">{{ activeFilterCount }}</text>
@@ -132,7 +128,7 @@
                             </view>
                         </view>
                         <view v-if="hasPaymentAmount(item)" class="amount-line">
-                            <text v-if="Number(item.flow_summary?.payable_amount || 0) > 0">待打款 ¥{{ formatMoney(item.flow_summary?.payable_amount) }}</text>
+                            <text v-if="Number(item.flow_summary?.payable_amount || 0) > 0">{{ getBusinessStageLabel('payable') || 'payable' }} ¥{{ formatMoney(item.flow_summary?.payable_amount) }}</text>
                             <text v-if="Number(item.flow_summary?.paid_amount || 0) > 0">已打款 ¥{{ formatMoney(item.flow_summary?.paid_amount) }}</text>
                         </view>
                     </view>
@@ -193,9 +189,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { getOrderList, pushOrderNotify, updateOrder } from '@/addon/hsx_recycle/api/order'
+import { getOrderBusinessStageOptions, getOrderList, getOrderStatus, pushOrderNotify, updateOrder } from '@/addon/hsx_recycle/api/order'
 import { copy, redirect } from '@/utils/common'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
+import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import OrderFilterDrawer from './components/OrderFilterDrawer.vue'
 import { getDeviceListPriceMeta, isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
@@ -209,21 +206,55 @@ const currentStatus = ref('')
 const filterVisible = ref(false)
 const filterParams = ref<Record<string, any>>({})
 const needRefresh = ref(false) // 标记是否需要刷新
+const initialized = ref(false)
+const lastStatusCounts = ref<Record<string, any>>({})
 
 const { pageHeaderStyle, pagingStyle } = useRecycleListHeader()
 
-const statusList = ref<Array<{ label: string, value: string, count?: number|boolean }>>([
-    { label: '全部', value: '' , count:false},
-    { label: '待签收', value: '1' },
-    { label: '已签收', value: '2' },
-    { label: '质检中', value: '3' },
-    { label: '已质检', value: '4' },
-    { label: '待确认', value: '5' },
-    { label: '待打款', value: '6' },
-    { label: '已完成', value: '7',count:false },
-    { label: '已关闭', value: '8' ,count:false},
-    { label: '已取消', value: '9',count:false }
+const statusList = ref<Array<{ label: string, value: string, count?: number }>>([
+    { label: '全部', value: '', count: 0 }
 ])
+const businessStageOptions = ref<Array<{ key: string, label: string, important?: boolean }>>([])
+
+const loadStatusTabs = async () => {
+    try {
+        const res: any = await getOrderStatus()
+        const rows = Object.values(res?.data || {})
+        statusList.value = [
+            { label: '全部', value: '', count: 0 },
+            ...rows.map((item: any) => ({
+                label: item?.name || item?.label || String(item?.status ?? ''),
+                value: String(item?.status ?? item?.value ?? ''),
+                count: 0
+            }))
+        ]
+        if (Object.keys(lastStatusCounts.value).length) {
+            syncStatusCounts(lastStatusCounts.value)
+        }
+    } catch (error) {
+        statusList.value = [{ label: '全部', value: '', count: 0 }]
+    }
+}
+
+const normalizeBusinessStageOptions = (data: any) => {
+    const rows = Array.isArray(data) ? data : Object.values(data || {})
+    const normalized = rows
+        .map((item: any) => ({
+            key: String(item?.key || item?.value || ''),
+            label: String(item?.name || item?.label || item?.key || ''),
+            important: Boolean(item?.important)
+        }))
+        .filter((item: any) => item.key && item.label)
+    return normalized.length ? normalized : businessStageOptions.value
+}
+
+const loadBusinessStageOptions = async () => {
+    try {
+        const res: any = await getOrderBusinessStageOptions()
+        businessStageOptions.value = normalizeBusinessStageOptions(res?.data)
+    } catch (error) {
+    }
+}
 
 const filterStatusOptions = computed(() => statusList.value.map((item) => ({
     label: item.label,
@@ -243,18 +274,23 @@ onLoad((option: any) => {
     }
 })
 
-onShow(() => {
-    if (needRefresh.value) {
+onShow(async () => {
+    await loadStatusTabs()
+    await loadBusinessStageOptions()
+    if (initialized.value || needRefresh.value) {
         reload()
-        needRefresh.value = false
+    } else {
+        initialized.value = true
     }
+    needRefresh.value = false
 })
 
 const queryList = async (pageNo: number, pageSize: number) => {
     const params: Record<string, any> = {
         page: pageNo,
         limit: pageSize,
-        keyword: keyword.value.trim()
+        keyword: keyword.value.trim(),
+        search: keyword.value.trim()
     }
     Object.assign(params, filterParams.value)
     if (currentStatus.value) params.status = currentStatus.value
@@ -262,7 +298,8 @@ const queryList = async (pageNo: number, pageSize: number) => {
     try {
         const res: any = await getOrderList(params)
         const pageData = res?.data || {}
-        syncStatusCounts(pageData.status_counts || {})
+        lastStatusCounts.value = pageData.status_counts || {}
+        syncStatusCounts(lastStatusCounts.value)
         complete(pageData.data || [])
     } catch (error) {
         complete(false)
@@ -271,7 +308,6 @@ const queryList = async (pageNo: number, pageSize: number) => {
 
 const syncStatusCounts = (statusCounts: Record<string, any>) => {
     statusList.value = statusList.value.map((item) => {
-        if (item.count === false) return item
         if (item.value === '') {
             return { ...item, count: Number(statusCounts.all || 0) }
         }
@@ -280,6 +316,10 @@ const syncStatusCounts = (statusCounts: Record<string, any>) => {
 }
 
 const onSearch = () => reload()
+
+const onScanSearch = () => {
+    reload()
+}
 
 const switchStatus = (value: string) => {
     currentStatus.value = value
@@ -321,7 +361,9 @@ const buildRouteFilters = (option: Record<string, any>) => {
         'device_imei',
         'device_model',
         'create_time_start',
-        'create_time_end'
+        'create_time_end',
+        'update_time_start',
+        'update_time_end'
     ]
     const filters: Record<string, any> = {}
     allowKeys.forEach((key) => {
@@ -334,7 +376,15 @@ const buildRouteFilters = (option: Record<string, any>) => {
 
 const toDetail = (item: any, filter = '') => {
     needRefresh.value = true // 从详情页返回时需要刷新
-    redirect({ url: '/addon/hsx_recycle/pages/order/detail', param: { id: item.id, filter } })
+    const deviceKeyword = String(filterParams.value.device_imei || keyword.value || '').trim()
+    redirect({
+        url: '/addon/hsx_recycle/pages/order/detail',
+        param: {
+            id: item.id,
+            filter,
+            device_keyword: deviceKeyword
+        }
+    })
 }
 
 const copyNo = (value: string) => copy(value)
@@ -464,13 +514,17 @@ const getProgressPercent = (item: any) => {
 }
 
 const getListSummaryItems = (item: any) => {
-    return [
-        { key: 'processing', label: '待处理', value: getBusinessStageCount(item, 'processing'), filter: 'processing', important: true },
-        { key: 'pending_confirm', label: '待确认', value: getBusinessStageCount(item, 'pending_confirm'), filter: 'pending_confirm', important: true },
-        { key: 'payable', label: '待打款', value: getBusinessStageCount(item, 'payable'), filter: 'payable', important: true },
-        { key: 'completed', label: '已完成', value: getBusinessStageCount(item, 'completed'), filter: 'completed' },
-        { key: 'exception', label: '异常', value: getBusinessStageCount(item, 'exception'), filter: 'exception' }
-    ]
+    return businessStageOptions.value.map((option) => ({
+        key: option.key,
+        label: option.label,
+        value: getBusinessStageCount(item, option.key),
+        filter: option.key,
+        important: Boolean(option.important)
+    }))
+}
+
+const getBusinessStageLabel = (key: string) => {
+    return businessStageOptions.value.find((item) => item.key === key)?.label || ''
 }
 
 const getBusinessStageCount = (item: any, stage: string) => {
@@ -555,10 +609,23 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 
 .nav-search-input {
     flex: 1;
-    /* min-width: 0; */
+    min-width: 0;
     height: 64rpx;
     font-size: 24rpx;
     color: #1f2937;
+}
+
+.nav-search-input :deep(.u-input),
+.nav-search-input :deep(.u-input__content) {
+    height: 64rpx;
+    min-height: 64rpx;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+.nav-search-input :deep(.u-input__content__field-wrapper__field) {
+    height: 64rpx;
+    line-height: 64rpx;
 }
 
 .nav-search-icon,
@@ -620,7 +687,21 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 
 .search-input {
     flex: 1;
+    min-width: 0;
     font-size: 26rpx;
+}
+
+.search-input :deep(.u-input),
+.search-input :deep(.u-input__content) {
+    height: 72rpx;
+    min-height: 72rpx;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+.search-input :deep(.u-input__content__field-wrapper__field) {
+    height: 72rpx;
+    line-height: 72rpx;
 }
 
 .search-clear,

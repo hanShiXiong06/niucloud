@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core\recycle_order;
 
+use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleReturnDevice;
@@ -77,7 +78,14 @@ class RecycleReturnOrderService extends BaseCoreService
             ['id', '=', $id],
             ['site_id', '=', $siteId]
         ])
-        ->with(['returnDevices.device', 'memberAddress'])
+        ->with([
+            'returnDevices.device',
+            'memberAddress' => function ($query) use ($siteId) {
+                $query->where('site_id', '=', $siteId)
+                    ->field('id,member_id,name,mobile,address,create_time,update_time')
+                    ->order('update_time desc,create_time desc,id desc');
+            }
+        ])
         ->find();
 
 
@@ -150,9 +158,6 @@ class RecycleReturnOrderService extends BaseCoreService
         if (empty($found_device_ids)) {
             return ['code' => -1, 'msg' => '所有设备都不存在或不属于该订单', 'data' => []];
         }
-        
-       
-        return true;
 
         // 开始事务
         Db::startTrans();
@@ -183,21 +188,16 @@ class RecycleReturnOrderService extends BaseCoreService
                 $return_devices[] = [
                     'return_order_id' => $return_order_id,
                     'device_id' => $device['id'],
-                    'status' => 0, // 待退货状态
-                    'create_at' => time()
+                    'status' => $this->getReturnDeviceStatusByOrderStatus(RecycleReturnOrderDict::ORDER_STATUS_PENDING),
+                    'remark' => $data['remark'] ?? ($data['comment'] ?? ''),
+                    'create_at' => time(),
+                    'update_at' => time()
                 ];
-                
-                // 如果设备状态还不是待退回，则更新
-                if ($device->status != RecycleReturnOrderDict::DEVICE_STATUS_PENDING &&
-                    $device->status != RecycleReturnOrderDict::DEVICE_STATUS_RETURNING &&
-                    $device->status != RecycleReturnOrderDict::DEVICE_STATUS_RETURNED) {
-                    
-                    $device->status = RecycleReturnOrderDict::DEVICE_STATUS_PENDING;
-                    $device->save();
-                }
             }
             
             (new RecycleReturnDevice())->insertAll($return_devices);
+            $this->syncLinkedDevicesForReturnOrder($order_id, $return_order_id, RecycleReturnOrderDict::ORDER_STATUS_PENDING, $data);
+            $this->syncParentOrderStatus($order_id);
             
             Db::commit();
             
@@ -284,52 +284,31 @@ class RecycleReturnOrderService extends BaseCoreService
         // 开始事务
         Db::startTrans();
         try {
+            $update_data = [
+                'status' => $status,
+                'comment' => $comment ? trim((string)$order['comment']) . (empty($order['comment']) ? '' : "\n") . $comment : $order['comment'],
+                'operator_uid' => $data['operator_id'] ?? ($data['operator_uid'] ?? 0),
+                'operator_name' => $data['operator_name'] ?? '',
+                'express_no' => array_key_exists('express_no', $data) ? ($data['express_no'] ?? '') : $order['express_no'],
+                'express_company' => array_key_exists('express_company', $data) ? ($data['express_company'] ?? '') : $order['express_company'],
+                'member_mobile' => array_key_exists('member_mobile', $data) ? ($data['member_mobile'] ?? '') : $order['member_mobile'],
+                'member_name' => array_key_exists('member_name', $data) ? ($data['member_name'] ?? '') : $order['member_name'],
+                'return_address' => array_key_exists('return_address', $data) ? ($data['return_address'] ?? '') : $order['return_address'],
+                'remark' => array_key_exists('remark', $data) ? ($data['remark'] ?? '') : $order['remark'],
+            ];
 
-            // 如果status == 2 直接sava 就可以了
-            if ($status == 2) {
-                
-                $data['operator_uid'] = $data['operator_id'] ?? 0;
-                $data['operator_name'] = $data['operator_name'] ?? '';
-                unset($data['operator_id']);
-
-                $this->model->where('id', $id)->update($data);
-               
-            }else{
-
-                // 更新订单状态
-                $update_data = [
-                    'status' => $status,
-                    'comment' => $comment ? $order['comment'] . "\n" . $comment : $order['comment'],
-                    'operator_uid' => $data['operator_uid'] ?? 0,
-                    'operator_name' => $data['operator_name'] ?? '',
-                    'express_no' => $data['express_no'] ?? '',
-                    'express_company' => $data['express_company'] ?? '',
-                    'member_mobile' => $data['member_mobile'] ?? '',
-                    'member_name' => $data['member_name'] ?? '',
-                    'return_address' => $data['return_address'] ?? '',
-                    'remark'=> $data['remark'] ?? '',
-                ];
-                
-                // 如果状态为已完成，设置完成时间
-                if ($status == RecycleReturnOrderDict::ORDER_STATUS_COMPLETED) {
-                    $update_data['over_at'] = date('Y-m-d H:i:s');
-                }
-                
-                
-                $this->model->where('id', $id)->update($update_data);
-                
-                // 更新关联设备状态
-                $device_status = $this->getDeviceStatusByOrderStatus($status);
-                if ($device_status !== false) {
-                    $device_ids = (new RecycleReturnDevice())->where('return_order_id', $id)
-                        ->column('device_id');
-                    
-                    if (!empty($device_ids)) {
-                        (new RecycleDevice())->whereIn('id', $device_ids)
-                            ->update(['status' => $device_status]);
-                    }
-                }
+            if ($status == RecycleReturnOrderDict::ORDER_STATUS_COMPLETED) {
+                $update_data['over_at'] = date('Y-m-d H:i:s');
             }
+
+            $this->model->where('id', $id)->update($update_data);
+            (new RecycleReturnDevice())->where('return_order_id', $id)->update([
+                'status' => $this->getReturnDeviceStatusByOrderStatus($status),
+                'remark' => $update_data['remark'] ?? '',
+                'update_at' => time()
+            ]);
+            $this->syncLinkedDevicesForReturnOrder((int)$order['order_id'], $id, $status, $data);
+            $this->syncParentOrderStatus((int)$order['order_id']);
             Db::commit();
 
             $this->triggerReturnPrint($status, $id);
@@ -473,6 +452,205 @@ class RecycleReturnOrderService extends BaseCoreService
         ];
         
         return $status_map[$order_status] ?? false;
+    }
+
+    private function getReturnDeviceStatusByOrderStatus(int $orderStatus): int
+    {
+        $map = [
+            RecycleReturnOrderDict::ORDER_STATUS_PENDING => 0,
+            RecycleReturnOrderDict::ORDER_STATUS_RETURNING => 1,
+            RecycleReturnOrderDict::ORDER_STATUS_COMPLETED => 2,
+            RecycleReturnOrderDict::ORDER_STATUS_CANCELLED => 0,
+        ];
+
+        return $map[$orderStatus] ?? 0;
+    }
+
+    private function syncLinkedDevicesForReturnOrder(int $orderId, int $returnOrderId, int $returnOrderStatus, array $data = []): void
+    {
+        $remark = trim((string)($data['remark'] ?? ($data['comment'] ?? '')));
+        $deviceIds = (new RecycleReturnDevice())->where('return_order_id', $returnOrderId)->column('device_id');
+        if (empty($deviceIds)) {
+            return;
+        }
+
+        $devices = (new RecycleDevice())->where([
+            ['order_id', '=', $orderId],
+        ])->whereIn('id', $deviceIds)
+            ->select()
+            ->toArray();
+
+        foreach ($devices as $device) {
+            $updateData = $returnOrderStatus === RecycleReturnOrderDict::ORDER_STATUS_CANCELLED
+                ? $this->buildCancelledReturnDeviceData($device)
+                : $this->buildReturnDeviceData($returnOrderId, $remark, $returnOrderStatus, $device);
+
+            (new RecycleDevice())->where('id', (int)$device['id'])->update($updateData);
+        }
+    }
+
+    private function buildReturnDeviceData(int $returnOrderId, string $remark, int $returnOrderStatus, array $device): array
+    {
+        $updateData = [
+            'status' => RecycleOrderDict::DEVICE_STATUS_RETURNED,
+            'settlement_mode' => RecycleOrderDict::DISPOSE_TYPE_RETURN,
+            'dispose_type' => RecycleOrderDict::DISPOSE_TYPE_RETURN,
+            'dispose_status' => RecycleOrderDict::DISPOSE_STATUS_RETURNED,
+            'return_order_id' => $returnOrderId,
+            'return_remark' => $remark,
+        ];
+
+        if ($returnOrderStatus === RecycleReturnOrderDict::ORDER_STATUS_COMPLETED || empty($device['return_time'])) {
+            $updateData['return_time'] = time();
+        }
+
+        return $updateData;
+    }
+
+    private function buildCancelledReturnDeviceData(array $device): array
+    {
+        $status = RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK;
+        $disposeType = RecycleOrderDict::DISPOSE_TYPE_PENDING;
+        $disposeStatus = RecycleOrderDict::DISPOSE_STATUS_PENDING;
+        $settlementMode = RecycleOrderDict::DISPOSE_TYPE_PENDING;
+        $confirmStatus = RecycleOrderDict::CONFIRM_STATUS_PENDING;
+
+        if (!empty($device['consignment_order_id']) || ($device['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN) {
+            $status = RecycleOrderDict::DEVICE_STATUS_CONSIGNED;
+            $disposeType = RecycleOrderDict::DISPOSE_TYPE_CONSIGN;
+            $disposeStatus = RecycleOrderDict::DISPOSE_STATUS_CONSIGNED;
+            $settlementMode = RecycleOrderDict::DISPOSE_TYPE_CONSIGN;
+            $confirmStatus = RecycleOrderDict::CONFIRM_STATUS_CONFIRMED;
+        } elseif ((int)($device['pay_status'] ?? 0) === RecycleOrderDict::PAY_STATUS_PAID
+            || (float)($device['pay_amount'] ?? 0) > 0
+            || (int)($device['confirm_status'] ?? 0) === RecycleOrderDict::CONFIRM_STATUS_CONFIRMED) {
+            $status = RecycleOrderDict::DEVICE_STATUS_RECYCLED;
+            $disposeType = RecycleOrderDict::DISPOSE_TYPE_RECYCLE;
+            $disposeStatus = RecycleOrderDict::DISPOSE_STATUS_RECYCLED;
+            $settlementMode = RecycleOrderDict::DISPOSE_TYPE_RECYCLE;
+            $confirmStatus = RecycleOrderDict::CONFIRM_STATUS_CONFIRMED;
+        } elseif ((float)($device['final_price'] ?? 0) > 0 || in_array((int)($device['status'] ?? 0), [
+            RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM,
+            RecycleOrderDict::DEVICE_STATUS_PRICED,
+            RecycleOrderDict::DEVICE_STATUS_PRICED_REPRICE,
+        ], true)) {
+            $status = RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM;
+        } elseif (in_array((int)($device['status'] ?? 0), [RecycleOrderDict::DEVICE_STATUS_CHECKING], true)) {
+            $status = RecycleOrderDict::DEVICE_STATUS_CHECKING;
+        } elseif (!empty($device['check_result']) || !empty($device['check_result_seller']) || !empty($device['check_at'])) {
+            $status = RecycleOrderDict::DEVICE_STATUS_CHECKED;
+        }
+
+        return [
+            'status' => $status,
+            'settlement_mode' => $settlementMode,
+            'dispose_type' => $disposeType,
+            'dispose_status' => $disposeStatus,
+            'return_order_id' => 0,
+            'return_time' => 0,
+            'return_remark' => '',
+            'confirm_status' => $confirmStatus,
+        ];
+    }
+
+    private function syncParentOrderStatus(int $orderId): void
+    {
+        if ($orderId <= 0) {
+            return;
+        }
+
+        $order = (new RecycleOrder())->where('id', $orderId)->find();
+        if (empty($order)) {
+            return;
+        }
+
+        $devices = (new RecycleDevice())->where('order_id', $orderId)->select()->toArray();
+        if (empty($devices)) {
+            return;
+        }
+
+        $counts = [
+            RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK => 0,
+            RecycleOrderDict::DEVICE_STATUS_CHECKING => 0,
+            RecycleOrderDict::DEVICE_STATUS_CHECKED => 0,
+            RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM => 0,
+            RecycleOrderDict::DEVICE_STATUS_RECYCLED => 0,
+            RecycleOrderDict::DEVICE_STATUS_RETURNED => 0,
+            RecycleOrderDict::DEVICE_STATUS_PRICED => 0,
+            RecycleOrderDict::DEVICE_STATUS_PRICED_REPRICE => 0,
+            RecycleOrderDict::DEVICE_STATUS_CONSIGNED => 0,
+        ];
+
+        $allDevicesChecked = true;
+        $allDevicesPriced = true;
+        $allDevicesInFinalState = true;
+
+        foreach ($devices as $device) {
+            $deviceStatus = (int)($device['status'] ?? 0);
+            if (isset($counts[$deviceStatus])) {
+                $counts[$deviceStatus]++;
+            }
+
+            if (in_array($deviceStatus, [
+                RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
+                RecycleOrderDict::DEVICE_STATUS_CHECKING,
+            ], true)) {
+                $allDevicesChecked = false;
+            }
+
+            if (!in_array($deviceStatus, [
+                RecycleOrderDict::DEVICE_STATUS_RETURNED,
+                RecycleOrderDict::DEVICE_STATUS_CONSIGNED,
+            ], true) && (float)($device['final_price'] ?? 0) <= 0 && $deviceStatus !== RecycleOrderDict::DEVICE_STATUS_RECYCLED) {
+                $allDevicesPriced = false;
+            }
+
+            if (!in_array($deviceStatus, [
+                RecycleOrderDict::DEVICE_STATUS_RECYCLED,
+                RecycleOrderDict::DEVICE_STATUS_RETURNED,
+                RecycleOrderDict::DEVICE_STATUS_CONSIGNED,
+            ], true)) {
+                $allDevicesInFinalState = false;
+            }
+        }
+
+        $total = count($devices);
+        $newStatus = (int)$order['status'];
+
+        if ($allDevicesInFinalState) {
+            if ($counts[RecycleOrderDict::DEVICE_STATUS_RETURNED] === $total) {
+                $newStatus = RecycleOrderDict::ORDER_STATUS_CLOSED;
+            } elseif ($counts[RecycleOrderDict::DEVICE_STATUS_RECYCLED] > 0) {
+                $newStatus = RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT;
+            } elseif ($counts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED] > 0) {
+                $newStatus = RecycleOrderDict::ORDER_STATUS_COMPLETED;
+            }
+        } elseif ($counts[RecycleOrderDict::DEVICE_STATUS_CHECKING] > 0) {
+            $newStatus = RecycleOrderDict::ORDER_STATUS_CHECKING;
+        } elseif ($counts[RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK] > 0) {
+            $newStatus = RecycleOrderDict::ORDER_STATUS_SIGNED;
+        } else {
+            $confirmedAndRecycled = $counts[RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM] + $counts[RecycleOrderDict::DEVICE_STATUS_RECYCLED];
+            $nonClosedDevices = $total - $counts[RecycleOrderDict::DEVICE_STATUS_RETURNED] - $counts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED];
+
+            if ($confirmedAndRecycled === $total && $counts[RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM] > 0) {
+                $newStatus = RecycleOrderDict::ORDER_STATUS_PENDING_CONFIRM;
+            } elseif ($allDevicesChecked) {
+                if ($allDevicesPriced && $nonClosedDevices > 0 && $counts[RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM] === $nonClosedDevices) {
+                    $newStatus = RecycleOrderDict::ORDER_STATUS_PENDING_CONFIRM;
+                } elseif (
+                    $counts[RecycleOrderDict::DEVICE_STATUS_CHECKED] > 0
+                    || $counts[RecycleOrderDict::DEVICE_STATUS_PRICED] > 0
+                    || $counts[RecycleOrderDict::DEVICE_STATUS_PRICED_REPRICE] > 0
+                ) {
+                    $newStatus = RecycleOrderDict::ORDER_STATUS_CHECKED;
+                }
+            }
+        }
+
+        if ($newStatus !== (int)$order['status']) {
+            (new RecycleOrder())->where('id', $orderId)->update(['status' => $newStatus]);
+        }
     }
 
     /**

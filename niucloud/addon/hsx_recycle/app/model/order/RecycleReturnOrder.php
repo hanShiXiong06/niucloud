@@ -197,7 +197,8 @@ class RecycleReturnOrder extends BaseModel
     }
     // memberAddress
     public function memberAddress(){
-        // ShopAddress
-        return $this->hasOne(RecycleUserAddress::class, 'member_id', 'member_id');
+        return $this->hasOne(RecycleUserAddress::class, 'member_id', 'member_id')
+            ->field('id,member_id,name,mobile,address,create_time,update_time')
+            ->order('update_time desc,create_time desc,id desc');
     }
 }

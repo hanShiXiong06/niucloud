@@ -33,7 +33,16 @@
                     </view>
                     <view class="form-row">
                         <text class="form-row__label">快递单号</text>
-                        <input v-model="form.express_no" class="form-row__input" placeholder="快递/物流单号" confirm-type="search" />
+                        <ScanCodeInput
+                            v-model="form.express_no"
+                            class="form-row__scan"
+                            placeholder="快递/物流单号"
+                            :maxlength="80"
+                            input-align="right"
+                            font-size="24rpx"
+                            placeholder-class="text-[var(--text-color-light9)] text-[24rpx]"
+                            :show-scan-text="false"
+                        />
                     </view>
                     <view class="form-row">
                         <text class="form-row__label">配送方式</text>
@@ -105,7 +114,16 @@
                     </view>
                     <view class="form-row">
                         <text class="form-row__label">IMEI</text>
-                        <input v-model="form.device_imei" class="form-row__input" placeholder="设备 IMEI" confirm-type="search" />
+                        <ScanCodeInput
+                            v-model="form.device_imei"
+                            class="form-row__scan"
+                            placeholder="设备 IMEI"
+                            :maxlength="80"
+                            input-align="right"
+                            font-size="24rpx"
+                            placeholder-class="text-[var(--text-color-light9)] text-[24rpx]"
+                            :show-scan-text="false"
+                        />
                     </view>
                     <view class="form-row">
                         <text class="form-row__label">设备型号</text>
@@ -114,19 +132,32 @@
                 </view>
 
                 <view class="filter-section">
-                    <view class="filter-section__title">提交时间</view>
-                    <view class="form-row">
-                        <text class="form-row__label">开始日期</text>
-                        <picker mode="date" :value="form.create_time_start" @change="onDateChange('create_time_start', $event)">
-                            <view class="form-row__picker">{{ form.create_time_start || '请选择' }}</view>
-                        </picker>
-                    </view>
-                    <view class="form-row">
-                        <text class="form-row__label">结束日期</text>
-                        <picker mode="date" :value="form.create_time_end" @change="onDateChange('create_time_end', $event)">
-                            <view class="form-row__picker">{{ form.create_time_end || '请选择' }}</view>
-                        </picker>
-                    </view>
+                    <view class="filter-section__title">时间区间</view>
+                    <DateRangeFilterRow
+                        label="提交时间"
+                        v-model:start="form.create_time_start"
+                        v-model:end="form.create_time_end"
+                    />
+                    <DateRangeFilterRow
+                        label="更新时间"
+                        v-model:start="form.update_time_start"
+                        v-model:end="form.update_time_end"
+                    />
+                    <DateRangeFilterRow
+                        label="签收时间"
+                        v-model:start="form.sign_at_start"
+                        v-model:end="form.sign_at_end"
+                    />
+                    <DateRangeFilterRow
+                        label="完成时间"
+                        v-model:start="form.complete_at_start"
+                        v-model:end="form.complete_at_end"
+                    />
+                    <DateRangeFilterRow
+                        label="打款时间"
+                        v-model:start="form.pay_time_start"
+                        v-model:end="form.pay_time_end"
+                    />
                 </view>
             </scroll-view>
 
@@ -141,6 +172,8 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import { searchMemberList } from '@/addon/hsx_recycle/api/order'
+import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
+import DateRangeFilterRow from './DateRangeFilterRow.vue'
 
 type FilterForm = {
     status: string
@@ -152,6 +185,14 @@ type FilterForm = {
     device_model: string
     create_time_start: string
     create_time_end: string
+    update_time_start: string
+    update_time_end: string
+    sign_at_start: string
+    sign_at_end: string
+    complete_at_start: string
+    complete_at_end: string
+    pay_time_start: string
+    pay_time_end: string
 }
 
 type MemberOption = {
@@ -184,7 +225,15 @@ const createDefaultForm = (): FilterForm => ({
     device_imei: '',
     device_model: '',
     create_time_start: '',
-    create_time_end: ''
+    create_time_end: '',
+    update_time_start: '',
+    update_time_end: '',
+    sign_at_start: '',
+    sign_at_end: '',
+    complete_at_start: '',
+    complete_at_end: '',
+    pay_time_start: '',
+    pay_time_end: ''
 })
 
 const form = reactive<FilterForm>(createDefaultForm())
@@ -212,7 +261,15 @@ const fillForm = (value: Record<string, any>) => {
         device_imei: stringifyValue(value.device_imei || value.imei),
         device_model: stringifyValue(value.device_model),
         create_time_start: stringifyValue(value.create_time_start),
-        create_time_end: stringifyValue(value.create_time_end)
+        create_time_end: stringifyValue(value.create_time_end),
+        update_time_start: stringifyValue(value.update_time_start),
+        update_time_end: stringifyValue(value.update_time_end),
+        sign_at_start: getRangeStart(value.sign_at, value.sign_at_start),
+        sign_at_end: getRangeEnd(value.sign_at, value.sign_at_end),
+        complete_at_start: getRangeStart(value.complete_at, value.complete_at_start),
+        complete_at_end: getRangeEnd(value.complete_at, value.complete_at_end),
+        pay_time_start: getRangeStart(value.pay_time, value.pay_time_start),
+        pay_time_end: getRangeEnd(value.pay_time, value.pay_time_end)
     })
     if (!form.member_id || String(selectedMember.value?.member_id || '') !== form.member_id) {
         selectedMember.value = null
@@ -221,8 +278,14 @@ const fillForm = (value: Record<string, any>) => {
 
 const stringifyValue = (value: any) => value === undefined || value === null ? '' : String(value)
 
-const onDateChange = (field: 'create_time_start' | 'create_time_end', event: any) => {
-    form[field] = event?.detail?.value || ''
+const getRangeStart = (rangeValue: any, fallback: any = '') => {
+    if (Array.isArray(rangeValue)) return stringifyValue(rangeValue[0])
+    return stringifyValue(fallback)
+}
+
+const getRangeEnd = (rangeValue: any, fallback: any = '') => {
+    if (Array.isArray(rangeValue)) return stringifyValue(rangeValue[1])
+    return stringifyValue(fallback)
 }
 
 const normalizeMemberList = (res: any): MemberOption[] => {
@@ -276,11 +339,53 @@ const clearMemberKeyword = () => {
 
 const buildParams = () => {
     const params: Record<string, any> = {}
-    Object.keys(form).forEach((key) => {
-        const value = String((form as any)[key] || '').trim()
+    const scalarKeys: Array<keyof FilterForm> = [
+        'status',
+        'order_no',
+        'express_no',
+        'delivery_type',
+        'member_id',
+        'device_imei',
+        'device_model',
+        'create_time_start',
+        'create_time_end',
+        'update_time_start',
+        'update_time_end'
+    ]
+    scalarKeys.forEach((key) => {
+        const value = String(form[key] || '').trim()
         if (value) params[key] = value
     })
+    appendRangeParam(params, 'sign_at', form.sign_at_start, form.sign_at_end)
+    appendRangeParam(params, 'complete_at', form.complete_at_start, form.complete_at_end)
+    appendRangeParam(params, 'pay_time', form.pay_time_start, form.pay_time_end)
     return params
+}
+
+const appendRangeParam = (params: Record<string, any>, key: string, start: string, end: string) => {
+    if (start && end) params[key] = [start, end]
+}
+
+const validateRanges = () => {
+    const ranges = [
+        { label: '提交时间', start: form.create_time_start, end: form.create_time_end },
+        { label: '更新时间', start: form.update_time_start, end: form.update_time_end },
+        { label: '签收时间', start: form.sign_at_start, end: form.sign_at_end },
+        { label: '完成时间', start: form.complete_at_start, end: form.complete_at_end },
+        { label: '打款时间', start: form.pay_time_start, end: form.pay_time_end }
+    ]
+
+    for (const item of ranges) {
+        if ((item.start && !item.end) || (!item.start && item.end)) {
+            uni.showToast({ title: `请选择完整${ item.label }`, icon: 'none' })
+            return false
+        }
+        if (item.start && item.end && item.start > item.end) {
+            uni.showToast({ title: `${ item.label }开始不能晚于结束`, icon: 'none' })
+            return false
+        }
+    }
+    return true
 }
 
 const handleConfirm = () => {
@@ -288,6 +393,7 @@ const handleConfirm = () => {
         uni.showToast({ title: '请先选择会员', icon: 'none' })
         return
     }
+    if (!validateRanges()) return
     const params = buildParams()
     emit('update:modelValue', params)
     emit('confirm', params)
@@ -317,6 +423,7 @@ const handleClose = () => {
     background: #f6f7fb;
     display: flex;
     flex-direction: column;
+    padding-top: 34rpx;
 }
 
 .order-filter__header {
@@ -380,7 +487,7 @@ const handleClose = () => {
 
 .status-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 12rpx;
 }
 
@@ -425,6 +532,26 @@ const handleClose = () => {
     height: 72rpx;
     text-align: right;
     font-size: 24rpx;
+    color: #111827;
+}
+
+.form-row__scan {
+    flex: 1;
+    min-width: 0;
+    height: 72rpx;
+}
+
+.form-row__scan :deep(.u-input),
+.form-row__scan :deep(.u-input__content) {
+    height: 72rpx;
+    min-height: 72rpx;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+.form-row__scan :deep(.u-input__content__field-wrapper__field) {
+    height: 72rpx;
+    line-height: 72rpx;
     color: #111827;
 }
 

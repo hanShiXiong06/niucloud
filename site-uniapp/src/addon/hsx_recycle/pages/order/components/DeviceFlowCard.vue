@@ -112,7 +112,7 @@
                     </view>
                 </view>
 
-                <view class="timeline">
+                <!-- <view class="timeline">
                     <view class="timeline__title">完整流转记录</view>
                     
                     <view v-if="logs.length" class="timeline__list">
@@ -132,7 +132,7 @@
                         </view>
                     </view>
                     <view v-else class="timeline__empty">暂无完整流转记录</view>
-                </view>
+                </view> -->
             </view>
         </view>
 

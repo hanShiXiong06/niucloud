@@ -277,7 +277,6 @@ class RecyclePrintSceneService extends BaseAdminService
             ->where([
                 ['site_id', '=', $this->site_id],
                 ['status', '=', 1],
-                ['biz_type', '=', $bizType],
             ])
             ->order('sort asc, scene_id asc')
             ->select()
@@ -289,6 +288,9 @@ class RecyclePrintSceneService extends BaseAdminService
                 continue;
             }
             $row = $this->appendSceneMeta($row);
+            if (($row['biz_type'] ?? 'device') !== $bizType) {
+                continue;
+            }
             $button = $row['button_config'] ?? [];
             if (empty($button['enabled'])) {
                 continue;
@@ -297,7 +299,7 @@ class RecyclePrintSceneService extends BaseAdminService
                 'scene_key' => $row['scene_key'],
                 'scene_name' => $row['scene_name'],
                 'button_text' => $button['text'] ?: $row['scene_name'],
-                'button_position' => $button['position'] ?: 'device_actions',
+                'button_position' => $this->normalizeButtonPosition((string)($row['biz_type'] ?? 'device'), (string)($button['position'] ?? '')),
                 'visible_device_status' => array_values($button['visible_device_status'] ?? []),
                 'visible_confirm_status' => array_values($button['visible_confirm_status'] ?? []),
                 'visible_pay_status' => array_values($button['visible_pay_status'] ?? []),
@@ -645,6 +647,8 @@ class RecyclePrintSceneService extends BaseAdminService
     {
         $builtin = RecyclePrintScene::sceneList()[$row['scene_key']] ?? [];
         $row['trigger_key'] = $row['trigger_key'] ?? ($builtin['trigger_key'] ?? '');
+        $row['biz_type_origin'] = $row['biz_type'] ?? '';
+        $row['biz_type'] = $this->resolveSceneBizType($row);
         $row['is_builtin'] = $this->isBuiltinScene((string)($row['scene_key'] ?? '')) ? 1 : 0;
         $row['trigger_options'] = $builtin['trigger_options'] ?? $this->getTriggerOptions((string)($row['biz_type'] ?? 'device'));
         $row['button_position_options'] = $this->getButtonPositionOptions();
@@ -822,15 +826,87 @@ class RecyclePrintSceneService extends BaseAdminService
             $defaultStatuses = [2, 3, 4, 5];
         }
 
+        $bizType = (string)($scene['biz_type'] ?? 'device');
+
         return [
             'enabled' => empty($button['enabled']) ? 0 : 1,
             'text' => trim((string)($button['text'] ?? $scene['scene_name'] ?? '打印')),
-            'position' => (string)($button['position'] ?? 'device_actions'),
+            'position' => $this->normalizeButtonPosition($bizType, (string)($button['position'] ?? '')),
             'visible_device_status' => $this->normalizeIntList($defaultStatuses),
             'visible_confirm_status' => $this->normalizeIntList($button['visible_confirm_status'] ?? []),
             'visible_pay_status' => $this->normalizeIntList($button['visible_pay_status'] ?? []),
             'confirm_required' => array_key_exists('confirm_required', $button) ? (empty($button['confirm_required']) ? 0 : 1) : 1,
         ];
+    }
+
+    private function normalizeButtonPosition(string $bizType, string $position): string
+    {
+        $defaultMap = [
+            'device' => 'device_actions',
+            'order' => 'order_actions',
+            'return' => 'return_order_actions',
+            'consignment' => 'consignment_order_actions',
+        ];
+
+        $defaultPosition = $defaultMap[$bizType] ?? 'device_actions';
+        $position = trim($position);
+        if ($position === '') {
+            return $defaultPosition;
+        }
+
+        // 兼容历史自定义场景。非设备业务未显式配置时，旧逻辑会错误落到 device_actions。
+        if ($bizType !== 'device' && $position === 'device_actions') {
+            return $defaultPosition;
+        }
+
+        return $position;
+    }
+
+    private function getBizTypeByTemplateType(string $templateType): string
+    {
+        $map = [
+            'device_label' => 'device',
+            'order_receipt' => 'order',
+            'return_label' => 'return',
+            'consignment_receipt' => 'consignment',
+        ];
+        return $map[$templateType] ?? '';
+    }
+
+    private function getBizTypeByButtonPosition(string $position): string
+    {
+        $map = [
+            'device_actions' => 'device',
+            'order_actions' => 'order',
+            'return_order_actions' => 'return',
+            'consignment_order_actions' => 'consignment',
+        ];
+        return $map[$position] ?? '';
+    }
+
+    private function resolveSceneBizType(array $scene): string
+    {
+        $sceneBizType = (string)($scene['biz_type'] ?? '');
+        $templateBizType = $this->getBizTypeByTemplateType((string)($scene['template_type'] ?? ''));
+        $conditionConfig = $this->decodeConditionConfig($scene['condition_config'] ?? '', []);
+        $buttonPosition = (string)($conditionConfig['button']['position'] ?? '');
+        $positionBizType = $this->getBizTypeByButtonPosition($buttonPosition);
+
+        if ($sceneBizType === '') {
+            return $templateBizType ?: ($positionBizType ?: 'device');
+        }
+
+        // 兼容历史自定义场景：新增时默认 biz_type=device，但模板/按钮位置已经体现了真实业务。
+        if ($sceneBizType === 'device') {
+            if ($templateBizType !== '' && $templateBizType !== 'device') {
+                return $templateBizType;
+            }
+            if ($positionBizType !== '' && $positionBizType !== 'device') {
+                return $positionBizType;
+            }
+        }
+
+        return $sceneBizType;
     }
 
     private function normalizeIntList($value): array
@@ -1232,27 +1308,70 @@ class RecyclePrintSceneService extends BaseAdminService
             ],
             'return' => [
                 ['key' => 'return_order_no', 'label' => '退货单号', 'sample' => 'RT202605250001'],
+                ['key' => 'return_status_name', 'label' => '退货状态', 'sample' => '退货中'],
                 ['key' => 'origin_order_no', 'label' => '原订单编号', 'sample' => 'R202605250001'],
+                ['key' => 'origin_order_status_name', 'label' => '原订单状态', 'sample' => '已关闭'],
+                ['key' => 'origin_customer_name', 'label' => '原下单客户', 'sample' => '张三'],
+                ['key' => 'origin_customer_phone', 'label' => '原下单客户电话', 'sample' => '13800000000'],
                 ['key' => 'express_company', 'label' => '退货快递公司', 'sample' => '顺丰速运'],
                 ['key' => 'express_no', 'label' => '退货快递单号', 'sample' => 'SF123456789'],
+                ['key' => 'sender_name', 'label' => '寄件人', 'sample' => '仓库A'],
+                ['key' => 'sender_mobile', 'label' => '寄件电话', 'sample' => '0755-123456'],
+                ['key' => 'sender_address', 'label' => '寄件地址', 'sample' => '广东省深圳市南山区...'],
+                ['key' => 'receiver_name', 'label' => '收件人', 'sample' => '张三'],
+                ['key' => 'receiver_mobile', 'label' => '收件电话', 'sample' => '13800000000'],
+                ['key' => 'receiver_address', 'label' => '收件地址', 'sample' => '广东省深圳市...'],
                 ['key' => 'return_address', 'label' => '退货地址', 'sample' => '广东省深圳市...'],
-                ['key' => 'member_name', 'label' => '收件人', 'sample' => '张三'],
-                ['key' => 'member_mobile', 'label' => '收件电话', 'sample' => '13800000000'],
+                ['key' => 'member_name', 'label' => '会员姓名', 'sample' => '张三'],
+                ['key' => 'member_mobile', 'label' => '会员电话', 'sample' => '13800000000'],
+                ['key' => 'device_count', 'label' => '设备数量', 'sample' => '2'],
                 ['key' => 'device_summary', 'label' => '退货设备摘要', 'sample' => 'iPhone 15 Pro / 358...'],
+                ['key' => 'device_summary_inline', 'label' => '退货设备摘要单行', 'sample' => 'iPhone 15 Pro / 358... | iPad mini / 359...' ],
+                ['key' => 'device_model_list', 'label' => '设备型号列表', 'sample' => "iPhone 15 Pro\niPad mini" ],
+                ['key' => 'device_imei_list', 'label' => '设备串号列表', 'sample' => "358000000000000\n359000000000000" ],
+                ['key' => 'device_sn_list', 'label' => '设备SN列表', 'sample' => "SN001\nSN002" ],
+                ['key' => 'first_device_model', 'label' => '首台设备型号', 'sample' => 'iPhone 15 Pro'],
+                ['key' => 'first_device_imei', 'label' => '首台设备IMEI', 'sample' => '358000000000000'],
+                ['key' => 'first_device_sn', 'label' => '首台设备SN', 'sample' => 'SN001'],
+                ['key' => 'first_device_capacity', 'label' => '首台设备容量', 'sample' => '256GB'],
+                ['key' => 'first_device_color', 'label' => '首台设备颜色', 'sample' => '黑色'],
+                ['key' => 'first_device_final_price', 'label' => '首台设备报价', 'sample' => '3200.00'],
+                ['key' => 'operator_name', 'label' => '操作人', 'sample' => 'admin'],
+                ['key' => 'create_time', 'label' => '创建时间', 'sample' => '2026-05-29 10:00:00'],
+                ['key' => 'update_time', 'label' => '更新时间', 'sample' => '2026-05-29 10:30:00'],
+                ['key' => 'over_time', 'label' => '完成时间', 'sample' => '2026-05-29 11:00:00'],
             ],
             'consignment' => [
                 ['key' => 'consignment_no', 'label' => '代卖单号', 'sample' => 'C202605250001'],
+                ['key' => 'consignment_status_name', 'label' => '代卖状态', 'sample' => '代卖中'],
+                ['key' => 'pay_status_name', 'label' => '结算状态', 'sample' => '已结算'],
                 ['key' => 'source_order_no', 'label' => '来源订单号', 'sample' => 'R202605250001'],
+                ['key' => 'source_order_status_name', 'label' => '来源订单状态', 'sample' => '已完成'],
                 ['key' => 'device_imei', 'label' => '设备IMEI', 'sample' => '358000000000000'],
                 ['key' => 'device_model', 'label' => '设备型号', 'sample' => 'iPhone 15 Pro'],
                 ['key' => 'status_name', 'label' => '代卖状态', 'sample' => '代卖中'],
+                ['key' => 'source_device_status_name', 'label' => '来源设备状态', 'sample' => '已转代卖'],
+                ['key' => 'source_device_check_result', 'label' => '来源设备质检摘要', 'sample' => '外观轻微划痕；功能正常'],
+                ['key' => 'source_device_check_result_seller', 'label' => '来源设备质检结果', 'sample' => '外观轻微划痕；功能正常'],
+                ['key' => 'source_device_check_result_buyer', 'label' => '来源设备买家质检结果', 'sample' => '功能正常'],
+                ['key' => 'source_device_initial_price', 'label' => '来源设备预估价', 'sample' => '3000.00'],
+                ['key' => 'source_device_final_price', 'label' => '来源设备回收报价', 'sample' => '3200.00'],
+                ['key' => 'source_device_sell_price', 'label' => '来源设备代卖参考价', 'sample' => '3999.00'],
                 ['key' => 'quote_price', 'label' => '回收报价', 'sample' => '3200.00'],
+                ['key' => 'expected_price', 'label' => '期望售价', 'sample' => '3999.00'],
+                ['key' => 'min_settlement_price', 'label' => '最低结算价', 'sample' => '3600.00'],
                 ['key' => 'listing_price', 'label' => '挂牌价', 'sample' => '3999.00'],
                 ['key' => 'sold_price', 'label' => '成交价', 'sample' => '4200.00'],
                 ['key' => 'settlement_amount', 'label' => '客户结算', 'sample' => '4000.00'],
                 ['key' => 'service_fee', 'label' => '服务收益', 'sample' => '200.00'],
                 ['key' => 'customer_name', 'label' => '客户姓名', 'sample' => '张三'],
                 ['key' => 'customer_phone', 'label' => '客户手机号', 'sample' => '13800000000'],
+                ['key' => 'member_name', 'label' => '会员姓名', 'sample' => '张三'],
+                ['key' => 'member_mobile', 'label' => '会员手机号', 'sample' => '13800000000'],
+                ['key' => 'device_summary', 'label' => '设备摘要', 'sample' => 'iPhone 15 Pro / 358... / 3999.00'],
+                ['key' => 'listed_time', 'label' => '挂牌时间', 'sample' => '2026-05-29 10:00:00'],
+                ['key' => 'sold_time', 'label' => '成交时间', 'sample' => '2026-05-30 18:30:00'],
+                ['key' => 'settle_time', 'label' => '结算时间', 'sample' => '2026-05-30 19:00:00'],
             ],
         ];
     }

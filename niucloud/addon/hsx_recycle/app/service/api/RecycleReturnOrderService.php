@@ -106,7 +106,8 @@ class RecycleReturnOrderService extends BaseApiService
             
             // 更新为已完成状态
             $data = [
-                'comment' => $comment
+                'comment' => $comment,
+                'site_id' => $siteId,
             ];
             
             return $this->coreService->updateStatus($id, 2, $data);
@@ -166,4 +167,4 @@ class RecycleReturnOrderService extends BaseApiService
             return error($e->getMessage());
         }
     }
-} 
+}

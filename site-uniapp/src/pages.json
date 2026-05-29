@@ -303,6 +303,9 @@
 				{
 					"path": "pages/order/detail",
 					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
 						"navigationBarTitleText": "订单详情"
 					},
 					"needLogin": true

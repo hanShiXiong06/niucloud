@@ -155,6 +155,7 @@ Route::group('recycle', function () {
     Route::put('recycle_device/:id/complete_check', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@completeCheck');
     // 获取订单及设备的状态信息
     Route::get('recycle_order/status', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@getStatus');
+    Route::get('recycle_order/business_stage_options', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@getBusinessStageOptions');
     // 获取商户的收款信息
     Route::get('recycle_order/merchant_pay_info/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@getMerchantPayInfo');
     // 财务确认打款
@@ -237,6 +238,7 @@ Route::group('recycle', function () {
     // 退回订单状态信息
     Route::get('recycle_return_order/status', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleReturnOrder@getStatus');
     Route::get('recycle_return_order/status_list', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleReturnOrder@getStatusList');
+    Route::get('recycle_return_order/shipment_modes', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleReturnOrder@getShipmentModeList');
     Route::get('recycle_return_order/:id/device_info', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleReturnOrder@detail');
 })->middleware([
     AdminCheckToken::class,
@@ -648,6 +650,7 @@ Route::group('recycle', function () {
 Route::group('recycle', function () {
     // 快递订单记录管理
     Route::get('express_order_record/lists', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@lists');
+    Route::get('express_order_record/status_options', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@statusOptions');
     Route::get('express_order_record/:id', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@info');
     Route::post('express_order_record', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@add');
     Route::put('express_order_record/:id', 'addon\hsx_recycle\app\adminapi\controller\express\ExpressOrderRecord@edit');

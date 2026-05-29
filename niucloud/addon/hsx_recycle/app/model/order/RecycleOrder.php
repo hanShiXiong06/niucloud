@@ -430,6 +430,11 @@ class RecycleOrder extends BaseModel
             // 格式2: create_at 数组
             $searchParams['create_at'] = self::formatTimeRange($params['create_at'][0], $params['create_at'][1]);
         }
+
+        // 更新时间
+        if (!empty($params['update_time_start']) && !empty($params['update_time_end'])) {
+            $searchParams['update_at'] = self::formatTimeRange($params['update_time_start'], $params['update_time_end']);
+        }
         
         // 打款时间
         if (!empty($params['pay_time']) && is_array($params['pay_time']) && count($params['pay_time']) == 2) {
@@ -491,9 +496,17 @@ class RecycleOrder extends BaseModel
     {
         return [
             'id', 'order_no', 'express_no', 'customer_name', 'customer_phone', 
-            'status', 'delivery_type', 'create_at', 'remark', 'imei', 
+            'status', 'delivery_type', 'create_at', 'update_at', 'remark', 'imei', 
             'device_model', 'search', 'keyword', 'member_id', 'delete_at', 'sign_at', 'complete_at', 'pay_time'
         ];
+    }
+    public function searchUpdateAtAttr($query, $value, $data)
+    {
+        if (is_array($value) && count($value) == 2) {
+            if (!empty($value[0]) && !empty($value[1])) {
+                $query->whereBetweenTime('update_at', $value[0], $value[1]);
+            }
+        }
     }
     public function searchSignAtAttr($query, $value, $data)
     {

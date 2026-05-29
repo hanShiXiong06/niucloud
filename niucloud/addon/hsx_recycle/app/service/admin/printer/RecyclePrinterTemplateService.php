@@ -822,6 +822,18 @@ class RecyclePrinterTemplateService extends BaseAdminService
     }
 
     /**
+     * 拼接省市区与详细地址。
+     * @param array $prefixParts
+     * @param string $detail
+     * @return string
+     */
+    private function joinAddressParts(array $prefixParts, string $detail = ''): string
+    {
+        $parts = array_values(array_filter(array_map(static fn($item) => trim((string)$item), $prefixParts)));
+        return trim(implode('', $parts) . trim($detail));
+    }
+
+    /**
      * 获取快递状态名称
      * @param int $status
      * @return string
@@ -1135,6 +1147,26 @@ class RecyclePrinterTemplateService extends BaseAdminService
             ])->findOrEmpty()->toArray();
         }
 
+        $memberAddress = [];
+        if (!empty($returnOrder['member_id'])) {
+            $memberAddress = (new \addon\hsx_recycle\app\model\address\RecycleUserAddress())->where([
+                ['site_id', '=', $this->site_id],
+                ['member_id', '=', (int)$returnOrder['member_id']],
+            ])->order('update_time desc,create_time desc,id desc')->findOrEmpty()->toArray();
+        }
+
+        $expressRecord = [];
+        if (!empty($returnOrder['order_id'])) {
+            $expressQuery = (new \addon\hsx_recycle\app\model\express\ExpressOrderRecord())->where([
+                ['site_id', '=', $this->site_id],
+                ['recycle_order_id', '=', (int)$returnOrder['order_id']],
+            ]);
+            if (!empty($returnOrder['express_no'])) {
+                $expressQuery->where('delivery_id', '=', (string)$returnOrder['express_no']);
+            }
+            $expressRecord = $expressQuery->order('id desc')->findOrEmpty()->toArray();
+        }
+
         $returnDevices = (new \addon\hsx_recycle\app\model\order\RecycleReturnDevice())->where([
             ['return_order_id', '=', $returnOrderId],
         ])->select()->toArray();
@@ -1159,6 +1191,26 @@ class RecyclePrinterTemplateService extends BaseAdminService
         }
         $firstDevice = $devices[0] ?? [];
         $statusInfo = RecycleReturnOrderDict::getOrderStatus((int)($returnOrder['status'] ?? 0));
+        $resolvedReturnAddress = $returnOrder['return_address'] ?: ($memberAddress['address'] ?? '');
+        $resolvedMemberName = $returnOrder['member_name'] ?: ($memberAddress['name'] ?? ($originOrder['customer_name'] ?? ''));
+        $resolvedMemberMobile = $returnOrder['member_mobile'] ?: ($memberAddress['mobile'] ?? ($originOrder['customer_phone'] ?? ''));
+        $senderAddress = $this->joinAddressParts([
+            $expressRecord['sender_province'] ?? '',
+            $expressRecord['sender_city'] ?? '',
+            $expressRecord['sender_district'] ?? '',
+        ], (string)($expressRecord['sender_address'] ?? ''));
+        $receiverAddress = $this->firstNotBlank(
+            $this->joinAddressParts([
+                $expressRecord['receiver_province'] ?? '',
+                $expressRecord['receiver_city'] ?? '',
+                $expressRecord['receiver_district'] ?? '',
+            ], (string)($expressRecord['receiver_address'] ?? '')),
+            $resolvedReturnAddress
+        );
+        $originStatusInfo = RecycleOrderDict::getOrderStatus((int)($originOrder['status'] ?? 0));
+        $deviceModelList = implode("\n", array_values(array_filter(array_map(static fn($item) => (string)($item['model'] ?? ''), $devices))));
+        $deviceImeiList = implode("\n", array_values(array_filter(array_map(static fn($item) => (string)($item['imei'] ?? ''), $devices))));
+        $deviceSnList = implode("\n", array_values(array_filter(array_map(static fn($item) => (string)($item['sn'] ?? ''), $devices))));
 
         return [
             'biz_type' => 'return',
@@ -1167,27 +1219,43 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'return_order_no' => $returnOrder['order_no'] ?? '',
             'order_id' => (string)($returnOrder['order_id'] ?? 0),
             'origin_order_no' => $originOrder['order_no'] ?? '',
+            'origin_order_status_name' => $originStatusInfo['name'] ?? '',
+            'origin_customer_name' => $originOrder['customer_name'] ?? '',
+            'origin_customer_phone' => $originOrder['customer_phone'] ?? '',
             'order_no' => $returnOrder['order_no'] ?? '',
             'express_company' => $returnOrder['express_company'] ?? '',
             'express_no' => $returnOrder['express_no'] ?? '',
-            'return_address' => $returnOrder['return_address'] ?? '',
+            'return_address' => $resolvedReturnAddress,
+            'receiver_name' => $resolvedMemberName,
+            'receiver_mobile' => $resolvedMemberMobile,
+            'receiver_address' => $receiverAddress,
+            'sender_name' => $expressRecord['sender_name'] ?? '',
+            'sender_mobile' => $expressRecord['sender_mobile'] ?? '',
+            'sender_address' => $senderAddress,
             'comment' => $returnOrder['comment'] ?? '',
             'remark' => $returnOrder['remark'] ?? '',
             'operator_name' => $returnOrder['operator_name'] ?? '',
             'member_id' => (string)($returnOrder['member_id'] ?? 0),
-            'member_name' => $returnOrder['member_name'] ?? ($originOrder['customer_name'] ?? ''),
-            'member_mobile' => $returnOrder['member_mobile'] ?? ($originOrder['customer_phone'] ?? ''),
+            'member_name' => $resolvedMemberName,
+            'member_mobile' => $resolvedMemberMobile,
             'status' => (string)($returnOrder['status'] ?? 0),
             'status_name' => $statusInfo['name'] ?? '',
             'return_status_name' => $statusInfo['name'] ?? '',
             'device_count' => (string)count($devices),
             'device_summary' => implode("\n", $deviceSummary),
+            'device_summary_inline' => implode(' | ', $deviceSummary),
+            'device_model_list' => $deviceModelList,
+            'device_imei_list' => $deviceImeiList,
+            'device_sn_list' => $deviceSnList,
             'first_device_imei' => $firstDevice['imei'] ?? '',
             'first_device_model' => $firstDevice['model'] ?? '',
             'first_device_sn' => $firstDevice['sn'] ?? '',
+            'first_device_capacity' => $firstDevice['capacity'] ?? '',
+            'first_device_color' => $firstDevice['color'] ?? '',
+            'first_device_final_price' => !empty($firstDevice['final_price']) ? number_format((float)$firstDevice['final_price'], 2) : '',
             'create_time' => $this->formatSafeTime($returnOrder['create_at'] ?? 0),
             'update_time' => $this->formatSafeTime($returnOrder['update_at'] ?? 0),
-            'over_time' => $returnOrder['over_at'] ?? '',
+            'over_time' => $this->formatSafeTime($returnOrder['over_at'] ?? 0),
             'current_time' => date('Y-m-d H:i:s'),
             'current_date' => date('Y-m-d'),
             'qrcode_content' => $returnOrder['express_no'] ?: ($returnOrder['order_no'] ?? (string)$returnOrderId),
@@ -1223,15 +1291,40 @@ class RecyclePrinterTemplateService extends BaseAdminService
             ])->findOrEmpty()->toArray();
         }
 
+        $member = [];
+        if (!empty($consignment['member_id'])) {
+            $member = (new \app\model\member\Member())->where([
+                ['member_id', '=', (int)$consignment['member_id']],
+            ])->field('member_id,username,nickname,mobile')->findOrEmpty()->toArray();
+        }
+
         $statusName = RecycleConsignmentDict::getStatus((int)($consignment['status'] ?? 0));
         $payStatusName = RecycleConsignmentDict::getPayStatus((int)($consignment['pay_status'] ?? 0));
         $deviceInfo = $this->normalizeDeviceInfo($sourceDevice['info'] ?? []);
+        $sourceOrderStatusInfo = RecycleOrderDict::getOrderStatus((int)($sourceOrder['status'] ?? 0));
+        $sourceDeviceStatusName = RecycleOrderDict::getDeviceStatus((int)($sourceDevice['status'] ?? 0));
         $deviceName = (string)$this->firstNotBlank(
             $consignment['device_model'] ?? null,
             $sourceDevice['model'] ?? null,
             $sourceDevice['imei'] ?? null,
             $consignment['device_imei'] ?? null
         );
+        $memberName = (string)$this->firstNotBlank(
+            $consignment['customer_name'] ?? null,
+            $member['nickname'] ?? null,
+            $member['username'] ?? null,
+            $sourceOrder['customer_name'] ?? null
+        );
+        $memberMobile = (string)$this->firstNotBlank(
+            $consignment['customer_phone'] ?? null,
+            $member['mobile'] ?? null,
+            $sourceOrder['customer_phone'] ?? null
+        );
+        $deviceSummary = implode(' / ', array_values(array_filter([
+            $deviceName,
+            $consignment['device_imei'] ?? ($sourceDevice['imei'] ?? ''),
+            !empty($consignment['listing_price']) ? number_format((float)$consignment['listing_price'], 2) : '',
+        ])));
 
         return [
             'biz_type' => 'consignment',
@@ -1240,6 +1333,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'consignment_no' => $consignment['consignment_no'] ?? '',
             'source_order_id' => (string)($consignment['source_order_id'] ?? 0),
             'source_order_no' => $consignment['source_order_no'] ?? ($sourceOrder['order_no'] ?? ''),
+            'source_order_status_name' => $sourceOrderStatusInfo['name'] ?? '',
             'source_device_id' => (string)($consignment['source_device_id'] ?? 0),
             'order_id' => (string)($consignment['source_order_id'] ?? 0),
             'order_no' => $consignment['source_order_no'] ?? ($sourceOrder['order_no'] ?? ''),
@@ -1251,16 +1345,26 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'sn' => $sourceDevice['sn'] ?? '',
             'device_model' => $deviceName,
             'model' => $deviceName,
+            'device_summary' => $deviceSummary,
             'capacity' => $sourceDevice['capacity'] ?? ($deviceInfo['capacity'] ?? ''),
             'color' => $sourceDevice['color'] ?? ($deviceInfo['color'] ?? ''),
-            'customer_name' => $consignment['customer_name'] ?? ($sourceOrder['customer_name'] ?? ''),
-            'customer_phone' => $consignment['customer_phone'] ?? ($sourceOrder['customer_phone'] ?? ''),
+            'customer_name' => $memberName,
+            'customer_phone' => $memberMobile,
+            'member_name' => $memberName,
+            'member_mobile' => $memberMobile,
             'member_id' => (string)($consignment['member_id'] ?? 0),
             'status' => (string)($consignment['status'] ?? 0),
             'status_name' => $statusName,
             'consignment_status_name' => $statusName,
             'pay_status' => (string)($consignment['pay_status'] ?? 0),
             'pay_status_name' => $payStatusName,
+            'source_device_status_name' => $sourceDeviceStatusName,
+            'source_device_check_result' => $sourceDevice['check_result'] ?? '',
+            'source_device_check_result_seller' => $sourceDevice['check_result_seller'] ?? '',
+            'source_device_check_result_buyer' => $sourceDevice['check_result_buyer'] ?? '',
+            'source_device_initial_price' => number_format((float)($sourceDevice['initial_price'] ?? 0), 2),
+            'source_device_final_price' => number_format((float)($sourceDevice['final_price'] ?? 0), 2),
+            'source_device_sell_price' => number_format((float)($sourceDevice['sell_price'] ?? 0), 2),
             'quote_price' => number_format((float)($consignment['quote_price'] ?? 0), 2),
             'expected_price' => number_format((float)($consignment['expected_price'] ?? 0), 2),
             'min_settlement_price' => number_format((float)($consignment['min_settlement_price'] ?? 0), 2),

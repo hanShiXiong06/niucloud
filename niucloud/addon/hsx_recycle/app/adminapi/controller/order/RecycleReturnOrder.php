@@ -219,4 +219,14 @@ class RecycleReturnOrder extends BaseAdminController
         $result = RecycleReturnOrderDict::getOrderStatusList();
         return success($result);
     }
-} 
+
+    /**
+     * 获取退货发货方式列表
+     * @return mixed
+     */
+    public function getShipmentModeList()
+    {
+        $result = RecycleReturnOrderDict::getShipmentModeList();
+        return success($result);
+    }
+}

@@ -133,7 +133,6 @@ const keyword = ref('')
 const currentStatus = ref<number | string>('')
 const statusTabs = ref<any[]>([{ status: '', name: '全部' }])
 const { pageHeaderStyle, pagingStyle } = useRecycleListHeader()
-const pendingStatus = '0'
 
 const loadStatuses = async () => {
     const res: any = await getReturnOrderStatusList()
@@ -142,12 +141,6 @@ const loadStatuses = async () => {
 
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
-        if (String(currentStatus.value) === pendingStatus) {
-            const pendingList = await queryPendingList(pageNo, pageSize)
-            complete(pendingList)
-            return
-        }
-
         const res: any = await getReturnOrderList({
             page: pageNo,
             limit: pageSize,
@@ -160,30 +153,6 @@ const queryList = async (pageNo: number, pageSize: number) => {
     } catch (e) {
         complete(false)
     }
-}
-
-const queryPendingList = async (pageNo: number, pageSize: number) => {
-    const start = (pageNo - 1) * pageSize
-    const end = pageNo * pageSize
-    const matched: any[] = []
-    let sourcePage = 1
-    const maxSourcePages = 50
-
-    while (matched.length < end && sourcePage <= maxSourcePages) {
-        const res: any = await getReturnOrderList({
-            page: sourcePage,
-            limit: pageSize,
-            order_no: keyword.value,
-            express_no: '',
-            create_at: []
-        })
-        const rows = res.data?.data || []
-        matched.push(...rows.filter((item: any) => Number(item.status) === 0))
-        if (rows.length < pageSize) break
-        sourcePage += 1
-    }
-
-    return matched.slice(start, end)
 }
 
 const reloadList = () => reload()

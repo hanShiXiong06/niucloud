@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\adminapi\controller\express;
 
+use addon\hsx_recycle\app\dict\express\ExpressOrderDict;
 use addon\hsx_recycle\app\service\admin\express\ExpressOrderRecordService;
 use core\base\BaseAdminController;
 
@@ -221,6 +222,15 @@ class ExpressOrderRecord extends BaseAdminController
         $stats = $service->getStatistics((int)$startTime, (int)$endTime);
 
         return success($stats);
+    }
+
+    /**
+     * 获取快递状态选项
+     * @return \think\Response
+     */
+    public function statusOptions()
+    {
+        return success(ExpressOrderDict::getStatusOptions());
     }
 
     /**

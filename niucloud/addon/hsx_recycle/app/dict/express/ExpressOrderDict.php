@@ -70,6 +70,22 @@ class ExpressOrderDict
     }
 
     /**
+     * 获取订单状态选项
+     * @return array
+     */
+    public static function getStatusOptions(): array
+    {
+        $options = [];
+        foreach (self::getAllStatus() as $value => $label) {
+            $options[] = [
+                'value' => $value,
+                'label' => $label,
+            ];
+        }
+        return $options;
+    }
+
+    /**
      * 获取所有支付状态
      * @return array
      */

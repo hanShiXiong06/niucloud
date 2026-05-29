@@ -429,6 +429,15 @@ class RecycleOrderService extends BaseAdminService
     }
 
     /**
+     * 获取移动端订单业务阶段选项
+     * @return array
+     */
+    public function getBusinessStageOptions(): array
+    {
+        return RecycleOrderDict::getBusinessStageOptions();
+    }
+
+    /**
      * 获取订单设备列表
      * @param int $id
      * @return array

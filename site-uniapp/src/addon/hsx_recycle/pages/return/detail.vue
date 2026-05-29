@@ -47,12 +47,23 @@
                     </view>
                 </view>
                 <view class="address-row">
-                    <text class="info-label">退回地址</text>
+                    <text class="info-label">{{ detail.return_address ? '本次退回地址' : '默认退货地址' }}</text>
                     <text class="address-value">{{ returnAddress }}</text>
+                </view>
+                <view v-if="defaultReceiverName !== '-' || defaultReceiverMobile !== '-'" class="address-row">
+                    <text class="info-label">默认联系人</text>
+                    <text class="address-value">{{ defaultReceiverName }} {{ defaultReceiverMobile }}</text>
                 </view>
                 <view v-if="detail.comment || detail.remark" class="address-row">
                     <text class="info-label">备注</text>
                     <text class="address-value">{{ detail.comment || detail.remark }}</text>
+                </view>
+                <view v-if="detail.express_no" class="info-link-row" @click="openExpressTrack">
+                    <text class="info-link-row__label">物流轨迹</text>
+                    <view class="info-link-row__value">
+                        <text>查看物流</text>
+                        <text class="nc-iconfont nc-icon-youV6xx1 info-link-row__icon"></text>
+                    </view>
                 </view>
             </view>
 
@@ -77,34 +88,12 @@
 
             <view v-if="statusValue === 0" class="section-card">
                 <view class="section-card__title">确认退货信息</view>
-                <view class="field-row">
-                    <text class="field-label">快递公司</text>
-                    <input v-model="confirmForm.express_company" class="field-input" placeholder="请输入快递公司" />
-                </view>
-                <view class="field-row">
-                    <text class="field-label">快递单号</text>
-                    <input v-model="confirmForm.express_no" class="field-input" placeholder="请输入快递单号" />
-                </view>
-                <view class="field-row">
-                    <text class="field-label">收件人</text>
-                    <input v-model="confirmForm.member_name" class="field-input" placeholder="请输入收件人姓名" />
-                </view>
-                <view class="field-row">
-                    <text class="field-label">手机号</text>
-                    <input v-model="confirmForm.member_mobile" class="field-input" placeholder="请输入收件人手机号" />
-                </view>
-                <textarea v-model="confirmForm.return_address" class="field-textarea" placeholder="退回地址" />
-                <textarea v-model="confirmForm.remark" class="field-textarea" placeholder="备注（选填）" />
-            </view>
-
-            <view v-if="statusValue === 1" class="section-card">
-                <view class="section-card__title">完成退货</view>
-                <textarea v-model="completeComment" class="field-textarea" placeholder="备注（选填）" />
-            </view>
-
-            <view v-if="[0, 1].includes(statusValue)" class="section-card">
-                <view class="section-card__title">取消退回单</view>
-                <textarea v-model="cancelComment" class="field-textarea" placeholder="请输入取消原因" />
+                <ReturnShipmentForm
+                    ref="shipmentFormRef"
+                    :detail="detail"
+                    :order-id="detail.order_id || orderId"
+                    :devices="returnDevices"
+                />
             </view>
 
             <view class="bottom-space"></view>
@@ -114,18 +103,37 @@
                     v-for="action in footerActions"
                     :key="action.type"
                     class="footer-btn"
-                    :class="{ 'footer-btn--primary': action.primary, 'footer-btn--danger': action.danger }"
+                    :class="{ 'footer-btn--primary': action.primary, 'footer-btn--danger': action.danger, 'footer-btn--disabled': submitting }"
                     @click="handleFooterAction(action.type)"
                 >
                     {{ action.label }}
                 </view>
             </view>
         </template>
+
+        <CancelReturnPopup
+            v-model:visible="cancelPopupVisible"
+            ref="cancelPopupRef"
+            @submit="handleCancelSubmit"
+        />
+
+        <CompleteReturnPopup
+            v-model:visible="completePopupVisible"
+            ref="completePopupRef"
+            @submit="handleCompleteSubmit"
+        />
+
+        <ExpressTrackPopup
+            v-model:visible="expressTrackVisible"
+            :express-no="detail?.express_no || ''"
+            :mobile="receiverMobile === '-' ? '' : receiverMobile"
+            :company-name="detail?.express_company || ''"
+        />
     </view>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
     cancelReturnOrder,
@@ -136,35 +144,54 @@ import {
 } from '@/addon/hsx_recycle/api/return-order'
 import { formatMoney, formatTime, makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
 import { copy } from '@/utils/common'
+import { useRecyclePrintActions } from '@/addon/hsx_recycle/hooks/useRecyclePrintActions'
+import ReturnShipmentForm from '@/addon/hsx_recycle/pages/return/components/ReturnShipmentForm.vue'
+import CancelReturnPopup from '@/addon/hsx_recycle/pages/return/components/CancelReturnPopup.vue'
+import CompleteReturnPopup from '@/addon/hsx_recycle/pages/return/components/CompleteReturnPopup.vue'
+import ExpressTrackPopup from '@/addon/hsx_recycle/components/ExpressTrackPopup.vue'
 
 const loading = ref(true)
 const detail = ref<any>(null)
 const orderId = ref<number | string>('')
-const completeComment = ref('')
-const cancelComment = ref('')
-
-const confirmForm = reactive({
-    express_company: '',
-    express_no: '',
-    member_mobile: '',
-    member_name: '',
-    return_address: '',
-    remark: ''
-})
+const submitting = ref(false)
+const shipmentFormRef = ref<InstanceType<typeof ReturnShipmentForm> | null>(null)
+const cancelPopupRef = ref<InstanceType<typeof CancelReturnPopup> | null>(null)
+const completePopupRef = ref<InstanceType<typeof CompleteReturnPopup> | null>(null)
+const cancelPopupVisible = ref(false)
+const completePopupVisible = ref(false)
+const expressTrackVisible = ref(false)
+const {
+    loadManualPrintActions,
+    getVisiblePrintActions,
+    executePrintAction
+} = useRecyclePrintActions('return')
 
 const statusValue = computed(() => Number(detail.value?.status || 0))
 const returnDevices = computed(() => detail.value?.returnDevices || detail.value?.return_devices || [])
-const receiverName = computed(() => detail.value?.member_name || detail.value?.member?.nickname || '-')
-const receiverMobile = computed(() => detail.value?.member_mobile || detail.value?.member?.mobile || '-')
-const memberAddress = computed(() => {
+const memberAddressInfo = computed(() => {
     const item = detail.value?.memberAddress || detail.value?.member_address || {}
-    return [item.province_name, item.city_name, item.district_name, item.address].filter(Boolean).join('')
+    return {
+        name: item.name || '',
+        mobile: item.mobile || '',
+        address: [item.province_name, item.city_name, item.district_name, item.address].filter(Boolean).join('') || item.address || ''
+    }
 })
-const returnAddress = computed(() => detail.value?.return_address || memberAddress.value || '-')
+const receiverName = computed(() => detail.value?.member_name || detail.value?.member?.nickname || memberAddressInfo.value.name || '-')
+const receiverMobile = computed(() => detail.value?.member_mobile || detail.value?.member?.mobile || memberAddressInfo.value.mobile || '-')
+const defaultReceiverName = computed(() => memberAddressInfo.value.name || '-')
+const defaultReceiverMobile = computed(() => memberAddressInfo.value.mobile || '-')
+const returnAddress = computed(() => detail.value?.return_address || memberAddressInfo.value.address || '-')
+const printActions = computed(() => getVisiblePrintActions(detail.value))
+const printTarget = computed(() => ({
+    return_order_id: detail.value?.id || orderId.value,
+    order_id: detail.value?.order_id || '',
+    biz_id: detail.value?.id || orderId.value
+}))
 const footerActions = computed(() => {
     const actions: Array<{ type: string, label: string, primary?: boolean, danger?: boolean }> = []
     if (statusValue.value === 0) actions.push({ type: 'confirm', label: '确认退货', primary: true })
     if (statusValue.value === 1) actions.push({ type: 'complete', label: '完成退货', primary: true })
+    if (printActions.value.length) actions.push({ type: 'print', label: '打印' })
     if ([0, 1].includes(statusValue.value)) actions.push({ type: 'cancel', label: '取消退回单', danger: true })
     if (statusValue.value === 3) actions.push({ type: 'delete', label: '删除退回单', danger: true })
     return actions
@@ -173,57 +200,143 @@ const footerActions = computed(() => {
 const loadDetail = async () => {
     loading.value = true
     try {
+        await loadManualPrintActions()
         const res: any = await getReturnOrderDetail(orderId.value)
         detail.value = res.data || null
-        confirmForm.express_company = detail.value?.express_company || ''
-        confirmForm.express_no = detail.value?.express_no || ''
-        confirmForm.member_mobile = detail.value?.member_mobile || detail.value?.member?.mobile || ''
-        confirmForm.member_name = detail.value?.member_name || detail.value?.member?.nickname || ''
-        confirmForm.return_address = detail.value?.return_address || memberAddress.value
     } finally {
         loading.value = false
     }
 }
 
 const handleFooterAction = async (type: string) => {
+    if (submitting.value) return
+    if (type === 'print') return openPrintActions()
     if (type === 'confirm') return submitConfirm()
     if (type === 'complete') return submitComplete()
     if (type === 'cancel') return submitCancel()
     if (type === 'delete') return submitDelete()
 }
 
+const handlePrintAction = async (action: any) => {
+    if (submitting.value) return
+    if (!action?.scene_key) {
+        uni.showToast({ title: '打印场景不可用', icon: 'none' })
+        return
+    }
+    await executePrintAction(action, printTarget.value)
+}
+
+const openPrintActions = async () => {
+    const actions = printActions.value
+    if (!actions.length) {
+        uni.showToast({ title: '暂无可用打印场景', icon: 'none' })
+        return
+    }
+    if (actions.length === 1) {
+        await handlePrintAction(actions[0])
+        return
+    }
+
+    uni.showActionSheet({
+        itemList: actions.map((action: any) => action.button_text || action.scene_name || '打印'),
+        success: async (res) => {
+            const action = actions[res.tapIndex]
+            if (!action) return
+            await handlePrintAction(action)
+        }
+    })
+}
+
 const submitConfirm = async () => {
-    await confirmReturnOrder(orderId.value, confirmForm)
-    uni.showToast({ title: '退货已确认', icon: 'none' })
-    loadDetail()
+    uni.showModal({
+        title: '确认退货',
+        content: '确认后退回单进入退货中，后续可完成退货。',
+        success: async (res) => {
+            if (!res.confirm) return
+            await runAction(async () => {
+                const payload = await shipmentFormRef.value?.buildConfirmPayload()
+                if (!payload) return
+                await confirmReturnOrder(orderId.value, payload)
+                uni.showToast({ title: '退货已确认', icon: 'success' })
+                await loadDetail()
+            })
+        }
+    })
 }
 
 const submitComplete = async () => {
-    await updateReturnOrderStatus(orderId.value, {
-        status: 2,
-        comment: completeComment.value
+    completePopupVisible.value = true
+}
+
+const handleCompleteSubmit = async (payload: { remark: string }) => {
+    completePopupRef.value?.setSubmitting(true)
+    await runAction(async () => {
+        await updateReturnOrderStatus(orderId.value, {
+            status: 2,
+            comment: payload.remark
+        })
+        completePopupVisible.value = false
+        uni.showToast({ title: '退货已完成', icon: 'success' })
+        await loadDetail()
     })
-    uni.showToast({ title: '退货已完成', icon: 'none' })
-    loadDetail()
+    completePopupRef.value?.setSubmitting(false)
 }
 
 const submitCancel = async () => {
-    await cancelReturnOrder(orderId.value, cancelComment.value)
-    uni.showToast({ title: '退回单已取消', icon: 'none' })
-    loadDetail()
+    cancelPopupVisible.value = true
+}
+
+const handleCancelSubmit = async (payload: { remark: string }) => {
+    cancelPopupRef.value?.setSubmitting(true)
+    await runAction(async () => {
+        await cancelReturnOrder(orderId.value, payload.remark)
+        cancelPopupVisible.value = false
+        uni.showToast({ title: '退回单已取消', icon: 'success' })
+        await loadDetail()
+    })
+    cancelPopupRef.value?.setSubmitting(false)
 }
 
 const submitDelete = async () => {
-    await deleteReturnOrder(orderId.value)
-    uni.showToast({ title: '退回单已删除', icon: 'none' })
-    setTimeout(() => {
-        uni.navigateBack()
-    }, 500)
+    uni.showModal({
+        title: '删除退回单',
+        content: '删除后不可恢复，确认删除？',
+        confirmColor: '#dc2626',
+        success: async (res) => {
+            if (!res.confirm) return
+            await runAction(async () => {
+                await deleteReturnOrder(orderId.value)
+                uni.showToast({ title: '退回单已删除', icon: 'success' })
+                setTimeout(() => {
+                    uni.navigateBack()
+                }, 500)
+            })
+        }
+    })
+}
+
+const runAction = async (handler: () => Promise<void>) => {
+    submitting.value = true
+    try {
+        await handler()
+    } catch (error: any) {
+        uni.showToast({ title: error?.msg || error?.message || '操作失败', icon: 'none' })
+    } finally {
+        submitting.value = false
+    }
 }
 
 const copyNo = (value: string) => {
     if (!value) return
     copy(value)
+}
+
+const openExpressTrack = () => {
+    if (!detail.value?.express_no) {
+        uni.showToast({ title: '暂无快递单号', icon: 'none' })
+        return
+    }
+    expressTrackVisible.value = true
 }
 
 onLoad((option: any) => {
@@ -383,6 +496,35 @@ onLoad((option: any) => {
     color: #1f2937;
 }
 
+.info-link-row {
+    margin-top: 14rpx;
+    padding: 18rpx 14rpx;
+    border-radius: 12rpx;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+}
+
+.info-link-row__label {
+    font-size: 23rpx;
+    color: #8c8c8c;
+}
+
+.info-link-row__value {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    font-size: 24rpx;
+    font-weight: 600;
+    color: #2563eb;
+}
+
+.info-link-row__icon {
+    font-size: 22rpx;
+}
+
 .empty-state {
     padding: 50rpx 0;
     text-align: center;
@@ -457,6 +599,26 @@ onLoad((option: any) => {
     color: #1f2937;
 }
 
+.field-scan {
+    flex: 1;
+    min-width: 0;
+    height: 78rpx;
+}
+
+.field-scan :deep(.u-input),
+.field-scan :deep(.u-input__content) {
+    height: 78rpx;
+    min-height: 78rpx;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+.field-scan :deep(.u-input__content__field-wrapper__field) {
+    height: 78rpx;
+    line-height: 78rpx;
+    color: #1f2937;
+}
+
 .field-textarea {
     width: 100%;
     box-sizing: border-box;
@@ -479,7 +641,7 @@ onLoad((option: any) => {
     bottom: 0;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12rpx;
     padding: 16rpx 20rpx calc(16rpx + env(safe-area-inset-bottom));
     border-top: 1rpx solid #e5e7eb;
@@ -508,5 +670,9 @@ onLoad((option: any) => {
     background: #fff1f2;
     border-color: #fecdd3;
     color: #dc2626;
+}
+
+.footer-btn--disabled {
+    opacity: .55;
 }
 </style>

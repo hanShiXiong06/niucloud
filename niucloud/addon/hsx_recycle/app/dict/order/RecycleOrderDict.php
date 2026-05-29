@@ -245,6 +245,47 @@ class RecycleOrderDict
     }
 
     /**
+     * 获取移动端订单业务阶段选项
+     * 仅用于前端聚合展示与筛选，不直接代表数据库主状态。
+     * @return array
+     */
+    public static function getBusinessStageOptions(): array
+    {
+        return [
+            'processing' => [
+                'key' => 'processing',
+                'name' => '待处理',
+                'desc' => '包含待质检、质检中、待定价设备',
+                'important' => true
+            ],
+            'pending_confirm' => [
+                'key' => 'pending_confirm',
+                'name' => '待确认',
+                'desc' => '等待客户确认报价',
+                'important' => true
+            ],
+            'payable' => [
+                'key' => 'payable',
+                'name' => '待打款',
+                'desc' => '客户已确认，等待打款',
+                'important' => true
+            ],
+            'completed' => [
+                'key' => 'completed',
+                'name' => '已完成',
+                'desc' => '已完成回收打款的设备',
+                'important' => false
+            ],
+            'exception' => [
+                'key' => 'exception',
+                'name' => '异常',
+                'desc' => '包含退回与转代卖设备',
+                'important' => false
+            ]
+        ];
+    }
+
+    /**
      * 获取设备状态列表
      * @param string $status
      * @return array

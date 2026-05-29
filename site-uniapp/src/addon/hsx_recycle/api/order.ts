@@ -16,6 +16,10 @@ export function getOrderStatus() {
     return request.get('recycle/recycle_order/status')
 }
 
+export function getOrderBusinessStageOptions() {
+    return request.get('recycle/recycle_order/business_stage_options')
+}
+
 export function searchMemberList(params: Record<string, any>) {
     return request.get('member/member', params)
 }

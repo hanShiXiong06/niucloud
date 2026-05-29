@@ -104,6 +104,7 @@ import ListingPopup from './components/ListingPopup.vue'
 import SoldPopup from './components/SoldPopup.vue'
 import SettlePopup from './components/SettlePopup.vue'
 import ClosePopup from './components/ClosePopup.vue'
+import { useRecyclePrintActions } from '@/addon/hsx_recycle/hooks/useRecyclePrintActions'
 
 const loading = ref(true)
 const detail = ref<any>(null)
@@ -120,6 +121,11 @@ const settlePopupRef = ref()
 const closePopupRef = ref()
 
 const statusValue = computed(() => Number(detail.value?.status || 0))
+const {
+    loadManualPrintActions,
+    getVisiblePrintActions,
+    executePrintAction
+} = useRecyclePrintActions('consignment')
 
 const actions = computed(() => {
     const result: Array<{ type: string, label: string, primary?: boolean, danger?: boolean }> = []
@@ -148,6 +154,13 @@ const actions = computed(() => {
 
     // 推送通知
     result.push({ type: 'notify', label: '推送通知' })
+
+    getVisiblePrintActions(detail.value).forEach((action: any) => {
+        result.push({
+            type: `print:${ action.scene_key }`,
+            label: action.button_text || action.scene_name || '打印'
+        })
+    })
 
     return result
 })
@@ -180,6 +193,17 @@ const actionName = (action: string) => {
 }
 
 const handleAction = (type: string) => {
+    if (type.startsWith('print:')) {
+        const sceneKey = type.replace('print:', '')
+        const action = getVisiblePrintActions(detail.value).find((item: any) => item.scene_key === sceneKey)
+        if (!action) {
+            uni.showToast({ title: '打印场景不可用', icon: 'none' })
+            return
+        }
+        executePrintAction(action, { consignment_id: consignmentId.value, biz_id: consignmentId.value })
+        return
+    }
+
     switch (type) {
         case 'listing':
             listingPopupVisible.value = true
@@ -276,6 +300,7 @@ const submitNotify = async () => {
 
 onLoad((option: any) => {
     consignmentId.value = option?.id || ''
+    loadManualPrintActions()
     if (consignmentId.value) loadDetail()
 })
 </script>

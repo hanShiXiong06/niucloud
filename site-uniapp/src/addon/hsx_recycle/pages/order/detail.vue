@@ -1,5 +1,26 @@
 <template>
     <view class="detail-page">
+        <!-- #ifdef MP -->
+        <RecyclePageHeader title="订单详情" class="detail-page-header">
+            <view class="detail-search-box" @tap.stop>
+                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 detail-search-icon" @click="applyDeviceKeyword"></text>
+                <ScanCodeInput
+                    v-model="deviceKeyword"
+                    class="detail-search-input"
+                    placeholder="搜索本订单设备 IMEI/型号"
+                    :maxlength="80"
+                    input-align="left"
+                    font-size="24rpx"
+                    placeholder-class="text-[rgba(255,255,255,.68)] text-[24rpx]"
+                    :show-scan-text="false"
+                    @update:modelValue="handleDeviceKeywordInput"
+                    @confirm="applyDeviceKeyword"
+                    @scan="applyDeviceKeyword"
+                />
+            </view>
+        </RecyclePageHeader>
+        <!-- #endif -->
+
         <view v-if="loading" class="loading-state">
             <text class="loading-state__text">订单数据加载中...</text>
         </view>
@@ -32,6 +53,29 @@
                     <text>{{ currentFilterLabel }}：{{ filteredDevices.length }} 台</text>
                     <text class="status-filter-bar__clear" @click="clearDeviceFilter">清除</text>
                 </view>
+                <!-- #ifndef MP -->
+                <view class="status-search-bar">
+                    <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 status-search-bar__icon" @click="applyDeviceKeyword"></text>
+                    <ScanCodeInput
+                        v-model="deviceKeyword"
+                        class="status-search-bar__input"
+                        placeholder="搜索本订单设备 IMEI/型号"
+                        :maxlength="80"
+                        input-align="left"
+                        font-size="24rpx"
+                        placeholder-class="text-[rgba(255,255,255,.68)] text-[24rpx]"
+                        :show-scan-text="false"
+                        @update:modelValue="handleDeviceKeywordInput"
+                        @confirm="applyDeviceKeyword"
+                        @scan="applyDeviceKeyword"
+                    />
+                    <text
+                        v-if="deviceKeyword"
+                        class="nc-iconfont nc-icon-cuohaoV6xx1 status-search-bar__clear"
+                        @click="clearDeviceKeyword"
+                    ></text>
+                </view>
+                <!-- #endif -->
             </view>
 
             <view class="card">
@@ -74,20 +118,31 @@
                         ></text>
                     </view>
                 </view>
+                <view v-if="order.express_no" class="info-row info-row--link" @click="openExpressTrack">
+                    <text class="info-row__label">物流轨迹</text>
+                    <view class="info-row__value info-row__value--inline">
+                        <text>查看物流</text>
+                        <text class="nc-iconfont nc-icon-youV6xx1 ml-[10rpx] text-[#94a3b8]"></text>
+                    </view>
+                </view>
             </view>
 
             <view class="card">
                 <view class="card__header">
                     <view class="card__title">设备列表</view>
                     <view class="card__subtitle">
-                        {{ deviceFilter ? `${ filteredDevices.length }/${ devices.length }` : devices.length }} 台设备
+                        {{ hasDeviceListFilter ? `${ filteredDevices.length }/${ devices.length }` : devices.length }} 台设备
                     </view>
+                </view>
+                <view v-if="activeDeviceKeyword" class="device-search-result">
+                    <text>设备搜索：{{ activeDeviceKeyword }}</text>
+                    <text class="device-search-result__clear" @click="clearDeviceKeyword">清除</text>
                 </view>
 
                 <view v-if="!devices.length" class="empty-state">
                     <text>暂无设备信息</text>
                 </view>
-                <view v-else-if="deviceFilter && !filteredDevices.length" class="empty-state">
+                <view v-else-if="hasDeviceListFilter && !filteredDevices.length" class="empty-state">
                     <text>当前筛选下暂无设备</text>
                 </view>
 
@@ -190,6 +245,13 @@
             @success="handleConsignmentSuccess"
         />
 
+        <ReturnDevicePopup
+            v-model:visible="returnPopupVisible"
+            :devices="returnDevices"
+            :orderId="orderId"
+            @success="handleReturnSuccess"
+        />
+
         <DeviceDetailPopup
             v-model:visible="deviceDetailVisible"
             :deviceData="currentDevice"
@@ -210,6 +272,13 @@
             :records="noticeLogs"
             :loading="noticeLogsLoading"
         />
+
+        <ExpressTrackPopup
+            v-model:visible="expressTrackVisible"
+            :express-no="order?.express_no || ''"
+            :mobile="customerPhone === '-' ? '' : customerPhone"
+            :company-name="order?.express_company || ''"
+        />
     </view>
 </template>
 
@@ -218,7 +287,7 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
     batchRecycleDevices,
-    batchReturnDevices,
+    getOrderBusinessStageOptions,
     getDevicePaymentLogs,
     getOrderDetail,
     getOrderNoticeLogs,
@@ -228,15 +297,20 @@ import {
 import { generateOrderShortLink } from '@/addon/hsx_recycle/api/shortlink'
 import { copy } from '@/utils/common'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
+import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
+import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
+import ExpressTrackPopup from '@/addon/hsx_recycle/components/ExpressTrackPopup.vue'
 import CheckDevicePopup from './components/CheckDevicePopup.vue'
 import PriceDevicePopup from './components/PriceDevicePopup.vue'
 import SignOrderPopup from './components/SignOrderPopup.vue'
 import PaymentConfirmPopup from './components/PaymentConfirmPopup.vue'
 import ConsignmentPopup from './components/ConsignmentPopup.vue'
+import ReturnDevicePopup from './components/ReturnDevicePopup.vue'
 import DeviceDetailPopup from './components/DeviceDetailPopup.vue'
 import DeviceFlowCard from './components/DeviceFlowCard.vue'
 import OrderLogPopup from './components/OrderLogPopup.vue'
 import { isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
+import { useRecyclePrintActions } from '@/addon/hsx_recycle/hooks/useRecyclePrintActions'
 
 const loading = ref(true)
 const order = ref<any>(null)
@@ -246,39 +320,54 @@ const pricePopupVisible = ref(false)
 const signPopupVisible = ref(false)
 const paymentPopupVisible = ref(false)
 const consignmentPopupVisible = ref(false)
+const returnPopupVisible = ref(false)
 const deviceDetailVisible = ref(false)
 const paymentLogsVisible = ref(false)
 const noticeLogsVisible = ref(false)
+const expressTrackVisible = ref(false)
 const selectedBatchIds = ref<Array<number | string>>([])
 const paymentLogs = ref<any[]>([])
 const noticeLogs = ref<any[]>([])
+const returnDevices = ref<any[]>([])
 const paymentLogsLoading = ref(false)
 const noticeLogsLoading = ref(false)
 const deviceFilter = ref('')
+const deviceKeyword = ref('')
+const activeDeviceKeyword = ref('')
+let pendingRouteDeviceKeyword = ''
 let orderId = ''
+
+const {
+    loadManualPrintActions: loadDevicePrintActions,
+    getVisiblePrintActions: getVisibleDevicePrintActions,
+    executePrintAction: executeDevicePrintAction
+} = useRecyclePrintActions('device')
+const {
+    loadManualPrintActions: loadOrderPrintActions,
+    getVisiblePrintActions: getVisibleOrderPrintActions,
+    executePrintAction: executeOrderPrintAction
+} = useRecyclePrintActions('order')
 
 const devices = computed(() => Array.isArray(order.value?.devices) ? order.value.devices : [])
 const flowSummary = computed(() => order.value?.flow_summary || {})
+const businessStageOptions = ref<Array<{ key: string, label: string, important?: boolean }>>([])
 const filteredDevices = computed(() => {
-    if (!deviceFilter.value) return devices.value
-    return devices.value.filter((device: any) => matchDeviceFilter(device, deviceFilter.value))
+    return devices.value.filter((device: any) => {
+        const stageMatched = !deviceFilter.value || matchDeviceFilter(device, deviceFilter.value)
+        const keywordMatched = !activeDeviceKeyword.value || matchDeviceKeyword(device, activeDeviceKeyword.value)
+        return stageMatched && keywordMatched
+    })
 })
-const detailSummaryItems = computed(() => [
-    { key: 'processing', label: '待处理', value: getBusinessStageCount('processing'), filter: 'processing', important: true },
-    { key: 'pending_confirm', label: '待确认', value: getBusinessStageCount('pending_confirm'), filter: 'pending_confirm', important: true },
-    { key: 'payable', label: '待打款', value: getBusinessStageCount('payable'), filter: 'payable', important: true },
-    { key: 'completed', label: '已完成', value: getBusinessStageCount('completed'), filter: 'completed' },
-    { key: 'exception', label: '异常', value: getBusinessStageCount('exception'), filter: 'exception' }
-])
+const hasDeviceListFilter = computed(() => Boolean(deviceFilter.value || activeDeviceKeyword.value))
+const detailSummaryItems = computed(() => businessStageOptions.value.map((option) => ({
+    key: option.key,
+    label: option.label,
+    value: getBusinessStageCount(option.key),
+    filter: option.key,
+    important: Boolean(option.important)
+})))
 const currentFilterLabel = computed(() => {
-    const map: Record<string, string> = {
-        processing: '待处理',
-        pending_confirm: '待确认',
-        payable: '待打款',
-        completed: '已完成',
-        exception: '异常'
-    }
-    return map[deviceFilter.value] || ''
+    return businessStageOptions.value.find(item => item.key === deviceFilter.value)?.label || ''
 })
 const customerName = computed(() => {
     return order.value?.member?.nickname
@@ -312,9 +401,33 @@ const footerActions = computed(() => {
     return [...actions, ...orderActions.value]
 })
 
+const normalizeBusinessStageOptions = (data: any) => {
+    const rows = Array.isArray(data) ? data : Object.values(data || {})
+    const normalized = rows
+        .map((item: any) => ({
+            key: String(item?.key || item?.value || ''),
+            label: String(item?.name || item?.label || item?.key || ''),
+            important: Boolean(item?.important)
+        }))
+        .filter((item: any) => item.key && item.label)
+    return normalized.length ? normalized : businessStageOptions.value
+}
+
+const loadBusinessStageOptions = async () => {
+    try {
+        const res: any = await getOrderBusinessStageOptions()
+        businessStageOptions.value = normalizeBusinessStageOptions(res?.data)
+    } catch (error) {
+    }
+}
+
 onLoad((option: any) => {
     orderId = option?.id || ''
     deviceFilter.value = option?.filter || ''
+    pendingRouteDeviceKeyword = normalizeKeyword(option?.device_keyword || option?.imei || option?.keyword || '')
+    loadDevicePrintActions()
+    loadOrderPrintActions()
+    loadBusinessStageOptions()
     if (orderId) {
         loadDetail()
     }
@@ -325,6 +438,7 @@ const loadDetail = async () => {
     try {
         const res: any = await getOrderDetail(orderId)
         order.value = res?.data || null
+        applyRouteDeviceKeyword()
         syncBatchSelection()
     } finally {
         loading.value = false
@@ -346,8 +460,83 @@ const clearDeviceFilter = () => {
     syncBatchSelection()
 }
 
+const applyDeviceKeyword = () => {
+    const keyword = normalizeKeyword(deviceKeyword.value)
+    if (!keyword) {
+        activeDeviceKeyword.value = ''
+        syncBatchSelection()
+        return
+    }
+    activeDeviceKeyword.value = keyword
+    deviceKeyword.value = keyword
+    syncBatchSelection()
+}
+
+const handleDeviceKeywordInput = (value: string) => {
+    const keyword = normalizeKeyword(value)
+    deviceKeyword.value = keyword
+    activeDeviceKeyword.value = keyword
+    pendingRouteDeviceKeyword = ''
+    syncBatchSelection()
+}
+
+const clearDeviceKeyword = () => {
+    deviceKeyword.value = ''
+    activeDeviceKeyword.value = ''
+    pendingRouteDeviceKeyword = ''
+    syncBatchSelection()
+}
+
+const applyRouteDeviceKeyword = () => {
+    const keyword = normalizeKeyword(pendingRouteDeviceKeyword)
+    if (!keyword) return
+
+    const matched = devices.value.some((device: any) => matchDeviceKeyword(device, keyword))
+    if (!matched) return
+
+    deviceKeyword.value = keyword
+    activeDeviceKeyword.value = keyword
+}
+
 const matchDeviceFilter = (device: any, filter: string) => {
     return matchBusinessStage(device, filter)
+}
+
+const matchDeviceKeyword = (device: any, keyword: string) => {
+    const normalizedKeyword = normalizeSearchText(keyword)
+    if (!normalizedKeyword) return true
+    return getDeviceSearchTexts(device).some((value) => normalizeSearchText(value).includes(normalizedKeyword))
+}
+
+const getDeviceSearchTexts = (device: any) => {
+    const info = normalizeObject(device.info)
+    return [
+        device.id,
+        device.imei,
+        device.imei2,
+        device.sn,
+        device.user_sn,
+        device.model,
+        device.device_name,
+        device.capacity,
+        device.color,
+        info.imei,
+        info.imei2,
+        info.sn,
+        info.user_sn,
+        info.model,
+        info.capacity,
+        info.color
+    ].filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
+}
+
+const normalizeKeyword = (value: any) => String(value || '').trim()
+
+const normalizeSearchText = (value: any) => {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s\-_:：]/g, '')
 }
 
 const getBusinessStageCount = (stage: string) => {
@@ -407,6 +596,13 @@ const getActions = (item: any) => {
         actions.push({ label: '取消订单', type: 'cancel', danger: true })
     }
 
+    getVisibleOrderPrintActions(item).forEach((action: any) => {
+        actions.push({
+            label: action.button_text || action.scene_name || '打印',
+            type: `print:${ action.scene_key }`
+        })
+    })
+
     return actions
 }
 
@@ -444,10 +640,28 @@ const getDeviceActions = (device: any) => {
         actions.push({ label: '查看代卖单', type: 'view_consignment' })
     }
 
+    getVisibleDevicePrintActions(device).forEach((action: any) => {
+        actions.push({
+            label: action.button_text || action.scene_name || '打印',
+            type: `print:${ action.scene_key }`
+        })
+    })
+
     return actions
 }
 
 const handleAction = async (type: string) => {
+    if (type.startsWith('print:')) {
+        const sceneKey = type.replace('print:', '')
+        const action = getVisibleOrderPrintActions(order.value).find((item: any) => item.scene_key === sceneKey)
+        if (!action) {
+            uni.showToast({ title: '打印场景不可用', icon: 'none' })
+            return
+        }
+        await executeOrderPrintAction(action, { order_id: order.value?.id || orderId, biz_id: order.value?.id || orderId })
+        return
+    }
+
     if (type === 'receive') {
         signPopupVisible.value = true
         return
@@ -573,12 +787,31 @@ const openNoticeLogs = async () => {
     }
 }
 
+const openExpressTrack = () => {
+    if (!order.value?.express_no) {
+        uni.showToast({ title: '暂无快递单号', icon: 'none' })
+        return
+    }
+    expressTrackVisible.value = true
+}
+
 const getPaymentLogText = () => {
     const paidCount = Number(order.value?.device_payment_summary?.paid_count || 0)
     return paidCount > 0 ? `${ paidCount } 条` : '查看'
 }
 
 const handleDeviceAction = async (type: string, device: any) => {
+    if (type.startsWith('print:')) {
+        const sceneKey = type.replace('print:', '')
+        const action = getVisibleDevicePrintActions(device).find((item: any) => item.scene_key === sceneKey)
+        if (!action) {
+            uni.showToast({ title: '打印场景不可用', icon: 'none' })
+            return
+        }
+        await executeDevicePrintAction(action, { device_id: device.id })
+        return
+    }
+
     if (type === 'detail') {
         currentDevice.value = device
         deviceDetailVisible.value = true
@@ -603,7 +836,7 @@ const handleDeviceAction = async (type: string, device: any) => {
     }
 
     if (type === 'reject') {
-        await handleRejectDevices([device.id])
+        openReturnPopup([device])
         return
     }
 
@@ -656,26 +889,36 @@ const handleConfirmDevices = async (deviceIds: Array<number | string>) => {
 
 const handleRejectDevices = async (deviceIds: Array<number | string>) => {
     if (!deviceIds.length) return
-    uni.showModal({
-        title: '退回设备',
-        content: '请输入退回原因',
-        editable: true,
-        placeholderText: '如：用户不同意报价、设备异常',
-        success: async (res) => {
-            if (!res.confirm) return
-            try {
-                await batchReturnDevices({
-                    ids: deviceIds.join(','),
-                    remark: res.content || '移动端退回设备'
+    const selected = devices.value.filter((device: any) => deviceIds.includes(device.id))
+    openReturnPopup(selected)
+}
+
+const openReturnPopup = (selected: any[]) => {
+    returnDevices.value = selected.filter((device: any) => device?.id)
+    if (!returnDevices.value.length) {
+        uni.showToast({ title: '请选择退回设备', icon: 'none' })
+        return
+    }
+    returnPopupVisible.value = true
+}
+
+const handleReturnSuccess = async (result: { returnOrderId: number | string }) => {
+    selectedBatchIds.value = []
+    await loadDetail()
+    if (result.returnOrderId) {
+        uni.showModal({
+            title: '退回单已生成',
+            content: '是否立即查看并处理退回物流？',
+            confirmText: '查看',
+            cancelText: '留在订单',
+            success: (res) => {
+                if (!res.confirm) return
+                uni.navigateTo({
+                    url: `/addon/hsx_recycle/pages/return/detail?id=${ result.returnOrderId }`
                 })
-                uni.showToast({ title: '已创建退回处理', icon: 'success' })
-                selectedBatchIds.value = []
-                await loadDetail()
-            } catch (error: any) {
-                uni.showToast({ title: error?.msg || error?.message || '操作失败', icon: 'none' })
             }
-        }
-    })
+        })
+    }
 }
 
 const handleBatchConfirm = async () => {
@@ -763,6 +1006,67 @@ const handleConsignmentSuccess = () => loadDetail()
     min-height: 100vh;
     background: #f5f7fa;
     padding-bottom: 300rpx;
+}
+
+.detail-page-header {
+    z-index: 30;
+}
+
+.detail-search-box {
+    flex: 1;
+    min-width: 0;
+    height: 64rpx;
+    border-radius: 32rpx;
+    background: rgba(255, 255, 255, 0.16);
+    display: flex;
+    align-items: center;
+    padding: 0 18rpx;
+    margin-left: 8rpx;
+    margin-right: 22rpx;
+}
+
+.detail-search-icon,
+.detail-search-clear {
+    flex-shrink: 0;
+    font-size: 26rpx;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.detail-search-icon {
+    margin-right: 10rpx;
+}
+
+.detail-search-clear {
+    margin-left: 10rpx;
+}
+
+.detail-search-input {
+    flex: 1;
+    min-width: 0;
+    height: 64rpx;
+    color: #fff;
+}
+
+.detail-search-input :deep(.u-input),
+.detail-search-input :deep(.u-input__content),
+.status-search-bar__input :deep(.u-input),
+.status-search-bar__input :deep(.u-input__content) {
+    height: 64rpx;
+    min-height: 64rpx;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+.detail-search-input :deep(.u-input__content__field-wrapper__field),
+.status-search-bar__input :deep(.u-input__content__field-wrapper__field) {
+    height: 64rpx;
+    line-height: 64rpx;
+    color: #fff;
+}
+
+.detail-search-input :deep(.scan-code-input__scan),
+.status-search-bar__input :deep(.scan-code-input__scan) {
+    color: rgba(255, 255, 255, 0.88);
 }
 
 .loading-state {
@@ -862,6 +1166,37 @@ const handleConsignmentSuccess = () => loadDetail()
     flex-shrink: 0;
 }
 
+.status-search-bar {
+    height: 64rpx;
+    margin-top: 18rpx;
+    padding: 0 18rpx;
+    border-radius: 32rpx;
+    background: rgba(255, 255, 255, 0.16);
+    display: flex;
+    align-items: center;
+}
+
+.status-search-bar__icon,
+.status-search-bar__clear {
+    flex-shrink: 0;
+    font-size: 26rpx;
+    color: rgba(255, 255, 255, 0.84);
+}
+
+.status-search-bar__icon {
+    margin-right: 10rpx;
+}
+
+.status-search-bar__clear {
+    margin-left: 10rpx;
+}
+
+.status-search-bar__input {
+    flex: 1;
+    min-width: 0;
+    height: 64rpx;
+}
+
 .card {
     margin: 20rpx;
     padding: 24rpx;
@@ -887,6 +1222,24 @@ const handleConsignmentSuccess = () => loadDetail()
 .card__subtitle {
     font-size: 22rpx;
     color: #8c8c8c;
+}
+
+.device-search-result {
+    margin-bottom: 16rpx;
+    padding: 12rpx 16rpx;
+    border-radius: 12rpx;
+    background: #eff6ff;
+    color: #2563eb;
+    font-size: 22rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+}
+
+.device-search-result__clear {
+    flex-shrink: 0;
+    font-weight: 600;
 }
 
 .info-row {

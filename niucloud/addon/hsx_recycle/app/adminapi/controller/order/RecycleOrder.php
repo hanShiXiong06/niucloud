@@ -58,6 +58,8 @@ class RecycleOrder extends BaseAdminController
             ['create_at', []],
             ['create_time_start', ''],
             ['create_time_end', ''],
+            ['update_time_start', ''],
+            ['update_time_end', ''],
             ['remark', ''],
             ['page', 1],
             ['limit', 10],
@@ -423,6 +425,15 @@ class RecycleOrder extends BaseAdminController
     public function getStatus()
     {
         return success($this->service->getStatus());
+    }
+
+    /**
+     * 获取移动端订单业务阶段选项
+     * @return mixed
+     */
+    public function getBusinessStageOptions()
+    {
+        return success($this->service->getBusinessStageOptions());
     }
 
     /**
