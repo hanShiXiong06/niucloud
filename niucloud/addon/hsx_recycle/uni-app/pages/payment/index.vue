@@ -29,7 +29,7 @@
                 </view>
                 <view class="brief-item address-item">
                     <text class="brief-label">地址</text>
-                    <text class="brief-value address-value">{{authFormData.detail_address}}</text>
+                    <text class="brief-value address-value">{{ authFullAddress || '未填写' }}</text>
                     <view class="edit-address" @tap.stop="editAddress">
                         <up-icon name="edit-pen" size="16" color="#3b82f6"></up-icon>
                     </view>
@@ -253,10 +253,16 @@
                     <!-- 收款码，仅在微信和支付宝时显示 -->
                     <view class="form-item" v-if="formData.pay_type !== '银行卡'">
                         <view class="label">收款码</view>
-                        <view class="upload-qrcode" @tap="chooseImage">
+                        <view class="upload-qrcode">
                             <view class="upload-content" :class="{ 'is-loading': isUploading }">
-                                <image v-if="formData.qrcode_image" :src="img(formData.qrcode_image)" mode="aspectFit"></image>
-                                <view v-else class="upload-placeholder">
+                                <view v-if="formData.qrcode_image" class="qrcode-preview-wrap" @tap="previewPaymentImage">
+                                    <image :src="img(formData.qrcode_image)" mode="aspectFit"></image>
+                                    <view class="qrcode-preview-mask">
+                                        <up-icon name="eye" size="18" color="#fff"></up-icon>
+                                        <text>查看大图</text>
+                                    </view>
+                                </view>
+                                <view v-else class="upload-placeholder" @tap="chooseImage">
                                     <up-icon name="camera" size="32" color="#94a3b8"></up-icon>
                                     <text>上传收款码</text>
                                 </view>
@@ -264,6 +270,20 @@
                                     <view class="loading-spinner"></view>
                                     <text class="loading-text">上传中...</text>
                                 </view>
+                            </view>
+                        </view>
+                        <view v-if="formData.qrcode_image" class="qrcode-actions">
+                            <view class="qrcode-action" @tap="previewPaymentImage">
+                                <up-icon name="eye" size="14" color="#2563eb"></up-icon>
+                                <text>查看</text>
+                            </view>
+                            <view class="qrcode-action" @tap="chooseImage">
+                                <up-icon name="camera" size="14" color="#2563eb"></up-icon>
+                                <text>重新上传</text>
+                            </view>
+                            <view class="qrcode-action danger" @tap="clearPaymentImage">
+                                <up-icon name="trash" size="14" color="#ef4444"></up-icon>
+                                <text>删除</text>
                             </view>
                         </view>
                     </view>
@@ -287,7 +307,11 @@
         </uni-popup>
 
         <!-- 地区选择器 -->
-        <area-select ref="areaRefAuth" @complete="handleAuthAreaSelectComplete"></area-select>
+        <area-select
+            ref="areaRefAuth"
+            :area-id="authFormData.district_id || authFormData.city_id || authFormData.province_id"
+            @complete="handleAuthAreaSelectComplete"
+        ></area-select>
     </view>
 </template>
 
@@ -413,6 +437,15 @@ const isIdCardRequired = computed(() => !!orderSubmitConfig.value.profile.id_car
 const isPaymentRequired = computed(() => isProfileRequired.value && !!orderSubmitConfig.value.profile.payment_required)
 const paymentMinCount = computed(() => Math.max(1, Number(orderSubmitConfig.value.profile.payment_min_count || 1)))
 const canManagePayment = computed(() => !isProfileRequired.value || !!authInfoId.value)
+const authFullAddress = computed(() => {
+    const parts = [
+        authFormData.province_name,
+        authFormData.city_name && authFormData.city_name !== authFormData.province_name ? authFormData.city_name : '',
+        authFormData.district_name,
+        authFormData.detail_address
+    ].filter(Boolean)
+    return parts.join(' ')
+})
 const paymentRequirementText = computed(() => {
     if (!isPaymentRequired.value) return ''
 
@@ -470,7 +503,7 @@ const loadAuthInfo = async () => {
 			authFormData.province_name = res.data.province_name || '';
 			authFormData.city_name = res.data.city_name || '';
 			authFormData.district_name = res.data.district_name || '';
-			authFormData.detail_address = res.data.address || '';
+			authFormData.detail_address = res.data.detail_address || '';
 			authInfoId.value = res.data.id || 0;
 			validateAuthForm(false); // Initial validation without showing errors everywhere
             
@@ -552,7 +585,7 @@ const validateAuthArea = (showError = true): boolean => {
 
 // Validate Auth Detail Address
 const validateAuthDetailAddress = (showError = true): boolean => {
-	if (!authFormData.detail_address && !authInfoId.value) {
+	if (!authFormData.detail_address) {
 		if (showError) authErrors.detail_address = '请输入详细地址';
 		return false;
 	}
@@ -565,9 +598,9 @@ const validateAuthForm = (showError = true): boolean => {
     const isMobileValid = validateAuthMobile(showError);
     const isIdCardValid = validateAuthIdCard(showError);
     const isCardPicValid = validateAuthCardPic(showError);
-    // const isAreaValid = validateAuthArea(showError);
-    // const isDetailAddressValid = validateAuthDetailAddress(showError);
-    return isNameValid && isMobileValid && isIdCardValid && isCardPicValid;
+    const isAreaValid = validateAuthArea(showError);
+    const isDetailAddressValid = validateAuthDetailAddress(showError);
+    return isNameValid && isMobileValid && isIdCardValid && isCardPicValid && isAreaValid && isDetailAddressValid;
 };
 
 const isAuthFormValid = computed(() => {
@@ -670,12 +703,12 @@ const submitAuthForm = async () => {
         
         authLoading.value = true;
         uni.showLoading({ title: '更新地址信息...', mask: true });
-        const address = authFormData.province_name + authFormData.city_name + authFormData.district_name + authFormData.detail_address;
+        const address = authFullAddress.value.replace(/\s+/g, '');
         
         try {
             let res = await editRecycleUserAddress(authInfoId.value, {
                 ...authFormData,
-                address:address,
+                address,
             } as AuthFormData) as ApiResponse;
             
             uni.hideLoading();
@@ -702,14 +735,21 @@ const submitAuthForm = async () => {
         authLoading.value = true;
         uni.showLoading({ title: '提交认证信息...', mask: true });
         
-        const address = authFormData.province_name + authFormData.city_name + authFormData.district_name + authFormData.detail_address;
+        const address = authFullAddress.value.replace(/\s+/g, '');
         try {
             const res = await addRecycleUserAddress({
                 name: authFormData.name,
                 mobile: authFormData.mobile,
                 id_card: isIdCardRequired.value ? authFormData.id_card : '',
                 card_pic: isIdCardRequired.value ? authFormData.card_pic : '',
-                address: address,
+                province_id: authFormData.province_id,
+                city_id: authFormData.city_id,
+                district_id: authFormData.district_id,
+                province_name: authFormData.province_name,
+                city_name: authFormData.city_name,
+                district_name: authFormData.district_name,
+                detail_address: authFormData.detail_address,
+                address,
             } as AuthFormData) as ApiResponse<{id: number}>;
             
             uni.hideLoading();
@@ -749,6 +789,9 @@ const loadPaymentList = async () => {
 const handleTypeChange = (e: any) => {
     typeIndex.value = e.detail.value
     formData.value.pay_type = payTypes[typeIndex.value]
+    if (formData.value.pay_type === '银行卡') {
+        formData.value.qrcode_image = ''
+    }
 }
 
 // 选择图片
@@ -793,6 +836,19 @@ const uploadPaymentImage = async (filePath: string) => {
     }
 }
 
+const previewPaymentImage = () => {
+    if (!formData.value.qrcode_image) return
+    uni.previewImage({
+        urls: [img(formData.value.qrcode_image)],
+        current: 0,
+        indicator: 'number'
+    })
+}
+
+const clearPaymentImage = () => {
+    formData.value.qrcode_image = ''
+}
+
 // 设置默认收款方式
 const handleSetDefault = async (id: number) => {
     try {
@@ -812,8 +868,8 @@ const handleSetDefault = async (id: number) => {
 const handleEdit = (item: PaymentInfo) => {
     isEdit.value = true
     editId.value = item.id
-    formData.value = { ...item }
-    typeIndex.value = payTypes.indexOf(item.pay_type)
+    formData.value = buildPaymentPayload(item)
+    typeIndex.value = Math.max(0, payTypes.indexOf(item.pay_type))
     popup.value?.open()
 }
 
@@ -854,11 +910,12 @@ const handleSubmit = async () => {
     }
     
     uni.showLoading({ title: '保存中...', mask: true })
+    const payload = buildPaymentPayload(formData.value)
     
     try {
         if (isEdit.value && editId.value) {
             // 编辑
-            const res = await updatePayment(editId.value, formData.value) as ApiResponse
+            const res = await updatePayment(editId.value, payload) as ApiResponse
             if (res.code === 1) {
                 uni.hideLoading()
                 uni.showToast({ title: '更新成功', icon: 'success' })
@@ -871,7 +928,7 @@ const handleSubmit = async () => {
             }
         } else {
             // 添加
-            const res = await addPayment(formData.value) as ApiResponse
+            const res = await addPayment(payload) as ApiResponse
             if (res.code === 1) {
                 uni.hideLoading()
                 uni.showToast({ title: '添加成功', icon: 'success' })
@@ -886,6 +943,15 @@ const handleSubmit = async () => {
     } catch (error) {
         uni.hideLoading()
         uni.showToast({ title: '操作失败', icon: 'none' })
+    }
+}
+
+const buildPaymentPayload = (source: Partial<PaymentInfo>) => {
+    return {
+        pay_type: source.pay_type || '微信',
+        account: source.account || '',
+        qrcode_image: source.qrcode_image || '',
+        is_default: source.is_default ? 1 : 0
     }
 }
 
@@ -1360,6 +1426,30 @@ const openAuthAreaPicker = () => {
                 font-size: 24rpx;
             }
         }
+
+        .qrcode-preview-wrap {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .qrcode-preview-mask {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 58rpx;
+            background: rgba(15, 23, 42, 0.62);
+            color: #fff;
+            font-size: 22rpx;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6rpx;
+        }
         
         .loading-overlay {
             position: absolute;
@@ -1379,6 +1469,30 @@ const openAuthAreaPicker = () => {
             border-top: 3rpx solid #3b82f6;
             border-radius: 50%;
             animation: spin 1s linear infinite;
+        }
+    }
+
+    .qrcode-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12rpx;
+        margin-top: 16rpx;
+    }
+
+    .qrcode-action {
+        height: 56rpx;
+        padding: 0 18rpx;
+        border-radius: 999rpx;
+        background: #eff6ff;
+        color: #2563eb;
+        font-size: 24rpx;
+        display: flex;
+        align-items: center;
+        gap: 6rpx;
+
+        &.danger {
+            background: #fef2f2;
+            color: #ef4444;
         }
     }
     

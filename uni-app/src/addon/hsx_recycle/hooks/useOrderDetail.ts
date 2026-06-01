@@ -60,6 +60,11 @@ export function useOrderDetail() {
     return Number.isFinite(count) && count > 0 ? Math.min(5, Math.floor(count)) : fallback
   }
 
+  const canUserDecideDevice = (device: OrderDetailDevice) => {
+    const price = Number(device.final_price || 0)
+    return Number.isFinite(price) && price > 0 && [4, 7].includes(Number(device.status))
+  }
+
   const checkPayoutProfile = async () => {
     const configRes = await getOrderSubmitConfig()
     const profile = {
@@ -150,9 +155,9 @@ export function useOrderDetail() {
       })
       return false
     }
-    if (orderInfo.value.status < 4 || ![3, 4, 7, 8].includes(Number(device.status))) {
+    if (orderInfo.value.status < 4 || !canUserDecideDevice(device)) {
       uni.showToast({
-        title: '当前设备暂不能拒绝出售',
+        title: '设备定价后才能操作',
         icon: 'none'
       })
       return false
@@ -210,6 +215,13 @@ export function useOrderDetail() {
     if (orderInfo.value.status < 4) {
       uni.showToast({
         title: '请等待全部设备质检完成后再确认',
+        icon: 'none'
+      })
+      return false
+    }
+    if (!canUserDecideDevice(device)) {
+      uni.showToast({
+        title: '设备定价后才能确认',
         icon: 'none'
       })
       return false
@@ -272,7 +284,7 @@ export function useOrderDetail() {
 
       // 只确认已经完成质检/定价并等待用户处理的设备
       const devicesToConfirm = orderInfo.value.devices.filter(
-        device => deviceIds.includes(device.id) && [3, 4, 7, 8].includes(Number(device.status))
+        device => deviceIds.includes(device.id) && canUserDecideDevice(device)
       )
 
       if (devicesToConfirm.length === 0) {

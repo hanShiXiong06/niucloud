@@ -50,6 +50,8 @@ class RecycleReturnOrder extends BaseAdminController
             ['status', ''],
             ['order_id', 0],
             ['create_at', [date('Y-m-d'), date('Y-m-d')] ],
+            ['start_time', ''],
+            ['end_time', ''],
         ]);
         
         // 

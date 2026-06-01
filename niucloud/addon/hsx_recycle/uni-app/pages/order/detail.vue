@@ -173,7 +173,7 @@
 
       <!-- 底部批量确认按钮 -->
       <view
-        v-if="selectedCount > 0 && orderInfo.status == 5"
+        v-if="selectedActionableCount > 0 && orderInfo.status == 5"
         class="fixed left-0 right-0 bottom-0 bg-white bg-opacity-95 p-3 shadow-up backdrop-blur-sm"
       >
         <button
@@ -182,7 +182,7 @@
           @tap="handleConfirmSelected"
         >
           <up-icon name="checkmark-circle" size="16" color="#fff" class="mr-1"></up-icon>
-          确认选中设备 ({{ selectedCount }})
+          确认选中设备 ({{ selectedActionableCount }})
         </button>
       </view>
 
@@ -247,6 +247,7 @@ const {
   toggleDeviceSelection, toggleSelectAll, copySelectedIMEIs,
   getSelectedPendingDevices, resetSelection, initSelection
 } = useDeviceSelection(devicesRef)
+const selectedActionableCount = computed(() => getSelectedPendingDevices().length)
 
 const handleDeviceConfirm = async (device: any) => {
   const success = await confirmDevice(device)
@@ -258,9 +259,18 @@ const handleDeviceRejectSale = async (device: any) => {
   if (success) resetSelection()
 }
 
+const hasDeviceFinalPrice = (device: OrderDetailDevice) => {
+  const price = Number(device.final_price || 0)
+  return Number.isFinite(price) && price > 0
+}
+
+const canUserDecideDevice = (device: OrderDetailDevice) => {
+  return hasDeviceFinalPrice(device) && [4, 7].includes(Number(device.status))
+}
+
 const canApplyConsignment = (device: OrderDetailDevice) => {
   if (!consignmentEntryEnabled.value) return false
-  if (![3, 4, 7, 8].includes(Number(device.status))) return false
+  if (!canUserDecideDevice(device)) return false
   if (Number(device.consignment_order_id || 0) > 0) return false
   return true
 }

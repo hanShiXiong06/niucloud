@@ -5,6 +5,8 @@ return [
 
     ],
     'listen' => [
+        // adminapp 旧核心命名空间兼容注册
+        'AppInit' => [ 'addon\hsx_recycle\app\listener\system\AdminAppCompatListener' ],
        // 协议
         'AgreementType' => [ 'addon\hsx_recycle\app\listener\AgreementType' ],
         // 主题色

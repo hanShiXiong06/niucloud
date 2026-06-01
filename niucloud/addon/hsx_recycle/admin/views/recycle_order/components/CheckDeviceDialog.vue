@@ -2,10 +2,10 @@
   <el-dialog
     v-model="dialogVisible"
     title="设备质检"
-    :width="isMobile ? '96vw' : '1240px'"
+    :width="dialogWidth"
+    :top="isMobile ? '2vh' : '3vh'"
     :destroy-on-close="true"
     class="check-device-dialog cdd-workbench-dialog"
-    align-center
   >
     <div class="cdd-workbench">
       <header class="cdd-topbar">
@@ -208,7 +208,8 @@
       <div class="cdd-footer">
         <span class="cdd-footer__info">已填质检项：{{ checkedCount }}</span>
         <div class="cdd-footer__btns">
-          <el-button size="large" @click="handleCancel">取消</el-button>
+          <el-button class="cdd-footer__cancel" size="large" @click="handleCancel">取消</el-button>
+          <el-button class="cdd-return-btn" type="danger" plain size="large" :disabled="savingDraft || submitting" @click="handleReturnDevice">退回设备</el-button>
           <el-button type="warning" size="large" :loading="savingDraft" @click="handleSaveDraft">{{ savingDraft ? '暂存中...' : '暂存草稿' }}</el-button>
           <el-button type="primary" size="large" :loading="submitting" @click="handleConfirm"><el-icon v-if="!submitting"><Check /></el-icon>{{ submitting ? '提交中...' : '完成质检' }}</el-button>
         </div>
@@ -263,7 +264,7 @@ interface DeviceInfo {
 
 const props = defineProps<{ visible: boolean; device: DeviceInfo }>()
 
-const emit = defineEmits(['update:visible', 'confirm', 'cancel', 'save-draft'])
+const emit = defineEmits(['update:visible', 'confirm', 'cancel', 'save-draft', 'return-device'])
 
 const checkSchemaLoading = ref(false)
 const checkTemplateLoading = ref(false)
@@ -444,6 +445,7 @@ const imeiInputRef = ref()
 const modelInputRef = ref()
 const isEditingDeviceInfo = ref(false)
 const isMobile = ref(false)
+const dialogWidth = computed(() => isMobile.value ? '96vw' : 'min(1280px, 96vw)')
 
 // 保存编辑前的原始数据
 const originalDeviceInfo = ref({ model: '', imei: '' })
@@ -776,7 +778,7 @@ const parseCoverageStatus = (coverage: any): string => {
   if (status === 'Out Of Warranty') return '过保'
   if (status === 'Not Activated' || (!date && !status)) return '未激活'
   if (status === 'In Warranty' || status === 'Active') {
-    return date ? `在保至 ${date}` : '在保'
+    return date ? `${date}` : '在保'
   }
   // 其他情况：有日期就显示日期，否则显示原始 status
   return date || status || '在保'
@@ -795,6 +797,15 @@ const syncSellerImagesToBuyer = () => {
 }
 
 const handleCancel = () => { dialogVisible.value = false; emit('cancel') }
+
+const handleReturnDevice = () => {
+  if (savingDraft.value || submitting.value) return
+  if (!deviceData.value?.id) {
+    ElMessage.warning('设备信息异常，无法退回')
+    return
+  }
+  emit('return-device', deviceData.value.id)
+}
 
 const handleConfirm = async () => {
   if (!formRef.value) return
@@ -1497,8 +1508,8 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
    ============================================================ */
 .cdd-workbench-dialog {
   :deep(.el-dialog) {
-    height: min(90vh, 860px);
-    max-height: 860px;
+    height: min(94vh, 900px);
+    max-height: 94vh;
     display: flex;
     flex-direction: column;
     border-radius: 10px;
@@ -1548,7 +1559,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
 
 .cdd-main-form {
   flex: 1 1 auto;
-  height: calc(min(90vh, 860px) - 64px - 69px - 59px);
+  height: calc(min(94vh, 900px) - 64px - 69px - 59px);
   min-height: 420px;
   overflow: hidden;
 }
@@ -1559,6 +1570,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 10px 16px;
   background: #fff;
@@ -1566,7 +1578,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) }
 }
 
 .cdd-topbar__identity {
-  min-width: 0;
+  min-width: min(100%, 420px);
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto;
   align-items: center;
@@ -2807,12 +2819,18 @@ $cdd-warning: #d97706;
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 10px;
 
     .el-button {
       margin-left: 0;
     }
   }
+}
+
+.cdd-return-btn {
+  border-color: #fecaca;
+  background: #fff7f7;
 }
 
 @media (max-width: 1180px) {

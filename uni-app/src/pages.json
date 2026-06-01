@@ -223,6 +223,19 @@
     ],
     "subPackages": [
         // {{ PAGE_BEGAIN }}
+        // RECYCLE_LEGACY_REDIRECT_BEGIN
+        {
+            "root": "addon/recycle",
+            "pages": [
+                {
+                    "path": "pages/order/order",
+                    "style": {
+                        "navigationBarTitleText": "回收下单"
+                    }
+                }
+            ]
+        },
+        // RECYCLE_LEGACY_REDIRECT_END
         // HSX_RECYCLE_PAGE_BEGIN
         {
             "root": "addon/hsx_recycle", 

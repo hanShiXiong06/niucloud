@@ -12,6 +12,11 @@ export function useDeviceSelection(devicesRef: Ref<OrderDetailDevice[]>) {
   // 选中状态映射（用于checkbox绑定）
   const selectedMap = ref<Record<number, boolean>>({})
 
+  const canUserDecideDevice = (device: OrderDetailDevice) => {
+    const price = Number(device.final_price || 0)
+    return Number.isFinite(price) && price > 0 && [4, 7].includes(Number(device.status))
+  }
+
   // 是否全选
   const isAllSelected = computed({
     get: () => {
@@ -94,7 +99,7 @@ export function useDeviceSelection(devicesRef: Ref<OrderDetailDevice[]>) {
   // 获取选中的可确认设备
   const getSelectedPendingDevices = () => {
     return devicesRef.value.filter(
-      device => selectedDeviceIds.value.includes(device.id) && [3, 4, 7, 8].includes(Number(device.status))
+      device => selectedDeviceIds.value.includes(device.id) && canUserDecideDevice(device)
     )
   }
 

@@ -2,14 +2,23 @@
 
 
 return [
+    // [
+    //     'name' => '回收主页',
+    //     'key' => 'hsx_recycle_home',
+    //     'group' => 'hsx_recycle',
+    //     'menu_key' => '',
+    //     'sort' => 1,
+    //     'page' => '/addon/hsx_recycle/pages/index',
+    //     'icon' => '/addon/hsx_recycle/site-tabbar/icon_01.png'
+    // ],
     [
-        'name' => '回收主页',
-        'key' => 'hsx_recycle_home',
+        'name' => '数据统计',
+        'key' => 'hsx_recycle_stats',
         'group' => 'hsx_recycle',
         'menu_key' => '',
         'sort' => 1,
-        'page' => '/addon/hsx_recycle/pages/index',
-        'icon' => '/addon/hsx_recycle/site-tabbar/icon_01.png'
+        'page' => '/addon/hsx_recycle/pages/stats/index',
+        'icon' => '/addon/hsx_recycle/site-tabbar/icon_07.png'
     ],
     [
         'name' => '扫码处理',
@@ -56,4 +65,5 @@ return [
         'page' => '/addon/hsx_recycle/pages/express/list',
         'icon' => '/addon/hsx_recycle/site-tabbar/icon_06.png'
     ],
+    
 ];

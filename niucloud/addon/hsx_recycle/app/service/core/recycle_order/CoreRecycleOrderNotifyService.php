@@ -189,13 +189,17 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
                 return;
             }
 
+            $payTime = (int)($orderInfo['pay_time'] ?? $data['pay_time'] ?? time());
+            $payAccount = $this->formatNoticeThing((string)($orderInfo['pay_account'] ?? $data['pay_account'] ?? ''), '请查看订单详情');
+
             $this->noticeService->send((int)$data['site_id'], 'recycle_order_pay', [
                 'order_id' => (int)$data['order_id'],
                 'member_id' => $memberId,
                 'order_no' => $orderInfo['order_no'] ?? '',
-                'pay_type' => $orderInfo['pay_type_name'] ?? '线下支付',
-                'pay_account' => $orderInfo['pay_account'] ?? '请查看订单详情',
+                'pay_type' => $this->formatNoticeThing((string)($orderInfo['pay_type_name'] ?? $orderInfo['pay_type'] ?? '线下支付'), '线下支付'),
+                'pay_account' => $payAccount,
                 'pay_result' => '打款成功',
+                'pay_time' => date('Y-m-d H:i:s', $payTime > 0 ? $payTime : time()),
                 '__weapp_page' => $this->getWeappOrderPage((int)$data['order_id']),
             ]);
 
@@ -203,6 +207,16 @@ class CoreRecycleOrderNotifyService extends BaseCoreService
         } catch (\Exception $e) {
             Log::error('【回收通知】订单打款通知发送失败: ' . $e->getMessage(), $data);
         }
+    }
+
+    private function formatNoticeThing(string $value, string $default = '请查看详情'): string
+    {
+        $value = trim((string)preg_replace('/\s+/', ' ', $value));
+        if ($value === '') {
+            $value = $default;
+        }
+
+        return mb_substr($value, 0, 20);
     }
 
     /**

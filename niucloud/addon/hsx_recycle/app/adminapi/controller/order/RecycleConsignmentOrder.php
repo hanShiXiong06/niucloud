@@ -28,6 +28,8 @@ class RecycleConsignmentOrder extends BaseAdminController
             ['status', ''],
             ['source_order_id', ''],
             ['create_time', []],
+            ['start_time', ''],
+            ['end_time', ''],
             ['page', 1],
             ['limit', 10],
         ]);

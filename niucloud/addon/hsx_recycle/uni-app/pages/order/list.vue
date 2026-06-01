@@ -42,7 +42,7 @@
 
     </z-paging>
 
-    <tabbar addon="recycle" />
+    <tabbar addon="hsx_recycle" />
   </view>
 </template>
 

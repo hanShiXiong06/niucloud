@@ -2,6 +2,7 @@
 
 namespace addon\hsx_recycle;
 
+use addon\hsx_recycle\app\service\core\adminapp\AdminAppCompatCleanupService;
 use think\facade\Db;
 
 /**
@@ -26,6 +27,7 @@ class Addon
      */
     public function uninstall()
     {
+        (new AdminAppCompatCleanupService())->cleanup();
         // 卸载计划任务
         (new \app\service\core\schedule\CoreScheduleInstallService())->uninstallAddonSchedule('hsx_recycle');
         return true;

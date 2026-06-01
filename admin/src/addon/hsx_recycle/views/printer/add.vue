@@ -167,7 +167,7 @@ const submitForm = async () => {
       const res = await addPrinter(submitData);
 
       if (res.code === 1) {
-        router.push("/hsx_recycle/printer/list");
+        router.push("/recycle/printer/list");
       }
     } catch (error) {
       console.error("添加打印机失败", error);
@@ -202,7 +202,7 @@ const testPrinterHandler = async () => {
 
 // 返回列表页
 const goBack = () => {
-  router.push("/hsx_recycle/printer/list");
+  router.push("/recycle/printer/list");
 };
 
 onMounted(() => {

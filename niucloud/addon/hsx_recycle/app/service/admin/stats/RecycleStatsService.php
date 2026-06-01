@@ -6,6 +6,7 @@ namespace addon\hsx_recycle\app\service\admin\stats;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\model\order\RecycleOrderLog;
+use addon\hsx_recycle\app\model\order\RecycleConsignmentOrder;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use app\model\member\Member;
 use app\model\sys\SysUser;
@@ -421,7 +422,46 @@ class RecycleStatsService extends BaseAdminService
             ['status', '=', 6], // 6-已退回
             ['update_at', 'between', [strtotime($today . ' 00:00:00'), strtotime($today . ' 23:59:59')]]
         ])->count();
-        
+
+        // 今日代卖数量
+        $todayConsignmentCount = RecycleConsignmentOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['create_time', 'between', [strtotime($today . ' 00:00:00'), strtotime($today . ' 23:59:59')]]
+        ])->count();
+
+        // 挂牌中代卖设备数
+        $consignmentListingCount = RecycleConsignmentOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['status', 'in', [0, 1]], // 待上架 + 代卖中
+        ])->count();
+
+        // 代卖成交额（今日）
+        $consignmentSoldAmount = RecycleConsignmentOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['status', '>=', 2], // 已售出及之后
+            ['update_time', 'between', [strtotime($today . ' 00:00:00'), strtotime($today . ' 23:59:59')]]
+        ])->sum('sold_price') ?: 0;
+
+        // 代卖服务收益（今日）
+        $consignmentServiceFee = RecycleConsignmentOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['status', '>=', 2],
+            ['update_time', 'between', [strtotime($today . ' 00:00:00'), strtotime($today . ' 23:59:59')]]
+        ])->sum('service_fee') ?: 0;
+
+        // 待退回设备数
+        $pendingReturn = RecycleDevice::where([
+            ['site_id', '=', $this->site_id],
+            ['dispose_type', '=', 'return'],
+            ['status', '<>', 6], // 尚未完成退回
+        ])->count();
+
+        // 待确认设备数（已报价待客户确认）
+        $pendingConfirmCount = RecycleDevice::where([
+            ['site_id', '=', $this->site_id],
+            ['status', '=', 5], // 待确认状态
+        ])->count();
+
         return [
             'today_order_count' => $todayOrderCount,
             'yesterday_order_count' => $yesterdayOrderCount,
@@ -430,7 +470,14 @@ class RecycleStatsService extends BaseAdminService
             'today_price_count' => $todayPriceCount,
             'today_payment_amount' => $todayPaymentAmount,
             'today_payment_count' => $todayPaymentCount,
-            'today_return_count' => $todayReturnCount
+            'today_return_count' => $todayReturnCount,
+            'today_consignment_count' => $todayConsignmentCount,
+            'consignment_listing_count' => $consignmentListingCount,
+            'consignment_sold_amount' => $consignmentSoldAmount,
+            'consignment_service_fee' => $consignmentServiceFee,
+            'today_return_device_count' => $todayReturnCount,
+            'pending_return' => $pendingReturn,
+            'pending_confirm_count' => $pendingConfirmCount,
         ];
     }
 

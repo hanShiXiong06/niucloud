@@ -16,6 +16,7 @@ const paths = {
 const keepUserPageDirs = new Set(["goods", "member", "order"]);
 const removeUserPageDirs = ["coupon", "discount", "evaluate", "point", "refund"];
 const removeUserApis = ["coupon.ts", "discount.ts", "evaluate.ts", "point.ts", "refund.ts"];
+const goodsFallbackImage = `addon/${pluginKey}/goods_template.png`;
 
 async function exists(file) {
   try {
@@ -69,6 +70,30 @@ async function replaceInFile(file, replacer) {
   const original = await fs.readFile(file, "utf8");
   const next = replacer(original);
   if (next !== original) await fs.writeFile(file, next);
+}
+
+function normalizeCampusVisualRefs(content) {
+  return content
+    .replaceAll("addon/shop/", `addon/${pluginKey}/`)
+    .replaceAll("static/resource/images/diy/shop_default.jpg", goodsFallbackImage);
+}
+
+async function getAddonPackageBlock(addon) {
+  const file = path.join(projectRoot, `niucloud/addon/${addon}/package/uni-app-pages.php`);
+  const uniSourceDir = path.join(projectRoot, `uni-app/src/addon/${addon}`);
+  if (!await exists(uniSourceDir)) return "";
+  if (!await exists(file)) return "";
+  const content = await fs.readFile(file, "utf8");
+  const match = content.match(/\/\/ PAGE_BEGIN[\s\S]*?\/\/ PAGE_END/);
+  if (!match) return "";
+  let block = match[0];
+  block = block.replace(/(.*)(\r?\n.*\/\/ PAGE_END.*)/s, (_, head, tail) => {
+    return `${head}${head.trimEnd().endsWith(",") ? "" : ","}${tail}`;
+  });
+  block = block.replaceAll("PAGE_BEGIN", `${addon.toUpperCase()}_PAGE_BEGIN`);
+  block = block.replaceAll("PAGE_END", `${addon.toUpperCase()}_PAGE_END`);
+  block = block.replaceAll("{{addon_name}}", addon);
+  return block;
 }
 
 function compactUniPagesPhp() {
@@ -1325,6 +1350,64 @@ const showLogistics = (data: any) => {
 `;
 }
 
+function diyIndexVue(diyName) {
+  return `<template>
+\t<view :style="themeColor()">
+\t\t<loading-page :loading="diy.getLoading()"></loading-page>
+\t\t<view v-show="!diy.getLoading()">
+\t\t\t<view class="diy-template-wrap bg-index" :style="diy.pageStyle()">
+\t\t\t\t<diy-group ref="diyGroupRef" :data="diy.data" :pullDownRefreshCount="diy.pullDownRefreshCount" />
+\t\t\t</view>
+\t\t</view>
+\t\t<!-- #ifdef MP-WEIXIN -->
+\t\t<wx-privacy-popup ref="wxPrivacyPopupRef"></wx-privacy-popup>
+\t\t<!-- #endif -->
+\t</view>
+</template>
+
+<script setup lang="ts">
+import { ref, nextTick } from 'vue';
+import { useDiy } from '@/hooks/useDiy';
+import diyGroup from '@/addon/components/diy/group/index.vue';
+
+const diy = useDiy({ name: '${diyName}' });
+const diyGroupRef = ref(null);
+const wxPrivacyPopupRef:any = ref(null);
+
+diy.onLoad();
+diy.onShow(() => {
+\tdiyGroupRef.value?.refresh();
+\t// #ifdef MP
+\tnextTick(() => {
+\t\tif (wxPrivacyPopupRef.value) wxPrivacyPopupRef.value.proactive();
+\t});
+\t// #endif
+});
+diy.onHide();
+diy.onUnload();
+diy.onPullDownRefresh();
+diy.onPageScroll();
+</script>
+
+<style lang="scss" scoped>
+\t@import '@/styles/diy.scss';
+</style>
+<style lang="scss">
+.diy-template-wrap {
+  /* #ifdef MP */
+  .child-diy-template-wrap {
+    ::v-deep .diy-group {
+      > .draggable-element.top-fixed-diy {
+        display: block !important;
+      }
+    }
+  }
+  /* #endif */
+}
+</style>
+`;
+}
+
 async function cleanupCampusUserSide() {
   const detailFile = path.join(paths.targetUni, "pages/goods/detail.vue");
   const paymentFile = path.join(paths.targetUni, "pages/order/payment.vue");
@@ -1332,9 +1415,6 @@ async function cleanupCampusUserSide() {
   const orderDetailFile = path.join(paths.targetUni, "pages/order/detail.vue");
   const orderInfoDiyFile = path.join(paths.targetUni, "components/diy/shop-order-info/index.vue");
   const memberInfoDiyFile = path.join(paths.targetUni, "components/diy/shop-member-info/index.vue");
-
-  await writeIfChanged(path.join(paths.targetUni, "api/coupon.ts"), couponApiStub());
-  await writeIfChanged(path.join(paths.targetUni, "api/point.ts"), pointApiStub());
 
   await fs.rm(path.join(paths.targetUni, "pages/member/my_coupon.vue"), { force: true });
   for (const file of [
@@ -1473,6 +1553,8 @@ const buildTraceabilityInfo = () => {
   await writeIfChanged(paymentFile, orderPaymentVue());
   await writeIfChanged(orderListFile, orderListVue());
   await writeIfChanged(orderDetailFile, orderDetailVue());
+  await writeIfChanged(path.join(paths.targetUni, "pages/index.vue"), diyIndexVue("DIY_SHOP_INDEX"));
+  await writeIfChanged(path.join(paths.targetUni, "pages/member/index.vue"), diyIndexVue("DIY_SHOP_MEMBER_INDEX"));
 
   await writeIfChanged(path.join(paths.targetUni, "components/diy/goods-coupon/index.vue"), `<template></template>
 
@@ -1687,6 +1769,8 @@ const clickAvatar = () => {
 </script>
 `);
 
+  await replaceInTextFiles(paths.targetUni, (content) => normalizeCampusVisualRefs(content));
+
   await fs.rm(path.join(paths.targetUni, "api/coupon.ts"), { force: true });
   await fs.rm(path.join(paths.targetUni, "api/point.ts"), { force: true });
   await fs.rm(path.join(paths.targetUni, "pages/order/components/select-coupon"), { recursive: true, force: true });
@@ -1697,11 +1781,16 @@ const clickAvatar = () => {
   await fs.writeFile(path.join(paths.targetAddon, "package/uni-app-pages.php"), compactUniPagesPhp());
 
   let pagesJson = await fs.readFile(paths.pagesJson, "utf8");
-  pagesJson = pagesJson.replace(/        \/\/ CAMPUS_PURCHASE_PAGE_BEGIN[\s\S]*?        \/\/ CAMPUS_PURCHASE_PAGE_END\n/, pagesJsonBlock());
-  if (!pagesJson.includes("CAMPUS_PURCHASE_PAGE_BEGIN")) {
-    pagesJson = pagesJson.replace("        // SHOP_PAGE_BEGIN", pagesJsonBlock() + "        // SHOP_PAGE_BEGIN");
+  const pageBlocks = [];
+  const cmsBlock = await getAddonPackageBlock("cms");
+  if (cmsBlock) pageBlocks.push(cmsBlock);
+  const campusBlock = await getAddonPackageBlock(pluginKey);
+  if (campusBlock) pageBlocks.push(campusBlock);
+  if (pagesJson.includes("// {{ PAGE_BEGAIN }}") && pagesJson.includes("// {{ PAGE_END }}")) {
+    pagesJson = pagesJson.replace(/(.*\/\/ \{\{ PAGE_BEGAIN \}\})([\s\S]*?)(\/\/ \{\{ PAGE_END \}\}.*)/s, (_, before, _middle, after) => {
+      return `${before}\n${pageBlocks.join("\n")}\n${after}`;
+    });
   }
-  pagesJson = pagesJson.replace(/(\n\s*\}\n)(\s*\/\/ CMS_PAGE_END\n\s*\/\/ CAMPUS_PURCHASE_PAGE_BEGIN)/, "$1,$2");
   await fs.writeFile(paths.pagesJson, pagesJson);
 }
 
@@ -1729,7 +1818,7 @@ async function main() {
   }, null, 2) + "\n");
 
   await replaceInTextFiles(paths.targetAddon, (content) => {
-    return content
+    return normalizeCampusVisualRefs(content)
       .replaceAll("namespace addon\\shop", `namespace addon\\${pluginKey}`)
       .replaceAll("use addon\\shop", `use addon\\${pluginKey}`)
       .replaceAll("'key' => 'shop'", `'key' => '${pluginKey}'`)
@@ -1739,7 +1828,7 @@ async function main() {
   });
 
   await replaceInTextFiles(paths.targetUni, (content, file) => {
-    let next = content
+    let next = normalizeCampusVisualRefs(content)
       .replaceAll("@/addon/shop", `@/addon/${pluginKey}`)
       .replaceAll("/addon/shop", `/addon/${pluginKey}`);
 

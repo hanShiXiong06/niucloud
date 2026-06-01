@@ -35,11 +35,21 @@ class QueryFail extends BaseNoticeTemplate
             'query_count' => $order['query_count'],
             'fail_reason' => str_sub($params['data']['fail_reason'] ?? '查询失败'),
             'refund_text' => $this->getRefundText($order),
-            'finish_time' => empty($order['finish_time']) ? '' : date('Y-m-d H:i:s', (int)$order['finish_time']),
+            'finish_time' => $this->getFinishTime($order),
             'url' => $wapDomain . '/' . $page,
         ], [
             'member_id' => $order['member_id'],
         ]);
+    }
+
+    private function getFinishTime(array $order): string
+    {
+        $finishTime = (int)($order['finish_time'] ?? 0);
+        if ($finishTime <= 0) {
+            $finishTime = time();
+        }
+
+        return date('Y-m-d H:i:s', $finishTime);
     }
 
     private function getResultText(array $order): string

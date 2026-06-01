@@ -231,7 +231,7 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
   const batchReturnDevice = async (deviceId: number | string) => {
     if (!deviceId) {
       ElMessage.warning('请选择设备')
-      return
+      return false
     }
 
     let loading: ReturnType<typeof ElLoading.service> | null = null
@@ -260,9 +260,11 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
 
       ElMessage.success('拒绝成功，已创建退货订单')
       await getList(pagination.value.page)
+      return true
     } catch (error) {
-      if (isDialogCanceled(error)) return
+      if (isDialogCanceled(error)) return false
       console.error('拒绝失败:', error)
+      return false
     } finally {
       loading?.close()
     }

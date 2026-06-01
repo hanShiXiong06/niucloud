@@ -200,6 +200,7 @@
       :device="checkDeviceLogForm"
       @confirm="submitDeviceCheck"
       @save-draft="handleCheckDeviceSaveDraft"
+      @return-device="handleCheckDeviceReturn"
     />
 
     <PriceFormDialog
@@ -664,6 +665,13 @@ const {
   checkDeviceLogVisible,
   priceDeviceLogVisible,
 });
+
+const handleCheckDeviceReturn = async (deviceId: number | string) => {
+  const success = await batchReturnDevice(deviceId);
+  if (success) {
+    checkDeviceLogVisible.value = false;
+  }
+};
 
 // 快递信息相关
 const expressLoading = ref<Record<string, boolean>>({});

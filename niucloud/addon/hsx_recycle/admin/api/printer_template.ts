@@ -175,4 +175,13 @@ export function getDevicePrintData(deviceId: number) {
   return request.get(`/recycle/printer_template/device_print_data/${deviceId}`, {
     showSuccessMessage: false
   });
+}
+
+/**
+ * 获取打印模板变量列表
+ */
+export function getTemplateVariables() {
+  return request.get('/recycle/printer_template/variables', {
+    showSuccessMessage: false
+  });
 } 

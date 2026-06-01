@@ -161,6 +161,10 @@ class RecycleDeviceService extends BaseApiService
             $old_status = $device_data_for_log['status']; // Get old status before update
             Log::write(sprintf('[RecycleDeviceService][confirmPrice] Device found. Device ID: %d, Order ID: %d, Old Status: %d', $device_data_for_log['id'], $order_id, $old_status));
 
+            if (!$this->isDevicePriced($device_data_for_log)) {
+                throw new ApiException('商家尚未完成定价，请等待最终报价后再操作');
+            }
+
             // 确认价格，更新设备状态 (core_service handles the actual status update)
             $this->core_service->confirmPrice($id, $accept);
             Log::write(sprintf('[RecycleDeviceService][confirmPrice] core_service->confirmPrice called for Device ID: %d, Accept: %s', $id, $accept ? 'true' : 'false'));
@@ -260,13 +264,16 @@ class RecycleDeviceService extends BaseApiService
             }
 
             $confirmableStatuses = [
-                RecycleOrderDict::DEVICE_STATUS_CHECKED,
                 RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM,
                 RecycleOrderDict::DEVICE_STATUS_PRICED,
                 RecycleOrderDict::DEVICE_STATUS_PRICED_REPRICE,
             ];
             if (!in_array((int)$device['status'], $confirmableStatuses, true)) {
                 throw new ApiException('设备当前状态不能确认');
+            }
+
+            if (!$this->isDevicePriced($device->toArray())) {
+                throw new ApiException('商家尚未完成定价，请等待最终报价后再操作');
             }
 
             $returnOrderId = 0;
@@ -298,6 +305,11 @@ class RecycleDeviceService extends BaseApiService
             $this->model->rollback();
             throw new ApiException($e->getMessage());
         }
+    }
+
+    private function isDevicePriced(array $device): bool
+    {
+        return (float)($device['final_price'] ?? 0) > 0;
     }
 
     private function ensureReturnOrderForDevice(RecycleDevice $device, string $remark = ''): int

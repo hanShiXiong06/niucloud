@@ -262,6 +262,35 @@ class ImportService extends BaseAdminService
             ])->findOrEmpty();
 
             $crawlerPrice = (float)$price['crawler_price'];
+
+            // 继承历史调价设置：如果当天没有记录，从最近一条记录继承 adjust/locked
+            $inheritAdjustType = 1;
+            $inheritAdjustValue = 0;
+            $inheritLocked = 0;
+
+            if ($row->isEmpty()) {
+                $prevRow = $model->where([
+                    ['site_id', '=', $this->site_id],
+                    ['dataset_id', '=', (int)$dataset['id']],
+                    ['model_id', '=', $modelId],
+                    ['capacity_id', '=', $capacityId],
+                    ['field_id', '=', $fieldId],
+                ])->order('price_date desc')->findOrEmpty();
+
+                if (!$prevRow->isEmpty()) {
+                    $inheritAdjustType = (int)($prevRow['adjust_type'] ?? 1);
+                    $inheritAdjustValue = (float)($prevRow['adjust_value'] ?? 0);
+                    $inheritLocked = (int)($prevRow['locked'] ?? 0);
+                }
+            } else {
+                $inheritAdjustType = (int)($row['adjust_type'] ?? 1);
+                $inheritAdjustValue = (float)($row['adjust_value'] ?? 0);
+                $inheritLocked = (int)($row['locked'] ?? 0);
+            }
+
+            // 计算最终价格（应用调价）
+            $finalPrice = $this->applyAdjust($crawlerPrice, $inheritAdjustType, $inheritAdjustValue);
+
             $data = [
                 'site_id' => $this->site_id,
                 'dataset_id' => (int)$dataset['id'],
@@ -273,12 +302,12 @@ class ImportService extends BaseAdminService
                 'capacity_answer_id' => $capacityAnswerId,
                 'field_name' => (string)$price['field_name'],
                 'crawler_price' => $crawlerPrice,
-                'adjust_type' => 1,
-                'adjust_value' => 0,
-                'final_price' => $crawlerPrice,
+                'adjust_type' => $inheritAdjustType,
+                'adjust_value' => $inheritAdjustValue,
+                'final_price' => $finalPrice,
                 'price_date' => $priceDate,
                 'is_current' => 1,
-                'locked' => 0,
+                'locked' => $inheritLocked,
                 'raw_item' => $price['raw_item'] ?? [],
                 'update_at' => time(),
             ];
@@ -286,11 +315,30 @@ class ImportService extends BaseAdminService
             if ($row->isEmpty()) {
                 $data['create_at'] = time();
                 $model->create($data);
-            } elseif ((int)($row['locked'] ?? 0) !== 1) {
+            } elseif ($inheritLocked !== 1) {
                 $row->save($data);
+            } else {
+                // locked 状态只更新爬虫原价，保留调价和最终价
+                $row->save([
+                    'crawler_price' => $crawlerPrice,
+                    'final_price' => $finalPrice,
+                    'raw_item' => $price['raw_item'] ?? [],
+                    'update_at' => time(),
+                ]);
             }
             $stats['prices_saved']++;
         }
+    }
+
+    private function applyAdjust(float $crawlerPrice, int $adjustType, float $adjustValue): float
+    {
+        if ($adjustValue == 0) return $crawlerPrice;
+        if ($adjustType === 1) {
+            return round($crawlerPrice + $adjustValue, 2);
+        } elseif ($adjustType === 2) {
+            return round($crawlerPrice * (1 + $adjustValue / 100), 2);
+        }
+        return $crawlerPrice;
     }
 
     private function upsertNotes(array $dataset, array $notes, array $modelMap, array $capacityMap, array $fieldMap, array &$stats): void

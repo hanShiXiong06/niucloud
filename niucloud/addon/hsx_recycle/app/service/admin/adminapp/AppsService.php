@@ -129,8 +129,9 @@ class AppsService extends BaseAdminService
 
     protected function getCurrentUserMenuKeys(): array
     {
+        $menu_service = new MenuService();
         if (AuthService::isSuperAdmin()) {
-            $menu_list = (new MenuService())->getSiteAllMenuList(AppTypeDict::SITE, 1, 0, 1, 1);
+            $menu_list = $this->getAllSiteMenus($menu_service);
             return array_column($menu_list, 'menu_key');
         }
 
@@ -141,14 +142,36 @@ class AppsService extends BaseAdminService
         }
 
         if (!empty($user_role_info['is_admin'])) {
-            $menu_list = (new MenuService())->getSiteAllMenuList(AppTypeDict::SITE, 1, 0, 1, 1);
+            $menu_list = $this->getAllSiteMenus($menu_service);
             return array_column($menu_list, 'menu_key');
         }
 
         $role_service = new RoleService();
         $menu_keys = $role_service->getMenuIdsByRoleIds($this->site_id, $user_role_info['role_ids']);
-        $menu_list = (new MenuService())->getSiteMenuListByMenuKeys($this->site_id, $menu_keys, AppTypeDict::SITE, 0, 'all', 1, 1);
+        $menu_list = $this->getSiteMenusByKeys($menu_service, $menu_keys);
 
         return array_column($menu_list, 'menu_key');
+    }
+
+    protected function getAllSiteMenus(MenuService $menu_service): array
+    {
+        if (method_exists($menu_service, 'getSiteAllMenuList')) {
+            return $menu_service->getSiteAllMenuList(AppTypeDict::SITE, 1, 0, 1, 1);
+        }
+
+        return $menu_service->getAllMenuList(AppTypeDict::SITE, 1, 0, 1);
+    }
+
+    protected function getSiteMenusByKeys(MenuService $menu_service, array $menu_keys): array
+    {
+        if (empty($menu_keys)) {
+            return [];
+        }
+
+        if (method_exists($menu_service, 'getSiteMenuListByMenuKeys')) {
+            return $menu_service->getSiteMenuListByMenuKeys($this->site_id, $menu_keys, AppTypeDict::SITE, 0, 'all', 1, 1);
+        }
+
+        return $menu_service->getMenuListByMenuKeys($this->site_id, $menu_keys, AppTypeDict::SITE, 0, 'all', 1);
     }
 }

@@ -13,7 +13,7 @@
     <!-- #endif -->
 
     <template v-if="diyStore && diyStore.mode == '' && diyStore.global && diyStore.global.bottomTabBar && diyStore.global.bottomTabBar.isShow">
-      <tabbar :addon="diyStore.global.bottomTabBar.designNav?.key || 'recycle'" />
+      <tabbar :addon="diyStore.global.bottomTabBar.designNav?.key || 'hsx_recycle'" />
     </template>
   </view>
 </template>

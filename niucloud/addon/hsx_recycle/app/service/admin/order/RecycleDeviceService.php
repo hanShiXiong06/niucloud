@@ -734,8 +734,8 @@ class RecycleDeviceService extends BaseAdminService
             }
 
             if ($action === 'save_draft') {
-                // 暂存质检：记录为质检开始或更新
-                $this->logService->logDeviceCheckStart($device->id, '暂存质检数据：' . $remark);
+                // 暂存质检：状态保持质检中，不再记录为“开始质检”
+                $this->logService->logDeviceCheckDraft($device->id, $remark);
             } else {
                 // 完成质检：记录质检完成
                 $this->logService->logDeviceCheckComplete($device->id, $checkData, $remark);

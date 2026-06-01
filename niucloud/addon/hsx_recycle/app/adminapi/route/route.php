@@ -73,6 +73,7 @@ Route::group('recycle', function () {
     Route::get('dashboard/trend', 'addon\hsx_recycle\app\adminapi\controller\dashboard\RecycleDashboard@trend');
     Route::get('dashboard/metrics', 'addon\hsx_recycle\app\adminapi\controller\dashboard\RecycleDashboard@metrics');
     Route::get('dashboard/filters', 'addon\hsx_recycle\app\adminapi\controller\dashboard\RecycleDashboard@filters');
+    Route::get('dashboard/device_progress_groups', 'addon\hsx_recycle\app\adminapi\controller\dashboard\RecycleDashboard@deviceProgressGroups');
     Route::get('dashboard/widgets', 'addon\hsx_recycle\app\adminapi\controller\dashboard\DashboardConfig@widgets');
     Route::post('dashboard/widgets', 'addon\hsx_recycle\app\adminapi\controller\dashboard\DashboardConfig@save');
     Route::get('dashboard/visible', 'addon\hsx_recycle\app\adminapi\controller\dashboard\DashboardConfig@visible');
@@ -409,6 +410,8 @@ Route::group('recycle', function () {
     Route::post('printer_template/test_print/:id', 'addon\hsx_recycle\app\adminapi\controller\printer\PrinterTemplate@testPrint');
     // 获取模板类型列表
     Route::get('printer_template/type_list', 'addon\hsx_recycle\app\adminapi\controller\printer\PrinterTemplate@getTypeList');
+    // 获取打印模板变量列表
+    Route::get('printer_template/variables', 'addon\hsx_recycle\app\adminapi\controller\printer\PrinterTemplate@getVariables');
     // 获取默认模板
     Route::get('printer_template/default', 'addon\hsx_recycle\app\adminapi\controller\printer\PrinterTemplate@getDefaultTemplate');
     // 获取设备打印数据

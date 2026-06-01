@@ -92,7 +92,7 @@
     <view v-if="showActions" class="action-grid px-3 py-2 border-t border-gray-50">
       <!-- #ifdef MP-WEIXIN -->
       <button
-        v-if="useWechatContact"
+        v-if="canUserDecide && useWechatContact"
         class="action-btn"
         style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
         open-type="contact"
@@ -101,7 +101,7 @@
         议价
       </button>
       <button
-        v-else
+        v-else-if="canUserDecide"
         class="action-btn"
         style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
         @tap.stop="$emit('negotiate')"
@@ -112,6 +112,7 @@
       <!-- #endif -->
       <!-- #ifndef MP-WEIXIN -->
       <button
+        v-if="canUserDecide"
         class="action-btn"
         style="background: linear-gradient(135deg, #14b8a6, #0d9488);"
         @tap.stop="$emit('negotiate')"
@@ -121,7 +122,7 @@
       </button>
       <!-- #endif -->
       <button
-        v-if="allowApplyConsignment"
+        v-if="allowApplyConsignment && canUserDecide"
         class="action-btn"
         style="background: linear-gradient(135deg, #6366f1, #2563eb);"
         @tap.stop="$emit('apply-consignment')"
@@ -139,7 +140,7 @@
         查看代卖
       </button>
       <button
-        v-if="allowRejectSale"
+        v-if="allowRejectSale && canUserDecide"
         class="action-btn"
         style="background: linear-gradient(135deg, #f97316, #ef4444);"
         @tap.stop="$emit('reject-sale')"
@@ -148,6 +149,7 @@
         拒绝出售
       </button>
       <button
+        v-if="canUserDecide"
         class="action-btn"
         style="background: linear-gradient(135deg, #f472b6, #ec4899);"
         @tap.stop="$emit('confirm')"
@@ -194,7 +196,10 @@ const checkResult = computed(() => {
   return props.device.check_result_seller || props.device.check_result || ''
 })
 
-const showActions = computed(() => [3, 4, 7, 8].includes(Number(props.device.status)))
+const finalPrice = computed(() => Number(props.device.final_price || 0))
+const hasFinalPrice = computed(() => Number.isFinite(finalPrice.value) && finalPrice.value > 0)
+const canUserDecide = computed(() => hasFinalPrice.value && [4, 7].includes(Number(props.device.status)))
+const showActions = computed(() => canUserDecide.value || props.allowViewConsignment)
 
 const imageCount = computed(() => {
   const raw = props.device.check_images_seller || props.device.check_images

@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\adminapi\controller\dashboard;
 
 use addon\hsx_recycle\app\service\admin\dashboard\RecycleDashboardFilterService;
 use addon\hsx_recycle\app\service\admin\dashboard\RecycleDashboardMetricService;
+use addon\hsx_recycle\app\dict\order\DeviceProgressDict;
 use core\base\BaseAdminController;
 use think\App;
 use think\Response;
@@ -60,5 +61,14 @@ class RecycleDashboard extends BaseAdminController
     public function filters(): Response
     {
         return success($this->filterService->getFilters());
+    }
+
+    /**
+     * 获取设备进度分组定义
+     * @return Response
+     */
+    public function deviceProgressGroups(): Response
+    {
+        return success(DeviceProgressDict::getGroups());
     }
 }

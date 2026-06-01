@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\adminapi\controller\printer;
 
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrinterTemplateService;
+use addon\hsx_recycle\app\dict\printer\PrinterVariableDict;
 use core\base\BaseAdminController;
 use think\App;
 use think\Response;
@@ -188,6 +189,15 @@ class PrinterTemplate extends BaseAdminController
     public function getTypeList()
     {
         return success($this->service->getTypeList());
+    }
+
+    /**
+     * 获取打印模板变量列表
+     * @return Response
+     */
+    public function getVariables()
+    {
+        return success(PrinterVariableDict::getVariableGroups());
     }
     
     /**

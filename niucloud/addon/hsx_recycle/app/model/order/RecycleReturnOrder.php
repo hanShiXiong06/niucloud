@@ -6,6 +6,7 @@ namespace addon\hsx_recycle\app\model\order;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
 use addon\hsx_recycle\app\model\address\RecycleUserAddress;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\service\core\RecycleDateRangeService;
 use app\model\member\Member;
 use app\model\site\Site;
 use core\base\BaseModel;
@@ -159,7 +160,8 @@ class RecycleReturnOrder extends BaseModel
     {
         if (is_array($value)) {
             if (!empty($value[0]) && !empty($value[1])) {
-                $query->whereBetweenTime('create_at', $value[0], $value[1]);
+                $range = RecycleDateRangeService::normalizeRangeFromArray($value);
+                $query->where('create_at', 'between', [$range['start_at'], $range['end_at']]);
             }
         }
     }

@@ -1273,15 +1273,41 @@ class HsxPhoneQueryService extends BaseApiService
             $item['can_view_detail'] = $queryStatus !== HsxPhoneQueryOrderDict::FAIL;
             $item['create_time'] = $this->formatTimestamp($item['create_time']);
             $item['finish_time'] = $this->formatTimestamp($item['finish_time'] ?? 0);
-            $item['pay_text'] = ($item['pay_type'] ?? '') === HsxPhoneQueryOrderDict::PAY_TYPE_POINT
-                ? ((int)round(((int)($item['pay_point'] ?? 0)) / max((int)($item['query_count'] ?? 1), 1)) . '积分')
-                : ('￥' . number_format((float)($item['money'] ?? 0), 2));
             $item['refund_text'] = $this->buildResultRefundText($item);
+            $item['pay_text'] = $this->getResultPayText($item);
             $item['fail_reason'] = mb_substr((string)($item['fail_reason'] ?? ''), 0, 160);
             $this->formatMoneyOutput($item, ['money', 'pay_money', 'unit_price', 'refund_money']);
         }
 
         return $data;
+    }
+
+    private function getResultPayText(array $item): string
+    {
+        if ((int)($item['query_status'] ?? 0) === HsxPhoneQueryOrderDict::FAIL) {
+            return '';
+        }
+
+        if (($item['pay_type'] ?? '') === HsxPhoneQueryOrderDict::PAY_TYPE_POINT) {
+            return (int)round(((int)($item['pay_point'] ?? 0)) / max((int)($item['query_count'] ?? 1), 1)) . '积分';
+        }
+
+        return '￥' . number_format($this->getResultPayMoney($item), 2);
+    }
+
+    private function getResultPayMoney(array $item): float
+    {
+        $money = (float)($item['money'] ?? 0);
+        if ($money > 0) {
+            return $money;
+        }
+
+        $payMoney = (float)($item['pay_money'] ?? 0);
+        if ($payMoney <= 0) {
+            return 0.0;
+        }
+
+        return round($payMoney / max((int)($item['query_count'] ?? 1), 1), 2);
     }
 
     private function buildResultStatusName(array $item): string

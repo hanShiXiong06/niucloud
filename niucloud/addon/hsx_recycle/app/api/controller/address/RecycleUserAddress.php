@@ -47,6 +47,13 @@ class RecycleUserAddress extends BaseApiController
              ["mobile",""],
              ["card_pic",""],
              ["name",""],
+             ["province_id",0],
+             ["city_id",0],
+             ["district_id",0],
+             ["province_name",""],
+             ["city_name",""],
+             ["district_name",""],
+             ["detail_address",""],
 
         ]);
         // $this->validate($data, 'addon\hsx_recycle\app\validate\recycle_user_address\RecycleUserAddress.add');
@@ -67,6 +74,13 @@ class RecycleUserAddress extends BaseApiController
              ["mobile",""],
              ["card_pic",""],
              ["name",""],
+             ["province_id",0],
+             ["city_id",0],
+             ["district_id",0],
+             ["province_name",""],
+             ["city_name",""],
+             ["district_name",""],
+             ["detail_address",""],
 
         ]);
         // $this->validate($data, 'addon\hsx_recycle\app\validate\recycle_user_address\RecycleUserAddress.edit');

@@ -85,6 +85,13 @@ const modules = [
         desc: '寄件记录和费用核对',
         url: '/addon/hsx_recycle/pages/express/list',
         color: 'linear-gradient(135deg, #7c3aed 0%, #9f67ff 100%)'
+    },
+    {
+        name: '数据统计',
+        short: '数',
+        desc: '经营数据和业务概览',
+        url: '/addon/hsx_recycle/pages/stats/index',
+        color: 'linear-gradient(135deg, #0369a1 0%, #38bdf8 100%)'
     }
 ]
 </script>

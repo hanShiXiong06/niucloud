@@ -435,7 +435,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Download, Search, Refresh, View, ArrowDown } from '@element-plus/icons-vue'
 
 import {
@@ -463,13 +463,18 @@ import { getExpress } from '../../api/device_query_api'
 
 
 const router = useRouter()
+const route = useRoute()
 
 // 搜索表单数据
 const searchParams = reactive<IReturnOrderListParams>({
     order_id: '',
     express_no: '',
-    status: undefined,
-    create_at: []
+    status: route.query.status !== undefined && route.query.status !== ''
+        ? Number(route.query.status)
+        : undefined,
+    create_at: route.query.start_time && route.query.end_time
+        ? [String(route.query.start_time), String(route.query.end_time)]
+        : []
 })
 
 // 状态选项
@@ -1001,13 +1006,6 @@ const getList = async () => {
             page: pagination.page,
             limit: pagination.limit
         }
-
-        // 处理日期范围
-        if (params.create_at && params.create_at.length === 2) {
-            const [start, end] = params.create_at
-            params.create_at = [`${start} 00:00:00`, `${end} 23:59:59`]
-        }
-      
 
         const res = await getReturnOrderList(params)
 

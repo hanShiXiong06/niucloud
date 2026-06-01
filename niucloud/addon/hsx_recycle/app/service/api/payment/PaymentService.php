@@ -33,6 +33,7 @@ class PaymentService extends BaseService
     {
         try {
             Db::startTrans();
+            $data = $this->sanitizePaymentData($data, true);
             
             // 如果设置为默认，先将其他的设为非默认
             if (!empty($data['is_default'])) {
@@ -67,6 +68,7 @@ class PaymentService extends BaseService
 
         try {
             Db::startTrans();
+            $data = $this->sanitizePaymentData($data);
             
             if (!empty($data['is_default'])) {
                 $this->model->where([
@@ -133,5 +135,33 @@ class PaymentService extends BaseService
             Db::rollback();
             return fail($e->getMessage());
         }
+    }
+
+    private function sanitizePaymentData(array $data, bool $allowMemberId = false): array
+    {
+        $allowFields = ['pay_type', 'account', 'qrcode_image', 'is_default'];
+        if ($allowMemberId) {
+            $allowFields[] = 'member_id';
+        }
+
+        $data = array_intersect_key($data, array_flip($allowFields));
+
+        if (isset($data['pay_type'])) {
+            $data['pay_type'] = trim((string)$data['pay_type']);
+        }
+        if (isset($data['account'])) {
+            $data['account'] = trim((string)$data['account']);
+        }
+        if (isset($data['qrcode_image'])) {
+            $data['qrcode_image'] = trim((string)$data['qrcode_image']);
+        }
+        if (isset($data['is_default'])) {
+            $data['is_default'] = !empty($data['is_default']) ? 1 : 0;
+        }
+        if ($allowMemberId && isset($data['member_id'])) {
+            $data['member_id'] = (int)$data['member_id'];
+        }
+
+        return $data;
     }
 } 

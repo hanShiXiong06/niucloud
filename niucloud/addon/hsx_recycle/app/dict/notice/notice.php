@@ -50,6 +50,7 @@ return [
             'pay_type' => '收款方式',
             'pay_account' => '收款账号',
             'pay_result' => '打款结果',
+            'pay_time' => '打款时间',
             'delivery_type' => '配送方式代码',
             'delivery_type_name' => '配送方式',
             'url' => '订单链接'

@@ -82,6 +82,25 @@ class CoreRecycleDeviceLogService extends BaseAdminService
     }
 
     /**
+     * 记录质检暂存日志
+     * @param int $deviceId 设备ID
+     * @param string $remark 备注
+     * @return int 日志ID
+     */
+    public function logDeviceCheckDraft(int $deviceId, string $remark = ''): int
+    {
+        return $this->addDeviceLog([
+            'device_id' => $deviceId,
+            'action' => 'check_draft',
+            'old_status' => RecycleOrderDict::DEVICE_STATUS_CHECKING,
+            'new_status' => RecycleOrderDict::DEVICE_STATUS_CHECKING,
+            'operation_type' => 'check_draft',
+            'custom_message' => '暂存质检',
+            'user_remark' => $remark
+        ]);
+    }
+
+    /**
      * 记录质检完成日志
      * @param int $deviceId 设备ID
      * @param array $checkData 质检数据
@@ -253,6 +272,9 @@ class CoreRecycleDeviceLogService extends BaseAdminService
             case 'check_start':
                 $this->addCheckStartRemarks($remarks, $data);
                 break;
+            case 'check_draft':
+                $this->addCheckDraftRemarks($remarks, $data);
+                break;
             case 'check_complete':
                 $this->addCheckCompleteRemarks($remarks, $data);
                 break;
@@ -309,6 +331,14 @@ class CoreRecycleDeviceLogService extends BaseAdminService
     private function addCheckStartRemarks(array &$remarks, array $data): void
     {
         $remarks[] = "质检开始时间: " . date('Y-m-d H:i:s');
+    }
+
+    /**
+     * 添加质检暂存相关备注
+     */
+    private function addCheckDraftRemarks(array &$remarks, array $data): void
+    {
+        $remarks[] = "暂存时间: " . date('Y-m-d H:i:s');
     }
 
     /**

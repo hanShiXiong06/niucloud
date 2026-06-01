@@ -21,6 +21,19 @@ class RecycleDashboardMetricDict
     public const QUOTE_CONFIRM_RATE = 'quote_confirm_rate';
     public const RETURN_RATE = 'return_rate';
 
+    // 代卖相关
+    public const TODAY_CONSIGNMENT_COUNT = 'today_consignment_count';
+    public const CONSIGNMENT_LISTING_COUNT = 'consignment_listing_count';
+    public const CONSIGNMENT_SOLD_AMOUNT = 'consignment_sold_amount';
+    public const CONSIGNMENT_SERVICE_FEE = 'consignment_service_fee';
+
+    // 退货相关
+    public const TODAY_RETURN_DEVICE_COUNT = 'today_return_device_count';
+    public const PENDING_RETURN = 'pending_return';
+
+    // 待确认
+    public const PENDING_CONFIRM_COUNT = 'pending_confirm_count';
+
     public static function getList(): array
     {
         return [
@@ -136,6 +149,76 @@ class RecycleDashboardMetricDict
                 'scope_label' => '所选时间',
                 'filter_key' => RecycleDashboardFilterDict::RETURNED_DEVICES,
                 'view_mode' => 'device_expand',
+            ],
+            self::TODAY_CONSIGNMENT_COUNT => [
+                'title' => '新增代卖',
+                'unit' => '单',
+                'value_type' => 'integer',
+                'category' => '业务量',
+                'description' => '所选时间内转入代卖的设备数量',
+                'caliber' => '统计所选时间内创建的代卖订单数',
+                'time_scope' => 'period',
+                'scope_label' => '所选时间',
+            ],
+            self::CONSIGNMENT_LISTING_COUNT => [
+                'title' => '挂牌中',
+                'unit' => '台',
+                'value_type' => 'integer',
+                'category' => '待办',
+                'description' => '当前挂牌中等待成交的代卖设备',
+                'caliber' => '代卖订单状态为挂牌中的数量',
+                'time_scope' => 'snapshot',
+                'scope_label' => '当前状态',
+            ],
+            self::CONSIGNMENT_SOLD_AMOUNT => [
+                'title' => '代卖成交额',
+                'unit' => '元',
+                'value_type' => 'money',
+                'category' => '资金',
+                'description' => '所选时间内代卖成交的总金额',
+                'caliber' => '所选时间内代卖订单成交金额合计',
+                'time_scope' => 'period',
+                'scope_label' => '所选时间',
+            ],
+            self::CONSIGNMENT_SERVICE_FEE => [
+                'title' => '代卖服务收益',
+                'unit' => '元',
+                'value_type' => 'money',
+                'category' => '资金',
+                'description' => '所选时间内代卖服务费收益',
+                'caliber' => '所选时间内代卖订单服务费合计（成交价-客户结算金额）',
+                'time_scope' => 'period',
+                'scope_label' => '所选时间',
+            ],
+            self::TODAY_RETURN_DEVICE_COUNT => [
+                'title' => '退货设备数',
+                'unit' => '台',
+                'value_type' => 'integer',
+                'category' => '业务量',
+                'description' => '所选时间内退货的设备数量',
+                'caliber' => '统计所选时间内状态变为退回的设备数',
+                'time_scope' => 'period',
+                'scope_label' => '所选时间',
+            ],
+            self::PENDING_RETURN => [
+                'title' => '待退回',
+                'unit' => '台',
+                'value_type' => 'integer',
+                'category' => '待办',
+                'description' => '当前待退回客户的设备',
+                'caliber' => '设备处置方式为退回且未完成退回流程的数量',
+                'time_scope' => 'snapshot',
+                'scope_label' => '当前状态',
+            ],
+            self::PENDING_CONFIRM_COUNT => [
+                'title' => '待确认',
+                'unit' => '台',
+                'value_type' => 'integer',
+                'category' => '待办',
+                'description' => '当前等待客户确认报价的设备',
+                'caliber' => '设备状态为已报价待客户确认的数量',
+                'time_scope' => 'snapshot',
+                'scope_label' => '当前状态',
             ],
         ];
     }

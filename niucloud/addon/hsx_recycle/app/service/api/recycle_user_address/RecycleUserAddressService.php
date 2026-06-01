@@ -42,7 +42,7 @@ class RecycleUserAddressService extends BaseApiService
     public function getInfo()
     {
         
-        $field = 'id,member_id,address,id_card,mobile,card_pic,name,create_time,update_time,site_id';
+        $field = 'id,member_id,address,id_card,mobile,card_pic,name,province_id,city_id,district_id,province_name,city_name,district_name,detail_address,create_time,update_time,site_id';
 
         $info = $this->model->field($field)->where([['member_id', "=", $this->member_id],['site_id', "=", $this->site_id]])->findOrEmpty()->toArray();
         return $info;
@@ -55,6 +55,7 @@ class RecycleUserAddressService extends BaseApiService
      */
     public function add(array $data)
     {
+        $data = $this->sanitizeAddressData($data);
         $data['site_id'] = $this->site_id;
         $data['member_id'] = $this->member_id;
         $res = $this->model->create($data);
@@ -73,6 +74,7 @@ class RecycleUserAddressService extends BaseApiService
      */
     public function edit(int $id, array $data)
     {
+        $data = $this->sanitizeAddressData($data);
         $data['member_id'] = $this->member_id;
         $this->model->where([['id', '=', $id],['site_id', '=', $this->site_id]])->update($data);
         return true;
@@ -88,6 +90,39 @@ class RecycleUserAddressService extends BaseApiService
         $model = $this->model->where([['id', '=', $id],['site_id', '=', $this->site_id]])->find();
         $res = $model->delete();
         return $res;
+    }
+
+    private function sanitizeAddressData(array $data): array
+    {
+        $allowFields = [
+            'member_id',
+            'address',
+            'id_card',
+            'mobile',
+            'card_pic',
+            'name',
+            'province_id',
+            'city_id',
+            'district_id',
+            'province_name',
+            'city_name',
+            'district_name',
+            'detail_address',
+        ];
+        $data = array_intersect_key($data, array_flip($allowFields));
+
+        foreach (['address', 'id_card', 'mobile', 'card_pic', 'name', 'province_name', 'city_name', 'district_name', 'detail_address'] as $field) {
+            if (isset($data[$field])) {
+                $data[$field] = trim((string)$data[$field]);
+            }
+        }
+        foreach (['province_id', 'city_id', 'district_id', 'member_id'] as $field) {
+            if (isset($data[$field])) {
+                $data[$field] = (int)$data[$field];
+            }
+        }
+
+        return $data;
     }
   
 

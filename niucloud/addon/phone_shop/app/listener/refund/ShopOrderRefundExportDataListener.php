@@ -23,6 +23,9 @@ class ShopOrderRefundExportDataListener
     public function handle($param)
     {
         $data = [];
+        if (($param['type'] ?? '') != 'shop_order_refund') {
+            return $data;
+        }
         if ($param['type'] == 'shop_order_refund') {
             $model = new OrderRefund();
 

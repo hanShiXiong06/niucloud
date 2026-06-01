@@ -24,6 +24,7 @@ class RecycleDashboardFilterDict
     public const PAID_TODAY = 'paid_today';
     public const COMPLETED_TODAY = 'completed_today';
     public const RETURNED_ORDERS = 'returned_orders';
+    public const PENDING_RETURN = 'pending_return';
     public const INVENTORY_DEVICES = 'inventory_devices';
     public const HIGH_COST_DEVICES = 'high_cost_devices';
     public const QUOTE_DECIDED = 'quote_decided';
@@ -98,6 +99,12 @@ class RecycleDashboardFilterDict
                 'name' => '有退回设备的订单',
                 'target' => 'order_list',
                 'description' => '包含已退回设备的订单',
+            ],
+            self::PENDING_RETURN => [
+                'name' => '待退回设备',
+                'target' => 'order_list',
+                'view_mode' => 'device_expand',
+                'description' => '处置方式为退回且尚未完成退回的设备',
             ],
             self::INVENTORY_DEVICES => [
                 'name' => '库存设备',

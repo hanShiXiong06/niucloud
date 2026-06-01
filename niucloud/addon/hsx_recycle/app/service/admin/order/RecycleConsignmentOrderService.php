@@ -12,6 +12,7 @@ use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\order\RecycleDevicePayment;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintTriggerService;
+use addon\hsx_recycle\app\service\core\RecycleDateRangeService;
 use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use core\base\BaseAdminService;
@@ -66,8 +67,15 @@ class RecycleConsignmentOrderService extends BaseAdminService
         if (($where['source_order_id'] ?? '') !== '') {
             $model->where('source_order_id', '=', (int)$where['source_order_id']);
         }
+        $dateRange = [];
         if (!empty($where['create_time']) && is_array($where['create_time']) && count($where['create_time']) === 2) {
-            $model->where('create_time', 'between', [strtotime($where['create_time'][0]), strtotime($where['create_time'][1])]);
+            $dateRange = RecycleDateRangeService::normalizeRangeFromArray($where['create_time']);
+        } elseif (($where['start_time'] ?? '') !== '' || ($where['end_time'] ?? '') !== '') {
+            $dateRange = RecycleDateRangeService::normalizeRange($where['start_time'] ?? '', $where['end_time'] ?? '');
+        }
+
+        if (!empty($dateRange)) {
+            $model->where('create_time', 'between', [$dateRange['start_at'], $dateRange['end_at']]);
         }
 
         return $this->pageQuery($model);

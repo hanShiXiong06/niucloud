@@ -344,6 +344,7 @@ class RecycleOrderDict
         $operationMap = [
             'sign' => '设备签收',
             'check_start' => '开始质检',
+            'check_draft' => '暂存质检',
             'check_complete' => '质检完成',
             'price' => '设备定价',
             'confirm_price' => '价格确认',
@@ -363,6 +364,7 @@ class RecycleOrderDict
             'device_payment' => '设备打款',
             'device_confirm' => '设备确认',
             'check_start' => '开始质检',
+            'check_draft' => '暂存质检',
             'check_complete' => '质检完成',
             'price' => '设备定价',
             'confirm_price' => '价格确认',

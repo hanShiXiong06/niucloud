@@ -192,9 +192,12 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,site_id,imei,user_sn,model,capacity,color,initial_price,status,final_price,remark,check_images,check_images_seller,check_result,check_result_seller,check_at,price_remark,consignment_order_id,info')
+                    $query->field('id,order_id,site_id,imei,imei2,sn,user_sn,model,capacity,color,initial_price,status,final_price,remark,check_images,check_images_seller,check_result,check_result_seller,check_at,price_remark,consignment_order_id,info')
                         ->with(['consignmentOrder' => function($q) {
                             $q->field('id,consignment_no,source_device_id,status');
+                        }, 'paymentRecords' => function($q) {
+                            $q->field('id,site_id,pay_no,order_id,device_id,amount,pay_type,pay_account,pay_name,pay_remark,payment_images,pay_time,create_at')
+                                ->order('pay_time asc,id asc');
                         }])
                         ->append(['status_name', 'check_images_seller_thumb_small']);
                 },
@@ -211,8 +214,32 @@ class RecycleOrderService extends BaseApiService
         }
 
         $info['devices'] = $this->fillInspectionReportMeta($info['devices'] ?? []);
+        $info['devices'] = $this->formatDevicePaymentRecords($info['devices']);
 
         return $info;
+    }
+
+    private function formatDevicePaymentRecords(array $devices): array
+    {
+        foreach ($devices as &$device) {
+            $records = $device['paymentRecords'] ?? $device['payment_records'] ?? [];
+            if (!is_array($records)) {
+                $records = [];
+            }
+            foreach ($records as $index => &$record) {
+                $images = array_values(array_filter(array_map('trim', explode(',', (string)($record['payment_images'] ?? '')))));
+                $record['batch_index'] = $index + 1;
+                $record['amount_text'] = number_format((float)($record['amount'] ?? 0), 2);
+                $record['pay_time_text'] = !empty($record['pay_time']) ? date('Y-m-d H:i:s', (int)$record['pay_time']) : '';
+                $record['payment_image_list'] = $images;
+            }
+            unset($record);
+            $device['payment_records'] = $records;
+            unset($device['paymentRecords']);
+        }
+        unset($device);
+
+        return $devices;
     }
 
     /**
@@ -385,6 +412,10 @@ class RecycleOrderService extends BaseApiService
             $data['member_id'] = $this->member_id;
             $data['status'] = RecycleOrderDict::ORDER_STATUS_PENDING_SIGN;
             $data['order_no'] = $this->generateOrderNo();
+
+            // 读取站点配置的流转模式（整单/按设备）
+            $orderSubmitConfig = (new \addon\hsx_recycle\app\service\api\order\OrderSubmitConfigService())->getConfig($this->site_id);
+            $data['flow_mode'] = ($orderSubmitConfig['flow']['mode'] ?? $orderSubmitConfig['payment']['mode'] ?? RecycleOrderDict::FLOW_MODE_ORDER);
 
             // ========== 统一快递服务（亿速）==========
             if (!empty($data['use_express']) && !empty($data['express_config'])) {

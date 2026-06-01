@@ -2,8 +2,19 @@
 return [
     'pages' => <<<EOT
         // PAGE_BEGIN
+		 {
+            "root": "addon/recycle",
+            "pages": [
+                {
+                    "path": "pages/order/order",
+                    "style": {
+                        "navigationBarTitleText": "回收下单"
+                    }
+                }
+            ]
+        },
         {
-            "root": "addon/hsx_recycle", 
+            "root": "addon/hsx_recycle/pages/payment/index", 
             "pages": [
 				{
 					"path": "pages/index",

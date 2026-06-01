@@ -189,7 +189,7 @@ const submitForm = async () => {
       
       if (res.code === 1) {
         ElMessage.success('修改成功');
-        router.push('/hsx_recycle/printer/list');
+        router.push('/recycle/printer/list');
       }
     } catch (error) {
       console.error('修改打印机失败', error);
@@ -224,7 +224,7 @@ const testPrinterHandler = async () => {
 
 // 返回列表页
 const goBack = () => {
-  router.push('/hsx_recycle/printer/list');
+  router.push('/recycle/printer/list');
 };
 
 onMounted(() => {

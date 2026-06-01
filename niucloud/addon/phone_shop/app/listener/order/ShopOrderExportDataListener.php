@@ -27,6 +27,9 @@ class ShopOrderExportDataListener
     public function handle($param)
     {
         $data = [];
+        if (($param['type'] ?? '') != 'shop_order') {
+            return $data;
+        }
         if ($param[ 'type' ] == 'shop_order') {
             $model = new Order();
             $orderGoodsModel = new OrderGoods();

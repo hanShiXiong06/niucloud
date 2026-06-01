@@ -60,6 +60,7 @@ ALTER TABLE `{{prefix}}recycle_order`
   ADD COLUMN `flow_mode` varchar(20) NOT NULL DEFAULT 'order' COMMENT '订单流转模式：order-整单流转，device-按设备流转' AFTER `site_id`;
 
 ALTER TABLE `{{prefix}}recycle_device`
+  ADD COLUMN `export_status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '导出状态：0-未导出，1-已导出' AFTER `site_id`,
   ADD COLUMN `check_template_id` int NOT NULL DEFAULT 0 COMMENT '质检模板ID' AFTER `category_id`,
   ADD COLUMN `confirm_status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '报价确认状态：0-待确认，1-已确认，2-已拒绝' AFTER `final_status`,
   ADD COLUMN `confirm_time` int NOT NULL DEFAULT 0 COMMENT '报价确认时间' AFTER `confirm_status`,
@@ -309,3 +310,12 @@ WHERE `images` IS NOT NULL AND `images` <> '';
 
 -- 历史表新增浏览量字段
 ALTER TABLE `{{prefix}}recycle_category_quote_history` ADD COLUMN `view_count` int NOT NULL DEFAULT 0 COMMENT '该报价单浏览次数' AFTER `create_time`;
+
+-- 用户退货地址地区反显字段
+ALTER TABLE `{{prefix}}recycle_user_address` ADD COLUMN `province_id` int NOT NULL DEFAULT 0 COMMENT '省份ID' AFTER `name`;
+ALTER TABLE `{{prefix}}recycle_user_address` ADD COLUMN `city_id` int NOT NULL DEFAULT 0 COMMENT '城市ID' AFTER `province_id`;
+ALTER TABLE `{{prefix}}recycle_user_address` ADD COLUMN `district_id` int NOT NULL DEFAULT 0 COMMENT '区县ID' AFTER `city_id`;
+ALTER TABLE `{{prefix}}recycle_user_address` ADD COLUMN `province_name` varchar(50) NOT NULL DEFAULT '' COMMENT '省份名称' AFTER `district_id`;
+ALTER TABLE `{{prefix}}recycle_user_address` ADD COLUMN `city_name` varchar(50) NOT NULL DEFAULT '' COMMENT '城市名称' AFTER `province_name`;
+ALTER TABLE `{{prefix}}recycle_user_address` ADD COLUMN `district_name` varchar(50) NOT NULL DEFAULT '' COMMENT '区县名称' AFTER `city_name`;
+ALTER TABLE `{{prefix}}recycle_user_address` ADD COLUMN `detail_address` varchar(255) NOT NULL DEFAULT '' COMMENT '详细地址' AFTER `district_name`;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleReturnOrderService as CoreRecycleReturnOrderService;
+use addon\hsx_recycle\app\service\core\RecycleDateRangeService;
 use core\base\BaseAdminService;
 
 /**
@@ -121,6 +122,10 @@ class RecycleReturnOrderService extends BaseAdminService
       
         // 添加站点ID
         $where['site_id'] = $this->site_id;
+        if ((empty($where['create_at']) || !is_array($where['create_at'])) && (($where['start_time'] ?? '') !== '' || ($where['end_time'] ?? '') !== '')) {
+            $range = RecycleDateRangeService::normalizeRange($where['start_time'] ?? '', $where['end_time'] ?? '');
+            $where['create_at'] = [$range['start_time'], $range['end_time']];
+        }
         
         // 构建查询模型
         $search_model = new \addon\hsx_recycle\app\model\order\RecycleReturnOrder();
@@ -168,4 +173,4 @@ class RecycleReturnOrderService extends BaseAdminService
     {
         return $this->coreService->getStatusCount($this->site_id);
     }
-} 
+}

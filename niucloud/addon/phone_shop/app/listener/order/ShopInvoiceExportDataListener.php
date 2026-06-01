@@ -25,6 +25,9 @@ class ShopInvoiceExportDataListener
     public function handle($param)
     {
         $data = [];
+        if (($param['type'] ?? '') != 'shop_invoice') {
+            return $data;
+        }
         if ($param['type'] == 'shop_invoice') {
             $model = new Invoice();
             $order = 'id desc';

@@ -147,6 +147,155 @@
               :date-label="dashboardDateLabel"
             />
 
+            <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+              <ChartCard title="今日经营" :icon="DataBoard" contentClass="p-0">
+                <div class="space-y-4 p-4">
+                  <div class="grid grid-cols-2 gap-3">
+                    <div
+                      v-for="item in todayBusinessStats"
+                      :key="item.label"
+                      :class="[
+                        'rounded-lg border p-3',
+                        item.urgent
+                          ? 'border-amber-200 bg-amber-50'
+                          : 'border-gray-100 bg-gray-50'
+                      ]"
+                    >
+                      <div :class="['text-xs', item.urgent ? 'text-amber-700' : 'text-gray-500']">{{ item.label }}</div>
+                      <div :class="['mt-1 text-xl font-semibold', item.urgent ? 'text-amber-900' : 'text-gray-900']">
+                        {{ item.value }}
+                        <span class="text-xs font-normal text-gray-500">{{ item.unit }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="mb-2 flex items-center justify-between">
+                      <span class="text-sm font-medium text-gray-800">设备类型</span>
+                      <span class="text-xs text-gray-500">按新增设备统计</span>
+                    </div>
+                    <div v-if="todayBusiness.category_breakdown?.length" class="flex flex-wrap gap-2">
+                      <el-tag
+                        v-for="item in todayBusiness.category_breakdown"
+                        :key="item.category_id || item.category_name"
+                        effect="plain"
+                      >
+                        {{ item.category_name }} {{ item.count }} 台
+                      </el-tag>
+                    </div>
+                    <div v-else class="rounded-lg bg-gray-50 py-5 text-center text-sm text-gray-400">
+                      暂无新增设备类型数据
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="mb-2 flex items-center justify-between">
+                      <span class="text-sm font-medium text-gray-800">回收价区间</span>
+                      <span class="text-xs text-gray-500">
+                        {{ todayBusiness.price_summary?.label || "0.00 - 0.00" }}
+                      </span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div
+                        v-for="range in todayBusiness.price_ranges || []"
+                        :key="range.key"
+                        class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm"
+                      >
+                        <span class="text-gray-600">{{ range.label }}</span>
+                        <span class="font-semibold text-gray-900">{{ range.count }} 台</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="mb-2 flex items-center justify-between">
+                      <span class="text-sm font-medium text-gray-800">代卖进度</span>
+                      <span class="text-xs text-gray-500">
+                        今日成交 ¥{{ todayBusiness.consignment?.sold_today_amount || "0.00" }}
+                      </span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                      <button
+                        v-for="item in consignmentProgress"
+                        :key="item.label"
+                        type="button"
+                        class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm transition hover:bg-blue-50"
+                        @click="goConsignmentStatus(item.status)"
+                      >
+                        <span class="text-gray-600">{{ item.label }}</span>
+                        <span class="font-semibold text-gray-900">{{ item.value }} 台</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </ChartCard>
+
+              <ChartCard title="待办与责任人" :icon="UserFilled" contentClass="p-0">
+                <template #header-right>
+                  <el-tag type="warning" size="small">
+                    待处理 {{ responsibility.total_pending_devices || 0 }} 台
+                  </el-tag>
+                </template>
+
+                <el-table
+                  :data="responsibilityTasks"
+                  size="small"
+                  class="workload-table"
+                  max-height="420"
+                >
+                  <el-table-column prop="title" label="任务" min-width="120" fixed />
+                  <el-table-column label="系统角色" min-width="110">
+                    <template #default="{ row }">
+                      <span v-if="getTaskRole(row)" class="text-xs text-gray-700">
+                        {{ getTaskRole(row) }}
+                      </span>
+                      <span v-else class="text-xs text-gray-400">未关联</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="数量" min-width="110">
+                    <template #default="{ row }">
+                      <div class="text-sm font-medium text-gray-900">{{ row.device_count || 0 }} 台</div>
+                      <div class="text-xs text-gray-500">{{ row.order_count || 0 }} 单</div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="责任人" min-width="190">
+                    <template #default="{ row }">
+                      <div v-if="row.owners?.length" class="space-y-1">
+                        <div
+                          v-for="owner in row.owners.slice(0, 3)"
+                          :key="`${row.key}-${owner.owner_id}-${owner.owner_name}`"
+                          class="flex items-center justify-between gap-2 text-xs"
+                        >
+                          <span class="min-w-0 truncate text-gray-700">
+                            {{ owner.owner_name }}
+                            <span v-if="owner.role_name" class="text-gray-400">· {{ owner.role_name }}</span>
+                          </span>
+                          <span class="shrink-0 font-medium text-gray-900">{{ owner.device_count }} 台</span>
+                        </div>
+                      </div>
+                      <span v-else class="text-xs text-gray-400">暂无</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="76" align="right">
+                    <template #default="{ row }">
+                      <el-button
+                        v-if="row.route_path || row.drilldown?.filter_key"
+                        link
+                        type="primary"
+                        size="small"
+                        @click="handleTaskDrilldown(row)"
+                      >
+                        查看
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <div class="border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
+                  {{ responsibility.explain || "责任角色来自系统角色；未明确到人的任务只显示待处理数量。" }}
+                </div>
+              </ChartCard>
+            </div>
+
             <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
               <MetricGrid
                 v-if="canShowWidget('business_dashboard_metrics')"
@@ -616,6 +765,34 @@ const businessDashboard = ref<BusinessDashboard>({
   thresholds: {},
   cards: [],
   todo: [],
+  today_business: {
+    order_count: 0,
+    device_count: 0,
+    recycled_device_count: 0,
+    sold_device_count: 0,
+    category_breakdown: [],
+    price_summary: {
+      count: 0,
+      min: "0.00",
+      max: "0.00",
+      avg: "0.00",
+      label: "0.00 - 0.00",
+    },
+    price_ranges: [],
+    consignment: {
+      today_count: 0,
+      pending_count: 0,
+      selling_count: 0,
+      pending_settlement_count: 0,
+      sold_today_count: 0,
+      sold_today_amount: "0.00",
+    },
+  },
+  responsibility: {
+    total_pending_devices: 0,
+    explain: "",
+    tasks: [],
+  },
   explain: "",
 });
 const businessTrend = ref<BusinessTrend>({
@@ -666,6 +843,66 @@ const financeMetricCards = computed(() => {
   return businessDashboard.value.cards.filter((card) => ["资金", "库存"].includes(card.category));
 });
 
+const todayBusiness = computed(() => {
+  return businessDashboard.value.today_business || {
+    order_count: 0,
+    device_count: 0,
+    recycled_device_count: 0,
+    sold_device_count: 0,
+    category_breakdown: [],
+    price_summary: {
+      count: 0,
+      min: "0.00",
+      max: "0.00",
+      avg: "0.00",
+      label: "0.00 - 0.00",
+    },
+    price_ranges: [],
+    consignment: {
+      today_count: 0,
+      pending_count: 0,
+      selling_count: 0,
+      pending_settlement_count: 0,
+      sold_today_count: 0,
+      sold_today_amount: "0.00",
+    },
+  };
+});
+
+const todayBusinessStats = computed(() => [
+  { label: "回收订单", value: todayBusiness.value.order_count || 0, unit: "单" },
+  { label: "回收设备", value: todayBusiness.value.device_count || 0, unit: "台" },
+  { label: "已回收", value: todayBusiness.value.recycled_device_count || 0, unit: "台" },
+  { label: "已售出", value: todayBusiness.value.sold_device_count || 0, unit: "台" },
+  { label: "代卖待上架", value: todayBusiness.value.consignment?.pending_count || 0, unit: "台", urgent: true },
+  { label: "代卖待结算", value: todayBusiness.value.consignment?.pending_settlement_count || 0, unit: "台", urgent: true },
+]);
+
+const consignmentProgress = computed(() => [
+  { label: "今日转入", value: todayBusiness.value.consignment?.today_count || 0, status: "" },
+  { label: "待上架", value: todayBusiness.value.consignment?.pending_count || 0, status: 0 },
+  { label: "代卖中", value: todayBusiness.value.consignment?.selling_count || 0, status: 1 },
+  { label: "待结算", value: todayBusiness.value.consignment?.pending_settlement_count || 0, status: 3 },
+]);
+
+const responsibility = computed(() => {
+  return businessDashboard.value.responsibility || {
+    total_pending_devices: 0,
+    explain: "",
+    tasks: [],
+  };
+});
+
+const responsibilityTasks = computed(() => responsibility.value.tasks || []);
+
+const getTaskRole = (task: NonNullable<BusinessDashboard["responsibility"]>["tasks"][number]) => {
+  const roles = (task.owners || [])
+    .map((owner) => owner.role_name)
+    .filter((role): role is string => !!role);
+
+  return Array.from(new Set(roles)).join("、");
+};
+
 const dashboardDateLabel = computed(() => {
   const startTime = businessDashboard.value.date_range?.start_time || queryParams.value.start_time || "今日";
   const endTime = businessDashboard.value.date_range?.end_time || queryParams.value.end_time || "";
@@ -686,6 +923,8 @@ const fetchBusinessDashboard = async () => {
       thresholds: res.data?.thresholds || {},
       cards: Array.isArray(res.data?.cards) ? res.data.cards : [],
       todo: Array.isArray(res.data?.todo) ? res.data.todo : [],
+      today_business: res.data?.today_business || undefined,
+      responsibility: res.data?.responsibility || undefined,
       explain: res.data?.explain || "",
     };
   } catch (error) {
@@ -695,6 +934,8 @@ const fetchBusinessDashboard = async () => {
       thresholds: {},
       cards: [],
       todo: [],
+      today_business: undefined,
+      responsibility: undefined,
       explain: "经营看板暂时无法加载，请稍后重试。",
     };
   } finally {
@@ -741,6 +982,49 @@ const handleMetricDrilldown = (card: DashboardMetricCard) => {
       start_time: queryParams.value.start_time || "",
       end_time: queryParams.value.end_time || "",
       dashboard_title: card.title,
+      t: String(Date.now()),
+    },
+  });
+};
+
+const handleTaskDrilldown = (task: NonNullable<BusinessDashboard["responsibility"]>["tasks"][number]) => {
+  if (task.route_path) {
+    router.push({
+      path: task.route_path,
+      query: {
+        ...(task.route_query || {}),
+        start_time: queryParams.value.start_time || "",
+        end_time: queryParams.value.end_time || "",
+        dashboard_title: task.title,
+        t: String(Date.now()),
+      },
+    });
+    return;
+  }
+
+  const drilldown = task.drilldown;
+  if (!drilldown?.filter_key) return;
+
+  router.push({
+    path: "/recycle_order/list",
+    query: {
+      filter_key: drilldown.filter_key,
+      view_mode: drilldown.view_mode || "",
+      start_time: queryParams.value.start_time || "",
+      end_time: queryParams.value.end_time || "",
+      dashboard_title: task.title,
+      t: String(Date.now()),
+    },
+  });
+};
+
+const goConsignmentStatus = (status: string | number) => {
+  router.push({
+    path: "/site/consignment_order/list",
+    query: {
+      status,
+      start_time: queryParams.value.start_time || "",
+      end_time: queryParams.value.end_time || "",
       t: String(Date.now()),
     },
   });

@@ -7,6 +7,7 @@ use addon\hsx_recycle\app\dict\dashboard\RecycleDashboardFilterDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\service\core\RecycleDateRangeService;
 use core\base\BaseAdminService;
 
 /**
@@ -34,14 +35,13 @@ class RecycleDashboardFilterService extends BaseAdminService
     public function normalizeParams(array $params = []): array
     {
         $today = date('Y-m-d');
-        $startTime = (string)($params['start_time'] ?? $today);
-        $endTime = (string)($params['end_time'] ?? $today);
+        $range = RecycleDateRangeService::normalizeRange($params['start_time'] ?? $today, $params['end_time'] ?? $today);
 
         return [
-            'start_time' => $startTime,
-            'end_time' => $endTime,
-            'start_at' => strtotime($startTime . ' 00:00:00'),
-            'end_at' => strtotime($endTime . ' 23:59:59'),
+            'start_time' => $range['start_time'],
+            'end_time' => $range['end_time'],
+            'start_at' => $range['start_at'],
+            'end_at' => $range['end_at'],
             'check_timeout_hours' => max(1, (int)($params['check_timeout_hours'] ?? self::DEFAULT_CHECK_TIMEOUT_HOURS)),
             'quote_timeout_hours' => max(1, (int)($params['quote_timeout_hours'] ?? self::DEFAULT_QUOTE_TIMEOUT_HOURS)),
             'pay_timeout_hours' => max(1, (int)($params['pay_timeout_hours'] ?? self::DEFAULT_PAY_TIMEOUT_HOURS)),
@@ -131,6 +131,15 @@ class RecycleDashboardFilterService extends BaseAdminService
             case RecycleDashboardFilterDict::RETURNED_DEVICES:
                 return $this->whereOrderHasDeviceStatus($query, RecycleOrderDict::DEVICE_STATUS_RETURNED, $params);
 
+            case RecycleDashboardFilterDict::PENDING_RETURN:
+                return $query->where('id', 'in', function ($subQuery) {
+                    $subQuery->name('recycle_device')
+                        ->field('order_id')
+                        ->where('site_id', '=', $this->site_id)
+                        ->where('dispose_type', '=', RecycleOrderDict::DISPOSE_TYPE_RETURN)
+                        ->where('status', '<>', RecycleOrderDict::DEVICE_STATUS_RETURNED);
+                });
+
             case RecycleDashboardFilterDict::INVENTORY_DEVICES:
                 return $this->whereOrderHasDeviceStatus($query, RecycleOrderDict::DEVICE_STATUS_RECYCLED);
 
@@ -171,6 +180,18 @@ class RecycleDashboardFilterService extends BaseAdminService
                     RecycleOrderDict::DEVICE_STATUS_CHECKING,
                 ]);
 
+            case RecycleDashboardFilterDict::PENDING_QUOTE:
+                return $query->where('status', 'in', [
+                    RecycleOrderDict::DEVICE_STATUS_CHECKED,
+                    RecycleOrderDict::DEVICE_STATUS_PRICED,
+                    RecycleOrderDict::DEVICE_STATUS_PRICED_REPRICE,
+                ]);
+
+            case RecycleDashboardFilterDict::PENDING_CONFIRM:
+                return $query
+                    ->where('status', '=', RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM)
+                    ->where('confirm_status', '=', RecycleOrderDict::CONFIRM_STATUS_PENDING);
+
             case RecycleDashboardFilterDict::PENDING_PAY:
                 return $query
                     ->where('order_id', 'in', function ($subQuery) {
@@ -210,6 +231,11 @@ class RecycleDashboardFilterService extends BaseAdminService
                 return $query
                     ->where('status', '=', RecycleOrderDict::DEVICE_STATUS_RETURNED)
                     ->where('update_at', 'between', [$params['start_at'], $params['end_at']]);
+
+            case RecycleDashboardFilterDict::PENDING_RETURN:
+                return $query
+                    ->where('dispose_type', '=', RecycleOrderDict::DISPOSE_TYPE_RETURN)
+                    ->where('status', '<>', RecycleOrderDict::DEVICE_STATUS_RETURNED);
 
             default:
                 return $query;

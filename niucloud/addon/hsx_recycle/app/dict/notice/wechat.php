@@ -31,9 +31,9 @@ return [
         'content' => [
             ['订单编号', '{order_no}', 'character_string4'],
             ['收款方式', '{pay_type}', 'thing13'],
-            ['打款结果', '{pay_result}', 'time3'],
+            ['打款时间', '{pay_time}', 'time3'],
         ],
-        'keyword_name_list' => ["订单编号", "收款方式", "打款结果"],
+        'keyword_name_list' => ["订单编号", "收款方式", "打款时间"],
         'tips' => '使用该消息请将微信公众号服务类目选择为：百货/超市/便利店'
     ],
 

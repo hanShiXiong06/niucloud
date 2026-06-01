@@ -120,7 +120,7 @@
       @close="handleFollowPopupClose"
     />
 
-    <tabbar addon="recycle" />
+    <tabbar addon="hsx_recycle" />
   </view>
 </template>
 

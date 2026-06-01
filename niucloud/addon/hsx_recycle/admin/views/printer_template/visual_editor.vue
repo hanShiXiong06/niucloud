@@ -53,7 +53,7 @@
 
         <div class="panel-section">
           <div class="panel-title">变量列表</div>
-          <div v-for="group in VARIABLE_GROUPS" :key="group.label" class="var-group">
+          <div v-for="group in variableGroups" :key="group.label" class="var-group">
             <div class="var-group-label">{{ group.label }}</div>
             <div class="var-items">
               <el-tag
@@ -279,6 +279,7 @@
           <el-select v-model="saveForm.template_type" style="width:100%">
             <el-option value="device_label" label="设备标签" />
             <el-option value="order_receipt" label="订单小票" />
+            <el-option value="consignment_receipt" label="代卖凭证" />
             <el-option value="return_label" label="退回标签" />
             <el-option value="custom" label="自定义模板" />
           </el-select>
@@ -299,11 +300,11 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, EditPen, Grid, Minus, SemiSelect, FullScreen, Printer, Document, Setting } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 import JsBarcode from 'jsbarcode'
-import { getTemplateInfo, addTemplate, editTemplate, testPrintTemplate } from '@/addon/hsx_recycle/api/printer_template'
+import { getTemplateInfo, addTemplate, editTemplate, testPrintTemplate, getTemplateVariables } from '@/addon/hsx_recycle/api/printer_template'
 import {
-  type TemplateElement, type TemplateData,
-  FONT_LIST, VARIABLE_GROUPS, PAPER_PRESETS,
-  Units, replaceVariables, getFontDef, genId
+  type TemplateElement, type TemplateData, type VariableGroup,
+  FONT_LIST, PAPER_PRESETS,
+  Units, getFontDef, genId
 } from './types'
 
 const route = useRoute()
@@ -319,6 +320,18 @@ const saveDialogVisible = ref(false)
 const selectedId = ref<string>('')
 const canvasRef = ref<HTMLElement>()
 const canvasWrapRef = ref<HTMLElement>()
+
+// 动态变量列表
+const variableGroups = ref<VariableGroup[]>([])
+const sampleData = computed(() => {
+  const data: Record<string, string> = {}
+  variableGroups.value.forEach(g => g.items.forEach(v => { data[v.key] = v.sampleValue || v.sample_value || '' }))
+  return data
+})
+const replaceVariables = (text: string): string => {
+  if (!text) return ''
+  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => sampleData.value[key] || `{{${key}}}`)
+}
 
 // QR/Barcode ref 映射
 const qrRefs: Record<string, HTMLCanvasElement> = {}
@@ -788,7 +801,24 @@ function goBack() {
 }
 
 function goPrintScene() {
-  router.push('/hsx_recycle/print_scene/list')
+  router.push('/recycle/print_scene/list')
+}
+
+async function loadVariables() {
+  try {
+    const res = await getTemplateVariables()
+    const data = res.data || res || []
+    variableGroups.value = Array.isArray(data) ? data.map((g: any) => ({
+      label: g.label,
+      items: (g.items || []).map((v: any) => ({
+        key: v.key,
+        label: v.label,
+        sampleValue: v.sample_value || v.sampleValue || ''
+      }))
+    })) : []
+  } catch (e) {
+    variableGroups.value = []
+  }
 }
 
 async function loadTemplate() {
@@ -822,6 +852,7 @@ async function loadTemplate() {
 }
 
 onMounted(() => {
+  loadVariables()
   loadTemplate()
 })
 

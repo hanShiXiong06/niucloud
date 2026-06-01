@@ -146,6 +146,20 @@ class RecycleOrderFlowModeService extends BaseAdminService
         $summary['payable_amount'] = round($summary['payable_amount'], 2);
         $summary['paid_amount'] = round($summary['paid_amount'], 2);
         $summary['all_closed'] = $summary['total'] > 0 && $summary['closed'] >= $summary['total'];
+
+        // 按 DeviceProgressDict 分组输出（供前端直接渲染）
+        $pending = $summary['pending_check'] + $summary['checking']
+            + ($summary['checked'] - $summary['confirmed'] - $summary['returned'] - ($summary['consigned'] ?? 0));
+        if ($pending < 0) $pending = 0;
+        $summary['progress'] = [
+            ['key' => 'total', 'label' => '共', 'value' => $summary['total'], 'color' => 'info'],
+            ['key' => 'pending', 'label' => '待处理', 'value' => $pending, 'color' => 'warning'],
+            ['key' => 'pending_confirm', 'label' => '待确认', 'value' => $summary['pending_confirm'], 'color' => 'primary'],
+            ['key' => 'pending_pay', 'label' => '待打款', 'value' => $summary['pending_pay'], 'color' => 'success'],
+            ['key' => 'paid', 'label' => '已打款', 'value' => $summary['paid'], 'color' => 'success'],
+            ['key' => 'abnormal', 'label' => '异常', 'value' => $summary['returned'] + ($summary['consigned'] ?? 0), 'color' => 'danger'],
+        ];
+
         return $summary;
     }
 

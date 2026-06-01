@@ -218,8 +218,11 @@ const detail = ref<any>(null)
 
 const search = reactive({
   keyword: '',
-  status: '',
-  source_order_id: route.query.source_order_id || ''
+  status: route.query.status !== undefined ? String(route.query.status) : '',
+  source_order_id: route.query.source_order_id || '',
+  create_time: route.query.start_time && route.query.end_time
+    ? [String(route.query.start_time), String(route.query.end_time)]
+    : []
 })
 const page = reactive({ page: 1, limit: 10, total: 0 })
 

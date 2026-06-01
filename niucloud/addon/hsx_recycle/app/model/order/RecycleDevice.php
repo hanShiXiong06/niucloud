@@ -197,6 +197,11 @@ class RecycleDevice extends BaseModel
         return $this->hasOne(RecycleConsignmentOrder::class, 'source_device_id', 'id');
     }
 
+    public function paymentRecords()
+    {
+        return $this->hasMany(RecycleDevicePayment::class, 'device_id', 'id');
+    }
+
     /**
      * 质检图片获取器
      * @param $value

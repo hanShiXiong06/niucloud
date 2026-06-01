@@ -281,11 +281,23 @@
     <el-table-column label="设备进度" min-width="260">
       <template #default="{ row }">
         <div class="flex flex-wrap gap-1 text-xs">
-          <el-tag size="small" type="info" effect="plain">共 {{ row.flow_summary?.total || row.devices?.length || 0 }} 台</el-tag>
-          <el-tag size="small" type="warning" effect="plain">待质检 {{ row.flow_summary?.pending_check || 0 }}</el-tag>
-          <el-tag size="small" type="primary" effect="plain">待确认 {{ row.flow_summary?.pending_confirm || 0 }}</el-tag>
-          <el-tag size="small" type="success" effect="plain">待打款 {{ row.flow_summary?.pending_pay || 0 }}</el-tag>
-          <el-tag size="small" type="success">已打款 {{ row.flow_summary?.paid || 0 }}</el-tag>
+          <template v-if="row.flow_summary?.progress?.length">
+            <el-tag
+              v-for="item in row.flow_summary.progress.filter(p => p.value > 0 || p.key === 'total')"
+              :key="item.key"
+              size="small"
+              :type="item.color === 'info' ? 'info' : item.color === 'warning' ? 'warning' : item.color === 'primary' ? 'primary' : item.color === 'success' ? 'success' : item.color === 'danger' ? 'danger' : 'info'"
+              :effect="item.key === 'paid' ? 'dark' : 'plain'"
+            >{{ item.label }} {{ item.value }}</el-tag>
+          </template>
+          <template v-else>
+            <el-tag size="small" type="info" effect="plain">共 {{ row.flow_summary?.total || row.devices?.length || 0 }} 台</el-tag>
+            <el-tag size="small" type="warning" effect="plain">待处理 {{ (row.flow_summary?.pending_check || 0) + (row.flow_summary?.checking || 0) }}</el-tag>
+            <el-tag size="small" type="primary" effect="plain">待确认 {{ row.flow_summary?.pending_confirm || 0 }}</el-tag>
+            <el-tag size="small" type="success" effect="plain">待打款 {{ row.flow_summary?.pending_pay || 0 }}</el-tag>
+            <el-tag size="small" type="success" effect="dark">已打款 {{ row.flow_summary?.paid || 0 }}</el-tag>
+            <el-tag v-if="(row.flow_summary?.returned || 0) + (row.flow_summary?.consigned || 0) > 0" size="small" type="danger" effect="plain">异常 {{ (row.flow_summary?.returned || 0) + (row.flow_summary?.consigned || 0) }}</el-tag>
+          </template>
         </div>
       </template>
     </el-table-column>
