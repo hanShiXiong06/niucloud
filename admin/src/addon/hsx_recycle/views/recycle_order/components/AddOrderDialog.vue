@@ -2,7 +2,7 @@
     <el-dialog
         v-model="dialogVisible"
         title="代客户下单"
-        :width="isMobile ? '95vw' : '600px'"
+        :width="isMobile ? '95vw' : '1120px'"
         top="4vh"
         class="add-order-dialog"
         :destroy-on-close="true"
@@ -16,10 +16,10 @@
         >
             <el-form-item label="选择会员" required>
                 <div class="member-select">
-                    <el-input v-model="memberSearch" placeholder="输入会员手机号/昵称/用户名搜索" clearable
+                    <el-input v-model="memberSearch" placeholder="输入会员手机号/昵称/用户名搜索" clearable :disabled="!!draftOrder.id"
                         @input="handleSearchInput">
                         <template #append>
-                            <el-button @click="searchMember">
+                            <el-button @click="searchMember" :disabled="!!draftOrder.id">
                                 <el-icon>
                                     <search />
                                 </el-icon>
@@ -54,7 +54,7 @@
                                     <div class="member-mobile">{{ selectedMember.mobile || '未绑定手机' }}</div>
                                 </div>
                             </div>
-                            <el-button link type="danger" @click="clearSelectedMember">
+                            <el-button link type="danger" @click="clearSelectedMember" :disabled="!!draftOrder.id">
                                 <el-icon>
                                     <delete />
                                 </el-icon>
@@ -65,7 +65,7 @@
             </el-form-item>
 
             <el-form-item label="下单方式">
-                <el-radio-group v-model="form.delivery_type">
+                <el-radio-group v-model="form.delivery_type" :disabled="!!draftOrder.id">
                     <el-radio label="1">快递</el-radio>
                     <el-radio label="2">门店</el-radio>
                 </el-radio-group>
@@ -74,8 +74,8 @@
             <el-form-item label="快递单号" v-if="form.delivery_type === '1'">
                 <div class="express-input-wrapper">
                     <el-input ref="expressInput" v-model="form.express_no" placeholder="请输入快递单号或使用扫码枪"
-                        @keydown.enter="handleScannerInput" @focus="handleInputFocus" @blur="handleInputBlur" />
-                    <el-button type="primary" @click="activateScanMode">
+                        @keydown.enter="handleScannerInput" @focus="handleInputFocus" @blur="handleInputBlur" :disabled="!!draftOrder.id" />
+                    <el-button type="primary" @click="activateScanMode" :disabled="!!draftOrder.id">
                         <el-icon>
                             <ZoomOut />
                         </el-icon>
@@ -89,26 +89,117 @@
                     <span>准备扫码中，请对准条码...</span>
                 </div>
             </el-form-item>
-            <!-- 数量 -->
-            <el-form-item label="数量">
-                <el-input-number v-model="form.count" :min="1" :max="100" />
+            <el-form-item label="" class="device-form-item">
+                <div class="device-entry">
+                    <div class="device-entry__head">
+                        <el-tag v-if="draftOrder.id" type="info" effect="plain">草稿订单：{{ draftOrder.order_no }}</el-tag>
+                        <span v-else class="device-entry__count">已保存 {{ savedDeviceCount }} 台设备</span>
+                        <el-button type="primary" plain size="small" :icon="Plus" @click="addDeviceRow">
+                            添加录入行
+                        </el-button>
+                    </div>
+                    <el-table :data="form.devices" border size="small" class="device-entry__table">
+                        <el-table-column label="IMEI/SN" min-width="180">
+                            <template #default="{ row }">
+                                <el-input v-model="row.imei" placeholder="可选，支持扫码枪" clearable :disabled="row.saved" />
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="设备型号" min-width="430">
+                            <template #default="{ row }">
+                                <el-tooltip v-if="row.saved" :content="row.model || '未填写'" placement="top" :show-after="300">
+                                    <div class="model-display">{{ row.model || '未填写' }}</div>
+                                </el-tooltip>
+                                <div v-else class="model-picker">
+                                    <el-cascader
+                                        v-if="!row.model_input_mode"
+                                        v-model="row.model_path"
+                                        :options="modelTreeOptions"
+                                        :props="modelCascaderProps"
+                                        placeholder="选择品牌/系列/型号"
+                                        filterable
+                                        clearable
+                                        class="model-cascader"
+                                        :loading="modelLoading"
+                                        @change="value => handleModelPathChange(row, value)"
+                                    />
+                                    <el-input
+                                        v-else
+                                        v-model="row.model"
+                                        placeholder="输入型号或 品牌/系列/型号"
+                                        clearable
+                                    />
+                                    <el-button
+                                        link
+                                        type="primary"
+                                        class="model-mode-button"
+                                        :icon="row.model_input_mode ? List : EditPen"
+                                        :title="row.model_input_mode ? '选择型号' : '手动输入'"
+                                        @click="toggleModelInputMode(row)"
+                                    >
+                                    </el-button>
+                                </div>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="预估价" width="130">
+                            <template #default="{ row }">
+                                <el-input-number
+                                    v-model="row.initial_price"
+                                    :min="0"
+                                    :controls="false"
+                                    placeholder="选填"
+                                    class="w-full"
+                                    :disabled="row.saved"
+                                />
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="状态" width="90" align="center">
+                            <template #default="{ row }">
+                                <el-tag v-if="row.saved" type="success" size="small">已保存</el-tag>
+                                <el-tag v-else type="info" size="small">待保存</el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="150" align="center">
+                            <template #default="{ row, $index }">
+                                <el-button
+                                    v-if="!row.saved"
+                                    link
+                                    type="primary"
+                                    :loading="row.saving"
+                                    @click="saveDeviceRow(row, $index)"
+                                >
+                                    保存
+                                </el-button>
+                                <el-button
+                                    link
+                                    type="danger"
+                                    :icon="Delete"
+                                    :disabled="form.devices.length <= 1"
+                                    @click="removeDeviceRow($index)"
+                                />
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
             </el-form-item>
         </el-form>
 
         <template #footer>
             <div :class="isMobile ? 'dialog-footer mobile-footer' : 'dialog-footer'">
                 <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="dialogVisible = false">取消</el-button>
-                <el-button type="primary" :class="isMobile ? '!ml-0 w-full' : ''" @click="handleConfirm" :loading="loading">确定</el-button>
+                <el-button type="primary" :class="isMobile ? '!ml-0 w-full' : ''" @click="handleConfirm" :loading="loading" :disabled="savedDeviceCount === 0">
+                    完成签收
+                </el-button>
             </div>
         </template>
     </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, defineProps, defineEmits, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Delete, Loading, Aim } from '@element-plus/icons-vue'
-import { createRecycleOrder, getUserByMobile } from '@/addon/hsx_recycle/api/recycle_order'
+import { Search, Delete, Loading, Aim, Plus, ZoomOut, EditPen, List } from '@element-plus/icons-vue'
+import { addOrderDevice, createRecycleOrder, getUserByMobile, updateRecycleOrder } from '@/addon/hsx_recycle/api/recycle_order'
+import { getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 // import { searchMembers } from '@/api/member'
 
 interface Member {
@@ -117,6 +208,17 @@ interface Member {
     username?: string;
     mobile?: string;
     headimg?: string;
+}
+
+interface DraftDeviceRow {
+    id?: number | string;
+    imei: string;
+    model: string;
+    initial_price: number;
+    saved?: boolean;
+    saving?: boolean;
+    model_path?: Array<string | number>;
+    model_input_mode?: boolean;
 }
 
 const props = defineProps({
@@ -135,8 +237,23 @@ const form = ref({
     member_id: '',
     delivery_type: '1',
     express_no: '',
-    count: 1 as number
+    devices: [
+        { imei: '', model: '', initial_price: 0 }
+    ] as DraftDeviceRow[]
 })
+const draftOrder = ref<{ id: number | string; order_no: string }>({ id: '', order_no: '' })
+const modelLoading = ref(false)
+const modelTreeOptions = ref<any[]>([])
+const modelNodeMap = ref<Record<string, any>>({})
+const modelCascaderProps = {
+    value: 'id',
+    label: 'node_name',
+    children: 'child_list',
+    emitPath: true,
+    checkStrictly: false,
+    expandTrigger: 'hover' as const
+}
+const savedDeviceCount = computed(() => form.value.devices.filter(device => device.saved && device.id).length)
 
 // 会员搜索相关
 const memberSearch = ref('')
@@ -158,9 +275,72 @@ const updateResponsiveState = () => {
     isMobile.value = window.innerWidth <= 768
 }
 
+const loadModelOptions = async () => {
+    modelLoading.value = true
+    try {
+        const res = await getRecycleDeviceModelDictTree()
+        const tree = res.data || []
+        modelTreeOptions.value = normalizeModelTree(tree)
+        modelNodeMap.value = buildModelNodeMap(modelTreeOptions.value)
+    } catch (error) {
+        console.error('加载型号字典失败:', error)
+    } finally {
+        modelLoading.value = false
+    }
+}
+
+const normalizeModelTree = (tree: any[]): any[] => {
+    return (tree || []).map((item) => ({
+        ...item,
+        child_list: Array.isArray(item.child_list) && item.child_list.length > 0
+            ? normalizeModelTree(item.child_list)
+            : undefined
+    }))
+}
+
+const buildModelNodeMap = (tree: any[], map: Record<string, any> = {}) => {
+    tree.forEach((item) => {
+        map[String(item.id)] = item
+        if (Array.isArray(item.child_list)) {
+            buildModelNodeMap(item.child_list, map)
+        }
+    })
+    return map
+}
+
+const handleModelPathChange = (row: DraftDeviceRow, value: Array<string | number> | string | number) => {
+    const path = Array.isArray(value) ? value : [value]
+    const leafId = path[path.length - 1]
+    const leaf = modelNodeMap.value[String(leafId)] || null
+    row.model = leaf?.model_full_name || leaf?.node_name || ''
+}
+
+const toggleModelInputMode = (row: DraftDeviceRow) => {
+    row.model_input_mode = !row.model_input_mode
+    if (row.model_input_mode) {
+        row.model_path = []
+    }
+}
+
+const addDeviceRow = () => {
+    form.value.devices.push({ imei: '', model: '', initial_price: 0 })
+}
+
+const removeDeviceRow = (index: number) => {
+    if (form.value.devices.length <= 1) return
+    if (form.value.devices[index]?.saved) {
+        ElMessage.warning('已保存设备请在订单详情中删除，避免误删')
+        return
+    }
+    form.value.devices.splice(index, 1)
+}
+
 // 监听visible属性变化
 watch(() => props.visible, (newVal) => {
     dialogVisible.value = newVal
+    if (newVal) {
+        loadModelOptions()
+    }
 })
 
 // 监听内部visible状态变化，同步到父组件
@@ -309,53 +489,127 @@ onBeforeUnmount(() => {
     }
 })
 
-// 确认添加订单
-const handleConfirm = async () => {
+const validateBaseOrder = () => {
     if (!form.value.member_id) {
-        ElMessage.warning('请选择会员')
-        return
+        // ElMessage.warning('请选择会员')
+        return false
     }
 
     if (form.value.delivery_type === '1' && !form.value.express_no) {
         ElMessage.warning('请输入快递单号')
+        return false
+    }
+
+    return true
+}
+
+const ensureDraftOrder = async () => {
+    if (draftOrder.value.id) {
+        return draftOrder.value
+    }
+    if (!validateBaseOrder()) {
+        throw new Error('请先补全订单信息')
+    }
+
+    const res = await createRecycleOrder({
+        member_id: form.value.member_id,
+        delivery_type: form.value.delivery_type,
+        express_no: form.value.delivery_type === '1' ? form.value.express_no : '',
+        count: 0,
+        order_source: 'agent',
+        sign_after_create: false,
+        draft_device_entry: true,
+        devices: []
+    })
+    if (res.code !== 1) {
+        throw new Error(res.message || '创建草稿订单失败')
+    }
+    draftOrder.value = {
+        id: res.data.id,
+        order_no: res.data.order_no
+    }
+    ElMessage.success(`草稿订单已创建：${res.data.order_no}`)
+    return draftOrder.value
+}
+
+const normalizeDevice = (device: DraftDeviceRow) => ({
+    imei: (device.imei || '').trim(),
+    model: (device.model || '').trim(),
+    initial_price: Number(device.initial_price || 0)
+})
+
+const saveDeviceRow = async (row: DraftDeviceRow, index: number) => {
+    const payload = normalizeDevice(row)
+    if (!payload.imei && !payload.model) {
+        ElMessage.warning('请填写 IMEI/SN 或设备型号')
+        return
+    }
+
+    row.saving = true
+    try {
+        const order = await ensureDraftOrder()
+        const res = await addOrderDevice(Number(order.id), payload)
+        if (res.code !== 1) {
+            throw new Error(res.message || '保存设备失败')
+        }
+        row.id = res.data.device_id
+        row.saved = true
+        ElMessage.success('设备已保存')
+        if (index === form.value.devices.length - 1) {
+            addDeviceRow()
+        }
+    } catch (error: any) {
+        console.error('保存设备失败:', error)
+        ElMessage.error(error.message || '保存设备失败')
+    } finally {
+        row.saving = false
+    }
+}
+
+// 完成签收
+const handleConfirm = async () => {
+    if (!draftOrder.value.id) {
+        ElMessage.warning('请先保存至少一台设备')
+        return
+    }
+    const savedDevices = form.value.devices.filter(device => device.saved && device.id)
+    if (savedDevices.length === 0) {
+        ElMessage.warning('请先保存至少一台设备')
         return
     }
 
     try {
         loading.value = true
 
-        // 二次确认
-        const memberName = selectedMember.value?.nickname || selectedMember.value?.username || '所选会员'
         await ElMessageBox.confirm(
-            `确定要为用户 "${memberName}" 创建回收订单吗？`,
-            '创建订单确认',
+            `确定签收订单 ${draftOrder.value.order_no} 下的 ${savedDevices.length} 台设备吗？`,
+            '完成签收',
             {
-                confirmButtonText: '确定',
+                confirmButtonText: '确认签收',
                 cancelButtonText: '取消',
-                type: 'warning'
+                type: 'warning',
             }
         )
 
-        const params = {
-            member_id: form.value.member_id,
-            delivery_type: form.value.delivery_type,
-            express_no: form.value.delivery_type === '1' ? form.value.express_no : '',
-            count: Number(form.value.count) || 1
-        }
-
-        const res = await createRecycleOrder(params)
+        const res = await updateRecycleOrder(Number(draftOrder.value.id), {
+            action: 'order_sign',
+            devices: savedDevices.map((device) => ({
+                id: device.id,
+                ...normalizeDevice(device)
+            }))
+        })
         if (res.code !== 1) {
-            throw new Error(res.message || '创建订单失败')
+            throw new Error(res.message || '签收失败')
         }
 
-        ElMessage.success('创建订单成功')
+        ElMessage.success('订单签收成功')
         resetForm()
         dialogVisible.value = false
         emit('success')
     } catch (error) {
         if (error === 'cancel') return // 用户取消操作
-        console.error('创建订单失败:', error)
-        ElMessage.error(error.message || '创建订单失败')
+        console.error('订单签收失败:', error)
+        ElMessage.error(error.message || '订单签收失败')
     } finally {
         loading.value = false
     }
@@ -367,8 +621,11 @@ const resetForm = () => {
         member_id: '',
         delivery_type: '1',
         express_no: '',
-        count: 1
+        devices: [
+            { imei: '', model: '', initial_price: 0 }
+        ]
     }
+    draftOrder.value = { id: '', order_no: '' }
     selectedMember.value = null
     memberSearch.value = ''
     memberSearchResults.value = []
@@ -485,6 +742,73 @@ if (props.visible) {
     margin-top: 5px;
     color: #409eff;
     font-size: 12px;
+}
+
+.device-entry {
+    width: 100%;
+}
+
+.device-form-item {
+    :deep(.el-form-item__content) {
+        margin-left: 0 !important;
+        max-width: 100%;
+    }
+}
+
+.device-entry__head {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-bottom: 8px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.device-entry__count {
+    color: #64748b;
+}
+
+.device-entry__table {
+    width: 100%;
+}
+
+.model-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+:deep(.el-cascader) {
+    width: 100%;
+}
+
+:deep(.el-input-number) {
+    width: 100px;
+}
+
+.model-cascader {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.model-picker .el-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.model-picker .model-mode-button {
+    flex: 0 0 auto;
+    width: 28px;
+    padding: 0;
+}
+
+.model-display {
+    color: #303133;
+    font-weight: 500;
+    line-height: 1.45;
+    white-space: normal;
+    word-break: break-all;
 }
 
 .dialog-footer {

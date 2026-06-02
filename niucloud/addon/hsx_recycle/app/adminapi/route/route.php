@@ -141,6 +141,14 @@ Route::group('recycle', function () {
     // 设备管理
     Route::get('recycle_device/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@getInfo');
     Route::post('recycle_device', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@add');
+    // 回收设备型号字典
+    Route::get('recycle_device_model_dict/options', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@options');
+    Route::get('recycle_device_model_dict/tree', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@tree');
+    Route::get('recycle_device_model_dict', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@lists');
+    Route::post('recycle_device_model_dict/quick_add', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@quickAdd');
+    Route::post('recycle_device_model_dict', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@add');
+    Route::put('recycle_device_model_dict/:id', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@edit');
+    Route::delete('recycle_device_model_dict/:id', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@del');
 
     // 确认设备价格
     Route::put('recycle_device/:id/confirm_price', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@confirmPrice');

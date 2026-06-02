@@ -113,7 +113,7 @@
               <input
                 v-model="newDevice.initial_price"
                 placeholder="不确定可以留空"
-                type="digit"
+                type="number"
                 class="custom-input"
               />
             </view>

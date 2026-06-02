@@ -14,7 +14,7 @@
                         <input
                             v-model="formData.sold_price"
                             class="form-input"
-                            type="digit"
+                            type="number"
                             placeholder="请输入成交价"
                         />
                     </view>
@@ -27,7 +27,7 @@
                         <input
                             v-model="formData.settlement_amount"
                             class="form-input"
-                            type="digit"
+                            type="number"
                             placeholder="请输入客户结算金额"
                         />
                     </view>

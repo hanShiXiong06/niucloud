@@ -57,16 +57,16 @@
             {{ device.confirm_disabled_reason }}
         </view>
 
-        <view class="device-flow-card__flow">
+        <view class="device-flow-card__flow"  v-if="flowHighlights.length">
             <view class="device-flow-card__flow-head" @click="expanded = !expanded">
                 <view class="device-flow-card__flow-title">设备流转</view>
-                <view class="device-flow-card__flow-toggle">
+                <!-- <view class="device-flow-card__flow-toggle">
                     <text>{{ expanded ? '收起' : '展开查看' }}</text>
                     <text class="nc-iconfont" :class="[expanded ? 'nc-icon-shangV6xx1' : 'nc-icon-xiaV6xx1']"></text>
-                </view>
+                </view> -->
             </view>
 
-            <view v-if="flowHighlights.length" class="device-flow-card__flow-highlight">
+            <view class="device-flow-card__flow-highlight">
                 <view v-for="item in flowHighlights" :key="`${ item.label }-${ item.value }`" class="flow-node">
                     <text class="flow-node__label">{{ item.label }}</text>
                     <text class="flow-node__value">{{ item.value }}</text>

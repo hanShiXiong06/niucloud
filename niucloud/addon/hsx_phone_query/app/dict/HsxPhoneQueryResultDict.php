@@ -172,8 +172,16 @@ class HsxPhoneQueryResultDict
             return '';
         }
 
+        if (is_array($value)) {
+            return self::formatArrayValue($path, $value);
+        }
+
         if (is_bool($value)) {
             return self::formatBooleanValue($path, $value);
+        }
+
+        if (is_object($value)) {
+            $value = method_exists($value, '__toString') ? (string)$value : json_encode($value, JSON_UNESCAPED_UNICODE);
         }
 
         $stringValue = trim((string)$value);
@@ -218,6 +226,31 @@ class HsxPhoneQueryResultDict
         }
 
         return self::valueLabels()[$stringValue] ?? $stringValue;
+    }
+
+    private static function formatArrayValue(string $path, array $value): string
+    {
+        $parts = [];
+        $isList = array_keys($value) === range(0, count($value) - 1);
+
+        foreach ($value as $key => $item) {
+            if ($item === null || $item === '') {
+                continue;
+            }
+
+            $childPath = $isList ? $path : ($path === '' ? (string)$key : $path . '.' . $key);
+            $displayValue = is_array($item)
+                ? self::formatArrayValue($childPath, $item)
+                : self::formatValue($childPath, $item);
+
+            if ($displayValue === '') {
+                continue;
+            }
+
+            $parts[] = $isList ? $displayValue : ((string)$key . '：' . $displayValue);
+        }
+
+        return implode($isList ? '，' : '；', $parts);
     }
 
     private static function formatBooleanValue(string $path, bool $value): string

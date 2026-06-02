@@ -39,7 +39,8 @@ class CoreRecycleOrderService extends BaseCoreService
             Db::startTrans();
 
             $devicesPayload = $data['devices'] ?? [];
-            if (empty($devicesPayload)) {
+            $isDraftDeviceEntry = !empty($data['draft_device_entry']);
+            if (empty($devicesPayload) && !$isDraftDeviceEntry) {
                 $count = max(1, (int)($data['count'] ?? 1));
                 $devicesPayload = array_fill(0, $count, []);
             }
@@ -53,6 +54,10 @@ class CoreRecycleOrderService extends BaseCoreService
             $order = RecycleOrder::create([
                 'site_id' => $data['site_id'],
                 'flow_mode' => $flowMode,
+                'order_source' => $data['order_source'] ?? 'customer',
+                'agent_uid' => $data['agent_uid'] ?? 0,
+                'agent_name' => $data['agent_name'] ?? '',
+                'agent_mobile' => $data['agent_mobile'] ?? '',
                 'member_id' => $data['member_id'] ?? 0,
                 'order_no' => $this->createOrderNo(),
                 'customer_name' => $data['customer_name'] ?? '',
@@ -61,8 +66,8 @@ class CoreRecycleOrderService extends BaseCoreService
                 'express_company' => $data['express_company'] ?? '',
                 'express_no' => $data['express_no'] ?? '',
                 'status' => RecycleOrderDict::ORDER_STATUS_PENDING_SIGN,
-                'device_count' => count($devicesPayload),
-                'count'=>$data['count'] ,
+                'device_count' => $isDraftDeviceEntry ? 0 : count($devicesPayload),
+                'count' => $isDraftDeviceEntry ? 0 : (int)($data['count'] ?? count($devicesPayload)),
                 'remark' => $data['remark'] ?? '',
                 'create_at' => time(),
                 'update_at' => time(),

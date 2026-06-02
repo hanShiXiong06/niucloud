@@ -35,8 +35,8 @@
 
             <view class="section-card">
                 <view class="section-title">更新实际费用</view>
-                <input v-model="actualForm.actual_weight" class="field-input" type="digit" placeholder="请输入实际重量（kg）" />
-                <input v-model="actualForm.actual_cost" class="field-input mt-[16rpx]" type="digit" placeholder="请输入实际费用（元）" />
+                <input v-model="actualForm.actual_weight" class="field-input" type="number" placeholder="请输入实际重量（kg）" />
+                <input v-model="actualForm.actual_cost" class="field-input mt-[16rpx]" type="number" placeholder="请输入实际费用（元）" />
                 <view class="action-btn primary" @click="submitActualInfo">保存实际费用</view>
             </view>
         </template>

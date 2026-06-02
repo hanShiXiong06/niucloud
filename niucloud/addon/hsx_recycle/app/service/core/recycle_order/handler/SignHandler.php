@@ -13,6 +13,7 @@ namespace addon\hsx_recycle\app\service\core\recycle_order\handler;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService;
 use core\exception\CommonException;
 
@@ -116,6 +117,7 @@ class SignHandler extends BaseFlowHandler
                     'update_at' => time()
                 ];
                 $deviceService->signUpdate((int)$device['id'], $deviceData);
+                (new RecycleDeviceModelDictService())->ensureFromModelName((string)($deviceData['model'] ?? ''), $siteId);
                 $deviceIds[] = $device['id'];
             } else {
                 // 设备不存在，添加新设备
@@ -140,6 +142,7 @@ class SignHandler extends BaseFlowHandler
                     'site_id' => $siteId
                 ];
                 $newDeviceId = $deviceService->add($deviceData);
+                (new RecycleDeviceModelDictService())->ensureFromModelName((string)($deviceData['model'] ?? ''), $siteId);
                 $deviceIds[] = $newDeviceId;
             }
         }

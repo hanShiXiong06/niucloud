@@ -13,6 +13,9 @@ class RecycleDashboardFilterDict
 {
     public const TODAY_CREATED_ORDERS = 'today_created_orders';
     public const TODAY_CREATED_DEVICES = 'today_created_devices';
+    public const SIGNED_TODAY = 'signed_today';
+    public const DEVICE_PENDING_CHECK = 'device_pending_check';
+    public const DEVICE_CHECKING = 'device_checking';
     public const PENDING_SIGN = 'pending_sign';
     public const PENDING_CHECK = 'pending_check';
     public const CHECK_TIMEOUT = 'check_timeout';
@@ -44,6 +47,24 @@ class RecycleDashboardFilterDict
                 'target' => 'order_list',
                 'view_mode' => 'device_expand',
                 'description' => '今日创建订单下的设备',
+            ],
+            self::SIGNED_TODAY => [
+                'name' => '今日签收设备',
+                'target' => 'order_list',
+                'view_mode' => 'device_expand',
+                'description' => '今日签收订单下的设备',
+            ],
+            self::DEVICE_PENDING_CHECK => [
+                'name' => '待质检设备',
+                'target' => 'order_list',
+                'view_mode' => 'device_expand',
+                'description' => '设备状态为待质检的明细',
+            ],
+            self::DEVICE_CHECKING => [
+                'name' => '质检中设备',
+                'target' => 'order_list',
+                'view_mode' => 'device_expand',
+                'description' => '设备状态为质检中的明细',
             ],
             self::PENDING_SIGN => [
                 'name' => '待签收',

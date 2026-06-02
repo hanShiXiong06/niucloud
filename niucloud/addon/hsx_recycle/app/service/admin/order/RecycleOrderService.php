@@ -240,10 +240,24 @@ class RecycleOrderService extends BaseAdminService
     public function create(array $data): array
     {
         $data['site_id'] = $this->site_id;
+        $data['order_source'] = $data['order_source'] ?? 'agent';
+        $data['agent_uid'] = $this->uid;
+        $data['agent_name'] = trim((string)($data['agent_name'] ?? '')) ?: $this->getOperatorName();
+        $data['agent_mobile'] = trim((string)($data['agent_mobile'] ?? ''));
+
         $coreService = new CoreRecycleOrderService();
         $order = $coreService->create($data);
 
-        return ['id' => $order->id, 'order_no' => $order->order_no];
+        $signed = false;
+        if (!empty($data['sign_after_create']) && !empty($data['devices']) && is_array($data['devices'])) {
+            $this->sign((int)$order->id, [
+                'devices' => $data['devices'],
+                'remark' => $data['remark'] ?? '代下单同步签收',
+            ]);
+            $signed = true;
+        }
+
+        return ['id' => $order->id, 'order_no' => $order->order_no, 'signed' => $signed];
     }
 
     /**

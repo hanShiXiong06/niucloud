@@ -76,6 +76,17 @@ class RecycleDashboardFilterService extends BaseAdminService
             case RecycleDashboardFilterDict::TODAY_CREATED_DEVICES:
                 return $query->where('create_at', 'between', [$params['start_at'], $params['end_at']]);
 
+            case RecycleDashboardFilterDict::SIGNED_TODAY:
+                return $query
+                    ->where('sign_at', '>', 0)
+                    ->where('sign_at', 'between', [$params['start_at'], $params['end_at']]);
+
+            case RecycleDashboardFilterDict::DEVICE_PENDING_CHECK:
+                return $this->whereOrderHasDeviceStatus($query, RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK);
+
+            case RecycleDashboardFilterDict::DEVICE_CHECKING:
+                return $this->whereOrderHasDeviceStatus($query, RecycleOrderDict::DEVICE_STATUS_CHECKING);
+
             case RecycleDashboardFilterDict::PENDING_SIGN:
                 return $query->where('status', '=', RecycleOrderDict::ORDER_STATUS_PENDING_SIGN);
 
@@ -172,6 +183,25 @@ class RecycleDashboardFilterService extends BaseAdminService
         switch ($filterKey) {
             case RecycleDashboardFilterDict::TODAY_CREATED_DEVICES:
                 return $query->where('create_at', 'between', [$params['start_at'], $params['end_at']]);
+
+            case RecycleDashboardFilterDict::SIGNED_TODAY:
+                return $query
+                    ->where('order_id', 'in', function ($subQuery) use ($params) {
+                        $subQuery->name('recycle_order')
+                            ->field('id')
+                            ->where([
+                                ['site_id', '=', $this->site_id],
+                                ['delete_at', '=', 0],
+                                ['sign_at', '>', 0],
+                                ['sign_at', 'between', [$params['start_at'], $params['end_at']]],
+                            ]);
+                    });
+
+            case RecycleDashboardFilterDict::DEVICE_PENDING_CHECK:
+                return $query->where('status', '=', RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK);
+
+            case RecycleDashboardFilterDict::DEVICE_CHECKING:
+                return $query->where('status', '=', RecycleOrderDict::DEVICE_STATUS_CHECKING);
 
             case RecycleDashboardFilterDict::PENDING_CHECK:
             case RecycleDashboardFilterDict::CHECK_TIMEOUT:

@@ -9,14 +9,18 @@ export function useDateFilter() {
 
   const quickPeriods = ref([
     { key: 'today', label: '今日' },
-    { key: 'week', label: '本周' },
-    { key: 'month', label: '本月' },
+    { key: 'yesterday', label: '昨日' },
+    { key: 'week', label: '近7天' },
+    { key: 'month', label: '近30天' },
     { key: 'custom', label: '自定义' }
   ])
 
   // 格式化日期
   const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0]
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
   // 处理快速时间筛选
@@ -31,25 +35,19 @@ export function useDateFilter() {
         startDate = today
         endDate = today
         break
+      case 'yesterday':
+        startDate = new Date(today)
+        startDate.setDate(today.getDate() - 1)
+        endDate = new Date(startDate)
+        break
       case 'week':
-        // 按照中国习惯：周一到周日为一周
-        // 如果今天是周日（getDay() = 0），统计上周（上周一到上周日）
-        const dayOfWeek = today.getDay()
         startDate = new Date(today)
         endDate = new Date(today)
-        
-        if (dayOfWeek === 0) {
-          // 周日：统计上周（上周一到上周日）
-          startDate.setDate(today.getDate() - 6) // 上周一
-          endDate.setDate(today.getDate()) // 上周日（今天就是上周日）
-        } else {
-          // 周一到周六：统计本周（本周一到今天）
-          startDate.setDate(today.getDate() - (dayOfWeek - 1)) // 本周一
-          // endDate 已经是 today
-        }
+        startDate.setDate(today.getDate() - 6)
         break
       case 'month':
-        startDate = new Date(today.getFullYear(), today.getMonth(), 1)
+        startDate = new Date(today)
+        startDate.setDate(today.getDate() - 29)
         break
       case 'custom':
         return
@@ -89,14 +87,16 @@ export function useDateFilter() {
   // 获取标签文字（根据时间段动态变化）
   const getPeriodLabel = (type: 'order' | 'check' | 'payment' | 'return') => {
     const labels = {
-      order: { week: '本周订单', month: '本月订单', default: '今日订单' },
-      check: { week: '本周质检', month: '本月质检', default: '今日质检' },
-      payment: { week: '本周打款', month: '本月打款', default: '今日打款' },
-      return: { week: '本周退货', month: '本月退货', default: '今日退货' }
+      order: { yesterday: '昨日订单', week: '近7天订单', month: '近30天订单', default: '今日订单' },
+      check: { yesterday: '昨日质检', week: '近7天质检', month: '近30天质检', default: '今日质检' },
+      payment: { yesterday: '昨日打款', week: '近7天打款', month: '近30天打款', default: '今日打款' },
+      return: { yesterday: '昨日退货', week: '近7天退货', month: '近30天退货', default: '今日退货' }
     }
 
     const periodLabels = labels[type]
     switch (activePeriod.value) {
+      case 'yesterday':
+        return periodLabels.yesterday
       case 'week':
         return periodLabels.week
       case 'month':
@@ -118,5 +118,3 @@ export function useDateFilter() {
     getPeriodLabel
   }
 }
-
-

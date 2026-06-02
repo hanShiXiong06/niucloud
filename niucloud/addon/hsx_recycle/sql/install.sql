@@ -24,6 +24,10 @@ CREATE TABLE `{{prefix}}recycle_order` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '订单ID',
   `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
   `flow_mode` varchar(20) NOT NULL DEFAULT 'order' COMMENT '订单流转模式：order-整单流转，device-按设备流转',
+  `order_source` varchar(20) NOT NULL DEFAULT 'customer' COMMENT '下单来源：customer-客户下单，agent-代下单',
+  `agent_uid` int NOT NULL DEFAULT 0 COMMENT '代下单操作人ID',
+  `agent_name` varchar(50) NOT NULL DEFAULT '' COMMENT '代下单操作人',
+  `agent_mobile` varchar(20) NOT NULL DEFAULT '' COMMENT '代下单人联系方式',
   `order_no` varchar(50)   NOT NULL DEFAULT '' COMMENT '订单编号',
   `customer_name` varchar(50)   NOT NULL DEFAULT '' COMMENT '客户姓名',
   `customer_phone` varchar(20)   NOT NULL DEFAULT '' COMMENT '客户电话',
@@ -136,6 +140,25 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `info` json,
   PRIMARY KEY (`id`)
 )  COMMENT='设备表';
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_model_dict`;
+CREATE TABLE `{{prefix}}recycle_device_model_dict` (
+  `id` int NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `pid` int NOT NULL DEFAULT 0 COMMENT '上级ID',
+  `level` tinyint NOT NULL DEFAULT 1 COMMENT '层级：1品牌，2系列/型号，3型号',
+  `node_name` varchar(100) NOT NULL DEFAULT '' COMMENT '节点名称',
+  `model_full_name` varchar(255) NOT NULL DEFAULT '' COMMENT '完整路径',
+  `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT 0 COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_parent_name` (`site_id`,`pid`,`node_name`),
+  KEY `idx_site_status` (`site_id`,`status`),
+  KEY `idx_site_pid` (`site_id`,`pid`),
+  KEY `idx_site_level` (`site_id`,`level`)
+) COMMENT='回收设备型号字典表';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_consignment_order` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '代卖订单ID',

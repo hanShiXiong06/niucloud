@@ -609,7 +609,7 @@ const getActions = (item: any) => {
 const getDeviceActions = (device: any) => {
     const status = Number(device.status || 0)
     const actions: Array<{ label: string, type: string, primary?: boolean, danger?: boolean }> = [
-        { label: '详情', type: 'detail' }
+        { label: '详情', type: 'detail' ,  primary:true }
     ]
 
     if ([1, 2].includes(status)) {

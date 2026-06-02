@@ -55,6 +55,8 @@ class RecycleOrder extends BaseAdminController
             ['customer_phone', ''],
             ['status', ''],
             ['delivery_type', ''],
+            ['order_source', ''],
+            ['agent_name', ''],
             ['create_at', []],
             ['create_time_start', ''],
             ['create_time_end', ''],
@@ -121,7 +123,12 @@ class RecycleOrder extends BaseAdminController
             ['delivery_type', 1],
             ['remark', ''],
             ['count', 1],
-            ['devices', []]
+            ['devices', []],
+            ['order_source', 'agent'],
+            ['agent_name', ''],
+            ['agent_mobile', ''],
+            ['sign_after_create', false],
+            ['draft_device_entry', false]
         ]);
 
         // 参数验证

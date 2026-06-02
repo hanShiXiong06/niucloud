@@ -206,6 +206,15 @@
               {{ row.delivery_type === "1" ? "📦 快递" : "🚗 自送" }}
             </el-tag>
           </div>
+          <div class="flex items-center text-sm">
+            <span class="text-gray-400 min-w-[60px]">来源：</span>
+            <el-tag size="small" :type="row.order_source === 'agent' ? 'primary' : 'info'" effect="plain">
+              {{ row.order_source === 'agent' ? '代下单' : '客户下单' }}
+            </el-tag>
+            <span v-if="row.order_source === 'agent' && row.agent_name" class="ml-2 text-xs text-gray-500">
+              {{ row.agent_name }}
+            </span>
+          </div>
           <div v-if="row.delivery_type === '1'" class="flex items-start text-sm">
             <span class="text-gray-400 min-w-[60px]">快递单号：</span>
             <span

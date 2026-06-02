@@ -14,7 +14,7 @@
                         <input
                             v-model="formData.settlement_amount"
                             class="form-input"
-                            type="digit"
+                            type="number"
                             placeholder="请输入结算金额"
                         />
                     </view>

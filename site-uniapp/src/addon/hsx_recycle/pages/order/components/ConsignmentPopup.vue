@@ -31,7 +31,7 @@
                     <view class="form-label">期望售价</view>
                     <view class="price-input-wrapper">
                         <text class="price-symbol">¥</text>
-                        <input v-model="formData.expected_price" type="digit" placeholder="请输入期望售价" class="price-input" />
+                        <input v-model="formData.expected_price" type="number" placeholder="请输入期望售价" class="price-input" />
                     </view>
                 </view>
 
@@ -39,7 +39,7 @@
                     <view class="form-label">最低结算价</view>
                     <view class="price-input-wrapper">
                         <text class="price-symbol">¥</text>
-                        <input v-model="formData.min_settlement_price" type="digit" placeholder="低于此价格需协商" class="price-input" />
+                        <input v-model="formData.min_settlement_price" type="number" placeholder="低于此价格需协商" class="price-input" />
                     </view>
                 </view>
 
@@ -47,7 +47,7 @@
                     <view class="form-label">挂牌价</view>
                     <view class="price-input-wrapper">
                         <text class="price-symbol">¥</text>
-                        <input v-model="formData.listing_price" type="digit" placeholder="对外展示价格" class="price-input" />
+                        <input v-model="formData.listing_price" type="number" placeholder="对外展示价格" class="price-input" />
                     </view>
                 </view>
 

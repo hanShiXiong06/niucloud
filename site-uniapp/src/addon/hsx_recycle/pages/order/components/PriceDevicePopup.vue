@@ -84,7 +84,7 @@
                         <text class="price-symbol">¥</text>
                         <u-input
                             v-model="formData.final_price"
-                            type="digit"
+                            type="number"
                             placeholder="请输入回收价格"
                             class="price-input"
                             border="none"
@@ -106,7 +106,7 @@
                         <text class="price-symbol">¥</text>
                         <u-input
                             v-model="formData.sell_price"
-                            type="digit"
+                            type="number"
                             placeholder="选填"
                             class="price-input"
                             border="none"

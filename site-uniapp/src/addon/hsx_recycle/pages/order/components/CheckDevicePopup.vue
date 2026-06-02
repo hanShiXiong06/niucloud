@@ -156,12 +156,12 @@
                         <u-input
                             v-model="formData.final_price"
                             class="price-box__input"
-                            type="digit"
+                            type="number"
                             placeholder="选填，可后续在定价环节处理"
                             border="none"
                             clearable
                             inputAlign="right"
-                            fontSize="34rpx"
+                            fontSize="28rpx"
                             placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
                         ></u-input>
                     </view>
@@ -250,7 +250,7 @@ const checkImages = ref('')
 const imageUploading = ref(false)
 const formData = ref({
     check_result_seller: '',
-    final_price: '',
+    final_price: 0,
     remark: ''
 })
 const summaryAutoSync = ref(true)

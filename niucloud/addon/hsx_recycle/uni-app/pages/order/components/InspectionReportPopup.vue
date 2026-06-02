@@ -108,10 +108,6 @@
             </view>
           </view>
         </view>
-
-        <view class="report-note">
-          <text>颜色来自质检模板选项配置。未配置颜色的历史结果会按普通检测项展示。</text>
-        </view>
       </scroll-view>
     </view>
   </up-popup>
@@ -323,7 +319,9 @@ const formatTime = (timestamp: number) => timeStampTurnTime(timestamp)
 }
 
 .report-head {
-  padding: 18rpx 28rpx 22rpx;
+  margin: 18rpx 28rpx 22rpx;
+  padding: 0 24rpx;
+  border-radius: 18rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;

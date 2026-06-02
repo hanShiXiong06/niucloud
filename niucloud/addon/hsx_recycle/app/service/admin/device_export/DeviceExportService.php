@@ -50,7 +50,8 @@ class DeviceExportService extends BaseAdminService
                 }
             ])
             ->field($field)
-            ->order('update_at desc')
+            // 导出时间 和 更新时间 都排序
+            ->order('export_time desc, update_at desc')
             ->append(['status_name', 'category_name' , 'nickname', 'dispose_type_name', 'dispose_status_name']);
 
         // 筛选分类

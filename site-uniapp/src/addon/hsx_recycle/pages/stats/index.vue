@@ -64,32 +64,45 @@ const statsData = ref<Record<string, any>>({})
 const dateOptions = [
     { label: '今日', value: 'today' },
     { label: '昨日', value: 'yesterday' },
-    { label: '本周', value: 'week' },
-    { label: '本月', value: 'month' },
+    { label: '近7天', value: 'week' },
+    { label: '近30天', value: 'month' },
 ]
 
 const businessMetrics = computed(() => [
-    { key: 'order', label: '新增订单', value: statsData.value.today_order_count || 0, unit: '单', color: 'text-blue' },
-    { key: 'consignment', label: '新增代卖', value: statsData.value.today_consignment_count || 0, unit: '单', color: 'text-purple' },
-    { key: 'return', label: '退货设备', value: statsData.value.today_return_count || 0, unit: '台', color: 'text-gray' },
-    { key: 'check', label: '质检完成', value: statsData.value.today_check_count || 0, unit: '台', color: 'text-green' },
+    { key: 'signed', label: '签收手机', value: ledgerValue('signed_device_count'), unit: '台', color: 'text-blue' },
+    { key: 'order', label: '新增订单', value: ledgerValue('order_count', 'today_order_count'), unit: '单', color: 'text-purple' },
+    { key: 'completed', label: '已完成', value: ledgerValue('completed_device_count'), unit: '台', color: 'text-green' },
+    { key: 'return', label: '退货设备', value: ledgerValue('return_device_count', 'today_return_count'), unit: '台', color: 'text-gray' },
 ])
 
 const todoMetrics = computed(() => [
-    { key: 'pending_check', label: '待质检', value: statsData.value.pending_check || 0 },
-    { key: 'pending_confirm', label: '待确认', value: statsData.value.pending_confirm_count || 0 },
-    { key: 'pending_pay', label: '待打款', value: statsData.value.pending_pay || 0 },
-    { key: 'pending_return', label: '待退回', value: statsData.value.pending_return || 0 },
+    { key: 'pending_check', label: '待质检', value: ledgerValue('pending_check_device_count', 'pending_check') },
+    { key: 'checking', label: '质检中', value: ledgerValue('checking_device_count', 'checking_count') },
+    { key: 'pending_confirm', label: '待确认', value: ledgerValue('pending_confirm_count') },
+    { key: 'pending_pay', label: '待打款', value: ledgerValue('pending_pay_device_count', 'pending_pay') },
+    { key: 'pending_return', label: '退货待处理', value: ledgerValue('pending_return_count', 'pending_return') },
     { key: 'listing', label: '挂牌中', value: statsData.value.consignment_listing_count || 0 },
 ])
 
 const financeMetrics = computed(() => [
-    { key: 'payment', label: '打款金额', value: formatMoney(statsData.value.today_payment_amount), unit: '元', color: 'text-red' },
+    { key: 'payment', label: '所选时间打款', value: formatMoney(financeValue('selected_paid_amount', 'selected_payment_amount')), unit: '元', color: 'text-red' },
+    { key: 'today_payment', label: '今日打款', value: formatMoney(financeValue('today_paid_amount', 'today_payment_amount')), unit: '元', color: 'text-blue' },
+    { key: 'week_payment', label: '近7天打款', value: formatMoney(financeValue('last_7_days_paid_amount', 'week_payment_amount')), unit: '元', color: 'text-purple' },
+    { key: 'month_payment', label: '近30天打款', value: formatMoney(financeValue('last_30_days_paid_amount', 'month_payment_amount')), unit: '元', color: 'text-green' },
     { key: 'sold', label: '代卖成交额', value: formatMoney(statsData.value.consignment_sold_amount), unit: '元', color: 'text-green' },
-    { key: 'fee', label: '代卖收益', value: formatMoney(statsData.value.consignment_service_fee), unit: '元', color: 'text-teal' },
 ])
 
 const formatMoney = (val: any) => Number(val || 0).toFixed(2)
+
+const ledgerValue = (key: string, fallbackKey = '') => Number(statsData.value.ledger?.[key] ?? (fallbackKey ? statsData.value[fallbackKey] : statsData.value[key]) ?? 0)
+
+const financeValue = (key: string, fallbackKey = '') => {
+    const finance = statsData.value.finance_summary || {}
+    if (finance[key] !== undefined) return finance[key]
+    if (key === 'last_7_days_paid_amount' && finance.week_paid_amount !== undefined) return finance.week_paid_amount
+    if (key === 'last_30_days_paid_amount' && finance.month_paid_amount !== undefined) return finance.month_paid_amount
+    return (fallbackKey ? statsData.value[fallbackKey] : statsData.value[key]) ?? 0
+}
 
 const getDateRange = (type: string) => {
     const now = new Date()
@@ -102,12 +115,12 @@ const getDateRange = (type: string) => {
         const d = new Date(now.getTime() - 86400000)
         start = end = formatDate(d)
     } else if (type === 'week') {
-        const day = now.getDay() || 7
-        const monday = new Date(now.getTime() - (day - 1) * 86400000)
-        start = formatDate(monday)
+        const d = new Date(now.getTime() - 6 * 86400000)
+        start = formatDate(d)
         end = formatDate(now)
     } else if (type === 'month') {
-        start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+        const d = new Date(now.getTime() - 29 * 86400000)
+        start = formatDate(d)
         end = formatDate(now)
     }
     return { start_time: start, end_time: end }

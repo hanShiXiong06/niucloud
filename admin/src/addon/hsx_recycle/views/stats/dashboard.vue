@@ -148,25 +148,30 @@
             />
 
             <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-              <ChartCard title="今日经营" :icon="DataBoard" contentClass="p-0">
+              <ChartCard title="台账概览" :icon="DataBoard" contentClass="p-0">
                 <div class="space-y-4 p-4">
                   <div class="grid grid-cols-2 gap-3">
-                    <div
+                    <button
                       v-for="item in todayBusinessStats"
                       :key="item.label"
+                      type="button"
                       :class="[
-                        'rounded-lg border p-3',
+                        'rounded-lg border p-3 text-left transition hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm',
                         item.urgent
                           ? 'border-amber-200 bg-amber-50'
                           : 'border-gray-100 bg-gray-50'
                       ]"
+                      @click="handleLedgerDrilldown(item)"
                     >
-                      <div :class="['text-xs', item.urgent ? 'text-amber-700' : 'text-gray-500']">{{ item.label }}</div>
+                      <div class="flex items-center justify-between gap-2">
+                        <div :class="['text-xs', item.urgent ? 'text-amber-700' : 'text-gray-500']">{{ item.label }}</div>
+                        <span class="text-xs text-blue-600">明细</span>
+                      </div>
                       <div :class="['mt-1 text-xl font-semibold', item.urgent ? 'text-amber-900' : 'text-gray-900']">
                         {{ item.value }}
                         <span class="text-xs font-normal text-gray-500">{{ item.unit }}</span>
                       </div>
-                    </div>
+                    </button>
                   </div>
 
                   <div>
@@ -296,21 +301,6 @@
               </ChartCard>
             </div>
 
-            <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-              <MetricGrid
-                v-if="canShowWidget('business_dashboard_metrics')"
-                :cards="businessMetricCards"
-                tone="business"
-                columns="business"
-                @drilldown="handleMetricDrilldown"
-              />
-
-              <TodoPanel
-                v-if="canShowWidget('business_dashboard_metrics')"
-                :items="businessDashboard.todo"
-                @drilldown="handleMetricDrilldown"
-              />
-            </div>
           </div>
 
           <div v-else-if="activeDashboard === 'finance'" class="space-y-4">
@@ -328,6 +318,24 @@
               columns="finance"
               @drilldown="handleMetricDrilldown"
             />
+
+            <ChartCard title="打款台账" :icon="Money" contentClass="p-0">
+              <div class="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
+                <div
+                  v-for="item in financeLedgerStats"
+                  :key="item.label"
+                  class="rounded-lg border border-gray-100 bg-gray-50 p-3"
+                >
+                  <div class="text-xs text-gray-500">{{ item.label }}</div>
+                  <div class="mt-1 text-xl font-semibold text-gray-900">
+                    ¥{{ item.value }}
+                  </div>
+                </div>
+              </div>
+              <div class="border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
+                {{ businessDashboard.finance_summary?.caliber || "按实际打款时间统计。" }}
+              </div>
+            </ChartCard>
 
             <ChartCard
               v-if="canShowWidget('finance_dashboard_trend')"
@@ -682,7 +690,6 @@ import BoardTabs from "./components/dashboard/BoardTabs.vue";
 import DashboardEmptyState from "./components/dashboard/DashboardEmptyState.vue";
 import DashboardSummary from "./components/dashboard/DashboardSummary.vue";
 import MetricGrid from "./components/dashboard/MetricGrid.vue";
-import TodoPanel from "./components/dashboard/TodoPanel.vue";
 
 // 导入 hooks
 import { useStatsData } from "./hooks/useStatsData";
@@ -765,6 +772,31 @@ const businessDashboard = ref<BusinessDashboard>({
   thresholds: {},
   cards: [],
   todo: [],
+  ledger: {
+    order_count: 0,
+    device_count: 0,
+    signed_order_count: 0,
+    signed_device_count: 0,
+    pending_sign_order_count: 0,
+    pending_check_device_count: 0,
+    checking_device_count: 0,
+    pending_quote_device_count: 0,
+    pending_confirm_count: 0,
+    pending_pay_order_count: 0,
+    pending_pay_device_count: 0,
+    completed_order_count: 0,
+    completed_device_count: 0,
+    return_device_count: 0,
+    pending_return_count: 0,
+  },
+  finance_summary: {
+    selected_paid_amount: "0.00",
+    today_paid_amount: "0.00",
+    week_paid_amount: "0.00",
+    month_paid_amount: "0.00",
+    pending_pay_amount: "0.00",
+    caliber: "",
+  },
   today_business: {
     order_count: 0,
     device_count: 0,
@@ -835,10 +867,6 @@ const dashboardTabs = computed<DashboardTabItem[]>(() => {
   return tabs.filter((tab) => tab.visible);
 });
 
-const businessMetricCards = computed(() => {
-  return businessDashboard.value.cards.filter((card) => !["资金", "库存"].includes(card.category));
-});
-
 const financeMetricCards = computed(() => {
   return businessDashboard.value.cards.filter((card) => ["资金", "库存"].includes(card.category));
 });
@@ -869,14 +897,52 @@ const todayBusiness = computed(() => {
   };
 });
 
+const ledger = computed(() => businessDashboard.value.ledger || {
+  order_count: 0,
+  device_count: 0,
+  signed_order_count: 0,
+  signed_device_count: 0,
+  pending_sign_order_count: 0,
+  pending_check_device_count: 0,
+  checking_device_count: 0,
+  pending_quote_device_count: 0,
+  pending_confirm_count: 0,
+  pending_pay_order_count: 0,
+  pending_pay_device_count: 0,
+  completed_order_count: 0,
+  completed_device_count: 0,
+  return_device_count: 0,
+  pending_return_count: 0,
+});
+
 const todayBusinessStats = computed(() => [
-  { label: "回收订单", value: todayBusiness.value.order_count || 0, unit: "单" },
-  { label: "回收设备", value: todayBusiness.value.device_count || 0, unit: "台" },
-  { label: "已回收", value: todayBusiness.value.recycled_device_count || 0, unit: "台" },
-  { label: "已售出", value: todayBusiness.value.sold_device_count || 0, unit: "台" },
-  { label: "代卖待上架", value: todayBusiness.value.consignment?.pending_count || 0, unit: "台", urgent: true },
-  { label: "代卖待结算", value: todayBusiness.value.consignment?.pending_settlement_count || 0, unit: "台", urgent: true },
+  { label: "签收手机", value: ledger.value.signed_device_count || 0, unit: "台", filterKey: "signed_today", viewMode: "device_expand" },
+  { label: "新增订单", value: ledger.value.order_count || 0, unit: "单", filterKey: "today_created_orders" },
+  { label: "待质检", value: ledger.value.pending_check_device_count || 0, unit: "台", urgent: true, filterKey: "device_pending_check", viewMode: "device_expand" },
+  { label: "质检中", value: ledger.value.checking_device_count || 0, unit: "台", urgent: true, filterKey: "device_checking", viewMode: "device_expand" },
+  { label: "待打款", value: ledger.value.pending_pay_device_count || 0, unit: "台", urgent: true, filterKey: "pending_pay", viewMode: "device_expand" },
+  { label: "已完成", value: ledger.value.completed_device_count || 0, unit: "台", filterKey: "completed_today", viewMode: "device_expand" },
+  { label: "退货", value: ledger.value.return_device_count || 0, unit: "台", filterKey: "returned_devices", viewMode: "device_expand" },
+  { label: "退货待处理", value: ledger.value.pending_return_count || 0, unit: "台", urgent: true, filterKey: "pending_return", viewMode: "device_expand" },
 ]);
+
+const financeLedgerStats = computed(() => {
+  const finance = businessDashboard.value.finance_summary || {
+    selected_paid_amount: "0.00",
+    today_paid_amount: "0.00",
+    week_paid_amount: "0.00",
+    month_paid_amount: "0.00",
+    last_7_days_paid_amount: "0.00",
+    last_30_days_paid_amount: "0.00",
+  };
+
+  return [
+    { label: "所选时间打款", value: finance.selected_paid_amount || "0.00" },
+    { label: "今日打款", value: finance.today_paid_amount || "0.00" },
+    { label: "近7天打款", value: finance.last_7_days_paid_amount || finance.week_paid_amount || "0.00" },
+    { label: "近30天打款", value: finance.last_30_days_paid_amount || finance.month_paid_amount || "0.00" },
+  ];
+});
 
 const consignmentProgress = computed(() => [
   { label: "今日转入", value: todayBusiness.value.consignment?.today_count || 0, status: "" },
@@ -923,6 +989,8 @@ const fetchBusinessDashboard = async () => {
       thresholds: res.data?.thresholds || {},
       cards: Array.isArray(res.data?.cards) ? res.data.cards : [],
       todo: Array.isArray(res.data?.todo) ? res.data.todo : [],
+      ledger: res.data?.ledger || undefined,
+      finance_summary: res.data?.finance_summary || undefined,
       today_business: res.data?.today_business || undefined,
       responsibility: res.data?.responsibility || undefined,
       explain: res.data?.explain || "",
@@ -934,6 +1002,8 @@ const fetchBusinessDashboard = async () => {
       thresholds: {},
       cards: [],
       todo: [],
+      ledger: undefined,
+      finance_summary: undefined,
       today_business: undefined,
       responsibility: undefined,
       explain: "经营看板暂时无法加载，请稍后重试。",
@@ -982,6 +1052,26 @@ const handleMetricDrilldown = (card: DashboardMetricCard) => {
       start_time: queryParams.value.start_time || "",
       end_time: queryParams.value.end_time || "",
       dashboard_title: card.title,
+      t: String(Date.now()),
+    },
+  });
+};
+
+const handleLedgerDrilldown = (item: {
+  label: string;
+  filterKey?: string;
+  viewMode?: string;
+}) => {
+  if (!item.filterKey) return;
+
+  router.push({
+    path: "/recycle_order/list",
+    query: {
+      filter_key: item.filterKey,
+      view_mode: item.viewMode || "",
+      start_time: queryParams.value.start_time || "",
+      end_time: queryParams.value.end_time || "",
+      dashboard_title: item.label,
       t: String(Date.now()),
     },
   });

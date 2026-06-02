@@ -52,9 +52,7 @@ export function getOrderDevices(orderId: number) {
 
 // 添加设备
 export function addOrderDevice(orderId: number, data: any) {
-  return request.post(`/recycle/recycle_order/${orderId}/devices`, {
-    data,
-  });
+  return request.post(`/recycle/recycle_order/${orderId}/add_device`, data);
 }
 
 // 更新设备

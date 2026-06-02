@@ -34,10 +34,6 @@
                             <text class="card-label">用户串号</text>
                             <text class="card-value">{{ device.user_sn }}</text>
                         </view>
-                        <view class="card-row">
-                            <text class="card-label">分类</text>
-                            <text class="card-value">{{ device.category_name || getCategoryName(device.category_id) || '手机' }}</text>
-                        </view>
                         <view v-if="device.initial_price && Number(device.initial_price) > 0" class="card-row">
                             <text class="card-label">预估价</text>
                             <text class="card-value card-value--price">¥{{ device.initial_price }}</text>
@@ -89,33 +85,14 @@
                         </u-form-item>
 
                         <u-form-item label="设备型号" required :border-bottom="false">
-                            <u-input
-                                v-model="editForm.model"
-                                border="none"
-                                clearable
-                                placeholder="请输入设备型号"
-                                inputAlign="right"
-                                fontSize="28rpx"
-                                placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
-                            ></u-input>
+                            <view class="model-select" @click="openModelPicker">
+                                <text class="model-select__text" :class="{ 'model-select__placeholder': !editForm.model }">
+                                    {{ editForm.model || '选择品牌/系列/型号' }}
+                                </text>
+                                <text class="nc-iconfont nc-icon-youV6xx1 model-select__icon"></text>
+                            </view>
                         </u-form-item>
                     </u-form>
-
-                    <view class="form-item">
-                        <view class="form-label">分类</view>
-                        <u-radio-group v-model="editForm.category_id" placement="row" iconPlacement="left" class="category-select">
-                            <u-radio
-                                v-for="cat in categories"
-                                :key="cat.id"
-                                activeColor="var(--primary-color)"
-                                :name="cat.id"
-                                :label="cat.name"
-                                labelColor="#333"
-                                :labelSize="'26rpx'"
-                                :customStyle="{ marginRight: '28rpx', marginBottom: '18rpx' }"
-                            ></u-radio>
-                        </u-radio-group>
-                    </view>
 
                     <view class="form-item">
                         <view class="form-label">预估价格 <text class="text-[22rpx] text-[#999]">（选填）</text></view>
@@ -123,7 +100,7 @@
                             <text class="price-symbol">¥</text>
                             <u-input
                                 v-model="editForm.initial_price"
-                                type="digit"
+                                type="number"
                                 border="none"
                                 clearable
                                 placeholder="0.00"
@@ -143,12 +120,60 @@
                 </view>
             </view>
         </u-popup>
+
+        <u-popup :show="modelPickerVisible" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="closeModelPicker">
+            <view class="model-picker-popup">
+                <view class="popup-header">
+                    <view class="popup-title">选择设备型号</view>
+                    <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx] text-[#999]" @click="closeModelPicker"></text>
+                </view>
+
+                <view v-if="!modelTree.length" class="model-empty">
+                    <text>暂无可选型号，请到 PC 端「型号字典」维护后再签收。</text>
+                </view>
+                <view v-else class="model-cascade">
+                    <scroll-view scroll-y class="model-column">
+                        <view
+                            v-for="brand in modelTree"
+                            :key="brand.id"
+                            class="model-option"
+                            :class="{ 'model-option--active': String(activeBrandId) === String(brand.id) }"
+                            @click="selectBrand(brand)"
+                        >
+                            <text>{{ brand.node_name }}</text>
+                        </view>
+                    </scroll-view>
+                    <scroll-view scroll-y class="model-column">
+                        <view
+                            v-for="item in secondLevelNodes"
+                            :key="item.id"
+                            class="model-option"
+                            :class="{ 'model-option--active': String(activeSecondId) === String(item.id) }"
+                            @click="selectSecondLevel(item)"
+                        >
+                            <text>{{ item.node_name }}</text>
+                            <text v-if="isLeafNode(item)" class="model-option__leaf">选择</text>
+                        </view>
+                    </scroll-view>
+                    <scroll-view v-if="thirdLevelNodes.length" scroll-y class="model-column">
+                        <view
+                            v-for="item in thirdLevelNodes"
+                            :key="item.id"
+                            class="model-option"
+                            @click="chooseModelNode(item)"
+                        >
+                            <text>{{ item.node_name }}</text>
+                        </view>
+                    </scroll-view>
+                </view>
+            </view>
+        </u-popup>
     </u-popup>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { updateOrder } from '@/addon/hsx_recycle/api/order'
+import { computed, ref, watch } from 'vue'
+import { getDeviceModelDictTree, updateOrder } from '@/addon/hsx_recycle/api/order'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 
 interface Props {
@@ -163,18 +188,10 @@ const emit = defineEmits(['update:visible', 'success'])
 const show = ref(false)
 const submitting = ref(false)
 const devices = ref<any[]>([])
-
-const categories = [
-    { id: 1, name: '手机' },
-    { id: 2, name: '平板' },
-    { id: 3, name: '笔记本' },
-    { id: 4, name: '手表' },
-    { id: 5, name: '其他' },
-]
-
-const getCategoryName = (id: any) => {
-    return categories.find(c => c.id == id)?.name || ''
-}
+const modelTree = ref<any[]>([])
+const modelPickerVisible = ref(false)
+const activeBrandId = ref<string | number>('')
+const activeSecondId = ref<string | number>('')
 
 const editVisible = ref(false)
 const editingIndex = ref(-1)
@@ -186,10 +203,48 @@ const editForm = ref({
     category_id: 1
 })
 
+const secondLevelNodes = computed(() => {
+    const brand = modelTree.value.find(item => String(item.id) === String(activeBrandId.value))
+    return Array.isArray(brand?.child_list) ? brand.child_list : []
+})
+
+const thirdLevelNodes = computed(() => {
+    const second = secondLevelNodes.value.find(item => String(item.id) === String(activeSecondId.value))
+    return Array.isArray(second?.child_list) ? second.child_list : []
+})
+
+const isLeafNode = (node: any) => !Array.isArray(node?.child_list) || node.child_list.length === 0
+
+const normalizeModelTree = (nodes: any[] = []): any[] => {
+    return nodes
+        .filter(item => Number(item.status ?? 1) === 1)
+        .map(item => {
+            const children = normalizeModelTree(Array.isArray(item.child_list) ? item.child_list : [])
+            return {
+                ...item,
+                child_list: children.length ? children : []
+            }
+        })
+        .filter(item => item.level > 1 || item.child_list.length > 0)
+}
+
+const loadModelTree = async () => {
+    try {
+        const res: any = await getDeviceModelDictTree()
+        modelTree.value = normalizeModelTree(res.data || [])
+        if (!activeBrandId.value && modelTree.value.length) {
+            activeBrandId.value = modelTree.value[0].id
+        }
+    } catch (error) {
+        modelTree.value = []
+    }
+}
+
 watch(() => props.visible, (val) => {
     show.value = val
     if (val) {
         devices.value = JSON.parse(JSON.stringify(props.deviceList || []))
+        loadModelTree()
     }
 })
 
@@ -234,6 +289,38 @@ const closeEdit = () => {
     editVisible.value = false
 }
 
+const openModelPicker = () => {
+    if (!modelTree.value.length) {
+        loadModelTree()
+    }
+    if (!activeBrandId.value && modelTree.value.length) {
+        activeBrandId.value = modelTree.value[0].id
+    }
+    modelPickerVisible.value = true
+}
+
+const closeModelPicker = () => {
+    modelPickerVisible.value = false
+}
+
+const selectBrand = (brand: any) => {
+    activeBrandId.value = brand.id
+    activeSecondId.value = ''
+}
+
+const selectSecondLevel = (node: any) => {
+    activeSecondId.value = node.id
+    if (isLeafNode(node)) {
+        chooseModelNode(node)
+    }
+}
+
+const chooseModelNode = (node: any) => {
+    if (!isLeafNode(node)) return
+    editForm.value.model = node.model_full_name || node.node_name || ''
+    closeModelPicker()
+}
+
 const saveEdit = () => {
     if (!editForm.value.imei) {
         uni.showToast({ title: '请输入IMEI串号', icon: 'none' })
@@ -245,8 +332,7 @@ const saveEdit = () => {
     }
 
     const data = {
-        ...editForm.value,
-        category_name: getCategoryName(editForm.value.category_id)
+        ...editForm.value
     }
 
     if (editingIndex.value === -1) {
@@ -478,19 +564,32 @@ const handleSubmit = async () => {
     font-weight: 500;
 }
 
-.required {
-    color: #f56c6c;
+.model-select {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 64rpx;
 }
 
-.form-input {
-    width: 100%;
-    height: 72rpx;
-    padding: 0 20rpx;
-    border: 1rpx solid #e0e0e0;
-    border-radius: 8rpx;
+.model-select__text {
+    flex: 1;
+    min-width: 0;
     font-size: 28rpx;
-    box-sizing: border-box;
-    background: #fff;
+    color: #333;
+    text-align: right;
+    word-break: break-all;
+}
+
+.model-select__placeholder {
+    color: var(--text-color-light9);
+}
+
+.model-select__icon {
+    margin-left: 12rpx;
+    color: #999;
+    font-size: 24rpx;
 }
 
 .price-input-wrap {
@@ -514,8 +613,64 @@ const handleSubmit = async () => {
     flex: 1;
 }
 
-.category-select {
+.model-picker-popup {
+    background: #fff;
+    max-height: 78vh;
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+}
+
+.model-empty {
+    padding: 80rpx 48rpx;
+    color: #777;
+    font-size: 26rpx;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.model-cascade {
+    display: flex;
+    min-height: 520rpx;
+    max-height: 620rpx;
+    border-top: 1rpx solid #f2f3f5;
+}
+
+.model-column {
+    flex: 1;
+    min-width: 0;
+    border-right: 1rpx solid #f2f3f5;
+    background: #fafafa;
+}
+
+.model-column:last-child {
+    border-right: none;
+    background: #fff;
+}
+
+.model-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 78rpx;
+    padding: 0 18rpx;
+    color: #333;
+    font-size: 25rpx;
+    line-height: 1.35;
+    word-break: break-all;
+    box-sizing: border-box;
+    border-bottom: 1rpx solid #f2f3f5;
+}
+
+.model-option--active {
+    color: var(--primary-color);
+    background: #fff;
+    font-weight: 600;
+}
+
+.model-option__leaf {
+    margin-left: 8rpx;
+    color: var(--primary-color);
+    font-size: 22rpx;
+    flex-shrink: 0;
 }
 </style>

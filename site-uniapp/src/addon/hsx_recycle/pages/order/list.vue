@@ -98,9 +98,9 @@
                             </view>
                             <view class="member-main">
                                 <view class="member-name">{{ getMemberName(item) }}</view>
-                                <view class="member-mobile" @click.stop="makePhoneCall(getMemberMobile(item))">
+                                <view class="member-mobile" >
                                     <text class="nc-iconfont nc-icon-dianhuaV6xx member-mobile__icon"></text>
-                                    <text>{{ getMemberMobile(item) }}</text>
+                                    <text @click.stop="makePhoneCall(getMemberMobile(item))">{{ getMemberMobile(item) }}</text>
                                 </view>
                             </view>
                         </view>

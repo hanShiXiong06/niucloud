@@ -298,7 +298,8 @@ const priceRow = (label: string, value: any): RowItem => ({
 })
 
 const compactRows = (rows: RowItem[]) => {
-    return rows.filter((item) => item.value !== '')
+    // 等于 0 不渲染
+    return rows.filter((item) => item.value !== '' && Number(item.value) !== 0)
 }
 
 const formatValue = (value: any) => {

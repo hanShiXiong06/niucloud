@@ -14,7 +14,7 @@
                         <input
                             v-model="formData.listing_price"
                             class="form-input"
-                            type="digit"
+                            type="number"
                             placeholder="请输入挂牌价"
                         />
                     </view>

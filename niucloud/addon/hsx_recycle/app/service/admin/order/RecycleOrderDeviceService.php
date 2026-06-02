@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
-use addon\hsx_recycle\app\service\admin\recycle_order\RecycleDeviceService;
 use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
-use addon\hsx_recycle\app\model\RecycleOrder;
-use addon\hsx_recycle\app\model\RecycleDevice;
+use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -55,16 +55,16 @@ class RecycleOrderDeviceService extends BaseAdminService
             }
 
             // 3. 验证IMEI是否已存在
-            if (!empty($deviceData['imei'])) {
-                $existingDevice = (new RecycleDevice())->where([
-                    ['imei', '=', $deviceData['imei']],
-                    ['order_id', '<>', $orderId]
-                ])->findOrEmpty();
+            // if (!empty($deviceData['imei'])) {
+            //     $existingDevice = (new RecycleDevice())->where([
+            //         ['imei', '=', $deviceData['imei']],
+            //         ['order_id', '<>', $orderId]
+            //     ])->findOrEmpty();
                 
-                if (!$existingDevice->isEmpty()) {
-                    throw new CommonException('DEVICE_IMEI_EXISTS');
-                }
-            }
+            //     if (!$existingDevice->isEmpty()) {
+            //         throw new CommonException('DEVICE_IMEI_EXISTS');
+            //     }
+            // }
 
             // 4. 组装设备数据
             $data = [
@@ -72,6 +72,10 @@ class RecycleOrderDeviceService extends BaseAdminService
                 'imei' => $deviceData['imei'] ?? '',
                 'model' => $deviceData['model'] ?? '',
                 'initial_price' => $deviceData['initial_price'] ?? 0,
+                'category_id' => (int)($deviceData['category_id'] ?? 1),
+                'info' => [
+                    'goods_category' => $this->normalizeCategoryPath($deviceData['category_path'] ?? null, (int)($deviceData['category_id'] ?? 1))
+                ],
                 'status' => $this->getInitialDeviceStatus($order->status),
                 'member_id' => $order->member_id,
                 'site_id' => $this->site_id,
@@ -83,9 +87,11 @@ class RecycleOrderDeviceService extends BaseAdminService
             // 5. 添加设备
             $deviceService = new RecycleDeviceService();
             $deviceId = $deviceService->add($data);
+            (new RecycleDeviceModelDictService())->ensureFromModelName((string)($data['model'] ?? ''), $this->site_id);
 
             // 6. 记录设备添加日志
             $this->logService->logDeviceAdd($deviceId, $data);
+            $this->syncOrderDeviceCount($orderId);
 
             Db::commit();
             return $deviceId;
@@ -167,7 +173,9 @@ class RecycleOrderDeviceService extends BaseAdminService
             $this->logService->logDeviceRemove($deviceId, $reason ?: '管理员操作');
 
             // 4. 删除设备
+            $orderId = (int)$device->order_id;
             $device->delete();
+            $this->syncOrderDeviceCount($orderId);
 
             Db::commit();
             return true;
@@ -175,5 +183,33 @@ class RecycleOrderDeviceService extends BaseAdminService
             Db::rollback();
             throw new CommonException($e->getMessage());
         }
+    }
+
+    private function syncOrderDeviceCount(int $orderId): void
+    {
+        $count = (new RecycleDevice())->where([['order_id', '=', $orderId]])->count();
+        (new RecycleOrder())->where([['id', '=', $orderId]])->update([
+            'count' => $count,
+            'device_count' => $count,
+            'update_at' => time(),
+        ]);
+    }
+
+    private function normalizeCategoryPath($categoryPath, int $categoryId): array
+    {
+        if (is_string($categoryPath) && $categoryPath !== '') {
+            $decoded = json_decode($categoryPath, true);
+            if (is_array($decoded)) {
+                $categoryPath = $decoded;
+            } else {
+                $categoryPath = array_filter(array_map('trim', explode(',', $categoryPath)));
+            }
+        }
+
+        if (!is_array($categoryPath) || empty($categoryPath)) {
+            $categoryPath = [ $categoryId ];
+        }
+
+        return array_values(array_map('strval', $categoryPath));
     }
 } 

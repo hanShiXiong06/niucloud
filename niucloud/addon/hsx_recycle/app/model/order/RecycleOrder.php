@@ -85,6 +85,8 @@ class RecycleOrder extends BaseModel
         'order_no' => '%like%',
         'status' => '=',
         'delivery_type' => '=',
+        'order_source' => '=',
+        'agent_name' => '%like%',
         'customer_name' => '%like%',
         'customer_phone' => '%like%',
         'remark' => '%like%',
@@ -292,6 +294,20 @@ class RecycleOrder extends BaseModel
         }
     }
 
+    public function searchOrderSourceAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('order_source', $value);
+        }
+    }
+
+    public function searchAgentNameAttr($query, $value, $data)
+    {
+        if (!empty($value)) {
+            $query->where('agent_name', 'like', "%{$value}%");
+        }
+    }
+
     // 搜索器 本表 order_no 模糊匹配
     public function searchOrderNoAttr($query, $value, $data)
     {
@@ -405,6 +421,8 @@ class RecycleOrder extends BaseModel
             'member_id' => 'member_id',         // 会员ID
             'status' => 'status',               // 订单状态
             'delivery_type' => 'delivery_type', // 配送方式
+            'order_source' => 'order_source',   // 下单来源
+            'agent_name' => 'agent_name',       // 代下单人
         ];
         
         // 应用映射规则
@@ -497,7 +515,8 @@ class RecycleOrder extends BaseModel
         return [
             'id', 'order_no', 'express_no', 'customer_name', 'customer_phone', 
             'status', 'delivery_type', 'create_at', 'update_at', 'remark', 'imei', 
-            'device_model', 'search', 'keyword', 'member_id', 'delete_at', 'sign_at', 'complete_at', 'pay_time'
+            'device_model', 'search', 'keyword', 'member_id', 'delete_at', 'sign_at', 'complete_at', 'pay_time',
+            'order_source', 'agent_name'
         ];
     }
     public function searchUpdateAtAttr($query, $value, $data)

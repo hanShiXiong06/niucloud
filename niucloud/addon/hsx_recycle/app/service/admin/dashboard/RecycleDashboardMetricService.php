@@ -10,6 +10,7 @@ use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleConsignmentOrder;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\model\order\RecycleDevicePayment;
 use addon\hsx_recycle\app\model\order\RecycleReturnOrder;
 use app\model\sys\SysUser;
 use app\service\admin\user\UserRoleService;
@@ -34,20 +35,30 @@ class RecycleDashboardMetricService extends BaseAdminService
     public function getOverview(array $params = []): array
     {
         $params = $this->filterService->normalizeParams($params);
+        $ledger = $this->buildLedger($params);
+        $financeSummary = $this->buildFinanceSummary($params);
         $cards = [
             $this->todayOrderCount($params),
             $this->todayDeviceCount($params),
+            $this->simpleMetric('signed_device_count', '签收设备', '业务量', '台', $ledger['signed_device_count'], '所选时间内已签收订单包含的设备总数', '按订单 sign_at 落在所选时间统计设备数', RecycleDashboardFilterDict::SIGNED_TODAY, 'period', '所选时间', 'device_expand'),
+            $this->simpleMetric('pending_check_device_count', '待质检设备', '待办', '台', $ledger['pending_check_device_count'], '当前已经签收，等待质检开始的设备', '设备状态为待质检', RecycleDashboardFilterDict::DEVICE_PENDING_CHECK, 'snapshot', '当前状态', 'device_expand'),
+            $this->simpleMetric('checking_device_count', '质检中设备', '待办', '台', $ledger['checking_device_count'], '当前正在质检处理的设备', '设备状态为质检中', RecycleDashboardFilterDict::DEVICE_CHECKING, 'snapshot', '当前状态', 'device_expand'),
+            $this->simpleMetric('pending_confirm_count', '待客户确认', '待办', '台', $ledger['pending_confirm_count'], '当前等待客户确认报价的设备', '设备状态为待确认且确认状态为待确认', RecycleDashboardFilterDict::PENDING_CONFIRM, 'snapshot', '当前状态', 'device_expand'),
             $this->todayPaidAmount($params),
             $this->pendingCheck($params),
             $this->checkTimeout($params),
             $this->pendingPay($params),
             $this->pendingPayAmount($params),
+            $this->simpleMetric('completed_order_count', '已完成订单', '业务量', '单', $ledger['completed_order_count'], '所选时间内已完成的订单数', '订单 complete_at 落在所选时间且状态为已完成', RecycleDashboardFilterDict::COMPLETED_TODAY, 'period', '所选时间'),
+            $this->simpleMetric('completed_device_count', '已完成设备', '业务量', '台', $ledger['completed_device_count'], '所选时间内已完成订单包含的设备数', '已完成订单下的设备数', RecycleDashboardFilterDict::COMPLETED_TODAY, 'period', '所选时间', 'device_expand'),
+            $this->simpleMetric('today_return_device_count', '退货设备', '风险', '台', $ledger['return_device_count'], '所选时间内已退回客户的设备数', '设备状态为已退回且更新时间落在所选时间', RecycleDashboardFilterDict::RETURNED_DEVICES, 'period', '所选时间', 'device_expand'),
+            $this->simpleMetric('pending_return', '退货待处理', '待办', '台', $ledger['pending_return_count'], '当前处置方式为退回但退回流程未完成的设备数', '退货单待处理/退货中设备数', RecycleDashboardFilterDict::PENDING_RETURN, 'snapshot', '当前状态', 'device_expand'),
             $this->inventoryRecoveryCost($params),
             $this->quoteConfirmRate($params),
             $this->returnRate($params),
         ];
 
-        return [
+        return array_merge([
             'date_range' => [
                 'start_time' => $params['start_time'],
                 'end_time' => $params['end_time'],
@@ -60,10 +71,12 @@ class RecycleDashboardMetricService extends BaseAdminService
             ],
             'cards' => $cards,
             'todo' => $this->buildTodo($cards),
+            'ledger' => $ledger,
+            'finance_summary' => $financeSummary,
             'today_business' => $this->buildTodayBusiness($params),
             'responsibility' => $this->buildResponsibility($params),
             'explain' => '本看板只统计回收链路真实数据。销售出库未接入前，库存回收成本不等同于利润。',
-        ];
+        ], $this->buildLegacyOverviewFields($ledger, $financeSummary));
     }
 
     public function getMetrics(): array
@@ -266,6 +279,194 @@ class RecycleDashboardMetricService extends BaseAdminService
         }
 
         return array_merge($result, $extra);
+    }
+
+    private function simpleMetric(string $key, string $title, string $category, string $unit, $value, string $description, string $caliber, string $filterKey = '', string $timeScope = 'snapshot', string $scopeLabel = '当前状态', string $viewMode = ''): array
+    {
+        $drilldown = [
+            'target' => 'order_list',
+            'filter_key' => $filterKey,
+        ];
+        if ($viewMode !== '') {
+            $drilldown['view_mode'] = $viewMode;
+        }
+
+        return [
+            'key' => $key,
+            'title' => $title,
+            'category' => $category,
+            'unit' => $unit,
+            'value_type' => 'integer',
+            'value' => (int)$value,
+            'description' => $description,
+            'caliber' => $caliber,
+            'time_scope' => $timeScope,
+            'scope_label' => $scopeLabel,
+            'drilldown' => $drilldown,
+        ];
+    }
+
+    private function buildLedger(array $params): array
+    {
+        $signedOrderIds = $this->orderIdsByTime('sign_at', $params, [RecycleOrderDict::ORDER_STATUS_SIGNED, RecycleOrderDict::ORDER_STATUS_CHECKING, RecycleOrderDict::ORDER_STATUS_CHECKED, RecycleOrderDict::ORDER_STATUS_PENDING_CONFIRM, RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT, RecycleOrderDict::ORDER_STATUS_COMPLETED]);
+        $completedOrderIds = $this->orderIdsByTime('complete_at', $params, [RecycleOrderDict::ORDER_STATUS_COMPLETED]);
+
+        return [
+            'order_count' => $this->filterService->countOrders(RecycleDashboardFilterDict::TODAY_CREATED_ORDERS, $params),
+            'device_count' => $this->filterService->countDevices(RecycleDashboardFilterDict::TODAY_CREATED_DEVICES, $params),
+            'signed_order_count' => count($signedOrderIds),
+            'signed_device_count' => $this->countDevicesByOrderIds($signedOrderIds),
+            'pending_sign_order_count' => $this->filterService->countOrders(RecycleDashboardFilterDict::PENDING_SIGN, $params),
+            'pending_check_device_count' => $this->countDevicesByStatus([RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK]),
+            'checking_device_count' => $this->countDevicesByStatus([RecycleOrderDict::DEVICE_STATUS_CHECKING]),
+            'pending_quote_device_count' => $this->countDevicesByStatus([
+                RecycleOrderDict::DEVICE_STATUS_CHECKED,
+                RecycleOrderDict::DEVICE_STATUS_PRICED,
+                RecycleOrderDict::DEVICE_STATUS_PRICED_REPRICE,
+            ]),
+            'pending_confirm_count' => $this->countDevicesByStatus([RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM], [
+                ['confirm_status', '=', RecycleOrderDict::CONFIRM_STATUS_PENDING],
+            ]),
+            'pending_pay_order_count' => $this->filterService->countOrders(RecycleDashboardFilterDict::PENDING_PAY, $params),
+            'pending_pay_device_count' => $this->filterService->countDevices(RecycleDashboardFilterDict::PENDING_PAY, $params),
+            'completed_order_count' => count($completedOrderIds),
+            'completed_device_count' => $this->countDevicesByOrderIds($completedOrderIds),
+            'return_device_count' => $this->filterService->countDevices(RecycleDashboardFilterDict::RETURNED_DEVICES, $params),
+            'pending_return_count' => $this->countPendingReturnDevices(),
+        ];
+    }
+
+    private function buildFinanceSummary(array $params): array
+    {
+        $todayRange = $this->filterService->normalizeParams([
+            'start_time' => date('Y-m-d'),
+            'end_time' => date('Y-m-d'),
+        ]);
+        $weekStart = date('Y-m-d', strtotime('-6 days'));
+        $weekRange = $this->filterService->normalizeParams([
+            'start_time' => $weekStart,
+            'end_time' => date('Y-m-d'),
+        ]);
+        $monthRange = $this->filterService->normalizeParams([
+            'start_time' => date('Y-m-d', strtotime('-29 days')),
+            'end_time' => date('Y-m-d'),
+        ]);
+        $last7DaysPaidAmount = $this->money($this->sumActualPaidAmount($weekRange));
+        $last30DaysPaidAmount = $this->money($this->sumActualPaidAmount($monthRange));
+
+        return [
+            'selected_paid_amount' => $this->money($this->sumActualPaidAmount($params)),
+            'today_paid_amount' => $this->money($this->sumActualPaidAmount($todayRange)),
+            'week_paid_amount' => $last7DaysPaidAmount,
+            'month_paid_amount' => $last30DaysPaidAmount,
+            'last_7_days_paid_amount' => $last7DaysPaidAmount,
+            'last_30_days_paid_amount' => $last30DaysPaidAmount,
+            'pending_pay_amount' => $this->money($this->filterService->sumDeviceFinalPrice(RecycleDashboardFilterDict::PENDING_PAY, $params)),
+            'caliber' => '近7天/近30天按包含今天的滚动自然日统计。优先按设备打款记录统计实际打款；没有设备打款记录的整单打款，按订单 pay_time 和设备 final_price 兜底统计。',
+        ];
+    }
+
+    private function buildLegacyOverviewFields(array $ledger, array $financeSummary): array
+    {
+        return [
+            'today_order_count' => $ledger['order_count'],
+            'today_device_count' => $ledger['device_count'],
+            'signed_order_count' => $ledger['signed_order_count'],
+            'signed_device_count' => $ledger['signed_device_count'],
+            'pending_check' => $ledger['pending_check_device_count'],
+            'checking_count' => $ledger['checking_device_count'],
+            'pending_confirm_count' => $ledger['pending_confirm_count'],
+            'pending_pay' => $ledger['pending_pay_device_count'],
+            'completed_order_count' => $ledger['completed_order_count'],
+            'completed_device_count' => $ledger['completed_device_count'],
+            'today_return_count' => $ledger['return_device_count'],
+            'pending_return' => $ledger['pending_return_count'],
+            'today_payment_amount' => $financeSummary['today_paid_amount'],
+            'week_payment_amount' => $financeSummary['week_paid_amount'],
+            'month_payment_amount' => $financeSummary['month_paid_amount'],
+            'selected_payment_amount' => $financeSummary['selected_paid_amount'],
+        ];
+    }
+
+    private function orderIdsByTime(string $field, array $params, array $statuses = []): array
+    {
+        $query = $this->filterService->newOrderQuery($params)
+            ->where($field, 'between', [$params['start_at'], $params['end_at']])
+            ->where($field, '>', 0);
+
+        if (!empty($statuses)) {
+            $query->where('status', 'in', $statuses);
+        }
+
+        return array_values(array_unique(array_map('intval', $query->column('id'))));
+    }
+
+    private function countDevicesByStatus(array $statuses, array $extraWhere = []): int
+    {
+        $query = (new RecycleDevice())->where([
+            ['site_id', '=', $this->site_id],
+            ['status', 'in', $statuses],
+        ]);
+
+        foreach ($extraWhere as $where) {
+            if (is_array($where) && count($where) >= 3) {
+                $query->where($where[0], $where[1], $where[2]);
+            }
+        }
+
+        return (int)$query->count();
+    }
+
+    private function countPendingReturnDevices(): int
+    {
+        $returnOrderTable = (new RecycleReturnOrder())->getTable();
+        return (int)Db::name('recycle_return_device')
+            ->alias('rd')
+            ->join($returnOrderTable . ' ro', 'rd.return_order_id = ro.id')
+            ->where([
+                ['ro.site_id', '=', $this->site_id],
+                ['rd.status', 'in', [
+                    RecycleReturnOrderDict::ORDER_STATUS_PENDING,
+                    RecycleReturnOrderDict::ORDER_STATUS_RETURNING,
+                    RecycleReturnOrderDict::DEVICE_STATUS_PENDING,
+                    RecycleReturnOrderDict::DEVICE_STATUS_RETURNING,
+                ]],
+            ])
+            ->count();
+    }
+
+    private function sumActualPaidAmount(array $params): float
+    {
+        $paymentRows = (new RecycleDevicePayment())
+            ->where([
+                ['site_id', '=', $this->site_id],
+                ['pay_time', 'between', [$params['start_at'], $params['end_at']]],
+            ])
+            ->field('order_id, SUM(amount) as amount')
+            ->group('order_id')
+            ->select()
+            ->toArray();
+
+        $paidOrderIds = [];
+        $amount = 0.0;
+        foreach ($paymentRows as $row) {
+            $paidOrderIds[] = (int)($row['order_id'] ?? 0);
+            $amount += (float)($row['amount'] ?? 0);
+        }
+
+        $orderIds = $this->filterService->getOrderIds(RecycleDashboardFilterDict::PAID_TODAY, $params);
+        $fallbackOrderIds = array_values(array_diff($orderIds, $paidOrderIds));
+        if (!empty($fallbackOrderIds)) {
+            $amount += (float)(new RecycleDevice())
+                ->where([
+                    ['site_id', '=', $this->site_id],
+                    ['order_id', 'in', $fallbackOrderIds],
+                    ['final_price', '>', 0],
+                ])
+                ->sum('final_price');
+        }
+
+        return round($amount, 2);
     }
 
     private function secondaryDeviceValue(int $value, string $filterKey): array

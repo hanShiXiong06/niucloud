@@ -115,7 +115,7 @@
                 <view class="number-grid">
                     <view class="number-field">
                         <text>重量kg</text>
-                        <input v-model="shipmentForm.weight" class="number-input" type="digit" />
+                        <input v-model="shipmentForm.weight" class="number-input" type="number" />
                     </view>
                     <view class="number-field">
                         <text>包裹数</text>
@@ -123,7 +123,7 @@
                     </view>
                     <view class="number-field">
                         <text>保价</text>
-                        <input v-model="shipmentForm.guaranteeValueAmount" class="number-input" type="digit" />
+                        <input v-model="shipmentForm.guaranteeValueAmount" class="number-input" type="number" />
                     </view>
                 </view>
                 <view class="quote-btn" :class="{ 'quote-btn--disabled': quoteLoading }" @click.stop="runQuote">
