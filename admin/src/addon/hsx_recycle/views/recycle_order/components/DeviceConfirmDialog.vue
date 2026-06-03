@@ -412,7 +412,7 @@ const handleModelPathChange = (row: Device, value: Array<string | number> | stri
     const path = Array.isArray(value) ? value : [value]
     const leafId = path[path.length - 1]
     const leaf = modelNodeMap.value[String(leafId)] || null
-    row.model = leaf?.model_full_name || leaf?.node_name || ''
+    row.model =  leaf?.node_name || ''
 }
 
 const toggleModelInputMode = (row: Device) => {

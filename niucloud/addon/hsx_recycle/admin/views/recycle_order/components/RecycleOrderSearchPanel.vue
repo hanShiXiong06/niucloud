@@ -1,5 +1,5 @@
 <template>
-  <div class="order-search-panel">
+  <div :class="['order-search-panel', panelCollapsed && !props.isMobile ? 'is-collapsed' : '']">
     <div v-if="props.isMobile" class="flex items-center justify-between gap-2 px-2 pt-1">
       <el-button type="primary" plain :icon="Search" @click="emit('toggle-mobile-search')">
         {{ props.mobileSearchVisible ? "收起筛选" : "展开筛选" }}
@@ -8,13 +8,24 @@
         快速重置
       </el-button>
     </div>
+    <div v-else-if="panelCollapsed" class="search-collapsed">
+      <el-button text type="primary" class="search-collapsed__btn" @click="panelCollapsed = false">
+        <span class="fold-symbol">⌄</span>
+      </el-button>
+    </div>
 
     <el-collapse-transition>
-      <div v-show="!props.isMobile || props.mobileSearchVisible" class="p-2">
+      <div v-show="(!props.isMobile && !panelCollapsed) || (props.isMobile && props.mobileSearchVisible)" class="p-2">
         <div class="search-head">
           <el-segmented v-model="filterMode" :options="filterModeOptions" />
-          <div class="search-head__hint">
-            {{ filterMode === 'basic' ? '常用检索：适合快速定位订单' : '高级检索：展开全部筛选条件' }}
+          <div class="search-head__right">
+            <div class="search-head__hint">
+              {{ filterMode === 'basic' ? '常用检索：适合快速定位订单' : '高级检索：展开全部筛选条件' }}
+            </div>
+            <el-button v-if="!props.isMobile" text type="primary" @click="panelCollapsed = true">
+              <span class="fold-symbol">⌃</span>
+              隐藏筛选
+            </el-button>
           </div>
         </div>
 
@@ -87,6 +98,18 @@
             >
               <el-option label="快递配送" value="1" />
               <el-option label="自送到店" value="2" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item v-if="filterMode === 'advanced'" label="下单来源" class="search-item search-item--select">
+            <el-select
+              v-model="props.advancedSearchForm.order_source"
+              placeholder="选择来源"
+              clearable
+              class="w-full"
+            >
+              <el-option label="客户下单" value="customer" />
+              <el-option label="代下单" value="agent" />
             </el-select>
           </el-form-item>
 
@@ -254,6 +277,7 @@ interface Props {
 
 const props = defineProps<Props>();
 const filterMode = ref<"basic" | "advanced">("basic");
+const panelCollapsed = ref(false);
 const filterModeOptions = [
   { label: "基础筛选", value: "basic" },
   { label: "高级筛选", value: "advanced" },
@@ -263,6 +287,7 @@ const clearAdvancedOnlyFields = () => {
   props.advancedSearchForm.order_no = "";
   props.advancedSearchForm.status = [];
   props.advancedSearchForm.delivery_type = [];
+  props.advancedSearchForm.order_source = "";
   props.advancedSearchForm.device_model = "";
   props.advancedSearchForm.device_count_min = null;
   props.advancedSearchForm.device_count_max = null;
@@ -295,10 +320,18 @@ const handleMemberChange = (...args: any[]) => {
 
 <style scoped>
 .order-search-panel {
+  position: relative;
   margin-bottom: 10px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fff;
+}
+
+.order-search-panel.is-collapsed {
+  height: 0;
+  margin-bottom: 0;
+  border: 0;
+  background: transparent;
 }
 
 .search-head {
@@ -309,9 +342,42 @@ const handleMemberChange = (...args: any[]) => {
   margin-bottom: 12px;
 }
 
+.search-head__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .search-head__hint {
   color: #6b7280;
   font-size: 12px;
+}
+
+.search-collapsed {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  z-index: 3;
+  transform: translateX(-50%);
+  height: 24px;
+  line-height: 24px;
+}
+
+.search-collapsed__btn {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.fold-symbol {
+  display: inline-block;
+  width: 14px;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .search-form {

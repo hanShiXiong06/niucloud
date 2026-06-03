@@ -2,7 +2,7 @@
     <el-dialog
         v-model="dialogVisible"
         title="设备信息确认"
-        :width="isMobile ? '95vw' : '900px'"
+        :width="isMobile ? '95vw' : '1120px'"
         top="4vh"
         center
         class="device-confirm-dialog"
@@ -60,42 +60,46 @@
                     <div v-else class="imei-display">{{ formatImei(row.imei) }}</div>
                 </template>
             </el-table-column>
-            <el-table-column label="设备型号" min-width="160">
+            <el-table-column label="设备型号" min-width="380">
                 <template #default="{ row }">
                     <div v-if="row.editing">
-                        <el-input
-                            v-model="row.model"
-                            placeholder="请输入型号"
-                            ref="modelInputRef"
-                            @keydown.enter="handleModelEnter(row)"
-                        />
+                        <div class="model-picker">
+                            <el-cascader
+                                v-if="!row.model_input_mode"
+                                v-model="row.model_path"
+                                :options="modelTreeOptions"
+                                :props="modelCascaderProps"
+                                placeholder="选择品牌/系列/型号"
+                                filterable
+                                clearable
+                                class="model-cascader"
+                                :loading="modelLoading"
+                                @change="value => handleModelPathChange(row, value)"
+                            />
+                            <el-input
+                                v-else
+                                v-model="row.model"
+                                placeholder="输入型号或 品牌/系列/型号"
+                                ref="modelInputRef"
+                                @keydown.enter="handleModelEnter(row)"
+                            />
+                            <el-button
+                                link
+                                type="primary"
+                                class="model-mode-button"
+                                :icon="row.model_input_mode ? List : EditPen"
+                                :title="row.model_input_mode ? '选择型号' : '手动输入'"
+                                @click="toggleModelInputMode(row)"
+                            >
+                            </el-button>
+                        </div>
                     </div>
-                    <div v-else class="model-display">{{ row.model }}</div>
+                    <el-tooltip v-else :content="row.model || '未填写'" placement="top" :show-after="300">
+                        <div class="model-display">{{ row.model || '未填写' }}</div>
+                    </el-tooltip>
                 </template>
             </el-table-column>
-            <el-table-column label="分类" width="120">
-                <template #default="{ row }">
-                    <el-tree-select
-                        v-model="row.category"
-                        placeholder="请选择"
-                        :data="categoryTree"
-                        :props="treeSelectProps"
-                        node-key="category_id"
-                        :loading="categoryLoading"
-                        filterable
-                        check-strictly
-                        :render-after-expand="false"
-                        size="small"
-                        class="w-full"
-                        :class="{ 'category-required': isInvalidCategory(row.category) }"
-                        @change="handleCategoryChange(row)"
-                    />
-                    <div v-if="isInvalidCategory(row.category)" class="category-tip">
-                        请选择分类
-                    </div>
-                </template>
-            </el-table-column>
-            <el-table-column label="预估价" width="120">
+            <el-table-column label="预估价" width="130">
                 <template #default="{ row }">
                     <el-input-number
                         v-if="row.editing"
@@ -103,7 +107,7 @@
                         :min="0"
                         :controls="false"
                         placeholder="选填"
-                        size="small"
+                        
 
                     />
                     <span v-else class="price-display">{{ row.initial_price ? `¥${row.initial_price}` : '—' }}</span>
@@ -166,36 +170,38 @@
 
                     <div class="info-row">
                         <div class="info-label">设备型号</div>
-                        <el-input
-                            v-if="row.editing"
-                            v-model="row.model"
-                            placeholder="请输入型号"
-                            ref="modelInputRef"
-                            @keydown.enter="handleModelEnter(row)"
-                        />
-                        <div v-else class="info-value">{{ row.model || '未填写' }}</div>
-                    </div>
-
-                    <div class="info-row">
-                        <div class="info-label">分类</div>
-                        <el-tree-select
-                            v-model="row.category"
-                            placeholder="请选择"
-                            :data="categoryTree"
-                            :props="treeSelectProps"
-                            node-key="category_id"
-                            :loading="categoryLoading"
-                            filterable
-                            check-strictly
-                            :render-after-expand="false"
-                            size="small"
-                            class="w-full"
-                            :class="{ 'category-required': isInvalidCategory(row.category) }"
-                            @change="handleCategoryChange(row)"
-                        />
-                        <div v-if="isInvalidCategory(row.category)" class="category-tip">
-                            请选择分类
+                        <div v-if="row.editing" class="model-picker">
+                            <el-cascader
+                                v-if="!row.model_input_mode"
+                                v-model="row.model_path"
+                                :options="modelTreeOptions"
+                                :props="modelCascaderProps"
+                                placeholder="选择品牌/系列/型号"
+                                filterable
+                                clearable
+                                class="model-cascader"
+                                :loading="modelLoading"
+                                @change="value => handleModelPathChange(row, value)"
+                            />
+                            <el-input
+                                v-if="row.editing"
+                                v-show="row.model_input_mode"
+                                v-model="row.model"
+                                placeholder="输入型号或 品牌/系列/型号"
+                                ref="modelInputRef"
+                                @keydown.enter="handleModelEnter(row)"
+                            />
+                            <el-button
+                                link
+                                type="primary"
+                                class="model-mode-button"
+                                :icon="row.model_input_mode ? List : EditPen"
+                                :title="row.model_input_mode ? '选择型号' : '手动输入'"
+                                @click="toggleModelInputMode(row)"
+                            >
+                            </el-button>
                         </div>
+                        <div v-else class="info-value model-display">{{ row.model || '未填写' }}</div>
                     </div>
 
                     <div class="info-row">
@@ -252,9 +258,10 @@
 
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, toRaw, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { Edit, Plus, Connection } from '@element-plus/icons-vue'
+import { Edit, Plus, Connection, EditPen, List } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getImeiInfo, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
+import { getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 import axios from 'axios'
 
 // 定义设备信息接口
@@ -288,12 +295,6 @@ interface Category {
     path: Array<string | number>;
 }
 
-interface GoodsCategoryTreeItem {
-    category_id: string | number;
-    category_name: string;
-    child_list?: GoodsCategoryTreeItem[];
-}
-
 const fallbackCategory: Category[] = [
     {
         id: 1,
@@ -323,19 +324,7 @@ const fallbackCategory: Category[] = [
 ]
 
 const category = ref<Category[]>([...fallbackCategory])
-const fallbackCategoryTree: GoodsCategoryTreeItem[] = fallbackCategory.map(item => ({
-    category_id: item.id,
-    category_name: item.name,
-    child_list: []
-}))
-const categoryTree = ref<GoodsCategoryTreeItem[]>([...fallbackCategoryTree])
-const categoryLoading = ref(false)
 const defaultCategoryId = ref<string | number>(fallbackCategory[0].id)
-const treeSelectProps = {
-    value: 'category_id',
-    label: 'category_name',
-    children: 'child_list'
-}
 
 const props = defineProps({
     visible: {
@@ -365,6 +354,17 @@ const loading = ref(false)
 const submitting = ref(false)
 const isMobile = ref(false)
 const fetchingLocal = ref(false)
+const modelLoading = ref(false)
+const modelTreeOptions = ref<any[]>([])
+const modelNodeMap = ref<Record<string, any>>({})
+const modelCascaderProps = {
+    value: 'id',
+    label: 'node_name',
+    children: 'child_list',
+    emitPath: true,
+    checkStrictly: false,
+    expandTrigger: 'hover' as const
+}
 // 保存原始设备列表，用于取消操作
 const originalDeviceList = ref<Device[]>([])
 // 输入框引用
@@ -375,6 +375,53 @@ const updateResponsiveState = () => {
     isMobile.value = window.innerWidth <= 768
 }
 
+const loadModelOptions = async () => {
+    modelLoading.value = true
+    try {
+        const res = await getRecycleDeviceModelDictTree()
+        const tree = res.data || []
+        modelTreeOptions.value = normalizeModelTree(tree)
+        modelNodeMap.value = buildModelNodeMap(modelTreeOptions.value)
+    } catch (error) {
+        console.error('加载型号字典失败:', error)
+    } finally {
+        modelLoading.value = false
+    }
+}
+
+const normalizeModelTree = (tree: any[]): any[] => {
+    return (tree || []).map((item) => ({
+        ...item,
+        child_list: Array.isArray(item.child_list) && item.child_list.length > 0
+            ? normalizeModelTree(item.child_list)
+            : undefined
+    }))
+}
+
+const buildModelNodeMap = (tree: any[], map: Record<string, any> = {}) => {
+    tree.forEach((item) => {
+        map[String(item.id)] = item
+        if (Array.isArray(item.child_list)) {
+            buildModelNodeMap(item.child_list, map)
+        }
+    })
+    return map
+}
+
+const handleModelPathChange = (row: Device, value: Array<string | number> | string | number) => {
+    const path = Array.isArray(value) ? value : [value]
+    const leafId = path[path.length - 1]
+    const leaf = modelNodeMap.value[String(leafId)] || null
+    row.model =  leaf?.node_name || ''
+}
+
+const toggleModelInputMode = (row: Device) => {
+    row.model_input_mode = !row.model_input_mode
+    if (row.model_input_mode) {
+        row.model_path = []
+    }
+}
+
 const isEmptyCategory = (categoryId: string | number | undefined | null) => {
     return categoryId === undefined || categoryId === null || categoryId === '' || Number(categoryId) === 0
 }
@@ -382,17 +429,6 @@ const isEmptyCategory = (categoryId: string | number | undefined | null) => {
 const findCategoryOptionById = (categoryId: string | number | undefined | null) => {
     if (isEmptyCategory(categoryId)) return null
     return category.value.find(item => String(item.id) === String(categoryId)) || null
-}
-
-const categoryExists = (categoryId: string | number | undefined | null) => {
-    if (isEmptyCategory(categoryId)) return false
-    return !!findCategoryOptionById(categoryId)
-}
-
-const isInvalidCategory = (categoryId: string | number | undefined | null) => {
-    if (isEmptyCategory(categoryId)) return true
-    if (categoryLoading.value) return false
-    return !categoryExists(categoryId)
 }
 
 const normalizeCategoryId = (categoryId: string | number | undefined | null) => {
@@ -429,8 +465,6 @@ const normalizeCategoryPath = (
 }
 
 const useFallbackCategoryTree = () => {
-    categoryLoading.value = false
-    categoryTree.value = [...fallbackCategoryTree]
     category.value = [...fallbackCategory]
     defaultCategoryId.value = fallbackCategory[0].id
     devices.value.forEach((device) => {
@@ -480,11 +514,6 @@ const syncDeviceData = () => {
         devices.value = []
         originalDeviceList.value = []
     }
-}
-
-const getCategoryName = (categoryId: string | number) => {
-    const current = findCategoryOptionById(categoryId)
-    return current ? current.name : '未选择'
 }
 
 // 格式化IMEI显示，每4位添加空格
@@ -787,15 +816,6 @@ const addDevice = () => {
     })
 }
 
-const handleCategoryChange = (row: Device) => {
-    const matched = findCategoryOptionById(row.category)
-    if (matched && matched.path.length > 0) {
-        row.category_path = matched.path.map(item => String(item))
-        return
-    }
-    row.category_path = normalizeCategoryPath([], row.category)
-}
-
 // 监听内部visible状态变化，同步到父组件
 watch(dialogVisible, (newVal) => {
     emit('update:visible', newVal)
@@ -869,12 +889,7 @@ const saveDevice = (row: Device, index: number) => {
         return
     }
     
-    // 验证分类不能为0
-    if (isInvalidCategory(row.category)) {
-        ElMessage.warning('请选择设备分类，建议选择手机')
-        return
-    }
-
+    devices.value[index].category = normalizeCategoryId(row.category)
     devices.value[index].category_path = normalizeCategoryPath(row.category_path, row.category)
 
     // 关闭编辑状态
@@ -976,13 +991,6 @@ const handleConfirm = async () => {
         return
     }
 
-    // 验证设备分类
-    const invalidCategoryDevice = devices.value.find(device => isInvalidCategory(device.category))
-    if (invalidCategoryDevice) {
-        ElMessage.warning('请为所有设备选择分类，建议选择手机')
-        return
-    }
-
     submitting.value = true
     try {
         // 提交前去除编辑状态标志和内部临时属性，并过滤掉无效设备
@@ -1026,6 +1034,7 @@ onMounted(() => {
     updateResponsiveState()
     window.addEventListener('resize', updateResponsiveState)
     useFallbackCategoryTree()
+    loadModelOptions()
 })
 
 onBeforeUnmount(() => {
@@ -1047,6 +1056,38 @@ onBeforeUnmount(() => {
     justify-content: flex-end;
     gap: 10px;
     padding-top: 20px;
+}
+
+.model-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.model-cascader {
+    flex: 1 1 auto;
+    width: 100%;
+}
+// .el-cascader
+:deep(.el-cascader) {
+    width: 100%;
+}
+
+:deep(.el-input-number) {
+    width: 100px;
+}
+
+
+.model-picker .el-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.model-picker .model-mode-button {
+    flex: 0 0 auto;
+    width: 28px;
+    padding: 0;
 }
 
 .empty-data {
@@ -1100,6 +1141,9 @@ onBeforeUnmount(() => {
     .model-display {
         color: #303133;
         font-weight: 500;
+        white-space: normal;
+        word-break: break-all;
+        line-height: 1.45;
     }
 
     .price-display {
@@ -1190,6 +1234,9 @@ onBeforeUnmount(() => {
                 min-height: 22px;
                 display: flex;
                 align-items: center;
+                min-width: 0;
+                word-break: break-all;
+                line-height: 1.45;
 
                 &.imei-value {
                     font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
@@ -1223,23 +1270,6 @@ onBeforeUnmount(() => {
     }
 }
 
-.category-required {
-    :deep(.el-select) {
-        .el-input {
-            .el-input__wrapper {
-                border-color: #f56c6c;
-                box-shadow: 0 0 0 1px #f56c6c inset;
-            }
-        }
-    }
-}
-
-.category-tip {
-    color: #f56c6c;
-    font-size: 12px;
-    margin-top: 4px;
-    line-height: 1.4;
-}
 
 // 响应式优化
 @media (max-width: 768px) {
