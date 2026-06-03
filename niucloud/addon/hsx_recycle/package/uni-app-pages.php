@@ -14,7 +14,7 @@ return [
             ]
         },
         {
-            "root": "addon/hsx_recycle/pages/payment/index", 
+            "root": "addon/hsx_recycle", 
             "pages": [
 				{
 					"path": "pages/index",
