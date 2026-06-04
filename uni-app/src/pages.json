@@ -223,8 +223,8 @@
     ],
     "subPackages": [
         // {{ PAGE_BEGAIN }}
-        // RECYCLE_LEGACY_REDIRECT_BEGIN
-        {
+        // HSX_RECYCLE_PAGE_BEGIN
+		 {
             "root": "addon/recycle",
             "pages": [
                 {
@@ -235,8 +235,6 @@
                 }
             ]
         },
-        // RECYCLE_LEGACY_REDIRECT_END
-        // HSX_RECYCLE_PAGE_BEGIN
         {
             "root": "addon/hsx_recycle", 
             "pages": [

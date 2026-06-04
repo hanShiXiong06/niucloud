@@ -69,6 +69,7 @@
                                 v-model="row.model_path"
                                 :options="modelTreeOptions"
                                 :props="modelCascaderProps"
+                                :filter-method="filterModelNode"
                                 placeholder="选择品牌/系列/型号"
                                 filterable
                                 clearable
@@ -374,6 +375,9 @@ const modelInputRef = ref<any>(null)
 const updateResponsiveState = () => {
     isMobile.value = window.innerWidth <= 768
 }
+ const filterModelNode = (node: any, keyword: string) => {
+      return String(node.text || '').toLowerCase().includes(String(keyword || '').toLowerCase())
+  }
 
 const loadModelOptions = async () => {
     modelLoading.value = true
