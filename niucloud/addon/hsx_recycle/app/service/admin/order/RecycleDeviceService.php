@@ -12,6 +12,7 @@ use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\order\RecycleReturnDevice;
 use addon\hsx_recycle\app\model\order\RecycleReturnOrder;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
@@ -87,10 +88,113 @@ class RecycleDeviceService extends BaseAdminService
         $info = (new RecycleDevice())->where([['id', '=', $id]])
         ->field($field)->with(['order','checkUser'])
         ->findOrEmpty()
-        ->append(['status_name', 'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small'])
+        ->append(['status_name', 'pay_status_name', 'confirm_status_name', 'dispose_type_name', 'dispose_status_name', 'check_template_name', 'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small'])
         ->toArray();
        
         return $info;
+    }
+
+    /**
+     * 扫码台按设备 ID / IMEI / SN 查询本地设备记录
+     * @param string $keyword
+     * @param int $limit
+     * @return array
+     */
+    public function scanSearch(string $keyword, int $limit = 20): array
+    {
+        $keyword = trim($keyword);
+        if ($keyword === '') {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 50));
+
+        $list = (new RecycleDevice())
+            ->where('site_id', '=', $this->site_id)
+            ->where(function ($query) use ($keyword) {
+                if (ctype_digit($keyword)) {
+                    $query->whereOr('id', '=', (int)$keyword);
+                }
+                $query->whereOr('imei', '=', $keyword)
+                    ->whereOr('imei2', '=', $keyword)
+                    ->whereOr('sn', '=', $keyword)
+                    ->whereOr('user_sn', '=', $keyword);
+            })
+            ->with(['order.member'])
+            ->append(['status_name', 'pay_status_name', 'confirm_status_name', 'dispose_type_name', 'dispose_status_name'])
+            ->order('pay_time desc, update_at desc, create_at desc, id desc')
+            ->limit($limit)
+            ->select()
+            ->toArray();
+
+        return array_map(function ($item) {
+            return $this->formatScanDeviceItem($item);
+        }, $list);
+    }
+
+    /**
+     * 格式化扫码候选项，给前端一个明确的选择标识
+     * @param array $item
+     * @return array
+     */
+    private function formatScanDeviceItem(array $item): array
+    {
+        $order = $item['order'] ?? [];
+        $member = $order['member'] ?? [];
+        $milestone = $this->resolveScanMilestone($item, $order);
+
+        return [
+            'id' => $item['id'] ?? 0,
+            'order_id' => $item['order_id'] ?? 0,
+            'order_no' => $order['order_no'] ?? '',
+            'model' => $item['model'] ?? '',
+            'imei' => $item['imei'] ?? '',
+            'imei2' => $item['imei2'] ?? '',
+            'sn' => $item['sn'] ?? '',
+            'user_sn' => $item['user_sn'] ?? '',
+            'status' => $item['status'] ?? 0,
+            'status_name' => $item['status_name'] ?? '',
+            'pay_status' => $item['pay_status'] ?? 0,
+            'pay_status_name' => $item['pay_status_name'] ?? '',
+            'confirm_status' => $item['confirm_status'] ?? 0,
+            'confirm_status_name' => $item['confirm_status_name'] ?? '',
+            'dispose_type' => $item['dispose_type'] ?? '',
+            'dispose_type_name' => $item['dispose_type_name'] ?? '',
+            'dispose_status' => $item['dispose_status'] ?? 0,
+            'dispose_status_name' => $item['dispose_status_name'] ?? '',
+            'customer_name' => $member['nickname'] ?? $member['username'] ?? $order['customer_name'] ?? $order['sender_name'] ?? '',
+            'customer_mobile' => $member['mobile'] ?? $order['customer_phone'] ?? $order['sender_mobile'] ?? '',
+            'milestone_label' => $milestone['label'],
+            'milestone_time' => $milestone['time'],
+            'create_at' => $item['create_at'] ?? 0,
+            'sign_at' => $order['sign_at'] ?? 0,
+            'pay_time' => $item['pay_time'] ?? $order['pay_time'] ?? 0,
+            'complete_at' => $order['complete_at'] ?? 0,
+        ];
+    }
+
+    /**
+     * 多条 IMEI 记录选择时优先展示最后关键节点
+     * @param array $device
+     * @param array $order
+     * @return array{label: string, time: mixed}
+     */
+    private function resolveScanMilestone(array $device, array $order): array
+    {
+        $candidates = [
+            ['label' => '回收时间', 'time' => $order['complete_at'] ?? 0],
+            ['label' => '打款时间', 'time' => $device['pay_time'] ?? $order['pay_time'] ?? 0],
+            ['label' => '签收时间', 'time' => $order['sign_at'] ?? 0],
+            ['label' => '创建时间', 'time' => $device['create_at'] ?? $order['create_at'] ?? 0],
+        ];
+
+        foreach ($candidates as $item) {
+            if (!empty($item['time'])) {
+                return $item;
+            }
+        }
+
+        return ['label' => '', 'time' => ''];
     }
 
     /**
@@ -281,14 +385,20 @@ class RecycleDeviceService extends BaseAdminService
     {
         $data['status'] = RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK;
         
-        // 确保分类字段有默认值
-        if (!isset($data['category_id']) || empty($data['category_id'])) {
-            $data['category_id'] = 1; // 默认为手机分类
-        }
+        $data['category_id'] = (int)($data['category_id'] ?? 0);
         
         $model = new RecycleDevice();
         $model->save($data);
+        $this->incrementCategorySelectCount((int)$data['category_id']);
         return $model->id;
+    }
+
+    private function incrementCategorySelectCount(int $categoryId): void
+    {
+        if ($categoryId <= 0) {
+            return;
+        }
+        (new RecycleDeviceModelDictService())->incrementSelectCount($categoryId);
     }
 
 
@@ -304,7 +414,11 @@ class RecycleDeviceService extends BaseAdminService
         if (empty($model)) {
             return false;
         }
-        return $model->save($data);
+        $saved = $model->save($data);
+        if ($saved && isset($data['category_id'])) {
+            $this->incrementCategorySelectCount((int)$data['category_id']);
+        }
+        return $saved;
     }
 
     /**

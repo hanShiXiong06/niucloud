@@ -210,8 +210,8 @@ const statusRows = computed<RowItem[]>(() => compactRows([
     row('设备状态', resolveBackendText(device.value.status_name, device.value.status)),
     row('确认状态', isConsigned.value ? '' : resolveBackendText(device.value.confirm_status_name, device.value.confirm_status)),
     row('打款状态', isConsigned.value ? '' : resolveBackendText(device.value.pay_status_name, device.value.pay_status)),
-    row('处置类型', isConsigned.value ? '' : resolveBackendText(device.value.dispose_type_name, device.value.dispose_type || device.value.settlement_mode)),
-    row('处置状态', isConsigned.value ? '' : resolveBackendText(device.value.dispose_status_name, device.value.dispose_status)),
+    row('处置类型', isConsigned.value ? '' : resolveBackendText(device.value.dispose_type_name, '')),
+    row('处置状态', isConsigned.value ? '' : resolveBackendText(device.value.dispose_status_name, '')),
     priceRow('预估价', device.value.initial_price),
     priceRow(isConsigned.value ? '转代卖前报价' : '回收报价', device.value.final_price),
     priceRow(isConsigned.value ? '代卖参考价' : '代卖/卖货价', device.value.sell_price),
@@ -275,7 +275,7 @@ const consignmentRows = computed<RowItem[]>(() => {
     const order = device.value.consignmentOrder || {}
     return compactRows([
         row('代卖单号', order.consignment_no || device.value.consignment_order_id),
-        row('代卖状态', resolveBackendText(order.status_name, device.value.dispose_status_name || device.value.dispose_status)),
+        row('代卖状态', resolveBackendText(order.status_name || device.value.dispose_status_name, '')),
         priceRow('挂牌价', order.listing_price),
         priceRow('成交价', order.sold_price),
         priceRow('结算金额', order.settlement_amount),

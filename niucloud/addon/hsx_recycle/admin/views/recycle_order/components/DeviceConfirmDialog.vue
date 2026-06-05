@@ -69,6 +69,8 @@
                                 v-model="row.model_path"
                                 :options="modelTreeOptions"
                                 :props="modelCascaderProps"
+                                :filter-method="filterModelNode"
+                                :before-filter="handleModelBeforeFilter"
                                 placeholder="选择品牌/系列/型号"
                                 filterable
                                 clearable
@@ -176,6 +178,8 @@
                                 v-model="row.model_path"
                                 :options="modelTreeOptions"
                                 :props="modelCascaderProps"
+                                :filter-method="filterModelNode"
+                                :before-filter="handleModelBeforeFilter"
                                 placeholder="选择品牌/系列/型号"
                                 filterable
                                 clearable
@@ -261,7 +265,7 @@ import { ref, defineProps, defineEmits, watch, toRaw, nextTick, onMounted, onBef
 import { Edit, Plus, Connection, EditPen, List } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getImeiInfo, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
-import { getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
+import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 import axios from 'axios'
 
 // 定义设备信息接口
@@ -361,9 +365,16 @@ const modelCascaderProps = {
     value: 'id',
     label: 'node_name',
     children: 'child_list',
+    leaf: 'leaf',
     emitPath: true,
     checkStrictly: false,
-    expandTrigger: 'hover' as const
+    expandTrigger: 'hover' as const,
+    lazy: true,
+    lazyLoad: async (node: any, resolve: (nodes: any[]) => void) => {
+        const pid = node?.level ? node.value : 0
+        const children = await loadModelChildren(pid)
+        resolve(children)
+    }
 }
 // 保存原始设备列表，用于取消操作
 const originalDeviceList = ref<Device[]>([])
@@ -374,14 +385,22 @@ const modelInputRef = ref<any>(null)
 const updateResponsiveState = () => {
     isMobile.value = window.innerWidth <= 768
 }
+ const filterModelNode = (node: any, keyword: string) => {
+      const value = String(keyword || '').toLowerCase()
+      return [
+          node.text,
+          node.label,
+          node.data?.node_name,
+          node.data?.model_full_name,
+          node.data?.source_node_id
+      ].some(item => String(item || '').toLowerCase().includes(value))
+  }
 
 const loadModelOptions = async () => {
     modelLoading.value = true
     try {
-        const res = await getRecycleDeviceModelDictTree()
-        const tree = res.data || []
-        modelTreeOptions.value = normalizeModelTree(tree)
-        modelNodeMap.value = buildModelNodeMap(modelTreeOptions.value)
+        modelNodeMap.value = {}
+        modelTreeOptions.value = await loadModelChildren(0)
     } catch (error) {
         console.error('加载型号字典失败:', error)
     } finally {
@@ -389,23 +408,53 @@ const loadModelOptions = async () => {
     }
 }
 
-const normalizeModelTree = (tree: any[]): any[] => {
-    return (tree || []).map((item) => ({
-        ...item,
-        child_list: Array.isArray(item.child_list) && item.child_list.length > 0
-            ? normalizeModelTree(item.child_list)
-            : undefined
-    }))
+const loadModelChildren = async (pid: string | number = 0) => {
+    const res = await getRecycleDeviceModelDictChildren({ pid, limit: 300 })
+    return normalizeModelNodes(res.data || [])
 }
 
-const buildModelNodeMap = (tree: any[], map: Record<string, any> = {}) => {
-    tree.forEach((item) => {
-        map[String(item.id)] = item
-        if (Array.isArray(item.child_list)) {
-            buildModelNodeMap(item.child_list, map)
+const normalizeModelNodes = (nodes: any[]): any[] => {
+    return (nodes || []).map((item) => {
+        const hasChildren = Number(item.has_children || 0) === 1
+        const node = {
+            ...item,
+            leaf: !hasChildren,
+            child_list: undefined
         }
+        modelNodeMap.value[String(node.id)] = node
+        return node
     })
-    return map
+}
+
+const normalizeModelSearchNodes = (nodes: any[]): any[] => {
+    return (nodes || []).map((item) => {
+        const node = {
+            ...item,
+            leaf: true,
+            child_list: undefined
+        }
+        modelNodeMap.value[String(node.id)] = node
+        return node
+    })
+}
+
+const handleModelBeforeFilter = async (keyword: string) => {
+    const value = String(keyword || '').trim()
+    modelLoading.value = true
+    try {
+        if (!value) {
+            modelTreeOptions.value = await loadModelChildren(0)
+            return true
+        }
+        const res = await getRecycleDeviceModelDictOptions({ keyword: value })
+        modelTreeOptions.value = normalizeModelSearchNodes(res.data || [])
+        return true
+    } catch (error) {
+        console.error('搜索型号字典失败:', error)
+        return false
+    } finally {
+        modelLoading.value = false
+    }
 }
 
 const handleModelPathChange = (row: Device, value: Array<string | number> | string | number) => {
@@ -413,6 +462,8 @@ const handleModelPathChange = (row: Device, value: Array<string | number> | stri
     const leafId = path[path.length - 1]
     const leaf = modelNodeMap.value[String(leafId)] || null
     row.model =  leaf?.node_name || ''
+    row.category = leafId || 0
+    row.category_path = path.filter(item => item !== undefined && item !== null && item !== '')
 }
 
 const toggleModelInputMode = (row: Device) => {

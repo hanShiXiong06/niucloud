@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\model\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\phone_shop\app\model\goods\Category as PhoneShopGoodsCategory;
+use addon\hsx_recycle\app\model\check\RecycleCheckTemplate;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use app\model\member\Member;
 use app\model\sys\SysUser;
@@ -71,6 +72,7 @@ class RecycleDevice extends BaseModel
         'confirm_status_name',
         'dispose_type_name',
         'dispose_status_name',
+        'check_template_name',
     ];
 
     /**
@@ -108,24 +110,31 @@ class RecycleDevice extends BaseModel
 
     public function getDisposeTypeNameAttr($value, $data): string
     {
-        $map = [
-            RecycleOrderDict::DISPOSE_TYPE_PENDING => '未处置',
-            RecycleOrderDict::DISPOSE_TYPE_RECYCLE => '商家自有',
-            RecycleOrderDict::DISPOSE_TYPE_RETURN => '退回客户',
-            RecycleOrderDict::DISPOSE_TYPE_CONSIGN => '代卖',
-        ];
-        return $map[$data['dispose_type'] ?? RecycleOrderDict::DISPOSE_TYPE_PENDING] ?? '未处置';
+        return RecycleOrderDict::getDisposeType($data['dispose_type'] ?? RecycleOrderDict::DISPOSE_TYPE_PENDING) ?: '未处置';
     }
 
     public function getDisposeStatusNameAttr($value, $data): string
     {
-        $map = [
-            RecycleOrderDict::DISPOSE_STATUS_PENDING => '未处置',
-            RecycleOrderDict::DISPOSE_STATUS_RECYCLED => '已回收',
-            RecycleOrderDict::DISPOSE_STATUS_RETURNED => '已退回',
-            RecycleOrderDict::DISPOSE_STATUS_CONSIGNED => '已转代卖',
-        ];
-        return $map[(int)($data['dispose_status'] ?? RecycleOrderDict::DISPOSE_STATUS_PENDING)] ?? '未处置';
+        return RecycleOrderDict::getDisposeStatus($data['dispose_status'] ?? RecycleOrderDict::DISPOSE_STATUS_PENDING) ?: '未处置';
+    }
+
+    /**
+     * 获取质检模板名称
+     * @param $value
+     * @param $data
+     * @return string
+     */
+    public function getCheckTemplateNameAttr($value, $data): string
+    {
+        $templateId = (int)($data['check_template_id'] ?? 0);
+        if ($templateId <= 0) {
+            return '';
+        }
+
+        return (string)(RecycleCheckTemplate::where([
+            ['id', '=', $templateId],
+            ['site_id', '=', (int)($data['site_id'] ?? 0)]
+        ])->value('template_name') ?: '');
     }
 
     /**

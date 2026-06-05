@@ -1,16 +1,28 @@
 <template>
     <view class="scan-check-page">
         <view class="hero">
-            <view class="hero__title">扫码处理</view>
-            <view class="hero__subtitle">扫码后按设备状态自动打开质检或定价，无需进入订单详情。</view>
+            <view class="hero__title">{{ currentMode.title }}</view>
+            <view class="hero__subtitle">{{ currentMode.desc }}</view>
         </view>
 
         <view class="scan-panel">
+            <view class="mode-tabs">
+                <view
+                    v-for="item in scanModes"
+                    :key="item.value"
+                    class="mode-tab"
+                    :class="{ 'mode-tab--active': scanMode === item.value }"
+                    @click="switchMode(item.value)"
+                >
+                    {{ item.label }}
+                </view>
+            </view>
+
             <view class="scan-button" @click="scanDevice">
                 <view class="scan-button__icon">扫</view>
                 <view>
-                    <view class="scan-button__title">扫描设备码</view>
-                    <view class="scan-button__desc">支持链接二维码或纯设备 ID</view>
+                    <view class="scan-button__title">扫描设备码 / IMEI</view>
+                    <view class="scan-button__desc">支持设备 ID、IMEI、SN 或链接二维码</view>
                 </view>
             </view>
 
@@ -20,16 +32,47 @@
                     <input
                         v-model="manualText"
                         class="manual-input"
-                        placeholder="输入设备ID或粘贴二维码内容"
+                        placeholder="输入设备ID、IMEI、SN或粘贴二维码内容"
                         confirm-type="search"
                         @confirm="handleManualSubmit"
                     />
-                    <view class="manual-btn" @click="handleManualSubmit">进入</view>
+                    <view class="manual-btn" @click="handleManualSubmit">查询</view>
                 </view>
             </view>
         </view>
 
-        <view v-if="loading" class="state-card">正在加载设备...</view>
+        <view v-if="loading" class="state-card">正在查询设备...</view>
+
+        <view v-if="candidateDevices.length > 1" class="candidate-card">
+            <view class="candidate-card__head">
+                <view>
+                    <view class="candidate-card__title">选择设备记录</view>
+                    <view class="candidate-card__desc">同一串码存在多条记录，请确认订单和时间后进入。</view>
+                </view>
+                <view class="candidate-card__count">{{ candidateDevices.length }} 条</view>
+            </view>
+            <view class="candidate-list">
+                <view
+                    v-for="item in candidateDevices"
+                    :key="item.id"
+                    class="candidate-item"
+                    @click="selectCandidate(item)"
+                >
+                    <view class="candidate-item__main">
+                        <view class="candidate-item__title">{{ item.model || '未知设备' }}</view>
+                        <view class="candidate-item__meta">IMEI：{{ item.imei || item.user_sn || item.sn || '-' }}</view>
+                        <view class="candidate-item__meta">订单：{{ item.order_no || item.order_id || '-' }}</view>
+                        <view class="candidate-item__meta">客户：{{ formatCustomer(item) }}</view>
+                    </view>
+                    <view class="candidate-item__side">
+                        <view class="candidate-item__status">{{ item.status_name || '-' }}</view>
+                        <view v-if="item.milestone_label" class="candidate-item__time">
+                            {{ item.milestone_label }} {{ formatScanTime(item.milestone_time) }}
+                        </view>
+                    </view>
+                </view>
+            </view>
+        </view>
 
         <view v-if="deviceData?.id" class="device-card">
             <view class="device-card__head">
@@ -45,16 +88,15 @@
             </view>
             <view class="device-card__actions">
                 <view class="device-card__btn" @click="openDeviceAction">{{ primaryActionText }}</view>
+                <view class="device-card__btn device-card__btn--ghost" @click="openOrderDetail">查看订单</view>
                 <view class="device-card__btn device-card__btn--ghost" @click="scanDevice">下一台</view>
             </view>
         </view>
 
         <view class="tips-card">
-            <view class="tips-card__title">使用说明</view>
-            <view class="tips-card__line">二维码内容可以是完整链接，例如 host + url + ?id=123。</view>
-            <view class="tips-card__line">也可以直接是设备 ID，例如 123。</view>
-            <view class="tips-card__line">设备待质检时打开质检；设备已质检或待确认时打开定价。</view>
-            <view class="tips-card__line">提交成功后会保留在扫码处理台，可继续扫描下一台。</view>
+            <view class="tips-card__title">当前模式</view>
+            <view class="tips-card__line">{{ currentMode.tip }}</view>
+            <view class="tips-card__line">同一 IMEI 查到多台时，会先展示订单、客户和关键时间供选择。</view>
         </view>
 
         <CheckDevicePopup
@@ -74,17 +116,55 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { getDevice } from '@/addon/hsx_recycle/api/order'
+import { getDevice, scanSearchDevice } from '@/addon/hsx_recycle/api/order'
+import { redirect } from '@/utils/common'
 import CheckDevicePopup from '@/addon/hsx_recycle/pages/order/components/CheckDevicePopup.vue'
 import PriceDevicePopup from '@/addon/hsx_recycle/pages/order/components/PriceDevicePopup.vue'
+import { useRecyclePrintActions } from '@/addon/hsx_recycle/hooks/useRecyclePrintActions'
+
+type ScanMode = 'process' | 'query' | 'label'
 
 const manualText = ref('')
 const deviceData = ref<any>(null)
+const candidateDevices = ref<any[]>([])
 const loading = ref(false)
 const checkPopupVisible = ref(false)
 const pricePopupVisible = ref(false)
 const loadedDeviceId = ref('')
+const scanMode = ref<ScanMode>('process')
 let openedFromQuery = false
+
+const {
+    loadManualPrintActions,
+    getVisiblePrintActions,
+    executePrintAction
+} = useRecyclePrintActions('device')
+
+const scanModes: Array<{ value: ScanMode, label: string, title: string, desc: string, tip: string }> = [
+    {
+        value: 'process',
+        label: '扫码处理',
+        title: '扫码处理',
+        desc: '扫码后按设备状态自动打开质检或定价。',
+        tip: '待质检打开质检，已质检/待确认打开定价。'
+    },
+    {
+        value: 'query',
+        label: '扫码查询',
+        title: '扫码查询',
+        desc: '扫码后定位设备所在订单，适合核对历史记录。',
+        tip: '单台设备直接进入订单详情，多台设备先选择记录。'
+    },
+    {
+        value: 'label',
+        label: '扫码打标',
+        title: '扫码打标',
+        desc: '扫码后按设备状态匹配可用打印/打标动作。',
+        tip: '打标动作来自后台打印场景配置，没有可用动作时会进入订单详情。'
+    }
+]
+
+const currentMode = computed(() => scanModes.find((item) => item.value === scanMode.value) || scanModes[0])
 
 const customerName = computed(() => {
     return deviceData.value?.order?.member?.nickname
@@ -104,10 +184,15 @@ const primaryActionText = computed(() => {
 })
 
 onLoad((option: any) => {
-    const id = parseDeviceId(option?.id || option?.device_id || option?.scene || '')
-    if (id) {
+    if (['process', 'query', 'label'].includes(String(option?.mode || ''))) {
+        scanMode.value = String(option.mode) as ScanMode
+    }
+    loadManualPrintActions()
+
+    const keyword = parseScanKeyword(option?.id || option?.device_id || option?.imei || option?.scene || '')
+    if (keyword) {
         openedFromQuery = true
-        loadDevice(id, true)
+        resolveScanKeyword(keyword, true)
     }
 })
 
@@ -122,12 +207,12 @@ const scanDevice = () => {
         onlyFromCamera: false,
         scanType: ['qrCode', 'barCode'],
         success: (res) => {
-            const id = parseDeviceId(res.result || '')
-            if (!id) {
-                uni.showToast({ title: '未识别到设备ID', icon: 'none' })
+            const keyword = parseScanKeyword(res.result || '')
+            if (!keyword) {
+                uni.showToast({ title: '未识别到设备码', icon: 'none' })
                 return
             }
-            loadDevice(id, true)
+            resolveScanKeyword(keyword, true)
         },
         fail: (error: any) => {
             if (String(error?.errMsg || '').includes('cancel')) return
@@ -137,15 +222,52 @@ const scanDevice = () => {
 }
 
 const handleManualSubmit = () => {
-    const id = parseDeviceId(manualText.value)
-    if (!id) {
-        uni.showToast({ title: '请输入有效设备ID', icon: 'none' })
+    const keyword = parseScanKeyword(manualText.value)
+    if (!keyword) {
+        uni.showToast({ title: '请输入有效设备码', icon: 'none' })
         return
     }
-    loadDevice(id, true)
+    resolveScanKeyword(keyword, true)
+}
+
+const switchMode = (value: ScanMode) => {
+    if (scanMode.value === value) return
+    scanMode.value = value
+    candidateDevices.value = []
+}
+
+const resolveScanKeyword = async (keyword: string, autoRun = false) => {
+    loading.value = true
+    candidateDevices.value = []
+    deviceData.value = null
+    manualText.value = keyword
+    try {
+        const res: any = await scanSearchDevice({ keyword, limit: 20 })
+        const list = Array.isArray(res?.data) ? res.data : []
+        if (!list.length) {
+            uni.showToast({ title: '未找到设备记录', icon: 'none' })
+            return
+        }
+        if (list.length > 1) {
+            candidateDevices.value = list
+            return
+        }
+        await selectCandidate(list[0], autoRun)
+    } catch (error: any) {
+        uni.showToast({ title: error?.msg || error?.message || '查询设备失败', icon: 'none' })
+    } finally {
+        loading.value = false
+    }
+}
+
+const selectCandidate = async (item: any, autoRun = true) => {
+    candidateDevices.value = []
+    await loadDevice(String(item.id || ''), false)
+    if (autoRun) runCurrentMode()
 }
 
 const loadDevice = async (id: string, autoOpen = false) => {
+    if (!id) return
     loading.value = true
     try {
         const res: any = await getDevice(id)
@@ -156,13 +278,25 @@ const loadDevice = async (id: string, autoOpen = false) => {
             uni.showToast({ title: '设备不存在', icon: 'none' })
             return
         }
-        if (autoOpen) openDeviceAction()
+        if (autoOpen) runCurrentMode()
     } catch (error: any) {
         deviceData.value = null
         uni.showToast({ title: error?.msg || error?.message || '获取设备失败', icon: 'none' })
     } finally {
         loading.value = false
     }
+}
+
+const runCurrentMode = () => {
+    if (scanMode.value === 'process') {
+        openDeviceAction()
+        return
+    }
+    if (scanMode.value === 'query') {
+        openOrderDetail()
+        return
+    }
+    openLabelAction()
 }
 
 const openDeviceAction = () => {
@@ -180,6 +314,56 @@ const openDeviceAction = () => {
         return
     }
     uni.showToast({ title: getUnsupportedActionText(), icon: 'none' })
+}
+
+const openOrderDetail = () => {
+    const orderId = deviceData.value?.order_id || deviceData.value?.order?.id
+    if (!orderId) {
+        uni.showToast({ title: '未找到关联订单', icon: 'none' })
+        return
+    }
+    redirect({
+        url: '/addon/hsx_recycle/pages/order/detail',
+        param: {
+            id: orderId,
+            device_keyword: deviceData.value?.imei || deviceData.value?.user_sn || deviceData.value?.sn || deviceData.value?.id
+        }
+    })
+}
+
+const openLabelAction = async () => {
+    if (!deviceData.value?.id) {
+        uni.showToast({ title: '请先选择设备', icon: 'none' })
+        return
+    }
+
+    const actions = getVisiblePrintActions(deviceData.value)
+    if (!actions.length) {
+        uni.showToast({ title: '当前状态暂无打标动作', icon: 'none' })
+        openOrderDetail()
+        return
+    }
+
+    if (actions.length === 1) {
+        await executeDevicePrint(actions[0])
+        return
+    }
+
+    uni.showActionSheet({
+        itemList: actions.map((action: any) => action.button_text || action.scene_name || '打印'),
+        success: async (res) => {
+            const action = actions[res.tapIndex]
+            if (action) await executeDevicePrint(action)
+        }
+    })
+}
+
+const executeDevicePrint = async (action: any) => {
+    await executePrintAction(action, {
+        device_id: deviceData.value?.id,
+        order_id: deviceData.value?.order_id || deviceData.value?.order?.id,
+        biz_id: deviceData.value?.id
+    })
 }
 
 const handleActionSuccess = async (actionName: string) => {
@@ -215,32 +399,50 @@ const getUnsupportedActionText = () => {
     return `${ statusName }暂不支持扫码处理`
 }
 
-const parseDeviceId = (value: any) => {
+const parseScanKeyword = (value: any) => {
     const text = decodeURIComponent(String(value || '').trim())
     if (!text) return ''
 
     const sceneId = parseSceneValue(text)
     if (sceneId) return sceneId
 
-    const directMatch = text.match(/^\d+$/)
-    if (directMatch) return directMatch[0]
+    const queryMatch = text.match(/[?&](?:imei|imei2|sn|user_sn|code|id|device_id)=([^&#]+)/i)
+    if (queryMatch?.[1]) return decodeURIComponent(queryMatch[1]).trim()
 
-    const queryMatch = text.match(/[?&](?:id|device_id)=([^&#]+)/i)
-    if (queryMatch?.[1]) return queryMatch[1].match(/\d+/)?.[0] || ''
-
-    const pathMatch = text.match(/(?:recycle_device|device|check)[/=-](\d+)/i)
+    const pathMatch = text.match(/(?:recycle_device|device|check)[/=-]([a-zA-Z0-9_-]+)/i)
     if (pathMatch?.[1]) return pathMatch[1]
 
-    const fallback = text.match(/\d+/)
-    return fallback?.[0] || ''
+    return text
 }
 
 const parseSceneValue = (value: string) => {
     const sceneMatch = value.match(/(?:^|[?&])scene=([^&#]+)/i)
     if (!sceneMatch?.[1]) return ''
     const scene = decodeURIComponent(sceneMatch[1])
-    const idMatch = scene.match(/(?:id|device_id)[=:](\d+)/i)
-    return idMatch?.[1] || scene.match(/\d+/)?.[0] || ''
+    const idMatch = scene.match(/(?:imei|imei2|sn|user_sn|code|id|device_id)[=:]([a-zA-Z0-9_-]+)/i)
+    return idMatch?.[1] || scene
+}
+
+const formatCustomer = (item: any) => {
+    const name = item.customer_name || ''
+    const mobile = item.customer_mobile || ''
+    if (name && mobile) return `${ name } / ${ mobile }`
+    return name || mobile || '-'
+}
+
+const formatScanTime = (value: any) => {
+    if (!value) return ''
+    const numeric = Number(value)
+    const date = numeric > 0
+        ? new Date(numeric > 100000000000 ? numeric : numeric * 1000)
+        : new Date(String(value).replace(/-/g, '/'))
+    if (Number.isNaN(date.getTime())) return String(value)
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    const h = String(date.getHours()).padStart(2, '0')
+    const i = String(date.getMinutes()).padStart(2, '0')
+    return `${ y}-${ m}-${ d } ${ h }:${ i }`
 }
 </script>
 
@@ -291,6 +493,32 @@ const parseSceneValue = (value: string) => {
     border-radius: 18rpx;
     background: #ecfeff;
     border: 2rpx solid #99f6e4;
+}
+
+.mode-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12rpx;
+    margin-bottom: 20rpx;
+}
+
+.mode-tab {
+    height: 64rpx;
+    border-radius: 14rpx;
+    background: #f8fafc;
+    color: #475569;
+    border: 1rpx solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24rpx;
+    font-weight: 600;
+}
+
+.mode-tab--active {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
 }
 
 .scan-button__icon {
@@ -367,6 +595,102 @@ const parseSceneValue = (value: string) => {
     color: #64748b;
 }
 
+.candidate-card {
+    margin-top: 24rpx;
+    padding: 24rpx;
+    border-radius: 20rpx;
+    background: #fff;
+    box-shadow: 0 8rpx 30rpx rgba(15, 23, 42, 0.05);
+}
+
+.candidate-card__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 18rpx;
+    align-items: flex-start;
+}
+
+.candidate-card__title {
+    font-size: 30rpx;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.candidate-card__desc {
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.candidate-card__count {
+    flex-shrink: 0;
+    padding: 8rpx 16rpx;
+    border-radius: 999rpx;
+    background: #ecfeff;
+    color: #0f766e;
+    font-size: 22rpx;
+    font-weight: 700;
+}
+
+.candidate-list {
+    margin-top: 18rpx;
+    display: flex;
+    flex-direction: column;
+    gap: 14rpx;
+}
+
+.candidate-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 18rpx;
+    padding: 20rpx;
+    border-radius: 16rpx;
+    background: #f8fafc;
+    border: 1rpx solid #e2e8f0;
+}
+
+.candidate-item:active {
+    opacity: 0.82;
+}
+
+.candidate-item__main {
+    min-width: 0;
+    flex: 1;
+}
+
+.candidate-item__title {
+    font-size: 28rpx;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.candidate-item__meta {
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: #64748b;
+    line-height: 1.4;
+}
+
+.candidate-item__side {
+    max-width: 220rpx;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.candidate-item__status {
+    font-size: 22rpx;
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.candidate-item__time {
+    margin-top: 12rpx;
+    font-size: 20rpx;
+    color: #64748b;
+    line-height: 1.4;
+}
+
 .device-card__head {
     display: flex;
     justify-content: space-between;
@@ -401,7 +725,7 @@ const parseSceneValue = (value: string) => {
 
 .device-card__actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16rpx;
     margin-top: 24rpx;
 }

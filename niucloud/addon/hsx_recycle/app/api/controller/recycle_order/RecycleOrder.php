@@ -63,7 +63,12 @@ class RecycleOrder extends BaseApiController
             ["delivery_type", ""],         // 配送方式
             ["status", ""],                // 订单状态
             ["create_at", ["", ""]],       // 创建时间范围
-            ["remark", ""]                 // 备注
+            ["remark", ""],                // 备注
+            ["start_time", ""],
+            ["end_time", ""],
+            ["filter_key", ""],
+            ["view_mode", ""],
+            ["dashboard_title", ""]
         ]);
       
         return success($this->service->getPage($data));

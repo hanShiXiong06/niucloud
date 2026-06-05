@@ -72,9 +72,9 @@ class RecycleOrderDeviceService extends BaseAdminService
                 'imei' => $deviceData['imei'] ?? '',
                 'model' => $deviceData['model'] ?? '',
                 'initial_price' => $deviceData['initial_price'] ?? 0,
-                'category_id' => (int)($deviceData['category_id'] ?? 1),
+                'category_id' => (int)($deviceData['category_id'] ?? 0),
                 'info' => [
-                    'goods_category' => $this->normalizeCategoryPath($deviceData['category_path'] ?? null, (int)($deviceData['category_id'] ?? 1))
+                    'goods_category' => $this->normalizeCategoryPath($deviceData['category_path'] ?? null, (int)($deviceData['category_id'] ?? 0))
                 ],
                 'status' => $this->getInitialDeviceStatus($order->status),
                 'member_id' => $order->member_id,
@@ -206,10 +206,10 @@ class RecycleOrderDeviceService extends BaseAdminService
             }
         }
 
-        if (!is_array($categoryPath) || empty($categoryPath)) {
+        if ((!is_array($categoryPath) || empty($categoryPath)) && $categoryId > 0) {
             $categoryPath = [ $categoryId ];
         }
 
-        return array_values(array_map('strval', $categoryPath));
+        return is_array($categoryPath) ? array_values(array_map('strval', $categoryPath)) : [];
     }
 } 

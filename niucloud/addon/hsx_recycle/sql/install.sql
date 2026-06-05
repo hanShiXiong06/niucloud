@@ -146,19 +146,56 @@ CREATE TABLE `{{prefix}}recycle_device_model_dict` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
   `pid` int NOT NULL DEFAULT 0 COMMENT '上级ID',
-  `level` tinyint NOT NULL DEFAULT 1 COMMENT '层级：1品牌，2系列/型号，3型号',
+  `level` tinyint NOT NULL DEFAULT 1 COMMENT '层级，从1开始',
+  `node_type` varchar(30) NOT NULL DEFAULT 'unknown' COMMENT '节点类型：category/subcategory/brand/series/model/group/unknown',
   `node_name` varchar(100) NOT NULL DEFAULT '' COMMENT '节点名称',
+  `source` varchar(50) NOT NULL DEFAULT 'manual' COMMENT '数据来源：manual或外部来源标识',
+  `source_node_id` varchar(100) NOT NULL DEFAULT '' COMMENT '外部节点ID或手动节点编号',
+  `source_parent_id` varchar(100) NOT NULL DEFAULT '' COMMENT '外部父级ID',
+  `category_source_id` varchar(100) NOT NULL DEFAULT '' COMMENT '外部品类ID',
+  `brand_source_id` varchar(100) NOT NULL DEFAULT '' COMMENT '外部品牌ID',
+  `series_source_id` varchar(100) NOT NULL DEFAULT '' COMMENT '外部系列ID或内部系列编号',
+  `product_source_id` varchar(100) NOT NULL DEFAULT '' COMMENT '外部产品ID',
   `model_full_name` varchar(255) NOT NULL DEFAULT '' COMMENT '完整路径',
+  `extra_json` text NULL COMMENT '外部原始数据或扩展信息',
   `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
   `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `is_hot` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否热门',
+  `select_count` int NOT NULL DEFAULT 0 COMMENT '被选择次数',
   `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
   `update_at` int NOT NULL DEFAULT 0 COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_site_parent_name` (`site_id`,`pid`,`node_name`),
+  KEY `idx_site_source_node` (`site_id`,`source`,`source_node_id`),
+  KEY `idx_site_category_source` (`site_id`,`source`,`category_source_id`),
+  KEY `idx_site_brand_source` (`site_id`,`source`,`brand_source_id`),
+  KEY `idx_site_series_source` (`site_id`,`source`,`series_source_id`),
+  KEY `idx_site_product_source` (`site_id`,`source`,`product_source_id`),
   KEY `idx_site_status` (`site_id`,`status`),
   KEY `idx_site_pid` (`site_id`,`pid`),
-  KEY `idx_site_level` (`site_id`,`level`)
-) COMMENT='回收设备型号字典表';
+  KEY `idx_site_level` (`site_id`,`level`),
+  KEY `idx_site_select` (`site_id`,`is_hot`,`select_count`,`sort`)
+) COMMENT='回收设备分类表';
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_template_binding`;
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_template_binding` (
+  `id` int NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `target_type` varchar(30) NOT NULL DEFAULT 'model_dict' COMMENT '绑定对象：model_dict型号节点，global通用兜底',
+  `target_id` int NOT NULL DEFAULT 0 COMMENT '绑定对象ID，通用兜底为0',
+  `scene_key` varchar(80) NOT NULL DEFAULT 'manual_device_label' COMMENT '打印场景标识',
+  `check_template_id` int NOT NULL DEFAULT 0 COMMENT '质检模板ID',
+  `print_template_id` int NOT NULL DEFAULT 0 COMMENT '打印模板ID',
+  `inherit_enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许子级继承',
+  `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `remark` varchar(500) NOT NULL DEFAULT '' COMMENT '备注',
+  `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT 0 COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_target_scene` (`site_id`,`target_type`,`target_id`,`scene_key`),
+  KEY `idx_site_scene` (`site_id`,`scene_key`,`status`)
+) COMMENT='回收型号模板绑定表';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_consignment_order` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '代卖订单ID',

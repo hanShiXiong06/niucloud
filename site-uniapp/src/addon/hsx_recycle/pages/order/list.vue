@@ -73,6 +73,14 @@
             :paging-style="pagingStyle"
         >
             <view class="list-content">
+                <view v-if="dashboardFilterTitle" class="dashboard-filter-card">
+                    <view class="dashboard-filter-card__main">
+                        <text class="dashboard-filter-card__label">来自看板</text>
+                        <text class="dashboard-filter-card__title">{{ dashboardFilterTitle }}</text>
+                        <text v-if="dashboardDateRangeText" class="dashboard-filter-card__date">{{ dashboardDateRangeText }}</text>
+                    </view>
+                    <view class="dashboard-filter-card__clear" @click.stop="clearDashboardFilter">清除</view>
+                </view>
                 <view
                     v-for="item in list"
                     :key="item.id"
@@ -265,6 +273,15 @@ const activeFilterCount = computed(() => Object.keys(filterParams.value).filter(
     return String(filterParams.value[key] ?? '').trim() !== ''
 }).length)
 
+const dashboardFilterTitle = computed(() => String(filterParams.value.dashboard_title || '').trim())
+const dashboardDateRangeText = computed(() => {
+    const start = String(filterParams.value.start_time || '').trim()
+    const end = String(filterParams.value.end_time || '').trim()
+    if (!start && !end) return ''
+    if (start && end && start !== end) return `${start} 至 ${end}`
+    return start || end
+})
+
 onLoad((option: any) => {
     if (option?.status) currentStatus.value = option.status
     const routeFilters = buildRouteFilters(option || {})
@@ -350,6 +367,13 @@ const onFilterReset = () => {
     reload()
 }
 
+const clearDashboardFilter = () => {
+    const next = { ...filterParams.value }
+    ;['filter_key', 'view_mode', 'start_time', 'end_time', 'dashboard_title'].forEach((key) => delete next[key])
+    filterParams.value = next
+    reload()
+}
+
 const buildRouteFilters = (option: Record<string, any>) => {
     const allowKeys = [
         'status',
@@ -363,7 +387,12 @@ const buildRouteFilters = (option: Record<string, any>) => {
         'create_time_start',
         'create_time_end',
         'update_time_start',
-        'update_time_end'
+        'update_time_end',
+        'start_time',
+        'end_time',
+        'filter_key',
+        'view_mode',
+        'dashboard_title'
     ]
     const filters: Record<string, any> = {}
     allowKeys.forEach((key) => {
@@ -759,6 +788,54 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 
 .list-content {
     padding: 14rpx 18rpx;
+}
+
+.dashboard-filter-card {
+    margin-bottom: 14rpx;
+    padding: 18rpx 20rpx;
+    border-radius: 14rpx;
+    background: #eff6ff;
+    border: 1rpx solid rgba(37, 99, 235, 0.18);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+}
+
+.dashboard-filter-card__main {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-filter-card__label {
+    font-size: 20rpx;
+    color: #2563eb;
+}
+
+.dashboard-filter-card__title {
+    margin-top: 4rpx;
+    font-size: 26rpx;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.dashboard-filter-card__date {
+    margin-top: 4rpx;
+    font-size: 22rpx;
+    color: #64748b;
+}
+
+.dashboard-filter-card__clear {
+    flex-shrink: 0;
+    height: 52rpx;
+    line-height: 52rpx;
+    padding: 0 22rpx;
+    border-radius: 26rpx;
+    background: #fff;
+    color: #2563eb;
+    font-size: 24rpx;
 }
 
 .order-card {

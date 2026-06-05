@@ -133,7 +133,7 @@ class RecycleOrderSignService extends BaseAdminService
                     'imei' => $device['imei'] ?? '',
                     'model' => $device['model'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
-                    'category_id' => $device['category_id'] ?? 1,
+                    'category_id' => (int)($device['category_id'] ?? 0),
                     'update_at' => time(),
                     'info'=>$this->info??null
                 ];
@@ -145,7 +145,7 @@ class RecycleOrderSignService extends BaseAdminService
                     'imei' => $device['imei'] ?? '',
                     'model' => $device['model'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
-                    'category_id' => $device['category_id'] ?? 1,
+                    'category_id' => (int)($device['category_id'] ?? 0),
                     'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
                     'create_at' => time(),
                     'update_at' => time(),

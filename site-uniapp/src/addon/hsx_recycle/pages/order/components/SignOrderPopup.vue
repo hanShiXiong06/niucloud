@@ -87,7 +87,7 @@
                         <u-form-item label="设备型号" required :border-bottom="false">
                             <view class="model-select" @click="openModelPicker">
                                 <text class="model-select__text" :class="{ 'model-select__placeholder': !editForm.model }">
-                                    {{ editForm.model || '选择品牌/系列/型号' }}
+                                    {{ editForm.model || '选择设备分类/末级设备' }}
                                 </text>
                                 <text class="nc-iconfont nc-icon-youV6xx1 model-select__icon"></text>
                             </view>
@@ -124,47 +124,55 @@
         <u-popup :show="modelPickerVisible" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="closeModelPicker">
             <view class="model-picker-popup">
                 <view class="popup-header">
-                    <view class="popup-title">选择设备型号</view>
+                    <view class="popup-title">选择设备分类</view>
                     <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx] text-[#999]" @click="closeModelPicker"></text>
                 </view>
 
-                <view v-if="!modelTree.length" class="model-empty">
-                    <text>暂无可选型号，请到 PC 端「型号字典」维护后再签收。</text>
+                <view class="model-search">
+                    <u-input
+                        v-model="modelKeyword"
+                        border="none"
+                        clearable
+                        placeholder="搜索分类、路径或外部ID"
+                        fontSize="26rpx"
+                        @input="handleModelKeywordInput"
+                    ></u-input>
                 </view>
+                <scroll-view v-if="modelKeyword.trim()" scroll-y class="model-search-list">
+                    <view v-if="modelSearching" class="model-loading">搜索中...</view>
+                    <view
+                        v-for="item in modelSearchList"
+                        v-else
+                        :key="item.id"
+                        class="model-search-item"
+                        @click="chooseModelNode(item)"
+                    >
+                        <text class="model-search-item__name">{{ item.model_full_name || item.node_name }}</text>
+                    </view>
+                    <view v-if="!modelSearching && !modelSearchList.length" class="model-loading">没有匹配分类</view>
+                </scroll-view>
                 <view v-else class="model-cascade">
-                    <scroll-view scroll-y class="model-column">
+                    <scroll-view
+                        v-for="(column, columnIndex) in modelColumns"
+                        :key="column.pid || 'root'"
+                        scroll-y
+                        class="model-column"
+                    >
                         <view
-                            v-for="brand in modelTree"
-                            :key="brand.id"
-                            class="model-option"
-                            :class="{ 'model-option--active': String(activeBrandId) === String(brand.id) }"
-                            @click="selectBrand(brand)"
-                        >
-                            <text>{{ brand.node_name }}</text>
-                        </view>
-                    </scroll-view>
-                    <scroll-view scroll-y class="model-column">
-                        <view
-                            v-for="item in secondLevelNodes"
+                            v-for="item in column.items"
                             :key="item.id"
                             class="model-option"
-                            :class="{ 'model-option--active': String(activeSecondId) === String(item.id) }"
-                            @click="selectSecondLevel(item)"
+                            :class="{ 'model-option--active': String(column.activeId) === String(item.id) }"
+                            @click="selectModelNode(item, columnIndex)"
                         >
-                            <text>{{ item.node_name }}</text>
+                            <text class="model-option__name">{{ item.node_name }}</text>
                             <text v-if="isLeafNode(item)" class="model-option__leaf">选择</text>
+                            <text v-else class="nc-iconfont nc-icon-youV6xx1 model-option__next"></text>
                         </view>
                     </scroll-view>
-                    <scroll-view v-if="thirdLevelNodes.length" scroll-y class="model-column">
-                        <view
-                            v-for="item in thirdLevelNodes"
-                            :key="item.id"
-                            class="model-option"
-                            @click="chooseModelNode(item)"
-                        >
-                            <text>{{ item.node_name }}</text>
-                        </view>
-                    </scroll-view>
+                    <view v-if="!modelColumns.length || !modelColumns[0].items.length" class="model-empty">
+                        <text>暂无可选分类，请到 PC 端维护设备分类后再签收。</text>
+                    </view>
                 </view>
             </view>
         </u-popup>
@@ -172,8 +180,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { getDeviceModelDictTree, updateOrder } from '@/addon/hsx_recycle/api/order'
+import { ref, watch } from 'vue'
+import { getDeviceModelDictChildren, searchDeviceModelDictOptions, updateOrder } from '@/addon/hsx_recycle/api/order'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 
 interface Props {
@@ -188,10 +196,12 @@ const emit = defineEmits(['update:visible', 'success'])
 const show = ref(false)
 const submitting = ref(false)
 const devices = ref<any[]>([])
-const modelTree = ref<any[]>([])
+const modelColumns = ref<Array<{ pid: number | string, items: any[], activeId: string | number }>>([])
+const modelKeyword = ref('')
+const modelSearchList = ref<any[]>([])
+const modelSearching = ref(false)
+let modelSearchTimer: any = null
 const modelPickerVisible = ref(false)
-const activeBrandId = ref<string | number>('')
-const activeSecondId = ref<string | number>('')
 
 const editVisible = ref(false)
 const editingIndex = ref(-1)
@@ -200,20 +210,10 @@ const editForm = ref({
     imei: '',
     user_sn: '',
     initial_price: '',
-    category_id: 1
+    category_id: 0
 })
 
-const secondLevelNodes = computed(() => {
-    const brand = modelTree.value.find(item => String(item.id) === String(activeBrandId.value))
-    return Array.isArray(brand?.child_list) ? brand.child_list : []
-})
-
-const thirdLevelNodes = computed(() => {
-    const second = secondLevelNodes.value.find(item => String(item.id) === String(activeSecondId.value))
-    return Array.isArray(second?.child_list) ? second.child_list : []
-})
-
-const isLeafNode = (node: any) => !Array.isArray(node?.child_list) || node.child_list.length === 0
+const isLeafNode = (node: any) => Number(node?.has_children || 0) !== 1 && (!Array.isArray(node?.child_list) || node.child_list.length === 0)
 
 const normalizeModelTree = (nodes: any[] = []): any[] => {
     return nodes
@@ -225,26 +225,26 @@ const normalizeModelTree = (nodes: any[] = []): any[] => {
                 child_list: children.length ? children : []
             }
         })
-        .filter(item => item.level > 1 || item.child_list.length > 0)
 }
 
-const loadModelTree = async () => {
+const loadModelChildren = async (pid = 0) => {
     try {
-        const res: any = await getDeviceModelDictTree()
-        modelTree.value = normalizeModelTree(res.data || [])
-        if (!activeBrandId.value && modelTree.value.length) {
-            activeBrandId.value = modelTree.value[0].id
-        }
+        const res: any = await getDeviceModelDictChildren({ pid, limit: 300 })
+        return normalizeModelTree(res.data || [])
     } catch (error) {
-        modelTree.value = []
+        return []
     }
+}
+
+const loadRootModels = async () => {
+    const roots = await loadModelChildren(0)
+    modelColumns.value = [{ pid: 0, items: roots, activeId: '' }]
 }
 
 watch(() => props.visible, (val) => {
     show.value = val
     if (val) {
         devices.value = JSON.parse(JSON.stringify(props.deviceList || []))
-        loadModelTree()
     }
 })
 
@@ -259,7 +259,7 @@ const handleClose = () => {
 
 const addDevice = () => {
     editingIndex.value = -1
-    editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', category_id: 1 }
+    editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', category_id: 0 }
     editVisible.value = true
 }
 
@@ -270,7 +270,7 @@ const editDevice = (device: any, index: number) => {
         imei: device.imei || '',
         user_sn: device.user_sn || '',
         initial_price: device.initial_price || '',
-        category_id: device.category_id || 1
+        category_id: device.category_id || 0
     }
     editVisible.value = true
 }
@@ -289,12 +289,11 @@ const closeEdit = () => {
     editVisible.value = false
 }
 
-const openModelPicker = () => {
-    if (!modelTree.value.length) {
-        loadModelTree()
-    }
-    if (!activeBrandId.value && modelTree.value.length) {
-        activeBrandId.value = modelTree.value[0].id
+const openModelPicker = async () => {
+    modelKeyword.value = ''
+    modelSearchList.value = []
+    if (!modelColumns.value.length) {
+        await loadRootModels()
     }
     modelPickerVisible.value = true
 }
@@ -303,22 +302,44 @@ const closeModelPicker = () => {
     modelPickerVisible.value = false
 }
 
-const selectBrand = (brand: any) => {
-    activeBrandId.value = brand.id
-    activeSecondId.value = ''
-}
-
-const selectSecondLevel = (node: any) => {
-    activeSecondId.value = node.id
+const selectModelNode = async (node: any, columnIndex: number) => {
+    modelColumns.value[columnIndex].activeId = node.id
+    modelColumns.value = modelColumns.value.slice(0, columnIndex + 1)
     if (isLeafNode(node)) {
         chooseModelNode(node)
+        return
     }
+    const children = await loadModelChildren(node.id)
+    modelColumns.value.push({ pid: node.id, items: children, activeId: '' })
 }
 
 const chooseModelNode = (node: any) => {
     if (!isLeafNode(node)) return
     editForm.value.model = node.model_full_name || node.node_name || ''
+    editForm.value.category_id = node.id || 0
     closeModelPicker()
+}
+
+const handleModelKeywordInput = () => {
+    if (modelSearchTimer) clearTimeout(modelSearchTimer)
+    modelSearchTimer = setTimeout(searchModelKeyword, 300)
+}
+
+const searchModelKeyword = async () => {
+    const keyword = modelKeyword.value.trim()
+    if (!keyword) {
+        modelSearchList.value = []
+        return
+    }
+    modelSearching.value = true
+    try {
+        const res: any = await searchDeviceModelDictOptions({ keyword })
+        modelSearchList.value = normalizeModelTree(res.data || [])
+    } catch (error) {
+        modelSearchList.value = []
+    } finally {
+        modelSearching.value = false
+    }
 }
 
 const saveEdit = () => {
@@ -327,7 +348,7 @@ const saveEdit = () => {
         return
     }
     if (!editForm.value.model) {
-        uni.showToast({ title: '请输入设备型号', icon: 'none' })
+        uni.showToast({ title: '请选择设备分类', icon: 'none' })
         return
     }
 
@@ -369,7 +390,7 @@ const handleSubmit = async () => {
                 model: d.model,
                 user_sn: d.user_sn || '',
                 initial_price: Number(d.initial_price) || 0,
-                category_id: d.category_id || 1
+                category_id: d.category_id || 0
             }))
         })
         uni.showToast({ title: '签收成功' })
@@ -621,6 +642,7 @@ const handleSubmit = async () => {
 }
 
 .model-empty {
+    min-width: 480rpx;
     padding: 80rpx 48rpx;
     color: #777;
     font-size: 26rpx;
@@ -628,16 +650,53 @@ const handleSubmit = async () => {
     text-align: center;
 }
 
+.model-search {
+    margin: 18rpx 24rpx;
+    padding: 0 20rpx;
+    background: #f6f7f9;
+    border-radius: 12rpx;
+    box-sizing: border-box;
+}
+
+.model-search-list {
+    min-height: 520rpx;
+    max-height: 620rpx;
+    border-top: 1rpx solid #f2f3f5;
+}
+
+.model-search-item {
+    min-height: 82rpx;
+    padding: 0 28rpx;
+    display: flex;
+    align-items: center;
+    border-bottom: 1rpx solid #f2f3f5;
+    box-sizing: border-box;
+}
+
+.model-search-item__name {
+    font-size: 26rpx;
+    color: #333;
+    line-height: 1.35;
+}
+
+.model-loading {
+    padding: 60rpx 0;
+    color: #999;
+    font-size: 26rpx;
+    text-align: center;
+}
+
 .model-cascade {
     display: flex;
+    overflow-x: auto;
     min-height: 520rpx;
     max-height: 620rpx;
     border-top: 1rpx solid #f2f3f5;
 }
 
 .model-column {
-    flex: 1;
-    min-width: 0;
+    flex: 0 0 230rpx;
+    min-width: 230rpx;
     border-right: 1rpx solid #f2f3f5;
     background: #fafafa;
 }
@@ -661,6 +720,11 @@ const handleSubmit = async () => {
     border-bottom: 1rpx solid #f2f3f5;
 }
 
+.model-option__name {
+    flex: 1;
+    min-width: 0;
+}
+
 .model-option--active {
     color: var(--primary-color);
     background: #fff;
@@ -670,6 +734,13 @@ const handleSubmit = async () => {
 .model-option__leaf {
     margin-left: 8rpx;
     color: var(--primary-color);
+    font-size: 22rpx;
+    flex-shrink: 0;
+}
+
+.model-option__next {
+    margin-left: 8rpx;
+    color: #c0c4cc;
     font-size: 22rpx;
     flex-shrink: 0;
 }

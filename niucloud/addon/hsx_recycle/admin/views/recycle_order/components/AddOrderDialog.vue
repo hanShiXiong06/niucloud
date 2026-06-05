@@ -115,6 +115,8 @@
                                         v-model="row.model_path"
                                         :options="modelTreeOptions"
                                         :props="modelCascaderProps"
+                                        :filter-method="filterModelNode"
+                                        :before-filter="handleModelBeforeFilter"
                                         placeholder="选择品牌/系列/型号"
                                         filterable
                                         clearable
@@ -199,7 +201,7 @@ import { computed, ref, defineProps, defineEmits, watch, onMounted, onBeforeUnmo
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Delete, Loading, Aim, Plus, ZoomOut, EditPen, List } from '@element-plus/icons-vue'
 import { addOrderDevice, createRecycleOrder, getUserByMobile, updateRecycleOrder } from '@/addon/hsx_recycle/api/recycle_order'
-import { getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
+import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 // import { searchMembers } from '@/api/member'
 
 interface Member {
@@ -215,6 +217,8 @@ interface DraftDeviceRow {
     imei: string;
     model: string;
     initial_price: number;
+    category_id?: string | number;
+    category_path?: Array<string | number>;
     saved?: boolean;
     saving?: boolean;
     model_path?: Array<string | number>;
@@ -249,9 +253,16 @@ const modelCascaderProps = {
     value: 'id',
     label: 'node_name',
     children: 'child_list',
+    leaf: 'leaf',
     emitPath: true,
     checkStrictly: false,
-    expandTrigger: 'hover' as const
+    expandTrigger: 'hover' as const,
+    lazy: true,
+    lazyLoad: async (node: any, resolve: (nodes: any[]) => void) => {
+        const pid = node?.level ? node.value : 0
+        const children = await loadModelChildren(pid)
+        resolve(children)
+    }
 }
 const savedDeviceCount = computed(() => form.value.devices.filter(device => device.saved && device.id).length)
 
@@ -278,10 +289,8 @@ const updateResponsiveState = () => {
 const loadModelOptions = async () => {
     modelLoading.value = true
     try {
-        const res = await getRecycleDeviceModelDictTree()
-        const tree = res.data || []
-        modelTreeOptions.value = normalizeModelTree(tree)
-        modelNodeMap.value = buildModelNodeMap(modelTreeOptions.value)
+        modelNodeMap.value = {}
+        modelTreeOptions.value = await loadModelChildren(0)
     } catch (error) {
         console.error('加载型号字典失败:', error)
     } finally {
@@ -289,30 +298,73 @@ const loadModelOptions = async () => {
     }
 }
 
-const normalizeModelTree = (tree: any[]): any[] => {
-    return (tree || []).map((item) => ({
-        ...item,
-        child_list: Array.isArray(item.child_list) && item.child_list.length > 0
-            ? normalizeModelTree(item.child_list)
-            : undefined
-    }))
+const loadModelChildren = async (pid: string | number = 0) => {
+    const res = await getRecycleDeviceModelDictChildren({ pid, limit: 300 })
+    return normalizeModelNodes(res.data || [])
 }
 
-const buildModelNodeMap = (tree: any[], map: Record<string, any> = {}) => {
-    tree.forEach((item) => {
-        map[String(item.id)] = item
-        if (Array.isArray(item.child_list)) {
-            buildModelNodeMap(item.child_list, map)
+const normalizeModelNodes = (nodes: any[]): any[] => {
+    return (nodes || []).map((item) => {
+        const hasChildren = Number(item.has_children || 0) === 1
+        const node = {
+            ...item,
+            leaf: !hasChildren,
+            child_list: undefined
         }
+        modelNodeMap.value[String(node.id)] = node
+        return node
     })
-    return map
 }
+
+const normalizeModelSearchNodes = (nodes: any[]): any[] => {
+    return (nodes || []).map((item) => {
+        const node = {
+            ...item,
+            leaf: true,
+            child_list: undefined
+        }
+        modelNodeMap.value[String(node.id)] = node
+        return node
+    })
+}
+
+const handleModelBeforeFilter = async (keyword: string) => {
+    const value = String(keyword || '').trim()
+    modelLoading.value = true
+    try {
+        if (!value) {
+            modelTreeOptions.value = await loadModelChildren(0)
+            return true
+        }
+        const res = await getRecycleDeviceModelDictOptions({ keyword: value })
+        modelTreeOptions.value = normalizeModelSearchNodes(res.data || [])
+        return true
+    } catch (error) {
+        console.error('搜索型号字典失败:', error)
+        return false
+    } finally {
+        modelLoading.value = false
+    }
+}
+
+ const filterModelNode = (node: any, keyword: string) => {
+      const value = String(keyword || '').toLowerCase()
+      return [
+          node.text,
+          node.label,
+          node.data?.node_name,
+          node.data?.model_full_name,
+          node.data?.source_node_id
+      ].some(item => String(item || '').toLowerCase().includes(value))
+  }
 
 const handleModelPathChange = (row: DraftDeviceRow, value: Array<string | number> | string | number) => {
     const path = Array.isArray(value) ? value : [value]
     const leafId = path[path.length - 1]
     const leaf = modelNodeMap.value[String(leafId)] || null
     row.model =  leaf?.node_name || ''
+    row.category_id = leafId || 0
+    row.category_path = path.filter(item => item !== undefined && item !== null && item !== '')
 }
 
 const toggleModelInputMode = (row: DraftDeviceRow) => {
@@ -535,7 +587,9 @@ const ensureDraftOrder = async () => {
 const normalizeDevice = (device: DraftDeviceRow) => ({
     imei: (device.imei || '').trim(),
     model: (device.model || '').trim(),
-    initial_price: Number(device.initial_price || 0)
+    initial_price: Number(device.initial_price || 0),
+    category_id: device.category_id || 0,
+    category_path: Array.isArray(device.category_path) ? device.category_path : []
 })
 
 const saveDeviceRow = async (row: DraftDeviceRow, index: number) => {

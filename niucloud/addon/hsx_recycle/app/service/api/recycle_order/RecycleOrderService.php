@@ -469,10 +469,10 @@ class RecycleOrderService extends BaseApiService
             if (!empty($data['devices'])) {
                 $devices = [];
                 foreach ($data['devices'] as $device) {
-                    $categoryId = (int)($device['category_id'] ?? 1);
+                    $categoryId = (int)($device['category_id'] ?? 0);
                     $categoryPath = $device['category_path'] ?? [];
                     if (!is_array($categoryPath) || empty($categoryPath)) {
-                        $categoryPath = [ $categoryId ];
+                        $categoryPath = $categoryId > 0 ? [ $categoryId ] : [];
                     }
 
                     $devices[] = [

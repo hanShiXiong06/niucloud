@@ -213,7 +213,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { getCheckTemplateAll, getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
+import { getCheckTemplateAll, getCheckTemplateSchema, resolveDeviceTemplateBinding } from '@/addon/hsx_recycle/api/check-template'
 import { batchReturnDevices, getDevice, updateDevice } from '@/addon/hsx_recycle/api/order'
 import RecycleImageUploader from '@/addon/hsx_recycle/components/RecycleImageUploader.vue'
 
@@ -339,9 +339,11 @@ const loadTemplates = async () => {
     try {
         const res: any = await getCheckTemplateAll()
         templateOptions.value = Array.isArray(res?.data) ? res.data : []
+        const boundTemplateId = await resolveBoundCheckTemplateId()
         const currentTemplateId = Number(
             deviceData.value.check_template_id ||
             normalizeObject(originalInfo.value.check_meta).template_id ||
+            boundTemplateId ||
             templateOptions.value.find((item: any) => Number(item.is_default || 0) === 1)?.id ||
             templateOptions.value[0]?.id ||
             0
@@ -354,6 +356,26 @@ const loadTemplates = async () => {
     } catch (error) {
         templateOptions.value = []
         schemaGroups.value = []
+    }
+}
+
+const resolveBoundCheckTemplateId = async () => {
+    const existingTemplateId = Number(deviceData.value.check_template_id || normalizeObject(originalInfo.value.check_meta).template_id || 0)
+    if (existingTemplateId > 0 || !deviceData.value.id) {
+        return 0
+    }
+
+    try {
+        const res: any = await resolveDeviceTemplateBinding({
+            device_id: deviceData.value.id,
+            scene_key: 'manual_device_label'
+        })
+        const templateId = Number(res?.data?.check_template_id || 0)
+        const exists = templateOptions.value.some((item: any) => Number(item.id || 0) === templateId)
+        return exists ? templateId : 0
+    } catch (error) {
+        console.warn('解析设备质检模板绑定失败，使用默认模板', error)
+        return 0
     }
 }
 

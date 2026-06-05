@@ -50,7 +50,7 @@ class AddDeviceHandler extends BaseFlowHandler
         $deviceIds = [];
 
         foreach ($devices as $device) {
-            $categoryId = (int)($device['category_id'] ?? 1);
+            $categoryId = (int)($device['category_id'] ?? 0);
             $categoryPath = $this->normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
 
             // 添加新设备
@@ -97,10 +97,10 @@ class AddDeviceHandler extends BaseFlowHandler
             }
         }
 
-        if (!is_array($categoryPath) || empty($categoryPath)) {
+        if ((!is_array($categoryPath) || empty($categoryPath)) && $categoryId > 0) {
             $categoryPath = [ $categoryId ];
         }
 
-        return array_values(array_map('strval', $categoryPath));
+        return is_array($categoryPath) ? array_values(array_map('strval', $categoryPath)) : [];
     }
 }

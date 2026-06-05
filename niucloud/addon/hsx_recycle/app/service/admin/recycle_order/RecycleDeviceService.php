@@ -87,7 +87,7 @@ class RecycleDeviceService extends BaseAdminService
         $info = (new RecycleDevice())->where([['id', '=', $id]])
         ->field($field)->with(['order','checkUser'])
         ->findOrEmpty()
-        ->append(['status_name'])
+        ->append(['status_name', 'pay_status_name', 'confirm_status_name', 'dispose_type_name', 'dispose_status_name', 'check_template_name'])
         ->toArray();
        
         return $info;
@@ -103,10 +103,7 @@ class RecycleDeviceService extends BaseAdminService
     {
         $data['status'] = RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK;
         
-        // 确保分类字段有默认值
-        if (!isset($data['category_id']) || empty($data['category_id'])) {
-            $data['category_id'] = 1; // 默认为手机分类
-        }
+        $data['category_id'] = (int)($data['category_id'] ?? 0);
         
         $model = new RecycleDevice();
         $model->save($data);

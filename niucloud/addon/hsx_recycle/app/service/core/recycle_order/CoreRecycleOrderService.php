@@ -86,10 +86,10 @@ class CoreRecycleOrderService extends BaseCoreService
                         continue;
                     }
 
-                    $categoryId = (int)($device['category_id'] ?? 1);
+                    $categoryId = (int)($device['category_id'] ?? 0);
                     $categoryPath = $device['category_path'] ?? [];
                     if (!is_array($categoryPath) || empty($categoryPath)) {
-                        $categoryPath = [ $categoryId ];
+                        $categoryPath = $categoryId > 0 ? [ $categoryId ] : [];
                     }
 
                     $devices[] = [

@@ -31,7 +31,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="brand_name" label="品牌" width="100" />
+        <el-table-column prop="brand_name" label="品牌" width="200" />
         
         <el-table-column prop="type_name" label="类型" width="100">
           <template #default="{ row }">
@@ -346,7 +346,6 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .printer-list-wrap {
-  padding: 16px;
   
   .card-header {
     display: flex;

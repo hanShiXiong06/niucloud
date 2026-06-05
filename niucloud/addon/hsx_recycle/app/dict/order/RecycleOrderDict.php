@@ -428,6 +428,40 @@ class RecycleOrderDict
     }
 
     /**
+     * 获取设备处置类型
+     * @param string $type
+     * @return array|string
+     */
+    public static function getDisposeType($type = '')
+    {
+        $data = [
+            self::DISPOSE_TYPE_PENDING => '未处置',
+            self::DISPOSE_TYPE_RECYCLE => '商家自有',
+            self::DISPOSE_TYPE_RETURN => '退回客户',
+            self::DISPOSE_TYPE_CONSIGN => '代卖',
+        ];
+
+        return $type === '' ? $data : ($data[(string)$type] ?? '');
+    }
+
+    /**
+     * 获取设备处置状态
+     * @param string|int $status
+     * @return array|string
+     */
+    public static function getDisposeStatus($status = '')
+    {
+        $data = [
+            self::DISPOSE_STATUS_PENDING => '未处置',
+            self::DISPOSE_STATUS_RECYCLED => '已回收',
+            self::DISPOSE_STATUS_RETURNED => '已退回',
+            self::DISPOSE_STATUS_CONSIGNED => '已转代卖',
+        ];
+
+        return $status === '' ? $data : ($data[(int)$status] ?? '');
+    }
+
+    /**
      * 获取设备报价确认状态
      * @param string|int $status
      * @return array|string

@@ -928,7 +928,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
             4 => '手表',
             5 => '其他'
         ];
-        $category_name = $categories[$device['category_id'] ?? 1] ?? '手机';
+        $category_name = $categories[$device['category_id'] ?? 0] ?? '未分类';
 
         // 状态名称映射
         $status_names = [
@@ -984,7 +984,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'order_remark' => $order['remark'] ?? '',
 
             // 分类信息
-            'category_id' => (string)($device['category_id'] ?? 1),
+            'category_id' => (string)($device['category_id'] ?? 0),
             'category_name' => $category_name,
 
             // 价格信息

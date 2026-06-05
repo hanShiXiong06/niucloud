@@ -778,7 +778,7 @@ const parseCoverageStatus = (coverage: any): string => {
   if (status === 'Out Of Warranty') return '过保'
   if (status === 'Not Activated' || (!date && !status)) return '未激活'
   if (status === 'In Warranty' || status === 'Active') {
-    return date ? `在保至 ${date}` : '在保'
+    return date ? `保 ${date}` : '在保'
   }
   // 其他情况：有日期就显示日期，否则显示原始 status
   return date || status || '在保'

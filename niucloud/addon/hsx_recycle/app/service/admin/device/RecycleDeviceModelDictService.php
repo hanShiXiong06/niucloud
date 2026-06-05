@@ -8,10 +8,10 @@ use core\base\BaseAdminService;
 use core\exception\CommonException;
 
 /**
- * 回收设备型号字典服务
+ * 回收设备分类服务
  *
- * 表结构参考分类表：pid + level + model_full_name 表达层级。
- * 支持二级：苹果/iPhone15，也支持三级：苹果/iPhone/iPhone15。
+ * 设备分类树：pid + level + model_full_name 表达层级。
+ * 层级语义由 node_type/source 数据决定，不按固定层级写死。
  */
 class RecycleDeviceModelDictService extends BaseAdminService
 {
@@ -30,14 +30,15 @@ class RecycleDeviceModelDictService extends BaseAdminService
             $keyword = trim((string)$where['keyword']);
             $query->where(function ($subQuery) use ($keyword) {
                 $subQuery->whereOr('node_name', 'like', "%{$keyword}%")
-                    ->whereOr('model_full_name', 'like', "%{$keyword}%");
+                    ->whereOr('model_full_name', 'like', "%{$keyword}%")
+                    ->whereOr('source_node_id', 'like', "%{$keyword}%");
             });
         }
         if ($where['status'] !== '' && $where['status'] !== null) {
             $query->where('status', (int)$where['status']);
         }
 
-        $result = $this->pageQuery($query->order('sort asc, id desc'));
+        $result = $this->pageQuery($query->order('is_hot desc, select_count desc, sort asc, id desc'));
         foreach (['data', 'list'] as $key) {
             if (!empty($result[$key]) && is_array($result[$key])) {
                 $result[$key] = array_values(array_map([$this, 'formatNode'], $this->filterLeafNodes($result[$key])));
@@ -49,8 +50,8 @@ class RecycleDeviceModelDictService extends BaseAdminService
     public function tree(): array
     {
         $rows = $this->model->where([['site_id', '=', $this->site_id]])
-            ->field('id,pid,level,node_name,model_full_name,status,sort')
-            ->order('level asc, sort asc, id asc')
+            ->field('id,pid,level,node_name,model_full_name,status,sort,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
+            ->order('level asc, is_hot desc, select_count desc, sort asc, id asc')
             ->select()
             ->toArray();
 
@@ -59,22 +60,23 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     public function options(array $where = []): array
     {
+        $keyword = trim((string)($where['keyword'] ?? ''));
         $query = $this->model->where([
             ['site_id', '=', $this->site_id],
             ['status', '=', 1],
             ['level', '>', 1],
         ]);
 
-        if (!empty($where['keyword'])) {
-            $keyword = trim((string)$where['keyword']);
+        if ($keyword !== '') {
             $query->where(function ($subQuery) use ($keyword) {
                 $subQuery->whereOr('node_name', 'like', "%{$keyword}%")
-                    ->whereOr('model_full_name', 'like', "%{$keyword}%");
+                    ->whereOr('model_full_name', 'like', "%{$keyword}%")
+                    ->whereOr('source_node_id', 'like', "%{$keyword}%");
             });
         }
 
-        $rows = $query->field('id,pid,level,node_name,model_full_name')
-            ->order('sort asc, id desc')
+        $rows = $query->field('id,pid,level,node_name,model_full_name,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
+            ->order('is_hot desc, select_count desc, sort asc, id desc')
             ->limit(300)
             ->select()
             ->toArray();
@@ -87,17 +89,47 @@ class RecycleDeviceModelDictService extends BaseAdminService
         return array_map([$this, 'formatNode'], array_values($leaves));
     }
 
+    public function children(array $where = []): array
+    {
+        $pid = (int)($where['pid'] ?? 0);
+        $keyword = trim((string)($where['keyword'] ?? ''));
+        $limit = max(20, min(500, (int)($where['limit'] ?? 200)));
+
+        $query = $this->model->where([
+            ['site_id', '=', $this->site_id],
+            ['pid', '=', $pid],
+            ['status', '=', 1],
+        ]);
+
+        if ($keyword !== '') {
+            $query->where(function ($subQuery) use ($keyword) {
+                $subQuery->whereOr('node_name', 'like', "%{$keyword}%")
+                    ->whereOr('model_full_name', 'like', "%{$keyword}%")
+                    ->whereOr('source_node_id', 'like', "%{$keyword}%");
+            });
+        }
+
+        $rows = $query->field('id,pid,level,node_name,model_full_name,status,sort,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
+            ->order('is_hot desc, select_count desc, sort asc, id asc')
+            ->limit($limit)
+            ->select()
+            ->toArray();
+
+        return $this->appendChildrenState($rows);
+    }
+
     public function add(array $data): int
     {
         $path = $this->normalizePath($data);
-        return $this->createPath($path, (int)($data['status'] ?? 1), (int)($data['sort'] ?? 0), false);
+        $id = $this->createPath($path, (int)($data['status'] ?? 1), (int)($data['sort'] ?? 0), false);
+        return $id;
     }
 
     public function edit(int $id, array $data): bool
     {
         $node = $this->getNode($id);
         if ($this->hasChildren($id)) {
-            throw new CommonException('存在下级型号，不能直接改成其他路径');
+            throw new CommonException('存在下级分类，不能直接改成其他路径');
         }
 
         $path = $this->normalizePath($data);
@@ -118,7 +150,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
     {
         $this->getNode($id);
         if ($this->hasChildren($id)) {
-            throw new CommonException('请先删除下级型号');
+            throw new CommonException('请先删除下级分类');
         }
         $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->delete();
         return true;
@@ -147,7 +179,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
         }
 
         if (empty($paths)) {
-            throw new CommonException('请输入要录入的型号');
+            throw new CommonException('请输入要录入的设备分类');
         }
 
         foreach ($paths as $parts) {
@@ -165,11 +197,80 @@ class RecycleDeviceModelDictService extends BaseAdminService
         foreach ($paths as $parts) {
             $this->createPath($parts, 1, 0, true);
         }
-
         return [
             'created_count' => count($paths),
             'duplicates' => [],
         ];
+    }
+
+    public function importExternalRows(array $rows, string $source = 'recycle_spider'): array
+    {
+        $source = trim($source) !== '' ? trim($source) : 'recycle_spider';
+        $created = 0;
+        $updated = 0;
+        $skipped = [];
+
+        foreach ($rows as $index => $row) {
+            if (!is_array($row)) {
+                $skipped[] = [
+                    'line' => $index + 1,
+                    'reason' => '行数据格式错误',
+                ];
+                continue;
+            }
+
+            try {
+                $payload = $this->normalizeExternalRow($row, $source);
+                $beforeExists = $this->pathExists($payload['parts']);
+                $this->createPath($payload['parts'], 1, 0, true, $payload['node_metas']);
+                $beforeExists ? $updated++ : $created++;
+            } catch (\Throwable $e) {
+                $skipped[] = [
+                    'line' => $index + 1,
+                    'reason' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return [
+            'created_count' => $created,
+            'updated_count' => $updated,
+            'skipped_count' => count($skipped),
+            'skipped' => $skipped,
+        ];
+    }
+
+    public function updateSort(array $rows): bool
+    {
+        if (empty($rows)) {
+            return true;
+        }
+
+        foreach ($rows as $row) {
+            $id = (int)($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $this->model->where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', $id],
+            ])->update([
+                'sort' => (int)($row['sort'] ?? 0),
+                'update_at' => time(),
+            ]);
+        }
+        return true;
+    }
+
+    public function incrementSelectCount(int $nodeId): void
+    {
+        if ($nodeId <= 0) {
+            return;
+        }
+        $this->model->where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $nodeId],
+        ])->inc('select_count')->update(['update_at' => time()]);
     }
 
     public function ensureFromModelName(string $modelName, int $siteId = 0): void
@@ -207,31 +308,204 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     private function normalizePath(array $data): array
     {
-        $parts = array_values(array_filter([
+        $parts = $this->normalizePathInput($data);
+
+        if (count($parts) < 2) {
+            throw new CommonException('请至少填写品类和末级设备');
+        }
+        if (count($parts) > 8) {
+            throw new CommonException('设备分类层级最多支持八级');
+        }
+        return $parts;
+    }
+
+    private function normalizePathInput(array $data): array
+    {
+        if (!empty($data['path']) && is_array($data['path'])) {
+            return array_values(array_filter(array_map(static fn($value) => trim((string)$value), $data['path']), static fn($value) => $value !== ''));
+        }
+
+        return array_values(array_filter([
+            trim((string)($data['category_name'] ?? '')),
+            trim((string)($data['subcategory_name'] ?? '')),
             trim((string)($data['brand_name'] ?? '')),
             trim((string)($data['series_name'] ?? '')),
             trim((string)($data['model_name'] ?? '')),
         ], static fn($value) => $value !== ''));
-
-        if (count($parts) < 2) {
-            throw new CommonException('请至少填写品牌和型号');
-        }
-        if (count($parts) > 3) {
-            throw new CommonException('型号层级最多支持三级');
-        }
-        return $parts;
     }
 
     private function normalizePathFromLine(string $line, int $lineNo): array
     {
         $parts = array_values(array_filter(array_map('trim', explode('/', $line)), static fn($value) => $value !== ''));
-        if (count($parts) < 2 || count($parts) > 3) {
-            throw new CommonException('第' . $lineNo . '行格式错误，请使用 品牌/型号 或 品牌/系列/型号');
+        if (count($parts) < 2 || count($parts) > 8) {
+            throw new CommonException('第' . $lineNo . '行格式错误，请使用斜杠分隔完整路径，如 品类/品牌/系列/型号');
         }
         return $parts;
     }
 
-    private function createPath(array $parts, int $status, int $sort, bool $allowExisting): int
+    private function normalizeExternalRow(array $row, string $source): array
+    {
+        $categoryText = $this->getRowValue($row, ['品类', 'category', 'category_name']);
+        $categoryId = $this->getRowValue($row, ['品类ID', 'category_id']);
+        $brandName = $this->getRowValue($row, ['品牌', 'brand', 'brand_name']);
+        $brandId = $this->getRowValue($row, ['品牌ID', 'brand_id']);
+        $seriesName = $this->getRowValue($row, ['系列', 'series', 'series_name']);
+        $modelName = $this->getRowValue($row, ['型号', 'model', 'model_name', 'goods_name']);
+        $productId = $this->getRowValue($row, ['产品ID', 'product_id', 'goods_id']);
+        $isHot = $this->parseHotValue($this->getRowValue($row, ['热门', 'is_hot', 'hot']));
+
+        $categoryParts = $this->splitPathText($categoryText);
+        $brandName = trim($brandName);
+        $seriesName = trim($seriesName) !== '' ? trim($seriesName) : '其他';
+        $modelName = trim($modelName);
+
+        if (empty($categoryParts)) {
+            throw new CommonException('缺少品类');
+        }
+        if ($brandName === '') {
+            throw new CommonException('缺少品牌');
+        }
+        if ($modelName === '') {
+            throw new CommonException('缺少型号');
+        }
+
+        $parts = array_merge($categoryParts, [$brandName, $seriesName, $modelName]);
+        if (count($parts) > 8) {
+            throw new CommonException('设备分类层级最多支持八级');
+        }
+
+        $nodeMetas = [];
+        $sourceParentId = '';
+        $lastCategorySourceId = '';
+        foreach ($categoryParts as $index => $name) {
+            $isLastCategory = $index === count($categoryParts) - 1;
+            $sourceNodeId = $isLastCategory && $categoryId !== ''
+                ? $categoryId
+                : $this->buildSyntheticSourceId('category', array_slice($categoryParts, 0, $index + 1));
+            $nodeMetas[] = [
+                'node_type' => $index === 0 ? 'category' : 'subcategory',
+                'source' => $source,
+                'source_node_id' => $sourceNodeId,
+                'source_parent_id' => $sourceParentId,
+                'category_source_id' => $isLastCategory ? $categoryId : '',
+                'brand_source_id' => '',
+                'series_source_id' => '',
+                'product_source_id' => '',
+                'extra_json' => [
+                    'raw_category_path' => $categoryText,
+                ],
+            ];
+            $sourceParentId = $sourceNodeId;
+            if ($isLastCategory) {
+                $lastCategorySourceId = $sourceNodeId;
+            }
+        }
+
+        $brandSourceId = $brandId !== ''
+            ? $brandId
+            : $this->buildSyntheticSourceId('brand', [$sourceParentId, $brandName]);
+        $nodeMetas[] = [
+            'node_type' => 'brand',
+            'source' => $source,
+            'source_node_id' => $brandSourceId,
+            'source_parent_id' => $lastCategorySourceId,
+            'category_source_id' => $categoryId,
+            'brand_source_id' => $brandId,
+            'series_source_id' => '',
+            'product_source_id' => '',
+            'extra_json' => [],
+        ];
+
+        $seriesSourceId = $this->buildSyntheticSourceId('series', [$categoryId ?: $sourceParentId, $brandSourceId, $seriesName]);
+        $nodeMetas[] = [
+            'node_type' => 'series',
+            'source' => $source,
+            'source_node_id' => $seriesSourceId,
+            'source_parent_id' => $brandSourceId,
+            'category_source_id' => $categoryId,
+            'brand_source_id' => $brandId,
+            'series_source_id' => $seriesSourceId,
+            'product_source_id' => '',
+            'extra_json' => [],
+        ];
+
+        $nodeMetas[] = [
+            'node_type' => 'model',
+            'source' => $source,
+            'source_node_id' => $productId !== '' ? $productId : $this->buildSyntheticSourceId('model', $parts),
+            'source_parent_id' => $seriesSourceId,
+            'category_source_id' => $categoryId,
+            'brand_source_id' => $brandId,
+            'series_source_id' => $seriesSourceId,
+            'product_source_id' => $productId,
+            'is_hot' => $isHot,
+            'extra_json' => [
+                'is_hot' => $isHot,
+                'raw' => $row,
+            ],
+        ];
+
+        return [
+            'parts' => $parts,
+            'node_metas' => $nodeMetas,
+        ];
+    }
+
+    private function getRowValue(array $row, array $keys): string
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $row)) {
+                return trim((string)$row[$key]);
+            }
+        }
+        return '';
+    }
+
+    private function splitPathText(string $text): array
+    {
+        return array_values(array_filter(array_map(static fn($value) => trim((string)$value), explode('/', $text)), static fn($value) => $value !== ''));
+    }
+
+    private function parseHotValue(string $value): int
+    {
+        $value = trim($value);
+        return in_array($value, ['1', '是', 'true', 'TRUE', 'yes', 'YES'], true) ? 1 : 0;
+    }
+
+    private function buildSyntheticSourceId(string $prefix, array $parts): string
+    {
+        return $prefix . ':' . md5(implode('/', array_map('strval', $parts)));
+    }
+
+    private function updateNodeMeta(int $id, array $meta): void
+    {
+        $data = [
+            'update_at' => time(),
+        ];
+        foreach (['node_type', 'source', 'source_node_id', 'source_parent_id', 'category_source_id', 'brand_source_id', 'series_source_id', 'product_source_id'] as $field) {
+            if (isset($meta[$field]) && trim((string)$meta[$field]) !== '') {
+                $data[$field] = (string)$meta[$field];
+            }
+        }
+        if (array_key_exists('is_hot', $meta)) {
+            $data['is_hot'] = (int)$meta['is_hot'];
+        }
+        if (array_key_exists('extra_json', $meta)) {
+            $data['extra_json'] = $this->encodeExtraJson($meta['extra_json']);
+        }
+        $this->model->where([['site_id', '=', $this->site_id], ['id', '=', $id]])->update($data);
+    }
+
+    private function encodeExtraJson($data): string
+    {
+        if (empty($data)) {
+            return '';
+        }
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return is_string($json) ? $json : '';
+    }
+
+    private function createPath(array $parts, int $status, int $sort, bool $allowExisting, array $nodeMetas = []): int
     {
         $pid = 0;
         $fullPath = [];
@@ -239,27 +513,79 @@ class RecycleDeviceModelDictService extends BaseAdminService
         foreach ($parts as $index => $name) {
             $level = $index + 1;
             $fullPath[] = $name;
+            $meta = $nodeMetas[$index] ?? [];
+            $pathSourceId = $this->buildSyntheticSourceId('path', $fullPath);
             $node = $this->findNode($pid, $name);
             if (empty($node)) {
-                $node = $this->model->create([
-                    'site_id' => $this->site_id,
-                    'pid' => $pid,
-                    'level' => $level,
-                    'node_name' => $name,
-                    'model_full_name' => implode('/', $fullPath),
-                    'status' => $status,
-                    'sort' => $sort,
-                    'create_at' => time(),
-                    'update_at' => time(),
-                ])->toArray();
+                $node = $this->createNodeSafely($pid, $level, $name, $fullPath, $status, $sort, $meta, $pathSourceId);
             } elseif ($level === count($parts) && !$allowExisting) {
-                throw new CommonException('该型号已存在：' . implode('/', $parts));
+                throw new CommonException('该设备分类已存在：' . implode('/', $parts));
+            } elseif (!empty($meta)) {
+                $this->updateNodeMeta((int)$node['id'], $meta);
             }
 
             $pid = (int)$node['id'];
             $leafId = $pid;
         }
         return $leafId;
+    }
+
+    private function createNodeSafely(
+        int $pid,
+        int $level,
+        string $name,
+        array $fullPath,
+        int $status,
+        int $sort,
+        array $meta,
+        string $pathSourceId
+    ): array {
+        $data = [
+            'site_id' => $this->site_id,
+            'pid' => $pid,
+            'level' => $level,
+            'node_name' => $name,
+            'model_full_name' => implode('/', $fullPath),
+            'status' => $status,
+            'sort' => $sort,
+            'node_type' => $meta['node_type'] ?? $this->inferNodeType($level, count($fullPath)),
+            'source' => $meta['source'] ?? 'manual',
+            'source_node_id' => (string)($meta['source_node_id'] ?? $pathSourceId),
+            'source_parent_id' => (string)($meta['source_parent_id'] ?? ''),
+            'category_source_id' => (string)($meta['category_source_id'] ?? ''),
+            'brand_source_id' => (string)($meta['brand_source_id'] ?? ''),
+            'series_source_id' => (string)($meta['series_source_id'] ?? ''),
+            'product_source_id' => (string)($meta['product_source_id'] ?? ''),
+            'extra_json' => $this->encodeExtraJson($meta['extra_json'] ?? []),
+            'is_hot' => (int)($meta['is_hot'] ?? 0),
+            'select_count' => 0,
+            'create_at' => time(),
+            'update_at' => time(),
+        ];
+
+        try {
+            return $this->model->create($data)->toArray();
+        } catch (\Throwable $e) {
+            $node = $this->findNode($pid, $name);
+            if (!empty($node)) {
+                if (!empty($meta)) {
+                    $this->updateNodeMeta((int)$node['id'], $meta);
+                }
+                return $node;
+            }
+
+            $data['source_node_id'] = $this->buildSyntheticSourceId('path_retry', [
+                $this->site_id,
+                $pid,
+                implode('/', $fullPath),
+                microtime(true),
+            ]);
+            try {
+                return $this->model->create($data)->toArray();
+            } catch (\Throwable $retryException) {
+                throw new CommonException($retryException->getMessage());
+            }
+        }
     }
 
     private function pathExists(array $parts): bool
@@ -288,7 +614,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
     {
         $node = $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
         if (empty($node)) {
-            throw new CommonException('型号不存在');
+            throw new CommonException('设备分类不存在');
         }
         return $node;
     }
@@ -326,6 +652,24 @@ class RecycleDeviceModelDictService extends BaseAdminService
         return array_flip(array_map('intval', $parentIds));
     }
 
+    private function appendChildrenState(array $rows): array
+    {
+        if (empty($rows)) {
+            return [];
+        }
+
+        $parentIds = $this->model->where([['site_id', '=', $this->site_id]])
+            ->whereIn('pid', array_column($rows, 'id') ?: [0])
+            ->column('pid');
+        $parentMap = $this->buildParentMap($parentIds);
+
+        return array_map(function ($row) use ($parentMap) {
+            $row['has_children'] = isset($parentMap[(int)$row['id']]) ? 1 : 0;
+            $row['child_list'] = [];
+            return $this->formatNode($row);
+        }, $rows);
+    }
+
     private function buildTree(array $rows): array
     {
         $items = [];
@@ -346,4 +690,16 @@ class RecycleDeviceModelDictService extends BaseAdminService
         unset($item);
         return $tree;
     }
+
+    private function inferNodeType(int $level, int $totalLevel): string
+    {
+        if ($level === 1) {
+            return 'category';
+        }
+        if ($level === $totalLevel) {
+            return 'model';
+        }
+        return 'group';
+    }
+
 }

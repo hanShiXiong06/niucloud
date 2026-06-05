@@ -81,6 +81,20 @@ class RecycleDevice extends BaseAdminController
     }
 
     /**
+     * 扫码台按设备 ID / IMEI / SN 查询设备候选
+     * @return mixed
+     */
+    public function scanSearch()
+    {
+        $data = $this->request->params([
+            ['keyword', ''],
+            ['limit', 20],
+        ]);
+
+        return success($this->service->scanSearch((string)$data['keyword'], (int)$data['limit']));
+    }
+
+    /**
      * 添加设备
      * @return mixed
      */

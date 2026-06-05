@@ -281,11 +281,6 @@ class DeviceDataService extends BaseCoreService
             $deviceType = $this->getDeviceTypeFromText($brandText);
         }
         
-        // 默认为手机类型
-        if ($deviceType === 'unknown') {
-            $deviceType = 'phone';
-        }
-        
         return $deviceType;
     }
 

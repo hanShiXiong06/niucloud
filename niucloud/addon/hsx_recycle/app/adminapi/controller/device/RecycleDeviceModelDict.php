@@ -8,7 +8,7 @@ use core\base\BaseAdminController;
 use think\App;
 
 /**
- * 回收设备型号字典
+ * 回收设备分类
  */
 class RecycleDeviceModelDict extends BaseAdminController
 {
@@ -41,6 +41,17 @@ class RecycleDeviceModelDict extends BaseAdminController
         return success($this->service->options($data));
     }
 
+    public function children()
+    {
+        $data = $this->request->params([
+            ['pid', 0],
+            ['keyword', ''],
+            ['limit', 200],
+        ]);
+
+        return success($this->service->children($data));
+    }
+
     public function tree()
     {
         return success($this->service->tree());
@@ -49,9 +60,12 @@ class RecycleDeviceModelDict extends BaseAdminController
     public function add()
     {
         $data = $this->request->params([
+            ['category_name', ''],
+            ['subcategory_name', ''],
             ['brand_name', ''],
             ['series_name', ''],
             ['model_name', ''],
+            ['path', []],
             ['status', 1],
             ['sort', 0],
         ]);
@@ -62,9 +76,12 @@ class RecycleDeviceModelDict extends BaseAdminController
     public function edit(int $id)
     {
         $data = $this->request->params([
+            ['category_name', ''],
+            ['subcategory_name', ''],
             ['brand_name', ''],
             ['series_name', ''],
             ['model_name', ''],
+            ['path', []],
             ['status', 1],
             ['sort', 0],
         ]);
@@ -84,5 +101,24 @@ class RecycleDeviceModelDict extends BaseAdminController
         ]);
 
         return success($this->service->quickAdd((string)$data['content']));
+    }
+
+    public function externalImport()
+    {
+        $data = $this->request->params([
+            ['rows', []],
+            ['source', 'recycle_spider'],
+        ]);
+
+        return success($this->service->importExternalRows(is_array($data['rows']) ? $data['rows'] : [], (string)$data['source']));
+    }
+
+    public function updateSort()
+    {
+        $data = $this->request->params([
+            ['sort_list', []],
+        ]);
+
+        return success($this->service->updateSort(is_array($data['sort_list']) ? $data['sort_list'] : []));
     }
 }

@@ -11,6 +11,7 @@ use addon\hsx_recycle\app\model\order\RecycleReturnOrder;
 use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
+use addon\hsx_recycle\app\service\admin\template\RecycleTemplateBindingService;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 
@@ -432,7 +433,13 @@ class RecyclePrintSceneService extends BaseAdminService
                 return $this->disabledPlan($scene, '当前业务状态不满足手动打印按钮展示规则');
             }
 
-            $templateId = (int)($scene['template_id'] ?? 0);
+            $bizInfo = $this->resolveBizPrintData((string)($scene['biz_type'] ?? 'device'), $payload);
+            $templateBinding = $this->resolveTemplateBinding($scene, $bizInfo);
+
+            $templateId = (int)($templateBinding['print_template_id'] ?? 0);
+            if ($templateId <= 0) {
+                $templateId = (int)($scene['template_id'] ?? 0);
+            }
             if ($templateId <= 0) {
                 $template = $this->templateService->getDefaultTemplate($scene['template_type']);
                 $templateId = (int)($template['template_id'] ?? 0);
@@ -452,7 +459,6 @@ class RecyclePrintSceneService extends BaseAdminService
                 throw new AdminException('打印模板缺少打印指令内容');
             }
 
-            $bizInfo = $this->resolveBizPrintData((string)($scene['biz_type'] ?? 'device'), $payload);
             $bindPrinterId = (int)($scene['printer_id'] ?? 0);
             if ($bindPrinterId <= 0) {
                 $bindPrinterId = (int)($templateInfo['printer_id'] ?? 0);
@@ -484,7 +490,9 @@ class RecyclePrintSceneService extends BaseAdminService
                     'template_name' => $templateInfo['template_name'] ?? '',
                     'template_type' => $templateInfo['template_type'] ?? '',
                     'template_type_name' => $templateInfo['type_name'] ?? '',
+                    'binding_source_name' => $templateBinding['source_name'] ?? '',
                 ],
+                'template_binding' => $templateBinding,
                 'printer' => [
                     'printer_id' => (int)$printer['printer_id'],
                     'printer_name' => $printer['printer_name'] ?? '',
@@ -524,6 +532,25 @@ class RecyclePrintSceneService extends BaseAdminService
     public function resolveDeviceScenePlan(string $sceneKey, int $deviceId, bool $requireAuto = false, array $sceneData = []): array
     {
         return $this->resolveScenePlan($sceneKey, ['device_id' => $deviceId], $requireAuto, $sceneData);
+    }
+
+    /**
+     * 解析设备型号绑定的模板。仅设备标签场景参与覆盖，其他业务保持原场景模板。
+     * @param array $scene
+     * @param array $bizInfo
+     * @return array
+     */
+    private function resolveTemplateBinding(array $scene, array $bizInfo): array
+    {
+        if (($scene['biz_type'] ?? 'device') !== 'device') {
+            return [];
+        }
+        if (($scene['template_type'] ?? '') !== 'device_label') {
+            return [];
+        }
+
+        $device = array_merge($bizInfo['device'] ?? [], $bizInfo['print_data'] ?? []);
+        return (new RecycleTemplateBindingService())->resolveForDevice($device, (string)($scene['scene_key'] ?? 'manual_device_label'));
     }
 
     /**

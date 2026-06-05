@@ -20,10 +20,17 @@
             <view class="section">
                 <view class="section-title">业务概览</view>
                 <view class="metric-grid">
-                    <view class="metric-card" v-for="item in businessMetrics" :key="item.key">
+                    <view
+                        class="metric-card"
+                        :class="{ 'metric-card--link': item.drilldown }"
+                        v-for="item in businessMetrics"
+                        :key="item.key"
+                        @click="openDrilldown(item)"
+                    >
                         <text class="metric-card__value" :class="item.color">{{ item.value }}</text>
                         <text class="metric-card__label">{{ item.label }}</text>
                         <text class="metric-card__unit">{{ item.unit }}</text>
+                        <text v-if="item.drilldown" class="metric-card__action">查看明细</text>
                     </view>
                 </view>
             </view>
@@ -31,9 +38,16 @@
             <view class="section">
                 <view class="section-title">待办事项</view>
                 <view class="todo-grid">
-                    <view class="todo-card" v-for="item in todoMetrics" :key="item.key">
+                    <view
+                        class="todo-card"
+                        :class="{ 'todo-card--link': item.drilldown }"
+                        v-for="item in todoMetrics"
+                        :key="item.key"
+                        @click="openDrilldown(item)"
+                    >
                         <text class="todo-card__value">{{ item.value }}</text>
                         <text class="todo-card__label">{{ item.label }}</text>
+                        <text v-if="item.drilldown" class="todo-card__action">查看</text>
                     </view>
                 </view>
             </view>
@@ -41,10 +55,17 @@
             <view class="section">
                 <view class="section-title">资金数据</view>
                 <view class="metric-grid">
-                    <view class="metric-card" v-for="item in financeMetrics" :key="item.key">
+                    <view
+                        class="metric-card"
+                        :class="{ 'metric-card--link': item.drilldown }"
+                        v-for="item in financeMetrics"
+                        :key="item.key"
+                        @click="openDrilldown(item)"
+                    >
                         <text class="metric-card__value" :class="item.color">{{ item.value }}</text>
                         <text class="metric-card__label">{{ item.label }}</text>
                         <text class="metric-card__unit">{{ item.unit }}</text>
+                        <text v-if="item.drilldown" class="metric-card__action">查看明细</text>
                     </view>
                 </view>
             </view>
@@ -56,10 +77,38 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getDashboardOverview } from '@/addon/hsx_recycle/api/stats'
+import { redirect } from '@/utils/common'
 
 const loading = ref(true)
 const currentDate = ref('today')
 const statsData = ref<Record<string, any>>({})
+
+type DrilldownTarget = {
+    filter_key: string
+    title?: string
+    view_mode?: string
+}
+
+type MetricItem = {
+    key: string
+    label: string
+    value: string | number
+    unit?: string
+    color?: string
+    drilldown?: DrilldownTarget
+}
+
+type DashboardCard = {
+    key: string
+    title?: string
+    unit?: string
+    value?: string | number
+    drilldown?: {
+        target?: string
+        filter_key?: string
+        view_mode?: string
+    }
+}
 
 const dateOptions = [
     { label: '今日', value: 'today' },
@@ -68,24 +117,70 @@ const dateOptions = [
     { label: '近30天', value: 'month' },
 ]
 
-const businessMetrics = computed(() => [
-    { key: 'signed', label: '签收手机', value: ledgerValue('signed_device_count'), unit: '台', color: 'text-blue' },
-    { key: 'order', label: '新增订单', value: ledgerValue('order_count', 'today_order_count'), unit: '单', color: 'text-purple' },
-    { key: 'completed', label: '已完成', value: ledgerValue('completed_device_count'), unit: '台', color: 'text-green' },
-    { key: 'return', label: '退货设备', value: ledgerValue('return_device_count', 'today_return_count'), unit: '台', color: 'text-gray' },
+const dashboardCardMap = computed<Record<string, DashboardCard>>(() => {
+    const cards = Array.isArray(statsData.value.cards) ? statsData.value.cards : []
+    return cards.reduce((map: Record<string, DashboardCard>, card: DashboardCard) => {
+        if (card?.key) map[String(card.key)] = card
+        return map
+    }, {})
+})
+
+const getDashboardCard = (key: string) => dashboardCardMap.value[key]
+
+const getCardDrilldown = (card: DashboardCard | undefined): DrilldownTarget | undefined => {
+    const drilldown = card?.drilldown
+    if (!drilldown?.filter_key) return undefined
+    if (drilldown.target && drilldown.target !== 'order_list') return undefined
+
+    return {
+        filter_key: String(drilldown.filter_key),
+        title: card?.title,
+        view_mode: drilldown.view_mode ? String(drilldown.view_mode) : ''
+    }
+}
+
+const cardMetric = (
+    cardKey: string,
+    fallback: {
+        key?: string
+        label: string
+        value: string | number
+        unit?: string
+        color?: string
+        format?: (value: any) => string | number
+    }
+): MetricItem => {
+    const card = getDashboardCard(cardKey)
+    const value = card?.value ?? fallback.value
+
+    return {
+        key: fallback.key || cardKey,
+        label: String(card?.title || fallback.label),
+        value: fallback.format ? fallback.format(value) : value,
+        unit: String(card?.unit ?? fallback.unit ?? ''),
+        color: fallback.color,
+        drilldown: getCardDrilldown(card)
+    }
+}
+
+const businessMetrics = computed<MetricItem[]>(() => [
+    cardMetric('signed_device_count', { key: 'signed', label: '签收手机', value: ledgerValue('signed_device_count'), unit: '台', color: 'text-blue' }),
+    cardMetric('today_order_count', { key: 'order', label: '新增订单', value: ledgerValue('order_count', 'today_order_count'), unit: '单', color: 'text-purple' }),
+    cardMetric('completed_device_count', { key: 'completed', label: '已完成', value: ledgerValue('completed_device_count'), unit: '台', color: 'text-green' }),
+    cardMetric('today_return_device_count', { key: 'return', label: '退货设备', value: ledgerValue('return_device_count', 'today_return_count'), unit: '台', color: 'text-gray' }),
 ])
 
-const todoMetrics = computed(() => [
-    { key: 'pending_check', label: '待质检', value: ledgerValue('pending_check_device_count', 'pending_check') },
-    { key: 'checking', label: '质检中', value: ledgerValue('checking_device_count', 'checking_count') },
-    { key: 'pending_confirm', label: '待确认', value: ledgerValue('pending_confirm_count') },
-    { key: 'pending_pay', label: '待打款', value: ledgerValue('pending_pay_device_count', 'pending_pay') },
-    { key: 'pending_return', label: '退货待处理', value: ledgerValue('pending_return_count', 'pending_return') },
+const todoMetrics = computed<MetricItem[]>(() => [
+    cardMetric('pending_check_device_count', { key: 'pending_check', label: '待质检', value: ledgerValue('pending_check_device_count', 'pending_check') }),
+    cardMetric('checking_device_count', { key: 'checking', label: '质检中', value: ledgerValue('checking_device_count', 'checking_count') }),
+    cardMetric('pending_confirm_count', { key: 'pending_confirm', label: '待确认', value: ledgerValue('pending_confirm_count') }),
+    cardMetric('pending_pay', { key: 'pending_pay', label: '待打款', value: ledgerValue('pending_pay_order_count', 'pending_pay') }),
+    cardMetric('pending_return', { key: 'pending_return', label: '退货待处理', value: ledgerValue('pending_return_count', 'pending_return') }),
     { key: 'listing', label: '挂牌中', value: statsData.value.consignment_listing_count || 0 },
 ])
 
-const financeMetrics = computed(() => [
-    { key: 'payment', label: '所选时间打款', value: formatMoney(financeValue('selected_paid_amount', 'selected_payment_amount')), unit: '元', color: 'text-red' },
+const financeMetrics = computed<MetricItem[]>(() => [
+    cardMetric('today_paid_amount', { key: 'payment', label: '所选时间打款', value: financeValue('selected_paid_amount', 'selected_payment_amount'), unit: '元', color: 'text-red', format: formatMoney }),
     { key: 'today_payment', label: '今日打款', value: formatMoney(financeValue('today_paid_amount', 'today_payment_amount')), unit: '元', color: 'text-blue' },
     { key: 'week_payment', label: '近7天打款', value: formatMoney(financeValue('last_7_days_paid_amount', 'week_payment_amount')), unit: '元', color: 'text-purple' },
     { key: 'month_payment', label: '近30天打款', value: formatMoney(financeValue('last_30_days_paid_amount', 'month_payment_amount')), unit: '元', color: 'text-green' },
@@ -126,6 +221,25 @@ const getDateRange = (type: string) => {
     return { start_time: start, end_time: end }
 }
 
+const currentDateLabel = computed(() => dateOptions.find((item) => item.value === currentDate.value)?.label || '所选时间')
+
+const openDrilldown = (item: MetricItem) => {
+    if (!item.drilldown) return
+    const range = getDateRange(currentDate.value)
+    const param: Record<string, any> = {
+        filter_key: item.drilldown.filter_key,
+        start_time: range.start_time,
+        end_time: range.end_time,
+        dashboard_title: `${currentDateLabel.value} · ${item.drilldown.title || item.label}`
+    }
+    if (item.drilldown.view_mode) param.view_mode = item.drilldown.view_mode
+
+    redirect({
+        url: '/addon/hsx_recycle/pages/order/list',
+        param
+    })
+}
+
 const formatDate = (d: Date) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -144,6 +258,7 @@ const loadStats = async () => {
 }
 
 const switchDate = (value: string) => {
+    if (currentDate.value === value) return
     currentDate.value = value
     loadStats()
 }
@@ -219,6 +334,15 @@ onLoad(() => {
     flex-direction: column;
 }
 
+.metric-card--link {
+    position: relative;
+}
+
+.metric-card--link:active,
+.todo-card--link:active {
+    opacity: 0.82;
+}
+
 .metric-card__value {
     font-size: 40rpx;
     font-weight: 700;
@@ -237,6 +361,12 @@ onLoad(() => {
     margin-top: 4rpx;
 }
 
+.metric-card__action {
+    margin-top: 12rpx;
+    font-size: 22rpx;
+    color: #2563eb;
+}
+
 .todo-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -253,6 +383,10 @@ onLoad(() => {
     align-items: center;
 }
 
+.todo-card--link {
+    border: 1rpx solid rgba(37, 99, 235, 0.12);
+}
+
 .todo-card__value {
     font-size: 36rpx;
     font-weight: 700;
@@ -263,6 +397,12 @@ onLoad(() => {
     font-size: 22rpx;
     color: #6b7280;
     margin-top: 8rpx;
+}
+
+.todo-card__action {
+    margin-top: 8rpx;
+    font-size: 20rpx;
+    color: #2563eb;
 }
 
 .text-blue { color: #2563eb; }

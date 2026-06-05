@@ -8,6 +8,7 @@ use app\model\sys\SysUser;
 use app\model\member\Member;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\model\check\RecycleCheckTemplate;
 
 /**
  * 回收设备模型
@@ -63,7 +64,10 @@ class RecycleDevice extends BaseModel
         'category_name',
         'nickname',
         'pay_status_name',
-        'confirm_status_name'
+        'confirm_status_name',
+        'dispose_type_name',
+        'dispose_status_name',
+        'check_template_name'
     ];
 
     /**
@@ -100,6 +104,47 @@ class RecycleDevice extends BaseModel
     }
 
     /**
+     * 获取设备处置类型名称
+     * @param $value
+     * @param $data
+     * @return string
+     */
+    public function getDisposeTypeNameAttr($value, $data): string
+    {
+        return RecycleOrderDict::getDisposeType($data['dispose_type'] ?? RecycleOrderDict::DISPOSE_TYPE_PENDING) ?: '未处置';
+    }
+
+    /**
+     * 获取设备处置状态名称
+     * @param $value
+     * @param $data
+     * @return string
+     */
+    public function getDisposeStatusNameAttr($value, $data): string
+    {
+        return RecycleOrderDict::getDisposeStatus($data['dispose_status'] ?? RecycleOrderDict::DISPOSE_STATUS_PENDING) ?: '未处置';
+    }
+
+    /**
+     * 获取质检模板名称
+     * @param $value
+     * @param $data
+     * @return string
+     */
+    public function getCheckTemplateNameAttr($value, $data): string
+    {
+        $templateId = (int)($data['check_template_id'] ?? 0);
+        if ($templateId <= 0) {
+            return '';
+        }
+
+        return (string)(RecycleCheckTemplate::where([
+            ['id', '=', $templateId],
+            ['site_id', '=', (int)($data['site_id'] ?? 0)]
+        ])->value('template_name') ?: '');
+    }
+
+    /**
      * 获取分类名称
      * @param $value
      * @param $data
@@ -114,7 +159,7 @@ class RecycleDevice extends BaseModel
             4 => '手表',
             5 => '其他'
         ];
-        return $categories[$data['category_id'] ?? 1] ?? '手机';
+        return $categories[$data['category_id'] ?? 0] ?? '未分类';
     }
 
     /**

@@ -253,8 +253,8 @@ $spec-border: #e2e8f0;
 }
 
 .dic-meta-value {
-  font-size: 12px;
-  color: #334155;
+  font-size: 14px;
+  color: #0069ff;
 
   &--mono { font-family: 'SF Mono', 'Fira Code', monospace; letter-spacing: 0.02em; }
 

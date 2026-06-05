@@ -12,6 +12,10 @@ export function getRecycleDeviceModelDictTree(params: Record<string, any> = {}) 
   return request.get("/recycle/recycle_device_model_dict/tree", { params });
 }
 
+export function getRecycleDeviceModelDictChildren(params: Record<string, any> = {}) {
+  return request.get("/recycle/recycle_device_model_dict/children", { params });
+}
+
 export function addRecycleDeviceModelDict(data: Record<string, any>) {
   return request.post("/recycle/recycle_device_model_dict", data, {
     showErrorMessage: true,
@@ -36,5 +40,35 @@ export function deleteRecycleDeviceModelDict(id: number | string) {
 export function quickAddRecycleDeviceModelDict(data: Record<string, any>) {
   return request.post("/recycle/recycle_device_model_dict/quick_add", data, {
     showErrorMessage: true,
+  });
+}
+
+export function importExternalRecycleDeviceModelDict(data: Record<string, any>) {
+  return request.post("/recycle/recycle_device_model_dict/external_import", data, {
+    showErrorMessage: true,
+  });
+}
+
+export function updateRecycleDeviceModelDictSort(data: Record<string, any>) {
+  return request.post("/recycle/recycle_device_model_dict/sort/update", data, {
+    showErrorMessage: true,
+  });
+}
+
+export function getTemplateBindingInfo(params: Record<string, any>) {
+  return request.get("/recycle/template_binding/info", { params });
+}
+
+export function saveTemplateBinding(data: Record<string, any>) {
+  return request.post("/recycle/template_binding/save", data, {
+    showErrorMessage: true,
+    showSuccessMessage: true,
+  });
+}
+
+export function resetTemplateBinding(data: Record<string, any>) {
+  return request.post("/recycle/template_binding/reset", data, {
+    showErrorMessage: true,
+    showSuccessMessage: true,
   });
 }

@@ -138,17 +138,25 @@ Route::group('recycle', function () {
     Route::delete('recycle_order/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@delete');
      // 查询手机imei的信息
     Route::get('recycle_device/imei_info/:imei', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@getImeiInfo');
+    Route::get('recycle_device/scan_search', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@scanSearch');
     // 设备管理
     Route::get('recycle_device/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@getInfo');
     Route::post('recycle_device', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@add');
     // 回收设备型号字典
     Route::get('recycle_device_model_dict/options', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@options');
+    Route::get('recycle_device_model_dict/children', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@children');
     Route::get('recycle_device_model_dict/tree', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@tree');
     Route::get('recycle_device_model_dict', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@lists');
     Route::post('recycle_device_model_dict/quick_add', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@quickAdd');
+    Route::post('recycle_device_model_dict/external_import', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@externalImport');
+    Route::post('recycle_device_model_dict/sort/update', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@updateSort');
     Route::post('recycle_device_model_dict', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@add');
     Route::put('recycle_device_model_dict/:id', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@edit');
     Route::delete('recycle_device_model_dict/:id', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@del');
+    Route::get('template_binding/info', 'addon\hsx_recycle\app\adminapi\controller\template\RecycleTemplateBinding@info');
+    Route::get('template_binding/resolve_device', 'addon\hsx_recycle\app\adminapi\controller\template\RecycleTemplateBinding@resolveDevice');
+    Route::post('template_binding/save', 'addon\hsx_recycle\app\adminapi\controller\template\RecycleTemplateBinding@save');
+    Route::post('template_binding/reset', 'addon\hsx_recycle\app\adminapi\controller\template\RecycleTemplateBinding@reset');
 
     // 确认设备价格
     Route::put('recycle_device/:id/confirm_price', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@confirmPrice');

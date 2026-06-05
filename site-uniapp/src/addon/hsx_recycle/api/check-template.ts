@@ -7,3 +7,7 @@ export function getCheckTemplateAll(params: Record<string, any> = {}) {
 export function getCheckTemplateSchema(params: Record<string, any> = {}) {
     return request.get('recycle/check_template/schema', params)
 }
+
+export function resolveDeviceTemplateBinding(params: Record<string, any> = {}) {
+    return request.get('recycle/template_binding/resolve_device', params)
+}

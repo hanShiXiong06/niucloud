@@ -709,9 +709,7 @@ watch(() => sceneForm.template_type, () => {
 </script>
 
 <style lang="scss" scoped>
-.print-scene-page {
-  padding: 16px;
-}
+
 
 .print-scene-card {
   border: none;

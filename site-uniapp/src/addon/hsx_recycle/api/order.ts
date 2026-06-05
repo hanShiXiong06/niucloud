@@ -24,6 +24,14 @@ export function getDeviceModelDictTree() {
     return request.get('recycle/recycle_device_model_dict/tree')
 }
 
+export function getDeviceModelDictChildren(params: Record<string, any> = {}) {
+    return request.get('recycle/recycle_device_model_dict/children', params)
+}
+
+export function searchDeviceModelDictOptions(params: Record<string, any> = {}) {
+    return request.get('recycle/recycle_device_model_dict/options', params)
+}
+
 export function searchMemberList(params: Record<string, any>) {
     return request.get('member/member', params)
 }
@@ -67,6 +75,10 @@ export function getOrderNoticeLogs(id: number | string) {
 // 设备相关接口
 export function getDevice(id: number | string) {
     return request.get(`recycle/recycle_device/${id}`)
+}
+
+export function scanSearchDevice(params: Record<string, any>) {
+    return request.get('recycle/recycle_device/scan_search', params)
 }
 
 export function updateDevice(id: number | string, data: Record<string, any>) {

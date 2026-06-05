@@ -16,6 +16,7 @@ use addon\hsx_recycle\app\service\core\category\CoreRecycleCategoryService;
 use addon\hsx_recycle\app\model\category\RecycleCategoryConfig;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
+use think\facade\Cache;
 
 /**
  * 二手机分类服务层
@@ -24,6 +25,8 @@ use core\exception\AdminException;
  */
 class RecycleCategoryService extends BaseAdminService
 {
+    private const CACHE_TTL = 86400;
+
     public function __construct()
     {
         parent::__construct();
@@ -52,6 +55,14 @@ class RecycleCategoryService extends BaseAdminService
      */
     public function getTree(?string $date = null)
     {
+        if ($date === null) {
+            $cacheKey = $this->cacheKey('tree');
+            $cached = Cache::get($cacheKey);
+            if (is_array($cached)) {
+                return $cached;
+            }
+        }
+
         if($this->site_id !== 0) {
             $config = (new RecycleCategoryConfig())->where([
                 ['site_id', '=', $this->site_id]
@@ -63,6 +74,10 @@ class RecycleCategoryService extends BaseAdminService
 
         if ($date) {
             $this->applyHistoryImagesToTree($tree, $date);
+        }
+
+        if ($date === null) {
+            Cache::tag($this->cacheTag())->set($cacheKey, $tree, self::CACHE_TTL);
         }
 
         return $tree;
@@ -162,6 +177,7 @@ class RecycleCategoryService extends BaseAdminService
             );
         }
 
+        $this->clearCategoryCache();
         return $res->category_id;
     }
 
@@ -219,6 +235,7 @@ class RecycleCategoryService extends BaseAdminService
             );
         }
 
+        $this->clearCategoryCache();
         return true;
     }
 
@@ -232,6 +249,7 @@ class RecycleCategoryService extends BaseAdminService
                 $this->model->where([ [ 'category_id', '=', $val[ 'category_id' ] ], [ 'site_id', '=', $this->site_id ] ])->update([ 'sort' => $val[ 'sort' ] ]);
             }
         }
+        $this->clearCategoryCache();
         return true;
     }
 
@@ -244,6 +262,22 @@ class RecycleCategoryService extends BaseAdminService
     {
         $model = $this->model->where([['category_id', '=', $id],['site_id', '=', $this->site_id]])->find();
         $res = $model->delete();
+        $this->clearCategoryCache();
         return $res;
+    }
+
+    private function cacheTag(): string
+    {
+        return 'hsx_recycle_category_' . $this->site_id;
+    }
+
+    private function cacheKey(string $scene): string
+    {
+        return $this->cacheTag() . '_' . $scene;
+    }
+
+    private function clearCategoryCache(): void
+    {
+        Cache::tag($this->cacheTag())->clear();
     }
 }
