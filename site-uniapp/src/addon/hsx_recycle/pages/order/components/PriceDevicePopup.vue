@@ -25,109 +25,111 @@
 
             <!-- 表单内容 -->
             <scroll-view scroll-y class="price-content">
-                <!-- 质检结果展示 -->
-                <view v-if="device.check_result || device.check_result_seller" class="form-section">
-                    <view class="section-title">
-                        <text>质检结果</text>
-                        <text v-if="detailLoading" class="section-loading">加载中...</text>
+                <view class="price-content__inner">
+                    <!-- 质检结果展示 -->
+                    <view v-if="device.check_result || device.check_result_seller" class="form-section">
+                        <view class="section-title">
+                            <text>质检结果</text>
+                            <text v-if="detailLoading" class="section-loading">加载中...</text>
+                        </view>
+                        <view class="check-result-box">
+                            {{ device.check_result_seller || device.check_result }}
+                        </view>
                     </view>
-                    <view class="check-result-box">
-                        {{ device.check_result_seller || device.check_result }}
-                    </view>
-                </view>
 
-                <view v-if="imageGroups.length" class="form-section">
-                    <view class="section-title">质检图片</view>
-                    <view v-for="group in imageGroups" :key="group.label" class="image-group">
-                        <view v-if="imageGroups.length > 1" class="image-group__label">{{ group.label }}</view>
-                        <scroll-view scroll-x class="image-scroll">
-                            <view class="image-row">
-                                <image
-                                    v-for="(item, imageIndex) in group.items"
-                                    :key="item.url"
-                                    class="preview-image"
-                                    :src="item.thumb"
-                                    mode="aspectFill"
-                                    @click="previewImages(group.items, imageIndex)"
-                                />
+                    <view v-if="imageGroups.length" class="form-section">
+                        <view class="section-title">质检图片</view>
+                        <view v-for="group in imageGroups" :key="group.label" class="image-group">
+                            <view v-if="imageGroups.length > 1" class="image-group__label">{{ group.label }}</view>
+                            <scroll-view scroll-x class="image-scroll">
+                                <view class="image-row">
+                                    <image
+                                        v-for="(item, imageIndex) in group.items"
+                                        :key="item.url"
+                                        class="preview-image"
+                                        :src="item.thumb"
+                                        mode="aspectFill"
+                                        @click="previewImages(group.items, imageIndex)"
+                                    />
+                                </view>
+                            </scroll-view>
+                        </view>
+                    </view>
+                    <view v-else-if="detailLoading" class="form-section">
+                        <view class="section-title">质检图片</view>
+                        <view class="image-empty">正在加载质检图片...</view>
+                    </view>
+
+                    <!-- 价格对比 -->
+                    <view class="form-section">
+                        <view class="section-title">价格信息</view>
+                        <view class="price-compare">
+                            <view v-if="device.initial_price && Number(device.initial_price) > 0" class="price-item">
+                                <text class="price-label">初始报价</text>
+                                <text class="price-value price-value--initial">¥{{ device.initial_price }}</text>
                             </view>
-                        </scroll-view>
-                    </view>
-                </view>
-                <view v-else-if="detailLoading" class="form-section">
-                    <view class="section-title">质检图片</view>
-                    <view class="image-empty">正在加载质检图片...</view>
-                </view>
-
-                <!-- 价格对比 -->
-                <view class="form-section">
-                    <view class="section-title">价格信息</view>
-                    <view class="price-compare">
-                        <view v-if="device.initial_price && Number(device.initial_price) > 0" class="price-item">
-                            <text class="price-label">初始报价</text>
-                            <text class="price-value price-value--initial">¥{{ device.initial_price }}</text>
-                        </view>
-                        <view v-if="device.before_price && device.before_price != device.initial_price" class="price-item">
-                            <text class="price-label">上次定价</text>
-                            <text class="price-value price-value--before">¥{{ device.before_price }}</text>
+                            <view v-if="device.before_price && device.before_price != device.initial_price" class="price-item">
+                                <text class="price-label">上次定价</text>
+                                <text class="price-value price-value--before">¥{{ device.before_price }}</text>
+                            </view>
                         </view>
                     </view>
-                </view>
 
-                <!-- 最终定价 -->
-                <view class="form-section">
-                    <view class="section-title">
-                        <text>最终定价</text>
-                        <text class="text-[#e6a23c] text-[24rpx] ml-[16rpx]">*必填</text>
+                    <!-- 最终定价 -->
+                    <view class="form-section">
+                        <view class="section-title">
+                            <text>最终定价</text>
+                            <text class="text-[#e6a23c] text-[24rpx] ml-[16rpx]">*必填</text>
+                        </view>
+                        <view class="price-input-wrapper">
+                            <text class="price-symbol">¥</text>
+                            <u-input
+                                v-model="formData.final_price"
+                                type="number"
+                                placeholder="请输入回收价格"
+                                class="price-input"
+                                border="none"
+                                clearable
+                                inputAlign="right"
+                                fontSize="34rpx"
+                                placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
+                            ></u-input>
+                        </view>
+                        <view v-if="device.initial_price && Number(device.initial_price) > 0" class="text-[22rpx] text-[#999] mt-[8rpx]">
+                            参考预估：¥{{ device.initial_price }}
+                        </view>
                     </view>
-                    <view class="price-input-wrapper">
-                        <text class="price-symbol">¥</text>
-                        <u-input
-                            v-model="formData.final_price"
-                            type="number"
-                            placeholder="请输入回收价格"
-                            class="price-input"
-                            border="none"
-                            clearable
-                            inputAlign="right"
-                            fontSize="34rpx"
-                            placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
-                        ></u-input>
-                    </view>
-                    <view v-if="device.initial_price && Number(device.initial_price) > 0" class="text-[22rpx] text-[#999] mt-[8rpx]">
-                        参考预估：¥{{ device.initial_price }}
-                    </view>
-                </view>
 
-                <!-- 卖货价格 -->
-                <view class="form-section">
-                    <view class="section-title">卖货价格 <text class="text-[22rpx] text-[#999]">（选填，内部使用）</text></view>
-                    <view class="price-input-wrapper">
-                        <text class="price-symbol">¥</text>
-                        <u-input
-                            v-model="formData.sell_price"
-                            type="number"
-                            placeholder="选填"
-                            class="price-input"
-                            border="none"
-                            clearable
-                            inputAlign="right"
-                            fontSize="34rpx"
-                            placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
-                        ></u-input>
+                    <!-- 卖货价格 -->
+                    <view class="form-section">
+                        <view class="section-title">卖货价格 <text class="text-[22rpx] text-[#999]">（选填，内部使用）</text></view>
+                        <view class="price-input-wrapper">
+                            <text class="price-symbol">¥</text>
+                            <u-input
+                                v-model="formData.sell_price"
+                                type="number"
+                                placeholder="选填"
+                                class="price-input"
+                                border="none"
+                                clearable
+                                inputAlign="right"
+                                fontSize="34rpx"
+                                placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
+                            ></u-input>
+                        </view>
                     </view>
-                </view>
 
-                <!-- 调价说明 -->
-                <view class="form-section">
-                    <view class="section-title">价格备注</view>
-                    <u-textarea
-                        v-model="formData.remark"
-                        placeholder="请输入定价理由或扣费说明..."
-                        :maxlength="200"
-                        :height="120"
-                        count
-                    ></u-textarea>
+                    <!-- 调价说明 -->
+                    <view class="form-section">
+                        <view class="section-title">价格备注</view>
+                        <u-textarea
+                            v-model="formData.remark"
+                            placeholder="请输入定价理由或扣费说明..."
+                            :maxlength="200"
+                            :height="120"
+                            count
+                        ></u-textarea>
+                    </view>
                 </view>
             </scroll-view>
 
@@ -309,9 +311,11 @@ const handleSubmit = async () => {
 <style scoped lang="scss">
 .price-popup {
     background: #fff;
+    height: 80vh;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .price-header {
@@ -320,6 +324,7 @@ const handleSubmit = async () => {
     justify-content: space-between;
     padding: 30rpx;
     border-bottom: 1rpx solid #f5f5f5;
+    flex-shrink: 0;
 }
 
 .price-title {
@@ -331,6 +336,7 @@ const handleSubmit = async () => {
 .device-info {
     padding: 24rpx 30rpx;
     background: #f8f9fa;
+    flex-shrink: 0;
 }
 
 .device-info-row {
@@ -365,8 +371,13 @@ const handleSubmit = async () => {
 
 .price-content {
     flex: 1;
+    min-height: 0;
+    height: 0;
+    box-sizing: border-box;
+}
+
+.price-content__inner {
     padding: 20rpx 30rpx;
-    overflow-y: auto;
     box-sizing: border-box;
 }
 
@@ -500,5 +511,6 @@ const handleSubmit = async () => {
     padding: 20rpx 30rpx;
     border-top: 1rpx solid #f5f5f5;
     background: #fff;
+    flex-shrink: 0;
 }
 </style>

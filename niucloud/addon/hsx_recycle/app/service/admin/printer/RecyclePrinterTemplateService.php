@@ -956,14 +956,15 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'imei' => $device['imei'] ?? '',
             'imei2' => $device['imei2'] ?? '',
             'sn' => $device['sn'] ?? '',
-            'model' => $device['model'] ?? '',
+            // 截取 25 个字符
+            'model' => substr($device['model'] ?? '', 0, 25),
             'system_version' => $this->stringifyPrintValue($this->firstNotBlank($device['system_version'] ?? null, $deviceInfo['system_version'] ?? null)),
             'warranty_info' => $this->stringifyPrintValue($this->firstNotBlank($device['warranty_info'] ?? null, $deviceInfo['warranty_info'] ?? null)),
             'capacity' => $this->stringifyPrintValue($this->firstNotBlank($device['capacity'] ?? null, $deviceInfo['capacity'] ?? null)),
             'color' => $this->stringifyPrintValue($this->firstNotBlank($device['color'] ?? null, $deviceInfo['color'] ?? null)),
-            'battery' => $this->isBlankPrintValue($battery) ? '未检测' : $this->stringifyPrintValue($battery),
-            'battery_num' => $this->isBlankPrintValue($batteryNum) ? '未检测' : $this->stringifyPrintValue($batteryNum),
-            'battery_cycle' => $this->isBlankPrintValue($batteryNum) ? '未检测' : $this->stringifyPrintValue($batteryNum),
+            'battery' => $this->isBlankPrintValue($battery) ? '-' : $this->stringifyPrintValue($battery),
+            'battery_num' => $this->isBlankPrintValue($batteryNum) ? '-' : $this->stringifyPrintValue($batteryNum),
+            'battery_cycle' => $this->isBlankPrintValue($batteryNum) ? '-' : $this->stringifyPrintValue($batteryNum),
             
             // 设备序号信息
             'device_index' => (string)$device_index,

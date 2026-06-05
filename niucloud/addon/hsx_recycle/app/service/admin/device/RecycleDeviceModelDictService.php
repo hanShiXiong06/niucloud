@@ -61,6 +61,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
     public function options(array $where = []): array
     {
         $keyword = trim((string)($where['keyword'] ?? ''));
+        $field = 'id,pid,level,node_name,model_full_name,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json';
         $query = $this->model->where([
             ['site_id', '=', $this->site_id],
             ['status', '=', 1],
@@ -71,22 +72,52 @@ class RecycleDeviceModelDictService extends BaseAdminService
             $query->where(function ($subQuery) use ($keyword) {
                 $subQuery->whereOr('node_name', 'like', "%{$keyword}%")
                     ->whereOr('model_full_name', 'like', "%{$keyword}%")
-                    ->whereOr('source_node_id', 'like', "%{$keyword}%");
+                    ->whereOr('source_node_id', 'like', "%{$keyword}%")
+                    ->whereOr('category_source_id', 'like', "%{$keyword}%")
+                    ->whereOr('brand_source_id', 'like', "%{$keyword}%")
+                    ->whereOr('series_source_id', 'like', "%{$keyword}%")
+                    ->whereOr('product_source_id', 'like', "%{$keyword}%");
             });
         }
 
-        $rows = $query->field('id,pid,level,node_name,model_full_name,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
+        $rows = $query->field($field)
             ->order('is_hot desc, select_count desc, sort asc, id desc')
             ->limit(300)
             ->select()
             ->toArray();
-        $parentIds = $this->model->where([['site_id', '=', $this->site_id]])
-            ->whereIn('pid', array_column($rows, 'id') ?: [0])
-            ->column('pid');
-        $parentMap = $this->buildParentMap($parentIds);
 
-        $leaves = array_filter($rows, static fn($row) => !isset($parentMap[(int)$row['id']]));
-        return array_map([$this, 'formatNode'], array_values($leaves));
+        $leaves = array_values($this->filterLeafNodes($rows));
+        $leafIds = array_column($leaves, 'id');
+        $parentRows = array_values(array_filter($rows, static fn($row) => !in_array($row['id'], $leafIds)));
+
+        $parentPaths = array_values(array_filter(array_map(static fn($row) => trim((string)($row['model_full_name'] ?? '')), $parentRows)));
+        if (!empty($parentPaths)) {
+            $descendantQuery = $this->model->where([
+                ['site_id', '=', $this->site_id],
+                ['status', '=', 1],
+            ]);
+            $descendantQuery->where(function ($subQuery) use ($parentPaths) {
+                foreach ($parentPaths as $path) {
+                    $subQuery->whereOr('model_full_name', 'like', $path . '/%');
+                }
+            });
+            $descendantRows = $descendantQuery->field($field)
+                ->order('is_hot desc, select_count desc, sort asc, id desc')
+                ->limit(300)
+                ->select()
+                ->toArray();
+            $leaves = array_merge($leaves, array_values($this->filterLeafNodes($descendantRows)));
+        }
+
+        $uniqueRows = [];
+        foreach ($leaves as $row) {
+            $uniqueRows[(int)$row['id']] = $row;
+            if (count($uniqueRows) >= 300) {
+                break;
+            }
+        }
+
+        return array_map([$this, 'formatNode'], array_values($uniqueRows));
     }
 
     public function children(array $where = []): array
@@ -105,7 +136,11 @@ class RecycleDeviceModelDictService extends BaseAdminService
             $query->where(function ($subQuery) use ($keyword) {
                 $subQuery->whereOr('node_name', 'like', "%{$keyword}%")
                     ->whereOr('model_full_name', 'like', "%{$keyword}%")
-                    ->whereOr('source_node_id', 'like', "%{$keyword}%");
+                    ->whereOr('source_node_id', 'like', "%{$keyword}%")
+                    ->whereOr('category_source_id', 'like', "%{$keyword}%")
+                    ->whereOr('brand_source_id', 'like', "%{$keyword}%")
+                    ->whereOr('series_source_id', 'like', "%{$keyword}%")
+                    ->whereOr('product_source_id', 'like', "%{$keyword}%");
             });
         }
 

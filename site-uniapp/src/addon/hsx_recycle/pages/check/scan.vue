@@ -1,8 +1,15 @@
 <template>
     <view class="scan-check-page">
         <view class="hero">
-            <view class="hero__title">{{ currentMode.title }}</view>
-            <view class="hero__subtitle">{{ currentMode.desc }}</view>
+            <view class="hero__content">
+                <view class="hero__icon">
+                    <text :class="['nc-iconfont', currentMode.icon]"></text>
+                </view>
+                <view class="hero__main">
+                    <view class="hero__title">{{ currentMode.title }}</view>
+                    <view class="hero__subtitle">{{ currentMode.desc }}</view>
+                </view>
+            </view>
         </view>
 
         <view class="scan-panel">
@@ -14,20 +21,27 @@
                     :class="{ 'mode-tab--active': scanMode === item.value }"
                     @click="switchMode(item.value)"
                 >
-                    {{ item.label }}
+                    <text :class="['nc-iconfont', item.icon, 'mode-tab__icon']"></text>
+                    <text class="mode-tab__label">{{ item.label }}</text>
                 </view>
             </view>
 
             <view class="scan-button" @click="scanDevice">
-                <view class="scan-button__icon">扫</view>
-                <view>
+                <view class="scan-button__icon">
+                    <text class="nc-iconfont nc-icon-saoyisaoV6xx"></text>
+                </view>
+                <view class="scan-button__main">
                     <view class="scan-button__title">扫描设备码 / IMEI</view>
                     <view class="scan-button__desc">支持设备 ID、IMEI、SN 或链接二维码</view>
                 </view>
+                <text class="nc-iconfont nc-icon-youV6xx1 scan-button__arrow"></text>
             </view>
 
             <view class="manual-box">
-                <view class="manual-box__title">手动输入</view>
+                <view class="manual-box__title">
+                    <text class="nc-iconfont nc-icon-sousuo-duanV6xx1 manual-box__icon"></text>
+                    <text>手动输入</text>
+                </view>
                 <view class="manual-row">
                     <input
                         v-model="manualText"
@@ -41,13 +55,23 @@
             </view>
         </view>
 
-        <view v-if="loading" class="state-card">正在查询设备...</view>
+        <view v-if="loading" class="state-card">
+            <view class="state-card__icon">
+                <text class="nc-iconfont nc-icon-sousuo-duanV6xx1"></text>
+            </view>
+            <text>正在查询设备...</text>
+        </view>
 
         <view v-if="candidateDevices.length > 1" class="candidate-card">
             <view class="candidate-card__head">
-                <view>
-                    <view class="candidate-card__title">选择设备记录</view>
-                    <view class="candidate-card__desc">同一串码存在多条记录，请确认订单和时间后进入。</view>
+                <view class="candidate-card__head-main">
+                    <view class="candidate-card__icon">
+                        <text class="nc-iconfont nc-icon-dingdanliebiaoV6xx"></text>
+                    </view>
+                    <view>
+                        <view class="candidate-card__title">选择设备记录</view>
+                        <view class="candidate-card__desc">同一串码存在多条记录，请确认订单和时间后进入。</view>
+                    </view>
                 </view>
                 <view class="candidate-card__count">{{ candidateDevices.length }} 条</view>
             </view>
@@ -60,15 +84,25 @@
                 >
                     <view class="candidate-item__main">
                         <view class="candidate-item__title">{{ item.model || '未知设备' }}</view>
-                        <view class="candidate-item__meta">IMEI：{{ item.imei || item.user_sn || item.sn || '-' }}</view>
-                        <view class="candidate-item__meta">订单：{{ item.order_no || item.order_id || '-' }}</view>
-                        <view class="candidate-item__meta">客户：{{ formatCustomer(item) }}</view>
+                        <view class="candidate-item__meta">
+                            <text class="candidate-item__meta-label">IMEI</text>
+                            <text>{{ item.imei || item.user_sn || item.sn || '-' }}</text>
+                        </view>
+                        <view class="candidate-item__meta">
+                            <text class="candidate-item__meta-label">订单</text>
+                            <text>{{ item.order_no || item.order_id || '-' }}</text>
+                        </view>
+                        <view class="candidate-item__meta">
+                            <text class="candidate-item__meta-label">客户</text>
+                            <text>{{ formatCustomer(item) }}</text>
+                        </view>
                     </view>
                     <view class="candidate-item__side">
                         <view class="candidate-item__status">{{ item.status_name || '-' }}</view>
                         <view v-if="item.milestone_label" class="candidate-item__time">
                             {{ item.milestone_label }} {{ formatScanTime(item.milestone_time) }}
                         </view>
+                        <text class="nc-iconfont nc-icon-youV6xx1 candidate-item__arrow"></text>
                     </view>
                 </view>
             </view>
@@ -76,25 +110,48 @@
 
         <view v-if="deviceData?.id" class="device-card">
             <view class="device-card__head">
-                <view>
-                    <view class="device-card__title">{{ deviceData.model || '未知设备' }}</view>
-                    <view class="device-card__meta">IMEI：{{ deviceData.imei || deviceData.user_sn || '-' }}</view>
+                <view class="device-card__head-main">
+                    <view class="device-card__icon">
+                        <text class="nc-iconfont nc-icon-erweimaV6xx"></text>
+                    </view>
+                    <view class="device-card__main">
+                        <view class="device-card__title">{{ deviceData.model || '未知设备' }}</view>
+                        <view class="device-card__meta">IMEI：{{ deviceData.imei || deviceData.user_sn || '-' }}</view>
+                    </view>
                 </view>
                 <view class="device-card__status">{{ deviceData.status_name || '-' }}</view>
             </view>
             <view class="device-card__info">
-                <text>订单：{{ deviceData.order?.order_no || deviceData.order_id || '-' }}</text>
-                <text>客户：{{ customerName }}</text>
+                <view class="device-card__info-row">
+                    <text class="nc-iconfont nc-icon-dingdanbianhaoV6xx device-card__info-icon"></text>
+                    <text>订单：{{ deviceData.order?.order_no || deviceData.order_id || '-' }}</text>
+                </view>
+                <view class="device-card__info-row">
+                    <text class="nc-iconfont nc-icon-dianhuaV6xx device-card__info-icon"></text>
+                    <text>客户：{{ customerName }}</text>
+                </view>
             </view>
             <view class="device-card__actions">
-                <view class="device-card__btn" @click="openDeviceAction">{{ primaryActionText }}</view>
-                <view class="device-card__btn device-card__btn--ghost" @click="openOrderDetail">查看订单</view>
-                <view class="device-card__btn device-card__btn--ghost" @click="scanDevice">下一台</view>
+                <view class="device-card__btn" @click="openDeviceAction">
+                    <text :class="['nc-iconfont', currentMode.icon, 'device-card__btn-icon']"></text>
+                    <text>{{ primaryActionText }}</text>
+                </view>
+                <view class="device-card__btn device-card__btn--ghost" @click="openOrderDetail">
+                    <text class="nc-iconfont nc-icon-dingdanliebiaoV6xx device-card__btn-icon"></text>
+                    <text>查看订单</text>
+                </view>
+                <view class="device-card__btn device-card__btn--ghost" @click="scanDevice">
+                    <text class="nc-iconfont nc-icon-saoyisaoV6xx device-card__btn-icon"></text>
+                    <text>下一台</text>
+                </view>
             </view>
         </view>
 
         <view class="tips-card">
-            <view class="tips-card__title">当前模式</view>
+            <view class="tips-card__title">
+                <text :class="['nc-iconfont', currentMode.icon, 'tips-card__icon']"></text>
+                <text>当前模式</text>
+            </view>
             <view class="tips-card__line">{{ currentMode.tip }}</view>
             <view class="tips-card__line">同一 IMEI 查到多台时，会先展示订单、客户和关键时间供选择。</view>
         </view>
@@ -140,27 +197,30 @@ const {
     executePrintAction
 } = useRecyclePrintActions('device')
 
-const scanModes: Array<{ value: ScanMode, label: string, title: string, desc: string, tip: string }> = [
+const scanModes: Array<{ value: ScanMode, label: string, title: string, desc: string, tip: string, icon: string }> = [
     {
         value: 'process',
         label: '扫码处理',
         title: '扫码处理',
         desc: '扫码后按设备状态自动打开质检或定价。',
-        tip: '待质检打开质检，已质检/待确认打开定价。'
+        tip: '待质检打开质检，已质检/待确认打开定价。',
+        icon: 'nc-icon-saoyisaoV6xx'
     },
     {
         value: 'query',
         label: '扫码查询',
         title: '扫码查询',
         desc: '扫码后定位设备所在订单，适合核对历史记录。',
-        tip: '单台设备直接进入订单详情，多台设备先选择记录。'
+        tip: '单台设备直接进入订单详情，多台设备先选择记录。',
+        icon: 'nc-icon-sousuo-duanV6xx1'
     },
     {
         value: 'label',
         label: '扫码打标',
         title: '扫码打标',
         desc: '扫码后按设备状态匹配可用打印/打标动作。',
-        tip: '打标动作来自后台打印场景配置，没有可用动作时会进入订单详情。'
+        tip: '打标动作来自后台打印场景配置，没有可用动作时会进入订单详情。',
+        icon: 'nc-icon-dayinjiV6xx'
     }
 ]
 
@@ -449,29 +509,56 @@ const formatScanTime = (value: any) => {
 <style scoped lang="scss">
 .scan-check-page {
     min-height: 100vh;
-    padding: 24rpx;
-    background: #f5f7fa;
+    padding: 24rpx 24rpx 40rpx;
+    background: #f4f6f8;
     box-sizing: border-box;
 }
 
 .hero {
-    padding: 32rpx 28rpx;
-    border-radius: 24rpx;
+    padding: 30rpx;
+    border-radius: 18rpx;
     color: #fff;
-    background: linear-gradient(135deg, #0f766e, #14b8a6);
-    box-shadow: 0 20rpx 50rpx rgba(20, 184, 166, 0.18);
+    background: #0f766e;
+    box-shadow: 0 14rpx 34rpx rgba(15, 118, 110, 0.18);
+}
+
+.hero__content {
+    display: flex;
+    align-items: center;
+}
+
+.hero__icon {
+    width: 92rpx;
+    height: 92rpx;
+    margin-right: 22rpx;
+    border-radius: 18rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.16);
+    flex-shrink: 0;
+}
+
+.hero__icon .nc-iconfont {
+    font-size: 48rpx;
+}
+
+.hero__main {
+    min-width: 0;
+    flex: 1;
 }
 
 .hero__title {
-    font-size: 38rpx;
+    font-size: 36rpx;
     font-weight: 700;
+    line-height: 1.2;
 }
 
 .hero__subtitle {
-    margin-top: 12rpx;
+    margin-top: 10rpx;
     font-size: 24rpx;
     line-height: 1.6;
-    color: rgba(255, 255, 255, 0.86);
+    color: rgba(255, 255, 255, 0.82);
 }
 
 .scan-panel,
@@ -479,40 +566,48 @@ const formatScanTime = (value: any) => {
 .tips-card,
 .state-card {
     margin-top: 24rpx;
-    padding: 26rpx;
-    border-radius: 20rpx;
+    padding: 24rpx;
+    border-radius: 16rpx;
     background: #fff;
-    box-shadow: 0 8rpx 30rpx rgba(15, 23, 42, 0.05);
-}
-
-.scan-button {
-    display: flex;
-    align-items: center;
-    gap: 20rpx;
-    padding: 26rpx;
-    border-radius: 18rpx;
-    background: #ecfeff;
-    border: 2rpx solid #99f6e4;
+    border: 1rpx solid #e9eef3;
+    box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.04);
 }
 
 .mode-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12rpx;
+    display: flex;
     margin-bottom: 20rpx;
 }
 
 .mode-tab {
-    height: 64rpx;
-    border-radius: 14rpx;
-    background: #f8fafc;
+    flex: 1;
+    min-width: 0;
+    height: 112rpx;
+    margin-right: 12rpx;
+    border-radius: 16rpx;
+    background: #f7fafc;
     color: #475569;
     border: 1rpx solid #e2e8f0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 24rpx;
+    box-sizing: border-box;
+}
+
+.mode-tab:last-child {
+    margin-right: 0;
+}
+
+.mode-tab__icon {
+    font-size: 36rpx;
+    line-height: 1;
+}
+
+.mode-tab__label {
+    margin-top: 10rpx;
+    font-size: 23rpx;
     font-weight: 600;
+    line-height: 1;
 }
 
 .mode-tab--active {
@@ -521,30 +616,56 @@ const formatScanTime = (value: any) => {
     color: #fff;
 }
 
+.scan-button {
+    display: flex;
+    align-items: center;
+    padding: 26rpx;
+    border-radius: 16rpx;
+    background: #ecfdf5;
+    border: 1rpx solid #b7ead8;
+}
+
 .scan-button__icon {
-    width: 76rpx;
-    height: 76rpx;
-    border-radius: 20rpx;
+    width: 84rpx;
+    height: 84rpx;
+    margin-right: 20rpx;
+    border-radius: 18rpx;
     background: #0f766e;
     color: #fff;
-    font-size: 30rpx;
-    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
 }
 
+.scan-button__icon .nc-iconfont {
+    font-size: 44rpx;
+}
+
+.scan-button__main {
+    flex: 1;
+    min-width: 0;
+}
+
 .scan-button__title {
     font-size: 30rpx;
     font-weight: 700;
     color: #0f172a;
+    line-height: 1.25;
 }
 
 .scan-button__desc {
     margin-top: 8rpx;
     font-size: 22rpx;
     color: #64748b;
+    line-height: 1.4;
+}
+
+.scan-button__arrow {
+    margin-left: 16rpx;
+    color: #0f766e;
+    font-size: 28rpx;
+    flex-shrink: 0;
 }
 
 .manual-box {
@@ -553,20 +674,28 @@ const formatScanTime = (value: any) => {
 
 .manual-box__title {
     margin-bottom: 14rpx;
+    display: flex;
+    align-items: center;
     font-size: 26rpx;
     font-weight: 600;
     color: #334155;
 }
 
+.manual-box__icon {
+    margin-right: 10rpx;
+    color: #0f766e;
+    font-size: 28rpx;
+}
+
 .manual-row {
     display: flex;
     align-items: center;
-    gap: 14rpx;
 }
 
 .manual-input {
     flex: 1;
     height: 76rpx;
+    min-width: 0;
     padding: 0 20rpx;
     border-radius: 14rpx;
     background: #f8fafc;
@@ -579,8 +708,9 @@ const formatScanTime = (value: any) => {
 .device-card__btn {
     min-width: 132rpx;
     height: 76rpx;
+    margin-left: 14rpx;
     border-radius: 14rpx;
-    background: #2563eb;
+    background: #0f766e;
     color: #fff;
     font-size: 24rpx;
     font-weight: 600;
@@ -590,30 +720,69 @@ const formatScanTime = (value: any) => {
 }
 
 .state-card {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 24rpx;
     color: #64748b;
+}
+
+.state-card__icon {
+    width: 54rpx;
+    height: 54rpx;
+    margin-right: 14rpx;
+    border-radius: 999rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ecfdf5;
+    color: #0f766e;
 }
 
 .candidate-card {
     margin-top: 24rpx;
     padding: 24rpx;
-    border-radius: 20rpx;
+    border-radius: 16rpx;
     background: #fff;
-    box-shadow: 0 8rpx 30rpx rgba(15, 23, 42, 0.05);
+    border: 1rpx solid #e9eef3;
+    box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.04);
 }
 
 .candidate-card__head {
     display: flex;
     justify-content: space-between;
-    gap: 18rpx;
     align-items: flex-start;
+}
+
+.candidate-card__head-main {
+    display: flex;
+    align-items: flex-start;
+    min-width: 0;
+    flex: 1;
+}
+
+.candidate-card__icon {
+    width: 64rpx;
+    height: 64rpx;
+    margin-right: 16rpx;
+    border-radius: 14rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #eff6ff;
+    color: #2563eb;
+    flex-shrink: 0;
+}
+
+.candidate-card__icon .nc-iconfont {
+    font-size: 34rpx;
 }
 
 .candidate-card__title {
     font-size: 30rpx;
     font-weight: 700;
     color: #0f172a;
+    line-height: 1.25;
 }
 
 .candidate-card__desc {
@@ -625,9 +794,10 @@ const formatScanTime = (value: any) => {
 
 .candidate-card__count {
     flex-shrink: 0;
+    margin-left: 18rpx;
     padding: 8rpx 16rpx;
     border-radius: 999rpx;
-    background: #ecfeff;
+    background: #ecfdf5;
     color: #0f766e;
     font-size: 22rpx;
     font-weight: 700;
@@ -635,19 +805,17 @@ const formatScanTime = (value: any) => {
 
 .candidate-list {
     margin-top: 18rpx;
-    display: flex;
-    flex-direction: column;
-    gap: 14rpx;
 }
 
 .candidate-item {
     display: flex;
     justify-content: space-between;
-    gap: 18rpx;
+    margin-top: 14rpx;
     padding: 20rpx;
     border-radius: 16rpx;
     background: #f8fafc;
     border: 1rpx solid #e2e8f0;
+    box-sizing: border-box;
 }
 
 .candidate-item:active {
@@ -663,6 +831,7 @@ const formatScanTime = (value: any) => {
     font-size: 28rpx;
     font-weight: 700;
     color: #0f172a;
+    line-height: 1.35;
 }
 
 .candidate-item__meta {
@@ -670,18 +839,35 @@ const formatScanTime = (value: any) => {
     font-size: 22rpx;
     color: #64748b;
     line-height: 1.4;
+    display: flex;
+    align-items: flex-start;
+}
+
+.candidate-item__meta-label {
+    width: 58rpx;
+    margin-right: 10rpx;
+    color: #94a3b8;
+    flex-shrink: 0;
 }
 
 .candidate-item__side {
-    max-width: 220rpx;
+    max-width: 230rpx;
+    margin-left: 18rpx;
     flex-shrink: 0;
     text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 }
 
 .candidate-item__status {
+    padding: 6rpx 12rpx;
+    border-radius: 999rpx;
+    background: #eff6ff;
     font-size: 22rpx;
     color: #2563eb;
     font-weight: 700;
+    line-height: 1.2;
 }
 
 .candidate-item__time {
@@ -691,20 +877,55 @@ const formatScanTime = (value: any) => {
     line-height: 1.4;
 }
 
+.candidate-item__arrow {
+    margin-top: 12rpx;
+    color: #94a3b8;
+    font-size: 24rpx;
+}
+
 .device-card__head {
     display: flex;
     justify-content: space-between;
-    gap: 20rpx;
+    align-items: flex-start;
+}
+
+.device-card__head-main {
+    display: flex;
+    align-items: flex-start;
+    min-width: 0;
+    flex: 1;
+}
+
+.device-card__icon {
+    width: 72rpx;
+    height: 72rpx;
+    margin-right: 16rpx;
+    border-radius: 16rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0f766e;
+    background: #ecfdf5;
+    flex-shrink: 0;
+}
+
+.device-card__icon .nc-iconfont {
+    font-size: 38rpx;
+}
+
+.device-card__main {
+    min-width: 0;
+    flex: 1;
 }
 
 .device-card__title {
     font-size: 30rpx;
     font-weight: 700;
     color: #0f172a;
+    line-height: 1.35;
 }
 
 .device-card__meta,
-.device-card__info,
 .tips-card__line {
     margin-top: 10rpx;
     font-size: 22rpx;
@@ -713,25 +934,68 @@ const formatScanTime = (value: any) => {
 }
 
 .device-card__status {
+    margin-left: 16rpx;
+    padding: 8rpx 14rpx;
+    border-radius: 999rpx;
+    background: #eff6ff;
     color: #2563eb;
     font-size: 22rpx;
+    font-weight: 700;
     flex-shrink: 0;
+    line-height: 1.2;
 }
 
 .device-card__info {
+    margin-top: 20rpx;
+    padding: 16rpx;
+    border-radius: 14rpx;
+    background: #f8fafc;
     display: flex;
     flex-direction: column;
 }
 
+.device-card__info-row {
+    display: flex;
+    align-items: center;
+    min-height: 38rpx;
+    font-size: 23rpx;
+    color: #475569;
+    line-height: 1.5;
+}
+
+.device-card__info-row + .device-card__info-row {
+    margin-top: 8rpx;
+}
+
+.device-card__info-icon {
+    width: 34rpx;
+    margin-right: 10rpx;
+    color: #0f766e;
+    font-size: 24rpx;
+    flex-shrink: 0;
+}
+
 .device-card__actions {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16rpx;
+    display: flex;
     margin-top: 24rpx;
 }
 
 .device-card__btn {
+    flex: 1;
     min-width: 0;
+    margin-left: 12rpx;
+    padding: 0 8rpx;
+    box-sizing: border-box;
+}
+
+.device-card__btn:first-child {
+    margin-left: 0;
+}
+
+.device-card__btn-icon {
+    margin-right: 8rpx;
+    font-size: 26rpx;
+    flex-shrink: 0;
 }
 
 .device-card__btn--ghost {
@@ -741,8 +1005,16 @@ const formatScanTime = (value: any) => {
 }
 
 .tips-card__title {
+    display: flex;
+    align-items: center;
     font-size: 26rpx;
     font-weight: 700;
     color: #334155;
+}
+
+.tips-card__icon {
+    margin-right: 10rpx;
+    color: #0f766e;
+    font-size: 28rpx;
 }
 </style>
