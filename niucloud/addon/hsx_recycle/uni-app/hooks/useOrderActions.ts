@@ -1,5 +1,6 @@
 import type { OrderListItem } from '../types/order'
 import { updateOrderStatus } from '../api/order'
+import { copyOrderNo as copyOrderNoText, copyExpressNo as copyExpressNoText } from '../utils/clipboard'
 
 /**
  * 订单操作管理
@@ -166,30 +167,14 @@ export function useOrderActions() {
    * 复制订单号
    */
   const copyOrderNo = (orderNo: string) => {
-    uni.setClipboardData({
-      data: orderNo,
-      success: () => {
-        uni.showToast({
-          title: '订单号已复制',
-          icon: 'success'
-        })
-      }
-    })
+    copyOrderNoText(orderNo)
   }
 
   /**
    * 复制快递单号
    */
   const copyExpressNo = (expressNo: string) => {
-    uni.setClipboardData({
-      data: expressNo,
-      success: () => {
-        uni.showToast({
-          title: '快递单号已复制',
-          icon: 'success'
-        })
-      }
-    })
+    copyExpressNoText(expressNo)
   }
 
   return {

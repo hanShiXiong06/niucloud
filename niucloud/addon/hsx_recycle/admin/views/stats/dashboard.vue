@@ -97,30 +97,8 @@
     </div>
 
     <!-- 主要内容区域 -->
-    <div class="mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="mx-auto">
       <section class="mb-6 rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div class="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div class="flex items-center gap-2">
-              <el-icon class="text-blue-600"><DataBoard /></el-icon>
-              <h2 class="text-lg font-semibold text-gray-900">数据看板</h2>
-            </div>
-            <p class="mt-1 text-sm text-gray-500">
-              按业务、财务、用户拆分数据场景，点击指标可进入真实订单或设备明细。
-            </p>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <el-tag size="small" type="info">
-              {{ businessDashboard.date_range?.start_time || queryParams.start_time || "今日" }}
-              <template v-if="businessDashboard.date_range?.end_time && businessDashboard.date_range.end_time !== businessDashboard.date_range.start_time">
-                至 {{ businessDashboard.date_range.end_time }}
-              </template>
-            </el-tag>
-            <el-button size="small" :loading="businessLoading" @click="fetchBusinessDashboard">
-              刷新
-            </el-button>
-          </div>
-        </div>
 
         <div class="p-5">
           <BoardTabs

@@ -23,11 +23,17 @@
         <view class="device-flow-card__meta">
             <view class="device-flow-card__meta-row">
                 <text class="meta-label">IMEI</text>
-                <text class="meta-value">{{ device.imei || '-' }}</text>
+                <view class="meta-copy" @click.stop="copyIMEI(device.imei)">
+                    <text class="meta-value">{{ device.imei || '-' }}</text>
+                    <text v-if="device.imei" class="nc-iconfont nc-icon-fuzhiV6xx1 meta-copy__icon"></text>
+                </view>
             </view>
             <view v-if="device.user_sn" class="device-flow-card__meta-row">
                 <text class="meta-label">用户串号</text>
-                <text class="meta-value">{{ device.user_sn }}</text>
+                <view class="meta-copy" @click.stop="copyIMEI(device.user_sn)">
+                    <text class="meta-value">{{ device.user_sn }}</text>
+                    <text class="nc-iconfont nc-icon-fuzhiV6xx1 meta-copy__icon"></text>
+                </view>
             </view>
         </view>
 
@@ -162,6 +168,7 @@ import { computed, ref } from 'vue'
 import { img } from '@/utils/common'
 import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
 import { formatMoney, formatTime } from '@/addon/hsx_recycle/utils/helper'
+import { copyIMEI } from '@/addon/hsx_recycle/utils/clipboard'
 import {
     buildDeviceFlowHighlights,
     getDevicePriceLabel,
@@ -369,6 +376,20 @@ const previewGroup = (items: ImageItem[], index: number) => {
 
 .device-flow-card__info-row--top {
     align-items: flex-start;
+}
+
+.meta-copy {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8rpx;
+    min-width: 0;
+}
+
+.meta-copy__icon {
+    flex-shrink: 0;
+    color: #2563eb;
+    font-size: 24rpx;
 }
 
 .meta-label,

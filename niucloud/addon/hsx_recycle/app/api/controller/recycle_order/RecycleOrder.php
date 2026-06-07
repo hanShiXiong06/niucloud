@@ -89,6 +89,16 @@ class RecycleOrder extends BaseApiController
     }
 
     /**
+     * 用户催办订单，推送到企业微信群
+     * @param int $id
+     * @return \think\Response
+     */
+    public function urge(int $id)
+    {
+        return success($this->service->urge($id));
+    }
+
+    /**
      * 添加二手机回收报价订单
      * @return \think\Response
      */

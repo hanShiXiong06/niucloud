@@ -160,7 +160,16 @@
                                 </view>
                             </view>
                             <view class="device-preview__bottom">
-                                <text>{{ device.imei || device.user_sn || '-' }}</text>
+                                <view
+                                    class="device-preview__serial"
+                                    @click.stop="copyDeviceCode(device)"
+                                >
+                                    <text>{{ device.imei || device.user_sn || '-' }}</text>
+                                    <text
+                                        v-if="device.imei || device.user_sn"
+                                        class="nc-iconfont nc-icon-fuzhiV6xx1 device-preview__copy"
+                                    ></text>
+                                </view>
                                 <text>{{ getDeviceSecondaryStatus(device) }}</text>
                             </view>
                         </view>
@@ -198,7 +207,8 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getOrderBusinessStageOptions, getOrderList, getOrderStatus, pushOrderNotify, updateOrder } from '@/addon/hsx_recycle/api/order'
-import { copy, redirect } from '@/utils/common'
+import { redirect } from '@/utils/common'
+import { copyOrderNo, copyIMEI } from '@/addon/hsx_recycle/utils/clipboard'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import OrderFilterDrawer from './components/OrderFilterDrawer.vue'
@@ -416,7 +426,11 @@ const toDetail = (item: any, filter = '') => {
     })
 }
 
-const copyNo = (value: string) => copy(value)
+const copyNo = (value: string) => copyOrderNo(value)
+
+const copyDeviceCode = (device: any) => {
+    copyIMEI(device?.imei || device?.user_sn || '')
+}
 
 const getActions = (item: any) => {
     const status = Number(item.status || 0)
@@ -1093,6 +1107,27 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     font-weight: 700;
     line-height: 1.25;
     text-align: right;
+}
+
+.device-preview__serial {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    min-width: 0;
+    color: #64748b;
+    text-align: left;
+}
+
+.device-preview__serial text:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.device-preview__copy {
+    flex-shrink: 0;
+    color: #2563eb;
+    font-size: 22rpx;
 }
 
 .device-preview__price--strong {

@@ -223,7 +223,7 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getReturnOrderDetail } from '../../api/return_order'
 import { getReturnOrderStatusInfo, getDeviceStatusInfo, RETURN_ORDER_STATUS } from '../../utils/theme'
-import { copyOrderNo, copyExpressNo } from '../../utils/clipboard'
+import { copyOrderNo, copyExpressNo, copyIMEI } from '../../utils/clipboard'
 import ExpressTrackingModal from '../order/components/ExpressTrackingModal.vue'
 
 const loading = ref(true)
@@ -274,12 +274,6 @@ const getDeviceText = (item: any) => getDeviceStatusInfo(item.device?.status ?? 
 
 const handleCopyOrderNo = () => copyOrderNo(orderDetail.value.order_no)
 const handleCopyExpressNo = () => copyExpressNo(orderDetail.value.express_no)
-const copyIMEI = (imei: string) => {
-  uni.setClipboardData({
-    data: imei,
-    success: () => uni.showToast({ title: '已复制IMEI', icon: 'success' })
-  })
-}
 
 const loadDetail = async (id: number | string) => {
   loading.value = true

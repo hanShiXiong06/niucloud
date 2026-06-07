@@ -52,7 +52,7 @@
               <div class="tree-cell tree-cell--name">
                 <el-tag size="small" :type="levelTagType(data.level)" effect="plain">{{ levelName(data.level) }}</el-tag>
                 <span class="tree-node-name">{{ data.node_name }}</span>
-                <el-tag v-if="Number(data.is_hot || 0) === 1" size="small" type="danger" effect="plain">热门</el-tag>
+                <el-tag v-if="isLeaf(data) && Number(data.is_hot || 0) === 1" size="small" type="danger" effect="plain">热门</el-tag>
               </div>
               <div class="tree-cell tree-cell--path">{{ data.model_full_name || data.node_name }}</div>
               <div class="tree-cell tree-cell--center">
@@ -70,6 +70,7 @@
                   添加下级
                 </el-button>
                 <el-button type="primary" link @click.stop="openTemplateDialog(data)">模板配置</el-button>
+                <el-button type="primary" link @click.stop="openSortDialog(data)">排序</el-button>
                 <el-button v-if="isLeaf(data)" type="primary" link @click.stop="openEdit(data)">编辑</el-button>
                 <el-button type="danger" link :disabled="!isLeaf(data)" @click.stop="handleDelete(data)">
                   删除
@@ -99,6 +100,29 @@
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="sortDialogVisible" title="调整分类排序" width="480px">
+      <div class="sort-target">
+        <div class="sort-target__label">当前节点</div>
+        <div class="sort-target__name">{{ sortForm.path_text || '-' }}</div>
+      </div>
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        class="sort-alert"
+        title="保存后会同步当前节点及所有下级节点排序，不会调整热门状态。"
+      />
+      <el-form :model="sortForm" label-width="90px">
+        <el-form-item label="排序值">
+          <el-input-number v-model="sortForm.sort" :controls="false" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="sortDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="sortSaving" @click="saveSort">保存</el-button>
       </template>
     </el-dialog>
 
@@ -263,6 +287,7 @@ import {
   quickAddRecycleDeviceModelDict,
   resetTemplateBinding,
   saveTemplateBinding,
+  updateRecycleDeviceModelDictSort,
 } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 
 const loading = ref(false)
@@ -284,6 +309,7 @@ const editDialogVisible = ref(false)
 const quickDialogVisible = ref(false)
 const importDialogVisible = ref(false)
 const templateDialogVisible = ref(false)
+const sortDialogVisible = ref(false)
 const quickContent = ref('')
 const importFileName = ref('')
 const importRows = ref<any[]>([])
@@ -293,6 +319,7 @@ const importPreviewLimit = 20
 const parentContext = ref<any>(null)
 const templateTarget = ref<any>(null)
 const templateSaving = ref(false)
+const sortSaving = ref(false)
 const templateBindingInfo = ref<any>({
   binding: {},
   effective: {},
@@ -303,6 +330,11 @@ const editForm = reactive<any>({
   id: 0,
   path_text: '',
   status: 1,
+  sort: 0,
+})
+const sortForm = reactive<any>({
+  id: 0,
+  path_text: '',
   sort: 0,
 })
 const templateForm = reactive<any>({
@@ -474,6 +506,37 @@ const handleDelete = async (row: any) => {
   })
   await deleteRecycleDeviceModelDict(row.id)
   await loadTree()
+}
+
+const openSortDialog = (row: any) => {
+  Object.assign(sortForm, {
+    id: row.id,
+    path_text: row.model_full_name || row.node_name || '',
+    sort: Number(row.sort || 0),
+  })
+  sortDialogVisible.value = true
+}
+
+const saveSort = async () => {
+  if (!sortForm.id) {
+    ElMessage.warning('请选择要调整的分类节点')
+    return
+  }
+  sortSaving.value = true
+  try {
+    await updateRecycleDeviceModelDictSort({
+      sort_list: [{
+        id: sortForm.id,
+        sort: Number(sortForm.sort || 0),
+        cascade: 1,
+      }],
+    })
+    ElMessage.success('排序已更新')
+    sortDialogVisible.value = false
+    await loadTree()
+  } finally {
+    sortSaving.value = false
+  }
 }
 
 const openQuickDialog = () => {
@@ -916,5 +979,30 @@ onMounted(() => loadTree())
   margin-left: 10px;
   color: #64748b;
   font-size: 12px;
+}
+
+.sort-target {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.sort-target__label {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.sort-target__name {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.sort-alert {
+  margin-bottom: 14px;
 }
 </style>

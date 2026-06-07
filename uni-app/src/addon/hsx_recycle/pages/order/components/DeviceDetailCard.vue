@@ -175,6 +175,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { OrderDetailDevice } from '../../../types/order'
+import { copyIMEI } from '../../../utils/clipboard'
 import { getDeviceStatusInfo } from '../../../utils/theme'
 
 interface Props {
@@ -283,12 +284,7 @@ const consignmentSummary = computed(() => {
 })
 
 const handleCopyIMEI = () => {
-  uni.setClipboardData({
-    data: props.device.imei,
-    success: () => {
-      uni.showToast({ title: '已复制IMEI', icon: 'success' })
-    }
-  })
+  copyIMEI(props.device.imei)
 }
 
 const formatMoney = (value: any) => {

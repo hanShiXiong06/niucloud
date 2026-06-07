@@ -79,7 +79,13 @@
                         <text class="device-card__status">{{ item.status_name || item.device?.status_name || '-' }}</text>
                     </view>
                     <view class="device-card__meta">
-                        <text>IMEI：{{ item.device?.imei || item.imei || '-' }}</text>
+                        <view class="device-card__copy-line" @click.stop="copyDeviceIMEI(item)">
+                            <text>IMEI：{{ item.device?.imei || item.imei || '-' }}</text>
+                            <text
+                                v-if="item.device?.imei || item.imei"
+                                class="nc-iconfont nc-icon-fuzhiV6xx1 device-card__copy-icon"
+                            ></text>
+                        </view>
                         <text v-if="item.device?.final_price || item.final_price">报价：¥{{ formatMoney(item.device?.final_price || item.final_price) }}</text>
                     </view>
                     <view v-if="item.remark" class="device-card__remark">{{ item.remark }}</view>
@@ -144,6 +150,7 @@ import {
 } from '@/addon/hsx_recycle/api/return-order'
 import { formatMoney, formatTime, makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
 import { copy } from '@/utils/common'
+import { copyIMEI } from '@/addon/hsx_recycle/utils/clipboard'
 import { useRecyclePrintActions } from '@/addon/hsx_recycle/hooks/useRecyclePrintActions'
 import ReturnShipmentForm from '@/addon/hsx_recycle/pages/return/components/ReturnShipmentForm.vue'
 import CancelReturnPopup from '@/addon/hsx_recycle/pages/return/components/CancelReturnPopup.vue'
@@ -329,6 +336,10 @@ const runAction = async (handler: () => Promise<void>) => {
 const copyNo = (value: string) => {
     if (!value) return
     copy(value)
+}
+
+const copyDeviceIMEI = (item: any) => {
+    copyIMEI(item?.device?.imei || item?.imei || '')
 }
 
 const openExpressTrack = () => {
@@ -569,6 +580,19 @@ onLoad((option: any) => {
     margin-top: 8rpx;
     font-size: 22rpx;
     color: #64748b;
+}
+
+.device-card__copy-line {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    min-width: 0;
+}
+
+.device-card__copy-icon {
+    flex-shrink: 0;
+    color: #2563eb;
+    font-size: 22rpx;
 }
 
 .device-card__remark {

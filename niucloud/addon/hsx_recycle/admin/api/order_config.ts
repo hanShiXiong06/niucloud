@@ -73,6 +73,16 @@ export interface OrderSubmitConfig {
         user_title: string
         user_desc: string
     }
+    work_wechat: {
+        enabled: number
+        channels: Record<string, {
+            enabled: number
+            name: string
+            webhook_url: string
+            dedupe_minutes: number
+            daily_limit: number
+        }>
+    }
     price_detail_theme: {
         template_key: string
         theme_name: string

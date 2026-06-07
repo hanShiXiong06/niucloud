@@ -10,6 +10,11 @@ export function getOrderDetail(id: number) {
   return request.get(`recycle/recycle_order/${id}`);
 }
 
+// 催办订单，推送到企业微信群
+export function urgeOrder(id: number) {
+  return request.post(`recycle/recycle_order/${id}/urge`);
+}
+
 // 添加回收订单
 export function createOrder(data: any) {
   return request.post("recycle/recycle_order", data);
@@ -22,6 +27,14 @@ export function getOrderSubmitConfig() {
 // 搜索设备型号字典叶子节点
 export function searchDeviceModelDictOptions(params: { keyword: string; limit?: number }) {
   return request.get("recycle/device_model_dict/options", params);
+}
+
+export function getDeviceModelDictTree() {
+  return request.get("recycle/device_model_dict/tree");
+}
+
+export function getDeviceModelDictChildren(params: { pid?: number; keyword?: string; limit?: number }) {
+  return request.get("recycle/device_model_dict/children", params);
 }
 
 // getOrderStatusCount 获取 订单菜单及统计

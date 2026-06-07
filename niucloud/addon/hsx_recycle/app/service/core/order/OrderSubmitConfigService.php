@@ -114,6 +114,46 @@ class OrderSubmitConfigService
                 'user_title' => '代卖订单',
                 'user_desc' => '查看代卖进度、成交与结算结果',
             ],
+            'work_wechat' => [
+                'enabled' => 0,
+                'channels' => [
+                    'order_notice' => [
+                        'enabled' => 0,
+                        'name' => '订单通知群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 10,
+                        'daily_limit' => 0,
+                    ],
+                    'order_urge' => [
+                        'enabled' => 1,
+                        'name' => '订单催办群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 10,
+                        'daily_limit' => 5,
+                    ],
+                    'return_order' => [
+                        'enabled' => 0,
+                        'name' => '退货处理群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 10,
+                        'daily_limit' => 0,
+                    ],
+                    'finance' => [
+                        'enabled' => 0,
+                        'name' => '财务打款群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 10,
+                        'daily_limit' => 0,
+                    ],
+                    'exception' => [
+                        'enabled' => 0,
+                        'name' => '异常预警群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 30,
+                        'daily_limit' => 0,
+                    ],
+                ],
+            ],
             'price_detail_theme' => $this->defaultPriceDetailTheme(),
         ];
     }
@@ -130,6 +170,7 @@ class OrderSubmitConfigService
         $followOfficialAccount = is_array($data['follow_official_account'] ?? null) ? $data['follow_official_account'] : [];
         $customerService = is_array($data['customer_service'] ?? null) ? $data['customer_service'] : [];
         $consignment = is_array($data['consignment'] ?? null) ? $data['consignment'] : [];
+        $workWechat = is_array($data['work_wechat'] ?? null) ? $data['work_wechat'] : [];
         $priceDetailTheme = is_array($data['price_detail_theme'] ?? null) ? $data['price_detail_theme'] : [];
         $platformDeliveryProviders = !empty($platformDeliveryProviders)
             ? array_values($platformDeliveryProviders)
@@ -238,6 +279,7 @@ class OrderSubmitConfigService
                 'user_title' => mb_substr(trim((string)($consignment['user_title'] ?? $default['consignment']['user_title'])), 0, 20),
                 'user_desc' => mb_substr(trim((string)($consignment['user_desc'] ?? $default['consignment']['user_desc'])), 0, 80),
             ],
+            'work_wechat' => $this->sanitizeWorkWechatConfig($workWechat, $strict),
             'price_detail_theme' => $this->sanitizePriceDetailTheme($priceDetailTheme),
         ];
 
@@ -290,6 +332,38 @@ class OrderSubmitConfigService
             $config['consignment']['user_view_enabled'] = 0;
             $config['consignment']['notice_enabled'] = 0;
             $config['consignment']['print_enabled'] = 0;
+        }
+
+        return $config;
+    }
+
+    private function sanitizeWorkWechatConfig(array $data, bool $strict = false): array
+    {
+        $default = $this->defaultConfig()['work_wechat'];
+        $channels = is_array($data['channels'] ?? null) ? $data['channels'] : [];
+        $config = [
+            'enabled' => !empty($data['enabled']) ? 1 : 0,
+            'channels' => [],
+        ];
+
+        foreach ($default['channels'] as $key => $defaultChannel) {
+            $channel = is_array($channels[$key] ?? null) ? $channels[$key] : [];
+            $name = mb_substr(trim((string)($channel['name'] ?? $defaultChannel['name'])), 0, 30);
+            $webhookUrl = trim((string)($channel['webhook_url'] ?? ''));
+            $dedupeMinutes = max(0, min(1440, (int)($channel['dedupe_minutes'] ?? $defaultChannel['dedupe_minutes'])));
+            $dailyLimit = max(0, min(999, (int)($channel['daily_limit'] ?? $defaultChannel['daily_limit'])));
+
+            $config['channels'][$key] = [
+                'enabled' => !empty($channel['enabled']) ? 1 : 0,
+                'name' => $name !== '' ? $name : $defaultChannel['name'],
+                'webhook_url' => mb_substr($webhookUrl, 0, 1000),
+                'dedupe_minutes' => $dedupeMinutes,
+                'daily_limit' => $dailyLimit,
+            ];
+
+            if ($strict && $config['enabled'] && $config['channels'][$key]['enabled'] && $config['channels'][$key]['webhook_url'] === '') {
+                throw new CommonException($config['channels'][$key]['name'] . '已启用，请填写企业微信群机器人 Webhook 地址');
+            }
         }
 
         return $config;

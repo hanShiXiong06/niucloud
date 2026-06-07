@@ -42,7 +42,13 @@
     </view>
 
     <view class="order-content">
-      <view class="empty-devices">
+      <OrderDeviceList
+        v-if="order.devices && order.devices.length"
+        :devices="order.devices"
+        :expanded="expanded"
+        @toggle="toggleExpand"
+      />
+      <view v-else class="empty-devices">
         <text class="text-xs text-gray-500">{{ emptyDeviceTip }}</text>
       </view>
 

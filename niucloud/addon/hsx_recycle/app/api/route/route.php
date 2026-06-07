@@ -69,9 +69,13 @@ Route::group('recycle', function() {
     // 回收订单相关接口
     Route::get('order_submit_config', 'addon\hsx_recycle\app\api\controller\recycle_order\OrderSubmitConfig@info');
     Route::get('device_model_dict/options', 'addon\hsx_recycle\app\api\controller\device\RecycleDeviceModelDict@options');
+    Route::get('device_model_dict/tree', 'addon\hsx_recycle\app\api\controller\device\RecycleDeviceModelDict@tree');
+    Route::get('device_model_dict/children', 'addon\hsx_recycle\app\api\controller\device\RecycleDeviceModelDict@children');
     Route::get('recycle_order', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@lists');
     // 获取单条订单详情
     Route::get('recycle_order/:id', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@show');
+    // 用户催办订单，推送到企业微信群
+    Route::post('recycle_order/:id/urge', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@urge');
     // 创建回收订单
     Route::post('recycle_order', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@store');
 

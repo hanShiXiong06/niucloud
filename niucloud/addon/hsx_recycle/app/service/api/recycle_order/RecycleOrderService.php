@@ -10,6 +10,7 @@ use addon\hsx_recycle\app\model\check\RecycleCheckOption;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderFlowService;
+use addon\hsx_recycle\app\service\core\recycle_order\CoreWorkWechatNotifyService;
 use app\model\member\Member;
 use core\base\BaseApiService;
 use core\exception\ApiException;
@@ -217,6 +218,36 @@ class RecycleOrderService extends BaseApiService
         $info['devices'] = $this->formatDevicePaymentRecords($info['devices']);
 
         return $info;
+    }
+
+    public function urge(int $id): array
+    {
+        $info = $this->getInfo($id);
+        if (in_array((int)($info['status'] ?? 0), [
+            RecycleOrderDict::ORDER_STATUS_COMPLETED,
+            RecycleOrderDict::ORDER_STATUS_CLOSED,
+            RecycleOrderDict::ORDER_STATUS_CANCELLED,
+            RecycleOrderDict::ORDER_STATUS_DELETE,
+        ], true)) {
+            throw new ApiException('订单已结束，不能再催办');
+        }
+
+        $result = (new CoreWorkWechatNotifyService())->sendOrderUrge(
+            (int)$this->site_id,
+            $info,
+            $info['devices'] ?? [],
+            [
+                'type' => 'member',
+                'id' => (int)$this->member_id,
+                'name' => '用户端',
+            ]
+        );
+
+        return [
+            'success' => true,
+            'message' => $result['message'] ?? '已催办工作人员',
+            'skipped' => !empty($result['skipped']),
+        ];
     }
 
     private function formatDevicePaymentRecords(array $devices): array

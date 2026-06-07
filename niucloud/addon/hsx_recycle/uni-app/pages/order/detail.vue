@@ -106,6 +106,22 @@
         <!-- #endif -->
       </view>
 
+      <!-- 催办入口 -->
+      <view v-if="urgeEnabled" class="mx-3 mb-3">
+        <button class="urge-card" :disabled="urging" @tap="handleUrgeOrder">
+          <view class="urge-icon">
+            <up-icon name="bell" size="18" color="#f97316"></up-icon>
+          </view>
+          <view class="urge-copy">
+            <text class="urge-title">催一下</text>
+            <text class="urge-desc">提醒工作人员尽快处理当前订单</text>
+          </view>
+          <view class="urge-action">
+            <text>{{ urging ? '发送中' : '发送提醒' }}</text>
+          </view>
+        </button>
+      </view>
+
       <!-- 退货信息入口 -->
       <view v-if="hasReturnOrder" class="mx-3 mb-3">
         <view
@@ -217,6 +233,7 @@ import CustomerServicePopup from './components/CustomerServicePopup.vue'
 import InspectionReportPopup from './components/InspectionReportPopup.vue'
 import RecyclePageHeader from '../components/RecyclePageHeader.vue'
 import { buildRecycleThemeVars } from '../../utils/theme'
+import { urgeOrder } from '../../api/order'
 import type { OrderDetailDevice } from '../../types/order'
 
 const {
@@ -230,6 +247,7 @@ const devicesRef = computed(() => orderInfo.value.devices)
 const themeVars = computed(() => buildRecycleThemeVars(submitConfig.value?.price_detail_theme?.colors || {}))
 const showCustomerServicePopup = ref(false)
 const showInspectionReport = ref(false)
+const urging = ref(false)
 const currentReportDevice = ref<OrderDetailDevice | null>(null)
 const customerServiceConfig = computed(() => submitConfig.value?.customer_service || {})
 const customerServiceEnabled = computed(() => Number(customerServiceConfig.value?.enabled || 0) === 1)
@@ -240,6 +258,13 @@ const consignmentEntryEnabled = computed(() => {
 })
 const consignmentViewEnabled = computed(() => {
   return Number(consignmentConfig.value?.enabled || 0) === 1 && Number(consignmentConfig.value?.user_view_enabled || 0) === 1
+})
+const workWechatConfig = computed(() => submitConfig.value?.work_wechat || {})
+const orderUrgeChannel = computed(() => workWechatConfig.value?.channels?.order_urge || {})
+const finishedOrderStatuses = [7, 8, 9, 10]
+const orderFinished = computed(() => finishedOrderStatuses.includes(Number(orderInfo.value?.status || 0)))
+const urgeEnabled = computed(() => {
+  return !orderFinished.value && Number(workWechatConfig.value?.enabled || 0) === 1 && Number(orderUrgeChannel.value?.enabled || 0) === 1
 })
 
 const {
@@ -317,6 +342,32 @@ const openInspectionReport = (device: OrderDetailDevice) => {
 const closeInspectionReport = () => {
   showInspectionReport.value = false
   currentReportDevice.value = null
+}
+
+const handleUrgeOrder = async () => {
+  if (urging.value || !orderInfo.value.id) return
+  if (orderFinished.value) {
+    uni.showToast({
+      title: '订单已结束，不能再催办',
+      icon: 'none'
+    })
+    return
+  }
+  urging.value = true
+  try {
+    const res = await urgeOrder(Number(orderInfo.value.id))
+    uni.showToast({
+      title: res?.data?.message || '已提醒工作人员',
+      icon: 'none'
+    })
+  } catch (e: any) {
+    uni.showToast({
+      title: e?.msg || e?.message || '催办失败，请稍后再试',
+      icon: 'none'
+    })
+  } finally {
+    urging.value = false
+  }
 }
 
 const handleConfirmSelected = async () => {
@@ -443,6 +494,70 @@ onShow(async () => {
 
 .customer-service-card::after {
   border: 0;
+}
+
+.urge-card {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: var(--recycle-bg-card);
+  box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  text-align: left;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.urge-card::after {
+  border: 0;
+}
+
+.urge-card[disabled] {
+  opacity: 0.72;
+}
+
+.urge-icon {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: rgba(249, 115, 22, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.urge-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.urge-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--recycle-text-main);
+}
+
+.urge-desc {
+  font-size: 24rpx;
+  color: var(--recycle-text-sub);
+  line-height: 1.4;
+}
+
+.urge-action {
+  padding: 12rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(249, 115, 22, 0.12);
+  color: #f97316;
+  font-size: 24rpx;
+  flex-shrink: 0;
 }
 
 .customer-service-icon {

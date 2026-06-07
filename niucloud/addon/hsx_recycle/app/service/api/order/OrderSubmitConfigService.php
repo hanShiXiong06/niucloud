@@ -21,6 +21,11 @@ class OrderSubmitConfigService extends BaseApiService
 
     public function getConfig(): array
     {
-        return $this->coreService->getConfig($this->site_id);
+        $config = $this->coreService->getConfig($this->site_id);
+        foreach (($config['work_wechat']['channels'] ?? []) as $key => $channel) {
+            unset($config['work_wechat']['channels'][$key]['webhook_url']);
+        }
+
+        return $config;
     }
 }

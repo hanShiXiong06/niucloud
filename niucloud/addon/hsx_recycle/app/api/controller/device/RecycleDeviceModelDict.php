@@ -33,4 +33,25 @@ class RecycleDeviceModelDict extends BaseApiController
             (int)$data['limit']
         ));
     }
+
+    public function tree()
+    {
+        return success($this->service->tree((int)$this->request->siteId()));
+    }
+
+    public function children()
+    {
+        $data = $this->request->params([
+            ['pid', 0],
+            ['keyword', ''],
+            ['limit', 200],
+        ]);
+
+        return success($this->service->children(
+            (int)$this->request->siteId(),
+            (int)$data['pid'],
+            (string)$data['keyword'],
+            (int)$data['limit']
+        ));
+    }
 }

@@ -35,7 +35,16 @@
               />
             </view>
             <!-- 串号 -->
-            <text class="text-xs text-gray-400">{{ device.user_sn || device.imei }}</text>
+            <view
+              v-if="device.user_sn || device.imei"
+              class="serial-row"
+              @longpress="handleCopyDeviceCode(device)"
+            >
+              <text class="text-xs text-gray-400">{{ device.user_sn || device.imei }}</text>
+              <view class="serial-copy" @tap.stop="handleCopyDeviceCode(device)">
+                <up-icon name="file-text" size="10" color="#94a3b8"></up-icon>
+              </view>
+            </view>
           </view>
           <!-- 价格 -->
           <view class="text-right mt-5">
@@ -56,6 +65,7 @@
 import { computed } from 'vue'
 import type { OrderDevice } from '../../../types/order'
 import { useOrderStatus } from '../../../hooks/useOrderStatus'
+import { copyIMEI } from '../../../utils/clipboard'
 import OrderStatusBadge from './OrderStatusBadge.vue'
 
 interface Props {
@@ -80,6 +90,10 @@ const displayDevices = computed(() => {
   }
   return props.devices.slice(0, 2)
 })
+
+const handleCopyDeviceCode = (device: OrderDevice) => {
+  copyIMEI(device.user_sn || device.imei)
+}
 </script>
 
 <style scoped lang="scss">
@@ -104,5 +118,23 @@ const displayDevices = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.serial-row {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 4px;
+}
+
+.serial-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: #f1f5f9;
 }
 </style>

@@ -900,7 +900,7 @@ class RecycleDashboardMetricService extends BaseAdminService
             ['key' => '0_1500', 'label' => '0-1500', 'min' => 0, 'max' => 1500],
             ['key' => '1501_3000', 'label' => '1500-3000', 'min' => 1501, 'max' => 3000],
             ['key' => '3001_6000', 'label' => '3001-6000', 'min' => 3001, 'max' => 6000],
-            ['key' => '6000_up', 'label' => '5000以上', 'min' => 6001, 'max' => null],
+            ['key' => '6000_up', 'label' => '6000以上', 'min' => 6001, 'max' => null],
         ];
 
         foreach ($ranges as &$range) {

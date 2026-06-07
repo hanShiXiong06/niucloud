@@ -297,6 +297,7 @@ import {
 } from '@/addon/hsx_recycle/api/order'
 import { generateOrderShortLink } from '@/addon/hsx_recycle/api/shortlink'
 import { copy } from '@/utils/common'
+import { copyText } from '@/addon/hsx_recycle/utils/clipboard'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
@@ -993,7 +994,7 @@ const normalizeObject = (value: any) => {
     return typeof value === 'object' ? value : {}
 }
 
-const copyNo = (value: string) => copy(value)
+const copyNo = (value: string) => copyText(value)
 
 const handleCheckSuccess = () => loadDetail()
 const handlePriceSuccess = () => loadDetail()

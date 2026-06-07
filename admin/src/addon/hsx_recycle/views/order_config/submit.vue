@@ -143,7 +143,7 @@
                     </el-alert>
                 </section>
 
-                <section class="config-section">
+                <section class="config-section config-section--wide">
                     <div class="section-title">代卖业务</div>
                     <div class="section-tip">代卖是独立订单，来源回收订单只保留追溯关系。开启后，后台可将单台设备转入代卖，用户端可进入代卖订单查看进度。</div>
                     <div class="setting-row">
@@ -210,6 +210,45 @@
                                 <div class="setting-desc">默认不显示。开启后用户能看到成交价和结算金额之间的服务收益，建议谨慎开启。</div>
                             </div>
                             <el-switch v-model="form.consignment.show_service_fee" :active-value="1" :inactive-value="0" :disabled="!form.consignment.enabled" />
+                        </div>
+                    </div>
+                </section>
+
+                <section class="config-section config-section--wide">
+                    <div class="section-title">企业微信群通知</div>
+                    <div class="section-tip">按不同业务场景推送到不同企业微信群，避免所有消息都挤在一个群里。第一版主要用于用户端“催一下”。</div>
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">启用企业微信群通知</div>
+                            <div class="setting-desc">关闭后，所有企业微信群通知都不会发送，但用户端仍可隐藏催办入口。</div>
+                        </div>
+                        <el-switch v-model="form.work_wechat.enabled" :active-value="1" :inactive-value="0" />
+                    </div>
+                    <div class="work-wechat-list" :class="{ disabled: !form.work_wechat.enabled }">
+                        <div v-for="item in workWechatChannelMetas" :key="item.key" class="work-wechat-card">
+                            <div class="work-wechat-card__head">
+                                <div>
+                                    <div class="setting-title">{{ item.title }}</div>
+                                    <div class="setting-desc">{{ item.desc }}</div>
+                                </div>
+                                <el-switch v-model="form.work_wechat.channels[item.key].enabled" :active-value="1" :inactive-value="0" :disabled="!form.work_wechat.enabled" />
+                            </div>
+                            <div class="work-wechat-card__body">
+                                <el-input v-model.trim="form.work_wechat.channels[item.key].name" maxlength="30" show-word-limit placeholder="群名称" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
+                                <el-input v-model.trim="form.work_wechat.channels[item.key].webhook_url" type="password" show-password maxlength="1000" placeholder="企业微信群机器人 Webhook 地址" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
+                                <div class="work-wechat-card__rules">
+                                    <div class="rule-item">
+                                        <span>同单限频</span>
+                                        <el-input-number v-model="form.work_wechat.channels[item.key].dedupe_minutes" :min="0" :max="1440" controls-position="right" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
+                                        <em>分钟</em>
+                                    </div>
+                                    <div class="rule-item">
+                                        <span>每日上限</span>
+                                        <el-input-number v-model="form.work_wechat.channels[item.key].daily_limit" :min="0" :max="999" controls-position="right" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
+                                        <em>0 为不限</em>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -487,6 +526,16 @@ const form = reactive<OrderSubmitConfig>({
         user_title: '代卖订单',
         user_desc: '查看代卖进度、成交与结算结果'
     },
+    work_wechat: {
+        enabled: 0,
+        channels: {
+            order_notice: { enabled: 0, name: '订单通知群', webhook_url: '', dedupe_minutes: 10, daily_limit: 0 },
+            order_urge: { enabled: 1, name: '订单催办群', webhook_url: '', dedupe_minutes: 10, daily_limit: 5 },
+            return_order: { enabled: 0, name: '退货处理群', webhook_url: '', dedupe_minutes: 10, daily_limit: 0 },
+            finance: { enabled: 0, name: '财务打款群', webhook_url: '', dedupe_minutes: 10, daily_limit: 0 },
+            exception: { enabled: 0, name: '异常预警群', webhook_url: '', dedupe_minutes: 30, daily_limit: 0 }
+        }
+    },
     price_detail_theme: {
         template_key: 'classic_blue',
         theme_name: '默认蓝',
@@ -497,6 +546,14 @@ const form = reactive<OrderSubmitConfig>({
 const goThemeStyle = () => {
     router.push('/diy/theme_style')
 }
+
+const workWechatChannelMetas = [
+    { key: 'order_notice', title: '订单通知群', desc: '用于新订单、订单状态等普通订单通知。建议按需开启，避免刷屏。' },
+    { key: 'order_urge', title: '订单催办群', desc: '用户在订单详情点击“催一下”后，推送到这个群。' },
+    { key: 'return_order', title: '退货处理群', desc: '用于退货申请、退货待处理、退货超时等通知。' },
+    { key: 'finance', title: '财务打款群', desc: '用于待打款、打款失败、付款凭证异常等财务通知。' },
+    { key: 'exception', title: '异常预警群', desc: '用于高金额、超时未处理、异常订单等预警。' }
+] as const
 
 const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.device_add_enabled = data.device_add_enabled ? 1 : 0
@@ -545,11 +602,26 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.consignment.show_service_fee = data.consignment?.show_service_fee ? 1 : 0
     form.consignment.user_title = data.consignment?.user_title || '代卖订单'
     form.consignment.user_desc = data.consignment?.user_desc || '查看代卖进度、成交与结算结果'
+    normalizeWorkWechat(data.work_wechat)
     normalizeTheme(data.price_detail_theme)
     if (!form.delivery_modes.mail && !form.delivery_modes.self) {
         form.delivery_modes.mail = 1
         form.delivery_modes.self = 1
     }
+}
+
+const normalizeWorkWechat = (config: Partial<OrderSubmitConfig['work_wechat']> = {}) => {
+    form.work_wechat.enabled = config.enabled ? 1 : 0
+    const channels = config.channels || {}
+    workWechatChannelMetas.forEach((meta) => {
+        const current = form.work_wechat.channels[meta.key]
+        const saved = channels[meta.key] || {}
+        current.enabled = saved.enabled ? 1 : 0
+        current.name = saved.name || current.name
+        current.webhook_url = saved.webhook_url || ''
+        current.dedupe_minutes = Math.max(0, Math.min(1440, Number(saved.dedupe_minutes ?? current.dedupe_minutes)))
+        current.daily_limit = Math.max(0, Math.min(999, Number(saved.daily_limit ?? current.daily_limit)))
+    })
 }
 
 const normalizeProviderOptions = (options: OrderSubmitConfig['platform_delivery']['provider_options'] = []) => {
@@ -733,6 +805,15 @@ const save = async () => {
         ElMessage.warning('请填写代卖用户端入口标题')
         return
     }
+    if (form.work_wechat.enabled) {
+        for (const meta of workWechatChannelMetas) {
+            const channel = form.work_wechat.channels[meta.key]
+            if (channel.enabled && !channel.webhook_url.trim()) {
+                ElMessage.warning(`请填写${channel.name || meta.title}的 Webhook 地址`)
+                return
+            }
+        }
+    }
 
     saving.value = true
     try {
@@ -748,6 +829,10 @@ onMounted(load)
 </script>
 
 <style scoped lang="scss">
+.main-container {
+    width: 100%;
+}
+
 .page-head {
     display: flex;
     align-items: center;
@@ -763,11 +848,14 @@ onMounted(load)
 
 .config-layout {
     display: grid;
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    align-items: start;
+    gap: 14px;
     margin-top: 20px;
 }
 
 .config-group-title {
+    grid-column: 1 / -1;
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -788,10 +876,15 @@ onMounted(load)
 }
 
 .config-section {
-    padding: 18px;
+    min-height: 100%;
+    padding: 16px;
     border: 1px solid #ebeef5;
     border-radius: 8px;
     background: #fff;
+}
+
+.config-section--wide {
+    grid-column: span 2;
 }
 
 .config-section.muted {
@@ -806,25 +899,26 @@ onMounted(load)
 
 .profile-panel {
     display: grid;
-    gap: 18px;
-    padding-top: 18px;
-    margin-top: 18px;
+    gap: 14px;
+    padding-top: 14px;
+    margin-top: 14px;
     border-top: 1px dashed #e5e7eb;
 }
 
 .media-config-panel {
     display: grid;
-    gap: 18px;
-    padding-top: 18px;
-    margin-top: 18px;
+    gap: 14px;
+    padding-top: 14px;
+    margin-top: 14px;
     border-top: 1px dashed #e5e7eb;
 }
 
 .consignment-panel {
     display: grid;
-    gap: 18px;
-    padding-top: 18px;
-    margin-top: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 18px;
+    padding-top: 14px;
+    margin-top: 14px;
     border-top: 1px dashed #e5e7eb;
 }
 
@@ -832,8 +926,60 @@ onMounted(load)
     opacity: 0.72;
 }
 
+.work-wechat-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding-top: 14px;
+    margin-top: 14px;
+    border-top: 1px dashed #e5e7eb;
+}
+
+.work-wechat-list.disabled {
+    opacity: 0.72;
+}
+
+.work-wechat-card {
+    padding: 12px;
+    border: 1px solid #edf0f5;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.work-wechat-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.work-wechat-card__body {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.work-wechat-card__rules {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.rule-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #6b7280;
+    font-size: 13px;
+
+    em {
+        font-style: normal;
+        color: #9ca3af;
+    }
+}
+
 .section-title {
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     font-size: 15px;
     font-weight: 600;
     color: #1f2937;
@@ -850,10 +996,10 @@ onMounted(load)
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 14px;
 
     & + & {
-        margin-top: 18px;
+        margin-top: 14px;
     }
 }
 
@@ -862,7 +1008,7 @@ onMounted(load)
 }
 
 .setting-input {
-    width: 280px;
+    width: 240px;
     flex-shrink: 0;
 }
 
@@ -884,11 +1030,11 @@ onMounted(load)
 .mode-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    gap: 12px;
 }
 
 .mode-card {
-    padding: 16px;
+    padding: 14px;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     cursor: pointer;
@@ -911,7 +1057,7 @@ onMounted(load)
 }
 
 .payment-mode-tip {
-    padding: 14px;
+    padding: 12px;
     border: 1px solid #edf0f5;
     border-radius: 8px;
     background: #fafafa;
@@ -936,10 +1082,21 @@ onMounted(load)
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 14px;
+    padding: 12px;
     border: 1px solid #edf0f5;
     border-radius: 8px;
     background: #fafafa;
+}
+
+@media (max-width: 1180px) {
+    .consignment-panel,
+    .work-wechat-list {
+        grid-template-columns: 1fr;
+    }
+
+    .config-section--wide {
+        grid-column: auto;
+    }
 }
 
 @media (max-width: 768px) {
@@ -952,6 +1109,22 @@ onMounted(load)
     .theme-entry {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .setting-row,
+    .mode-head,
+    .work-wechat-card__head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .setting-input {
+        width: 100%;
+    }
+
+    .mode-grid,
+    .work-wechat-card__rules {
+        grid-template-columns: 1fr;
     }
 }
 </style>

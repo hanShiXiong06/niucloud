@@ -215,17 +215,38 @@ class RecycleDeviceModelDictService extends BaseAdminService
             return true;
         }
 
+        $now = time();
         foreach ($rows as $row) {
             $id = (int)($row['id'] ?? 0);
             if ($id <= 0) {
                 continue;
             }
+            $sort = (int)($row['sort'] ?? 0);
+            $cascade = (int)($row['cascade'] ?? 0) === 1;
+            if ($cascade) {
+                $node = $this->getNode($id);
+                $path = trim((string)($node['model_full_name'] ?? ''));
+                if ($path === '') {
+                    continue;
+                }
+                $this->model->where([['site_id', '=', $this->site_id]])
+                    ->where(function ($query) use ($path) {
+                        $query->where('model_full_name', '=', $path)
+                            ->whereOr('model_full_name', 'like', $path . '/%');
+                    })
+                    ->update([
+                        'sort' => $sort,
+                        'update_at' => $now,
+                    ]);
+                continue;
+            }
+
             $this->model->where([
                 ['site_id', '=', $this->site_id],
                 ['id', '=', $id],
             ])->update([
-                'sort' => (int)($row['sort'] ?? 0),
-                'update_at' => time(),
+                'sort' => $sort,
+                'update_at' => $now,
             ]);
         }
         return true;

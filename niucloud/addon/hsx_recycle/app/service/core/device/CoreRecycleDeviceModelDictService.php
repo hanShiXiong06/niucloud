@@ -32,7 +32,7 @@ class CoreRecycleDeviceModelDictService extends BaseCoreService
 
         $keyword = trim($keyword);
         $limit = max(1, min(500, $limit));
-        $field = 'id,pid,level,node_name,model_full_name,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json';
+        $field = 'id,site_id,pid,level,node_name,model_full_name,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json';
         $query = $this->model->where([
             ['site_id', '=', $siteId],
             ['status', '=', 1],
@@ -81,6 +81,88 @@ class CoreRecycleDeviceModelDictService extends BaseCoreService
         }
 
         return array_map([$this, 'formatNode'], array_values($uniqueRows));
+    }
+
+    public function tree(int $siteId): array
+    {
+        if ($siteId <= 0) {
+            return [];
+        }
+
+        $rows = $this->model->where([
+            ['site_id', '=', $siteId],
+            ['status', '=', 1],
+        ])->field('id,site_id,pid,level,node_name,model_full_name,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
+            ->order('level asc, is_hot desc, select_count desc, sort asc, id asc')
+            ->select()
+            ->toArray();
+
+        $items = [];
+        foreach ($rows as $row) {
+            $row = $this->formatNode($row);
+            $row['child_list'] = [];
+            $row['children'] = [];
+            $items[(int)$row['id']] = $row;
+        }
+
+        $tree = [];
+        foreach ($items as $id => &$item) {
+            $pid = (int)($item['pid'] ?? 0);
+            if ($pid > 0 && isset($items[$pid])) {
+                $items[$pid]['child_list'][] = &$item;
+                $items[$pid]['children'][] = &$item;
+                $items[$pid]['leaf'] = false;
+                $items[$pid]['has_children'] = 1;
+            } else {
+                $tree[] = &$item;
+            }
+        }
+        unset($item);
+
+        return $tree;
+    }
+
+    public function children(int $siteId, int $pid = 0, string $keyword = '', int $limit = 200): array
+    {
+        if ($siteId <= 0) {
+            return [];
+        }
+
+        $limit = max(20, min(500, $limit));
+        $query = $this->model->where([
+            ['site_id', '=', $siteId],
+            ['pid', '=', $pid],
+            ['status', '=', 1],
+        ]);
+
+        if (trim($keyword) !== '') {
+            $this->applyKeywordFilter($query, trim($keyword));
+        }
+
+        $rows = $query->field('id,site_id,pid,level,node_name,model_full_name,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
+            ->order('is_hot desc, select_count desc, sort asc, id asc')
+            ->limit($limit)
+            ->select()
+            ->toArray();
+
+        if (empty($rows)) {
+            return [];
+        }
+
+        $parentIds = $this->model->where([
+            ['site_id', '=', $siteId],
+            ['status', '=', 1],
+        ])->whereIn('pid', array_column($rows, 'id') ?: [0])->column('pid');
+        $parentMap = array_flip(array_map('intval', $parentIds));
+
+        return array_map(function ($row) use ($parentMap) {
+            $row = $this->formatNode($row);
+            $row['has_children'] = isset($parentMap[(int)$row['id']]) ? 1 : 0;
+            $row['child_list'] = [];
+            $row['children'] = [];
+            $row['leaf'] = empty($row['has_children']);
+            return $row;
+        }, $rows);
     }
 
     public function applyKeywordFilter($query, string $keyword, array $extraFields = []): void
@@ -150,9 +232,38 @@ class CoreRecycleDeviceModelDictService extends BaseCoreService
             'series_name' => count($parts) === 3 ? ($parts[1] ?? '') : '',
             'model_name' => $parts[count($parts) - 1] ?? '',
             'extra' => $extra,
+            'category_path' => $this->buildCategoryPathIds($row),
+            'category_path_names' => $parts,
             'leaf' => true,
             'has_children' => 0,
         ]);
+    }
+
+    private function buildCategoryPathIds(array $row): array
+    {
+        $siteId = (int)($row['site_id'] ?? 0);
+        $id = (int)($row['id'] ?? 0);
+        if ($siteId <= 0 || $id <= 0) {
+            return $id > 0 ? [$id] : [];
+        }
+
+        $path = [];
+        $currentId = $id;
+        $guard = 0;
+        while ($currentId > 0 && $guard < 12) {
+            $node = $this->model->where([
+                ['site_id', '=', $siteId],
+                ['id', '=', $currentId],
+            ])->field('id,pid')->findOrEmpty()->toArray();
+            if (empty($node)) {
+                break;
+            }
+            array_unshift($path, (int)$node['id']);
+            $currentId = (int)($node['pid'] ?? 0);
+            $guard++;
+        }
+
+        return $path;
     }
 
     private function normalizeSearchKeyword(string $value): string

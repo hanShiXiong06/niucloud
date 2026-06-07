@@ -1,5 +1,6 @@
 import { ref, computed, type Ref } from 'vue'
 import type { OrderDetailDevice } from '../types/order'
+import { copyIMEIs } from '../utils/clipboard'
 
 /**
  * 设备选择管理
@@ -83,17 +84,8 @@ export function useDeviceSelection(devicesRef: Ref<OrderDetailDevice[]>) {
     const imeis = devicesRef.value
       .filter(device => selectedDeviceIds.value.includes(device.id))
       .map(device => device.imei)
-      .join('\n')
 
-    uni.setClipboardData({
-      data: imeis,
-      success: () => {
-        uni.showToast({
-          title: '已复制选中IMEI',
-          icon: 'success'
-        })
-      }
-    })
+    copyIMEIs(imeis, '已复制选中IMEI')
   }
 
   // 获取选中的可确认设备
