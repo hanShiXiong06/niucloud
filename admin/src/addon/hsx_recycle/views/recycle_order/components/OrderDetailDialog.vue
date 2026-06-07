@@ -340,7 +340,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getReturnOrderList } from '@/addon/hsx_recycle/api/recycle_return_order'
 
 interface OrderDetail {

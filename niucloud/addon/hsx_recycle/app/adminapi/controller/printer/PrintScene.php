@@ -147,6 +147,7 @@ class PrintScene extends BaseAdminController
             ['return_order_id', 0],
             ['consignment_id', 0],
             ['biz_id', 0],
+            ['print_data_override', []],
         ]);
         $result = $this->service->resolvePlanBySceneKey($sceneKey, [
             'device_id' => (int)$data['device_id'],
@@ -154,6 +155,7 @@ class PrintScene extends BaseAdminController
             'return_order_id' => (int)$data['return_order_id'],
             'consignment_id' => (int)$data['consignment_id'],
             'biz_id' => (int)$data['biz_id'],
+            'print_data_override' => is_array($data['print_data_override']) ? $data['print_data_override'] : [],
         ], false);
         if (!empty($result['can_print'])) {
             unset($result['template_info'], $result['printer_info'], $result['device_data'], $result['print_data']);
@@ -175,6 +177,7 @@ class PrintScene extends BaseAdminController
             ['return_order_id', 0],
             ['consignment_id', 0],
             ['biz_id', 0],
+            ['print_data_override', []],
         ]);
         $result = $this->service->printScene($sceneKey, [
             'device_id' => (int)$data['device_id'],
@@ -182,6 +185,7 @@ class PrintScene extends BaseAdminController
             'return_order_id' => (int)$data['return_order_id'],
             'consignment_id' => (int)$data['consignment_id'],
             'biz_id' => (int)$data['biz_id'],
+            'print_data_override' => is_array($data['print_data_override']) ? $data['print_data_override'] : [],
         ]);
         if (!empty($result['success'])) {
             return success($result);

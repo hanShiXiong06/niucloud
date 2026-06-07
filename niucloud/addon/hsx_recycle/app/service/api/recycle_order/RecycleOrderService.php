@@ -164,7 +164,7 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,site_id,imei,user_sn,model,initial_price,status,final_price,check_images,check_images_seller')
+                    $query->field('id,order_id,site_id,imei,user_sn,model,initial_price,status,final_price,cost_adjust_amount,cost_adjust_count,last_cost_adjust_time,last_cost_adjust_no,check_images,check_images_seller')
                         ->append(['status_name', 'check_images_seller_thumb_small']);
                 }
             ])
@@ -192,7 +192,7 @@ class RecycleOrderService extends BaseApiService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,site_id,imei,imei2,sn,user_sn,model,capacity,color,initial_price,status,final_price,remark,check_images,check_images_seller,check_result,check_result_seller,check_at,price_remark,consignment_order_id,info')
+                    $query->field('id,order_id,site_id,imei,imei2,sn,user_sn,model,capacity,color,initial_price,status,final_price,cost_adjust_amount,cost_adjust_count,last_cost_adjust_time,last_cost_adjust_no,remark,check_images,check_images_seller,check_result,check_result_seller,check_at,price_remark,consignment_order_id,info')
                         ->with(['consignmentOrder' => function($q) {
                             $q->field('id,consignment_no,source_device_id,status');
                         }, 'paymentRecords' => function($q) {

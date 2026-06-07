@@ -167,6 +167,62 @@
             :deviceData="deviceData"
             @success="handleActionSuccess('定价')"
         />
+
+        <u-popup :show="labelEditVisible" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="closeLabelEdit">
+            <view class="label-edit-popup">
+                <view class="label-edit-popup__header">
+                    <view>
+                        <view class="label-edit-popup__title">编辑打印标签</view>
+                        <view class="label-edit-popup__subtitle">默认使用系统字段，可按本次打印临时调整</view>
+                    </view>
+                    <text class="nc-iconfont nc-icon-guanbiV6xx1 label-edit-popup__close" @click="closeLabelEdit"></text>
+                </view>
+
+                <scroll-view scroll-y class="label-edit-popup__body">
+                    <view class="label-edit-tip">
+                        <view>建议单行最多放 {{ labelLineLimit }} 个字符。</view>
+                        <view>中文约按 {{ labelCnCharWidth }} 个字符计算，英文、数字、符号按 {{ labelAsciiCharWidth }} 个字符计算。</view>
+                    </view>
+
+                    <view v-for="field in labelFieldConfigs" :key="field.key" class="label-edit-field">
+                        <view class="label-edit-field__head">
+                            <text class="label-edit-field__label">{{ field.label }}</text>
+                            <text
+                                class="label-edit-field__count"
+                                :class="{ 'label-edit-field__count--warning': getLabelFieldWidth(field.key) > labelLineLimit }"
+                            >
+                                {{ formatLabelFieldWidth(field.key) }}/{{ labelLineLimit }}
+                            </text>
+                        </view>
+                        <textarea
+                            v-model="labelEditForm[field.key]"
+                            class="label-edit-field__textarea"
+                            :placeholder="field.placeholder"
+                            maxlength="120"
+                            auto-height
+                        />
+                        <view
+                            v-if="getLabelFieldWidth(field.key) > labelLineLimit"
+                            class="label-edit-field__warning"
+                        >
+                            该字段可能超过单行宽度，建议手动删减或换成短名称。
+                        </view>
+                    </view>
+                </scroll-view>
+
+                <view class="label-edit-popup__footer">
+                    <u-button @click="closeLabelEdit" :customStyle="{ flex: 1 }">取消</u-button>
+                    <u-button
+                        type="primary"
+                        @click="confirmLabelPrint"
+                        :customStyle="{ flex: 1, marginLeft: '16rpx' }"
+                    >
+                        确认打印
+                    </u-button>
+                </view>
+            </view>
+        </u-popup>
+
     </view>
 </template>
 
@@ -178,6 +234,7 @@ import { redirect } from '@/utils/common'
 import CheckDevicePopup from '@/addon/hsx_recycle/pages/order/components/CheckDevicePopup.vue'
 import PriceDevicePopup from '@/addon/hsx_recycle/pages/order/components/PriceDevicePopup.vue'
 import { useRecyclePrintActions } from '@/addon/hsx_recycle/hooks/useRecyclePrintActions'
+import { getPrintScenePlan } from '@/addon/hsx_recycle/api/printer'
 
 type ScanMode = 'process' | 'query' | 'label'
 
@@ -187,9 +244,38 @@ const candidateDevices = ref<any[]>([])
 const loading = ref(false)
 const checkPopupVisible = ref(false)
 const pricePopupVisible = ref(false)
+const labelEditVisible = ref(false)
 const loadedDeviceId = ref('')
 const scanMode = ref<ScanMode>('process')
+const pendingPrintAction = ref<any>(null)
+const labelLineLimit = ref(17)
+const labelCnCharWidth = ref(2.5)
+const labelAsciiCharWidth = ref(1)
 let openedFromQuery = false
+
+const defaultLabelFieldConfigs = [
+    { key: 'model', label: '产品名称/型号', placeholder: '请输入产品名称或型号' },
+    { key: 'capacity', label: '规格/容量', placeholder: '请输入规格或容量' },
+    { key: 'color', label: '颜色', placeholder: '请输入颜色' },
+    { key: 'imei', label: 'IMEI', placeholder: '请输入 IMEI' },
+    { key: 'sn', label: 'SN', placeholder: '请输入 SN' },
+    { key: 'order_no', label: '订单号', placeholder: '请输入订单号' },
+    { key: 'customer_name', label: '客户姓名', placeholder: '请输入客户姓名' }
+] as Array<{ key: string, label: string, placeholder: string, value?: string }>
+
+type LabelEditForm = Record<string, string>
+
+const labelFieldConfigs = ref<Array<{ key: string, label: string, placeholder: string, value?: string }>>([...defaultLabelFieldConfigs])
+
+const createEmptyLabelForm = (): LabelEditForm => {
+    return labelFieldConfigs.value.reduce((form, field) => {
+        form[field.key] = ''
+        return form
+    }, {} as LabelEditForm)
+}
+
+const labelEditForm = ref<LabelEditForm>(createEmptyLabelForm())
+const labelEditOriginalForm = ref<LabelEditForm>(createEmptyLabelForm())
 
 const {
     loadManualPrintActions,
@@ -419,11 +505,117 @@ const openLabelAction = async () => {
 }
 
 const executeDevicePrint = async (action: any) => {
+    const labelEditConfig = await loadLabelEditConfig(action)
+    if (!labelEditConfig.enabled) {
+        await executePrintAction(action, {
+            device_id: deviceData.value?.id,
+            order_id: deviceData.value?.order_id || deviceData.value?.order?.id,
+            biz_id: deviceData.value?.id
+        })
+        return
+    }
+
+    const form = buildLabelEditForm()
+    pendingPrintAction.value = action
+    labelEditForm.value = { ...form }
+    labelEditOriginalForm.value = { ...form }
+    labelEditVisible.value = true
+}
+
+const confirmLabelPrint = async () => {
+    const action = pendingPrintAction.value
+    if (!action) {
+        closeLabelEdit()
+        return
+    }
+    labelEditVisible.value = false
+    pendingPrintAction.value = null
     await executePrintAction(action, {
         device_id: deviceData.value?.id,
         order_id: deviceData.value?.order_id || deviceData.value?.order?.id,
-        biz_id: deviceData.value?.id
+        biz_id: deviceData.value?.id,
+        print_data_override: buildPrintDataOverride()
     })
+}
+
+const closeLabelEdit = () => {
+    labelEditVisible.value = false
+    pendingPrintAction.value = null
+}
+
+const buildLabelEditForm = (): LabelEditForm => {
+    return labelFieldConfigs.value.reduce((form, field) => {
+        form[field.key] = String((field as any).value || '')
+        return form
+    }, {} as LabelEditForm)
+}
+
+const buildPrintDataOverride = () => {
+    const data: Record<string, string> = {}
+    labelFieldConfigs.value.forEach((field) => {
+        const value = String(labelEditForm.value[field.key] || '').trim()
+        const originalValue = String(labelEditOriginalForm.value[field.key] || '').trim()
+        if (value !== originalValue) {
+            data[field.key] = value
+        }
+    })
+    return data
+}
+
+const loadLabelEditConfig = async (action: any) => {
+    const fallback = action?.label_edit || {}
+    try {
+        const payload = {
+            device_id: deviceData.value?.id,
+            order_id: deviceData.value?.order_id || deviceData.value?.order?.id,
+            biz_id: deviceData.value?.id
+        }
+        const res: any = await getPrintScenePlan(action.scene_key, payload)
+        return applyLabelEditConfig(res?.data?.label_edit || fallback)
+    } catch (error) {
+        return applyLabelEditConfig(fallback)
+    }
+}
+
+const applyLabelEditConfig = (config: any = {}) => {
+    const fields = Array.isArray(config.fields) && config.fields.length
+        ? config.fields
+        : defaultLabelFieldConfigs
+    labelFieldConfigs.value = fields
+        .map((field: any) => ({
+            key: String(typeof field === 'string' ? field : field.key || ''),
+            label: String(typeof field === 'string' ? field : field.label || field.key || ''),
+            placeholder: String(typeof field === 'string' ? '' : field.placeholder || `请输入${ field.label || field.key || '' }`),
+            value: String(typeof field === 'string' ? '' : field.value || '')
+        }))
+        .filter((field: any) => field.key)
+    if (!labelFieldConfigs.value.length) {
+        labelFieldConfigs.value = [...defaultLabelFieldConfigs]
+    }
+
+    const limit = Number(config.line_width_limit || 0)
+    labelLineLimit.value = limit > 0 ? limit : 17
+    labelCnCharWidth.value = Number(config.cn_char_width || 2.5) || 2.5
+    labelAsciiCharWidth.value = Number(config.ascii_char_width || 1) || 1
+
+    return {
+        enabled: Number(config.enabled ?? 1) === 1
+    }
+}
+
+const getLabelFieldWidth = (key: string) => {
+    return calcLabelTextWidth(labelEditForm.value[key])
+}
+
+const formatLabelFieldWidth = (key: string) => {
+    const width = getLabelFieldWidth(key)
+    return Number.isInteger(width) ? String(width) : width.toFixed(1)
+}
+
+const calcLabelTextWidth = (value: any) => {
+    return Array.from(String(value || '')).reduce((total, char) => {
+        return total + (/[\u4e00-\u9fff]/.test(char) ? labelCnCharWidth.value : labelAsciiCharWidth.value)
+    }, 0)
 }
 
 const handleActionSuccess = async (actionName: string) => {
@@ -1017,4 +1209,119 @@ const formatScanTime = (value: any) => {
     color: #0f766e;
     font-size: 28rpx;
 }
+
+.label-edit-popup {
+    max-height: 86vh;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+}
+
+.label-edit-popup__header {
+    padding: 30rpx;
+    border-bottom: 1rpx solid #eef2f7;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20rpx;
+}
+
+.label-edit-popup__title {
+    font-size: 32rpx;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.25;
+}
+
+.label-edit-popup__subtitle {
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: #64748b;
+    line-height: 1.4;
+}
+
+.label-edit-popup__close {
+    flex-shrink: 0;
+    font-size: 32rpx;
+    color: #64748b;
+}
+
+.label-edit-popup__body {
+    height: 58vh;
+    max-height: 58vh;
+    padding: 24rpx;
+    box-sizing: border-box;
+    background: #f6f7fb;
+}
+
+.label-edit-tip {
+    padding: 18rpx 20rpx;
+    border-radius: 14rpx;
+    background: #ecfdf5;
+    border: 1rpx solid #b7ead8;
+    color: #0f766e;
+    font-size: 22rpx;
+    line-height: 1.6;
+}
+
+.label-edit-field {
+    margin-top: 18rpx;
+    padding: 20rpx;
+    border-radius: 16rpx;
+    background: #fff;
+    border: 1rpx solid #e9eef3;
+}
+
+.label-edit-field__head {
+    margin-bottom: 12rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+}
+
+.label-edit-field__label {
+    font-size: 25rpx;
+    font-weight: 700;
+    color: #334155;
+}
+
+.label-edit-field__count {
+    flex-shrink: 0;
+    font-size: 22rpx;
+    color: #64748b;
+}
+
+.label-edit-field__count--warning {
+    color: #dc2626;
+    font-weight: 700;
+}
+
+.label-edit-field__textarea {
+    width: 100%;
+    min-height: 72rpx;
+    padding: 18rpx;
+    border-radius: 12rpx;
+    background: #f8fafc;
+    border: 1rpx solid #dbe2ea;
+    color: #0f172a;
+    font-size: 25rpx;
+    line-height: 1.45;
+    box-sizing: border-box;
+}
+
+.label-edit-field__warning {
+    margin-top: 10rpx;
+    font-size: 21rpx;
+    color: #dc2626;
+    line-height: 1.4;
+}
+
+.label-edit-popup__footer {
+    padding: 20rpx 24rpx calc(20rpx + env(safe-area-inset-bottom));
+    border-top: 1rpx solid #eef2f7;
+    display: flex;
+    background: #fff;
+}
+
 </style>

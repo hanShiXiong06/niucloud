@@ -54,6 +54,7 @@
       :show="showAddDialog"
       mode="center"
       :round="10"
+      :safeAreaInsetBottom="false"
       :closeOnClickOverlay="false"
       @close="closeAddDialog"
     >
@@ -82,8 +83,25 @@
                 v-model="newDevice.model"
                 placeholder="如：iPhone 13 Pro"
                 class="custom-input"
+                @focus="handleModelFocus"
+                @input="handleModelInput"
               />
             </view>
+            <view v-if="showModelSuggestions" class="model-suggestions">
+              <view v-if="modelSearching" class="model-suggestion-empty">搜索中...</view>
+              <block v-else>
+                <view
+                  v-for="item in modelSuggestions"
+                  :key="item.id"
+                  class="model-suggestion-item"
+                  @click="selectModelSuggestion(item)"
+                >
+                  <text class="model-suggestion-name">{{ item.node_name }}</text>
+                </view>
+              </block>
+              <view v-if="!modelSearching && !modelSuggestions.length" class="model-suggestion-empty">暂无匹配型号，可直接输入后继续添加</view>
+            </view>
+            <text class="form-hint">如果没有找到型号，请直接输入完整型号，门店会在签收时确认。</text>
           </view>
 
           <!-- 用户串号输入（后6位） -->
@@ -95,13 +113,18 @@
             <view class="input-wrapper">
               <input
                 v-model="newDevice.user_sn"
-                placeholder="输入后6位（字母或数字）"
-                maxlength="6"
+                placeholder="手输后6位，或扫码录入完整串号"
+                maxlength="64"
                 type="text"
-                class="custom-input"
+                class="custom-input custom-input--with-action"
+                @focus="clearModelSuggestions"
+                @input="handleUserSnInput"
               />
+              <view class="input-action" @click="scanUserSn">
+                <up-icon name="scan" size="20" color="#4f46e5"></up-icon>
+              </view>
             </view>
-            <text class="form-hint">仅需输入IMEI/SN的后6位，可以是字母或数字</text>
+            <text class="form-hint">用户可在手机拨号输入 *#06#，调出条形码后点击右侧扫码快速录入；也可手动输入后6位数字或字母。</text>
           </view>
 
           <!-- 定价输入 -->
@@ -115,6 +138,7 @@
                 placeholder="不确定可以留空"
                 type="number"
                 class="custom-input"
+                @focus="clearModelSuggestions"
               />
             </view>
             <text class="form-hint">这里只做下单预估，不会影响门店最终质检报价</text>
@@ -139,8 +163,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Device } from '../../../types/order'
+import { searchDeviceModelDictOptions } from '../../../api/order'
 
 interface Props {
   devices: Device[]
@@ -165,11 +190,22 @@ const emit = defineEmits<{
 
 const localCount = ref(props.count)
 const showAddDialog = ref(false)
+const modelSuggestions = ref<any[]>([])
+const modelSearching = ref(false)
+const modelFocused = ref(false)
+const userSnFromScan = ref(false)
+let modelSearchTimer: any = null
 const newDevice = ref<Device>({
   imei: '',
   user_sn: '',
   model: '',
-  initial_price: ''
+  initial_price: '',
+  category_id: 0,
+  category_path: []
+})
+
+const showModelSuggestions = computed(() => {
+  return modelFocused.value && String(newDevice.value.model || '').trim().length > 0
 })
 
 const normalizeCount = (value: any) => {
@@ -220,12 +256,109 @@ defineExpose({
 
 const closeAddDialog = () => {
   showAddDialog.value = false
+  clearModelSuggestions()
+  userSnFromScan.value = false
   newDevice.value = {
     imei: '',
     user_sn: '',
     model: '',
-    initial_price: ''
+    initial_price: '',
+    category_id: 0,
+    category_path: []
   }
+}
+
+const handleModelFocus = () => {
+  modelFocused.value = true
+  scheduleModelSearch()
+}
+
+const handleModelInput = () => {
+  newDevice.value.category_id = 0
+  newDevice.value.category_path = []
+  scheduleModelSearch()
+}
+
+const scheduleModelSearch = () => {
+  if (modelSearchTimer) clearTimeout(modelSearchTimer)
+  modelSearchTimer = setTimeout(searchModelSuggestions, 260)
+}
+
+const searchModelSuggestions = async () => {
+  const keyword = String(newDevice.value.model || '').trim()
+  if (!keyword) {
+    modelSuggestions.value = []
+    modelSearching.value = false
+    return
+  }
+
+  modelSearching.value = true
+  try {
+    const res: any = await searchDeviceModelDictOptions({ keyword, limit: 20 })
+    modelSuggestions.value = Array.isArray(res?.data) ? res.data : []
+  } catch (error) {
+    modelSuggestions.value = []
+  } finally {
+    modelSearching.value = false
+  }
+}
+
+const selectModelSuggestion = (item: any) => {
+  newDevice.value.model = item.node_name || ''
+  newDevice.value.category_id = item.id || 0
+  newDevice.value.category_path = resolveModelPath(item)
+  clearModelSuggestions()
+}
+
+const resolveModelPath = (item: any): Array<string | number> => {
+  if (Array.isArray(item?.category_path) && item.category_path.length) {
+    return item.category_path
+  }
+  return [item?.id || 0].filter(Boolean)
+}
+
+const clearModelSuggestions = () => {
+  if (modelSearchTimer) clearTimeout(modelSearchTimer)
+  modelFocused.value = false
+  modelSearching.value = false
+  modelSuggestions.value = []
+}
+
+const normalizeUserSn = (value: any, maxLength = 64) => {
+  return String(value || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, maxLength)
+}
+
+const handleUserSnInput = () => {
+  if (userSnFromScan.value) {
+    newDevice.value.user_sn = normalizeUserSn(newDevice.value.user_sn, 64)
+    return
+  }
+  newDevice.value.user_sn = normalizeUserSn(newDevice.value.user_sn, 6)
+}
+
+const scanUserSn = () => {
+  clearModelSuggestions()
+  uni.scanCode({
+    scanType: ['barCode', 'qrCode'],
+    success: (res: any) => {
+      const code = normalizeUserSn(res?.result || '', 64)
+      if (code.length < 6) {
+        uni.showToast({
+          title: '未识别到有效串号，请手动输入后6位',
+          icon: 'none'
+        })
+        return
+      }
+      userSnFromScan.value = true
+      newDevice.value.user_sn = code
+    },
+    fail: () => {
+      uni.showToast({
+        title: '扫码取消或失败，可手动输入',
+        icon: 'none'
+      })
+    }
+  })
 }
 
 const confirmAdd = () => {
@@ -246,9 +379,10 @@ const confirmAdd = () => {
     return
   }
 
-  if (newDevice.value.user_sn.length !== 6) {
+  const userSnLength = String(newDevice.value.user_sn || '').length
+  if (userSnLength < 6 || (!userSnFromScan.value && userSnLength !== 6)) {
     uni.showToast({
-      title: '串号必须是6位',
+      title: '请手动输入6位，或扫码录入完整串号',
       icon: 'none'
     })
     return
@@ -271,11 +405,15 @@ const confirmAdd = () => {
 
   // 关闭弹窗
   showAddDialog.value = false
+  clearModelSuggestions()
+  userSnFromScan.value = false
   newDevice.value = {
     imei: '',
     user_sn: '',
     model: '',
-    initial_price: ''
+    initial_price: '',
+    category_id: 0,
+    category_path: []
   }
 
   uni.showToast({
@@ -363,6 +501,7 @@ const confirmAdd = () => {
 }
 
 .form-item {
+  position: relative;
   margin-bottom: 24rpx;
 }
 
@@ -388,6 +527,7 @@ const confirmAdd = () => {
 
 .input-wrapper {
   width: 100%;
+  position: relative;
 }
 
 .custom-input {
@@ -401,9 +541,66 @@ const confirmAdd = () => {
   box-sizing: border-box;
 }
 
+.custom-input--with-action {
+  padding-right: 86rpx;
+}
+
+.input-action {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 82rpx;
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .custom-input:focus {
   border-color: var(--primary-color);
   outline: none;
+}
+
+.model-suggestions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% - 2rpx);
+  z-index: 20;
+  border: 1px solid #e5e7eb;
+  border-radius: 10rpx;
+  background: #fff;
+  max-height: 280rpx;
+  overflow-y: auto;
+  box-shadow: 0 16rpx 36rpx rgba(15, 23, 42, 0.14);
+}
+
+.model-suggestion-item {
+  min-height: 72rpx;
+  padding: 0 22rpx;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #f3f4f6;
+  box-sizing: border-box;
+}
+
+.model-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.model-suggestion-name {
+  font-size: 14px;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.model-suggestion-empty {
+  min-height: 72rpx;
+  padding: 0 22rpx;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: #9ca3af;
 }
 
 .dialog-footer {

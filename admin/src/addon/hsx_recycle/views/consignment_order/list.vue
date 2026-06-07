@@ -406,9 +406,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.consignment-page {
-  padding: 16px;
-}
 .page-header {
   display: flex;
   align-items: center;

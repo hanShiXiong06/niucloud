@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\adminapi\controller\order;
 
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService;
+use addon\hsx_recycle\app\service\admin\order\RecycleDeviceCostAdjustmentService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrinterTemplateService;
 use addon\hsx_recycle\app\validate\RecycleDeviceValidate;
 use core\base\BaseAdminController;
@@ -31,12 +32,18 @@ class RecycleDevice extends BaseAdminController
      */
     protected $template_service;
 
+    /**
+     * @var RecycleDeviceCostAdjustmentService
+     */
+    protected $cost_adjustment_service;
+
     public function __construct(App $app)
     {
         parent::__construct($app);
         $this->service = new RecycleDeviceService();
         $this->validate = new RecycleDeviceValidate();
         $this->template_service = new RecyclePrinterTemplateService();
+        $this->cost_adjustment_service = new RecycleDeviceCostAdjustmentService();
     }
 
     /**
@@ -78,6 +85,50 @@ class RecycleDevice extends BaseAdminController
         $data['logs'] = $this->service->getTimelineLogs($id, 50);
         
         return success($data);
+    }
+
+    /**
+     * 获取设备成本调整记录
+     * @param int $id
+     * @return mixed
+     */
+    public function costAdjustLogs(int $id)
+    {
+        $this->validate->scene('detail')->check(['id' => $id]);
+
+        return success($this->cost_adjustment_service->lists($id));
+    }
+
+    /**
+     * 获取设备成本调整能力
+     * @param int $id
+     * @return mixed
+     */
+    public function costAdjustAbility(int $id)
+    {
+        $this->validate->scene('detail')->check(['id' => $id]);
+
+        return success($this->cost_adjustment_service->ability($id));
+    }
+
+    /**
+     * 已打款设备成本调整
+     * @param int $id
+     * @return mixed
+     */
+    public function costAdjust(int $id)
+    {
+        $data = $this->request->params([
+            ['adjust_type', ''],
+            ['direction', 'decrease'],
+            ['adjust_amount', 0],
+            ['reason', ''],
+            ['images', ''],
+            ['customer_handled', 0],
+            ['inventory_tip_confirmed', 0],
+        ]);
+
+        return success($this->cost_adjustment_service->adjust($id, $data));
     }
 
     /**

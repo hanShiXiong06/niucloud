@@ -182,7 +182,15 @@ class RecycleDashboardFilterService extends BaseAdminService
 
         switch ($filterKey) {
             case RecycleDashboardFilterDict::TODAY_CREATED_DEVICES:
-                return $query->where('create_at', 'between', [$params['start_at'], $params['end_at']]);
+                return $query->where('order_id', 'in', function ($subQuery) use ($params) {
+                    $subQuery->name('recycle_order')
+                        ->field('id')
+                        ->where([
+                            ['site_id', '=', $this->site_id],
+                            ['delete_at', '=', 0],
+                            ['create_at', 'between', [$params['start_at'], $params['end_at']]],
+                        ]);
+                });
 
             case RecycleDashboardFilterDict::SIGNED_TODAY:
                 return $query

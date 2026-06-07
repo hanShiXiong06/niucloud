@@ -19,6 +19,7 @@ type PrintTarget = {
     return_order_id?: number | string
     consignment_id?: number | string
     biz_id?: number | string
+    print_data_override?: Record<string, any>
 }
 
 const getDefaultPosition = (bizType: BizType) => {
@@ -73,7 +74,13 @@ export function useRecyclePrintActions(bizType: BizType, options: { position?: s
         const templateName = plan?.template?.template_name || plan?.template_name || '默认模板'
         const printerName = plan?.printer?.printer_name || plan?.printer_name || '默认打印机'
         const copies = Number(plan?.copies || plan?.scene?.copies || action?.copies || 1)
-        return `场景：${ sceneName }\n模板：${ templateName }\n打印机：${ printerName }\n份数：${ copies }`
+        const lineBreak = '\n'
+        return [
+            `场景：${ sceneName }`,
+            `模板：${ templateName }`,
+            `打印机：${ printerName }`,
+            `份数：${ copies }`
+        ].join(lineBreak)
     }
 
     const confirmPrint = (content: string, title: string) => {
@@ -100,7 +107,9 @@ export function useRecyclePrintActions(bizType: BizType, options: { position?: s
         uni.showLoading({ title: '检查打印计划...' })
 
         try {
-            const planRes: any = await getPrintScenePlan(action.scene_key, payload)
+            const planPayload = { ...payload }
+            delete (planPayload as any).print_data_override
+            const planRes: any = await getPrintScenePlan(action.scene_key, planPayload)
             const plan = planRes?.data || {}
             if (planRes?.code !== 1 || !plan?.can_print) {
                 throw planRes || new Error(plan?.message || '打印计划不可用')

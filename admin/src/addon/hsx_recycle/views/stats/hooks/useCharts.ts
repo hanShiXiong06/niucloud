@@ -10,6 +10,10 @@ export function useCharts() {
   const overviewRingChart = ref<HTMLElement>()
   const businessTrendChart = ref<HTMLElement>()
   const financeTrendChart = ref<HTMLElement>()
+  const ledgerSourceChart = ref<HTMLElement>()
+  const ledgerStatusChart = ref<HTMLElement>()
+  const ledgerCategoryChart = ref<HTMLElement>()
+  const ledgerPriceChart = ref<HTMLElement>()
   const memberRegisterTrendChart = ref<HTMLElement>()
   const memberChannelChart = ref<HTMLElement>()
   const memberActivityChart = ref<HTMLElement>()
@@ -19,6 +23,10 @@ export function useCharts() {
   let overviewRingChartInstance: echarts.ECharts | null = null
   let businessTrendChartInstance: echarts.ECharts | null = null
   let financeTrendChartInstance: echarts.ECharts | null = null
+  let ledgerSourceChartInstance: echarts.ECharts | null = null
+  let ledgerStatusChartInstance: echarts.ECharts | null = null
+  let ledgerCategoryChartInstance: echarts.ECharts | null = null
+  let ledgerPriceChartInstance: echarts.ECharts | null = null
   let memberRegisterTrendChartInstance: echarts.ECharts | null = null
   let memberChannelChartInstance: echarts.ECharts | null = null
   let memberActivityChartInstance: echarts.ECharts | null = null
@@ -582,6 +590,218 @@ export function useCharts() {
   const updateFinanceTrendChart = (trendData: any) => {
     if (!financeTrendChartInstance) return
     financeTrendChartInstance.setOption(buildTrendOption(trendData, ['元']), true)
+  }
+
+  const chartColors = ['#2563EB', '#12B76A', '#F79009', '#7C3AED', '#F04438', '#13C2C2', '#667085']
+
+  const emptyGraphic = (text = '暂无数据') => ({
+    type: 'text',
+    left: 'center',
+    top: 'middle',
+    style: {
+      text,
+      fontSize: 14,
+      fill: '#98A2B3'
+    }
+  })
+
+  const initLedgerSourceChart = () => {
+    if (!ledgerSourceChart.value) return
+    if (ledgerSourceChartInstance) return
+    ledgerSourceChartInstance = echarts.init(ledgerSourceChart.value)
+  }
+
+  const updateLedgerSourceChart = (sourceData: any[] = [], deliveryData: any[] = []) => {
+    if (!ledgerSourceChartInstance) return
+    const sourceSeries = sourceData.map((item, index) => ({
+      name: item.label,
+      value: Number(item.order_count || 0),
+      itemStyle: { color: chartColors[index % chartColors.length] }
+    }))
+    const deliverySeries = deliveryData.map((item, index) => ({
+      name: item.label,
+      value: Number(item.order_count || 0),
+      itemStyle: { color: chartColors[(index + 2) % chartColors.length] }
+    }))
+    const hasData = [...sourceSeries, ...deliverySeries].some(item => item.value > 0)
+
+    ledgerSourceChartInstance.setOption({
+      tooltip: {
+        trigger: 'item',
+        formatter: '{a}<br/>{b}: {c}单 ({d}%)'
+      },
+      legend: {
+        bottom: 0,
+        type: 'scroll'
+      },
+      graphic: hasData ? [] : emptyGraphic('暂无来源数据'),
+      series: [
+        {
+          name: '下单来源',
+          type: 'pie',
+          radius: ['34%', '52%'],
+          center: ['32%', '45%'],
+          avoidLabelOverlap: true,
+          label: { formatter: '{b}\n{c}单' },
+          data: sourceSeries
+        },
+        {
+          name: '配送方式',
+          type: 'pie',
+          radius: ['34%', '52%'],
+          center: ['72%', '45%'],
+          avoidLabelOverlap: true,
+          label: { formatter: '{b}\n{c}单' },
+          data: deliverySeries
+        }
+      ]
+    }, true)
+  }
+
+  const initLedgerStatusChart = () => {
+    if (!ledgerStatusChart.value) return
+    if (ledgerStatusChartInstance) return
+    ledgerStatusChartInstance = echarts.init(ledgerStatusChart.value)
+  }
+
+  const updateLedgerStatusChart = (orderStatusData: any[] = [], deviceStatusData: any[] = []) => {
+    if (!ledgerStatusChartInstance) return
+    const labels = Array.from(new Set([
+      ...orderStatusData.map(item => item.label),
+      ...deviceStatusData.map(item => item.label)
+    ]))
+    const orderMap = orderStatusData.reduce((map, item) => {
+      map[item.label] = Number(item.order_count || 0)
+      return map
+    }, {} as Record<string, number>)
+    const deviceMap = deviceStatusData.reduce((map, item) => {
+      map[item.label] = Number(item.device_count || 0)
+      return map
+    }, {} as Record<string, number>)
+    const hasData = labels.some(label => (orderMap[label] || 0) > 0 || (deviceMap[label] || 0) > 0)
+
+    ledgerStatusChartInstance.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { top: 0 },
+      grid: { top: 44, left: 36, right: 24, bottom: 40, containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: labels,
+        axisLabel: { color: '#667085', interval: 0, rotate: labels.length > 6 ? 30 : 0 }
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { color: '#667085' },
+        splitLine: { lineStyle: { color: '#EAECF0' } }
+      },
+      graphic: hasData ? [] : emptyGraphic('暂无状态数据'),
+      series: [
+        {
+          name: '订单',
+          type: 'bar',
+          barMaxWidth: 28,
+          data: labels.map(label => orderMap[label] || 0),
+          itemStyle: { color: '#2563EB' }
+        },
+        {
+          name: '设备',
+          type: 'bar',
+          barMaxWidth: 28,
+          data: labels.map(label => deviceMap[label] || 0),
+          itemStyle: { color: '#12B76A' }
+        }
+      ]
+    }, true)
+  }
+
+  const initLedgerCategoryChart = () => {
+    if (!ledgerCategoryChart.value) return
+    if (ledgerCategoryChartInstance) return
+    ledgerCategoryChartInstance = echarts.init(ledgerCategoryChart.value)
+  }
+
+  const updateLedgerCategoryChart = (data: any[] = []) => {
+    if (!ledgerCategoryChartInstance) return
+    const rows = [...data]
+      .sort((a, b) => Number(b.count || 0) - Number(a.count || 0))
+      .slice(0, 10)
+      .reverse()
+    const hasData = rows.some(item => Number(item.count || 0) > 0)
+
+    ledgerCategoryChartInstance.setOption({
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params: any[]) => {
+          const item = rows[params?.[0]?.dataIndex] || {}
+          return `${item.category_name || '-'}<br/>数量：${item.count || 0}台<br/>金额：¥${item.amount || '0.00'}<br/>占比：${item.rate || 0}%`
+        }
+      },
+      grid: { top: 20, left: 24, right: 36, bottom: 20, containLabel: true },
+      xAxis: {
+        type: 'value',
+        axisLabel: { color: '#667085' },
+        splitLine: { lineStyle: { color: '#EAECF0' } }
+      },
+      yAxis: {
+        type: 'category',
+        data: rows.map(item => item.category_name || '未分类'),
+        axisLabel: { color: '#667085' }
+      },
+      graphic: hasData ? [] : emptyGraphic('暂无分类数据'),
+      series: [
+        {
+          name: '设备数量',
+          type: 'bar',
+          barMaxWidth: 20,
+          data: rows.map(item => Number(item.count || 0)),
+          itemStyle: { color: '#2563EB', borderRadius: [0, 6, 6, 0] },
+          label: { show: true, position: 'right', formatter: '{c}台', color: '#475467' }
+        }
+      ]
+    }, true)
+  }
+
+  const initLedgerPriceChart = () => {
+    if (!ledgerPriceChart.value) return
+    if (ledgerPriceChartInstance) return
+    ledgerPriceChartInstance = echarts.init(ledgerPriceChart.value)
+  }
+
+  const updateLedgerPriceChart = (data: any[] = []) => {
+    if (!ledgerPriceChartInstance) return
+    const hasData = data.some(item => Number(item.count || 0) > 0)
+    ledgerPriceChartInstance.setOption({
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params: any[]) => {
+          const item = data[params?.[0]?.dataIndex] || {}
+          return `${item.label || '-'}<br/>数量：${item.count || 0}台<br/>金额：¥${item.amount || '0.00'}`
+        }
+      },
+      grid: { top: 24, left: 36, right: 24, bottom: 30, containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: data.map(item => item.label),
+        axisLabel: { color: '#667085' }
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { color: '#667085' },
+        splitLine: { lineStyle: { color: '#EAECF0' } }
+      },
+      graphic: hasData ? [] : emptyGraphic('暂无价格区间数据'),
+      series: [
+        {
+          name: '设备数量',
+          type: 'bar',
+          barMaxWidth: 32,
+          data: data.map(item => Number(item.count || 0)),
+          itemStyle: { color: '#F79009', borderRadius: [6, 6, 0, 0] }
+        }
+      ]
+    }, true)
   }
 
   // 初始化会员注册趋势图
@@ -1150,6 +1370,10 @@ export function useCharts() {
     overviewRingChartInstance?.resize()
     businessTrendChartInstance?.resize()
     financeTrendChartInstance?.resize()
+    ledgerSourceChartInstance?.resize()
+    ledgerStatusChartInstance?.resize()
+    ledgerCategoryChartInstance?.resize()
+    ledgerPriceChartInstance?.resize()
     memberRegisterTrendChartInstance?.resize()
     memberChannelChartInstance?.resize()
     memberActivityChartInstance?.resize()
@@ -1162,6 +1386,10 @@ export function useCharts() {
     overviewRingChartInstance?.dispose()
     businessTrendChartInstance?.dispose()
     financeTrendChartInstance?.dispose()
+    ledgerSourceChartInstance?.dispose()
+    ledgerStatusChartInstance?.dispose()
+    ledgerCategoryChartInstance?.dispose()
+    ledgerPriceChartInstance?.dispose()
     memberRegisterTrendChartInstance?.dispose()
     memberChannelChartInstance?.dispose()
     memberActivityChartInstance?.dispose()
@@ -1174,6 +1402,10 @@ export function useCharts() {
     overviewRingChart,
     businessTrendChart,
     financeTrendChart,
+    ledgerSourceChart,
+    ledgerStatusChart,
+    ledgerCategoryChart,
+    ledgerPriceChart,
     memberRegisterTrendChart,
     memberChannelChart,
     memberActivityChart,
@@ -1188,6 +1420,14 @@ export function useCharts() {
     updateBusinessTrendChart,
     initFinanceTrendChart,
     updateFinanceTrendChart,
+    initLedgerSourceChart,
+    updateLedgerSourceChart,
+    initLedgerStatusChart,
+    updateLedgerStatusChart,
+    initLedgerCategoryChart,
+    updateLedgerCategoryChart,
+    initLedgerPriceChart,
+    updateLedgerPriceChart,
     initMemberRegisterTrendChart,
     updateMemberRegisterTrendChart,
     initMemberChannelChart,

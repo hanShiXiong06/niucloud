@@ -74,6 +74,21 @@ export function getDevice(deviceId: number) {
   return request.get(`/recycle/recycle_device/${deviceId}`);
 }
 
+// 获取设备成本调整记录
+export function getDeviceCostAdjustLogs(deviceId: number | string) {
+  return request.get(`/recycle/recycle_device/${deviceId}/cost_adjust_logs`, { showErrorMessage: false });
+}
+
+// 获取设备成本调整能力
+export function getDeviceCostAdjustAbility(deviceId: number | string) {
+  return request.get(`/recycle/recycle_device/${deviceId}/cost_adjust_ability`, { showErrorMessage: false });
+}
+
+// 已打款设备成本调整
+export function adjustDeviceCost(deviceId: number | string, data: any) {
+  return request.post(`/recycle/recycle_device/${deviceId}/cost_adjust`, data);
+}
+
 // updateDevice
 // 更新单个设备信息
 export function updateDevice(deviceId: number, data: any) {

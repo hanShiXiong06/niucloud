@@ -211,6 +211,11 @@ class RecycleDevice extends BaseModel
         return $this->hasMany(RecycleDevicePayment::class, 'device_id', 'id');
     }
 
+    public function costAdjustments()
+    {
+        return $this->hasMany(RecycleDeviceCostAdjustment::class, 'device_id', 'id');
+    }
+
     /**
      * 质检图片获取器
      * @param $value

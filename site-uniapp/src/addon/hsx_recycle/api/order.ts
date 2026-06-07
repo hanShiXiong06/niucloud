@@ -77,6 +77,18 @@ export function getDevice(id: number | string) {
     return request.get(`recycle/recycle_device/${id}`)
 }
 
+export function getDeviceCostAdjustLogs(id: number | string) {
+    return request.get(`recycle/recycle_device/${id}/cost_adjust_logs`, {}, { showErrorMessage: false })
+}
+
+export function getDeviceCostAdjustAbility(id: number | string) {
+    return request.get(`recycle/recycle_device/${id}/cost_adjust_ability`, {}, { showErrorMessage: false })
+}
+
+export function adjustDeviceCost(id: number | string, data: Record<string, any>) {
+    return request.post(`recycle/recycle_device/${id}/cost_adjust`, data)
+}
+
 export function scanSearchDevice(params: Record<string, any>) {
     return request.get('recycle/recycle_device/scan_search', params)
 }

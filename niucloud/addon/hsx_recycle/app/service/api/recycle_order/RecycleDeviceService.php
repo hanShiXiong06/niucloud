@@ -38,7 +38,7 @@ class RecycleDeviceService extends BaseApiService
     public function getPage(array $where = [])
     {
       
-        $field = 'id,order_id,site_id,imei,model,initial_price,final_price,price_remark,status,check_status,check_result,check_result_seller,check_images,check_images_seller,check_at,remark,create_at,update_at';
+        $field = 'id,order_id,site_id,imei,model,initial_price,final_price,cost_adjust_amount,cost_adjust_count,last_cost_adjust_time,last_cost_adjust_no,price_remark,status,check_status,check_result,check_result_seller,check_images,check_images_seller,check_at,remark,create_at,update_at';
         $order = 'create_at desc';
 
         $search_model = $this->model->where([

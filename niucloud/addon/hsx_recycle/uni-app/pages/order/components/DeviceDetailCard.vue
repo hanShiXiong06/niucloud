@@ -53,6 +53,17 @@
       </view>
     </view>
 
+    <view v-if="hasCostAdjustment" class="px-3 pb-2">
+      <view class="cost-adjust-notice">
+        <view class="cost-adjust-notice__main">
+          <text class="cost-adjust-notice__title">商家已调整最终回收成本</text>
+          <text class="cost-adjust-notice__desc">
+            当前成本 ¥{{ formatMoney(device.final_price) }}，累计调整 {{ formatSignedMoney(device.cost_adjust_amount) }}。如涉及差额，请以商家沟通结果为准。
+          </text>
+        </view>
+      </view>
+    </view>
+
     <!-- 验机报告入口 -->
     <view v-if="hasInspectionReport" class="px-3 pb-2">
       <view class="inspection-entry" @tap.stop="$emit('view-report')">
@@ -200,6 +211,7 @@ const finalPrice = computed(() => Number(props.device.final_price || 0))
 const hasFinalPrice = computed(() => Number.isFinite(finalPrice.value) && finalPrice.value > 0)
 const canUserDecide = computed(() => hasFinalPrice.value && [4, 7].includes(Number(props.device.status)))
 const showActions = computed(() => canUserDecide.value || props.allowViewConsignment)
+const hasCostAdjustment = computed(() => Number(props.device.cost_adjust_count || 0) > 0)
 
 const imageCount = computed(() => {
   const raw = props.device.check_images_seller || props.device.check_images
@@ -277,6 +289,17 @@ const handleCopyIMEI = () => {
       uni.showToast({ title: '已复制IMEI', icon: 'success' })
     }
   })
+}
+
+const formatMoney = (value: any) => {
+  const num = Number(value || 0)
+  return Number.isFinite(num) ? num.toFixed(2) : '0.00'
+}
+
+const formatSignedMoney = (value: any) => {
+  const num = Number(value || 0)
+  if (!Number.isFinite(num) || num === 0) return '¥0.00'
+  return `${num > 0 ? '+' : '-'}¥${Math.abs(num).toFixed(2)}`
 }
 
 </script>
@@ -432,5 +455,31 @@ const handleCopyIMEI = () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cost-adjust-notice {
+  margin-top: 14rpx;
+  padding: 16rpx;
+  border-radius: 14rpx;
+  background: #fffbeb;
+  border: 1rpx solid #fde68a;
+}
+
+.cost-adjust-notice__main {
+  display: flex;
+  flex-direction: column;
+}
+
+.cost-adjust-notice__title {
+  font-size: 23rpx;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.cost-adjust-notice__desc {
+  margin-top: 6rpx;
+  font-size: 21rpx;
+  line-height: 1.5;
+  color: #a16207;
 }
 </style>

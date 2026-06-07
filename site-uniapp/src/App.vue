@@ -167,4 +167,10 @@ onHide(() => {
 uni-page-head {
     display: none !important;
 }
+
+.uni-modal__bd,
+.uni-modal__bd div,
+.uni-modal__bd text {
+    white-space: pre-line;
+}
 </style>

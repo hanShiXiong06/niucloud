@@ -197,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, defineProps, defineEmits, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Delete, Loading, Aim, Plus, ZoomOut, EditPen, List } from '@element-plus/icons-vue'
 import { addOrderDevice, createRecycleOrder, getUserByMobile, updateRecycleOrder } from '@/addon/hsx_recycle/api/recycle_order'
@@ -347,16 +347,19 @@ const handleModelBeforeFilter = async (keyword: string) => {
     }
 }
 
- const filterModelNode = (node: any, keyword: string) => {
-      const value = String(keyword || '').toLowerCase()
-      return [
-          node.text,
-          node.label,
-          node.data?.node_name,
-          node.data?.model_full_name,
-          node.data?.source_node_id
-      ].some(item => String(item || '').toLowerCase().includes(value))
-  }
+const normalizeModelSearchText = (value: any) => String(value || '').toLowerCase().replace(/[\s\-_\/\\.　]+/g, '')
+
+const filterModelNode = (node: any, keyword: string) => {
+    const value = normalizeModelSearchText(keyword)
+    if (!value) return true
+    return [
+        node.text,
+        node.label,
+        node.data?.node_name,
+        node.data?.model_full_name,
+        node.data?.source_node_id
+    ].some(item => normalizeModelSearchText(item).includes(value))
+}
 const handleModelPathChange = (row: DraftDeviceRow, value: Array<string | number> | string | number) => {
     const path = Array.isArray(value) ? value : [value]
     const leafId = path[path.length - 1]

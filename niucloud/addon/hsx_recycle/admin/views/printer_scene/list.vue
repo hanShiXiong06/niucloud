@@ -158,6 +158,22 @@
             <el-switch v-model="sceneForm.button.confirm_required" :active-value="1" :inactive-value="0" />
             <div class="form-tip">开启后，点击按钮会先展示打印计划，确认后再发送到打印机。</div>
           </el-form-item>
+          <el-form-item label="打标编辑" v-if="sceneForm.biz_type === 'device'">
+            <el-switch v-model="sceneForm.button.label_edit.enabled" :active-value="1" :inactive-value="0" />
+            <div class="form-tip">开启后，扫码打标会先弹出字段编辑表单；只影响本次打印，不回写设备资料。</div>
+          </el-form-item>
+          <el-form-item label="单行宽度" v-if="sceneForm.biz_type === 'device' && sceneForm.button.label_edit.enabled === 1">
+            <el-input-number v-model="sceneForm.button.label_edit.line_width_limit" :min="0" :max="200" :precision="1" controls-position="right" />
+            <div class="form-tip">填 0 表示按打印模板宽度自动推导；中文默认按 2.5 个字符、英文数字按 1 个字符计算。</div>
+          </el-form-item>
+          <el-form-item label="可编辑字段" v-if="sceneForm.biz_type === 'device' && sceneForm.button.label_edit.enabled === 1">
+            <el-checkbox-group v-model="sceneForm.button.label_edit.fields">
+              <el-checkbox-button v-for="field in labelEditFieldOptions" :key="field.key" :label="field.key">
+                {{ field.label }}
+              </el-checkbox-button>
+            </el-checkbox-group>
+            <div class="form-tip">扫码打标弹窗只展示选中的字段。</div>
+          </el-form-item>
         </div>
 
         <div class="form-section">
@@ -341,7 +357,12 @@ const sceneForm = reactive({
     text: '打印设备标签',
     position: 'device_actions',
     visible_device_status: [2, 3, 4, 5],
-    confirm_required: 1
+    confirm_required: 1,
+    label_edit: {
+      enabled: 1,
+      line_width_limit: 0,
+      fields: ['model', 'capacity', 'color', 'imei', 'sn', 'order_no', 'customer_name']
+    }
   }
 });
 
@@ -384,6 +405,16 @@ const variableOptions = computed(() => {
 });
 
 const formatVariableToken = (key) => `{{${key}}}`;
+
+const labelEditFieldOptions = computed(() => [
+  { key: 'model', label: '产品名称/型号' },
+  { key: 'capacity', label: '规格/容量' },
+  { key: 'color', label: '颜色' },
+  { key: 'imei', label: 'IMEI' },
+  { key: 'sn', label: 'SN' },
+  { key: 'order_no', label: '订单号' },
+  { key: 'customer_name', label: '客户姓名' }
+]);
 
 const idempotencyScopeOptions = computed(() => currentScene.value?.idempotency_scope_options?.length
   ? currentScene.value.idempotency_scope_options
@@ -545,6 +576,9 @@ const resetSceneForm = () => {
   sceneForm.button.position = getDefaultButtonPosition(sceneForm.biz_type);
   sceneForm.button.visible_device_status = statusOptions.value.map((item) => Number(item.value)).slice(0, 4);
   sceneForm.button.confirm_required = 1;
+  sceneForm.button.label_edit.enabled = sceneForm.biz_type === 'device' ? 1 : 0;
+  sceneForm.button.label_edit.line_width_limit = 0;
+  sceneForm.button.label_edit.fields = labelEditFieldOptions.value.map((item) => item.key);
 };
 
 const openAddSceneDialog = () => {
@@ -581,6 +615,12 @@ const openSceneDialog = (scene) => {
     : statusOptions.value.map((item) => Number(item.value)).slice(0, 4);
   syncVisibleStatuses();
   sceneForm.button.confirm_required = Number(button.confirm_required ?? 1);
+  const labelEdit = button.label_edit || {};
+  sceneForm.button.label_edit.enabled = Number(labelEdit.enabled ?? (sceneForm.biz_type === 'device' ? 1 : 0));
+  sceneForm.button.label_edit.line_width_limit = Number(labelEdit.line_width_limit || 0);
+  sceneForm.button.label_edit.fields = Array.isArray(labelEdit.fields) && labelEdit.fields.length
+    ? labelEdit.fields.filter((key) => labelEditFieldOptions.value.some((item) => item.key === key))
+    : labelEditFieldOptions.value.map((item) => item.key);
   sceneDialogVisible.value = true;
 };
 

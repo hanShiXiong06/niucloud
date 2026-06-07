@@ -68,6 +68,7 @@ Route::group('recycle', function() {
 
     // 回收订单相关接口
     Route::get('order_submit_config', 'addon\hsx_recycle\app\api\controller\recycle_order\OrderSubmitConfig@info');
+    Route::get('device_model_dict/options', 'addon\hsx_recycle\app\api\controller\device\RecycleDeviceModelDict@options');
     Route::get('recycle_order', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@lists');
     // 获取单条订单详情
     Route::get('recycle_order/:id', 'addon\hsx_recycle\app\api\controller\recycle_order\RecycleOrder@show');

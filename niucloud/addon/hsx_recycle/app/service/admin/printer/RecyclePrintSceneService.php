@@ -305,6 +305,7 @@ class RecyclePrintSceneService extends BaseAdminService
                 'visible_confirm_status' => array_values($button['visible_confirm_status'] ?? []),
                 'visible_pay_status' => array_values($button['visible_pay_status'] ?? []),
                 'confirm_required' => (int)($button['confirm_required'] ?? 1),
+                'label_edit' => $button['label_edit'] ?? [],
                 'template_type' => $row['template_type'],
                 'template_type_name' => $row['template_type_name'],
                 'template_name' => $row['template_name'],
@@ -435,6 +436,7 @@ class RecyclePrintSceneService extends BaseAdminService
 
             $bizInfo = $this->resolveBizPrintData((string)($scene['biz_type'] ?? 'device'), $payload);
             $templateBinding = $this->resolveTemplateBinding($scene, $bizInfo);
+            $bizInfo = $this->applyPrintDataOverride($bizInfo, $payload['print_data_override'] ?? []);
 
             $templateId = (int)($templateBinding['print_template_id'] ?? 0);
             if ($templateId <= 0) {
@@ -505,6 +507,7 @@ class RecyclePrintSceneService extends BaseAdminService
                 'printer_info' => $printer,
                 'device_data' => $bizInfo['print_data'],
                 'print_data' => $bizInfo['print_data'],
+                'label_edit' => $this->resolveLabelEditConfig($scene, $templateInfo, $bizInfo['print_data']),
             ];
         } catch (AdminException $e) {
             return [
@@ -863,6 +866,177 @@ class RecyclePrintSceneService extends BaseAdminService
             'visible_confirm_status' => $this->normalizeIntList($button['visible_confirm_status'] ?? []),
             'visible_pay_status' => $this->normalizeIntList($button['visible_pay_status'] ?? []),
             'confirm_required' => array_key_exists('confirm_required', $button) ? (empty($button['confirm_required']) ? 0 : 1) : 1,
+            'label_edit' => $this->normalizeLabelEditConfig($button['label_edit'] ?? [], $scene),
+        ];
+    }
+
+    private function normalizeLabelEditConfig($config, array $scene): array
+    {
+        $config = is_array($config) ? $config : [];
+        $defaultFields = $this->getDefaultLabelEditFields();
+        $allowedKeys = array_column($defaultFields, 'key');
+        $fields = $config['fields'] ?? [];
+        if (!is_array($fields) || empty($fields)) {
+            $fields = $allowedKeys;
+        }
+        $fields = array_values(array_filter(array_map('strval', $fields), function ($key) use ($allowedKeys) {
+            return in_array($key, $allowedKeys, true);
+        }));
+        if (empty($fields)) {
+            $fields = $allowedKeys;
+        }
+
+        return [
+            'enabled' => array_key_exists('enabled', $config) ? (empty($config['enabled']) ? 0 : 1) : (($scene['biz_type'] ?? 'device') === 'device' ? 1 : 0),
+            'line_width_limit' => max(0, min(200, (float)($config['line_width_limit'] ?? 0))),
+            'fields' => $fields,
+        ];
+    }
+
+    private function resolveLabelEditConfig(array $scene, array $templateInfo, array $printData = []): array
+    {
+        $config = $this->normalizeLabelEditConfig($scene['button_config']['label_edit'] ?? [], $scene);
+        $templateVariableKeys = $this->extractTemplateVariableKeys($templateInfo);
+        $fieldKeys = !empty($templateVariableKeys)
+            ? $templateVariableKeys
+            : array_column($this->getDefaultLabelEditFields(), 'key');
+        $labelMap = $this->getPrintVariableLabelMap();
+        $fields = [];
+        foreach ($fieldKeys as $key) {
+            if (!$this->isEditablePrintVariable($key)) {
+                continue;
+            }
+            $label = $labelMap[$key] ?? $key;
+            $fields[] = [
+                'key' => $key,
+                'label' => $label,
+                'placeholder' => '请输入' . $label,
+                'value' => isset($printData[$key]) && is_scalar($printData[$key]) ? (string)$printData[$key] : '',
+            ];
+        }
+
+        $configuredLimit = (float)($config['line_width_limit'] ?? 0);
+        $limit = $configuredLimit > 0 ? $configuredLimit : $this->inferLabelLineWidthLimit($templateInfo);
+
+        return [
+            'enabled' => (int)($config['enabled'] ?? 0),
+            'line_width_limit' => $limit,
+            'fields' => $fields,
+            'cn_char_width' => 2.5,
+            'ascii_char_width' => 1,
+            'source' => $configuredLimit > 0 ? 'scene' : 'template',
+        ];
+    }
+
+    private function extractTemplateVariableKeys(array $templateInfo): array
+    {
+        $sources = [];
+        foreach (['instruction_content', 'html_content'] as $key) {
+            if (!empty($templateInfo[$key]) && is_string($templateInfo[$key])) {
+                $sources[] = $templateInfo[$key];
+            }
+        }
+
+        $variables = $templateInfo['variables'] ?? [];
+        if (is_string($variables) && $variables !== '') {
+            $decoded = json_decode($variables, true);
+            $variables = is_array($decoded) ? $decoded : [];
+        }
+        if (is_array($variables)) {
+            foreach ($variables as $item) {
+                if (is_array($item)) {
+                    $key = (string)($item['key'] ?? $item['name'] ?? '');
+                    if ($key !== '') {
+                        $sources[] = '{{' . $key . '}}';
+                    }
+                } elseif (is_string($item) && $item !== '') {
+                    $sources[] = '{{' . $item . '}}';
+                }
+            }
+        }
+
+        $content = $templateInfo['content'] ?? [];
+        if (is_string($content) && $content !== '') {
+            $sources[] = $content;
+        } elseif (is_array($content)) {
+            $sources[] = json_encode($content, JSON_UNESCAPED_UNICODE);
+        }
+
+        $keys = [];
+        foreach ($sources as $source) {
+            preg_match_all('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', (string)$source, $matches);
+            foreach ($matches[1] ?? [] as $key) {
+                if (!in_array($key, $keys, true)) {
+                    $keys[] = $key;
+                }
+            }
+        }
+
+        return $keys;
+    }
+
+    private function getPrintVariableLabelMap(): array
+    {
+        $map = [];
+        foreach ($this->getPrintVariableOptions() as $group) {
+            foreach ($group as $item) {
+                $key = (string)($item['key'] ?? '');
+                if ($key !== '') {
+                    $map[$key] = (string)($item['label'] ?? $key);
+                }
+            }
+        }
+        return $map;
+    }
+
+    private function isEditablePrintVariable(string $key): bool
+    {
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $key)) {
+            return false;
+        }
+        $readonlyKeys = [
+            'qrcode_content',
+            'barcode_content',
+            'current_time',
+            'current_date',
+            'site_name',
+            'biz_type',
+            'biz_id',
+            'device_id',
+            'order_id',
+        ];
+        return !in_array($key, $readonlyKeys, true);
+    }
+
+    private function inferLabelLineWidthLimit(array $templateInfo): float
+    {
+        $width = (float)($templateInfo['width'] ?? 0);
+        if ($width <= 0) {
+            $content = $templateInfo['content'] ?? [];
+            if (is_string($content) && $content !== '') {
+                $decoded = json_decode($content, true);
+                $content = is_array($decoded) ? $decoded : [];
+            }
+            $width = (float)($content['width'] ?? 0);
+        }
+
+        if ($width <= 0) {
+            return 17;
+        }
+
+        return max(8, min(80, round($width / 2.35, 1)));
+    }
+
+    private function getDefaultLabelEditFields(): array
+    {
+        return [
+            ['key' => 'model', 'label' => '产品名称/型号', 'placeholder' => '请输入产品名称或型号'],
+            ['key' => 'capacity', 'label' => '规格/容量', 'placeholder' => '请输入规格或容量'],
+            ['key' => 'color', 'label' => '颜色', 'placeholder' => '请输入颜色'],
+            ['key' => 'imei', 'label' => 'IMEI', 'placeholder' => '请输入 IMEI'],
+            ['key' => 'sn', 'label' => 'SN', 'placeholder' => '请输入 SN'],
+            ['key' => 'order_no', 'label' => '订单号', 'placeholder' => '请输入订单号'],
+            ['key' => 'customer_name', 'label' => '客户姓名', 'placeholder' => '请输入客户姓名'],
         ];
     }
 
@@ -1310,6 +1484,32 @@ class RecyclePrintSceneService extends BaseAdminService
             ],
             'print_data' => $printData,
         ];
+    }
+
+    private function applyPrintDataOverride(array $bizInfo, $override): array
+    {
+        if (!is_array($override) || empty($override)) {
+            return $bizInfo;
+        }
+
+        foreach ($override as $key => $rawValue) {
+            $key = (string)$key;
+            if (!$this->isEditablePrintVariable($key)) {
+                continue;
+            }
+            $value = trim((string)$rawValue);
+            $bizInfo['print_data'][$key] = $value;
+            if (isset($bizInfo['device'][$key])) {
+                $bizInfo['device'][$key] = $value;
+            }
+            if ($key === 'model') {
+                $bizInfo['summary']['subtitle'] = $value;
+            } elseif ($key === 'imei') {
+                $bizInfo['summary']['title'] = $value;
+            }
+        }
+
+        return $bizInfo;
     }
 
     private function getPrintVariableOptions(): array

@@ -19,6 +19,11 @@ export function getOrderSubmitConfig() {
   return request.get("recycle/order_submit_config");
 }
 
+// 搜索设备型号字典叶子节点
+export function searchDeviceModelDictOptions(params: { keyword: string; limit?: number }) {
+  return request.get("recycle/device_model_dict/options", params);
+}
+
 // getOrderStatusCount 获取 订单菜单及统计
 export function getOrderStatusCount() {
   return request.get("recycle/recycle_order/status_count");

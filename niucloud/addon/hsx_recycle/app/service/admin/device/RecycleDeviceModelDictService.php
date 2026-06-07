@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\service\admin\device;
 
 use addon\hsx_recycle\app\model\device\RecycleDeviceModelDict;
+use addon\hsx_recycle\app\service\core\device\CoreRecycleDeviceModelDictService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -16,23 +17,20 @@ use core\exception\CommonException;
 class RecycleDeviceModelDictService extends BaseAdminService
 {
     protected $model;
+    protected CoreRecycleDeviceModelDictService $coreService;
 
     public function __construct()
     {
         parent::__construct();
         $this->model = new RecycleDeviceModelDict();
+        $this->coreService = new CoreRecycleDeviceModelDictService();
     }
 
     public function getPage(array $where = []): array
     {
         $query = $this->model->where([['site_id', '=', $this->site_id], ['level', '>', 1]]);
         if (!empty($where['keyword'])) {
-            $keyword = trim((string)$where['keyword']);
-            $query->where(function ($subQuery) use ($keyword) {
-                $subQuery->whereOr('node_name', 'like', "%{$keyword}%")
-                    ->whereOr('model_full_name', 'like', "%{$keyword}%")
-                    ->whereOr('source_node_id', 'like', "%{$keyword}%");
-            });
+            $this->coreService->applyKeywordFilter($query, trim((string)$where['keyword']), ['source_node_id']);
         }
         if ($where['status'] !== '' && $where['status'] !== null) {
             $query->where('status', (int)$where['status']);
@@ -61,63 +59,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
     public function options(array $where = []): array
     {
         $keyword = trim((string)($where['keyword'] ?? ''));
-        $field = 'id,pid,level,node_name,model_full_name,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json';
-        $query = $this->model->where([
-            ['site_id', '=', $this->site_id],
-            ['status', '=', 1],
-            ['level', '>', 1],
-        ]);
-
-        if ($keyword !== '') {
-            $query->where(function ($subQuery) use ($keyword) {
-                $subQuery->whereOr('node_name', 'like', "%{$keyword}%")
-                    ->whereOr('model_full_name', 'like', "%{$keyword}%")
-                    ->whereOr('source_node_id', 'like', "%{$keyword}%")
-                    ->whereOr('category_source_id', 'like', "%{$keyword}%")
-                    ->whereOr('brand_source_id', 'like', "%{$keyword}%")
-                    ->whereOr('series_source_id', 'like', "%{$keyword}%")
-                    ->whereOr('product_source_id', 'like', "%{$keyword}%");
-            });
-        }
-
-        $rows = $query->field($field)
-            ->order('is_hot desc, select_count desc, sort asc, id desc')
-            ->limit(300)
-            ->select()
-            ->toArray();
-
-        $leaves = array_values($this->filterLeafNodes($rows));
-        $leafIds = array_column($leaves, 'id');
-        $parentRows = array_values(array_filter($rows, static fn($row) => !in_array($row['id'], $leafIds)));
-
-        $parentPaths = array_values(array_filter(array_map(static fn($row) => trim((string)($row['model_full_name'] ?? '')), $parentRows)));
-        if (!empty($parentPaths)) {
-            $descendantQuery = $this->model->where([
-                ['site_id', '=', $this->site_id],
-                ['status', '=', 1],
-            ]);
-            $descendantQuery->where(function ($subQuery) use ($parentPaths) {
-                foreach ($parentPaths as $path) {
-                    $subQuery->whereOr('model_full_name', 'like', $path . '/%');
-                }
-            });
-            $descendantRows = $descendantQuery->field($field)
-                ->order('is_hot desc, select_count desc, sort asc, id desc')
-                ->limit(300)
-                ->select()
-                ->toArray();
-            $leaves = array_merge($leaves, array_values($this->filterLeafNodes($descendantRows)));
-        }
-
-        $uniqueRows = [];
-        foreach ($leaves as $row) {
-            $uniqueRows[(int)$row['id']] = $row;
-            if (count($uniqueRows) >= 300) {
-                break;
-            }
-        }
-
-        return array_map([$this, 'formatNode'], array_values($uniqueRows));
+        return $this->coreService->searchLeafOptions((int)$this->site_id, $keyword);
     }
 
     public function children(array $where = []): array
@@ -133,15 +75,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
         ]);
 
         if ($keyword !== '') {
-            $query->where(function ($subQuery) use ($keyword) {
-                $subQuery->whereOr('node_name', 'like', "%{$keyword}%")
-                    ->whereOr('model_full_name', 'like', "%{$keyword}%")
-                    ->whereOr('source_node_id', 'like', "%{$keyword}%")
-                    ->whereOr('category_source_id', 'like', "%{$keyword}%")
-                    ->whereOr('brand_source_id', 'like', "%{$keyword}%")
-                    ->whereOr('series_source_id', 'like', "%{$keyword}%")
-                    ->whereOr('product_source_id', 'like', "%{$keyword}%");
-            });
+            $this->coreService->applyKeywordFilter($query, $keyword);
         }
 
         $rows = $query->field('id,pid,level,node_name,model_full_name,status,sort,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')

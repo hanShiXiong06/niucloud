@@ -122,6 +122,10 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `pay_time` int NOT NULL DEFAULT 0 COMMENT '设备打款时间',
   `pay_uid` int NOT NULL DEFAULT 0 COMMENT '设备打款操作人ID',
   `pay_no` varchar(64) NOT NULL DEFAULT '' COMMENT '最近一次设备打款批次号',
+  `cost_adjust_amount` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '累计成本调整金额，负数为成本减少',
+  `cost_adjust_count` int NOT NULL DEFAULT 0 COMMENT '成本调整次数',
+  `last_cost_adjust_time` int NOT NULL DEFAULT 0 COMMENT '最后成本调整时间',
+  `last_cost_adjust_no` varchar(64) NOT NULL DEFAULT '' COMMENT '最后成本调整单号',
   `settlement_mode` varchar(20) NOT NULL DEFAULT 'recycle' COMMENT '结算模式：recycle-普通回收，consign-代卖',
   `dispose_type` varchar(20) NOT NULL DEFAULT 'pending' COMMENT '处置类型：pending-未处置，recycle-普通回收，return-退回，consign-代卖',
   `dispose_status` tinyint NOT NULL DEFAULT 0 COMMENT '处置状态：0-未处置，1-已回收，2-已退回，3-已转代卖',
@@ -280,6 +284,39 @@ CREATE TABLE `{{prefix}}recycle_device_payment` (
   KEY `idx_site_device` (`site_id`,`device_id`),
   KEY `idx_pay_no` (`pay_no`)
 ) COMMENT='回收设备打款记录表';
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_cost_adjustment`;
+CREATE TABLE `{{prefix}}recycle_device_cost_adjustment` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `adjust_no` varchar(64) NOT NULL DEFAULT '' COMMENT '成本调整单号',
+  `order_id` int NOT NULL DEFAULT 0 COMMENT '订单ID',
+  `order_no` varchar(50) NOT NULL DEFAULT '' COMMENT '订单编号',
+  `device_id` int NOT NULL DEFAULT 0 COMMENT '设备ID',
+  `device_imei` varchar(50) NOT NULL DEFAULT '' COMMENT '设备IMEI',
+  `device_model` varchar(100) NOT NULL DEFAULT '' COMMENT '设备型号',
+  `member_id` int NOT NULL DEFAULT 0 COMMENT '会员ID',
+  `adjust_type` varchar(50) NOT NULL DEFAULT '' COMMENT '调整类型',
+  `adjust_type_name` varchar(50) NOT NULL DEFAULT '' COMMENT '调整类型名称',
+  `before_cost` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '调整前成本',
+  `adjust_amount` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '调整金额绝对值',
+  `adjust_delta` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '成本变动值',
+  `after_cost` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '调整后成本',
+  `customer_amount` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '客户应退/应补金额',
+  `customer_direction` varchar(30) NOT NULL DEFAULT 'none' COMMENT '客户资金方向：customer_refund/merchant_pay/none',
+  `customer_handled` tinyint(1) NOT NULL DEFAULT 0 COMMENT '客户差额是否已处理',
+  `reason` varchar(1000) NOT NULL DEFAULT '' COMMENT '调整原因',
+  `images` text COMMENT '凭证图片',
+  `inventory_sync_tip` varchar(500) NOT NULL DEFAULT '' COMMENT '进销存同步提醒',
+  `inventory_tip_confirmed` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否已确认同步提醒',
+  `operator_id` int NOT NULL DEFAULT 0 COMMENT '操作人ID',
+  `operator_name` varchar(100) NOT NULL DEFAULT '' COMMENT '操作人名称',
+  `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_adjust_no` (`site_id`,`adjust_no`),
+  KEY `idx_site_device` (`site_id`,`device_id`),
+  KEY `idx_site_order` (`site_id`,`order_id`)
+) COMMENT='回收设备成本调整记录表';
 
 DROP TABLE IF EXISTS `{{prefix}}recycle_notice_log`;
 CREATE TABLE `{{prefix}}recycle_notice_log` (

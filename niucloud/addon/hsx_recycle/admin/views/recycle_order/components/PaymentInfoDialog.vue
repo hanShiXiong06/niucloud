@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, defineProps, defineEmits, watch } from 'vue';
+import { ref, reactive, watch } from 'vue';
 
 // 定义支付信息类型
 interface PaymentInfo {

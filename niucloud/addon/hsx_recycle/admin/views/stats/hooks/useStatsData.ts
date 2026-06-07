@@ -257,17 +257,25 @@ export function useStatsData() {
   }
 
   // 获取所有数据
-  const fetchData = async () => {
+  const fetchData = async (dashboard: 'business' | 'finance' | 'user' = 'business') => {
     await fetchDashboardConfig()
     await fetchUserRole()
 
-    if (userRole.value === 'admin') {
-      await fetchUserList()
-      await fetchUserDetailStats()
-      await fetchAllMemberStats()
-    } else {
+    if (dashboard !== 'user') return
+
+    if (userRole.value !== 'admin') {
       await fetchUserWorkStats()
+      return
     }
+
+    const tasks: Array<Promise<any>> = []
+    if (canShowWidget('staff_work_table') || canShowWidget('staff_work_chart')) {
+      tasks.push(fetchUserList(), fetchUserDetailStats())
+    }
+    if (canShowWidget('member_stats_overview')) {
+      tasks.push(fetchAllMemberStats())
+    }
+    await Promise.all(tasks)
   }
 
   return {

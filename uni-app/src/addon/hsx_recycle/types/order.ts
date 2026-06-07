@@ -8,6 +8,8 @@ export interface Device {
   user_sn?: string
   model?: string
   initial_price?: string
+  category_id?: string | number
+  category_path?: Array<string | number>
 }
 
 // 订单表单
@@ -107,6 +109,10 @@ export interface OrderDevice {
   brand: string
   initial_price: string
   final_price: string
+  cost_adjust_amount?: string | number
+  cost_adjust_count?: number
+  last_cost_adjust_time?: number | string
+  last_cost_adjust_no?: string
   status: number
   status_name: string
   remark?: string
@@ -177,6 +183,10 @@ export interface OrderDetailDevice {
   brand?: string
   initial_price: string
   final_price: string
+  cost_adjust_amount?: string | number
+  cost_adjust_count?: number
+  last_cost_adjust_time?: number | string
+  last_cost_adjust_no?: string
   status: number
   status_name: string
   remark?: string

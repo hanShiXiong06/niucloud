@@ -72,6 +72,31 @@ export interface BusinessDashboard {
       category_id: number
       category_name: string
       count: number
+      amount?: string
+      rate?: number
+    }>
+    source_breakdown?: Array<{
+      key: string
+      label: string
+      order_count: number
+      rate: number
+    }>
+    delivery_breakdown?: Array<{
+      key: string
+      label: string
+      order_count: number
+      rate: number
+    }>
+    order_status_breakdown?: Array<{
+      key: string
+      label: string
+      order_count: number
+    }>
+    device_status_breakdown?: Array<{
+      key: string
+      label: string
+      device_count: number
+      amount?: string
     }>
     price_summary: {
       count: number
@@ -84,6 +109,7 @@ export interface BusinessDashboard {
       key: string
       label: string
       count: number
+      amount?: string
     }>
     consignment?: {
       today_count: number

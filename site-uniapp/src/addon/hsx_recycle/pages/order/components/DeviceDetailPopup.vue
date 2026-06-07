@@ -34,6 +34,23 @@
                     </view>
                 </view>
 
+                <view v-if="hasCostAdjustment || canAdjustCost" class="section">
+                    <view class="section-title-row">
+                        <view>
+                            <view class="section-title">成本调整</view>
+                            <view class="section-subtitle">已打款后修改设备成本会留痕，提交后请同步进销存成本。</view>
+                        </view>
+                        <view v-if="canAdjustCost" class="small-action" @click="openCostAdjust">调整</view>
+                    </view>
+                    <view v-if="hasCostAdjustment" class="info-list">
+                        <view v-for="item in costAdjustRows" :key="item.label" class="info-row">
+                            <text class="info-label">{{ item.label }}</text>
+                            <text class="info-value" :class="{ 'info-value--price': item.price }">{{ item.value }}</text>
+                        </view>
+                    </view>
+                    <view v-else class="cost-tip">当前暂无成本调整记录。</view>
+                </view>
+
                 <view v-if="checkRows.length || checkResultRows.length || checkMetaItems.length" class="section">
                     <view class="section-title">质检信息</view>
                     <view v-if="checkRows.length" class="info-list">
@@ -107,7 +124,83 @@
             </scroll-view>
 
             <view class="detail-footer">
+                <u-button v-if="canAdjustCost" type="warning" @click="openCostAdjust" :customStyle="{ flex: 1 }">调整成本</u-button>
                 <u-button @click="handleClose" :customStyle="{ flex: 1 }">关闭</u-button>
+            </view>
+        </view>
+    </u-popup>
+
+    <u-popup :show="costAdjustVisible" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="closeCostAdjust">
+        <view class="cost-adjust-popup">
+            <view class="detail-header">
+                <view class="detail-header__main">
+                    <view class="detail-title">设备成本调整</view>
+                    <view class="detail-subtitle">当前成本 ¥{{ formatMoney(device.final_price || 0) }}</view>
+                </view>
+                <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx]" @click="closeCostAdjust"></text>
+            </view>
+            <scroll-view scroll-y class="cost-adjust-content">
+                <view class="warning-box">
+                    此操作会修改设备当前成本，不会修改历史打款记录。提交后请同步修改进销存软件中的库存成本。
+                </view>
+
+                <view class="form-block">
+                    <view class="form-label">调整类型</view>
+                    <view class="type-grid">
+                        <view
+                            v-for="item in adjustTypes"
+                            :key="item.value"
+                            class="type-item"
+                            :class="{ 'type-item--active': costAdjustForm.adjust_type === item.value }"
+                            @click="costAdjustForm.adjust_type = item.value"
+                        >
+                            {{ item.label }}
+                        </view>
+                    </view>
+                </view>
+
+                <view v-if="costAdjustForm.adjust_type === 'cost_correction'" class="form-block">
+                    <view class="form-label">修正方向</view>
+                    <view class="type-grid type-grid--two">
+                        <view class="type-item" :class="{ 'type-item--active': costAdjustForm.direction === 'decrease' }" @click="costAdjustForm.direction = 'decrease'">成本减少</view>
+                        <view class="type-item" :class="{ 'type-item--active': costAdjustForm.direction === 'increase' }" @click="costAdjustForm.direction = 'increase'">成本增加</view>
+                    </view>
+                </view>
+
+                <view class="form-block">
+                    <view class="form-label">调整金额</view>
+                    <input v-model="costAdjustForm.adjust_amount" class="form-input" type="digit" placeholder="请输入金额" />
+                    <view class="form-help">预计调整后成本：{{ previewAfterCost }}</view>
+                </view>
+
+                <view class="form-block">
+                    <view class="form-label">调整原因</view>
+                    <textarea v-model="costAdjustForm.reason" class="form-textarea" maxlength="200" placeholder="例如：已打款后发现主板维修，客户同意退回200元" />
+                </view>
+
+                <view class="confirm-row" @click="costAdjustForm.customer_handled = costAdjustForm.customer_handled ? 0 : 1">
+                    <view class="checkbox" :class="{ 'checkbox--checked': costAdjustForm.customer_handled }"></view>
+                    <text>与客户差额已沟通/已处理</text>
+                </view>
+                <view class="confirm-row" @click="costAdjustForm.inventory_tip_confirmed = costAdjustForm.inventory_tip_confirmed ? 0 : 1">
+                    <view class="checkbox" :class="{ 'checkbox--checked': costAdjustForm.inventory_tip_confirmed }"></view>
+                    <text>我已知晓：提交后需要同步修改进销存软件成本</text>
+                </view>
+
+                <view v-if="costAdjustLogs.length" class="history-block">
+                    <view class="form-label">历史调整</view>
+                    <view v-for="item in costAdjustLogs" :key="item.id" class="history-item">
+                        <view class="history-top">
+                            <text>{{ item.adjust_type_name }}</text>
+                            <text class="history-amount">{{ formatSignedMoney(item.adjust_delta) }}</text>
+                        </view>
+                        <view class="history-desc">调整后 ¥{{ formatMoney(item.after_cost) }} · {{ item.operator_name || '系统' }} · {{ formatTimeValue(item.create_at) }}</view>
+                    </view>
+                </view>
+            </scroll-view>
+            <view class="detail-footer">
+                <u-button @click="closeCostAdjust" :customStyle="{ flex: 1 }">取消</u-button>
+                <u-button type="warning" :loading="costAdjustSubmitting" @click="submitCostAdjust" :customStyle="{ flex: 1 }">确认调整</u-button>
             </view>
         </view>
     </u-popup>
@@ -123,7 +216,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { img } from '@/utils/common'
-import { getDevice } from '@/addon/hsx_recycle/api/order'
+import { adjustDeviceCost, getDevice, getDeviceCostAdjustAbility, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/order'
 import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
 import { formatMoney, formatTime } from '@/addon/hsx_recycle/utils/helper'
 import { isConsignedDevice } from '@/addon/hsx_recycle/utils/device'
@@ -145,7 +238,7 @@ const props = defineProps<{
     deviceData: any
 }>()
 
-const emit = defineEmits(['update:visible'])
+const emit = defineEmits(['update:visible', 'updated'])
 
 const show = ref(false)
 const loading = ref(false)
@@ -153,12 +246,31 @@ const latestDeviceData = ref<any>(null)
 const previewVisible = ref(false)
 const previewUrls = ref<string[]>([])
 const previewCurrent = ref(0)
+const costAdjustVisible = ref(false)
+const costAdjustSubmitting = ref(false)
+const costAdjustLogs = ref<any[]>([])
+const costAdjustAllowed = ref(false)
+const costAdjustForm = ref({
+    adjust_type: 'refund_from_customer',
+    direction: 'decrease',
+    adjust_amount: '',
+    reason: '',
+    customer_handled: 0,
+    inventory_tip_confirmed: 0
+})
+const adjustTypes = [
+    { label: '客户退回差额', value: 'refund_from_customer' },
+    { label: '补款给客户', value: 'pay_to_customer' },
+    { label: '内部修正', value: 'cost_correction' }
+]
 
 const device = computed(() => latestDeviceData.value || props.deviceData || {})
 const info = computed(() => normalizeObject(device.value.info))
 const checkMeta = computed(() => normalizeObject(info.value.check_meta))
 const logs = computed(() => Array.isArray(device.value.logs) ? device.value.logs : [])
 const isConsigned = computed(() => isConsignedDevice(device.value))
+const hasCostAdjustment = computed(() => Number(device.value.cost_adjust_count || 0) > 0)
+const canAdjustCost = computed(() => costAdjustAllowed.value && Number(device.value.pay_status || 0) === 1 && Number(device.value.status || 0) !== 6)
 
 watch(() => props.visible, (value) => {
     show.value = value
@@ -179,10 +291,14 @@ const loadDeviceDetail = async () => {
     }
 
     latestDeviceData.value = props.deviceData || null
+    costAdjustAllowed.value = false
+    costAdjustLogs.value = []
     loading.value = true
     try {
         const res: any = await getDevice(deviceId)
         latestDeviceData.value = res?.data || props.deviceData || null
+        await loadCostAdjustAbility()
+        await loadCostAdjustLogs()
     } catch (error: any) {
         latestDeviceData.value = props.deviceData || null
         uni.showToast({ title: error?.msg || error?.message || '获取设备详情失败', icon: 'none' })
@@ -221,6 +337,23 @@ const statusRows = computed<RowItem[]>(() => compactRows([
     row('确认备注', isConsigned.value ? '' : device.value.confirm_remark, true),
     row('备注', device.value.remark, true)
 ]))
+
+const costAdjustRows = computed<RowItem[]>(() => compactRows([
+    row('累计调整', formatSignedMoney(device.value.cost_adjust_amount), false),
+    row('调整次数', `${ device.value.cost_adjust_count || 0 } 次`),
+    row('最后调整', formatTimeValue(device.value.last_cost_adjust_time)),
+    row('调整单号', device.value.last_cost_adjust_no)
+]))
+
+const previewAfterCost = computed(() => {
+    const current = Number(device.value.final_price || 0)
+    const amount = Number(costAdjustForm.value.adjust_amount || 0)
+    let delta = 0
+    if (costAdjustForm.value.adjust_type === 'refund_from_customer') delta = -amount
+    else if (costAdjustForm.value.adjust_type === 'pay_to_customer') delta = amount
+    else delta = costAdjustForm.value.direction === 'increase' ? amount : -amount
+    return `¥${ formatMoney(Math.max(current + delta, 0)) }`
+})
 
 const checkRows = computed<RowItem[]>(() => compactRows([
     row('质检模板', device.value.check_template_name || device.value.check_template_id),
@@ -354,6 +487,12 @@ const formatTimeValue = (value: any) => {
     return formatTime(value)
 }
 
+const formatSignedMoney = (value: any) => {
+    const num = Number(value || 0)
+    if (!Number.isFinite(num) || num === 0) return '¥0.00'
+    return `${ num > 0 ? '+' : '-' }¥${ Math.abs(num).toFixed(2) }`
+}
+
 const normalizeObject = (value: any) => {
     if (!value) return {}
     if (typeof value === 'string') {
@@ -389,6 +528,90 @@ const previewGroup = (items: ImageItem[], index: number) => {
     previewUrls.value = items.map((item) => item.url)
     previewCurrent.value = index
     previewVisible.value = true
+}
+
+const openCostAdjust = () => {
+    costAdjustForm.value = {
+        adjust_type: 'refund_from_customer',
+        direction: 'decrease',
+        adjust_amount: '',
+        reason: '',
+        customer_handled: 0,
+        inventory_tip_confirmed: 0
+    }
+    costAdjustVisible.value = true
+    loadCostAdjustLogs()
+}
+
+const closeCostAdjust = () => {
+    costAdjustVisible.value = false
+}
+
+const loadCostAdjustLogs = async () => {
+    const deviceId = device.value?.id || props.deviceData?.id
+    if (!deviceId || !costAdjustAllowed.value) return
+    try {
+        const res: any = await getDeviceCostAdjustLogs(deviceId)
+        costAdjustLogs.value = Array.isArray(res?.data) ? res.data : []
+    } catch (error) {
+        costAdjustLogs.value = []
+    }
+}
+
+const loadCostAdjustAbility = async () => {
+    const deviceId = device.value?.id || props.deviceData?.id
+    if (!deviceId) {
+        costAdjustAllowed.value = false
+        return
+    }
+    try {
+        const res: any = await getDeviceCostAdjustAbility(deviceId)
+        costAdjustAllowed.value = Boolean(res?.data?.allowed)
+    } catch (error) {
+        costAdjustAllowed.value = false
+    }
+}
+
+const submitCostAdjust = async () => {
+    const deviceId = device.value?.id
+    if (!deviceId) return
+    if (!costAdjustForm.value.adjust_amount || Number(costAdjustForm.value.adjust_amount) <= 0) {
+        uni.showToast({ title: '请输入大于0的调整金额', icon: 'none' })
+        return
+    }
+    if (!String(costAdjustForm.value.reason || '').trim()) {
+        uni.showToast({ title: '请填写调整原因', icon: 'none' })
+        return
+    }
+    if (Number(costAdjustForm.value.inventory_tip_confirmed) !== 1) {
+        uni.showToast({ title: '请先确认进销存成本同步提醒', icon: 'none' })
+        return
+    }
+
+    costAdjustSubmitting.value = true
+    try {
+        const res: any = await adjustDeviceCost(deviceId, {
+            ...costAdjustForm.value,
+            adjust_amount: Number(costAdjustForm.value.adjust_amount)
+        })
+        const data = res?.data || {}
+        latestDeviceData.value = {
+            ...device.value,
+            final_price: data.after_cost,
+            cost_adjust_amount: Number(device.value.cost_adjust_amount || 0) + Number(data.adjust_delta || 0),
+            cost_adjust_count: data.cost_adjust_count,
+            last_cost_adjust_time: data.create_at,
+            last_cost_adjust_no: data.adjust_no
+        }
+        await loadCostAdjustLogs()
+        closeCostAdjust()
+        uni.showToast({ title: '成本已调整，请同步进销存', icon: 'none' })
+        emit('updated', latestDeviceData.value)
+    } catch (error: any) {
+        uni.showToast({ title: error?.msg || error?.message || '调整失败', icon: 'none' })
+    } finally {
+        costAdjustSubmitting.value = false
+    }
 }
 
 const handleClose = () => {
@@ -454,6 +677,43 @@ const handleClose = () => {
     font-size: 28rpx;
     font-weight: 600;
     color: #1f2937;
+}
+
+.section-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20rpx;
+    margin-bottom: 16rpx;
+
+    .section-title {
+        margin-bottom: 6rpx;
+    }
+}
+
+.section-subtitle {
+    font-size: 22rpx;
+    color: #94a3b8;
+    line-height: 1.5;
+}
+
+.small-action {
+    flex-shrink: 0;
+    padding: 10rpx 20rpx;
+    border-radius: 999rpx;
+    background: #fff7ed;
+    color: #ea580c;
+    font-size: 22rpx;
+    font-weight: 600;
+}
+
+.cost-tip {
+    padding: 20rpx;
+    border-radius: 14rpx;
+    background: #fffbeb;
+    color: #a16207;
+    font-size: 22rpx;
+    line-height: 1.6;
 }
 
 .info-list,
@@ -674,9 +934,163 @@ const handleClose = () => {
 
 .detail-footer {
     display: flex;
+    gap: 20rpx;
     padding: 20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom));
     border-top: 1rpx solid #f2f3f5;
     background: #fff;
     flex-shrink: 0;
+}
+
+.cost-adjust-popup {
+    height: 82vh;
+    max-height: 82vh;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.cost-adjust-content {
+    flex: 1;
+    height: 0;
+    min-height: 0;
+    padding: 24rpx 30rpx;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.warning-box {
+    padding: 20rpx;
+    border-radius: 16rpx;
+    background: #fffbeb;
+    border: 1rpx solid #fde68a;
+    color: #92400e;
+    font-size: 24rpx;
+    line-height: 1.6;
+}
+
+.form-block {
+    margin-top: 24rpx;
+}
+
+.form-label {
+    margin-bottom: 12rpx;
+    font-size: 24rpx;
+    font-weight: 600;
+    color: #334155;
+}
+
+.type-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14rpx;
+}
+
+.type-grid--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.type-item {
+    min-height: 72rpx;
+    padding: 0 12rpx;
+    border-radius: 14rpx;
+    border: 1rpx solid #e5e7eb;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 22rpx;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.type-item--active {
+    border-color: #f97316;
+    background: #fff7ed;
+    color: #ea580c;
+}
+
+.form-input,
+.form-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 14rpx;
+    background: #f8fafc;
+    border: 1rpx solid #e5e7eb;
+    color: #1f2937;
+    font-size: 26rpx;
+}
+
+.form-input {
+    height: 82rpx;
+    padding: 0 22rpx;
+}
+
+.form-textarea {
+    min-height: 150rpx;
+    padding: 18rpx 22rpx;
+    line-height: 1.6;
+}
+
+.form-help {
+    margin-top: 10rpx;
+    font-size: 22rpx;
+    color: #ea580c;
+}
+
+.confirm-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14rpx;
+    margin-top: 22rpx;
+    color: #475569;
+    font-size: 23rpx;
+    line-height: 1.5;
+}
+
+.checkbox {
+    width: 30rpx;
+    height: 30rpx;
+    margin-top: 2rpx;
+    border-radius: 8rpx;
+    border: 2rpx solid #cbd5e1;
+    background: #fff;
+    flex-shrink: 0;
+}
+
+.checkbox--checked {
+    border-color: #f97316;
+    background: #f97316;
+    box-shadow: inset 0 0 0 6rpx #fff;
+}
+
+.history-block {
+    margin-top: 28rpx;
+}
+
+.history-item {
+    padding: 18rpx 0;
+    border-bottom: 1rpx solid #edf2f7;
+}
+
+.history-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 20rpx;
+    font-size: 24rpx;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.history-amount {
+    color: #ea580c;
+}
+
+.history-desc {
+    margin-top: 8rpx;
+    font-size: 21rpx;
+    color: #94a3b8;
+    line-height: 1.5;
 }
 </style>

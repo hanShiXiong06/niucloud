@@ -51,7 +51,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, defineProps, defineEmits, defineExpose } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import VerifySlide from './verifySlider/verifySlider.vue'
 import VerifyPoint from "./verifyPoint/verifyPoint.vue"
 

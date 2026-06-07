@@ -356,12 +356,14 @@ class RecycleOrderDict
             'device_payment' => '设备打款',
             'device_consignment' => '转入代卖',
             'consignment_payment' => '代卖结算',
+            'cost_adjust' => '成本调整',
         ];
 
         $actionMap = [
             'transfer_consignment' => '转入代卖',
             'consignment_settle' => '代卖结算',
             'device_payment' => '设备打款',
+            'cost_adjust' => '成本调整',
             'device_confirm' => '设备确认',
             'check_start' => '开始质检',
             'check_draft' => '暂存质检',

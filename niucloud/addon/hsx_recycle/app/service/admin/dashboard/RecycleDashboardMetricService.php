@@ -529,21 +529,25 @@ class RecycleDashboardMetricService extends BaseAdminService
         );
         $createdDeviceIds = array_values(array_map('intval', $createdDeviceQuery->column('id')));
 
-        $baseDeviceQuery = $this->filterService->newDeviceQuery($params)
-            ->where('create_at', 'between', [$params['start_at'], $params['end_at']]);
+        $baseDeviceQuery = $this->filterService->newDeviceQuery($params);
+        $this->whereDeviceIdIn($baseDeviceQuery, $createdDeviceIds);
 
         $categoryRows = (clone $baseDeviceQuery)
-            ->field('category_id, COUNT(*) as count')
+            ->field('category_id, COUNT(*) as count, SUM(final_price) as amount')
             ->group('category_id')
             ->select()
             ->toArray();
 
         $categoryBreakdown = [];
+        $categoryTotal = array_sum(array_map(static fn($row) => (int)($row['count'] ?? 0), $categoryRows));
         foreach ($categoryRows as $row) {
+            $count = (int)($row['count'] ?? 0);
             $categoryBreakdown[] = [
                 'category_id' => (int)($row['category_id'] ?? 0),
                 'category_name' => $this->categoryName((int)($row['category_id'] ?? 0)),
-                'count' => (int)($row['count'] ?? 0),
+                'count' => $count,
+                'amount' => $this->money((float)($row['amount'] ?? 0)),
+                'rate' => $categoryTotal > 0 ? round($count / $categoryTotal * 100, 2) : 0,
             ];
         }
 
@@ -588,6 +592,10 @@ class RecycleDashboardMetricService extends BaseAdminService
                 ])
                 ->count(),
             'category_breakdown' => $categoryBreakdown,
+            'source_breakdown' => $this->buildSourceBreakdown($params),
+            'delivery_breakdown' => $this->buildDeliveryBreakdown($params),
+            'order_status_breakdown' => $this->buildOrderStatusBreakdown($params),
+            'device_status_breakdown' => $this->buildDeviceStatusBreakdown($params, $createdDeviceIds),
             'price_summary' => [
                 'count' => $priceCount,
                 'min' => $this->money($priceMin),
@@ -889,10 +897,10 @@ class RecycleDashboardMetricService extends BaseAdminService
     private function buildPriceRanges(array $deviceIds): array
     {
         $ranges = [
-            ['key' => '0_500', 'label' => '0-500', 'min' => 0, 'max' => 500],
-            ['key' => '500_1000', 'label' => '500-1000', 'min' => 500, 'max' => 1000],
-            ['key' => '1000_3000', 'label' => '1000-3000', 'min' => 1000, 'max' => 3000],
-            ['key' => '3000_up', 'label' => '3000以上', 'min' => 3000, 'max' => null],
+            ['key' => '0_1500', 'label' => '0-1500', 'min' => 0, 'max' => 1500],
+            ['key' => '1501_3000', 'label' => '1500-3000', 'min' => 1501, 'max' => 3000],
+            ['key' => '3001_6000', 'label' => '3001-6000', 'min' => 3001, 'max' => 6000],
+            ['key' => '6000_up', 'label' => '5000以上', 'min' => 6001, 'max' => null],
         ];
 
         foreach ($ranges as &$range) {
@@ -913,12 +921,130 @@ class RecycleDashboardMetricService extends BaseAdminService
                 $query->where('final_price', '<', $range['max']);
             }
 
-            $range['count'] = (int)$query->count();
+            $range['count'] = (int)(clone $query)->count();
+            $range['amount'] = $this->money((float)(clone $query)->sum('final_price'));
             unset($range['min'], $range['max']);
         }
         unset($range);
 
         return $ranges;
+    }
+
+    private function buildSourceBreakdown(array $params): array
+    {
+        $rows = $this->filterService->newOrderQuery($params)
+            ->where('create_at', 'between', [$params['start_at'], $params['end_at']])
+            ->field("IF(order_source = '', 'customer', order_source) as source_key, COUNT(*) as order_count")
+            ->group('source_key')
+            ->select()
+            ->toArray();
+
+        $labels = [
+            'customer' => '用户提交',
+            'agent' => '后台代下单',
+        ];
+
+        $total = array_sum(array_map(static fn($row) => (int)($row['order_count'] ?? 0), $rows));
+        return array_map(function ($row) use ($labels, $total) {
+            $count = (int)($row['order_count'] ?? 0);
+            $key = (string)($row['source_key'] ?? 'customer');
+            return [
+                'key' => $key,
+                'label' => $labels[$key] ?? '其他来源',
+                'order_count' => $count,
+                'rate' => $total > 0 ? round($count / $total * 100, 2) : 0,
+            ];
+        }, $rows);
+    }
+
+    private function buildDeliveryBreakdown(array $params): array
+    {
+        $rows = $this->filterService->newOrderQuery($params)
+            ->where('create_at', 'between', [$params['start_at'], $params['end_at']])
+            ->field('delivery_type, COUNT(*) as order_count')
+            ->group('delivery_type')
+            ->select()
+            ->toArray();
+
+        $total = array_sum(array_map(static fn($row) => (int)($row['order_count'] ?? 0), $rows));
+        return array_map(static function ($row) use ($total) {
+            $deliveryType = (int)($row['delivery_type'] ?? 1);
+            $count = (int)($row['order_count'] ?? 0);
+            return [
+                'key' => (string)$deliveryType,
+                'label' => $deliveryType === 1 ? '快递寄送' : '自送/自提',
+                'order_count' => $count,
+                'rate' => $total > 0 ? round($count / $total * 100, 2) : 0,
+            ];
+        }, $rows);
+    }
+
+    private function buildOrderStatusBreakdown(array $params): array
+    {
+        $rows = $this->filterService->newOrderQuery($params)
+            ->where('create_at', 'between', [$params['start_at'], $params['end_at']])
+            ->field('status, COUNT(*) as order_count')
+            ->group('status')
+            ->select()
+            ->toArray();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int)($row['status'] ?? 0)] = (int)($row['order_count'] ?? 0);
+        }
+
+        $result = [];
+        foreach (RecycleOrderDict::ORDER_STATUS_TEXT as $status => $label) {
+            $result[] = [
+                'key' => (string)$status,
+                'label' => $label,
+                'order_count' => $map[(int)$status] ?? 0,
+            ];
+        }
+
+        return $result;
+    }
+
+    private function buildDeviceStatusBreakdown(array $params, array $deviceIds): array
+    {
+        $query = $this->filterService->newDeviceQuery($params)
+            ->field('status, COUNT(*) as device_count, SUM(final_price) as amount')
+            ->group('status');
+        $this->whereDeviceIdIn($query, $deviceIds);
+
+        $rows = $query->select()->toArray();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $status = (int)($row['status'] ?? 0);
+            $map[$status] = [
+                'device_count' => (int)($row['device_count'] ?? 0),
+                'amount' => (float)($row['amount'] ?? 0),
+            ];
+        }
+
+        $result = [];
+        foreach (RecycleOrderDict::DEVICE_STATUS_TEXT as $status => $label) {
+            $data = $map[(int)$status] ?? ['device_count' => 0, 'amount' => 0];
+            $result[] = [
+                'key' => (string)$status,
+                'label' => $label,
+                'device_count' => $data['device_count'],
+                'amount' => $this->money($data['amount']),
+            ];
+        }
+
+        return $result;
+    }
+
+    private function whereDeviceIdIn($query, array $deviceIds): void
+    {
+        if (!empty($deviceIds)) {
+            $query->where('id', 'in', $deviceIds);
+            return;
+        }
+
+        $query->where('id', '=', 0);
     }
 
     private function buildConsignmentOverview(array $params): array

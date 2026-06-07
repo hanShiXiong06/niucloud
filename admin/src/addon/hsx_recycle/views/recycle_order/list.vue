@@ -3,7 +3,7 @@
     <el-card class="box-card !border-none h-full relative" shadow="never">
       <div class="order-list-header">
         <div :class="isMobile ? 'order-page-header order-page-header--mobile' : 'order-page-header'">
-          <span :class="isMobile ? 'text-lg font-semibold text-gray-800' : 'text-xl font-semibold text-gray-800'">📱 回收订单管理</span>
+          <span :class="isMobile ? 'text-lg font-semibold text-gray-800' : 'text-xl font-semibold text-gray-800'">回收订单管理</span>
           <div :class="isMobile ? 'w-full' : 'btn-wrap'">
             <el-button type="primary" :icon="Plus" :class="isMobile ? 'w-full' : ''" @click="showAddOrderDialog">代下单</el-button>
           </div>
@@ -214,6 +214,7 @@
       v-model:visible="deviceLogVisible"
       :device="deviceDetailData"
       @closed="handleDeviceDetailClosed"
+      @updated="getList"
     />
 
     <!-- 订单详情 -->

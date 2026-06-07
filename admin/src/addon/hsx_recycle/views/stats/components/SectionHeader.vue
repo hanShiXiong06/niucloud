@@ -28,7 +28,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, withDefaults } from 'vue'
 
 interface Props {
     title: string
@@ -45,4 +44,3 @@ withDefaults(defineProps<Props>(), {
     subtitleClass: 'text-blue-100 text-xs'
 })
 </script>
-

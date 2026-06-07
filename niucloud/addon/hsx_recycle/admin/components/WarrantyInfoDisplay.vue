@@ -138,7 +138,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue'
 import { 
   Star, ShoppingCart, Monitor, InfoFilled,
   CircleCheck, CircleClose, Headset
@@ -481,4 +480,4 @@ const formatDate = (date: string) => {
     }
   }
 }
-</style> 
+</style>

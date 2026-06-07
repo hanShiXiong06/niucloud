@@ -37,6 +37,24 @@
             </div>
           </div>
         </div>
+        <div v-if="hasCostAdjustment || canAdjustCost" class="ddd-cost-adjust">
+          <div class="ddd-cost-adjust__summary">
+            <div>
+              <div class="ddd-cost-adjust__title">成本调整</div>
+              <div class="ddd-cost-adjust__desc">
+                已打款后如需改设备成本，在这里留痕处理；确认后请同步修改进销存软件成本。
+              </div>
+            </div>
+            <el-button v-if="canAdjustCost" type="warning" size="small" @click="openCostAdjustDialog">
+              成本调整
+            </el-button>
+          </div>
+          <div v-if="hasCostAdjustment" class="ddd-cost-adjust__meta">
+            <span>累计调整：{{ formatSignedMoney(deviceData.cost_adjust_amount) }}</span>
+            <span>调整次数：{{ deviceData.cost_adjust_count || 0 }} 次</span>
+            <span v-if="deviceData.last_cost_adjust_time">最后调整：{{ formatDate(deviceData.last_cost_adjust_time) }}</span>
+          </div>
+        </div>
         <!-- 价格备注 -->
         <div v-if="deviceData.price_remark" class="ddd-remark">
           <svg class="ddd-remark-icon" fill="currentColor" viewBox="0 0 20 20">
@@ -199,14 +217,92 @@
       :zoom-rate="1.2"
       @close="imageViewer.show = false"
     />
+
+    <el-dialog
+      v-model="costAdjustDialog.visible"
+      title="设备成本调整"
+      width="620px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-alert
+        type="warning"
+        show-icon
+        :closable="false"
+        title="该操作会修改设备当前成本，不会修改历史打款记录。提交后请同步修改进销存软件里的库存成本，并保留与客户沟通记录。"
+      />
+      <el-form class="ddd-cost-form" label-width="110px">
+        <el-form-item label="当前成本">
+          <strong class="ddd-current-cost">¥{{ formatMoney(deviceData?.final_price) }}</strong>
+        </el-form-item>
+        <el-form-item label="调整类型" required>
+          <el-radio-group v-model="costAdjustForm.adjust_type">
+            <el-radio-button label="refund_from_customer">客户退回差额</el-radio-button>
+            <el-radio-button label="pay_to_customer">补款给客户</el-radio-button>
+            <el-radio-button label="cost_correction">内部修正</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="costAdjustForm.adjust_type === 'cost_correction'" label="修正方向">
+          <el-radio-group v-model="costAdjustForm.direction">
+            <el-radio label="decrease">成本减少</el-radio>
+            <el-radio label="increase">成本增加</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="调整金额" required>
+          <el-input-number v-model="costAdjustForm.adjust_amount" :min="0" :precision="2" :step="10" controls-position="right" />
+          <span class="ddd-form-help">调整后的成本：{{ previewAfterCost }}</span>
+        </el-form-item>
+        <el-form-item label="调整原因" required>
+          <el-input v-model="costAdjustForm.reason" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="例如：已打款后发现主板维修，客户同意退回200元" />
+        </el-form-item>
+        <el-form-item label="处理确认">
+          <el-checkbox v-model="costAdjustForm.customer_handled" :true-label="1" :false-label="0">
+            与客户差额已沟通/已处理
+          </el-checkbox>
+        </el-form-item>
+        <el-form-item label="进销存提醒" required>
+          <el-checkbox v-model="costAdjustForm.inventory_tip_confirmed" :true-label="1" :false-label="0">
+            我已知晓：提交后需要同步修改进销存软件中的该设备库存成本
+          </el-checkbox>
+        </el-form-item>
+      </el-form>
+
+      <div class="ddd-cost-log">
+        <div class="ddd-cost-log__title">历史调整记录</div>
+        <el-table v-if="costAdjustLogs.length" :data="costAdjustLogs" size="small" max-height="180">
+          <el-table-column prop="adjust_type_name" label="类型" min-width="110" />
+          <el-table-column label="调整" width="110">
+            <template #default="{ row }">{{ formatSignedMoney(row.adjust_delta) }}</template>
+          </el-table-column>
+          <el-table-column label="调整后" width="110">
+            <template #default="{ row }">¥{{ formatMoney(row.after_cost) }}</template>
+          </el-table-column>
+          <el-table-column prop="operator_name" label="操作人" width="110" />
+          <el-table-column label="时间" width="150">
+            <template #default="{ row }">{{ formatDate(row.create_at) }}</template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-else description="暂无成本调整记录" :image-size="64" />
+      </div>
+
+      <template #footer>
+        <el-button @click="costAdjustDialog.visible = false">取消</el-button>
+        <el-button type="warning" :loading="costAdjustDialog.submitting" @click="submitCostAdjust">
+          确认调整成本
+        </el-button>
+      </template>
+    </el-dialog>
   </el-dialog>
 
 </template>
 
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ElMessage } from 'element-plus'
 import { img } from '@/utils/common'
+import { adjustDeviceCost, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/recycle_order'
+import useUserStore from '@/stores/modules/user'
 import DeviceInfoCard from './DeviceInfoCard.vue'
 
 // 定义设备信息接口
@@ -257,11 +353,22 @@ const props = defineProps({
     device: { type: Object as () => DeviceDetail | null, default: null }
 })
 
-const emit = defineEmits(['update:visible', 'closed'])
+const emit = defineEmits(['update:visible', 'closed', 'updated'])
 
 const dialogVisible = ref(props.visible)
 const deviceData = ref<DeviceDetail | null>(props.device)
 const isMobile = ref(false)
+const userStore = useUserStore()
+const costAdjustDialog = reactive({ visible: false, submitting: false })
+const costAdjustLogs = ref<any[]>([])
+const costAdjustForm = reactive({
+    adjust_type: 'refund_from_customer',
+    direction: 'decrease',
+    adjust_amount: 0,
+    reason: '',
+    customer_handled: 0,
+    inventory_tip_confirmed: 0
+})
 
 const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
 
@@ -289,9 +396,24 @@ const sellerCheckResult = computed(() =>
 )
 const buyerCheckResult = computed(() => deviceData.value?.check_result_buyer || '')
 const hasCheckResult = computed(() => !!(sellerCheckResult.value || buyerCheckResult.value))
+const hasCostAdjustment = computed(() => Number(deviceData.value?.cost_adjust_count || 0) > 0)
+const hasCostAdjustPermission = computed(() => (userStore.rules || []).includes('recycle_device_cost_adjust'))
+const canAdjustCost = computed(() => hasCostAdjustPermission.value && Number(deviceData.value?.pay_status || 0) === 1 && Number(deviceData.value?.status || 0) !== 6)
+const previewAfterCost = computed(() => {
+    const current = Number(deviceData.value?.final_price || 0)
+    const amount = Number(costAdjustForm.adjust_amount || 0)
+    let delta = 0
+    if (costAdjustForm.adjust_type === 'refund_from_customer') delta = -amount
+    else if (costAdjustForm.adjust_type === 'pay_to_customer') delta = amount
+    else delta = costAdjustForm.direction === 'increase' ? amount : -amount
+    return `¥${formatMoney(Math.max(current + delta, 0))}`
+})
 
 // 监听
-watch(() => props.visible, (v) => { dialogVisible.value = v })
+watch(() => props.visible, (v) => {
+    dialogVisible.value = v
+    if (v) loadCostAdjustLogs()
+})
 watch(() => props.device, (v) => { deviceData.value = v }, { deep: true })
 watch(dialogVisible, (v) => {
     emit('update:visible', v)
@@ -307,6 +429,62 @@ const previewImage = (images: string[], index: number) => {
     imageViewer.show = true
 }
 
+const openCostAdjustDialog = () => {
+    costAdjustForm.adjust_type = 'refund_from_customer'
+    costAdjustForm.direction = 'decrease'
+    costAdjustForm.adjust_amount = 0
+    costAdjustForm.reason = ''
+    costAdjustForm.customer_handled = 0
+    costAdjustForm.inventory_tip_confirmed = 0
+    costAdjustDialog.visible = true
+    loadCostAdjustLogs()
+}
+
+const loadCostAdjustLogs = async () => {
+    const deviceId = deviceData.value?.id
+    if (!deviceId || !hasCostAdjustPermission.value) return
+    try {
+        const res: any = await getDeviceCostAdjustLogs(deviceId)
+        costAdjustLogs.value = Array.isArray(res?.data) ? res.data : []
+    } catch (error) {
+        costAdjustLogs.value = []
+    }
+}
+
+const submitCostAdjust = async () => {
+    if (!deviceData.value?.id) return
+    if (!costAdjustForm.adjust_amount || Number(costAdjustForm.adjust_amount) <= 0) {
+        ElMessage.warning('请输入大于 0 的调整金额')
+        return
+    }
+    if (!String(costAdjustForm.reason || '').trim()) {
+        ElMessage.warning('请填写成本调整原因')
+        return
+    }
+    if (Number(costAdjustForm.inventory_tip_confirmed) !== 1) {
+        ElMessage.warning('请先确认进销存成本同步提醒')
+        return
+    }
+    costAdjustDialog.submitting = true
+    try {
+        const res: any = await adjustDeviceCost(deviceData.value.id, { ...costAdjustForm })
+        const data = res?.data || {}
+        deviceData.value.final_price = data.after_cost
+        deviceData.value.cost_adjust_amount = Number(deviceData.value.cost_adjust_amount || 0) + Number(data.adjust_delta || 0)
+        deviceData.value.cost_adjust_count = data.cost_adjust_count
+        deviceData.value.last_cost_adjust_time = data.create_at
+        deviceData.value.last_cost_adjust_no = data.adjust_no
+        await loadCostAdjustLogs()
+        costAdjustDialog.visible = false
+        ElMessage.success('成本已调整，请同步修改进销存软件成本')
+        emit('updated', deviceData.value)
+    } catch (error: any) {
+        ElMessage.error(error?.msg || error?.message || '成本调整失败')
+    } finally {
+        costAdjustDialog.submitting = false
+    }
+}
+
 const formatDate = (dateStr: string | number) => {
     if (!dateStr) return '—'
     let date: Date
@@ -320,6 +498,17 @@ const formatDate = (dateStr: string | number) => {
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit'
     })
+}
+
+const formatMoney = (value: any) => {
+    const num = Number(value || 0)
+    return Number.isFinite(num) ? num.toFixed(2) : '0.00'
+}
+
+const formatSignedMoney = (value: any) => {
+    const num = Number(value || 0)
+    if (!Number.isFinite(num) || num === 0) return '¥0.00'
+    return `${num > 0 ? '+' : '-'}¥${Math.abs(num).toFixed(2)}`
 }
 
 onMounted(() => { updateResponsiveState(); window.addEventListener('resize', updateResponsiveState) })
@@ -433,6 +622,71 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
     .ddd-price-label { color: #7c3aed; }
     .ddd-price-value { color: #6d28d9; }
   }
+}
+
+.ddd-cost-adjust {
+  margin: 0 14px 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+}
+
+.ddd-cost-adjust__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ddd-cost-adjust__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.ddd-cost-adjust__desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a16207;
+}
+
+.ddd-cost-adjust__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #78350f;
+}
+
+.ddd-cost-form {
+  margin-top: 16px;
+}
+
+.ddd-current-cost {
+  color: #ea580c;
+  font-size: 16px;
+}
+
+.ddd-form-help {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.ddd-cost-log {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.ddd-cost-log__title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
 }
 
 .ddd-remark {

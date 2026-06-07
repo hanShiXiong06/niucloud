@@ -255,6 +255,7 @@
         <DeviceDetailPopup
             v-model:visible="deviceDetailVisible"
             :deviceData="currentDevice"
+            @updated="loadDetail"
         />
 
         <OrderLogPopup

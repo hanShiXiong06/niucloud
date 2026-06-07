@@ -357,6 +357,34 @@
 			]
         },
 // HSX_RECYCLE_PAGE_END
+        // HSX_PHONE_QUERY_PAGE_BEGIN
+        {
+            "root": "addon/hsx_phone_query", 
+            "pages": [
+				{
+					"path": "pages/index",
+					"style": {
+						"navigationBarTitleText": "查询界面"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/history",
+					"style": {
+						"navigationBarTitleText": "查询历史"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/detail",
+					"style": {
+						"navigationBarTitleText": "查询详情"
+					},
+					"needLogin": true,
+				}
+			]
+        },
+// HSX_PHONE_QUERY_PAGE_END
         // RECYCLE_DAHENG_QUOTE_PAGE_BEGIN
         {
             "root": "addon/recycle_daheng_quote",
@@ -391,34 +419,6 @@
             ]
         },
 // RECYCLE_QUOTE_SPIDER_PAGE_END
-        // HSX_PHONE_QUERY_PAGE_BEGIN
-        {
-            "root": "addon/hsx_phone_query", 
-            "pages": [
-				{
-					"path": "pages/index",
-					"style": {
-						"navigationBarTitleText": "查询界面"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/history",
-					"style": {
-						"navigationBarTitleText": "查询历史"
-					},
-					"needLogin": true
-				},
-				{
-					"path": "pages/detail",
-					"style": {
-						"navigationBarTitleText": "查询详情"
-					},
-					"needLogin": true,
-				}
-			]
-        },
-// HSX_PHONE_QUERY_PAGE_END
 // {{ PAGE_END }}
         {
             "root": "app/components",

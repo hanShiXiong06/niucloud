@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, defineProps, defineEmits, watch, computed } from 'vue';
+import { ref, reactive, watch, computed } from 'vue';
 import DeviceInfoCard from './DeviceInfoCard.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
@@ -352,4 +352,4 @@ if (props.visible) {
     justify-content: flex-end;
     gap: 10px;
 }
-</style> 
+</style>

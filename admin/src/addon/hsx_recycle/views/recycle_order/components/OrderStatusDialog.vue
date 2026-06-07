@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, defineProps, defineEmits, watch, computed } from 'vue';
+import { ref, reactive, watch, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { updateRecycleOrder } from '@/addon/hsx_recycle/api/recycle_order';
 

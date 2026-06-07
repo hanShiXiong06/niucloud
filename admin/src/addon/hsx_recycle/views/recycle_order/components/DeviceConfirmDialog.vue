@@ -261,7 +261,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch, toRaw, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, toRaw, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { Edit, Plus, Connection, EditPen, List } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getImeiInfo, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
@@ -385,16 +385,19 @@ const modelInputRef = ref<any>(null)
 const updateResponsiveState = () => {
     isMobile.value = window.innerWidth <= 768
 }
- const filterModelNode = (node: any, keyword: string) => {
-      const value = String(keyword || '').toLowerCase()
-      return [
-          node.text,
-          node.label,
-          node.data?.node_name,
-          node.data?.model_full_name,
-          node.data?.source_node_id
-      ].some(item => String(item || '').toLowerCase().includes(value))
-  }
+const normalizeModelSearchText = (value: any) => String(value || '').toLowerCase().replace(/[\s\-_\/\\.　]+/g, '')
+
+const filterModelNode = (node: any, keyword: string) => {
+    const value = normalizeModelSearchText(keyword)
+    if (!value) return true
+    return [
+        node.text,
+        node.label,
+        node.data?.node_name,
+        node.data?.model_full_name,
+        node.data?.source_node_id
+    ].some(item => normalizeModelSearchText(item).includes(value))
+}
 
 const loadModelOptions = async () => {
     modelLoading.value = true
