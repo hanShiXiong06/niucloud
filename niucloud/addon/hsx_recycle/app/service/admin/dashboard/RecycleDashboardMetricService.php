@@ -8,6 +8,7 @@ use addon\hsx_recycle\app\dict\dashboard\RecycleDashboardMetricDict;
 use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
+use addon\hsx_recycle\app\model\device\RecycleDeviceModelDict;
 use addon\hsx_recycle\app\model\order\RecycleConsignmentOrder;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleDevicePayment;
@@ -25,6 +26,7 @@ use think\facade\Db;
 class RecycleDashboardMetricService extends BaseAdminService
 {
     protected RecycleDashboardFilterService $filterService;
+    private array $categoryNameCache = [];
 
     public function __construct()
     {
@@ -542,9 +544,10 @@ class RecycleDashboardMetricService extends BaseAdminService
         $categoryTotal = array_sum(array_map(static fn($row) => (int)($row['count'] ?? 0), $categoryRows));
         foreach ($categoryRows as $row) {
             $count = (int)($row['count'] ?? 0);
+            $categoryId = (int)($row['category_id'] ?? 0);
             $categoryBreakdown[] = [
-                'category_id' => (int)($row['category_id'] ?? 0),
-                'category_name' => $this->categoryName((int)($row['category_id'] ?? 0)),
+                'category_id' => $categoryId,
+                'category_name' => $this->categoryName($categoryId),
                 'count' => $count,
                 'amount' => $this->money((float)($row['amount'] ?? 0)),
                 'rate' => $categoryTotal > 0 ? round($count / $categoryTotal * 100, 2) : 0,
@@ -1104,12 +1107,32 @@ class RecycleDashboardMetricService extends BaseAdminService
             return '未分类';
         }
 
-        try {
-            $name = (new RecycleDevice())->getCategoryNameAttr('', ['category_id' => $categoryId]);
-            return $name !== '' ? $name : '未分类';
-        } catch (\Throwable $e) {
-            return '未分类';
+        if (array_key_exists($categoryId, $this->categoryNameCache)) {
+            return $this->categoryNameCache[$categoryId];
         }
+
+        try {
+            $node = (new RecycleDeviceModelDict())->where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', $categoryId],
+            ])->field('node_name,model_full_name')->findOrEmpty();
+
+            if (!$node->isEmpty()) {
+                $data = $node->toArray();
+                $name = trim((string)($data['node_name'] ?? ''));
+                if ($name === '') {
+                    $parts = array_values(array_filter(explode('/', (string)($data['model_full_name'] ?? ''))));
+                    $name = trim((string)end($parts));
+                }
+                $this->categoryNameCache[$categoryId] = $name !== '' ? $name : '未分类';
+                return $this->categoryNameCache[$categoryId];
+            }
+        } catch (\Throwable $e) {
+            // Ignore category lookup failures; keep dashboard data available.
+        }
+
+        $this->categoryNameCache[$categoryId] = '未分类';
+        return $this->categoryNameCache[$categoryId];
     }
 
     private function userName(int $uid): string
