@@ -373,7 +373,42 @@
 					"needLogin": true
 				}
 			]
+		},
+		// DEVICE_ASSET_PAGE_BEGIN
+		{
+			"root": "addon/hsx_device_asset",
+			"pages": [
+				{
+					"path": "pages/photo/scan",
+					"style": {
+						"navigationBarTitleText": "资产拍照"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/photo/capture",
+					"style": {
+						"navigationBarTitleText": "资产拍照"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/price/scan",
+					"style": {
+						"navigationBarTitleText": "资产定价"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/price/detail",
+					"style": {
+						"navigationBarTitleText": "资产定价"
+					},
+					"needLogin": true
+				}
+			]
 		}
+		// DEVICE_ASSET_PAGE_END
 		// RECYCLE_PAGE_END
 	],
 	"globalStyle": {

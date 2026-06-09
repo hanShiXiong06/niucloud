@@ -127,7 +127,11 @@ class AuthService extends BaseAdminService
     }
 
     private function isCheckDomain() {
-        return !(request()->ip() == '127.0.0.1' || request()->host() == 'localhost');
+        $ignore_hosts = array_filter(array_map('trim', explode(',', (string)env('system.auth_domain_ignore_hosts', 'localhost,127.0.0.1'))));
+        $host = request()->host();
+        $ip = request()->ip();
+
+        return !(in_array($host, $ignore_hosts, true) || in_array($ip, $ignore_hosts, true));
     }
 
     /**
