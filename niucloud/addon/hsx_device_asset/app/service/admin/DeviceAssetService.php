@@ -44,7 +44,7 @@ class DeviceAssetService extends BaseAdminService
                     $query->field('uid,username,real_name');
                 },
             ])
-            ->field('id,site_id,order_id,imei,imei2,sn,model,category_id,status,final_price,sell_price,check_result_buyer,check_images_buyer,price_uid,create_at,update_at')
+            ->field('id,site_id,order_id,imei,imei2,sn,model,category_id,capacity,color,status,initial_price,final_price,sell_price,check_result,check_result_seller,check_result_buyer,check_images,check_images_seller,check_images_buyer,check_at,price_uid,create_at,update_at')
             ->order('update_at desc,id desc')
             ->append(['status_name', 'category_name']);
 
@@ -85,6 +85,11 @@ class DeviceAssetService extends BaseAdminService
     {
         $query = (new DeviceAssetItem())
             ->where([['site_id', '=', $this->site_id]])
+            ->with([
+                'recycleDevice' => function ($query) {
+                    $query->field('id,site_id,order_id,imei,imei2,sn,model,capacity,color,initial_price,final_price,sell_price,check_result,check_result_seller,check_result_buyer,check_images,check_images_seller,check_images_buyer,check_at');
+                },
+            ])
             ->field('*')
             ->order('id desc');
 
@@ -100,6 +105,7 @@ class DeviceAssetService extends BaseAdminService
                 $query->where($field, '=', (string)$where[$field]);
             }
         }
+        $this->applyTaskType($query, (string)($where['task_type'] ?? ''));
         if (!empty($where['category_id'])) {
             $query->where('category_id', '=', (int)$where['category_id']);
         }
@@ -108,6 +114,27 @@ class DeviceAssetService extends BaseAdminService
         }
 
         return $this->pageQuery($query);
+    }
+
+    public function getTaskStats(): array
+    {
+        $assetQuery = (new DeviceAssetItem())->where([["site_id", "=", $this->site_id]]);
+        $importedDeviceIds = (clone $assetQuery)->column("device_id");
+        $poolQuery = (new RecycleDevice())
+            ->where([["site_id", "=", $this->site_id]])
+            ->whereIn("status", $this->allowedRecycleStatuses([]));
+        if (!empty($importedDeviceIds)) {
+            $poolQuery->whereNotIn("id", $importedDeviceIds);
+        }
+
+        return [
+            "pending" => $this->taskTypeCount(clone $assetQuery, "pending"),
+            "pool" => (int)$poolQuery->count(),
+            "photo" => $this->taskTypeCount(clone $assetQuery, "photo"),
+            "price" => $this->taskTypeCount(clone $assetQuery, "price"),
+            "completed" => $this->taskTypeCount(clone $assetQuery, "completed"),
+            "total" => (int)(clone $assetQuery)->count(),
+        ];
     }
 
     public function getInfo(int $id): array
@@ -357,6 +384,77 @@ class DeviceAssetService extends BaseAdminService
         return $this->getInfo((int)$media->asset_id);
     }
 
+    public function reviewMediaBatch(int $assetId, array $mediaIds, string $status, string $reason = ''): array
+    {
+        if (!in_array($status, [DeviceAssetDict::MEDIA_STATUS_APPROVED, DeviceAssetDict::MEDIA_STATUS_REJECTED], true)) {
+            throw new CommonException('媒体复检状态不正确');
+        }
+        $mediaIds = array_values(array_unique(array_filter(array_map('intval', $mediaIds))));
+        if (empty($mediaIds)) {
+            throw new CommonException('请选择需要处理的图片');
+        }
+
+        $asset = $this->getAsset($assetId);
+        $query = (new DeviceAssetMedia())->where([
+            ['site_id', '=', $this->site_id],
+            ['asset_id', '=', $assetId],
+        ])->whereIn('id', $mediaIds);
+        $count = (int)(clone $query)->count();
+        if ($count <= 0) {
+            throw new CommonException('未找到可处理图片');
+        }
+
+        Db::startTrans();
+        try {
+            $query->update([
+                'status' => $status,
+                'reject_reason' => $status === DeviceAssetDict::MEDIA_STATUS_REJECTED ? $reason : '',
+                'operator_uid' => $this->uid,
+                'update_at' => time(),
+            ]);
+            $this->refreshMediaCount($assetId);
+
+            $activeCount = (new DeviceAssetMedia())->where([
+                ['site_id', '=', $this->site_id],
+                ['asset_id', '=', $assetId],
+                ['media_type', '=', 'image'],
+                ['status', '<>', DeviceAssetDict::MEDIA_STATUS_REJECTED],
+            ])->count();
+            $assetUpdate = [];
+            if ($activeCount <= 0) {
+                $assetUpdate = [
+                    'status' => DeviceAssetDict::STATUS_PHOTO_REJECTED,
+                    'photo_status' => DeviceAssetDict::PHOTO_STATUS_REJECTED,
+                ];
+            } elseif ($status === DeviceAssetDict::MEDIA_STATUS_APPROVED && $asset->photo_status === DeviceAssetDict::PHOTO_STATUS_REJECTED) {
+                $assetUpdate = [
+                    'status' => DeviceAssetDict::STATUS_PHOTO_REVIEW,
+                    'photo_status' => DeviceAssetDict::PHOTO_STATUS_REVIEW,
+                ];
+            }
+            if (!empty($assetUpdate)) {
+                (new DeviceAssetItem())->where([
+                    ['site_id', '=', $this->site_id],
+                    ['id', '=', $assetId],
+                ])->update($assetUpdate);
+            }
+
+            $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_MEDIA_REVIEW, [
+                'media_ids' => $mediaIds,
+                'count' => $count,
+                'status' => $status,
+                'reason' => $reason,
+                'batch' => true,
+            ]);
+            Db::commit();
+        } catch (\Throwable $e) {
+            Db::rollback();
+            throw new CommonException($e->getMessage());
+        }
+
+        return $this->getInfo($assetId);
+    }
+
     public function confirmPhotos(int $assetId): array
     {
         $asset = $this->getAsset($assetId);
@@ -581,7 +679,17 @@ class DeviceAssetService extends BaseAdminService
             'category_id' => (int)($device['category_id'] ?? 0),
             'source_status' => (string)($device['status'] ?? ''),
             'recycle_final_price' => round((float)($device['final_price'] ?? 0), 2),
-            'check_summary' => $this->normalizeJson($device['check_result_buyer'] ?? []),
+            'check_summary' => $this->buildCheckSummary($device),
+            'ext_json' => [
+                'capacity' => (string)($device['capacity'] ?? ''),
+                'color' => (string)($device['color'] ?? ''),
+                'initial_price' => round((float)($device['initial_price'] ?? 0), 2),
+                'recycle_sell_price' => round((float)($device['sell_price'] ?? 0), 2),
+                'check_at' => (int)($device['check_at'] ?? 0),
+                'check_images' => (string)($device['check_images'] ?? ''),
+                'check_images_seller' => (string)($device['check_images_seller'] ?? ''),
+                'check_images_buyer' => (string)($device['check_images_buyer'] ?? ''),
+            ],
             'status' => DeviceAssetDict::STATUS_WAIT_PHOTO,
             'photo_status' => DeviceAssetDict::PHOTO_STATUS_WAIT,
             'price_status' => DeviceAssetDict::PRICE_STATUS_WAIT,
@@ -601,6 +709,76 @@ class DeviceAssetService extends BaseAdminService
             return is_array($json) ? $json : ['raw' => $value];
         }
         return [];
+    }
+
+    protected function buildCheckSummary(array $device): array
+    {
+        $summary = [];
+        foreach ([
+            'check_result' => '内部质检',
+            'check_result_seller' => '卖家质检',
+            'check_result_buyer' => '买家质检',
+        ] as $field => $label) {
+            $value = trim((string)($device[$field] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $decoded = $this->normalizeJson($value);
+            if (!empty($decoded) && !isset($decoded['raw'])) {
+                foreach ($decoded as $key => $item) {
+                    if ($item !== '' && $item !== null) {
+                        $summary[(string)$key] = is_array($item) ? json_encode($item, JSON_UNESCAPED_UNICODE) : (string)$item;
+                    }
+                }
+                continue;
+            }
+            $summary[$label] = $value;
+        }
+        if (!empty($device['capacity'])) {
+            $summary['容量'] = (string)$device['capacity'];
+        }
+        if (!empty($device['color'])) {
+            $summary['颜色'] = (string)$device['color'];
+        }
+        return $summary;
+    }
+
+    protected function taskTypeCount($query, string $taskType): int
+    {
+        $this->applyTaskType($query, $taskType);
+        return (int)$query->count();
+    }
+
+    protected function applyTaskType($query, string $taskType): void
+    {
+        $statusMap = [
+            'pending' => [
+                DeviceAssetDict::STATUS_WAIT_PHOTO,
+                DeviceAssetDict::STATUS_PHOTOING,
+                DeviceAssetDict::STATUS_PHOTO_REVIEW,
+                DeviceAssetDict::STATUS_PHOTO_REJECTED,
+                DeviceAssetDict::STATUS_WAIT_PRICE,
+                DeviceAssetDict::STATUS_PRICED,
+            ],
+            'photo' => [
+                DeviceAssetDict::STATUS_WAIT_PHOTO,
+                DeviceAssetDict::STATUS_PHOTOING,
+                DeviceAssetDict::STATUS_PHOTO_REVIEW,
+                DeviceAssetDict::STATUS_PHOTO_REJECTED,
+            ],
+            'price' => [
+                DeviceAssetDict::STATUS_WAIT_PRICE,
+                DeviceAssetDict::STATUS_PRICED,
+            ],
+            'completed' => [
+                DeviceAssetDict::STATUS_READY_EXPORT,
+                DeviceAssetDict::STATUS_EXPORTED,
+                DeviceAssetDict::STATUS_ARCHIVED,
+            ],
+        ];
+        if (isset($statusMap[$taskType])) {
+            $query->whereIn('status', $statusMap[$taskType]);
+        }
     }
 
     protected function getAsset(int $assetId): DeviceAssetItem

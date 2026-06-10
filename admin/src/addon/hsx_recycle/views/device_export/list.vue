@@ -60,6 +60,14 @@
                         <el-button type="primary" @click="exportEvent" :disabled="deviceTableData.total === 0">
                             {{ selectedDevices.length > 0 ? `导出选中 (${selectedDevices.length})` : t('export') }}
                         </el-button>
+                        <el-button
+                            type="success"
+                            :loading="erpSyncLoading"
+                            :disabled="selectedDevices.length === 0"
+                            @click="syncErpEvent"
+                        >
+                            同步 ERP{{ selectedDevices.length > 0 ? ` (${selectedDevices.length})` : '' }}
+                        </el-button>
                     </el-form-item>
                 </el-form>
             </el-card>
@@ -144,6 +152,17 @@
                         <template #default="{ row }">
                             <span v-if="row.export_time && row.export_time > 0">{{ formatTimestamp(row.export_time) }}</span>
                             <el-tag v-else type="info" size="small">未导出</el-tag>
+                        </template>
+                    </el-table-column>
+
+                    <el-table-column label="ERP 状态" min-width="130" align="center">
+                        <template #default="{ row }">
+                            <el-tooltip v-if="row.erp_sync" :content="row.erp_sync.asset_no || ''" placement="top">
+                                <el-tag :type="erpStatusMeta(row).type">
+                                    {{ erpStatusMeta(row).label }}
+                                </el-tag>
+                            </el-tooltip>
+                            <el-tag v-else type="info">未同步</el-tag>
                         </template>
                     </el-table-column>
 
@@ -328,7 +347,7 @@ import { reactive, ref, computed } from 'vue'
 import { t } from '@/lang'
 import { FormInstance, ElMessage, ElImageViewer, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
-import { getRecycleDeviceList, updateDevice } from '@/addon/hsx_recycle/api/device_export'
+import { getRecycleDeviceList, syncRecycleDevicesToErp, updateDevice } from '@/addon/hsx_recycle/api/device_export'
 import { img } from '@/utils/common'
 import { View, User, Picture } from '@element-plus/icons-vue'
 
@@ -512,9 +531,55 @@ const previewImages = (images: string[], index: number) => {
 const exportSureDialog = ref(null)
 const flag = ref(false)
 const selectedDevices = ref<any[]>([])
+const erpSyncLoading = ref(false)
 
 const handleSelectionChange = (selection: any[]) => {
     selectedDevices.value = selection
+}
+
+const erpStatusMeta = (row: any) => {
+    if (row.erp_sync?.inventory_status === 'in_stock') {
+        return { label: '已入库', type: 'success' as const }
+    }
+    if (row.erp_sync?.inventory_status === 'pending_in') {
+        return { label: '待入库', type: 'warning' as const }
+    }
+    return { label: '已同步', type: 'primary' as const }
+}
+
+const syncErpEvent = async () => {
+    if (selectedDevices.value.length === 0) {
+        ElMessage.warning('请先勾选需要同步的设备')
+        return
+    }
+
+    const unsyncedCount = selectedDevices.value.filter((row: any) => !row.erp_sync).length
+    const syncedCount = selectedDevices.value.length - unsyncedCount
+    const confirmMessage = syncedCount > 0
+        ? `已选择 ${selectedDevices.value.length} 台设备，其中 ${syncedCount} 台已同步过。系统会自动跳过重复设备，是否继续？`
+        : `确定将选中的 ${selectedDevices.value.length} 台设备同步到 ERP 待入库池吗？`
+
+    try {
+        await ElMessageBox.confirm(confirmMessage, '批量同步 ERP', {
+            confirmButtonText: '确认同步',
+            cancelButtonText: '取消',
+            type: 'warning'
+        })
+        erpSyncLoading.value = true
+        const res: any = await syncRecycleDevicesToErp(selectedDevices.value.map((row: any) => row.id))
+        const result = (res?.data?.results || []).find((item: any) => item?.target === 'self_erp')
+        const created = Number(result?.created_count || 0)
+        const existing = Number(result?.existing_count || 0)
+        ElMessage.success(`ERP 同步完成：新增 ${created} 台，已存在 ${existing} 台`)
+        selectedDevices.value = []
+        loadDeviceList()
+    } catch (error: any) {
+        if (error !== 'cancel' && error !== 'close') {
+            ElMessage.error(error?.msg || error?.message || 'ERP 同步失败')
+        }
+    } finally {
+        erpSyncLoading.value = false
+    }
 }
 
 /**

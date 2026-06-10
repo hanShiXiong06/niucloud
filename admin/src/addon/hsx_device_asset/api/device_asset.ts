@@ -8,6 +8,10 @@ export function getAssetList(params: Record<string, any>) {
     return request.get('device_asset/lists', { params })
 }
 
+export function getAssetStats() {
+    return request.get('device_asset/stats')
+}
+
 export function getAssetInfo(id: number) {
     return request.get(`device_asset/info/${ id }`)
 }
@@ -30,6 +34,10 @@ export function saveAssetMedia(id: number, data: Record<string, any>) {
 
 export function reviewAssetMedia(mediaId: number, data: Record<string, any>) {
     return request.post(`device_asset/media/review/${ mediaId }`, data)
+}
+
+export function reviewAssetMediaBatch(id: number, data: Record<string, any>) {
+    return request.post(`device_asset/media/review_batch/${ id }`, data)
 }
 
 export function confirmAssetPhotos(id: number) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\adminapi\controller\device\export;
 
 use addon\hsx_recycle\app\service\admin\device_export\DeviceExportService;
+use addon\hsx_recycle\app\service\admin\order\RecycleDeviceErpSyncService;
 use core\base\BaseAdminController;
 use think\Response;
 
@@ -50,5 +51,22 @@ class DeviceExportController extends BaseAdminController
 
         (new DeviceExportService())->export($data);
         return success('EXPORT_SUCCESS');
+    }
+
+    /**
+     * 批量同步已回收/已代卖设备到 ERP。
+     * @return Response
+     */
+    public function syncErp()
+    {
+        $data = $this->request->params([
+            ['device_ids', []],
+            ['targets', ['self_erp']],
+        ]);
+
+        return success((new RecycleDeviceErpSyncService())->dispatch(
+            (array)$data['device_ids'],
+            (array)$data['targets']
+        ));
     }
 }

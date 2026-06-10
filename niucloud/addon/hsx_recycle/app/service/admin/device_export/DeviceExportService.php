@@ -59,7 +59,21 @@ class DeviceExportService extends BaseAdminService
             $search_model->where('category_id', $where['category_id']);
         }
 
-        return $this->pageQuery($search_model);
+        $result = $this->pageQuery($search_model);
+        $deviceIds = array_map('intval', array_column($result['data'] ?? [], 'id'));
+        if (!empty($deviceIds)) {
+            $listeners = array_values(array_filter(event('GetErpDeviceSyncStatus', [
+                'site_id' => $this->site_id,
+                'device_ids' => $deviceIds,
+            ])));
+            $statusMap = $listeners[0] ?? [];
+            foreach ($result['data'] as &$device) {
+                $device['erp_sync'] = $statusMap[(int)$device['id']] ?? null;
+            }
+            unset($device);
+        }
+
+        return $result;
     }
 
     /**

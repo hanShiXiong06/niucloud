@@ -51,12 +51,18 @@ class DeviceAsset extends BaseAdminController
             ['photo_status', ''],
             ['price_status', ''],
             ['export_status', ''],
+            ['task_type', ''],
             ['create_at', []],
             ['page', 1],
             ['limit', 10],
         ]);
 
         return success($this->service->getPage($data));
+    }
+
+    public function stats()
+    {
+        return success($this->service->getTaskStats());
     }
 
     public function info($id)
@@ -124,6 +130,17 @@ class DeviceAsset extends BaseAdminController
         ]);
 
         return success($this->service->reviewMedia((int)$media_id, (string)$data['status'], (string)$data['reject_reason']));
+    }
+
+    public function reviewMediaBatch($id)
+    {
+        $data = $this->request->params([
+            ['media_ids', []],
+            ['status', ''],
+            ['reject_reason', ''],
+        ]);
+
+        return success($this->service->reviewMediaBatch((int)$id, (array)$data['media_ids'], (string)$data['status'], (string)$data['reject_reason']));
     }
 
     public function confirmPhotos($id)

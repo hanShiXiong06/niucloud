@@ -378,7 +378,14 @@
 		{
 			"root": "addon/hsx_device_asset",
 			"pages": [
-				{
+                {
+                    "path": "pages/task/list",
+                    "style": {
+                        "navigationBarTitleText": "资产任务"
+                    },
+                    "needLogin": true
+                },
+                {
 					"path": "pages/photo/scan",
 					"style": {
 						"navigationBarTitleText": "资产拍照"

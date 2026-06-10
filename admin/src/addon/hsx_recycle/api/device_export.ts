@@ -27,3 +27,13 @@ export function exportRecycleDevice(params: Record<string, any>) {
 export function updateDevice(deviceId: number, data: any) {
     return request.put(`recycle/recycle_device/${deviceId}`, { data })
 }
+
+/**
+ * 将选中的设备批量同步到 ERP。
+ */
+export function syncRecycleDevicesToErp(deviceIds: Array<number | string>, targets: string[] = ['self_erp']) {
+    return request.post('recycle/device_export/sync_erp', {
+        device_ids: deviceIds,
+        targets
+    })
+}

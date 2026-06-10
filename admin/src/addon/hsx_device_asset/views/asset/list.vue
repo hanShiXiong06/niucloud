@@ -26,20 +26,38 @@
             <div class="stat-grid">
                 <div class="stat-card">
                     <div class="stat-label">待入库</div>
-                    <div class="stat-value">{{ poolTable.total }}</div>
+                    <div class="stat-value">{{ taskStats.pool }}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">资产总数</div>
-                    <div class="stat-value">{{ assetTable.total }}</div>
+                    <div class="stat-value">{{ taskStats.total }}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">待拍照/复检</div>
-                    <div class="stat-value">{{ pendingPhotoCount }}</div>
+                    <div class="stat-value">{{ taskStats.photo }}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">待定价/导出</div>
-                    <div class="stat-value">{{ pendingPriceCount }}</div>
+                    <div class="stat-label">待定价</div>
+                    <div class="stat-value">{{ taskStats.price }}</div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-label">本页预估毛利</div>
+                    <div class="stat-value">¥{{ money(pageGrossProfit) }}</div>
+                </div>
+            </div>
+
+            <div class="task-tabbar">
+                <button
+                    v-for="item in taskTabs"
+                    :key="item.key"
+                    type="button"
+                    class="task-tab"
+                    :class="{ active: activeTaskTab === item.key }"
+                    @click="handleTaskTab(item.key)"
+                >
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.count }}</strong>
+                </button>
             </div>
 
             <el-tabs v-model="activeTab" class="asset-tabs" @tab-change="handleTabChange">
@@ -153,8 +171,21 @@
                         <el-table-column type="selection" width="48" />
                         <el-table-column prop="asset_no" label="资产编号" min-width="170" show-overflow-tooltip />
                         <el-table-column prop="device_id" label="设备ID" width="90" />
-                        <el-table-column prop="imei" label="IMEI" min-width="150" show-overflow-tooltip />
-                        <el-table-column prop="model" label="型号" min-width="170" show-overflow-tooltip />
+                        <el-table-column label="设备信息" min-width="260" show-overflow-tooltip>
+                            <template #default="{ row }">
+                                <div class="asset-device-main">{{ row.model || '-' }}</div>
+                                <div class="muted">IMEI {{ row.imei || '-' }} / SN {{ row.sn || '-' }}</div>
+                                <div v-if="deviceSpecText(row)" class="muted">{{ deviceSpecText(row) }}</div>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="机况摘要" min-width="220">
+                            <template #default="{ row }">
+                                <div v-if="checkSummaryEntries(row).length" class="table-summary">
+                                    <span v-for="item in checkSummaryEntries(row).slice(0, 3)" :key="item.key">{{ item.key }}：{{ item.value }}</span>
+                                </div>
+                                <span v-else class="muted">暂无摘要</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column label="成本/售价" width="145" align="right">
                             <template #default="{ row }">
                                 <div>成本 ¥{{ money(row.recycle_final_price) }}</div>
@@ -174,6 +205,7 @@
                                     <el-tag :type="photoStatusType(row.photo_status)" effect="plain">{{ row.photo_status_name || row.photo_status }}</el-tag>
                                     <el-tag :type="priceStatusType(row.price_status)" effect="plain">{{ row.price_status_name || row.price_status }}</el-tag>
                                 </div>
+                                <div class="next-action">{{ nextActionLabel(row) }}</div>
                             </template>
                         </el-table-column>
                         <el-table-column prop="create_at" label="入库时间" width="170" />
@@ -285,93 +317,84 @@
             </div>
         </el-drawer>
 
-        <el-dialog v-model="mediaDialogVisible" title="拍照/补图" width="720px" destroy-on-close>
+        <el-dialog v-model="mediaDialogVisible" title="商品图片拍摄" width="860px" destroy-on-close>
             <div v-if="mediaAsset" class="dialog-body">
-                <el-alert type="info" :closable="false" show-icon>
-                    <template #title>
-                        当前资产：{{ mediaAsset.asset_no }}，自动拍照服务可用任务号回传图片；人工补图可直接粘贴 OSS 图片链接。
-                    </template>
-                </el-alert>
+                <div class="photo-workflow">
+                    <div v-for="item in photoWorkflowSteps(mediaAsset)" :key="item.key" class="photo-workflow__step" :class="{ active: item.active, done: item.done }">
+                        <span>{{ item.index }}</span>
+                        <div>
+                            <strong>{{ item.title }}</strong>
+                            <small>{{ item.desc }}</small>
+                        </div>
+                    </div>
+                </div>
                 <div class="mobile-capture-panel">
                     <div class="mobile-capture-panel__qr">
                         <img v-if="mobileQrCode" :src="mobileQrCode" alt="移动拍照二维码" />
                         <div v-else class="qr-empty">生成中</div>
                     </div>
                     <div class="mobile-capture-panel__content">
-                        <div class="mobile-capture-panel__title">手机扫码拍照</div>
-                        <div class="mobile-capture-panel__desc">扫码后会自动绑定当前资产，手机拍照上传后，PC 端点击刷新即可看到图片。</div>
+                        <div class="mobile-capture-panel__title">手机扫码拍照并回传</div>
+                        <div class="mobile-capture-panel__desc">扫码后手机会进入当前资产的拍照页。照片先上传到系统 OSS，再回传到当前资产，PC 端会自动刷新，也可以手动刷新。</div>
+                        <div class="mobile-capture-panel__status">
+                            <el-tag :type="mediaAsset.image_count > 0 ? 'success' : 'warning'">{{ mediaAsset.image_count || 0 }} 张商品图</el-tag>
+                            <el-tag :type="mediaAsset.photo_status === 'approved' ? 'success' : 'info'">{{ mediaAsset.photo_status_name || mediaAsset.photo_status }}</el-tag>
+                            <span>{{ mobileSyncHint }}</span>
+                        </div>
                         <div class="mobile-capture-panel__actions">
-                            <el-button :icon="Refresh" @click="refreshMediaAsset">刷新图片</el-button>
+                            <el-button :icon="Refresh" :loading="mediaRefreshLoading" @click="refreshMediaAsset">刷新回传</el-button>
                             <el-button link type="primary" @click="copyMobileCaptureUrl">复制链接</el-button>
                         </div>
                     </div>
                 </div>
-                <div class="auto-camera-panel">
-                    <div class="auto-camera-panel__head">
+
+                <div class="capture-gallery">
+                    <div class="capture-gallery__head">
                         <div>
-                            <div class="auto-camera-panel__title">自动拍照设备</div>
-                            <div class="auto-camera-panel__desc">在拍照电脑打开本地服务后，可直接启动设备拍摄并同步到当前资产。</div>
+                            <strong>已回传商品图片</strong>
+                            <small>手机拍照和自动拍照都会进入这里，复检通过后才能定价。</small>
                         </div>
-                        <el-tag :type="localCamera.connected ? 'success' : 'info'">
-                            {{ localCamera.connected ? '已连接' : '未检测' }}
-                        </el-tag>
-                    </div>
-                    <div class="auto-camera-panel__controls">
-                        <el-input v-model.trim="localCamera.serviceUrl" class="auto-camera-panel__url" placeholder="本地服务地址，如 http://127.0.0.1:5200" />
-                        <el-select
-                            v-model="localCamera.activePresetId"
-                            class="auto-camera-panel__preset"
-                            placeholder="相机预设"
-                            :loading="localCamera.presetLoading"
-                            @change="applyLocalCameraPreset(true)"
-                        >
-                            <el-option
-                                v-for="preset in localCamera.presets"
-                                :key="preset.id"
-                                :label="preset.name"
-                                :value="preset.id"
-                            >
-                                <div class="auto-camera-panel__preset-option">
-                                    <span>{{ preset.name }}</span>
-                                    <small>{{ preset.description }}</small>
-                                </div>
-                            </el-option>
-                        </el-select>
-                        <el-button :icon="Refresh" :loading="localCamera.checking" @click="checkLocalCameraService">检测服务</el-button>
-                        <el-button type="primary" :icon="Camera" :loading="localCamera.shooting" @click="handleAutoShoot">
-                            {{ localCamera.state === 'wait_flip' ? '确认翻面后继续' : '启动/继续拍摄' }}
-                        </el-button>
-                        <el-button type="success" :loading="localCamera.syncing" :disabled="!localCamera.photos.length" @click="syncAutoPhotosToAsset">
-                            同步照片 {{ localCamera.photos.length ? `(${ localCamera.photos.length })` : '' }}
-                        </el-button>
-                    </div>
-                    <div v-if="localCamera.error" class="auto-camera-panel__error">{{ localCamera.error }}</div>
-                    <div v-if="localCamera.hardware" class="auto-camera-panel__status">
-                        <span>相机：{{ localCamera.hardware.camera_front || '-' }}</span>
-                        <span>电机：{{ localCamera.hardware.motor || '-' }}</span>
-                        <span>灯光：{{ localCamera.hardware.light || '-' }}</span>
-                        <span>状态：{{ localCamera.state || 'idle' }}</span>
-                    </div>
-                    <div v-if="localCamera.photos.length" class="auto-camera-photos">
-                        <div v-for="photo in localCamera.photos" :key="photo.id" class="auto-camera-photo">
-                            <el-image :src="localPhotoUrl(photo.id)" fit="cover" :preview-src-list="localCamera.photos.map(item => localPhotoUrl(item.id))" />
-                            <span>{{ photo.face || 'photo' }} {{ photo.angle ?? '' }}°</span>
+                        <div class="capture-gallery__actions">
+                            <el-checkbox v-model="showDiscardedMedia">显示已丢弃</el-checkbox>
+                            <el-button size="small" :disabled="!selectableMediaList.length" @click="selectAllVisibleMedia">全选</el-button>
+                            <el-button size="small" :disabled="!selectableMediaList.length" @click="invertVisibleMediaSelection">反选</el-button>
+                            <el-button size="small" :disabled="!selectedMediaIds.length" @click="selectedMediaIds = []">清空</el-button>
+                            <el-button size="small" :disabled="!pendingMediaList.length" @click="approveAllPendingMedia">待确认全部通过</el-button>
+                            <el-button size="small" type="success" :disabled="!selectedMediaIds.length" @click="reviewSelectedMedia('approved')">选中通过</el-button>
+                            <el-button size="small" type="danger" :disabled="!selectedMediaIds.length" @click="reviewSelectedMedia('rejected')">选中丢弃</el-button>
+                            <el-button size="small" type="warning" :disabled="!canConfirmPhotos(mediaAsset)" @click="handleConfirmPhotos(mediaAsset, false)">确认照片完成</el-button>
                         </div>
                     </div>
+                    <div v-if="visibleMediaList.length" class="capture-media-grid">
+                        <div v-for="item in visibleMediaList" :key="item.id" class="capture-media-card" :class="[item.status, { selected: selectedMediaIds.includes(item.id) }]">
+                            <el-checkbox
+                                v-if="item.status !== 'rejected'"
+                                class="capture-media-card__check"
+                                :model-value="selectedMediaIds.includes(item.id)"
+                                @change="toggleMediaSelection(item.id)"
+                            />
+                            <el-image v-if="item.media_type !== 'video'" :src="imgUrl(item.url)" fit="cover" :preview-src-list="visibleMediaList.filter((media: any) => media.media_type !== 'video').map((media: any) => imgUrl(media.url))" />
+                            <div v-else class="video-box">视频</div>
+                            <div class="capture-media-card__meta">
+                                <el-tag size="small" :type="mediaStatusType(item.status)">{{ item.status_name || item.status }}</el-tag>
+                                <span>{{ sceneName(item.scene) }} / {{ sourceName(item.source) }}</span>
+                            </div>
+                            <div class="capture-media-card__actions">
+                                <el-button size="small" type="success" link :disabled="item.status === 'approved'" @click="reviewDialogMedia(item, 'approved')">通过</el-button>
+                                <el-button size="small" type="danger" link :disabled="item.status === 'rejected'" @click="reviewDialogMedia(item, 'rejected')">退回</el-button>
+                            </div>
+                        </div>
+                    </div>
+                    <el-empty v-else description="等待手机扫码拍照上传" :image-size="72" />
                 </div>
+
                 <el-form label-width="96px" class="mt-[16px]">
-                    <el-form-item label="拍照工位">
-                        <el-input v-model.trim="photoTaskForm.station_id" placeholder="如 camera-01，可为空" />
-                    </el-form-item>
-                    <el-form-item label="外部任务号">
-                        <el-input v-model.trim="photoTaskForm.camera_job_id" placeholder="本地拍照服务任务ID，可为空" />
-                    </el-form-item>
                     <el-form-item label="图片链接">
                         <el-input
                             v-model.trim="mediaForm.url"
                             type="textarea"
-                            :rows="4"
-                            placeholder="每行一个图片/视频 URL，自动拍照服务回传 OSS 后也走这里保存"
+                            :rows="3"
+                            placeholder="兜底补录：每行一个图片/视频 URL。正常情况建议用手机扫码拍照。"
                         />
                     </el-form-item>
                     <el-form-item label="媒体类型">
@@ -391,11 +414,74 @@
                         </el-select>
                     </el-form-item>
                 </el-form>
+
+                <el-collapse class="auto-camera-collapse">
+                    <el-collapse-item name="auto">
+                        <template #title>
+                            <span>自动拍照设备</span>
+                            <el-tag class="ml-[8px]" size="small" :type="localCamera.connected ? 'success' : 'info'">{{ localCamera.connected ? '已连接' : '可选' }}</el-tag>
+                        </template>
+                        <div class="auto-camera-panel">
+                            <div class="auto-camera-panel__head">
+                                <div>
+                                    <div class="auto-camera-panel__title">自动拍照设备</div>
+                                    <div class="auto-camera-panel__desc">设备拍完后会先同步到系统 OSS，再进入上面的商品图片列表，体验和手机拍照一致。</div>
+                                </div>
+                                <el-tag :type="localCamera.connected ? 'success' : 'info'">
+                                    {{ localCamera.connected ? '已连接' : '未检测' }}
+                                </el-tag>
+                            </div>
+                            <div class="auto-camera-panel__controls">
+                                <el-input v-model.trim="localCamera.serviceUrl" class="auto-camera-panel__url" placeholder="本地服务地址，如 http://127.0.0.1:5200" />
+                                <el-select
+                                    v-model="localCamera.activePresetId"
+                                    class="auto-camera-panel__preset"
+                                    placeholder="相机预设"
+                                    :loading="localCamera.presetLoading"
+                                    @change="applyLocalCameraPreset(true)"
+                                >
+                                    <el-option
+                                        v-for="preset in localCamera.presets"
+                                        :key="preset.id"
+                                        :label="preset.name"
+                                        :value="preset.id"
+                                    >
+                                        <div class="auto-camera-panel__preset-option">
+                                            <span>{{ preset.name }}</span>
+                                            <small>{{ preset.description }}</small>
+                                        </div>
+                                    </el-option>
+                                </el-select>
+                                <el-button :icon="Refresh" :loading="localCamera.checking" @click="checkLocalCameraService">检测服务</el-button>
+                                <el-button type="primary" :icon="Camera" :loading="localCamera.shooting" @click="handleAutoShoot">
+                                    {{ localCamera.state === 'wait_flip' ? '确认翻面后继续' : '启动/继续拍摄' }}
+                                </el-button>
+                                <el-button type="success" :loading="localCamera.syncing" :disabled="!localCamera.photos.length" @click="syncAutoPhotosToAsset">
+                                    同步照片 {{ localCamera.photos.length ? `(${ localCamera.photos.length })` : '' }}
+                                </el-button>
+                            </div>
+                            <div v-if="localCamera.error" class="auto-camera-panel__error">{{ localCamera.error }}</div>
+                            <div v-if="localCamera.hardware" class="auto-camera-panel__status">
+                                <span>相机：{{ localCamera.hardware.camera_front || '-' }}</span>
+                                <span>电机：{{ localCamera.hardware.motor || '-' }}</span>
+                                <span>灯光：{{ localCamera.hardware.light || '-' }}</span>
+                                <span>状态：{{ localCamera.state || 'idle' }}</span>
+                            </div>
+                            <div v-if="localCamera.photos.length" class="auto-camera-photos">
+                                <div v-for="photo in localCamera.photos" :key="photo.id" class="auto-camera-photo">
+                                    <el-image :src="localPhotoUrl(photo.id)" fit="cover" :preview-src-list="localCamera.photos.map(item => localPhotoUrl(item.id))" />
+                                    <span>{{ photo.face || 'photo' }} {{ photo.angle ?? '' }}°</span>
+                                </div>
+                            </div>
+                        </div>
+                    </el-collapse-item>
+                </el-collapse>
             </div>
             <template #footer>
                 <el-button @click="mediaDialogVisible = false">取消</el-button>
-                <el-button :loading="photoTaskLoading" @click="handleCreatePhotoTask">创建拍照任务</el-button>
-                <el-button type="primary" :loading="mediaSaveLoading" @click="handleSaveMedia">保存媒体</el-button>
+                <el-button :loading="photoTaskLoading" @click="handleCreatePhotoTask">生成手机拍照任务</el-button>
+                <el-button :disabled="!mediaForm.url" type="primary" :loading="mediaSaveLoading" @click="handleSaveMedia">保存补录链接</el-button>
+                <el-button type="success" :disabled="!canConfirmPhotos(mediaAsset)" @click="handleConfirmPhotos(mediaAsset, false)">确认进入定价</el-button>
             </template>
         </el-dialog>
 
@@ -434,6 +520,19 @@
                 </div>
             </div>
             <el-form :model="priceForm" label-width="90px">
+                <div class="price-profit-panel">
+                    <div>
+                        <span>预估毛利</span>
+                        <strong :class="{ danger: grossProfit < 0 }">¥{{ money(grossProfit) }}</strong>
+                    </div>
+                    <div>
+                        <span>毛利率</span>
+                        <strong :class="{ danger: grossProfitRate < 0 }">{{ grossProfitRate }}%</strong>
+                    </div>
+                    <div v-if="priceWarnings.length" class="price-warnings">
+                        <el-alert v-for="item in priceWarnings" :key="item" type="warning" :closable="false" show-icon :title="item" />
+                    </div>
+                </div>
                 <el-form-item label="销售价" required>
                     <el-input-number v-model="priceForm.sale_price" :min="0" :precision="2" class="!w-full" />
                 </el-form-item>
@@ -456,7 +555,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { Aim, Camera, CircleCheck, Download, Money, Plus, Refresh, Search, View } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
@@ -468,15 +567,19 @@ import {
     getAssetInfo,
     getAssetList,
     getAssetPool,
+    getAssetStats,
     importAssets,
     reviewAssetMedia,
+    reviewAssetMediaBatch,
     saveAssetMedia,
     scanImportAsset
 } from '@/addon/hsx_device_asset/api/device_asset'
 import { getToken, img } from '@/utils/common'
 import storage from '@/utils/storage'
 
-const activeTab = ref('pool')
+const activeTab = ref('asset')
+const activeTaskTab = ref('pending')
+const taskStats = reactive({ pending: 0, pool: 0, photo: 0, price: 0, completed: 0, total: 0 })
 const scanKeyword = ref('')
 const scanLoading = ref(false)
 const importLoading = ref(false)
@@ -485,7 +588,7 @@ const exportLoading = ref(false)
 const poolSearchRef = ref<FormInstance>()
 const assetSearchRef = ref<FormInstance>()
 const poolSearch = reactive({ keyword: '', update_at: [] as string[] })
-const assetSearch = reactive({ keyword: '', status: '', photo_status: '', price_status: '' })
+const assetSearch = reactive({ keyword: '', status: '', photo_status: '', price_status: '', task_type: 'pending' })
 
 const poolTable = reactive({ data: [] as any[], total: 0, page: 1, limit: 10, loading: false })
 const assetTable = reactive({ data: [] as any[], total: 0, page: 1, limit: 10, loading: false })
@@ -500,6 +603,10 @@ const mobileCaptureUrl = ref('')
 const mobileQrCode = ref('')
 const photoTaskLoading = ref(false)
 const mediaSaveLoading = ref(false)
+const mediaRefreshLoading = ref(false)
+let mediaRefreshTimer: ReturnType<typeof setInterval> | null = null
+const selectedMediaIds = ref<number[]>([])
+const showDiscardedMedia = ref(false)
 const photoTaskForm = reactive({ station_id: '', camera_job_id: '' })
 const mediaForm = reactive({ url: '', media_type: 'image', scene: 'common' })
 const activePhotoTask = ref<any>(null)
@@ -546,17 +653,85 @@ const priceStatusOptions = [
     { label: '已完成', value: 'completed' }
 ]
 
-const pendingPhotoCount = computed(() => {
-    return assetTable.data.filter(item => ['wait_photo', 'photoing', 'photo_review', 'photo_rejected'].includes(item.status)).length
+const taskTabs = computed(() => [
+    { key: 'pending', label: '待完成', count: taskStats.pending },
+    { key: 'pool', label: '待入库', count: taskStats.pool },
+    { key: 'photo', label: '待拍照', count: taskStats.photo },
+    { key: 'price', label: '待定价', count: taskStats.price },
+    { key: 'completed', label: '已完成', count: taskStats.completed },
+])
+const pageGrossProfit = computed(() => {
+    return assetTable.data.reduce((total, item) => total + Number(item.sale_price || 0) - Number(item.recycle_final_price || 0), 0)
 })
-const pendingPriceCount = computed(() => {
-    return assetTable.data.filter(item => ['wait_price', 'ready_export'].includes(item.status)).length
+const grossProfit = computed(() => Number(priceForm.sale_price || 0) - Number(priceAsset.value?.recycle_final_price || 0))
+const grossProfitRate = computed(() => {
+    const salePrice = Number(priceForm.sale_price || 0)
+    if (salePrice <= 0) return '0.00'
+    return ((grossProfit.value / salePrice) * 100).toFixed(2)
+})
+const priceWarnings = computed(() => {
+    const warnings: string[] = []
+    const salePrice = Number(priceForm.sale_price || 0)
+    const minPrice = Number(priceForm.min_price || 0)
+    const costPrice = Number(priceAsset.value?.recycle_final_price || 0)
+    if (salePrice > 0 && costPrice > 0 && salePrice < costPrice) warnings.push('销售价低于回收成本，请确认是否亏损出货')
+    if (salePrice > 0 && minPrice > salePrice) warnings.push('最低价高于销售价，请调整价格梯度')
+    if (salePrice > 0 && !priceForm.remark && grossProfit.value < 0) warnings.push('亏损定价建议填写备注，便于后续 KPI 复盘')
+    return warnings
+})
+const pendingMediaList = computed(() => {
+    return (mediaAsset.value?.media || []).filter((item: any) => item.status === 'pending')
+})
+const visibleMediaList = computed(() => {
+    const media = mediaAsset.value?.media || []
+    return showDiscardedMedia.value ? media : media.filter((item: any) => item.status !== 'rejected')
+})
+const selectableMediaList = computed(() => visibleMediaList.value.filter((item: any) => item.status !== 'rejected'))
+const mobileSyncHint = computed(() => {
+    if (!mediaAsset.value) return ''
+    if (mediaAsset.value.photo_status === 'approved') return '照片已确认，可以进入定价'
+    if (pendingMediaList.value.length > 0) return `有 ${ pendingMediaList.value.length } 张待复检图片`
+    if (Number(mediaAsset.value.image_count || 0) > 0) return '图片已回传，请复检后确认'
+    return '等待手机扫码拍照上传'
 })
 
 onMounted(() => {
     loadPool()
     loadAssets()
+    loadStats()
 })
+
+onUnmounted(() => {
+    stopMediaAutoRefresh()
+})
+
+watch(mediaDialogVisible, (visible) => {
+    visible ? startMediaAutoRefresh() : stopMediaAutoRefresh()
+})
+
+const loadStats = async () => {
+    const res: any = await getAssetStats()
+    Object.assign(taskStats, res.data || {})
+}
+
+const handleTaskTab = async (taskType: string) => {
+    activeTaskTab.value = taskType
+    selectedPoolRows.value = []
+    selectedAssetRows.value = []
+    if (taskType === 'pool') {
+        activeTab.value = 'pool'
+        poolTable.page = 1
+        await loadPool()
+        return
+    }
+    activeTab.value = 'asset'
+    assetSearch.task_type = taskType
+    assetSearch.status = ''
+    assetSearch.photo_status = ''
+    assetSearch.price_status = ''
+    assetTable.page = 1
+    await loadAssets()
+}
 
 const loadPool = async () => {
     poolTable.loading = true
@@ -602,8 +777,10 @@ const handleBatchImport = async () => {
     try {
         await importAssets(selectedPoolRows.value.map(item => item.id))
         ElMessage.success('资产导入成功')
-        await Promise.all([loadPool(), loadAssets()])
         activeTab.value = 'asset'
+        activeTaskTab.value = 'photo'
+        assetSearch.task_type = 'photo'
+        await Promise.all([loadPool(), loadAssets(), loadStats()])
     } finally {
         importLoading.value = false
     }
@@ -614,8 +791,10 @@ const handleSingleImport = async (row: any) => {
     try {
         await importAssets([row.id])
         ElMessage.success('资产导入成功')
-        await Promise.all([loadPool(), loadAssets()])
         activeTab.value = 'asset'
+        activeTaskTab.value = 'photo'
+        assetSearch.task_type = 'photo'
+        await Promise.all([loadPool(), loadAssets(), loadStats()])
     } finally {
         row._importing = false
     }
@@ -631,8 +810,10 @@ const handleScanImport = async () => {
         await scanImportAsset(scanKeyword.value)
         ElMessage.success('扫码入库成功')
         scanKeyword.value = ''
-        await Promise.all([loadPool(), loadAssets()])
         activeTab.value = 'asset'
+        activeTaskTab.value = 'photo'
+        assetSearch.task_type = 'photo'
+        await Promise.all([loadPool(), loadAssets(), loadStats()])
     } finally {
         scanLoading.value = false
     }
@@ -644,20 +825,23 @@ const openDetail = async (row: any) => {
     detailVisible.value = true
 }
 
-const openMediaDialog = (row: any) => {
-    mediaAsset.value = row
+const openMediaDialog = async (row: any) => {
+    const res: any = await getAssetInfo(row.id)
+    mediaAsset.value = res.data || row
     activePhotoTask.value = null
     photoTaskForm.station_id = ''
     photoTaskForm.camera_job_id = ''
     mediaForm.url = ''
     mediaForm.media_type = 'image'
     mediaForm.scene = 'common'
+    selectedMediaIds.value = []
+    showDiscardedMedia.value = false
     localCamera.error = ''
     localCamera.photos = []
     localCamera.state = 'idle'
     localCamera.inspectionId = Number(localStorage.getItem(localInspectionKey(row.id)) || 0)
     mediaDialogVisible.value = true
-    generateMobileCaptureQr(row)
+    generateMobileCaptureQr(mediaAsset.value)
     loadLocalCameraPresets()
 }
 
@@ -684,10 +868,29 @@ const copyMobileCaptureUrl = async () => {
 
 const refreshMediaAsset = async () => {
     if (!mediaAsset.value?.id) return
-    const res: any = await getAssetInfo(mediaAsset.value.id)
-    mediaAsset.value = res.data
-    await loadAssets()
-    ElMessage.success('已刷新')
+    mediaRefreshLoading.value = true
+    try {
+        const res: any = await getAssetInfo(mediaAsset.value.id)
+        mediaAsset.value = res.data
+        const ids = new Set((mediaAsset.value.media || []).map((item: any) => Number(item.id)))
+        selectedMediaIds.value = selectedMediaIds.value.filter(id => ids.has(Number(id)))
+        await loadAssets()
+    } finally {
+        mediaRefreshLoading.value = false
+    }
+}
+
+const startMediaAutoRefresh = () => {
+    stopMediaAutoRefresh()
+    mediaRefreshTimer = setInterval(() => {
+        if (mediaDialogVisible.value && mediaAsset.value?.id) refreshMediaAsset()
+    }, 5000)
+}
+
+const stopMediaAutoRefresh = () => {
+    if (!mediaRefreshTimer) return
+    clearInterval(mediaRefreshTimer)
+    mediaRefreshTimer = null
 }
 
 const handleCreatePhotoTask = async () => {
@@ -942,7 +1145,8 @@ const handleSaveMedia = async () => {
             }))
         })
         ElMessage.success('媒体已保存，等待复检')
-        mediaDialogVisible.value = false
+        mediaForm.url = ''
+        await refreshMediaAsset()
         await loadAssets()
     } finally {
         mediaSaveLoading.value = false
@@ -969,6 +1173,69 @@ const reviewMedia = async (item: any, status: 'approved' | 'rejected') => {
     await loadAssets()
 }
 
+const reviewDialogMedia = async (item: any, status: 'approved' | 'rejected') => {
+    await reviewMedia(item, status)
+    if (mediaAsset.value?.id) await refreshMediaAsset()
+}
+
+const approveAllPendingMedia = async () => {
+    if (!pendingMediaList.value.length) return
+    const count = pendingMediaList.value.length
+    await reviewAssetMediaBatch(mediaAsset.value.id, {
+        media_ids: pendingMediaList.value.map((item: any) => item.id),
+        status: 'approved',
+        reject_reason: ''
+    })
+    ElMessage.success(`已通过 ${ count } 张图片`)
+    await refreshMediaAsset()
+    await loadAssets()
+}
+
+const toggleMediaSelection = (mediaId: number) => {
+    const id = Number(mediaId)
+    selectedMediaIds.value = selectedMediaIds.value.includes(id)
+        ? selectedMediaIds.value.filter(item => item !== id)
+        : [...selectedMediaIds.value, id]
+}
+
+const selectAllVisibleMedia = () => {
+    selectedMediaIds.value = selectableMediaList.value.map((item: any) => Number(item.id))
+}
+
+const invertVisibleMediaSelection = () => {
+    const selected = new Set(selectedMediaIds.value.map(Number))
+    selectedMediaIds.value = selectableMediaList.value
+        .map((item: any) => Number(item.id))
+        .filter((id: number) => !selected.has(id))
+}
+
+const reviewSelectedMedia = async (status: 'approved' | 'rejected') => {
+    if (!mediaAsset.value?.id || !selectedMediaIds.value.length) return
+    let rejectReason = ''
+    if (status === 'rejected') {
+        try {
+            const { value } = await ElMessageBox.prompt('这些图片将被标记为已丢弃，默认不展示、不参与导出。可填写丢弃原因。', '丢弃图片', {
+                confirmButtonText: '确认丢弃',
+                cancelButtonText: '取消',
+                inputPlaceholder: '如：反光、模糊、角度不完整'
+            })
+            rejectReason = value || ''
+        } catch {
+            return
+        }
+    }
+    const count = selectedMediaIds.value.length
+    await reviewAssetMediaBatch(mediaAsset.value.id, {
+        media_ids: selectedMediaIds.value,
+        status,
+        reject_reason: rejectReason
+    })
+    selectedMediaIds.value = []
+    ElMessage.success(status === 'approved' ? `已通过 ${ count } 张图片` : `已丢弃 ${ count } 张图片`)
+    await refreshMediaAsset()
+    await loadAssets()
+}
+
 const canConfirmPhotos = (asset: any) => {
     if (!asset) return false
     if (asset.photo_status === 'approved') return false
@@ -988,20 +1255,66 @@ const canPrice = (asset: any) => {
     return asset.photo_status === 'approved' || ['wait_price', 'ready_export'].includes(asset.status)
 }
 
+const nextActionLabel = (asset: any) => {
+    if (!asset) return '-'
+    if (asset.status === 'exported') return '已导出，可归档'
+    if (asset.photo_status === 'rejected' || asset.status === 'photo_rejected') return '下一步：补拍退回图片'
+    if (['wait_photo', 'photoing'].includes(asset.photo_status) || Number(asset.image_count || 0) <= 0) return '下一步：拍照/补图'
+    if (asset.photo_status !== 'approved') return '下一步：复检确认照片'
+    if (asset.price_status !== 'completed') return '下一步：销售定价'
+    return '下一步：导出销售资料'
+}
+
 const handleConfirmPhotos = async (asset: any, refreshDetail = false) => {
     if (!asset?.id || !canConfirmPhotos(asset)) return
     asset._confirmingPhotos = true
     try {
         await confirmAssetPhotos(asset.id)
         ElMessage.success('照片已确认，资产进入定价环节')
-        await loadAssets()
+        await Promise.all([loadAssets(), loadStats()])
         if (refreshDetail) {
             const res: any = await getAssetInfo(asset.id)
             currentAsset.value = res.data
         }
+        if (mediaAsset.value?.id === asset.id) {
+            await refreshMediaAsset()
+        }
     } finally {
         asset._confirmingPhotos = false
     }
+}
+
+const photoWorkflowSteps = (asset: any) => {
+    const hasMedia = Number(asset?.image_count || 0) > 0
+    const reviewed = asset?.photo_status === 'approved'
+    const priced = asset?.price_status === 'completed'
+    return [
+        { key: 'capture', index: 1, title: '拍摄商品图', desc: hasMedia ? `已回传 ${ asset.image_count || 0 } 张` : '手机扫码拍照上传', done: hasMedia, active: !hasMedia },
+        { key: 'review', index: 2, title: '复检确认', desc: reviewed ? '照片已确认' : '检查是否清晰完整', done: reviewed, active: hasMedia && !reviewed },
+        { key: 'price', index: 3, title: '生成定价工单', desc: priced ? '定价已完成' : '确认后进入定价', done: priced, active: reviewed && !priced },
+    ]
+}
+
+const sceneName = (scene = '') => {
+    return ({
+        front: '正面',
+        back: '背面',
+        side: '边框',
+        flaw: '瑕疵',
+        mobile: '手机拍摄',
+        auto: '自动拍摄',
+        common: '通用',
+        video: '视频',
+    } as Record<string, string>)[scene] || scene || '通用'
+}
+
+const sourceName = (source = '') => {
+    return ({
+        mobile: '手机',
+        auto: '自动设备',
+        manual: '人工补录',
+        pc: 'PC',
+    } as Record<string, string>)[source] || source || '未知'
 }
 
 const openPriceDialog = async (row: any) => {
@@ -1020,6 +1333,10 @@ const handleCompletePrice = async () => {
         ElMessage.warning('请输入销售价')
         return
     }
+    if (Number(priceForm.min_price || 0) > 0 && Number(priceForm.min_price || 0) > Number(priceForm.sale_price || 0)) {
+        ElMessage.warning('最低价不能高于销售价')
+        return
+    }
     priceLoading.value = true
     try {
         if (priceAsset.value.photo_status !== 'approved') {
@@ -1030,7 +1347,7 @@ const handleCompletePrice = async () => {
         await completeAssetPrice(priceAsset.value.id, { ...priceForm })
         ElMessage.success('定价已保存')
         priceDialogVisible.value = false
-        await loadAssets()
+        await Promise.all([loadAssets(), loadStats()])
     } finally {
         priceLoading.value = false
     }
@@ -1066,8 +1383,16 @@ const refreshCurrentDetail = async () => {
 }
 
 const checkSummaryEntries = (asset: any) => {
-    const summary = asset?.check_summary || asset?.recycle_device?.check_result_buyer || asset?.recycleDevice?.check_result_buyer || {}
-    const data = normalizeObject(summary)
+    const device = asset?.recycle_device || asset?.recycleDevice || {}
+    const summary = asset?.check_summary || {}
+    const data = {
+        ...normalizeCheckResult(device.check_result || '', '内部质检'),
+        ...normalizeCheckResult(device.check_result_seller || '', '卖家质检'),
+        ...normalizeCheckResult(device.check_result_buyer || '', '买家质检'),
+        ...normalizeObject(summary),
+    }
+    if (!data['容量'] && (asset?.ext_json?.capacity || device.capacity)) data['容量'] = asset?.ext_json?.capacity || device.capacity
+    if (!data['颜色'] && (asset?.ext_json?.color || device.color)) data['颜色'] = asset?.ext_json?.color || device.color
     return Object.entries(data)
         .filter(([, value]) => value !== '' && value !== null && value !== undefined)
         .map(([key, value]) => ({
@@ -1079,10 +1404,18 @@ const checkSummaryEntries = (asset: any) => {
 const recycleCheckImages = (asset: any) => {
     const device = asset?.recycle_device || asset?.recycleDevice || {}
     return [
+        ...splitImages(asset?.ext_json?.check_images_buyer),
+        ...splitImages(asset?.ext_json?.check_images_seller),
+        ...splitImages(asset?.ext_json?.check_images),
         ...splitImages(device.check_images_buyer),
         ...splitImages(device.check_images_seller),
         ...splitImages(device.check_images)
     ].filter((url, index, arr) => url && arr.indexOf(url) === index)
+}
+
+const deviceSpecText = (asset: any) => {
+    const device = asset?.recycle_device || asset?.recycleDevice || {}
+    return [asset?.ext_json?.capacity || device.capacity, asset?.ext_json?.color || device.color].filter(Boolean).join(' / ')
 }
 
 const assetImages = (asset: any) => {
@@ -1109,6 +1442,17 @@ const normalizeObject = (value: any) => {
         return typeof parsed === 'object' && parsed ? parsed : { 原始质检: value }
     } catch {
         return { 原始质检: value }
+    }
+}
+
+const normalizeCheckResult = (value: any, label: string) => {
+    if (!value) return {}
+    if (typeof value === 'object') return value
+    try {
+        const parsed = JSON.parse(value)
+        return typeof parsed === 'object' && parsed ? parsed : { [label]: value }
+    } catch {
+        return { [label]: value }
     }
 }
 
@@ -1156,9 +1500,45 @@ const mediaStatusType = (status: string) => status === 'approved' ? 'success' : 
         width: 320px;
     }
 
+    .task-tabbar {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+
+    .task-tab {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border: 1px solid var(--el-border-color-light);
+        border-radius: 8px;
+        color: var(--el-text-color-regular);
+        background: var(--el-bg-color);
+        cursor: pointer;
+        transition: all 0.2s;
+
+        strong {
+            font-size: 20px;
+        }
+    }
+
+    .task-tab.active {
+        border-color: var(--el-color-primary);
+        color: var(--el-color-primary);
+        background: var(--el-color-primary-light-9);
+        box-shadow: 0 0 0 1px var(--el-color-primary-light-7);
+    }
+
+    .asset-tabs :deep(.el-tabs__header) {
+        display: none;
+    }
+
     .stat-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 12px;
         margin-bottom: 16px;
     }
@@ -1198,6 +1578,28 @@ const mediaStatusType = (status: string) => status === 'approved' ? 'success' : 
         display: flex;
         gap: 6px;
         flex-wrap: wrap;
+    }
+
+    .asset-device-main {
+        color: var(--el-text-color-primary);
+        font-weight: 650;
+        line-height: 1.5;
+    }
+
+    .table-summary {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        color: var(--el-text-color-secondary);
+        font-size: 12px;
+        line-height: 1.35;
+    }
+
+    .next-action {
+        margin-top: 6px;
+        color: var(--el-text-color-secondary);
+        font-size: 12px;
+        line-height: 1.35;
     }
 
     .muted {
@@ -1314,6 +1716,71 @@ const mediaStatusType = (status: string) => status === 'approved' ? 'success' : 
         min-height: 260px;
     }
 
+    .photo-workflow {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .photo-workflow__step {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        min-height: 78px;
+        padding: 12px;
+        border: 1px solid var(--el-border-color-light);
+        border-radius: 8px;
+        background: var(--el-bg-color-page);
+
+        > span {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            flex: 0 0 26px;
+            border-radius: 50%;
+            background: var(--el-fill-color);
+            color: var(--el-text-color-secondary);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        strong {
+            display: block;
+            color: var(--el-text-color-primary);
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        small {
+            display: block;
+            margin-top: 4px;
+            color: var(--el-text-color-secondary);
+            line-height: 1.4;
+        }
+    }
+
+    .photo-workflow__step.active {
+        border-color: var(--el-color-primary-light-5);
+        background: var(--el-color-primary-light-9);
+
+        > span {
+            background: var(--el-color-primary);
+            color: #fff;
+        }
+    }
+
+    .photo-workflow__step.done {
+        border-color: var(--el-color-success-light-5);
+
+        > span {
+            background: var(--el-color-success);
+            color: #fff;
+        }
+    }
+
     .mobile-capture-panel {
         display: grid;
         grid-template-columns: 132px 1fr;
@@ -1364,8 +1831,115 @@ const mediaStatusType = (status: string) => status === 'approved' ? 'success' : 
         margin-top: 14px;
     }
 
-    .auto-camera-panel {
+    .mobile-capture-panel__status {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+        color: var(--el-text-color-secondary);
+        font-size: 13px;
+    }
+
+    .capture-gallery {
         margin-top: 14px;
+        padding: 12px;
+        border: 1px solid var(--el-border-color-light);
+        border-radius: 8px;
+        background: var(--el-bg-color);
+    }
+
+    .capture-gallery__head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+
+        strong {
+            display: block;
+            color: var(--el-text-color-primary);
+            font-size: 14px;
+        }
+
+        small {
+            display: block;
+            margin-top: 4px;
+            color: var(--el-text-color-secondary);
+            line-height: 1.45;
+        }
+    }
+
+    .capture-gallery__actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .capture-media-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .capture-media-card {
+        position: relative;
+        padding: 8px;
+        border: 1px solid var(--el-border-color-light);
+        border-radius: 8px;
+        background: var(--el-bg-color-page);
+
+        .el-image,
+        .video-box {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 6px;
+            background: var(--el-bg-color);
+        }
+    }
+
+    .capture-media-card.approved {
+        border-color: var(--el-color-success-light-5);
+    }
+
+    .capture-media-card.selected {
+        border-color: var(--el-color-primary);
+        box-shadow: 0 0 0 2px var(--el-color-primary-light-8);
+    }
+
+    .capture-media-card.rejected {
+        border-color: var(--el-color-danger-light-5);
+        opacity: 0.72;
+    }
+
+    .capture-media-card__check {
+        position: absolute;
+        z-index: 2;
+        top: 10px;
+        left: 10px;
+        padding: 2px 5px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.88);
+    }
+
+    .capture-media-card__meta,
+    .capture-media-card__actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-top: 7px;
+        color: var(--el-text-color-secondary);
+        font-size: 12px;
+    }
+
+    .auto-camera-collapse {
+        margin-top: 14px;
+    }
+
+    .auto-camera-panel {
+        margin-top: 0;
         padding: 12px;
         border: 1px solid var(--el-border-color-light);
         border-radius: 8px;
@@ -1467,6 +2041,40 @@ const mediaStatusType = (status: string) => status === 'approved' ? 'success' : 
 
     .price-context {
         margin-bottom: 16px;
+    }
+
+    .price-profit-panel {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+        padding: 12px;
+        border-radius: 8px;
+        background: var(--el-bg-color-page);
+
+        > div:not(.price-warnings) {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            color: var(--el-text-color-secondary);
+            font-size: 13px;
+
+            strong {
+                color: var(--el-text-color-primary);
+                font-size: 18px;
+            }
+
+            .danger {
+                color: var(--el-color-danger);
+            }
+        }
+    }
+
+    .price-warnings {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: 8px;
     }
 
     .price-context__head {
