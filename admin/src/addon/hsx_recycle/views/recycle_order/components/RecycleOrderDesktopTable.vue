@@ -39,9 +39,7 @@
             </el-table-column>
             <el-table-column prop="status_name" label="状态" width="100">
               <template #default="{ row: deviceRow }">
-                <el-tag :type="props.getDeviceStatusType(deviceRow.status)" size="small">
-                  {{ deviceRow.status_name }}
-                </el-tag>
+                <DeviceStatusBadge :status="deviceRow.status" :status-name="deviceRow.status_name" />
                 <div v-if="deviceRow.consignment_order_id || deviceRow.consignmentOrder" class="mt-1">
                   <el-button link type="primary" size="small" @click="props.viewConsignment(deviceRow)">
                     {{ deviceRow.consignmentOrder?.consignment_no || '查看代卖单' }}
@@ -369,6 +367,7 @@
 <script setup lang="ts">
 import { ElMessageBox, ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import {
   Search,
   DocumentChecked,

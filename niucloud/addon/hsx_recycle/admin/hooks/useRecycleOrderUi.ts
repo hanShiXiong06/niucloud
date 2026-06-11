@@ -68,6 +68,33 @@ const DEVICE_STATUS_TYPE_MAP: Record<number, StatusTagType> = {
   6: "danger",
 };
 
+// 设备状态文案兜底（后端通常返回 status_name，此处用于缺失时兜底）
+const DEVICE_STATUS_TEXT_MAP: Record<number, string> = {
+  1: "待质检",
+  2: "质检中",
+  3: "已质检",
+  4: "待确认",
+  5: "已回收",
+  6: "已退回",
+  7: "已定价",
+  8: "已定价",
+  9: "已转代卖",
+};
+
+// 设备状态 → 下一步动作提示。把状态机翻译成「现在该做什么」，
+// 用于状态徽章的悬停提示，给店员明确指引。
+const DEVICE_STATUS_NEXT_MAP: Record<number, string> = {
+  1: "下一步：开始质检",
+  2: "下一步：完成质检",
+  3: "下一步：回收定价",
+  4: "下一步：确认回收（或重新定价 / 拒绝）",
+  5: "已回收，等待打款与入库",
+  6: "已退回，流程结束",
+  7: "下一步：确认回收",
+  8: "下一步：确认回收",
+  9: "已转代卖，按代卖流程跟进",
+};
+
 const ACTION_BUTTON_TYPE_MAP: Record<string, string> = {
   order_sign: "primary",
   order_check: "success",
@@ -115,6 +142,12 @@ export function useRecycleOrderUi() {
 
   const getDeviceStatusType = (status: number): string =>
     DEVICE_STATUS_TYPE_MAP[status] || "info";
+
+  const getDeviceStatusText = (status: number): string =>
+    DEVICE_STATUS_TEXT_MAP[status] || "";
+
+  const getDeviceNextStep = (status: number): string =>
+    DEVICE_STATUS_NEXT_MAP[status] || "";
 
   const getActionButtonType = (actionKey: string): string =>
     ACTION_BUTTON_TYPE_MAP[actionKey] || "default";
@@ -169,6 +202,8 @@ export function useRecycleOrderUi() {
     getStatusBadgeType,
     getStatusIcon,
     getDeviceStatusType,
+    getDeviceStatusText,
+    getDeviceNextStep,
     getActionButtonType,
     getActionIcon,
     formatDateTime,
