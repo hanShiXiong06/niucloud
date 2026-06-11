@@ -99,13 +99,9 @@
             <el-form-item prop="check_result_buyer" class="cdd-result-field"><el-input v-model="deviceForm.check_result_buyer" type="textarea" :rows="5" placeholder="可同步卖家内容后单独调整..." maxlength="500" show-word-limit resize="none" /></el-form-item>
           </section>
 
-          <section class="cdd-panel cdd-price-panel">
-            <div class="cdd-panel__title">定价</div>
-            <el-form-item prop="final_price" class="cdd-price-field">
-              <template #label><span>回收定价 <em v-if="deviceData.initial_price">参考 ¥{{ deviceData.initial_price }}</em></span></template>
-              <el-input-number v-model="deviceForm.final_price" :step="10" :precision="2" :min="0" :max="99999" controls-position="right" class="cdd-price-input" />
-            </el-form-item>
-            <el-form-item label="扣费说明" prop="remark" class="cdd-remark-field"><el-input v-model="deviceForm.remark" placeholder="扣费原因、特殊备注..." maxlength="200" clearable /></el-form-item>
+          <section class="cdd-panel">
+            <div class="cdd-panel__title">质检备注</div>
+            <el-form-item label="备注说明" prop="remark" class="cdd-remark-field"><el-input v-model="deviceForm.remark" placeholder="质检补充说明、特殊情况..." maxlength="200" clearable /></el-form-item>
           </section>
 
           <section class="cdd-panel cdd-upload-panel">
@@ -179,13 +175,9 @@
                 <el-form-item prop="check_result_buyer" class="cdd-result-field"><el-input v-model="deviceForm.check_result_buyer" type="textarea" :rows="5" placeholder="可同步卖家内容后单独调整..." maxlength="500" show-word-limit resize="none" /></el-form-item>
               </section>
 
-              <section class="cdd-panel cdd-price-panel">
-                <div class="cdd-panel__title">定价</div>
-                <el-form-item prop="final_price" class="cdd-price-field">
-                  <template #label><span>回收定价 <em v-if="deviceData.initial_price">参考 ¥{{ deviceData.initial_price }}</em></span></template>
-                  <el-input-number v-model="deviceForm.final_price" :step="10" :precision="2" :min="0" :max="99999" controls-position="right" class="cdd-price-input" />
-                </el-form-item>
-                <el-form-item label="扣费说明" prop="remark" class="cdd-remark-field"><el-input v-model="deviceForm.remark" placeholder="扣费原因、特殊备注..." maxlength="200" clearable /></el-form-item>
+              <section class="cdd-panel">
+                <div class="cdd-panel__title">质检备注</div>
+                <el-form-item label="备注说明" prop="remark" class="cdd-remark-field"><el-input v-model="deviceForm.remark" placeholder="质检补充说明、特殊情况..." maxlength="200" clearable /></el-form-item>
               </section>
 
               <section class="cdd-panel cdd-upload-panel">
@@ -472,8 +464,6 @@ const deviceForm = reactive({
   check_result_buyer: props.device.check_result_buyer || '',
   check_images: props.device.check_images_seller || props.device.check_images || '',
   check_images_buyer: props.device.check_images_buyer || '',
-  final_price: parsePrice(props.device.final_price),
-  sell_price: parsePrice(props.device.sell_price),
   remark: props.device.remark || '',
   imei: props.device.imei || '',
   info: normalizeInfo(props.device.info),
@@ -518,15 +508,6 @@ const {
   openCameraCapture: openBuyerCameraCapture,
   handleCameraFilesChange: handleBuyerCameraFilesChange
 } = useCameraUpload({ checkImages: toRef(deviceForm, 'check_images_buyer') })
-
-function parsePrice(value: any): number | undefined {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') {
-    const parsed = parseFloat(value)
-    return Number.isNaN(parsed) ? undefined : parsed
-  }
-  return undefined
-}
 
 const updateDeviceMode = () => { isMobile.value = window.innerWidth <= 980 }
 
@@ -835,8 +816,6 @@ function buildSubmitPayload(action: 'check' | 'save_draft') {
     check_images_buyer: deviceForm.check_images_buyer,
     remark: deviceForm.remark,
     check_status: action === 'check' ? 1 : undefined,
-    final_price: deviceForm.final_price,
-    sell_price: deviceForm.sell_price,
     action,
     imei: deviceForm.imei,
     model: deviceForm.model,
@@ -864,8 +843,6 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
   deviceForm.check_result_buyer = device.check_result_buyer || ''
   deviceForm.check_images = device.check_images_seller || device.check_images || ''
   deviceForm.check_images_buyer = device.check_images_buyer || ''
-  deviceForm.final_price = parsePrice(device.final_price)
-  deviceForm.sell_price = parsePrice(device.sell_price)
   deviceForm.remark = device.remark || ''
   deviceForm.imei = device.imei || ''
   deviceForm.info = normalizeInfo(device.info)

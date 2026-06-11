@@ -16,6 +16,8 @@ use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
+use app\model\sys\SysUser;
+use app\model\sys\SysUserRole;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\db\exception\DataNotFoundException;
@@ -984,7 +986,7 @@ class RecycleDeviceService extends BaseAdminService
      * @return bool
      * @throws CommonException
      */
-    public function confirmPrice(int $id, float $price, string $remark = '', ?float $sellPrice = null): bool
+    public function confirmPrice(int $id, float $price, string $remark = '', ?float $sellPrice = null, array $refurbishment = []): bool
     {
        
      
@@ -1013,9 +1015,18 @@ class RecycleDeviceService extends BaseAdminService
             if ($sellPrice !== null) {
                 $device->sell_price = $sellPrice;
             }
+            $refurbishmentData = $this->normalizeRefurbishmentDecision($refurbishment);
+            $saleDestination = $this->normalizeSaleDestination($refurbishment['sale_destination'] ?? RecycleOrderDict::SALE_DESTINATION_MALL);
             $device->remark = $remark;
             $device->price_uid = $this->uid;
             $device->price_at = time(); // 添加定价时间
+            $device->sale_destination = $saleDestination;
+            $device->refurbishment_required = $refurbishmentData['required'];
+            $device->refurbishment_assignee_uid = $refurbishmentData['assignee_uid'];
+            $device->refurbishment_assignee_name = $refurbishmentData['assignee_name'];
+            $device->refurbishment_reason = $refurbishmentData['reason'];
+            $device->refurbishment_items = $refurbishmentData['items'];
+            $device->refurbishment_estimated_cost = $refurbishmentData['estimated_cost'];
             $device->status = RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM;
             $device->update_time = time();
             
@@ -1037,6 +1048,12 @@ class RecycleDeviceService extends BaseAdminService
                 'old_price' => $oldPrice,
                 'price_change' => $price - ($oldPrice ?? 0),
                 'is_repricing' => $isRepricing,
+                'refurbishment_required' => $refurbishmentData['required'],
+                'refurbishment_assignee_uid' => $refurbishmentData['assignee_uid'],
+                'refurbishment_reason' => $refurbishmentData['reason'],
+                'refurbishment_items' => $refurbishmentData['items'],
+                'refurbishment_estimated_cost' => $refurbishmentData['estimated_cost'],
+                'sale_destination' => $saleDestination,
                 'order_id' => $device->order_id
             ];
             $this->logService->logDevicePrice($id, $priceData, $remark);
@@ -1087,6 +1104,80 @@ class RecycleDeviceService extends BaseAdminService
         }
     }
 
+    private function normalizeRefurbishmentDecision(array $data): array
+    {
+        $required = (int)($data['refurbishment_required'] ?? 0) === 1 ? 1 : 0;
+        $assigneeUid = $required ? (int)($data['refurbishment_assignee_uid'] ?? 0) : 0;
+        $assigneeName = '';
+
+        if ($required && $assigneeUid <= 0) {
+            throw new CommonException('请选择整备负责人');
+        }
+        if ($assigneeUid > 0) {
+            $allowed = SysUserRole::where([
+                ['site_id', '=', $this->site_id],
+                ['uid', '=', $assigneeUid],
+                ['status', '=', 1],
+            ])->count();
+            $user = SysUser::where([['uid', '=', $assigneeUid]])->field('uid,username,real_name')->findOrEmpty();
+            if (!$allowed || $user->isEmpty()) {
+                throw new CommonException('整备负责人不存在或不属于当前站点');
+            }
+            $assigneeName = (string)($user->real_name ?: $user->username ?: ('员工#' . $assigneeUid));
+        }
+
+        $items = $data['refurbishment_items'] ?? [];
+        if (is_string($items)) {
+            $decoded = json_decode($items, true);
+            $items = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($items)) {
+            $items = [];
+        }
+
+        $items = array_values(array_filter(array_map(function ($item) {
+            if (is_array($item)) {
+                $key = trim((string)($item['item_key'] ?? $item['key'] ?? ''));
+                $name = trim((string)($item['item_name'] ?? $item['name'] ?? ''));
+                $type = trim((string)($item['item_type'] ?? $item['type'] ?? 'other'));
+            } else {
+                $key = '';
+                $name = trim((string)$item);
+                $type = 'other';
+            }
+            if ($name === '') {
+                return null;
+            }
+            return ['item_key' => $key, 'item_name' => $name, 'item_type' => $type ?: 'other'];
+        }, $items)));
+
+        return [
+            'required' => $required,
+            'assignee_uid' => $assigneeUid,
+            'assignee_name' => $assigneeName,
+            'reason' => $required ? trim((string)($data['refurbishment_reason'] ?? '')) : '',
+            'items' => $required ? json_encode($items, JSON_UNESCAPED_UNICODE) : '[]',
+            'estimated_cost' => $required ? round((float)($data['refurbishment_estimated_cost'] ?? 0), 2) : 0,
+        ];
+    }
+
+    private function normalizeSaleDestination($value): string
+    {
+        $destination = trim((string)$value);
+        $allowed = [
+            RecycleOrderDict::SALE_DESTINATION_MALL,
+            RecycleOrderDict::SALE_DESTINATION_PEER,
+            RecycleOrderDict::SALE_DESTINATION_HOLD,
+        ];
+        if ($destination === '') {
+            return RecycleOrderDict::SALE_DESTINATION_MALL;
+        }
+        if (!in_array($destination, $allowed, true)) {
+            throw new CommonException('销售去向不正确');
+        }
+        return $destination;
+    }
+
     /**
      * 回收设备
      * @param int $id
@@ -1128,12 +1219,20 @@ class RecycleDeviceService extends BaseAdminService
             
             // 尝试同步更新订单状态
             $this->syncOrderStatus($device->order_id, RecycleOrderDict::DEVICE_STATUS_RECYCLED);
-            
-           
-            
-            
-            
+
             Db::commit();
+
+            if ((int)($device->refurbishment_required ?? 0) === 1) {
+                try {
+                    (new RecyclePrintSceneService())->autoPrintAfterRefurbishmentRequired((int)$device->id);
+                } catch (\Throwable $printException) {
+                    Log::warning('整备标签自动打印失败：' . $printException->getMessage(), [
+                        'site_id' => $this->site_id,
+                        'device_id' => (int)$device->id,
+                    ]);
+                }
+            }
+
             return true;
         } catch (\Exception $e) {
             Db::rollback();

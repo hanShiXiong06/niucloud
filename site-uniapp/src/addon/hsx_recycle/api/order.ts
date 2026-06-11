@@ -101,6 +101,14 @@ export function confirmPrice(id: number | string, data: Record<string, any>) {
     return request.put(`recycle/recycle_device/${id}/confirm_price`, data)
 }
 
+export function getStaffOptions() {
+    return request.get('recycle/stats/getUserList')
+}
+
+export function getRefurbishmentOptions() {
+    return request.get('recycle/recycle_device/refurbishment_options')
+}
+
 export function batchRecycleDevices(data: Record<string, any>) {
     return request.post('recycle/recycle_device/batch_recycle', data)
 }

@@ -41,7 +41,7 @@
                         ></u-radio>
                     </u-radio-group>
                     <view class="section-tip">
-                        {{ checkConclusion === 2 ? '该设备将按退回处理，无需填写回收报价。' : '完成质检后可继续定价、确认回收或进入后续处理。' }}
+                        {{ checkConclusion === 2 ? '该设备将按退回处理，质检不处理回收定价。' : '完成质检后进入回收定价，由定价环节决定报价和整备安排。' }}
                     </view>
                 </view>
 
@@ -146,30 +146,6 @@
                     </view>
                 </view>
 
-                <view v-if="checkConclusion !== 2" class="section">
-                    <view class="section-title">
-                        <text>回收报价</text>
-                        <text class="section-suffix">选填</text>
-                    </view>
-                    <view class="price-box">
-                        <text class="price-box__symbol">¥</text>
-                        <u-input
-                            v-model="formData.final_price"
-                            class="price-box__input"
-                            type="number"
-                            placeholder="选填，可后续在定价环节处理"
-                            border="none"
-                            clearable
-                            inputAlign="right"
-                            fontSize="28rpx"
-                            placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
-                        ></u-input>
-                    </view>
-                    <view v-if="Number(deviceData?.initial_price || 0) > 0" class="section-tip">
-                        参考预估：¥{{ formatMoney(deviceData?.initial_price || 0) }}
-                    </view>
-                </view>
-
                 <view class="section">
                     <view class="section-title">备注说明</view>
                     <u-textarea
@@ -250,7 +226,6 @@ const checkImages = ref('')
 const imageUploading = ref(false)
 const formData = ref({
     check_result_seller: '',
-    final_price: 0,
     remark: ''
 })
 const summaryAutoSync = ref(true)
@@ -314,10 +289,8 @@ const initPopup = async () => {
     }
 
     originalInfo.value = normalizeObject(deviceData.value.info)
-    const existingFinalPrice = deviceData.value.final_price
     formData.value = {
         check_result_seller: deviceData.value.check_result_seller || deviceData.value.check_result || '',
-        final_price: existingFinalPrice === undefined || existingFinalPrice === null || existingFinalPrice === '' ? '' : String(existingFinalPrice),
         remark: deviceData.value.remark || ''
     }
     checkConclusion.value = Number(deviceData.value.status) === 6 ? 2 : 1
@@ -589,7 +562,6 @@ const getSuccessMessage = (action: 'check' | 'save_draft') => {
 }
 
 const buildSubmitPayload = (action: 'check' | 'save_draft') => {
-    const paymentPrice = checkConclusion.value === 2 ? '' : normalizeOptionalNumber(formData.value.final_price)
     const checkMeta = buildCheckMeta()
     const infoFields = buildInfoFields()
     const sellerSummary = normalizeSummaryText(formData.value.check_result_seller) || generatedSummary.value
@@ -602,7 +574,6 @@ const buildSubmitPayload = (action: 'check' | 'save_draft') => {
         goods_category: resolveGoodsCategory(),
         check_meta: checkMeta
     }
-    const sellPrice = normalizeOptionalNumber(deviceData.value.sell_price)
 
     return {
         action,
@@ -613,8 +584,6 @@ const buildSubmitPayload = (action: 'check' | 'save_draft') => {
         check_images: sellerImages,
         check_images_seller: sellerImages,
         check_images_buyer: buyerImages,
-        final_price: paymentPrice,
-        sell_price: sellPrice === '' ? 0 : sellPrice,
         remark: formData.value.remark.trim(),
         imei: String(deviceData.value.imei || deviceData.value.user_sn || ''),
         check_template_id: Number(selectedTemplateId.value || 0),
@@ -801,13 +770,6 @@ const normalizeBoolean = (value: any) => {
 }
 
 const normalizeSummaryText = (value: any) => String(value || '').trim()
-
-const normalizeOptionalNumber = (value: any) => {
-    const text = String(value ?? '').trim()
-    if (!text) return ''
-    const amount = Number(text)
-    return Number.isFinite(amount) ? amount : ''
-}
 
 const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 

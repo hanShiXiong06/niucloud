@@ -52,7 +52,13 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
       system_version: data?.system_version || '',
       warranty_info: data?.warranty_info || '',
       capacity: data?.capacity || '',
-      color: data?.color || ''
+      color: data?.color || '',
+      refurbishment_required: Number(data?.refurbishment_required || 0),
+      refurbishment_assignee_uid: Number(data?.refurbishment_assignee_uid || 0),
+      refurbishment_assignee_name: data?.refurbishment_assignee_name || '',
+      refurbishment_reason: data?.refurbishment_reason || '',
+      refurbishment_items: data?.refurbishment_items || [],
+      refurbishment_estimated_cost: data?.refurbishment_estimated_cost || 0
     }
   }
 
@@ -102,7 +108,13 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
     system_version: '',
     warranty_info: '',
     capacity: '',
-    color: ''
+    color: '',
+    refurbishment_required: 0,
+    refurbishment_assignee_uid: 0,
+    refurbishment_assignee_name: '',
+    refurbishment_reason: '',
+    refurbishment_items: [] as any,
+    refurbishment_estimated_cost: 0
   })
 
   const selectedDevices = ref<Record<string | number, any[]>>({})

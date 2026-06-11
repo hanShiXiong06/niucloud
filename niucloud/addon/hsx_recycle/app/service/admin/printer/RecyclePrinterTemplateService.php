@@ -653,6 +653,15 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'price_time' => date('Y-m-d H:i:s'),
             'price_remark' => '市场行情调整',
 
+            // 整备信息
+            'refurbishment_required' => '1',
+            'refurbishment_required_name' => '需要整备',
+            'refurbishment_assignee_uid' => '10001',
+            'refurbishment_assignee_name' => '李四',
+            'refurbishment_items_text' => '更换电池、清洁消毒',
+            'refurbishment_reason' => '电池效率低于 80%，建议更换电池后销售',
+            'refurbishment_estimated_cost' => '120.00',
+
             // 快递信息
             'express_company' => '顺丰速运',
             'express_no' => 'SF1234567890',
@@ -877,6 +886,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
         $checkResultSeller = (string)($device['check_result_seller'] ?? '');
         $checkResultBuyer = (string)($device['check_result_buyer'] ?? '');
         $mainCheckResult = (string)$this->firstNotBlank($checkResultSeller, $checkResult, $checkResultBuyer);
+        $refurbishmentRequired = (int)($device['refurbishment_required'] ?? 0) === 1;
+        $refurbishmentItemsText = $this->formatRefurbishmentItemsText($device['refurbishment_items'] ?? []);
         $battery = $this->firstNotBlank(
             $checkMeta['battery'] ?? null,
             $deviceInfo['battery'] ?? null,
@@ -996,6 +1007,15 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'before_price' => $device['before_price'] ?? '',
             'price_remark' => $device['price_remark'] ?? '',
 
+            // 整备信息
+            'refurbishment_required' => $refurbishmentRequired ? '1' : '0',
+            'refurbishment_required_name' => $refurbishmentRequired ? '需要整备' : '无需整备',
+            'refurbishment_assignee_uid' => (string)($device['refurbishment_assignee_uid'] ?? 0),
+            'refurbishment_assignee_name' => $device['refurbishment_assignee_name'] ?? '',
+            'refurbishment_items_text' => $refurbishmentItemsText,
+            'refurbishment_reason' => $device['refurbishment_reason'] ?? '',
+            'refurbishment_estimated_cost' => number_format((float)($device['refurbishment_estimated_cost'] ?? 0), 2),
+
             // 状态信息
             'status' => (string)($device['status'] ?? 1),
             'status_name' => $status_names[$device['status'] ?? 1] ?? '',
@@ -1057,6 +1077,31 @@ class RecyclePrinterTemplateService extends BaseAdminService
             // 其他常用字段
             'site_name' => '回收中心'
         ];
+    }
+
+    private function formatRefurbishmentItemsText($items): string
+    {
+        if (is_string($items)) {
+            $decoded = json_decode($items, true);
+            $items = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($items)) {
+            return '';
+        }
+
+        $names = [];
+        foreach ($items as $item) {
+            if (is_array($item)) {
+                $name = trim((string)($item['item_name'] ?? $item['name'] ?? ''));
+            } else {
+                $name = trim((string)$item);
+            }
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+
+        return implode('、', array_values(array_unique($names)));
     }
 
     public function getOrderPrintData(int $orderId): array

@@ -94,6 +94,8 @@ class VariableReplaceService extends BaseAdminService
             'inspection_summary', // 验机摘要
             'remark',          // 备注
             'price_remark',    // 定价备注
+            'refurbishment_reason', // 整备说明
+            'refurbishment_items_text', // 整备项目
             'description',     // 描述
             'note',           // 说明
             'comment'         // 评论

@@ -46,6 +46,37 @@ class PrinterSceneDict
                     ],
                 ],
             ],
+            'refurbishment_label' => [
+                'scene_key' => 'refurbishment_label',
+                'trigger_key' => 'device.recycled.refurbishment_required',
+                'scene_name' => '整备标签打印',
+                'biz_type' => 'device',
+                'template_type' => 'device_label',
+                'trigger_name' => '设备确认回收且需整备后',
+                'auto_print' => 0,
+                'idempotency_scope' => 'site_scene_device',
+                'description' => '用于需要整备的设备标签打印。设备确认回收后，如已在回收定价中标记需整备，可自动打印整备标签。',
+                'trigger_options' => [
+                    [
+                        'key' => 'device.recycled.refurbishment_required',
+                        'name' => '设备确认回收且需整备后',
+                        'description' => '客户确认出售，后台将设备确认回收后触发。',
+                    ],
+                ],
+                'condition_config' => [
+                    'button' => [
+                        'enabled' => 1,
+                        'text' => '打印整备标签',
+                        'position' => 'device_actions',
+                        'visible_device_status' => [4, 5],
+                        'confirm_required' => 1,
+                    ],
+                    'trigger' => [
+                        'key' => 'device.recycled.refurbishment_required',
+                        'name' => '设备确认回收且需整备后',
+                    ],
+                ],
+            ],
             'consignment_receipt' => [
                 'scene_key' => 'consignment_receipt',
                 'trigger_key' => 'consignment.created',

@@ -362,6 +362,18 @@ class RecyclePrintSceneService extends BaseAdminService
     }
 
     /**
+     * 设备确认回收且需整备后自动打印
+     * @param int $deviceId
+     * @return array
+     */
+    public function autoPrintAfterRefurbishmentRequired(int $deviceId): array
+    {
+        return (new RecyclePrintTriggerService())->auto('device.recycled.refurbishment_required', [
+            'device_id' => $deviceId,
+        ]);
+    }
+
+    /**
      * 根据触发事件解析打印计划
      * @param string $triggerKey
      * @param array $payload
@@ -1524,6 +1536,11 @@ class RecyclePrintSceneService extends BaseAdminService
                 ['key' => 'check_info', 'label' => '质检信息', 'sample' => '外观正常; 功能正常'],
                 ['key' => 'price', 'label' => '回收价格', 'sample' => '3200.00'],
                 ['key' => 'order_no', 'label' => '订单编号', 'sample' => 'R202605250001'],
+                ['key' => 'refurbishment_required_name', 'label' => '是否整备', 'sample' => '需要整备'],
+                ['key' => 'refurbishment_assignee_name', 'label' => '整备负责人', 'sample' => '李四'],
+                ['key' => 'refurbishment_items_text', 'label' => '整备项目', 'sample' => '更换电池、清洁消毒'],
+                ['key' => 'refurbishment_reason', 'label' => '整备说明', 'sample' => '电池效率低于 80%，建议更换电池'],
+                ['key' => 'refurbishment_estimated_cost', 'label' => '预估整备成本', 'sample' => '120.00'],
             ],
             'order' => [
                 ['key' => 'order_no', 'label' => '订单编号', 'sample' => 'R202605250001'],

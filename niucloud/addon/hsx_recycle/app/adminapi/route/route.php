@@ -139,6 +139,8 @@ Route::group('recycle', function () {
      // 查询手机imei的信息
     Route::get('recycle_device/imei_info/:imei', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@getImeiInfo');
     Route::get('recycle_device/scan_search', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@scanSearch');
+    Route::get('recycle_device/refurbishment_options', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@refurbishmentOptions');
+    Route::get('recycle_device/sale_destination_options', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@saleDestinationOptions');
     // 设备管理
     Route::get('recycle_device/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@getInfo');
     Route::get('recycle_device/:id/cost_adjust_ability', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@costAdjustAbility');

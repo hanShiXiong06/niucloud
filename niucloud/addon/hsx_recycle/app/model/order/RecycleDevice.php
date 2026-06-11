@@ -72,6 +72,7 @@ class RecycleDevice extends BaseModel
         'confirm_status_name',
         'dispose_type_name',
         'dispose_status_name',
+        'sale_destination_name',
         'check_template_name',
     ];
 
@@ -116,6 +117,12 @@ class RecycleDevice extends BaseModel
     public function getDisposeStatusNameAttr($value, $data): string
     {
         return RecycleOrderDict::getDisposeStatus($data['dispose_status'] ?? RecycleOrderDict::DISPOSE_STATUS_PENDING) ?: '未处置';
+    }
+
+    public function getSaleDestinationNameAttr($value, $data): string
+    {
+        $destination = (string)($data['sale_destination'] ?? RecycleOrderDict::SALE_DESTINATION_MALL);
+        return RecycleOrderDict::SALE_DESTINATION_TEXT[$destination] ?? '商城销售';
     }
 
     /**

@@ -49,6 +49,10 @@ class RecycleOrderDict
     const DISPOSE_TYPE_RECYCLE = 'recycle';      // 普通回收
     const DISPOSE_TYPE_RETURN = 'return';        // 退回
     const DISPOSE_TYPE_CONSIGN = 'consign';      // 代卖
+    // 销售去向
+    const SALE_DESTINATION_MALL = 'mall';         // 商城销售
+    const SALE_DESTINATION_PEER = 'peer';         // 同行出货
+    const SALE_DESTINATION_HOLD = 'hold';         // 暂存
     // 设备处置状态
     const DISPOSE_STATUS_PENDING = 0;            // 未处置
     const DISPOSE_STATUS_RECYCLED = 1;           // 已回收
@@ -57,6 +61,31 @@ class RecycleOrderDict
     // 质检结果状态
     const CHECK_STATUS_PASS = 1;               // 质检通过
     const CHECK_STATUS_RETURN = 2;             // 退回
+
+    const SALE_DESTINATION_TEXT = [
+        self::SALE_DESTINATION_MALL => '商城销售',
+        self::SALE_DESTINATION_PEER => '同行出货',
+        self::SALE_DESTINATION_HOLD => '暂存',
+    ];
+
+    const SALE_DESTINATION_DESC = [
+        self::SALE_DESTINATION_MALL => '入库和整备完成后进入拍照、销售定价、上架链路',
+        self::SALE_DESTINATION_PEER => '入库后进入同行出货处理链路',
+        self::SALE_DESTINATION_HOLD => '入库后暂存，不自动进入销售处理链路',
+    ];
+
+    public static function getSaleDestinationOptions(): array
+    {
+        return array_map(
+            fn (string $value, string $label) => [
+                'value' => $value,
+                'label' => $label,
+                'description' => self::SALE_DESTINATION_DESC[$value] ?? '',
+            ],
+            array_keys(self::SALE_DESTINATION_TEXT),
+            array_values(self::SALE_DESTINATION_TEXT)
+        );
+    }
 
     // 设备操作类型
     const DEVICE_OP_TYPE_CHECK = 2;            // 质检

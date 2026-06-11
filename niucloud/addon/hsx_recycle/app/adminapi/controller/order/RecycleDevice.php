@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\adminapi\controller\order;
 
+use addon\hsx_recycle\app\dict\order\RecycleRefurbishmentDict;
+use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceCostAdjustmentService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrinterTemplateService;
@@ -325,17 +327,41 @@ class RecycleDevice extends BaseAdminController
      */
     public function confirmPrice(int $id)
     {
-        $data = $this->request->params([
+        $defaults = [
             ['final_price', ''],
             ['sell_price', ''],
-            ['remark', '']
-        ]);
+            ['remark', ''],
+            ['sale_destination', RecycleOrderDict::SALE_DESTINATION_MALL],
+            ['refurbishment_required', 0],
+            ['refurbishment_assignee_uid', 0],
+            ['refurbishment_reason', ''],
+            ['refurbishment_items', []],
+            ['refurbishment_estimated_cost', 0]
+        ];
+        $data = $this->request->params($defaults);
+        $requestData = $this->request->param();
+        if (is_array($requestData)) {
+            $payload = isset($requestData['data']) && is_array($requestData['data']) ? $requestData['data'] : $requestData;
+            foreach ($defaults as $item) {
+                $key = $item[0];
+                if (array_key_exists($key, $payload)) {
+                    $data[$key] = $payload[$key];
+                }
+            }
+        }
       
         // 参数验证
         $this->validate->scene('price')->check(array_merge(['id' => $id], $data));
 
         $sellPrice = ($data['sell_price'] === '' || $data['sell_price'] === null) ? null : (float)$data['sell_price'];
-        return success($this->service->confirmPrice($id, (float)$data['final_price'], $data['remark'], $sellPrice));
+        return success($this->service->confirmPrice($id, (float)$data['final_price'], $data['remark'], $sellPrice, [
+            'sale_destination' => $data['sale_destination'],
+            'refurbishment_required' => $data['refurbishment_required'],
+            'refurbishment_assignee_uid' => $data['refurbishment_assignee_uid'],
+            'refurbishment_reason' => $data['refurbishment_reason'],
+            'refurbishment_items' => $data['refurbishment_items'],
+            'refurbishment_estimated_cost' => $data['refurbishment_estimated_cost'],
+        ]));
     }
 
     /**
@@ -353,6 +379,24 @@ class RecycleDevice extends BaseAdminController
         $this->validate->scene('recycle')->check(array_merge(['id' => $id], $data));
 
         return success($this->service->recycle($id, $data['remark']));
+    }
+
+    /**
+     * 整备配置选项
+     * @return mixed
+     */
+    public function refurbishmentOptions()
+    {
+        return success([
+            'items' => RecycleRefurbishmentDict::getItemOptions(),
+        ]);
+    }
+
+    public function saleDestinationOptions()
+    {
+        return success([
+            'items' => RecycleOrderDict::getSaleDestinationOptions(),
+        ]);
     }
 
     /**

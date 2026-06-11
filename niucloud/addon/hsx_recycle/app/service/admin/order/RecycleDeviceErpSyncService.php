@@ -84,6 +84,8 @@ class RecycleDeviceErpSyncService extends BaseAdminService
     {
         $isConsign = (string)($device['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN
             || (int)($device['status'] ?? 0) === RecycleOrderDict::DEVICE_STATUS_CONSIGNED;
+        $memberId = (int)($device['member_id'] ?? ($device['order']['member_id'] ?? 0));
+        $counterpartySourceId = $memberId > 0 ? $memberId : (int)($device['order_id'] ?? 0);
 
         return [
             'source_id' => (int)($device['order_id'] ?? 0),
@@ -99,6 +101,21 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'color' => (string)($device['color'] ?? ''),
             'ownership_type' => $isConsign ? 'consign' : 'owned',
             'purchase_cost' => $isConsign ? 0 : round((float)($device['final_price'] ?? 0), 2),
+            'counterparty' => [
+                'source_plugin' => $memberId > 0 ? 'niucloud' : 'hsx_recycle',
+                'source_type' => $memberId > 0 ? 'member' : 'order_customer',
+                'source_id' => $counterpartySourceId,
+                'counterparty_type' => 'individual',
+                'role_type' => $isConsign ? 'consignor' : 'supplier',
+                'name' => (string)($device['order']['customer_name'] ?? ''),
+                'mobile' => (string)($device['order']['customer_phone'] ?? ''),
+                'contact_name' => (string)($device['order']['customer_name'] ?? ''),
+            ],
+            'paid_amount' => $isConsign ? 0 : round((float)($device['pay_amount'] ?? 0), 2),
+            'settlement_status' => $isConsign
+                ? 'consignment'
+                : ((int)($device['pay_status'] ?? 0) === 1 ? 'paid' : 'unpaid'),
+            'sale_destination' => (string)($device['sale_destination'] ?? RecycleOrderDict::SALE_DESTINATION_MALL),
             'suggested_sale_price' => round((float)($device['sell_price'] ?? 0), 2),
             'acquired_at' => (int)($device['pay_time'] ?? $device['update_at'] ?? time()),
             'check_snapshot' => [
@@ -112,11 +129,38 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 'check_uid' => (int)($device['check_uid'] ?? 0),
                 'check_at' => (int)($device['check_at'] ?? 0),
             ],
-            'pricing_snapshot' => [
+            'recycle_pricing_snapshot' => [
                 'recycle_price' => round((float)($device['final_price'] ?? 0), 2),
                 'suggested_sale_price' => round((float)($device['sell_price'] ?? 0), 2),
+                'sale_destination' => (string)($device['sale_destination'] ?? RecycleOrderDict::SALE_DESTINATION_MALL),
                 'price_uid' => (int)($device['price_uid'] ?? 0),
                 'price_at' => (int)($device['price_at'] ?? 0),
+            ],
+            'pricing_snapshot' => [
+                'pricing_type' => 'recycle',
+                'recycle_price' => round((float)($device['final_price'] ?? 0), 2),
+                'suggested_sale_price' => round((float)($device['sell_price'] ?? 0), 2),
+                'sale_destination' => (string)($device['sale_destination'] ?? RecycleOrderDict::SALE_DESTINATION_MALL),
+                'price_uid' => (int)($device['price_uid'] ?? 0),
+                'price_at' => (int)($device['price_at'] ?? 0),
+            ],
+            'refurbishment' => [
+                'required' => (bool)($device['refurbishment_required'] ?? false),
+                'decision_source' => array_key_exists('refurbishment_required', $device) ? 'hsx_recycle' : 'default',
+                'reason' => trim((string)($device['refurbishment_reason'] ?? '')),
+                'suggested_items' => $this->normalizeRefurbishmentItems($device['refurbishment_items'] ?? []),
+                'estimated_cost' => round((float)($device['refurbishment_estimated_cost'] ?? 0), 2),
+                'decided_by' => [
+                    'type' => 'staff',
+                    'id' => (int)($device['price_uid'] ?? $device['check_uid'] ?? 0),
+                    'name' => '',
+                ],
+                'assignee' => [
+                    'type' => 'staff',
+                    'id' => (int)($device['refurbishment_assignee_uid'] ?? 0),
+                    'name' => (string)($device['refurbishment_assignee_name'] ?? ''),
+                ],
+                'decided_at' => (int)($device['price_at'] ?? $device['check_at'] ?? 0),
             ],
             'consignment' => $isConsign ? [
                 'order_id' => (int)($device['consignment_order_id'] ?? 0),
@@ -124,6 +168,15 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 'listing_price' => round((float)($device['consignment_order']['listing_price'] ?? 0), 2),
             ] : null,
         ];
+    }
+
+    private function normalizeRefurbishmentItems($items): array
+    {
+        if (is_string($items)) {
+            $decoded = json_decode($items, true);
+            $items = is_array($decoded) ? $decoded : [];
+        }
+        return is_array($items) ? array_values($items) : [];
     }
 
     private function makeEventId(): string

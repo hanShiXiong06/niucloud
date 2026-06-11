@@ -78,7 +78,8 @@ ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `settlement_mode` varchar(20) NOT NULL DEFAULT 'recycle' COMMENT '结算模式：recycle-普通回收，consign-代卖' AFTER `last_cost_adjust_no`,
   ADD COLUMN `dispose_type` varchar(20) NOT NULL DEFAULT 'pending' COMMENT '处置类型：pending-未处置，recycle-普通回收，return-退回，consign-代卖' AFTER `settlement_mode`,
   ADD COLUMN `dispose_status` tinyint NOT NULL DEFAULT 0 COMMENT '处置状态：0-未处置，1-已回收，2-已退回，3-已转代卖' AFTER `dispose_type`,
-  ADD COLUMN `consignment_order_id` int NOT NULL DEFAULT 0 COMMENT '关联代卖订单ID' AFTER `dispose_status`,
+  ADD COLUMN `sale_destination` varchar(20) NOT NULL DEFAULT 'mall' COMMENT '销售去向：mall-商城销售，peer-同行出货，hold-暂存' AFTER `dispose_status`,
+  ADD COLUMN `consignment_order_id` int NOT NULL DEFAULT 0 COMMENT '关联代卖订单ID' AFTER `sale_destination`,
   ADD COLUMN `return_order_id` int NOT NULL DEFAULT 0 COMMENT '关联退回订单ID' AFTER `consignment_order_id`,
   ADD COLUMN `return_time` int NOT NULL DEFAULT 0 COMMENT '退回处理时间' AFTER `return_order_id`,
   ADD COLUMN `return_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '退回备注' AFTER `return_time`;
@@ -417,3 +418,12 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_template_binding` (
   UNIQUE KEY `uk_site_target_scene` (`site_id`,`target_type`,`target_id`,`scene_key`),
   KEY `idx_site_scene` (`site_id`,`scene_key`,`status`)
 ) COMMENT='回收型号模板绑定表';
+
+ALTER TABLE `{{prefix}}recycle_device`
+  ADD COLUMN `refurbishment_required` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要整备：0-否，1-是' AFTER `price_remark`,
+  ADD COLUMN `refurbishment_assignee_uid` int NOT NULL DEFAULT 0 COMMENT '建议整备负责人ID' AFTER `refurbishment_required`,
+  ADD COLUMN `refurbishment_assignee_name` varchar(100) NOT NULL DEFAULT '' COMMENT '建议整备负责人姓名' AFTER `refurbishment_assignee_uid`,
+  ADD COLUMN `refurbishment_reason` varchar(500) NOT NULL DEFAULT '' COMMENT '整备原因' AFTER `refurbishment_assignee_name`,
+  ADD COLUMN `refurbishment_items` text COMMENT '建议整备项目JSON' AFTER `refurbishment_reason`,
+  ADD COLUMN `refurbishment_estimated_cost` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '预估整备成本' AFTER `refurbishment_items`,
+  ADD COLUMN  `sale_destination` varchar(20) NOT NULL DEFAULT 'mall' COMMENT '销售去向：mall-商城销售，peer-同行出货，hold-暂存';

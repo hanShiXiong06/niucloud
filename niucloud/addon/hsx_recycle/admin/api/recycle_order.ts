@@ -103,6 +103,17 @@ export function confirmPrice(orderId: number, data: any) {
   return request.put(
     `/recycle/recycle_device/${orderId}/confirm_price`,data);
 }
+
+// 获取整备选项
+export function getRefurbishmentOptions() {
+  return request.get("/recycle/recycle_device/refurbishment_options");
+}
+
+// 获取销售去向选项
+export function getSaleDestinationOptions() {
+  return request.get("/recycle/recycle_device/sale_destination_options");
+}
+
 // 获取商户的收款信息
 export function getMerchantPayInfo(memberId: number) {
   return request.get(

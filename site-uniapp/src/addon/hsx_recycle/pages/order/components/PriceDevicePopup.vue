@@ -66,11 +66,11 @@
                         <view class="price-compare">
                             <view v-if="device.initial_price && Number(device.initial_price) > 0" class="price-item">
                                 <text class="price-label">初始报价</text>
-                                <text class="price-value price-value--initial">¥{{ device.initial_price }}</text>
+                                <text class="price-value price-value--initial">¥{{ amountText(device.initial_price) }}</text>
                             </view>
                             <view v-if="device.before_price && device.before_price != device.initial_price" class="price-item">
                                 <text class="price-label">上次定价</text>
-                                <text class="price-value price-value--before">¥{{ device.before_price }}</text>
+                                <text class="price-value price-value--before">¥{{ amountText(device.before_price) }}</text>
                             </view>
                         </view>
                     </view>
@@ -96,7 +96,7 @@
                             ></u-input>
                         </view>
                         <view v-if="device.initial_price && Number(device.initial_price) > 0" class="text-[22rpx] text-[#999] mt-[8rpx]">
-                            参考预估：¥{{ device.initial_price }}
+                            参考预估：¥{{ amountText(device.initial_price) }}
                         </view>
                     </view>
 
@@ -130,6 +130,68 @@
                             count
                         ></u-textarea>
                     </view>
+
+                    <view class="form-section">
+                        <view class="section-title">整备安排</view>
+                        <view class="refurbish-toggle" @click="formData.refurbishment_required = formData.refurbishment_required === 1 ? 0 : 1">
+                            <view>
+                                <view class="refurbish-toggle__title">是否需要整备</view>
+                                <view class="refurbish-toggle__desc">默认无需整备；开启后入库到 ERP 会自动生成整备工单。</view>
+                            </view>
+                            <u-switch v-model="formData.refurbishment_required" :activeValue="1" :inactiveValue="0" size="22"></u-switch>
+                        </view>
+
+                        <view v-if="formData.refurbishment_required === 1" class="refurbish-form">
+                            <view class="form-label">整备负责人 <text class="required">*</text></view>
+                            <picker :range="staffOptions" range-key="label" @change="handleStaffChange">
+                                <view class="picker-field">
+                                    <text :class="{ placeholder: !selectedStaffName }">{{ selectedStaffName || '请选择负责人' }}</text>
+                                    <text class="nc-iconfont nc-icon-youV6xx"></text>
+                                </view>
+                            </picker>
+
+                            <view class="form-label mt-24">建议整备项目</view>
+                            <view class="preset-grid">
+                                <view
+                                    v-for="item in refurbishmentPresets"
+                                    :key="item.key"
+                                    :class="['preset-item', { active: formData.refurbishment_item_keys.includes(item.key) }]"
+                                    @click="toggleRefurbishmentItem(item.key)"
+                                >
+                                    {{ item.name }}
+                                </view>
+                            </view>
+                            <u-input
+                                v-model="formData.refurbishment_custom_item"
+                                placeholder="其他项目，例如：更换尾插、补胶"
+                                border="surround"
+                                class="mt-16"
+                            ></u-input>
+
+                            <view class="form-label mt-24">预估整备成本</view>
+                            <view class="price-input-wrapper">
+                                <text class="price-symbol">¥</text>
+                                <u-input
+                                    v-model="formData.refurbishment_estimated_cost"
+                                    type="number"
+                                    placeholder="选填"
+                                    class="price-input"
+                                    border="none"
+                                    inputAlign="right"
+                                    fontSize="30rpx"
+                                ></u-input>
+                            </view>
+
+                            <view class="form-label mt-24">整备说明</view>
+                            <u-textarea
+                                v-model="formData.refurbishment_reason"
+                                placeholder="例如：电池效率低，建议更换电池后销售"
+                                :maxlength="300"
+                                :height="100"
+                                count
+                            ></u-textarea>
+                        </view>
+                    </view>
                 </view>
             </scroll-view>
 
@@ -155,7 +217,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { confirmPrice, getDevice } from '@/addon/hsx_recycle/api/order'
+import { confirmPrice, getDevice, getRefurbishmentOptions, getStaffOptions } from '@/addon/hsx_recycle/api/order'
 import { img } from '@/utils/common'
 import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
 
@@ -175,12 +237,31 @@ const previewUrls = ref<string[]>([])
 const previewCurrent = ref(0)
 const deviceDetail = ref<any>(null)
 const device = computed(() => deviceDetail.value || props.deviceData || {})
+const staffOptions = ref<Array<{ uid: number, label: string }>>([])
+const refurbishmentPresets = ref<Array<{ key: string, name: string, type: string }>>([])
 
 const formData = ref({
     final_price: '',
     sell_price: '',
-    remark: ''
+    remark: '',
+    refurbishment_required: 0,
+    refurbishment_assignee_uid: 0,
+    refurbishment_reason: '',
+    refurbishment_item_keys: [] as string[],
+    refurbishment_custom_item: '',
+    refurbishment_estimated_cost: ''
 })
+
+const selectedStaffName = computed(() => {
+    const uid = Number(formData.value.refurbishment_assignee_uid || 0)
+    return staffOptions.value.find((item) => Number(item.uid) === uid)?.label || ''
+})
+
+const amountText = (value: any) => {
+    const amount = Number(value || 0)
+    if (!Number.isFinite(amount)) return '0'
+    return Number.isInteger(amount) ? String(amount) : amount.toFixed(2)
+}
 
 type ImageItem = {
     url: string
@@ -228,10 +309,13 @@ watch(() => props.visible, (val) => {
         deviceDetail.value = props.deviceData
         const fp = props.deviceData.final_price
         formData.value = {
-            final_price: (fp && Number(fp) > 0) ? fp : (props.deviceData.initial_price || ''),
-            sell_price: props.deviceData.sell_price || '',
-            remark: props.deviceData.remark || ''
+            final_price: (fp && Number(fp) > 0) ? amountText(fp) : (props.deviceData.initial_price ? amountText(props.deviceData.initial_price) : ''),
+            sell_price: props.deviceData.sell_price ? amountText(props.deviceData.sell_price) : '',
+            remark: props.deviceData.remark || '',
+            ...buildRefurbishmentForm(props.deviceData)
         }
+        loadStaffOptions()
+        loadRefurbishmentOptions()
         loadDeviceDetail()
     } else if (!val) {
         deviceDetail.value = null
@@ -253,15 +337,108 @@ const loadDeviceDetail = async () => {
         }
         const fp = deviceDetail.value.final_price
         formData.value = {
-            final_price: (fp && Number(fp) > 0) ? fp : (deviceDetail.value.initial_price || ''),
-            sell_price: deviceDetail.value.sell_price || '',
-            remark: deviceDetail.value.remark || ''
+            final_price: (fp && Number(fp) > 0) ? amountText(fp) : (deviceDetail.value.initial_price ? amountText(deviceDetail.value.initial_price) : ''),
+            sell_price: deviceDetail.value.sell_price ? amountText(deviceDetail.value.sell_price) : '',
+            remark: deviceDetail.value.remark || '',
+            ...buildRefurbishmentForm(deviceDetail.value)
         }
     } catch (error) {
         // 图片只是辅助信息，加载失败不阻断定价。
     } finally {
         detailLoading.value = false
     }
+}
+
+const loadStaffOptions = async () => {
+    try {
+        const res: any = await getStaffOptions()
+        const rows = Array.isArray(res?.data) ? res.data : []
+        staffOptions.value = rows.map((item: any) => ({
+            uid: Number(item.uid),
+            label: item.real_name || item.username || `员工#${item.uid}`
+        }))
+        ensureAssigneeOption(device.value)
+    } catch (error) {
+        staffOptions.value = []
+        ensureAssigneeOption(device.value)
+    }
+}
+
+const ensureAssigneeOption = (source: any) => {
+    const uid = Number(source?.refurbishment_assignee_uid || 0)
+    if (uid <= 0 || staffOptions.value.some((item) => Number(item.uid) === uid)) return
+    staffOptions.value.unshift({
+        uid,
+        label: source?.refurbishment_assignee_name || `员工#${uid}`
+    })
+}
+
+const loadRefurbishmentOptions = async () => {
+    try {
+        const res: any = await getRefurbishmentOptions()
+        refurbishmentPresets.value = res?.data?.items || []
+        formData.value = {
+            ...formData.value,
+            ...buildRefurbishmentForm(device.value)
+        }
+    } catch (error) {
+        refurbishmentPresets.value = []
+    }
+}
+
+const parseRefurbishmentItems = (value: any) => {
+    if (!value) return { keys: [] as string[], custom: '' }
+    let items = value
+    if (typeof value === 'string') {
+        try { items = JSON.parse(value) } catch { items = [] }
+    }
+    if (!Array.isArray(items)) return { keys: [], custom: '' }
+    const nameMap = new Map(refurbishmentPresets.value.map((item) => [item.name, item.key]))
+    const keySet = new Set(refurbishmentPresets.value.map((item) => item.key))
+    const keys: string[] = []
+    const custom: string[] = []
+    items.forEach((item: any) => {
+        const rawKey = typeof item === 'object' && item ? String(item.item_key || item.key || '') : ''
+        const name = typeof item === 'string' ? item : (item.item_name || item.name || '')
+        const key = rawKey && keySet.has(rawKey) ? rawKey : nameMap.get(name)
+        if (key) keys.push(key)
+        else if (name) custom.push(name)
+    })
+    return { keys: Array.from(new Set(keys)), custom: custom.join('、') }
+}
+
+const buildRefurbishmentForm = (source: any) => {
+    const parsed = parseRefurbishmentItems(source?.refurbishment_items)
+    return {
+        refurbishment_required: Number(source?.refurbishment_required || 0),
+        refurbishment_assignee_uid: Number(source?.refurbishment_assignee_uid || 0),
+        refurbishment_reason: source?.refurbishment_reason || '',
+        refurbishment_item_keys: parsed.keys,
+        refurbishment_custom_item: parsed.custom,
+        refurbishment_estimated_cost: source?.refurbishment_estimated_cost ? amountText(source.refurbishment_estimated_cost) : ''
+    }
+}
+
+const handleStaffChange = (event: any) => {
+    const index = Number(event.detail.value || 0)
+    formData.value.refurbishment_assignee_uid = Number(staffOptions.value[index]?.uid || 0)
+}
+
+const toggleRefurbishmentItem = (key: string) => {
+    const list = formData.value.refurbishment_item_keys
+    const index = list.indexOf(key)
+    if (index >= 0) list.splice(index, 1)
+    else list.push(key)
+}
+
+const buildRefurbishmentItems = () => {
+    const items = formData.value.refurbishment_item_keys
+        .map((key) => refurbishmentPresets.value.find((item) => item.key === key))
+        .filter(Boolean)
+        .map((item: any) => ({ item_key: item.key, item_name: item.name, item_type: item.type }))
+    const custom = formData.value.refurbishment_custom_item.trim()
+    if (custom) items.push({ item_name: custom, item_type: 'other' })
+    return items
 }
 
 const handleClose = () => {
@@ -286,12 +463,22 @@ const handleSubmit = async () => {
         return
     }
 
+    if (formData.value.refurbishment_required === 1 && !formData.value.refurbishment_assignee_uid) {
+        uni.showToast({ title: '请选择整备负责人', icon: 'none' })
+        return
+    }
+
     submitting.value = true
     try {
         await confirmPrice(device.value.id, {
             final_price: formData.value.final_price,
             sell_price: formData.value.sell_price || 0,
-            remark: formData.value.remark
+            remark: formData.value.remark,
+            refurbishment_required: formData.value.refurbishment_required,
+            refurbishment_assignee_uid: formData.value.refurbishment_required === 1 ? formData.value.refurbishment_assignee_uid : 0,
+            refurbishment_reason: formData.value.refurbishment_required === 1 ? formData.value.refurbishment_reason : '',
+            refurbishment_items: formData.value.refurbishment_required === 1 ? buildRefurbishmentItems() : [],
+            refurbishment_estimated_cost: formData.value.refurbishment_required === 1 ? Number(formData.value.refurbishment_estimated_cost || 0) : 0
         })
 
         uni.showToast({ title: '定价成功' })
@@ -467,6 +654,90 @@ const handleSubmit = async () => {
     font-size: 36rpx;
     font-weight: bold;
     color: #333;
+}
+
+.refurbish-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+    padding: 22rpx 24rpx;
+    background: #f8f9fa;
+    border-radius: 12rpx;
+}
+
+.refurbish-toggle__title {
+    font-size: 27rpx;
+    color: #333;
+    font-weight: 500;
+}
+
+.refurbish-toggle__desc {
+    margin-top: 6rpx;
+    font-size: 22rpx;
+    color: #909399;
+    line-height: 1.4;
+}
+
+.refurbish-form {
+    margin-top: 20rpx;
+}
+
+.form-label {
+    margin-bottom: 12rpx;
+    font-size: 25rpx;
+    color: #333;
+    font-weight: 500;
+}
+
+.required {
+    color: #f56c6c;
+}
+
+.mt-16 {
+    margin-top: 16rpx;
+}
+
+.mt-24 {
+    margin-top: 24rpx;
+}
+
+.picker-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 76rpx;
+    padding: 0 24rpx;
+    border: 2rpx solid #e4e7ed;
+    border-radius: 12rpx;
+    background: #f8f9fa;
+    font-size: 26rpx;
+    color: #333;
+}
+
+.placeholder {
+    color: #999;
+}
+
+.preset-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14rpx;
+}
+
+.preset-item {
+    padding: 12rpx 20rpx;
+    border: 2rpx solid #e4e7ed;
+    border-radius: 999rpx;
+    background: #fff;
+    color: #606266;
+    font-size: 24rpx;
+}
+
+.preset-item.active {
+    border-color: #2979ff;
+    background: #ecf5ff;
+    color: #2979ff;
 }
 
 .image-group + .image-group {

@@ -544,6 +544,9 @@ const erpStatusMeta = (row: any) => {
     if (row.erp_sync?.inventory_status === 'pending_in') {
         return { label: '待入库', type: 'warning' as const }
     }
+    if (row.erp_sync?.inventory_status === 'inbound_rejected') {
+        return { label: '入库驳回', type: 'danger' as const }
+    }
     return { label: '已同步', type: 'primary' as const }
 }
 
