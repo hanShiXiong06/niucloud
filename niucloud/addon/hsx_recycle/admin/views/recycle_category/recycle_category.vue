@@ -26,7 +26,12 @@
                 <el-table :data="categoryTable.data" ref="tableRef" size="large" v-loading="categoryTable.loading"
                     row-key="category_id" :tree-props="{ hasChildren: 'hasChildren', children: 'child_list' }">
                     <template #empty>
-                        <span>{{ !categoryTable.loading ? t('emptyData') : '' }}</span>
+                        <EmptyState
+                            v-if="!categoryTable.loading"
+                            icon="folder"
+                            title="暂无回收分类"
+                            description="添加分类与报价配置后，C 端用户才能选择品类下单。"
+                        />
                     </template>
                     <el-table-column :label="t('categoryName')" min-width="120">
                         <template #default="{ row }">
@@ -170,6 +175,7 @@ import { getCategoryTree, deleteRecycleCategory, editRecycleCategory, updateRecy
 import { img } from '@/utils/common'
 import { ElMessageBox } from 'element-plus'
 import categoryEdit from '@/addon/hsx_recycle/views/recycle_category/components/recycle-category-edit.vue'
+import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 
 import { useRoute, useRouter } from 'vue-router'
 import Sortable from 'sortablejs'

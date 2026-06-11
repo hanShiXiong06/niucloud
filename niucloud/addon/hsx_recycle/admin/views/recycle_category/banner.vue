@@ -1,19 +1,23 @@
 <template>
     <div class="banner-manage">
         <el-card shadow="never">
-            <div class="flex justify-between items-center mb-[5px]">
-                <span class="text-page-title">轮播图管理</span>
-                <div class="flex items-center">
+            <PageHeader title="轮播图管理">
+                <template #actions>
                     <el-button type="primary" @click="handleAdd">
                         添加轮播图
                     </el-button>
-                </div>
-            </div>
+                </template>
+            </PageHeader>
 
             <div class="mt-[10px]">
                 <el-table :data="tableData" v-loading="loading">
                     <template #empty>
-                        <span>{{ loading ? '' : '暂无数据' }}</span>
+                        <EmptyState
+                            v-if="!loading"
+                            icon="document"
+                            title="暂无轮播图"
+                            description="点右上角「添加轮播图」配置首页轮播。"
+                        />
                     </template>
                     <el-table-column label="轮播图" min-width="200">
                         <template #default="{ row }">
@@ -53,6 +57,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBannerList, deleteBanner, changeBannerSort } from '@/addon/hsx_recycle/api/recycle_category'
 import { img } from '@/utils/common'
 import BannerEdit from '@/addon/hsx_recycle/views/recycle_category/components/banner-edit.vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
+import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 
 const loading = ref(false)
 const tableData = ref([])
