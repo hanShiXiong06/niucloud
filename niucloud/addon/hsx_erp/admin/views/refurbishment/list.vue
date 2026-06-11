@@ -74,6 +74,25 @@
                         <el-button type="primary" link @click="openDetail(row)">详情</el-button>
                     </template>
                 </el-table-column>
+
+                <template #empty>
+                    <EmptyState
+                        v-if="search.keyword || search.status"
+                        icon="search"
+                        title="没有符合条件的整备工单"
+                        description="换个关键词或状态筛选再试试。"
+                    />
+                    <EmptyState
+                        v-else
+                        icon="document"
+                        title="还没有整备工单"
+                        description="在库设备需要维修/翻新时发起整备；完工并确认费用后，设备进入待销售定价。"
+                    >
+                        <template #action>
+                            <el-button type="primary" @click="openCreate()">发起整备</el-button>
+                        </template>
+                    </EmptyState>
+                </template>
             </el-table>
 
             <div class="mt-4 flex justify-end">
@@ -209,6 +228,7 @@ import {
     cancelErpRefurbishment, completeErpRefurbishment, createErpRefurbishment,
     getErpRefurbishmentInfo, getErpRefurbishmentList, getErpRefurbishmentUsers
 } from '@/addon/hsx_erp/api/refurbishment'
+import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const presets = [
     { key: 'clean', name: '清洁消毒', type: 'labor' },

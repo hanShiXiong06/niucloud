@@ -68,6 +68,21 @@
                         <el-button type="primary" link @click="openOrder(row)">处理详情</el-button>
                     </template>
                 </el-table-column>
+
+                <template #empty>
+                    <EmptyState
+                        v-if="search.keyword || search.status"
+                        icon="search"
+                        title="没有符合条件的入库单"
+                        description="换个关键词或状态筛选再试试。"
+                    />
+                    <EmptyState
+                        v-else
+                        icon="document"
+                        title="还没有入库单"
+                        description="手工建档或回收同步的设备进入待入库后，会自动生成入库单。"
+                    />
+                </template>
             </el-table>
 
             <div class="mt-4 flex justify-end">
@@ -261,6 +276,7 @@ import {
     resubmitErpStockOrderItem
 } from '@/addon/hsx_erp/api/stock_order'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
+import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const search = reactive({ keyword: '', status: '' })
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })

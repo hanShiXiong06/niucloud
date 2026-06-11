@@ -82,6 +82,21 @@
                         <el-button type="primary" link @click="openDetail(row)">详情</el-button>
                     </template>
                 </el-table-column>
+
+                <template #empty>
+                    <EmptyState
+                        v-if="search.keyword || search.inventory_status"
+                        icon="search"
+                        title="没有符合条件的设备"
+                        description="换个关键词或库存状态再试试。"
+                    />
+                    <EmptyState
+                        v-else
+                        icon="document"
+                        title="暂无待定价设备"
+                        description="设备完成整备、进入「待销售定价」后会自动出现在这里。"
+                    />
+                </template>
             </el-table>
 
             <div class="mt-4 flex justify-end">
@@ -169,6 +184,7 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { getErpPricingInfo, getErpPricingList, saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
+import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const route = useRoute()
 const search = reactive({ keyword: '', inventory_status: '' })

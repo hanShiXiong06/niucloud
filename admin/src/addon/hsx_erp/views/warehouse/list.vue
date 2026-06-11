@@ -60,6 +60,18 @@
                         <el-button type="danger" link @click="removeWarehouse(row)">删除</el-button>
                     </template>
                 </el-table-column>
+
+                <template #empty>
+                    <EmptyState
+                        icon="box"
+                        title="还没有仓库"
+                        description="先建一个仓库和库位，设备确认入库时才能选择存放位置。"
+                    >
+                        <template #action>
+                            <el-button type="primary" @click="openWarehouse()">新增仓库</el-button>
+                        </template>
+                    </EmptyState>
+                </template>
             </el-table>
         </el-card>
 
@@ -103,6 +115,7 @@ import {
     saveErpWarehouse,
     saveErpWarehouseLocation
 } from '@/addon/hsx_erp/api/warehouse'
+import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const loading = ref(false)
 const warehouses = ref<any[]>([])

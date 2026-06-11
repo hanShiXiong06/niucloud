@@ -47,6 +47,25 @@
                 <el-table-column label="操作" width="100" align="center">
                     <template #default="{ row }"><el-button type="primary" link @click="openEdit(row)">编辑/归属</el-button></template>
                 </el-table-column>
+
+                <template #empty>
+                    <EmptyState
+                        v-if="search.keyword || search.role_type"
+                        icon="search"
+                        title="没有符合条件的往来单位"
+                        description="换个关键词或角色筛选再试试。"
+                    />
+                    <EmptyState
+                        v-else
+                        icon="folder"
+                        title="还没有往来单位"
+                        description="往来单位是回收客户、供应商、代卖委托方等结算主体；手工建档或回收同步时也会自动生成。"
+                    >
+                        <template #action>
+                            <el-button type="primary" @click="openEdit()">新增往来单位</el-button>
+                        </template>
+                    </EmptyState>
+                </template>
             </el-table>
             <div class="mt-4 flex justify-end">
                 <el-pagination v-model:current-page="table.page" v-model:page-size="table.limit"
@@ -120,6 +139,7 @@ import { ElMessage } from 'element-plus'
 import {
     getErpCounterpartyList, saveErpCounterparty, getErpMemberOptions, getErpCounterpartyMembers
 } from '@/addon/hsx_erp/api/counterparty'
+import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const search = reactive({ keyword: '', role_type: '' })
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
