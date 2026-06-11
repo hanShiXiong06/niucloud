@@ -3,9 +3,7 @@
     <div class="main-container">
         <el-card class="box-card !border-none" shadow="never">
 
-            <div class="flex justify-between items-center">
-                <span class="text-page-title">{{ pageName }}</span>
-            </div>
+            <PageHeader :title="pageName" description="按 IMEI / 型号 / 分类 / 时间等条件筛选，导出设备明细或同步到 ERP。" />
 
             <el-card class="box-card !border-none my-[20px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="deviceTableData.searchParam" ref="searchFormRef">
@@ -75,7 +73,12 @@
             <div class="mt-[10px]">
                 <el-table :data="deviceTableData.data" size="large" v-loading="deviceTableData.loading" :row-class-name="tableRowClassName" @selection-change="handleSelectionChange">
                     <template #empty>
-                        <span>{{ !deviceTableData.loading ? t('emptyData') : '' }}</span>
+                        <EmptyState
+                            v-if="!deviceTableData.loading"
+                            icon="search"
+                            title="没有符合条件的设备"
+                            description="调整 IMEI / 型号 / 分类 / 回收时间等筛选条件再试试。"
+                        />
                     </template>
 
                     <el-table-column type="selection" width="55" align="center" />
@@ -350,6 +353,8 @@ import { useRoute } from 'vue-router'
 import { getRecycleDeviceList, syncRecycleDevicesToErp, updateDevice } from '@/addon/hsx_recycle/api/device_export'
 import { img } from '@/utils/common'
 import { View, User, Picture } from '@element-plus/icons-vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
+import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 
 const route = useRoute()
 const pageName = route.meta.title
