@@ -363,7 +363,7 @@ import {
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
 import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
-import EmptyState from '@/components/empty-state/index.vue'
+import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const router = useRouter()
 const search = reactive({ keyword: '', inventory_status: '' })

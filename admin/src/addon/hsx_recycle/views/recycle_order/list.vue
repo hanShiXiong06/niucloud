@@ -399,7 +399,7 @@ import NoticeLogDialog from "./components/NoticeLogDialog.vue";
 // 引入图片预览工具
 import { img } from "@/utils/common";
 // 提交守卫与危险操作确认通用件
-import { useSubmit, confirmDanger } from "@/utils/useSubmit";
+import { useSubmit, confirmDanger } from "@/addon/hsx_recycle/hooks/useSubmit";
 
 // 状态定义
 interface OrderActionItem {

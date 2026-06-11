@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 import { ElLoading, ElMessage, ElMessageBox } from 'element-plus'
-import { useSubmit, confirmDanger } from '@/utils/useSubmit'
+import { useSubmit, confirmDanger } from '@/addon/hsx_recycle/hooks/useSubmit'
 import {
   batchRecycleDevices as apiBatchRecycleDevices,
   batchReturnDevices as apiBatchReturnDevices,
