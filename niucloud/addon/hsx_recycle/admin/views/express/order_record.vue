@@ -107,6 +107,14 @@
             </div>
 
             <el-table v-loading="loading" :data="orderList" class="mt-[16px]" stripe border>
+                <template #empty>
+                    <EmptyState
+                        v-if="!loading"
+                        icon="document"
+                        title="暂无快递运单"
+                        description="点右上角「新建运单」创建，或调整时间/状态/单号等筛选条件。"
+                    />
+                </template>
                 <el-table-column label="运单信息" min-width="230">
                     <template #default="{ row }">
                         <div v-if="row.delivery_id" class="primary-text clickable-text" @click="openExpressTrack(row)">{{ row.delivery_id }}</div>
@@ -454,6 +462,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     cancelOrInterceptExpressOrder,

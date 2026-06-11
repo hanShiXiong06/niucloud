@@ -1,15 +1,16 @@
 <template>
     <div class="main-container">
         <el-card class="box-card !border-none" shadow="never">
-            <div class="flex justify-between items-center">
-                <span class="text-page-title">易速产品配置</span>
-                <el-button type="primary" @click="handleBatchSave">
-                    <template #icon>
-                        <el-icon><Check /></el-icon>
-                    </template>
-                    保存配置
-                </el-button>
-            </div>
+            <PageHeader title="易速产品配置" description="启用的产品将在快递下单时显示报价，建议只启用 1-2 个常用产品。">
+                <template #actions>
+                    <el-button type="primary" @click="handleBatchSave">
+                        <template #icon>
+                            <el-icon><Check /></el-icon>
+                        </template>
+                        保存配置
+                    </el-button>
+                </template>
+            </PageHeader>
 
             <el-card class="box-card !border-none mt-[20px]" shadow="never">
                 <el-alert
@@ -124,6 +125,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { getYisuProductList, batchUpdateYisuProduct } from '@/addon/hsx_recycle/api/yisu'
 
 const loading = ref(false)
