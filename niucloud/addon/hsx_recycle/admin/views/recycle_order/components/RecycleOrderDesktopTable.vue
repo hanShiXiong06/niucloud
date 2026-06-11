@@ -63,118 +63,49 @@
                 <span v-else class="text-xs text-gray-400">-</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作"  fixed="right">
+            <el-table-column label="操作"  fixed="right" width="240">
               <template #default="{ row: deviceRow }">
-                <el-button-group>
+                <div class="flex items-center gap-1">
+                  <!-- 主行动：当前状态最该做的下一步，高亮 -->
                   <el-button
-                    v-if="deviceRow.status === 1 && props.findOrderStatus(deviceRow.order_id) > 1"
-                    type="primary"
+                    v-if="getDevicePrimaryAction(deviceRow)"
+                    :type="getDevicePrimaryAction(deviceRow)!.type || 'primary'"
                     size="small"
-                    :icon="DocumentChecked"
-                    @click="props.checkDevice(deviceRow)"
+                    :icon="getDevicePrimaryAction(deviceRow)!.icon"
+                    @click="getDevicePrimaryAction(deviceRow)!.handler()"
                   >
-                    开始质检
+                    {{ getDevicePrimaryAction(deviceRow)!.label }}
                   </el-button>
 
-                  <el-button
-                    v-if="deviceRow.status == 2"
-                    type="warning"
-                    size="small"
-                    :icon="Edit"
-                    @click="props.checkDevice(deviceRow)"
-                  >
-                    编辑质检
-                  </el-button>
-
-                  <el-button
-                    v-if="deviceRow.status == 3"
-                    type="success"
-                    size="small"
-                    :icon="PriceTag"
-                    @click="props.priceDevice(deviceRow)"
-                  >
-                    定价
-                  </el-button>
-
-                  <el-button
-                    v-if="deviceRow.status == 4"
-                    type="primary"
-                    size="small"
-                    :icon="Check"
-                    @click="props.batchRecycleDevice(deviceRow.id)"
-                  >
-                    确认
-                  </el-button>
-                  <el-button
-                    v-if="deviceRow.status == 4"
-                    type="warning"
-                    size="small"
-                    :icon="Edit"
-                    @click="props.priceDevice(deviceRow)"
-                  >
-                    重新定价
-                  </el-button>
-                  <el-button
-                    v-if="deviceRow.status == 4"
-                    type="danger"
-                    size="small"
-                    :icon="Close"
-                    @click="props.batchReturnDevice(deviceRow.id)"
-                  >
-                    拒绝
-                  </el-button>
-                  <el-button
-                    v-if="[3,4,7,8].includes(Number(deviceRow.status)) && !deviceRow.consignment_order_id"
-                    type="info"
-                    size="small"
-                    :icon="Switch"
-                    @click="props.transferConsignment(deviceRow)"
-                  >
-                    转代卖
-                  </el-button>
-
-                  <template v-if="props.getVisibleDevicePrintActions(deviceRow).length === 1">
-                    <el-button
-                      type="info"
-                      size="small"
-                      :icon="Printer"
-                      @click="props.printDeviceByScene(deviceRow, props.getVisibleDevicePrintActions(deviceRow)[0])"
-                    >
-                      {{ props.getVisibleDevicePrintActions(deviceRow)[0].button_text || '打印' }}
-                    </el-button>
-                  </template>
-                  <el-dropdown
-                    v-else-if="props.getVisibleDevicePrintActions(deviceRow).length > 1"
-                    trigger="click"
-                    @command="(action) => props.printDeviceByScene(deviceRow, action)"
-                  >
-                    <el-button type="info" size="small" :icon="Printer">
-                      打印
-                    </el-button>
+                  <!-- 更多：次要操作（重新定价 / 拒绝 / 转代卖 / 打印） -->
+                  <el-dropdown v-if="getDeviceMoreActions(deviceRow).length" trigger="click">
+                    <el-button size="small" :icon="MoreFilled">更多</el-button>
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item
-                          v-for="action in props.getVisibleDevicePrintActions(deviceRow)"
-                          :key="action.scene_key"
-                          :command="action"
+                          v-for="a in getDeviceMoreActions(deviceRow)"
+                          :key="a.key"
+                          :divided="a.danger"
+                          @click="a.handler()"
                         >
-                          {{ action.button_text || action.scene_name || '打印' }}
+                          <span class="flex items-center gap-1" :class="a.danger ? 'text-red-500' : ''">
+                            <el-icon><component :is="a.icon" /></el-icon>{{ a.label }}
+                          </span>
                         </el-dropdown-item>
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
-                </el-button-group>
 
-                <el-button
-                  type="primary"
-                  link
-                  :icon="View"
-                  @click="props.viewDetail(deviceRow)"
-                  size="small"
-                  class="ml-2"
-                >
-                  查看详情
-                </el-button>
+                  <el-button
+                    type="primary"
+                    link
+                    :icon="View"
+                    @click="props.viewDetail(deviceRow)"
+                    size="small"
+                  >
+                    详情
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -368,6 +299,7 @@
 import { ElMessageBox, ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
+import { useDeviceRowActions } from '@/addon/hsx_recycle/hooks/useDeviceRowActions'
 import {
   Search,
   DocumentChecked,
@@ -425,6 +357,18 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits(['refresh'])
+
+// 设备操作主次：主行动 + 更多动作（单一真源，桌面/移动复用）
+const { getDevicePrimaryAction, getDeviceMoreActions } = useDeviceRowActions({
+  checkDevice: props.checkDevice,
+  priceDevice: props.priceDevice,
+  batchRecycleDevice: props.batchRecycleDevice,
+  batchReturnDevice: props.batchReturnDevice,
+  transferConsignment: props.transferConsignment,
+  getVisibleDevicePrintActions: props.getVisibleDevicePrintActions,
+  printDeviceByScene: props.printDeviceByScene,
+  findOrderStatus: props.findOrderStatus,
+})
 
 const normalizeDeviceCount = (value: any) => {
   const count = Number(value)
