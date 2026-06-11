@@ -223,8 +223,8 @@
           type="primary"
           :class="isMobile ? '!ml-0 w-full' : ''"
           @click="handleConfirmPayment"
-          :disabled="!canConfirm"
-          :loading="confirming"
+          :disabled="!canConfirm || submitting"
+          :loading="submitting"
         >
           {{ confirmButtonText }}
         </el-button>
@@ -276,11 +276,12 @@ interface PaymentInfoItem {
   [key: string]: any
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   visible: boolean
   paymentInfo: PaymentInfoItem[]
   orderId?: number | string  // 订单ID，当paymentInfo为空时使用
-}>()
+  submitting?: boolean        // 父级真实的打款提交中状态
+}>(), { submitting: false })
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
@@ -291,6 +292,8 @@ const emit = defineEmits<{
     paymentImages?: string
     paymentMode?: 'order' | 'device'
     selectedDeviceIds?: Array<number | string>
+    amount?: number | string      // 本次打款金额（订单模式为订单总额）
+    deviceCount?: number          // 设备模式下本次打款的设备数
   }]
 }>()
 
@@ -298,7 +301,7 @@ const emit = defineEmits<{
 const dialogVisible = ref(props.visible)
 const paymentInfoData = ref<PaymentInfoItem[]>(props.paymentInfo)
 const selectedPayTypeIndex = ref(0)
-const confirming = ref(false)
+// confirming 由父级通过 props.submitting 传入（反映真实的服务端打款进行中状态）
 const isMobile = ref(false)
 const selectedDevices = ref<any[]>([])
 
@@ -438,23 +441,18 @@ const handleConfirmPayment = () => {
     return
   }
 
-  confirming.value = true
-
-  // 发送确认事件
+  // 仅发起打款，不在此自关弹窗：由父级在服务端打款成功后关闭，失败时弹窗保留。
+  // 加载态与防重复点击由 props.submitting 驱动。
   emit('payment-confirmed', {
     orderId,
     payType: finalPayType,
     account: finalAccount,
     paymentImages: paymentImages.value,
     paymentMode: isDevicePaymentMode.value ? 'device' : 'order',
-    selectedDeviceIds: selectedDeviceIds.value
+    selectedDeviceIds: selectedDeviceIds.value,
+    amount: currentPaymentInfo.value?.order_summary?.total_amount,
+    deviceCount: isDevicePaymentMode.value ? selectedDevices.value.length : undefined
   })
-
-  // 关闭对话框
-  setTimeout(() => {
-    confirming.value = false
-    dialogVisible.value = false
-  }, 300)
 }
 
 onMounted(() => {

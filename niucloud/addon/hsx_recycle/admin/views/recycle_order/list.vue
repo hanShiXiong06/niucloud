@@ -266,6 +266,7 @@
       v-model:visible="paymentDialogVisible"
       :payment-info="paymentInfo"
       :order-id="currentOrderId"
+      :submitting="paySubmitting"
       @payment-confirmed="handlePaymentConfirm"
     />
 
@@ -397,6 +398,8 @@ import NoticeLogDialog from "./components/NoticeLogDialog.vue";
 
 // 引入图片预览工具
 import { img } from "@/utils/common";
+// 提交守卫与危险操作确认通用件
+import { useSubmit, confirmDanger } from "@/utils/useSubmit";
 
 // 状态定义
 interface OrderActionItem {
@@ -943,44 +946,60 @@ onBeforeUnmount(() => {
   }
 });
 
+// 打款是资金操作：提交守卫防止慢网络下连点造成重复打款
+const paySubmit = useSubmit();
+const paySubmitting = paySubmit.loading;
+
 // 处理支付确认
 const handlePaymentConfirm = async (paymentData) => {
-  try {
-    // 使用传入的 orderId，如果为空则使用 currentOrderId
-    const orderId = paymentData.orderId || currentOrderId.value;
-    if (!orderId) {
-      ElMessage.error("订单ID不能为空");
-      return;
-    }
-
-    const paymentInfo = {
-      pay_type: paymentData.payType,
-      account: paymentData.account,
-      payment_images: paymentData.paymentImages,
-      remark: "财务已确认打款",
-    };
-
-    if (paymentData.paymentMode === "device") {
-      await devicePaymentConfirm(Number(orderId), {
-        ...paymentInfo,
-        device_ids: paymentData.selectedDeviceIds || [],
-        payment_info: paymentInfo,
-      });
-    } else {
-      await paymentConfirm(Number(orderId), {
-        ...paymentInfo,
-        payment_info: paymentInfo,
-      });
-    }
-
-    ElMessage.success(paymentData.paymentMode === "device" ? "设备打款成功" : "确认打款成功");
-    paymentDialogVisible.value = false;
-
-    // 刷新订单列表
-    await getList();
-  } catch (error) {
-    console.error("确认打款失败", error);
+  // 使用传入的 orderId，如果为空则使用 currentOrderId
+  const orderId = paymentData.orderId || currentOrderId.value;
+  if (!orderId) {
+    ElMessage.error("订单ID不能为空");
+    return;
   }
+
+  // 打款不可撤销，先二次确认（尽量带上金额/设备数等关键信息）
+  const amountText =
+    paymentData.amount !== undefined && paymentData.amount !== ""
+      ? `金额 <b>¥${paymentData.amount}</b> `
+      : "";
+  const scopeText =
+    paymentData.paymentMode === "device"
+      ? `为已选 <b>${paymentData.deviceCount ?? paymentData.selectedDeviceIds?.length ?? 0}</b> 台设备打款`
+      : "确认本单打款";
+  const confirmed = await confirmDanger(
+    `${scopeText}${amountText ? "，" + amountText : ""}，此操作不可撤销。`,
+    { title: "确认打款", confirmText: "确认打款", html: true }
+  );
+  if (!confirmed) return;
+
+  const paymentInfo = {
+    pay_type: paymentData.payType,
+    account: paymentData.account,
+    payment_images: paymentData.paymentImages,
+    remark: "财务已确认打款",
+  };
+
+  await paySubmit.run(
+    async () => {
+      if (paymentData.paymentMode === "device") {
+        await devicePaymentConfirm(Number(orderId), {
+          ...paymentInfo,
+          device_ids: paymentData.selectedDeviceIds || [],
+          payment_info: paymentInfo,
+        });
+      } else {
+        await paymentConfirm(Number(orderId), {
+          ...paymentInfo,
+          payment_info: paymentInfo,
+        });
+      }
+      paymentDialogVisible.value = false;
+      await getList();
+    },
+    { success: paymentData.paymentMode === "device" ? "设备打款成功" : "确认打款成功" }
+  );
 };
 
 // 设备详情弹窗相关

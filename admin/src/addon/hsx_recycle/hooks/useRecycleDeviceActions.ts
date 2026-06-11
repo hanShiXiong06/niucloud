@@ -280,35 +280,38 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
   }
 
   const batchRecycleDevices = async (orderId: string | number) => {
-    try {
-      const selectedDeviceIds = getSelectedDeviceIds(orderId)
-      if (selectedDeviceIds.length === 0) {
-        ElMessage.warning('请选择设备')
-        return
-      }
+    const selectedDeviceIds = getSelectedDeviceIds(orderId)
+    if (selectedDeviceIds.length === 0) {
+      ElMessage.warning('请选择设备')
+      return
+    }
 
-      const { value: remark } = await ElMessageBox.prompt(
-        '请输入操作备注',
-        '批量确认设备',
+    let remark = ''
+    try {
+      const res = await ElMessageBox.prompt(
+        `确认将已选 ${selectedDeviceIds.length} 台设备标记为「已回收」？确认后将进入后续入库流程。`,
+        '批量确认回收',
         {
-          confirmButtonText: '确认',
+          confirmButtonText: '确认回收',
           cancelButtonText: '取消',
-          inputPlaceholder: '请输入备注信息（可选）'
+          type: 'warning',
+          inputPlaceholder: '可填写操作备注（可选）'
         }
       )
+      remark = res.value || ''
+    } catch (error) {
+      if (isDialogCanceled(error)) return // 用户取消
+      throw error
+    }
 
+    // 提交守卫：防止连点造成重复确认
+    return recycleSubmit.run(async () => {
       await apiBatchRecycleDevices({
         ids: selectedDeviceIds.join(','),
-        remark: remark || ''
+        remark
       })
-      ElMessage.success('批量确认成功')
       await getList(pagination.value.page)
-    } catch (error) {
-      if (!isDialogCanceled(error)) {
-        console.error('批量确认失败：', error)
-        ElMessage.error('批量确认失败')
-      }
-    }
+    }, { success: '批量确认成功' })
   }
 
   const batchReturnDevices = async (orderId: string | number) => {
