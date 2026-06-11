@@ -17,6 +17,48 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_device_identity` (
   KEY `idx_site_sn` (`site_id`,`sn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP物理设备身份';
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_counterparty` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `counterparty_no` varchar(64) NOT NULL DEFAULT '',
+  `counterparty_type` varchar(32) NOT NULL DEFAULT 'individual',
+  `role_type` varchar(32) NOT NULL DEFAULT 'supplier',
+  `name` varchar(150) NOT NULL DEFAULT '',
+  `mobile` varchar(32) NOT NULL DEFAULT '',
+  `contact_name` varchar(100) NOT NULL DEFAULT '',
+  `tax_no` varchar(100) NOT NULL DEFAULT '',
+  `bank_name` varchar(150) NOT NULL DEFAULT '',
+  `bank_account` varchar(150) NOT NULL DEFAULT '',
+  `source_plugin` varchar(64) NOT NULL DEFAULT '',
+  `source_type` varchar(64) NOT NULL DEFAULT '',
+  `source_id` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `remark` varchar(500) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_no` (`site_id`,`counterparty_no`),
+  UNIQUE KEY `uk_site_source` (`site_id`,`source_plugin`,`source_type`,`source_id`),
+  KEY `idx_site_name` (`site_id`,`name`),
+  KEY `idx_site_mobile` (`site_id`,`mobile`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP往来单位';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_counterparty_member` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `counterparty_id` int NOT NULL DEFAULT 0,
+  `member_id` int NOT NULL DEFAULT 0,
+  `relation_role` varchar(32) NOT NULL DEFAULT 'business',
+  `is_finance_contact` tinyint(1) NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `remark` varchar(500) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_member` (`site_id`,`member_id`),
+  KEY `idx_counterparty` (`site_id`,`counterparty_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP往来主体会员归属';
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset_cycle` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int NOT NULL DEFAULT 0,
@@ -26,6 +68,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset_cycle` (
   `source_type` varchar(64) NOT NULL DEFAULT '',
   `source_id` int NOT NULL DEFAULT 0,
   `source_device_id` int NOT NULL DEFAULT 0,
+  `counterparty_id` int NOT NULL DEFAULT 0,
+  `source_member_id` int NOT NULL DEFAULT 0,
   `ownership_type` varchar(32) NOT NULL DEFAULT 'owned',
   `status` varchar(32) NOT NULL DEFAULT 'pending_in',
   `acquired_at` int NOT NULL DEFAULT 0,
@@ -35,7 +79,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset_cycle` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_site_cycle_no` (`site_id`,`cycle_no`),
   UNIQUE KEY `uk_site_source_device` (`site_id`,`source_plugin`,`source_type`,`source_device_id`),
-  KEY `idx_identity` (`site_id`,`identity_id`)
+  KEY `idx_identity` (`site_id`,`identity_id`),
+  KEY `idx_source_member` (`site_id`,`source_member_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP设备经营周期';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset` (
@@ -45,6 +90,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset` (
   `identity_id` int NOT NULL DEFAULT 0,
   `cycle_id` int NOT NULL DEFAULT 0,
   `source_device_id` int NOT NULL DEFAULT 0,
+  `counterparty_id` int NOT NULL DEFAULT 0,
+  `source_member_id` int NOT NULL DEFAULT 0,
   `imei` varchar(64) NOT NULL DEFAULT '',
   `imei2` varchar(64) NOT NULL DEFAULT '',
   `sn` varchar(128) NOT NULL DEFAULT '',
@@ -71,8 +118,42 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset` (
   UNIQUE KEY `uk_site_cycle` (`site_id`,`cycle_id`),
   KEY `idx_site_status` (`site_id`,`inventory_status`),
   KEY `idx_site_imei` (`site_id`,`imei`),
+  KEY `idx_counterparty` (`site_id`,`counterparty_id`),
+  KEY `idx_source_member` (`site_id`,`source_member_id`),
   KEY `idx_source_device` (`site_id`,`source_device_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP资产当前快照';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `warehouse_name` varchar(100) NOT NULL DEFAULT '',
+  `warehouse_code` varchar(64) NOT NULL DEFAULT '',
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `is_default` tinyint(1) NOT NULL DEFAULT 0,
+  `sort` int NOT NULL DEFAULT 0,
+  `remark` varchar(500) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_name` (`site_id`,`warehouse_name`),
+  KEY `idx_site_status` (`site_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP仓库';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse_location` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `warehouse_id` int NOT NULL DEFAULT 0,
+  `location_name` varchar(100) NOT NULL DEFAULT '',
+  `location_code` varchar(64) NOT NULL DEFAULT '',
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `sort` int NOT NULL DEFAULT 0,
+  `remark` varchar(500) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_warehouse_name` (`site_id`,`warehouse_id`,`location_name`),
+  KEY `idx_site_warehouse` (`site_id`,`warehouse_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP仓库库位';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_stock_order` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
@@ -83,6 +164,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_stock_order` (
   `source_plugin` varchar(64) NOT NULL DEFAULT '',
   `source_type` varchar(64) NOT NULL DEFAULT '',
   `source_id` int NOT NULL DEFAULT 0,
+  `counterparty_id` int NOT NULL DEFAULT 0,
+  `source_member_id` int NOT NULL DEFAULT 0,
   `warehouse_id` int NOT NULL DEFAULT 0,
   `device_count` int NOT NULL DEFAULT 0,
   `total_cost` decimal(14,2) NOT NULL DEFAULT 0.00,
@@ -95,7 +178,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_stock_order` (
   `update_at` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_site_order_no` (`site_id`,`order_no`),
-  KEY `idx_site_status` (`site_id`,`status`)
+  KEY `idx_site_status` (`site_id`,`status`),
+  KEY `idx_source_member` (`site_id`,`source_member_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP库存单';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_stock_order_item` (
@@ -107,6 +191,11 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_stock_order_item` (
   `source_device_id` int NOT NULL DEFAULT 0,
   `amount` decimal(12,2) NOT NULL DEFAULT 0.00,
   `status` varchar(32) NOT NULL DEFAULT 'pending',
+  `reject_reason` varchar(500) NOT NULL DEFAULT '',
+  `rejected_by` int NOT NULL DEFAULT 0,
+  `rejected_name` varchar(100) NOT NULL DEFAULT '',
+  `rejected_at` int NOT NULL DEFAULT 0,
+  `retry_count` int NOT NULL DEFAULT 0,
   `create_at` int NOT NULL DEFAULT 0,
   `update_at` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
@@ -148,6 +237,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_cost_ledger` (
   `source_plugin` varchar(64) NOT NULL DEFAULT '',
   `source_type` varchar(64) NOT NULL DEFAULT '',
   `source_id` int NOT NULL DEFAULT 0,
+  `counterparty_id` int NOT NULL DEFAULT 0,
   `operator_id` int NOT NULL DEFAULT 0,
   `operator_name` varchar(100) NOT NULL DEFAULT '',
   `occurred_at` int NOT NULL DEFAULT 0,
@@ -156,6 +246,68 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_cost_ledger` (
   UNIQUE KEY `uk_site_ledger_no` (`site_id`,`ledger_no`),
   KEY `idx_asset` (`site_id`,`asset_id`,`occurred_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP不可变成本流水';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_price_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `price_no` varchar(64) NOT NULL DEFAULT '',
+  `asset_id` int NOT NULL DEFAULT 0,
+  `cycle_id` int NOT NULL DEFAULT 0,
+  `action` varchar(32) NOT NULL DEFAULT 'initial',
+  `before_price` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `after_price` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `current_cost` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `gross_profit` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `gross_margin` decimal(8,4) NOT NULL DEFAULT 0.0000,
+  `min_profit` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `operator_id` int NOT NULL DEFAULT 0,
+  `operator_name` varchar(100) NOT NULL DEFAULT '',
+  `remark` varchar(1000) NOT NULL DEFAULT '',
+  `occurred_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_price_no` (`site_id`,`price_no`),
+  KEY `idx_asset` (`site_id`,`asset_id`,`occurred_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP销售定价日志';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_refurbish_order` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `order_no` varchar(64) NOT NULL DEFAULT '',
+  `asset_id` int NOT NULL DEFAULT 0,
+  `cycle_id` int NOT NULL DEFAULT 0,
+  `status` varchar(32) NOT NULL DEFAULT 'processing',
+  `assigned_uid` int NOT NULL DEFAULT 0,
+  `assigned_name` varchar(100) NOT NULL DEFAULT '',
+  `planned_finish_at` int NOT NULL DEFAULT 0,
+  `started_at` int NOT NULL DEFAULT 0,
+  `completed_at` int NOT NULL DEFAULT 0,
+  `accepted_by` int NOT NULL DEFAULT 0,
+  `accepted_name` varchar(100) NOT NULL DEFAULT '',
+  `total_cost` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `rework_count` int NOT NULL DEFAULT 0,
+  `remark` varchar(1000) NOT NULL DEFAULT '',
+  `completion_remark` varchar(1000) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_order_no` (`site_id`,`order_no`),
+  KEY `idx_site_status` (`site_id`,`status`),
+  KEY `idx_asset` (`site_id`,`asset_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP整备工单';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_refurbish_item` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `order_id` int NOT NULL DEFAULT 0,
+  `item_type` varchar(32) NOT NULL DEFAULT 'other',
+  `item_name` varchar(100) NOT NULL DEFAULT '',
+  `amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `remark` varchar(500) NOT NULL DEFAULT '',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_order` (`site_id`,`order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP整备项目及费用';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_sync_batch` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,

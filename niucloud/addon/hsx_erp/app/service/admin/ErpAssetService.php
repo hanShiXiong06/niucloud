@@ -8,11 +8,15 @@ use addon\hsx_erp\app\job\PublishOutboxEvent;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetCycle;
 use addon\hsx_erp\app\model\ErpCostLedger;
+use addon\hsx_erp\app\model\ErpCounterparty;
 use addon\hsx_erp\app\model\ErpOperationEvent;
-use addon\hsx_erp\app\model\ErpOutboxEvent;
+use addon\hsx_erp\app\model\ErpRefurbishItem;
+use addon\hsx_erp\app\model\ErpRefurbishOrder;
 use addon\hsx_erp\app\model\ErpStockLedger;
 use addon\hsx_erp\app\model\ErpStockOrder;
 use addon\hsx_erp\app\model\ErpStockOrderItem;
+use addon\hsx_erp\app\support\ErpDomainEvent;
+use addon\hsx_erp\app\support\ErpMoney;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -32,7 +36,9 @@ class ErpAssetService extends BaseAdminService
         if (!empty($where['inventory_status'])) {
             $query->where('inventory_status', '=', (string)$where['inventory_status']);
         }
-        return $this->pageQuery($query);
+        $result = $this->pageQuery($query);
+        $this->appendCounterparties($result['data']);
+        return $result;
     }
 
     public function getInfo(int $id): array
@@ -45,8 +51,15 @@ class ErpAssetService extends BaseAdminService
             throw new CommonException('ERP资产不存在');
         }
 
+        $counterparty = (int)$asset->counterparty_id > 0
+            ? ErpCounterparty::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', (int)$asset->counterparty_id],
+            ])->findOrEmpty()->toArray()
+            : [];
         return [
             'asset' => $asset->toArray(),
+            'counterparty' => $counterparty,
             'stock_ledger' => ErpStockLedger::where([
                 ['site_id', '=', $this->site_id],
                 ['asset_id', '=', $id],
@@ -110,6 +123,7 @@ class ErpAssetService extends BaseAdminService
 
         $warehouseId = (int)($data['warehouse_id'] ?? 0);
         $locationId = (int)($data['location_id'] ?? 0);
+        (new ErpWarehouseService())->validateInboundLocation($warehouseId, $locationId);
         $remark = trim((string)($data['remark'] ?? ''));
         $now = time();
         $outboxIds = [];
@@ -163,10 +177,12 @@ class ErpAssetService extends BaseAdminService
                 }
 
                 $beforeStatus = (string)$asset->inventory_status;
+                $purchaseCost = ErpMoney::normalize($asset->purchase_cost);
                 $asset->save([
                     'inventory_status' => ErpDict::INVENTORY_IN_STOCK,
                     'warehouse_id' => $warehouseId,
                     'location_id' => $locationId,
+                    'current_cost' => $purchaseCost,
                     'stock_in_at' => $now,
                     'version' => (int)$asset->version + 1,
                     'update_at' => $now,
@@ -203,12 +219,13 @@ class ErpAssetService extends BaseAdminService
                     'asset_id' => (int)$asset->id,
                     'cycle_id' => (int)$asset->cycle_id,
                     'cost_type' => 'purchase',
-                    'amount_delta' => (float)$asset->purchase_cost,
-                    'before_cost' => 0,
-                    'after_cost' => (float)$asset->current_cost,
+                    'amount_delta' => $purchaseCost,
+                    'before_cost' => '0.00',
+                    'after_cost' => $purchaseCost,
                     'source_plugin' => (string)$order->source_plugin,
                     'source_type' => (string)$order->source_type,
                     'source_id' => (int)$item->source_device_id,
+                    'counterparty_id' => (int)$asset->counterparty_id,
                     'operator_id' => $this->uid,
                     'operator_name' => $this->username ?: '',
                     'occurred_at' => $now,
@@ -217,28 +234,50 @@ class ErpAssetService extends BaseAdminService
                 $this->writeOperation(
                     (int)$asset->id,
                     (int)$asset->cycle_id,
-                    'erp.asset.stocked',
+                    'erp.asset.stocked.v1',
                     'confirm_stock_in',
                     $stockOrderId,
                     ['warehouse_id' => $warehouseId, 'location_id' => $locationId]
                 );
-                $outbox = ErpOutboxEvent::create([
-                    'site_id' => $this->site_id,
-                    'event_id' => $this->makeEventId('stocked', (int)$asset->id),
-                    'event_name' => 'erp.asset.stocked',
-                    'aggregate_type' => 'asset',
-                    'aggregate_id' => (int)$asset->id,
-                    'status' => 'pending',
-                    'payload' => [
+                $sourceSnapshot = (array)$asset->source_snapshot;
+                $payableAmount = ErpMoney::normalize($sourceSnapshot['payable_amount'] ?? $purchaseCost);
+                $paidAmount = ErpMoney::normalize($sourceSnapshot['paid_amount'] ?? 0);
+                $settlementStatus = array_key_exists('settlement_status', $sourceSnapshot)
+                    ? (string)$sourceSnapshot['settlement_status']
+                    : (ErpMoney::compare($payableAmount, '0.00') === 0 ? 'not_applicable' : 'unknown');
+                $eventId = $this->makeEventId('stocked', (int)$asset->id);
+                $domainEvent = ErpDomainEvent::create(
+                    $this->site_id,
+                    'erp.asset.stocked.v1',
+                    $eventId,
+                    'asset',
+                    (int)$asset->id,
+                    ['type' => 'staff', 'id' => $this->uid, 'name' => $this->username ?: ''],
+                    [
+                        'plugin' => (string)$order->source_plugin,
+                        'type' => (string)$order->source_type,
+                        'id' => (int)$item->source_device_id,
+                    ],
+                    [
                         'asset_id' => (int)$asset->id,
                         'cycle_id' => (int)$asset->cycle_id,
                         'stock_order_id' => $stockOrderId,
                         'source_device_id' => (int)$asset->source_device_id,
+                        'counterparty_id' => (int)$asset->counterparty_id,
+                        'source_member_id' => (int)$asset->source_member_id,
+                        'ownership_type' => (string)$asset->ownership_type,
+                        'payable_amount' => $payableAmount,
+                        'paid_amount' => $paidAmount,
+                        'settlement_status' => $settlementStatus,
                     ],
-                    'create_at' => $now,
-                    'update_at' => $now,
-                ]);
+                    $now
+                );
+                $outbox = ErpDomainEvent::writeOutbox($domainEvent, $now);
                 $outboxIds[] = (int)$outbox->id;
+                $outboxIds = array_merge(
+                    $outboxIds,
+                    $this->applyPostInboundRefurbishmentDecision($asset, $stockOrderId, $now)
+                );
             }
 
             foreach ($orderIds as $orderId) {
@@ -251,13 +290,31 @@ class ErpAssetService extends BaseAdminService
                     ['order_id', '=', $orderId],
                     ['status', '=', 'pending'],
                 ])->count();
+                $confirmedCount = ErpStockOrderItem::where([
+                    ['site_id', '=', $this->site_id],
+                    ['order_id', '=', $orderId],
+                    ['status', '=', ErpDict::STOCK_ITEM_CONFIRMED],
+                ])->count();
+                $rejectedCount = ErpStockOrderItem::where([
+                    ['site_id', '=', $this->site_id],
+                    ['order_id', '=', $orderId],
+                    ['status', '=', ErpDict::STOCK_ITEM_REJECTED],
+                ])->count();
+                $orderStatus = ErpDict::STOCK_ORDER_DRAFT;
+                if ($pendingCount === 0 && $rejectedCount === 0) {
+                    $orderStatus = ErpDict::STOCK_ORDER_CONFIRMED;
+                } elseif ($confirmedCount > 0) {
+                    $orderStatus = ErpDict::STOCK_ORDER_PARTIAL_CONFIRMED;
+                } elseif ($pendingCount === 0 && $rejectedCount > 0) {
+                    $orderStatus = ErpDict::STOCK_ORDER_REJECTED;
+                }
                 $orderData = [
-                    'status' => $pendingCount > 0 ? 'partial_confirmed' : ErpDict::STOCK_ORDER_CONFIRMED,
+                    'status' => $orderStatus,
                     'warehouse_id' => $warehouseId,
                     'remark' => $remark ?: (string)$order->remark,
                     'update_at' => $now,
                 ];
-                if ($pendingCount === 0) {
+                if ($orderStatus === ErpDict::STOCK_ORDER_CONFIRMED) {
                     $orderData['confirmed_by'] = $this->uid;
                     $orderData['confirmed_at'] = $now;
                 }
@@ -305,6 +362,243 @@ class ErpAssetService extends BaseAdminService
         ]);
     }
 
+    private function applyPostInboundRefurbishmentDecision(ErpAsset $asset, int $stockOrderId, int $now): array
+    {
+        $sourceSnapshot = (array)$asset->source_snapshot;
+        $plan = $this->normalizeRefurbishmentPlan((array)($sourceSnapshot['refurbishment'] ?? []));
+        if ($plan['required']) {
+            $refurbishOrder = $this->createRefurbishmentOrderFromDecision($asset, $plan, $stockOrderId, $now);
+            $this->writeOperation(
+                (int)$asset->id,
+                (int)$asset->cycle_id,
+                'erp.refurbishment.required.v1',
+                'refurbishment_required',
+                $stockOrderId,
+                [
+                    'stock_order_id' => $stockOrderId,
+                    'required' => true,
+                    'decision_source' => $plan['decision_source'],
+                    'reason' => $plan['reason'],
+                    'suggested_items' => $plan['suggested_items'],
+                    'estimated_cost' => $plan['estimated_cost'],
+                    'assignee' => $plan['assignee'],
+                    'refurbish_order_id' => (int)$refurbishOrder->id,
+                    'refurbish_order_no' => (string)$refurbishOrder->order_no,
+                    'next_status' => ErpDict::INVENTORY_REFURBISHING,
+                ]
+            );
+            return [
+                $this->writeDecisionEvent($asset, 'erp.refurbishment.required.v1', $stockOrderId, [
+                    'required' => true,
+                    'decision_source' => $plan['decision_source'],
+                    'reason' => $plan['reason'],
+                    'suggested_items' => $plan['suggested_items'],
+                    'estimated_cost' => $plan['estimated_cost'],
+                    'decided_by' => $plan['decided_by'],
+                    'assignee' => $plan['assignee'],
+                    'decided_at' => $plan['decided_at'],
+                    'refurbish_order_id' => (int)$refurbishOrder->id,
+                    'refurbish_order_no' => (string)$refurbishOrder->order_no,
+                    'next_status' => ErpDict::INVENTORY_REFURBISHING,
+                ], $now),
+            ];
+        }
+
+        $beforeStatus = (string)$asset->inventory_status;
+        $asset->save([
+            'inventory_status' => ErpDict::INVENTORY_PENDING_PRICING,
+            'version' => (int)$asset->version + 1,
+            'update_at' => $now,
+        ]);
+        ErpAssetCycle::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', (int)$asset->cycle_id],
+        ])->update([
+            'status' => ErpDict::INVENTORY_PENDING_PRICING,
+            'update_at' => $now,
+        ]);
+        ErpStockLedger::create([
+            'site_id' => $this->site_id,
+            'ledger_no' => $this->makeNo('SL'),
+            'asset_id' => (int)$asset->id,
+            'cycle_id' => (int)$asset->cycle_id,
+            'stock_order_id' => $stockOrderId,
+            'action' => 'skip_refurbishment',
+            'before_status' => $beforeStatus,
+            'after_status' => ErpDict::INVENTORY_PENDING_PRICING,
+            'warehouse_id' => (int)$asset->warehouse_id,
+            'location_id' => (int)$asset->location_id,
+            'operator_id' => $this->uid,
+            'operator_name' => $this->username ?: '',
+            'occurred_at' => $now,
+            'payload' => [
+                'decision_source' => $plan['decision_source'] ?: 'default',
+                'reason' => $plan['reason'] ?: '默认无需整备，入库后直接进入待销售定价',
+            ],
+        ]);
+        $this->writeOperation(
+            (int)$asset->id,
+            (int)$asset->cycle_id,
+            'erp.refurbishment.skipped.v1',
+            'skip_refurbishment',
+            $stockOrderId,
+            [
+                'stock_order_id' => $stockOrderId,
+                'required' => false,
+                'decision_source' => $plan['decision_source'] ?: 'default',
+                'reason' => $plan['reason'] ?: '默认无需整备，入库后直接进入待销售定价',
+                'next_status' => ErpDict::INVENTORY_PENDING_PRICING,
+            ]
+        );
+
+        return array_merge([
+            $this->writeDecisionEvent($asset, 'erp.refurbishment.skipped.v1', $stockOrderId, [
+                'required' => false,
+                'decision_source' => $plan['decision_source'] ?: 'default',
+                'reason' => $plan['reason'] ?: '默认无需整备，入库后直接进入待销售定价',
+                'next_status' => ErpDict::INVENTORY_PENDING_PRICING,
+            ], $now),
+        ], $this->writeReadyForPhotoEvents($asset, $stockOrderId, $now));
+    }
+
+    private function writeReadyForPhotoEvents(ErpAsset $asset, int $documentId, int $now): array
+    {
+        $sourceSnapshot = (array)$asset->source_snapshot;
+        if ((string)($sourceSnapshot['sale_destination'] ?? '') !== ErpDict::SALE_DESTINATION_MALL) {
+            return [];
+        }
+        return [
+            $this->writeDecisionEvent($asset, 'erp.asset.ready_for_photo.v1', $documentId, [
+                'source_device_id' => (int)$asset->source_device_id,
+                'sale_destination' => ErpDict::SALE_DESTINATION_MALL,
+                'next_status' => ErpDict::INVENTORY_PENDING_PRICING,
+            ], $now),
+        ];
+    }
+
+    private function normalizeRefurbishmentPlan(array $plan): array
+    {
+        $items = $plan['suggested_items'] ?? [];
+        if (!is_array($items)) {
+            $items = [];
+        }
+        return [
+            'required' => (bool)($plan['required'] ?? false),
+            'decision_source' => (string)($plan['decision_source'] ?? 'default'),
+            'reason' => trim((string)($plan['reason'] ?? '')),
+            'suggested_items' => array_values($items),
+            'estimated_cost' => ErpMoney::normalize($plan['estimated_cost'] ?? 0),
+            'decided_by' => (array)($plan['decided_by'] ?? []),
+            'assignee' => (array)($plan['assignee'] ?? []),
+            'decided_at' => (int)($plan['decided_at'] ?? 0),
+        ];
+    }
+
+    private function createRefurbishmentOrderFromDecision(ErpAsset $asset, array $plan, int $stockOrderId, int $now): ErpRefurbishOrder
+    {
+        $assignee = (array)$plan['assignee'];
+        $assignedUid = (int)($assignee['id'] ?? 0);
+        $assignedName = trim((string)($assignee['name'] ?? ''));
+        if ($assignedUid <= 0) {
+            $assignedUid = $this->uid;
+            $assignedName = $this->username ?: '';
+        }
+        if ($assignedName === '') {
+            $assignedName = $assignedUid > 0 ? ('员工#' . $assignedUid) : '待分配';
+        }
+
+        $order = ErpRefurbishOrder::create([
+            'site_id' => $this->site_id,
+            'order_no' => $this->makeNo('ZB'),
+            'asset_id' => (int)$asset->id,
+            'cycle_id' => (int)$asset->cycle_id,
+            'status' => ErpDict::REFURBISH_PROCESSING,
+            'assigned_uid' => $assignedUid,
+            'assigned_name' => $assignedName,
+            'planned_finish_at' => 0,
+            'started_at' => $now,
+            'remark' => trim((string)$plan['reason']),
+            'create_at' => $now,
+            'update_at' => $now,
+        ]);
+
+        foreach ($plan['suggested_items'] as $item) {
+            $name = is_array($item) ? trim((string)($item['item_name'] ?? $item['name'] ?? '')) : trim((string)$item);
+            if ($name === '') {
+                continue;
+            }
+            ErpRefurbishItem::create([
+                'site_id' => $this->site_id,
+                'order_id' => (int)$order->id,
+                'item_type' => is_array($item) ? (string)($item['item_type'] ?? $item['type'] ?? 'other') : 'other',
+                'item_name' => $name,
+                'amount' => '0.00',
+                'remark' => '',
+                'create_at' => $now,
+                'update_at' => $now,
+            ]);
+        }
+
+        $beforeStatus = (string)$asset->inventory_status;
+        $asset->save([
+            'inventory_status' => ErpDict::INVENTORY_REFURBISHING,
+            'version' => (int)$asset->version + 1,
+            'update_at' => $now,
+        ]);
+        ErpAssetCycle::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', (int)$asset->cycle_id],
+        ])->update([
+            'status' => ErpDict::INVENTORY_REFURBISHING,
+            'update_at' => $now,
+        ]);
+        ErpStockLedger::create([
+            'site_id' => $this->site_id,
+            'ledger_no' => $this->makeNo('SL'),
+            'asset_id' => (int)$asset->id,
+            'cycle_id' => (int)$asset->cycle_id,
+            'stock_order_id' => $stockOrderId,
+            'action' => 'auto_create_refurbishment',
+            'before_status' => $beforeStatus,
+            'after_status' => ErpDict::INVENTORY_REFURBISHING,
+            'warehouse_id' => (int)$asset->warehouse_id,
+            'location_id' => (int)$asset->location_id,
+            'operator_id' => $this->uid,
+            'operator_name' => $this->username ?: '',
+            'occurred_at' => $now,
+            'payload' => [
+                'refurbish_order_id' => (int)$order->id,
+                'refurbish_order_no' => (string)$order->order_no,
+                'reason' => $plan['reason'],
+                'estimated_cost' => $plan['estimated_cost'],
+            ],
+        ]);
+
+        return $order;
+    }
+
+    private function writeDecisionEvent(ErpAsset $asset, string $eventName, int $stockOrderId, array $payload, int $now): int
+    {
+        $event = ErpDomainEvent::create(
+            $this->site_id,
+            $eventName,
+            $this->makeEventId(str_replace('.', '-', $eventName), (int)$asset->id),
+            'asset',
+            (int)$asset->id,
+            ['type' => 'staff', 'id' => $this->uid, 'name' => $this->username ?: ''],
+            ['plugin' => 'hsx_erp', 'type' => 'stock_in', 'id' => $stockOrderId],
+            array_merge([
+                'asset_id' => (int)$asset->id,
+                'cycle_id' => (int)$asset->cycle_id,
+                'stock_order_id' => $stockOrderId,
+                'source_device_id' => (int)$asset->source_device_id,
+                'counterparty_id' => (int)$asset->counterparty_id,
+            ], $payload),
+            $now
+        );
+        return (int)ErpDomainEvent::writeOutbox($event, $now)->id;
+    }
+
     private function makeNo(string $prefix): string
     {
         return $prefix . date('YmdHis') . str_pad((string)$this->site_id, 3, '0', STR_PAD_LEFT) . random_int(100000, 999999);
@@ -313,5 +607,25 @@ class ErpAssetService extends BaseAdminService
     private function makeEventId(string $prefix, int $id): string
     {
         return $prefix . '-' . $id . '-' . date('YmdHis') . '-' . random_int(1000, 9999);
+    }
+
+    private function appendCounterparties(array &$rows): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map(
+            fn(array $row) => (int)($row['counterparty_id'] ?? 0),
+            $rows
+        ))));
+        if (empty($ids)) {
+            return;
+        }
+        $map = [];
+        foreach (ErpCounterparty::where([['site_id', '=', $this->site_id]])
+                     ->whereIn('id', $ids)->select()->toArray() as $counterparty) {
+            $map[(int)$counterparty['id']] = $counterparty;
+        }
+        foreach ($rows as &$row) {
+            $row['counterparty'] = $map[(int)($row['counterparty_id'] ?? 0)] ?? null;
+        }
+        unset($row);
     }
 }

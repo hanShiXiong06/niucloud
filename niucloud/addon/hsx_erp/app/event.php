@@ -9,6 +9,9 @@ return [
         'GetErpDeviceSyncStatus' => [
             'addon\hsx_erp\app\listener\DeviceSyncStatusListener',
         ],
+        'DeviceAssetPriceCompleted' => [
+            'addon\hsx_erp\app\listener\DeviceAssetPriceCompletedListener',
+        ],
     ],
     'subscribe' => [],
 ];

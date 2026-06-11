@@ -75,8 +75,10 @@ class Asset extends BaseAdminController
             ['category_id', 0],
             ['capacity', ''],
             ['color', ''],
-            ['ownership_type', 'owned'],
+            ['business_type', 'recycle'],
+            ['counterparty_id', 0],
             ['purchase_cost', 0],
+            ['paid_amount', 0],
             ['suggested_sale_price', 0],
             ['remark', ''],
         ]);

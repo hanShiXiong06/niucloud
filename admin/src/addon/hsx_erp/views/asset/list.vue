@@ -26,6 +26,9 @@
                     <el-select v-model="search.inventory_status" clearable class="!w-[150px]" placeholder="全部">
                         <el-option label="待入库" value="pending_in" />
                         <el-option label="在库" value="in_stock" />
+                        <el-option label="整备中" value="refurbishing" />
+                        <el-option label="待销售定价" value="pending_pricing" />
+                        <el-option label="可售" value="available_for_sale" />
                     </el-select>
                 </el-form-item>
                 <el-form-item>
@@ -48,7 +51,6 @@
                 <el-button
                     type="primary"
                     :disabled="selectedAssets.length === 0"
-                    :loading="batchConfirming"
                     @click="batchConfirmInbound"
                 >
                     批量确认入库{{ selectedAssets.length ? ` (${selectedAssets.length})` : '' }}
@@ -71,6 +73,9 @@
                     </template>
                 </el-table-column>
                 <el-table-column prop="source_device_id" label="来源设备ID" width="120" />
+                <el-table-column label="往来单位" min-width="150">
+                    <template #default="{ row }">{{ row.counterparty?.name || '-' }}</template>
+                </el-table-column>
                 <el-table-column label="归属" width="100">
                     <template #default="{ row }">
                         <el-tag :type="row.ownership_type === 'consign' ? 'warning' : 'success'" effect="plain">
@@ -83,7 +88,7 @@
                 </el-table-column>
                 <el-table-column label="状态" width="120">
                     <template #default="{ row }">
-                        <el-tag :type="row.inventory_status === 'in_stock' ? 'success' : 'warning'">
+                        <el-tag :type="statusType(row.inventory_status)">
                             {{ statusName(row.inventory_status) }}
                         </el-tag>
                     </template>
@@ -91,7 +96,7 @@
                 <el-table-column prop="stock_in_at" label="入库时间" width="180">
                     <template #default="{ row }">{{ formatTime(row.stock_in_at) }}</template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="170" align="center">
+                <el-table-column label="操作" fixed="right" width="250" align="center">
                     <template #default="{ row }">
                         <el-button
                             v-if="row.inventory_status === 'pending_in'"
@@ -101,6 +106,20 @@
                             @click="confirmInbound(row)"
                         >
                             确认入库
+                        </el-button>
+                        <el-button v-if="row.inventory_status === 'in_stock'" type="primary" link @click="startRefurbishment(row)">
+                            发起整备
+                        </el-button>
+                        <el-button v-if="row.inventory_status === 'in_stock'" type="success" link @click="skipRefurbishment(row)">
+                            无需整备
+                        </el-button>
+                        <el-button
+                            v-if="['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
+                            type="primary"
+                            link
+                            @click="openPricing(row)"
+                        >
+                            {{ row.inventory_status === 'available_for_sale' ? '调价' : '定价' }}
                         </el-button>
                         <el-button type="primary" link @click="openDetail(row)">详情</el-button>
                     </template>
@@ -131,11 +150,26 @@
                     <el-form-item label="设备型号" required>
                         <el-input v-model.trim="manualForm.model" placeholder="例如 iPhone 15 Pro" />
                     </el-form-item>
-                    <el-form-item label="归属类型">
-                        <el-select v-model="manualForm.ownership_type" class="w-full">
-                            <el-option label="自有库存" value="owned" />
-                            <el-option label="代卖库存" value="consign" />
+                    <el-form-item label="入库类型" required>
+                        <el-select v-model="manualForm.business_type" class="w-full" @change="handleBusinessTypeChange">
+                            <el-option label="回收客户" value="recycle" />
+                            <el-option label="同行/供应商采购" value="purchase" />
+                            <el-option label="代卖委托" value="consignment" />
+                            <el-option label="期初库存" value="opening" />
                         </el-select>
+                    </el-form-item>
+                    <el-form-item label="往来单位" :required="manualForm.business_type !== 'opening'">
+                        <div class="flex w-full gap-2">
+                            <el-select v-model="manualForm.counterparty_id" filterable class="flex-1" placeholder="请选择货物来源">
+                                <el-option
+                                    v-for="item in counterpartyOptions"
+                                    :key="item.id"
+                                    :label="`${item.name}${item.mobile ? ` (${item.mobile})` : ''}`"
+                                    :value="item.id"
+                                />
+                            </el-select>
+                            <el-button @click="openQuickCounterparty">新增</el-button>
+                        </div>
                     </el-form-item>
                     <el-form-item label="IMEI">
                         <el-input v-model.trim="manualForm.imei" />
@@ -152,13 +186,35 @@
                     <el-form-item label="颜色">
                         <el-input v-model.trim="manualForm.color" />
                     </el-form-item>
-                    <el-form-item label="采购成本">
-                        <el-input-number v-model="manualForm.purchase_cost" :min="0" :precision="2" class="!w-full" />
+                    <el-form-item :label="manualForm.business_type === 'consignment' ? '入库成本' : '应付/成本'">
+                        <el-input-number
+                            v-model="manualForm.purchase_cost"
+                            :min="0"
+                            :precision="2"
+                            :disabled="manualForm.business_type === 'consignment'"
+                            class="!w-full"
+                        />
+                    </el-form-item>
+                    <el-form-item label="已付金额">
+                        <el-input-number
+                            v-model="manualForm.paid_amount"
+                            :min="0"
+                            :max="manualForm.purchase_cost"
+                            :precision="2"
+                            :disabled="['consignment', 'opening'].includes(manualForm.business_type)"
+                            class="!w-full"
+                        />
                     </el-form-item>
                     <el-form-item label="建议销售价">
                         <el-input-number v-model="manualForm.suggested_sale_price" :min="0" :precision="2" class="!w-full" />
                     </el-form-item>
                 </div>
+                <el-alert
+                    class="mb-4"
+                    :type="manualUnpaidAmount > 0 ? 'warning' : 'success'"
+                    :closable="false"
+                    :title="manualSettlementText"
+                />
                 <el-form-item label="备注">
                     <el-input v-model.trim="manualForm.remark" type="textarea" :rows="3" placeholder="录入来源、采购说明等" />
                 </el-form-item>
@@ -171,6 +227,24 @@
             </template>
         </el-dialog>
 
+        <el-dialog v-model="counterpartyDialog.visible" title="快速新增往来单位" width="520px">
+            <el-form label-width="100px">
+                <el-form-item label="单位类型">
+                    <el-select v-model="counterpartyDialog.form.counterparty_type" class="w-full">
+                        <el-option label="个人" value="individual" />
+                        <el-option label="企业" value="company" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="名称" required><el-input v-model.trim="counterpartyDialog.form.name" /></el-form-item>
+                <el-form-item label="手机号"><el-input v-model.trim="counterpartyDialog.form.mobile" /></el-form-item>
+                <el-form-item label="联系人"><el-input v-model.trim="counterpartyDialog.form.contact_name" /></el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="counterpartyDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="counterpartyDialog.loading" @click="submitQuickCounterparty">保存并选择</el-button>
+            </template>
+        </el-dialog>
+
         <el-drawer v-model="detailVisible" title="ERP 设备详情" size="720px">
             <el-descriptions v-if="detail.asset" :column="2" border>
                 <el-descriptions-item label="资产编号">{{ detail.asset.asset_no }}</el-descriptions-item>
@@ -178,6 +252,12 @@
                 <el-descriptions-item label="IMEI">{{ detail.asset.imei || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="SN">{{ detail.asset.sn || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="型号" :span="2">{{ detail.asset.model || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="往来单位">
+                    {{ detail.counterparty?.name || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="联系电话">
+                    {{ detail.counterparty?.mobile || '-' }}
+                </el-descriptions-item>
                 <el-descriptions-item label="采购成本">¥{{ money(detail.asset.purchase_cost) }}</el-descriptions-item>
                 <el-descriptions-item label="当前总成本">¥{{ money(detail.asset.current_cost) }}</el-descriptions-item>
             </el-descriptions>
@@ -185,11 +265,9 @@
             <el-alert
                 v-if="detail.asset"
                 class="mt-4"
-                :type="detail.asset.inventory_status === 'pending_in' ? 'warning' : 'success'"
+                :type="detail.asset.inventory_status === 'pending_in' ? 'warning' : 'info'"
                 :closable="false"
-                :title="detail.asset.inventory_status === 'pending_in'
-                    ? '下一步：核对串号、型号和成本后确认入库'
-                    : '下一步：进入整备/维修与成本管理，完成后进行销售定价和上架'"
+                :title="nextStepText(detail.asset.inventory_status)"
             />
 
             <div class="mt-5 font-medium">库存流水</div>
@@ -228,13 +306,34 @@
                 </el-timeline-item>
             </el-timeline>
         </el-drawer>
+
+        <el-dialog v-model="inbound.visible" title="确认入库位置" width="560px">
+            <el-form label-width="100px">
+                <el-form-item label="入库仓库" required>
+                    <el-select v-model="inbound.warehouse_id" class="w-full" @change="inbound.location_id = 0">
+                        <el-option v-for="item in warehouseOptions" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="入库库位" required>
+                    <el-select v-model="inbound.location_id" class="w-full">
+                        <el-option v-for="item in availableLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="备注"><el-input v-model.trim="inbound.remark" type="textarea" /></el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="inbound.visible = false">取消</el-button>
+                <el-button type="primary" :loading="inbound.loading" @click="submitInbound">确认入库</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import {
     batchConfirmErpAssetInbound,
     confirmErpAssetInbound,
@@ -242,25 +341,51 @@ import {
     getErpAssetInfo,
     getErpAssetList
 } from '@/addon/hsx_erp/api/asset'
+import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
+import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
+import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
 
+const router = useRouter()
 const search = reactive({ keyword: '', inventory_status: '' })
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
 const detailVisible = ref(false)
 const detail = reactive<any>({ asset: null, timeline: [] })
 const selectedAssets = ref<any[]>([])
-const batchConfirming = ref(false)
+const warehouseOptions = ref<any[]>([])
+const counterpartyOptions = ref<any[]>([])
+const inbound = reactive<any>({
+    visible: false, loading: false, warehouse_id: 0, location_id: 0, remark: '', assetIds: []
+})
+const availableLocations = computed(() =>
+    warehouseOptions.value.find((item: any) => Number(item.id) === Number(inbound.warehouse_id))?.locations || []
+)
 const manualDialog = reactive({ visible: false, submitting: false })
 const manualForm = reactive({
     model: '',
-    ownership_type: 'owned',
+    business_type: 'recycle',
+    counterparty_id: 0,
     imei: '',
     imei2: '',
     sn: '',
     capacity: '',
     color: '',
     purchase_cost: 0,
+    paid_amount: 0,
     suggested_sale_price: 0,
     remark: ''
+})
+const counterpartyDialog = reactive<any>({
+    visible: false,
+    loading: false,
+    form: { counterparty_type: 'individual', name: '', mobile: '', contact_name: '' }
+})
+const manualUnpaidAmount = computed(() =>
+    Math.max(0, Number(manualForm.purchase_cost || 0) - Number(manualForm.paid_amount || 0))
+)
+const manualSettlementText = computed(() => {
+    if (manualForm.business_type === 'consignment') return '代卖入库：暂不形成采购成本和应付，销售后按代卖结算规则处理。'
+    if (manualForm.business_type === 'opening') return `期初成本 ¥${money(manualForm.purchase_cost)}，不自动形成外部应付。`
+    return `应付 ¥${money(manualForm.purchase_cost)}，已付 ¥${money(manualForm.paid_amount)}，未付 ¥${money(manualUnpaidAmount.value)}`
 })
 
 const loadList = async () => {
@@ -288,16 +413,25 @@ const handleReset = () => {
 const resetManualForm = () => {
     Object.assign(manualForm, {
         model: '',
-        ownership_type: 'owned',
+        business_type: 'recycle',
+        counterparty_id: 0,
         imei: '',
         imei2: '',
         sn: '',
         capacity: '',
         color: '',
         purchase_cost: 0,
+        paid_amount: 0,
         suggested_sale_price: 0,
         remark: ''
     })
+}
+
+const handleBusinessTypeChange = () => {
+    if (['consignment', 'opening'].includes(manualForm.business_type)) {
+        manualForm.paid_amount = 0
+    }
+    if (manualForm.business_type === 'consignment') manualForm.purchase_cost = 0
 }
 
 const openManualInbound = () => {
@@ -314,6 +448,14 @@ const submitManualInbound = async () => {
         ElMessage.warning('IMEI 和 SN 至少填写一个')
         return
     }
+    if (manualForm.business_type !== 'opening' && !manualForm.counterparty_id) {
+        ElMessage.warning('请选择往来单位')
+        return
+    }
+    if (Number(manualForm.paid_amount) > Number(manualForm.purchase_cost)) {
+        ElMessage.warning('已付金额不能大于应付金额')
+        return
+    }
     manualDialog.submitting = true
     try {
         await createErpManualInbound({ ...manualForm })
@@ -327,25 +469,45 @@ const submitManualInbound = async () => {
     }
 }
 
+const loadCounterparties = async () => {
+    const res: any = await getErpCounterpartyOptions()
+    counterpartyOptions.value = res.data || []
+}
+
+const openQuickCounterparty = () => {
+    Object.assign(counterpartyDialog.form, {
+        counterparty_type: 'individual',
+        name: '',
+        mobile: '',
+        contact_name: '',
+        role_type: manualForm.business_type === 'consignment' ? 'consignor' : 'supplier'
+    })
+    counterpartyDialog.visible = true
+}
+
+const submitQuickCounterparty = async () => {
+    if (!counterpartyDialog.form.name) return ElMessage.warning('请填写往来单位名称')
+    counterpartyDialog.loading = true
+    try {
+        const res: any = await saveErpCounterparty(0, { ...counterpartyDialog.form, status: 1 })
+        await loadCounterparties()
+        manualForm.counterparty_id = Number(res.data || 0)
+        counterpartyDialog.visible = false
+        ElMessage.success('往来单位已新增并选中')
+    } finally {
+        counterpartyDialog.loading = false
+    }
+}
+
 const rowSelectable = (row: any) => row.inventory_status === 'pending_in'
 const handleSelectionChange = (rows: any[]) => {
     selectedAssets.value = rows.filter(rowSelectable)
 }
 
 const confirmInbound = async (row: any) => {
-    await ElMessageBox.confirm(
-        `确认将 ${ row.imei || row.asset_no } 正式入库吗？确认后会生成库存和初始成本流水。`,
-        '确认入库',
-        { type: 'warning' }
-    )
-    row._confirming = true
-    try {
-        await confirmErpAssetInbound(row.id)
-        ElMessage.success('入库成功')
-        await loadList()
-    } finally {
-        row._confirming = false
-    }
+    inbound.assetIds = [Number(row.id)]
+    inbound.remark = ''
+    inbound.visible = true
 }
 
 const batchConfirmInbound = async () => {
@@ -354,19 +516,28 @@ const batchConfirmInbound = async () => {
         ElMessage.warning('请先勾选待入库设备')
         return
     }
-    await ElMessageBox.confirm(
-        `确认将选中的 ${assetIds.length} 台设备正式入库吗？未勾选的设备会继续保持待入库。`,
-        '批量确认入库',
-        { type: 'warning' }
-    )
-    batchConfirming.value = true
+    inbound.assetIds = assetIds
+    inbound.remark = ''
+    inbound.visible = true
+}
+
+const submitInbound = async () => {
+    if (!inbound.warehouse_id || !inbound.location_id) {
+        ElMessage.warning('请选择入库仓库和库位')
+        return
+    }
+    inbound.loading = true
     try {
-        const res: any = await batchConfirmErpAssetInbound(assetIds)
-        ElMessage.success(`已确认入库 ${Number(res.data?.confirmed_count || assetIds.length)} 台`)
+        const data = { warehouse_id: inbound.warehouse_id, location_id: inbound.location_id, remark: inbound.remark }
+        const res: any = inbound.assetIds.length === 1
+            ? await confirmErpAssetInbound(inbound.assetIds[0], data)
+            : await batchConfirmErpAssetInbound(inbound.assetIds, data)
+        ElMessage.success(`已确认入库 ${Number(res.data?.confirmed_count || inbound.assetIds.length)} 台`)
+        inbound.visible = false
         selectedAssets.value = []
         await loadList()
     } finally {
-        batchConfirming.value = false
+        inbound.loading = false
     }
 }
 
@@ -376,16 +547,63 @@ const openDetail = async (row: any) => {
     detailVisible.value = true
 }
 
+const startRefurbishment = (row: any) => {
+    router.push({ path: '/hsx_erp/refurbishment', query: { asset_id: String(row.id) } })
+}
+
+const openPricing = (row: any) => {
+    router.push({ path: '/hsx_erp/pricing', query: { asset_id: String(row.id) } })
+}
+
+const skipRefurbishment = async (row: any) => {
+    await ElMessageBox.confirm(
+        `确认 ${row.model || row.asset_no} 无需整备，直接进入待销售定价吗？`,
+        '无需整备',
+        { type: 'warning', confirmButtonText: '进入待销售定价', cancelButtonText: '取消' }
+    )
+    await skipErpRefurbishment(Number(row.id), { remark: '库存工作台确认无需整备' })
+    ElMessage.success('设备已进入待销售定价')
+    await loadList()
+}
+
 const money = (value: any) => Number(value || 0).toFixed(2)
 const statusName = (status: string) => ({
     pending_in: '待入库',
-    in_stock: '在库'
+    inbound_rejected: '入库驳回',
+    in_stock: '在库',
+    refurbishing: '整备中',
+    pending_pricing: '待销售定价',
+    available_for_sale: '可售'
 }[status] || status || '-')
+const statusType = (status: string) => ({
+    pending_in: 'warning',
+    inbound_rejected: 'danger',
+    in_stock: 'success',
+    refurbishing: 'warning',
+    pending_pricing: 'primary',
+    available_for_sale: 'success'
+}[status] || 'info')
+const nextStepText = (status: string) => ({
+    pending_in: '下一步：核对串号、型号和成本后确认入库',
+    inbound_rejected: '下一步：修正驳回信息后重新提交入库',
+    in_stock: '下一步：发起整备，或确认无需整备后直接进入待销售定价',
+    refurbishing: '下一步：完成整备验收并确认实际费用',
+    pending_pricing: '下一步：创建销售定价单，确认销售价和最低利润',
+    available_for_sale: '下一步：客户锁定后创建销售单并出库'
+}[status] || '请根据设备当前状态继续处理')
 const formatTime = (value: any) => {
     if (!value) return '-'
     const date = new Date(Number(value) * 1000)
     return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN')
 }
 
-onMounted(loadList)
+const loadWarehouses = async () => {
+    const res: any = await getErpWarehouseOptions()
+    warehouseOptions.value = res.data || []
+    const defaultWarehouse = warehouseOptions.value.find((item: any) => item.is_default === 1) || warehouseOptions.value[0]
+    inbound.warehouse_id = Number(defaultWarehouse?.id || 0)
+    inbound.location_id = Number(defaultWarehouse?.locations?.[0]?.id || 0)
+}
+
+onMounted(() => Promise.all([loadList(), loadWarehouses(), loadCounterparties()]))
 </script>

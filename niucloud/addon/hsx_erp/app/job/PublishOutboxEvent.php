@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\job;
 
 use addon\hsx_erp\app\model\ErpOutboxEvent;
+use addon\hsx_erp\app\support\ErpDomainEvent;
 use core\base\BaseJob;
 
 class PublishOutboxEvent extends BaseJob
@@ -16,7 +17,9 @@ class PublishOutboxEvent extends BaseJob
         }
 
         try {
-            event('ErpDomainEvent', (array)$event->payload);
+            $domainEvent = (array)$event->payload;
+            ErpDomainEvent::validate($domainEvent);
+            event('ErpDomainEvent', $domainEvent);
             $event->save([
                 'status' => 'published',
                 'attempts' => (int)$event->attempts + 1,
