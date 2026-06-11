@@ -124,6 +124,25 @@
                         <el-button type="primary" link @click="openDetail(row)">详情</el-button>
                     </template>
                 </el-table-column>
+
+                <template #empty>
+                    <EmptyState
+                        v-if="search.keyword || search.inventory_status"
+                        icon="search"
+                        title="没有符合条件的设备"
+                        description="换个关键词或库存状态再试试。"
+                    />
+                    <EmptyState
+                        v-else
+                        icon="box"
+                        title="还没有库存设备"
+                        description="点击「手工建档入库」录入第一台；或在回收订单确认回收后，设备会自动同步到这里的待入库池。"
+                    >
+                        <template #action>
+                            <el-button type="primary" @click="openManualInbound">手工建档入库</el-button>
+                        </template>
+                    </EmptyState>
+                </template>
             </el-table>
 
             <div class="mt-4 flex justify-end">
@@ -344,6 +363,7 @@ import {
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
 import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
+import EmptyState from '@/components/empty-state/index.vue'
 
 const router = useRouter()
 const search = reactive({ keyword: '', inventory_status: '' })
