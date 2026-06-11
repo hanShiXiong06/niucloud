@@ -2,12 +2,13 @@
     <div class="main-container">
         <el-card class="box-card !border-none" shadow="never">
 
-            <div class="flex justify-between items-center">
-                <span class="text-lg">{{pageName}}</span>
-                <el-button type="primary" @click="addEvent">
-                    {{ t('addRecycleUserAddress') }}
-                </el-button>
-            </div>
+            <PageHeader :title="pageName">
+                <template #actions>
+                    <el-button type="primary" @click="addEvent">
+                        {{ t('addRecycleUserAddress') }}
+                    </el-button>
+                </template>
+            </PageHeader>
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="recycleUserAddressTable.searchParam" ref="searchFormRef">
@@ -43,7 +44,12 @@
             <div class="mt-[10px]">
                 <el-table :data="recycleUserAddressTable.data" size="large" v-loading="recycleUserAddressTable.loading">
                     <template #empty>
-                        <span>{{ !recycleUserAddressTable.loading ? t('emptyData') : '' }}</span>
+                        <EmptyState
+                            v-if="!recycleUserAddressTable.loading"
+                            icon="folder"
+                            title="暂无地址"
+                            description="点右上角「新增地址」添加，或调整筛选条件再试试。"
+                        />
                     </template>
                     <el-table-column prop="id" :label="t('memberId')" min-width="120" :show-overflow-tooltip="true"/>
                     
@@ -83,6 +89,8 @@ import { getRecycleUserAddressList, deleteRecycleUserAddress, getWithMemberList 
 import { img } from '@/utils/common'
 import { ElMessageBox,FormInstance } from 'element-plus'
 import Edit from '@/addon/hsx_recycle/views/recycle_user_address/components/recycle-user-address-edit.vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
+import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import { useRoute } from 'vue-router'
 const route = useRoute()
 const pageName = route.meta.title;
