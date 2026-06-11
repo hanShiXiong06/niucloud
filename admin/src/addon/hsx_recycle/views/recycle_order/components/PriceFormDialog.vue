@@ -236,7 +236,8 @@
         <el-button
           type="primary"
           @click="handleConfirm"
-          :disabled="!isFormValid"
+          :disabled="!isFormValid || submitting"
+          :loading="submitting"
           :class="isMobile ? 'w-full !ml-0' : ''"
         >
           确认回收定价
@@ -283,7 +284,8 @@ interface DeviceInfo {
 
 const props = defineProps({
     visible: { type: Boolean, default: false },
-    device: { type: Object as () => DeviceInfo, default: () => ({}) }
+    device: { type: Object as () => DeviceInfo, default: () => ({}) },
+    submitting: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:visible', 'confirm', 'cancel'])

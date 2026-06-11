@@ -198,6 +198,7 @@
     <CheckDeviceDialog
       v-model:visible="checkDeviceLogVisible"
       :device="checkDeviceLogForm"
+      :submitting="checkSubmitting"
       @confirm="submitDeviceCheck"
       @save-draft="handleCheckDeviceSaveDraft"
       @return-device="handleCheckDeviceReturn"
@@ -206,6 +207,7 @@
     <PriceFormDialog
       v-model:visible="priceDeviceLogVisible"
       :device="checkDeviceLogForm"
+      :submitting="priceSubmitting"
       @confirm="submitDevicePrice"
     />
 
@@ -659,6 +661,8 @@ const {
   batchRecycleDevice,
   batchReturnDevice,
   batchRecycleDevices,
+  checkSubmitting,
+  priceSubmitting,
 } = useRecycleDeviceActions({
   list,
   pagination,

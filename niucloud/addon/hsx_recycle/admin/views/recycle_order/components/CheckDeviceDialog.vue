@@ -254,7 +254,10 @@ interface DeviceInfo {
   [key: string]: any
 }
 
-const props = defineProps<{ visible: boolean; device: DeviceInfo }>()
+const props = withDefaults(
+  defineProps<{ visible: boolean; device: DeviceInfo; submitting?: boolean }>(),
+  { submitting: false }
+)
 
 const emit = defineEmits(['update:visible', 'confirm', 'cancel', 'save-draft', 'return-device'])
 
@@ -430,7 +433,7 @@ const handleTemplateFieldChange = (field: CheckTemplateField, value: any) => {
 
 const dialogVisible = ref(props.visible)
 const deviceData = ref<DeviceInfo>({ ...props.device })
-const submitting = ref(false)
+// submitting 由父级通过 prop 传入（反映真实的服务端提交进行中状态）
 const savingDraft = ref(false)
 const formRef = ref<FormInstance>()
 const imeiInputRef = ref()
@@ -780,7 +783,7 @@ const syncSellerImagesToBuyer = () => {
 const handleCancel = () => { dialogVisible.value = false; emit('cancel') }
 
 const handleReturnDevice = () => {
-  if (savingDraft.value || submitting.value) return
+  if (savingDraft.value || props.submitting) return
   if (!deviceData.value?.id) {
     ElMessage.warning('设备信息异常，无法退回')
     return
@@ -790,11 +793,11 @@ const handleReturnDevice = () => {
 
 const handleConfirm = async () => {
   if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
+  await formRef.value.validate((valid) => {
     if (!valid) return
-    submitting.value = true
-    try { emit('confirm', buildSubmitPayload('check')); dialogVisible.value = false }
-    finally { submitting.value = false }
+    // 仅发起提交，不在此自关弹窗：由父级在服务端提交成功后再关闭，
+    // 失败时弹窗保留，用户的质检填写不丢失。按钮加载态由 props.submitting 驱动。
+    emit('confirm', buildSubmitPayload('check'))
   })
 }
 

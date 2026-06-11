@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 import { ElLoading, ElMessage, ElMessageBox } from 'element-plus'
+import { useSubmit, confirmDanger } from '@/utils/useSubmit'
 import {
   batchRecycleDevices as apiBatchRecycleDevices,
   batchReturnDevices as apiBatchReturnDevices,
@@ -119,6 +120,11 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
 
   const selectedDevices = ref<Record<string | number, any[]>>({})
 
+  // 关键写操作的提交守卫：防重复提交 + 加载态。loading 暴露给弹窗按钮绑定 :loading。
+  const checkSubmit = useSubmit()
+  const priceSubmit = useSubmit()
+  const recycleSubmit = useSubmit()
+
   const checkDevice = async (row: any) => {
     const orderId = row.order_id
     const order = list.value.find((item) => item.id === orderId)
@@ -151,26 +157,20 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
     }
   }
 
-  const submitDeviceCheck = async (formData: any) => {
-    try {
-      if (!formData.check_result_seller) {
-        ElMessage.warning('请填写质检结果')
-        return
-      }
-
+  const submitDeviceCheck = (formData: any) => {
+    if (!formData.check_result_seller) {
+      ElMessage.warning('请填写质检结果')
+      return
+    }
+    return checkSubmit.run(async () => {
       await updateDevice(formData.id, {
         ...buildCheckSubmitPayload(formData),
         check_status: 1,
         action: 'check',
       })
-
-      ElMessage.success('质检信息提交成功')
       checkDeviceLogVisible.value = false
       await getList(pagination.value.page)
-    } catch (error: any) {
-      console.error('提交质检信息失败：', error)
-      ElMessage.error(error.response?.data?.message || '提交失败，请重试')
-    }
+    }, { success: '质检信息提交成功' })
   }
 
   const handleCheckDeviceSaveDraft = async (formData: any) => {
@@ -197,22 +197,16 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
     }
   }
 
-  const submitDevicePrice = async (formData: any) => {
-    try {
-      if (!formData || !formData.final_price || formData.final_price <= 0) {
-        ElMessage.warning('请输入有效的价格')
-        return
-      }
-
+  const submitDevicePrice = (formData: any) => {
+    if (!formData || !formData.final_price || formData.final_price <= 0) {
+      ElMessage.warning('请输入有效的价格')
+      return
+    }
+    return priceSubmit.run(async () => {
       await confirmPrice(formData.id, formData)
-
-      ElMessage.success('定价信息提交成功')
       priceDeviceLogVisible.value = false
       await getList(pagination.value.page)
-    } catch (error) {
-      console.error('提交定价信息失败：', error)
-      ElMessage.error('提交失败，请重试')
-    }
+    }, { success: '定价信息提交成功' })
   }
 
   const handleDeviceSelectionChange = (val: any[], orderId: string | number) => {
@@ -230,14 +224,17 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
       ElMessage.warning('请选择设备')
       return
     }
+    // 确认回收会推进设备进入后续入库流程，属状态变更，先二次确认
+    const ok = await confirmDanger('确认将该设备标记为「已回收」？确认后将进入后续入库流程。', {
+      title: '确认回收',
+      confirmText: '确认回收'
+    })
+    if (!ok) return
 
-    try {
+    return recycleSubmit.run(async () => {
       await apiBatchRecycleDevices({ ids: deviceId + '', remark: '管理员确认' })
       await getList(pagination.value.page)
-    } catch (error) {
-      console.error('确认失败:', error)
-      ElMessage.error('确认失败')
-    }
+    }, { success: '已确认回收' })
   }
 
   const batchReturnDevice = async (deviceId: number | string) => {
@@ -368,6 +365,9 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
     batchRecycleDevice,
     batchReturnDevice,
     batchRecycleDevices,
-    batchReturnDevices
+    batchReturnDevices,
+    // 提交进行中状态，供弹窗确认按钮绑定 :loading，实现可见的防重复点击
+    checkSubmitting: checkSubmit.loading,
+    priceSubmitting: priceSubmit.loading
   }
 }
