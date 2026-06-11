@@ -181,6 +181,7 @@ class DeviceAssetService extends BaseAdminService
             throw new CommonException('存在已入库设备，请勿重复导入：' . implode(',', $exists));
         }
 
+        $completedEvent = [];
         Db::startTrans();
         try {
             $items = [];
@@ -547,11 +548,26 @@ class DeviceAssetService extends BaseAdminService
             }
 
             $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_PRICE_COMPLETE, $orderData);
+            $completedEvent = [
+                'event_name' => 'device_asset.price.completed.v1',
+                'site_id' => $this->site_id,
+                'asset_id' => $assetId,
+                'device_id' => (int)$asset->device_id,
+                'operator' => ['id' => $this->uid, 'name' => $this->username ?: ''],
+                'payload' => [
+                    'erp_asset_id' => (int)($asset->ext_json['erp_asset_id'] ?? 0),
+                    'sale_price' => $priceData['sale_price'],
+                    'peer_price' => $priceData['peer_price'],
+                    'min_price' => $priceData['min_price'],
+                    'remark' => $priceData['price_remark'],
+                ],
+            ];
             Db::commit();
         } catch (\Throwable $e) {
             Db::rollback();
             throw new CommonException($e->getMessage());
         }
+        event('DeviceAssetPriceCompleted', $completedEvent);
 
         return $this->getInfo($assetId);
     }
