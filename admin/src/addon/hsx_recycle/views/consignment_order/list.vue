@@ -30,6 +30,14 @@
       </el-form>
 
       <el-table v-loading="loading" :data="tableData" size="large">
+        <template #empty>
+          <EmptyState
+            v-if="!loading"
+            icon="search"
+            title="暂无代卖订单"
+            description="在回收订单里把设备「转代卖」后，会出现在这里。可调整关键词或状态筛选。"
+          />
+        </template>
         <el-table-column label="代卖信息" min-width="260">
           <template #default="{ row }">
             <div class="font-semibold text-gray-900">{{ row.consignment_no }}</div>
@@ -205,6 +213,7 @@ import {
   updateConsignmentListing
 } from '@/addon/hsx_recycle/api/consignment_order'
 import { getPrintSceneManualActions, getPrintScenePlan, printByScene } from '@/addon/hsx_recycle/api/printer'
+import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 
 const route = useRoute()
 const router = useRouter()

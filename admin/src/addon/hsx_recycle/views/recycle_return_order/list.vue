@@ -57,6 +57,14 @@
             <!-- 表格区域 -->
             <el-table v-loading="tableLoading" :data="formattedTableData" style="width: 100%; margin-top: 20px" border
                 @selection-change="handleSelectionChange">
+                <template #empty>
+                    <EmptyState
+                        v-if="!tableLoading"
+                        icon="search"
+                        title="暂无退货订单"
+                        description="拒绝回收的设备会在这里生成退货订单，可调整筛选条件再试试。"
+                    />
+                </template>
                 <el-table-column type="selection" width="55" />
                 <el-table-column prop="id" label="ID" width="80" sortable />
                 <el-table-column prop="order_id" label="退回订单编号" min-width="150" sortable show-overflow-tooltip />
@@ -437,6 +445,7 @@ import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { Download, Search, Refresh, View, ArrowDown } from '@element-plus/icons-vue'
+import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 
 import {
     getReturnOrderList,
