@@ -172,9 +172,7 @@
 
               <div class="mt-2 flex items-center justify-between">
                 <span class="text-sm font-semibold text-red-500">{{ props.formatPrice(device.final_price) }}</span>
-                <el-tag :type="props.getDeviceStatusType(device.status)" size="small">
-                  {{ device.status_name }}
-                </el-tag>
+                <DeviceStatusBadge :status="device.status" :status-name="device.status_name" />
               </div>
               <div v-if="device.status === 5" class="mt-2">
                 <el-tag :type="Number(device.pay_status || 0) === 1 ? 'success' : 'warning'" size="small">
@@ -312,6 +310,7 @@ import {
   Share,
   Bell,
 } from "@element-plus/icons-vue";
+import DeviceStatusBadge from "./DeviceStatusBadge.vue";
 
 interface Props {
   loading: boolean;
