@@ -88,9 +88,18 @@
                 </el-table-column>
                 <el-table-column label="状态" width="120">
                     <template #default="{ row }">
-                        <el-tag :type="statusType(row.inventory_status)">
-                            {{ statusName(row.inventory_status) }}
-                        </el-tag>
+                        <el-tooltip
+                            :content="nextStepText(row.inventory_status)"
+                            :disabled="!nextStepText(row.inventory_status)"
+                            placement="top"
+                        >
+                            <span class="inline-flex cursor-default items-center gap-1">
+                                <el-tag :type="statusType(row.inventory_status)">
+                                    {{ statusName(row.inventory_status) }}
+                                </el-tag>
+                                <el-icon class="text-gray-300"><InfoFilled /></el-icon>
+                            </span>
+                        </el-tooltip>
                     </template>
                 </el-table-column>
                 <el-table-column prop="stock_in_at" label="入库时间" width="180">
@@ -351,7 +360,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Refresh, Search, InfoFilled } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
     batchConfirmErpAssetInbound,
