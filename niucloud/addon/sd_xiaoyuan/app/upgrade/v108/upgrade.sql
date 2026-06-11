@@ -1,1 +1,0 @@
-ALTER TABLE `xiaoyuan_order` MODIFY COLUMN `task_type` varchar(50) NOT NULL DEFAULT '' COMMENT '任务类型';
