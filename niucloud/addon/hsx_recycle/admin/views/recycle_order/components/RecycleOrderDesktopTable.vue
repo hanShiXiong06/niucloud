@@ -192,21 +192,6 @@
       </template>
     </el-table-column>
 
-    <el-table-column width="140" align="center">
-      <template #header>
-        <div class="text-xs">提交数量/签收数量</div>
-      </template>
-      <template #default="{ row }">
-        <el-tag v-if="isDeviceCountMatched(row)" type="success">
-          {{ getSubmittedDeviceCount(row) }}/ {{ getSignedDeviceCount(row) }}台
-        </el-tag>
-        <el-tag v-else type="danger">
-          {{ getSubmittedDeviceCount(row) }}/
-          {{ getSignedDeviceCount(row) }}台
-        </el-tag>
-      </template>
-    </el-table-column>
-
     <el-table-column label="状态" width="130" align="center">
       <template #default="{ row }">
         <el-tag :type="props.getStatusType(row.status)" :effect="props.getStatusEffect(row.status)">
@@ -216,9 +201,12 @@
       </template>
     </el-table-column>
 
-    <el-table-column label="设备进度" min-width="260">
+    <el-table-column label="设备进度" min-width="240">
       <template #default="{ row }">
-        <div class="flex flex-wrap gap-1 text-xs">
+        <div class="flex flex-wrap gap-1 text-xs items-center">
+          <el-tag size="small" effect="plain" :type="isDeviceCountMatched(row) ? 'success' : 'danger'">
+            {{ getSubmittedDeviceCount(row) }}/{{ getSignedDeviceCount(row) }}台
+          </el-tag>
           <template v-if="row.flow_summary?.progress?.length">
             <el-tag
               v-for="item in row.flow_summary.progress.filter(p => p.value > 0 || p.key === 'total')"
@@ -240,27 +228,22 @@
       </template>
     </el-table-column>
 
-    <el-table-column prop="create_at" label="创建时间" width="180">
+    <el-table-column label="时间" width="178">
       <template #default="{ row }">
-        {{ props.formatDateTime(row.create_at) }}
-      </template>
-    </el-table-column>
-
-    <el-table-column prop="sign_at" label="签收时间" width="180">
-      <template #default="{ row }">
-        {{ props.formatDateTime(row.sign_at) }}
-      </template>
-    </el-table-column>
-
-    <el-table-column prop="complete_at" label="完成时间" width="180">
-      <template #default="{ row }">
-        {{ props.formatDateTime(row.complete_at) }}
-      </template>
-    </el-table-column>
-
-    <el-table-column prop="pay_time" label="打款时间" width="180">
-      <template #default="{ row }">
-        {{ props.formatDateTime(row.pay_time) }}
+        <div class="order-time-cell">
+          <div class="order-time-cell__row">
+            <span class="order-time-cell__label">创建</span>{{ props.formatDateTime(row.create_at) }}
+          </div>
+          <div v-if="row.sign_at" class="order-time-cell__row">
+            <span class="order-time-cell__label">签收</span>{{ props.formatDateTime(row.sign_at) }}
+          </div>
+          <div v-if="row.complete_at" class="order-time-cell__row">
+            <span class="order-time-cell__label">完成</span>{{ props.formatDateTime(row.complete_at) }}
+          </div>
+          <div v-if="row.pay_time" class="order-time-cell__row">
+            <span class="order-time-cell__label">打款</span>{{ props.formatDateTime(row.pay_time) }}
+          </div>
+        </div>
       </template>
     </el-table-column>
 
@@ -493,6 +476,18 @@ const handleEditUsername = async (row: any) => {
 <style scoped>
 :deep(.el-table__fixed-right .el-table__cell) {
   overflow: visible;
+}
+/* 合并后的时间列：只显示有值的时间，标签灰、数值常规色 */
+.order-time-cell {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--el-text-color-regular);
+}
+.order-time-cell__label {
+  display: inline-block;
+  width: 30px;
+  color: var(--el-text-color-placeholder);
+  margin-right: 4px;
 }
 </style>
 
