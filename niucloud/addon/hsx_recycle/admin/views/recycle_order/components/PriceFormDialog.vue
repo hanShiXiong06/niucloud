@@ -55,7 +55,7 @@
                   <h4>回收报价</h4>
                   <p class="text-[12px]">给客户的最终回收价格，不是销售定价。</p>
                 </div>
-                <el-tag type="warning" effect="light">回收定价</el-tag>
+                <el-tag type="info" effect="plain">回收定价</el-tag>
               </div>
 
               <div class="pfd-price-grid">
@@ -111,7 +111,7 @@
                   <h4>销售去向</h4>
                   <p class="text-[12px]">定价员在回收定价阶段确定后续销售链路。</p>
                 </div>
-                <el-tag v-if="saleDestinationText" type="success" effect="light">{{ saleDestinationText }}</el-tag>
+                <el-tag v-if="saleDestinationText" type="info" effect="plain">{{ saleDestinationText }}</el-tag>
               </div>
               <el-radio-group v-model="deviceForm.sale_destination" class="flex flex-wrap gap-2">
                 <el-radio-button

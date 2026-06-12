@@ -10,7 +10,7 @@
 
     <!-- ===== 顶部：型号 + IMEI + 状态 ===== -->
     <div class="dic-header">
-      <div class="dic-header__icon">📱</div>
+      <div class="dic-header__icon"><el-icon><Cellphone /></el-icon></div>
       <div class="dic-header__main">
         <div class="dic-header__model">{{ device.model || '未知型号' }}</div>
         <div class="dic-header__meta">
@@ -35,7 +35,7 @@
     <!-- ===== 规格栏：内存 / 颜色 / 系统版本 / 保修信息 ===== -->
     <div class="dic-specs">
       <div class="dic-spec-item" v-for="spec in specs" :key="spec.key">
-        <span class="dic-spec-icon">{{ spec.icon }}</span>
+        <el-icon class="dic-spec-icon"><component :is="spec.icon" /></el-icon>
         <div class="dic-spec-body">
           <span class="dic-spec-label">{{ spec.label }}</span>
           <span :class="['dic-spec-value', !spec.value && 'dic-spec-value--empty']">
@@ -58,6 +58,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Cellphone, Coin, Brush, Medal } from '@element-plus/icons-vue'
 
 interface DeviceData {
   model?: string
@@ -111,10 +112,10 @@ const statusTagType = computed(() => {
 
 // 规格列表 —— 四项固定展示，无值显示"—"
 const specs = computed(() => [
-  { key: 'capacity',       icon: '💾', label: '内存',   value: props.device?.capacity },
-  { key: 'color',          icon: '🎨', label: '颜色',   value: props.device?.color },
-  { key: 'system_version', icon: '📲', label: '系统版本', value: props.device?.system_version },
-  { key: 'warranty_info',  icon: '🛡', label: '保修信息', value: props.device?.warranty_info }
+  { key: 'capacity',       icon: Coin,      label: '内存',   value: props.device?.capacity },
+  { key: 'color',          icon: Brush,     label: '颜色',   value: props.device?.color },
+  { key: 'system_version', icon: Cellphone, label: '系统版本', value: props.device?.system_version },
+  { key: 'warranty_info',  icon: Medal,     label: '保修信息', value: props.device?.warranty_info }
 ])
 
 const formatDate = (dateStr: string | number) => {
@@ -204,6 +205,7 @@ $spec-border: #e2e8f0;
   flex-shrink: 0;
   line-height: 1;
   margin-top: 2px;
+  color: var(--el-color-primary);
 }
 
 .dic-header__main {

@@ -610,17 +610,15 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
     line-height: 1;
   }
 
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter);
+  .ddd-price-label { color: var(--el-text-color-secondary); }
+
   &--final {
-    background: #fff7ed;
-    border: 1px solid #fed7aa;
-    .ddd-price-label { color: #ea580c; }
-    .ddd-price-value { color: #c2410c; }
+    .ddd-price-value { color: var(--el-color-danger); }
   }
   &--sell {
-    background: #faf5ff;
-    border: 1px solid #e9d5ff;
-    .ddd-price-label { color: #7c3aed; }
-    .ddd-price-value { color: #6d28d9; }
+    .ddd-price-value { color: var(--el-color-primary); }
   }
 }
 
