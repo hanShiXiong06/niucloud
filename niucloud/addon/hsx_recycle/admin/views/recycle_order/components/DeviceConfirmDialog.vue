@@ -535,6 +535,7 @@ watch(() => props.visible, (newVal) => {
     // 当对话框打开时，复制一份设备列表数据以避免直接修改props
     if (newVal) {
         syncDeviceData()
+        loadModelOptions()
     }
 })
 
@@ -1088,7 +1089,8 @@ onMounted(() => {
     updateResponsiveState()
     window.addEventListener('resize', updateResponsiveState)
     useFallbackCategoryTree()
-    loadModelOptions()
+    // 型号字典改为打开时加载，避免常驻挂载时进入列表页就请求
+    if (props.visible) loadModelOptions()
 })
 
 onBeforeUnmount(() => {

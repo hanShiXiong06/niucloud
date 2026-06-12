@@ -522,6 +522,7 @@ watch(() => props.visible, (v) => {
     if (v) {
         applyDeviceToForm(props.device as DeviceInfo)
         loadDeviceDetail()
+        ensureOptionsLoaded()
     }
 })
 watch(() => props.device, (newVal) => {
@@ -554,12 +555,20 @@ const handleConfirm = () => {
     })
 }
 
-onMounted(() => {
-    updateResponsiveState()
-    applyRefurbishmentFromDevice(deviceData.value)
+// 选项数据改为"首次打开时"加载，避免组件常驻挂载时在进入列表页就发起无效请求
+let optionsLoaded = false
+const ensureOptionsLoaded = () => {
+    if (optionsLoaded) return
+    optionsLoaded = true
     loadUsers()
     loadRefurbishmentOptions()
     loadSaleDestinationOptions()
+}
+
+onMounted(() => {
+    updateResponsiveState()
+    applyRefurbishmentFromDevice(deviceData.value)
+    if (props.visible) ensureOptionsLoaded()
     window.addEventListener('resize', updateResponsiveState)
 })
 onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveState) })

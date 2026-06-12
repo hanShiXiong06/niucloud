@@ -907,6 +907,7 @@ watch(dialogVisible, async (val) => {
   // 列表按设备分类圈定范围,不同设备需重新拉取
   await loadCheckTemplateList()
   await loadCheckTemplateSchema(selectedCheckTemplateId.value)
+  await loadDeviceQueryActions()
 })
 watch(
   () => [
@@ -924,9 +925,12 @@ onMounted(async () => {
   updateDeviceMode()
   window.addEventListener('resize', updateDeviceMode)
   initializeFormFromDevice(props.device)
-  await loadCheckTemplateList()
-  if (dialogVisible.value) await loadCheckTemplateSchema(selectedCheckTemplateId.value)
-  await loadDeviceQueryActions()
+  // 模板/验机动作改为打开时加载，避免组件常驻挂载时进入列表页就发起请求
+  if (dialogVisible.value) {
+    await loadCheckTemplateList()
+    await loadCheckTemplateSchema(selectedCheckTemplateId.value)
+    await loadDeviceQueryActions()
+  }
 })
 onBeforeUnmount(() => { window.removeEventListener('resize', updateDeviceMode) })
 </script>
