@@ -1,5 +1,5 @@
 <template>
-  <div class="template-list-wrap">
+  <PremiumTheme class="template-list-wrap">
     <el-card class="box-card" v-loading="loading">
       <template #header>
         <div class="card-header">
@@ -130,10 +130,11 @@
         <el-button type="primary" @click="submitTest" :loading="testLoading">测试打印</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRouter } from 'vue-router';

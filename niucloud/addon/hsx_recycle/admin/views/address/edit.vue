@@ -1,5 +1,5 @@
 <template>
-	<div class="main-container">
+	<PremiumTheme class="main-container">
         <el-card class="card !border-none mb-[15px]" shadow="never">
             <el-page-header :content="pageName" :icon="ArrowLeft" @back="back" />
         </el-card>
@@ -56,10 +56,11 @@
 				<el-button @click="back()">{{ t('cancel') }}</el-button>
 			</div>
 		</div>
-	</div>
+	</PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { t } from '@/lang'
 import type { FormInstance } from 'element-plus'

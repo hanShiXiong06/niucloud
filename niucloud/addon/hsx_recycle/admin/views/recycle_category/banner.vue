@@ -1,5 +1,5 @@
 <template>
-    <div class="banner-manage">
+    <PremiumTheme class="banner-manage">
         <el-card shadow="never">
             <PageHeader title="轮播图管理">
                 <template #actions>
@@ -48,10 +48,11 @@
 
         <!-- Banner编辑组件 -->
         <banner-edit ref="bannerEditRef" @complete="getList" />
-    </div>
+    </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBannerList, deleteBanner, changeBannerSort } from '@/addon/hsx_recycle/api/recycle_category'

@@ -1,5 +1,5 @@
 <template>
-  <div class="main-container dashboard-config-page">
+  <PremiumTheme class="main-container dashboard-config-page">
     <el-card class="box-card !border-none" shadow="never" v-loading="loading">
       <template #header>
         <div class="page-header">
@@ -85,10 +85,11 @@
         </div>
       </div>
     </el-card>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { onMounted, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { allRole } from '@/app/api/sys'

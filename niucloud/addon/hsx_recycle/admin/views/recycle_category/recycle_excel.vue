@@ -1,5 +1,5 @@
 <template>
-    <div class="min-h-screen bg-gray-50">
+    <PremiumTheme class="min-h-screen bg-gray-50">
      <!-- 页面头部 -->
      <div class="bg-white border-b border-gray-200 px-6 py-4 mb-6">
      <div class="flex items-center justify-between">
@@ -377,10 +377,11 @@
     
      <!-- Excel上传组件 -->
      <ExcelUpload v-model="uploadVisible" @success="handleImportSuccess" />
-    </div>
+    </PremiumTheme>
     </template>
     
     <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
     import { clearCache } from '@/app/api/sys'
     import request from '@/utils/request'
     import {

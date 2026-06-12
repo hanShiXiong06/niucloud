@@ -1,5 +1,5 @@
 <template>
-    <div class="main-container">
+    <PremiumTheme class="main-container">
         <el-card class="box-card !border-none" shadow="never">
             <div class="page-head">
                 <div>
@@ -456,10 +456,11 @@
             :mobile="currentTrackMobile"
             :company-name="currentTrackOrder?.provider_name || currentTrackOrder?.express_company || '快递公司'"
         />
-    </div>
+    </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'

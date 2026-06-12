@@ -1,14 +1,15 @@
 <template>
-  <div class="w-full">
+  <PremiumTheme class="w-full">
     <component :is="diyEditComponent" v-if="diyEditComponent">
       <template #style>
         <!-- 样式设置区域 -->
       </template>
     </component>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { computed, markRaw, watch } from 'vue';
 import useDiyStore from '@/stores/modules/diy';
 import EditPage from '@/app/views/diy/components/edit-page.vue';

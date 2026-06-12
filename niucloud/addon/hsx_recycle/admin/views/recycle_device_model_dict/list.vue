@@ -1,5 +1,5 @@
 <template>
-  <div class="model-dict-page">
+  <PremiumTheme class="model-dict-page">
     <el-card shadow="never">
       <div class="page-head">
         <div>
@@ -271,10 +271,11 @@
         <el-button type="primary" :loading="templateSaving" @click="handleSaveTemplateBinding">保存</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {

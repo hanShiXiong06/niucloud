@@ -1,5 +1,5 @@
 <template>
-    <div class="main-container">
+    <PremiumTheme class="main-container">
         <el-card class="box-card !border-none" shadow="never">
             <PageHeader title="易速产品配置" description="启用的产品将在快递下单时显示报价，建议只启用 1-2 个常用产品。">
                 <template #actions>
@@ -118,10 +118,11 @@
                 </el-tabs>
             </el-card>
         </el-card>
-    </div>
+    </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'

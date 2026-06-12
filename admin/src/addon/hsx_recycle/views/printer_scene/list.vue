@@ -1,5 +1,5 @@
 <template>
-  <div class="print-scene-page">
+  <PremiumTheme class="print-scene-page">
     <el-card class="print-scene-card" shadow="never" v-loading="loading">
       <template #header>
         <div class="page-header">
@@ -295,10 +295,11 @@
         />
       </div>
     </el-drawer>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {

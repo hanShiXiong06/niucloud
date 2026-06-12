@@ -1,5 +1,5 @@
 <template>
-    <div class="main-container">
+    <PremiumTheme class="main-container">
         <el-card class="box-card !border-none" shadow="never">
 
             <div class="flex justify-between items-center">
@@ -61,10 +61,11 @@
             </div>
 
         </el-card>
-    </div>
+    </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { reactive, ref } from 'vue'
 import { t } from '@/lang'
 import { getShopAddressList, deleteShopAddress } from '@/addon/hsx_recycle/api/shop_address'

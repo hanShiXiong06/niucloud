@@ -1,5 +1,5 @@
 <template>
-    <div class="main-container">
+    <PremiumTheme class="main-container">
         <el-card class="box-card !border-none" shadow="never">
             <span class="text-page-title">费用统计</span>
 
@@ -110,10 +110,11 @@
                 </div>
             </el-card>
         </el-card>
-    </div>
+    </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { apiThirdPartyCostStatsLists } from '@/addon/hsx_recycle/api/third_party'

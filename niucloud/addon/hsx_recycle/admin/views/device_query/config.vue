@@ -1,5 +1,5 @@
 <template>
-  <div class="main-container device-query-page">
+  <PremiumTheme class="main-container device-query-page">
     <el-card class="box-card !border-none" shadow="never">
       <div class="page-head">
         <div>
@@ -787,10 +787,11 @@
         <el-button type="primary" @click="saveMapping">保存映射</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { onMounted } from 'vue'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import {

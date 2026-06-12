@@ -1,10 +1,11 @@
 <template>
-  <div class="template-add-container">
+  <PremiumTheme class="template-add-container">
     <VisualEditor />
-  </div>
+  </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import VisualEditor from './visual_editor.vue'
 </script>
 

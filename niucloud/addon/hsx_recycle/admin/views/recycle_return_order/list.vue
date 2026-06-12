@@ -1,5 +1,5 @@
 <template>
-    <div class="return-order-list">
+    <PremiumTheme class="return-order-list">
         <el-card class="box-card" shadow="never">
             <template #header>
                 <div class="card-header">
@@ -437,10 +437,11 @@
                 <el-button type="primary" :loading="expressTrackLoading" @click="refreshCurrentExpressTrack">刷新状态</el-button>
             </template>
         </el-dialog>
-    </div>
+    </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'

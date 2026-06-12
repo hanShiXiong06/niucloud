@@ -1,5 +1,5 @@
 <template>
-    <div class="main-container">
+    <PremiumTheme class="main-container">
         <el-card class="box-card !border-none" shadow="never">
             <div class="flex justify-between items-center">
                 <span class="text-page-title">第三方服务配置</span>
@@ -137,10 +137,11 @@
                 <el-button type="primary" @click="handleSubmit" :loading="submitLoading">确定</el-button>
             </template>
         </el-dialog>
-    </div>
+    </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'

@@ -1,5 +1,5 @@
 <template>
-  <div class="main-container">
+  <PremiumTheme class="main-container">
     <el-card class="box-card !border-none" shadow="never">
       <div class="flex justify-between items-center mb-4">
         <div>
@@ -23,10 +23,11 @@
         <el-table-column prop="created_at" label="时间" min-width="180" />
       </el-table>
     </el-card>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { onMounted, ref } from 'vue'
 import { getDeviceQueryResultList } from '@/addon/hsx_recycle/api/device_query_result'
 

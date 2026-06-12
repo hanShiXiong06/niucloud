@@ -1,5 +1,5 @@
 <template>
-  <div class="printer-add-wrap">
+  <PremiumTheme class="printer-add-wrap">
     <el-card class="box-card">
       <template #header>
         <div class="card-header">
@@ -86,10 +86,11 @@
         </el-form-item>
       </el-form>
     </el-card>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useRouter } from "vue-router";

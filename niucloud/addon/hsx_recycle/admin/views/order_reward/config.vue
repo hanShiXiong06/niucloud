@@ -1,5 +1,5 @@
 <template>
-    <div class="main-container">
+    <PremiumTheme class="main-container">
         <el-card class="box-card !border-none" shadow="never">
             <div class="flex justify-between items-center mb-6">
                 <div>
@@ -88,10 +88,11 @@
                 </el-card>
             </div>
         </el-card>
-    </div>
+    </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getOrderRewardConfig, setOrderRewardConfig } from '@/addon/hsx_recycle/api/order_reward'

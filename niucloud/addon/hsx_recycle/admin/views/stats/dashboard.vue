@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <PremiumTheme class="min-h-screen bg-gray-50">
     <!-- 页面标题和快速筛选 -->
     <div class="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-10">
       <div class="mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -467,10 +467,11 @@
         </section>
       </div>
     </div>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { useRouter } from "vue-router";
 import {

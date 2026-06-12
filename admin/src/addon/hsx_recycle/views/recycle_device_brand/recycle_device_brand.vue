@@ -1,5 +1,5 @@
 <template>
-    <div class="main-container">
+    <PremiumTheme class="main-container">
         <el-card class="box-card !border-none" shadow="never">
 
             <PageHeader :title="pageName">
@@ -75,10 +75,11 @@
 
             <edit ref="editRecycleDeviceBrandDialog" @complete="loadRecycleDeviceBrandList" />
         </el-card>
-    </div>
+    </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { reactive, ref, watch } from 'vue'
 import { t } from '@/lang'
 import { useDictionary } from '@/app/api/dict'

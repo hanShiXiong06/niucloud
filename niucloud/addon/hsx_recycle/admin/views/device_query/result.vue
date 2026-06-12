@@ -1,5 +1,5 @@
 <template>
-  <div class="main-container device-query-result-page">
+  <PremiumTheme class="main-container device-query-result-page">
     <el-card class="box-card !border-none" shadow="never">
       <div class="page-head">
         <div>
@@ -147,10 +147,11 @@
         </template>
       </div>
     </el-dialog>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { getDeviceQueryResultInfo, getDeviceQueryResultList, getDeviceQueryResultStats } from '@/addon/hsx_recycle/api/device_query_result'
 

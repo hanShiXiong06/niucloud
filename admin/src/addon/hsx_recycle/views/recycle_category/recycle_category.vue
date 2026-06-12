@@ -1,5 +1,5 @@
 <template>
-    <div class="recycle-category">
+    <PremiumTheme class="recycle-category">
         <!-- 分类列表 -->
         <el-card shadow="never">
             <div class="flex justify-between items-center mb-[5px]">
@@ -162,10 +162,11 @@
         </el-drawer>
 
 
-    </div>
+    </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { reactive, ref, onMounted, nextTick, computed } from 'vue'
 import { t } from '@/lang'
 // import { updateCategory, editCategory } from '@/addon/hsx_recycle/api/goods'

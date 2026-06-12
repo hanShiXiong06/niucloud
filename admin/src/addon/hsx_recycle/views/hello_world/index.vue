@@ -1,5 +1,5 @@
 <template>
-  <div class="p-[15px]">
+  <PremiumTheme class="p-[15px]">
       <el-card header="质检员工作量统计" class="mb-[15px]">
           <div>
               <el-table :data="staffCountData" v-loading="staffLoading">
@@ -19,10 +19,11 @@
               </el-table>
           </div>
       </el-card>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, onMounted } from 'vue'
 import { getStaffCount, getPriceConfirmerPerformance } from '@/addon/hsx_recycle/api/hello_world' // 路径确认
 

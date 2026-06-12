@@ -1,5 +1,5 @@
 <template>
-  <div class="consignment-page">
+  <PremiumTheme class="consignment-page">
     <el-card class="!border-none" shadow="never">
       <template #header>
         <div class="page-header">
@@ -195,10 +195,11 @@
         <el-button type="primary" :loading="saving" @click="submitAction">确认</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
