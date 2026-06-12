@@ -113,44 +113,18 @@
                 </div>
                 <el-tag v-if="saleDestinationText" type="info" effect="plain">{{ saleDestinationText }}</el-tag>
               </div>
-              <!-- 仓库模式：ERP 已连接且有仓库 → 选仓库即决定流向 -->
+              <!-- 仓库模式：ERP 已连接且有仓库 → 仓库/库位级联,选仓即决定流向 -->
               <template v-if="warehouseMode">
-                <el-select
-                  v-model="deviceForm.target_warehouse_id"
-                  placeholder="选择入库仓库（决定销售流向）"
+                <el-cascader
+                  v-model="warehousePath"
+                  :options="warehouseCascaderOptions"
+                  :props="{ checkStrictly: true, expandTrigger: 'hover' }"
+                  placeholder="选择入库仓库 / 库位（决定销售流向）"
                   class="w-full"
-                  @change="onWarehouseChange"
-                >
-                  <el-option
-                    v-for="w in erpWarehouses"
-                    :key="w.id"
-                    :label="w.warehouse_name"
-                    :value="w.id"
-                  >
-                    <span>{{ w.warehouse_name }}</span>
-                    <span class="text-gray-400 text-xs ml-2">{{ warehouseTypeLabel(w.business_type) }}</span>
-                  </el-option>
-                </el-select>
+                  @change="onCascaderChange"
+                />
                 <div class="pfd-hint">
-                  入此仓将按其业务类型自动确定流向：<b>{{ saleDestinationText || '—' }}</b><template v-if="saleDestinationDescription">（{{ saleDestinationDescription }}）</template>
-                </div>
-
-                <div v-if="currentWarehouseLocations.length" class="pfd-warehouse">
-                  <div class="pfd-warehouse__label">库位（可选）</div>
-                  <el-select
-                    v-model="deviceForm.target_location_id"
-                    placeholder="选择库位，不选则由 ERP 入库时再定"
-                    clearable
-                    class="w-full"
-                    @change="onLocationChange"
-                  >
-                    <el-option
-                      v-for="loc in currentWarehouseLocations"
-                      :key="loc.id"
-                      :label="loc.location_name"
-                      :value="loc.id"
-                    />
-                  </el-select>
+                  选到仓库即可（库位可不选，留给入库时再定）；流向按仓库业务类型自动确定：<b>{{ saleDestinationText || '—' }}</b><template v-if="saleDestinationDescription">（{{ saleDestinationDescription }}）</template>
                 </div>
               </template>
 
@@ -325,18 +299,24 @@ const refurbishmentPresets = ref<Array<{ key: string; name: string; type: string
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
 const erpWarehouses = ref<Array<{ id: number; warehouse_name: string; business_type?: string; is_default?: number; locations?: Array<{ id: number; location_name: string }> }>>([])
 const erpConnected = ref(false)
-// 当前所选仓库的库位列表（手动选，不自动匹配）
-const currentWarehouseLocations = computed(() => {
-    const w = erpWarehouses.value.find(item => item.id === deviceForm.target_warehouse_id)
-    return (w?.locations || []) as Array<{ id: number; location_name: string }>
-})
+// 级联选择：仓库 → 库位，一个控件搞定（可只选到仓库，也可选到库位）
+const warehousePath = ref<number[]>([])
 
 // 仓库业务类型 → 销售流向（与后端 RecycleOrderDict::saleDestinationFromWarehouseType 保持一致）
 const WH_TYPE_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
 const WH_TYPE_LABEL: Record<string, string> = { mall: '商城', peer: '同行', scrap: '报废', hold: '暂存' }
-const warehouseTypeLabel = (t?: string) => WH_TYPE_LABEL[t || 'mall'] || '商城'
 // 仓库模式：ERP 已连接且有可用仓库时，以仓库为主选项（选仓即定流向）
 const warehouseMode = computed(() => erpConnected.value && erpWarehouses.value.length > 0)
+// 级联选项：一级仓库(带业务类型)，二级库位
+const warehouseCascaderOptions = computed(() => erpWarehouses.value.map(w => {
+    const node: any = {
+        value: w.id,
+        label: `${w.warehouse_name} · ${WH_TYPE_LABEL[w.business_type || 'mall'] || '商城'}`
+    }
+    const locs = w.locations || []
+    if (locs.length) node.children = locs.map(l => ({ value: l.id, label: l.location_name }))
+    return node
+}))
 
 const deviceForm = reactive<{
     final_price: number | undefined;
@@ -502,33 +482,38 @@ const loadRefurbishmentOptions = async () => {
     }
 }
 
-const onWarehouseChange = (val: number) => {
-    const w = erpWarehouses.value.find(item => item.id === val)
+// 由级联路径([仓库] 或 [仓库,库位])推导出表单字段 + 销售流向
+const applyPath = (path: number[]) => {
+    const wid = Number(path?.[0] || 0)
+    const lid = Number(path?.[1] || 0)
+    const w = erpWarehouses.value.find(item => item.id === wid)
+    deviceForm.target_warehouse_id = wid
     deviceForm.target_warehouse_name = w?.warehouse_name || ''
-    // 选仓即决定流向：按仓库业务类型自动设置 sale_destination
     if (w) deviceForm.sale_destination = WH_TYPE_DEST[w.business_type || 'mall'] || 'hold'
-    // 换仓后库位需重选：若原库位不在新仓库位内则清空
-    if (!(w?.locations || []).some(loc => loc.id === deviceForm.target_location_id)) {
-        deviceForm.target_location_id = 0
-        deviceForm.target_location_name = ''
-    }
-}
-
-const onLocationChange = (val: number) => {
-    const loc = currentWarehouseLocations.value.find(item => item.id === val)
+    const loc = (w?.locations || []).find(item => item.id === lid)
+    deviceForm.target_location_id = loc ? lid : 0
     deviceForm.target_location_name = loc?.location_name || ''
 }
 
-// 仓库模式下未选仓库时，自动默认选中"默认入库仓"，没有则第一个；
-// 用 watch 兼容仓库列表与设备详情两路异步先后到达，避免被回填覆盖成 0。
-watch([erpWarehouses, () => deviceForm.target_warehouse_id], () => {
+const onCascaderChange = (path: number[] | null) => {
+    applyPath(path || [])
+}
+
+// 同步级联选中项：兼容"仓库列表/设备详情"两路异步到达；未选或无效时回退默认入库仓。
+watch([erpWarehouses, () => deviceForm.target_warehouse_id, () => deviceForm.target_location_id], () => {
     if (!warehouseMode.value) return
-    const valid = erpWarehouses.value.some(w => w.id === deviceForm.target_warehouse_id)
-    if (valid) return
-    const def = erpWarehouses.value.find(w => Number(w.is_default) === 1) || erpWarehouses.value[0]
-    if (def) {
-        deviceForm.target_warehouse_id = def.id
-        onWarehouseChange(def.id)
+    let wid = Number(deviceForm.target_warehouse_id || 0)
+    if (!erpWarehouses.value.some(w => w.id === wid)) {
+        const def = erpWarehouses.value.find(w => Number(w.is_default) === 1) || erpWarehouses.value[0]
+        wid = def ? def.id : 0
+    }
+    const w = erpWarehouses.value.find(item => item.id === wid)
+    let lid = Number(deviceForm.target_location_id || 0)
+    if (!(w?.locations || []).some(loc => loc.id === lid)) lid = 0
+    const desired = lid ? [wid, lid] : (wid ? [wid] : [])
+    if (JSON.stringify(desired) !== JSON.stringify(warehousePath.value)) {
+        warehousePath.value = desired
+        applyPath(desired)
     }
 }, { deep: true })
 
