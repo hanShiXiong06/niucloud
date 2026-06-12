@@ -1276,6 +1276,46 @@ const shareOrder = async (row: any) => {
 </script>
 
 <style lang="scss" scoped>
+/* ===== 高级皮肤（插件作用域内覆盖核心的直角/扁平，找回圆角+柔投影+精致表格）=====
+   现代、商业化、专业；不碰核心，仅作用于本页。满意后抽成共享样式铺其它页。 */
+.recycle-order-list {
+  :deep(.el-card) {
+    border-radius: 12px !important;
+    border: 1px solid var(--el-border-color-lighter) !important;
+  }
+  /* 搜索区卡片：更轻 */
+  :deep(.table-search-wrap) {
+    background: var(--el-fill-color-blank) !important;
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.06) !important;
+  }
+  /* 输入框 / 选择器：圆角（核心强制为 0，这里找回） */
+  :deep(.el-input__wrapper),
+  :deep(.el-textarea__inner),
+  :deep(.el-input-group__append) {
+    border-radius: 8px !important;
+  }
+  /* 按钮：略圆润、克制 */
+  :deep(.el-button) {
+    border-radius: 8px;
+  }
+  /* 表格：去重边框、精致表头、行悬停、舒适行高 */
+  :deep(.el-table) {
+    --el-table-border-color: var(--el-border-color-lighter);
+    --el-table-header-bg-color: var(--el-fill-color-light);
+    --el-table-row-hover-bg-color: var(--el-fill-color-light);
+  }
+  :deep(.el-table th.el-table__cell) {
+    font-weight: 500;
+    color: var(--el-text-color-secondary);
+  }
+  :deep(.el-table .el-table__cell) {
+    padding: 10px 0;
+  }
+  /* 标签页：下划线更精致 */
+  :deep(.el-tabs__item) {
+    font-weight: 400;
+  }
+}
 .recycle-order-list {
   height: calc(100vh - 90px);
   min-height: 0;
