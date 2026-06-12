@@ -390,19 +390,6 @@ class RecycleDevice extends BaseAdminController
     }
 
     /**
-     * 撤销回收（退款）
-     * @param int $id
-     * @return mixed
-     */
-    public function cancelRecycle(int $id)
-    {
-        $data = $this->request->params([
-            ['reason', ''],
-        ]);
-        return success($this->service->cancelRecycle($id, $data));
-    }
-
-    /**
      * 整备配置选项
      * @return mixed
      */

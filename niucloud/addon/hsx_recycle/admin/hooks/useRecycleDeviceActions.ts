@@ -5,7 +5,6 @@ import { useSubmit, confirmDanger } from '@/addon/hsx_recycle/hooks/useSubmit'
 import {
   batchRecycleDevices as apiBatchRecycleDevices,
   batchReturnDevices as apiBatchReturnDevices,
-  cancelRecycleDevice,
   confirmPrice,
   getDevice,
   updateDevice
@@ -272,38 +271,6 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
     }
   }
 
-  // 撤销回收（退款）：已回收设备客户反悔时使用，触发 ERP 退货出库冲销
-  const cancelRecycle = async (device: any) => {
-    const deviceId = device?.id
-    if (!deviceId) {
-      ElMessage.warning('请选择设备')
-      return false
-    }
-    let loading: ReturnType<typeof ElLoading.service> | null = null
-    try {
-      const { value: reason } = await ElMessageBox.prompt(
-        '确定撤销该设备的回收吗？设备将转为「已取消」并记录退款，已入 ERP 的会自动退货出库冲销（成本归零）。\n请输入撤销原因：',
-        '撤销回收（退款）',
-        {
-          confirmButtonText: '确定撤销',
-          cancelButtonText: '取消',
-          type: 'warning',
-          inputPlaceholder: '请输入撤销/退款原因'
-        }
-      )
-      loading = ElLoading.service({ lock: true, text: '正在处理...', background: 'rgba(0, 0, 0, 0.7)' })
-      await cancelRecycleDevice(deviceId, reason || '客户反悔撤销回收')
-      ElMessage.success('已撤销回收并记录退款')
-      await getList(pagination.value.page)
-      return true
-    } catch (error) {
-      if (isDialogCanceled(error)) return false
-      console.error('撤销回收失败:', error)
-      return false
-    } finally {
-      loading?.close()
-    }
-  }
 
   const batchRecycleDevices = async (orderId: string | number) => {
     const selectedDeviceIds = getSelectedDeviceIds(orderId)
@@ -393,7 +360,6 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
     handleDeviceSelectionChange,
     batchRecycleDevice,
     batchReturnDevice,
-    cancelRecycle,
     batchRecycleDevices,
     batchReturnDevices,
     // 提交进行中状态，供弹窗确认按钮绑定 :loading，实现可见的防重复点击

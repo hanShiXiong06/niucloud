@@ -13,7 +13,6 @@ class ErpDict
     public const INVENTORY_REFURBISHING = 'refurbishing';
     public const INVENTORY_PENDING_PRICING = 'pending_pricing';
     public const INVENTORY_AVAILABLE_FOR_SALE = 'available_for_sale';
-    public const INVENTORY_RETURNED = 'returned'; // 已退货出库(回收撤销冲销后的终态)
 
     public const REFURBISH_PROCESSING = 'processing';
     public const REFURBISH_COMPLETED = 'completed';

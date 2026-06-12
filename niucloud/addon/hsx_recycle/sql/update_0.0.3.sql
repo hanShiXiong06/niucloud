@@ -11,11 +11,7 @@ ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `target_warehouse_id` int NOT NULL DEFAULT 0 COMMENT '目标仓库ID(ERP安装时定价选择,0为未指定)' AFTER `downstream_event_id`,
   ADD COLUMN `target_warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标仓库名称快照' AFTER `target_warehouse_id`,
   ADD COLUMN `target_location_id` int NOT NULL DEFAULT 0 COMMENT '目标库位ID(定价手动选择,0为未指定)' AFTER `target_warehouse_name`,
-  ADD COLUMN `target_location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标库位名称快照' AFTER `target_location_id`,
-  ADD COLUMN `cancel_amount` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '撤销回收退款金额' AFTER `target_location_name`,
-  ADD COLUMN `cancel_time` int NOT NULL DEFAULT 0 COMMENT '撤销回收时间' AFTER `cancel_amount`,
-  ADD COLUMN `cancel_uid` int NOT NULL DEFAULT 0 COMMENT '撤销回收操作人ID' AFTER `cancel_time`,
-  ADD COLUMN `cancel_reason` varchar(500) NOT NULL DEFAULT '' COMMENT '撤销回收原因' AFTER `cancel_uid`;
+  ADD COLUMN `target_location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标库位名称快照' AFTER `target_location_id`;
 
 -- 修复历史安装中"报价单每日快照"任务的非法 cron：
 -- 旧 time JSON 误用 minute 且缺 day，type=day 拼出 `0 * 23 */* * *`，被 workerman/crontab 判为非法字符串导致调度进程崩溃。
