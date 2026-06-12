@@ -9,7 +9,9 @@ ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `downstream_sale_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '中台销售定价(下游回流)' AFTER `downstream_erp_asset_id`,
   ADD COLUMN `downstream_event_id` varchar(64) NOT NULL DEFAULT '' COMMENT '最近一次应用的下游事件ID(幂等追溯)' AFTER `downstream_sale_price`,
   ADD COLUMN `target_warehouse_id` int NOT NULL DEFAULT 0 COMMENT '目标仓库ID(ERP安装时定价选择,0为未指定)' AFTER `downstream_event_id`,
-  ADD COLUMN `target_warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标仓库名称快照' AFTER `target_warehouse_id`;
+  ADD COLUMN `target_warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标仓库名称快照' AFTER `target_warehouse_id`,
+  ADD COLUMN `target_location_id` int NOT NULL DEFAULT 0 COMMENT '目标库位ID(定价手动选择,0为未指定)' AFTER `target_warehouse_name`,
+  ADD COLUMN `target_location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标库位名称快照' AFTER `target_location_id`;
 
 -- 修复历史安装中"报价单每日快照"任务的非法 cron：
 -- 旧 time JSON 误用 minute 且缺 day，type=day 拼出 `0 * 23 */* * *`，被 workerman/crontab 判为非法字符串导致调度进程崩溃。

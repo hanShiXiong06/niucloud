@@ -118,6 +118,8 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'sale_destination' => (string)($device['sale_destination'] ?? RecycleOrderDict::SALE_DESTINATION_MALL),
             'target_warehouse_id' => (int)($device['target_warehouse_id'] ?? 0),
             'target_warehouse_name' => (string)($device['target_warehouse_name'] ?? ''),
+            'target_location_id' => (int)($device['target_location_id'] ?? 0),
+            'target_location_name' => (string)($device['target_location_name'] ?? ''),
             'suggested_sale_price' => round((float)($device['sell_price'] ?? 0), 2),
             'acquired_at' => (int)($device['pay_time'] ?? $device['update_at'] ?? time()),
             'check_snapshot' => [

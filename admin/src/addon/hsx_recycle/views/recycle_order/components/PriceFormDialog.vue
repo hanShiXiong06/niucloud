@@ -134,6 +134,24 @@
                 <div class="pfd-hint">
                   入此仓将按其业务类型自动确定流向：<b>{{ saleDestinationText || '—' }}</b><template v-if="saleDestinationDescription">（{{ saleDestinationDescription }}）</template>
                 </div>
+
+                <div v-if="currentWarehouseLocations.length" class="pfd-warehouse">
+                  <div class="pfd-warehouse__label">库位（可选）</div>
+                  <el-select
+                    v-model="deviceForm.target_location_id"
+                    placeholder="选择库位，不选则由 ERP 入库时再定"
+                    clearable
+                    class="w-full"
+                    @change="onLocationChange"
+                  >
+                    <el-option
+                      v-for="loc in currentWarehouseLocations"
+                      :key="loc.id"
+                      :label="loc.location_name"
+                      :value="loc.id"
+                    />
+                  </el-select>
+                </div>
               </template>
 
               <!-- 渠道模式：ERP 未连接 → 固定渠道单选 -->
@@ -303,8 +321,13 @@ const detailLoading = ref(false)
 
 const refurbishmentPresets = ref<Array<{ key: string; name: string; type: string }>>([])
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
-const erpWarehouses = ref<Array<{ id: number; warehouse_name: string; business_type?: string; is_default?: number }>>([])
+const erpWarehouses = ref<Array<{ id: number; warehouse_name: string; business_type?: string; is_default?: number; locations?: Array<{ id: number; location_name: string }> }>>([])
 const erpConnected = ref(false)
+// 当前所选仓库的库位列表（手动选，不自动匹配）
+const currentWarehouseLocations = computed(() => {
+    const w = erpWarehouses.value.find(item => item.id === deviceForm.target_warehouse_id)
+    return (w?.locations || []) as Array<{ id: number; location_name: string }>
+})
 
 // 仓库业务类型 → 销售流向（与后端 RecycleOrderDict::saleDestinationFromWarehouseType 保持一致）
 const WH_TYPE_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
@@ -319,6 +342,8 @@ const deviceForm = reactive<{
     sale_destination: string;
     target_warehouse_id: number;
     target_warehouse_name: string;
+    target_location_id: number;
+    target_location_name: string;
     remark: string;
     refurbishment_required: number;
     refurbishment_assignee_uid: number;
@@ -340,6 +365,8 @@ const deviceForm = reactive<{
     sale_destination: props.device.sale_destination || '',
     target_warehouse_id: Number(props.device.target_warehouse_id || 0),
     target_warehouse_name: props.device.target_warehouse_name || '',
+    target_location_id: Number(props.device.target_location_id || 0),
+    target_location_name: props.device.target_location_name || '',
     remark: props.device.remark || '',
     refurbishment_required: Number(props.device.refurbishment_required || 0),
     refurbishment_assignee_uid: Number(props.device.refurbishment_assignee_uid || 0),
@@ -478,6 +505,16 @@ const onWarehouseChange = (val: number) => {
     deviceForm.target_warehouse_name = w?.warehouse_name || ''
     // 选仓即决定流向：按仓库业务类型自动设置 sale_destination
     if (w) deviceForm.sale_destination = WH_TYPE_DEST[w.business_type || 'mall'] || 'hold'
+    // 换仓后库位需重选：若原库位不在新仓库位内则清空
+    if (!(w?.locations || []).some(loc => loc.id === deviceForm.target_location_id)) {
+        deviceForm.target_location_id = 0
+        deviceForm.target_location_name = ''
+    }
+}
+
+const onLocationChange = (val: number) => {
+    const loc = currentWarehouseLocations.value.find(item => item.id === val)
+    deviceForm.target_location_name = loc?.location_name || ''
 }
 
 // 仓库模式下未选仓库时，自动默认选中"默认入库仓"，没有则第一个；
@@ -558,6 +595,8 @@ const handleConfirm = () => {
         sale_destination: deviceForm.sale_destination,
         target_warehouse_id: deviceForm.target_warehouse_id || 0,
         target_warehouse_name: deviceForm.target_warehouse_name || '',
+        target_location_id: deviceForm.target_location_id || 0,
+        target_location_name: deviceForm.target_location_name || '',
         status: deviceData.value.status,
         remark: deviceForm.remark,
         refurbishment_required: deviceForm.refurbishment_required,

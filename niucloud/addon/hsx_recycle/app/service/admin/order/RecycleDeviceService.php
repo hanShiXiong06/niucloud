@@ -1028,6 +1028,12 @@ class RecycleDeviceService extends BaseAdminService
             if (isset($refurbishment['target_warehouse_name'])) {
                 $device->target_warehouse_name = (string)$refurbishment['target_warehouse_name'];
             }
+            if (isset($refurbishment['target_location_id'])) {
+                $device->target_location_id = (int)$refurbishment['target_location_id'];
+            }
+            if (isset($refurbishment['target_location_name'])) {
+                $device->target_location_name = (string)$refurbishment['target_location_name'];
+            }
             $device->refurbishment_required = $refurbishmentData['required'];
             $device->refurbishment_assignee_uid = $refurbishmentData['assignee_uid'];
             $device->refurbishment_assignee_name = $refurbishmentData['assignee_name'];
