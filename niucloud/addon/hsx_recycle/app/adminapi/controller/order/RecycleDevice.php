@@ -417,6 +417,23 @@ class RecycleDevice extends BaseAdminController
             $warehouses = [];
         }
 
+        // 兜底：事件未返回时，若 ERP 插件在场则用 class_exists 守卫直接取仓库服务
+        // （ERP 未安装则类不存在 → 跳过，回退固定渠道；避免依赖事件注册时机）
+        if (empty($warehouses)) {
+            $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpWarehouseService';
+            if (class_exists($cls)) {
+                try {
+                    $list = (new $cls())->getOptions();
+                    if (is_array($list)) {
+                        $erpConnected = true;
+                        $warehouses = array_values($list);
+                    }
+                } catch (\Throwable $e) {
+                    // ERP 在场但取数失败：保持已连接判断，仓库留空，前端给出提示
+                }
+            }
+        }
+
         return success([
             'items' => RecycleOrderDict::getSaleDestinationOptions(),
             'warehouses' => $warehouses,

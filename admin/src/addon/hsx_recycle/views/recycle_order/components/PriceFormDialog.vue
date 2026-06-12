@@ -418,6 +418,8 @@ const applyDeviceToForm = (device: DeviceInfo) => {
 const loadDeviceDetail = async () => {
     const id = Number(deviceData.value.id || props.device?.id || 0)
     if (!id) return
+    // 防止开窗时 visible / device 两个 watch 同帧触发导致重复请求同一设备
+    if (detailLoading.value) return
     detailLoading.value = true
     try {
         const res: any = await getDevice(id)
