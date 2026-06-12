@@ -22,6 +22,8 @@
         :sale-price="deviceData.downstream_sale_price"
         :staged-at="deviceData.downstream_stage_at"
         :erp-asset-id="deviceData.downstream_erp_asset_id"
+        :pay-status="deviceData.pay_status"
+        :dispose-status="deviceData.dispose_status"
       />
 
       <!-- ===== 价格信息 ===== -->
@@ -338,6 +340,8 @@ interface DeviceDetail {
     downstream_stage_at?: number;
     downstream_sale_price?: number | string;
     downstream_erp_asset_id?: number;
+    pay_status?: number;
+    dispose_status?: number;
     capacity?: string;
     color?: string;
     system_version?: string;

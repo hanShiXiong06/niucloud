@@ -10,7 +10,7 @@
         v-for="(n, i) in nodes"
         :key="n.key"
         class="ddp-node"
-        :class="{ 'is-done': i <= activeIndex, 'is-current': i === activeIndex }"
+        :class="{ 'is-done': i <= activeIndex, 'is-current': i === currentIndex }"
       >
         <div class="ddp-dot">
           <el-icon v-if="i < activeIndex" :size="13"><Check /></el-icon>
@@ -22,7 +22,9 @@
       </div>
     </div>
 
-    <div v-if="stage === 0" class="ddp-foot">已回收，等待 ERP 入库后开始流转。</div>
+    <div v-if="isReturned" class="ddp-foot">设备已退回，不进入仓储流转。</div>
+    <div v-else-if="!recycleDone" class="ddp-foot">尚未完成回收，完成打款后进入仓储流转。</div>
+    <div v-else-if="stage === 0" class="ddp-foot">已回收，等待 ERP 入库后开始流转。</div>
     <div v-else-if="stagedAt" class="ddp-foot">最近更新：{{ formatTime(stagedAt) }}</div>
   </div>
 </template>
@@ -36,10 +38,20 @@ const props = defineProps<{
   salePrice?: number | string
   stagedAt?: number
   erpAssetId?: number
+  payStatus?: number
+  disposeStatus?: number
 }>()
 
 const stage = computed(() => Number(props.stage || 0))
 const stagedAt = computed(() => Number(props.stagedAt || 0))
+
+// 处置状态：1-已回收，2-已退回，3-已转代卖
+const isReturned = computed(() => Number(props.disposeStatus || 0) === 2)
+// 回收完成（进入仓储流转的前提）：已打款 / 已回收处置 / 已有下游阶段；退回的不算
+const recycleDone = computed(() =>
+  !isReturned.value &&
+  (Number(props.payStatus || 0) === 1 || Number(props.disposeStatus || 0) === 1 || stage.value > 0)
+)
 
 const salePriceText = computed(() => {
   const v = Number(props.salePrice || 0)
@@ -54,8 +66,9 @@ const nodes = computed(() => [
   { key: 'sold', label: '已售/下架', hint: '待商城接入' }
 ])
 
-// stage: 0/10/20/30/40 → 已达节点下标
+// stage: 0/10/20/30/40 → 已达节点下标；未完成回收时无任何节点点亮(-1)
 const activeIndex = computed(() => {
+  if (!recycleDone.value) return -1
   const s = stage.value
   if (s >= 40) return 4
   if (s >= 30) return 3
@@ -63,6 +76,9 @@ const activeIndex = computed(() => {
   if (s >= 10) return 1
   return 0
 })
+
+// 当前(高亮待办)节点：已回收按已达阶段；未回收时指向首个节点"回收完成"
+const currentIndex = computed(() => (recycleDone.value ? activeIndex.value : 0))
 
 function formatTime(ts: number) {
   if (!ts) return ''
