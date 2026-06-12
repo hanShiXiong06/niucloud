@@ -1206,7 +1206,7 @@ class RecycleDeviceService extends BaseAdminService
      * @param string $remark
      * @return bool
      */
-    public function recycle(int $id, string $remark = ''): bool
+    public function recycle(int $id, string $remark = '', bool $autoErpSync = true): bool
     {
         // 开启事务
         Db::startTrans();
@@ -1255,10 +1255,37 @@ class RecycleDeviceService extends BaseAdminService
                 }
             }
 
+            // 确认回收即自动同步到 ERP(装了 ERP 时):设备带着定价选定的仓位进入 ERP，
+            // 由 ERP 侧 A1 自动确认入库 → 进中台拍照定价。批量回收时由 batchRecycle 统一同步。
+            if ($autoErpSync) {
+                $this->autoSyncErpInbound([(int)$device->id]);
+            }
+
             return true;
         } catch (\Exception $e) {
             Db::rollback();
             throw $e;
+        }
+    }
+
+    /**
+     * 确认回收后自动同步设备到 ERP（故障隔离：ERP 未安装/同步失败都不影响回收）
+     * @param array $deviceIds
+     * @return void
+     */
+    private function autoSyncErpInbound(array $deviceIds): void
+    {
+        $deviceIds = array_values(array_filter(array_map('intval', $deviceIds)));
+        if (empty($deviceIds)) {
+            return;
+        }
+        try {
+            (new RecycleDeviceErpSyncService())->dispatch($deviceIds, ['self_erp']);
+        } catch (\Throwable $e) {
+            Log::warning('确认回收后自动同步ERP失败：' . $e->getMessage(), [
+                'site_id' => $this->site_id,
+                'device_ids' => $deviceIds,
+            ]);
         }
     }
 
@@ -1435,10 +1462,13 @@ class RecycleDeviceService extends BaseAdminService
         Db::startTrans();
         try {
             foreach ($ids as $id) {
-                $this->recycle((int)$id, $remark);
+                // 批量模式下逐台跳过同步，待整批提交后统一同步，避免在外层事务内产生跨插件副作用
+                $this->recycle((int)$id, $remark, false);
             }
-            
+
             Db::commit();
+            // 整批提交成功后再统一同步到 ERP
+            $this->autoSyncErpInbound(array_map('intval', $ids));
             return true;
         } catch (\Exception $e) {
             Db::rollback();
