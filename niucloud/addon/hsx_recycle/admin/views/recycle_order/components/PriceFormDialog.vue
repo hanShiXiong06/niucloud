@@ -124,23 +124,28 @@
               </el-radio-group>
               <div v-if="saleDestinationDescription" class="pfd-hint">{{ saleDestinationDescription }}</div>
 
-              <div v-if="erpWarehouses.length" class="pfd-warehouse">
+              <div v-if="erpConnected" class="pfd-warehouse">
                 <div class="pfd-warehouse__label">目标仓库（ERP）</div>
-                <el-select
-                  v-model="deviceForm.target_warehouse_id"
-                  placeholder="选择入库仓库，不选则由 ERP 默认分配"
-                  clearable
-                  class="w-full"
-                  @change="onWarehouseChange"
-                >
-                  <el-option
-                    v-for="w in erpWarehouses"
-                    :key="w.id"
-                    :label="w.warehouse_name"
-                    :value="w.id"
-                  />
-                </el-select>
-                <div class="pfd-hint">已检测到 ERP 仓库，可在定价时直接指定该设备入库的目标仓库。</div>
+                <template v-if="erpWarehouses.length">
+                  <el-select
+                    v-model="deviceForm.target_warehouse_id"
+                    placeholder="选择入库仓库，不选则由 ERP 默认分配"
+                    clearable
+                    class="w-full"
+                    @change="onWarehouseChange"
+                  >
+                    <el-option
+                      v-for="w in erpWarehouses"
+                      :key="w.id"
+                      :label="w.warehouse_name"
+                      :value="w.id"
+                    />
+                  </el-select>
+                  <div class="pfd-hint">已连接 ERP，可在定价时直接指定该设备入库的目标仓库。</div>
+                </template>
+                <div v-else class="pfd-hint pfd-hint--warn">
+                  已连接 ERP，但尚未创建启用的仓库。请先到「ERP · 仓库管理」新建并启用仓库后再回来选择。
+                </div>
               </div>
             </section>
 
@@ -294,6 +299,7 @@ const detailLoading = ref(false)
 const refurbishmentPresets = ref<Array<{ key: string; name: string; type: string }>>([])
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
 const erpWarehouses = ref<Array<{ id: number; warehouse_name: string }>>([])
+const erpConnected = ref(false)
 
 const deviceForm = reactive<{
     final_price: number | undefined;
@@ -463,12 +469,14 @@ const loadSaleDestinationOptions = async () => {
         const res: any = await getSaleDestinationOptions()
         saleDestinationOptions.value = res.data?.items || []
         erpWarehouses.value = res.data?.warehouses || []
+        erpConnected.value = !!res.data?.erp_connected
         if (!saleDestinationOptions.value.some(item => item.value === deviceForm.sale_destination)) {
             deviceForm.sale_destination = saleDestinationOptions.value[0]?.value || ''
         }
     } catch (e) {
         saleDestinationOptions.value = []
         erpWarehouses.value = []
+        erpConnected.value = false
     }
 }
 
@@ -774,6 +782,17 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   font-size: 11px;
   color: var(--el-text-color-placeholder);
   margin-top: 4px;
+}
+.pfd-hint--warn {
+  color: var(--el-color-warning);
+}
+.pfd-warehouse {
+  margin-top: 12px;
+}
+.pfd-warehouse__label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  margin-bottom: 6px;
 }
 
 /* 校验提示 */

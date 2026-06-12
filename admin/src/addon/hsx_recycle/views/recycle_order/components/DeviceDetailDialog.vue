@@ -17,6 +17,7 @@
 
       <!-- ===== 下游流转进度 ===== -->
       <DownstreamProgress
+        v-if="Number(deviceData.pay_status) === 1 || Number(deviceData.dispose_status) === 1 || Number(deviceData.downstream_stage) > 0"
         class="ddd-section"
         :stage="deviceData.downstream_stage"
         :sale-price="deviceData.downstream_sale_price"

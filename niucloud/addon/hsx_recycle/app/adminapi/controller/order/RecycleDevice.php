@@ -399,19 +399,28 @@ class RecycleDevice extends BaseAdminController
     public function saleDestinationOptions()
     {
         // 当 ERP 已安装时，向其同步查询启用仓库列表（解耦：只发标准事件，ERP 未装则无人应答 → 回退固定渠道）
+        // erp_connected 用于区分「ERP 未接入」与「ERP 已接入但暂无仓库」两种状态，便于前端给出明确提示。
         $warehouses = [];
+        $erpConnected = false;
         try {
-            $results = array_values(array_filter((array)event('GetErpWarehouseList', ['site_id' => $this->site_id])));
-            if (!empty($results) && is_array($results[0])) {
-                $warehouses = $results[0];
+            $raw = (array)event('GetErpWarehouseList', ['site_id' => $this->site_id]);
+            foreach ($raw as $r) {
+                if (is_array($r)) {
+                    // 只要有插件应答(哪怕返回空数组)，即视为 ERP 已接入
+                    $erpConnected = true;
+                    $warehouses = array_values($r);
+                    break;
+                }
             }
         } catch (\Throwable $e) {
+            $erpConnected = false;
             $warehouses = [];
         }
 
         return success([
             'items' => RecycleOrderDict::getSaleDestinationOptions(),
             'warehouses' => $warehouses,
+            'erp_connected' => $erpConnected,
         ]);
     }
 
