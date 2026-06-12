@@ -142,19 +142,10 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
   }
 
   const priceDevice = async (row: any) => {
-    try {
-      const res = await getDevice(row.id)
-      if (res.code === 1) {
-        checkDeviceLogForm.value = {
-          ...mapDeviceToCheckForm(res.data),
-          before_price: res.data.before_price || ''
-        } as any
-        priceDeviceLogVisible.value = true
-      }
-    } catch (error) {
-      console.error('获取设备信息失败:', error)
-      ElMessage.error('获取设备信息失败')
-    }
+    // 不在此预取设备详情：定价弹窗打开时会统一拉取全量(含 sale_destination/target_warehouse 等)，
+    // 这里再取会造成 recycle_device/:id 重复请求。直接把行数据传入开窗即可。
+    checkDeviceLogForm.value = { ...row, before_price: row.before_price || '' } as any
+    priceDeviceLogVisible.value = true
   }
 
   const submitDeviceCheck = (formData: any) => {
