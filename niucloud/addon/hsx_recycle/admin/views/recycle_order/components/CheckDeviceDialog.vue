@@ -34,13 +34,15 @@
           <CheckTemplateSelector
             v-model="selectedCheckTemplateId"
             :template-info="checkTemplateInfo"
-            :templates="checkTemplateList"
+            :templates="checkTemplateOptions"
             :group-count="checkTemplateGroups.length"
             :field-count="checkTemplateFields.length"
             :loading="checkTemplateLoading || checkSchemaLoading"
             @change="handleCheckTemplateChange"
+            @search="loadCheckTemplateList"
           />
-          <el-tag size="small" type="success" effect="plain">已填 {{ checkedCount }} 项</el-tag>
+          <el-tag v-if="templateResolveTag" size="small" :type="templateResolveTag.type" effect="plain">{{ templateResolveTag.text }}</el-tag>
+          <el-tag size="small" :type="checkedCount > 0 ? 'primary' : 'info'" effect="plain">已填 {{ checkedCount }} 项</el-tag>
           <template v-if="!isEditingDeviceInfo">
             <el-button size="small" :icon="Edit" @click="startEditDeviceInfo">编辑设备</el-button>
           </template>
@@ -267,6 +269,13 @@ const checkTemplateInfo = ref<any>(null)
 const checkTemplateGroups = ref<any[]>([])
 const checkTemplateList = ref<any[]>([])
 const selectedCheckTemplateId = ref<number>(0)
+const templateResolveInfo = ref<{ matched?: boolean; source_name?: string } | null>(null)
+const templateResolveTag = computed(() => {
+  const info = templateResolveInfo.value
+  if (!info) return null
+  if (info.matched) return { type: 'info' as const, text: '已自动匹配模板' }
+  return { type: 'warning' as const, text: '未匹配，已用默认模板' }
+})
 const knownFieldOptionKeys = ['screen_id', 'indisplay_id', 'appearance_id', 'function_ids', 'fix_ids'] as const
 type KnownFieldOptionKey = typeof knownFieldOptionKeys[number]
 type KnownOptionBucket = 'screen' | 'indisplay' | 'appearance' | 'function' | 'fix'
@@ -302,6 +311,7 @@ const normalizeSchemaOption = (option: any) => ({
   name: option.name || option.label || option.option_label || '',
   label: option.label || option.name || option.option_label || '',
   value: String(option.value ?? option.option_value ?? ''),
+  is_default: Number(option.is_default || 0),
   sort: Number(option.sort || 0),
   memo: option.memo || '',
   extra_config: option.extra_config || {}
@@ -485,7 +495,7 @@ const rules = reactive<FormRules>({
 
 const {
   templateSelections, checkedCount, getSubmitInfo,
-  updateCheckResult, clearAllSelections,
+  updateCheckResult, clearAllSelections, applyTemplateDefaults,
   restoreFromDevice
 } = useCheckMeta({
   dictOptions: checkDictOptions,
@@ -521,10 +531,17 @@ const resolveDeviceTemplateId = (device: DeviceInfo) => {
   return Number.isNaN(templateId) ? 0 : templateId
 }
 
-const loadCheckTemplateList = async () => {
+const loadCheckTemplateList = async (keyword = '') => {
   checkTemplateLoading.value = true
   try {
-    const res: any = await getCheckTemplateAll({ status: 1 })
+    // 模板总量可达上万(批量导入),按设备分类圈定范围 + 限量 + 远程搜索
+    const categoryId = Number(deviceData.value?.category_id || props.device?.category_id || 0)
+    const res: any = await getCheckTemplateAll({
+      status: 1,
+      keyword,
+      limit: 50,
+      category_id: categoryId > 0 ? categoryId : undefined
+    })
     checkTemplateList.value = Array.isArray(res.data) ? res.data : (res.data?.list || [])
   } catch (error) {
     checkTemplateList.value = []
@@ -533,19 +550,39 @@ const loadCheckTemplateList = async () => {
   }
 }
 
+// 当前模板可能不在限量列表里(如按分类解析出的导入模板),合并进选项保证回显
+const checkTemplateOptions = computed(() => {
+  const current = checkTemplateInfo.value
+  if (!current?.id) return checkTemplateList.value
+  const exists = checkTemplateList.value.some((item: any) => Number(item.id) === Number(current.id))
+  return exists ? checkTemplateList.value : [current, ...checkTemplateList.value]
+})
+
 const loadCheckTemplateSchema = async (templateId = selectedCheckTemplateId.value, restoreDevice = true) => {
   checkSchemaLoading.value = true
   try {
-    const params = templateId ? { template_id: templateId } : {}
+    // 未指定模板时传设备/分类信息，由后端按分类树解析绑定模板并兜底
+    let params: Record<string, any> = {}
+    if (templateId) {
+      params = { template_id: templateId }
+    } else {
+      const deviceId = Number(deviceData.value?.id || props.device?.id || 0)
+      const categoryId = Number(deviceData.value?.category_id || props.device?.category_id || 0)
+      if (deviceId > 0) params = { device_id: deviceId }
+      else if (categoryId > 0) params = { category_id: categoryId }
+    }
     const res: any = await getCheckTemplateSchema(params)
     const payload = res.data || {}
     checkTemplateInfo.value = payload.template || null
     checkTemplateGroups.value = payload.groups || []
+    templateResolveInfo.value = templateId ? null : (payload.resolve || null)
     selectedCheckTemplateId.value = Number(payload.template?.id || templateId || 0)
     if (restoreDevice) {
       restoreFromDevice(deviceData.value)
     } else {
+      // 手动切换模板:清空旧选项后按新模板默认值预填
       clearAllSelections()
+      applyTemplateDefaults()
     }
   } catch (error) {
     checkTemplateInfo.value = null
@@ -867,7 +904,8 @@ watch(dialogVisible, async (val) => {
   emit('update:visible', val)
   if (!val) return
   initializeFormFromDevice(props.device)
-  if (!checkTemplateList.value.length) await loadCheckTemplateList()
+  // 列表按设备分类圈定范围,不同设备需重新拉取
+  await loadCheckTemplateList()
   await loadCheckTemplateSchema(selectedCheckTemplateId.value)
 })
 watch(
