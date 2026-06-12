@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\listener;
 
 use addon\hsx_erp\app\dict\ErpDict;
+use addon\hsx_erp\app\model\ErpWarehouseLocation;
 use addon\hsx_erp\app\service\admin\ErpAssetService;
 use addon\hsx_erp\app\service\core\ErpInboundService;
 
@@ -55,24 +56,49 @@ class DeviceInboundRequestedListener
             ];
         }
 
+        $siteId = (int)($event['site_id'] ?? 0);
         $assetService = new ErpAssetService();
         foreach ($created as $asset) {
             $sid = (int)($asset['source_device_id'] ?? 0);
             $assetId = (int)($asset['id'] ?? 0);
             $target = $targetMap[$sid] ?? null;
-            // 未选定仓位(仓库或库位缺失)→ 留待入库人工选位确认
-            if ($assetId <= 0 || !$target || $target['warehouse_id'] <= 0 || $target['location_id'] <= 0) {
+            // 没有仓库无法自动入库 → 留待入库人工选位确认
+            if ($assetId <= 0 || !$target || $target['warehouse_id'] <= 0) {
+                continue;
+            }
+            // 库位:定价已选则用之;未选则自动取该仓首个启用库位(确认入库强制要库位)
+            $locationId = $target['location_id'] > 0
+                ? $target['location_id']
+                : $this->firstActiveLocationId($siteId, $target['warehouse_id']);
+            if ($locationId <= 0) {
                 continue;
             }
             try {
                 $assetService->confirmInboundByAsset($assetId, [
                     'warehouse_id' => $target['warehouse_id'],
-                    'location_id' => $target['location_id'],
-                    'remark' => '打款已到货，自动确认入库',
+                    'location_id' => $locationId,
+                    'remark' => '确认回收已到货，自动确认入库',
                 ]);
             } catch (\Throwable $e) {
                 // 单台失败不影响其它；该台留在待入库由人工处理
             }
+        }
+    }
+
+    /**
+     * 取仓库的首个启用库位（定价未选库位时的自动兜底）
+     */
+    private function firstActiveLocationId(int $siteId, int $warehouseId): int
+    {
+        try {
+            $id = ErpWarehouseLocation::where([
+                ['site_id', '=', $siteId],
+                ['warehouse_id', '=', $warehouseId],
+                ['status', '=', 1],
+            ])->order('sort asc,id asc')->value('id');
+            return (int)($id ?: 0);
+        } catch (\Throwable $e) {
+            return 0;
         }
     }
 }
