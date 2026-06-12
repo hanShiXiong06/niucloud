@@ -15,6 +15,9 @@ return [
         'DeviceAssetPriceCompleted' => [
             'addon\hsx_erp\app\listener\DeviceAssetPriceCompletedListener',
         ],
+        'RecycleDeviceCancelled' => [
+            'addon\hsx_erp\app\listener\DeviceCancelledListener',
+        ],
     ],
     'subscribe' => [],
 ];
