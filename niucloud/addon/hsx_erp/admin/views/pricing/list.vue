@@ -11,6 +11,15 @@
                 <el-button :icon="Refresh" @click="loadList">刷新</el-button>
             </div>
 
+            <el-alert
+                v-if="integrated"
+                class="mt-4"
+                type="warning"
+                :closable="false"
+                show-icon
+                title="已接入数据中台：销售定价由中台在拍照后完成，此页仅供独立模式使用。建议在「设备流转」查看中台进度与参考价。"
+            />
+
             <el-form :inline="true" class="mt-5" @submit.prevent>
                 <el-form-item label="关键词">
                     <el-input
@@ -184,7 +193,19 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { getErpPricingInfo, getErpPricingList, saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
+import { getErpIntegrationStatus } from '@/addon/hsx_erp/api/asset'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
+import { ref } from 'vue'
+
+const integrated = ref(false)
+const loadIntegration = async () => {
+    try {
+        const res: any = await getErpIntegrationStatus()
+        integrated.value = !!res.data?.device_asset_connected
+    } catch (e) {
+        integrated.value = false
+    }
+}
 
 const route = useRoute()
 const search = reactive({ keyword: '', inventory_status: '' })
@@ -280,6 +301,7 @@ const formatTime = (value: any) => {
 }
 
 onMounted(async () => {
+    loadIntegration()
     await loadList()
     const assetId = Number(route.query.asset_id || 0)
     if (assetId > 0) {
