@@ -134,10 +134,11 @@ export function useRecycleDeviceActions(options: UseRecycleDeviceActionsOptions)
       return
     }
 
-    checkDeviceLogVisible.value = true
+    // 先取数据再开窗：避免"先开窗触发一次 schema、设备到位后 watch(device) 再触发一次"的重复请求
     const res = await getDevice(row.id)
     if (res.code === 1) {
       checkDeviceLogForm.value = mapDeviceToCheckForm(res.data)
+      checkDeviceLogVisible.value = true
     }
   }
 

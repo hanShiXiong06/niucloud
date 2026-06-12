@@ -896,9 +896,9 @@ const initializeFormFromDevice = (device: DeviceInfo) => {
 }
 
 watch(() => props.visible, (val) => { dialogVisible.value = val })
-watch(() => props.device, async (val) => {
+watch(() => props.device, (val) => {
+  // 只同步表单，不在此加载 schema：开窗加载统一交给 watch(dialogVisible)，避免开窗时重复请求 schema
   initializeFormFromDevice(val)
-  if (dialogVisible.value) await loadCheckTemplateSchema(selectedCheckTemplateId.value)
 }, { deep: true })
 watch(dialogVisible, async (val) => {
   emit('update:visible', val)
