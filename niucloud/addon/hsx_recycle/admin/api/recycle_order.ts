@@ -114,6 +114,11 @@ export function getSaleDestinationOptions() {
   return request.get("/recycle/recycle_device/sale_destination_options");
 }
 
+// 整备负责人候选（按被选次数倒序，常用优先）
+export function getRefurbishmentAssigneeOptions() {
+  return request.get("/recycle/recycle_device/refurbishment_assignee_options");
+}
+
 // 获取商户的收款信息
 export function getMerchantPayInfo(memberId: number) {
   return request.get(

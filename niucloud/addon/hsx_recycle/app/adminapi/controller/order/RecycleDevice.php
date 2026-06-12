@@ -446,6 +446,44 @@ class RecycleDevice extends BaseAdminController
     }
 
     /**
+     * 整备负责人候选（按被选次数倒序，常用优先）
+     * @return mixed
+     */
+    public function refurbishmentAssigneeOptions()
+    {
+        $users = [];
+        try {
+            $users = (new \addon\hsx_recycle\app\service\admin\stats\RecycleStatsService())->getUserList();
+        } catch (\Throwable $e) {
+            $users = [];
+        }
+
+        $counts = [];
+        try {
+            $svc = new \addon\hsx_recycle\app\service\core\recycle_device\CoreRecyclePickStatService();
+            $counts = $svc->getCounts(\addon\hsx_recycle\app\service\core\recycle_device\CoreRecyclePickStatService::SCENE_REFURB_ASSIGNEE);
+        } catch (\Throwable $e) {
+            $counts = [];
+        }
+
+        foreach ($users as &$u) {
+            $u['pick_count'] = (int)($counts[(int)($u['uid'] ?? 0)] ?? 0);
+        }
+        unset($u);
+
+        usort($users, function ($a, $b) {
+            $ca = (int)($a['pick_count'] ?? 0);
+            $cb = (int)($b['pick_count'] ?? 0);
+            if ($ca !== $cb) {
+                return $cb <=> $ca;
+            }
+            return (int)($a['uid'] ?? 0) <=> (int)($b['uid'] ?? 0);
+        });
+
+        return success(['users' => $users]);
+    }
+
+    /**
      * 退回设备
      * @param int $id
      * @return mixed

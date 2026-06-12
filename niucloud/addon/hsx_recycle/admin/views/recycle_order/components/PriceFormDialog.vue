@@ -206,7 +206,10 @@
                         :key="user.uid"
                         :label="userName(user)"
                         :value="Number(user.uid)"
-                      />
+                      >
+                        <span>{{ userName(user) }}</span>
+                        <span v-if="Number(user.pick_count) > 0" class="text-gray-400 text-xs ml-2">{{ user.pick_count }} 次</span>
+                      </el-option>
                     </el-select>
                   </el-form-item>
 
@@ -274,8 +277,7 @@ import { ref, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import DeviceInfoCard from './DeviceInfoCard.vue'
 import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
-import { getUserList } from '@/addon/hsx_recycle/api/stats'
-import { getDevice, getRefurbishmentOptions, getSaleDestinationOptions } from '@/addon/hsx_recycle/api/recycle_order'
+import { getDevice, getRefurbishmentOptions, getSaleDestinationOptions, getRefurbishmentAssigneeOptions } from '@/addon/hsx_recycle/api/recycle_order'
 
 interface DeviceInfo {
     id?: string | number;
@@ -481,7 +483,7 @@ const ensureAssigneeOption = (device: DeviceInfo) => {
 
 const loadUsers = async () => {
     try {
-        const res: any = await getUserList()
+        const res: any = await getRefurbishmentAssigneeOptions()
         userOptions.value = res.data?.users || res.data || []
         ensureAssigneeOption(deviceData.value)
     } catch (e) {

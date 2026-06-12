@@ -19,3 +19,18 @@ ALTER TABLE `{{prefix}}recycle_device`
 UPDATE `{{prefix}}sys_schedule`
   SET `time` = '{"type":"day","day":1,"hour":23,"min":0}'
   WHERE `addon` = 'hsx_recycle' AND `key` = 'quote_daily_snapshot';
+
+-- 选择频次统计表（通用：按场景记录某用户被选中的次数，用于"常用优先"排序，如整备负责人）
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_user_pick_stat` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `scene` varchar(50) NOT NULL DEFAULT '' COMMENT '选择场景，如 refurbishment_assignee',
+  `user_id` int NOT NULL DEFAULT 0 COMMENT '被选用户ID',
+  `pick_count` int NOT NULL DEFAULT 0 COMMENT '被选次数',
+  `last_pick_at` int NOT NULL DEFAULT 0 COMMENT '最近被选时间',
+  `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT 0 COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_scene_user` (`site_id`,`scene`,`user_id`),
+  KEY `idx_site_scene_count` (`site_id`,`scene`,`pick_count`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收选择频次统计表';

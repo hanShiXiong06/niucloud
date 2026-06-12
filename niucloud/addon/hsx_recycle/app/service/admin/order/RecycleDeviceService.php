@@ -1070,6 +1070,15 @@ class RecycleDeviceService extends BaseAdminService
                 'order_id' => $device->order_id
             ];
             $this->logService->logDevicePrice($id, $priceData, $remark);
+
+            // 记录整备负责人被选次数（用于下拉"常用优先"排序）；故障隔离，不影响定价
+            if (!empty($refurbishmentData['required']) && (int)($refurbishmentData['assignee_uid'] ?? 0) > 0) {
+                try {
+                    $pickStat = new \addon\hsx_recycle\app\service\core\recycle_device\CoreRecyclePickStatService();
+                    $pickStat->record(\addon\hsx_recycle\app\service\core\recycle_device\CoreRecyclePickStatService::SCENE_REFURB_ASSIGNEE, (int)$refurbishmentData['assignee_uid']);
+                } catch (\Throwable $e) {
+                }
+            }
             
             // 尝试同步更新订单状态
             $this->syncOrderStatus($device->order_id, RecycleOrderDict::DEVICE_STATUS_PENDING_CONFIRM);
