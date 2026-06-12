@@ -1,6 +1,6 @@
 <template>
     <!--回收设备导出-->
-    <div class="main-container">
+    <PremiumTheme class="main-container">
         <el-card class="box-card !border-none" shadow="never">
 
             <PageHeader :title="pageName" description="按 IMEI / 型号 / 分类 / 时间等条件筛选，导出设备明细或同步到 ERP。" />
@@ -342,7 +342,7 @@
             :initial-index="previewImageIndex"
             @close="imageViewerVisible = false"
         />
-    </div>
+    </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
@@ -355,6 +355,7 @@ import { img } from '@/utils/common'
 import { View, User, Picture } from '@element-plus/icons-vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 
 const route = useRoute()
 const pageName = route.meta.title
