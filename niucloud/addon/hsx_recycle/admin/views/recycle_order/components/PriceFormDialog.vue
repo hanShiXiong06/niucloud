@@ -1,26 +1,16 @@
 <template>
-  <el-dialog
-    v-model="dialogVisible"
-    title=""
-    :width="isMobile ? '95vw' : '960px'"
-    top="4vh"
-    :destroy-on-close="true"
-    class="price-form-dialog"
+  <FormDialog
+    :visible="dialogVisible"
+    title="回收定价"
+    subtitle="基于质检结果确定回收报价和整备安排"
+    width="lg"
+    :loading="submitting"
+    :confirm-disabled="!isFormValid"
+    confirm-text="确认回收定价"
+    @update:visible="dialogVisible = $event"
+    @confirm="handleConfirm"
+    @cancel="handleCancel"
   >
-    <!-- ===== 渐变 Header ===== -->
-    <template #header>
-      <div class="pfd-header">
-        <div class="pfd-header__left">
-          <div class="pfd-header__icon">¥</div>
-          <div>
-            <h3 class="pfd-header__title">回收定价</h3>
-            <p class="pfd-header__sub">基于质检结果确定回收报价和整备安排</p>
-          </div>
-        </div>
-        <el-tag size="small" effect="plain" class="pfd-header__id">ID: {{ deviceData.id }}</el-tag>
-      </div>
-    </template>
-
     <div class="pfd-body">
 
       <!-- ===== 设备信息卡片 ===== -->
@@ -229,28 +219,14 @@
       </div>
 
     </div>
-
-    <template #footer>
-      <div :class="isMobile ? 'pfd-footer pfd-footer--mobile' : 'pfd-footer'">
-        <el-button @click="handleCancel" :class="isMobile ? 'w-full !ml-0' : ''">取消</el-button>
-        <el-button
-          type="primary"
-          @click="handleConfirm"
-          :disabled="!isFormValid || submitting"
-          :loading="submitting"
-          :class="isMobile ? 'w-full !ml-0' : ''"
-        >
-          确认回收定价
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
+  </FormDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import DeviceInfoCard from './DeviceInfoCard.vue'
+import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
 import { getUserList } from '@/addon/hsx_recycle/api/stats'
 import { getDevice, getRefurbishmentOptions, getSaleDestinationOptions } from '@/addon/hsx_recycle/api/recycle_order'
 
