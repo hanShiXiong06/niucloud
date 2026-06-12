@@ -3,8 +3,8 @@
         <el-card class="!border-none" shadow="never">
             <div class="flex items-start justify-between gap-4">
                 <div>
-                    <div class="text-page-title">ERP 设备库存</div>
-                    <div class="mt-1 text-sm text-gray-500">手工建档或外部业务同步后先进入待入库，确认后才形成正式库存和成本流水。</div>
+                    <div class="text-page-title">设备流转</div>
+                    <div class="mt-1 text-sm text-gray-500">一条主线跟着设备走：待入库 → 在库/整备 → 待定价 → 可售。按阶段切换，就地处理当前该做的动作。</div>
                 </div>
                 <div class="flex gap-2">
                     <el-button type="primary" @click="openManualInbound">手工建档入库</el-button>
@@ -12,7 +12,16 @@
                 </div>
             </div>
 
-            <el-form :inline="true" class="mt-5" @submit.prevent>
+            <el-tabs v-model="search.inventory_status" class="mt-5" @tab-change="handleSearch">
+                <el-tab-pane label="全部" name="" />
+                <el-tab-pane label="待入库" name="pending_in" />
+                <el-tab-pane label="在库待整备" name="in_stock" />
+                <el-tab-pane label="整备中" name="refurbishing" />
+                <el-tab-pane label="待销售定价" name="pending_pricing" />
+                <el-tab-pane label="可售" name="available_for_sale" />
+            </el-tabs>
+
+            <el-form :inline="true" @submit.prevent>
                 <el-form-item label="关键词">
                     <el-input
                         v-model.trim="search.keyword"
@@ -22,27 +31,11 @@
                         @keyup.enter="handleSearch"
                     />
                 </el-form-item>
-                <el-form-item label="库存状态">
-                    <el-select v-model="search.inventory_status" clearable class="!w-[150px]" placeholder="全部">
-                        <el-option label="待入库" value="pending_in" />
-                        <el-option label="在库" value="in_stock" />
-                        <el-option label="整备中" value="refurbishing" />
-                        <el-option label="待销售定价" value="pending_pricing" />
-                        <el-option label="可售" value="available_for_sale" />
-                    </el-select>
-                </el-form-item>
                 <el-form-item>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
                     <el-button @click="handleReset">重置</el-button>
                 </el-form-item>
             </el-form>
-
-            <el-alert
-                class="mb-4"
-                type="info"
-                :closable="false"
-                title="当前流程：逐台核对待入库设备 → 确认形成正式库存 → 整备/维修追加成本 → 销售定价与上架"
-            />
 
             <div class="mb-3 flex items-center justify-between">
                 <div class="text-sm text-gray-500">

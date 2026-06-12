@@ -355,9 +355,9 @@ return [
                 ],
             ],
             [
-                'menu_name' => '设备库存',
+                'menu_name' => '设备流转',
                 'menu_key' => 'hsx_erp_asset_list',
-                'menu_short_name' => '设备库存',
+                'menu_short_name' => '设备流转',
                 'parent_select_key' => '',
                 'menu_type' => '1',
                 'icon' => 'nc-iconfont nc-icon-dingdanV6xx',
