@@ -79,6 +79,15 @@
                 <el-table-column label="成本" width="130" align="right">
                     <template #default="{ row }">¥{{ money(row.current_cost) }}</template>
                 </el-table-column>
+                <el-table-column label="参考售价" width="150" align="right">
+                    <template #default="{ row }">
+                        <template v-if="Number(row.current_sale_price) > 0">
+                            <div class="font-medium text-gray-800">¥{{ money(row.current_sale_price) }}</div>
+                            <div class="text-xs text-gray-400">{{ priceSource() }}</div>
+                        </template>
+                        <span v-else class="text-gray-300">—</span>
+                    </template>
+                </el-table-column>
                 <el-table-column label="状态" width="120">
                     <template #default="{ row }">
                         <el-tooltip
@@ -651,6 +660,9 @@ const loadIntegration = async () => {
 // 列表与状态标签的展示名：联合模式下"待销售定价"语义其实是"已交中台·处理中"
 const flowStatusName = (status: string) =>
     integrated.value && status === 'pending_pricing' ? '已交中台·处理中' : statusName(status)
+
+// 参考售价来源标注：均为"参考价"，真实成交价在销售环节产生
+const priceSource = () => (integrated.value ? '中台参考价' : '门店参考价')
 
 onMounted(() => Promise.all([loadIntegration(), loadList(), loadWarehouses(), loadCounterparties()]))
 </script>
