@@ -1290,6 +1290,86 @@ class RecycleDeviceService extends BaseAdminService
     }
 
     /**
+     * 撤销回收（退款）
+     * 客户反悔/不卖时使用：设备转"已取消"、留痕退款信息，并发事件 → ERP 退货出库冲销 / 财务退款。
+     * 仅允许"已回收"且下游尚未售出的设备。
+     * @param int $id
+     * @param array $data [reason]
+     * @return bool
+     * @throws CommonException
+     */
+    public function cancelRecycle(int $id, array $data = []): bool
+    {
+        Db::startTrans();
+        try {
+            $device = $this->model->find($id);
+            if (empty($device)) {
+                throw new CommonException('设备不存在');
+            }
+            if ((int)$device->status !== RecycleOrderDict::DEVICE_STATUS_RECYCLED) {
+                throw new CommonException('只有「已回收」的设备可以撤销回收');
+            }
+            // 已售出(下游已售)不能撤销，需走售后
+            if ((int)($device->downstream_stage ?? 0) >= 40) {
+                throw new CommonException('设备已售出，不能撤销回收，请走售后流程');
+            }
+
+            $refundAmount = round((float)($device->pay_amount ?: $device->final_price ?: 0), 2);
+            $oldStatus = (int)$device->status;
+            $reason = (string)($data['reason'] ?? '');
+
+            $device->status = RecycleOrderDict::DEVICE_STATUS_CANCELLED;
+            $device->dispose_status = RecycleOrderDict::DISPOSE_STATUS_RETURNED;
+            $device->cancel_amount = $refundAmount;
+            $device->cancel_time = time();
+            $device->cancel_uid = $this->uid;
+            $device->cancel_reason = $reason;
+            $device->update_time = time();
+            $device->save();
+
+            if (!isset($this->logService)) {
+                $this->logService = new CoreRecycleDeviceLogService();
+            }
+            $this->logService->addDeviceLog([
+                'device_id' => $id,
+                'order_id' => (int)$device->order_id,
+                'operation_type' => 'cancel_recycle',
+                'action' => 'cancel_recycle',
+                'old_status' => $oldStatus,
+                'new_status' => RecycleOrderDict::DEVICE_STATUS_CANCELLED,
+                'custom_message' => sprintf('撤销回收 | 退款 %.2f | 原因: %s', $refundAmount, $reason),
+            ]);
+
+            $this->syncOrderStatus((int)$device->order_id, RecycleOrderDict::DEVICE_STATUS_CANCELLED);
+
+            Db::commit();
+
+            // 发"已取消"事件 → ERP 退货出库冲销 / 财务退款（各自订阅，互不依赖）
+            try {
+                event('RecycleDeviceCancelled', [
+                    'event_name' => 'recycle.device.cancelled.v1',
+                    'event_version' => 1,
+                    'site_id' => $this->site_id,
+                    'event_id' => 'rc-cancel-' . $id . '-' . time() . '-' . random_int(1000, 9999),
+                    'occurred_at' => time(),
+                    'source_device_id' => $id,
+                    'order_id' => (int)$device->order_id,
+                    'refund_amount' => $refundAmount,
+                    'reason' => $reason,
+                    'operator' => ['type' => 'staff', 'id' => $this->uid, 'name' => $this->username ?: ''],
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('撤销回收事件发布失败：' . $e->getMessage(), ['device_id' => $id]);
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            Db::rollback();
+            throw $e;
+        }
+    }
+
+    /**
      * getList
      * 获取设备列表（不分页）
      * @param array $where 查询条件

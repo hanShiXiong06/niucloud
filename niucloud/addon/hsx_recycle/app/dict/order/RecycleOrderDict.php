@@ -33,6 +33,7 @@ class RecycleOrderDict
     const DEVICE_STATUS_PRICED = 7;             // 已定价
     const DEVICE_STATUS_PRICED_REPRICE = 8;     // 已定价（重新定价）
     const DEVICE_STATUS_CONSIGNED = 9;          // 已转代卖
+    const DEVICE_STATUS_CANCELLED = 10;         // 已取消(撤销回收/退款)
     // 订单流转模式
     const FLOW_MODE_ORDER = 'order';             // 整单流转
     const FLOW_MODE_DEVICE = 'device';           // 按设备流转
@@ -127,7 +128,8 @@ class RecycleOrderDict
         self::DEVICE_STATUS_RECYCLED => '已回收',
         self::DEVICE_STATUS_RETURNED => '已退回',
         self::DEVICE_STATUS_PRICED => '已定价',
-        self::DEVICE_STATUS_CONSIGNED => '已转代卖'
+        self::DEVICE_STATUS_CONSIGNED => '已转代卖',
+        self::DEVICE_STATUS_CANCELLED => '已取消'
     ];
 
     // 设备操作类型文本映射
@@ -165,10 +167,11 @@ class RecycleOrderDict
         self::DEVICE_STATUS_CHECKING => [self::DEVICE_STATUS_CHECKED, self::DEVICE_STATUS_PENDING_CONFIRM, self::DEVICE_STATUS_RETURNED],
         self::DEVICE_STATUS_CHECKED => [self::DEVICE_STATUS_PENDING_CONFIRM, self::DEVICE_STATUS_RETURNED],
         self::DEVICE_STATUS_PENDING_CONFIRM => [self::DEVICE_STATUS_RECYCLED, self::DEVICE_STATUS_RETURNED],
-        self::DEVICE_STATUS_RECYCLED => [],
+        self::DEVICE_STATUS_RECYCLED => [self::DEVICE_STATUS_CANCELLED],
         self::DEVICE_STATUS_RETURNED => [],
         self::DEVICE_STATUS_PRICED => [self::DEVICE_STATUS_RETURNED, self::DEVICE_STATUS_RECYCLED, self::DEVICE_STATUS_CONSIGNED],
-        self::DEVICE_STATUS_CONSIGNED => []
+        self::DEVICE_STATUS_CONSIGNED => [],
+        self::DEVICE_STATUS_CANCELLED => []
     ];
 
     // 状态流转规则 - 订单
