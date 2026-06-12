@@ -1,5 +1,5 @@
 <template>
-  <div class="recycle-order-list h-full hsx-premium">
+  <PremiumTheme class="recycle-order-list h-full">
     <el-card class="box-card !border-none h-full relative" shadow="never">
       <div class="order-list-header">
         <div :class="isMobile ? 'order-page-header order-page-header--mobile' : 'order-page-header'">
@@ -330,7 +330,7 @@
 
       <div v-else class="text-center py-8 text-gray-500">暂无快递信息</div>
     </el-dialog>
-  </div>
+  </PremiumTheme>
 </template>
 
 <script setup lang="ts">
@@ -382,6 +382,7 @@ import AddOrderDialog from "./components/AddOrderDialog.vue";
 // import DeviceDetailDialog from './components/DeviceDetailDialog.vue'
 // 导入新的支付方式对话框组件
 import PaymentMethodDialog from "./components/PaymentMethodDialog.vue";
+import PremiumTheme from "@/addon/hsx_recycle/components/PremiumTheme.vue";
 // 导入订单详情弹窗组件
 import OrderDetailDialog from "./components/OrderDetailDialog.vue";
 // 导入定价表单组件
@@ -1731,9 +1732,4 @@ const shareOrder = async (row: any) => {
   color: #337ecc;
   line-height: 1.6;
 }
-</style>
-
-<style lang="scss">
-/* 插件作用域高级主题（非 scoped 注入，.hsx-premium / .hsx-premium-overlay 全局可用） */
-@import '../../styles/premium-theme.scss';
 </style>
