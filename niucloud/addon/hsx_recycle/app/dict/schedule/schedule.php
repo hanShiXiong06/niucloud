@@ -18,8 +18,9 @@ return [
         'desc' => '每天自动将当前分类报价单同步到历史表，确保每天都有一条快照记录',
         'time' => [
             'type' => 'day',
+            'day' => 1,
             'hour' => 23,
-            'minute' => 0
+            'min' => 0
         ],
         'class' => 'addon\hsx_recycle\app\job\schedule\QuoteDailySnapshot',
         'function' => 'doJob'
