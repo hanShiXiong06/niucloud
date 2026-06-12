@@ -1,0 +1,66 @@
+/* =============================================================================
+   插件作用域内的「高级主题」——不碰 niucloud 核心框架
+   原理：CSS 变量是级联的。把 Element Plus 设计 token 设在 .hsx-premium 包裹类上，
+        包裹内的所有 el-* 组件会自动用新主题（主色、圆角、表格、卡片…）。
+   覆盖：核心用 !important 强制了直角，作用域内需同样 !important + 更高特异性来翻转。
+   浮层：el-dialog / el-select 下拉等会 teleport 到 body（在包裹外），
+        需在其 class / popper-class 上额外加 hsx-premium-overlay 才能套到主题。
+   ============================================================================= */
+
+@mixin hsx-premium-tokens {
+  --el-color-primary: #4f46e5;
+  --el-color-primary-light-3: #847eed;
+  --el-color-primary-light-5: #a7a2f2;
+  --el-color-primary-light-7: #cac8f7;
+  --el-color-primary-light-8: #dcdafa;
+  --el-color-primary-light-9: #eeedfc;
+  --el-color-primary-dark-2: #3f38b7;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-color-lighter: #eef0f4;
+  --el-box-shadow-light: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.06);
+}
+
+/* ===== 页面内容区：包裹类 ===== */
+.hsx-premium {
+  @include hsx-premium-tokens;
+
+  /* 找回圆角（翻转核心强制的直角） */
+  .el-card { border-radius: 12px !important; border: 1px solid var(--el-border-color-lighter); }
+  .el-card.is-always-shadow,
+  .el-card.is-hover-shadow:hover { box-shadow: var(--el-box-shadow-light); }
+  .el-input__wrapper,
+  .el-input-group__append,
+  .el-input-group__prepend,
+  .el-textarea__inner,
+  .el-select__wrapper { border-radius: var(--el-border-radius-base) !important; }
+  .el-button:not(.is-round):not(.is-circle) { border-radius: var(--el-border-radius-base) !important; }
+
+  /* 表格：精致表头 + 行悬停 + 淡分隔线 */
+  .el-table {
+    --el-table-header-bg-color: var(--el-fill-color-lighter);
+    --el-table-header-text-color: var(--el-text-color-secondary);
+    --el-table-border-color: var(--el-border-color-lighter);
+    --el-table-row-hover-bg-color: var(--el-fill-color-light);
+  }
+  .el-table thead th.el-table__cell { font-weight: 500 !important; letter-spacing: 0.2px; }
+
+  /* 字重纪律 */
+  .el-button { font-weight: 400; }
+  .text-page-title { font-weight: 500 !important; }
+  .el-tag { border-radius: 6px; }
+}
+
+/* ===== 浮层（弹窗/下拉 teleport 到 body）：在其 class / popper-class 上加 hsx-premium-overlay ===== */
+.hsx-premium-overlay {
+  @include hsx-premium-tokens;
+
+  &.el-dialog,
+  .el-dialog { border-radius: 12px !important; overflow: hidden; }
+  .el-input__wrapper,
+  .el-textarea__inner,
+  .el-select__wrapper { border-radius: 8px !important; }
+  .el-button:not(.is-round):not(.is-circle) { border-radius: 8px !important; }
+  .el-card { border-radius: 12px !important; }
+  .el-table thead th.el-table__cell { font-weight: 500 !important; }
+}

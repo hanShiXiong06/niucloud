@@ -1,5 +1,5 @@
 <template>
-  <div class="recycle-order-list h-full">
+  <div class="recycle-order-list h-full hsx-premium">
     <el-card class="box-card !border-none h-full relative" shadow="never">
       <div class="order-list-header">
         <div :class="isMobile ? 'order-page-header order-page-header--mobile' : 'order-page-header'">
@@ -1731,4 +1731,9 @@ const shareOrder = async (row: any) => {
   color: #337ecc;
   line-height: 1.6;
 }
+</style>
+
+<style lang="scss">
+/* 插件作用域高级主题（非 scoped 注入，.hsx-premium / .hsx-premium-overlay 全局可用） */
+@import '../../styles/premium-theme.scss';
 </style>

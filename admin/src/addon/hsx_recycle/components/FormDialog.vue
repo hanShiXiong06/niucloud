@@ -6,7 +6,7 @@
     :destroy-on-close="destroyOnClose"
     :top="top"
     align-center
-    class="rc-form-dialog"
+    class="rc-form-dialog hsx-premium-overlay"
     @update:model-value="(v: boolean) => emit('update:visible', v)"
     @closed="emit('closed')"
   >
