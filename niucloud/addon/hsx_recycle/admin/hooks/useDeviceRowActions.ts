@@ -34,6 +34,7 @@ export interface DeviceRowActionHandlers {
   priceDevice: (device: any) => void
   batchRecycleDevice: (id: number | string) => void
   batchReturnDevice: (id: number | string) => void
+  cancelRecycle: (device: any) => void
   transferConsignment: (device: any) => void
   getVisibleDevicePrintActions: (device: any) => any[]
   printDeviceByScene: (device: any, action: any) => void
@@ -76,6 +77,11 @@ export function useDeviceRowActions(handlers: DeviceRowActionHandlers) {
     // 已质检 / 待确认 / 已定价 且尚未转代卖：可转代卖
     if ([3, 4, 7, 8].includes(status) && !device.consignment_order_id) {
       actions.push({ key: 'consign', label: '转代卖', icon: Switch, handler: () => handlers.transferConsignment(device) })
+    }
+
+    // 已回收：客户反悔可撤销回收（退款），同时触发 ERP 退货出库冲销
+    if (status === 5) {
+      actions.push({ key: 'cancel_recycle', label: '撤销回收', icon: Close, danger: true, handler: () => handlers.cancelRecycle(device) })
     }
 
     // 打印场景（动态，可有多个）

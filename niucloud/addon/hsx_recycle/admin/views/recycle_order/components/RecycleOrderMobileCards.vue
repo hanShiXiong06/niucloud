@@ -304,6 +304,7 @@ interface Props {
   priceDevice: (row: any) => void;
   batchRecycleDevice: (id: number | string) => void;
   batchReturnDevice: (id: number | string) => void;
+  cancelRecycle: (device: any) => void;
   batchRecycleDevices: (orderId: number | string) => void;
   manualPrintActions: any[];
   getVisibleDevicePrintActions: (device: any) => any[];
@@ -327,6 +328,7 @@ const { getDevicePrimaryAction, getDeviceMoreActions } = useDeviceRowActions({
   priceDevice: props.priceDevice,
   batchRecycleDevice: props.batchRecycleDevice,
   batchReturnDevice: props.batchReturnDevice,
+  cancelRecycle: props.cancelRecycle,
   transferConsignment: props.transferConsignment,
   getVisibleDevicePrintActions: props.getVisibleDevicePrintActions,
   printDeviceByScene: props.printDeviceByScene,

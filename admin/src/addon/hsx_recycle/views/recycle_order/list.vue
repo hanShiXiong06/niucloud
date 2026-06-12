@@ -98,6 +98,7 @@
           :price-device="priceDevice"
           :batch-recycle-device="batchRecycleDevice"
           :batch-return-device="batchReturnDevice"
+          :cancel-recycle="cancelRecycle"
           :batch-recycle-devices="batchRecycleDevices"
           :manual-print-actions="manualPrintActions"
           :get-visible-device-print-actions="getVisibleDevicePrintActions"
@@ -140,6 +141,7 @@
           :price-device="priceDevice"
           :batch-recycle-device="batchRecycleDevice"
           :batch-return-device="batchReturnDevice"
+          :cancel-recycle="cancelRecycle"
           :batch-recycle-devices="batchRecycleDevices"
           :manual-print-actions="manualPrintActions"
           :get-visible-device-print-actions="getVisibleDevicePrintActions"
@@ -670,6 +672,7 @@ const {
   handleDeviceSelectionChange,
   batchRecycleDevice,
   batchReturnDevice,
+  cancelRecycle,
   batchRecycleDevices,
   checkSubmitting,
   priceSubmitting,

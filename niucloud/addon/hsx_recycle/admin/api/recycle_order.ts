@@ -119,6 +119,11 @@ export function getRefurbishmentAssigneeOptions() {
   return request.get("/recycle/recycle_device/refurbishment_assignee_options");
 }
 
+// 撤销回收（退款）：设备转已取消，并触发 ERP 退货出库冲销
+export function cancelRecycleDevice(id: number | string, reason = "") {
+  return request.post(`/recycle/recycle_device/${id}/cancel_recycle`, { reason });
+}
+
 // 获取商户的收款信息
 export function getMerchantPayInfo(memberId: number) {
   return request.get(
