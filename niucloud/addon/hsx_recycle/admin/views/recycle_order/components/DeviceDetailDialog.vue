@@ -7,13 +7,22 @@
     :fullscreen="isMobile"
     center
     :destroy-on-close="true"
-    class="device-detail-dialog"
+    class="device-detail-dialog hsx-premium-overlay"
   >
 
     <div v-if="deviceData" class="ddd-wrap">
 
       <!-- ===== 设备信息卡片 ===== -->
       <DeviceInfoCard :device="deviceData" mode="full" class="ddd-section" />
+
+      <!-- ===== 下游流转进度 ===== -->
+      <DownstreamProgress
+        class="ddd-section"
+        :stage="deviceData.downstream_stage"
+        :sale-price="deviceData.downstream_sale_price"
+        :staged-at="deviceData.downstream_stage_at"
+        :erp-asset-id="deviceData.downstream_erp_asset_id"
+      />
 
       <!-- ===== 价格信息 ===== -->
       <div class="ddd-section ddd-price-section">
@@ -25,7 +34,11 @@
         </div>
         <div class="ddd-price-grid">
           <div class="ddd-price-card ddd-price-card--final">
-            <div class="ddd-price-label">最终价格</div>
+            <div class="ddd-price-label flex items-center">
+              <!-- 初始参考价格 -->
+               <div>最终价格</div>
+               <div class="text-[10px] text-[#909399]"  v-if="deviceData.initial_price"> 初始参考价格：{{ deviceData.initial_price }}</div> 
+            </div>
             <div class="ddd-price-value">
               {{ deviceData.final_price ? `¥${deviceData.final_price}` : '未定价' }}
             </div>
@@ -304,6 +317,7 @@ import { img } from '@/utils/common'
 import { adjustDeviceCost, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/recycle_order'
 import useUserStore from '@/stores/modules/user'
 import DeviceInfoCard from './DeviceInfoCard.vue'
+import DownstreamProgress from './DownstreamProgress.vue'
 
 // 定义设备信息接口
 interface DeviceLog {
@@ -320,6 +334,10 @@ interface DeviceDetail {
     model: string;
     status: number | string;
     status_name: string;
+    downstream_stage?: number;
+    downstream_stage_at?: number;
+    downstream_sale_price?: number | string;
+    downstream_erp_asset_id?: number;
     capacity?: string;
     color?: string;
     system_version?: string;

@@ -39,6 +39,10 @@ return [
         // 设备质检完成事件
         'AfterDeviceCheckComplete' => [ 'addon\hsx_recycle\app\listener\device\DeviceCheckCompleteListener' ],
 
+        // 下游流转回流：订阅 ERP/数据中台事件，把设备下游生命周期(已入库/转中台/已定价)镜像回回收设备
+        'ErpDomainEvent' => [ 'addon\hsx_recycle\app\listener\downstream\ErpAssetDownstreamListener' ],
+        'DeviceAssetPriceCompleted' => [ 'addon\hsx_recycle\app\listener\downstream\DeviceAssetPricedListener' ],
+
         // 快递回调事件。易速推送统一在此分发，后续 ERP、通知、财务流水可挂载扩展。
         'RecycleExpressEvent' => [ 'addon\hsx_recycle\app\listener\express\RecycleExpressEventListener' ],
         
