@@ -1,11 +1,15 @@
 <template>
-  <el-dialog
-    v-model="dialogVisible"
+  <FormDialog
+    :visible="dialogVisible"
     title="收款方式"
-    :width="isMobile ? '95vw' : '780px'"
-    top="4vh"
-    class="payment-method-dialog"
-    :destroy-on-close="true"
+    subtitle="选择收款方式与账号，确认后打款（不可撤销）"
+    width="md"
+    :loading="submitting"
+    :confirm-disabled="!canConfirm"
+    :confirm-text="confirmButtonText"
+    @update:visible="(v: boolean) => dialogVisible = v"
+    @confirm="handleConfirmPayment"
+    @cancel="dialogVisible = false"
   >
     <div class="payment-dialog-scroll">
     <div v-if="paymentInfoData && paymentInfoData.length > 0">
@@ -214,28 +218,13 @@
       </el-empty>
     </div>
     </div>
-
-    <!-- 对话框底部按钮 -->
-    <template #footer>
-      <div :class="isMobile ? 'dialog-footer mobile-footer' : 'dialog-footer'">
-        <el-button :class="isMobile ? '!ml-0 w-full' : ''" @click="dialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :class="isMobile ? '!ml-0 w-full' : ''"
-          @click="handleConfirmPayment"
-          :disabled="!canConfirm || submitting"
-          :loading="submitting"
-        >
-          {{ confirmButtonText }}
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
+  </FormDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
 import { Picture, InfoFilled } from '@element-plus/icons-vue'
 
 // 定义支付信息接口
