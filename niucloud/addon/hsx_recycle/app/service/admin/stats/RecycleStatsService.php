@@ -692,6 +692,132 @@ class RecycleStatsService extends BaseAdminService
     }
 
     /**
+     * 员工考核看板 · 只读聚合
+     * 在已有「工作量计数」基础上，补充各环节平均时效与金额贡献，供前端计算综合评分与排名。
+     * 纯读、不改任何业务数据；单表聚合为主，全程故障隔离（异常即 0，绝不影响接口）。
+     * @param array $params [start_time, end_time, user_id?]
+     * @return array
+     */
+    public function getStaffKpiBoard(array $params): array
+    {
+        $startTime = $params['start_time'] ?? '';
+        $endTime   = $params['end_time'] ?? '';
+        $specificUserId = (int)($params['user_id'] ?? 0);
+
+        $startTs = $startTime ? strtotime($startTime . ' 00:00:00') : 0;
+        $endTs   = $endTime ? strtotime($endTime . ' 23:59:59') : 0;
+
+        // 复用已有的工作量计数（签收/质检/定价/打款台数），保证口径一致、不重复造轮子
+        $base = [];
+        try {
+            foreach ($this->getUserDetailStats($params) as $row) {
+                $base[(int)$row['user_id']] = $row;
+            }
+        } catch (\Throwable $e) {
+            $base = [];
+        }
+
+        $users = $this->getUserList();
+        if ($specificUserId) {
+            $users = array_filter($users, function ($u) use ($specificUserId) {
+                return (int)$u['uid'] === $specificUserId;
+            });
+        }
+
+        $result = [];
+        foreach ($users as $user) {
+            $uid = (int)$user['uid'];
+            $row = $base[$uid] ?? [
+                'user_id'             => $uid,
+                'user_name'           => $user['real_name'] ?: $user['username'],
+                'user_type_name'      => $this->getUserRoleName($uid),
+                'signed_order_count'  => 0,
+                'signed_device_count' => 0,
+                'check_count'         => 0,
+                'price_count'         => 0,
+                'payment_count'       => 0,
+            ];
+
+            // —— 各环节平均时效（秒）：仅统计该员工亲自操作、且首尾时间戳齐全的设备 —— //
+            // 质检时长：录入(create_at) → 质检完成(check_at)
+            $row['avg_check_duration'] = $this->kpiAvgDuration('check_uid', $uid, 'check_at', 'create_at', $startTs, $endTs, 'check_at');
+            // 定价时长：质检(check_at) → 定价(price_at)
+            $row['avg_price_duration'] = $this->kpiAvgDuration('price_uid', $uid, 'price_at', 'check_at', $startTs, $endTs, 'price_at');
+            // 打款时长：定价(price_at) → 打款(pay_time)
+            $row['avg_pay_duration']   = $this->kpiAvgDuration('pay_uid', $uid, 'pay_time', 'price_at', $startTs, $endTs, 'pay_time');
+
+            // —— 金额贡献 —— //
+            // 回收成本贡献：该员工打款设备实付合计
+            $row['total_pay_amount'] = $this->kpiSumAmount('pay_uid', $uid, 'pay_amount', 'pay_time', $startTs, $endTs);
+            // 定价毛利参考：已售设备 (sell_price - final_price) 均值（sell_price 由数据中台回写）
+            $row['avg_margin'] = $this->kpiAvgMargin($uid, $startTs, $endTs);
+
+            $result[] = $row;
+        }
+
+        return $result;
+    }
+
+    /**
+     * KPI 平均时长（秒）：endField - startField，限定操作人与时间窗，两端时间戳须均 > 0 且 end >= start。
+     */
+    private function kpiAvgDuration(string $opField, int $uid, string $endField, string $startField, int $startTs, int $endTs, string $windowField): float
+    {
+        try {
+            $query = RecycleDevice::where([
+                ['site_id', '=', $this->site_id],
+                [$opField, '=', $uid],
+            ])->whereRaw("`{$endField}` > 0 AND `{$startField}` > 0 AND `{$endField}` >= `{$startField}`");
+            if ($startTs) $query->where($windowField, '>=', $startTs);
+            if ($endTs)   $query->where($windowField, '<=', $endTs);
+            $res = $query->fieldRaw("AVG(`{$endField}` - `{$startField}`) as v")->find();
+            $v = $res['v'] ?? null;
+            return $v !== null ? round((float)$v, 1) : 0.0;
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
+    /**
+     * KPI 金额合计：限定操作人 / 时间窗。
+     */
+    private function kpiSumAmount(string $opField, int $uid, string $amountField, string $windowField, int $startTs, int $endTs): float
+    {
+        try {
+            $query = RecycleDevice::where([
+                ['site_id', '=', $this->site_id],
+                [$opField, '=', $uid],
+            ])->where($windowField, '>', 0);
+            if ($startTs) $query->where($windowField, '>=', $startTs);
+            if ($endTs)   $query->where($windowField, '<=', $endTs);
+            $v = $query->sum($amountField);
+            return $v ? round((float)$v, 2) : 0.0;
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
+    /**
+     * KPI 定价毛利均值：已售(sell_price>0) 设备 (sell_price - final_price) 均值，按定价人统计。
+     */
+    private function kpiAvgMargin(int $uid, int $startTs, int $endTs): float
+    {
+        try {
+            $query = RecycleDevice::where([
+                ['site_id', '=', $this->site_id],
+                ['price_uid', '=', $uid],
+            ])->whereRaw("`sell_price` > 0 AND `final_price` > 0");
+            if ($startTs) $query->where('price_at', '>=', $startTs);
+            if ($endTs)   $query->where('price_at', '<=', $endTs);
+            $res = $query->fieldRaw("AVG(`sell_price` - `final_price`) as v")->find();
+            $v = $res['v'] ?? null;
+            return $v !== null ? round((float)$v, 2) : 0.0;
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
+    /**
      * 获取分类统计汇总
      * @param array $params
      * @return array

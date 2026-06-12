@@ -315,6 +315,22 @@ class Stats extends BaseAdminController
     }
 
     /**
+     * 员工考核看板（计数 + 各环节时效 + 金额贡献）
+     * @return Response
+     */
+    public function getStaffKpiBoard(): Response
+    {
+        $params = $this->request->params([
+            ['user_id', ''],
+            ['start_time', date('Y-m-d', strtotime('-29 days'))],
+            ['end_time', date('Y-m-d')],
+        ]);
+
+        $data = $this->recycleStatsService->getStaffKpiBoard($params);
+        return success($data);
+    }
+
+    /**
      * 获取会员统计概览
      * @return Response
      */

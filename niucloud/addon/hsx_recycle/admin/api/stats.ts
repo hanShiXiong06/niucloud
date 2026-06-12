@@ -148,6 +148,13 @@ export function getUserDetailStats(params: Record<string, any>) {
 }
 
 /**
+ * 员工考核看板：每人计数 + 各环节平均时效 + 金额贡献
+ */
+export function getStaffKpiBoard(params: Record<string, any>) {
+    return request.get(`recycle/stats/getStaffKpiBoard`, { params })
+}
+
+/**
  * 获取会员统计概览
  */
 export function getMemberStatsOverview(params: Record<string, any>) {

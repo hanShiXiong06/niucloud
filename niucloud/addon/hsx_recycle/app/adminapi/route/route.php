@@ -339,6 +339,7 @@ Route::group('recycle', function () {
     Route::delete('check_template_field/:id', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@deleteField');
 
     Route::post('check_template_option', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@saveOption');
+    Route::post('check_template_option/:id/default', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@setOptionDefault');
     Route::delete('check_template_option/:id', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@deleteOption');
 })->middleware([
     AdminCheckToken::class,
@@ -472,6 +473,8 @@ Route::group('recycle', function () {
     Route::get('stats/getUserList', 'addon\hsx_recycle\app\adminapi\controller\Stats@getUserList');
     // 获取用户详细统计
     Route::get('stats/getUserDetailStats', 'addon\hsx_recycle\app\adminapi\controller\Stats@getUserDetailStats');
+    // 员工考核看板（计数+时效+金额）
+    Route::get('stats/getStaffKpiBoard', 'addon\hsx_recycle\app\adminapi\controller\Stats@getStaffKpiBoard');
     // 获取排行榜数据
     Route::get('stats/getRankingStats', 'addon\hsx_recycle\app\adminapi\controller\Stats@getRankingStats');
     // 获取质检员分类统计
