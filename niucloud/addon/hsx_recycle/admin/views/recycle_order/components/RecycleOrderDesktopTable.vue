@@ -96,15 +96,16 @@
                     </template>
                   </el-dropdown>
 
-                  <el-button
-                    type="primary"
-                    link
-                    :icon="View"
-                    @click="props.viewDetail(deviceRow)"
-                    size="small"
-                  >
-                    详情
-                  </el-button>
+                  <el-tooltip content="查看详情" placement="top">
+                    <el-button
+                      type="primary"
+                      link
+                      :icon="View"
+                      @click="props.viewDetail(deviceRow)"
+                      size="small"
+                      aria-label="查看详情"
+                    />
+                  </el-tooltip>
                 </div>
               </template>
             </el-table-column>
@@ -194,10 +195,10 @@
 
     <el-table-column label="状态" width="130" align="center">
       <template #default="{ row }">
-        <el-tag :type="props.getStatusType(row.status)" :effect="props.getStatusEffect(row.status)">
-          {{ row.status_name }}
-        </el-tag>
-        <div class="mt-1 text-[11px] text-gray-500">{{ row.flow_mode_name || '整单流转' }}</div>
+        <span class="soft-pill" :class="`is-${props.getStatusType(row.status)}`">
+          <span class="soft-pill__dot"></span>{{ row.status_name }}
+        </span>
+        <div class="mt-1 text-[11px] text-gray-400">{{ row.flow_mode_name || '整单流转' }}</div>
       </template>
     </el-table-column>
 
@@ -489,6 +490,29 @@ const handleEditUsername = async (row: any) => {
   color: var(--el-text-color-placeholder);
   margin-right: 4px;
 }
+/* 柔和状态药丸（与设备状态徽章统一） */
+.soft-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.soft-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.soft-pill.is-primary { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.soft-pill.is-success { color: var(--el-color-success); background: var(--el-color-success-light-9); }
+.soft-pill.is-warning { color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
+.soft-pill.is-danger  { color: var(--el-color-danger);  background: var(--el-color-danger-light-9); }
+.soft-pill.is-info    { color: var(--el-color-info);     background: var(--el-color-info-light-9); }
 </style>
 
 <style>
