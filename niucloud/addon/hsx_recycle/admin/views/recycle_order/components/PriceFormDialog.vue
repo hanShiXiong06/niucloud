@@ -303,7 +303,7 @@ const detailLoading = ref(false)
 
 const refurbishmentPresets = ref<Array<{ key: string; name: string; type: string }>>([])
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
-const erpWarehouses = ref<Array<{ id: number; warehouse_name: string; business_type?: string }>>([])
+const erpWarehouses = ref<Array<{ id: number; warehouse_name: string; business_type?: string; is_default?: number }>>([])
 const erpConnected = ref(false)
 
 // 仓库业务类型 → 销售流向（与后端 RecycleOrderDict::saleDestinationFromWarehouseType 保持一致）
@@ -479,6 +479,19 @@ const onWarehouseChange = (val: number) => {
     // 选仓即决定流向：按仓库业务类型自动设置 sale_destination
     if (w) deviceForm.sale_destination = WH_TYPE_DEST[w.business_type || 'mall'] || 'hold'
 }
+
+// 仓库模式下未选仓库时，自动默认选中"默认入库仓"，没有则第一个；
+// 用 watch 兼容仓库列表与设备详情两路异步先后到达，避免被回填覆盖成 0。
+watch([erpWarehouses, () => deviceForm.target_warehouse_id], () => {
+    if (!warehouseMode.value) return
+    const valid = erpWarehouses.value.some(w => w.id === deviceForm.target_warehouse_id)
+    if (valid) return
+    const def = erpWarehouses.value.find(w => Number(w.is_default) === 1) || erpWarehouses.value[0]
+    if (def) {
+        deviceForm.target_warehouse_id = def.id
+        onWarehouseChange(def.id)
+    }
+}, { deep: true })
 
 const loadSaleDestinationOptions = async () => {
     try {
