@@ -526,8 +526,8 @@ watch(() => props.visible, (v) => {
     }
 })
 watch(() => props.device, (newVal) => {
+    // 只同步表单，不在此再次请求详情：开窗拉取统一交给 visible 监听，避免开窗时两个监听重复请求
     applyDeviceToForm(newVal)
-    if (dialogVisible.value) loadDeviceDetail()
 }, { deep: true })
 watch(dialogVisible, (v) => { emit('update:visible', v) })
 
