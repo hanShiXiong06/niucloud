@@ -36,6 +36,7 @@ Route::group('erp', function () {
     Route::post('stock_order/:id/reject_items', 'addon\hsx_erp\app\adminapi\controller\StockOrder@rejectItems');
     Route::post('stock_order/:id/item/:item_id/resubmit', 'addon\hsx_erp\app\adminapi\controller\StockOrder@resubmitItem');
     Route::get('asset/lists', 'addon\hsx_erp\app\adminapi\controller\Asset@lists');
+    Route::get('asset/integration_status', 'addon\hsx_erp\app\adminapi\controller\Asset@integrationStatus');
     Route::post('asset/manual_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@manualInbound');
     Route::get('asset/:id', 'addon\hsx_erp\app\adminapi\controller\Asset@info');
     Route::post('asset/batch_confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@batchConfirmInbound');

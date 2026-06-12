@@ -4,6 +4,11 @@ export function getErpAssetList(params: Record<string, any>) {
     return request.get('erp/asset/lists', { params })
 }
 
+// 集成状态：中台是否接入(接入后拍照/定价交给中台)
+export function getErpIntegrationStatus() {
+    return request.get('erp/asset/integration_status')
+}
+
 export function getErpAssetInfo(id: number) {
     return request.get(`erp/asset/${ id }`)
 }

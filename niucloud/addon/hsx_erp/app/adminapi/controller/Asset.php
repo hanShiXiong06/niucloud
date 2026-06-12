@@ -29,6 +29,19 @@ class Asset extends BaseAdminController
         return success($this->service->getPage($data));
     }
 
+    /**
+     * 集成状态：探测中台(数据中台)是否接入。
+     * 接入后拍照与销售定价由中台负责，ERP 隐藏自身定价、改显示"已交中台"。
+     * class_exists 守卫：中台未安装则类不存在，返回 false，ERP 独立运行不受影响。
+     */
+    public function integrationStatus()
+    {
+        $deviceAsset = class_exists('\\addon\\hsx_device_asset\\app\\service\\admin\\DeviceAssetService');
+        return success([
+            'device_asset_connected' => $deviceAsset,
+        ]);
+    }
+
     public function info(int $id)
     {
         return success($this->service->getInfo($id));

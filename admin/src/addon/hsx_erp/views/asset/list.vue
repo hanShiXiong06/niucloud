@@ -17,7 +17,7 @@
                 <el-tab-pane label="待入库" name="pending_in" />
                 <el-tab-pane label="在库待整备" name="in_stock" />
                 <el-tab-pane label="整备中" name="refurbishing" />
-                <el-tab-pane label="待销售定价" name="pending_pricing" />
+                <el-tab-pane :label="integrated ? '已交中台' : '待销售定价'" name="pending_pricing" />
                 <el-tab-pane label="可售" name="available_for_sale" />
             </el-tabs>
 
@@ -88,7 +88,7 @@
                         >
                             <span class="inline-flex cursor-default items-center gap-1">
                                 <el-tag :type="statusType(row.inventory_status)">
-                                    {{ statusName(row.inventory_status) }}
+                                    {{ flowStatusName(row.inventory_status) }}
                                 </el-tag>
                                 <el-icon class="text-gray-300"><InfoFilled /></el-icon>
                             </span>
@@ -115,14 +115,23 @@
                         <el-button v-if="row.inventory_status === 'in_stock'" type="success" link @click="skipRefurbishment(row)">
                             无需整备
                         </el-button>
+                        <!-- 独立模式:ERP 自己定价/调价 -->
                         <el-button
-                            v-if="['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
+                            v-if="!integrated && ['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
                             type="primary"
                             link
                             @click="openPricing(row)"
                         >
                             {{ row.inventory_status === 'available_for_sale' ? '调价' : '定价' }}
                         </el-button>
+                        <!-- 联合模式:定价交给中台,ERP 不再定价,仅提示进度 -->
+                        <el-tooltip
+                            v-else-if="integrated && row.inventory_status === 'pending_pricing'"
+                            content="拍照与销售定价由数据中台完成，完成后自动回写参考价并转可售"
+                            placement="top"
+                        >
+                            <el-tag type="info" effect="plain" size="small">中台处理中</el-tag>
+                        </el-tooltip>
                         <el-button type="primary" link @click="openDetail(row)">详情</el-button>
                     </template>
                 </el-table-column>
@@ -360,7 +369,8 @@ import {
     confirmErpAssetInbound,
     createErpManualInbound,
     getErpAssetInfo,
-    getErpAssetList
+    getErpAssetList,
+    getErpIntegrationStatus
 } from '@/addon/hsx_erp/api/asset'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
@@ -369,6 +379,8 @@ import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const router = useRouter()
 const search = reactive({ keyword: '', inventory_status: '' })
+// 是否已接入中台(数据中台)：接入后拍照/定价交给中台，ERP 不再自行定价
+const integrated = ref(false)
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
 const detailVisible = ref(false)
 const detail = reactive<any>({ asset: null, timeline: [] })
@@ -627,5 +639,18 @@ const loadWarehouses = async () => {
     inbound.location_id = Number(defaultWarehouse?.locations?.[0]?.id || 0)
 }
 
-onMounted(() => Promise.all([loadList(), loadWarehouses(), loadCounterparties()]))
+const loadIntegration = async () => {
+    try {
+        const res: any = await getErpIntegrationStatus()
+        integrated.value = !!res.data?.device_asset_connected
+    } catch (e) {
+        integrated.value = false
+    }
+}
+
+// 列表与状态标签的展示名：联合模式下"待销售定价"语义其实是"已交中台·处理中"
+const flowStatusName = (status: string) =>
+    integrated.value && status === 'pending_pricing' ? '已交中台·处理中' : statusName(status)
+
+onMounted(() => Promise.all([loadIntegration(), loadList(), loadWarehouses(), loadCounterparties()]))
 </script>
