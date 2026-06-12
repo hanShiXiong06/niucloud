@@ -65,8 +65,8 @@
               <span>回收报价</span><strong>¥{{ money(row.quote_price) }}</strong>
               <span>挂牌价</span><strong>¥{{ money(row.listing_price) }}</strong>
               <span>成交价</span><strong>¥{{ money(row.sold_price) }}</strong>
-              <span>客户结算</span><strong class="text-green-600">¥{{ money(row.settlement_amount) }}</strong>
-              <span>服务收益</span><strong class="text-blue-600">¥{{ money(row.service_fee) }}</strong>
+              <span>客户结算</span><strong class="text-[var(--el-color-success)]">¥{{ money(row.settlement_amount) }}</strong>
+              <span>服务收益</span><strong class="text-[var(--el-color-primary)]">¥{{ money(row.service_fee) }}</strong>
             </div>
           </template>
         </el-table-column>

@@ -2,16 +2,7 @@
     <PremiumTheme class="return-order-list">
         <el-card class="box-card" shadow="never">
             <template #header>
-                <div class="card-header">
-                    <span>退回订单列表</span>
-                    <div class="header-actions">
-                        <!-- <el-button type="primary" size="small" @click="exportReturnOrders" :loading="exportLoading">
-                            <el-icon>
-                                <Download />
-                            </el-icon> 导出数据
-                        </el-button> -->
-                    </div>
-                </div>
+                <PageHeader title="退货订单" description="拒绝回收的设备会生成退货订单，在这里确认、完成退货并追踪物流。" />
             </template>
 
             <!-- 搜索区域 -->
@@ -66,8 +57,7 @@
                     />
                 </template>
                 <el-table-column type="selection" width="55" />
-                <el-table-column prop="id" label="ID" width="80" sortable />
-                <el-table-column prop="order_id" label="退回订单编号" min-width="150" sortable show-overflow-tooltip />
+                <el-table-column prop="order_id" label="退回订单编号" min-width="160" sortable show-overflow-tooltip />
                 <el-table-column label="快递单号" min-width="170" show-overflow-tooltip>
                     <template #default="scope">
                         <span v-if="scope.row.express_no" class="clickable-text" @click="openReturnExpressTrack(scope.row)">
@@ -111,48 +101,40 @@
                     </template>
                 </el-table-column>
                 <el-table-column prop="create_at" label="创建时间" min-width="180" sortable />
-                <el-table-column label="操作" width="340" fixed="right">
+                <el-table-column label="操作" width="220" fixed="right" align="center">
                     <template #default="scope">
-                        <el-button type="primary" size="small" @click="handleDetail(scope.row)">
-                            <el-icon>
-                                <View />
-                            </el-icon> 详情
-                        </el-button>
-                        <el-button v-if="scope.row.express_no" type="primary" plain size="small"
-                            :loading="expressTrackLoading && activeTrackId === scope.row.id"
-                            @click="openReturnExpressTrack(scope.row)">查状态</el-button>
-                        <el-button v-if="canPerformAction('CONFIRM', scope.row.status)" type="success" size="small"
-                            :loading="operationLoading && activeOperationId === scope.row.id"
-                            @click="handleConfirm(scope.row.id)">确认退货</el-button>
-                        <el-button v-if="canPerformAction('COMPLETE', scope.row.status)" type="success" size="small"
-                            :loading="operationLoading && activeOperationId === scope.row.id"
-                            @click="handleComplete(scope.row.id)">完成退货</el-button>
-                        <!-- <el-button v-if="canPerformAction('CANCEL', scope.row.status)" type="danger" size="small"
-                            :loading="operationLoading && activeOperationId === scope.row.id"
-                            @click="handleCancel(scope.row.id)">取消</el-button> -->
-                        <el-button v-if="canPerformAction('DELETE', scope.row.status)" type="danger" size="small"
-                            :loading="operationLoading && activeOperationId === scope.row.id"
-                            @click="handleDelete(scope.row.id)">删除</el-button>
-                        <el-dropdown
-                            v-if="getVisibleReturnPrintActions(scope.row).length"
-                            trigger="click"
-                            @command="(action) => printReturnByScene(scope.row, action)"
-                        >
-                            <el-button size="small" plain>
-                                打印<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                            </el-button>
-                            <template #dropdown>
-                                <el-dropdown-menu>
-                                    <el-dropdown-item
-                                        v-for="action in getVisibleReturnPrintActions(scope.row)"
-                                        :key="action.scene_key"
-                                        :command="action"
-                                    >
-                                        {{ action.button_text || action.scene_name }}
-                                    </el-dropdown-item>
-                                </el-dropdown-menu>
-                            </template>
-                        </el-dropdown>
+                        <div class="flex items-center justify-center gap-1">
+                            <!-- 主行动：当前状态最该做的下一步 -->
+                            <el-button v-if="canPerformAction('CONFIRM', scope.row.status)" type="success" size="small"
+                                :loading="operationLoading && activeOperationId === scope.row.id"
+                                @click="handleConfirm(scope.row.id)">确认退货</el-button>
+                            <el-button v-else-if="canPerformAction('COMPLETE', scope.row.status)" type="success" size="small"
+                                :loading="operationLoading && activeOperationId === scope.row.id"
+                                @click="handleComplete(scope.row.id)">完成退货</el-button>
+
+                            <el-button type="primary" link size="small" @click="handleDetail(scope.row)">详情</el-button>
+
+                            <!-- 更多：次要操作 -->
+                            <el-dropdown
+                                v-if="scope.row.express_no || canPerformAction('DELETE', scope.row.status) || getVisibleReturnPrintActions(scope.row).length"
+                                trigger="click"
+                            >
+                                <el-button size="small" :icon="MoreFilled" plain>更多</el-button>
+                                <template #dropdown>
+                                    <el-dropdown-menu>
+                                        <el-dropdown-item v-if="scope.row.express_no" @click="openReturnExpressTrack(scope.row)">查物流状态</el-dropdown-item>
+                                        <el-dropdown-item
+                                            v-for="action in getVisibleReturnPrintActions(scope.row)"
+                                            :key="action.scene_key"
+                                            @click="printReturnByScene(scope.row, action)"
+                                        >{{ action.button_text || action.scene_name }}</el-dropdown-item>
+                                        <el-dropdown-item v-if="canPerformAction('DELETE', scope.row.status)" divided @click="handleDelete(scope.row.id)">
+                                            <span class="text-red-500">删除</span>
+                                        </el-dropdown-item>
+                                    </el-dropdown-menu>
+                                </template>
+                            </el-dropdown>
+                        </div>
                     </template>
                 </el-table-column>
             </el-table>
@@ -445,8 +427,9 @@ import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { Download, Search, Refresh, View, ArrowDown } from '@element-plus/icons-vue'
+import { Download, Search, Refresh, View, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 
 import {
     getReturnOrderList,
