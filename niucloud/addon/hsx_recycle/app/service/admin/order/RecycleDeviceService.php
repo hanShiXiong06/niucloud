@@ -1021,6 +1021,13 @@ class RecycleDeviceService extends BaseAdminService
             $device->price_uid = $this->uid;
             $device->price_at = time(); // 添加定价时间
             $device->sale_destination = $saleDestination;
+            // 目标仓库（ERP 安装时由定价弹窗选择；未选则保持 0/空，不影响固定渠道流程）
+            if (isset($refurbishment['target_warehouse_id'])) {
+                $device->target_warehouse_id = (int)$refurbishment['target_warehouse_id'];
+            }
+            if (isset($refurbishment['target_warehouse_name'])) {
+                $device->target_warehouse_name = (string)$refurbishment['target_warehouse_name'];
+            }
             $device->refurbishment_required = $refurbishmentData['required'];
             $device->refurbishment_assignee_uid = $refurbishmentData['assignee_uid'];
             $device->refurbishment_assignee_name = $refurbishmentData['assignee_name'];

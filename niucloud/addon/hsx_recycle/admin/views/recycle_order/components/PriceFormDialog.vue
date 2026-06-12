@@ -123,6 +123,25 @@
                 </el-radio-button>
               </el-radio-group>
               <div v-if="saleDestinationDescription" class="pfd-hint">{{ saleDestinationDescription }}</div>
+
+              <div v-if="erpWarehouses.length" class="pfd-warehouse">
+                <div class="pfd-warehouse__label">目标仓库（ERP）</div>
+                <el-select
+                  v-model="deviceForm.target_warehouse_id"
+                  placeholder="选择入库仓库，不选则由 ERP 默认分配"
+                  clearable
+                  class="w-full"
+                  @change="onWarehouseChange"
+                >
+                  <el-option
+                    v-for="w in erpWarehouses"
+                    :key="w.id"
+                    :label="w.warehouse_name"
+                    :value="w.id"
+                  />
+                </el-select>
+                <div class="pfd-hint">已检测到 ERP 仓库，可在定价时直接指定该设备入库的目标仓库。</div>
+              </div>
             </section>
 
             <section :class="['pfd-section', 'pfd-refurbish-card', deviceForm.refurbishment_required === 1 ? 'is-required' : '']">
@@ -274,11 +293,14 @@ const detailLoading = ref(false)
 
 const refurbishmentPresets = ref<Array<{ key: string; name: string; type: string }>>([])
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
+const erpWarehouses = ref<Array<{ id: number; warehouse_name: string }>>([])
 
 const deviceForm = reactive<{
     final_price: number | undefined;
     sell_price: number | undefined;
     sale_destination: string;
+    target_warehouse_id: number;
+    target_warehouse_name: string;
     remark: string;
     refurbishment_required: number;
     refurbishment_assignee_uid: number;
@@ -298,6 +320,8 @@ const deviceForm = reactive<{
             ? parseFloat(props.device.sell_price) || undefined
             : undefined,
     sale_destination: props.device.sale_destination || '',
+    target_warehouse_id: Number(props.device.target_warehouse_id || 0),
+    target_warehouse_name: props.device.target_warehouse_name || '',
     remark: props.device.remark || '',
     refurbishment_required: Number(props.device.refurbishment_required || 0),
     refurbishment_assignee_uid: Number(props.device.refurbishment_assignee_uid || 0),
@@ -429,15 +453,22 @@ const loadRefurbishmentOptions = async () => {
     }
 }
 
+const onWarehouseChange = (val: number) => {
+    const w = erpWarehouses.value.find(item => item.id === val)
+    deviceForm.target_warehouse_name = w?.warehouse_name || ''
+}
+
 const loadSaleDestinationOptions = async () => {
     try {
         const res: any = await getSaleDestinationOptions()
         saleDestinationOptions.value = res.data?.items || []
+        erpWarehouses.value = res.data?.warehouses || []
         if (!saleDestinationOptions.value.some(item => item.value === deviceForm.sale_destination)) {
             deviceForm.sale_destination = saleDestinationOptions.value[0]?.value || ''
         }
     } catch (e) {
         saleDestinationOptions.value = []
+        erpWarehouses.value = []
     }
 }
 
@@ -487,6 +518,8 @@ const handleConfirm = () => {
         final_price: deviceForm.final_price,
         sell_price: deviceForm.sell_price,
         sale_destination: deviceForm.sale_destination,
+        target_warehouse_id: deviceForm.target_warehouse_id || 0,
+        target_warehouse_name: deviceForm.target_warehouse_name || '',
         status: deviceData.value.status,
         remark: deviceForm.remark,
         refurbishment_required: deviceForm.refurbishment_required,

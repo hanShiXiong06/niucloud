@@ -130,6 +130,8 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `downstream_erp_asset_id` int NOT NULL DEFAULT 0 COMMENT '关联ERP资产ID(下游回流)',
   `downstream_sale_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '中台销售定价(下游回流)',
   `downstream_event_id` varchar(64) NOT NULL DEFAULT '' COMMENT '最近一次应用的下游事件ID(幂等追溯)',
+  `target_warehouse_id` int NOT NULL DEFAULT 0 COMMENT '目标仓库ID(ERP安装时定价选择,0为未指定)',
+  `target_warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标仓库名称快照',
   `last_cost_adjust_no` varchar(64) NOT NULL DEFAULT '' COMMENT '最后成本调整单号',
   `settlement_mode` varchar(20) NOT NULL DEFAULT 'recycle' COMMENT '结算模式：recycle-普通回收，consign-代卖',
   `dispose_type` varchar(20) NOT NULL DEFAULT 'pending' COMMENT '处置类型：pending-未处置，recycle-普通回收，return-退回，consign-代卖',

@@ -332,6 +332,8 @@ class RecycleDevice extends BaseAdminController
             ['sell_price', ''],
             ['remark', ''],
             ['sale_destination', RecycleOrderDict::SALE_DESTINATION_MALL],
+            ['target_warehouse_id', 0],
+            ['target_warehouse_name', ''],
             ['refurbishment_required', 0],
             ['refurbishment_assignee_uid', 0],
             ['refurbishment_reason', ''],
@@ -356,6 +358,8 @@ class RecycleDevice extends BaseAdminController
         $sellPrice = ($data['sell_price'] === '' || $data['sell_price'] === null) ? null : (float)$data['sell_price'];
         return success($this->service->confirmPrice($id, (float)$data['final_price'], $data['remark'], $sellPrice, [
             'sale_destination' => $data['sale_destination'],
+            'target_warehouse_id' => (int)$data['target_warehouse_id'],
+            'target_warehouse_name' => (string)$data['target_warehouse_name'],
             'refurbishment_required' => $data['refurbishment_required'],
             'refurbishment_assignee_uid' => $data['refurbishment_assignee_uid'],
             'refurbishment_reason' => $data['refurbishment_reason'],
@@ -394,8 +398,20 @@ class RecycleDevice extends BaseAdminController
 
     public function saleDestinationOptions()
     {
+        // 当 ERP 已安装时，向其同步查询启用仓库列表（解耦：只发标准事件，ERP 未装则无人应答 → 回退固定渠道）
+        $warehouses = [];
+        try {
+            $results = array_values(array_filter((array)event('GetErpWarehouseList', ['site_id' => $this->site_id])));
+            if (!empty($results) && is_array($results[0])) {
+                $warehouses = $results[0];
+            }
+        } catch (\Throwable $e) {
+            $warehouses = [];
+        }
+
         return success([
             'items' => RecycleOrderDict::getSaleDestinationOptions(),
+            'warehouses' => $warehouses,
         ]);
     }
 
