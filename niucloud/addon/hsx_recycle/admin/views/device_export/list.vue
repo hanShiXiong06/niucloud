@@ -81,104 +81,93 @@
                         />
                     </template>
 
-                    <el-table-column type="selection" width="55" align="center" />
-                    <el-table-column prop="imei" :label="t('imei')" min-width="120" />
-                    <el-table-column prop="model" :label="t('型号')" min-width="150" show-overflow-tooltip />
-                    <el-table-column prop="category_name" :label="t('分类')" min-width="100" align="center" />
+                    <el-table-column type="selection" width="50" align="center" />
 
-                    <el-table-column prop="final_price" label="收货价" min-width="100" align="right">
+                    <!-- 设备：型号 + 串号 + 分类 -->
+                    <el-table-column label="设备" min-width="230">
                         <template #default="{ row }">
-                            ¥{{ row.final_price || '0.00' }}
+                            <div class="font-medium text-gray-800">{{ row.model || '未知型号' }}</div>
+                            <div class="mt-0.5 text-xs text-gray-500">IMEI {{ row.imei || '—' }}</div>
+                            <div v-if="row.category_name" class="text-xs text-gray-400">{{ row.category_name }}</div>
                         </template>
                     </el-table-column>
 
-                    <el-table-column prop="sell_price" label="卖货价格" min-width="120" align="right">
+                    <!-- 价格：收货价 + 就地编辑的卖货价 -->
+                    <el-table-column label="价格" min-width="180">
                         <template #default="{ row }">
-                            <el-input
-                                v-model="row.sell_price"
-                                size="small"
-                                type="number"
-                                :min="0"
-                                placeholder="0.00"
-                                style="width: 100px"
-                                @blur="saveSellPrice(row)"
-                                @keyup.enter="saveSellPrice(row)"
-                            >
-                                <template #prefix>¥</template>
-                            </el-input>
+                            <div class="flex items-center justify-between gap-2 text-xs">
+                                <span class="text-gray-500">收货价</span>
+                                <strong class="text-[var(--el-color-danger)]">¥{{ row.final_price || '0.00' }}</strong>
+                            </div>
+                            <div class="mt-1 flex items-center justify-between gap-2 text-xs">
+                                <span class="text-gray-500">卖货价</span>
+                                <el-input
+                                    v-model="row.sell_price"
+                                    size="small"
+                                    type="number"
+                                    :min="0"
+                                    placeholder="0.00"
+                                    style="width: 110px"
+                                    @blur="saveSellPrice(row)"
+                                    @keyup.enter="saveSellPrice(row)"
+                                >
+                                    <template #prefix>¥</template>
+                                </el-input>
+                            </div>
                         </template>
                     </el-table-column>
 
-                    <el-table-column label="供货商" min-width="120" align="center">
+                    <!-- 来源：供货商 + 报价人 -->
+                    <el-table-column label="来源" min-width="160">
                         <template #default="{ row }">
                             <div v-if="row.order?.member" class="flex items-center gap-2">
-                                <el-avatar :size="24" :src="img(row.order.member.headimg)" v-if="row.order.member.headimg">
+                                <el-avatar :size="22" :src="img(row.order.member.headimg)" v-if="row.order.member.headimg">
                                     <el-icon><User /></el-icon>
                                 </el-avatar>
-                                <span>{{ row.order.member.nickname || row.order.member.username || '未知' }}</span>
+                                <span class="text-sm text-gray-800">{{ row.order.member.nickname || row.order.member.username || '未知' }}</span>
                             </div>
-                            <span v-else class="text-gray-400">-</span>
+                            <span v-else class="text-sm text-gray-400">散户/未知</span>
+                            <div class="mt-0.5 text-xs text-gray-400">
+                                报价：{{ row.price_user ? (row.priceUser?.real_name || row.priceUser?.username || '未知') : '—' }}
+                            </div>
                         </template>
                     </el-table-column>
 
-                    <el-table-column label="报价人" min-width="100" align="center">
+                    <!-- 状态：设备状态 + 入库类型 + ERP 同步（柔和药丸） -->
+                    <el-table-column label="状态" min-width="150">
                         <template #default="{ row }">
-                            <span v-if="row.price_user">{{ row.priceUser.real_name || row.priceUser.username || '未知' }}</span>
-                            <span v-else class="text-gray-400">-</span>
-                        </template>
-                    </el-table-column>
-
-                    <el-table-column prop="status_name" :label="t('status')" min-width="100" align="center">
-                        <template #default="{ row }">
-                            <el-tag type="success">{{ row.status_name }}</el-tag>
-                        </template>
-                    </el-table-column>
-
-                    <el-table-column label="入库类型" min-width="120" align="center">
-                        <template #default="{ row }">
-                            <el-tag :type="row.dispose_type === 'consign' || row.status === 9 ? 'warning' : 'success'">
-                                {{ row.dispose_type === 'consign' || row.status === 9 ? '代卖入库' : '回收入库' }}
-                            </el-tag>
-                            <div v-if="row.consignmentOrder?.consignment_no || row.consignment_order?.consignment_no" class="mt-1 text-xs text-blue-600">
+                            <div class="flex flex-wrap items-center gap-1">
+                                <el-tag size="small" type="success" effect="plain">{{ row.status_name }}</el-tag>
+                                <el-tag size="small" effect="plain" :type="row.dispose_type === 'consign' || row.status === 9 ? 'warning' : 'info'">
+                                    {{ row.dispose_type === 'consign' || row.status === 9 ? '代卖入库' : '回收入库' }}
+                                </el-tag>
+                                <el-tooltip v-if="row.erp_sync" :content="row.erp_sync.asset_no || ''" placement="top">
+                                    <el-tag size="small" effect="plain" :type="erpStatusMeta(row).type">{{ erpStatusMeta(row).label }}</el-tag>
+                                </el-tooltip>
+                                <el-tag v-else size="small" type="info" effect="plain">未同步</el-tag>
+                            </div>
+                            <div v-if="row.consignmentOrder?.consignment_no || row.consignment_order?.consignment_no" class="mt-1 text-xs text-[var(--el-color-primary)]">
                                 {{ row.consignmentOrder?.consignment_no || row.consignment_order?.consignment_no }}
                             </div>
                         </template>
                     </el-table-column>
 
-                    <el-table-column :label="t('回收时间')" min-width="150" align="center">
+                    <!-- 时间：回收 + 导出 -->
+                    <el-table-column label="时间" width="178">
                         <template #default="{ row }">
-                            {{ row.update_at || '' }}
+                            <div class="text-xs leading-5 text-gray-600">
+                                <div><span class="text-gray-400">回收 </span>{{ row.update_at || '—' }}</div>
+                                <div v-if="row.export_time && row.export_time > 0"><span class="text-gray-400">导出 </span>{{ formatTimestamp(row.export_time) }}</div>
+                                <el-tag v-else size="small" type="info" effect="plain">未导出</el-tag>
+                            </div>
                         </template>
                     </el-table-column>
 
-                    <el-table-column label="导出时间" min-width="150" align="center">
+                    <el-table-column label="操作" width="90" align="center" fixed="right">
                         <template #default="{ row }">
-                            <span v-if="row.export_time && row.export_time > 0">{{ formatTimestamp(row.export_time) }}</span>
-                            <el-tag v-else type="info" size="small">未导出</el-tag>
-                        </template>
-                    </el-table-column>
-
-                    <el-table-column label="ERP 状态" min-width="130" align="center">
-                        <template #default="{ row }">
-                            <el-tooltip v-if="row.erp_sync" :content="row.erp_sync.asset_no || ''" placement="top">
-                                <el-tag :type="erpStatusMeta(row).type">
-                                    {{ erpStatusMeta(row).label }}
-                                </el-tag>
+                            <el-tooltip content="查看详情" placement="top">
+                                <el-button type="primary" link :icon="View" @click="viewDeviceDetail(row)" aria-label="查看详情" />
                             </el-tooltip>
-                            <el-tag v-else type="info">未同步</el-tag>
-                        </template>
-                    </el-table-column>
-
-                    <el-table-column label="操作" min-width="100" align="center" fixed="right">
-                        <template #default="{ row }">
-                            <el-button
-                                type="primary"
-                                link
-                                :icon="View"
-                                @click="viewDeviceDetail(row)"
-                            >
-                                查看详情
-                            </el-button>
                         </template>
                     </el-table-column>
                 </el-table>
