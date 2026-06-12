@@ -32,6 +32,21 @@ return [
                 'is_show' => '0',
             ],
             [
+                'menu_name' => '基础配置',
+                'menu_key' => 'hsx_erp_config_group',
+                'menu_short_name' => '基础配置',
+                'parent_select_key' => '',
+                'menu_type' => '0',
+                'icon' => 'nc-iconfont nc-icon-shezhi',
+                'api_url' => '',
+                'router_path' => '',
+                'view_path' => '',
+                'methods' => '',
+                'sort' => '60',
+                'status' => '1',
+                'is_show' => '1',
+                'children' => [
+            [
                 'menu_name' => '往来单位',
                 'menu_key' => 'hsx_erp_counterparty_list',
                 'menu_short_name' => '往来单位',
@@ -168,6 +183,8 @@ return [
                         'status' => '1',
                         'is_show' => '0',
                     ],
+                ],
+            ],
                 ],
             ],
             [
