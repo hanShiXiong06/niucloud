@@ -1,0 +1,86 @@
+/* =============================================================================
+   Premium 设计系统升级（全局主题层）
+   目标：现代 B 端 SaaS 审美（克制、精致、专业），把"干净"抬到"高级"。
+   做法：覆盖 Element Plus 设计 token + 修正核心强制的直角/扁平。
+   原则：纯样式、加法、可回滚（删除本文件的 @import 即恢复原状）；不改业务逻辑。
+   导入顺序：本文件在 index.scss 最后导入，确保覆盖到核心的 !important 规则。
+   ============================================================================= */
+
+:root {
+  /* ---- 主色：精炼靛蓝，取代 Element 默认偏亮的青蓝，更现代专业 ---- */
+  --el-color-primary: #4f46e5;
+  --el-color-primary-light-3: #847eed;
+  --el-color-primary-light-5: #a7a2f2;
+  --el-color-primary-light-7: #cac8f7;
+  --el-color-primary-light-8: #dcdafa;
+  --el-color-primary-light-9: #eeedfc;
+  --el-color-primary-dark-2: #3f38b7;
+
+  /* ---- 圆角：统一节奏（核心把它强制成 0 了，这里找回） ---- */
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 999px;
+
+  /* ---- 更柔和的边框与文字层次 ---- */
+  --el-border-color-lighter: #eef0f4;
+  --el-border-color-light: #e6e8ec;
+
+  /* ---- 精致的阴影层次（克制，非默认那种重投影） ---- */
+  --el-box-shadow-light: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.06);
+}
+
+/* 暗色模式同步主色（保持一致观感） */
+html.dark {
+  --el-color-primary: #6366f1;
+  --el-color-primary-light-3: #565ad6;
+  --el-color-primary-light-5: #454a9e;
+  --el-color-primary-light-7: #353a66;
+  --el-color-primary-light-8: #2d3150;
+  --el-color-primary-light-9: #25283c;
+  --el-color-primary-dark-2: #818cf8;
+}
+
+/* ---- 修正核心强制的直角：卡片 / 输入 / 下拉 / 按钮 找回圆角 ---- */
+.el-card { border-radius: var(--el-border-radius-large, 12px) !important; }
+.el-input__wrapper,
+.el-input-group__append,
+.el-input-group__prepend,
+.el-textarea__inner,
+.el-select__wrapper { border-radius: var(--el-border-radius-base) !important; }
+.el-button:not(.is-round):not(.is-circle) { border-radius: var(--el-border-radius-base) !important; }
+
+/* ---- 卡片：统一圆角 + 克制阴影（非 never 的卡片用柔投影，告别死板边框） ---- */
+.el-card {
+  border: 1px solid var(--el-border-color-lighter);
+  --el-card-padding: 18px 20px;
+}
+.el-card.is-always-shadow,
+.el-card.is-hover-shadow:hover {
+  box-shadow: var(--el-box-shadow-light);
+}
+
+/* ---- 表格：精致表头（轻、留白、字重 500）+ 行悬停 + 更淡的分隔线 ---- */
+.el-table {
+  --el-table-header-bg-color: var(--el-fill-color-lighter) !important;
+  --el-table-header-text-color: var(--el-text-color-secondary) !important;
+  --el-table-border-color: var(--el-border-color-lighter) !important;
+  --el-table-row-hover-bg-color: var(--el-fill-color-light) !important;
+}
+.el-table thead th.el-table__cell {
+  font-weight: 500 !important;
+  letter-spacing: 0.2px;
+}
+
+/* ---- 按钮：字重纪律 + 主按钮去掉那点"街机感" ---- */
+.el-button { font-weight: 400; }
+.el-button--primary { --el-button-bg-color: var(--el-color-primary); }
+
+/* ---- 弹窗：统一较大圆角，与卡片节奏一致 ---- */
+.el-dialog { border-radius: 12px; overflow: hidden; }
+.el-message-box { border-radius: 12px; overflow: hidden; }
+
+/* ---- 标签/药丸：略圆润 ---- */
+.el-tag { border-radius: 6px; }
+
+/* ---- 字重纪律：标题用 500，不用 700，更现代不笨重 ---- */
+.text-page-title { font-weight: 500 !important; }

@@ -7,3 +7,4 @@
 @import 'icon/addon-iconfont.css'; // 安装卸载插件时，动态引用插件的图标库文件
 @import 'icon/official-iconfont.css';
 @import 'common.scss';
+@import 'theme-premium.scss'; // 全局设计系统升级（须最后导入以覆盖核心强制样式）
