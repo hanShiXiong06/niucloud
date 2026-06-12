@@ -60,8 +60,13 @@ class ErpWarehouseService extends BaseAdminService
 
         $now = time();
         $isDefault = (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
+        // 业务类型(=销售流向)：商城/同行/报废/暂存，缺省商城
+        $allowedTypes = ['mall', 'peer', 'scrap', 'hold'];
+        $businessType = in_array((string)($data['business_type'] ?? ''), $allowedTypes, true)
+            ? (string)$data['business_type']
+            : 'mall';
         $warehouseId = 0;
-        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, &$warehouseId) {
+        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $businessType, &$warehouseId) {
             if ($isDefault === 1) {
                 ErpWarehouse::where([['site_id', '=', $this->site_id]])->update([
                     'is_default' => 0,
@@ -71,6 +76,7 @@ class ErpWarehouseService extends BaseAdminService
             $values = [
                 'warehouse_name' => $name,
                 'warehouse_code' => trim((string)($data['warehouse_code'] ?? '')),
+                'business_type' => $businessType,
                 'status' => (int)($data['status'] ?? 1) === 1 ? 1 : 0,
                 'is_default' => $isDefault,
                 'sort' => (int)($data['sort'] ?? 0),

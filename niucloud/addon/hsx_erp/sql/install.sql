@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse` (
   `site_id` int NOT NULL DEFAULT 0,
   `warehouse_name` varchar(100) NOT NULL DEFAULT '',
   `warehouse_code` varchar(64) NOT NULL DEFAULT '',
+  `business_type` varchar(20) NOT NULL DEFAULT 'mall' COMMENT '业务类型(=销售流向)：mall商城/peer同行/scrap报废/hold暂存',
   `status` tinyint(1) NOT NULL DEFAULT 1,
   `is_default` tinyint(1) NOT NULL DEFAULT 0,
   `sort` int NOT NULL DEFAULT 0,

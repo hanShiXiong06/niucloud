@@ -113,40 +113,45 @@
                 </div>
                 <el-tag v-if="saleDestinationText" type="info" effect="plain">{{ saleDestinationText }}</el-tag>
               </div>
-              <el-radio-group v-model="deviceForm.sale_destination" class="flex flex-wrap gap-2">
-                <el-radio-button
-                  v-for="item in saleDestinationOptions"
-                  :key="item.value"
-                  :label="item.value"
+              <!-- 仓库模式：ERP 已连接且有仓库 → 选仓库即决定流向 -->
+              <template v-if="warehouseMode">
+                <el-select
+                  v-model="deviceForm.target_warehouse_id"
+                  placeholder="选择入库仓库（决定销售流向）"
+                  class="w-full"
+                  @change="onWarehouseChange"
                 >
-                  {{ item.label }}
-                </el-radio-button>
-              </el-radio-group>
-              <div v-if="saleDestinationDescription" class="pfd-hint">{{ saleDestinationDescription }}</div>
-
-              <div v-if="erpConnected" class="pfd-warehouse">
-                <div class="pfd-warehouse__label">目标仓库（ERP）</div>
-                <template v-if="erpWarehouses.length">
-                  <el-select
-                    v-model="deviceForm.target_warehouse_id"
-                    placeholder="选择入库仓库，不选则由 ERP 默认分配"
-                    clearable
-                    class="w-full"
-                    @change="onWarehouseChange"
+                  <el-option
+                    v-for="w in erpWarehouses"
+                    :key="w.id"
+                    :label="w.warehouse_name"
+                    :value="w.id"
                   >
-                    <el-option
-                      v-for="w in erpWarehouses"
-                      :key="w.id"
-                      :label="w.warehouse_name"
-                      :value="w.id"
-                    />
-                  </el-select>
-                  <div class="pfd-hint">已连接 ERP，可在定价时直接指定该设备入库的目标仓库。</div>
-                </template>
-                <div v-else class="pfd-hint pfd-hint--warn">
-                  已连接 ERP，但尚未创建启用的仓库。请先到「ERP · 仓库管理」新建并启用仓库后再回来选择。
+                    <span>{{ w.warehouse_name }}</span>
+                    <span class="text-gray-400 text-xs ml-2">{{ warehouseTypeLabel(w.business_type) }}</span>
+                  </el-option>
+                </el-select>
+                <div class="pfd-hint">
+                  入此仓将按其业务类型自动确定流向：<b>{{ saleDestinationText || '—' }}</b><template v-if="saleDestinationDescription">（{{ saleDestinationDescription }}）</template>
                 </div>
-              </div>
+              </template>
+
+              <!-- 渠道模式：ERP 未连接 → 固定渠道单选 -->
+              <template v-else>
+                <el-radio-group v-model="deviceForm.sale_destination" class="flex flex-wrap gap-2">
+                  <el-radio-button
+                    v-for="item in saleDestinationOptions"
+                    :key="item.value"
+                    :label="item.value"
+                  >
+                    {{ item.label }}
+                  </el-radio-button>
+                </el-radio-group>
+                <div v-if="saleDestinationDescription" class="pfd-hint">{{ saleDestinationDescription }}</div>
+                <div v-if="erpConnected && !erpWarehouses.length" class="pfd-hint pfd-hint--warn">
+                  已连接 ERP，但尚未创建启用的仓库。可先按固定渠道定价，或到「ERP · 仓库管理」创建仓库后改用仓库选择。
+                </div>
+              </template>
             </section>
 
             <section :class="['pfd-section', 'pfd-refurbish-card', deviceForm.refurbishment_required === 1 ? 'is-required' : '']">
@@ -298,8 +303,15 @@ const detailLoading = ref(false)
 
 const refurbishmentPresets = ref<Array<{ key: string; name: string; type: string }>>([])
 const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
-const erpWarehouses = ref<Array<{ id: number; warehouse_name: string }>>([])
+const erpWarehouses = ref<Array<{ id: number; warehouse_name: string; business_type?: string }>>([])
 const erpConnected = ref(false)
+
+// 仓库业务类型 → 销售流向（与后端 RecycleOrderDict::saleDestinationFromWarehouseType 保持一致）
+const WH_TYPE_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
+const WH_TYPE_LABEL: Record<string, string> = { mall: '商城', peer: '同行', scrap: '报废', hold: '暂存' }
+const warehouseTypeLabel = (t?: string) => WH_TYPE_LABEL[t || 'mall'] || '商城'
+// 仓库模式：ERP 已连接且有可用仓库时，以仓库为主选项（选仓即定流向）
+const warehouseMode = computed(() => erpConnected.value && erpWarehouses.value.length > 0)
 
 const deviceForm = reactive<{
     final_price: number | undefined;
@@ -464,6 +476,8 @@ const loadRefurbishmentOptions = async () => {
 const onWarehouseChange = (val: number) => {
     const w = erpWarehouses.value.find(item => item.id === val)
     deviceForm.target_warehouse_name = w?.warehouse_name || ''
+    // 选仓即决定流向：按仓库业务类型自动设置 sale_destination
+    if (w) deviceForm.sale_destination = WH_TYPE_DEST[w.business_type || 'mall'] || 'hold'
 }
 
 const loadSaleDestinationOptions = async () => {

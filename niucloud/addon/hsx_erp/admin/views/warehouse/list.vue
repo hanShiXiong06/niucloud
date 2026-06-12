@@ -39,6 +39,11 @@
                 </el-table-column>
                 <el-table-column prop="warehouse_name" label="仓库名称" min-width="180" />
                 <el-table-column prop="warehouse_code" label="仓库编码" width="150" />
+                <el-table-column label="业务类型" width="110">
+                    <template #default="{ row }">
+                        <el-tag size="small" effect="plain">{{ businessTypeLabel(row.business_type) }}</el-tag>
+                    </template>
+                </el-table-column>
                 <el-table-column label="默认入库仓" width="130">
                     <template #default="{ row }">
                         <el-tag v-if="row.is_default === 1" type="success">默认</el-tag>
@@ -79,6 +84,12 @@
             <el-form label-width="100px">
                 <el-form-item label="仓库名称" required><el-input v-model.trim="warehouseDialog.form.warehouse_name" /></el-form-item>
                 <el-form-item label="仓库编码"><el-input v-model.trim="warehouseDialog.form.warehouse_code" /></el-form-item>
+                <el-form-item label="业务类型" required>
+                    <el-select v-model="warehouseDialog.form.business_type" class="w-full">
+                        <el-option v-for="t in businessTypeOptions" :key="t.value" :label="t.label" :value="t.value" />
+                    </el-select>
+                    <div class="text-xs text-gray-400 mt-1">决定入此仓设备的销售流向：商城走拍照定价、同行走同行出货、报废不进销售、暂存挂起。</div>
+                </el-form-item>
                 <el-form-item label="状态"><el-switch v-model="warehouseDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="默认入库仓"><el-switch v-model="warehouseDialog.form.is_default" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="备注"><el-input v-model.trim="warehouseDialog.form.remark" type="textarea" /></el-form-item>
@@ -121,8 +132,15 @@ const loading = ref(false)
 const warehouses = ref<any[]>([])
 const warehouseDialog = reactive<any>({
     visible: false, loading: false,
-    form: { id: 0, warehouse_name: '', warehouse_code: '', status: 1, is_default: 0, remark: '' }
+    form: { id: 0, warehouse_name: '', warehouse_code: '', business_type: 'mall', status: 1, is_default: 0, remark: '' }
 })
+const businessTypeOptions = [
+    { value: 'mall', label: '商城销售' },
+    { value: 'peer', label: '同行出货' },
+    { value: 'scrap', label: '报废' },
+    { value: 'hold', label: '暂存' }
+]
+const businessTypeLabel = (v: string) => businessTypeOptions.find(t => t.value === v)?.label || '商城销售'
 const locationDialog = reactive<any>({
     visible: false, loading: false, warehouseId: 0, warehouseName: '',
     form: { id: 0, location_name: '', location_code: '', status: 1, remark: '' }
@@ -141,8 +159,8 @@ const loadData = async () => {
 const openWarehouse = (row: any = {}) => {
     Object.assign(warehouseDialog.form, {
         id: Number(row.id || 0), warehouse_name: row.warehouse_name || '',
-        warehouse_code: row.warehouse_code || '', status: row.status ?? 1,
-        is_default: row.is_default ?? 0, remark: row.remark || ''
+        warehouse_code: row.warehouse_code || '', business_type: row.business_type || 'mall',
+        status: row.status ?? 1, is_default: row.is_default ?? 0, remark: row.remark || ''
     })
     warehouseDialog.visible = true
 }

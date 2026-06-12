@@ -52,6 +52,7 @@ class RecycleOrderDict
     // 销售去向
     const SALE_DESTINATION_MALL = 'mall';         // 商城销售
     const SALE_DESTINATION_PEER = 'peer';         // 同行出货
+    const SALE_DESTINATION_SCRAP = 'scrap';       // 报废
     const SALE_DESTINATION_HOLD = 'hold';         // 暂存
     // 设备处置状态
     const DISPOSE_STATUS_PENDING = 0;            // 未处置
@@ -65,12 +66,14 @@ class RecycleOrderDict
     const SALE_DESTINATION_TEXT = [
         self::SALE_DESTINATION_MALL => '商城销售',
         self::SALE_DESTINATION_PEER => '同行出货',
+        self::SALE_DESTINATION_SCRAP => '报废',
         self::SALE_DESTINATION_HOLD => '暂存',
     ];
 
     const SALE_DESTINATION_DESC = [
         self::SALE_DESTINATION_MALL => '入库和整备完成后进入拍照、销售定价、上架链路',
         self::SALE_DESTINATION_PEER => '入库后进入同行出货处理链路',
+        self::SALE_DESTINATION_SCRAP => '报废处理，不进入销售链路',
         self::SALE_DESTINATION_HOLD => '入库后暂存，不自动进入销售处理链路',
     ];
 
@@ -85,6 +88,24 @@ class RecycleOrderDict
             array_keys(self::SALE_DESTINATION_TEXT),
             array_values(self::SALE_DESTINATION_TEXT)
         );
+    }
+
+    /**
+     * 仓库业务类型 → 销售流向映射
+     * ERP 仓库自带 business_type，这里负责把它翻译成回收侧的 sale_destination 行为。
+     * 采用恒等映射，未知类型回退暂存(hold)，便于 ERP 未来扩展仓库类型时优雅降级。
+     * @param string $businessType
+     * @return string
+     */
+    public static function saleDestinationFromWarehouseType(string $businessType): string
+    {
+        $map = [
+            'mall' => self::SALE_DESTINATION_MALL,
+            'peer' => self::SALE_DESTINATION_PEER,
+            'scrap' => self::SALE_DESTINATION_SCRAP,
+            'hold' => self::SALE_DESTINATION_HOLD,
+        ];
+        return $map[$businessType] ?? self::SALE_DESTINATION_HOLD;
     }
 
     // 设备操作类型
