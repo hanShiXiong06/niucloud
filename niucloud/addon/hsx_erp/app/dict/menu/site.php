@@ -200,7 +200,7 @@ return [
                 'methods' => 'get',
                 'sort' => '110',
                 'status' => '1',
-                'is_show' => '1',
+                'is_show' => '0',
                 'children' => [
                     [
                         'menu_name' => '入库单详情',
