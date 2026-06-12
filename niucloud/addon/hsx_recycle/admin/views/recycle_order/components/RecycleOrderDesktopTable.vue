@@ -133,7 +133,7 @@
           <div class="flex items-center text-sm">
             <span class="text-gray-400 min-w-[60px]">配送：</span>
             <el-tag size="small" :type="row.delivery_type === '1' ? 'warning' : 'success'">
-              {{ row.delivery_type === "1" ? "📦 快递" : "🚗 自送" }}
+              {{ row.delivery_type === "1" ? "快递" : "自送" }}
             </el-tag>
           </div>
           <div class="flex items-center text-sm">
@@ -170,9 +170,17 @@
     <el-table-column label="用户信息" min-width="160">
       <template #default="{ row }">
         <div class="flex items-center">
-          <el-avatar :size="32" :src="row.member?.headimg ? props.img(row.member.headimg) : ''" class="mr-2">
-            <el-icon><User /></el-icon>
-          </el-avatar>
+          <el-tooltip :content="row.member?.member_id ? '查看会员详情' : '未关联会员'" placement="top">
+            <el-avatar
+              :size="32"
+              :src="row.member?.headimg ? props.img(row.member.headimg) : ''"
+              class="mr-2"
+              :class="row.member?.member_id ? 'cursor-pointer hover:ring-2 hover:ring-[var(--el-color-primary-light-5)]' : ''"
+              @click="row.member?.member_id && props.openMemberDetail(row.member)"
+            >
+              <el-icon><User /></el-icon>
+            </el-avatar>
+          </el-tooltip>
           <div class="flex-1">
             <div class="text-sm font-medium text-gray-800 flex items-center group">
               <span>{{ getUserDisplayName(row) }}</span>
@@ -332,6 +340,7 @@ interface Props {
   transferConsignment: (device: any) => void;
   viewConsignment: (device: any) => void;
   viewDetail: (device: any) => void;
+  openMemberDetail: (member: any) => void;
   handleAction: (row: any, action: any) => void;
   handleExpressHover: (row: any) => void;
   handleExpressLeave: () => void;

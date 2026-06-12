@@ -14,7 +14,12 @@
         </div>
 
         <div class="mb-2 flex items-center gap-2">
-          <el-avatar :size="28" :src="row.member?.headimg ? props.img(row.member.headimg) : ''">
+          <el-avatar
+            :size="28"
+            :src="row.member?.headimg ? props.img(row.member.headimg) : ''"
+            :class="row.member?.member_id ? 'cursor-pointer' : ''"
+            @click="row.member?.member_id && props.openMemberDetail(row.member)"
+          >
             <el-icon><User /></el-icon>
           </el-avatar>
           <div class="min-w-0">
@@ -31,7 +36,7 @@
           <div class="rounded-md border border-gray-200 bg-slate-50 p-2">
             <div class="mb-1 text-xs text-gray-500">配送方式</div>
             <el-tag size="small" :type="row.delivery_type === '1' ? 'warning' : 'success'">
-              {{ row.delivery_type === "1" ? "📦 快递" : "🚗 自送" }}
+              {{ row.delivery_type === "1" ? "📦 快递" : " 自送" }}
             </el-tag>
           </div>
 
@@ -306,6 +311,7 @@ interface Props {
   transferConsignment: (device: any) => void;
   viewConsignment: (device: any) => void;
   viewDetail: (device: any) => void;
+  openMemberDetail: (member: any) => void;
   handleAction: (row: any, action: any) => void;
   handleExpressHover: (row: any) => void;
   handleExpressLeave: () => void;

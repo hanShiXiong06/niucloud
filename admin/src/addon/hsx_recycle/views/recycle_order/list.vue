@@ -105,6 +105,7 @@
           :transfer-consignment="openTransferConsignmentDialog"
           :view-consignment="viewConsignmentOrder"
           :view-detail="viewDetail"
+          :open-member-detail="openMemberDetail"
           :handle-action="handleAction"
           :handle-express-hover="handleExpressHover"
           :handle-express-leave="handleExpressLeave"
@@ -146,6 +147,7 @@
           :transfer-consignment="openTransferConsignmentDialog"
           :view-consignment="viewConsignmentOrder"
           :view-detail="viewDetail"
+          :open-member-detail="openMemberDetail"
           :handle-action="handleAction"
           :handle-express-hover="handleExpressHover"
           :handle-express-leave="handleExpressLeave"
@@ -270,6 +272,9 @@
       @payment-confirmed="handlePaymentConfirm"
     />
 
+    <!-- 会员详情抽屉（复用 niucloud 核心会员组件） -->
+    <detail-member ref="memberDetailDialog" />
+
     <!-- 快递信息弹出框 -->
     <el-dialog
       v-model="expressPopoverVisible"
@@ -383,6 +388,7 @@ import AddOrderDialog from "./components/AddOrderDialog.vue";
 // 导入新的支付方式对话框组件
 import PaymentMethodDialog from "./components/PaymentMethodDialog.vue";
 import PremiumTheme from "@/addon/hsx_recycle/components/PremiumTheme.vue";
+import detailMember from "@/app/views/member/components/detail-member.vue";
 // 导入订单详情弹窗组件
 import OrderDetailDialog from "./components/OrderDetailDialog.vue";
 // 导入定价表单组件
@@ -950,6 +956,17 @@ onBeforeUnmount(() => {
 // 打款是资金操作：提交守卫防止慢网络下连点造成重复打款
 const paySubmit = useSubmit();
 const paySubmitting = paySubmit.loading;
+
+// 会员详情抽屉：点击订单里的用户头像打开（复用 niucloud 核心会员组件）
+const memberDetailDialog = ref<any>(null);
+const openMemberDetail = (member: any) => {
+  if (!member?.member_id) {
+    ElMessage.warning("该订单未关联会员");
+    return;
+  }
+  memberDetailDialog.value?.setFormData({ id: member.member_id });
+  if (memberDetailDialog.value) memberDetailDialog.value.showDialog = true;
+};
 
 // 处理支付确认
 const handlePaymentConfirm = async (paymentData) => {
