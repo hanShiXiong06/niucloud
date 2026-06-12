@@ -1,5 +1,5 @@
 <template>
-    <el-dialog v-model="dialogVisible" title="修改订单状态" width="400px" :destroy-on-close="true" @closed="handleClosed">
+    <el-dialog class="hsx-premium-overlay" v-model="dialogVisible" title="修改订单状态" width="400px" :destroy-on-close="true" @closed="handleClosed">
         <el-form :model="form" label-width="100px" v-loading="loading">
             <el-form-item label="当前状态">
                 <el-tag :type="getStatusTagType(form.currentStatus)">

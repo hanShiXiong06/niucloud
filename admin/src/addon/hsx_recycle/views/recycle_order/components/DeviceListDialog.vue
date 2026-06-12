@@ -1,5 +1,5 @@
 <template>
-    <el-dialog v-model="dialogVisible" title="设备信息确认" width="800" center :destroy-on-close="true"
+    <el-dialog class="hsx-premium-overlay" v-model="dialogVisible" title="设备信息确认" width="800" center :destroy-on-close="true"
         @closed="handleClosed">
         <template #header>
             <div class="flex justify-between items-center">

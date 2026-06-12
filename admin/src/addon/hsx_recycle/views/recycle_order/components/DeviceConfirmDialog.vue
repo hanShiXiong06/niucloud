@@ -5,7 +5,7 @@
         :width="isMobile ? '95vw' : '1120px'"
         top="4vh"
         center
-        class="device-confirm-dialog"
+        class="device-confirm-dialog hsx-premium-overlay"
     >
         <template #header>
             <div class="flex justify-between items-center">

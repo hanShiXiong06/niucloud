@@ -4,7 +4,7 @@
         title="代客户下单"
         :width="isMobile ? '95vw' : '1120px'"
         top="4vh"
-        class="add-order-dialog"
+        class="add-order-dialog hsx-premium-overlay"
         :destroy-on-close="true"
         @closed="handleClosed"
     >

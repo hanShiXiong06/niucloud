@@ -5,7 +5,7 @@
         width="640px"
         :destroy-on-close="true"
         @closed="handleClosed"
-        class="device-edit-dialog"
+        class="device-edit-dialog hsx-premium-overlay"
     >
         <!-- 设备信息只读卡片 -->
         <DeviceInfoCard

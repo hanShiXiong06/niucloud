@@ -5,7 +5,7 @@
     :width="dialogWidth"
     :top="isMobile ? '2vh' : '3vh'"
     :destroy-on-close="true"
-    class="check-device-dialog cdd-workbench-dialog"
+    class="check-device-dialog cdd-workbench-dialog hsx-premium-overlay"
   >
     <div class="cdd-workbench">
       <header class="cdd-topbar">

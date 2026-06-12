@@ -4,7 +4,7 @@
     title="订单详情"
     :width="isMobile ? '96vw' : 'min(1180px, calc(100vw - 48px))'"
     :top="isMobile ? '2vh' : '3vh'"
-    class="diy-dialog-wrap order-detail-dialog"
+    class="diy-dialog-wrap order-detail-dialog hsx-premium-overlay"
     :destroy-on-close="true"
   >
     <div v-if="orderData" class="odd-wrap">

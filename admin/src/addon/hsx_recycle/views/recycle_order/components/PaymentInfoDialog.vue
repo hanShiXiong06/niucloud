@@ -1,5 +1,5 @@
 <template>
-    <el-dialog v-model="dialogVisible" title="收款信息" width="500px" :destroy-on-close="true" @closed="handleClosed">
+    <el-dialog class="hsx-premium-overlay" v-model="dialogVisible" title="收款信息" width="500px" :destroy-on-close="true" @closed="handleClosed">
         <el-form :model="form" label-width="100px">
             <el-form-item label="收款账号">
                 <el-input v-model="form.account" disabled />

@@ -5,7 +5,7 @@
     :width="isMobile ? '94vw' : '860px'"
     top="6vh"
     :destroy-on-close="true"
-    class="notice-log-dialog"
+    class="notice-log-dialog hsx-premium-overlay"
   >
     <div class="notice-log-dialog__body">
       <el-alert
