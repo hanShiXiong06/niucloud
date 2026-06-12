@@ -67,42 +67,34 @@
           <div class="odd-desc-grid">
             <div class="odd-desc-item">
               <span class="odd-desc-label">配送方式</span>
-              <span class="odd-desc-value">{{ orderData.delivery_type_name || '暂无' }}</span>
+              <span class="odd-desc-value">{{ orderData.delivery_type_name || '自送' }}</span>
             </div>
-            <div class="odd-desc-item">
+            <div class="odd-desc-item" v-if="orderData.express_company">
               <span class="odd-desc-label">快递公司</span>
-              <span class="odd-desc-value">{{ orderData.express_company || '暂无' }}</span>
+              <span class="odd-desc-value">{{ orderData.express_company }}</span>
             </div>
-            <div class="odd-desc-item odd-desc-item--wide">
+            <div class="odd-desc-item odd-desc-item--wide" v-if="orderData.express_no">
               <span class="odd-desc-label">快递单号</span>
               <span class="odd-desc-value odd-inline-action">
-                <span class="odd-desc-value--mono">{{ orderData.express_no || '暂无' }}</span>
-                <el-button
-                  v-if="orderData.express_no"
-                  link
-                  type="primary"
-                  size="small"
-                  @click="queryOrderExpress"
-                >
-                  查物流
-                </el-button>
+                <span class="odd-desc-value--mono">{{ orderData.express_no }}</span>
+                <el-button link type="primary" size="small" @click="queryOrderExpress">查物流</el-button>
               </span>
             </div>
-            <div class="odd-desc-item">
+            <div class="odd-desc-item" v-if="orderData.pay_type">
               <span class="odd-desc-label">打款方式</span>
-              <span class="odd-desc-value">{{ orderData.pay_type || '暂无' }}</span>
+              <span class="odd-desc-value">{{ orderData.pay_type }}</span>
             </div>
-            <div class="odd-desc-item">
+            <div class="odd-desc-item" v-if="orderData.pay_time">
               <span class="odd-desc-label">打款时间</span>
               <span class="odd-desc-value">{{ formatTime(orderData.pay_time) }}</span>
             </div>
-            <div class="odd-desc-item odd-desc-item--wide">
+            <div class="odd-desc-item odd-desc-item--wide" v-if="orderData.pay_account">
               <span class="odd-desc-label">收款账号</span>
-              <span class="odd-desc-value odd-desc-value--mono">{{ orderData.pay_account || '暂无' }}</span>
+              <span class="odd-desc-value odd-desc-value--mono">{{ orderData.pay_account }}</span>
             </div>
-            <div class="odd-desc-item odd-desc-item--wide">
+            <div class="odd-desc-item odd-desc-item--wide" v-if="orderData.remark">
               <span class="odd-desc-label">备注</span>
-              <span class="odd-desc-value">{{ orderData.remark || '暂无备注' }}</span>
+              <span class="odd-desc-value">{{ orderData.remark }}</span>
             </div>
           </div>
         </div>
