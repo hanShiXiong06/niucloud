@@ -22,6 +22,13 @@ class Finance extends BaseAdminController
         return success((new FinanceCounterpartyBalanceService())->getBoard());
     }
 
+    /** 查单个往来单位往来账(谁欠谁多少, 是否可折账) — 与 GetFinanceCounterpartyBalance 事件同口径 */
+    public function counterpartyBalance()
+    {
+        $cpId = (int)$this->request->param('counterparty_id', 0);
+        return success((new FinanceCounterpartyBalanceService())->getCounterpartyBalance($cpId));
+    }
+
     /** 应付列表 */
     public function payableLists()
     {

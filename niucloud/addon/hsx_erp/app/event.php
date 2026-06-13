@@ -22,6 +22,14 @@ return [
         'FinanceReceivableCreated' => [
             'addon\hsx_erp\app\listener\ReceivableCreatedListener',
         ],
+        // 查往来账(谁欠谁多少) — 回收"打款即折账"查询用
+        'GetFinanceCounterpartyBalance' => [
+            'addon\hsx_erp\app\listener\FinanceCounterpartyBalanceProvider',
+        ],
+        // 折账结算指令 — 回收打款确认折账时触发, 经唯一结算服务执行
+        'RequestFinanceSettlement' => [
+            'addon\hsx_erp\app\listener\FinanceSettlementRequestListener',
+        ],
     ],
     'subscribe' => [],
 ];

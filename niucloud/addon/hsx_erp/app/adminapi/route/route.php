@@ -44,6 +44,7 @@ Route::group('erp', function () {
     Route::post('stock_order/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmInbound');
     // 财务中心: 往来对账 / 应付应收 / 结算·折账
     Route::get('finance/board', 'addon\hsx_erp\app\adminapi\controller\Finance@board');
+    Route::get('finance/counterparty_balance', 'addon\hsx_erp\app\adminapi\controller\Finance@counterpartyBalance');
     Route::get('finance/payable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@payableLists');
     Route::get('finance/receivable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@receivableLists');
     Route::get('finance/payable/outstanding', 'addon\hsx_erp\app\adminapi\controller\Finance@payableOutstanding');

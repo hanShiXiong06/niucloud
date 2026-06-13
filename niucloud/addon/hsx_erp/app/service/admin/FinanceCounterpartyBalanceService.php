@@ -50,4 +50,43 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
         usort($rows, static fn($a, $b) => $b['offsetable'] <=> $a['offsetable']);
         return $rows;
     }
+
+    /**
+     * 查单个往来单位的往来账(给回收"打款即折账"用)
+     *
+     * 站在我方视角:
+     *   payable    我欠对方(来自回收)
+     *   receivable 对方欠我(来自销售/商城)
+     *   net        payable - receivable: >0 我还需净付, <0 对方还需净付我, =0 已平
+     *   offsetable min(payable, receivable): 可折账(折让)金额, >0 即可折
+     * @param int $counterpartyId 往来单位ID
+     * @param int|null $siteId 站点ID(事件上下文显式传入; 为空则取当前请求站点)
+     */
+    public function getCounterpartyBalance(int $counterpartyId, ?int $siteId = null): array
+    {
+        $siteId = $siteId ?? (int)$this->site_id;
+        $open = [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL];
+
+        $payable = (float)FinancePayable::where([
+            ['site_id', '=', $siteId], ['counterparty_id', '=', $counterpartyId], ['status', 'in', $open],
+        ])->sum('amount - settled_amount');
+        $receivable = (float)FinanceReceivable::where([
+            ['site_id', '=', $siteId], ['counterparty_id', '=', $counterpartyId], ['status', 'in', $open],
+        ])->sum('amount - settled_amount');
+
+        $payable = round($payable, 2);
+        $receivable = round($receivable, 2);
+        $offsetable = round(min($payable, $receivable), 2);
+        $net = round($payable - $receivable, 2);
+
+        return [
+            'counterparty_id' => $counterpartyId,
+            'payable'         => $payable,
+            'receivable'      => $receivable,
+            'offsetable'      => $offsetable,
+            'can_offset'      => $offsetable > 0,
+            'net'             => $net,
+            'net_direction'   => $net > 0 ? 'pay' : ($net < 0 ? 'collect' : 'none'),
+        ];
+    }
 }

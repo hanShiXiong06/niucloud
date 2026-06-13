@@ -32,6 +32,31 @@ class FinanceSettlementService extends BaseAdminService
         return $this->plan($counterpartyId, $payableIds, $receivableIds)['summary'];
     }
 
+    /**
+     * 按往来单位自动结算其全部未结往来(给回收"打款即折账"用)。
+     * 自动取该单位所有待结应付+应收, 折账冲抵, 余下走现金净额。
+     * 返回 summary 含 cash_amount/cash_direction, 回收据此知道实际要打多少现金。
+     */
+    public function settleAllByCounterparty(int $counterpartyId, array $options = []): array
+    {
+        $payableIds    = $this->allOutstandingIds(new FinancePayable(), $counterpartyId);
+        $receivableIds = $this->allOutstandingIds(new FinanceReceivable(), $counterpartyId);
+        if (empty($payableIds) && empty($receivableIds)) {
+            throw new CommonException('该往来单位没有待结算的应付或应收');
+        }
+        return $this->settle($counterpartyId, $payableIds, $receivableIds, $options);
+    }
+
+    private function allOutstandingIds($model, int $counterpartyId): array
+    {
+        $rows = $model->where([
+            ['site_id', '=', $this->site_id],
+            ['counterparty_id', '=', $counterpartyId],
+            ['status', 'in', [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL]],
+        ])->whereRaw('amount - settled_amount > 0')->column('id');
+        return array_map('intval', $rows);
+    }
+
     /** 执行结算 */
     public function settle(int $counterpartyId, array $payableIds, array $receivableIds, array $options = []): array
     {
