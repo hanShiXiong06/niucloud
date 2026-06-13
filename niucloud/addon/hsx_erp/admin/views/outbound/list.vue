@@ -93,6 +93,12 @@
                                     <el-input-number v-model="priceInput[row.id]" :min="0" :controls="false" size="small" class="w-28" />
                                 </template>
                             </el-table-column>
+                            <el-table-column v-if="showConsignorCol" label="应付寄卖人" width="150">
+                                <template #default="{ row }">
+                                    <el-input-number v-if="isConsign(row)" v-model="consignorInput[row.id]" :min="0" :precision="2" :controls="false" size="small" class="w-28" />
+                                    <span v-else class="text-xs text-gray-300">非代卖</span>
+                                </template>
+                            </el-table-column>
                         </el-table>
                         <div class="mt-1 text-xs text-gray-400">已选 {{ selectedAssets.length }} 台</div>
                     </div>
@@ -190,7 +196,11 @@ const availableAssets = ref<any[]>([])
 const assetLoading = ref(false)
 const selectedAssets = ref<any[]>([])
 const priceInput = reactive<Record<number, number>>({})
+const consignorInput = reactive<Record<number, number>>({})
 const showPrice = computed(() => form.outbound_type === 'peer_sale' && form.settle_mode === 'now')
+// 代卖设备卖出需填"应付寄卖人"金额（人手填）
+const isConsign = (row: any) => String(row?.ownership_type) === 'consign'
+const showConsignorCol = computed(() => form.outbound_type === 'peer_sale' && availableAssets.value.some((a) => isConsign(a)))
 
 async function openCreate() {
     createVisible.value = true
@@ -224,7 +234,11 @@ function onAssetSelect(rows: any[]) {
 }
 async function doCreate() {
     if (selectedAssets.value.length === 0) return
-    const items = selectedAssets.value.map((a) => ({ asset_id: a.id, sale_price: showPrice.value ? (priceInput[a.id] || 0) : 0 }))
+    const items = selectedAssets.value.map((a) => ({
+        asset_id: a.id,
+        sale_price: showPrice.value ? (priceInput[a.id] || 0) : 0,
+        consignor_payable: isConsign(a) ? (consignorInput[a.id] || 0) : 0,
+    }))
     if (showPrice.value && items.some((i) => !i.sale_price)) {
         ElMessage.warning('现结出库请为每台填写出货价')
         return
@@ -254,6 +268,7 @@ function resetCreate() {
     form.remark = ''
     selectedAssets.value = []
     Object.keys(priceInput).forEach((k) => delete priceInput[Number(k)])
+    Object.keys(consignorInput).forEach((k) => delete consignorInput[Number(k)])
 }
 
 // 回填价格
