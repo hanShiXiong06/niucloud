@@ -43,6 +43,12 @@ Route::group('erp', function () {
     Route::post('asset/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmAssetInbound');
     Route::post('stock_order/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmInbound');
     // 财务中心: 往来对账 / 应付应收 / 结算·折账
+    // 出库 / 调拨(同行出货)
+    Route::get('outbound/lists', 'addon\hsx_erp\app\adminapi\controller\Outbound@lists');
+    Route::get('outbound/:id', 'addon\hsx_erp\app\adminapi\controller\Outbound@info');
+    Route::post('outbound/create', 'addon\hsx_erp\app\adminapi\controller\Outbound@create');
+    Route::post('outbound/:id/fill_price', 'addon\hsx_erp\app\adminapi\controller\Outbound@fillPrice');
+    Route::post('outbound/transfer', 'addon\hsx_erp\app\adminapi\controller\Outbound@transfer');
     Route::get('finance/board', 'addon\hsx_erp\app\adminapi\controller\Finance@board');
     Route::get('finance/counterparty_balance', 'addon\hsx_erp\app\adminapi\controller\Finance@counterpartyBalance');
     Route::get('finance/payable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@payableLists');

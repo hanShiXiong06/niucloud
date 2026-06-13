@@ -39,4 +39,34 @@ class ErpDict
 
     public const OWNERSHIP_OWNED = 'owned';
     public const OWNERSHIP_CONSIGN = 'consign';
+
+    // 出库后库存状态
+    public const INVENTORY_OUTBOUND = 'outbound'; // 已出库(同行销售/报废等)
+
+    // 出库类型
+    public const OUTBOUND_TYPE_PEER_SALE = 'peer_sale'; // 同行销售
+    public const OUTBOUND_TYPE_SCRAP     = 'scrap';     // 报废出库
+    public const OUTBOUND_TYPE_OTHER     = 'other';     // 其他出库
+
+    public static function getOutboundTypeMap(): array
+    {
+        return [
+            self::OUTBOUND_TYPE_PEER_SALE => '同行销售',
+            self::OUTBOUND_TYPE_SCRAP     => '报废出库',
+            self::OUTBOUND_TYPE_OTHER     => '其他出库',
+        ];
+    }
+
+    // 结算方式(出库时)
+    public const SETTLE_MODE_NOW   = 'now';   // 现结(出库即定价, 立即生成应收)
+    public const SETTLE_MODE_LATER = 'later'; // 价格未来回填(先出库, 回填价格后再生成应收)
+    public const SETTLE_MODE_NONE  = 'none';  // 无结算(报废等, 不产生应收)
+
+    // 出库单价格状态
+    public const OUTBOUND_PRICE_PENDING = 'pending'; // 待回填价格
+    public const OUTBOUND_PRICE_FILLED  = 'filled';  // 价格已确定
+
+    // 出库单状态
+    public const OUTBOUND_STATUS_COMPLETED = 'completed';
+    public const OUTBOUND_STATUS_VOID      = 'void';
 }
