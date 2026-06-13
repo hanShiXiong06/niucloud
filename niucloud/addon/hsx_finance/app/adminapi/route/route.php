@@ -4,6 +4,8 @@ declare(strict_types=1);
 use think\facade\Route;
 
 Route::group('finance', function () {
+    // 能力检测(回收/ERP 是否在场) — 前端据此决定是否显示折账按钮
+    Route::get('capability', 'addon\hsx_finance\app\adminapi\controller\Balance@capability');
     // 往来单位余额看板(折账入口)
     Route::get('balance/board', 'addon\hsx_finance\app\adminapi\controller\Balance@board');
     // 应付

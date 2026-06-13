@@ -8,10 +8,21 @@
                         按往来单位汇总应付与应收。可折账=同一单位两侧可净额冲抵的部分;净额>0 我方仍需付现，&lt;0 对方仍需付我。
                     </div>
                 </div>
-                <el-button @click="loadBoard" :loading="loading">刷新</el-button>
+                <el-button v-if="capable" @click="reload" :loading="loading">刷新</el-button>
             </div>
 
-            <div class="mt-5 grid grid-cols-3 gap-4">
+            <!-- 依赖未满足: 折账依赖【回收】(出应付)+【ERP/中台】(出应收), 缺则不显示折账, 只给引导 -->
+            <div v-if="!capLoading && !capable" class="mt-8 flex flex-col items-center py-10 text-center">
+                <div class="text-base font-medium text-gray-700">财务中心需先打通业务插件</div>
+                <div class="mt-2 max-w-lg text-sm text-gray-500">
+                    折账(应收抵应付)需要：应付来自<b>回收</b>插件、应收来自<b>ERP/中台</b>。
+                    检测到尚未安装：<span class="text-orange-600">{{ (capability.missing || []).join('、') }}</span>。
+                    安装并打通后，往来对账与折账会自动出现。
+                </div>
+                <el-button class="mt-5" @click="reload" :loading="capLoading">重新检测</el-button>
+            </div>
+
+            <div v-if="capable" class="mt-5 grid grid-cols-3 gap-4">
                 <div class="rounded-lg bg-gray-50 px-5 py-4">
                     <div class="text-sm text-gray-500">应付合计(我欠)</div>
                     <div class="mt-1 text-2xl font-semibold text-orange-600">{{ money(sum.payable) }}</div>
@@ -26,7 +37,7 @@
                 </div>
             </div>
 
-            <el-table class="mt-5" :data="board" v-loading="loading" size="large" empty-text="暂无未结往来">
+            <el-table v-if="capable" class="mt-5" :data="board" v-loading="loading" size="large" empty-text="暂无未结往来">
                 <el-table-column prop="counterparty_name" label="往来单位" min-width="160">
                     <template #default="{ row }">
                         <span class="font-medium">{{ row.counterparty_name || ('#' + row.counterparty_id) }}</span>
@@ -132,6 +143,7 @@
 import { ref, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+    getFinanceCapability,
     getFinanceBalanceBoard,
     getFinancePayableOutstanding,
     getFinanceReceivableOutstanding,
@@ -142,6 +154,31 @@ import {
 const loading = ref(false)
 const board = ref<any[]>([])
 const sum = reactive({ payable: 0, receivable: 0, offsetable: 0 })
+
+// 能力检测: 折账依赖 回收(应付)+ERP/中台(应收), 缺则不显示折账, 只给引导
+const capLoading = ref(true)
+const capability = ref<any>({ recycle_connected: false, erp_connected: false, can_offset: false, missing: [] })
+const capable = computed(() => !!capability.value.can_offset)
+
+async function loadCapability() {
+    capLoading.value = true
+    try {
+        const res: any = await getFinanceCapability()
+        capability.value = res.data || capability.value
+    } catch {
+        capability.value = { recycle_connected: false, erp_connected: false, can_offset: false, missing: ['回收', 'ERP'] }
+    } finally {
+        capLoading.value = false
+    }
+}
+
+// 仅在依赖满足时才拉看板数据
+async function reload() {
+    await loadCapability()
+    if (capable.value) {
+        await loadBoard()
+    }
+}
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 const netLabel = (d: string) => (d === 'pay' ? '我付' : d === 'collect' ? '我收' : '已平')
@@ -262,5 +299,5 @@ function resetDialog() {
     remark.value = ''
 }
 
-loadBoard()
+reload()
 </script>

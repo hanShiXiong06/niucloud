@@ -1,7 +1,6 @@
 -- 二手机财务插件建表
--- 约定: 金额单位=元 decimal(12,2); 往来单位为锚; 软状态用 varchar 便于扩展。
-
--- 应付(我欠往来单位): 来源=回收确认/定价 等业务事实
+-- 约定 金额单位元 decimal(12,2) 往来单位为锚 软状态用 varchar 便于扩展
+-- 应付(我欠往来单位) 来源=回收确认/定价 等业务事实
 CREATE TABLE IF NOT EXISTS `{{prefix}}finance_payable` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',

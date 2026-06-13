@@ -1,5 +1,10 @@
 import request from '@/utils/request'
 
+// 能力检测(回收/ERP 是否在场, 是否可折账)
+export function getFinanceCapability() {
+    return request.get('finance/capability')
+}
+
 // 往来单位余额看板(应付/应收/可折账/净额)
 export function getFinanceBalanceBoard() {
     return request.get('finance/balance/board')
