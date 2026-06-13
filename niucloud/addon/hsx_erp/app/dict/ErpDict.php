@@ -30,7 +30,24 @@ class ErpDict
     public const PRICE_ACTION_INITIAL = 'initial';
     public const PRICE_ACTION_ADJUST = 'adjust';
 
-    public const SALE_DESTINATION_MALL = 'mall';
+    // 销路 / 目标仓业务类型（与 erp_warehouse.business_type 对齐；真正驱动行为的是设备当前所在仓的 business_type）
+    public const SALE_DESTINATION_MALL        = 'mall';        // 二手机仓/商城（进中台拍照+定价）
+    public const SALE_DESTINATION_PEER        = 'peer';        // 同行仓（不拍照，直接出库）
+    public const SALE_DESTINATION_CONSIGNMENT = 'consignment'; // 代卖仓
+    public const SALE_DESTINATION_HOLD        = 'hold';        // 暂存仓
+    public const SALE_DESTINATION_SCRAP       = 'scrap';       // 报废仓
+
+    /** 仓库业务类型全集（= 销路） */
+    public static function warehouseBusinessTypes(): array
+    {
+        return [
+            self::SALE_DESTINATION_MALL        => '二手机仓(商城)',
+            self::SALE_DESTINATION_PEER        => '同行仓',
+            self::SALE_DESTINATION_CONSIGNMENT => '代卖仓',
+            self::SALE_DESTINATION_HOLD        => '暂存仓',
+            self::SALE_DESTINATION_SCRAP       => '报废仓',
+        ];
+    }
 
     public const SYNC_PENDING = 'pending';
     public const SYNC_PROCESSING = 'processing';

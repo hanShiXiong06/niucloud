@@ -20,6 +20,12 @@ Route::group('erp', function () {
     Route::delete('warehouse/:id', 'addon\hsx_erp\app\adminapi\controller\Warehouse@delete');
     Route::post('warehouse/:warehouse_id/location/save/:id', 'addon\hsx_erp\app\adminapi\controller\Warehouse@saveLocation');
     Route::delete('warehouse/location/:id', 'addon\hsx_erp\app\adminapi\controller\Warehouse@deleteLocation');
+    // 库位责任分配（人↔库位）
+    Route::get('location_assign/tree', 'addon\hsx_erp\app\adminapi\controller\LocationAssign@tree');
+    Route::get('location_assign/staff_options', 'addon\hsx_erp\app\adminapi\controller\LocationAssign@staffOptions');
+    Route::get('location_assign/lists', 'addon\hsx_erp\app\adminapi\controller\LocationAssign@lists');
+    Route::post('location_assign/location/:location_id/staff', 'addon\hsx_erp\app\adminapi\controller\LocationAssign@setLocationStaff');
+    Route::post('location_assign/staff/:uid/locations', 'addon\hsx_erp\app\adminapi\controller\LocationAssign@setStaffLocations');
     Route::get('refurbishment/lists', 'addon\hsx_erp\app\adminapi\controller\Refurbishment@lists');
     Route::get('refurbishment/user_options', 'addon\hsx_erp\app\adminapi\controller\Refurbishment@userOptions');
     Route::post('refurbishment/create', 'addon\hsx_erp\app\adminapi\controller\Refurbishment@create');

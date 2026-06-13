@@ -50,12 +50,22 @@ class Outbound extends BaseAdminController
         return success($this->service->fillPrice($id, (array)$items));
     }
 
-    /** 调拨(移仓/移库位, 如划拨到同行仓) */
+    /** 调拨(移仓/移库位, 如划拨到同行仓)。consign_action: list 上架代卖(默认) / buyout 我方买断 */
     public function transfer()
     {
         $p = $this->request->params([
             ['asset_ids', []], ['to_warehouse_id', 0], ['to_location_id', 0], ['remark', ''],
+            ['consign_action', 'list'], ['buyout_prices', []],
         ]);
-        return success($this->service->transfer((array)$p['asset_ids'], (int)$p['to_warehouse_id'], (int)$p['to_location_id'], (string)$p['remark']));
+        return success($this->service->transfer(
+            (array)$p['asset_ids'],
+            (int)$p['to_warehouse_id'],
+            (int)$p['to_location_id'],
+            (string)$p['remark'],
+            [
+                'consign_action' => (string)$p['consign_action'],
+                'buyout_prices'  => (array)$p['buyout_prices'],
+            ]
+        ));
     }
 }

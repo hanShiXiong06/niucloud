@@ -21,13 +21,20 @@
 - 库存流水 `erp_stock_ledger`：有 `action / before_status / after_status / warehouse_id / location_id`，天生适合记调拨与出库。
 - 成本流水 `erp_cost_ledger`、定价日志 `erp_price_log`。
 
-**缺口，要新建：**
-1. **调拨（inter-warehouse transfer）**——目前完全没有。
-2. **出库（outbound）两段式**——目前只有 `stock_out_at` 空字段躺着，无任何逻辑。
-3. **库位责任人**——ERP 现在只有粗粒度 `SysUserRole`，没有"谁负责哪个库位/分类"的精确到人指派表。
-4. **代卖/卖出的应付寄卖人**触发钩子（财务积木已就绪，缺业务触发点，金额人手填）。
-5. **财务任务/待办筛选**（打款/追款）——应付应收表已有，缺面向财务的任务化视图。
-6. **主体关联就地编辑**——`erp_counterparty_member` 映射已有，缺各环节随手可改的入口。
+> **2026-06-13 实读修正**：经逐文件核实，**出库与调拨其实已经实现**（之前的探查结论有误）：
+> - `ErpOutboundService`（327 行）：`createOutbound` 出库两段式（现结 now / 回填 later→应收）、`fillPrice` 回填→`FinanceReceivableCreated` 应收（幂等 `receivable_emitted`）、`transfer` 调拨（移库 + `erp_asset_move_log`）、报废出库、同行销售必选对手方、`counterparty_enterprise_id` 主体字段，**全部已就绪**。
+> - 表 `erp_outbound_order / erp_outbound_item / erp_asset_move_log` 已在 install.sql + update_outbound.sql。
+> - `ErpDict` 已含 `INVENTORY_OUTBOUND / OUTBOUND_TYPE_* / SETTLE_MODE_* / OUTBOUND_PRICE_*`。
+> 因此原 P2（调拨基础）、P4（出库两段式）**视为已完成**，本设计聚焦下列真实缺口。
+
+**真实缺口（要新建/补全）：**
+1. **库位责任人**——ERP 只有粗粒度 `SysUserRole`，没有"谁负责哪个库位/分类"的精确到人指派表（中台已有同款 `device_asset_location_assign`，ERP 无）。【P1】
+2. **仓库类型 `consignment`**——`ErpWarehouseService::$allowedTypes` 只有 `mall/peer/scrap/hold`，缺 `consignment`。【P1】
+3. **调拨的"类型联动"**——现有 `transfer()` 只是纯移库，**没有**：→mall 发 `ready_for_photo`（已拍过不重拍）、离开 mall 发"商城下架"、`consignment→mall` 买断应付+改 ownership+计成本。【P3】
+4. **代卖卖出→应付寄卖人**——`createOutbound` 只发应收（买家欠我），未对 `ownership=consign` 的设备发"应付寄卖人"。金额人手填。【P3/P5】
+5. **财务任务/待办筛选**（打款/追款）——应付应收表已有，缺面向财务的任务化视图。【P5】
+6. **主体关联就地编辑**——`erp_counterparty_member` 映射已有、出库已有 `counterparty_enterprise_id`，缺各环节随手可改的统一入口。【P6】
+7. **中台 re-delegation**——`createFromReadyForPhotoEvent` 已按 device_id 去重（不会重复建），补"已拍过照则回推可售、不退回待拍照"。【中台】
 
 ---
 
@@ -248,3 +255,34 @@ pending_pricing →(定价)→ available_for_sale →(出库)→ sold
 - 入口位置：回收订单/设备详情、ERP 资产详情、销售/出库选对手方处，都挂这个组件。
 
 > 本质：把"member → 主体"的对应，分散到每一次真实业务操作里顺手完成，而不是事后由专人补录。
+
+---
+
+## 13. 实施进度（2026-06-13 夜，自动执行）
+
+> 说明：沙箱**无法连你内网数据库、也无 PHP 运行时**，故后端用「Python 括号/结构自检」+ 人工对照约定校验，前端用「@vue/compiler-sfc 编译校验」。**SQL 只写了迁移脚本，需你明早在库里执行**。
+
+**已完成并校验：**
+- **仓库类型 `consignment`**：`ErpDict` 补销路常量 + `warehouseBusinessTypes()`；`ErpWarehouseService::$allowedTypes` 加 `consignment`；仓库表单类型选项加"代卖"。
+- **修复既有 Bug**：`Warehouse@save` 控制器之前漏传 `business_type`（表单选了类型但永远存成 mall），已补上。
+- **库位责任（P1，全新）**：
+  - 表 `erp_location_assign`（install.sql + `sql/update_location_assign.sql`，**待执行**）。
+  - `ErpLocationAssign` 模型、`ErpLocationAssignService`（树/员工/列表/按库位设人/按人设库位）、`LocationAssign` 控制器、5 条路由、菜单页「库位责任」。
+  - 资产列表 `ErpAssetService::getPage` 按 `scopedLocationIds()` 过滤（管理员看全部，员工只看负责库位）。
+  - 管理端页面 `admin/views/location_assign/list.vue` + `admin/api/location_assign.ts`（编译通过）。
+- **调拨类型联动（P3 后端）**：`ErpOutboundService::transfer()` 增加：进 mall 发 `ready_for_photo`（中台按 device_id 去重，已拍过不重拍）、离开 mall 发 `erp.asset.delisted.v1`、代卖进 mall 且 `consign_action=buyout` 时改 `ownership=owned`+计成本+对寄卖人发应付（买断价人手填）。`Outbound@transfer` 控制器加 `consign_action/buyout_prices` 入参。
+- **代卖卖出应付寄卖人（P5 后端）**：`createOutbound` 的 item 支持 `consignor_payable`（人手填），代卖设备卖出时对其寄卖人 `counterparty_id` 发 `FinancePayableCreated`（幂等键按设备）。
+
+**出库/调拨本体**：经核实**早已实现**（`ErpOutboundService` 全套 + 表 + 菜单 + 路由 + 出库 list.vue），本次只做"类型联动/代卖应付"的增量。
+
+**尚未做（留待续做，多为前端 UI）：**
+1. **调拨管理 UI**：目前 `transfer` 有后端+路由，但管理端没有调拨对话框（选目标仓/库位、代卖买断价输入）。需在资产列表加"调拨"入口。
+2. **出库 create 表单**：加每台"应付寄卖人金额"输入（仅代卖设备显示）→ 传 `consignor_payable`。
+3. **财务待办 Tab（P5）**：财务看板加"打款任务/追款任务"筛选（基于现成应付/应收 outstanding 接口）。
+4. **主体关联内联编辑（P6）**：统一组件 + 端点，挂到回收/ERP/销售各处。
+5. **中台回推可售**：当前去重已保证"不重拍"；"已拍过照自动回推可售"为可选优化，未做。
+
+**明早操作清单：**
+1. 在数据库执行 `niucloud/addon/hsx_erp/sql/update_location_assign.sql`（建库位责任表）。
+2. ERP 插件菜单需重新同步（新增了「库位责任」菜单页与若干 API 节点）。
+3. 验收：建一个 `consignment` 仓 → 仓库类型能存住代卖；「库位责任」页给员工指派库位 → 用普通员工账号登录看资产列表是否只显示其负责库位。

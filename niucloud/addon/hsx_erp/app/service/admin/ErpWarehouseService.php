@@ -60,8 +60,8 @@ class ErpWarehouseService extends BaseAdminService
 
         $now = time();
         $isDefault = (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
-        // 业务类型(=销售流向)：商城/同行/报废/暂存，缺省商城
-        $allowedTypes = ['mall', 'peer', 'scrap', 'hold'];
+        // 业务类型(=销售流向)：商城/同行/代卖/报废/暂存，缺省商城
+        $allowedTypes = ['mall', 'peer', 'consignment', 'scrap', 'hold'];
         $businessType = in_array((string)($data['business_type'] ?? ''), $allowedTypes, true)
             ? (string)$data['business_type']
             : 'mall';

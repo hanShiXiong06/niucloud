@@ -12,7 +12,11 @@
       "Bash(cp Addon.php /tmp/Addon_test.php)",
       "Bash(perl -i -pe 's{\\\\Qaddon\\\\shop\\\\E}{addon\\\\\\\\phone_shop}g' /tmp/Addon_test.php)",
       "Bash(echo \"exit=$?\")",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(grep -oE 'CREATE TABLE `\\\\{\\\\{prefix\\\\}\\\\}phone_shop_[a-z_]+`' sql/install.sql)",
+      "Bash(grep -oE '`shop_[a-z_]+`' sql/install.sql)",
+      "Bash(grep -nE '`\\\\{\\\\{prefix\\\\}\\\\}phone_shop_[a-z]+`[^_]' sql/install.sql)",
+      "Bash(grep -nE '`shop_name`|`shop_no`' sql/install.sql)"
     ]
   }
 }

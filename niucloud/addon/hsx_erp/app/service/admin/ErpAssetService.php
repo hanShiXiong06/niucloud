@@ -9,6 +9,7 @@ use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetCycle;
 use addon\hsx_erp\app\model\ErpCostLedger;
 use addon\hsx_erp\app\model\ErpCounterparty;
+use addon\hsx_erp\app\model\ErpLocationAssign;
 use addon\hsx_erp\app\model\ErpOperationEvent;
 use addon\hsx_erp\app\model\ErpRefurbishItem;
 use addon\hsx_erp\app\model\ErpRefurbishOrder;
@@ -17,12 +18,42 @@ use addon\hsx_erp\app\model\ErpStockOrder;
 use addon\hsx_erp\app\model\ErpStockOrderItem;
 use addon\hsx_erp\app\support\ErpDomainEvent;
 use addon\hsx_erp\app\support\ErpMoney;
+use app\model\sys\SysUserRole;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
 
 class ErpAssetService extends BaseAdminService
 {
+    /**
+     * 是否可查看全部（管理员 is_admin 组看全部，其余员工只看自己负责库位）。
+     */
+    protected function canViewAll(): bool
+    {
+        return SysUserRole::where([
+            ['site_id', '=', $this->site_id],
+            ['uid', '=', $this->uid],
+            ['is_admin', '=', 1],
+        ])->count() > 0;
+    }
+
+    /**
+     * 当前用户的库位过滤范围。
+     * null = 不限制（管理员）；[-1] = 无任何负责库位（看不到任何设备）；否则为负责的库位ID集合。
+     */
+    protected function scopedLocationIds(): ?array
+    {
+        if ($this->canViewAll()) {
+            return null;
+        }
+        $ids = ErpLocationAssign::where([
+            ['site_id', '=', $this->site_id],
+            ['uid', '=', $this->uid],
+        ])->column('location_id');
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        return empty($ids) ? [-1] : $ids;
+    }
+
     public function getPage(array $where = []): array
     {
         $query = ErpAsset::where([['site_id', '=', $this->site_id]])->order('id desc');
@@ -35,6 +66,17 @@ class ErpAssetService extends BaseAdminService
         }
         if (!empty($where['inventory_status'])) {
             $query->where('inventory_status', '=', (string)$where['inventory_status']);
+        }
+        if (!empty($where['warehouse_id'])) {
+            $query->where('warehouse_id', '=', (int)$where['warehouse_id']);
+        }
+        if (!empty($where['location_id'])) {
+            $query->where('location_id', '=', (int)$where['location_id']);
+        }
+        // 员工只看自己负责库位的设备；管理员看全部
+        $scope = $this->scopedLocationIds();
+        if ($scope !== null) {
+            $query->whereIn('location_id', $scope);
         }
         $result = $this->pageQuery($query);
         $this->appendCounterparties($result['data']);

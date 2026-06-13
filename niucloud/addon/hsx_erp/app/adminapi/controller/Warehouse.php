@@ -30,7 +30,7 @@ class Warehouse extends BaseAdminController
     public function save(int $id = 0)
     {
         return success($this->service->saveWarehouse($this->request->params([
-            ['warehouse_name', ''], ['warehouse_code', ''], ['status', 1],
+            ['warehouse_name', ''], ['warehouse_code', ''], ['business_type', 'mall'], ['status', 1],
             ['is_default', 0], ['sort', 0], ['remark', ''],
         ]), $id));
     }

@@ -6,8 +6,11 @@ namespace addon\hsx_erp\app\service\admin;
 use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetMoveLog;
+use addon\hsx_erp\app\model\ErpCostLedger;
+use addon\hsx_erp\app\model\ErpCounterparty;
 use addon\hsx_erp\app\model\ErpOutboundItem;
 use addon\hsx_erp\app\model\ErpOutboundOrder;
+use addon\hsx_erp\app\model\ErpWarehouse;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -72,8 +75,10 @@ class ErpOutboundService extends BaseAdminService
             throw new CommonException('设备无效');
         }
         $priceMap = [];
+        $consignorMap = []; // 代卖设备卖出时应付寄卖人金额(人手填, 可选)
         foreach ($items as $it) {
             $priceMap[(int)$it['asset_id']] = round((float)($it['sale_price'] ?? 0), 2);
+            $consignorMap[(int)$it['asset_id']] = round((float)($it['consignor_payable'] ?? 0), 2);
         }
 
         $now = time();
@@ -81,8 +86,9 @@ class ErpOutboundService extends BaseAdminService
         $priceStatus = $settleMode === ErpDict::SETTLE_MODE_LATER ? ErpDict::OUTBOUND_PRICE_PENDING : ErpDict::OUTBOUND_PRICE_FILLED;
         $outboundId = 0;
         $emitItems = [];
+        $emitConsignPayables = []; // 代卖卖出 → 应付寄卖人
 
-        Db::transaction(function () use ($assetIds, $priceMap, $type, $settleMode, $priceStatus, $cpId, $p, $no, $now, &$outboundId, &$emitItems) {
+        Db::transaction(function () use ($assetIds, $priceMap, $consignorMap, $type, $settleMode, $priceStatus, $cpId, $p, $no, $now, &$outboundId, &$emitItems, &$emitConsignPayables) {
             // 锁定并校验资产
             $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->select();
             if (count($assets) !== count($assetIds)) {
@@ -116,6 +122,18 @@ class ErpOutboundService extends BaseAdminService
                     'cost'             => round((float)$asset->current_cost, 2),
                     'sale_price'       => $price,
                 ];
+                // 代卖设备卖出 → 收集"应付寄卖人"(人手填金额, 锚定该设备的寄卖人 counterparty_id)
+                if ((string)$asset->ownership_type === ErpDict::OWNERSHIP_CONSIGN) {
+                    $cpAmount = $consignorMap[(int)$asset->id] ?? 0.0;
+                    if ($cpAmount > 0 && (int)$asset->counterparty_id > 0) {
+                        $emitConsignPayables[] = [
+                            'asset_id'  => (int)$asset->id,
+                            'cp_id'     => (int)$asset->counterparty_id,
+                            'device_id' => (int)$asset->source_device_id,
+                            'amount'    => $cpAmount,
+                        ];
+                    }
+                }
                 $total += $price;
                 $qty++;
             }
@@ -158,6 +176,10 @@ class ErpOutboundService extends BaseAdminService
         // 发应收(故障隔离)
         if (!empty($emitItems)) {
             $this->emitReceivables($outboundId, $cpId, (string)($p['counterparty_name'] ?? ''), $no, $emitItems);
+        }
+        // 代卖卖出 → 发应付寄卖人(故障隔离)
+        if (!empty($emitConsignPayables)) {
+            $this->emitConsignorPayables($no, $emitConsignPayables);
         }
 
         return ['outbound_id' => $outboundId, 'outbound_no' => $no];
@@ -215,10 +237,15 @@ class ErpOutboundService extends BaseAdminService
     }
 
     /**
-     * 调拨: 把设备移到另一个仓库/库位(如划拨到同行仓), 不出库不动钱
+     * 调拨: 把设备移到另一个仓库/库位, 并按"目标仓类型"触发联动:
+     *   - 进入 mall(二手机仓): 发 ready_for_photo 进中台(中台按 device_id 去重, 已拍过不重拍)
+     *   - 离开 mall(原在 mall 现去他仓): 发 erp.asset.delisted.v1 通知商城下架
+     *   - 代卖(consign)进 mall 且 consign_action=buyout: 我方买断 → 改 ownership=owned + 计成本 + 对寄卖人发应付(人手填买断价)
+     *     consign_action=list(默认): 仅上架代卖, 不动产权/应付, 卖出时再结寄卖人
      * @param array $assetIds
+     * @param array $options [consign_action=list|buyout, buyout_prices=[{asset_id,amount}]]
      */
-    public function transfer(array $assetIds, int $toWarehouseId, int $toLocationId, string $remark = ''): array
+    public function transfer(array $assetIds, int $toWarehouseId, int $toLocationId, string $remark = '', array $options = []): array
     {
         $assetIds = array_values(array_filter(array_map('intval', $assetIds)));
         if (empty($assetIds)) {
@@ -227,18 +254,31 @@ class ErpOutboundService extends BaseAdminService
         if ($toWarehouseId <= 0) {
             throw new CommonException('请选择目标仓库');
         }
+        $consignAction = (string)($options['consign_action'] ?? 'list');
+        $buyoutMap = [];
+        foreach ((array)($options['buyout_prices'] ?? []) as $row) {
+            $buyoutMap[(int)($row['asset_id'] ?? 0)] = round((float)($row['amount'] ?? 0), 2);
+        }
+
+        // 目标仓 / 来源仓 业务类型
+        $toType = (string)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $toWarehouseId]])->value('business_type') ?: '');
         $now = time();
         $moved = 0;
-        Db::transaction(function () use ($assetIds, $toWarehouseId, $toLocationId, $remark, $now, &$moved) {
-            $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->select();
+        $linkages = ['photo' => [], 'delist' => [], 'payable' => []]; // 提交后再发事件
+
+        Db::transaction(function () use ($assetIds, $toWarehouseId, $toLocationId, $toType, $remark, $consignAction, $buyoutMap, $now, &$moved, &$linkages) {
+            $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->lock(true)->select();
             foreach ($assets as $asset) {
                 if ((string)$asset->inventory_status === ErpDict::INVENTORY_OUTBOUND) {
                     throw new CommonException('设备[' . $asset->asset_no . ']已出库, 不能调拨');
                 }
+                $fromWarehouseId = (int)$asset->warehouse_id;
+                $fromType = (string)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $fromWarehouseId]])->value('business_type') ?: '');
+
                 ErpAssetMoveLog::create([
                     'site_id'           => $this->site_id,
                     'asset_id'          => (int)$asset->id,
-                    'from_warehouse_id' => (int)$asset->warehouse_id,
+                    'from_warehouse_id' => $fromWarehouseId,
                     'from_location_id'  => (int)$asset->location_id,
                     'to_warehouse_id'   => $toWarehouseId,
                     'to_location_id'    => $toLocationId,
@@ -247,15 +287,115 @@ class ErpOutboundService extends BaseAdminService
                     'remark'            => $remark,
                     'create_at'         => $now,
                 ]);
+
+                // 代卖进 mall 且选择买断: 改产权 + 计成本(买断价计入成本)
+                $isConsign = (string)$asset->ownership_type === ErpDict::OWNERSHIP_CONSIGN;
+                if ($isConsign && $toType === ErpDict::SALE_DESTINATION_MALL && $consignAction === 'buyout') {
+                    $buyout = $buyoutMap[(int)$asset->id] ?? 0.0;
+                    if ($buyout <= 0) {
+                        throw new CommonException('代卖买断必须为设备[' . $asset->asset_no . ']填写买断价');
+                    }
+                    $beforeCost = round((float)$asset->current_cost, 2);
+                    $afterCost = round($beforeCost + $buyout, 2);
+                    ErpCostLedger::create([
+                        'site_id'       => $this->site_id,
+                        'ledger_no'     => 'CL' . date('YmdHis') . random_int(1000, 9999),
+                        'asset_id'      => (int)$asset->id,
+                        'cycle_id'      => (int)$asset->cycle_id,
+                        'cost_type'     => 'buyout',
+                        'amount_delta'  => $buyout,
+                        'before_cost'   => $beforeCost,
+                        'after_cost'    => $afterCost,
+                        'counterparty_id' => (int)$asset->counterparty_id,
+                        'operator_id'   => (int)$this->uid,
+                        'operator_name' => (string)$this->username,
+                        'occurred_at'   => $now,
+                        'remark'        => '代卖买断, 买断价计入成本',
+                    ]);
+                    $asset->ownership_type = ErpDict::OWNERSHIP_OWNED;
+                    $asset->purchase_cost = round((float)$asset->purchase_cost + $buyout, 2);
+                    $asset->current_cost = $afterCost;
+                    // 应付寄卖人(买断价) → 提交后发
+                    $linkages['payable'][] = ['asset_id' => (int)$asset->id, 'cp_id' => (int)$asset->counterparty_id, 'device_id' => (int)$asset->source_device_id, 'amount' => $buyout, 'reason' => 'consign_buyout'];
+                }
+
                 $asset->warehouse_id = $toWarehouseId;
                 $asset->location_id = $toLocationId;
                 $asset->version = (int)$asset->version + 1;
                 $asset->update_at = $now;
                 $asset->save();
                 $moved++;
+
+                // 进入 mall → 进中台拍照(中台去重, 已拍过不重拍)
+                if ($toType === ErpDict::SALE_DESTINATION_MALL && $fromType !== ErpDict::SALE_DESTINATION_MALL) {
+                    $linkages['photo'][] = (int)$asset->id;
+                }
+                // 离开 mall → 通知商城下架
+                if ($fromType === ErpDict::SALE_DESTINATION_MALL && $toType !== ErpDict::SALE_DESTINATION_MALL) {
+                    $linkages['delist'][] = (int)$asset->id;
+                }
             }
         });
+
+        $this->emitTransferLinkages($linkages, $now);
         return ['moved' => $moved];
+    }
+
+    /** 提交后发调拨联动事件(故障隔离, 不影响调拨本身) */
+    private function emitTransferLinkages(array $linkages, int $now): void
+    {
+        foreach ($linkages['photo'] as $assetId) {
+            try {
+                event('ErpDomainEvent', [
+                    'event_name'   => 'erp.asset.ready_for_photo.v1',
+                    'event_id'     => 'erp_transfer_photo_' . $assetId . '_' . $now,
+                    'site_id'      => (int)$this->site_id,
+                    'aggregate_id' => $assetId,
+                    'payload'      => ['asset_id' => $assetId, 'sale_destination' => ErpDict::SALE_DESTINATION_MALL, 'source' => 'transfer'],
+                    'operator'     => ['id' => (int)$this->uid, 'name' => (string)$this->username],
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('[erp] 调拨进中台发 ready_for_photo 失败: ' . $e->getMessage());
+            }
+        }
+        foreach ($linkages['delist'] as $assetId) {
+            try {
+                event('ErpDomainEvent', [
+                    'event_name'   => 'erp.asset.delisted.v1',
+                    'event_id'     => 'erp_transfer_delist_' . $assetId . '_' . $now,
+                    'site_id'      => (int)$this->site_id,
+                    'aggregate_id' => $assetId,
+                    'payload'      => ['asset_id' => $assetId, 'reason' => 'transfer_out_of_mall'],
+                    'operator'     => ['id' => (int)$this->uid, 'name' => (string)$this->username],
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('[erp] 离开mall发下架失败: ' . $e->getMessage());
+            }
+        }
+        foreach ($linkages['payable'] as $p) {
+            if ((int)$p['cp_id'] <= 0 || (float)$p['amount'] <= 0) {
+                Log::warning('[erp] 代卖买断应付缺往来单位或金额, 跳过: asset=' . $p['asset_id']);
+                continue;
+            }
+            try {
+                $cpName = (string)(ErpCounterparty::where([['site_id', '=', $this->site_id], ['id', '=', (int)$p['cp_id']]])->value('name') ?: '');
+                event('FinancePayableCreated', [
+                    'event'             => 'finance.payable.created.v1',
+                    'event_id'          => 'erp_consign_buyout_' . (int)$p['asset_id'],
+                    'site_id'           => (int)$this->site_id,
+                    'counterparty_id'   => (int)$p['cp_id'],
+                    'counterparty_name' => $cpName,
+                    'amount'            => round((float)$p['amount'], 2),
+                    'source_type'       => 'erp_consign_buyout',
+                    'source_no'         => 'BUYOUT' . (int)$p['asset_id'],
+                    'source_device_id'  => (int)$p['device_id'],
+                    'occurred_at'       => $now,
+                    'remark'            => '代卖买断, 应付寄卖人',
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('[erp] 代卖买断发应付失败: ' . $e->getMessage());
+            }
+        }
     }
 
     public function getPage(array $where = []): array
@@ -321,6 +461,35 @@ class ErpOutboundService extends BaseAdminService
                     ->update(['receivable_emitted' => 1]);
             } catch (\Throwable $e) {
                 Log::warning('[erp] 同行出货发应收失败: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /** 代卖卖出 → 发应付寄卖人(锚定设备的寄卖人 counterparty_id, 金额人手填), 幂等键按设备 */
+    private function emitConsignorPayables(string $outboundNo, array $payables): void
+    {
+        $now = time();
+        foreach ($payables as $p) {
+            if ((int)$p['cp_id'] <= 0 || (float)$p['amount'] <= 0) {
+                continue;
+            }
+            try {
+                $cpName = (string)(ErpCounterparty::where([['site_id', '=', $this->site_id], ['id', '=', (int)$p['cp_id']]])->value('name') ?: '');
+                event('FinancePayableCreated', [
+                    'event'             => 'finance.payable.created.v1',
+                    'event_id'          => 'erp_consign_sale_' . (int)$p['asset_id'],
+                    'site_id'           => (int)$this->site_id,
+                    'counterparty_id'   => (int)$p['cp_id'],
+                    'counterparty_name' => $cpName,
+                    'amount'            => round((float)$p['amount'], 2),
+                    'source_type'       => 'erp_consign_sale',
+                    'source_no'         => $outboundNo,
+                    'source_device_id'  => (int)$p['device_id'],
+                    'occurred_at'       => $now,
+                    'remark'            => '代卖卖出, 应付寄卖人',
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('[erp] 代卖卖出发应付失败: ' . $e->getMessage());
             }
         }
     }
