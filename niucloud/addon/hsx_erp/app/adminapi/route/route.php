@@ -42,6 +42,14 @@ Route::group('erp', function () {
     Route::post('asset/batch_confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@batchConfirmInbound');
     Route::post('asset/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmAssetInbound');
     Route::post('stock_order/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmInbound');
+    // 财务中心: 往来对账 / 应付应收 / 结算·折账
+    Route::get('finance/board', 'addon\hsx_erp\app\adminapi\controller\Finance@board');
+    Route::get('finance/payable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@payableLists');
+    Route::get('finance/receivable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@receivableLists');
+    Route::get('finance/payable/outstanding', 'addon\hsx_erp\app\adminapi\controller\Finance@payableOutstanding');
+    Route::get('finance/receivable/outstanding', 'addon\hsx_erp\app\adminapi\controller\Finance@receivableOutstanding');
+    Route::post('finance/settlement/preview', 'addon\hsx_erp\app\adminapi\controller\Finance@settlementPreview');
+    Route::post('finance/settlement/settle', 'addon\hsx_erp\app\adminapi\controller\Finance@settlementSettle');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,

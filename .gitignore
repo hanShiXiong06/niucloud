@@ -28,3 +28,6 @@ niucloud/public/.htaccess
 # 备份归档（不应进入版本库）
 归档.zip
 niucloud/addon/归档.zip
+
+# 已合并进 ERP 的旧财务插件(待手动删)
+**/hsx_finance.removed/
