@@ -1259,6 +1259,8 @@ class RecycleDeviceService extends BaseAdminService
             // 由 ERP 侧 A1 自动确认入库 → 进中台拍照定价。批量回收时由 batchRecycle 统一同步。
             if ($autoErpSync) {
                 $this->autoSyncErpInbound([(int)$device->id]);
+                // 确认回收即生成"应付"(我欠客户回收价)。批量模式由 batchRecycle 统一发。
+                $this->autoEmitPayable([(int)$device->id]);
             }
 
             return true;
@@ -1283,6 +1285,61 @@ class RecycleDeviceService extends BaseAdminService
             (new RecycleDeviceErpSyncService())->dispatch($deviceIds, ['self_erp']);
         } catch (\Throwable $e) {
             Log::warning('确认回收后自动同步ERP失败：' . $e->getMessage(), [
+                'site_id' => $this->site_id,
+                'device_ids' => $deviceIds,
+            ]);
+        }
+    }
+
+    /**
+     * 确认回收即生成"应付"事实(我欠客户=回收价)，发给财务(ERP财务中心)。
+     *
+     * 解耦：只发标准事件 FinancePayableCreated，财务侧幂等落库；财务不在则无监听=空操作。
+     * 故障隔离：发事件失败不影响回收。往来单位锚 = member_id(个人客户)，
+     * 金额 = final_price(定价确认的回收价)，source_device_id = 设备ID(可精确追到哪台机)。
+     * 与《应付与结算契约》一致。
+     * @param array $deviceIds
+     */
+    private function autoEmitPayable(array $deviceIds): void
+    {
+        $deviceIds = array_values(array_filter(array_map('intval', $deviceIds)));
+        if (empty($deviceIds)) {
+            return;
+        }
+        try {
+            $devices = $this->model->where('id', 'in', $deviceIds)->select();
+            foreach ($devices as $device) {
+                $amount = round((float)($device->final_price ?? 0), 2);
+                $memberId = (int)($device->member_id ?? 0);
+                if ($amount <= 0 || $memberId <= 0) {
+                    continue; // 没定价或无客户的不发
+                }
+                $orderNo = '';
+                $memberName = '';
+                try {
+                    $order = RecycleOrder::where('id', (int)$device->order_id)->find();
+                    if (!empty($order)) {
+                        $orderNo = (string)($order->order_no ?? '');
+                        $memberName = (string)($order->member_name ?? $order->nickname ?? '');
+                    }
+                } catch (\Throwable $ignore) {
+                }
+                event('FinancePayableCreated', [
+                    'event'             => 'finance.payable.created.v1',
+                    'event_id'          => 'recycle_payable_' . (int)$device->id, // 幂等：每台一笔
+                    'site_id'           => (int)$this->site_id,
+                    'counterparty_id'   => $memberId,
+                    'counterparty_name' => $memberName,
+                    'amount'            => $amount,
+                    'source_type'       => 'recycle_device',
+                    'source_no'         => $orderNo !== '' ? $orderNo : ('DEV' . (int)$device->id),
+                    'source_device_id'  => (int)$device->id,
+                    'occurred_at'       => time(),
+                    'remark'            => '确认回收生成应付',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('确认回收生成应付失败：' . $e->getMessage(), [
                 'site_id' => $this->site_id,
                 'device_ids' => $deviceIds,
             ]);
@@ -1468,8 +1525,9 @@ class RecycleDeviceService extends BaseAdminService
             }
 
             Db::commit();
-            // 整批提交成功后再统一同步到 ERP
+            // 整批提交成功后再统一同步到 ERP + 生成应付
             $this->autoSyncErpInbound(array_map('intval', $ids));
+            $this->autoEmitPayable(array_map('intval', $ids));
             return true;
         } catch (\Exception $e) {
             Db::rollback();
