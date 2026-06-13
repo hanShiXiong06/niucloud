@@ -54,7 +54,9 @@
                 </el-table-column>
                 <el-table-column label="操作" width="120" align="center" fixed="right">
                     <template #default="{ row }">
-                        <el-button type="primary" link @click="openSettle(row)">去结算</el-button>
+                        <!-- 只有两侧都有账(可折账>0)才显示折账, 否则不显示, 避免点进去折不了 -->
+                        <el-button v-if="row.offsetable > 0" type="primary" link @click="openSettle(row)">折账</el-button>
+                        <span v-else class="text-xs text-gray-400">无可折</span>
                     </template>
                 </el-table-column>
             </el-table>
