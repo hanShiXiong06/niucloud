@@ -512,7 +512,7 @@ const renderTrendChart = () => {
             { name: '新增订单', data: orderSeries },
             { name: '新增设备', data: deviceSeries }
         ],
-        color: ['#2563eb', '#10b981'],
+        color: ['var(--hsx-primary)', '#10b981'],
         padding: [12, 10, 8, 10],
         legend: { show: false },
         dataLabel: false,
@@ -527,7 +527,7 @@ const renderLifecycleChart = () => {
         type: 'column',
         categories: lifecycleChartData.value.categories,
         series: lifecycleChartData.value.series,
-        color: ['#2563eb'],
+        color: ['var(--hsx-primary)'],
         padding: [12, 10, 18, 10],
         legend: { show: false },
         dataLabel: true,
@@ -541,7 +541,7 @@ const renderSourceChart = () => {
     createChart('source', {
         type: 'ring',
         series: sourceChartData.value.series,
-        color: ['#2563eb', '#10b981', '#f97316', '#7c3aed', '#dc2626', '#0d9488'],
+        color: ['var(--hsx-primary)', '#10b981', '#f97316', '#7c3aed', '#dc2626', '#0d9488'],
         padding: [8, 8, 8, 8],
         legend: { show: true, position: 'bottom', fontColor: '#64748b' },
         dataLabel: true,
@@ -650,7 +650,7 @@ onPullDownRefresh(() => {
     padding: 30rpx;
     border-radius: 24rpx;
     color: #fff;
-    background: linear-gradient(135deg, #1d4ed8, #0f766e);
+    background: linear-gradient(135deg, var(--hsx-primary-dark), #0f766e);
     box-shadow: 0 18rpx 48rpx rgba(29, 78, 216, 0.22);
 }
 
@@ -710,8 +710,8 @@ onPullDownRefresh(() => {
 }
 
 .date-chip--active {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
+    background: var(--hsx-primary-dark);
+    border-color: var(--hsx-primary-dark);
     color: #fff;
     font-weight: 600;
 }
@@ -731,8 +731,8 @@ onPullDownRefresh(() => {
     width: 42rpx;
     height: 42rpx;
     border-radius: 50%;
-    border: 5rpx solid #dbeafe;
-    border-top-color: #2563eb;
+    border: 5rpx solid var(--hsx-primary-100);
+    border-top-color: var(--hsx-primary);
     animation: rotate 0.8s linear infinite;
 }
 
@@ -928,7 +928,7 @@ onPullDownRefresh(() => {
 }
 
 .legend-dot--order {
-    background: #2563eb;
+    background: var(--hsx-primary);
 }
 
 .legend-dot--device {
@@ -985,7 +985,7 @@ onPullDownRefresh(() => {
     color: #94a3b8;
 }
 
-.text-blue { color: #2563eb; }
+.text-blue { color: var(--hsx-primary); }
 .text-green { color: #16a34a; }
 .text-red { color: #dc2626; }
 .text-purple { color: #7c3aed; }

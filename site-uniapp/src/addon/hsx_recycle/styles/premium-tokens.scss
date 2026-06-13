@@ -1,0 +1,48 @@
+/* =============================================================================
+   回收插件「高级主题」设计令牌（site-uniapp 移动端）
+   —— 对齐 admin/src/addon/hsx_recycle/styles/premium-theme.scss 的设计系统。
+
+   原理：CSS 变量是级联的。在 page 根上定义一组 --hsx-* 令牌，
+        回收模块内所有组件直接 var(--hsx-*) 引用，做到「唯一颜色出口」。
+   作用域：令牌带 hsx- 前缀，全局注入但与站点 --primary-color 互不干扰；
+        回收模块刻意使用固定靛蓝主色，与 PC 管理端品牌一致，
+        不跟随商户 C 端主题色（与 admin 同一思路）。
+   引入：在 src/styles/index.scss 中 @import 一次即可全局生效。
+   ============================================================================= */
+
+:root,
+page {
+  /* ===== 主色（靛蓝，对齐 admin #4f46e5） ===== */
+  --hsx-primary: #4f46e5;        /* 主色：原蓝 #2563eb / #2979ff */
+  --hsx-primary-dark: #4338ca;   /* 深主色（悬停/按压）：原 #1d4ed8 / #1e40af */
+  --hsx-primary-light: #6366f1;  /* 浅主色（次级强调）：原 #3b82f6 */
+  --hsx-primary-300: #a5b4fc;    /* 浅主色边线：原 #93c5fd */
+  --hsx-primary-100: #e0e7ff;    /* 浅主色块底：原 #dbeafe */
+  --hsx-primary-50: #eef2ff;     /* 极浅主色背景：原 #eff6ff */
+
+  /* ===== 状态色（柔和药丸 / 标签，供 DeviceStatusBadge 等使用） ===== */
+  --hsx-info: #6b7280;           --hsx-info-bg: #f3f4f6;     /* 灰：待处理/中性 */
+  --hsx-warning: #d97706;        --hsx-warning-bg: #fff7ed;  /* 橙：进行中 */
+  --hsx-success: #16a34a;        --hsx-success-bg: #ecfdf5;  /* 绿：已完成 */
+  --hsx-danger: #ef4444;         --hsx-danger-bg: #fef2f2;   /* 红：退回/危险 */
+  --hsx-purple: #7c3aed;         --hsx-purple-bg: #f5f3ff;   /* 紫：代卖 */
+  --hsx-price: #ea580c;          /* 金额橙（沿用现有强调色） */
+
+  /* ===== 文本 / 边线 / 背景 ===== */
+  --hsx-text-strong: #1f2937;
+  --hsx-text-regular: #475569;
+  --hsx-text-secondary: #64748b;
+  --hsx-text-placeholder: #94a3b8;
+  --hsx-border: #eef0f4;         /* 浅分隔线（对齐 admin --el-border-color-lighter） */
+  --hsx-fill-light: #f8fafc;     /* 浅填充（表头/悬停底） */
+
+  /* ===== 圆角（rpx，移动端尺度；对齐 admin 8/12px 的视觉比例） ===== */
+  --hsx-radius-sm: 12rpx;
+  --hsx-radius: 16rpx;
+  --hsx-radius-lg: 24rpx;
+  --hsx-radius-pill: 999rpx;     /* 状态药丸 */
+
+  /* ===== 阴影（柔投影，对齐 admin --el-box-shadow-light 观感） ===== */
+  --hsx-shadow-sm: 0 1rpx 4rpx rgba(17, 24, 39, 0.04), 0 2rpx 6rpx rgba(17, 24, 39, 0.06);
+  --hsx-shadow-card: 0 4rpx 16rpx rgba(17, 24, 39, 0.06);
+}

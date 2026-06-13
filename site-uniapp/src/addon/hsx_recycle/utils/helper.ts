@@ -35,7 +35,7 @@ export const getStatusTextClass = (type: string) => {
         warning: 'text-[#f0a020]',
         danger: 'text-[#d03050]',
         info: 'text-[#909399]',
-        primary: 'text-[#2979ff]'
+        primary: 'text-[var(--hsx-primary)]'
     }
 
     return map[type] || map.primary

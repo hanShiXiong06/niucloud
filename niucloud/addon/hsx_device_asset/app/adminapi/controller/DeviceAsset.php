@@ -148,6 +148,18 @@ class DeviceAsset extends BaseAdminController
         return success($this->service->confirmPhotos((int)$id));
     }
 
+    /** 设置 / 修改资产库位 */
+    public function setLocation($id)
+    {
+        $data = $this->request->params([
+            ['warehouse_id', 0],
+            ['warehouse_name', ''],
+            ['location_id', 0],
+            ['location_name', ''],
+        ]);
+        return success($this->service->setLocation((int)$id, $data));
+    }
+
     public function price($id)
     {
         $data = $this->request->params([

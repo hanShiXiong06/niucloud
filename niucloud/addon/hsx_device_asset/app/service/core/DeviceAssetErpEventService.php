@@ -111,7 +111,6 @@ class DeviceAssetErpEventService
     private function buildCheckSummary(ErpAsset $erpAsset, array $check): array
     {
         return array_filter([
-            '内部质检' => (string)($check['check_result'] ?? ''),
             '卖家质检' => (string)($check['check_result_seller'] ?? ''),
             '买家质检' => (string)($check['check_result_buyer'] ?? ''),
             '容量' => (string)$erpAsset->capacity,

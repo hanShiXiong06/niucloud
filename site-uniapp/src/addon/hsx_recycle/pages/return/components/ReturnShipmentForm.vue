@@ -60,7 +60,7 @@
                             <view class="sender-card__address">{{ formatShopAddress(item) || '-' }}</view>
                         </view>
                         <view class="sender-card__check">
-                            <u-icon v-if="isSenderSelected(item)" name="checkmark" size="16" color="#2563eb"></u-icon>
+                            <u-icon v-if="isSenderSelected(item)" name="checkmark" size="16" color="var(--hsx-primary)"></u-icon>
                         </view>
                     </view>
                 </view>
@@ -704,7 +704,7 @@ defineExpose({
 }
 
 .summary-card__value--active {
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-weight: 700;
 }
 
@@ -723,8 +723,8 @@ defineExpose({
 }
 
 .mode-item--active {
-    border-color: #2563eb;
-    background: #eff6ff;
+    border-color: var(--hsx-primary);
+    background: var(--hsx-primary-50);
 }
 
 .mode-item__name {
@@ -773,8 +773,8 @@ defineExpose({
 }
 
 .panel-mark--receiver {
-    background: #eff6ff;
-    color: #1d4ed8;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary-dark);
 }
 
 .panel-mark--quote {
@@ -846,8 +846,8 @@ defineExpose({
 }
 
 .sender-card--active {
-    border-color: #2563eb;
-    background: #eff6ff;
+    border-color: var(--hsx-primary);
+    background: var(--hsx-primary-50);
 }
 
 .sender-card__main {
@@ -884,7 +884,7 @@ defineExpose({
 }
 
 .sender-card--active .sender-card__check {
-    border-color: #2563eb;
+    border-color: var(--hsx-primary);
 }
 
 .field-row {
@@ -990,7 +990,7 @@ defineExpose({
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #2563eb;
+    background: var(--hsx-primary);
     color: #fff;
     font-size: 25rpx;
     font-weight: 700;
@@ -1019,8 +1019,8 @@ defineExpose({
 }
 
 .quote-item--active {
-    border-color: #2563eb;
-    background: #eff6ff;
+    border-color: var(--hsx-primary);
+    background: var(--hsx-primary-50);
 }
 
 .quote-item__main {

@@ -373,7 +373,7 @@ onLoad((option: any) => {
 .hero-card {
     padding: 28rpx;
     border-radius: 18rpx;
-    background: #2563eb;
+    background: var(--hsx-primary);
     color: #fff;
 }
 
@@ -488,7 +488,7 @@ onLoad((option: any) => {
 .info-copy,
 .info-phone {
     flex-shrink: 0;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 24rpx;
 }
 
@@ -529,7 +529,7 @@ onLoad((option: any) => {
     gap: 8rpx;
     font-size: 24rpx;
     font-weight: 600;
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .info-link-row__icon {
@@ -591,7 +591,7 @@ onLoad((option: any) => {
 
 .device-card__copy-icon {
     flex-shrink: 0;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 22rpx;
 }
 
@@ -685,8 +685,8 @@ onLoad((option: any) => {
 }
 
 .footer-btn--primary {
-    background: #2563eb;
-    border-color: #2563eb;
+    background: var(--hsx-primary);
+    border-color: var(--hsx-primary);
     color: #fff;
 }
 

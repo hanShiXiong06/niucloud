@@ -1,7 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(php -l /Users/a123/Documents/1-work/niucloud/niucloud/niucloud/addon/hsx_recycle/app/adminapi/route/route.php)",
+      "Bash(php -r ' *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(echo \"=== 改动文件报错数: $\\(npx vue-tsc --noEmit 2>&1)",
+      "Bash(node -e ' *)",
+      "Bash(cat)",
+      "Bash(bash /tmp/count_shop.sh)",
+      "Bash(cp Addon.php /tmp/Addon_test.php)",
+      "Bash(perl -i -pe 's{\\\\Qaddon\\\\shop\\\\E}{addon\\\\\\\\phone_shop}g' /tmp/Addon_test.php)",
+      "Bash(echo \"exit=$?\")",
+      "Read(//tmp/**)"
     ]
   }
 }

@@ -32,7 +32,7 @@ class RecycleTemplateBindingService extends BaseAdminService
         return [
             'binding' => $binding,
             'effective' => $effective,
-            'check_template_options' => $this->getCheckTemplateOptions(),
+            'check_template_options' => $this->getCheckTemplateOptions((int)($binding['check_template_id'] ?? 0)),
             'print_template_options' => $this->getPrintTemplateOptions(),
         ];
     }
@@ -229,15 +229,32 @@ class RecycleTemplateBindingService extends BaseAdminService
         return $chain;
     }
 
-    private function getCheckTemplateOptions(): array
+    private function getCheckTemplateOptions(int $includeId = 0): array
     {
-        return RecycleCheckTemplate::where([
+        // 批量导入的拍机堂模板(scene=pjt)有上万条,不进下拉;它们通过型号绑定自动生效
+        $options = RecycleCheckTemplate::where([
             ['site_id', '=', $this->site_id],
             ['status', '=', 1],
+            ['scene', '<>', 'pjt'],
         ])->field('id,template_name,scene,is_default,sort,update_at')
             ->order('is_default desc, sort asc, id desc')
+            ->limit(200)
             ->select()
             ->toArray();
+
+        if ($includeId > 0 && !in_array($includeId, array_column($options, 'id'))) {
+            $bound = RecycleCheckTemplate::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', $includeId],
+            ])->field('id,template_name,scene,is_default,sort,update_at')
+                ->findOrEmpty()
+                ->toArray();
+            if (!empty($bound)) {
+                array_unshift($options, $bound);
+            }
+        }
+
+        return $options;
     }
 
     private function getPrintTemplateOptions(): array

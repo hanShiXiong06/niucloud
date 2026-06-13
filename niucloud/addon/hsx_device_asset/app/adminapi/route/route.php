@@ -18,9 +18,17 @@ Route::group('device_asset', function () {
     Route::post('media/review/:media_id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@reviewMedia');
     Route::post('media/review_batch/:id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@reviewMediaBatch');
     Route::post('photos/confirm/:id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@confirmPhotos');
+    Route::post('location/:id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@setLocation');
     Route::post('price/:id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@price');
     Route::get('export', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@export');
     Route::post('export', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@export');
+
+    // 库位责任分配（管理员）
+    Route::get('assign/warehouse_tree', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAssetAssign@warehouseTree');
+    Route::get('assign/staff_options', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAssetAssign@staffOptions');
+    Route::get('assign/list', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAssetAssign@assignments');
+    Route::post('assign/location_staff', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAssetAssign@setLocationStaff');
+    Route::post('assign/staff_locations', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAssetAssign@setStaffLocations');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,

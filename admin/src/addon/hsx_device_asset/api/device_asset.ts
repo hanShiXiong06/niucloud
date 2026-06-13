@@ -51,3 +51,29 @@ export function completeAssetPrice(id: number, data: Record<string, any>) {
 export function exportAssetExcel(params: Record<string, any>) {
     return request.post('device_asset/export', params, { responseType: 'blob' })
 }
+
+// 设置 / 修改资产库位
+export function setAssetLocation(id: number, data: Record<string, any>) {
+    return request.post(`device_asset/location/${ id }`, data)
+}
+
+// ===== 库位责任分配 =====
+export function getAssignWarehouseTree() {
+    return request.get('device_asset/assign/warehouse_tree')
+}
+
+export function getAssignStaffOptions() {
+    return request.get('device_asset/assign/staff_options')
+}
+
+export function getAssignList(params: Record<string, any> = {}) {
+    return request.get('device_asset/assign/list', { params })
+}
+
+export function setLocationStaff(data: Record<string, any>) {
+    return request.post('device_asset/assign/location_staff', data)
+}
+
+export function setStaffLocations(data: Record<string, any>) {
+    return request.post('device_asset/assign/staff_locations', data)
+}

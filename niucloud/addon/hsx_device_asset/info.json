@@ -2,7 +2,7 @@
   "title": "设备资产中台",
   "desc": "承接回收插件完成后的设备，完成资产入库、拍照复检、销售定价和资料导出",
   "key": "hsx_device_asset",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": "hsx",
   "type": "addon",
   "support_app": "",

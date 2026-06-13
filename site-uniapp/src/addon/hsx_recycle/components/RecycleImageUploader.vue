@@ -17,12 +17,6 @@
             <text class="uploader-add__text">{{ addText }}</text>
         </view>
 
-        <ImagePreviewOverlay
-            v-model:visible="previewVisible"
-            :urls="previewUrls"
-            :current="previewCurrent"
-            @change="previewCurrent = $event"
-        />
     </view>
 </template>
 
@@ -30,7 +24,7 @@
 import { computed, ref, watch } from 'vue'
 import { uploadImage } from '@/app/api/system'
 import { img } from '@/utils/common'
-import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
+import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 
 interface ImageItem {
     url: string
@@ -55,9 +49,6 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits(['update:modelValue', 'change', 'uploading'])
 
 const imageItems = ref<ImageItem[]>([])
-const previewVisible = ref(false)
-const previewUrls = ref<string[]>([])
-const previewCurrent = ref(0)
 
 const uploading = computed(() => imageItems.value.some(item => item.status === 'uploading'))
 const remainCount = computed(() => Math.max(props.maxCount - imageItems.value.length, 1))
@@ -147,10 +138,7 @@ const previewImages = (index: number) => {
     const urls = imageItems.value
         .filter(item => item.status === 'success')
         .map(item => item.url)
-    if (!urls.length) return
-    previewUrls.value = urls
-    previewCurrent.value = Math.max(0, Math.min(index, urls.length - 1))
-    previewVisible.value = true
+    openPreview(urls, index)
 }
 
 const toValue = () => {

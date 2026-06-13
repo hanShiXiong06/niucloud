@@ -1,7 +1,7 @@
 <template>
     <u-popup :show="visible" mode="right" :safeAreaInsetBottom="true" @close="handleClose">
         <view class="order-filter">
-            <view class="order-filter__header">
+            <view class="order-filter__header" :style="headerSafeStyle">
                 <view>
                     <text class="order-filter__title">订单筛选</text>
                     <text class="order-filter__desc">按 PC 端常用条件精确定位</text>
@@ -137,26 +137,31 @@
                         label="提交时间"
                         v-model:start="form.create_time_start"
                         v-model:end="form.create_time_end"
+                        @request-calendar="openCalendar('create_time', '提交时间')"
                     />
                     <DateRangeFilterRow
                         label="更新时间"
                         v-model:start="form.update_time_start"
                         v-model:end="form.update_time_end"
+                        @request-calendar="openCalendar('update_time', '更新时间')"
                     />
                     <DateRangeFilterRow
                         label="签收时间"
                         v-model:start="form.sign_at_start"
                         v-model:end="form.sign_at_end"
+                        @request-calendar="openCalendar('sign_at', '签收时间')"
                     />
                     <DateRangeFilterRow
                         label="完成时间"
                         v-model:start="form.complete_at_start"
                         v-model:end="form.complete_at_end"
+                        @request-calendar="openCalendar('complete_at', '完成时间')"
                     />
                     <DateRangeFilterRow
                         label="打款时间"
                         v-model:start="form.pay_time_start"
                         v-model:end="form.pay_time_end"
+                        @request-calendar="openCalendar('pay_time', '打款时间')"
                     />
                 </view>
             </scroll-view>
@@ -174,6 +179,15 @@ import { reactive, ref, watch } from 'vue'
 import { searchMemberList } from '@/addon/hsx_recycle/api/order'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import DateRangeFilterRow from './DateRangeFilterRow.vue'
+import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
+
+// 抽屉从屏幕顶部 0 起，头部需让出状态栏/胶囊安全区，否则标题与关闭按钮会被微信胶囊遮住
+const navbarMetrics = getRecycleNavbarMetrics()
+let safeTopPx = 24
+// #ifdef MP
+safeTopPx = navbarMetrics.statusTopPx
+// #endif
+const headerSafeStyle = `padding-top:${ safeTopPx }px;`
 
 type FilterForm = {
     status: string
@@ -214,7 +228,31 @@ const props = withDefaults(defineProps<{
     statusOptions: () => []
 })
 
-const emit = defineEmits(['update:visible', 'update:modelValue', 'confirm', 'reset'])
+const emit = defineEmits(['update:visible', 'update:modelValue', 'confirm', 'reset', 'open-calendar'])
+
+// 时间范围日历由页面层（抽屉外）渲染，避免被抽屉的 transform 容器裁切。
+// 这里只负责把「打开请求」抛上去，并暴露回写方法供页面确认后调用。
+const openCalendar = (key: string, title: string) => {
+    emit('open-calendar', {
+        key,
+        title,
+        start: (form as any)[`${ key }_start`] || '',
+        end: (form as any)[`${ key }_end`] || ''
+    })
+}
+
+const applyCalendarRange = (key: string, start: string, end: string) => {
+    ;(form as any)[`${ key }_start`] = start
+    ;(form as any)[`${ key }_end`] = end
+    skipNextFill.value = true // 接下来抽屉弹回时保留本次填入
+}
+
+// 日历取消（未选择）时，抽屉弹回也不应重置已填条件
+const keepFormOnReopen = () => {
+    skipNextFill.value = true
+}
+
+defineExpose({ applyCalendarRange, keepFormOnReopen })
 
 const createDefaultForm = (): FilterForm => ({
     status: '',
@@ -243,8 +281,17 @@ const memberLoading = ref(false)
 const memberSearched = ref(false)
 const selectedMember = ref<MemberOption | null>(null)
 
+// 日历往返时抽屉会先收起再弹回，这一标记用于跳过弹回时的表单重置，保留用户已填条件
+const skipNextFill = ref(false)
+
 watch(() => props.visible, (value) => {
-    if (value) fillForm(props.modelValue || {})
+    if (value) {
+        if (skipNextFill.value) {
+            skipNextFill.value = false
+            return
+        }
+        fillForm(props.modelValue || {})
+    }
 })
 
 watch(() => props.modelValue, (value) => {
@@ -423,7 +470,6 @@ const handleClose = () => {
     background: #f6f7fb;
     display: flex;
     flex-direction: column;
-    padding-top: 34rpx;
 }
 
 .order-filter__header {
@@ -503,8 +549,8 @@ const handleClose = () => {
 }
 
 .status-item--active {
-    background: #eff6ff;
-    color: #2563eb;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary);
     font-weight: 700;
 }
 
@@ -585,8 +631,8 @@ const handleClose = () => {
 }
 
 .segmented__item--active {
-    background: #eff6ff;
-    color: #2563eb;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary);
     font-weight: 700;
 }
 
@@ -623,7 +669,7 @@ const handleClose = () => {
 }
 
 .member-search__btn {
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .member-search__btn--loading {
@@ -634,7 +680,7 @@ const handleClose = () => {
     margin-top: 14rpx;
     padding: 14rpx;
     border-radius: 12rpx;
-    background: #eff6ff;
+    background: var(--hsx-primary-50);
     display: flex;
     align-items: center;
 }
@@ -670,7 +716,7 @@ const handleClose = () => {
     flex-shrink: 0;
     margin-left: 12rpx;
     font-size: 22rpx;
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .member-result {
@@ -692,7 +738,7 @@ const handleClose = () => {
 }
 
 .member-result__item--active {
-    background: #eff6ff;
+    background: var(--hsx-primary-50);
 }
 
 .member-result__info {
@@ -738,7 +784,7 @@ const handleClose = () => {
 }
 
 .footer-btn--primary {
-    background: #2563eb;
+    background: var(--hsx-primary);
     color: #fff;
     font-weight: 700;
 }

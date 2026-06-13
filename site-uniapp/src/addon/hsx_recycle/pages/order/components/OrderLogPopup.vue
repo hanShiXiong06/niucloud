@@ -71,20 +71,13 @@
             </view>
         </view>
     </u-popup>
-
-    <ImagePreviewOverlay
-        v-model:visible="previewVisible"
-        :urls="previewUrls"
-        :current="previewCurrent"
-        @change="previewCurrent = $event"
-    />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { img } from '@/utils/common'
 import { formatMoney, formatTime } from '@/addon/hsx_recycle/utils/helper'
-import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
+import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 
 const props = withDefaults(defineProps<{
     visible: boolean
@@ -101,9 +94,6 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits(['update:visible'])
 
 const show = ref(false)
-const previewVisible = ref(false)
-const previewUrls = ref<string[]>([])
-const previewCurrent = ref(0)
 
 const records = computed(() => Array.isArray(props.records) ? props.records : [])
 const type = computed(() => props.type || 'payment')
@@ -130,10 +120,7 @@ const getPaymentImages = (item: any) => {
 }
 
 const previewImages = (images: string[], index: number) => {
-    if (!images.length) return
-    previewUrls.value = images
-    previewCurrent.value = index
-    previewVisible.value = true
+    openPreview(images, index)
 }
 
 const getNoticeStatusClass = (status: number | string) => {

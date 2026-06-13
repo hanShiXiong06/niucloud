@@ -561,7 +561,7 @@ const handleSubmit = async () => {
     height: 36rpx;
     line-height: 36rpx;
     text-align: center;
-    background: #2979ff;
+    background: var(--hsx-primary);
     color: #fff;
     border-radius: 50%;
     font-size: 22rpx;
@@ -630,7 +630,7 @@ const handleSubmit = async () => {
     padding: 24rpx;
     border: 2rpx dashed #ddd;
     border-radius: 12rpx;
-    color: #2979ff;
+    color: var(--hsx-primary);
     font-size: 26rpx;
     box-sizing: border-box;
 }

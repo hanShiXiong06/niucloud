@@ -63,7 +63,7 @@ const modules = [
         short: '单',
         desc: '订单处理主链路',
         url: '/addon/hsx_recycle/pages/order/list',
-        color: 'linear-gradient(135deg, #2979ff 0%, #5aa2ff 100%)'
+        color: 'linear-gradient(135deg, var(--hsx-primary) 0%, #5aa2ff 100%)'
     },
     {
         name: '代卖订单',

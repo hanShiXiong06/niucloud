@@ -109,19 +109,49 @@
             <!-- 卖家质检结果 -->
             <div v-if="sellerCheckResult" class="ddd-result-block ddd-result-block--seller">
               <div class="ddd-result-title">卖家质检结果</div>
-              <div class="ddd-result-content">{{ sellerCheckResult }}</div>
+              <div
+                :ref="setClampRef('seller')"
+                class="ddd-result-content"
+                :class="{ 'is-clamped': !expanded.seller }"
+              >{{ sellerCheckResult }}</div>
+              <button
+                v-if="overflowing.seller"
+                type="button"
+                class="ddd-result-toggle"
+                @click="expanded.seller = !expanded.seller"
+              >{{ expanded.seller ? '收起' : '展开全部' }}</button>
             </div>
 
             <!-- 买家质检结果 -->
             <div v-if="buyerCheckResult" class="ddd-result-block ddd-result-block--buyer">
               <div class="ddd-result-title">买家质检结果</div>
-              <div class="ddd-result-content">{{ buyerCheckResult }}</div>
+              <div
+                :ref="setClampRef('buyer')"
+                class="ddd-result-content"
+                :class="{ 'is-clamped': !expanded.buyer }"
+              >{{ buyerCheckResult }}</div>
+              <button
+                v-if="overflowing.buyer"
+                type="button"
+                class="ddd-result-toggle"
+                @click="expanded.buyer = !expanded.buyer"
+              >{{ expanded.buyer ? '收起' : '展开全部' }}</button>
             </div>
 
             <!-- 扣费说明 -->
             <div v-if="deviceData.remark" class="ddd-result-block ddd-result-block--deduct">
               <div class="ddd-result-title">扣费说明</div>
-              <div class="ddd-result-content">{{ deviceData.remark }}</div>
+              <div
+                :ref="setClampRef('deduct')"
+                class="ddd-result-content"
+                :class="{ 'is-clamped': !expanded.deduct }"
+              >{{ deviceData.remark }}</div>
+              <button
+                v-if="overflowing.deduct"
+                type="button"
+                class="ddd-result-toggle"
+                @click="expanded.deduct = !expanded.deduct"
+              >{{ expanded.deduct ? '收起' : '展开全部' }}</button>
             </div>
 
             <!-- 卖家质检图片 -->
@@ -314,7 +344,7 @@
 
 
 <script setup lang="ts">
-import { ref, watch, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, computed, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { img } from '@/utils/common'
 import { adjustDeviceCost, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/recycle_order'
@@ -414,6 +444,22 @@ const checkImagesBuyerThumbArray = computed(() => {
     return (thumbs && Array.isArray(thumbs) && thumbs.length > 0) ? thumbs : checkImagesBuyerArray.value
 })
 
+// 质检结果文本折叠（内容过长时只展示前几行，超出可展开）
+type ClampKey = 'seller' | 'buyer' | 'deduct'
+const clampKeys: ClampKey[] = ['seller', 'buyer', 'deduct']
+const clampRefs: Record<ClampKey, HTMLElement | null> = { seller: null, buyer: null, deduct: null }
+const expanded = reactive<Record<ClampKey, boolean>>({ seller: false, buyer: false, deduct: false })
+const overflowing = reactive<Record<ClampKey, boolean>>({ seller: false, buyer: false, deduct: false })
+const setClampRef = (key: ClampKey) => (el: any) => { clampRefs[key] = (el as HTMLElement) || null }
+const measureClamp = async () => {
+    await nextTick()
+    for (const key of clampKeys) {
+        const el = clampRefs[key]
+        // 在折叠态下测量：真实内容高度超过可视高度即认为溢出
+        overflowing[key] = !!el && !expanded[key] && (el.scrollHeight - el.clientHeight > 1)
+    }
+}
+
 const sellerCheckResult = computed(() =>
     deviceData.value?.check_result_seller || deviceData.value?.check_result || ''
 )
@@ -435,9 +481,17 @@ const previewAfterCost = computed(() => {
 // 监听
 watch(() => props.visible, (v) => {
     dialogVisible.value = v
-    if (v) loadCostAdjustLogs()
+    if (v) {
+        loadCostAdjustLogs()
+        clampKeys.forEach(k => { expanded[k] = false })
+        measureClamp()
+    }
 })
-watch(() => props.device, (v) => { deviceData.value = v }, { deep: true })
+watch(() => props.device, (v) => {
+    deviceData.value = v
+    clampKeys.forEach(k => { expanded[k] = false })
+    measureClamp()
+}, { deep: true })
 watch(dialogVisible, (v) => {
     emit('update:visible', v)
     if (!v) emit('closed')
@@ -784,6 +838,30 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
     font-size: 11px;
     line-height: 1.6;
     white-space: pre-line;
+    word-break: break-word;
+
+    &.is-clamped {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  }
+
+  .ddd-result-toggle {
+    margin-top: 4px;
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.85;
+    transition: opacity 0.2s;
+
+    &:hover { opacity: 1; text-decoration: underline; }
   }
 
   &--seller {
@@ -791,18 +869,21 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
     border-color: #bfdbfe;
     .ddd-result-title { color: #1d4ed8; }
     .ddd-result-content { color: #1e40af; }
+    .ddd-result-toggle { color: #1d4ed8; }
   }
   &--buyer {
     background: #f0fdf4;
     border-color: #bbf7d0;
     .ddd-result-title { color: #15803d; }
     .ddd-result-content { color: #166534; }
+    .ddd-result-toggle { color: #15803d; }
   }
   &--deduct {
     background: #fef2f2;
     border-color: #fecaca;
     .ddd-result-title { color: #b91c1c; }
     .ddd-result-content { color: #991b1b; }
+    .ddd-result-toggle { color: #b91c1c; }
   }
 }
 

@@ -21,7 +21,7 @@
                         v-for="item in statusTabs"
                         :key="item.value"
                         class="mr-[28rpx] text-[24rpx]"
-                        :style="currentStatus === item.value ? 'color: #2979ff; font-weight: 700;' : 'color: #666;'"
+                        :style="currentStatus === item.value ? 'color: var(--hsx-primary); font-weight: 700;' : 'color: #666;'"
                         @click="switchStatus(item.value)"
                     >
                         {{ item.label }}
@@ -161,7 +161,7 @@ const getStatusClass = (status: string) => {
     if (status === 'cancelled') return 'text-[#909399]'
     if (status === 'exception') return 'text-[#d03050]'
     if (status === 'in_transit') return 'text-[#f0a020]'
-    return 'text-[#2979ff]'
+    return 'text-[var(--hsx-primary)]'
 }
 
 onShow(async () => {

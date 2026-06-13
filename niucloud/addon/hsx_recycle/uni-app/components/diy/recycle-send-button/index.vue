@@ -15,7 +15,7 @@
                     class="button-icon button-icon-left"
                     :style="iconStyle"
                 >
-                    📦
+                    
                 </view>
                 
                 <!-- 按钮文字 -->

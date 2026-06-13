@@ -179,20 +179,13 @@
             </view>
         </view>
     </u-popup>
-
-    <ImagePreviewOverlay
-        v-model:visible="previewVisible"
-        :urls="previewUrls"
-        :current="previewCurrent"
-        @change="previewCurrent = $event"
-    />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { devicePaymentConfirm, getMerchantPayInfo, paymentConfirm } from '@/addon/hsx_recycle/api/order'
 import { img } from '@/utils/common'
-import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
+import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import RecycleImageUploader from '@/addon/hsx_recycle/components/RecycleImageUploader.vue'
 import { formatMoney } from '@/addon/hsx_recycle/utils/helper'
 import { getDeviceSettlementAmount, isConsignedDevice } from '@/addon/hsx_recycle/utils/device'
@@ -222,9 +215,6 @@ const customAccount = ref('')
 const selectedDeviceIds = ref<Array<number | string>>([])
 const paymentImages = ref('')
 const imageUploading = ref(false)
-const previewVisible = ref(false)
-const previewUrls = ref<string[]>([])
-const previewCurrent = ref(0)
 
 const devices = computed(() => Array.isArray(props.devices) ? props.devices : [])
 const isDeviceMode = computed(() => (props.orderData?.flow_mode || props.orderData?.payment_mode) === 'device')
@@ -387,10 +377,7 @@ const toggleDevice = (deviceId: number | string) => {
 }
 
 const previewSingleImage = (url: string) => {
-    if (!url) return
-    previewUrls.value = [url]
-    previewCurrent.value = 0
-    previewVisible.value = true
+    openPreview([url], 0)
 }
 
 const handleClose = () => {
@@ -449,7 +436,7 @@ const getDevicePaymentLabel = (device: any) => {
 
 .summary-card {
     padding: 22rpx 24rpx;
-    background: linear-gradient(135deg, #eff6ff, #eef2ff);
+    background: linear-gradient(135deg, var(--hsx-primary-50), #eef2ff);
 }
 
 .summary-row {
@@ -527,9 +514,9 @@ const getDevicePaymentLabel = (device: any) => {
 }
 
 .method-chip--active {
-    background: #eff6ff;
-    color: #2563eb;
-    border-color: #93c5fd;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary);
+    border-color: var(--hsx-primary-300);
 }
 
 .method-detail,
@@ -589,8 +576,8 @@ const getDevicePaymentLabel = (device: any) => {
 }
 
 .device-card--active {
-    background: #eff6ff;
-    box-shadow: inset 0 0 0 2rpx #93c5fd;
+    background: var(--hsx-primary-50);
+    box-shadow: inset 0 0 0 2rpx var(--hsx-primary-300);
 }
 
 .device-card--muted {
@@ -622,8 +609,8 @@ const getDevicePaymentLabel = (device: any) => {
 }
 
 .selector--active {
-    border-color: #2563eb;
-    background: #2563eb;
+    border-color: var(--hsx-primary);
+    background: var(--hsx-primary);
     box-shadow: inset 0 0 0 6rpx #fff;
 }
 

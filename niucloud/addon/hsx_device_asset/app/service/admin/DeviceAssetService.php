@@ -9,8 +9,10 @@ use addon\hsx_device_asset\app\model\DeviceAssetMedia;
 use addon\hsx_device_asset\app\model\DeviceAssetOperationLog;
 use addon\hsx_device_asset\app\model\DeviceAssetPhotoTask;
 use addon\hsx_device_asset\app\model\DeviceAssetPriceOrder;
+use addon\hsx_device_asset\app\model\DeviceAssetLocationAssign;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use app\model\sys\SysUserRole;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -31,6 +33,36 @@ class DeviceAssetService extends BaseAdminService
     /**
      * 回收完成后可进入资产中台的设备池。
      */
+    /**
+     * 是否可查看全部（管理员）。属 is_admin 组的用户看全部，其余员工只看自己负责库位。
+     * 说明：v1 以「is_admin 组」为闸门；如需更细粒度（按角色/权限节点放行）后续可扩展。
+     */
+    protected function canViewAll(): bool
+    {
+        return SysUserRole::where([
+            ['site_id', '=', $this->site_id],
+            ['uid', '=', $this->uid],
+            ['is_admin', '=', 1],
+        ])->count() > 0;
+    }
+
+    /**
+     * 当前用户的库位过滤范围。
+     * null = 不限制（管理员看全部）；[-1] = 无任何负责库位（看不到任何设备）；否则为负责的库位ID集合。
+     */
+    protected function scopedLocationIds(): ?array
+    {
+        if ($this->canViewAll()) {
+            return null;
+        }
+        $ids = DeviceAssetLocationAssign::where([
+            ['site_id', '=', $this->site_id],
+            ['uid', '=', $this->uid],
+        ])->column('location_id');
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        return empty($ids) ? [-1] : $ids;
+    }
+
     public function getImportableDevices(array $where = []): array
     {
         $query = (new RecycleDevice())
@@ -75,6 +107,12 @@ class DeviceAssetService extends BaseAdminService
             $query->whereNotIn('id', $importedDeviceIds);
         }
 
+        // 员工只看自己负责库位的待入库设备（按回收定价时选的目标库位）；管理员看全部
+        $scope = $this->scopedLocationIds();
+        if ($scope !== null) {
+            $query->whereIn('target_location_id', $scope);
+        }
+
         return $this->pageQuery($query);
     }
 
@@ -113,18 +151,35 @@ class DeviceAssetService extends BaseAdminService
             $query->whereBetweenTime('create_at', $where['create_at'][0], $where['create_at'][1]);
         }
 
+        // 员工只看自己负责库位的资产；管理员看全部
+        $scope = $this->scopedLocationIds();
+        if ($scope !== null) {
+            $query->whereIn('location_id', $scope);
+        }
+
         return $this->pageQuery($query);
     }
 
     public function getTaskStats(): array
     {
+        $scope = $this->scopedLocationIds();
+
         $assetQuery = (new DeviceAssetItem())->where([["site_id", "=", $this->site_id]]);
-        $importedDeviceIds = (clone $assetQuery)->column("device_id");
+        if ($scope !== null) {
+            $assetQuery->whereIn('location_id', $scope);
+        }
+        // 池子排除「已导入」用全量资产的 device_id（不受库位范围影响），避免已入库设备漏排
+        $importedDeviceIds = (new DeviceAssetItem())
+            ->where([["site_id", "=", $this->site_id]])
+            ->column("device_id");
         $poolQuery = (new RecycleDevice())
             ->where([["site_id", "=", $this->site_id]])
             ->whereIn("status", $this->allowedRecycleStatuses([]));
         if (!empty($importedDeviceIds)) {
             $poolQuery->whereNotIn("id", $importedDeviceIds);
+        }
+        if ($scope !== null) {
+            $poolQuery->whereIn('target_location_id', $scope);
         }
 
         return [
@@ -149,7 +204,7 @@ class DeviceAssetService extends BaseAdminService
         if (empty($asset)) {
             throw new CommonException('资产不存在');
         }
-        return $asset->toArray();
+        return  $asset->toArray();
     }
 
     /**
@@ -459,14 +514,15 @@ class DeviceAssetService extends BaseAdminService
     public function confirmPhotos(int $assetId): array
     {
         $asset = $this->getAsset($assetId);
-        $approvedCount = (new DeviceAssetMedia())->where([
+        // 不再依赖「复检通过」：拍照员当场删掉糊图，留下的(未删除)图片即视为可用，至少一张即可完成拍照
+        $imageCount = (new DeviceAssetMedia())->where([
             ['site_id', '=', $this->site_id],
             ['asset_id', '=', $assetId],
             ['media_type', '=', 'image'],
-            ['status', '=', DeviceAssetDict::MEDIA_STATUS_APPROVED],
+            ['status', '<>', DeviceAssetDict::MEDIA_STATUS_REJECTED],
         ])->count();
-        if ($approvedCount <= 0) {
-            throw new CommonException('请至少保留一张复检通过的图片');
+        if ($imageCount <= 0) {
+            throw new CommonException('请至少拍并保留一张图片');
         }
 
         Db::startTrans();
@@ -487,7 +543,7 @@ class DeviceAssetService extends BaseAdminService
             ]);
             $this->ensurePriceOrder($asset);
             $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_PHOTO_CONFIRM, [
-                'approved_count' => $approvedCount,
+                'image_count' => $imageCount,
             ]);
             Db::commit();
         } catch (\Throwable $e) {
@@ -555,7 +611,7 @@ class DeviceAssetService extends BaseAdminService
                 'device_id' => (int)$asset->device_id,
                 'operator' => ['id' => $this->uid, 'name' => $this->username ?: ''],
                 'payload' => [
-                    'erp_asset_id' => (int)($asset->ext_json['erp_asset_id'] ?? 0),
+                    'erp_asset_id' => (int)(((array)$asset->ext_json)['erp_asset_id'] ?? 0),
                     'sale_price' => $priceData['sale_price'],
                     'peer_price' => $priceData['peer_price'],
                     'min_price' => $priceData['min_price'],
@@ -568,6 +624,31 @@ class DeviceAssetService extends BaseAdminService
             throw new CommonException($e->getMessage());
         }
         event('DeviceAssetPriceCompleted', $completedEvent);
+
+        return $this->getInfo($assetId);
+    }
+
+    /**
+     * 设置 / 修改资产的库位（物理库位入库才定，中台可随时归位与改位）。
+     * 库位是责任过滤的依据：归到某库位后，负责该库位的员工即可在「我的待办」看到。
+     */
+    public function setLocation(int $assetId, array $data): array
+    {
+        $asset = $this->getAsset($assetId);
+        $locationId = (int)($data['location_id'] ?? 0);
+        if ($locationId <= 0) {
+            throw new CommonException('请选择库位');
+        }
+
+        $payload = [
+            'warehouse_id' => (int)($data['warehouse_id'] ?? 0),
+            'warehouse_name' => (string)($data['warehouse_name'] ?? ''),
+            'location_id' => $locationId,
+            'location_name' => (string)($data['location_name'] ?? ''),
+        ];
+        $asset->save($payload);
+
+        $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_SET_LOCATION, $payload);
 
         return $this->getInfo($assetId);
     }
@@ -693,6 +774,11 @@ class DeviceAssetService extends BaseAdminService
             'sn' => (string)($device['sn'] ?? ''),
             'model' => (string)($device['model'] ?? ''),
             'category_id' => (int)($device['category_id'] ?? 0),
+            // 目标仓库/库位来自回收定价时的选择，带过来作为中台的库位归属与责任过滤依据
+            'warehouse_id' => (int)($device['target_warehouse_id'] ?? 0),
+            'warehouse_name' => (string)($device['target_warehouse_name'] ?? ''),
+            'location_id' => (int)($device['target_location_id'] ?? 0),
+            'location_name' => (string)($device['target_location_name'] ?? ''),
             'source_status' => (string)($device['status'] ?? ''),
             'recycle_final_price' => round((float)($device['final_price'] ?? 0), 2),
             'check_summary' => $this->buildCheckSummary($device),
@@ -731,7 +817,6 @@ class DeviceAssetService extends BaseAdminService
     {
         $summary = [];
         foreach ([
-            'check_result' => '内部质检',
             'check_result_seller' => '卖家质检',
             'check_result_buyer' => '买家质检',
         ] as $field => $label) {
@@ -742,6 +827,10 @@ class DeviceAssetService extends BaseAdminService
             $decoded = $this->normalizeJson($value);
             if (!empty($decoded) && !isset($decoded['raw'])) {
                 foreach ($decoded as $key => $item) {
+                    // 保存时显式剔除「内部质检」，不写入 check_summary
+                    if ((string)$key === '内部质检') {
+                        continue;
+                    }
                     if ($item !== '' && $item !== null) {
                         $summary[(string)$key] = is_array($item) ? json_encode($item, JSON_UNESCAPED_UNICODE) : (string)$item;
                     }

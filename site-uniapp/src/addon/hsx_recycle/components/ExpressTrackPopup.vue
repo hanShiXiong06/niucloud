@@ -330,7 +330,7 @@ const loadTrack = async () => {
 }
 
 .track-popup__summary-icon {
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 24rpx;
 }
 
@@ -378,7 +378,7 @@ const loadTrack = async () => {
 }
 
 .track-timeline__dot--active {
-    background: #2563eb;
+    background: var(--hsx-primary);
     box-shadow: 0 0 0 8rpx rgba(37, 99, 235, 0.12);
 }
 
@@ -409,7 +409,7 @@ const loadTrack = async () => {
 }
 
 .track-timeline__phone {
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .track-popup__footer {

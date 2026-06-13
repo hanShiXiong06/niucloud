@@ -72,6 +72,13 @@
             :default-page-size="15"
             :paging-style="pagingStyle"
         >
+            <template #empty>
+                <RecycleEmptyState
+                    title="暂无回收订单"
+                    description="客户下单或扫码签收后，订单会显示在这里"
+                    icon="document"
+                />
+            </template>
             <view class="list-content">
                 <view v-if="dashboardFilterTitle" class="dashboard-filter-card">
                     <view class="dashboard-filter-card__main">
@@ -194,11 +201,26 @@
         </z-paging>
 
         <OrderFilterDrawer
+            ref="filterDrawerRef"
             v-model:visible="filterVisible"
             v-model="filterParams"
             :status-options="filterStatusOptions"
             @confirm="onFilterConfirm"
             @reset="onFilterReset"
+            @open-calendar="onOpenCalendar"
+        />
+
+        <!-- 时间范围日历：挂在页面层（抽屉外），打开时抽屉先收起，日历独占便于全屏选择 -->
+        <u-calendar
+            :show="calendarShow"
+            mode="range"
+            :title="calendarTitle"
+            :defaultDate="calendarDefault"
+            :minDate="calendarMinDate"
+            :maxDate="calendarMaxDate"
+            :monthNum="12"
+            @confirm="onCalendarConfirm"
+            @close="onCalendarClose"
         />
     </view>
 </template>
@@ -211,6 +233,7 @@ import { redirect } from '@/utils/common'
 import { copyOrderNo, copyIMEI } from '@/addon/hsx_recycle/utils/clipboard'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
+import RecycleEmptyState from '@/addon/hsx_recycle/components/RecycleEmptyState.vue'
 import OrderFilterDrawer from './components/OrderFilterDrawer.vue'
 import { getDeviceListPriceMeta, isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
@@ -224,10 +247,60 @@ const currentStatus = ref('')
 const filterVisible = ref(false)
 const filterParams = ref<Record<string, any>>({})
 const needRefresh = ref(false) // 标记是否需要刷新
+
+// 时间范围日历（挂在页面层，供筛选抽屉调用）
+const filterDrawerRef = ref<any>(null)
+const calendarShow = ref(false)
+const calendarTitle = ref('选择日期范围')
+const calendarKey = ref('')
+const calendarDefault = ref<string[]>([])
+const formatYmd = (ts: number) => {
+    const d = new Date(ts)
+    return `${ d.getFullYear() }-${ String(d.getMonth() + 1).padStart(2, '0') }-${ String(d.getDate()).padStart(2, '0') }`
+}
+const todayStr = formatYmd(Date.now())
+const calendarMaxDate = todayStr                                   // 今天，禁选未来
+// 最近 12 个月（含本月）。范围越短，小程序里滚动定位越可靠
+const calendarMinDate = (() => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - 11)
+    d.setDate(1)
+    return formatYmd(d.getTime())
+})()
+
+const onOpenCalendar = (payload: { key: string, title: string, start: string, end: string }) => {
+    calendarKey.value = payload.key
+    calendarTitle.value = payload.title ? `${ payload.title }范围` : '选择日期范围'
+    // 传有效 defaultDate（已选范围或今天），让日历滚到对应月份而非停在最早月
+    calendarDefault.value = (payload.start && payload.end) ? [payload.start, payload.end] : [todayStr]
+    // 先收起抽屉，日历独占（避免被抽屉遮罩拦截点击、被抽屉宽度裁切）
+    filterVisible.value = false
+    calendarShow.value = true
+}
+
+const onCalendarConfirm = (selected: string[]) => {
+    const dates = (selected || []).filter(Boolean)
+    if (dates.length) {
+        const start = dates[0]
+        const end = dates[dates.length - 1]
+        filterDrawerRef.value?.applyCalendarRange(calendarKey.value, start, end)
+    } else {
+        filterDrawerRef.value?.keepFormOnReopen()
+    }
+    calendarShow.value = false
+    filterVisible.value = true // 弹回抽屉（已填条件保留）
+}
+
+const onCalendarClose = () => {
+    calendarShow.value = false
+    filterDrawerRef.value?.keepFormOnReopen()
+    filterVisible.value = true // 取消也弹回抽屉
+}
 const initialized = ref(false)
 const lastStatusCounts = ref<Record<string, any>>({})
 
-const { pageHeaderStyle, pagingStyle } = useRecycleListHeader()
+// 胶囊筛选行高度上调，让设备列表落在胶囊按钮下方、留出间距
+const { pageHeaderStyle, pagingStyle } = useRecycleListHeader(104)
 
 const statusList = ref<Array<{ label: string, value: string, count?: number }>>([
     { label: '全部', value: '', count: 0 }
@@ -695,7 +768,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     margin-left: 10rpx;
     border-radius: 26rpx;
     background: #e8eef8;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 25rpx;
     display: flex;
     align-items: center;
@@ -769,7 +842,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     display: flex;
     align-items: center;
     gap: 18rpx;
-    padding: 16rpx 20rpx 18rpx;
+    padding: 24rpx 20rpx 20rpx;
     white-space: nowrap;
 }
 
@@ -785,8 +858,8 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 }
 
 .status-chip--active {
-    background: #eff6ff;
-    color: #2563eb;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary);
 }
 
 .status-chip__count {
@@ -808,7 +881,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     margin-bottom: 14rpx;
     padding: 18rpx 20rpx;
     border-radius: 14rpx;
-    background: #eff6ff;
+    background: var(--hsx-primary-50);
     border: 1rpx solid rgba(37, 99, 235, 0.18);
     display: flex;
     align-items: center;
@@ -825,7 +898,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 
 .dashboard-filter-card__label {
     font-size: 20rpx;
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .dashboard-filter-card__title {
@@ -848,7 +921,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     padding: 0 22rpx;
     border-radius: 26rpx;
     background: #fff;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 24rpx;
 }
 
@@ -892,7 +965,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 }
 
 .is-primary {
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .is-warning {
@@ -929,7 +1002,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 24rpx;
     font-weight: 700;
 }
@@ -1006,7 +1079,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     flex-shrink: 0;
     font-size: 28rpx;
     font-weight: 800;
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .flow-progress {
@@ -1020,7 +1093,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 .flow-progress__bar {
     height: 100%;
     border-radius: 999rpx;
-    background: #2563eb;
+    background: var(--hsx-primary);
 }
 
 .summary-strip {
@@ -1039,7 +1112,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 }
 
 .summary-node--important {
-    background: #eff6ff;
+    background: var(--hsx-primary-50);
 }
 
 .summary-node__label {
@@ -1126,7 +1199,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 
 .device-preview__copy {
     flex-shrink: 0;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 22rpx;
 }
 
@@ -1135,7 +1208,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 }
 
 .device-preview__price--info {
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .device-preview__price--muted {
@@ -1160,7 +1233,7 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 .device-preview__more {
     margin-top: 4rpx;
     font-size: 21rpx;
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .order-card__actions {
@@ -1183,8 +1256,8 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 }
 
 .action-btn--primary {
-    background: #2563eb;
-    border-color: #2563eb;
+    background: var(--hsx-primary);
+    border-color: var(--hsx-primary);
     color: #fff;
 }
 

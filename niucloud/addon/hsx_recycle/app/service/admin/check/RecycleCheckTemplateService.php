@@ -7,6 +7,7 @@ use addon\hsx_recycle\app\model\check\RecycleCheckField;
 use addon\hsx_recycle\app\model\check\RecycleCheckGroup;
 use addon\hsx_recycle\app\model\check\RecycleCheckOption;
 use addon\hsx_recycle\app\model\check\RecycleCheckTemplate;
+use addon\hsx_recycle\app\service\admin\template\RecycleTemplateBindingService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -32,21 +33,107 @@ class RecycleCheckTemplateService extends BaseAdminService
     {
         $where['site_id'] = $this->site_id;
         $this->ensureSingleDefault();
+        // 导入模板名以下划线连接,放宽搜索词空格为通配
+        if (!empty($where['keyword'])) {
+            $where['keyword'] = str_replace(' ', '%', trim((string)$where['keyword']));
+        }
         $query = $this->templateModel
-            ->withSearch(['site_id', 'status', 'scene', 'keyword'], $where)
-            ->order('sort asc,id desc');
+            ->withSearch(['site_id', 'status', 'scene', 'keyword'], $where);
+        $this->applySourceFilter($query, (string)($where['source'] ?? ''));
+        // 管理页下钻:点到哪个节点就按该节点子树过滤
+        $this->applyCategoryFilter($query, (int)($where['category_id'] ?? 0), (string)($where['category_match'] ?? 'subtree'));
+        $query->orderRaw("is_default desc, scene = 'pjt' asc, sort asc, id desc");
         return $this->pageQuery($query);
+    }
+
+    /**
+     * 按来源过滤:manual=手工模板(非pjt),pjt=拍机堂导入
+     */
+    private function applySourceFilter($query, string $source): void
+    {
+        if ($source === 'manual') {
+            $query->where('scene', '<>', 'pjt');
+        } elseif ($source === 'pjt') {
+            $query->where('scene', '=', 'pjt');
+        }
+    }
+
+    /**
+     * 按设备分类节点过滤:只保留该节点范围内绑定过的模板;手工模板始终保留
+     * @param string $match root=按顶级大类(验机弹窗,便于切换同类型号);subtree=按选中节点子树(管理页下钻)
+     */
+    private function applyCategoryFilter($query, int $categoryId, string $match = 'root'): void
+    {
+        if ($categoryId <= 0) {
+            return;
+        }
+        $prefix = $this->getCategoryPathPrefix($categoryId, $match);
+        if ($prefix === '') {
+            return;
+        }
+        $siteId = $this->site_id;
+        $query->where(function ($q) use ($prefix, $siteId) {
+            $q->whereIn('id', function ($sub) use ($prefix, $siteId) {
+                $sub->name('recycle_template_binding')->alias('b')
+                    ->join('recycle_device_model_dict d', 'd.id = b.target_id AND d.site_id = b.site_id')
+                    ->where([
+                        ['b.site_id', '=', $siteId],
+                        ['b.target_type', '=', 'model_dict'],
+                        ['b.status', '=', 1],
+                        ['b.check_template_id', '>', 0],
+                    ])
+                    ->where(function ($p) use ($prefix) {
+                        $p->whereLike('d.model_full_name', $prefix . '/%')
+                            ->whereOr('d.model_full_name', '=', $prefix);
+                    })
+                    ->field('b.check_template_id');
+            })->whereOr('scene', '<>', 'pjt');
+        });
     }
 
     public function all(array $where = []): array
     {
         $where['site_id'] = $this->site_id;
         $this->ensureSingleDefault();
-        return $this->templateModel
-            ->withSearch(['site_id', 'status', 'scene', 'keyword'], $where)
-            ->order('sort asc,id desc')
+        // 导入模板名以下划线连接,把搜索词中的空格放宽为通配,便于"iPhone 17"式输入
+        if (!empty($where['keyword'])) {
+            $where['keyword'] = str_replace(' ', '%', trim((string)$where['keyword']));
+        }
+        // 模板可达上万条(批量导入),下拉场景必须限量,配合 keyword 远程搜索使用
+        $limit = (int)($where['limit'] ?? 0);
+        if ($limit <= 0 || $limit > 200) {
+            $limit = 50;
+        }
+        $query = $this->templateModel
+            ->withSearch(['site_id', 'status', 'scene', 'keyword'], $where);
+        $this->applySourceFilter($query, (string)($where['source'] ?? ''));
+        // 传入设备分类节点时,只取该顶级分类下绑定过的模板;手工模板(非pjt)不受限
+        $this->applyCategoryFilter($query, (int)($where['category_id'] ?? 0));
+
+        return $query
+            ->orderRaw("is_default desc, scene = 'pjt' asc, sort asc, id desc")
+            ->limit($limit)
             ->select()
             ->toArray();
+    }
+
+    /**
+     * 取分类节点的路径前缀:root=顶级大类名(首段),subtree=节点完整路径
+     */
+    private function getCategoryPathPrefix(int $nodeId, string $match): string
+    {
+        $node = (new \addon\hsx_recycle\app\model\device\RecycleDeviceModelDict())->where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $nodeId],
+        ])->field('node_name,model_full_name')->findOrEmpty()->toArray();
+        if (empty($node)) {
+            return '';
+        }
+        $path = trim((string)($node['model_full_name'] ?? ''));
+        if ($path === '') {
+            return trim((string)$node['node_name']);
+        }
+        return $match === 'subtree' ? $path : trim(explode('/', $path)[0]);
     }
 
     public function info(int $id): array
@@ -323,9 +410,72 @@ class RecycleCheckTemplateService extends BaseAdminService
         return true;
     }
 
+    /**
+     * 设置选项默认选中:单选字段(radio/select)互斥,只能有一个默认;多选(checkbox)可多个
+     */
+    public function setOptionDefault(int $optionId, int $isDefault): bool
+    {
+        $option = $this->optionModel->where([['id', '=', $optionId], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
+        if (empty($option)) {
+            throw new CommonException('质检选项不存在');
+        }
+        $field = $this->fieldModel->where([['id', '=', (int)$option['field_id']], ['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
+        if (empty($field)) {
+            throw new CommonException('质检字段不存在');
+        }
+        $isDefault = $isDefault ? 1 : 0;
+        $isSingle = in_array($field['component'], ['radio', 'select'], true) || $field['selection_mode'] === 'single';
+
+        Db::transaction(function () use ($option, $field, $isDefault, $isSingle) {
+            // 单选设默认时先清掉同字段其它默认,保证互斥
+            if ($isDefault && $isSingle) {
+                $this->optionModel->where([
+                    ['site_id', '=', $this->site_id],
+                    ['field_id', '=', (int)$option['field_id']],
+                ])->update(['is_default' => 0, 'update_at' => time()]);
+            }
+            $this->optionModel->where('id', (int)$option['id'])->update([
+                'is_default' => $isDefault,
+                'update_at' => time(),
+            ]);
+        });
+        $this->touchTemplate((int)$field['template_id']);
+        return true;
+    }
+
     public function schema(array $where = []): array
     {
         $templateId = (int)($where['template_id'] ?? 0);
+        $resolve = null;
+
+        // 未显式指定模板时，按设备/分类节点解析绑定模板；解析失败静默落入默认兜底
+        if ($templateId <= 0) {
+            $deviceId = (int)($where['device_id'] ?? 0);
+            $categoryId = (int)($where['category_id'] ?? 0);
+            if ($deviceId > 0 || $categoryId > 0) {
+                try {
+                    $bindingService = new RecycleTemplateBindingService();
+                    $resolve = $deviceId > 0
+                        ? $bindingService->resolveByDeviceId($deviceId)
+                        : $bindingService->resolveByTarget('model_dict', $categoryId);
+                } catch (\Throwable $e) {
+                    $resolve = null;
+                }
+                if (!empty($resolve['matched']) && (int)($resolve['check_template_id'] ?? 0) > 0) {
+                    $resolvedTemplate = $this->templateModel->where([
+                        ['site_id', '=', $this->site_id],
+                        ['id', '=', (int)$resolve['check_template_id']],
+                        ['status', '=', 1],
+                    ])->findOrEmpty()->toArray();
+                    if (!empty($resolvedTemplate)) {
+                        $templateId = (int)$resolvedTemplate['id'];
+                    } else {
+                        $resolve['matched'] = false;
+                    }
+                }
+            }
+        }
+
         if ($templateId > 0) {
             $template = $this->info($templateId);
         } else {
@@ -378,6 +528,13 @@ class RecycleCheckTemplateService extends BaseAdminService
         return [
             'template' => $template,
             'groups' => $groups,
+            'resolve' => [
+                'matched' => !empty($resolve['matched']),
+                'source_type' => (string)($resolve['source_type'] ?? ''),
+                'source_name' => (string)($resolve['source_name'] ?? ''),
+                'template_id' => (int)$template['id'],
+                'template_name' => (string)($template['template_name'] ?? ''),
+            ],
         ];
     }
 

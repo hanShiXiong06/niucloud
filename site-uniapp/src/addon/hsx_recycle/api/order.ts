@@ -109,6 +109,16 @@ export function getRefurbishmentOptions() {
     return request.get('recycle/recycle_device/refurbishment_options')
 }
 
+// 销售去向选项（含 ERP 仓库/库位、是否连接 ERP），与 PC 端 PriceFormDialog 一致
+export function getSaleDestinationOptions() {
+    return request.get('recycle/recycle_device/sale_destination_options')
+}
+
+// IMEI 信息查询（质检/签收时校验有效性、带出机型信息）
+export function getImeiInfo(imei: string) {
+    return request.get(`recycle/recycle_device/imei_info/${imei}`)
+}
+
 export function batchRecycleDevices(data: Record<string, any>) {
     return request.post('recycle/recycle_device/batch_recycle', data)
 }

@@ -321,7 +321,7 @@ onLoad((option: any) => {
 }
 
 .header-card {
-    background: linear-gradient(135deg, #2979ff 0%, #4c94ff 100%);
+    background: linear-gradient(135deg, var(--hsx-primary) 0%, #4c94ff 100%);
     border-radius: 20rpx;
     padding: 30rpx;
 }
@@ -393,8 +393,8 @@ onLoad((option: any) => {
 }
 
 .action-footer__btn--primary {
-    background: #2563eb;
-    border-color: #2563eb;
+    background: var(--hsx-primary);
+    border-color: var(--hsx-primary);
     color: #fff;
 }
 

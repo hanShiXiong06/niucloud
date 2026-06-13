@@ -10,7 +10,7 @@
             <view class="recycle-page-header__center" :style="centerStyle">
                 <slot>
                     <text class="recycle-page-header__title">{{ title }}</text>
-                    <text v-if="subtitle" class="recycle-page-header__subtitle">{{ subtitle }}</text>
+                    <text v-if="subtitleText" class="recycle-page-header__subtitle">{{ subtitleText }}</text>
                 </slot>
             </view>
 
@@ -28,16 +28,22 @@ import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
 
 const props = withDefaults(defineProps<{
     title: string
+    /** 副标题。与 admin PageHeader 的 description 等价，二者任一传入即可。 */
     subtitle?: string
+    /** description 为 subtitle 的别名，便于与 PC 管理端 PageHeader 保持 API 一致。 */
+    description?: string
     showBack?: boolean
     fill?: boolean
     compact?: boolean
 }>(), {
     subtitle: '',
+    description: '',
     showBack: true,
     fill: true,
     compact: false
 })
+
+const subtitleText = computed(() => props.subtitle || props.description)
 
 const navbarMetrics = getRecycleNavbarMetrics()
 const navStatusTopPx = navbarMetrics.statusTopPx
@@ -93,13 +99,13 @@ defineExpose({
     right: 0;
     top: 0;
     z-index: 999;
-    background: #2563eb;
+    background: var(--hsx-primary);
     color: #fff;
     box-shadow: 0 8rpx 20rpx rgba(31, 41, 55, 0.14);
 }
 
 .recycle-page-header.compact {
-    background: #2563eb;
+    background: var(--hsx-primary);
 }
 
 .recycle-page-header__content {

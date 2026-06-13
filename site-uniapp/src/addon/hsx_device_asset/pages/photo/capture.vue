@@ -34,7 +34,7 @@
                     @click="openScene(scene.key)"
                 >
                     <view class="scene-card__icon">
-                        <u-icon :name="scene.icon" size="26" :color="sceneDone(scene.key) ? '#16a34a' : '#2563eb'"></u-icon>
+                        <u-icon :name="scene.icon" size="26" :color="sceneDone(scene.key) ? '#16a34a' : 'var(--hsx-primary)'"></u-icon>
                     </view>
                     <view class="scene-card__name">{{ scene.label }}</view>
                     <view class="scene-card__desc">{{ sceneHint(scene.key) }}</view>
@@ -60,6 +60,9 @@
                         <image :src="item.url" mode="aspectFill" />
                         <view class="gallery-item__label">{{ sceneLabel(item.scene) }}</view>
                         <view v-if="item.pending" class="gallery-item__badge">待回传</view>
+                        <view class="gallery-item__del" @click.stop="removeGalleryItem(item)">
+                            <text class="nc-iconfont nc-icon-cuohaoV6xx1"></text>
+                        </view>
                     </view>
                 </view>
             </scroll-view>
@@ -69,8 +72,8 @@
         <view class="footer-safe"></view>
         <view class="footer-actions">
             <u-button @click="openScene(nextSceneKey)" :customStyle="{ flex: 1 }">继续拍</u-button>
-            <u-button type="primary" :loading="saveLoading || uploading" :disabled="!pendingImages.length" @click="handleSave" :customStyle="{ flex: 2 }">
-                保存并回传
+            <u-button type="primary" :loading="saveLoading || uploading || reviewLoading" :disabled="primaryDisabled" @click="handlePrimary" :customStyle="{ flex: 2 }">
+                {{ primaryText }}
             </u-button>
         </view>
 
@@ -130,7 +133,7 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { img } from '@/utils/common'
 import { uploadImage } from '@/app/api/system'
-import { createPhotoTask, getAssetInfo, saveAssetMedia } from '@/addon/hsx_device_asset/api/device_asset'
+import { confirmAssetPhotos, createPhotoTask, getAssetInfo, reviewAssetMedia, saveAssetMedia } from '@/addon/hsx_device_asset/api/device_asset'
 
 type SceneKey = 'front' | 'back' | 'side' | 'flaw'
 
@@ -140,6 +143,7 @@ const pendingImages = ref<Array<{ url: string; path: string; scene: SceneKey }>>
 const loading = ref(false)
 const uploading = ref(false)
 const saveLoading = ref(false)
+const reviewLoading = ref(false)
 const scenePopupVisible = ref(false)
 const checkPopupVisible = ref(false)
 const activeScene = ref<SceneKey>('front')
@@ -164,22 +168,22 @@ onLoad((options: any) => {
 const uploadedImages = computed(() => {
     return (asset.value.media || [])
         .filter((item: any) => item.media_type !== 'video' && item.status !== 'rejected')
-        .map((item: any) => ({ url: img(item.url), rawUrl: item.url, scene: normalizeScene(item.scene), pending: false }))
+        .map((item: any) => ({ id: Number(item.id), url: img(item.url), rawUrl: item.url, scene: normalizeScene(item.scene), pending: false }))
 })
 
 const galleryImages = computed(() => [
     ...uploadedImages.value,
-    ...pendingImages.value.map(item => ({ url: item.url, rawUrl: item.path, scene: item.scene, pending: true }))
+    ...pendingImages.value.map(item => ({ id: 0, url: item.url, rawUrl: item.path, scene: item.scene, pending: true }))
 ])
 
 const flowSteps = computed(() => {
     const hasMedia = uploadedImages.value.length + pendingImages.value.length > 0
     const returned = uploadedImages.value.length > 0 && !pendingImages.value.length
-    const reviewed = asset.value.photo_status === 'approved'
+    const done = asset.value.photo_status === 'approved'
     return [
         { key: 'capture', index: 1, title: '拍摄', done: hasMedia, active: !hasMedia },
-        { key: 'return', index: 2, title: '回传', done: returned || reviewed, active: hasMedia && !returned && !reviewed },
-        { key: 'review', index: 3, title: '复检', done: reviewed, active: returned && !reviewed }
+        { key: 'return', index: 2, title: '回传', done: returned || done, active: hasMedia && !returned && !done },
+        { key: 'done', index: 3, title: '完成', done: done, active: returned && !done }
     ]
 })
 
@@ -191,7 +195,6 @@ const nextSceneKey = computed<SceneKey>(() => shotScenes.find(item => !sceneDone
 const checkEntries = computed(() => {
     const device = asset.value?.recycle_device || asset.value?.recycleDevice || {}
     const data = {
-        ...normalizeCheckResult(device.check_result || '', '内部质检'),
         ...normalizeCheckResult(device.check_result_seller || '', '卖家质检'),
         ...normalizeCheckResult(device.check_result_buyer || '', '买家质检'),
         ...normalizeObject(asset.value?.check_summary || {})
@@ -205,6 +208,65 @@ const checkEntries = computed(() => {
             value: typeof value === 'object' ? JSON.stringify(value) : String(value)
         }))
 })
+
+// 拍照员当场删糊图、留好图，传完一键「拍照完成」直接进待定价（不需要单独复检审核）
+const isDone = computed(() => asset.value.photo_status === 'approved')
+const primaryText = computed(() => {
+    if (pendingImages.value.length) return '保存并回传'
+    if (isDone.value) return '已完成拍照'
+    return '拍照完成'
+})
+const primaryDisabled = computed(() => {
+    if (pendingImages.value.length) return false
+    if (isDone.value) return true
+    return uploadedImages.value.length === 0
+})
+const handlePrimary = () => {
+    if (pendingImages.value.length) return handleSave()
+    return handleFinishPhoto()
+}
+const handleFinishPhoto = async () => {
+    if (!uploadedImages.value.length) {
+        uni.showToast({ title: '请先拍照并回传', icon: 'none' })
+        return
+    }
+    reviewLoading.value = true
+    try {
+        await confirmAssetPhotos(assetId.value)
+        uni.showToast({ title: '拍照完成，进入待定价', icon: 'none' })
+        const pages = getCurrentPages()
+        setTimeout(() => {
+            if (pages.length > 1) {
+                uni.navigateBack()
+            } else {
+                uni.redirectTo({ url: '/addon/hsx_device_asset/pages/task/list?tab=price' })
+            }
+        }, 600)
+    } finally {
+        reviewLoading.value = false
+    }
+}
+
+// 拍照员自己删坏图/糊图：未回传的直接从本地移除；已回传的标记删除(不会用于上架)
+const removeGalleryItem = (item: any) => {
+    if (item.pending) {
+        const i = pendingImages.value.findIndex(p => p.path === item.rawUrl && p.scene === item.scene)
+        if (i >= 0) pendingImages.value.splice(i, 1)
+        return
+    }
+    if (!item.id) return
+    uni.showModal({
+        title: '删除图片',
+        content: '这张不清晰/不要了？删除后不会用于上架。',
+        confirmText: '删除',
+        confirmColor: '#ef4444',
+        success: async (r) => {
+            if (!r.confirm) return
+            await reviewAssetMedia(item.id, { status: 'rejected', reject_reason: '拍照员删除' })
+            await loadInfo()
+        }
+    })
+}
 
 const loadInfo = async () => {
     if (!assetId.value) return
@@ -418,7 +480,7 @@ const normalizeCheckResult = (value: any, label: string) => {
 }
 
 .flow-step.active {
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .flow-step.done {
@@ -427,7 +489,7 @@ const normalizeCheckResult = (value: any, label: string) => {
 
 .flow-step.active .flow-step__dot {
     color: #fff;
-    background: #2563eb;
+    background: var(--hsx-primary);
 }
 
 .flow-step.done .flow-step__dot {
@@ -453,7 +515,7 @@ const normalizeCheckResult = (value: any, label: string) => {
 
 .text-action {
     flex: 0 0 auto;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 25rpx;
     line-height: 44rpx;
 }
@@ -555,6 +617,22 @@ const normalizeCheckResult = (value: any, label: string) => {
     left: auto;
     right: 10rpx;
     background: rgba(37, 99, 235, 0.86);
+}
+
+.gallery-item__del {
+    position: absolute;
+    top: 6rpx;
+    right: 6rpx;
+    width: 40rpx;
+    height: 40rpx;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.55);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20rpx;
+    z-index: 2;
 }
 
 .footer-safe {

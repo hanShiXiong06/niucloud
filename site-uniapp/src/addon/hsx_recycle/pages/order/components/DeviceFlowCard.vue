@@ -38,7 +38,7 @@
         </view>
 
         <view class="device-flow-card__tags">
-            <text class="tag tag--status">{{ device.status_name || '-' }}</text>
+            <DeviceStatusBadge :status="device.status" :status-name="device.status_name" />
             <text v-if="showConfirmTag" class="tag tag--warning">{{ device.confirm_status_name }}</text>
             <text v-if="showPayTag" class="tag tag--success">{{ device.pay_status_name }}</text>
             <text v-if="isConsigned" class="tag tag--purple">{{ device.consignmentOrder?.status_name || device.dispose_status_name || '已转代卖' }}</text>
@@ -50,10 +50,9 @@
             </text>
         </view>
 
-        <view v-if="device.check_result_seller || device.check_result || device.check_result_buyer" class="device-flow-card__check-result">
+        <view v-if="device.check_result_seller || device.check_result_buyer" class="device-flow-card__check-result">
             <view v-if="device.check_result_seller" class="device-flow-card__check-line">卖家质检：{{ device.check_result_seller }}</view>
             <view v-if="device.check_result_buyer" class="device-flow-card__check-line">买家质检：{{ device.check_result_buyer }}</view>
-            <view v-if="showLegacyCheckResult" class="device-flow-card__check-line">质检摘要：{{ device.check_result }}</view>
         </view>
 
         <view v-if="device.pay_disabled_reason && !device.can_pay" class="device-flow-card__hint device-flow-card__hint--danger">
@@ -155,18 +154,13 @@
         </view>
     </view>
 
-    <ImagePreviewOverlay
-        v-model:visible="previewVisible"
-        :urls="previewUrls"
-        :current="previewCurrent"
-        @change="previewCurrent = $event"
-    />
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { img } from '@/utils/common'
-import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
+import DeviceStatusBadge from '@/addon/hsx_recycle/components/DeviceStatusBadge.vue'
+import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import { formatMoney, formatTime } from '@/addon/hsx_recycle/utils/helper'
 import { copyIMEI } from '@/addon/hsx_recycle/utils/clipboard'
 import {
@@ -210,9 +204,6 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits(['action', 'toggle-select'])
 
 const expanded = ref(false)
-const previewVisible = ref(false)
-const previewUrls = ref<string[]>([])
-const previewCurrent = ref(0)
 
 const device = computed(() => props.device || {})
 const isConsigned = computed(() => isConsignedDevice(device.value))
@@ -223,14 +214,6 @@ const showPayTag = computed(() => !isConsigned.value && Boolean(device.value.pay
 const logs = computed(() => Array.isArray(device.value.logs) ? device.value.logs : [])
 const flowHighlights = computed(() => buildDeviceFlowHighlights(device.value))
 const inspectorName = computed(() => device.value.checkUser?.real_name || device.value.checkUser?.username || '')
-
-const showLegacyCheckResult = computed(() => {
-    const current = String(device.value.check_result || '').trim()
-    if (!current) return false
-
-    return current !== String(device.value.check_result_seller || '').trim()
-        && current !== String(device.value.check_result_buyer || '').trim()
-})
 
 const consignmentRows = computed(() => {
     const order = device.value.consignmentOrder || {}
@@ -277,9 +260,7 @@ const buildImageItems = (rawValue: any, thumbs: any) => {
 }
 
 const previewGroup = (items: ImageItem[], index: number) => {
-    previewUrls.value = items.map((item) => item.url)
-    previewCurrent.value = index
-    previewVisible.value = true
+    openPreview(items.map((item) => item.url), index)
 }
 </script>
 
@@ -327,8 +308,8 @@ const previewGroup = (items: ImageItem[], index: number) => {
 }
 
 .device-selector--active {
-    border-color: #2563eb;
-    background: #2563eb;
+    border-color: var(--hsx-primary);
+    background: var(--hsx-primary);
     box-shadow: inset 0 0 0 6rpx #fff;
 }
 
@@ -388,7 +369,7 @@ const previewGroup = (items: ImageItem[], index: number) => {
 
 .meta-copy__icon {
     flex-shrink: 0;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 24rpx;
 }
 
@@ -430,8 +411,8 @@ const previewGroup = (items: ImageItem[], index: number) => {
 }
 
 .tag--status {
-    background: #dbeafe;
-    color: #1d4ed8;
+    background: var(--hsx-primary-100);
+    color: var(--hsx-primary-dark);
 }
 
 .tag--warning {
@@ -502,7 +483,7 @@ const previewGroup = (items: ImageItem[], index: number) => {
     align-items: center;
     gap: 8rpx;
     font-size: 22rpx;
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .device-flow-card__flow-highlight {
@@ -585,7 +566,7 @@ const previewGroup = (items: ImageItem[], index: number) => {
     height: 16rpx;
     margin-top: 6rpx;
     border-radius: 50%;
-    background: #2563eb;
+    background: var(--hsx-primary);
 }
 
 .timeline__line {
@@ -593,7 +574,7 @@ const previewGroup = (items: ImageItem[], index: number) => {
     top: 28rpx;
     bottom: -18rpx;
     width: 2rpx;
-    background: #dbeafe;
+    background: var(--hsx-primary-100);
 }
 
 .timeline__content {
@@ -645,8 +626,8 @@ const previewGroup = (items: ImageItem[], index: number) => {
 
 .action-btn--primary {
     color: #fff;
-    background: #2563eb;
-    border-color: #2563eb;
+    background: var(--hsx-primary);
+    border-color: var(--hsx-primary);
 }
 
 .action-btn--danger {

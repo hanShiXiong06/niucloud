@@ -10,7 +10,7 @@
             <!-- 设备信息 -->
             <view class="device-info">
                 <view class="device-info-row">
-                    <text class="device-icon">📱</text>
+                    <text class="nc-iconfont nc-icon-huishouzhan device-icon"></text>
                     <view class="device-main">
                         <view class="device-model">{{ device.model || '未知型号' }}</view>
                         <view class="device-meta">
@@ -131,14 +131,64 @@
                         ></u-textarea>
                     </view>
 
+                    <!-- 销售去向（对齐 PC：ERP 已连接走仓库级联自动定流向，否则渠道单选） -->
+                    <view v-if="warehouseMode || saleDestinationOptions.length" class="form-section">
+                        <view class="section-title">销售去向</view>
+
+                        <template v-if="warehouseMode">
+                            <view class="dest-hint">选择目标仓库即可（库位可不选，入库时再定）；流向按仓库类型自动确定。</view>
+                            <view class="dest-chips">
+                                <view
+                                    v-for="w in erpWarehouses"
+                                    :key="w.id"
+                                    class="dest-chip"
+                                    :class="{ 'dest-chip--active': Number(formData.target_warehouse_id) === Number(w.id) }"
+                                    @click="selectWarehouse(w)"
+                                >{{ w.warehouse_name }} · {{ WH_TYPE_LABEL[w.business_type || 'mall'] || '商城' }}</view>
+                            </view>
+
+                            <template v-if="currentWarehouseLocations.length">
+                                <view class="dest-sub-label">库位（可选）</view>
+                                <view class="dest-chips">
+                                    <view
+                                        v-for="loc in currentWarehouseLocations"
+                                        :key="loc.id"
+                                        class="dest-chip"
+                                        :class="{ 'dest-chip--active': Number(formData.target_location_id) === Number(loc.id) }"
+                                        @click="selectLocation(loc)"
+                                    >{{ loc.location_name }}</view>
+                                </view>
+                            </template>
+
+                            <view v-if="saleDestinationText" class="dest-current">
+                                流向：{{ saleDestinationText }}<text v-if="saleDestinationDescription" class="dest-desc">（{{ saleDestinationDescription }}）</text>
+                            </view>
+                        </template>
+
+                        <template v-else>
+                            <view class="dest-chips">
+                                <view
+                                    v-for="item in saleDestinationOptions"
+                                    :key="item.value"
+                                    class="dest-chip"
+                                    :class="{ 'dest-chip--active': formData.sale_destination === item.value }"
+                                    @click="selectDestination(item.value)"
+                                >{{ item.label }}</view>
+                            </view>
+                            <view v-if="saleDestinationDescription" class="dest-desc">{{ saleDestinationDescription }}</view>
+                        </template>
+                    </view>
+
                     <view class="form-section">
                         <view class="section-title">整备安排</view>
-                        <view class="refurbish-toggle" @click="formData.refurbishment_required = formData.refurbishment_required === 1 ? 0 : 1">
-                            <view>
+                        <view class="refurbish-toggle">
+                            <view class="refurbish-toggle__text" @click="toggleRefurbishment">
                                 <view class="refurbish-toggle__title">是否需要整备</view>
                                 <view class="refurbish-toggle__desc">默认无需整备；开启后入库到 ERP 会自动生成整备工单。</view>
                             </view>
-                            <u-switch v-model="formData.refurbishment_required" :activeValue="1" :inactiveValue="0" size="22"></u-switch>
+                            <view class="refurbish-toggle__switch" @tap.stop>
+                                <u-switch v-model="formData.refurbishment_required" :activeValue="1" :inactiveValue="0" size="22"></u-switch>
+                            </view>
                         </view>
 
                         <view v-if="formData.refurbishment_required === 1" class="refurbish-form">
@@ -207,19 +257,15 @@
         </view>
     </u-popup>
 
-    <ImagePreviewOverlay
-        v-model:visible="previewVisible"
-        :urls="previewUrls"
-        :current="previewCurrent"
-        @change="previewCurrent = $event"
-    />
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { confirmPrice, getDevice, getRefurbishmentOptions, getStaffOptions } from '@/addon/hsx_recycle/api/order'
+import { confirmPrice, getDevice, getRefurbishmentOptions, getSaleDestinationOptions, getStaffOptions } from '@/addon/hsx_recycle/api/order'
 import { img } from '@/utils/common'
-import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
+import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
+import { useRecycleSubmit } from '@/addon/hsx_recycle/hooks/useRecycleSubmit'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 
 interface Props {
     visible: boolean
@@ -231,10 +277,9 @@ const emit = defineEmits(['update:visible', 'success'])
 
 const show = ref(false)
 const submitting = ref(false)
+// 提交守卫复用现有 submitting，模板 :loading 绑定无需改动
+const submit = useRecycleSubmit(submitting)
 const detailLoading = ref(false)
-const previewVisible = ref(false)
-const previewUrls = ref<string[]>([])
-const previewCurrent = ref(0)
 const deviceDetail = ref<any>(null)
 const device = computed(() => deviceDetail.value || props.deviceData || {})
 const staffOptions = ref<Array<{ uid: number, label: string }>>([])
@@ -244,6 +289,11 @@ const formData = ref({
     final_price: '',
     sell_price: '',
     remark: '',
+    sale_destination: '',
+    target_warehouse_id: 0,
+    target_warehouse_name: '',
+    target_location_id: 0,
+    target_location_name: '',
     refurbishment_required: 0,
     refurbishment_assignee_uid: 0,
     refurbishment_reason: '',
@@ -251,6 +301,88 @@ const formData = ref({
     refurbishment_custom_item: '',
     refurbishment_estimated_cost: ''
 })
+
+// ===== 销售去向（对齐 PC 端 PriceFormDialog） =====
+interface ErpWarehouse {
+    id: number
+    warehouse_name: string
+    business_type?: string
+    is_default?: number
+    locations?: Array<{ id: number; location_name: string }>
+}
+const saleDestinationOptions = ref<Array<{ value: string; label: string; description?: string }>>([])
+const erpWarehouses = ref<ErpWarehouse[]>([])
+const erpConnected = ref(false)
+// 仓库业务类型 → 销售流向 / 中文标签（与后端 RecycleOrderDict 保持一致）
+const WH_TYPE_DEST: Record<string, string> = { mall: 'mall', peer: 'peer', scrap: 'scrap', hold: 'hold' }
+const WH_TYPE_LABEL: Record<string, string> = { mall: '商城', peer: '同行', scrap: '报废', hold: '暂存' }
+// ERP 已连接且有可用仓库时，以仓库为主选项（选仓即定流向）
+const warehouseMode = computed(() => erpConnected.value && erpWarehouses.value.length > 0)
+const saleDestinationText = computed(() =>
+    saleDestinationOptions.value.find((i) => i.value === formData.value.sale_destination)?.label || ''
+)
+const saleDestinationDescription = computed(() =>
+    saleDestinationOptions.value.find((i) => i.value === formData.value.sale_destination)?.description || ''
+)
+const currentWarehouseLocations = computed(() => {
+    const w = erpWarehouses.value.find((item) => Number(item.id) === Number(formData.value.target_warehouse_id))
+    return w?.locations || []
+})
+
+const buildSaleDestForm = (device: Record<string, any> = {}) => ({
+    sale_destination: device.sale_destination || '',
+    target_warehouse_id: Number(device.target_warehouse_id || 0),
+    target_warehouse_name: device.target_warehouse_name || '',
+    target_location_id: Number(device.target_location_id || 0),
+    target_location_name: device.target_location_name || ''
+})
+
+const loadSaleDestinationOptions = async () => {
+    try {
+        const res: any = await getSaleDestinationOptions()
+        saleDestinationOptions.value = res?.data?.items || []
+        erpWarehouses.value = res?.data?.warehouses || []
+        erpConnected.value = !!res?.data?.erp_connected
+        if (warehouseMode.value) {
+            // 仓库模式：无已选仓时默认选中默认仓 / 首个仓（对齐 PC，不再为空）
+            if (!Number(formData.value.target_warehouse_id)) {
+                const def = erpWarehouses.value.find((w) => Number(w.is_default) === 1) || erpWarehouses.value[0]
+                if (def) selectWarehouse(def)
+            }
+        } else if (!saleDestinationOptions.value.some((i) => i.value === formData.value.sale_destination)) {
+            // 渠道模式：当前去向不在选项中则回退到第一个
+            formData.value.sale_destination = saleDestinationOptions.value[0]?.value || ''
+        }
+    } catch (error) {
+        saleDestinationOptions.value = []
+        erpWarehouses.value = []
+        erpConnected.value = false
+    }
+}
+
+const selectWarehouse = (w: ErpWarehouse) => {
+    formData.value.target_warehouse_id = Number(w.id)
+    formData.value.target_warehouse_name = w.warehouse_name || ''
+    // 选仓即定流向
+    formData.value.sale_destination = WH_TYPE_DEST[w.business_type || 'mall'] || 'hold'
+    // 切换仓库后清空已选库位
+    formData.value.target_location_id = 0
+    formData.value.target_location_name = ''
+}
+
+const selectLocation = (loc: { id: number; location_name: string }) => {
+    if (Number(formData.value.target_location_id) === Number(loc.id)) {
+        formData.value.target_location_id = 0
+        formData.value.target_location_name = ''
+    } else {
+        formData.value.target_location_id = Number(loc.id)
+        formData.value.target_location_name = loc.location_name || ''
+    }
+}
+
+const selectDestination = (value: string) => {
+    formData.value.sale_destination = value
+}
 
 const selectedStaffName = computed(() => {
     const uid = Number(formData.value.refurbishment_assignee_uid || 0)
@@ -312,10 +444,12 @@ watch(() => props.visible, (val) => {
             final_price: (fp && Number(fp) > 0) ? amountText(fp) : (props.deviceData.initial_price ? amountText(props.deviceData.initial_price) : ''),
             sell_price: props.deviceData.sell_price ? amountText(props.deviceData.sell_price) : '',
             remark: props.deviceData.remark || '',
+            ...buildSaleDestForm(props.deviceData),
             ...buildRefurbishmentForm(props.deviceData)
         }
         loadStaffOptions()
         loadRefurbishmentOptions()
+        loadSaleDestinationOptions()
         loadDeviceDetail()
     } else if (!val) {
         deviceDetail.value = null
@@ -340,6 +474,7 @@ const loadDeviceDetail = async () => {
             final_price: (fp && Number(fp) > 0) ? amountText(fp) : (deviceDetail.value.initial_price ? amountText(deviceDetail.value.initial_price) : ''),
             sell_price: deviceDetail.value.sell_price ? amountText(deviceDetail.value.sell_price) : '',
             remark: deviceDetail.value.remark || '',
+            ...buildSaleDestForm(deviceDetail.value),
             ...buildRefurbishmentForm(deviceDetail.value)
         }
     } catch (error) {
@@ -424,6 +559,10 @@ const handleStaffChange = (event: any) => {
     formData.value.refurbishment_assignee_uid = Number(staffOptions.value[index]?.uid || 0)
 }
 
+const toggleRefurbishment = () => {
+    formData.value.refurbishment_required = formData.value.refurbishment_required === 1 ? 0 : 1
+}
+
 const toggleRefurbishmentItem = (key: string) => {
     const list = formData.value.refurbishment_item_keys
     const index = list.indexOf(key)
@@ -446,10 +585,7 @@ const handleClose = () => {
 }
 
 const previewImages = (items: ImageItem[], index: number) => {
-    if (!items.length) return
-    previewUrls.value = items.map((item) => item.url)
-    previewCurrent.value = Math.max(0, Math.min(index, items.length - 1))
-    previewVisible.value = true
+    openPreview(items.map((item) => item.url), index)
 }
 
 const handleSubmit = async () => {
@@ -468,30 +604,34 @@ const handleSubmit = async () => {
         return
     }
 
-    submitting.value = true
-    try {
+    // 金额二次确认：定价不可轻率，高亮金额给店员复核
+    const price = Number(formData.value.final_price)
+    const confirmed = await confirmDanger(`确认以 ¥${ price.toFixed(2) } 对该设备定价？`, {
+        title: '确认定价',
+        confirmText: '确认定价'
+    })
+    if (!confirmed) return
+
+    // 提交守卫：进行中忽略重复点击，成功后统一提示
+    await submit.run(async () => {
         await confirmPrice(device.value.id, {
             final_price: formData.value.final_price,
             sell_price: formData.value.sell_price || 0,
             remark: formData.value.remark,
+            sale_destination: formData.value.sale_destination,
+            target_warehouse_id: formData.value.target_warehouse_id || 0,
+            target_warehouse_name: formData.value.target_warehouse_name || '',
+            target_location_id: formData.value.target_location_id || 0,
+            target_location_name: formData.value.target_location_name || '',
             refurbishment_required: formData.value.refurbishment_required,
             refurbishment_assignee_uid: formData.value.refurbishment_required === 1 ? formData.value.refurbishment_assignee_uid : 0,
             refurbishment_reason: formData.value.refurbishment_required === 1 ? formData.value.refurbishment_reason : '',
             refurbishment_items: formData.value.refurbishment_required === 1 ? buildRefurbishmentItems() : [],
             refurbishment_estimated_cost: formData.value.refurbishment_required === 1 ? Number(formData.value.refurbishment_estimated_cost || 0) : 0
         })
-
-        uni.showToast({ title: '定价成功' })
         emit('success')
         handleClose()
-    } catch (error: any) {
-        uni.showToast({
-            title: error.message || '定价失败',
-            icon: 'none'
-        })
-    } finally {
-        submitting.value = false
-    }
+    }, { success: '定价成功' })
 }
 </script>
 
@@ -532,8 +672,9 @@ const handleSubmit = async () => {
 }
 
 .device-icon {
-    font-size: 48rpx;
+    font-size: 44rpx;
     margin-right: 16rpx;
+    color: var(--hsx-primary);
 }
 
 .device-main {
@@ -656,6 +797,53 @@ const handleSubmit = async () => {
     color: #333;
 }
 
+.dest-hint {
+    font-size: 22rpx;
+    color: var(--hsx-text-secondary);
+    line-height: 32rpx;
+    margin-bottom: 16rpx;
+}
+
+.dest-sub-label {
+    margin: 18rpx 0 12rpx;
+    font-size: 24rpx;
+    color: var(--hsx-text-regular);
+}
+
+.dest-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16rpx;
+}
+
+.dest-chip {
+    padding: 14rpx 24rpx;
+    border-radius: 999rpx;
+    background: var(--hsx-fill-light);
+    border: 1rpx solid var(--hsx-border);
+    color: var(--hsx-text-regular);
+    font-size: 24rpx;
+    line-height: 32rpx;
+}
+
+.dest-chip--active {
+    background: var(--hsx-primary-50);
+    border-color: var(--hsx-primary);
+    color: var(--hsx-primary);
+    font-weight: 500;
+}
+
+.dest-current {
+    margin-top: 16rpx;
+    font-size: 24rpx;
+    color: var(--hsx-text-strong);
+}
+
+.dest-desc {
+    font-size: 22rpx;
+    color: var(--hsx-text-secondary);
+}
+
 .refurbish-toggle {
     display: flex;
     align-items: center;
@@ -664,6 +852,15 @@ const handleSubmit = async () => {
     padding: 22rpx 24rpx;
     background: #f8f9fa;
     border-radius: 12rpx;
+}
+
+.refurbish-toggle__text {
+    flex: 1;
+    min-width: 0;
+}
+
+.refurbish-toggle__switch {
+    flex-shrink: 0;
 }
 
 .refurbish-toggle__title {
@@ -735,9 +932,9 @@ const handleSubmit = async () => {
 }
 
 .preset-item.active {
-    border-color: #2979ff;
+    border-color: var(--hsx-primary);
     background: #ecf5ff;
-    color: #2979ff;
+    color: var(--hsx-primary);
 }
 
 .image-group + .image-group {

@@ -336,8 +336,8 @@ onShow(() => {
 }
 
 .status-chip--active {
-    background: #eff6ff;
-    color: #2563eb;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary);
 }
 
 .status-chip__count {
@@ -389,7 +389,7 @@ onShow(() => {
 }
 
 .is-primary {
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .is-warning {
@@ -423,7 +423,7 @@ onShow(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 28rpx;
     font-weight: 700;
 }
@@ -529,6 +529,6 @@ onShow(() => {
 
 .card-footer__link {
     flex-shrink: 0;
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 </style>

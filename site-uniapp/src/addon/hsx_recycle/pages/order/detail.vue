@@ -90,7 +90,7 @@
                         <text>{{ customerPhone }}</text>
                         <text
                             v-if="customerPhone && customerPhone !== '-'"
-                            class="nc-iconfont nc-icon-dianhuaV6xx1 ml-[10rpx] text-[#2563eb]"
+                            class="nc-iconfont nc-icon-dianhuaV6xx1 ml-[10rpx] text-[var(--hsx-primary)]"
                             @click.stop="makePhoneCall(customerPhone)"
                         ></text>
                     </view>
@@ -113,7 +113,7 @@
                         <text>{{ order.express_no || '-' }}</text>
                         <text
                             v-if="order.express_no"
-                            class="nc-iconfont nc-icon-fuzhiV6xx1 ml-[10rpx] text-[#2563eb]"
+                            class="nc-iconfont nc-icon-fuzhiV6xx1 ml-[10rpx] text-[var(--hsx-primary)]"
                             @click.stop="copyNo(order.express_no)"
                         ></text>
                     </view>
@@ -1085,7 +1085,7 @@ const handleConsignmentSuccess = () => loadDetail()
 
 .status-hero {
     padding: 32rpx 24rpx 28rpx;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    background: linear-gradient(135deg, var(--hsx-primary), var(--hsx-primary-dark));
 }
 
 .status-hero__main {
@@ -1230,8 +1230,8 @@ const handleConsignmentSuccess = () => loadDetail()
     margin-bottom: 16rpx;
     padding: 12rpx 16rpx;
     border-radius: 12rpx;
-    background: #eff6ff;
-    color: #2563eb;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary);
     font-size: 22rpx;
     display: flex;
     align-items: center;
@@ -1319,8 +1319,8 @@ const handleConsignmentSuccess = () => loadDetail()
 }
 
 .order-footer__btn--primary {
-    background: #2563eb;
-    border-color: #2563eb;
+    background: var(--hsx-primary);
+    border-color: var(--hsx-primary);
     color: #fff;
 }
 

@@ -254,7 +254,6 @@ const loadInfo = async () => {
 const checkEntries = computed(() => {
     const device = asset.value?.recycle_device || asset.value?.recycleDevice || {}
     const data = {
-        ...normalizeCheckResult(device.check_result || '', '内部质检'),
         ...normalizeCheckResult(device.check_result_seller || '', '卖家质检'),
         ...normalizeCheckResult(device.check_result_buyer || '', '买家质检'),
         ...normalizeObject(asset.value?.check_summary || {})
@@ -468,7 +467,7 @@ const normalizeCheckResult = (value: any, label: string) => {
     display: flex;
     gap: 26rpx;
     margin-top: 18rpx;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 25rpx;
 }
 
@@ -500,11 +499,11 @@ const normalizeCheckResult = (value: any, label: string) => {
 }
 
 .price-board__item.primary {
-    background: #eff6ff;
+    background: var(--hsx-primary-50);
 }
 
 .price-board__item.primary strong {
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .price-board__item.danger strong {
@@ -537,7 +536,7 @@ const normalizeCheckResult = (value: any, label: string) => {
 
 .text-action {
     flex: 0 0 auto;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-size: 25rpx;
     line-height: 44rpx;
 }
@@ -578,7 +577,7 @@ const normalizeCheckResult = (value: any, label: string) => {
 }
 
 .thumb-item.active {
-    border-color: #2563eb;
+    border-color: var(--hsx-primary);
 }
 
 .thumb-item image {

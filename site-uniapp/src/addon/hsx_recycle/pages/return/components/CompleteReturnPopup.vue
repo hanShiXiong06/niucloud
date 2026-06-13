@@ -134,14 +134,14 @@ defineExpose({
 .warning-box {
     margin-bottom: 18rpx;
     border: 1rpx solid #bfdbfe;
-    background: #eff6ff;
+    background: var(--hsx-primary-50);
 }
 
 .warning-title {
     display: block;
     font-size: 26rpx;
     font-weight: 700;
-    color: #1d4ed8;
+    color: var(--hsx-primary-dark);
 }
 
 .warning-text {
@@ -149,7 +149,7 @@ defineExpose({
     margin-top: 8rpx;
     font-size: 23rpx;
     line-height: 34rpx;
-    color: #1e40af;
+    color: var(--hsx-primary-dark);
 }
 
 .form-label {

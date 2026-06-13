@@ -47,6 +47,7 @@ class DeviceAssetDict
     public const ACTION_PHOTO_CONFIRM = 'photo_confirm';
     public const ACTION_PRICE_ORDER_CREATE = 'price_order_create';
     public const ACTION_PRICE_COMPLETE = 'price_complete';
+    public const ACTION_SET_LOCATION = 'set_location';
     public const ACTION_EXPORT = 'export';
 
     public static function statusName(string $status): string
@@ -113,6 +114,7 @@ class DeviceAssetDict
             self::ACTION_PHOTO_CONFIRM => '确认图片完成',
             self::ACTION_PRICE_ORDER_CREATE => '生成定价工单',
             self::ACTION_PRICE_COMPLETE => '完成定价',
+            self::ACTION_SET_LOCATION => '设置库位',
             self::ACTION_EXPORT => '导出资料',
         ][$action] ?? $action;
     }

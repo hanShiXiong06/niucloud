@@ -108,7 +108,7 @@
                             <text class="field-switch__text">{{ fieldValues[field.field_key] ? '已开启' : '未开启' }}</text>
                             <u-switch
                                 v-model="fieldValues[field.field_key]"
-                                activeColor="#2563eb"
+                                activeColor="var(--hsx-primary)"
                                 @change="handleTemplateValueChange"
                             ></u-switch>
                         </view>
@@ -851,7 +851,7 @@ const resolveGoodsCategory = () => {
     margin: 20rpx 30rpx 0;
     padding: 22rpx 24rpx;
     border-radius: 16rpx;
-    background: linear-gradient(135deg, #eff6ff, #eef2ff);
+    background: linear-gradient(135deg, var(--hsx-primary-50), #eef2ff);
     flex-shrink: 0;
 }
 
@@ -918,7 +918,7 @@ const resolveGoodsCategory = () => {
 }
 
 .section-action {
-    color: #2563eb;
+    color: var(--hsx-primary);
 }
 
 .section-tip {
@@ -949,9 +949,9 @@ const resolveGoodsCategory = () => {
 .chip--active,
 .template-chip--active,
 .option-chip--active {
-    background: #eff6ff;
-    border-color: #93c5fd;
-    color: #2563eb;
+    background: var(--hsx-primary-50);
+    border-color: var(--hsx-primary-300);
+    color: var(--hsx-primary);
 }
 
 .chip--danger {

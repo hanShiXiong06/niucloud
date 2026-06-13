@@ -19,6 +19,7 @@ class Addon
         $this->syncAdminappResources();
         // 安装计划任务
         (new \app\service\core\schedule\CoreScheduleInstallService())->installAddonSchedule('hsx_recycle');
+        $this->repairAddonSchedule();
         return true;
     }
 
@@ -40,7 +41,76 @@ class Addon
     {
         $this->installSystemColumns();
         $this->syncAdminappResources();
+        $this->repairAddonSchedule();
         return true;
+    }
+
+    /**
+     * 自修复本插件的计划任务时间配置。
+     *
+     * 历史安装中曾出现 time JSON 损坏(误用 minute 且缺 day),type=day 会被拼成
+     * 非法 cron(间隔位变成星号斜杠星号),导致 workerman 调度进程整体崩溃重启。
+     * 这里以插件 dict(schedule.php)中的定义为准,仅修正“会生成非法 cron”的行,
+     * 合法配置(含管理员自定义)保持不动。只读写本插件自己的 sys_schedule 行,不触碰框架。
+     */
+    protected function repairAddonSchedule()
+    {
+        try {
+            $templates = array_column(
+                (new \app\service\core\schedule\CoreScheduleService())->getTemplateList('hsx_recycle'),
+                'time',
+                'key'
+            );
+            $rows = Db::name('sys_schedule')
+                ->where('addon', 'hsx_recycle')
+                ->field('id,key,time')
+                ->select()
+                ->toArray();
+            foreach ($rows as $row) {
+                $time = is_array($row['time']) ? $row['time'] : json_decode((string)$row['time'], true);
+                if ($this->isValidScheduleTime($time)) {
+                    continue; // 合法配置保留,不覆盖管理员自定义
+                }
+                $fallback = $templates[$row['key']] ?? null;
+                if (empty($fallback)) {
+                    continue;
+                }
+                Db::name('sys_schedule')
+                    ->where('id', (int)$row['id'])
+                    ->update(['time' => json_encode($fallback, JSON_UNESCAPED_UNICODE)]);
+            }
+        } catch (\Throwable $e) {
+            // 自修复失败不应阻断安装/升级流程
+        }
+        return true;
+    }
+
+    /**
+     * 判断计划任务 time 配置能否生成合法 cron(间隔型字段必须是正整数)。
+     */
+    protected function isValidScheduleTime($time): bool
+    {
+        if (!is_array($time) || empty($time['type'])) {
+            return false;
+        }
+        $isPositiveInt = static function ($value): bool {
+            return is_numeric($value) && (int)$value >= 1 && (string)(int)$value === (string)$value;
+        };
+        switch ($time['type']) {
+            case 'sec':
+                return $isPositiveInt($time['sec'] ?? null);
+            case 'min':
+                return $isPositiveInt($time['min'] ?? null);
+            case 'hour':
+                return $isPositiveInt($time['hour'] ?? null);
+            case 'day':
+            case 'month':
+                return $isPositiveInt($time['day'] ?? null);
+            case 'week':
+                return isset($time['week']) && $time['week'] !== '';
+            default:
+                return false;
+        }
     }
 
     /**

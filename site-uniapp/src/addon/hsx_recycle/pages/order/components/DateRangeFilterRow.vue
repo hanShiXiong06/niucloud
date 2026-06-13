@@ -15,21 +15,13 @@
                 </view>
             </view>
             
-            <!-- 自定义日期范围 -->
-            <view v-if="showCustomRange" class="date-range-row__custom">
-                <view
-                    class="date-range-row__date"
-                    :class="{ 'date-range-row__date--empty': !start }"
-                    @click="openPicker('start')"
-                >
+            <!-- 自定义日期范围：点击调起页面级 u-calendar 范围日历（由父级在抽屉外渲染，避免被抽屉裁切） -->
+            <view v-if="showCustomRange" class="date-range-row__custom" @click="emit('request-calendar')">
+                <view class="date-range-row__date" :class="{ 'date-range-row__date--empty': !start }">
                     {{ start || startPlaceholder }}
                 </view>
                 <text class="date-range-row__separator">至</text>
-                <view
-                    class="date-range-row__date"
-                    :class="{ 'date-range-row__date--empty': !end }"
-                    @click="openPicker('end')"
-                >
+                <view class="date-range-row__date" :class="{ 'date-range-row__date--empty': !end }">
                     {{ end || endPlaceholder }}
                 </view>
                 <view v-if="start || end" class="date-range-row__clear" @click.stop="clearRange">
@@ -37,19 +29,6 @@
                 </view>
             </view>
         </view>
-
-        <u-datetime-picker
-            v-model="pickerValue"
-            :show="pickerVisible"
-            mode="date"
-            :title="pickerTitle"
-            :minDate="minDate"
-            :maxDate="maxDate"
-            closeOnClickOverlay
-            @confirm="confirmPicker"
-            @cancel="closePicker"
-            @close="closePicker"
-        />
     </view>
 </template>
 
@@ -76,7 +55,7 @@ const props = withDefaults(defineProps<{
     startPlaceholder: '开始日期',
     endPlaceholder: '结束日期',
     minDate: new Date('2000/01/01 00:00:00').getTime(),
-    maxDate: new Date('2099/12/31 23:59:59').getTime(),
+    maxDate: Date.now(),
     shortcuts: () => [
         { label: '今天', value: 'today' },
         { label: '昨天', value: 'yesterday' },
@@ -89,13 +68,20 @@ const emit = defineEmits<{
     (event: 'update:start', value: string): void
     (event: 'update:end', value: string): void
     (event: 'change', value: { start: string, end: string }): void
+    (event: 'request-calendar'): void
 }>()
 
-const pickerVisible = ref(false)
-const pickerField = ref<'start' | 'end'>('start')
-const pickerValue = ref(Date.now())
 const currentShortcut = ref<string>('')
 const showCustomRange = ref(false)
+
+const formatDate = (value: string | number) => {
+    const date = new Date(Number(value))
+    if (Number.isNaN(date.getTime())) return ''
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
 
 // 监听外部值变化，自动判断当前快捷选项
 watch(() => [props.start, props.end], ([newStart, newEnd]) => {
@@ -129,10 +115,6 @@ watch(() => [props.start, props.end], ([newStart, newEnd]) => {
 
 const shortcutOptions = computed(() => props.shortcuts)
 
-const pickerTitle = computed(() => {
-    return `${props.label}${pickerField.value === 'start' ? '开始日期' : '结束日期'}`
-})
-
 // 处理快捷选项点击
 const handleShortcut = (value: string) => {
     currentShortcut.value = value
@@ -162,7 +144,8 @@ const handleShortcut = (value: string) => {
             break
         case 'custom':
             showCustomRange.value = true
-            // 不清空已有值，保留之前的自定义范围
+            // 一点即开：展开自定义范围的同时请求父级调起范围日历；不清空已有值
+            emit('request-calendar')
             return
         default:
             // 支持自定义扩展的快捷选项
@@ -176,50 +159,12 @@ const handleShortcut = (value: string) => {
     emit('change', { start: startValue, end: endValue })
 }
 
-const openPicker = (field: 'start' | 'end') => {
-    pickerField.value = field
-    const currentValue = field === 'start' ? props.start : props.end
-    pickerValue.value = parseDateValue(currentValue) || Date.now()
-    pickerVisible.value = true
-}
-
-const closePicker = () => {
-    pickerVisible.value = false
-}
-
-const confirmPicker = (event: any) => {
-    const value = formatDate(event?.value || pickerValue.value)
-    if (pickerField.value === 'start') {
-        emit('update:start', value)
-        emit('change', { start: value, end: props.end || '' })
-    } else {
-        emit('update:end', value)
-        emit('change', { start: props.start || '', end: value })
-    }
-    closePicker()
-}
-
 const clearRange = () => {
     emit('update:start', '')
     emit('update:end', '')
     emit('change', { start: '', end: '' })
     showCustomRange.value = false
     currentShortcut.value = ''
-}
-
-const parseDateValue = (value: string) => {
-    if (!value) return 0
-    const timestamp = new Date(`${value.replace(/-/g, '/')} 00:00:00`).getTime()
-    return Number.isFinite(timestamp) ? timestamp : 0
-}
-
-const formatDate = (value: string | number) => {
-    const date = new Date(Number(value))
-    if (Number.isNaN(date.getTime())) return ''
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
 }
 </script>
 
@@ -273,9 +218,9 @@ const formatDate = (value: string | number) => {
     }
     
     &--active {
-        color: #3b82f6;
-        background: #eff6ff;
-        border-color: #3b82f6;
+        color: var(--hsx-primary-light);
+        background: var(--hsx-primary-50);
+        border-color: var(--hsx-primary-light);
     }
 }
 

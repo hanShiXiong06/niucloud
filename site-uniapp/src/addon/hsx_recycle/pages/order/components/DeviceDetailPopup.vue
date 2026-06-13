@@ -100,6 +100,20 @@
                     </view>
                 </view>
 
+                <view
+                    v-if="Number(device.pay_status) === 1 || Number(device.dispose_status) === 1 || Number(device.downstream_stage) > 0"
+                    class="section"
+                >
+                    <DeviceDownstreamProgress
+                        :stage="device.downstream_stage"
+                        :sale-price="device.downstream_sale_price"
+                        :staged-at="device.downstream_stage_at"
+                        :erp-asset-id="device.downstream_erp_asset_id"
+                        :pay-status="device.pay_status"
+                        :dispose-status="device.dispose_status"
+                    />
+                </view>
+
                 <view class="section">
                     <view class="section-title">完整流转</view>
                     <view v-if="logs.length" class="timeline">
@@ -205,19 +219,14 @@
         </view>
     </u-popup>
 
-    <ImagePreviewOverlay
-        v-model:visible="previewVisible"
-        :urls="previewUrls"
-        :current="previewCurrent"
-        @change="previewCurrent = $event"
-    />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { img } from '@/utils/common'
 import { adjustDeviceCost, getDevice, getDeviceCostAdjustAbility, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/order'
-import ImagePreviewOverlay from '@/addon/hsx_recycle/components/ImagePreviewOverlay.vue'
+import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
+import DeviceDownstreamProgress from '@/addon/hsx_recycle/components/DeviceDownstreamProgress.vue'
 import { formatMoney, formatTime } from '@/addon/hsx_recycle/utils/helper'
 import { isConsignedDevice } from '@/addon/hsx_recycle/utils/device'
 
@@ -243,9 +252,6 @@ const emit = defineEmits(['update:visible', 'updated'])
 const show = ref(false)
 const loading = ref(false)
 const latestDeviceData = ref<any>(null)
-const previewVisible = ref(false)
-const previewUrls = ref<string[]>([])
-const previewCurrent = ref(0)
 const costAdjustVisible = ref(false)
 const costAdjustSubmitting = ref(false)
 const costAdjustLogs = ref<any[]>([])
@@ -525,9 +531,7 @@ const buildImageItems = (rawValue: any, thumbs: any) => {
 }
 
 const previewGroup = (items: ImageItem[], index: number) => {
-    previewUrls.value = items.map((item) => item.url)
-    previewCurrent.value = index
-    previewVisible.value = true
+    openPreview(items.map((item) => item.url), index)
 }
 
 const openCostAdjust = () => {
@@ -869,7 +873,7 @@ const handleClose = () => {
     height: 16rpx;
     margin-top: 6rpx;
     border-radius: 50%;
-    background: #2563eb;
+    background: var(--hsx-primary);
 }
 
 .timeline__line {
@@ -877,7 +881,7 @@ const handleClose = () => {
     top: 28rpx;
     bottom: -20rpx;
     width: 2rpx;
-    background: #dbeafe;
+    background: var(--hsx-primary-100);
 }
 
 .timeline__content {

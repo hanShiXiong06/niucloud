@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}device_asset_item` (
   `sn` varchar(128) NOT NULL DEFAULT '',
   `model` varchar(255) NOT NULL DEFAULT '' COMMENT '设备型号',
   `category_id` int NOT NULL DEFAULT '0' COMMENT '设备字典节点ID',
+  `warehouse_id` int NOT NULL DEFAULT '0' COMMENT '目标仓库ID(来自回收定价)',
+  `warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标仓库名称快照',
+  `location_id` int NOT NULL DEFAULT '0' COMMENT '目标库位ID(责任分配/过滤依据)',
+  `location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '目标库位名称快照',
   `source_status` int NOT NULL DEFAULT '0' COMMENT '导入时回收设备状态',
   `recycle_final_price` decimal(12,2) NOT NULL DEFAULT '0.00' COMMENT '回收最终价',
   `check_summary` text COMMENT '质检摘要',
@@ -38,8 +42,22 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}device_asset_item` (
   KEY `idx_site_status` (`site_id`,`status`),
   KEY `idx_site_photo_status` (`site_id`,`photo_status`),
   KEY `idx_site_price_status` (`site_id`,`price_status`),
-  KEY `idx_site_export_status` (`site_id`,`export_status`)
+  KEY `idx_site_export_status` (`site_id`,`export_status`),
+  KEY `idx_site_location` (`site_id`,`location_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备资产中台-资产档案';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}device_asset_location_assign` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '分配ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `warehouse_id` int NOT NULL DEFAULT '0' COMMENT '仓库ID(ERP)',
+  `location_id` int NOT NULL DEFAULT '0' COMMENT '库位ID(ERP erp_warehouse_location)',
+  `uid` int NOT NULL DEFAULT '0' COMMENT '负责员工UID',
+  `create_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_location_uid` (`site_id`,`location_id`,`uid`),
+  KEY `idx_site_uid` (`site_id`,`uid`),
+  KEY `idx_site_location` (`site_id`,`location_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备资产中台-库位责任分配(人↔库位多对多)';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}device_asset_photo_task` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '拍照任务ID',

@@ -78,7 +78,7 @@ const goPrice = (id: string) => {
     padding: 34rpx 30rpx;
     border-radius: 24rpx;
     color: #fff;
-    background: linear-gradient(135deg, #0f766e 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #0f766e 0%, var(--hsx-primary) 100%);
 }
 
 .hero-title {
@@ -107,7 +107,7 @@ const goPrice = (id: string) => {
     line-height: 88rpx;
     border-radius: 44rpx;
     color: #fff;
-    background: #2563eb;
+    background: var(--hsx-primary);
     font-size: 30rpx;
 }
 
@@ -136,8 +136,8 @@ const goPrice = (id: string) => {
     height: 82rpx;
     line-height: 82rpx;
     border-radius: 16rpx;
-    color: #2563eb;
-    background: #dbeafe;
+    color: var(--hsx-primary);
+    background: var(--hsx-primary-100);
     font-size: 28rpx;
 }
 

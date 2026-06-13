@@ -155,7 +155,7 @@ onLoad((option: any) => {
 }
 
 .action-btn.primary {
-    background: #2979ff;
+    background: var(--hsx-primary);
     color: #fff;
 }
 </style>

@@ -78,7 +78,7 @@ const goCapture = (id: string) => {
     padding: 34rpx 30rpx;
     border-radius: 24rpx;
     color: #fff;
-    background: linear-gradient(135deg, #2563eb 0%, #14b8a6 100%);
+    background: linear-gradient(135deg, var(--hsx-primary) 0%, #14b8a6 100%);
 }
 
 .hero-title {
@@ -107,7 +107,7 @@ const goCapture = (id: string) => {
     line-height: 88rpx;
     border-radius: 44rpx;
     color: #fff;
-    background: #2563eb;
+    background: var(--hsx-primary);
     font-size: 30rpx;
 }
 
@@ -136,8 +136,8 @@ const goCapture = (id: string) => {
     height: 82rpx;
     line-height: 82rpx;
     border-radius: 16rpx;
-    color: #2563eb;
-    background: #dbeafe;
+    color: var(--hsx-primary);
+    background: var(--hsx-primary-100);
     font-size: 28rpx;
 }
 

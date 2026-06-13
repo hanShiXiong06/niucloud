@@ -4,36 +4,21 @@
             <div class="page-head">
                 <div>
                     <div class="text-page-title">设备资产中台</div>
-                    <div class="page-subtitle">承接回收完成设备，完成入库、拍照复检、定价和资料导出</div>
+                    <div class="page-subtitle">承接 ERP 转入的设备，完成拍照、定价、归位与资料导出</div>
                 </div>
                 <div class="head-actions">
-                    <el-input
-                        v-model.trim="scanKeyword"
-                        class="scan-input"
-                        clearable
-                        placeholder="扫码导入 device_id / IMEI / SN"
-                        @keyup.enter="handleScanImport"
-                    >
-                        <template #prefix>
-                            <el-icon><Aim /></el-icon>
-                        </template>
-                    </el-input>
-                    <el-button type="primary" :icon="Plus" :loading="scanLoading" @click="handleScanImport">扫码入库</el-button>
+                    <el-button :icon="UserFilled" @click="assignDrawerVisible = true">库位分配</el-button>
                     <el-button :icon="Download" :loading="exportLoading" @click="handleExport">导出 Excel</el-button>
                 </div>
             </div>
 
             <div class="stat-grid">
                 <div class="stat-card">
-                    <div class="stat-label">待入库</div>
-                    <div class="stat-value">{{ taskStats.pool }}</div>
-                </div>
-                <div class="stat-card">
                     <div class="stat-label">资产总数</div>
                     <div class="stat-value">{{ taskStats.total }}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">待拍照/复检</div>
+                    <div class="stat-label">待拍照</div>
                     <div class="stat-value">{{ taskStats.photo }}</div>
                 </div>
                 <div class="stat-card">
@@ -61,76 +46,6 @@
             </div>
 
             <el-tabs v-model="activeTab" class="asset-tabs" @tab-change="handleTabChange">
-                <el-tab-pane label="待入库设备" name="pool">
-                    <el-card class="search-panel !border-none" shadow="never">
-                        <el-form :inline="true" :model="poolSearch" ref="poolSearchRef">
-                            <el-form-item label="关键词" prop="keyword">
-                                <el-input v-model.trim="poolSearch.keyword" class="!w-[240px]" clearable placeholder="IMEI / SN / 型号 / 设备ID" @keyup.enter="loadPool" />
-                            </el-form-item>
-                            <el-form-item label="回收时间" prop="update_at">
-                                <el-date-picker
-                                    v-model="poolSearch.update_at"
-                                    type="daterange"
-                                    value-format="YYYY-MM-DD"
-                                    range-separator="至"
-                                    start-placeholder="开始日期"
-                                    end-placeholder="结束日期"
-                                    clearable
-                                />
-                            </el-form-item>
-                            <el-form-item>
-                                <el-button type="primary" :icon="Search" @click="loadPool">查询</el-button>
-                                <el-button @click="resetPoolSearch">重置</el-button>
-                                <el-button type="success" :disabled="selectedPoolRows.length === 0" :loading="importLoading" @click="handleBatchImport">
-                                    导入选中 {{ selectedPoolRows.length ? `(${ selectedPoolRows.length })` : '' }}
-                                </el-button>
-                            </el-form-item>
-                        </el-form>
-                    </el-card>
-
-                    <el-table
-                        :data="poolTable.data"
-                        v-loading="poolTable.loading"
-                        size="large"
-                        @selection-change="selectedPoolRows = $event"
-                    >
-                        <template #empty>
-                            <span>{{ poolTable.loading ? '' : '暂无待入库设备' }}</span>
-                        </template>
-                        <el-table-column type="selection" width="48" />
-                        <el-table-column prop="id" label="设备ID" width="90" />
-                        <el-table-column prop="imei" label="IMEI" min-width="150" show-overflow-tooltip />
-                        <el-table-column prop="sn" label="SN" min-width="130" show-overflow-tooltip />
-                        <el-table-column prop="model" label="型号" min-width="180" show-overflow-tooltip />
-                        <el-table-column prop="category_name" label="分类" width="120" />
-                        <el-table-column label="回收价" width="110" align="right">
-                            <template #default="{ row }">¥{{ money(row.final_price) }}</template>
-                        </el-table-column>
-                        <el-table-column prop="status_name" label="回收状态" width="110" align="center">
-                            <template #default="{ row }">
-                                <el-tag type="success">{{ row.status_name || '-' }}</el-tag>
-                            </template>
-                        </el-table-column>
-                        <el-table-column prop="update_at" label="回收时间" width="170" />
-                        <el-table-column label="操作" fixed="right" width="110" align="center">
-                            <template #default="{ row }">
-                                <el-button type="primary" link :icon="Plus" :loading="row._importing" @click="handleSingleImport(row)">入库</el-button>
-                            </template>
-                        </el-table-column>
-                    </el-table>
-
-                    <div class="pager">
-                        <el-pagination
-                            v-model:current-page="poolTable.page"
-                            v-model:page-size="poolTable.limit"
-                            layout="total, sizes, prev, pager, next, jumper"
-                            :total="poolTable.total"
-                            @size-change="loadPool"
-                            @current-change="loadPool"
-                        />
-                    </div>
-                </el-tab-pane>
-
                 <el-tab-pane label="资产流转" name="asset">
                     <el-card class="search-panel !border-none" shadow="never">
                         <el-form :inline="true" :model="assetSearch" ref="assetSearchRef">
@@ -178,14 +93,6 @@
                                 <div v-if="deviceSpecText(row)" class="muted">{{ deviceSpecText(row) }}</div>
                             </template>
                         </el-table-column>
-                        <el-table-column label="机况摘要" min-width="220">
-                            <template #default="{ row }">
-                                <div v-if="checkSummaryEntries(row).length" class="table-summary">
-                                    <span v-for="item in checkSummaryEntries(row).slice(0, 3)" :key="item.key">{{ item.key }}：{{ item.value }}</span>
-                                </div>
-                                <span v-else class="muted">暂无摘要</span>
-                            </template>
-                        </el-table-column>
                         <el-table-column label="成本/售价" width="145" align="right">
                             <template #default="{ row }">
                                 <div>成本 ¥{{ money(row.recycle_final_price) }}</div>
@@ -198,20 +105,21 @@
                                 <el-tag size="small" class="ml-[4px]" type="info">视 {{ row.video_count || 0 }}</el-tag>
                             </template>
                         </el-table-column>
-                        <el-table-column label="状态" width="210">
+                        <el-table-column label="状态" width="180">
                             <template #default="{ row }">
-                                <div class="status-line">
-                                    <el-tag :type="statusType(row.status)">{{ row.status_name || row.status }}</el-tag>
-                                    <el-tag :type="photoStatusType(row.photo_status)" effect="plain">{{ row.photo_status_name || row.photo_status }}</el-tag>
-                                    <el-tag :type="priceStatusType(row.price_status)" effect="plain">{{ row.price_status_name || row.price_status }}</el-tag>
-                                </div>
+                                <el-tag :type="statusType(row.status)" effect="light" round>{{ row.status_name || row.status }}</el-tag>
                                 <div class="next-action">{{ nextActionLabel(row) }}</div>
+                                <div class="loc-line">
+                                    <el-tag v-if="Number(row.location_id) > 0" type="success" size="small" effect="plain">库位：{{ row.location_name || ('#' + row.location_id) }}</el-tag>
+                                    <el-tag v-else type="info" size="small" effect="plain">未归位</el-tag>
+                                </div>
                             </template>
                         </el-table-column>
                         <el-table-column prop="create_at" label="入库时间" width="170" />
-                        <el-table-column label="操作" fixed="right" width="330" align="center">
+                        <el-table-column label="操作" fixed="right" width="400" align="center">
                             <template #default="{ row }">
                                 <el-button type="primary" link :icon="View" @click="openDetail(row)">详情</el-button>
+                                <el-button type="primary" link :icon="Location" @click="openLocationDialog(row)">设库位</el-button>
                                 <el-button v-if="canUploadMedia(row)" type="primary" link :icon="Camera" @click="openMediaDialog(row)">
                                     {{ row.photo_status === 'rejected' ? '重新补图' : '拍照/补图' }}
                                 </el-button>
@@ -263,7 +171,10 @@
                     <div v-if="checkSummaryEntries(currentAsset).length" class="check-summary">
                         <div v-for="item in checkSummaryEntries(currentAsset)" :key="item.key" class="check-summary__item">
                             <span>{{ item.key }}</span>
-                            <strong>{{ item.value }}</strong>
+                            <strong :class="{ 'is-clamped': isLongSummary(item.value) && !expandedSummaryKeys.has(item.key) }">{{ item.value }}</strong>
+                            <a v-if="isLongSummary(item.value)" class="summary-toggle" @click="toggleSummary(item.key)">
+                                {{ expandedSummaryKeys.has(item.key) ? '收起' : '展开' }}
+                            </a>
                         </div>
                     </div>
                     <el-empty v-else description="暂无质检摘要" :image-size="70" />
@@ -299,9 +210,8 @@
                             <el-tag size="small" :type="mediaStatusType(item.status)">{{ item.status_name || item.status }}</el-tag>
                             <span>{{ item.scene || 'common' }}</span>
                         </div>
-                        <div class="media-actions">
-                            <el-button size="small" type="success" link @click="reviewMedia(item, 'approved')">通过</el-button>
-                            <el-button size="small" type="danger" link @click="reviewMedia(item, 'rejected')">退回</el-button>
+                        <div v-if="item.status !== 'rejected'" class="media-actions">
+                            <el-button size="small" type="danger" link @click="reviewMedia(item, 'rejected')">删除</el-button>
                         </div>
                     </div>
                 </div>
@@ -352,17 +262,15 @@
                     <div class="capture-gallery__head">
                         <div>
                             <strong>已回传商品图片</strong>
-                            <small>手机拍照和自动拍照都会进入这里，复检通过后才能定价。</small>
+                            <small>拍照员删掉不清晰的，留下的即为可用图，确认后进入定价。</small>
                         </div>
                         <div class="capture-gallery__actions">
-                            <el-checkbox v-model="showDiscardedMedia">显示已丢弃</el-checkbox>
+                            <el-checkbox v-model="showDiscardedMedia">显示已删除</el-checkbox>
                             <el-button size="small" :disabled="!selectableMediaList.length" @click="selectAllVisibleMedia">全选</el-button>
                             <el-button size="small" :disabled="!selectableMediaList.length" @click="invertVisibleMediaSelection">反选</el-button>
                             <el-button size="small" :disabled="!selectedMediaIds.length" @click="selectedMediaIds = []">清空</el-button>
-                            <el-button size="small" :disabled="!pendingMediaList.length" @click="approveAllPendingMedia">待确认全部通过</el-button>
-                            <el-button size="small" type="success" :disabled="!selectedMediaIds.length" @click="reviewSelectedMedia('approved')">选中通过</el-button>
-                            <el-button size="small" type="danger" :disabled="!selectedMediaIds.length" @click="reviewSelectedMedia('rejected')">选中丢弃</el-button>
-                            <el-button size="small" type="warning" :disabled="!canConfirmPhotos(mediaAsset)" @click="handleConfirmPhotos(mediaAsset, false)">确认照片完成</el-button>
+                            <el-button size="small" type="danger" :disabled="!selectedMediaIds.length" @click="reviewSelectedMedia('rejected')">删除选中</el-button>
+                            <el-button size="small" type="warning" :disabled="!canConfirmPhotos(mediaAsset)" @click="handleConfirmPhotos(mediaAsset, false)">确认拍照完成</el-button>
                         </div>
                     </div>
                     <div v-if="visibleMediaList.length" class="capture-media-grid">
@@ -380,8 +288,7 @@
                                 <span>{{ sceneName(item.scene) }} / {{ sourceName(item.source) }}</span>
                             </div>
                             <div class="capture-media-card__actions">
-                                <el-button size="small" type="success" link :disabled="item.status === 'approved'" @click="reviewDialogMedia(item, 'approved')">通过</el-button>
-                                <el-button size="small" type="danger" link :disabled="item.status === 'rejected'" @click="reviewDialogMedia(item, 'rejected')">退回</el-button>
+                                <el-button size="small" type="danger" link :disabled="item.status === 'rejected'" @click="reviewDialogMedia(item, 'rejected')">删除</el-button>
                             </div>
                         </div>
                     </div>
@@ -485,114 +392,61 @@
             </template>
         </el-dialog>
 
-        <el-dialog v-model="priceDialogVisible" title="完成定价" width="560px" destroy-on-close>
-            <div v-if="priceAsset" class="price-context">
-                <div class="price-context__head">
-                    <div>
-                        <div class="price-context__title">{{ priceAsset.model || priceAsset.asset_no }}</div>
-                        <div class="muted">成本 ¥{{ money(priceAsset.recycle_final_price) }} / IMEI {{ priceAsset.imei || '-' }}</div>
-                    </div>
-                    <el-tag :type="photoStatusType(priceAsset.photo_status)">{{ priceAsset.photo_status_name || priceAsset.photo_status }}</el-tag>
-                </div>
-                <div class="price-context__cols">
-                    <div>
-                        <div class="context-title">质检摘要</div>
-                        <div v-if="checkSummaryEntries(priceAsset).length" class="mini-summary">
-                            <div v-for="item in checkSummaryEntries(priceAsset).slice(0, 8)" :key="item.key">
-                                <span>{{ item.key }}</span>
-                                <strong>{{ item.value }}</strong>
-                            </div>
-                        </div>
-                        <el-empty v-else description="暂无摘要" :image-size="48" />
-                    </div>
-                    <div>
-                        <div class="context-title">图片对比</div>
-                        <div class="mini-images">
-                            <el-image
-                                v-for="(url, index) in priceCompareImages(priceAsset)"
-                                :key="`${ url }-${ index }`"
-                                :src="imgUrl(url)"
-                                fit="cover"
-                                :preview-src-list="priceCompareImages(priceAsset).map(imgUrl)"
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <el-form :model="priceForm" label-width="90px">
-                <div class="price-profit-panel">
-                    <div>
-                        <span>预估毛利</span>
-                        <strong :class="{ danger: grossProfit < 0 }">¥{{ money(grossProfit) }}</strong>
-                    </div>
-                    <div>
-                        <span>毛利率</span>
-                        <strong :class="{ danger: grossProfitRate < 0 }">{{ grossProfitRate }}%</strong>
-                    </div>
-                    <div v-if="priceWarnings.length" class="price-warnings">
-                        <el-alert v-for="item in priceWarnings" :key="item" type="warning" :closable="false" show-icon :title="item" />
-                    </div>
-                </div>
-                <el-form-item label="销售价" required>
-                    <el-input-number v-model="priceForm.sale_price" :min="0" :precision="2" class="!w-full" />
-                </el-form-item>
-                <el-form-item label="同行价">
-                    <el-input-number v-model="priceForm.peer_price" :min="0" :precision="2" class="!w-full" />
-                </el-form-item>
-                <el-form-item label="最低价">
-                    <el-input-number v-model="priceForm.min_price" :min="0" :precision="2" class="!w-full" />
-                </el-form-item>
-                <el-form-item label="备注">
-                    <el-input v-model.trim="priceForm.remark" type="textarea" :rows="3" placeholder="成色、渠道、底价原因等" />
-                </el-form-item>
-            </el-form>
-            <template #footer>
-                <el-button @click="priceDialogVisible = false">取消</el-button>
-                <el-button type="primary" :loading="priceLoading" @click="handleCompletePrice">保存定价</el-button>
-            </template>
-        </el-dialog>
+        <PriceDialog v-model="priceDialogVisible" :asset-row="priceRow" @success="onPriceSuccess" />
+
+        <LocationAssignDrawer v-model="assignDrawerVisible" />
+        <SetLocationDialog v-model="locationDialogVisible" :asset="locationDialogAsset" @success="loadAssets" />
     </div>
 </template>
 
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
-import { Aim, Camera, CircleCheck, Download, Money, Plus, Refresh, Search, View } from '@element-plus/icons-vue'
+import { Camera, CircleCheck, Download, Location, Money, Refresh, Search, UserFilled, View } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 import {
-    completeAssetPrice,
     confirmAssetPhotos,
     createPhotoTask,
     exportAssetExcel,
     getAssetInfo,
     getAssetList,
-    getAssetPool,
     getAssetStats,
-    importAssets,
     reviewAssetMedia,
     reviewAssetMediaBatch,
-    saveAssetMedia,
-    scanImportAsset
+    saveAssetMedia
 } from '@/addon/hsx_device_asset/api/device_asset'
 import { getToken, img } from '@/utils/common'
 import storage from '@/utils/storage'
+import LocationAssignDrawer from './components/LocationAssignDrawer.vue'
+import SetLocationDialog from './components/SetLocationDialog.vue'
+import PriceDialog from './components/PriceDialog.vue'
+import { useAssetFormat } from './composables/useAssetFormat'
 
+// 共享格式化/判定工具（同名解构，模板与方法里的调用点完全不变）
+const {
+    money, imgUrl,
+    statusType, mediaStatusType,
+    checkSummaryEntries, recycleCheckImages, deviceSpecText,
+    canConfirmPhotos, canUploadMedia, canPrice, nextActionLabel,
+    expandedSummaryKeys, isLongSummary, toggleSummary
+} = useAssetFormat()
+
+const assignDrawerVisible = ref(false)
+const locationDialogVisible = ref(false)
+const locationDialogAsset = ref<Record<string, any> | null>(null)
+const openLocationDialog = (row: Record<string, any>) => {
+    locationDialogAsset.value = row
+    locationDialogVisible.value = true
+}
 const activeTab = ref('asset')
-const activeTaskTab = ref('pending')
+const activeTaskTab = ref('photo')
 const taskStats = reactive({ pending: 0, pool: 0, photo: 0, price: 0, completed: 0, total: 0 })
-const scanKeyword = ref('')
-const scanLoading = ref(false)
-const importLoading = ref(false)
 const exportLoading = ref(false)
 
-const poolSearchRef = ref<FormInstance>()
 const assetSearchRef = ref<FormInstance>()
-const poolSearch = reactive({ keyword: '', update_at: [] as string[] })
-const assetSearch = reactive({ keyword: '', status: '', photo_status: '', price_status: '', task_type: 'pending' })
+const assetSearch = reactive({ keyword: '', status: '', photo_status: '', price_status: '', task_type: 'photo' })
 
-const poolTable = reactive({ data: [] as any[], total: 0, page: 1, limit: 10, loading: false })
 const assetTable = reactive({ data: [] as any[], total: 0, page: 1, limit: 10, loading: false })
-const selectedPoolRows = ref<any[]>([])
 const selectedAssetRows = ref<any[]>([])
 
 const detailVisible = ref(false)
@@ -627,15 +481,14 @@ const localCamera = reactive({
 })
 
 const priceDialogVisible = ref(false)
-const priceAsset = ref<any>(null)
-const priceLoading = ref(false)
-const priceForm = reactive({ sale_price: 0, peer_price: 0, min_price: 0, remark: '' })
+const priceRow = ref<Record<string, any> | null>(null)
+const onPriceSuccess = () => { Promise.all([loadAssets(), loadStats()]) }
 
 const assetStatusOptions = [
     { label: '待拍照', value: 'wait_photo' },
     { label: '拍照中', value: 'photoing' },
-    { label: '待复检', value: 'photo_review' },
-    { label: '图片退回', value: 'photo_rejected' },
+    { label: '待确认', value: 'photo_review' },
+    { label: '图片已删除', value: 'photo_rejected' },
     { label: '待定价', value: 'wait_price' },
     { label: '待导出', value: 'ready_export' },
     { label: '已导出', value: 'exported' }
@@ -643,8 +496,8 @@ const assetStatusOptions = [
 const photoStatusOptions = [
     { label: '待拍照', value: 'wait_photo' },
     { label: '拍照中', value: 'photoing' },
-    { label: '待复检', value: 'review' },
-    { label: '复检退回', value: 'rejected' },
+    { label: '待确认', value: 'review' },
+    { label: '已删除', value: 'rejected' },
     { label: '图片通过', value: 'approved' }
 ]
 const priceStatusOptions = [
@@ -653,34 +506,14 @@ const priceStatusOptions = [
     { label: '已完成', value: 'completed' }
 ]
 
+// 中台只做拍照+定价（入库是 ERP 的事，设备由 ERP 自动转入）：任务流 待拍照 → 待定价 → 已完成
 const taskTabs = computed(() => [
-    { key: 'pending', label: '待完成', count: taskStats.pending },
-    { key: 'pool', label: '待入库', count: taskStats.pool },
     { key: 'photo', label: '待拍照', count: taskStats.photo },
     { key: 'price', label: '待定价', count: taskStats.price },
     { key: 'completed', label: '已完成', count: taskStats.completed },
 ])
 const pageGrossProfit = computed(() => {
     return assetTable.data.reduce((total, item) => total + Number(item.sale_price || 0) - Number(item.recycle_final_price || 0), 0)
-})
-const grossProfit = computed(() => Number(priceForm.sale_price || 0) - Number(priceAsset.value?.recycle_final_price || 0))
-const grossProfitRate = computed(() => {
-    const salePrice = Number(priceForm.sale_price || 0)
-    if (salePrice <= 0) return '0.00'
-    return ((grossProfit.value / salePrice) * 100).toFixed(2)
-})
-const priceWarnings = computed(() => {
-    const warnings: string[] = []
-    const salePrice = Number(priceForm.sale_price || 0)
-    const minPrice = Number(priceForm.min_price || 0)
-    const costPrice = Number(priceAsset.value?.recycle_final_price || 0)
-    if (salePrice > 0 && costPrice > 0 && salePrice < costPrice) warnings.push('销售价低于回收成本，请确认是否亏损出货')
-    if (salePrice > 0 && minPrice > salePrice) warnings.push('最低价高于销售价，请调整价格梯度')
-    if (salePrice > 0 && !priceForm.remark && grossProfit.value < 0) warnings.push('亏损定价建议填写备注，便于后续 KPI 复盘')
-    return warnings
-})
-const pendingMediaList = computed(() => {
-    return (mediaAsset.value?.media || []).filter((item: any) => item.status === 'pending')
 })
 const visibleMediaList = computed(() => {
     const media = mediaAsset.value?.media || []
@@ -690,13 +523,11 @@ const selectableMediaList = computed(() => visibleMediaList.value.filter((item: 
 const mobileSyncHint = computed(() => {
     if (!mediaAsset.value) return ''
     if (mediaAsset.value.photo_status === 'approved') return '照片已确认，可以进入定价'
-    if (pendingMediaList.value.length > 0) return `有 ${ pendingMediaList.value.length } 张待复检图片`
-    if (Number(mediaAsset.value.image_count || 0) > 0) return '图片已回传，请复检后确认'
+    if (Number(mediaAsset.value.image_count || 0) > 0) return '图片已回传，删掉不清晰的后点确认拍照完成'
     return '等待手机扫码拍照上传'
 })
 
 onMounted(() => {
-    loadPool()
     loadAssets()
     loadStats()
 })
@@ -716,14 +547,7 @@ const loadStats = async () => {
 
 const handleTaskTab = async (taskType: string) => {
     activeTaskTab.value = taskType
-    selectedPoolRows.value = []
     selectedAssetRows.value = []
-    if (taskType === 'pool') {
-        activeTab.value = 'pool'
-        poolTable.page = 1
-        await loadPool()
-        return
-    }
     activeTab.value = 'asset'
     assetSearch.task_type = taskType
     assetSearch.status = ''
@@ -731,17 +555,6 @@ const handleTaskTab = async (taskType: string) => {
     assetSearch.price_status = ''
     assetTable.page = 1
     await loadAssets()
-}
-
-const loadPool = async () => {
-    poolTable.loading = true
-    try {
-        const res: any = await getAssetPool({ ...poolSearch, page: poolTable.page, limit: poolTable.limit })
-        poolTable.data = res.data?.data || []
-        poolTable.total = res.data?.total || 0
-    } finally {
-        poolTable.loading = false
-    }
 }
 
 const loadAssets = async () => {
@@ -756,13 +569,7 @@ const loadAssets = async () => {
 }
 
 const handleTabChange = () => {
-    activeTab.value === 'pool' ? loadPool() : loadAssets()
-}
-
-const resetPoolSearch = () => {
-    poolSearchRef.value?.resetFields()
-    poolTable.page = 1
-    loadPool()
+    loadAssets()
 }
 
 const resetAssetSearch = () => {
@@ -771,53 +578,6 @@ const resetAssetSearch = () => {
     loadAssets()
 }
 
-const handleBatchImport = async () => {
-    if (!selectedPoolRows.value.length) return
-    importLoading.value = true
-    try {
-        await importAssets(selectedPoolRows.value.map(item => item.id))
-        ElMessage.success('资产导入成功')
-        activeTab.value = 'asset'
-        activeTaskTab.value = 'photo'
-        assetSearch.task_type = 'photo'
-        await Promise.all([loadPool(), loadAssets(), loadStats()])
-    } finally {
-        importLoading.value = false
-    }
-}
-
-const handleSingleImport = async (row: any) => {
-    row._importing = true
-    try {
-        await importAssets([row.id])
-        ElMessage.success('资产导入成功')
-        activeTab.value = 'asset'
-        activeTaskTab.value = 'photo'
-        assetSearch.task_type = 'photo'
-        await Promise.all([loadPool(), loadAssets(), loadStats()])
-    } finally {
-        row._importing = false
-    }
-}
-
-const handleScanImport = async () => {
-    if (!scanKeyword.value) {
-        ElMessage.warning('请先扫码或输入设备码')
-        return
-    }
-    scanLoading.value = true
-    try {
-        await scanImportAsset(scanKeyword.value)
-        ElMessage.success('扫码入库成功')
-        scanKeyword.value = ''
-        activeTab.value = 'asset'
-        activeTaskTab.value = 'photo'
-        assetSearch.task_type = 'photo'
-        await Promise.all([loadPool(), loadAssets(), loadStats()])
-    } finally {
-        scanLoading.value = false
-    }
-}
 
 const openDetail = async (row: any) => {
     const res: any = await getAssetInfo(row.id)
@@ -1144,7 +904,7 @@ const handleSaveMedia = async () => {
                 sort: index + 1
             }))
         })
-        ElMessage.success('媒体已保存，等待复检')
+        ElMessage.success('媒体已保存')
         mediaForm.url = ''
         await refreshMediaAsset()
         await loadAssets()
@@ -1157,8 +917,8 @@ const reviewMedia = async (item: any, status: 'approved' | 'rejected') => {
     let rejectReason = ''
     if (status === 'rejected') {
         try {
-            const { value } = await ElMessageBox.prompt('请填写退回原因', '图片复检', {
-                confirmButtonText: '退回',
+            const { value } = await ElMessageBox.prompt('删除后该图片不展示、不参与导出。可填写删除原因。', '删除图片', {
+                confirmButtonText: '确认删除',
                 cancelButtonText: '取消',
                 inputPlaceholder: '如：反光、模糊、角度不完整'
             })
@@ -1168,7 +928,7 @@ const reviewMedia = async (item: any, status: 'approved' | 'rejected') => {
         }
     }
     await reviewAssetMedia(item.id, { status, reject_reason: rejectReason })
-    ElMessage.success(status === 'approved' ? '已通过' : '已退回')
+    ElMessage.success(status === 'approved' ? '已通过' : '已删除')
     if (currentAsset.value?.id) await openDetail(currentAsset.value)
     await loadAssets()
 }
@@ -1176,19 +936,6 @@ const reviewMedia = async (item: any, status: 'approved' | 'rejected') => {
 const reviewDialogMedia = async (item: any, status: 'approved' | 'rejected') => {
     await reviewMedia(item, status)
     if (mediaAsset.value?.id) await refreshMediaAsset()
-}
-
-const approveAllPendingMedia = async () => {
-    if (!pendingMediaList.value.length) return
-    const count = pendingMediaList.value.length
-    await reviewAssetMediaBatch(mediaAsset.value.id, {
-        media_ids: pendingMediaList.value.map((item: any) => item.id),
-        status: 'approved',
-        reject_reason: ''
-    })
-    ElMessage.success(`已通过 ${ count } 张图片`)
-    await refreshMediaAsset()
-    await loadAssets()
 }
 
 const toggleMediaSelection = (mediaId: number) => {
@@ -1236,35 +983,6 @@ const reviewSelectedMedia = async (status: 'approved' | 'rejected') => {
     await loadAssets()
 }
 
-const canConfirmPhotos = (asset: any) => {
-    if (!asset) return false
-    if (asset.photo_status === 'approved') return false
-    if (asset.status === 'exported' || asset.status === 'archived') return false
-    return Number(asset.image_count || 0) > 0
-}
-
-const canUploadMedia = (asset: any) => {
-    if (!asset) return false
-    if (asset.status === 'exported' || asset.status === 'archived') return false
-    return ['wait_photo', 'photoing', 'photo_review', 'photo_rejected'].includes(asset.status)
-}
-
-const canPrice = (asset: any) => {
-    if (!asset) return false
-    if (asset.status === 'exported' || asset.status === 'archived') return false
-    return asset.photo_status === 'approved' || ['wait_price', 'ready_export'].includes(asset.status)
-}
-
-const nextActionLabel = (asset: any) => {
-    if (!asset) return '-'
-    if (asset.status === 'exported') return '已导出，可归档'
-    if (asset.photo_status === 'rejected' || asset.status === 'photo_rejected') return '下一步：补拍退回图片'
-    if (['wait_photo', 'photoing'].includes(asset.photo_status) || Number(asset.image_count || 0) <= 0) return '下一步：拍照/补图'
-    if (asset.photo_status !== 'approved') return '下一步：复检确认照片'
-    if (asset.price_status !== 'completed') return '下一步：销售定价'
-    return '下一步：导出销售资料'
-}
-
 const handleConfirmPhotos = async (asset: any, refreshDetail = false) => {
     if (!asset?.id || !canConfirmPhotos(asset)) return
     asset._confirmingPhotos = true
@@ -1290,7 +1008,7 @@ const photoWorkflowSteps = (asset: any) => {
     const priced = asset?.price_status === 'completed'
     return [
         { key: 'capture', index: 1, title: '拍摄商品图', desc: hasMedia ? `已回传 ${ asset.image_count || 0 } 张` : '手机扫码拍照上传', done: hasMedia, active: !hasMedia },
-        { key: 'review', index: 2, title: '复检确认', desc: reviewed ? '照片已确认' : '检查是否清晰完整', done: reviewed, active: hasMedia && !reviewed },
+        { key: 'review', index: 2, title: '确认拍照完成', desc: reviewed ? '照片已确认' : '删掉不清晰的，确认后进入定价', done: reviewed, active: hasMedia && !reviewed },
         { key: 'price', index: 3, title: '生成定价工单', desc: priced ? '定价已完成' : '确认后进入定价', done: priced, active: reviewed && !priced },
     ]
 }
@@ -1317,40 +1035,9 @@ const sourceName = (source = '') => {
     } as Record<string, string>)[source] || source || '未知'
 }
 
-const openPriceDialog = async (row: any) => {
-    const res: any = await getAssetInfo(row.id)
-    priceAsset.value = res.data
-    priceForm.sale_price = Number(priceAsset.value.sale_price || 0)
-    priceForm.peer_price = Number(priceAsset.value.peer_price || 0)
-    priceForm.min_price = Number(priceAsset.value.min_price || 0)
-    priceForm.remark = priceAsset.value.price_remark || ''
+const openPriceDialog = (row: any) => {
+    priceRow.value = row
     priceDialogVisible.value = true
-}
-
-const handleCompletePrice = async () => {
-    if (!priceAsset.value?.id) return
-    if (priceForm.sale_price <= 0) {
-        ElMessage.warning('请输入销售价')
-        return
-    }
-    if (Number(priceForm.min_price || 0) > 0 && Number(priceForm.min_price || 0) > Number(priceForm.sale_price || 0)) {
-        ElMessage.warning('最低价不能高于销售价')
-        return
-    }
-    priceLoading.value = true
-    try {
-        if (priceAsset.value.photo_status !== 'approved') {
-            await ElMessageBox.confirm('当前照片还没有确认完成，仍然保存定价吗？建议先由复检人员确认照片。', '定价提醒', {
-                type: 'warning'
-            })
-        }
-        await completeAssetPrice(priceAsset.value.id, { ...priceForm })
-        ElMessage.success('定价已保存')
-        priceDialogVisible.value = false
-        await Promise.all([loadAssets(), loadStats()])
-    } finally {
-        priceLoading.value = false
-    }
 }
 
 const handleExport = async () => {
@@ -1371,9 +1058,6 @@ const handleExport = async () => {
     }
 }
 
-const money = (value: any) => Number(value || 0).toFixed(2)
-const imgUrl = (url: string) => img(url || '')
-
 const refreshCurrentDetail = async () => {
     if (!currentAsset.value?.id) return
     const res: any = await getAssetInfo(currentAsset.value.id)
@@ -1381,95 +1065,6 @@ const refreshCurrentDetail = async () => {
     await loadAssets()
     ElMessage.success('详情已刷新')
 }
-
-const checkSummaryEntries = (asset: any) => {
-    const device = asset?.recycle_device || asset?.recycleDevice || {}
-    const summary = asset?.check_summary || {}
-    const data = {
-        ...normalizeCheckResult(device.check_result || '', '内部质检'),
-        ...normalizeCheckResult(device.check_result_seller || '', '卖家质检'),
-        ...normalizeCheckResult(device.check_result_buyer || '', '买家质检'),
-        ...normalizeObject(summary),
-    }
-    if (!data['容量'] && (asset?.ext_json?.capacity || device.capacity)) data['容量'] = asset?.ext_json?.capacity || device.capacity
-    if (!data['颜色'] && (asset?.ext_json?.color || device.color)) data['颜色'] = asset?.ext_json?.color || device.color
-    return Object.entries(data)
-        .filter(([, value]) => value !== '' && value !== null && value !== undefined)
-        .map(([key, value]) => ({
-            key,
-            value: typeof value === 'object' ? JSON.stringify(value) : String(value)
-        }))
-}
-
-const recycleCheckImages = (asset: any) => {
-    const device = asset?.recycle_device || asset?.recycleDevice || {}
-    return [
-        ...splitImages(asset?.ext_json?.check_images_buyer),
-        ...splitImages(asset?.ext_json?.check_images_seller),
-        ...splitImages(asset?.ext_json?.check_images),
-        ...splitImages(device.check_images_buyer),
-        ...splitImages(device.check_images_seller),
-        ...splitImages(device.check_images)
-    ].filter((url, index, arr) => url && arr.indexOf(url) === index)
-}
-
-const deviceSpecText = (asset: any) => {
-    const device = asset?.recycle_device || asset?.recycleDevice || {}
-    return [asset?.ext_json?.capacity || device.capacity, asset?.ext_json?.color || device.color].filter(Boolean).join(' / ')
-}
-
-const assetImages = (asset: any) => {
-    return (asset?.media || [])
-        .filter((item: any) => item.media_type !== 'video' && item.status !== 'rejected')
-        .map((item: any) => item.url)
-        .filter(Boolean)
-}
-
-const priceCompareImages = (asset: any) => {
-    return [...recycleCheckImages(asset).slice(0, 4), ...assetImages(asset).slice(0, 4)]
-}
-
-const splitImages = (value: any) => {
-    if (Array.isArray(value)) return value.filter(Boolean)
-    return String(value || '').split(',').map(item => item.trim()).filter(Boolean)
-}
-
-const normalizeObject = (value: any) => {
-    if (!value) return {}
-    if (typeof value === 'object') return value
-    try {
-        const parsed = JSON.parse(value)
-        return typeof parsed === 'object' && parsed ? parsed : { 原始质检: value }
-    } catch {
-        return { 原始质检: value }
-    }
-}
-
-const normalizeCheckResult = (value: any, label: string) => {
-    if (!value) return {}
-    if (typeof value === 'object') return value
-    try {
-        const parsed = JSON.parse(value)
-        return typeof parsed === 'object' && parsed ? parsed : { [label]: value }
-    } catch {
-        return { [label]: value }
-    }
-}
-
-const statusType = (status: string) => {
-    if (status === 'exported') return 'success'
-    if (status === 'ready_export' || status === 'wait_price') return 'warning'
-    if (status === 'photo_rejected') return 'danger'
-    return 'info'
-}
-const photoStatusType = (status: string) => {
-    if (status === 'approved') return 'success'
-    if (status === 'rejected') return 'danger'
-    if (status === 'review') return 'warning'
-    return 'info'
-}
-const priceStatusType = (status: string) => status === 'completed' ? 'success' : (status === 'pending' ? 'warning' : 'info')
-const mediaStatusType = (status: string) => status === 'approved' ? 'success' : (status === 'rejected' ? 'danger' : 'warning')
 </script>
 
 <style lang="scss" scoped>
@@ -1636,16 +1231,49 @@ const mediaStatusType = (status: string) => status === 'approved' ? 'success' : 
 
     .check-summary {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
         gap: 8px;
     }
 
-    .check-summary__item,
+    .check-summary__item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        background: var(--el-bg-color);
+        color: var(--el-text-color-secondary);
+        font-size: 12px;
+
+        strong {
+            color: var(--el-text-color-primary);
+            font-weight: 600;
+            text-align: left;
+            line-height: 1.6;
+            word-break: break-word;
+            white-space: pre-wrap;
+
+            &.is-clamped {
+                display: -webkit-box;
+                -webkit-line-clamp: 4;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+                white-space: normal;
+            }
+        }
+
+        .summary-toggle {
+            align-self: flex-start;
+            color: var(--el-color-primary);
+            font-size: 12px;
+            cursor: pointer;
+        }
+    }
+
     .mini-summary > div {
         display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        min-height: 32px;
+        flex-direction: column;
+        gap: 4px;
         padding: 7px 10px;
         border-radius: 6px;
         background: var(--el-bg-color);
@@ -1655,7 +1283,13 @@ const mediaStatusType = (status: string) => status === 'approved' ? 'success' : 
         strong {
             color: var(--el-text-color-primary);
             font-weight: 600;
-            text-align: right;
+            word-break: break-word;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-align: left;
         }
     }
 
@@ -2135,6 +1769,32 @@ const mediaStatusType = (status: string) => status === 'approved' ? 'success' : 
         .stat-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
+    }
+}
+</style>
+
+<!-- 弹窗 teleport 到 body，用非 scoped 全局样式按弹窗类名定位，保证定高/滚动一定生效 -->
+<style lang="scss">
+/* 完成定价弹窗：主体定高可滚、底部按钮固定，统一交互观感 */
+.da-form-dialog {
+    .el-dialog__body {
+        padding-top: 12px;
+        padding-bottom: 8px;
+    }
+
+    .da-dialog-body {
+        max-height: 56vh;
+        overflow-y: auto;
+        padding-right: 6px;
+    }
+
+    .da-dialog-body::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .da-dialog-body::-webkit-scrollbar-thumb {
+        border-radius: 6px;
+        background: var(--el-border-color);
     }
 }
 </style>

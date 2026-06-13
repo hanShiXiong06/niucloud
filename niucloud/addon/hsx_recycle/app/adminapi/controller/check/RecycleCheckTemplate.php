@@ -14,6 +14,8 @@ class RecycleCheckTemplate extends BaseAdminController
             ['keyword', ''],
             ['scene', ''],
             ['status', ''],
+            ['source', ''],
+            ['category_id', 0],
         ]);
         return success((new RecycleCheckTemplateService())->getPage($data));
     }
@@ -24,6 +26,8 @@ class RecycleCheckTemplate extends BaseAdminController
             ['keyword', ''],
             ['scene', ''],
             ['status', ''],
+            ['category_id', 0],
+            ['limit', 0],
         ]);
         return success((new RecycleCheckTemplateService())->all($data));
     }
@@ -62,6 +66,8 @@ class RecycleCheckTemplate extends BaseAdminController
     {
         $data = $this->request->params([
             ['template_id', 0],
+            ['device_id', 0],
+            ['category_id', 0],
             ['scene', 'phone'],
             ['brand', ''],
         ]);
@@ -162,6 +168,15 @@ class RecycleCheckTemplate extends BaseAdminController
     {
         (new RecycleCheckTemplateService())->deleteOption($id);
         return success('DELETE_SUCCESS');
+    }
+
+    public function setOptionDefault(int $id)
+    {
+        $data = $this->request->params([
+            ['is_default', 1],
+        ]);
+        (new RecycleCheckTemplateService())->setOptionDefault($id, (int)$data['is_default']);
+        return success('MODIFY_SUCCESS');
     }
 
     private function templateParams(): array

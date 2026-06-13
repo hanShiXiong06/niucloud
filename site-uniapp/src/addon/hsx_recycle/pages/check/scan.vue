@@ -961,8 +961,8 @@ const formatScanTime = (value: any) => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #eff6ff;
-    color: #2563eb;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary);
     flex-shrink: 0;
 }
 
@@ -1055,9 +1055,9 @@ const formatScanTime = (value: any) => {
 .candidate-item__status {
     padding: 6rpx 12rpx;
     border-radius: 999rpx;
-    background: #eff6ff;
+    background: var(--hsx-primary-50);
     font-size: 22rpx;
-    color: #2563eb;
+    color: var(--hsx-primary);
     font-weight: 700;
     line-height: 1.2;
 }
@@ -1129,8 +1129,8 @@ const formatScanTime = (value: any) => {
     margin-left: 16rpx;
     padding: 8rpx 14rpx;
     border-radius: 999rpx;
-    background: #eff6ff;
-    color: #2563eb;
+    background: var(--hsx-primary-50);
+    color: var(--hsx-primary);
     font-size: 22rpx;
     font-weight: 700;
     flex-shrink: 0;
