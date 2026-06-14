@@ -77,7 +77,7 @@
                     </el-table-column>
                     <el-table-column label="操作" width="160" fixed="right">
                         <template #default="{ row }">
-                            <el-button link type="primary" @click.stop="selectTemplate(row)">编辑质检项</el-button>
+                            <el-button link type="primary" @click.stop="openTemplateEditor(row)">编辑质检项</el-button>
                             <el-dropdown trigger="click" @command="cmd => handleTemplateCommand(String(cmd), row)">
                                 <el-button link type="primary">更多</el-button>
                                 <template #dropdown>
@@ -638,8 +638,13 @@ const selectTemplate = async (row: any) => {
     currentTemplate.value = row
     currentGroup.value = null
     currentField.value = null
-    editorDrawerVisible.value = true
     await loadGroups()
+}
+
+// 点「编辑质检项」才打开抽屉；单纯点行只是选中，不自动弹出
+const openTemplateEditor = async (row: any) => {
+    await selectTemplate(row)
+    editorDrawerVisible.value = true
 }
 
 const loadGroups = async () => {
