@@ -137,31 +137,54 @@ class RecycleTemplateBindingService extends BaseAdminService
         $targetType = $this->normalizeTargetType($targetType);
         $chain = $targetType === 'global' ? [] : $this->getAncestorChain($targetId);
 
+        // check 与 print 各自独立解析：沿型号→祖先链各取第一个非0，缺的再回退 global 兜底。
+        // 这样拍机堂型号(只绑了 check)，print 会自动回退到 global 打印模板，无需逐型号设置。
+        $checkId = 0; $checkName = ''; $printId = 0; $printName = '';
+        $srcType = ''; $srcId = 0; $srcName = '';
+        $pick = function (array $b, array $node, string $type) use (&$checkId, &$checkName, &$printId, &$printName, &$srcType, &$srcId, &$srcName) {
+            if ($checkId <= 0 && (int)($b['check_template_id'] ?? 0) > 0) {
+                $checkId = (int)$b['check_template_id'];
+                $checkName = (string)($b['check_template_name'] ?? '');
+                if ($srcType === '') { $srcType = $type; $srcId = $type === 'global' ? 0 : (int)($node['id'] ?? 0); $srcName = $type === 'global' ? '通用兜底' : (string)($node['model_full_name'] ?? $node['node_name'] ?? ''); }
+            }
+            if ($printId <= 0 && (int)($b['print_template_id'] ?? 0) > 0) {
+                $printId = (int)$b['print_template_id'];
+                $printName = (string)($b['print_template_name'] ?? '');
+                if ($srcType === '') { $srcType = $type; $srcId = $type === 'global' ? 0 : (int)($node['id'] ?? 0); $srcName = $type === 'global' ? '通用兜底' : (string)($node['model_full_name'] ?? $node['node_name'] ?? ''); }
+            }
+        };
+
         foreach ($chain as $index => $node) {
             $binding = $this->findBinding('model_dict', (int)$node['id'], $sceneKey);
-            if (!empty($binding) && (int)($binding['status'] ?? 0) === 1 && $this->hasUsableTemplate($binding)) {
-                if ($index > 0 && empty($binding['inherit_enabled'])) {
-                    continue;
-                }
-                return $this->formatResolvedBinding($binding, $node, 'model_dict');
+            if (empty($binding) || (int)($binding['status'] ?? 0) !== 1) {
+                continue;
+            }
+            if ($index > 0 && empty($binding['inherit_enabled'])) {
+                continue;
+            }
+            $pick($binding, $node, 'model_dict');
+            if ($checkId > 0 && $printId > 0) {
+                break;
             }
         }
 
-        $global = $this->findBinding('global', 0, $sceneKey);
-        if (!empty($global) && (int)($global['status'] ?? 0) === 1 && $this->hasUsableTemplate($global)) {
-            return $this->formatResolvedBinding($global, [], 'global');
+        if ($checkId <= 0 || $printId <= 0) {
+            $global = $this->findBinding('global', 0, $sceneKey);
+            if (!empty($global) && (int)($global['status'] ?? 0) === 1) {
+                $pick($global, [], 'global');
+            }
         }
 
         return [
-            'matched' => false,
-            'source_type' => '',
-            'source_id' => 0,
-            'source_name' => '',
+            'matched' => ($checkId > 0 || $printId > 0),
+            'source_type' => $srcType,
+            'source_id' => $srcId,
+            'source_name' => $srcName,
             'scene_key' => $sceneKey,
-            'check_template_id' => 0,
-            'check_template_name' => '',
-            'print_template_id' => 0,
-            'print_template_name' => '',
+            'check_template_id' => $checkId,
+            'check_template_name' => $checkName,
+            'print_template_id' => $printId,
+            'print_template_name' => $printName,
         ];
     }
 
