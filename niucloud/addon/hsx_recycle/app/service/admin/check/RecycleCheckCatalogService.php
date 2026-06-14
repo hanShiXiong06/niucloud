@@ -163,6 +163,20 @@ class RecycleCheckCatalogService extends BaseAdminService
                     ]);
                 }
             }
+            // 补「设备信息」组 + 保修信息字段(input，允许API回填)：拍机堂数据不含保修，留此字段供「查保修」回填。
+            $infoGid = (int)Db::name('recycle_check_group')->insertGetId([
+                'site_id' => $this->site_id, 'template_id' => $tplId, 'group_key' => 'g_info',
+                'group_name' => '设备信息', 'description' => '', 'sort' => 99, 'status' => 1,
+                'create_at' => $now, 'update_at' => $now,
+            ]);
+            Db::name('recycle_check_field')->insert([
+                'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $infoGid,
+                'field_key' => 'warranty_info', 'field_name' => '保修信息', 'component' => 'input',
+                'selection_mode' => '', 'placeholder' => '点「查保修」自动回填', 'is_required' => 0,
+                'is_show' => 1, 'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
+                'result_template' => '保修: {value}', 'api_fill_enabled' => 1, 'api_fill_policy' => 'overwrite',
+                'sort' => 1, 'create_at' => $now, 'update_at' => $now,
+            ]);
         }
 
         $nodeId = $this->resolveModelNode($nodeCache, $pid, $model);
