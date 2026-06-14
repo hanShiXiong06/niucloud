@@ -8,9 +8,13 @@ export function getCheckCatalogList(params: Record<string, any>) {
 export function getCheckCatalogBatches() {
     return request.get('recycle/check_catalog/batches')
 }
-// 导入检测目录(CSV, multipart)
-export function importCheckCatalog(data: FormData) {
-    return request.post('recycle/check_catalog/import', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+// 上传原始CSV，返回 {batch_id, token, total_rows}
+export function uploadCheckCatalog(data: FormData) {
+    return request.post('recycle/check_catalog/import_upload', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+// 处理一片，前端循环调用直到 done
+export function importChunkCheckCatalog(params: { batch_id: number; token: string; offset: number; limit?: number }) {
+    return request.post('recycle/check_catalog/import_chunk', params)
 }
 // 选项级别列表 + 统计
 export function getCheckSeverityList(params: Record<string, any>) {

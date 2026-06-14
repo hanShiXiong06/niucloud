@@ -354,7 +354,8 @@ Route::group('recycle', function () {
  * 质检检测目录(扁平) + 选项级别字典
  */
 Route::group('recycle', function () {
-    Route::post('check_catalog/import', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@import');
+    Route::post('check_catalog/import_upload', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@importUpload');
+    Route::post('check_catalog/import_chunk', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@importChunk');
     Route::get('check_catalog/lists', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@lists');
     Route::get('check_catalog/by_model', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@byModel');
     Route::get('check_catalog/batches', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@batches');

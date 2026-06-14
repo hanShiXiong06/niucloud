@@ -41,13 +41,31 @@ class RecycleCheckCatalog extends BaseAdminController
         return success($this->service->batchList(30));
     }
 
-    /**
-     * 大批量初始数据请用 LOAD DATA 灌库(本地已去重 dict/data)，不走网页上传。
-     * 此处仅给提示，避免误用导致 50 万行压垮服务器。
-     */
-    public function import()
+    /** 上传原始 CSV(型号,产品ID,检测项,分类,默认选项,全部选项)，返回批次+token */
+    public function importUpload()
     {
-        return fail('检测目录为50万级数据，请用 sql/load_check_data.sql 走 LOAD DATA 灌库，不支持网页上传。');
+        $file = $this->request->file('file');
+        if (!$file || !$file->isValid()) {
+            return fail('文件上传失败，请重试');
+        }
+        $ext = strtolower($file->getOriginalExtension());
+        if (!in_array($ext, ['csv', 'txt'], true)) {
+            return fail('请上传 CSV 文件（拍机堂原始表另存为 CSV UTF-8 即可）');
+        }
+        $dir = public_path() . 'upload/check_import/';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        $token = 'pjt_' . date('YmdHis') . '_' . mt_rand(1000, 9999) . '.csv';
+        $file->move($dir, $token);
+        return success('上传成功，开始导入', $this->service->importInit($dir . $token, $token, $file->getOriginalName()));
+    }
+
+    /** 处理一片(前端循环调用直到 done) */
+    public function importChunk()
+    {
+        $p = $this->request->params([['batch_id', 0], ['token', ''], ['offset', 0], ['limit', 2000]]);
+        return success($this->service->importChunk((int)$p['batch_id'], (string)$p['token'], (int)$p['offset'], (int)$p['limit']));
     }
 
     /** 级别字典列表 + 统计 */
