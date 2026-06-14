@@ -57,9 +57,7 @@ export function addOrderDevice(orderId: number, data: any) {
 
 // 更新设备
 export function updateOrderDevice(deviceId: number, data: any) {
-  return request.put(`/recycle/recycle_device/${deviceId}`, {
-    data,
-  });
+  return request.put(`/recycle/recycle_device/${deviceId}`, data);
 }
 
 // 删除设备
@@ -92,9 +90,7 @@ export function adjustDeviceCost(deviceId: number | string, data: any) {
 // updateDevice
 // 更新单个设备信息
 export function updateDevice(deviceId: number, data: any) {
-  return request.put(`/recycle/recycle_device/${deviceId}`, {
-    data,
-  });
+  return request.put(`/recycle/recycle_device/${deviceId}`, data);
 }
 
 // confirmPrice

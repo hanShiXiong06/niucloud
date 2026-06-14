@@ -110,54 +110,53 @@ class RecycleDevice extends BaseAdminController
      */
     public function update(int $id)
     {
-        $data = $this->request->params([
-            ['data', []]
-        ]);
+        // 直接接收扁平参数（不再包一层 data）
+        $data = $this->request->param();
+        unset($data['id']);
 
         // 参数验证
-        $this->validate->scene('update')->check(array_merge(['id' => $id], $data['data']));
+        $this->validate->scene('update')->check(array_merge(['id' => $id], $data));
 
         // 检查是否是质检操作
-        if (isset($data['data']['action']) && $data['data']['action'] == 'check') {
+        if (isset($data['action']) && $data['action'] == 'check') {
             // 组装质检数据
             $checkData = [
-                'check_result' => $data['data']['check_result'] ?? '',
-                'check_images' => $data['data']['check_images'] ?? '',
+                'check_result' => $data['check_result'] ?? '',
+                'check_images' => $data['check_images'] ?? '',
             ];
-            
+
             // 如果有最终价格，添加到质检数据中
-            if (isset($data['data']['final_price']) && $data['data']['final_price'] > 0) {
-                $checkData['final_price'] = $data['data']['final_price'];
+            if (isset($data['final_price']) && $data['final_price'] > 0) {
+                $checkData['final_price'] = $data['final_price'];
             }
-            
+
             // 如果有check_status，添加到质检数据中
-            if (isset($data['data']['check_status'])) {
-                $checkData['check_status'] = $data['data']['check_status'];
+            if (isset($data['check_status'])) {
+                $checkData['check_status'] = $data['check_status'];
             }
-            
+
             // imei
-            if (isset($data['data']['imei'])) {
-                $checkData['imei'] = $data['data']['imei'];
+            if (isset($data['imei'])) {
+                $checkData['imei'] = $data['imei'];
             }
             // info
-            if (isset($data['data']['info'])) {
-                $checkData['info'] = $data['data']['info'];
+            if (isset($data['info'])) {
+                $checkData['info'] = $data['info'];
             }
             // model
-            if (isset($data['data']['model'])) {
-                $checkData['model'] = $data['data']['model'];
+            if (isset($data['model'])) {
+                $checkData['model'] = $data['model'];
             }
             // check_template_id
-            if (isset($data['data']['check_template_id'])) {
-                $checkData['check_template_id'] = $data['data']['check_template_id'];
+            if (isset($data['check_template_id'])) {
+                $checkData['check_template_id'] = $data['check_template_id'];
             }
-            
 
             // 调用质检完成方法
-            return success($this->service->completeCheck($id, $checkData, $data['data']['remark'] ?? ''));
+            return success($this->service->completeCheck($id, $checkData, $data['remark'] ?? ''));
         }
-        
-        return success($this->service->update($id, $data['data']));
+
+        return success($this->service->update($id, $data));
     }
 
     /**

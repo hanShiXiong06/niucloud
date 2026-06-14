@@ -520,8 +520,8 @@ const submitForm = async (action: 'check' | 'save_draft') => {
 
     try {
         const payload = buildSubmitPayload(action)
-        // 兼容 PC 端格式：后端期望数据包在 data 字段中
-        await updateDevice(deviceData.value.id, { data: payload })
+        // 直接传扁平参数（后端已统一不再包 data 层）
+        await updateDevice(deviceData.value.id, payload)
         if (shouldCreateReturnOrder(action)) {
             await createReturnOrder()
         }

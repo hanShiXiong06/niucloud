@@ -1,0 +1,109 @@
+<svg viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <title>二手机系统整体架构</title>
+  <desc>niucloud 平台上的四个独立插件（回收、ERP中台、数据中台、商城）通过标准事件集成；设备主线从回收入库到出库，资金线由应付应收汇入财务中心折账结算。</desc>
+
+  <rect x="0" y="0" width="960" height="540" fill="#ffffff"/>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="20" y="26" font-size="18" font-weight="700" fill="#1a1a1a">二手机系统 · 整体架构</text>
+  <text x="943" y="26" text-anchor="end" font-size="11" fill="#6b7280">✅ 已上线　　⏳ 待商城二开</text>
+
+  <!-- Platform bar -->
+  <rect x="20" y="40" width="923" height="40" rx="8" fill="#f6f7f9" stroke="#d6d9de"/>
+  <text x="481" y="65" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1a1a">niucloud SaaS 平台 · ThinkPHP 8（后端）＋ Vue 3 / Element Plus（后台）· 插件化 addon 架构</text>
+
+  <!-- box1 回收 -->
+  <g>
+    <rect x="20" y="100" width="218" height="138" rx="10" fill="#ffffff" stroke="#d6d9de"/>
+    <rect x="20" y="100" width="218" height="30" rx="10" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="34" y="120" font-size="14" font-weight="700" fill="#1a1a1a">回收　hsx_recycle</text>
+    <text x="34" y="152" font-size="11.5" fill="#5b616e">收货端：客户卖机给我们</text>
+    <text x="34" y="172" font-size="11.5" fill="#5b616e">签收 · 质检 · 定价 · 确认回收 · 打款</text>
+    <text x="34" y="192" font-size="11.5" fill="#5b616e">员工 KPI 看板</text>
+    <text x="34" y="222" font-size="11" font-weight="600" fill="#2563eb">产出：成本 + 应付（我欠客户）</text>
+  </g>
+
+  <!-- box2 ERP 中枢 -->
+  <g>
+    <rect x="254" y="100" width="218" height="138" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+    <rect x="254" y="100" width="218" height="30" rx="10" fill="#2563eb"/>
+    <text x="268" y="120" font-size="14" font-weight="700" fill="#ffffff">ERP · 中枢　hsx_erp</text>
+    <text x="268" y="152" font-size="11.5" fill="#5b616e">进销存（串号级 / 一物一码）</text>
+    <text x="268" y="172" font-size="11.5" fill="#5b616e">入库 · 整备 · 设备流转</text>
+    <text x="268" y="192" font-size="11.5" fill="#5b616e">出库 / 调拨（同行出货）</text>
+    <text x="268" y="222" font-size="11" font-weight="600" fill="#2563eb">内置：财务中心（见下）</text>
+  </g>
+
+  <!-- box3 数据中台 -->
+  <g>
+    <rect x="488" y="100" width="218" height="138" rx="10" fill="#ffffff" stroke="#d6d9de"/>
+    <rect x="488" y="100" width="218" height="30" rx="10" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="502" y="120" font-size="14" font-weight="700" fill="#1a1a1a">数据中台　device_asset</text>
+    <text x="502" y="152" font-size="11.5" fill="#5b616e">设备实物拍照</text>
+    <text x="502" y="172" font-size="11.5" fill="#5b616e">销售参考定价</text>
+    <text x="502" y="222" font-size="11" font-weight="600" fill="#2563eb">真实售价以拍照后为准</text>
+  </g>
+
+  <!-- box4 商城 待二开 -->
+  <g>
+    <rect x="722" y="100" width="221" height="138" rx="10" fill="#ffffff" stroke="#b9bec7" stroke-dasharray="6 4"/>
+    <rect x="722" y="100" width="221" height="30" rx="10" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="736" y="120" font-size="14" font-weight="700" fill="#1a1a1a">商城　mall</text>
+    <text x="900" y="120" text-anchor="end" font-size="10.5" font-weight="700" fill="#b45309">⏳待二开</text>
+    <text x="736" y="152" font-size="11.5" fill="#5b616e">面向客户 / 同行在线销售</text>
+    <text x="736" y="172" font-size="11.5" fill="#5b616e">以订单为最小颗粒度</text>
+    <text x="736" y="222" font-size="11" font-weight="600" fill="#2563eb">产出：应收（客户欠我）</text>
+  </g>
+
+  <!-- Flow lane -->
+  <text x="20" y="282" font-size="12" font-weight="700" fill="#1a1a1a">设备主线（跨插件标准事件驱动）</text>
+  <g font-size="11.5">
+    <rect x="20" y="294" width="120" height="30" rx="6" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="80" y="313" text-anchor="middle" fill="#1a1a1a">回收·确认回收</text>
+    <line x1="142" y1="309" x2="206" y2="309" stroke="#6b7280" marker-end="url(#arr)"/>
+    <text x="174" y="303" text-anchor="middle" font-size="9.5" fill="#6b7280">入库事件</text>
+
+    <rect x="208" y="294" width="104" height="30" rx="6" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="260" y="313" text-anchor="middle" fill="#1a1a1a">ERP 在库</text>
+    <line x1="314" y1="309" x2="378" y2="309" stroke="#6b7280" marker-end="url(#arr)"/>
+    <text x="346" y="303" text-anchor="middle" font-size="9.5" fill="#6b7280">待拍照</text>
+
+    <rect x="380" y="294" width="120" height="30" rx="6" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="440" y="313" text-anchor="middle" fill="#1a1a1a">中台拍照定价</text>
+    <line x1="502" y1="309" x2="566" y2="309" stroke="#6b7280" marker-end="url(#arr)"/>
+    <text x="534" y="303" text-anchor="middle" font-size="9.5" fill="#6b7280">定价回写</text>
+
+    <rect x="568" y="294" width="104" height="30" rx="6" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="620" y="313" text-anchor="middle" fill="#1a1a1a">ERP 可售</text>
+    <line x1="674" y1="309" x2="738" y2="309" stroke="#6b7280" marker-end="url(#arr)"/>
+    <text x="706" y="303" text-anchor="middle" font-size="9.5" fill="#6b7280">销售</text>
+
+    <rect x="740" y="294" width="203" height="30" rx="6" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="841" y="313" text-anchor="middle" fill="#1a1a1a">出库：商城 / 同行出货 / 报废</text>
+  </g>
+
+  <!-- Finance band -->
+  <rect x="20" y="346" width="923" height="78" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="34" y="368" font-size="13" font-weight="700" fill="#2563eb">财务中心（ERP 内置）· 往来单位锚 = member_id</text>
+  <g font-size="11.5">
+    <rect x="34" y="378" width="250" height="34" rx="6" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="159" y="400" text-anchor="middle" fill="#1a1a1a">应付（来自回收：我欠客户）</text>
+    <text x="300" y="400" text-anchor="middle" font-size="16" fill="#6b7280">＋</text>
+    <rect x="318" y="378" width="278" height="34" rx="6" fill="#eef0f3" stroke="#d6d9de"/>
+    <text x="457" y="400" text-anchor="middle" fill="#1a1a1a">应收（来自商城 / 同行出货：客户欠我）</text>
+    <line x1="600" y1="395" x2="636" y2="395" stroke="#6b7280" marker-end="url(#arr)"/>
+    <rect x="640" y="378" width="295" height="34" rx="6" fill="#2563eb"/>
+    <text x="787" y="400" text-anchor="middle" font-weight="600" fill="#ffffff">结算：现金　或　折账（应收抵应付，只结差额）</text>
+  </g>
+
+  <!-- Principles footer -->
+  <text x="20" y="452" font-size="12" font-weight="700" fill="#1a1a1a">架构红线</text>
+  <text x="20" y="472" font-size="11" fill="#5b616e">不改平台核心　·　插件相互独立，跨插件只发标准事件（版本化 + 幂等），绝不直接读写对方数据　·　对方插件缺席自动降级　·　跨插件副作用故障隔离</text>
+  <text x="20" y="490" font-size="11" fill="#5b616e">价值点：一物一码串号管理　·　数据中台统一拍照定价　·　多渠道销售　·　账目自动折账　·　模块可独立启停、商城可换成外部系统</text>
+</svg>
