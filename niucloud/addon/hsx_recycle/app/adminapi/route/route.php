@@ -349,6 +349,25 @@ Route::group('recycle', function () {
 ]);
 // USER_CODE_END -- recycle_check_template
 
+// ✅ USER_CODE_BEGIN -- recycle_check_catalog
+/**
+ * 质检检测目录(扁平) + 选项级别字典
+ */
+Route::group('recycle', function () {
+    Route::post('check_catalog/import', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@import');
+    Route::get('check_catalog/lists', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@lists');
+    Route::get('check_catalog/batches', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@batches');
+    Route::get('check_catalog/severity', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityLists');
+    Route::post('check_catalog/severity/:id', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severitySet');
+    Route::post('check_catalog/severity_batch', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityBatchSet');
+    Route::post('check_catalog/severity_keyword', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityByKeyword');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+// USER_CODE_END -- recycle_check_catalog
+
 // ✅ USER_CODE_BEGIN -- recycle_printer
 /**
  * 打印机相关接口
