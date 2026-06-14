@@ -75,3 +75,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_import_batch` (
 -- recycle_check_option 加 severity(级别)列（仅 0.0.1/0.0.2 升级时执行；全新安装已在 install.sql 含此列）
 ALTER TABLE `{{prefix}}recycle_check_option`
   ADD COLUMN `severity` varchar(16) NOT NULL DEFAULT 'normal' COMMENT '级别 normal/general/abnormal' AFTER `is_default`;
+
+-- 设备表加 电池效率/单机全套 列(供质检勾选回写 + 打印单独显示；全新安装已在 install.sql 含)
+ALTER TABLE `{{prefix}}recycle_device`
+  ADD COLUMN `battery` varchar(50) NOT NULL DEFAULT '' COMMENT '电池效率/健康（如85%）' AFTER `color`,
+  ADD COLUMN `package_type` varchar(50) NOT NULL DEFAULT '' COMMENT '单机/全套等套装情况' AFTER `battery`;

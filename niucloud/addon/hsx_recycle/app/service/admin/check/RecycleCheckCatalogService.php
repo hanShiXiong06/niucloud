@@ -142,12 +142,20 @@ class RecycleCheckCatalogService extends BaseAdminService
                 }
             }
             $fi = 0;
+            $usedStable = [];
             foreach ($items as $it) {
                 $fi++;
                 $g = $it['group'] !== '' ? $it['group'] : '检测项';
+                // 检测项语义匹配到设备稳定字段(内存→capacity、颜色→color…)就用稳定 key，
+                // 这样勾选的值会写进设备同名列、打印模板的 {capacity} 等变量直接取到；匹配不上才排号 f{N}。
+                $stable = $this->mapFieldKey($it['field']);
+                $fieldKey = ($stable !== '' && !isset($usedStable[$stable])) ? $stable : ('f' . $fi);
+                if ($stable !== '') {
+                    $usedStable[$stable] = true;
+                }
                 $fid = (int)Db::name('recycle_check_field')->insertGetId([
                     'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $groupId[$g],
-                    'field_key' => 'f' . $fi, 'field_name' => $it['field'], 'component' => 'radio',
+                    'field_key' => $fieldKey, 'field_name' => $it['field'], 'component' => 'radio',
                     'selection_mode' => 'single', 'is_required' => 0, 'is_show' => 1,
                     'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
                     'sort' => $fi, 'create_at' => $now, 'update_at' => $now,
@@ -198,6 +206,30 @@ class RecycleCheckCatalogService extends BaseAdminService
             $bound++;
         }
         return $count;
+    }
+
+    /**
+     * 检测项名 → 设备稳定字段 key。匹配上则勾选值会写入设备同名列、被打印变量取用。
+     * 仅映射到设备表确有的列(capacity/color/system_version/battery/package_type)，避免保存到不存在的列。
+     * 想加新对应：在 $rules 加一行 + 确保设备表有该列(见 install/update SQL)。
+     */
+    private function mapFieldKey(string $fieldName): string
+    {
+        $rules = [
+            'capacity'       => ['内存', '容量', '规格', '存储'],
+            'color'          => ['颜色'],
+            'system_version' => ['系统'],
+            'battery'        => ['电池'],
+            'package_type'   => ['单机', '全套', '套装', '配件'],
+        ];
+        foreach ($rules as $key => $keywords) {
+            foreach ($keywords as $kw) {
+                if (mb_strpos($fieldName, $kw) !== false) {
+                    return $key;
+                }
+            }
+        }
+        return '';
     }
 
     /** 选项级别：dict 里有就用其级别，没有就建(默认normal)。保住用户改过的级别 */

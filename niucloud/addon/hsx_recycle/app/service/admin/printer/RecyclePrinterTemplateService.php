@@ -889,6 +889,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
         $refurbishmentRequired = (int)($device['refurbishment_required'] ?? 0) === 1;
         $refurbishmentItemsText = $this->formatRefurbishmentItemsText($device['refurbishment_items'] ?? []);
         $battery = $this->firstNotBlank(
+            $device['battery'] ?? null,
             $checkMeta['battery'] ?? null,
             $deviceInfo['battery'] ?? null,
             $this->extractValueFromCheckText($mainCheckResult, '/电池健康度\s*(\d{1,3})\s*%/u')
@@ -973,6 +974,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'warranty_info' => $this->stringifyPrintValue($this->firstNotBlank($device['warranty_info'] ?? null, $deviceInfo['warranty_info'] ?? null)),
             'capacity' => $this->stringifyPrintValue($this->firstNotBlank($device['capacity'] ?? null, $deviceInfo['capacity'] ?? null)),
             'color' => $this->stringifyPrintValue($this->firstNotBlank($device['color'] ?? null, $deviceInfo['color'] ?? null)),
+            'package_type' => $this->stringifyPrintValue($this->firstNotBlank($device['package_type'] ?? null, $deviceInfo['package_type'] ?? null)),
             'battery' => $this->isBlankPrintValue($battery) ? '-' : $this->stringifyPrintValue($battery),
             'battery_num' => $this->isBlankPrintValue($batteryNum) ? '-' : $this->stringifyPrintValue($batteryNum),
             'battery_cycle' => $this->isBlankPrintValue($batteryNum) ? '-' : $this->stringifyPrintValue($batteryNum),

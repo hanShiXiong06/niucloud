@@ -109,6 +109,8 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `sell_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '卖货价格',
   `capacity` varchar(50) NOT NULL DEFAULT '' COMMENT '内存/规格（如256GB）',
   `color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色（如深空黑色）',
+  `battery` varchar(50) NOT NULL DEFAULT '' COMMENT '电池效率/健康（如85%）',
+  `package_type` varchar(50) NOT NULL DEFAULT '' COMMENT '单机/全套等套装情况',
   `price_at` int DEFAULT 0 COMMENT '定价时间',
   `final_price_at` int DEFAULT 0 COMMENT '最终价格时间',
   `price_uid` int NOT NULL DEFAULT 0 COMMENT '价格确认人ID',
