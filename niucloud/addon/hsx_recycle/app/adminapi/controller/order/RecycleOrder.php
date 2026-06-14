@@ -6,7 +6,7 @@ namespace addon\hsx_recycle\app\adminapi\controller\order;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderService as OrderFlowService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDevicePaymentService;
-use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\model\order\RecycleOrder as RecycleOrderModel;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\validate\RecycleOrderValidate;
 use core\base\BaseAdminController;
@@ -376,7 +376,7 @@ class RecycleOrder extends BaseAdminController
             return;
         }
         try {
-            $order = RecycleOrder::where([['id', '=', $orderId], ['site_id', '=', $this->site_id]])->findOrEmpty();
+            $order = RecycleOrderModel::where([['id', '=', $orderId], ['site_id', '=', $this->site_id]])->findOrEmpty();
             if ($amount === null) {
                 $amount = (float)RecycleDevice::where([
                     ['order_id', '=', $orderId],
