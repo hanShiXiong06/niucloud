@@ -55,10 +55,16 @@ class DeviceAssetService extends BaseAdminService
         if ($this->canViewAll()) {
             return null;
         }
-        $ids = DeviceAssetLocationAssign::where([
-            ['site_id', '=', $this->site_id],
-            ['uid', '=', $this->uid],
-        ])->column('location_id');
+        // 库位责任以 ERP 的 erp_location_assign 为唯一来源（中台不再自管，避免两套配置冲突）。
+        // ERP 未安装/无此表时不限制（看全部）。
+        try {
+            $ids = Db::name('erp_location_assign')->where([
+                ['site_id', '=', $this->site_id],
+                ['uid', '=', $this->uid],
+            ])->column('location_id');
+        } catch (\Throwable $e) {
+            return null;
+        }
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
         return empty($ids) ? [-1] : $ids;
     }

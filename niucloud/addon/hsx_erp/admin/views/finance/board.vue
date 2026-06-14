@@ -8,7 +8,10 @@
                         按往来单位汇总应付与应收。可折账=同一单位两侧可净额冲抵的部分；净额&gt;0 我方仍需付现，&lt;0 对方仍需付我。
                     </div>
                 </div>
-                <el-button @click="loadBoard" :loading="loading">刷新</el-button>
+                <div class="flex items-center gap-2">
+                    <el-input v-model="boardKeyword" placeholder="按往来单位筛选" clearable class="!w-[200px]" />
+                    <el-button @click="loadBoard" :loading="loading">刷新</el-button>
+                </div>
             </div>
 
             <div class="mt-5 grid grid-cols-3 gap-4">
@@ -26,7 +29,7 @@
                 </div>
             </div>
 
-            <el-table class="mt-5" :data="board" v-loading="loading" size="large" empty-text="暂无未结往来">
+            <el-table class="mt-5" :data="filteredBoard" v-loading="loading" size="large" empty-text="暂无未结往来">
                 <el-table-column prop="counterparty_name" label="往来单位" min-width="160">
                     <template #default="{ row }">
                         <span class="font-medium">{{ row.counterparty_name || ('#' + row.counterparty_id) }}</span>
@@ -143,6 +146,12 @@ import {
 
 const loading = ref(false)
 const board = ref<any[]>([])
+const boardKeyword = ref('')
+const filteredBoard = computed(() => {
+    const kw = boardKeyword.value.trim()
+    if (!kw) return board.value
+    return board.value.filter((r: any) => String(r.counterparty_name || '').includes(kw) || String(r.counterparty_id || '') === kw)
+})
 const sum = reactive({ payable: 0, receivable: 0, offsetable: 0 })
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)

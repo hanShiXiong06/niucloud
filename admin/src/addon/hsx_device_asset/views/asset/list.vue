@@ -7,7 +7,6 @@
                     <div class="page-subtitle">承接 ERP 转入的设备，完成拍照、定价、归位与资料导出</div>
                 </div>
                 <div class="head-actions">
-                    <el-button :icon="UserFilled" @click="assignDrawerVisible = true">库位分配</el-button>
                     <el-button :icon="Download" :loading="exportLoading" @click="handleExport">导出 Excel</el-button>
                 </div>
             </div>
@@ -394,7 +393,6 @@
 
         <PriceDialog v-model="priceDialogVisible" :asset-row="priceRow" @success="onPriceSuccess" />
 
-        <LocationAssignDrawer v-model="assignDrawerVisible" />
         <SetLocationDialog v-model="locationDialogVisible" :asset="locationDialogAsset" @success="loadAssets" />
     </div>
 </template>
@@ -402,7 +400,7 @@
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
-import { Camera, CircleCheck, Download, Location, Money, Refresh, Search, UserFilled, View } from '@element-plus/icons-vue'
+import { Camera, CircleCheck, Download, Location, Money, Refresh, Search, View } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 import {
     confirmAssetPhotos,
@@ -417,7 +415,6 @@ import {
 } from '@/addon/hsx_device_asset/api/device_asset'
 import { getToken, img } from '@/utils/common'
 import storage from '@/utils/storage'
-import LocationAssignDrawer from './components/LocationAssignDrawer.vue'
 import SetLocationDialog from './components/SetLocationDialog.vue'
 import PriceDialog from './components/PriceDialog.vue'
 import { useAssetFormat } from './composables/useAssetFormat'
@@ -431,7 +428,6 @@ const {
     expandedSummaryKeys, isLongSummary, toggleSummary
 } = useAssetFormat()
 
-const assignDrawerVisible = ref(false)
 const locationDialogVisible = ref(false)
 const locationDialogAsset = ref<Record<string, any> | null>(null)
 const openLocationDialog = (row: Record<string, any>) => {
