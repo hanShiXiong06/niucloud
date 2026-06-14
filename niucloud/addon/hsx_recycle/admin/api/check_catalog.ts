@@ -4,6 +4,10 @@ import request from '@/utils/request'
 export function getCheckCatalogList(params: Record<string, any>) {
     return request.get('recycle/check_catalog/lists', { params })
 }
+// 验机表单 schema(传型号节点 model_dict_id 或 product_id)
+export function getCheckCatalogSchema(params: { model_dict_id?: number; product_id?: number }) {
+    return request.get('recycle/check_catalog/schema', { params })
+}
 // 导入批次记录
 export function getCheckCatalogBatches() {
     return request.get('recycle/check_catalog/batches')
