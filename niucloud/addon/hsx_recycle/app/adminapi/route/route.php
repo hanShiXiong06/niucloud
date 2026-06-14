@@ -181,6 +181,8 @@ Route::group('recycle', function () {
     Route::get('recycle_order/business_stage_options', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@getBusinessStageOptions');
     // 获取商户的收款信息
     Route::get('recycle_order/merchant_pay_info/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@getMerchantPayInfo');
+    // 出账户头候选（打款选从哪个ERP资金账户出钱）
+    Route::get('recycle_order/capital_accounts', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@capitalAccountOptions');
     // 财务确认打款
     Route::put('recycle_order/:id/payment_confirm', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@paymentConfirm');
     Route::post('recycle_order/:id/device_payment_confirm', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleOrder@devicePaymentConfirm');

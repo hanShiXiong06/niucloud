@@ -123,6 +123,11 @@ export function getMerchantPayInfo(memberId: number) {
   );
 }
 
+// 出账户头候选（打款选从哪个ERP资金账户出钱；ERP未装则accounts为空）
+export function getCapitalAccountOptions() {
+  return request.get("/recycle/recycle_order/capital_accounts");
+}
+
 // 确认打款
 export function paymentConfirm(orderId: number, data: any) {
   return request.put(

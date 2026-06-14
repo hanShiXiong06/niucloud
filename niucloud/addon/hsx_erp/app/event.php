@@ -12,6 +12,14 @@ return [
         'GetErpWarehouseList' => [
             'addon\hsx_erp\app\listener\WarehouseListProvider',
         ],
+        // 资金账户列表（回收打款选"出账户头"用）— ERP 未装则无人应答
+        'GetErpCapitalAccountList' => [
+            'addon\hsx_erp\app\listener\CapitalAccountListProvider',
+        ],
+        // 记一笔资金流水（回收打款确认后出账扣余额）
+        'RecordErpCapitalFlow' => [
+            'addon\hsx_erp\app\listener\RecordCapitalFlowListener',
+        ],
         'DeviceAssetPriceCompleted' => [
             'addon\hsx_erp\app\listener\DeviceAssetPriceCompletedListener',
         ],

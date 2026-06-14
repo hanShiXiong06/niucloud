@@ -1006,11 +1006,13 @@ const handlePaymentConfirm = async (paymentData) => {
           ...paymentInfo,
           device_ids: paymentData.selectedDeviceIds || [],
           payment_info: paymentInfo,
+          capital_account_id: paymentData.capitalAccountId || 0,
         });
       } else {
         await paymentConfirm(Number(orderId), {
           ...paymentInfo,
           payment_info: paymentInfo,
+          capital_account_id: paymentData.capitalAccountId || 0,
         });
       }
       paymentDialogVisible.value = false;

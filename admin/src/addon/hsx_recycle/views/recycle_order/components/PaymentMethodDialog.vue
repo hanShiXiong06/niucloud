@@ -217,6 +217,34 @@
         </template>
       </el-empty>
     </div>
+
+    <!-- 出账户头（从哪个资金账户出钱）— 仅安装ERP且有启用账户时显示；不选不影响原打款 -->
+    <el-card v-if="showCapitalAccount" shadow="never" class="capital-account-card">
+      <template #header>
+        <div class="card-header">
+          <span>💰 出账户头</span>
+          <el-tag type="info" size="small">从哪个账户出钱（可选）</el-tag>
+        </div>
+      </template>
+      <el-select
+        v-model="selectedCapitalAccountId"
+        placeholder="选择出账户头（不选则不记资金流水）"
+        clearable
+        filterable
+        style="width: 100%"
+      >
+        <el-option
+          v-for="acc in capitalAccounts"
+          :key="acc.id"
+          :label="capitalAccountLabel(acc)"
+          :value="acc.id"
+        />
+      </el-select>
+      <div class="capital-account-tip">
+        <el-icon><InfoFilled /></el-icon>
+        <span>选了出账户头，确认打款后会在 ERP 该账户记一笔出账流水并扣减余额；不选则按原流程只记打款信息。</span>
+      </div>
+    </el-card>
     </div>
   </FormDialog>
 </template>
@@ -226,6 +254,7 @@ import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
 import { Picture, InfoFilled } from '@element-plus/icons-vue'
+import { getCapitalAccountOptions } from '@/addon/hsx_recycle/api/recycle_order'
 
 // 定义支付信息接口
 interface PaymentInfoItem {
@@ -283,6 +312,7 @@ const emit = defineEmits<{
     selectedDeviceIds?: Array<number | string>
     amount?: number | string      // 本次打款金额（订单模式为订单总额）
     deviceCount?: number          // 设备模式下本次打款的设备数
+    capitalAccountId?: number     // 出账户头ID（来自ERP资金账户，未选为undefined）
   }]
 }>()
 
@@ -300,6 +330,32 @@ const customAccount = ref('')
 
 // 打款凭证图片
 const paymentImages = ref('')
+
+// 出账户头（从哪个ERP资金账户出钱）
+const capitalAccounts = ref<any[]>([])
+const erpConnected = ref(false)
+const selectedCapitalAccountId = ref<number | undefined>(undefined)
+
+// 仅当装了ERP且有启用账户时才显示户头选择
+const showCapitalAccount = computed(() => erpConnected.value && capitalAccounts.value.length > 0)
+
+const capitalAccountLabel = (acc: any) => {
+  const typeText = acc.account_type_text ? `[${acc.account_type_text}] ` : ''
+  const bal = (acc.balance !== undefined && acc.balance !== null && acc.balance !== '')
+    ? ` · 余额¥${acc.balance}` : ''
+  return `${typeText}${acc.account_name || '未命名账户'}${bal}`
+}
+
+const loadCapitalAccounts = async () => {
+  try {
+    const res: any = await getCapitalAccountOptions()
+    capitalAccounts.value = Array.isArray(res.data?.accounts) ? res.data.accounts : []
+    erpConnected.value = !!res.data?.erp_connected
+  } catch (e) {
+    capitalAccounts.value = []
+    erpConnected.value = false
+  }
+}
 
 const updateResponsiveState = () => {
   isMobile.value = window.innerWidth <= 768
@@ -381,6 +437,8 @@ watch(() => props.visible, (newVal) => {
     customAccount.value = ''
     paymentImages.value = ''
     selectedDevices.value = []
+    selectedCapitalAccountId.value = undefined
+    loadCapitalAccounts()
   }
 })
 
@@ -440,7 +498,8 @@ const handleConfirmPayment = () => {
     paymentMode: isDevicePaymentMode.value ? 'device' : 'order',
     selectedDeviceIds: selectedDeviceIds.value,
     amount: currentPaymentInfo.value?.order_summary?.total_amount,
-    deviceCount: isDevicePaymentMode.value ? selectedDevices.value.length : undefined
+    deviceCount: isDevicePaymentMode.value ? selectedDevices.value.length : undefined,
+    capitalAccountId: selectedCapitalAccountId.value
   })
 }
 
@@ -578,6 +637,25 @@ onBeforeUnmount(() => {
 .payment-proof-card {
   border: 1px solid #409eff;
   background: #ecf5ff;
+}
+
+.capital-account-card {
+  margin-top: 16px;
+  border: 1px solid #67c23a;
+  background: #f0f9eb;
+
+  .capital-account-tip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #909399;
+
+    .el-icon {
+      color: #67c23a;
+    }
+  }
 }
 
 .upload-section {

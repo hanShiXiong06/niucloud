@@ -6,6 +6,8 @@ namespace addon\hsx_recycle\app\adminapi\controller\order;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderService;
 use addon\hsx_recycle\app\service\admin\order\RecycleOrderService as OrderFlowService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDevicePaymentService;
+use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\validate\RecycleOrderValidate;
 use core\base\BaseAdminController;
 use core\exception\CommonException;
@@ -262,7 +264,8 @@ class RecycleOrder extends BaseAdminController
             ['remark', ''],
             ['account', ''],           // 收款账号
             ['payment_images', ''],    // 打款凭证图片
-            ['payment_info', []]
+            ['payment_info', []],
+            ['capital_account_id', 0]  // 出账户头ID（来自ERP资金账户，0=未选）
         ]);
         $data = $this->fillPaymentInfo($data);
 
@@ -271,7 +274,10 @@ class RecycleOrder extends BaseAdminController
 
         (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
 
-        return success($this->flowService->payment($id, $data));
+        $result = $this->flowService->payment($id, $data);
+        // 打款成功后，若选了出账户头则在ERP记一笔出账流水（整单：按设备final_price合计）
+        $this->recordCapitalOutflow($id, (int)($data['capital_account_id'] ?? 0), null, '');
+        return success($result);
     }
 
     /**
@@ -292,11 +298,111 @@ class RecycleOrder extends BaseAdminController
             ['remark', ''],
             ['account', ''],
             ['payment_images', ''],
-            ['payment_info', []]
+            ['payment_info', []],
+            ['capital_account_id', 0]  // 出账户头ID（来自ERP资金账户，0=未选）
         ]);
         $data = $this->fillPaymentInfo($data);
 
-        return success((new RecycleDevicePaymentService())->payDevices($id, $data));
+        $result = (new RecycleDevicePaymentService())->payDevices($id, $data);
+        // 打款成功后，若选了出账户头则在ERP记一笔出账流水（设备级：本批次实付金额）
+        $this->recordCapitalOutflow(
+            $id,
+            (int)($data['capital_account_id'] ?? 0),
+            (float)($result['paid_amount'] ?? 0),
+            (string)($result['pay_no'] ?? '')
+        );
+        return success($result);
+    }
+
+    /**
+     * 出账户头候选（打款弹框用）
+     * 解耦：发 GetErpCapitalAccountList 事件向 ERP 取启用资金账户；
+     * ERP 未安装则无人应答 → 返回空 → 前端隐藏户头选择，不影响原打款流程。
+     * @return mixed
+     */
+    public function capitalAccountOptions()
+    {
+        $accounts = [];
+        $erpConnected = false;
+        try {
+            $raw = (array)event('GetErpCapitalAccountList', ['site_id' => $this->site_id]);
+            foreach ($raw as $r) {
+                if (is_array($r)) {
+                    // 只要有插件应答（哪怕空数组），即视为 ERP 已接入
+                    $erpConnected = true;
+                    $accounts = array_values($r);
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+            $erpConnected = false;
+            $accounts = [];
+        }
+
+        // 兜底：事件未应答时，若 ERP 类在场则直接取（避免依赖事件注册时机）
+        if (empty($accounts)) {
+            $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpCapitalAccountService';
+            if (class_exists($cls)) {
+                try {
+                    $all = (new $cls())->getAll();
+                    $accounts = array_values(array_filter($all, function ($a) {
+                        return (int)($a['status'] ?? 1) === 1;
+                    }));
+                    $erpConnected = true;
+                } catch (\Throwable $e) {
+                    // ERP 在场但取数失败：保持已连接判断，账户留空
+                }
+            }
+        }
+
+        return success([
+            'accounts' => $accounts,
+            'erp_connected' => $erpConnected,
+        ]);
+    }
+
+    /**
+     * 打款成功后：若选了"出账户头"且已安装 ERP，则在 ERP 记一笔出账流水（扣余额）。
+     * 解耦：仅发事件，ERP 未装则无人应答；记账失败也绝不影响打款主流程。
+     *
+     * @param int $orderId 订单ID
+     * @param int $capitalAccountId 出账户头ID（0=未选，跳过）
+     * @param float|null $amount 出账金额；null 时按订单设备 final_price 合计计算（整单打款）
+     * @param string $sourceNo 来源单号；空时回退用订单号
+     */
+    private function recordCapitalOutflow(int $orderId, int $capitalAccountId, ?float $amount, string $sourceNo): void
+    {
+        if ($capitalAccountId <= 0) {
+            return;
+        }
+        try {
+            $order = RecycleOrder::where([['id', '=', $orderId], ['site_id', '=', $this->site_id]])->findOrEmpty();
+            if ($amount === null) {
+                $amount = (float)RecycleDevice::where([
+                    ['order_id', '=', $orderId],
+                    ['site_id', '=', $this->site_id],
+                ])->sum('final_price');
+            }
+            $amount = round((float)$amount, 2);
+            if ($amount <= 0) {
+                return;
+            }
+            $orderNo = $order->isEmpty() ? (string)$orderId : (string)$order->order_no;
+            event('RecordErpCapitalFlow', [
+                'site_id'           => $this->site_id,
+                'account_id'        => $capitalAccountId,
+                'direction'         => 'out',
+                'amount'            => $amount,
+                'biz_type'          => 'recycle_payment',
+                'counterparty_name' => $order->isEmpty() ? '' : (string)$order->customer_name,
+                'source_type'       => 'recycle_order',
+                'source_no'         => $sourceNo !== '' ? $sourceNo : $orderNo,
+                'source_id'         => $orderId,
+                'remark'            => '回收打款 - 订单：' . $orderNo,
+            ]);
+        } catch (\Throwable $e) {
+            // 解耦：记流水失败不影响打款
+        }
     }
 
     /**
