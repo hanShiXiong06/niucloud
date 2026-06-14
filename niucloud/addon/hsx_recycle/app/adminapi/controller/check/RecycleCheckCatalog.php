@@ -18,43 +18,21 @@ class RecycleCheckCatalog extends BaseAdminController
         $this->service = new RecycleCheckCatalogService();
     }
 
-    /**
-     * 导入检测目录(CSV，流式，50万行无压力)。
-     * 列顺序：型号,产品ID,检测项,分类,默认选项,全部选项(用 | 分隔)。
-     */
-    public function import()
-    {
-        $file = $this->request->file('file');
-        if (!$file || !$file->isValid()) {
-            return fail('文件上传失败，请重试');
-        }
-        $ext = strtolower($file->getOriginalExtension());
-        if (!in_array($ext, ['csv', 'txt'], true)) {
-            return fail('检测目录请用 CSV 导入（50万行 xlsx 会内存溢出）。可把 Excel 另存为 CSV UTF-8 再传。');
-        }
-        $dir = public_path() . 'upload/check_catalog/';
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        $saveName = 'catalog_' . date('YmdHis') . '_' . mt_rand(1000, 9999) . '.csv';
-        $file->move($dir, $saveName);
-        $absPath = $dir . $saveName;
-
-        $source = (string)$this->request->param('source', 'paijitang');
-        $result = $this->service->importCsv($absPath, $source, $file->getOriginalName());
-
-        if (is_file($absPath)) {
-            @unlink($absPath);
-        }
-        return success('导入完成', $result);
-    }
-
-    /** 目录列表 */
+    /** 检测数据列表(全ID映射，已还原中文) */
     public function lists()
     {
-        return success($this->service->catalogPage($this->request->params([
-            ['model_key', ''], ['group_name', ''], ['keyword', ''], ['page', 1], ['limit', 20],
-        ])));
+        return success([
+            'summary' => $this->service->summary(),
+            'page' => $this->service->dataPage($this->request->params([
+                ['model_key', ''], ['product_id', 0], ['page', 1], ['limit', 20],
+            ])),
+        ]);
+    }
+
+    /** 按型号取整套检测项 */
+    public function byModel()
+    {
+        return success($this->service->getByModel((string)$this->request->param('model_key', '')));
     }
 
     /** 导入批次记录 */
@@ -63,13 +41,22 @@ class RecycleCheckCatalog extends BaseAdminController
         return success($this->service->batchList(30));
     }
 
+    /**
+     * 大批量初始数据请用 LOAD DATA 灌库(本地已去重 dict/data)，不走网页上传。
+     * 此处仅给提示，避免误用导致 50 万行压垮服务器。
+     */
+    public function import()
+    {
+        return fail('检测目录为50万级数据，请用 sql/load_check_data.sql 走 LOAD DATA 灌库，不支持网页上传。');
+    }
+
     /** 级别字典列表 + 统计 */
     public function severityLists()
     {
-        $severityService = new RecycleCheckSeverityService();
+        $s = new RecycleCheckSeverityService();
         return success([
-            'summary' => $severityService->summary(),
-            'page' => $severityService->getPage($this->request->params([
+            'summary' => $s->summary(),
+            'page' => $s->getPage($this->request->params([
                 ['severity', ''], ['keyword', ''], ['page', 1], ['limit', 50],
             ])),
         ]);
