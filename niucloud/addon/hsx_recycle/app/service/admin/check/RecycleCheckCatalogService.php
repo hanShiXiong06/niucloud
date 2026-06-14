@@ -165,8 +165,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                     $oi++;
                     Db::name('recycle_check_option')->insert([
                         'site_id' => $this->site_id, 'field_id' => $fid, 'option_label' => $o,
-                        // option_value = 选项文本(被选中后存库/写设备列/显示的就是它)，不能用数字序号
-                        'option_value' => mb_substr($o, 0, 80), 'is_default' => ($o === $it['default'] ? 1 : 0),
+                        'option_value' => (string)$oi, 'is_default' => ($o === $it['default'] ? 1 : 0),
                         'is_show' => 1, 'severity' => $this->resolveOptionSeverity($optCache, $o, $now),
                         'sort' => $oi, 'create_at' => $now, 'update_at' => $now,
                     ]);
@@ -199,7 +198,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                 $pkgOi++;
                 Db::name('recycle_check_option')->insert([
                     'site_id' => $this->site_id, 'field_id' => $pkgFid, 'option_label' => $po,
-                    'option_value' => $po, 'is_default' => ($po === '单机' ? 1 : 0),
+                    'option_value' => (string)$pkgOi, 'is_default' => ($po === '单机' ? 1 : 0),
                     'is_show' => 1, 'severity' => 'normal', 'sort' => $pkgOi,
                     'create_at' => $now, 'update_at' => $now,
                 ]);
