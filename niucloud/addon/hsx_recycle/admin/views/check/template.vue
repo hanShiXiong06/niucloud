@@ -1,5 +1,5 @@
 <template>
-    <div class="check-template-page">
+    <PremiumTheme class="check-template-page">
         <section class="page-toolbar">
             <div>
                 <div class="page-title">质检模板</div>
@@ -15,19 +15,64 @@
             <aside class="panel template-panel">
                 <div class="panel-head">
                     <span>模板</span>
-                    <el-input v-model="templateQuery.keyword" clearable placeholder="搜索模板" size="small" @keyup.enter="loadTemplates" />
+                    <el-input v-model="templateQuery.keyword" clearable placeholder="搜索模板" size="small" @keyup.enter="reloadTemplates" @clear="reloadTemplates" />
                 </div>
+
+                <div class="template-filter">
+                    <el-radio-group v-model="templateQuery.source" size="small" @change="reloadTemplates">
+                        <el-radio-button label="manual">手工</el-radio-button>
+                        <el-radio-button label="pjt">拍机堂</el-radio-button>
+                        <el-radio-button label="">全部</el-radio-button>
+                    </el-radio-group>
+                    <el-button
+                        size="small"
+                        :type="showCategoryTree ? 'primary' : 'default'"
+                        :icon="Filter"
+                        @click="toggleCategoryTree"
+                    >按分类</el-button>
+                </div>
+
+                <div v-show="showCategoryTree" class="category-filter">
+                    <div class="category-filter__current">
+                        <span class="category-filter__path" :title="activeCategory?.model_full_name">
+                            {{ activeCategory ? activeCategory.model_full_name : '点击下方分类节点筛选（含其子级型号）' }}
+                        </span>
+                        <el-button v-if="activeCategory" link type="primary" @click="clearCategory">清除</el-button>
+                    </div>
+                    <el-tree
+                        ref="categoryTreeRef"
+                        class="category-filter__tree"
+                        lazy
+                        :load="loadCategoryChildren"
+                        :props="categoryTreeProps"
+                        node-key="id"
+                        highlight-current
+                        @node-click="onCategoryClick"
+                    >
+                        <template #default="{ data }">
+                            <span class="category-node">
+                                <span class="category-node__name">{{ data.node_name }}</span>
+                                <span class="category-node__type">{{ nodeTypeText(data.node_type) }}</span>
+                            </span>
+                        </template>
+                    </el-tree>
+                </div>
+
                 <el-table
                     v-loading="templateLoading"
                     :data="templates"
-                    height="680"
+                    :height="showCategoryTree ? 360 : 620"
                     row-key="id"
                     highlight-current-row
                     @row-click="selectTemplate"
                 >
                     <el-table-column label="模板" min-width="180" show-overflow-tooltip>
                         <template #default="{ row }">
-                            <div class="name-main">{{ row.template_name }}</div>
+                            <div class="name-main">
+                                {{ row.template_name }}
+                                <el-tag v-if="row.scene === 'pjt'" size="small" type="warning" effect="plain" class="source-tag">拍机堂</el-tag>
+                                <el-tag v-else size="small" type="primary" effect="plain" class="source-tag">手工</el-tag>
+                            </div>
                             <div class="name-sub">{{ row.scene }} · v{{ row.version }}</div>
                         </template>
                     </el-table-column>
@@ -51,6 +96,17 @@
                         </template>
                     </el-table-column>
                 </el-table>
+
+                <el-pagination
+                    v-model:current-page="templatePage.page"
+                    class="template-pager"
+                    small
+                    background
+                    layout="total, prev, pager, next"
+                    :page-size="templatePage.limit"
+                    :total="templatePage.total"
+                    @current-change="loadTemplates"
+                />
             </aside>
 
             <section class="panel group-panel">
@@ -110,6 +166,7 @@
                         <template #default="{ row }">
                             <div class="name-main">{{ row.field_name }}</div>
                             <div class="name-sub">{{ row.field_key }} · {{ row.component }}</div>
+                            <div v-if="fieldDefaultText(row)" class="name-default">默认：{{ fieldDefaultText(row) }}</div>
                         </template>
                     </el-table-column>
                     <el-table-column label="文案" min-width="150" show-overflow-tooltip>
@@ -143,9 +200,22 @@
                     <el-button type="primary" :disabled="!currentField || !fieldNeedsOptions(currentField)" @click="openOptionDialog()">新增选项</el-button>
                 </div>
                 <el-table :data="currentFieldOptions" height="260" border>
-                    <el-table-column prop="option_label" label="选项名称" min-width="150" />
-                    <el-table-column prop="option_value" label="选项值" width="110" />
-                    <el-table-column label="展示样式" width="140">
+                    <el-table-column label="选项名称" min-width="150">
+                        <template #default="{ row }">
+                            <span>{{ row.option_label }}</span>
+                            <el-tag v-if="Number(row.is_default) === 1" size="small" type="success" effect="plain" class="source-tag">默认</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="option_value" label="选项值" width="100" />
+                    <el-table-column :label="currentFieldIsSingle ? '默认选中（单选）' : '默认选中（多选）'" width="130" align="center">
+                        <template #default="{ row }">
+                            <el-switch
+                                :model-value="Number(row.is_default) === 1"
+                                @change="(val: boolean) => setOptionDefault(row, val)"
+                            />
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="展示样式" width="130">
                         <template #default="{ row }">
                             <div class="option-style-preview">
                                 <span
@@ -231,6 +301,34 @@
                     <el-input v-model="fieldDialog.form.placeholder" placeholder="例如：请输入电池健康度" />
                     <div class="form-tip">显示在输入框或选择框内部，引导质检人员填写正确内容。</div>
                 </el-form-item>
+                <el-form-item label="默认值">
+                    <template v-if="fieldNeedsOptions(fieldDialog.form)">
+                        <div class="form-tip default-hint">该字段为选项类，请在下方「选项」列表用「默认选中」开关设置默认；单选只能有一个，多选可多个。</div>
+                    </template>
+                    <el-switch
+                        v-else-if="fieldDialog.form.component === 'switch'"
+                        v-model="fieldDialog.form.default_value"
+                        active-value="1"
+                        inactive-value=""
+                        active-text="默认开启"
+                        inactive-text="默认关闭"
+                        inline-prompt
+                    />
+                    <el-input-number
+                        v-else-if="fieldDialog.form.component === 'number'"
+                        v-model="fieldDialog.form.default_value"
+                        :controls="false"
+                        placeholder="留空表示无默认"
+                        class="w-full"
+                    />
+                    <el-input
+                        v-else
+                        v-model="fieldDialog.form.default_value"
+                        :type="fieldDialog.form.component === 'textarea' ? 'textarea' : 'text'"
+                        placeholder="留空表示无默认值"
+                    />
+                    <div v-if="!fieldNeedsOptions(fieldDialog.form)" class="form-tip">进入质检时若该设备没有历史记录，会用这个值预填，质检员可再修改。</div>
+                </el-form-item>
                 <el-form-item label="结果文案">
                     <el-input v-model="fieldDialog.form.result_template" placeholder="例如：外屏{label} / 电池健康度{value}%" />
                     <div class="form-tip">参与自动生成质检结果。可用 {label} 表示选项名称，{value} 表示填写值；不填写则按字段名称和结果自动拼接。</div>
@@ -269,6 +367,10 @@
             <el-form label-width="92px" :model="optionDialog.form">
                 <el-form-item label="选项名称"><el-input v-model="optionDialog.form.option_label" /></el-form-item>
                 <el-form-item label="选项值"><el-input v-model="optionDialog.form.option_value" /></el-form-item>
+                <el-form-item label="默认选中">
+                    <el-switch v-model="optionDialog.form.is_default" :active-value="1" :inactive-value="0" />
+                    <span class="form-tip default-hint">{{ currentFieldIsSingle ? '单选字段：设为默认会取消同字段其它默认项' : '多选字段：可同时设置多个默认项' }}</span>
+                </el-form-item>
                 <el-form-item label="文字颜色">
                     <el-color-picker v-model="optionDialog.form.extra_config.result_style.text_color" show-alpha />
                     <span class="color-value">{{ optionDialog.form.extra_config.result_style.text_color || '默认' }}</span>
@@ -299,12 +401,14 @@
                 <el-button type="primary" @click="submitOption">保存</el-button>
             </template>
         </el-dialog>
-    </div>
+    </PremiumTheme>
 </template>
 
 <script setup lang="ts">
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Filter } from '@element-plus/icons-vue'
 import {
     addCheckTemplate,
     deleteCheckField,
@@ -319,8 +423,10 @@ import {
     saveCheckField,
     saveCheckGroup,
     saveCheckOption,
+    setCheckOptionDefault,
     setDefaultCheckTemplate
 } from '@/addon/hsx_recycle/api/check_template'
+import { getRecycleDeviceModelDictChildren } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 
 const templateLoading = ref(false)
 const groupLoading = ref(false)
@@ -331,7 +437,47 @@ const fields = ref<any[]>([])
 const currentTemplate = ref<any>(null)
 const currentGroup = ref<any>(null)
 const currentField = ref<any>(null)
-const templateQuery = reactive({ keyword: '' })
+// source 默认 manual:进入先看手工模板,避免一次拉上万条导入模板
+const templateQuery = reactive({ keyword: '', source: 'manual' })
+const templatePage = reactive({ page: 1, limit: 50, total: 0 })
+
+const showCategoryTree = ref(false)
+const activeCategory = ref<any>(null)
+const categoryTreeRef = ref<any>(null)
+const categoryTreeProps = {
+    label: 'node_name',
+    isLeaf: (data: any) => Number(data.has_children) !== 1
+}
+const nodeTypeTextMap: Record<string, string> = {
+    category: '分类', subcategory: '子类', brand: '品牌',
+    series: '系列', model: '型号', group: '分组'
+}
+const nodeTypeText = (type: string) => nodeTypeTextMap[type] || ''
+
+const loadCategoryChildren = async (node: any, resolve: (data: any[]) => void) => {
+    try {
+        const pid = node.level === 0 ? 0 : Number(node.data.id)
+        const res: any = await getRecycleDeviceModelDictChildren({ pid, limit: 300 })
+        resolve(res.data || [])
+    } catch (error) {
+        resolve([])
+    }
+}
+
+const toggleCategoryTree = () => {
+    showCategoryTree.value = !showCategoryTree.value
+}
+
+const onCategoryClick = (data: any) => {
+    activeCategory.value = data
+    reloadTemplates()
+}
+
+const clearCategory = () => {
+    activeCategory.value = null
+    categoryTreeRef.value?.setCurrentKey(null)
+    reloadTemplates()
+}
 
 const componentOptions = [
     { label: '单行输入', value: 'input' },
@@ -360,6 +506,33 @@ const optionDialog = reactive({
 })
 
 const currentFieldOptions = computed(() => currentField.value?.options || [])
+
+// 当前字段是否单选(radio/select 或选择模式为 single):决定默认选中的互斥语义
+const currentFieldIsSingle = computed(() => {
+    const field = currentField.value
+    if (!field) return true
+    return ['radio', 'select'].includes(field.component) || field.selection_mode === 'single'
+})
+
+// 字段当前默认值的可读文案:选项类取默认选项名,其它取 default_value
+const fieldDefaultText = (field: any) => {
+    if (['radio', 'checkbox', 'select'].includes(field?.component)) {
+        const labels = (field.options || [])
+            .filter((opt: any) => Number(opt.is_default) === 1)
+            .map((opt: any) => opt.option_label)
+        return labels.join('、')
+    }
+    if (field?.component === 'switch') {
+        return Number(field.default_value) === 1 || field.default_value === '1' ? '开启' : ''
+    }
+    return field?.default_value ? String(field.default_value) : ''
+}
+
+const setOptionDefault = async (row: any, val: boolean) => {
+    const fieldId = currentField.value?.id || 0
+    await setCheckOptionDefault(row.id, val ? 1 : 0)
+    await loadFields(fieldId)
+}
 
 const normalizeExtraConfig = (config: any) => {
     if (!config) return {}
@@ -420,8 +593,16 @@ const loadTemplates = async () => {
     templateLoading.value = true
     try {
         const currentId = currentTemplate.value?.id
-        const res: any = await getCheckTemplatePages({ ...templateQuery, page: 1, limit: 100 })
+        const res: any = await getCheckTemplatePages({
+            keyword: templateQuery.keyword,
+            source: templateQuery.source,
+            category_id: activeCategory.value?.id || 0,
+            category_match: 'subtree',
+            page: templatePage.page,
+            limit: templatePage.limit
+        })
         templates.value = res.data.data || []
+        templatePage.total = Number(res.data.total || 0)
         if (!templates.value.length) {
             currentTemplate.value = null
             groups.value = []
@@ -440,6 +621,12 @@ const loadTemplates = async () => {
     } finally {
         templateLoading.value = false
     }
+}
+
+// 筛选条件变化:回到第 1 页重新加载
+const reloadTemplates = () => {
+    templatePage.page = 1
+    return loadTemplates()
 }
 
 const selectTemplate = async (row: any) => {
@@ -636,7 +823,13 @@ const resetOptionStyle = () => {
 
 const submitOption = async () => {
     const fieldId = currentField.value.id
-    await saveCheckOption({ ...normalizeOptionForm(optionDialog.form), field_id: currentField.value.id })
+    const isDefault = Number(optionDialog.form.is_default) === 1
+    const res: any = await saveCheckOption({ ...normalizeOptionForm(optionDialog.form), field_id: fieldId })
+    const savedId = optionDialog.form.id || res?.data?.id || 0
+    // 单选字段:通过专用接口确保默认项互斥(saveOption 本身不清理同字段其它默认)
+    if (isDefault && savedId && currentFieldIsSingle.value) {
+        await setCheckOptionDefault(savedId, 1)
+    }
     optionDialog.visible = false
     await loadFields(fieldId)
 }
@@ -744,6 +937,86 @@ onMounted(loadTemplates)
     display: grid;
     grid-template-columns: minmax(260px, 0.8fr) minmax(300px, 1fr) minmax(520px, 1.5fr);
     gap: 12px;
+}
+
+.template-filter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.category-filter {
+    margin-bottom: 10px;
+    padding: 8px;
+    border: 1px solid #ebeef5;
+    border-radius: 6px;
+    background: #fafcff;
+}
+
+.category-filter__current {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.category-filter__path {
+    overflow: hidden;
+    color: #475569;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.category-filter__tree {
+    max-height: 220px;
+    overflow: auto;
+    background: transparent;
+}
+
+.category-node {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.category-node__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.category-node__type {
+    flex: 0 0 auto;
+    color: #b0b7c3;
+    font-size: 11px;
+}
+
+.source-tag {
+    margin-left: 6px;
+    transform: scale(0.88);
+    transform-origin: left center;
+}
+
+.template-pager {
+    margin-top: 10px;
+    justify-content: center;
+}
+
+.name-default {
+    margin-top: 2px;
+    color: #16a34a;
+    font-size: 12px;
+}
+
+.default-hint {
+    margin-top: 0;
+    margin-left: 10px;
+    display: inline;
 }
 
 .panel {

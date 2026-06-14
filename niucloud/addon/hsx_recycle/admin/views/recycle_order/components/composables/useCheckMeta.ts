@@ -4,6 +4,7 @@ export interface DictOptionItem {
   name: string
   value: string
   label?: string
+  is_default?: number
   extra_config?: Record<string, any> | string | null
 }
 
@@ -62,6 +63,7 @@ export interface CheckTemplateField {
   field_key: string
   field_name: string
   component: string
+  selection_mode?: string
   unit?: string
   placeholder?: string
   default_value?: any
@@ -579,6 +581,49 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     deviceForm.info = getSubmitInfo()
   }
 
+  // ==================== 应用模板默认值 ====================
+
+  // 模板字段默认值:选项 is_default 优先,其次字段 default_value
+  const resolveFieldDefault = (field: CheckTemplateField): any => {
+    const options = field.options || []
+    const isMultiple = field.component === 'checkbox' || field.selection_mode === 'multiple'
+    if (options.length) {
+      const defaults = options
+        .filter((option) => Number(option.is_default) === 1)
+        .map((option) => toStringValue(option.value))
+      if (defaults.length) return isMultiple ? defaults : defaults[0]
+    }
+    if (!isEmptyValue(field.default_value)) {
+      const value = toStringValue(field.default_value)
+      return isMultiple ? [value] : value
+    }
+    return undefined
+  }
+
+  const applyTemplateDefaults = () => {
+    const fieldMap = fieldConfigByKey?.value || {}
+    let applied = false
+    Object.entries(fieldMap).forEach(([fieldKey, field]) => {
+      if (FORM_FIELD_KEYS.includes(fieldKey as any)) return
+      const value = resolveFieldDefault(field)
+      if (value === undefined || isEmptyValue(value)) return
+      applied = true
+      switch (fieldKey) {
+        case 'battery': templateSelections.battery = toOptionalNumber(value); break
+        case 'battery_num': templateSelections.battery_num = toOptionalNumber(value); break
+        case 'screen_id': templateSelections.screenId = toStringValue(value); break
+        case 'indisplay_id': templateSelections.indisplayId = toStringValue(value); break
+        case 'appearance_id': templateSelections.appearanceId = toStringValue(value); break
+        case 'function_ids': templateSelections.functionIds = Array.isArray(value) ? value : [toStringValue(value)]; break
+        case 'fix_ids': templateSelections.fixIds = Array.isArray(value) ? value : [toStringValue(value)]; break
+        case 'activation_lock': templateSelections.activationLock = toBooleanValue(value); break
+        case 'mdm_lock': templateSelections.mdmLock = toBooleanValue(value); break
+        default: templateSelections.customFields[fieldKey] = value
+      }
+    })
+    if (applied) updateCheckResult()
+  }
+
   // ==================== 从元数据恢复 ====================
 
   const applyCheckMeta = (meta: CheckMetaPayload) => {
@@ -616,7 +661,8 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
       }
     }
 
-    if (!parsed || typeof parsed !== 'object') return null
+    // 空数组 [] 也是 object 且 truthy(PHP 空数组序列化结果),不能当成有效 meta,否则会顶掉模板默认值
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
 
     const functionIds = Array.isArray(parsed.function_ids ?? parsed.functionIds)
       ? (parsed.function_ids ?? parsed.functionIds).map((item: any) => toStringValue(item)).filter(Boolean)
@@ -733,17 +779,21 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
 
   // ==================== 从设备数据恢复 ====================
 
+  // meta 是否真的填过东西:全空的占位 meta(如代下单工单)不应顶掉模板默认值
+  const metaHasSelections = (meta: CheckMetaPayload): boolean => {
+    if (meta.battery !== undefined || meta.battery_num !== undefined) return true
+    if (meta.screen_id || meta.indisplay_id || meta.appearance_id) return true
+    if ((meta.function_ids || []).length || (meta.fix_ids || []).length) return true
+    if (meta.activation_lock || meta.mdm_lock) return true
+    return Object.values(meta.custom_fields || {}).some((value) => !isEmptyValue(value))
+  }
+
   const restoreFromDevice = (device: DeviceCheckMetaSource) => {
     const checkMeta = resolveCheckMeta(device)
-    if (checkMeta) {
-      if (!shouldRestoreMeta || shouldRestoreMeta(checkMeta)) {
-        applyCheckMeta(checkMeta)
-        updateCheckResult()
-      } else {
-        resetTemplateSelections()
-        deviceForm.check_result_seller = ''
-        deviceForm.info = getSubmitInfo()
-      }
+    // 仅当 meta 属于当前模板且确有勾选时才恢复;否则(空占位 / 模板不匹配)落到默认值预填
+    if (checkMeta && (!shouldRestoreMeta || shouldRestoreMeta(checkMeta)) && metaHasSelections(checkMeta)) {
+      applyCheckMeta(checkMeta)
+      updateCheckResult()
       return
     }
 
@@ -756,6 +806,9 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
       return
     }
 
+    // 没有任何历史质检数据时(含代下单空占位 meta),按模板默认选项预填
+    resetTemplateSelections()
+    applyTemplateDefaults()
     deviceForm.info = getSubmitInfo()
   }
 
@@ -766,6 +819,7 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     getSubmitInfo,
     updateCheckResult,
     clearAllSelections,
+    applyTemplateDefaults,
     restoreFromDevice
   }
 }

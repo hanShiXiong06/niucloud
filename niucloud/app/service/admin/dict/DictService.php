@@ -59,10 +59,6 @@ class DictService extends BaseAdminService
         if($info['dictionary'] == null)
         {
             $info['dictionary'] = [];
-        } else {
-            usort($info['dictionary'], function ($a, $b) {
-                return ($a['sort'] ?? 0) - ($b['sort'] ?? 0);
-            });
         }
         return $info;
     }
@@ -126,11 +122,6 @@ class DictService extends BaseAdminService
         if($info['dictionary'] == null)
         {
             $info['dictionary'] = [];
-        } else {
-            // 按sort字段升序排序
-            usort($info['dictionary'], function ($a, $b) {
-                return ($a['sort'] ?? 0) - ($b['sort'] ?? 0);
-            });
         }
         return $info;
     }

@@ -63,3 +63,7 @@ export function saveCheckOption(params: Record<string, any>) {
 export function deleteCheckOption(id: number) {
     return request.delete(`recycle/check_template_option/${id}`, { showSuccessMessage: true })
 }
+
+export function setCheckOptionDefault(id: number, isDefault: number) {
+    return request.post(`recycle/check_template_option/${id}/default`, { is_default: isDefault }, { showSuccessMessage: true })
+}

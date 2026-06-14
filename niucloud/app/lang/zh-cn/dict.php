@@ -435,7 +435,7 @@ return [
         'status_not_sign' => '未签到',
         'status_signed' => '已签到'
     ],
-    // 打印机等级
+    // 打印机品牌
     'dict_printer' => [
         'yilianyun' => '易联云打印机'
     ],

@@ -15,9 +15,11 @@
           :model-value="modelValue"
           size="small"
           filterable
+          remote
+          :remote-method="handleSearch"
           class="check-template-selector__select"
           :loading="loading"
-          placeholder="选择模板"
+          placeholder="搜索模板"
           @change="handleChange"
         >
           <el-option
@@ -73,7 +75,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'update:modelValue', value: number): void
   (event: 'change', value: number): void
+  (event: 'search', keyword: string): void
 }>()
+
+const handleSearch = (keyword: string) => {
+  emit('search', keyword)
+}
 
 const sceneText = (scene?: string) => {
   const sceneMap: Record<string, string> = {
@@ -82,7 +89,8 @@ const sceneText = (scene?: string) => {
     watch: '手表',
     tablet: '平板',
     computer: '电脑',
-    common: '通用'
+    common: '通用',
+    pjt: '拍机堂'
   }
   return sceneMap[String(scene || '')] || '通用'
 }

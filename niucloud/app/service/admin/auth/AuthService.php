@@ -121,17 +121,18 @@ class AuthService extends BaseAdminService
 
         $site_address = $authinfo['site_address'] ?? '';
         $domain = request()->domain();
+
+        // 如果是站点域名不进行验证
+        $site_id = (new CoreSiteService())->getSiteIdByDomain($domain);
+        if (!empty($site_id)) return;
+
         if (!empty($site_address) && strpos($domain, $site_address) !== false) return;
 
         throw new CommonException("授权域名校验失败！请确保当前访问域名与授权码绑定的域名一致");
     }
 
     private function isCheckDomain() {
-        $ignore_hosts = array_filter(array_map('trim', explode(',', (string)env('system.auth_domain_ignore_hosts', 'localhost,127.0.0.1'))));
-        $host = request()->host();
-        $ip = request()->ip();
-
-        return !(in_array($host, $ignore_hosts, true) || in_array($ip, $ignore_hosts, true));
+        return !(request()->ip() == '127.0.0.1' || request()->host() == 'localhost');
     }
 
     /**

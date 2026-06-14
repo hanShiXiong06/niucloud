@@ -91,9 +91,8 @@ class Queue extends Command
         $system_dir = root_path() . 'app' . DIRECTORY_SEPARATOR . 'job';
         $addon_dir = root_path() . 'addon' . DIRECTORY_SEPARATOR;
         if (is_dir($system_dir)) {
-            $app_data = [];
             search_dir($system_dir, $app_data, root_path());
-            $class_list = array_merge($class_list, array_filter($app_data, 'is_string'));
+            $class_list = array_merge($class_list, $app_data);
         }
 
         $addons = ( new CoreAddonService() )->getInstallAddonList();
@@ -101,9 +100,8 @@ class Queue extends Command
 
             $addon_path = $addon_dir . $v[ 'key' ] . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'job';
             if (is_dir($addon_path)) {
-                $addon_data = [];
                 search_dir($addon_path, $addon_data, root_path());
-                $class_list = array_merge($class_list, array_filter($addon_data, 'is_string'));
+                $class_list = array_merge($class_list, $addon_data);
             }
         }
 

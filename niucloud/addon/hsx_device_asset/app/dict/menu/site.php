@@ -1,18 +1,18 @@
 <?php
 return [
     [
-        'menu_name' => '设备资产中台',
+        'menu_name' => '拍照定价',
         'menu_key' => 'device_asset_manage',
-        'menu_short_name' => '资产中台',
+        'menu_short_name' => '拍照定价',
         'parent_select_key' => '',
-        'parent_key' => 'recycle',
+        'parent_key' => 'hsx_erp_manage',
         'menu_type' => '1',
         'icon' => 'nc-iconfont nc-icon-dingdanV6xx',
         'api_url' => 'device_asset/lists',
         'router_path' => 'device_asset/list',
         'view_path' => 'asset/list',
         'methods' => 'get',
-        'sort' => '92',
+        'sort' => '98',
         'status' => '1',
         'is_show' => '1',
         'children' => [

@@ -92,8 +92,6 @@ trait WapTrait
         }
         $addon_arr = array_unique($addon_arr);
 
-        $addon_component_templates = [];
-        $addon_component_imports = [];
         foreach ($addon_arr as $k => $v) {
             $addon_path = $compile_path . str_replace('/', DIRECTORY_SEPARATOR, 'addon/' . $v . '/components/diy'); // 插件自定义组件根目录
             $addon_file_arr = getFileMap($addon_path);
@@ -113,18 +111,16 @@ trait WapTrait
                         $name = implode('', $name_arr);
                         $file_name = 'diy-' . $path;
 
+                        $content .= "                <template v-if=\"component.componentName == '{$name}'\">\n";
                         $event_str = '$event';
-                        $addon_component_templates[ $name ] = "                <template v-if=\"component.componentName == '{$name}'\">\n";
-                        $addon_component_templates[ $name ] .= "                   <$file_name ref=\"diy{$name}Ref\" :component=\"component\" :global=\"data.global\" :index=\"index\" :scrollBool=\"diyGroup.componentsScrollBool.{$name}\" @update:componentIsShow=\"component.componentIsShow = {$event_str}\" />\n";
-                        $addon_component_templates[ $name ] .= "                </template>\n";
-                        $addon_component_imports[ $name ] = "   import diy{$name} from '@/addon/" . $v . "/components/diy/{$path}/index.vue';\n";
+                        $content .= "                   <$file_name ref=\"diy{$name}Ref\" :component=\"component\" :global=\"data.global\" :index=\"index\" :scrollBool=\"diyGroup.componentsScrollBool.{$name}\" @update:componentIsShow=\"component.componentIsShow = {$event_str}\" />\n";
+
+                        $content .= "                </template>\n";
+
+                        $addon_import_content .= "   import diy{$name} from '@/addon/" . $v . "/components/diy/{$path}/index.vue';\n";
                     }
                 }
             }
-        }
-        if (!empty($addon_component_templates)) {
-            $content .= implode('', $addon_component_templates);
-            $addon_import_content .= implode('', $addon_component_imports);
         }
 
         $content .= "                </view>\n";

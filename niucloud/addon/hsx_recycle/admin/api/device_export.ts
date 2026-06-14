@@ -25,7 +25,7 @@ export function exportRecycleDevice(params: Record<string, any>) {
  * @returns
  */
 export function updateDevice(deviceId: number, data: any) {
-    return request.put(`recycle/recycle_device/${deviceId}`, { data })
+    return request.put(`recycle/recycle_device/${deviceId}`, data)
 }
 
 /**
