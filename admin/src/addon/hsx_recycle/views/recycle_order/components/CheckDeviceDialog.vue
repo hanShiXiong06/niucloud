@@ -222,7 +222,6 @@ import {
 import { queryDeviceByService } from '@/addon/hsx_recycle/api/device_query_api'
 import { getDeviceQueryConfigList } from '@/addon/hsx_recycle/api/device_query_config'
 import { getCheckTemplateAll, getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
-import { getCheckCatalogSchema } from '@/addon/hsx_recycle/api/check_catalog'
 import {
   normalizeInfo,
   useCheckMeta,
@@ -559,33 +558,6 @@ const checkTemplateOptions = computed(() => {
   return exists ? checkTemplateList.value : [current, ...checkTemplateList.value]
 })
 
-// 把导入目录(catalog)的 schema 转成质检面板需要的 groups 形状(选项带 severity 供着色)
-const convertCatalogToTemplateGroups = (catGroups: any[]) => {
-  return (catGroups || []).map((g: any, gi: number) => ({
-    group_key: 'cat_g_' + gi,
-    group_name: g.group || '检测项',
-    fields: (g.fields || []).map((f: any) => ({
-      field_key: 'cat_' + f.field_id,
-      field_name: f.field_name,
-      component: 'radio',
-      selection_mode: 'single',
-      is_show: 1,
-      is_required: 0,
-      seller_visible: 1,
-      buyer_visible: 1,
-      result_visible: 1,
-      options: (f.options || []).map((o: any, oi: number) => ({
-        name: o.label,
-        label: o.label,
-        value: String(o.id),
-        is_default: Number(o.id) === Number(f.default_option_id) ? 1 : 0,
-        sort: oi,
-        severity: o.severity || 'normal'
-      }))
-    }))
-  }))
-}
-
 const loadCheckTemplateSchema = async (templateId = selectedCheckTemplateId.value, restoreDevice = true) => {
   checkSchemaLoading.value = true
   try {
@@ -605,20 +577,6 @@ const loadCheckTemplateSchema = async (templateId = selectedCheckTemplateId.valu
     checkTemplateGroups.value = payload.groups || []
     templateResolveInfo.value = templateId ? null : (payload.resolve || null)
     selectedCheckTemplateId.value = Number(payload.template?.id || templateId || 0)
-    // 兜底：该型号没有结构化模板时，用导入的检测目录(拍机堂)即时生成同形状的质检项
-    if (!templateId && (!checkTemplateGroups.value || checkTemplateGroups.value.length === 0)) {
-      const categoryId = Number(deviceData.value?.category_id || props.device?.category_id || 0)
-      if (categoryId > 0) {
-        try {
-          const catRes: any = await getCheckCatalogSchema({ model_dict_id: categoryId })
-          const catGroups = catRes.data?.groups || []
-          if (catGroups.length) {
-            checkTemplateGroups.value = convertCatalogToTemplateGroups(catGroups)
-            checkTemplateInfo.value = { id: 0, template_name: '检测目录(' + (catRes.data?.model_name || '型号') + ')', from_catalog: true }
-          }
-        } catch (e) { /* 目录不可用则保持空 */ }
-      }
-    }
     if (restoreDevice) {
       restoreFromDevice(deviceData.value)
     } else {
