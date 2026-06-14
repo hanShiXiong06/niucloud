@@ -141,6 +141,7 @@
                         >
                             <el-tag type="info" effect="plain" size="small">中台处理中</el-tag>
                         </el-tooltip>
+                        <el-button v-if="canTransfer(row)" type="warning" link @click="openTransfer(row)">调拨</el-button>
                         <el-button type="primary" link @click="openDetail(row)">详情</el-button>
                     </template>
                 </el-table-column>
@@ -365,6 +366,39 @@
                 <el-button type="primary" :loading="inbound.loading" @click="submitInbound">确认入库</el-button>
             </template>
         </el-dialog>
+
+        <el-dialog v-model="transfer.visible" title="调拨" width="560px">
+            <el-form label-width="100px">
+                <el-form-item label="设备">
+                    <span class="text-gray-600">{{ transfer.asset?.model || '-' }}（IMEI {{ transfer.asset?.imei || '-' }}）</span>
+                </el-form-item>
+                <el-form-item label="目标仓库" required>
+                    <el-select v-model="transfer.to_warehouse_id" class="w-full" @change="transfer.to_location_id = 0">
+                        <el-option v-for="item in warehouseOptions" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="目标库位">
+                    <el-select v-model="transfer.to_location_id" class="w-full" placeholder="可不选">
+                        <el-option v-for="item in transferLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item v-if="showConsignChoice" label="代卖处理" required>
+                    <el-radio-group v-model="transfer.consign_action">
+                        <el-radio value="list">上架代卖（卖出时再结寄卖人）</el-radio>
+                        <el-radio value="buyout">我方买断（立即应付寄卖人）</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item v-if="showConsignChoice && transfer.consign_action === 'buyout'" label="买断价" required>
+                    <el-input-number v-model="transfer.buyout_price" :min="0" :precision="2" :controls="false" class="!w-[180px]" />
+                    <span class="text-xs text-gray-400 ml-2">买断价计入成本，并对寄卖人生成应付</span>
+                </el-form-item>
+                <el-form-item label="备注"><el-input v-model.trim="transfer.remark" type="textarea" /></el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="transfer.visible = false">取消</el-button>
+                <el-button type="primary" :loading="transfer.loading" @click="submitTransfer">确认调拨</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -384,6 +418,7 @@ import {
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
 import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
+import { transferErpAsset } from '@/addon/hsx_erp/api/outbound'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const router = useRouter()
@@ -402,6 +437,58 @@ const inbound = reactive<any>({
 const availableLocations = computed(() =>
     warehouseOptions.value.find((item: any) => Number(item.id) === Number(inbound.warehouse_id))?.locations || []
 )
+
+// 调拨
+const transfer = reactive<any>({
+    visible: false, loading: false, asset: null,
+    to_warehouse_id: 0, to_location_id: 0, remark: '',
+    consign_action: 'list', buyout_price: 0
+})
+const transferLocations = computed(() =>
+    warehouseOptions.value.find((item: any) => Number(item.id) === Number(transfer.to_warehouse_id))?.locations || []
+)
+const transferTargetType = computed(() =>
+    String(warehouseOptions.value.find((item: any) => Number(item.id) === Number(transfer.to_warehouse_id))?.business_type || '')
+)
+// 代卖设备调进二手机仓(商城)时，需要选择"上架代卖 or 我方买断"
+const showConsignChoice = computed(() =>
+    transfer.asset && String(transfer.asset.ownership_type) === 'consign' && transferTargetType.value === 'mall'
+)
+const canTransfer = (row: any) => !['pending_in', 'outbound'].includes(String(row.inventory_status))
+const openTransfer = (row: any) => {
+    transfer.asset = row
+    transfer.to_warehouse_id = 0
+    transfer.to_location_id = 0
+    transfer.remark = ''
+    transfer.consign_action = 'list'
+    transfer.buyout_price = 0
+    transfer.visible = true
+}
+const submitTransfer = async () => {
+    if (!transfer.to_warehouse_id) { ElMessage.warning('请选择目标仓库'); return }
+    if (showConsignChoice.value && transfer.consign_action === 'buyout' && Number(transfer.buyout_price) <= 0) {
+        ElMessage.warning('我方买断必须填写买断价'); return
+    }
+    transfer.loading = true
+    try {
+        const payload: any = {
+            asset_ids: [Number(transfer.asset.id)],
+            to_warehouse_id: Number(transfer.to_warehouse_id),
+            to_location_id: Number(transfer.to_location_id),
+            remark: transfer.remark,
+            consign_action: transfer.consign_action
+        }
+        if (showConsignChoice.value && transfer.consign_action === 'buyout') {
+            payload.buyout_prices = [{ asset_id: Number(transfer.asset.id), amount: Number(transfer.buyout_price) }]
+        }
+        await transferErpAsset(payload)
+        ElMessage.success('调拨成功')
+        transfer.visible = false
+        loadList()
+    } finally {
+        transfer.loading = false
+    }
+}
 const manualDialog = reactive({ visible: false, submitting: false })
 const manualForm = reactive({
     model: '',

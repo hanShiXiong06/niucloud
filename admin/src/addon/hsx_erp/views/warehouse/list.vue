@@ -137,6 +137,7 @@ const warehouseDialog = reactive<any>({
 const businessTypeOptions = [
     { value: 'mall', label: '商城销售' },
     { value: 'peer', label: '同行出货' },
+    { value: 'consignment', label: '代卖' },
     { value: 'scrap', label: '报废' },
     { value: 'hold', label: '暂存' }
 ]
