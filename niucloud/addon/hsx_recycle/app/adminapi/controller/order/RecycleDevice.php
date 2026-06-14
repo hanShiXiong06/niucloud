@@ -174,23 +174,25 @@ class RecycleDevice extends BaseAdminController
      */
     public function update(int $id)
     {
-        $data = $this->request->params([
-            ['data', []]
-        ]);
+        // 前端已改为扁平直传（action/check_result/info... 均在顶层）；
+        // 这里兼容两种形态：若仍带 data 包裹则取内层，否则直接用顶层参数。
+        $raw = $this->request->param();
+        $payload = (is_array($raw) && isset($raw['data']) && is_array($raw['data'])) ? $raw['data'] : (is_array($raw) ? $raw : []);
+        unset($payload['id']);
 
         // 参数验证
-        $this->validate->scene('update')->check(array_merge(['id' => $id], $data['data']));
+        $this->validate->scene('update')->check(array_merge(['id' => $id], $payload));
 
         // 检查是否是质检操作（包括完成质检和暂存质检）
-        if (isset($data['data']['action']) && in_array($data['data']['action'], ['check', 'save_draft'])) {
+        if (isset($payload['action']) && in_array($payload['action'], ['check', 'save_draft'])) {
             // 组装质检数据
             $checkData = [
-                'check_result' => $data['data']['check_result'] ?? '',
-                'check_images' => $data['data']['check_images'] ?? '',
-                'check_result_seller' => $data['data']['check_result_seller'] ?? '',
-                'check_result_buyer' => $data['data']['check_result_buyer'] ?? '',
-                'check_images_seller' => $data['data']['check_images_seller'] ?? '',
-                'check_images_buyer' => $data['data']['check_images_buyer'] ?? '',
+                'check_result' => $payload['check_result'] ?? '',
+                'check_images' => $payload['check_images'] ?? '',
+                'check_result_seller' => $payload['check_result_seller'] ?? '',
+                'check_result_buyer' => $payload['check_result_buyer'] ?? '',
+                'check_images_seller' => $payload['check_images_seller'] ?? '',
+                'check_images_buyer' => $payload['check_images_buyer'] ?? '',
             ];
 
             // 向后兼容：如果只提交了 seller 字段，兼容填充旧字段
@@ -202,59 +204,59 @@ class RecycleDevice extends BaseAdminController
             }
 
             // 如果有最终价格，添加到质检数据中
-            if (isset($data['data']['final_price']) && $data['data']['final_price'] > 0) {
-                $checkData['final_price'] = $data['data']['final_price'];
+            if (isset($payload['final_price']) && $payload['final_price'] > 0) {
+                $checkData['final_price'] = $payload['final_price'];
             }
 
             // 卖货价格支持在质检阶段录入（允许为0）
-            if (array_key_exists('sell_price', $data['data']) && $data['data']['sell_price'] !== '' && $data['data']['sell_price'] !== null) {
-                $checkData['sell_price'] = $data['data']['sell_price'];
+            if (array_key_exists('sell_price', $payload) && $payload['sell_price'] !== '' && $payload['sell_price'] !== null) {
+                $checkData['sell_price'] = $payload['sell_price'];
             }
 
             // 如果有check_status，添加到质检数据中
-            if (isset($data['data']['check_status'])) {
-                $checkData['check_status'] = $data['data']['check_status'];
+            if (isset($payload['check_status'])) {
+                $checkData['check_status'] = $payload['check_status'];
             }
 
             // imei
-            if (isset($data['data']['imei'])) {
-                $checkData['imei'] = $data['data']['imei'];
+            if (isset($payload['imei'])) {
+                $checkData['imei'] = $payload['imei'];
             }
             // info
-            if (isset($data['data']['info'])) {
-                $checkData['info'] = $data['data']['info'];
+            if (isset($payload['info'])) {
+                $checkData['info'] = $payload['info'];
             }
             // model
-            if (isset($data['data']['model'])) {
-                $checkData['model'] = $data['data']['model'];
+            if (isset($payload['model'])) {
+                $checkData['model'] = $payload['model'];
             }
             // system_version
-            if (isset($data['data']['system_version'])) {
-                $checkData['system_version'] = $data['data']['system_version'];
+            if (isset($payload['system_version'])) {
+                $checkData['system_version'] = $payload['system_version'];
             }
             // warranty_info
-            if (isset($data['data']['warranty_info'])) {
-                $checkData['warranty_info'] = $data['data']['warranty_info'];
+            if (isset($payload['warranty_info'])) {
+                $checkData['warranty_info'] = $payload['warranty_info'];
             }
             // capacity
-            if (isset($data['data']['capacity'])) {
-                $checkData['capacity'] = $data['data']['capacity'];
+            if (isset($payload['capacity'])) {
+                $checkData['capacity'] = $payload['capacity'];
             }
             // color
-            if (isset($data['data']['color'])) {
-                $checkData['color'] = $data['data']['color'];
+            if (isset($payload['color'])) {
+                $checkData['color'] = $payload['color'];
             }
             // check_template_id
-            if (isset($data['data']['check_template_id'])) {
-                $checkData['check_template_id'] = $data['data']['check_template_id'];
+            if (isset($payload['check_template_id'])) {
+                $checkData['check_template_id'] = $payload['check_template_id'];
             }
 
 
             // 调用质检完成方法，传递 action 参数
-            return success($this->service->completeCheck($id, $checkData, $data['data']['remark'] ?? '', $data['data']['action']));
+            return success($this->service->completeCheck($id, $checkData, $payload['remark'] ?? '', $payload['action']));
         }
-        
-        return success($this->service->update($id, $data['data']));
+
+        return success($this->service->update($id, $payload));
     }
 
     /**
