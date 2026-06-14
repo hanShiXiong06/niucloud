@@ -67,6 +67,14 @@ class ErpAssetService extends BaseAdminService
         if (!empty($where['inventory_status'])) {
             $query->where('inventory_status', '=', (string)$where['inventory_status']);
         }
+        // 可出库设备(在库/待定价/可售)，供出库选择用
+        if (!empty($where['sellable'])) {
+            $query->whereIn('inventory_status', [
+                ErpDict::INVENTORY_IN_STOCK,
+                ErpDict::INVENTORY_PENDING_PRICING,
+                ErpDict::INVENTORY_AVAILABLE_FOR_SALE,
+            ]);
+        }
         if (!empty($where['warehouse_id'])) {
             $query->where('warehouse_id', '=', (int)$where['warehouse_id']);
         }

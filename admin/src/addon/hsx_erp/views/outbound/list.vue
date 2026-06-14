@@ -198,14 +198,14 @@ async function openCreate() {
 }
 async function loadCounterparties() {
     try {
-        const res: any = await getErpCounterpartyList({ page: 1, limit: 200 })
+        const res: any = await getErpCounterpartyList({ page: 1, limit: 100 })
         counterparties.value = res.data?.data || res.data || []
     } catch { counterparties.value = [] }
 }
 async function loadAvailableAssets() {
     assetLoading.value = true
     try {
-        const res: any = await getErpAssetList({ inventory_status: 'available_for_sale', page: 1, limit: 200 })
+        const res: any = await getErpAssetList({ inventory_status: 'available_for_sale', page: 1, limit: 100 })
         availableAssets.value = res.data?.data || []
     } finally {
         assetLoading.value = false

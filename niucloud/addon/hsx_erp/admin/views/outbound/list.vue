@@ -11,19 +11,27 @@
                 <el-button type="primary" @click="openCreate">新建出库</el-button>
             </div>
 
-            <div class="mt-4 flex gap-3">
-                <el-select v-model="search.outbound_type" placeholder="出库类型" clearable @change="loadList" class="w-40">
-                    <el-option label="同行销售" value="peer_sale" />
-                    <el-option label="报废出库" value="scrap" />
-                    <el-option label="其他出库" value="other" />
-                </el-select>
-                <el-select v-model="search.price_status" placeholder="价格状态" clearable @change="loadList" class="w-40">
-                    <el-option label="待回填" value="pending" />
-                    <el-option label="已定价" value="filled" />
-                </el-select>
-                <el-input v-model="search.keyword" placeholder="出库单号/往来单位" clearable class="w-60" @keyup.enter="loadList" />
-                <el-button @click="loadList" :loading="loading">查询</el-button>
-            </div>
+            <el-form :inline="true" class="mt-4" @submit.prevent>
+                <el-form-item label="出库类型">
+                    <el-select v-model="search.outbound_type" placeholder="全部" clearable @change="loadList" class="!w-[140px]">
+                        <el-option label="同行销售" value="peer_sale" />
+                        <el-option label="报废出库" value="scrap" />
+                        <el-option label="其他出库" value="other" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="价格状态">
+                    <el-select v-model="search.price_status" placeholder="全部" clearable @change="loadList" class="!w-[120px]">
+                        <el-option label="待回填" value="pending" />
+                        <el-option label="已定价" value="filled" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="关键词">
+                    <el-input v-model.trim="search.keyword" placeholder="出库单号 / 往来单位" clearable class="!w-[200px]" @keyup.enter="loadList" />
+                </el-form-item>
+                <el-form-item>
+                    <el-button type="primary" @click="loadList" :loading="loading">查询</el-button>
+                </el-form-item>
+            </el-form>
 
             <el-table class="mt-4" :data="list" v-loading="loading" size="large" empty-text="暂无出库单">
                 <el-table-column prop="outbound_no" label="出库单号" min-width="170" />
@@ -68,9 +76,10 @@
                     </el-radio-group>
                 </el-form-item>
                 <el-form-item v-if="form.outbound_type === 'peer_sale'" label="往来单位">
-                    <el-select v-model="form.counterparty_id" filterable placeholder="选择同行(往来单位)" class="w-80"
-                        @change="onCounterpartyChange">
-                        <el-option v-for="c in counterparties" :key="c.id" :label="c.counterparty_name || c.name" :value="c.id" />
+                    <el-select v-model="form.counterparty_id" filterable remote clearable :remote-method="searchCounterparties"
+                        :loading="cpLoading" placeholder="输入名称/手机号检索同行" class="!w-[320px]" @change="onCounterpartyChange">
+                        <el-option v-for="c in counterparties" :key="c.id"
+                            :label="(c.name || ('#' + c.id)) + (c.mobile ? ('（' + c.mobile + '）') : '')" :value="c.id" />
                     </el-select>
                     <span class="ml-2 text-xs text-gray-400">同行未建档?先到"往来单位"新增</span>
                 </el-form-item>
@@ -82,10 +91,22 @@
                 </el-form-item>
                 <el-form-item label="选择设备">
                     <div class="w-full">
+                        <div class="mb-2 flex items-center gap-2">
+                            <el-select v-model="assetWarehouseId" placeholder="按仓库筛选" clearable class="!w-[200px]" @change="loadAvailableAssets">
+                                <el-option v-for="w in warehouseOptions" :key="w.id"
+                                    :label="w.warehouse_name + '（' + businessTypeLabel(w.business_type) + '）'" :value="w.id" />
+                            </el-select>
+                            <el-input v-model.trim="assetKeyword" placeholder="资产号/IMEI/型号" clearable class="!w-[200px]" @keyup.enter="loadAvailableAssets" />
+                            <el-button @click="loadAvailableAssets" :loading="assetLoading">筛选</el-button>
+                            <span class="text-xs text-gray-400">先按仓库性质筛选，再勾选要出库的设备</span>
+                        </div>
                         <el-table :data="availableAssets" size="small" max-height="300" @selection-change="onAssetSelect"
-                            v-loading="assetLoading" empty-text="无可出库设备">
+                            v-loading="assetLoading" empty-text="无可出库设备（试试切换仓库）">
                             <el-table-column type="selection" width="40" />
                             <el-table-column prop="asset_no" label="资产号" min-width="120" show-overflow-tooltip />
+                            <el-table-column label="所在仓库" min-width="130" show-overflow-tooltip>
+                                <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
+                            </el-table-column>
                             <el-table-column prop="model" label="型号" min-width="120" show-overflow-tooltip />
                             <el-table-column prop="imei" label="IMEI" min-width="120" show-overflow-tooltip />
                             <el-table-column v-if="showPrice" label="出货价" width="140">
@@ -161,7 +182,8 @@ import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutboundPrice } from '@/addon/hsx_erp/api/outbound'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
-import { getErpCounterpartyList } from '@/addon/hsx_erp/api/counterparty'
+import { getErpCounterpartyOptions } from '@/addon/hsx_erp/api/counterparty'
+import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 const formatTime = (t: number) => new Date(t * 1000).toLocaleString()
@@ -192,6 +214,13 @@ const createVisible = ref(false)
 const submitting = ref(false)
 const form = reactive({ outbound_type: 'peer_sale', counterparty_id: 0, counterparty_name: '', settle_mode: 'now', remark: '' })
 const counterparties = ref<any[]>([])
+const cpLoading = ref(false)
+const warehouseOptions = ref<any[]>([])
+const assetWarehouseId = ref<number | ''>('')
+const assetKeyword = ref('')
+const businessTypeMap: Record<string, string> = { mall: '商城', peer: '同行', consignment: '代卖', hold: '暂存', scrap: '报废' }
+const businessTypeLabel = (v: string) => businessTypeMap[v] || '商城'
+const warehouseName = (id: number) => warehouseOptions.value.find((w: any) => Number(w.id) === Number(id))?.warehouse_name || '-'
 const availableAssets = ref<any[]>([])
 const assetLoading = ref(false)
 const selectedAssets = ref<any[]>([])
@@ -204,18 +233,30 @@ const showConsignorCol = computed(() => form.outbound_type === 'peer_sale' && av
 
 async function openCreate() {
     createVisible.value = true
-    await Promise.all([loadCounterparties(), loadAvailableAssets()])
+    await Promise.all([searchCounterparties(''), loadWarehouses(), loadAvailableAssets()])
 }
-async function loadCounterparties() {
+async function loadWarehouses() {
     try {
-        const res: any = await getErpCounterpartyList({ page: 1, limit: 200 })
-        counterparties.value = res.data?.data || res.data || []
-    } catch { counterparties.value = [] }
+        const res: any = await getErpWarehouseOptions()
+        warehouseOptions.value = res.data || []
+    } catch { warehouseOptions.value = [] }
+}
+async function searchCounterparties(keyword: string) {
+    cpLoading.value = true
+    try {
+        const res: any = await getErpCounterpartyOptions({ keyword: keyword || '' })
+        counterparties.value = res.data || []
+    } catch { counterparties.value = [] } finally {
+        cpLoading.value = false
+    }
 }
 async function loadAvailableAssets() {
     assetLoading.value = true
     try {
-        const res: any = await getErpAssetList({ inventory_status: 'available_for_sale', page: 1, limit: 200 })
+        const params: any = { sellable: 1, page: 1, limit: 200 }
+        if (assetWarehouseId.value) params.warehouse_id = assetWarehouseId.value
+        if (assetKeyword.value) params.keyword = assetKeyword.value
+        const res: any = await getErpAssetList(params)
         availableAssets.value = res.data?.data || []
     } finally {
         assetLoading.value = false
@@ -267,6 +308,8 @@ function resetCreate() {
     form.settle_mode = 'now'
     form.remark = ''
     selectedAssets.value = []
+    assetWarehouseId.value = ''
+    assetKeyword.value = ''
     Object.keys(priceInput).forEach((k) => delete priceInput[Number(k)])
     Object.keys(consignorInput).forEach((k) => delete consignorInput[Number(k)])
 }
