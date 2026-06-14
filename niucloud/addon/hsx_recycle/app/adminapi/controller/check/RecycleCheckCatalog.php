@@ -18,40 +18,16 @@ class RecycleCheckCatalog extends BaseAdminController
         $this->service = new RecycleCheckCatalogService();
     }
 
-    /** 检测数据列表(全ID映射，已还原中文) */
+    /** 概览 + 最近批次 */
     public function lists()
     {
         return success([
             'summary' => $this->service->summary(),
-            'page' => $this->service->dataPage($this->request->params([
-                ['model_key', ''], ['product_id', 0], ['page', 1], ['limit', 20],
-            ])),
+            'batches' => $this->service->batchList(20),
         ]);
     }
 
-    /** 按型号取整套检测项 */
-    public function byModel()
-    {
-        return success($this->service->getByModel((string)$this->request->param('model_key', '')));
-    }
-
-    /** 验机表单 schema：传 model_dict_id(型号节点) 或 product_id */
-    public function schema()
-    {
-        $p = $this->request->params([['model_dict_id', 0], ['product_id', 0]]);
-        if ((int)$p['model_dict_id'] > 0) {
-            return success($this->service->getSchemaByModelNode((int)$p['model_dict_id']));
-        }
-        return success($this->service->getSchemaByProductId((int)$p['product_id']));
-    }
-
-    /** 导入批次记录 */
-    public function batches()
-    {
-        return success($this->service->batchList(30));
-    }
-
-    /** 上传原始 CSV(型号,产品ID,检测项,分类,默认选项,全部选项)，返回批次+token */
+    /** 上传原始拍机堂 CSV(型号,产品ID,检测项,分类,默认选项,全部选项)，返回批次+token */
     public function importUpload()
     {
         $file = $this->request->file('file');
@@ -74,7 +50,7 @@ class RecycleCheckCatalog extends BaseAdminController
     /** 处理一片(前端循环调用直到 done) */
     public function importChunk()
     {
-        $p = $this->request->params([['batch_id', 0], ['token', ''], ['offset', 0], ['limit', 2000]]);
+        $p = $this->request->params([['batch_id', 0], ['token', ''], ['offset', 0], ['limit', 80]]);
         return success($this->service->importChunk((int)$p['batch_id'], (string)$p['token'], (int)$p['offset'], (int)$p['limit']));
     }
 
@@ -90,20 +66,17 @@ class RecycleCheckCatalog extends BaseAdminController
         ]);
     }
 
-    /** 设置单个选项级别 */
     public function severitySet(int $id)
     {
         return success((new RecycleCheckSeverityService())->setSeverity($id, (string)$this->request->param('severity', 'normal')));
     }
 
-    /** 批量设置级别 */
     public function severityBatchSet()
     {
         $p = $this->request->params([['ids', []], ['severity', 'normal']]);
         return success((new RecycleCheckSeverityService())->batchSetSeverity((array)$p['ids'], (string)$p['severity']));
     }
 
-    /** 按关键字批量打标级别 */
     public function severityByKeyword()
     {
         $p = $this->request->params([['keyword', ''], ['severity', 'abnormal']]);

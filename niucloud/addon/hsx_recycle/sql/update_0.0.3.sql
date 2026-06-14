@@ -51,26 +51,6 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_dict` (
   KEY `idx_site_type_sev` (`site_id`,`dict_type`,`severity`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检参考表(字典:分类/检测项/选项)';
 
-CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_data` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
-  `model_key` varchar(120) NOT NULL DEFAULT '' COMMENT '型号',
-  `product_id` int NOT NULL DEFAULT 0 COMMENT '来源产品ID',
-  `group_id` int NOT NULL DEFAULT 0 COMMENT '分类→dict.id',
-  `field_id` int NOT NULL DEFAULT 0 COMMENT '检测项→dict.id',
-  `default_option_id` int NOT NULL DEFAULT 0 COMMENT '默认选项→dict.id',
-  `option_ids` varchar(500) NOT NULL DEFAULT '' COMMENT '全部选项id(逗号分隔)',
-  `import_hash` char(32) NOT NULL DEFAULT '' COMMENT '内容哈希',
-  `is_user_modified` tinyint(1) NOT NULL DEFAULT 0 COMMENT '用户改过=1，重导永久跳过',
-  `sort` int NOT NULL DEFAULT 0,
-  `create_at` int NOT NULL DEFAULT 0,
-  `update_at` int NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_site_model_field` (`site_id`,`model_key`,`field_id`),
-  KEY `idx_site_model` (`site_id`,`model_key`),
-  KEY `idx_site_product` (`site_id`,`product_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检数据表(全ID映射)';
-
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_import_batch` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int NOT NULL DEFAULT 0,

@@ -10,11 +10,11 @@
             </div>
         </section>
 
-        <div class="stat-row">
-            <div class="stat-card normal"><div class="stat-label">正常</div><div class="stat-value">{{ summary.normal }}</div></div>
-            <div class="stat-card general"><div class="stat-label">一般</div><div class="stat-value">{{ summary.general }}</div></div>
-            <div class="stat-card abnormal"><div class="stat-label">异常</div><div class="stat-value">{{ summary.abnormal }}</div></div>
-        </div>
+        <el-row :gutter="16" class="summary-row">
+            <el-col :span="8"><el-statistic title="正常" :value="summary.normal" /></el-col>
+            <el-col :span="8"><el-statistic title="一般" :value="summary.general" /></el-col>
+            <el-col :span="8"><el-statistic title="异常" :value="summary.abnormal" /></el-col>
+        </el-row>
 
         <el-form :inline="true" class="filter-form" @submit.prevent>
             <el-form-item label="级别">
@@ -159,13 +159,7 @@ onMounted(loadList)
 </script>
 
 <style lang="scss" scoped>
-.stat-row { display: flex; gap: 16px; margin-bottom: 16px; }
-.stat-card { flex: 1; padding: 16px 20px; border-radius: 10px; background: var(--el-fill-color-light); }
-.stat-card.normal { background: var(--el-color-success-light-9); }
-.stat-card.general { background: var(--el-color-info-light-9); }
-.stat-card.abnormal { background: var(--el-color-danger-light-9); }
-.stat-label { font-size: 13px; color: var(--el-text-color-secondary); }
-.stat-value { margin-top: 6px; font-size: 22px; font-weight: 600; }
+.summary-row { margin: 8px 0 20px; }
 .filter-form { margin-bottom: 4px; }
 .batch-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; padding: 10px 14px; background: var(--el-fill-color-lighter); border-radius: 8px; }
 .batch-bar__tip { font-size: 13px; color: var(--el-text-color-secondary); }
