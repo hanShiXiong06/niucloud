@@ -74,6 +74,12 @@ class RecycleCheckTemplate extends BaseAdminController
         return success((new RecycleCheckTemplateService())->schema($data));
     }
 
+    /** 可由验机查询回填的字段对照表(反黑盒：明示哪个字段对应查询的什么) */
+    public function fillableSources()
+    {
+        return success((new RecycleCheckTemplateService())->fillableSourceMap());
+    }
+
     public function initDefault()
     {
         return success((new RecycleCheckTemplateService())->initDefault());

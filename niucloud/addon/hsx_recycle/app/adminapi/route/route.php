@@ -324,6 +324,7 @@ Route::group('recycle', function () {
     Route::get('check_template/pages', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@pages');
     Route::get('check_template/all', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@all');
     Route::get('check_template/schema', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@schema');
+    Route::get('check_template/fillable_sources', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@fillableSources');
     Route::post('check_template/init_default', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@initDefault');
     Route::get('check_template/:id', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@info');
     Route::post('check_template', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckTemplate@add');

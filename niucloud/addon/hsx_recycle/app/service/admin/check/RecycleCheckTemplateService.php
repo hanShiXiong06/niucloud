@@ -47,6 +47,23 @@ class RecycleCheckTemplateService extends BaseAdminService
     }
 
     /**
+     * 可由「验机查询」回填的字段对照表(显式契约，反黑盒)。
+     * 字段按 field_key 与查询返回自动对齐；UI 据此明示"哪个字段会回填、对应查询的什么"。
+     * 想新增对应(如颜色)，在此加一条即可，无需改代码逻辑。
+     */
+    public function fillableSourceMap(): array
+    {
+        return [
+            ['field_key' => 'warranty_info',   'label' => '保修信息', 'query_field' => '保修',   'desc' => '验机查询返回的保修状态/到期日，一般只查这个'],
+            ['field_key' => 'capacity',        'label' => '容量',     'query_field' => '容量',   'desc' => '设备存储容量'],
+            ['field_key' => 'color',           'label' => '颜色',     'query_field' => '颜色',   'desc' => '机身颜色'],
+            ['field_key' => 'system_version',  'label' => '系统版本', 'query_field' => '系统',   'desc' => '系统/固件版本'],
+            ['field_key' => 'activation_lock', 'label' => '激活锁',   'query_field' => '激活锁', 'desc' => 'iCloud 激活锁状态'],
+            ['field_key' => 'mdm_lock',        'label' => 'MDM锁',    'query_field' => 'MDM锁',  'desc' => '企业 MDM 锁状态'],
+        ];
+    }
+
+    /**
      * 按来源过滤:manual=手工模板(非pjt),pjt=拍机堂导入
      */
     private function applySourceFilter($query, string $source): void
