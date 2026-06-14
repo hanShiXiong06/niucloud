@@ -12,61 +12,55 @@
         </section>
 
         <div class="workspace">
-            <aside class="panel template-panel">
+            <aside class="panel tree-panel">
                 <div class="panel-head">
-                    <span>模板</span>
-                    <el-input v-model="templateQuery.keyword" clearable placeholder="搜索模板" size="small" @keyup.enter="reloadTemplates" @clear="reloadTemplates" />
+                    <span>型号分类</span>
+                    <el-button v-if="activeCategory" link type="primary" size="small" @click="clearCategory">清除筛选</el-button>
                 </div>
-
-                <div class="template-filter">
-                    <el-radio-group v-model="templateQuery.source" size="small" @change="reloadTemplates">
-                        <el-radio-button label="manual">手工</el-radio-button>
-                        <el-radio-button label="pjt">拍机堂</el-radio-button>
-                        <el-radio-button label="">全部</el-radio-button>
-                    </el-radio-group>
-                    <el-button
-                        size="small"
-                        :type="showCategoryTree ? 'primary' : 'default'"
-                        :icon="Filter"
-                        @click="toggleCategoryTree"
-                    >按分类</el-button>
+                <div class="tree-current" :title="activeCategory?.model_full_name">
+                    {{ activeCategory ? activeCategory.model_full_name : '点分类筛选模板（含其子级型号）' }}
                 </div>
-
-                <div v-show="showCategoryTree" class="category-filter">
-                    <div class="category-filter__current">
-                        <span class="category-filter__path" :title="activeCategory?.model_full_name">
-                            {{ activeCategory ? activeCategory.model_full_name : '点击下方分类节点筛选（含其子级型号）' }}
+                <el-tree
+                    ref="categoryTreeRef"
+                    class="category-filter__tree"
+                    lazy
+                    :load="loadCategoryChildren"
+                    :props="categoryTreeProps"
+                    node-key="id"
+                    highlight-current
+                    @node-click="onCategoryClick"
+                >
+                    <template #default="{ data }">
+                        <span class="category-node">
+                            <span class="category-node__name">{{ data.node_name }}</span>
+                            <span class="category-node__type">{{ nodeTypeText(data.node_type) }}</span>
                         </span>
-                        <el-button v-if="activeCategory" link type="primary" @click="clearCategory">清除</el-button>
+                    </template>
+                </el-tree>
+            </aside>
+
+            <section class="panel list-panel">
+                <div class="panel-head">
+                    <div class="list-head-left">
+                        <span class="panel-title">质检模板</span>
+                        <el-radio-group v-model="templateQuery.source" size="small" @change="reloadTemplates">
+                            <el-radio-button label="manual">手工</el-radio-button>
+                            <el-radio-button label="pjt">拍机堂</el-radio-button>
+                            <el-radio-button label="">全部</el-radio-button>
+                        </el-radio-group>
                     </div>
-                    <el-tree
-                        ref="categoryTreeRef"
-                        class="category-filter__tree"
-                        lazy
-                        :load="loadCategoryChildren"
-                        :props="categoryTreeProps"
-                        node-key="id"
-                        highlight-current
-                        @node-click="onCategoryClick"
-                    >
-                        <template #default="{ data }">
-                            <span class="category-node">
-                                <span class="category-node__name">{{ data.node_name }}</span>
-                                <span class="category-node__type">{{ nodeTypeText(data.node_type) }}</span>
-                            </span>
-                        </template>
-                    </el-tree>
+                    <el-input v-model="templateQuery.keyword" clearable placeholder="搜索模板名称" size="small" class="list-search" @keyup.enter="reloadTemplates" @clear="reloadTemplates" />
                 </div>
 
                 <el-table
                     v-loading="templateLoading"
                     :data="templates"
-                    :height="showCategoryTree ? 360 : 620"
+                    height="600"
                     row-key="id"
                     highlight-current-row
                     @row-click="selectTemplate"
                 >
-                    <el-table-column label="模板" min-width="180" show-overflow-tooltip>
+                    <el-table-column label="模板" min-width="220" show-overflow-tooltip>
                         <template #default="{ row }">
                             <div class="name-main">
                                 {{ row.template_name }}
@@ -76,18 +70,19 @@
                             <div class="name-sub">{{ row.scene }} · v{{ row.version }}</div>
                         </template>
                     </el-table-column>
-                    <el-table-column label="状态" width="76">
+                    <el-table-column label="状态" width="90" align="center">
                         <template #default="{ row }">
                             <el-tag size="small" :type="row.is_default ? 'success' : 'info'">{{ row.is_default ? '默认' : (row.status ? '启用' : '停用') }}</el-tag>
                         </template>
                     </el-table-column>
-                    <el-table-column label="操作" width="86" fixed="right">
+                    <el-table-column label="操作" width="160" fixed="right">
                         <template #default="{ row }">
+                            <el-button link type="primary" @click.stop="selectTemplate(row)">编辑质检项</el-button>
                             <el-dropdown trigger="click" @command="cmd => handleTemplateCommand(String(cmd), row)">
-                                <el-button link type="primary">操作</el-button>
+                                <el-button link type="primary">更多</el-button>
                                 <template #dropdown>
                                     <el-dropdown-menu>
-                                        <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                                        <el-dropdown-item command="edit">编辑信息</el-dropdown-item>
                                         <el-dropdown-item command="default">设为默认</el-dropdown-item>
                                         <el-dropdown-item command="delete">删除</el-dropdown-item>
                                     </el-dropdown-menu>
@@ -100,14 +95,13 @@
                 <el-pagination
                     v-model:current-page="templatePage.page"
                     class="template-pager"
-                    small
                     background
-                    layout="total, prev, pager, next"
+                    layout="total, prev, pager, next, jumper"
                     :page-size="templatePage.limit"
                     :total="templatePage.total"
                     @current-change="loadTemplates"
                 />
-            </aside>
+            </section>
         </div>
 
         <el-drawer
@@ -946,8 +940,47 @@ onMounted(loadTemplates)
 }
 
 .workspace {
-    /* 主视图只剩模板列表，铺满；分组/字段/选项移到抽屉里 */
-    display: block;
+    /* 主从布局：左分类树，右模板列表；编辑落到抽屉 */
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+.tree-panel .tree-current {
+    margin: 6px 0 10px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #f5f7fa;
+    color: #909399;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tree-panel .category-filter__tree {
+    max-height: 620px;
+    overflow: auto;
+}
+.list-panel .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.list-head-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.list-search {
+    width: 220px;
+}
+@media (max-width: 1000px) {
+    .workspace {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* 抽屉内：左分组、右字段+选项 两栏 */
