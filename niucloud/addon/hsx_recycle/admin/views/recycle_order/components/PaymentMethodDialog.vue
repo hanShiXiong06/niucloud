@@ -11,7 +11,6 @@
     @confirm="handleConfirmPayment"
     @cancel="dialogVisible = false"
   >
-    <div class="payment-dialog-scroll">
     <div v-if="paymentInfoData && paymentInfoData.length > 0">
       <!-- 订单摘要信息卡片 -->
       <el-card v-if="currentPaymentInfo && currentPaymentInfo.order_summary" shadow="never" class="mb-4">
@@ -245,7 +244,6 @@
         <span>选了出账户头，确认打款后会在 ERP 该账户记一笔出账流水并扣减余额；不选则按原流程只记打款信息。</span>
       </div>
     </el-card>
-    </div>
   </FormDialog>
 </template>
 
@@ -514,50 +512,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
-:global(.payment-method-dialog) {
-  --payment-dialog-max-height: min(88vh, 820px);
-}
-
-:global(.payment-method-dialog .el-dialog) {
-  max-height: var(--payment-dialog-max-height);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  margin-bottom: 4vh;
-}
-
-:global(.payment-method-dialog .el-dialog__header),
-:global(.payment-method-dialog .el-dialog__footer) {
-  flex-shrink: 0;
-}
-
-:global(.payment-method-dialog .el-dialog__body) {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.payment-dialog-scroll {
-  height: 100%;
-  max-height: calc(var(--payment-dialog-max-height) - 132px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 4px;
-
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-}
-
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -623,10 +577,18 @@ onBeforeUnmount(() => {
   }
 }
 
-.custom-payment-card {
+/* 统一卡片风格：浅边框 + 留白背景，靠头部标签区分用途，避免彩色边框拼色 */
+.payment-method-card,
+.custom-payment-card,
+.payment-proof-card,
+.capital-account-card {
   margin-bottom: 16px;
-  border: 1px dashed #e6a23c;
-  background: #fdf6ec;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-blank);
+}
+
+.capital-account-card {
+  margin-bottom: 0;
 }
 
 .custom-payment-card-empty {
@@ -634,27 +596,16 @@ onBeforeUnmount(() => {
   margin-top: 16px;
 }
 
-.payment-proof-card {
-  border: 1px solid #409eff;
-  background: #ecf5ff;
-}
+.capital-account-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 
-.capital-account-card {
-  margin-top: 16px;
-  border: 1px solid #67c23a;
-  background: #f0f9eb;
-
-  .capital-account-tip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 10px;
-    font-size: 12px;
-    color: #909399;
-
-    .el-icon {
-      color: #67c23a;
-    }
+  .el-icon {
+    color: var(--el-color-primary);
   }
 }
 
@@ -705,10 +656,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
-  :global(.payment-method-dialog) {
-    --payment-dialog-max-height: calc(100dvh - 24px);
-  }
-
   .card-header {
     align-items: flex-start;
     gap: 8px;
