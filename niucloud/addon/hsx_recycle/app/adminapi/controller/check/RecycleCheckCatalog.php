@@ -35,6 +35,16 @@ class RecycleCheckCatalog extends BaseAdminController
         return success($this->service->getByModel((string)$this->request->param('model_key', '')));
     }
 
+    /** 验机表单 schema：传 model_dict_id(型号节点) 或 product_id */
+    public function schema()
+    {
+        $p = $this->request->params([['model_dict_id', 0], ['product_id', 0]]);
+        if ((int)$p['model_dict_id'] > 0) {
+            return success($this->service->getSchemaByModelNode((int)$p['model_dict_id']));
+        }
+        return success($this->service->getSchemaByProductId((int)$p['product_id']));
+    }
+
     /** 导入批次记录 */
     public function batches()
     {

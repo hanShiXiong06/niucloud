@@ -358,6 +358,7 @@ Route::group('recycle', function () {
     Route::post('check_catalog/import_chunk', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@importChunk');
     Route::get('check_catalog/lists', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@lists');
     Route::get('check_catalog/by_model', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@byModel');
+    Route::get('check_catalog/schema', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@schema');
     Route::get('check_catalog/batches', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@batches');
     Route::get('check_catalog/severity', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severityLists');
     Route::post('check_catalog/severity/:id', 'addon\hsx_recycle\app\adminapi\controller\check\RecycleCheckCatalog@severitySet');

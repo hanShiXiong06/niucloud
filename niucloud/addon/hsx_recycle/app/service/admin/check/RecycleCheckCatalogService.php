@@ -217,6 +217,61 @@ class RecycleCheckCatalogService extends BaseAdminService
         unset($r);
     }
 
+    /**
+     * 按拍机堂产品ID取验机表单 schema：分组 → 检测项 → 选项(含级别)，默认项预选。
+     * 供验机/质检时给客户选择用。
+     */
+    public function getSchemaByProductId(int $productId): array
+    {
+        if ($productId <= 0) {
+            return ['product_id' => 0, 'groups' => []];
+        }
+        $rows = RecycleCheckData::where([['site_id', '=', $this->site_id], ['product_id', '=', $productId]])
+            ->order('group_id asc,sort asc,id asc')->select()->toArray();
+        $this->fillDictText($rows);
+        $groups = [];
+        $idx = [];
+        foreach ($rows as $r) {
+            $g = $r['group_name'] !== '' ? $r['group_name'] : '其他';
+            if (!isset($idx[$g])) {
+                $idx[$g] = count($groups);
+                $groups[] = ['group' => $g, 'fields' => []];
+            }
+            $groups[$idx[$g]]['fields'][] = [
+                'field_id' => (int)$r['field_id'],
+                'field_name' => $r['field_name'],
+                'default_option_id' => (int)$r['default_option_id'],
+                'options' => $r['options'], // [{id,label,severity}]
+            ];
+        }
+        return ['product_id' => $productId, 'groups' => $groups];
+    }
+
+    /**
+     * 按型号字典节点取验机表单：节点 product_source_id → 拍机堂 product_id → 检测项。
+     * 若该型号已 fork 成自定义结构化模板(template_binding)，标记 source=template 交原流程。
+     */
+    public function getSchemaByModelNode(int $nodeId): array
+    {
+        $node = Db::name('recycle_device_model_dict')
+            ->where('site_id', $this->site_id)->where('id', $nodeId)
+            ->field('id,node_name,product_source_id')->find();
+        if (!$node) {
+            return ['model_node_id' => $nodeId, 'product_id' => 0, 'groups' => [], 'source' => 'none'];
+        }
+        // 优先：该型号已绑定自定义质检模板 → 交原结构化模板流程
+        $boundTpl = (int)Db::name('recycle_template_binding')
+            ->where('site_id', $this->site_id)->where('target_type', 'model_dict')->where('target_id', $nodeId)
+            ->where('status', 1)->value('check_template_id');
+        $pid = (int)($node['product_source_id'] ?? 0);
+        $schema = $this->getSchemaByProductId($pid);
+        $schema['model_node_id'] = $nodeId;
+        $schema['model_name'] = $node['node_name'];
+        $schema['source'] = $boundTpl > 0 ? 'template' : 'catalog';
+        $schema['custom_template_id'] = $boundTpl;
+        return $schema;
+    }
+
     /** 概览统计 */
     public function summary(): array
     {
