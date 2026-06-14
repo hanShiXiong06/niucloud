@@ -179,12 +179,30 @@ class RecycleCheckCatalogService extends BaseAdminService
             ]);
             Db::name('recycle_check_field')->insert([
                 'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $infoGid,
-                'field_key' => 'warranty_info', 'field_name' => '保修信息', 'component' => 'input',
+                'field_key' => 'warranty_info', 'field_name' => '保修', 'component' => 'input',
                 'selection_mode' => '', 'placeholder' => '点「查保修」自动回填', 'is_required' => 0,
                 'is_show' => 1, 'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
                 'result_template' => '保修: {value}', 'api_fill_enabled' => 1, 'api_fill_policy' => 'overwrite',
                 'sort' => 1, 'create_at' => $now, 'update_at' => $now,
             ]);
+            // 包装：单选(全套/单机/带配件)，写入设备 package_type 列、供打印 {package_type}
+            $pkgFid = (int)Db::name('recycle_check_field')->insertGetId([
+                'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $infoGid,
+                'field_key' => 'package_type', 'field_name' => '包装', 'component' => 'radio',
+                'selection_mode' => 'single', 'is_required' => 0, 'is_show' => 1,
+                'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
+                'result_template' => '包装: {value}', 'sort' => 2, 'create_at' => $now, 'update_at' => $now,
+            ]);
+            $pkgOi = 0;
+            foreach (['全套', '单机', '带配件'] as $po) {
+                $pkgOi++;
+                Db::name('recycle_check_option')->insert([
+                    'site_id' => $this->site_id, 'field_id' => $pkgFid, 'option_label' => $po,
+                    'option_value' => (string)$pkgOi, 'is_default' => ($po === '单机' ? 1 : 0),
+                    'is_show' => 1, 'severity' => 'normal', 'sort' => $pkgOi,
+                    'create_at' => $now, 'update_at' => $now,
+                ]);
+            }
         }
 
         $nodeId = $this->resolveModelNode($nodeCache, $pid, $model);
@@ -215,12 +233,12 @@ class RecycleCheckCatalogService extends BaseAdminService
      */
     private function mapFieldKey(string $fieldName): string
     {
+        // 注：package_type(包装) 改为「设备信息」组里的固定标准字段，不从检测项映射，避免撞 key。
         $rules = [
             'capacity'       => ['内存', '容量', '规格', '存储'],
             'color'          => ['颜色'],
             'system_version' => ['系统'],
             'battery'        => ['电池'],
-            'package_type'   => ['单机', '全套', '套装', '配件'],
         ];
         foreach ($rules as $key => $keywords) {
             foreach ($keywords as $kw) {
