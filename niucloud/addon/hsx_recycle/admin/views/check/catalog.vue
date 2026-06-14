@@ -1,148 +1,118 @@
 <template>
-    <div class="main-container">
-        <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <div class="text-page-title">检测目录</div>
-                    <div class="mt-1 text-sm text-gray-500">按型号维护质检项与可选项（如拍机堂导出）。用 CSV 导入，大数据量无压力。</div>
-                </div>
-                <div class="flex gap-2">
-                    <el-button @click="openBatches">导入记录</el-button>
-                    <el-button type="primary" @click="importVisible = true">导入检测目录</el-button>
-                </div>
+    <PremiumTheme class="check-catalog-page">
+        <section class="page-toolbar">
+            <div>
+                <div class="page-title">检测目录</div>
+                <div class="page-subtitle">型号 → 检测项（全 ID 映射，长文本只存一份）。50 万级数据用数据库工具/LOAD DATA 灌入，本页只看与查。</div>
             </div>
-
-            <div class="mt-4 flex flex-wrap gap-3">
-                <el-input v-model="search.model_key" placeholder="型号" clearable class="w-44" @keyup.enter="reload" />
-                <el-input v-model="search.group_name" placeholder="分类" clearable class="w-44" @keyup.enter="reload" />
-                <el-input v-model="search.keyword" placeholder="检测项 / 型号关键字" clearable class="w-56" @keyup.enter="reload" />
-                <el-button @click="reload" :loading="loading">查询</el-button>
+            <div class="toolbar-actions">
+                <el-button :loading="loading" @click="loadList">刷新</el-button>
             </div>
+        </section>
 
-            <el-table class="mt-4" :data="list" v-loading="loading" size="large" empty-text="暂无检测目录，请先导入">
-                <el-table-column prop="model_key" label="型号" min-width="150" show-overflow-tooltip />
-                <el-table-column prop="group_name" label="分类" width="130" show-overflow-tooltip />
-                <el-table-column prop="field_name" label="检测项" min-width="150" show-overflow-tooltip />
-                <el-table-column prop="default_option" label="默认选项" width="130" show-overflow-tooltip />
-                <el-table-column label="全部选项" min-width="220">
-                    <template #default="{ row }">
-                        <span class="text-gray-500 text-sm">{{ optionText(row.options_json) }}</span>
-                    </template>
-                </el-table-column>
-                <el-table-column label="改过" width="70" align="center">
-                    <template #default="{ row }">
-                        <el-tag v-if="row.is_user_modified" size="small" type="warning">已改</el-tag>
-                        <span v-else class="text-gray-300">-</span>
-                    </template>
-                </el-table-column>
-            </el-table>
-            <div class="mt-4 flex justify-end">
-                <el-pagination layout="total, prev, pager, next" :total="total" :page-size="search.limit"
-                    :current-page="search.page" @current-change="onPage" />
-            </div>
-        </el-card>
+        <div class="stat-row">
+            <div class="stat-card"><div class="stat-label">型号数</div><div class="stat-value">{{ summary.models }}</div></div>
+            <div class="stat-card"><div class="stat-label">数据行</div><div class="stat-value">{{ summary.data_rows }}</div></div>
+            <div class="stat-card"><div class="stat-label">检测项</div><div class="stat-value">{{ summary.fields }}</div></div>
+            <div class="stat-card"><div class="stat-label">选项</div><div class="stat-value">{{ summary.options }}</div></div>
+        </div>
 
-        <!-- 导入 -->
-        <el-dialog v-model="importVisible" title="导入检测目录(CSV)" width="560px">
-            <el-alert type="info" :closable="false" class="mb-3"
-                title="列顺序：型号, 产品ID, 检测项, 分类, 默认选项, 全部选项(用 | 分隔)。请用 CSV(UTF-8)，Excel 可另存为 CSV。" />
-            <el-upload drag :auto-upload="false" :limit="1" :on-change="onFileChange" :on-remove="() => (file = null)" accept=".csv,.txt">
-                <div class="el-upload__text">把 CSV 拖到这里，或<em>点击选择</em></div>
-            </el-upload>
-            <template #footer>
-                <el-button @click="importVisible = false">取消</el-button>
-                <el-button type="primary" :loading="importing" :disabled="!file" @click="doImport">开始导入</el-button>
-            </template>
-        </el-dialog>
+        <el-form :inline="true" class="filter-form" @submit.prevent>
+            <el-form-item label="型号">
+                <el-input v-model.trim="query.model_key" clearable class="!w-[220px]" placeholder="如 1MORE_AERO" @keyup.enter="handleSearch" @clear="handleSearch" />
+            </el-form-item>
+            <el-form-item label="产品ID">
+                <el-input v-model.trim="query.product_id" clearable class="!w-[140px]" placeholder="产品ID" @keyup.enter="handleSearch" @clear="handleSearch" />
+            </el-form-item>
+            <el-form-item>
+                <el-button type="primary" @click="handleSearch">查询</el-button>
+                <el-button @click="handleReset">重置</el-button>
+            </el-form-item>
+        </el-form>
 
-        <!-- 导入记录 -->
-        <el-dialog v-model="batchesVisible" title="导入记录" width="640px">
-            <el-table :data="batches" size="small" v-loading="batchesLoading" empty-text="暂无导入记录">
-                <el-table-column prop="id" label="批次" width="70" />
-                <el-table-column prop="file_name" label="文件" min-width="160" show-overflow-tooltip />
-                <el-table-column prop="total_rows" label="行数" width="80" align="right" />
-                <el-table-column prop="inserted" label="新增" width="70" align="right" />
-                <el-table-column prop="updated" label="更新" width="70" align="right" />
-                <el-table-column label="跳过" width="80" align="right">
-                    <template #default="{ row }">{{ (row.skipped_same || 0) + (row.skipped_user || 0) }}</template>
-                </el-table-column>
-                <el-table-column label="时间" min-width="150">
-                    <template #default="{ row }">{{ row.create_at ? formatTime(row.create_at) : '-' }}</template>
-                </el-table-column>
-            </el-table>
-        </el-dialog>
-    </div>
+        <el-table :data="list" v-loading="loading" size="large" border empty-text="暂无数据（请先灌入检测目录）">
+            <el-table-column prop="model_key" label="型号" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="group_name" label="分类" width="120" show-overflow-tooltip />
+            <el-table-column prop="field_name" label="检测项" min-width="150" show-overflow-tooltip />
+            <el-table-column label="默认项" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.default_option || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="选项（按级别着色）" min-width="320">
+                <template #default="{ row }">
+                    <el-tag
+                        v-for="opt in row.options"
+                        :key="opt.id"
+                        :type="sevType(opt.severity)"
+                        effect="light"
+                        class="opt-tag"
+                    >{{ opt.label }}</el-tag>
+                </template>
+            </el-table-column>
+        </el-table>
+
+        <div class="pager">
+            <el-pagination
+                v-model:current-page="page.page"
+                v-model:page-size="page.limit"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="page.total"
+                @size-change="loadList"
+                @current-change="loadList"
+            />
+        </div>
+    </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
-import { getCheckCatalogList, getCheckCatalogBatches, importCheckCatalog } from '@/addon/hsx_recycle/api/check_catalog'
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+import { onMounted, reactive, ref } from 'vue'
+import { getCheckCatalogList } from '@/addon/hsx_recycle/api/check_catalog'
 
-const formatTime = (t: number) => new Date(t * 1000).toLocaleString()
 const loading = ref(false)
 const list = ref<any[]>([])
-const total = ref(0)
-const search = reactive({ model_key: '', group_name: '', keyword: '', page: 1, limit: 20 })
+const summary = reactive({ models: 0, data_rows: 0, fields: 0, options: 0 })
+const query = reactive({ model_key: '', product_id: '' })
+const page = reactive({ page: 1, limit: 20, total: 0 })
 
-function optionText(v: any): string {
-    if (!v) return '-'
-    try {
-        const arr = typeof v === 'string' ? JSON.parse(v) : v
-        return Array.isArray(arr) ? arr.join(' | ') : String(v)
-    } catch {
-        return String(v)
-    }
-}
-function onPage(p: number) { search.page = p; loadList() }
-function reload() { search.page = 1; loadList() }
+// 级别 → Element 标签色：异常红 / 一般灰 / 正常绿
+const sevType = (s: string) => (s === 'abnormal' ? 'danger' : s === 'general' ? 'info' : 'success')
+
 async function loadList() {
     loading.value = true
     try {
-        const res: any = await getCheckCatalogList(search)
-        list.value = res.data?.data || []
-        total.value = res.data?.total || 0
+        const res: any = await getCheckCatalogList({
+            model_key: query.model_key,
+            product_id: query.product_id,
+            page: page.page,
+            limit: page.limit,
+        })
+        const data = res.data || {}
+        Object.assign(summary, data.summary || {})
+        list.value = data.page?.data || []
+        page.total = Number(data.page?.total || 0)
     } finally {
         loading.value = false
     }
 }
-
-// 导入
-const importVisible = ref(false)
-const importing = ref(false)
-const file = ref<any>(null)
-function onFileChange(f: any) { file.value = f }
-async function doImport() {
-    if (!file.value?.raw) return
-    const fd = new FormData()
-    fd.append('file', file.value.raw)
-    fd.append('source', 'paijitang')
-    importing.value = true
-    try {
-        const res: any = await importCheckCatalog(fd)
-        ElMessage.success('导入完成')
-        importVisible.value = false
-        file.value = null
-        reload()
-    } finally {
-        importing.value = false
-    }
+function handleSearch() {
+    page.page = 1
+    loadList()
+}
+function handleReset() {
+    query.model_key = ''
+    query.product_id = ''
+    handleSearch()
 }
 
-// 导入记录
-const batchesVisible = ref(false)
-const batchesLoading = ref(false)
-const batches = ref<any[]>([])
-async function openBatches() {
-    batchesVisible.value = true
-    batchesLoading.value = true
-    try {
-        const res: any = await getCheckCatalogBatches()
-        batches.value = res.data || []
-    } finally {
-        batchesLoading.value = false
-    }
-}
-
-loadList()
+onMounted(loadList)
 </script>
+
+<style lang="scss" scoped>
+.stat-row { display: flex; gap: 16px; margin-bottom: 16px; }
+.stat-card { flex: 1; padding: 16px 20px; background: var(--el-fill-color-light); border-radius: 10px; }
+.stat-label { font-size: 13px; color: var(--el-text-color-secondary); }
+.stat-value { margin-top: 6px; font-size: 22px; font-weight: 600; }
+.filter-form { margin-bottom: 8px; }
+.opt-tag { margin: 0 6px 6px 0; }
+.pager { margin-top: 16px; display: flex; justify-content: flex-end; }
+</style>
