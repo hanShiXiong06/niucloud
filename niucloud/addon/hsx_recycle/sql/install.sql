@@ -984,6 +984,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_option` (
   `option_label` varchar(120) NOT NULL DEFAULT '' COMMENT '选项名称',
   `option_value` varchar(80) NOT NULL DEFAULT '' COMMENT '选项值',
   `is_default` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否默认',
+  `severity` varchar(16) NOT NULL DEFAULT 'normal' COMMENT '级别 normal/general/abnormal',
   `is_show` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否显示',
   `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
   `extra_config` json DEFAULT NULL COMMENT '扩展配置',

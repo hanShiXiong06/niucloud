@@ -1,6 +1,0 @@
--- 【已作废 / SUPERSEDED】
--- 这个扁平目录方案已被「参考表 + 数据表(全ID映射)」取代。
--- 请改用：
---   update_check_dict.sql   建两张表(参考表 recycle_check_dict + 数据表 recycle_check_data)
---   load_check_data.sql     用本地去重好的 check_dict.tsv / check_data.tsv 灌库
--- 不要执行本文件。

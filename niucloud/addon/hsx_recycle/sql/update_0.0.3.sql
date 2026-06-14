@@ -71,3 +71,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_import_batch` (
   PRIMARY KEY (`id`),
   KEY `idx_site` (`site_id`,`create_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检导入批次';
+
+-- recycle_check_option 加 severity(级别)列（仅 0.0.1/0.0.2 升级时执行；全新安装已在 install.sql 含此列）
+ALTER TABLE `{{prefix}}recycle_check_option`
+  ADD COLUMN `severity` varchar(16) NOT NULL DEFAULT 'normal' COMMENT '级别 normal/general/abnormal' AFTER `is_default`;
