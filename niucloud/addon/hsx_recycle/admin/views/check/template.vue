@@ -108,7 +108,16 @@
                     @current-change="loadTemplates"
                 />
             </aside>
+        </div>
 
+        <el-drawer
+            v-model="editorDrawerVisible"
+            size="82%"
+            destroy-on-close
+            :title="currentTemplate ? ('编辑质检项 · ' + currentTemplate.template_name) : '编辑质检项'"
+            class="check-template-editor-drawer"
+        >
+            <div class="editor-drawer-body">
             <section class="panel group-panel">
                 <div class="panel-head">
                     <div>
@@ -239,7 +248,8 @@
                     </el-table-column>
                 </el-table>
             </section>
-        </div>
+            </div>
+        </el-drawer>
 
         <el-dialog v-model="templateDialog.visible" :title="templateDialog.form.id ? '编辑模板' : '新增模板'" width="520px">
             <el-form label-width="92px" :model="templateDialog.form">
@@ -435,6 +445,7 @@ const templates = ref<any[]>([])
 const groups = ref<any[]>([])
 const fields = ref<any[]>([])
 const currentTemplate = ref<any>(null)
+const editorDrawerVisible = ref(false)
 const currentGroup = ref<any>(null)
 const currentField = ref<any>(null)
 // source 默认 manual:进入先看手工模板,避免一次拉上万条导入模板
@@ -633,6 +644,7 @@ const selectTemplate = async (row: any) => {
     currentTemplate.value = row
     currentGroup.value = null
     currentField.value = null
+    editorDrawerVisible.value = true
     await loadGroups()
 }
 
@@ -934,9 +946,22 @@ onMounted(loadTemplates)
 }
 
 .workspace {
+    /* 主视图只剩模板列表，铺满；分组/字段/选项移到抽屉里 */
+    display: block;
+}
+
+/* 抽屉内：左分组、右字段+选项 两栏 */
+.editor-drawer-body {
     display: grid;
-    grid-template-columns: minmax(260px, 0.8fr) minmax(300px, 1fr) minmax(520px, 1.5fr);
+    grid-template-columns: minmax(280px, 0.8fr) minmax(520px, 1.6fr);
     gap: 12px;
+    align-items: start;
+    padding: 4px 4px 12px;
+}
+@media (max-width: 1100px) {
+    .editor-drawer-body {
+        grid-template-columns: 1fr;
+    }
 }
 
 .template-filter {
