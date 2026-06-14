@@ -198,7 +198,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                 $pkgOi++;
                 Db::name('recycle_check_option')->insert([
                     'site_id' => $this->site_id, 'field_id' => $pkgFid, 'option_label' => $po,
-                    'option_value' => (string)$pkgOi, 'is_default' => ($po === '单机' ? 1 : 0),
+                    'option_value' => (string)$pkgOi, 'is_default' => 0,
                     'is_show' => 1, 'severity' => 'normal', 'sort' => $pkgOi,
                     'create_at' => $now, 'update_at' => $now,
                 ]);
