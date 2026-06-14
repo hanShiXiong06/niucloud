@@ -124,7 +124,7 @@ class RecycleCheckCatalogService extends BaseAdminService
         if ($tplId <= 0) {
             $tplId = (int)Db::name('recycle_check_template')->insertGetId([
                 'site_id' => $this->site_id, 'template_key' => $templateKey,
-                'template_name' => '拍机堂·' . mb_substr($model, 0, 80), 'scene' => 'phone',
+                'template_name' => '拍机堂·' . mb_substr($model, 0, 80), 'scene' => 'pjt',
                 'is_default' => 0, 'status' => 1, 'sort' => 0, 'version' => 1,
                 'create_at' => $now, 'update_at' => $now,
             ]);
