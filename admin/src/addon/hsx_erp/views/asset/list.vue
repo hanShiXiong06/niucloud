@@ -46,8 +46,8 @@
 
             <div class="mb-3 flex flex-wrap gap-4 rounded-lg bg-gray-50 px-4 py-2 text-sm">
                 <span>共 <b class="text-[var(--el-color-primary)]">{{ summary.count }}</b> 台</span>
-                <span>成本合计 <b class="text-orange-600">{{ money(summary.total_cost) }}</b></span>
-                <span>参考售价合计 <b class="text-blue-600">{{ money(summary.total_sale) }}</b></span>
+                <span>成本合计 <b class="text-orange-600">¥{{ money(summary.total_cost) }}</b></span>
+                <span>参考售价合计 <b class="text-blue-600">¥{{ money(summary.total_sale) }}</b></span>
             </div>
 
             <div class="mb-3 flex items-center justify-between">
@@ -499,7 +499,6 @@ import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 const router = useRouter()
 const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any })
 const summary = reactive({ count: 0, total_cost: 0, total_sale: 0 })
-const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 // 是否已接入中台(数据中台)：接入后拍照/定价交给中台，ERP 不再自行定价
 const integrated = ref(false)
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
