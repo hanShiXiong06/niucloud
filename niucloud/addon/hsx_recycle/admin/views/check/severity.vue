@@ -1,14 +1,13 @@
 <template>
     <PremiumTheme class="check-severity-page">
-        <section class="page-toolbar">
-            <div>
-                <div class="page-title">选项级别</div>
-                <div class="page-subtitle">按选项文本标一次、全局生效：异常红(danger) / 一般灰(info) / 正常绿(success)。改过的不会被重导覆盖。</div>
-            </div>
-            <div class="toolbar-actions">
-                <el-button :loading="loading" @click="loadList">刷新</el-button>
-            </div>
-        </section>
+        <el-card class="box-card" shadow="never">
+            <template #header>
+                <PageHeader title="选项级别" description="按选项文本标一次、全局生效：异常红(danger) / 一般灰(info) / 正常绿(success)。改过的不会被重导覆盖。">
+                    <template #actions>
+                        <el-button :loading="loading" @click="loadList">刷新</el-button>
+                    </template>
+                </PageHeader>
+            </template>
 
         <el-row :gutter="16" class="summary-row">
             <el-col :span="8"><el-statistic title="正常" :value="summary.normal" /></el-col>
@@ -85,11 +84,13 @@
                 @current-change="loadList"
             />
         </div>
+        </el-card>
     </PremiumTheme>
 </template>
 
 <script lang="ts" setup>
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {

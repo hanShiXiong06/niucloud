@@ -1,16 +1,15 @@
 <template>
     <PremiumTheme class="check-catalog-page">
-        <section class="page-toolbar">
-            <div>
-                <div class="page-title">导入检测表</div>
-                <div class="page-subtitle">上传一份拍机堂 CSV，后端自动去重生成质检模板并按型号绑定。验机时直接读这些模板，无需逐型号建表。</div>
-            </div>
-            <div class="toolbar-actions">
-                <el-button type="primary" @click="triggerUpload">导入 CSV</el-button>
-                <el-button :loading="loading" @click="loadSummary">刷新</el-button>
-                <input ref="fileInput" type="file" accept=".csv,.txt" style="display:none" @change="onFileChange" />
-            </div>
-        </section>
+        <el-card class="box-card" shadow="never">
+            <template #header>
+                <PageHeader title="导入检测表" description="上传一份拍机堂 CSV，后端自动去重生成质检模板并按型号绑定。验机时直接读这些模板，无需逐型号建表。">
+                    <template #actions>
+                        <el-button type="primary" @click="triggerUpload">导入 CSV</el-button>
+                        <el-button :loading="loading" @click="loadSummary">刷新</el-button>
+                        <input ref="fileInput" type="file" accept=".csv,.txt" style="display:none" @change="onFileChange" />
+                    </template>
+                </PageHeader>
+            </template>
 
         <el-row :gutter="16" class="summary-row">
             <el-col :span="8"><el-statistic title="质检模板数（拍机堂）" :value="summary.templates" /></el-col>
@@ -37,6 +36,7 @@
                 <template #default="{ row }">{{ formatTime(row.create_at) }}</template>
             </el-table-column>
         </el-table>
+        </el-card>
 
         <el-dialog v-model="imp.visible" title="导入检测表" width="460px" :close-on-click-modal="false" :show-close="!imp.running" class="hsx-premium-overlay">
             <div class="imp-file">{{ imp.fileName }}</div>
@@ -52,6 +52,7 @@
 
 <script lang="ts" setup>
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getCheckCatalogList, uploadCheckCatalog, importChunkCheckCatalog } from '@/addon/hsx_recycle/api/check_catalog'

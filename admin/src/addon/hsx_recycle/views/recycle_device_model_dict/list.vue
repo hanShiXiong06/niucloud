@@ -1,18 +1,16 @@
 <template>
   <PremiumTheme class="model-dict-page">
-    <el-card shadow="never">
-      <div class="page-head">
-        <div>
-          <span class="text-page-title">设备分类</span>
-          <div class="page-subtitle">按动态层级组织设备分类；签收时只选择最末级节点。</div>
-        </div>
-        <div class="page-actions">
-          <el-button type="primary" plain @click="openImportDialog">导入数据</el-button>
-          <el-button type="primary" plain @click="openQuickDialog">快速录入</el-button>
-          <el-button type="primary" plain @click="openTemplateDialog()">通用模板</el-button>
-          <el-button type="primary" @click="openCreateRoot">新增分类</el-button>
-        </div>
-      </div>
+    <el-card class="box-card" shadow="never">
+      <template #header>
+        <PageHeader title="设备分类" description="按动态层级组织设备分类；签收时只选择最末级节点。">
+          <template #actions>
+            <el-button type="primary" plain @click="openImportDialog">导入数据</el-button>
+            <el-button type="primary" plain @click="openQuickDialog">快速录入</el-button>
+            <el-button type="primary" plain @click="openTemplateDialog()">通用模板</el-button>
+            <el-button type="primary" @click="openCreateRoot">新增分类</el-button>
+          </template>
+        </PageHeader>
+      </template>
 
       <div class="toolbar">
         <el-input
@@ -276,6 +274,7 @@
 
 <script setup lang="ts">
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {

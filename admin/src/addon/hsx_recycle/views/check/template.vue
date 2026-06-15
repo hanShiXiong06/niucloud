@@ -1,15 +1,14 @@
 <template>
     <PremiumTheme class="check-template-page">
-        <section class="page-toolbar">
-            <div>
-                <div class="page-title">质检模板</div>
-                <div class="page-subtitle">维护站点自己的质检表单、选项、文案和 API 回填字段</div>
-            </div>
-            <div class="toolbar-actions">
-                <el-button @click="initDefault">初始化默认模板</el-button>
-                <el-button type="primary" @click="openTemplateDialog()">新增模板</el-button>
-            </div>
-        </section>
+        <el-card class="box-card" shadow="never">
+            <template #header>
+                <PageHeader title="质检模板" description="维护站点自己的质检表单、选项、文案和 API 回填字段">
+                    <template #actions>
+                        <el-button @click="initDefault">初始化默认模板</el-button>
+                        <el-button type="primary" @click="openTemplateDialog()">新增模板</el-button>
+                    </template>
+                </PageHeader>
+            </template>
 
         <div class="workspace">
             <aside class="panel tree-panel">
@@ -103,6 +102,7 @@
                 />
             </section>
         </div>
+        </el-card>
 
         <el-drawer
             v-model="editorDrawerVisible"
@@ -410,6 +410,7 @@
 
 <script setup lang="ts">
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Filter } from '@element-plus/icons-vue'
