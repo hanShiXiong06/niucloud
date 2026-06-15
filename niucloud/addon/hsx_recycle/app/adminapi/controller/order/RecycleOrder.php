@@ -444,6 +444,7 @@ class RecycleOrder extends BaseAdminController
                 'direction'         => 'out',
                 'amount'            => $amount,
                 'biz_type'          => 'recycle_payment',
+                'counterparty_id'   => $order->isEmpty() ? 0 : (int)$order->member_id, // 客户=会员，供流水关联到人
                 'counterparty_name' => $order->isEmpty() ? '' : (string)$order->customer_name,
                 'source_type'       => 'recycle_order',
                 'source_no'         => $sourceNo !== '' ? $sourceNo : $orderNo,

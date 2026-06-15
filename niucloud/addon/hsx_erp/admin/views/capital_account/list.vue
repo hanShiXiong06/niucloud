@@ -150,7 +150,12 @@
                 <el-table-column label="记账后余额" width="120" align="right">
                     <template #default="{ row }">{{ money(row.balance_after) }}</template>
                 </el-table-column>
-                <el-table-column prop="counterparty_name" label="对手方" min-width="110" show-overflow-tooltip />
+                <el-table-column label="对手方" min-width="130" show-overflow-tooltip>
+                    <template #default="{ row }">
+                        <template v-if="row.counterparty_name">{{ row.counterparty_name }}<span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span></template>
+                        <span v-else class="text-gray-300">-</span>
+                    </template>
+                </el-table-column>
                 <el-table-column prop="source_no" label="来源单" min-width="120" show-overflow-tooltip />
                 <el-table-column prop="operator_name" label="操作人" width="90" show-overflow-tooltip />
                 <el-table-column label="时间" width="150">
