@@ -22,7 +22,14 @@ class ErpAssetDownstreamListener
     {
         try {
             $name = (string)($event['event_name'] ?? '');
-            if ($name !== 'erp.asset.stocked.v1' && $name !== 'erp.asset.ready_for_photo.v1') {
+            // ERP 域事件 → 回收下游流转阶段。售出/下架(无商城时由ERP出库驱动)推进到 已售/下架。
+            $stageMap = [
+                'erp.asset.stocked.v1'         => RecycleDownstreamDict::STAGE_STOCKED,
+                'erp.asset.ready_for_photo.v1' => RecycleDownstreamDict::STAGE_READY_FOR_PHOTO,
+                'erp.asset.sold.v1'            => RecycleDownstreamDict::STAGE_SOLD,
+                'erp.asset.delisted.v1'        => RecycleDownstreamDict::STAGE_SOLD,
+            ];
+            if (!isset($stageMap[$name])) {
                 return ['skipped' => true];
             }
 
@@ -39,9 +46,7 @@ class ErpAssetDownstreamListener
             $eventId = (string)($event['event_id'] ?? '');
             $extra = ['erp_asset_id' => (int)($payload['asset_id'] ?? $event['aggregate_id'] ?? 0)];
 
-            $stage = $name === 'erp.asset.stocked.v1'
-                ? RecycleDownstreamDict::STAGE_STOCKED
-                : RecycleDownstreamDict::STAGE_READY_FOR_PHOTO;
+            $stage = $stageMap[$name];
 
             return (new CoreRecycleDownstreamMirrorService())->applyStage($deviceId, $stage, $extra, $eventId);
         } catch (\Throwable $e) {

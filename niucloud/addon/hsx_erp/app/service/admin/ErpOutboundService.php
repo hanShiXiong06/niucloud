@@ -97,8 +97,9 @@ class ErpOutboundService extends BaseAdminService
         $outboundId = 0;
         $emitItems = [];
         $emitConsignPayables = []; // 代卖卖出 → 应付寄卖人
+        $soldDevices = [];         // 同行销售已售设备(来源回收), 出库后通知回收"已售/下架"
 
-        Db::transaction(function () use ($assetIds, $priceMap, $consignorMap, $type, $settleMode, $priceStatus, $targetStatus, $cpId, $p, $no, $now, &$outboundId, &$emitItems, &$emitConsignPayables) {
+        Db::transaction(function () use ($assetIds, $priceMap, $consignorMap, $type, $settleMode, $priceStatus, $targetStatus, $cpId, $p, $no, $now, &$outboundId, &$emitItems, &$emitConsignPayables, &$soldDevices) {
             // 锁定并校验资产
             $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->select();
             if (count($assets) !== count($assetIds)) {
@@ -132,6 +133,10 @@ class ErpOutboundService extends BaseAdminService
                     'cost'             => round((float)$asset->current_cost, 2),
                     'sale_price'       => $price,
                 ];
+                // 同行销售且来源回收 → 出库后通知回收"已售/下架"(无商城也能闭环)
+                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && (int)$asset->source_device_id > 0) {
+                    $soldDevices[] = ['asset_id' => (int)$asset->id, 'source_device_id' => (int)$asset->source_device_id];
+                }
                 // 代卖设备卖出 → 收集"应付寄卖人"(人手填金额, 锚定该设备的寄卖人 counterparty_id)
                 if ((string)$asset->ownership_type === ErpDict::OWNERSHIP_CONSIGN) {
                     $cpAmount = $consignorMap[(int)$asset->id] ?? 0.0;
@@ -196,6 +201,27 @@ class ErpOutboundService extends BaseAdminService
         // 代卖卖出 → 发应付寄卖人(故障隔离)
         if (!empty($emitConsignPayables)) {
             $this->emitConsignorPayables($no, $emitConsignPayables);
+        }
+
+        // 同行销售出库 → 通知回收"已售/下架"(回收 downstream_stage 推进到 SOLD; 无商城也闭环)
+        foreach ($soldDevices as $sd) {
+            try {
+                event('ErpDomainEvent', [
+                    'event_name'   => 'erp.asset.sold.v1',
+                    'event_id'     => 'erp_sold_' . (int)$sd['asset_id'] . '_' . $now,
+                    'site_id'      => (int)$this->site_id,
+                    'aggregate_id' => (int)$sd['asset_id'],
+                    'payload'      => [
+                        'asset_id'         => (int)$sd['asset_id'],
+                        'source_device_id' => (int)$sd['source_device_id'],
+                        'outbound_no'      => $no,
+                        'reason'           => 'peer_sale',
+                    ],
+                    'operator'     => ['id' => (int)$this->uid, 'name' => (string)$this->username],
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('[erp] 出库通知回收已售失败: ' . $e->getMessage());
+            }
         }
 
         return ['outbound_id' => $outboundId, 'outbound_no' => $no];
