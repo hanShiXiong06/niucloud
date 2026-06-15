@@ -20,3 +20,7 @@ export function fillErpOutboundPrice(id: number, items: any[]) {
 export function transferErpAsset(data: Record<string, any>) {
     return request.post('erp/outbound/transfer', data)
 }
+// 退回/取消出库(仅挂单/未定价、未收款)
+export function cancelErpOutbound(id: number, reason = '') {
+    return request.post(`erp/outbound/${id}/cancel`, { reason })
+}

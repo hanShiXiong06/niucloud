@@ -43,19 +43,23 @@
                 <el-table-column label="出货总额" width="120" align="right">
                     <template #default="{ row }">{{ money(row.total_amount) }}</template>
                 </el-table-column>
-                <el-table-column label="价格状态" width="110" align="center">
+                <el-table-column label="结算/状态" width="150" align="center">
                     <template #default="{ row }">
-                        <el-tag v-if="row.price_status === 'pending'" type="warning" effect="light">待回填</el-tag>
-                        <el-tag v-else type="success" effect="light">已定价</el-tag>
+                        <el-tag v-if="row.is_void" type="info" effect="light">已退回</el-tag>
+                        <template v-else>
+                            <el-tag :type="row.settle_mode === 'now' ? 'success' : 'warning'" effect="light">{{ row.settle_mode === 'now' ? '现结·已售' : '挂单·锁定' }}</el-tag>
+                            <div v-if="row.settle_mode === 'later'" class="mt-0.5 text-xs" :class="row.price_status === 'pending' ? 'text-orange-500' : 'text-gray-400'">{{ row.price_status === 'pending' ? '待回填价' : '价格已定·待收款' }}</div>
+                        </template>
                     </template>
                 </el-table-column>
                 <el-table-column label="出库时间" width="170">
                     <template #default="{ row }">{{ row.out_at ? formatTime(row.out_at) : '-' }}</template>
                 </el-table-column>
-                <el-table-column label="操作" width="150" align="center" fixed="right">
+                <el-table-column label="操作" width="200" align="center" fixed="right">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openInfo(row)">详情</el-button>
-                        <el-button v-if="row.price_status === 'pending'" type="warning" link @click="openFill(row)">回填价格</el-button>
+                        <el-button v-if="!row.is_void && row.price_status === 'pending'" type="warning" link @click="openFill(row)">回填价格</el-button>
+                        <el-button v-if="row.can_cancel" type="danger" link @click="doCancel(row)">退回</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -87,9 +91,17 @@
                 </el-form-item>
                 <el-form-item v-if="form.outbound_type === 'peer_sale'" label="结算方式">
                     <el-radio-group v-model="form.settle_mode">
-                        <el-radio label="now">现结(出库即填价)</el-radio>
-                        <el-radio label="later">价格未来回填</el-radio>
+                        <el-radio label="now">现结(出库即收款·设备已售下架)</el-radio>
+                        <el-radio label="later">挂单(暂不收款·设备锁定可退回)</el-radio>
                     </el-radio-group>
+                    <div class="mt-1 text-xs text-gray-400">
+                        现结=当场收钱,款进所选户头、设备直接售出;挂单=先把设备锁定给买家,款未到,可回填价/退回。
+                    </div>
+                </el-form-item>
+                <el-form-item v-if="form.outbound_type === 'peer_sale' && form.settle_mode === 'now'" label="收款户头" required>
+                    <el-select v-model="form.capital_account_id" filterable placeholder="款项收入哪个账户" class="!w-[320px]">
+                        <el-option v-for="a in payAccounts" :key="a.id" :label="`${a.account_name}（余额 ${money(a.balance)}）`" :value="a.id" />
+                    </el-select>
                 </el-form-item>
                 <el-form-item label="选择设备">
                     <div class="w-full">
@@ -203,8 +215,9 @@
 
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
-import { ElMessage } from 'element-plus'
-import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutboundPrice } from '@/addon/hsx_erp/api/outbound'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutboundPrice, cancelErpOutbound } from '@/addon/hsx_erp/api/outbound'
+import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
 import { getErpMemberOptions, quickCreateErpContact } from '@/addon/hsx_erp/api/counterparty'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
@@ -233,12 +246,29 @@ async function loadList() {
     }
 }
 
+async function doCancel(row: any) {
+    try {
+        await ElMessageBox.confirm(
+            `退回出库单 ${row.outbound_no}？锁定设备将恢复在库、未收款的应收作废。`,
+            '退回出库', { type: 'warning' }
+        )
+    } catch { return }
+    try {
+        const res: any = await cancelErpOutbound(row.id)
+        ElMessage.success(`已退回，恢复在库 ${res.data?.restored ?? 0} 台`)
+        loadList()
+    } catch (e: any) {
+        ElMessage.error(e?.message || '退回失败')
+    }
+}
+
 // 新建出库
 const createVisible = ref(false)
 const submitting = ref(false)
-const form = reactive<any>({ outbound_type: 'peer_sale', counterparty_id: undefined, counterparty_name: '', settle_mode: 'now', remark: '' })
+const form = reactive<any>({ outbound_type: 'peer_sale', counterparty_id: undefined, counterparty_name: '', settle_mode: 'now', capital_account_id: undefined, remark: '' })
 const contacts = ref<any[]>([])
 const cpLoading = ref(false)
+const payAccounts = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 const assetWarehouseId = ref<number | ''>('')
 const assetKeyword = ref('')
@@ -260,13 +290,19 @@ const showConsignorCol = computed(() => form.outbound_type === 'peer_sale' && av
 
 async function openCreate() {
     createVisible.value = true
-    await Promise.all([searchContacts(''), loadWarehouses(), loadAvailableAssets()])
+    await Promise.all([searchContacts(''), loadWarehouses(), loadAvailableAssets(), loadPayAccounts()])
 }
 async function loadWarehouses() {
     try {
         const res: any = await getErpWarehouseOptions()
         warehouseOptions.value = res.data || []
     } catch { warehouseOptions.value = [] }
+}
+async function loadPayAccounts() {
+    try {
+        const res: any = await getCapitalAccounts()
+        payAccounts.value = (res.data?.list || []).filter((a: any) => Number(a.status) === 1)
+    } catch { payAccounts.value = [] }
 }
 async function searchContacts(keyword: string) {
     cpLoading.value = true
@@ -343,6 +379,10 @@ async function doCreate() {
         ElMessage.warning('请选择对接人/交易人(或点"快速建档")')
         return
     }
+    if (form.outbound_type === 'peer_sale' && form.settle_mode === 'now' && !form.capital_account_id) {
+        ElMessage.warning('现结出库请选择收款户头')
+        return
+    }
     const items = selectedAssets.value.map((a) => ({
         asset_id: a.id,
         sale_price: showPrice.value ? (priceInput[a.id] || 0) : 0,
@@ -359,6 +399,7 @@ async function doCreate() {
             counterparty_id: form.counterparty_id,
             counterparty_name: form.counterparty_name,
             settle_mode: form.outbound_type === 'peer_sale' ? form.settle_mode : 'none',
+            capital_account_id: form.settle_mode === 'now' ? form.capital_account_id : 0,
             remark: form.remark,
             items,
         })
@@ -374,6 +415,7 @@ function resetCreate() {
     form.counterparty_id = undefined
     form.counterparty_name = ''
     form.settle_mode = 'now'
+    form.capital_account_id = undefined
     form.remark = ''
     selectedAssets.value = []
     assetWarehouseId.value = ''

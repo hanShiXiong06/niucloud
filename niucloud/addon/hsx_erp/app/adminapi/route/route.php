@@ -59,6 +59,7 @@ Route::group('erp', function () {
     Route::get('outbound/:id', 'addon\hsx_erp\app\adminapi\controller\Outbound@info');
     Route::post('outbound/create', 'addon\hsx_erp\app\adminapi\controller\Outbound@create');
     Route::post('outbound/:id/fill_price', 'addon\hsx_erp\app\adminapi\controller\Outbound@fillPrice');
+    Route::post('outbound/:id/cancel', 'addon\hsx_erp\app\adminapi\controller\Outbound@cancel');
     Route::post('outbound/transfer', 'addon\hsx_erp\app\adminapi\controller\Outbound@transfer');
     // 资金账户 / 账目往来
     Route::get('capital_account/lists', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@lists');

@@ -38,9 +38,16 @@ class Outbound extends BaseAdminController
     {
         $p = $this->request->params([
             ['outbound_type', 'peer_sale'], ['counterparty_id', 0], ['counterparty_name', ''],
-            ['counterparty_enterprise_id', 0], ['settle_mode', 'now'], ['remark', ''], ['items', []],
+            ['counterparty_enterprise_id', 0], ['settle_mode', 'now'], ['capital_account_id', 0],
+            ['remark', ''], ['items', []],
         ]);
         return success($this->service->createOutbound($p));
+    }
+
+    /** 退回/取消出库(仅挂单/未定价、未收款) */
+    public function cancel(int $id)
+    {
+        return success($this->service->cancelOutbound($id, (string)$this->request->param('reason', '')));
     }
 
     /** 回填价格(价格未来回填的出库单) */

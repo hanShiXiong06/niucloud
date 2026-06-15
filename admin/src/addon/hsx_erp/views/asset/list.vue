@@ -590,7 +590,7 @@ const transferBlockedMsg = computed(() => {
 const showConsignChoice = computed(() =>
     transfer.asset && String(transfer.asset.ownership_type) === 'consign' && transferTargetType.value === 'mall'
 )
-const canTransfer = (row: any) => !['pending_in', 'outbound'].includes(String(row.inventory_status))
+const canTransfer = (row: any) => !['pending_in', 'outbound', 'locked'].includes(String(row.inventory_status))
 const openTransfer = (row: any) => {
     transfer.asset = row
     // 反显：默认选中设备当前所在的仓库/库位
@@ -891,7 +891,9 @@ const statusName = (status: string) => ({
     in_stock: '在库',
     refurbishing: '整备中',
     pending_pricing: '待销售定价',
-    available_for_sale: '可售'
+    available_for_sale: '可售',
+    locked: '已锁定(挂单待收款)',
+    outbound: '已售/已出库'
 }[status] || status || '-')
 const statusType = (status: string) => ({
     pending_in: 'warning',
@@ -899,7 +901,9 @@ const statusType = (status: string) => ({
     in_stock: 'success',
     refurbishing: 'warning',
     pending_pricing: 'primary',
-    available_for_sale: 'success'
+    available_for_sale: 'success',
+    locked: 'warning',
+    outbound: 'info'
 }[status] || 'info')
 const nextStepText = (status: string) => ({
     pending_in: '下一步：核对串号、型号和成本后确认入库',
