@@ -109,6 +109,7 @@ class DeviceTraceService extends BaseAdminService
         }
 
         // 回收段
+        \think\facade\Log::info('[erp_trace] asset_id=' . $assetId . ' 解析device_id=' . $deviceId);
         $rec = $deviceId > 0 ? (array)$this->callRecycle(['mode' => 'trace', 'device_id' => $deviceId]) : [];
         $recSummary = (array)($rec['summary'] ?? []);
         $events = (array)($rec['events'] ?? []);

@@ -104,7 +104,14 @@ class CollectDeviceTraceListener
         $events = [];
         // 设备操作日志: 复用官方 getDeviceLogList(只按 device_id 查, 不带 site_id; 写日志时未存 site_id)
         // 自带 status_name(中文) + operator_name(关联系统用户)
-        $deviceLogs = (new RecycleDeviceLog())->getDeviceLogList(['device_id' => $deviceId], 1, 200, 'id asc')['list'] ?? [];
+        $deviceLogs = [];
+        try {
+            $deviceLogs = (new RecycleDeviceLog())->getDeviceLogList(['device_id' => $deviceId], 1, 200, 'id asc')['list'] ?? [];
+        } catch (\Throwable $e) {
+            \think\facade\Log::warning('[trace] getDeviceLogList失败回退裸查: ' . $e->getMessage());
+            $deviceLogs = RecycleDeviceLog::where([['device_id', '=', $deviceId]])->order('id asc')->select()->toArray();
+        }
+        \think\facade\Log::info('[trace] device_id=' . $deviceId . ' order_id=' . $orderId . ' 设备日志=' . count($deviceLogs));
         foreach ($deviceLogs as $lg) {
             $op = (string)($lg['operation_type'] ?? '');
             $ac = (string)($lg['action'] ?? '');
@@ -187,6 +194,7 @@ class CollectDeviceTraceListener
             'pay_amount'     => round((float)($d['pay_amount'] ?? 0), 2),
             'recycle_time'   => (int)($ord['create_at'] ?? 0) ?: (int)($ord['create_time'] ?? 0) ?: (int)($d['create_at'] ?? 0),
         ];
+        \think\facade\Log::info('[trace] device_id=' . $deviceId . ' 回收段事件合计=' . count($events));
         return ['summary' => $summary, 'events' => $events];
     }
 
