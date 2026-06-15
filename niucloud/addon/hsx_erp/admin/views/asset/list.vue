@@ -892,8 +892,8 @@ const statusName = (status: string) => ({
     refurbishing: '整备中',
     pending_pricing: '待销售定价',
     available_for_sale: '可售',
-    locked: '已出货·待收款(挂单)',
-    outbound: '已售/已出库'
+    locked: '已完成',
+    outbound: '已完成'
 }[status] || status || '-')
 const statusType = (status: string) => ({
     pending_in: 'warning',
@@ -902,8 +902,8 @@ const statusType = (status: string) => ({
     refurbishing: 'warning',
     pending_pricing: 'primary',
     available_for_sale: 'success',
-    locked: 'warning',
-    outbound: 'info'
+    locked: 'success',
+    outbound: 'success'
 }[status] || 'info')
 const nextStepText = (status: string) => ({
     pending_in: '下一步：核对串号、型号和成本后确认入库',
