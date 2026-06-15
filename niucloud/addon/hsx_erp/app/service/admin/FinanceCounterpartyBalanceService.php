@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\FinanceDict;
+use addon\hsx_erp\app\model\ErpCounterparty;
 use addon\hsx_erp\app\model\FinancePayable;
 use addon\hsx_erp\app\model\FinanceReceivable;
 use core\base\BaseAdminService;
@@ -17,8 +18,11 @@ use core\base\BaseAdminService;
 class FinanceCounterpartyBalanceService extends BaseAdminService
 {
     /**
-     * 按 counterparty_id(=会员member_id) 批量解析会员，精确到人。
-     * 返回 member_id => ['name'=>昵称/用户名, 'mobile'=>手机号]。会员表查不到的不返回。
+     * 按 counterparty_id(=会员member_id) 批量解析会员(对接人)及其所属主体(往来单位)，精确到人。
+     * 返回 member_id => [
+     *   'name'=>对接人(昵称/用户名), 'mobile'=>手机,
+     *   'entity_id'=>所属主体ID(0=未归属), 'entity_name'=>主体名(空=未归属)
+     * ]。会员表查不到的不返回。
      */
     public static function resolveMemberMap(int $siteId, array $counterpartyIds): array
     {
@@ -34,9 +38,31 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
                 ->select()->toArray();
             foreach ($rows as $m) {
                 $map[(int)$m['member_id']] = [
-                    'name'   => (string)($m['nickname'] ?: $m['username'] ?: ''),
-                    'mobile' => (string)($m['mobile'] ?? ''),
+                    'name'        => (string)($m['nickname'] ?: $m['username'] ?: ''),
+                    'mobile'      => (string)($m['mobile'] ?? ''),
+                    'entity_id'   => 0,
+                    'entity_name' => '',
                 ];
+            }
+            // 关联主体(往来单位)：member → erp_counterparty_member → erp_counterparty
+            $rels = \addon\hsx_erp\app\model\ErpCounterpartyMember::where([
+                ['site_id', '=', $siteId], ['status', '=', 1],
+            ])->whereIn('member_id', $ids)->field('member_id,counterparty_id')->select()->toArray();
+            if (!empty($rels)) {
+                $cpIds = array_values(array_unique(array_filter(array_column($rels, 'counterparty_id'))));
+                $cpNameMap = [];
+                if (!empty($cpIds)) {
+                    foreach (ErpCounterparty::where([['site_id', '=', $siteId]])->whereIn('id', $cpIds)->field('id,name')->select()->toArray() as $cp) {
+                        $cpNameMap[(int)$cp['id']] = (string)$cp['name'];
+                    }
+                }
+                foreach ($rels as $r) {
+                    $mid = (int)$r['member_id'];
+                    if (isset($map[$mid])) {
+                        $map[$mid]['entity_id'] = (int)$r['counterparty_id'];
+                        $map[$mid]['entity_name'] = (string)($cpNameMap[(int)$r['counterparty_id']] ?? '');
+                    }
+                }
             }
         } catch (\Throwable $e) {
         }

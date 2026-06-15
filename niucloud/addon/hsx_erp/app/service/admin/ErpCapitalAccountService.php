@@ -206,6 +206,8 @@ class ErpCapitalAccountService extends BaseAdminService
                         $row['counterparty_name'] = $m['name'];
                     }
                     $row['counterparty_mobile'] = $m['mobile'];
+                    $row['entity_id'] = $m['entity_id'];
+                    $row['entity_name'] = $m['entity_name'];
                 }
             }
             unset($row);
