@@ -168,29 +168,91 @@
             </template>
         </el-dialog>
 
-        <!-- 详情 -->
-        <el-dialog v-model="infoVisible" title="出库单详情" width="720px">
+        <!-- 详情抽屉 -->
+        <el-drawer v-model="infoVisible" title="出库单详情" size="820px">
             <div v-if="infoData" v-loading="infoLoading">
-                <div class="mb-3 grid grid-cols-2 gap-2 text-sm">
-                    <div>单号：{{ infoData.outbound_no }}</div>
-                    <div>类型：{{ infoData.type_text }}</div>
-                    <div>往来单位：{{ infoData.counterparty_name || ('#' + infoData.counterparty_id) }}</div>
-                    <div>总额：{{ money(infoData.total_amount) }}</div>
+                <!-- 概览 -->
+                <div class="rounded-lg bg-gray-50 px-4 py-3">
+                    <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+                        <span class="font-medium">{{ infoData.outbound_no }}</span>
+                        <el-tag size="small" effect="plain">{{ infoData.type_text }}</el-tag>
+                        <el-tag size="small" :type="infoData.is_void ? 'info' : (infoData.collected ? 'success' : 'warning')" effect="light">
+                            {{ infoData.is_void ? '已退回' : (infoData.settle_mode === 'now' ? '现结·已售' : (infoData.collected ? '挂单·已收款' : '挂单·待收款')) }}
+                        </el-tag>
+                        <span class="text-sm text-gray-500">{{ formatTime(infoData.out_at) }} · {{ infoData.operator_name || '-' }}</span>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-600">
+                        卖给了谁：<b>{{ infoData.buyer_name || '-' }}</b><span v-if="infoData.buyer_mobile" class="text-gray-400"> · {{ infoData.buyer_mobile }}</span>
+                        <span v-if="infoData.buyer_entity" class="text-gray-500">（主体：<b class="cursor-pointer text-[var(--el-color-primary)]" @click="openEntity(infoData.buyer_entity_id)">{{ infoData.buyer_entity }}</b>）</span>
+                    </div>
+                    <div v-if="infoData.remark" class="mt-1 text-sm text-gray-500">备注：{{ infoData.remark }}</div>
+                    <div class="mt-3 grid grid-cols-4 gap-3 text-center">
+                        <div><div class="text-xs text-gray-500">台数</div><div class="mt-1 font-semibold">{{ infoData.qty }}</div></div>
+                        <div><div class="text-xs text-gray-500">总售价</div><div class="mt-1 font-semibold text-blue-600">{{ money(infoData.total_amount) }}</div></div>
+                        <div><div class="text-xs text-gray-500">总成本</div><div class="mt-1 font-semibold text-orange-600">{{ money(infoData.total_cost) }}</div></div>
+                        <div><div class="text-xs text-gray-500">总毛利</div><div class="mt-1 font-semibold" :class="infoData.total_profit >= 0 ? 'text-green-600' : 'text-red-600'">{{ money(infoData.total_profit) }}</div></div>
+                    </div>
                 </div>
+
+                <!-- 设备明细 -->
+                <div class="mt-4 mb-2 font-medium">设备明细（{{ (infoData.items || []).length }} 台）</div>
                 <el-table :data="infoData.items || []" size="small" empty-text="无明细">
-                    <el-table-column prop="model" label="型号" min-width="120" show-overflow-tooltip />
-                    <el-table-column prop="imei" label="IMEI" min-width="120" show-overflow-tooltip />
-                    <el-table-column label="出货价" width="110" align="right">
-                        <template #default="{ row }">{{ money(row.sale_price) }}</template>
-                    </el-table-column>
-                    <el-table-column label="应收" width="80" align="center">
+                    <el-table-column label="设备" min-width="150" show-overflow-tooltip>
                         <template #default="{ row }">
-                            <el-tag size="small" :type="row.receivable_emitted ? 'success' : 'info'">{{ row.receivable_emitted ? '已生成' : '未生成' }}</el-tag>
+                            <div>{{ row.model }}</div>
+                            <div class="text-xs text-gray-400">IMEI {{ row.imei || '-' }}<span v-if="row.asset_no"> · {{ row.asset_no }}</span></div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="成本" width="90" align="right"><template #default="{ row }">{{ money(row.cost) }}</template></el-table-column>
+                    <el-table-column label="出货价" width="90" align="right"><template #default="{ row }">{{ money(row.sale_price) }}</template></el-table-column>
+                    <el-table-column label="毛利" width="90" align="right"><template #default="{ row }"><span :class="row.profit >= 0 ? 'text-green-600' : 'text-red-600'">{{ money(row.profit) }}</span></template></el-table-column>
+                    <el-table-column label="库存状态" width="100" align="center"><template #default="{ row }"><el-tag size="small" effect="light">{{ row.inventory_status_text || '-' }}</el-tag></template></el-table-column>
+                    <el-table-column label="操作" width="90" align="center">
+                        <template #default="{ row }">
+                            <el-button type="primary" link @click="openTrace(row)">全链路</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
+
+                <!-- 财务关联 -->
+                <div class="mt-4 mb-2 font-medium">财务关联</div>
+                <div class="rounded-lg border border-gray-100 px-4 py-3 text-sm">
+                    <div class="flex flex-wrap gap-x-6 gap-y-1">
+                        <span>已收：<b class="text-green-600">{{ money(infoData.received) }}</b></span>
+                        <span>未收：<b :class="infoData.unreceived > 0 ? 'text-orange-600' : 'text-gray-400'">{{ money(infoData.unreceived) }}</b></span>
+                    </div>
+                    <div v-if="(infoData.receivables || []).length" class="mt-2">
+                        <div class="text-xs text-gray-500">应收</div>
+                        <div v-for="r in infoData.receivables" :key="r.id" class="mt-1 flex flex-wrap gap-x-4 text-gray-600">
+                            <span>{{ r.source_no }}</span><span>¥{{ Number(r.amount).toFixed(2) }}</span>
+                            <span>已结 ¥{{ Number(r.settled_amount).toFixed(2) }}</span>
+                            <el-tag size="small" :type="r.status === 'settled' ? 'success' : (r.status === 'partial' ? 'warning' : 'danger')" effect="light">{{ r.status_text }}</el-tag>
+                        </div>
+                    </div>
+                    <div v-if="(infoData.settlements || []).length" class="mt-2">
+                        <div class="text-xs text-gray-500">结算/折账</div>
+                        <div v-for="s in infoData.settlements" :key="s.id" class="mt-1 flex flex-wrap gap-x-4 text-gray-600">
+                            <span>{{ s.settlement_no }}</span>
+                            <span>折账 ¥{{ Number(s.offset_amount).toFixed(2) }}</span>
+                            <span>现金 ¥{{ Number(s.cash_amount).toFixed(2) }}</span>
+                            <span v-if="s.account_name">户头：{{ s.account_name }}</span>
+                        </div>
+                    </div>
+                    <div v-if="(infoData.capital_flows || []).length" class="mt-2">
+                        <div class="text-xs text-gray-500">收款流水</div>
+                        <div v-for="(c, i) in infoData.capital_flows" :key="i" class="mt-1 flex flex-wrap gap-x-4 text-gray-600">
+                            <span>{{ c.account_name }}</span><span>{{ c.direction === 'in' ? '收' : '付' }} ¥{{ Number(c.amount).toFixed(2) }}</span>
+                            <span class="text-gray-400">{{ c.remark }}</span>
+                        </div>
+                    </div>
+                    <div v-if="!(infoData.receivables || []).length && !(infoData.capital_flows || []).length" class="mt-1 text-gray-400">暂无财务记录</div>
+                </div>
             </div>
-        </el-dialog>
+        </el-drawer>
+
+        <!-- 设备全链路 + 主体抽屉 -->
+        <trace-detail v-model="trace.visible" :asset-id="trace.assetId" :device-id="trace.deviceId" />
+        <entity-drawer v-model="entityDrawer.visible" :entity-id="entityDrawer.id" />
 
         <!-- 快速建档:对接人+主体一步建 -->
         <el-dialog v-model="quickContact.visible" title="快速建档(对接人)" width="420px" append-to-body>
@@ -220,6 +282,8 @@ import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutbo
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
 import { getErpMemberOptions, quickCreateErpContact } from '@/addon/hsx_erp/api/counterparty'
+import TraceDetail from '@/addon/hsx_erp/views/device_trace/trace-detail.vue'
+import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
@@ -465,6 +529,20 @@ async function openInfo(row: any) {
     } finally {
         infoLoading.value = false
     }
+}
+
+// 设备全链路 + 主体抽屉
+const trace = reactive<any>({ visible: false, assetId: 0, deviceId: 0 })
+function openTrace(row: any) {
+    trace.assetId = row.asset_id || 0
+    trace.deviceId = row.source_device_id || 0
+    trace.visible = true
+}
+const entityDrawer = reactive<any>({ visible: false, id: 0 })
+function openEntity(id: number) {
+    if (!id) return
+    entityDrawer.id = id
+    entityDrawer.visible = true
 }
 
 loadList()

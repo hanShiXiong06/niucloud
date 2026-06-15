@@ -591,8 +591,81 @@ class ErpOutboundService extends BaseAdminService
             throw new CommonException('出库单不存在');
         }
         $data = $order->toArray();
+        $no = (string)$data['outbound_no'];
         $data['type_text'] = ErpDict::getOutboundTypeMap()[$data['outbound_type']] ?? $data['outbound_type'];
-        $data['items'] = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['outbound_id', '=', $id]])->select()->toArray();
+        $settleMap = ['now' => '现结(已收款)', 'later' => '挂单(待收款)', 'none' => '无结算'];
+        $data['settle_mode_text'] = $settleMap[(string)$data['settle_mode']] ?? (string)$data['settle_mode'];
+        $data['is_void'] = (string)$data['status'] === ErpDict::OUTBOUND_STATUS_VOID;
+
+        // 卖给了谁: 对接人本人 + 所属主体
+        $bm = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, [(int)$data['counterparty_id']])[(int)$data['counterparty_id']] ?? null;
+        $data['buyer_name'] = $bm ? (string)$bm['name'] : (string)$data['counterparty_name'];
+        $data['buyer_mobile'] = $bm ? (string)$bm['mobile'] : '';
+        $data['buyer_entity'] = $bm ? (string)$bm['entity_name'] : '';
+        $data['buyer_entity_id'] = $bm ? (int)$bm['entity_id'] : 0;
+
+        // 设备明细 + 资产号/库存状态/毛利
+        $items = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['outbound_id', '=', $id]])->select()->toArray();
+        $assetMap = [];
+        $assetIds = array_values(array_filter(array_column($items, 'asset_id')));
+        if (!empty($assetIds)) {
+            foreach (ErpAsset::where([['site_id', '=', $this->site_id]])->whereIn('id', $assetIds)->field('id,asset_no,inventory_status,current_cost')->select()->toArray() as $a) {
+                $assetMap[(int)$a['id']] = $a;
+            }
+        }
+        $invMap = ['in_stock' => '在库', 'refurbishing' => '整备中', 'pending_pricing' => '待定价', 'available_for_sale' => '可售', 'locked' => '已售/锁定', 'outbound' => '已售/已出库'];
+        $totalCost = 0.0;
+        $totalSale = 0.0;
+        foreach ($items as &$it) {
+            $a = $assetMap[(int)$it['asset_id']] ?? [];
+            $cost = round((float)($it['cost'] ?: ($a['current_cost'] ?? 0)), 2);
+            $sale = round((float)$it['sale_price'], 2);
+            $it['asset_no'] = (string)($a['asset_no'] ?? '');
+            $it['inventory_status'] = (string)($a['inventory_status'] ?? '');
+            $it['inventory_status_text'] = $invMap[(string)($a['inventory_status'] ?? '')] ?? (string)($a['inventory_status'] ?? '');
+            $it['cost'] = $cost;
+            $it['profit'] = round($sale - $cost, 2);
+            $totalCost += $cost;
+            $totalSale += $sale;
+        }
+        unset($it);
+        $data['items'] = $items;
+        $data['total_cost'] = round($totalCost, 2);
+        $data['total_profit'] = round($totalSale - $totalCost, 2);
+
+        // 财务关联: 应收(本单) + 结算/折账 + 收款流水
+        $recs = FinanceReceivable::where([['site_id', '=', $this->site_id], ['source_no', '=', $no]])->select()->toArray();
+        $received = 0.0;
+        $unreceived = 0.0;
+        $statusMap = FinanceDict::getStatusMap();
+        foreach ($recs as &$r) {
+            $r['status_text'] = $statusMap[$r['status']] ?? $r['status'];
+            $r['outstanding'] = round((float)$r['amount'] - (float)$r['settled_amount'], 2);
+            $received += (float)$r['settled_amount'];
+            $unreceived += $r['outstanding'];
+        }
+        unset($r);
+        $data['receivables'] = $recs;
+        $data['received'] = round($received, 2);
+        $data['unreceived'] = round(max(0, $unreceived), 2);
+        $data['collected'] = (string)$data['settle_mode'] === ErpDict::SETTLE_MODE_NOW || (!empty($recs) && $data['unreceived'] <= 0);
+
+        // 关联结算单(通过应收核销关联)
+        $data['settlements'] = [];
+        $recIds = array_column($recs, 'id');
+        if (!empty($recIds)) {
+            $sids = \addon\hsx_erp\app\model\FinanceSettlementLink::where([['site_id', '=', $this->site_id], ['target_type', '=', FinanceDict::TARGET_RECEIVABLE]])
+                ->whereIn('target_id', $recIds)->column('settlement_id');
+            $sids = array_values(array_unique(array_filter(array_map('intval', $sids))));
+            if (!empty($sids)) {
+                $data['settlements'] = \addon\hsx_erp\app\model\FinanceSettlement::where([['site_id', '=', $this->site_id]])->whereIn('id', $sids)
+                    ->field('id,settlement_no,method,offset_amount,cash_amount,cash_direction,account_name,occurred_at')->select()->toArray();
+            }
+        }
+        // 收款资金流水(本单)
+        $data['capital_flows'] = \addon\hsx_erp\app\model\ErpCapitalLedger::where([['site_id', '=', $this->site_id], ['source_no', '=', $no]])
+            ->field('ledger_no,direction,amount,account_name,occurred_at,remark')->order('id asc')->select()->toArray();
+
         return $data;
     }
 
