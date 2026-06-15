@@ -116,9 +116,17 @@ class CollectDeviceTraceListener
         // 订单操作日志(签收/质检/定价/确认 多记在订单层)
         if ($orderId > 0) {
             foreach (RecycleOrderLog::where([['site_id', '=', $siteId], ['order_id', '=', $orderId]])->order('id asc')->select()->toArray() as $lg) {
+                // 认识的 action 给中文名; 不认识的用"订单·{目标状态}"兜底, 不丢弃
                 $title = $this->orderActionName((string)($lg['action'] ?? ''));
                 if ($title === '') {
-                    continue;
+                    $sn = RecycleOrderDict::ORDER_STATUS_TEXT[(int)($lg['new_status'] ?? 0)] ?? '';
+                    $title = $sn !== '' ? ('订单·' . $sn) : '';
+                    if ($title === '' && (string)($lg['remark'] ?? '') !== '') {
+                        $title = '订单操作';
+                    }
+                    if ($title === '') {
+                        continue;
+                    }
                 }
                 $events[] = [
                     'time'          => (int)$lg['create_at'],

@@ -188,16 +188,20 @@ class DeviceTraceService extends BaseAdminService
         foreach (ErpCostLedger::where([['site_id', '=', $this->site_id], ['asset_id', '=', $assetId]])->order('id asc')->select()->toArray() as $c) {
             $delta = round((float)$c['amount_delta'], 2);
             $type = (string)$c['cost_type'];
-            if (stripos($type, 'refurb') !== false || strpos($type, '整备') !== false) {
+            $isPurchase = stripos($type, 'purchase') !== false || strpos($type, '回收') !== false || stripos($type, 'inbound') !== false;
+            $isRefurb = stripos($type, 'refurb') !== false || strpos($type, '整备') !== false;
+            if ($isRefurb) {
                 $cost['refurbish'] += $delta;
-            } elseif ($delta != 0.0 && stripos($type, 'purchase') === false && strpos($type, '回收') === false && strpos($type, 'inbound') === false) {
+            } elseif (!$isPurchase && $delta != 0.0) {
                 $cost['other'] += $delta;
             }
+            // 入库(采购成本)是关键节点; 整备其次; 其它成本变动归细节
+            $title = $isPurchase ? '确认入库(建档)' : ($isRefurb ? '整备成本' : '成本变动');
             $events[] = [
-                'time' => (int)$c['occurred_at'], 'stage' => '中台', 'title' => '成本变动',
+                'time' => (int)$c['occurred_at'], 'stage' => '中台', 'title' => $title,
                 'detail' => $type . ' ' . ($delta >= 0 ? '+' : '') . $delta . ' ' . (string)$c['remark'],
                 'operator_name' => (string)$c['operator_name'], 'operator_uid' => (int)$c['operator_id'],
-                'amount' => $delta, 'no' => (string)$c['ledger_no'], 'key' => false,
+                'amount' => $delta, 'no' => (string)$c['ledger_no'], 'key' => ($isPurchase || $isRefurb),
             ];
         }
     }
