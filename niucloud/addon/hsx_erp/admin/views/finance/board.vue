@@ -43,10 +43,19 @@
             <el-tabs v-model="activeTab" class="mt-4" @tab-change="onTabChange">
                 <!-- 往来汇总 -->
                 <el-tab-pane label="往来汇总" name="board">
-                    <div class="mb-3 flex items-center gap-2">
-                        <el-input v-model="boardKeyword" placeholder="按往来单位筛选" clearable class="!w-[220px]" />
+                    <div class="mb-3 flex flex-wrap items-center gap-2">
+                        <el-radio-group v-model="boardFilter">
+                            <el-radio-button label="">全部</el-radio-button>
+                            <el-radio-button label="offsetable">可折账</el-radio-button>
+                            <el-radio-button label="pay">我应付</el-radio-button>
+                            <el-radio-button label="collect">我应收</el-radio-button>
+                        </el-radio-group>
+                        <el-input v-model="boardKeyword" placeholder="主体/对接人/电话" clearable class="!w-[200px]" />
+                        <el-select v-model="boardSort" placeholder="排序" style="width: 170px">
+                            <el-option v-for="s in boardSortOptions" :key="s.value" :label="s.label" :value="s.value" />
+                        </el-select>
                     </div>
-                    <el-table :data="filteredBoard" v-loading="loading" size="large" empty-text="暂无未结往来">
+                    <el-table :data="filteredBoard" v-loading="loading" size="large" empty-text="暂无未结往来" @sort-change="onBoardSortChange">
                         <el-table-column label="主体 / 对接人" min-width="200">
                             <template #default="{ row }">
                                 <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
@@ -54,19 +63,19 @@
                                 <div class="text-xs text-gray-500">{{ row.counterparty_name || ('#' + row.counterparty_id) }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></div>
                             </template>
                         </el-table-column>
-                        <el-table-column label="应付(我欠)" width="140" align="right">
+                        <el-table-column label="应付(我欠)" width="140" align="right" prop="payable" sortable="custom">
                             <template #default="{ row }"><span class="text-orange-600">{{ money(row.payable) }}</span></template>
                         </el-table-column>
-                        <el-table-column label="应收(欠我)" width="140" align="right">
+                        <el-table-column label="应收(欠我)" width="140" align="right" prop="receivable" sortable="custom">
                             <template #default="{ row }"><span class="text-green-600">{{ money(row.receivable) }}</span></template>
                         </el-table-column>
-                        <el-table-column label="可折账" width="120" align="right">
+                        <el-table-column label="可折账" width="120" align="right" prop="offsetable" sortable="custom">
                             <template #default="{ row }">
                                 <el-tag v-if="row.offsetable > 0" type="primary" effect="light">{{ money(row.offsetable) }}</el-tag>
                                 <span v-else class="text-gray-400">-</span>
                             </template>
                         </el-table-column>
-                        <el-table-column label="净额" width="150" align="right">
+                        <el-table-column label="净额" width="150" align="right" prop="net" sortable="custom">
                             <template #default="{ row }">
                                 <span :class="row.net > 0 ? 'text-orange-600' : (row.net < 0 ? 'text-green-600' : 'text-gray-400')">{{ money(Math.abs(row.net)) }}</span>
                                 <span class="ml-1 text-xs text-gray-400">{{ netLabel(row.net_direction) }}</span>
@@ -90,7 +99,7 @@
                             <el-radio-button label="settled">已结清</el-radio-button>
                         </el-radio-group>
                         <el-input v-model="detail.keyword" placeholder="往来单位/来源单号" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" />
-                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" class="!w-[300px] flex-none" />
+                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="width: 300px" />
                         <el-input v-model="detail.amount_min" placeholder="金额≥" class="!w-[100px]" />
                         <el-input v-model="detail.amount_max" placeholder="金额≤" class="!w-[100px]" />
                         <el-select v-model="detail.quickSort" placeholder="排序" class="!w-[150px]" @change="onQuickSort">
@@ -140,7 +149,7 @@
                 <el-tab-pane label="结算记录" name="settlement">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                         <el-input v-model="settle.keyword" placeholder="结算单号/往来单位" clearable class="!w-[200px]" @keyup.enter="loadSettlement" />
-                        <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" class="!w-[340px] flex-none" />
+                        <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="width: 300px" />
                         <el-button type="primary" @click="loadSettlement">查询</el-button>
                         <el-button @click="resetSettleFilter">重置</el-button>
                     </div>
@@ -329,14 +338,40 @@ async function loadSummary() {
     } catch (e) { /* ignore */ }
 }
 
-// 往来汇总
+// 往来汇总(数据全量在前端，筛选+排序均在本地)
 const board = ref<any[]>([])
 const boardKeyword = ref('')
+const boardFilter = ref('')        // '' | offsetable | pay | collect
+const boardSort = ref('offsetable:desc')
+const boardSortOptions = [
+    { value: 'offsetable:desc', label: '可折账 高→低' },
+    { value: 'net:desc', label: '净额 高→低' },
+    { value: 'net:asc', label: '净额 低→高' },
+    { value: 'payable:desc', label: '应付 高→低' },
+    { value: 'receivable:desc', label: '应收 高→低' },
+]
 const filteredBoard = computed(() => {
     const kw = boardKeyword.value.trim()
-    if (!kw) return board.value
-    return board.value.filter((r: any) => String(r.counterparty_name || '').includes(kw) || String(r.counterparty_id || '') === kw)
+    let rows = board.value.slice()
+    if (kw) {
+        rows = rows.filter((r: any) =>
+            String(r.entity_name || '').includes(kw) ||
+            String(r.counterparty_name || '').includes(kw) ||
+            String(r.counterparty_mobile || '').includes(kw) ||
+            String(r.counterparty_id || '') === kw)
+    }
+    if (boardFilter.value === 'offsetable') rows = rows.filter((r: any) => Number(r.offsetable) > 0)
+    else if (boardFilter.value === 'pay') rows = rows.filter((r: any) => Number(r.net) > 0)
+    else if (boardFilter.value === 'collect') rows = rows.filter((r: any) => Number(r.net) < 0)
+    const [f, o] = String(boardSort.value || 'offsetable:desc').split(':')
+    const sign = o === 'asc' ? 1 : -1
+    rows.sort((a: any, b: any) => (Number(a[f] || 0) - Number(b[f] || 0)) * sign)
+    return rows
 })
+function onBoardSortChange({ prop, order }: any) {
+    if (!order) { boardSort.value = 'offsetable:desc'; return }
+    boardSort.value = `${prop}:${order === 'ascending' ? 'asc' : 'desc'}`
+}
 async function loadBoard() {
     loading.value = true
     try {
