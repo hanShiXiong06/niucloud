@@ -377,7 +377,7 @@ class FinanceSettlementService extends BaseAdminService
         }
 
         // 发结算完成事件(故障隔离, 不回抛): 业务/ERP 订阅以更新各自展示
-        $this->emitSettlementCompleted($settlementId, $anchorId, $summary, $plan, $eventId, $now);
+        $this->emitSettlementCompleted($settlementId, $no, $anchorId, $summary, $plan, $eventId, $now);
 
         return ['settlement_id' => $settlementId, 'settlement_no' => $no, 'summary' => $summary];
     }
@@ -523,12 +523,27 @@ class FinanceSettlementService extends BaseAdminService
         ]);
     }
 
-    private function emitSettlementCompleted(int $settlementId, int $cpId, array $summary, array $plan, string $eventId, int $now): void
+    private function emitSettlementCompleted(int $settlementId, string $settlementNo, int $cpId, array $summary, array $plan, string $eventId, int $now): void
     {
         try {
+            // 回查被核销应付的来源(回收设备/订单), 供回收端回写打款状态+备注折账单号
+            $payIds = array_map(static fn($a) => (int)$a['id'], $plan['payable_alloc']);
+            $paySrc = [];
+            if (!empty($payIds)) {
+                foreach (FinancePayable::where([['site_id', '=', $this->site_id]])->whereIn('id', $payIds)
+                    ->field('id,source_type,source_no,source_device_id')->select()->toArray() as $r) {
+                    $paySrc[(int)$r['id']] = $r;
+                }
+            }
             $linked = [];
             foreach ($plan['payable_alloc'] as $a) {
-                $linked[] = ['type' => 'payable', 'id' => $a['id'], 'applied' => $a['applied'], 'offset' => $a['offset_part'], 'cash' => $a['cash_part']];
+                $s = $paySrc[(int)$a['id']] ?? [];
+                $linked[] = [
+                    'type' => 'payable', 'id' => $a['id'], 'applied' => $a['applied'], 'offset' => $a['offset_part'], 'cash' => $a['cash_part'],
+                    'source_type' => (string)($s['source_type'] ?? ''),
+                    'source_no' => (string)($s['source_no'] ?? ''),
+                    'source_device_id' => (int)($s['source_device_id'] ?? 0),
+                ];
             }
             foreach ($plan['receivable_alloc'] as $a) {
                 $linked[] = ['type' => 'receivable', 'id' => $a['id'], 'applied' => $a['applied'], 'offset' => $a['offset_part'], 'cash' => $a['cash_part']];
@@ -538,6 +553,7 @@ class FinanceSettlementService extends BaseAdminService
                 'event_id'        => $eventId,
                 'site_id'         => $this->site_id,
                 'settlement_id'   => $settlementId,
+                'settlement_no'   => $settlementNo,
                 'counterparty_id' => $cpId,
                 'method'          => $summary['method'],
                 'offset_amount'   => $summary['offset_amount'],

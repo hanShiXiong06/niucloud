@@ -236,6 +236,96 @@ class RecycleDevicePaymentService extends BaseAdminService
         ];
     }
 
+    /**
+     * 折账结清: 财务中心把回收应付折账冲抵后, 回调本方把对应设备标记为"已折账结清"(等同已打款),
+     * 备注写折账结算单号, 便于查账。已打款的设备跳过(幂等)。
+     * @param array $deviceIds 回收设备ID(= ERP应付的 source_device_id)
+     * @param string $settlementNo 折账结算单号(JS...)
+     * @param array $info [offset=>本次折账额, cash=>本次现金额, operator=>操作人]
+     * @return int 实际标记的设备数
+     */
+    public function settleByOffset(array $deviceIds, string $settlementNo, array $info = []): int
+    {
+        $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
+        if (empty($deviceIds)) {
+            return 0;
+        }
+        $now = time();
+        $payRemark = '折账结清 单号:' . $settlementNo;
+        $marked = 0;
+        Db::startTrans();
+        try {
+            $devices = RecycleDevice::where([['site_id', '=', $this->site_id]])->whereIn('id', $deviceIds)->select();
+            // 设备表无 member_id/order_no, 从订单补
+            $orderIdsAll = array_values(array_unique(array_filter(array_map(static fn($d) => (int)$d->order_id, $devices->toArray()))));
+            $orderMap = [];
+            if (!empty($orderIdsAll)) {
+                foreach (RecycleOrder::where([['site_id', '=', $this->site_id]])->whereIn('id', $orderIdsAll)->field('id,order_no,member_id')->select()->toArray() as $o) {
+                    $orderMap[(int)$o['id']] = $o;
+                }
+            }
+            $orderIds = [];
+            foreach ($devices as $device) {
+                if ((int)($device->pay_status ?? 0) === RecycleOrderDict::PAY_STATUS_PAID) {
+                    continue; // 已打款/已结清, 跳过
+                }
+                $ord = $orderMap[(int)$device->order_id] ?? [];
+                $amount = round((float)($device->final_price ?: $device->initial_price ?: 0), 2);
+                $device->save([
+                    'pay_status' => RecycleOrderDict::PAY_STATUS_PAID,
+                    'pay_amount' => $amount,
+                    'pay_time'   => $now,
+                    'pay_uid'    => (int)$this->uid,
+                    'pay_no'     => $settlementNo,
+                    'pay_type'   => '折账',
+                    'pay_remark' => $payRemark,
+                    'update_at'  => $now,
+                ]);
+                RecycleDevicePayment::create([
+                    'site_id'      => $this->site_id,
+                    'pay_no'       => $settlementNo,
+                    'order_id'     => (int)$device->order_id,
+                    'device_id'    => (int)$device->id,
+                    'member_id'    => (int)($ord['member_id'] ?? 0),
+                    'order_no'     => (string)($ord['order_no'] ?? ''),
+                    'device_imei'  => (string)$device->imei,
+                    'device_model' => (string)$device->model,
+                    'amount'       => $amount,
+                    'pay_type'     => '折账',
+                    'pay_account'  => '',
+                    'pay_name'     => (string)($info['operator'] ?? ''),
+                    'pay_remark'   => $payRemark,
+                    'pay_uid'      => (int)$this->uid,
+                    'pay_time'     => $now,
+                    'create_at'    => $now,
+                ]);
+                RecycleDeviceLog::create([
+                    'site_id'        => $this->site_id,
+                    'device_id'      => (int)$device->id,
+                    'order_id'       => (int)$device->order_id,
+                    'operator_id'    => (int)$this->uid,
+                    'operator_name'  => (string)($info['operator'] ?? $this->username),
+                    'operation_type' => 'device_payment',
+                    'action'         => 'device_offset_settle',
+                    'old_status'     => (int)$device->status,
+                    'new_status'     => RecycleOrderDict::DEVICE_OP_TYPE_PAYMENT,
+                    'remark'         => sprintf('折账结清 | 金额: %.2f | 结算单: %s', $amount, $settlementNo),
+                    'create_at'      => $now,
+                ]);
+                $orderIds[(int)$device->order_id] = true;
+                $marked++;
+            }
+            foreach (array_keys($orderIds) as $oid) {
+                $this->syncOrderPayStatus($oid, ['pay_type' => '折账', 'pay_remark' => $payRemark, 'pay_time' => $now]);
+            }
+            Db::commit();
+            return $marked;
+        } catch (\Throwable $e) {
+            Db::rollback();
+            throw $e;
+        }
+    }
+
     private function syncOrderPayStatus(int $orderId, array $paymentData): array
     {
         $summary = $this->getPaymentSummary($orderId);
