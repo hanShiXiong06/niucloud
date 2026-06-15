@@ -61,6 +61,12 @@ Route::group('erp', function () {
     Route::post('outbound/:id/fill_price', 'addon\hsx_erp\app\adminapi\controller\Outbound@fillPrice');
     Route::post('outbound/:id/cancel', 'addon\hsx_erp\app\adminapi\controller\Outbound@cancel');
     Route::post('outbound/transfer', 'addon\hsx_erp\app\adminapi\controller\Outbound@transfer');
+    // 库存盘点
+    Route::get('stocktake/lists', 'addon\hsx_erp\app\adminapi\controller\Stocktake@lists');
+    Route::get('stocktake/:id', 'addon\hsx_erp\app\adminapi\controller\Stocktake@info');
+    Route::post('stocktake/create', 'addon\hsx_erp\app\adminapi\controller\Stocktake@create');
+    Route::post('stocktake/:id/scan', 'addon\hsx_erp\app\adminapi\controller\Stocktake@scan');
+    Route::post('stocktake/:id/finish', 'addon\hsx_erp\app\adminapi\controller\Stocktake@finish');
     // 资金账户 / 账目往来
     Route::get('capital_account/lists', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@lists');
     Route::post('capital_account/save/:id', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@save');

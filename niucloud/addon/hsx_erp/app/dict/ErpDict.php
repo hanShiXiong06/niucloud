@@ -87,4 +87,16 @@ class ErpDict
     // 出库单状态
     public const OUTBOUND_STATUS_COMPLETED = 'completed';
     public const OUTBOUND_STATUS_VOID      = 'void';
+
+    // 盘点
+    public const INVENTORY_LOST = 'lost'; // 盘亏丢失(盘点未盘到, 据实核销离库)
+
+    public const STOCKTAKE_STATUS_COUNTING = 'counting'; // 盘点中
+    public const STOCKTAKE_STATUS_FINISHED = 'finished'; // 已完成
+    public const STOCKTAKE_STATUS_VOID     = 'void';
+
+    public const STOCKTAKE_RESULT_UNCOUNTED = 'uncounted'; // 待盘(尚未盘到)
+    public const STOCKTAKE_RESULT_MATCHED   = 'matched';   // 账实相符
+    public const STOCKTAKE_RESULT_LOSS      = 'loss';      // 盘亏(应在库却未盘到)
+    public const STOCKTAKE_RESULT_PROFIT    = 'profit';    // 盘盈(盘到但系统无在库记录)
 }

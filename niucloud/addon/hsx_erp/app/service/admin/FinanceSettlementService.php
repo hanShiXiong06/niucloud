@@ -299,6 +299,16 @@ class FinanceSettlementService extends BaseAdminService
         if ($summary['payable_total'] <= 0 && $summary['receivable_total'] <= 0) {
             throw new CommonException('没有可结算的应付或应收');
         }
+        // 现金出账(付款)预检: 先确认所选户头余额够, 不够直接提示换户头(避免标记结清后才发现钱不够)
+        $preRecordCash = ($options['record_cash'] ?? true) !== false;
+        $preAccountId = (int)($options['capital_account_id'] ?? 0);
+        $preCash = round((float)($summary['cash_amount'] ?? 0), 2);
+        if ($preRecordCash && $preAccountId > 0 && $preCash > 0 && (string)($summary['cash_direction'] ?? '') === FinanceDict::CASH_PAY) {
+            $acc = ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $preAccountId]])->findOrEmpty();
+            if (!$acc->isEmpty() && round((float)$acc->balance, 2) < $preCash) {
+                throw new CommonException(sprintf('账户「%s」余额不足：当前 %.2f，需付出 %.2f，请改用其他户头', (string)$acc->account_name, (float)$acc->balance, $preCash));
+            }
+        }
         // 结算单归属锚点与名称: 主体级折账传主体ID/主体名; 否则用首个对接人
         $anchorId = (int)($options['anchor_id'] ?? ($cpIds[0] ?? 0));
         $anchorName = (string)($options['anchor_name'] ?? ($summary['counterparty_name'] ?? ''));

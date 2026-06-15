@@ -96,6 +96,27 @@ class ErpCapitalAccountService extends BaseAdminService
         return true;
     }
 
+    /**
+     * 出账前预检余额是否充足, 不足抛异常(供回收打款等在执行前提示换户头)。
+     * 账户不存在则不在此拦(交由记账时处理)。
+     */
+    public function assertBalanceEnough(int $accountId, float $amount): void
+    {
+        if ($accountId <= 0 || $amount <= 0) {
+            return;
+        }
+        $acc = ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $accountId]])->findOrEmpty();
+        if ($acc->isEmpty()) {
+            return;
+        }
+        if (round((float)$acc->balance, 2) < round($amount, 2)) {
+            throw new CommonException(sprintf(
+                '账户「%s」余额不足：当前 %.2f，需出账 %.2f，请改用其他户头',
+                (string)$acc->account_name, (float)$acc->balance, round($amount, 2)
+            ));
+        }
+    }
+
     /** 手工记一笔收/付（同步余额），用于线下收付、调整等 */
     public function recordEntry(array $data): int
     {
