@@ -37,3 +37,18 @@ export function syncRecycleDevicesToErp(deviceIds: Array<number | string>, targe
         targets
     })
 }
+
+/**
+ * 批量查询设备下游同步健康度（仅"卡住"的设备才需显示「重新同步」）。
+ * 返回 { [deviceId]: { stuck:boolean, has_asset:boolean, pending:number, failed:number, reason:string } }
+ */
+export function getDeviceSyncHealth(deviceIds: Array<number | string>) {
+    return request.post('recycle/device_export/sync_health', { device_ids: deviceIds }, { showErrorMessage: false })
+}
+
+/**
+ * 重新同步单台设备（兜底：事件失效时手动补齐下游步骤，如中台待拍照）。
+ */
+export function resyncRecycleDevice(deviceId: number | string) {
+    return request.post(`recycle/device_export/${deviceId}/resync`, {})
+}

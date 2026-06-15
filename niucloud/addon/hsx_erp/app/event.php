@@ -20,6 +20,14 @@ return [
         'RecordErpCapitalFlow' => [
             'addon\hsx_erp\app\listener\RecordCapitalFlowListener',
         ],
+        // 设备下游同步健康度查询（回收设备列表判断是否需要显示「重新同步」）
+        'GetErpDeviceSyncHealth' => [
+            'addon\hsx_erp\app\listener\DeviceSyncHealthProvider',
+        ],
+        // 设备重新同步（重发卡住的 outbox 事件，补齐中台拍照等下游步骤）
+        'ResyncErpDevice' => [
+            'addon\hsx_erp\app\listener\DeviceResyncListener',
+        ],
         'DeviceAssetPriceCompleted' => [
             'addon\hsx_erp\app\listener\DeviceAssetPriceCompletedListener',
         ],

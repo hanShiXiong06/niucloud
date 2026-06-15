@@ -163,10 +163,25 @@
                         </template>
                     </el-table-column>
 
-                    <el-table-column label="操作" width="90" align="center" fixed="right">
+                    <el-table-column label="操作" width="130" align="center" fixed="right">
                         <template #default="{ row }">
                             <el-tooltip content="查看详情" placement="top">
                                 <el-button type="primary" link :icon="View" @click="viewDeviceDetail(row)" aria-label="查看详情" />
+                            </el-tooltip>
+                            <!-- 仅当检测到该设备下游同步"卡住"时才显示；同步正常时不出现，避免误操作 -->
+                            <el-tooltip
+                                v-if="isStuck(row)"
+                                :content="`同步失效：${stuckReason(row)}。仅此时需要点「重新同步」补齐下游（如中台拍照），同步正常无需操作。`"
+                                placement="top"
+                            >
+                                <el-button
+                                    type="warning"
+                                    link
+                                    :icon="RefreshRight"
+                                    :loading="resyncLoadingId === row.id"
+                                    @click="handleResync(row)"
+                                    aria-label="重新同步"
+                                >重新同步</el-button>
                             </el-tooltip>
                         </template>
                     </el-table-column>
@@ -339,9 +354,9 @@ import { reactive, ref, computed } from 'vue'
 import { t } from '@/lang'
 import { FormInstance, ElMessage, ElImageViewer, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
-import { getRecycleDeviceList, syncRecycleDevicesToErp, updateDevice } from '@/addon/hsx_recycle/api/device_export'
+import { getRecycleDeviceList, syncRecycleDevicesToErp, updateDevice, getDeviceSyncHealth, resyncRecycleDevice } from '@/addon/hsx_recycle/api/device_export'
 import { img } from '@/utils/common'
-import { View, User, Picture } from '@element-plus/icons-vue'
+import { View, User, Picture, RefreshRight } from '@element-plus/icons-vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import EmptyState from '@/addon/hsx_recycle/components/empty-state/index.vue'
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
@@ -459,9 +474,54 @@ const loadDeviceList = () => {
         deviceTableData.loading = false
         deviceTableData.data = res.data.data
         deviceTableData.total = res.data.total
+        loadSyncHealth()
     }).catch(() => {
         deviceTableData.loading = false
     })
+}
+
+// 下游同步健康度：仅"卡住"(stuck)的设备才显示「重新同步」。装了 ERP 才有数据；未装则全为健康、按钮不显示。
+const syncHealthMap = ref<Record<number, any>>({})
+const resyncLoadingId = ref<number | null>(null)
+
+const isStuck = (row: any) => Boolean(syncHealthMap.value[row.id]?.stuck)
+const stuckReason = (row: any) => syncHealthMap.value[row.id]?.reason || '该设备下游同步未完成'
+
+const loadSyncHealth = async () => {
+    const ids = (deviceTableData.data || []).map((r: any) => r.id).filter(Boolean)
+    if (!ids.length) {
+        syncHealthMap.value = {}
+        return
+    }
+    try {
+        const res: any = await getDeviceSyncHealth(ids)
+        syncHealthMap.value = res?.data || {}
+    } catch (e) {
+        // 取不到健康度(如ERP未装/接口异常) → 不显示按钮，不打扰用户
+        syncHealthMap.value = {}
+    }
+}
+
+const handleResync = async (row: any) => {
+    resyncLoadingId.value = row.id
+    try {
+        const res: any = await resyncRecycleDevice(row.id)
+        const r = res?.data || {}
+        if (r.has_asset === false) {
+            ElMessage.warning('该设备尚未在 ERP 建立资产，已尝试重新入库同步，请稍候刷新查看')
+        } else if ((r.flushed || 0) > 0) {
+            ElMessage.success(`已重新投递 ${r.flushed} 条下游事件，中台拍照等步骤将补齐`)
+        } else if ((r.still_failed || 0) > 0) {
+            ElMessage.error(`仍有 ${r.still_failed} 条事件失败，请检查下游插件日志`)
+        } else {
+            ElMessage.success('已触发重新同步')
+        }
+        loadDeviceList()
+    } catch (error: any) {
+        ElMessage.error(error?.message || '重新同步失败')
+    } finally {
+        resyncLoadingId.value = null
+    }
 }
 
 /**

@@ -69,4 +69,27 @@ class DeviceExportController extends BaseAdminController
             (array)$data['targets']
         ));
     }
+
+    /**
+     * 批量查询设备下游同步健康度（前端据此只在"卡住"的设备上显示「重新同步」）。
+     * @return Response
+     */
+    public function syncHealth()
+    {
+        $data = $this->request->params([
+            ['device_ids', []],
+        ]);
+
+        return success((new RecycleDeviceErpSyncService())->syncHealth((array)$data['device_ids']));
+    }
+
+    /**
+     * 重新同步单台设备（兜底：事件失效时手动补齐下游步骤，如中台待拍照）。
+     * @param int $id
+     * @return Response
+     */
+    public function resync(int $id)
+    {
+        return success((new RecycleDeviceErpSyncService())->resync($id));
+    }
 }

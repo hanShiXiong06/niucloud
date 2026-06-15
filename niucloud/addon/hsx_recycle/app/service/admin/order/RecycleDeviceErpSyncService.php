@@ -80,6 +80,88 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         ];
     }
 
+    /**
+     * 批量查询设备的下游同步健康度（仅"卡住"的需要显示「重新同步」）。
+     * 解耦：发 GetErpDeviceSyncHealth 事件向 ERP 问；ERP 未装则无人应答 → 全部视为健康(stuck=false)，前端不显示按钮。
+     * @param array $deviceIds
+     * @return array device_id => ['stuck'=>bool, ...]
+     */
+    public function syncHealth(array $deviceIds): array
+    {
+        $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
+        if (empty($deviceIds)) {
+            return [];
+        }
+
+        $merged = [];
+        try {
+            $results = (array)event('GetErpDeviceSyncHealth', [
+                'site_id' => $this->site_id,
+                'source_device_ids' => $deviceIds,
+            ]);
+            foreach ($results as $resp) {
+                if (is_array($resp)) {
+                    foreach ($resp as $sid => $info) {
+                        if (is_array($info)) {
+                            $merged[(int)$sid] = $info;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            $merged = [];
+        }
+
+        // 没有应答(ERP 未装)的设备 → 视为健康，不显示按钮
+        $out = [];
+        foreach ($deviceIds as $id) {
+            $out[$id] = $merged[$id] ?? ['stuck' => false, 'has_asset' => true, 'reason' => ''];
+        }
+        return $out;
+    }
+
+    /**
+     * 重新同步单台设备：先让 ERP 重发卡住的下游事件；若 ERP 还没这台资产，则重新 dispatch 入库后再重发。
+     * @param int $deviceId
+     * @return array
+     */
+    public function resync(int $deviceId): array
+    {
+        $deviceId = (int)$deviceId;
+        if ($deviceId <= 0) {
+            throw new CommonException('设备不存在');
+        }
+
+        $flush = function () use ($deviceId): array {
+            $merged = ['has_asset' => false, 'asset_id' => 0, 'flushed' => 0, 'still_failed' => 0];
+            $results = (array)event('ResyncErpDevice', [
+                'site_id' => $this->site_id,
+                'source_device_id' => $deviceId,
+            ]);
+            foreach ($results as $resp) {
+                if (is_array($resp) && array_key_exists('has_asset', $resp)) {
+                    $merged = array_merge($merged, $resp);
+                    break;
+                }
+            }
+            return $merged;
+        };
+
+        $result = $flush();
+
+        // ERP 还没这台资产 → 入库同步根本没落地：重新 dispatch 入库，再 flush 一次
+        if (empty($result['has_asset'])) {
+            try {
+                $this->dispatch([$deviceId], ['self_erp']);
+            } catch (\Throwable $e) {
+                throw new CommonException('重新入库同步失败：' . $e->getMessage());
+            }
+            $result = $flush();
+        }
+
+        return $result;
+    }
+
     private function buildSnapshot(array $device): array
     {
         $isConsign = (string)($device['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN
