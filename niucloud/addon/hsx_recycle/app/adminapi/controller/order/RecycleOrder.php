@@ -329,7 +329,7 @@ class RecycleOrder extends BaseAdminController
         $accounts = [];
         $erpConnected = false;
         try {
-            $raw = (array)event('GetErpCapitalAccountList', ['site_id' => $this->site_id]);
+            $raw = (array)event('GetErpCapitalAccountList', ['site_id' => $this->request->siteId()]);
             foreach ($raw as $r) {
                 if (is_array($r)) {
                     // 只要有插件应答（哪怕空数组），即视为 ERP 已接入
@@ -373,7 +373,7 @@ class RecycleOrder extends BaseAdminController
         try {
             return array_map('intval', RecycleDevice::where([
                 ['order_id', '=', $orderId],
-                ['site_id', '=', $this->site_id],
+                ['site_id', '=', $this->request->siteId()],
             ])->column('id'));
         } catch (\Throwable $e) {
             return [];
@@ -393,7 +393,7 @@ class RecycleOrder extends BaseAdminController
         try {
             // 先走事件；若无人成功应答，直连 ERP 财务结算服务兜底核销，避免静默不核销。
             $results = (array)event('SettleErpPayableByDevice', [
-                'site_id' => $this->site_id,
+                'site_id' => $this->request->siteId(),
                 'source_device_ids' => $deviceIds,
                 'remark' => '回收打款核销应付',
             ]);
@@ -408,7 +408,7 @@ class RecycleOrder extends BaseAdminController
                 }
             }
         } catch (\Throwable $e) {
-            \think\facade\Log::warning('回收打款核销应付失败：' . $e->getMessage(), ['device_ids' => $deviceIds]);
+            \think\facade\Log::warning('回收打款核销应付失败：' . $e->getMessage() . ' device_ids=' . implode(',', $deviceIds));
         }
     }
 
@@ -427,11 +427,11 @@ class RecycleOrder extends BaseAdminController
             return;
         }
         try {
-            $order = RecycleOrderModel::where([['id', '=', $orderId], ['site_id', '=', $this->site_id]])->findOrEmpty();
+            $order = RecycleOrderModel::where([['id', '=', $orderId], ['site_id', '=', $this->request->siteId()]])->findOrEmpty();
             if ($amount === null) {
                 $amount = (float)RecycleDevice::where([
                     ['order_id', '=', $orderId],
-                    ['site_id', '=', $this->site_id],
+                    ['site_id', '=', $this->request->siteId()],
                 ])->sum('final_price');
             }
             $amount = round((float)$amount, 2);
@@ -451,7 +451,7 @@ class RecycleOrder extends BaseAdminController
                 'remark'            => '回收打款 - 订单：' . $orderNo,
             ];
             // 先走事件；若无人成功应答(未注册/事件缓存未刷新等)，直连 ERP 兜底记账，避免静默丢账。
-            $results = (array)event('RecordErpCapitalFlow', array_merge(['site_id' => $this->site_id], $entry));
+            $results = (array)event('RecordErpCapitalFlow', array_merge(['site_id' => $this->request->siteId()], $entry));
             if (!in_array(true, $results, true)) {
                 $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpCapitalAccountService';
                 if (class_exists($cls)) {
