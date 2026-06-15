@@ -28,6 +28,7 @@ class CoreRecycleDeviceLogService extends BaseAdminService
     public function addDeviceLog(array $data): int
     {
         $logData = [
+            'site_id' => $this->site_id,
             'device_id' => $data['device_id'] ?? 0,
             'order_id' => $data['order_id'] ?? 0,
             'operator_id' => $this->uid,

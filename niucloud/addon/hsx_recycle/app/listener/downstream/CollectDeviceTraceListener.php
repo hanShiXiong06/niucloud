@@ -93,15 +93,14 @@ class CollectDeviceTraceListener
             return ['summary' => [], 'events' => []];
         }
         // 注意: 设备/日志数据写库时 site_id 常为0, 按 id 唯一主键取, 不卡 site_id
+        // 即使设备主表记录已不在(id对不齐), 也照样按 device_id 拉日志, 不提前return
         $device = RecycleDevice::where([['id', '=', $deviceId]])->findOrEmpty();
-        if ($device->isEmpty()) {
-            return ['summary' => [], 'events' => []];
+        $d = $device->isEmpty() ? [] : $device->toArray();
+        $orderId = (int)($d['order_id'] ?? 0);
+        if ($orderId === 0) {
+            $orderId = (int)(RecycleDeviceLog::where([['device_id', '=', $deviceId]])->order('id asc')->value('order_id') ?: 0);
         }
-        $d = $device->toArray();
-        $orderId = (int)$d['order_id'];
-        // 会员/主体仍按真实站点取; 站点优先用设备自身的 site_id, 回退传入的
-        $effSite = (int)($d['site_id'] ?? 0) ?: $siteId;
-        $ord = $this->orderMap($effSite, [$orderId])[$orderId] ?? [];
+        $ord = $orderId > 0 ? ($this->orderMap($siteId, [$orderId])[$orderId] ?? []) : [];
 
         $orderNo = (string)($ord['order_no'] ?? '');
         $events = [];
@@ -192,8 +191,8 @@ class CollectDeviceTraceListener
             'order_no'       => $orderNo,
             'customer_name'  => $customer,
             'customer_phone' => (string)($ord['customer_phone'] ?? ''),
-            'recycle_price'  => round((float)($d['final_price'] ?: $d['initial_price'] ?: 0), 2),
-            'pay_status'     => (int)$d['pay_status'],
+            'recycle_price'  => round((float)(($d['final_price'] ?? 0) ?: ($d['initial_price'] ?? 0) ?: 0), 2),
+            'pay_status'     => (int)($d['pay_status'] ?? 0),
             'pay_amount'     => round((float)($d['pay_amount'] ?? 0), 2),
             'recycle_time'   => (int)($ord['create_at'] ?? 0) ?: (int)($ord['create_time'] ?? 0) ?: (int)($d['create_at'] ?? 0),
         ];
