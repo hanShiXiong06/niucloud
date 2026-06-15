@@ -47,6 +47,47 @@ class FinanceSettlementService extends BaseAdminService
         return $this->settle($counterpartyId, $payableIds, $receivableIds, $options);
     }
 
+    /**
+     * 按来源设备精确核销应付（给回收"打款即核销"用）。
+     * 只结这些设备对应的待结应付（不折应收、现金净付），与打款的资金账户扣减一一对应，
+     * 避免 settleAllByCounterparty 把该客户其它未付订单一并清掉导致账实不符。
+     * 幂等：已结清的设备不会再被选中。
+     * @param array $deviceIds 回收设备ID（= 应付的 source_device_id）
+     * @return array ['settled'=>int 结清应付笔数, 'results'=>array]
+     */
+    public function settleByDeviceIds(array $deviceIds, array $options = []): array
+    {
+        $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
+        if (empty($deviceIds)) {
+            return ['settled' => 0, 'results' => []];
+        }
+        $rows = FinancePayable::where([['site_id', '=', $this->site_id]])
+            ->whereIn('source_device_id', $deviceIds)
+            ->whereIn('status', [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL])
+            ->whereRaw('amount - settled_amount > 0')
+            ->field('id,counterparty_id')
+            ->select()
+            ->toArray();
+        if (empty($rows)) {
+            return ['settled' => 0, 'results' => []];
+        }
+        // 按往来单位分组逐个结算（settle 要求同一往来单位）
+        $byCp = [];
+        foreach ($rows as $r) {
+            $cpId = (int)$r['counterparty_id'];
+            if ($cpId > 0) {
+                $byCp[$cpId][] = (int)$r['id'];
+            }
+        }
+        $results = [];
+        $settled = 0;
+        foreach ($byCp as $cpId => $payableIds) {
+            $results[] = $this->settle($cpId, $payableIds, [], $options);
+            $settled += count($payableIds);
+        }
+        return ['settled' => $settled, 'results' => $results];
+    }
+
     private function allOutstandingIds($model, int $counterpartyId): array
     {
         $rows = $model->where([

@@ -277,6 +277,8 @@ class RecycleOrder extends BaseAdminController
         $result = $this->flowService->payment($id, $data);
         // 打款成功后，若选了出账户头则在ERP记一笔出账流水（整单：按设备final_price合计）
         $this->recordCapitalOutflow($id, (int)($data['capital_account_id'] ?? 0), null, '');
+        // 同步核销该订单设备的应付（与资金扣减配套，形成完整账目往来）
+        $this->settleErpPayables($this->orderDeviceIds($id));
         return success($result);
     }
 
@@ -311,6 +313,8 @@ class RecycleOrder extends BaseAdminController
             (float)($result['paid_amount'] ?? 0),
             (string)($result['pay_no'] ?? '')
         );
+        // 同步核销本批次设备的应付（与资金扣减配套）
+        $this->settleErpPayables(array_map('intval', (array)($data['device_ids'] ?? [])));
         return success($result);
     }
 
@@ -359,6 +363,42 @@ class RecycleOrder extends BaseAdminController
             'accounts' => $accounts,
             'erp_connected' => $erpConnected,
         ]);
+    }
+
+    /**
+     * 取订单下全部设备ID（整单打款核销应付用）。
+     */
+    private function orderDeviceIds(int $orderId): array
+    {
+        try {
+            return array_map('intval', RecycleDevice::where([
+                ['order_id', '=', $orderId],
+                ['site_id', '=', $this->site_id],
+            ])->column('id'));
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * 打款成功后：核销这些设备在 ERP 财务的应付（与资金账户扣减配套，形成完整账目往来）。
+     * 解耦：仅发事件，ERP 未装则无人应答；失败只吞日志，绝不影响打款主流程。
+     */
+    private function settleErpPayables(array $deviceIds): void
+    {
+        $deviceIds = array_values(array_filter(array_map('intval', $deviceIds)));
+        if (empty($deviceIds)) {
+            return;
+        }
+        try {
+            event('SettleErpPayableByDevice', [
+                'site_id' => $this->site_id,
+                'source_device_ids' => $deviceIds,
+                'remark' => '回收打款核销应付',
+            ]);
+        } catch (\Throwable $e) {
+            // 解耦：核销失败不影响打款
+        }
     }
 
     /**

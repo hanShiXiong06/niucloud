@@ -46,6 +46,10 @@ return [
         'RequestFinanceSettlement' => [
             'addon\hsx_erp\app\listener\FinanceSettlementRequestListener',
         ],
+        // 按来源设备核销应付 — 回收打款确认后精确结清这些设备的应付(与资金扣减配套)
+        'SettleErpPayableByDevice' => [
+            'addon\hsx_erp\app\listener\SettlePayableByDeviceListener',
+        ],
     ],
     'subscribe' => [],
 ];
