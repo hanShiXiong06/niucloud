@@ -60,6 +60,18 @@
           </div>
         </div>
 
+        <div class="odd-section" v-if="isPaid">
+          <el-alert type="success" :closable="false" show-icon>
+            <template #title>
+              <span style="font-weight:600">已转账给客户</span>
+              <span v-if="orderData.total_amount"> · 金额 ¥{{ orderData.total_amount }}</span>
+              <span v-if="orderData.pay_type"> · {{ orderData.pay_type }}</span>
+              <span v-if="orderData.pay_name"> · 收款人 {{ orderData.pay_name }}</span>
+              <span v-if="orderData.pay_time"> · {{ formatTime(orderData.pay_time) }}</span>
+            </template>
+          </el-alert>
+        </div>
+
         <div class="odd-section">
           <div class="odd-section-header">
             <span>订单信息</span>
@@ -342,6 +354,9 @@ interface OrderDetail {
     status_name: string;
     pay_type?: string;
     pay_account?: string;
+    pay_name?: string;
+    pay_status?: number;
+    total_amount?: number | string;
     payment_images?: string;
     delivery_type_name?: string;
     express_company?: string;
@@ -396,6 +411,11 @@ const paymentImageList = computed(() => {
     if (!orderData.value?.payment_images) return []
     return orderData.value.payment_images.split(',').filter((i: string) => i.trim())
 })
+
+// 是否已打款给客户（已转账）：pay_status=1 或有打款时间
+const isPaid = computed(() =>
+    Number(orderData.value?.pay_status) === 1 || Number(orderData.value?.pay_time) > 0
+)
 
 const handlePreview = (index: number) => { previewIndex.value = index; showImageViewer.value = true }
 
