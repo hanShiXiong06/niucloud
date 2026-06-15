@@ -86,10 +86,15 @@ class DeviceTraceService extends BaseAdminService
                 $items[$key]['buyer_name'] = (string)$bm['name'];          // 对接人本人
                 $items[$key]['buyer_entity'] = (string)$bm['entity_name']; // 所属主体
             }
-            // 从谁收的: 资产 source_member_id 解析回收客户(列表 customer_name 常空)
+            // 从谁收的: 资产 source_member_id 解析回收客户 + 所属主体(列表 customer_name 常空)
             $cm = $memberMap[(int)($a['source_member_id'] ?? 0)] ?? null;
-            if ($cm && (string)($items[$key]['customer_name'] ?? '') === '') {
-                $items[$key]['customer_name'] = (string)$cm['name'];
+            if ($cm) {
+                if ((string)($items[$key]['customer_name'] ?? '') === '') {
+                    $items[$key]['customer_name'] = (string)$cm['name'];
+                }
+                if ((string)($items[$key]['customer_entity'] ?? '') === '') {
+                    $items[$key]['customer_entity'] = (string)$cm['entity_name'];
+                }
             }
         }
         $rows = array_values($items);

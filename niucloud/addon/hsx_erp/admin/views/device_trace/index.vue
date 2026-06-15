@@ -22,8 +22,11 @@
                         <div class="text-xs text-gray-400">{{ formatTime(row.recycle_time) }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="从谁收的" min-width="110" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.customer_name || '-' }}</template>
+                <el-table-column label="从谁收的" min-width="120" show-overflow-tooltip>
+                    <template #default="{ row }">
+                        <div>{{ row.customer_name || '-' }}</div>
+                        <div v-if="row.customer_entity" class="text-xs text-gray-400">主体：{{ row.customer_entity }}</div>
+                    </template>
                 </el-table-column>
                 <el-table-column label="卖给了谁" min-width="120" show-overflow-tooltip>
                     <template #default="{ row }">
