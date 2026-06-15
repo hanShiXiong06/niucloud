@@ -80,8 +80,13 @@
                     </template>
                 </el-table-column>
                 <el-table-column prop="source_device_id" label="来源设备ID" width="120" />
-                <el-table-column label="往来单位" min-width="150">
-                    <template #default="{ row }">{{ row.counterparty?.name || '-' }}</template>
+                <el-table-column label="往来单位 / 关联人" min-width="180">
+                    <template #default="{ row }">
+                        <div class="font-medium text-gray-800">{{ row.contact?.unit_name || row.counterparty?.name || '散户/未关联' }}</div>
+                        <div v-if="row.contact?.person_name || row.contact?.person_mobile" class="mt-0.5 text-xs text-gray-500">
+                            {{ row.contact?.person_name || '-' }}<span v-if="row.contact?.person_mobile"> · {{ row.contact.person_mobile }}</span>
+                        </div>
+                    </template>
                 </el-table-column>
                 <el-table-column label="归属" width="100">
                     <template #default="{ row }">

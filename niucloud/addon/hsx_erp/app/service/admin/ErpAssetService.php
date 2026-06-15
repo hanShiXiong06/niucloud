@@ -882,8 +882,26 @@ class ErpAssetService extends BaseAdminService
                      ->whereIn('id', $ids)->select()->toArray() as $counterparty) {
             $map[(int)$counterparty['id']] = $counterparty;
         }
+        // 关联人：任何设备都来自某个人(回收客户/采购联系人)。解析 source_member_id → 姓名/手机/所属主体
+        // 复用财务中心同一套人+主体解析口径，保证"单位+人"展示一致
+        $memberIds = array_values(array_unique(array_filter(array_map(
+            fn(array $row) => (int)($row['source_member_id'] ?? 0),
+            $rows
+        ))));
+        $memberMap = !empty($memberIds)
+            ? FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, $memberIds)
+            : [];
         foreach ($rows as &$row) {
-            $row['counterparty'] = $map[(int)($row['counterparty_id'] ?? 0)] ?? null;
+            $cp = $map[(int)($row['counterparty_id'] ?? 0)] ?? null;
+            $row['counterparty'] = $cp;
+            $m = $memberMap[(int)($row['source_member_id'] ?? 0)] ?? null;
+            // 单位：优先用资产关联的往来单位，其次用该人所属主体
+            $unitName = $cp['name'] ?? ($m['entity_name'] ?? '');
+            $row['contact'] = [
+                'unit_name'     => (string)$unitName,
+                'person_name'   => (string)($m['name'] ?? ''),
+                'person_mobile' => (string)($m['mobile'] ?? ''),
+            ];
         }
         unset($row);
     }
