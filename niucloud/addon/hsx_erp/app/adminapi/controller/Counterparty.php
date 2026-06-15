@@ -63,6 +63,14 @@ class Counterparty extends BaseAdminController
         return success();
     }
 
+    public function quickContact()
+    {
+        return success($this->service->quickCreateContact($this->request->params([
+            ['name', ''], ['mobile', ''], ['entity_id', 0], ['entity_name', ''],
+            ['counterparty_type', 'individual'], ['role_type', 'customer'],
+        ])));
+    }
+
     public function save(int $id = 0)
     {
         return success($this->service->save($this->request->params([

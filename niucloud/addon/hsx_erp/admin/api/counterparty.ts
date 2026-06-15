@@ -36,3 +36,8 @@ export function removeErpCounterpartyMember(id: number, memberId: number) {
 export function deleteErpCounterparty(id: number) {
     return request.delete(`erp/counterparty/${id}`)
 }
+
+// 快速建档:一步建对接人(会员)+主体并关联,返回 member_id 作财务锚点
+export function quickCreateErpContact(data: Record<string, any>) {
+    return request.post('erp/counterparty/quick_contact', data)
+}

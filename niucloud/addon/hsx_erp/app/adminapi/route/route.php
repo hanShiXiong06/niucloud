@@ -12,6 +12,7 @@ Route::group('erp', function () {
     Route::get('counterparty/member_options', 'addon\hsx_erp\app\adminapi\controller\Counterparty@memberOptions');
     Route::get('counterparty/:id/members', 'addon\hsx_erp\app\adminapi\controller\Counterparty@members');
     Route::get('counterparty/:id/detail', 'addon\hsx_erp\app\adminapi\controller\Counterparty@detail');
+    Route::post('counterparty/quick_contact', 'addon\hsx_erp\app\adminapi\controller\Counterparty@quickContact');
     Route::post('counterparty/:id/member/add', 'addon\hsx_erp\app\adminapi\controller\Counterparty@addMember');
     Route::post('counterparty/:id/member/remove', 'addon\hsx_erp\app\adminapi\controller\Counterparty@removeMember');
     Route::post('counterparty/save/:id', 'addon\hsx_erp\app\adminapi\controller\Counterparty@save');

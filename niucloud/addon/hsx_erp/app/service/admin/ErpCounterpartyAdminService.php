@@ -202,6 +202,70 @@ class ErpCounterpartyAdminService extends BaseAdminService
         }
     }
 
+    /**
+     * 出库/录入时"快速建档"：一步建对接人(会员)+主体并关联，返回 member_id 作为财务锚点。
+     * 同手机会员复用、同名主体复用，避免重复建档。
+     * @param array $data [name, mobile, entity_id?, entity_name?, counterparty_type?, role_type?]
+     * @return array{member_id:int,member_name:string,mobile:string,counterparty_id:int,counterparty_name:string}
+     */
+    public function quickCreateContact(array $data): array
+    {
+        $name = trim((string)($data['name'] ?? ''));
+        $mobile = trim((string)($data['mobile'] ?? ''));
+        if ($name === '') {
+            throw new CommonException('请填写对接人姓名');
+        }
+        if ($mobile === '') {
+            throw new CommonException('请填写对接人手机号(用于建档)');
+        }
+        // 已有同手机会员则复用，否则走标准会员建档
+        $member = Member::where([['site_id', '=', $this->site_id], ['mobile', '=', $mobile]])->findOrEmpty();
+        if (!$member->isEmpty()) {
+            $memberId = (int)$member->member_id;
+        } else {
+            $svc = new \app\service\admin\member\MemberService();
+            $no = $svc->getMemberNo();
+            $memberId = (int)$svc->add([
+                'mobile'         => $mobile,
+                'member_no'      => $no,
+                'init_member_no' => $no,
+                'nickname'       => $name,
+                'password'       => (string)random_int(100000, 999999),
+            ]);
+        }
+        // 主体：指定 > 同名复用 > 以对接人名新建
+        $entityId = (int)($data['entity_id'] ?? 0);
+        $entityName = trim((string)($data['entity_name'] ?? ''));
+        if ($entityId <= 0) {
+            if ($entityName === '') {
+                $entityName = $name;
+            }
+            $exist = ErpCounterparty::where([['site_id', '=', $this->site_id], ['name', '=', $entityName]])->findOrEmpty();
+            if (!$exist->isEmpty()) {
+                $entityId = (int)$exist->id;
+            } else {
+                $entityId = $this->save([
+                    'name'              => $entityName,
+                    'counterparty_type' => (string)($data['counterparty_type'] ?? 'individual'),
+                    'role_type'         => (string)($data['role_type'] ?? 'customer'),
+                    'mobile'            => $mobile,
+                    'contact_name'      => $name,
+                ]);
+            }
+        } else {
+            $this->find($entityId);
+        }
+        $this->addMember($entityId, $memberId, 'business', 0);
+        $cp = ErpCounterparty::where([['site_id', '=', $this->site_id], ['id', '=', $entityId]])->findOrEmpty();
+        return [
+            'member_id'         => $memberId,
+            'member_name'       => $name,
+            'mobile'            => $mobile,
+            'counterparty_id'   => $entityId,
+            'counterparty_name' => (string)($cp->name ?? $entityName),
+        ];
+    }
+
     /** 删除主体(解除所有对接人关系；财务以会员记账，不受影响) */
     public function delete(int $id): void
     {

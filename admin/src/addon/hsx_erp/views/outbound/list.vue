@@ -75,13 +75,15 @@
                         <el-radio label="other">其他出库</el-radio>
                     </el-radio-group>
                 </el-form-item>
-                <el-form-item v-if="form.outbound_type === 'peer_sale'" label="往来单位">
-                    <el-select v-model="form.counterparty_id" filterable remote clearable :remote-method="searchCounterparties"
-                        :loading="cpLoading" placeholder="输入名称/手机号检索同行" class="!w-[320px]" @change="onCounterpartyChange">
-                        <el-option v-for="c in counterparties" :key="c.id"
-                            :label="(c.name || ('#' + c.id)) + (c.mobile ? ('（' + c.mobile + '）') : '')" :value="c.id" />
+                <el-form-item v-if="form.outbound_type === 'peer_sale'" label="对接人/交易人">
+                    <el-select v-model="form.counterparty_id" filterable remote clearable :remote-method="searchContacts"
+                        :loading="cpLoading" placeholder="按姓名/手机检索交易人" class="!w-[320px]" @change="onContactChange">
+                        <el-option v-for="c in contacts" :key="c.member_id"
+                            :label="(c.nickname || c.username || ('会员#' + c.member_id)) + (c.mobile ? ('·' + c.mobile) : '') + (c.counterparty_name ? ('（' + c.counterparty_name + '）') : '')"
+                            :value="c.member_id" />
                     </el-select>
-                    <span class="ml-2 text-xs text-gray-400">同行未建档?先到"往来单位"新增</span>
+                    <el-button class="!ml-2" link type="primary" @click="openQuickContact">+ 快速建档</el-button>
+                    <div class="mt-1 text-xs text-gray-400">出库按"交易人"记账(与回收同口径,可折账)。同行没建档点"快速建档"一步搞定。</div>
                 </el-form-item>
                 <el-form-item v-if="form.outbound_type === 'peer_sale'" label="结算方式">
                     <el-radio-group v-model="form.settle_mode">
@@ -174,6 +176,25 @@
                 </el-table>
             </div>
         </el-dialog>
+
+        <!-- 快速建档:对接人+主体一步建 -->
+        <el-dialog v-model="quickContact.visible" title="快速建档(对接人)" width="420px" append-to-body>
+            <el-form label-width="84px">
+                <el-form-item label="对接人" required>
+                    <el-input v-model.trim="quickContact.name" placeholder="交易人姓名,如 张三 / 某同行老板" />
+                </el-form-item>
+                <el-form-item label="手机号" required>
+                    <el-input v-model.trim="quickContact.mobile" placeholder="用于建会员档,必填" />
+                </el-form-item>
+                <el-form-item label="所属主体">
+                    <el-input v-model.trim="quickContact.entity_name" placeholder="留空则以对接人姓名作主体名" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="quickContact.visible = false">取消</el-button>
+                <el-button type="primary" :loading="quickContact.submitting" @click="submitQuickContact">建档并选中</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -182,7 +203,7 @@ import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutboundPrice } from '@/addon/hsx_erp/api/outbound'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
-import { getErpCounterpartyOptions } from '@/addon/hsx_erp/api/counterparty'
+import { getErpMemberOptions, quickCreateErpContact } from '@/addon/hsx_erp/api/counterparty'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
@@ -213,7 +234,7 @@ async function loadList() {
 const createVisible = ref(false)
 const submitting = ref(false)
 const form = reactive({ outbound_type: 'peer_sale', counterparty_id: 0, counterparty_name: '', settle_mode: 'now', remark: '' })
-const counterparties = ref<any[]>([])
+const contacts = ref<any[]>([])
 const cpLoading = ref(false)
 const warehouseOptions = ref<any[]>([])
 const assetWarehouseId = ref<number | ''>('')
@@ -233,7 +254,7 @@ const showConsignorCol = computed(() => form.outbound_type === 'peer_sale' && av
 
 async function openCreate() {
     createVisible.value = true
-    await Promise.all([searchCounterparties(''), loadWarehouses(), loadAvailableAssets()])
+    await Promise.all([searchContacts(''), loadWarehouses(), loadAvailableAssets()])
 }
 async function loadWarehouses() {
     try {
@@ -241,12 +262,12 @@ async function loadWarehouses() {
         warehouseOptions.value = res.data || []
     } catch { warehouseOptions.value = [] }
 }
-async function searchCounterparties(keyword: string) {
+async function searchContacts(keyword: string) {
     cpLoading.value = true
     try {
-        const res: any = await getErpCounterpartyOptions({ keyword: keyword || '' })
-        counterparties.value = res.data || []
-    } catch { counterparties.value = [] } finally {
+        const res: any = await getErpMemberOptions({ keyword: keyword || '' })
+        contacts.value = res.data || []
+    } catch { contacts.value = [] } finally {
         cpLoading.value = false
     }
 }
@@ -266,9 +287,36 @@ function onTypeChange() {
     if (form.outbound_type !== 'peer_sale') form.settle_mode = 'none'
     else if (form.settle_mode === 'none') form.settle_mode = 'now'
 }
-function onCounterpartyChange(id: number) {
-    const c = counterparties.value.find((x) => x.id === id)
-    form.counterparty_name = c ? (c.counterparty_name || c.name || '') : ''
+function onContactChange(id: number) {
+    const c = contacts.value.find((x) => x.member_id === id)
+    form.counterparty_name = c ? (c.nickname || c.username || '') : ''
+}
+
+// 快速建档:一步建对接人+主体
+const quickContact = reactive<any>({ visible: false, submitting: false, name: '', mobile: '', entity_name: '' })
+function openQuickContact() {
+    Object.assign(quickContact, { visible: true, submitting: false, name: '', mobile: '', entity_name: '' })
+}
+async function submitQuickContact() {
+    if (!quickContact.name) return ElMessage.warning('请填写对接人姓名')
+    if (!quickContact.mobile) return ElMessage.warning('请填写手机号(用于建档)')
+    quickContact.submitting = true
+    try {
+        const res: any = await quickCreateErpContact({
+            name: quickContact.name, mobile: quickContact.mobile, entity_name: quickContact.entity_name,
+        })
+        const d = res.data || {}
+        // 选中刚建好的对接人(锚=member_id)
+        contacts.value.unshift({ member_id: d.member_id, nickname: d.member_name, username: d.member_name, mobile: d.mobile, counterparty_name: d.counterparty_name })
+        form.counterparty_id = d.member_id
+        form.counterparty_name = d.member_name
+        ElMessage.success('已建档并选中:' + d.member_name + '（' + d.counterparty_name + '）')
+        quickContact.visible = false
+    } catch (e: any) {
+        ElMessage.error(e?.message || '建档失败')
+    } finally {
+        quickContact.submitting = false
+    }
 }
 function onAssetSelect(rows: any[]) {
     selectedAssets.value = rows
