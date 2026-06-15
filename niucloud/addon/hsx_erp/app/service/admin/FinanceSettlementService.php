@@ -339,7 +339,7 @@ class FinanceSettlementService extends BaseAdminService
 
         return [
             'summary' => [
-                'counterparty_id'   => $counterpartyId,
+                'counterparty_id'   => $cpIds[0] ?? 0,
                 'counterparty_name' => $cpName,
                 'payable_total'     => $payableTotal,
                 'receivable_total'  => $receivableTotal,
