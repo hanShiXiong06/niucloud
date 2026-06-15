@@ -391,13 +391,24 @@ class RecycleOrder extends BaseAdminController
             return;
         }
         try {
-            event('SettleErpPayableByDevice', [
+            // 先走事件；若无人成功应答，直连 ERP 财务结算服务兜底核销，避免静默不核销。
+            $results = (array)event('SettleErpPayableByDevice', [
                 'site_id' => $this->site_id,
                 'source_device_ids' => $deviceIds,
                 'remark' => '回收打款核销应付',
             ]);
+            $handled = false;
+            foreach ($results as $r) {
+                if (is_array($r) && !empty($r['ok'])) { $handled = true; break; }
+            }
+            if (!$handled) {
+                $cls = '\\addon\\hsx_erp\\app\\service\\admin\\FinanceSettlementService';
+                if (class_exists($cls)) {
+                    (new $cls())->settleByDeviceIds($deviceIds, ['remark' => '回收打款核销应付']);
+                }
+            }
         } catch (\Throwable $e) {
-            // 解耦：核销失败不影响打款
+            \think\facade\Log::warning('回收打款核销应付失败：' . $e->getMessage(), ['device_ids' => $deviceIds]);
         }
     }
 
@@ -428,8 +439,7 @@ class RecycleOrder extends BaseAdminController
                 return;
             }
             $orderNo = $order->isEmpty() ? (string)$orderId : (string)$order->order_no;
-            event('RecordErpCapitalFlow', [
-                'site_id'           => $this->site_id,
+            $entry = [
                 'account_id'        => $capitalAccountId,
                 'direction'         => 'out',
                 'amount'            => $amount,
@@ -439,9 +449,20 @@ class RecycleOrder extends BaseAdminController
                 'source_no'         => $sourceNo !== '' ? $sourceNo : $orderNo,
                 'source_id'         => $orderId,
                 'remark'            => '回收打款 - 订单：' . $orderNo,
-            ]);
+            ];
+            // 先走事件；若无人成功应答(未注册/事件缓存未刷新等)，直连 ERP 兜底记账，避免静默丢账。
+            $results = (array)event('RecordErpCapitalFlow', array_merge(['site_id' => $this->site_id], $entry));
+            if (!in_array(true, $results, true)) {
+                $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpCapitalAccountService';
+                if (class_exists($cls)) {
+                    (new $cls())->recordEntry($entry);
+                }
+            }
         } catch (\Throwable $e) {
-            // 解耦：记流水失败不影响打款
+            // 记日志而非静默吞掉，便于排查（不影响打款主流程）
+            \think\facade\Log::warning('回收打款记ERP资金流水失败：' . $e->getMessage(), [
+                'order_id' => $orderId, 'capital_account_id' => $capitalAccountId,
+            ]);
         }
     }
 
