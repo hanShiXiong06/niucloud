@@ -102,28 +102,30 @@ class CollectDeviceTraceListener
 
         $orderNo = (string)($ord['order_no'] ?? '');
         $events = [];
-        // 设备操作日志(跳过打款/折账, 由打款记录覆盖, 避免重复+脏时间)
-        foreach (RecycleDeviceLog::where([['site_id', '=', $siteId], ['device_id', '=', $deviceId]])->order('id asc')->select()->toArray() as $lg) {
+        // 设备操作日志: 复用官方 getDeviceLogList(只按 device_id 查, 不带 site_id; 写日志时未存 site_id)
+        // 自带 status_name(中文) + operator_name(关联系统用户)
+        $deviceLogs = (new RecycleDeviceLog())->getDeviceLogList(['device_id' => $deviceId], 1, 200, 'id asc')['list'] ?? [];
+        foreach ($deviceLogs as $lg) {
             $op = (string)($lg['operation_type'] ?? '');
             $ac = (string)($lg['action'] ?? '');
             if (in_array($op, ['device_payment', 'device_offset_settle'], true) || in_array($ac, ['device_payment', 'device_offset_settle'], true)) {
-                continue;
+                continue; // 打款/折账由打款记录覆盖
             }
             $events[] = [
-                'time'          => (int)$lg['create_at'],
+                'time'          => (int)($lg['create_at'] ?? 0),
                 'stage'         => '回收',
-                'title'         => RecycleOrderDict::getDeviceLogOperationName($lg),
-                'detail'        => (string)$lg['remark'],
-                'operator_name' => (string)$lg['operator_name'],
-                'operator_uid'  => (int)$lg['operator_id'],
+                'title'         => (string)($lg['status_name'] ?? RecycleOrderDict::getDeviceLogOperationName($lg)),
+                'detail'        => (string)($lg['remark'] ?? ''),
+                'operator_name' => (string)($lg['operator_name'] ?? ''),
+                'operator_uid'  => (int)($lg['operator_id'] ?? 0),
                 'amount'        => 0,
                 'no'            => $orderNo,
                 'key'           => true,
             ];
         }
-        // 订单操作日志(签收/质检/定价/确认 多记在订单层)
+        // 订单操作日志(签收/质检/定价/确认 状态流转, 同样不按 site_id 过滤)
         if ($orderId > 0) {
-            foreach (RecycleOrderLog::where([['site_id', '=', $siteId], ['order_id', '=', $orderId]])->order('id asc')->select()->toArray() as $lg) {
+            foreach (RecycleOrderLog::where([['order_id', '=', $orderId]])->order('id asc')->select()->toArray() as $lg) {
                 // 认识的 action 给中文名; 不认识的用"订单·{目标状态}"兜底, 不丢弃
                 $title = $this->orderActionName((string)($lg['action'] ?? ''));
                 if ($title === '') {
