@@ -5,6 +5,8 @@ namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\model\ErpCounterparty;
 use addon\hsx_erp\app\model\ErpCounterpartyMember;
+use addon\hsx_erp\app\model\FinancePayable;
+use addon\hsx_erp\app\model\FinanceReceivable;
 use app\model\member\Member;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -107,6 +109,109 @@ class ErpCounterpartyAdminService extends BaseAdminService
             }
             Db::commit();
             return $id;
+        } catch (\Throwable $e) {
+            Db::rollback();
+            throw $e;
+        }
+    }
+
+    /**
+     * 主体详情(供财务中心抽屉): 主体信息 + 对接人(会员) + 该主体财务对账汇总。
+     * 财务以 member_id 记账，故主体对账 = 旗下所有对接人(会员)的应收应付合计。
+     */
+    public function detail(int $id): array
+    {
+        $cp = $this->find($id)->toArray();
+        $cp['members'] = $this->getMembers($id);
+        $cp['finance'] = $this->financeRecon($id);
+        return $cp;
+    }
+
+    /** 主体财务对账：聚合旗下对接人(会员)的未结应付/应收/净额/可折账 */
+    public function financeRecon(int $counterpartyId): array
+    {
+        $memberIds = ErpCounterpartyMember::where([
+            ['site_id', '=', $this->site_id],
+            ['counterparty_id', '=', $counterpartyId],
+            ['status', '=', 1],
+        ])->column('member_id');
+        $memberIds = array_values(array_unique(array_filter(array_map('intval', $memberIds))));
+        if (empty($memberIds)) {
+            return ['payable' => 0, 'receivable' => 0, 'net' => 0, 'offsetable' => 0, 'member_count' => 0];
+        }
+        $open = ['pending', 'partial'];
+        $pBase = function () use ($open, $memberIds) {
+            return FinancePayable::where([['site_id', '=', $this->site_id], ['status', 'in', $open]])->whereIn('counterparty_id', $memberIds);
+        };
+        $rBase = function () use ($open, $memberIds) {
+            return FinanceReceivable::where([['site_id', '=', $this->site_id], ['status', 'in', $open]])->whereIn('counterparty_id', $memberIds);
+        };
+        $payable = round((float)$pBase()->sum('amount') - (float)$pBase()->sum('settled_amount'), 2);
+        $receivable = round((float)$rBase()->sum('amount') - (float)$rBase()->sum('settled_amount'), 2);
+        return [
+            'payable'      => $payable,
+            'receivable'   => $receivable,
+            'net'          => round($payable - $receivable, 2),
+            'offsetable'   => round(min($payable, $receivable), 2),
+            'member_count' => count($memberIds),
+        ];
+    }
+
+    /** 往主体里添加一名对接人(会员)。一个会员只能属于一个主体，已属其他主体则改归本主体。 */
+    public function addMember(int $counterpartyId, int $memberId, string $relationRole = 'business', int $isFinanceContact = 0): void
+    {
+        $this->find($counterpartyId);
+        if ($memberId <= 0) {
+            throw new CommonException('请选择会员');
+        }
+        if (!in_array($relationRole, ['owner', 'finance', 'business'], true)) {
+            $relationRole = 'business';
+        }
+        $exist = Member::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])->count();
+        if (!$exist) {
+            throw new CommonException('会员不存在或不属于当前站点');
+        }
+        $now = time();
+        $values = [
+            'counterparty_id'    => $counterpartyId,
+            'relation_role'      => $relationRole,
+            'is_finance_contact' => $isFinanceContact === 1 ? 1 : 0,
+            'status'             => 1,
+            'update_at'          => $now,
+        ];
+        $relation = ErpCounterpartyMember::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])->findOrEmpty();
+        if (!$relation->isEmpty()) {
+            $relation->save($values);
+            return;
+        }
+        ErpCounterpartyMember::create(array_merge($values, [
+            'site_id' => $this->site_id, 'member_id' => $memberId, 'remark' => '', 'create_at' => $now,
+        ]));
+    }
+
+    /** 从主体移除一名对接人 */
+    public function removeMember(int $counterpartyId, int $memberId): void
+    {
+        $relation = ErpCounterpartyMember::where([
+            ['site_id', '=', $this->site_id],
+            ['counterparty_id', '=', $counterpartyId],
+            ['member_id', '=', $memberId],
+        ])->findOrEmpty();
+        if (!$relation->isEmpty()) {
+            $relation->save(['status' => 0, 'is_finance_contact' => 0, 'update_at' => time()]);
+        }
+    }
+
+    /** 删除主体(解除所有对接人关系；财务以会员记账，不受影响) */
+    public function delete(int $id): void
+    {
+        $cp = $this->find($id);
+        Db::startTrans();
+        try {
+            ErpCounterpartyMember::where([['site_id', '=', $this->site_id], ['counterparty_id', '=', $id]])
+                ->update(['status' => 0, 'is_finance_contact' => 0, 'update_at' => time()]);
+            $cp->delete();
+            Db::commit();
         } catch (\Throwable $e) {
             Db::rollback();
             throw $e;

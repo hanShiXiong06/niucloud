@@ -150,10 +150,11 @@
                 <el-table-column label="记账后余额" width="120" align="right">
                     <template #default="{ row }">{{ money(row.balance_after) }}</template>
                 </el-table-column>
-                <el-table-column label="对手方" min-width="130" show-overflow-tooltip>
+                <el-table-column label="主体 / 对手方" min-width="170" show-overflow-tooltip>
                     <template #default="{ row }">
-                        <template v-if="row.counterparty_name">{{ row.counterparty_name }}<span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span></template>
-                        <span v-else class="text-gray-300">-</span>
+                        <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
+                        <template v-if="row.counterparty_name"><div class="text-xs text-gray-500">{{ row.counterparty_name }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></div></template>
+                        <span v-else-if="!row.entity_name" class="text-gray-300">-</span>
                     </template>
                 </el-table-column>
                 <el-table-column prop="source_no" label="来源单" min-width="120" show-overflow-tooltip />
@@ -167,13 +168,24 @@
                 <el-pagination layout="total, prev, pager, next" :total="ledger.total" :page-size="ledger.limit" :current-page="ledger.page" @current-change="onLedgerPage" />
             </div>
         </el-drawer>
+
+        <!-- 主体抽屉 -->
+        <entity-drawer v-model="entityDrawer.visible" :entity-id="entityDrawer.id" @changed="loadLedger" />
     </div>
 </template>
 
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 import { getCapitalAccounts, saveCapitalAccount, deleteCapitalAccount, recordCapitalEntry, getCapitalLedger } from '@/addon/hsx_erp/api/capital_account'
+
+const entityDrawer = reactive<any>({ visible: false, id: 0 })
+function openEntity(id: number) {
+    if (!id) return
+    entityDrawer.id = id
+    entityDrawer.visible = true
+}
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 const formatTime = (t: number) => (t ? new Date(t * 1000).toLocaleString() : '-')

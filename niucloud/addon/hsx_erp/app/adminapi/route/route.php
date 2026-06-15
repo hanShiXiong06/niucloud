@@ -11,7 +11,11 @@ Route::group('erp', function () {
     Route::get('counterparty/options', 'addon\hsx_erp\app\adminapi\controller\Counterparty@options');
     Route::get('counterparty/member_options', 'addon\hsx_erp\app\adminapi\controller\Counterparty@memberOptions');
     Route::get('counterparty/:id/members', 'addon\hsx_erp\app\adminapi\controller\Counterparty@members');
+    Route::get('counterparty/:id/detail', 'addon\hsx_erp\app\adminapi\controller\Counterparty@detail');
+    Route::post('counterparty/:id/member/add', 'addon\hsx_erp\app\adminapi\controller\Counterparty@addMember');
+    Route::post('counterparty/:id/member/remove', 'addon\hsx_erp\app\adminapi\controller\Counterparty@removeMember');
     Route::post('counterparty/save/:id', 'addon\hsx_erp\app\adminapi\controller\Counterparty@save');
+    Route::delete('counterparty/:id', 'addon\hsx_erp\app\adminapi\controller\Counterparty@delete');
     Route::get('reconciliation/scan', 'addon\hsx_erp\app\adminapi\controller\Reconciliation@scan');
     Route::get('reconciliation/asset/:id', 'addon\hsx_erp\app\adminapi\controller\Reconciliation@asset');
     Route::get('warehouse/lists', 'addon\hsx_erp\app\adminapi\controller\Warehouse@lists');

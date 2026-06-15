@@ -47,10 +47,11 @@
                         <el-input v-model="boardKeyword" placeholder="按往来单位筛选" clearable class="!w-[220px]" />
                     </div>
                     <el-table :data="filteredBoard" v-loading="loading" size="large" empty-text="暂无未结往来">
-                        <el-table-column label="往来单位" min-width="180">
+                        <el-table-column label="主体 / 对接人" min-width="200">
                             <template #default="{ row }">
-                                <span class="font-medium">{{ row.counterparty_name || ('#' + row.counterparty_id) }}</span>
-                                <span v-if="row.counterparty_mobile" class="ml-1 text-xs text-gray-400">{{ row.counterparty_mobile }}</span>
+                                <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
+                                <div v-else class="text-xs text-gray-400">未归属主体</div>
+                                <div class="text-xs text-gray-500">{{ row.counterparty_name || ('#' + row.counterparty_id) }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></div>
                             </template>
                         </el-table-column>
                         <el-table-column label="应付(我欠)" width="140" align="right">
@@ -94,9 +95,11 @@
                         <el-button @click="resetDetailFilter">重置</el-button>
                     </div>
                     <el-table :data="detail.list" v-loading="detail.loading" size="large" empty-text="暂无数据">
-                        <el-table-column label="往来单位" min-width="160" show-overflow-tooltip>
+                        <el-table-column label="主体 / 对接人" min-width="180" show-overflow-tooltip>
                             <template #default="{ row }">
-                                {{ row.counterparty_name }}<span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span>
+                                <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
+                                <div v-else class="text-xs text-gray-400">未归属主体</div>
+                                <div class="text-xs text-gray-500">{{ row.counterparty_name }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></div>
                             </template>
                         </el-table-column>
                         <el-table-column label="业务类型" width="100" align="center">
@@ -137,9 +140,11 @@
                     </div>
                     <el-table :data="settle.list" v-loading="settle.loading" size="large" empty-text="暂无结算记录">
                         <el-table-column prop="settlement_no" label="结算单号" min-width="170" show-overflow-tooltip />
-                        <el-table-column label="往来单位" min-width="160" show-overflow-tooltip>
+                        <el-table-column label="主体 / 对接人" min-width="180" show-overflow-tooltip>
                             <template #default="{ row }">
-                                {{ row.counterparty_name }}<span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span>
+                                <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
+                                <div v-else class="text-xs text-gray-400">未归属主体</div>
+                                <div class="text-xs text-gray-500">{{ row.counterparty_name }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></div>
                             </template>
                         </el-table-column>
                         <el-table-column label="应付合计" width="110" align="right"><template #default="{ row }">{{ money(row.payable_total) }}</template></el-table-column>
@@ -218,6 +223,9 @@
             </template>
         </el-dialog>
 
+        <!-- 主体抽屉(信息/对接人/财务对账) -->
+        <entity-drawer v-model="entityDrawer.visible" :entity-id="entityDrawer.id" @changed="onEntityChanged" />
+
         <!-- 经营支出弹框 -->
         <el-dialog v-model="expense.visible" title="记一笔经营支出" width="460px">
             <el-form label-width="90px">
@@ -252,6 +260,7 @@
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import EntityDrawer from './entity-drawer.vue'
 import {
     getFinanceBalanceBoard,
     getFinancePayableOutstanding,
@@ -499,6 +508,17 @@ async function submitExpense() {
     } finally {
         expense.submitting = false
     }
+}
+
+// 主体抽屉
+const entityDrawer = reactive<any>({ visible: false, id: 0 })
+function openEntity(id: number) {
+    if (!id) return ElMessage.info('该往来未归属主体，请在出库/录入时归属或在此添加')
+    entityDrawer.id = id
+    entityDrawer.visible = true
+}
+function onEntityChanged() {
+    refreshAll()
 }
 
 loadSummary()

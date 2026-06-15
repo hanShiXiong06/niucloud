@@ -39,6 +39,30 @@ class Counterparty extends BaseAdminController
         return success($this->service->getMembers($id));
     }
 
+    public function detail(int $id)
+    {
+        return success($this->service->detail($id));
+    }
+
+    public function addMember(int $id)
+    {
+        $p = $this->request->params([['member_id', 0], ['relation_role', 'business'], ['is_finance_contact', 0]]);
+        $this->service->addMember($id, (int)$p['member_id'], (string)$p['relation_role'], (int)$p['is_finance_contact']);
+        return success();
+    }
+
+    public function removeMember(int $id)
+    {
+        $this->service->removeMember($id, (int)$this->request->param('member_id', 0));
+        return success();
+    }
+
+    public function delete(int $id)
+    {
+        $this->service->delete($id);
+        return success();
+    }
+
     public function save(int $id = 0)
     {
         return success($this->service->save($this->request->params([
