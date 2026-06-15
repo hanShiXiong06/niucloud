@@ -508,6 +508,8 @@ const transferLocations = computed(() =>
 const currentWarehouseName = computed(() => {
     const wid = Number(transfer.asset?.warehouse_id || 0)
     if (!wid) return ''
+    // 优先用后端补的名称，其次从 warehouseOptions 解析，最后兜底显示 id
+    if (transfer.asset?.warehouse_name) return transfer.asset.warehouse_name
     const wh = warehouseOptions.value.find((w: any) => Number(w.id) === wid)
     return wh?.warehouse_name || ('仓#' + wid)
 })
@@ -515,6 +517,7 @@ const currentLocationName = computed(() => {
     const wid = Number(transfer.asset?.warehouse_id || 0)
     const lid = Number(transfer.asset?.location_id || 0)
     if (!lid) return ''
+    if (transfer.asset?.location_name) return transfer.asset.location_name
     const wh = warehouseOptions.value.find((w: any) => Number(w.id) === wid)
     const loc = (wh?.locations || []).find((l: any) => Number(l.id) === lid)
     return loc?.location_name || ('库位#' + lid)

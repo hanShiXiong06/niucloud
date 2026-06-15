@@ -16,6 +16,8 @@ use addon\hsx_erp\app\model\ErpRefurbishOrder;
 use addon\hsx_erp\app\model\ErpStockLedger;
 use addon\hsx_erp\app\model\ErpStockOrder;
 use addon\hsx_erp\app\model\ErpStockOrderItem;
+use addon\hsx_erp\app\model\ErpWarehouse;
+use addon\hsx_erp\app\model\ErpWarehouseLocation;
 use addon\hsx_erp\app\support\ErpDomainEvent;
 use addon\hsx_erp\app\support\ErpMoney;
 use app\model\sys\SysUserRole;
@@ -88,7 +90,37 @@ class ErpAssetService extends BaseAdminService
         }
         $result = $this->pageQuery($query);
         $this->appendCounterparties($result['data']);
+        $this->appendWarehouseNames($result['data']);
         return $result;
+    }
+
+    /**
+     * 给资产列表行补上仓库/库位名称（资产表只存 id），供前端调拨弹框等反显当前库位。
+     */
+    private function appendWarehouseNames(array &$rows): void
+    {
+        if (empty($rows)) {
+            return;
+        }
+        $whIds = array_values(array_unique(array_filter(array_map(fn($r) => (int)($r['warehouse_id'] ?? 0), $rows))));
+        $locIds = array_values(array_unique(array_filter(array_map(fn($r) => (int)($r['location_id'] ?? 0), $rows))));
+        $whMap = [];
+        if (!empty($whIds)) {
+            foreach (ErpWarehouse::where([['site_id', '=', $this->site_id]])->whereIn('id', $whIds)->field('id,warehouse_name')->select()->toArray() as $w) {
+                $whMap[(int)$w['id']] = (string)($w['warehouse_name'] ?? '');
+            }
+        }
+        $locMap = [];
+        if (!empty($locIds)) {
+            foreach (ErpWarehouseLocation::where([['site_id', '=', $this->site_id]])->whereIn('id', $locIds)->field('id,location_name')->select()->toArray() as $l) {
+                $locMap[(int)$l['id']] = (string)($l['location_name'] ?? '');
+            }
+        }
+        foreach ($rows as &$row) {
+            $row['warehouse_name'] = $whMap[(int)($row['warehouse_id'] ?? 0)] ?? '';
+            $row['location_name'] = $locMap[(int)($row['location_id'] ?? 0)] ?? '';
+        }
+        unset($row);
     }
 
     public function getInfo(int $id): array
