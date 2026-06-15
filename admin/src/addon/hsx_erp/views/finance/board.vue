@@ -94,11 +94,13 @@
                                 <span class="ml-1 text-xs text-gray-400">{{ netLabel(row.net_direction) }}</span>
                             </template>
                         </el-table-column>
-                        <el-table-column label="操作" width="110" align="center" fixed="right">
+                        <el-table-column label="操作" width="190" align="center" fixed="right">
                             <template #default="{ row }">
                                 <template v-if="!row.is_child">
                                     <el-button v-if="row.offsetable > 0" type="primary" link @click="openSettle(row)">折账</el-button>
-                                    <span v-else class="text-xs text-gray-400">无可折</span>
+                                    <el-button v-if="!row.is_entity && row.payable > 0" type="warning" link @click="openPay(row)">付款</el-button>
+                                    <el-button v-if="!row.is_entity && row.receivable > 0" type="success" link @click="openCollect(row)">收款</el-button>
+                                    <span v-if="row.offsetable <= 0 && row.payable <= 0 && row.receivable <= 0" class="text-xs text-gray-400">-</span>
                                 </template>
                             </template>
                         </el-table-column>
@@ -268,6 +270,37 @@
             <template #footer>
                 <el-button @click="dialogVisible = false">取消</el-button>
                 <el-button type="primary" :loading="submitting" :disabled="!canSettle" @click="doSettle">确认结算</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 付款 / 收款 弹框（纯现金，关联单据 + 资金账户） -->
+        <el-dialog v-model="payColl.visible" :title="payCollTitle" width="640px">
+            <div v-loading="payColl.loading">
+                <el-alert type="info" :closable="false" class="mb-3"
+                    :title="payColl.mode === 'pay' ? '勾选要付款的应付单据（来自回收），从所选资金账户出账并标记结清。' : '勾选要收款的应收单据（销售/同行出库挂账），收入所选资金账户并标记结清。'" />
+                <el-table :data="payColl.rows" size="small" @selection-change="onPayCollSelect" max-height="300"
+                    :empty-text="payColl.mode === 'pay' ? '无待付应付' : '无待收应收'">
+                    <el-table-column type="selection" width="40" />
+                    <el-table-column prop="source_no" label="来源单" min-width="120" show-overflow-tooltip />
+                    <el-table-column prop="remark" label="说明" min-width="120" show-overflow-tooltip />
+                    <el-table-column label="待结" width="120" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
+                </el-table>
+                <div class="mt-3 text-right text-sm text-gray-500">已选 {{ payColl.selected.length }} 笔，合计
+                    <b :class="payColl.mode === 'pay' ? 'text-orange-600' : 'text-green-600'">{{ money(payCollTotal) }}</b>
+                </div>
+                <div class="mt-3">
+                    <div class="mb-1 text-sm text-gray-500">{{ payColl.mode === 'pay' ? '出账账户(必选)：现金从该账户付出' : '入账账户(必选)：现金收入该账户' }}</div>
+                    <el-select v-model="payColl.accountId" filterable class="w-full" placeholder="选择资金账户">
+                        <el-option v-for="a in summary.accounts" :key="a.id" :label="`${a.account_name}（余额 ${money(a.balance)}）`" :value="a.id" />
+                    </el-select>
+                </div>
+                <el-input v-model="payColl.remark" class="mt-3" type="textarea" :rows="2" placeholder="备注(可选)" maxlength="200" show-word-limit />
+            </div>
+            <template #footer>
+                <el-button @click="payColl.visible = false">取消</el-button>
+                <el-button type="primary" :loading="payColl.submitting" :disabled="!payColl.selected.length || !payColl.accountId" @click="submitPayColl">
+                    确认{{ payColl.mode === 'pay' ? '付款' : '收款' }}
+                </el-button>
             </template>
         </el-dialog>
 
@@ -664,6 +697,52 @@ async function doSettle() {
 function resetDialog() {
     current.value = null; payables.value = []; receivables.value = []
     selectedPayables.value = []; selectedReceivables.value = []; preview.value = null; remark.value = ''; settleAccountId.value = undefined
+}
+
+// 付款 / 收款（纯现金结算，复用 settle：只传一侧 ids + 资金账户）
+const payColl = reactive<any>({ visible: false, mode: 'pay', loading: false, submitting: false, current: null, rows: [], selected: [], accountId: undefined, remark: '' })
+const payCollTitle = computed(() => {
+    const t = payColl.mode === 'pay' ? '付款（给客户）' : '收款（向客户/同行）'
+    const c = payColl.current
+    return c ? `${t} · ${c.counterparty_name || ('#' + c.counterparty_id)}` : t
+})
+const payCollTotal = computed(() => payColl.selected.reduce((s: number, r: any) => s + Number(r.outstanding || 0), 0))
+function openPay(row: any) { openPayColl(row, 'pay') }
+function openCollect(row: any) { openPayColl(row, 'collect') }
+async function openPayColl(row: any, mode: 'pay' | 'collect') {
+    Object.assign(payColl, { visible: true, mode, loading: true, current: row, rows: [], selected: [], accountId: undefined, remark: '' })
+    if (!summary.accounts || !summary.accounts.length) loadSummary()
+    try {
+        const res: any = mode === 'pay'
+            ? await getFinancePayableOutstanding(row.counterparty_id)
+            : await getFinanceReceivableOutstanding(row.counterparty_id)
+        payColl.rows = res.data || []
+    } finally {
+        payColl.loading = false
+    }
+}
+function onPayCollSelect(rows: any[]) { payColl.selected = rows }
+async function submitPayColl() {
+    if (!payColl.selected.length || !payColl.accountId || !payColl.current) return
+    const ids = payColl.selected.map((x: any) => x.id)
+    const dirText = payColl.mode === 'pay' ? '付款' : '收款'
+    const flow = payColl.mode === 'pay' ? '出账' : '入账'
+    try { await ElMessageBox.confirm(`${dirText} ${money(payCollTotal.value)}，从所选账户${flow}。确认？`, dirText, { type: 'warning' }) } catch { return }
+    payColl.submitting = true
+    try {
+        await settleFinance({
+            counterparty_id: payColl.current.counterparty_id,
+            payable_ids: payColl.mode === 'pay' ? ids : [],
+            receivable_ids: payColl.mode === 'collect' ? ids : [],
+            remark: payColl.remark,
+            capital_account_id: payColl.accountId,
+        })
+        ElMessage.success(dirText + '完成')
+        payColl.visible = false
+        refreshAll()
+    } finally {
+        payColl.submitting = false
+    }
 }
 
 // 经营支出
