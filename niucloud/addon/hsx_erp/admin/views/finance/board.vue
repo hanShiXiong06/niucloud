@@ -99,7 +99,7 @@
                             <el-radio-button label="settled">已结清</el-radio-button>
                         </el-radio-group>
                         <el-input v-model="detail.keyword" placeholder="往来单位/来源单号" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" />
-                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="width: 300px" />
+                        <el-date-picker v-model="detail.dateRange" class="fin-range" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" />
                         <el-input v-model="detail.amount_min" placeholder="金额≥" class="!w-[100px]" />
                         <el-input v-model="detail.amount_max" placeholder="金额≤" class="!w-[100px]" />
                         <el-select v-model="detail.quickSort" placeholder="排序" class="!w-[150px]" @change="onQuickSort">
@@ -149,7 +149,7 @@
                 <el-tab-pane label="结算记录" name="settlement">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                         <el-input v-model="settle.keyword" placeholder="结算单号/往来单位" clearable class="!w-[200px]" @keyup.enter="loadSettlement" />
-                        <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="width: 300px" />
+                        <el-date-picker v-model="settle.dateRange" class="fin-range" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" />
                         <el-button type="primary" @click="loadSettlement">查询</el-button>
                         <el-button @click="resetSettleFilter">重置</el-button>
                     </div>
@@ -592,3 +592,10 @@ function onEntityChanged() {
 loadSummary()
 loadBoard()
 </script>
+
+<style scoped>
+/* 钉死日期区间组件宽度: Element Plus 自带样式会盖掉行内 width, 用 :deep + !important 强制 */
+:deep(.el-date-editor.fin-range) {
+    width: 300px !important;
+}
+</style>
