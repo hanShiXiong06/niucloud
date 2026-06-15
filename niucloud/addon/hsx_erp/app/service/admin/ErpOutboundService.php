@@ -526,13 +526,33 @@ class ErpOutboundService extends BaseAdminService
         $data = $list->toArray();
         $settleMap = ['now' => '现结(已收款)', 'later' => '挂单(待收款)', 'none' => '无结算'];
         $priceMap = ['pending' => '待回填价', 'filled' => '价格已定'];
+        // 挂单收款情况: 按出库单号(=应收来源单)反查应收, 是否已结清(折账或现金收款都算)
+        $recAgg = [];
+        $orderNos = array_values(array_filter(array_column($data['data'], 'outbound_no')));
+        if (!empty($orderNos)) {
+            $recRows = FinanceReceivable::where([['site_id', '=', $this->site_id]])
+                ->whereIn('source_no', $orderNos)
+                ->field('source_no,amount,settled_amount')->select()->toArray();
+            foreach ($recRows as $r) {
+                $no = (string)$r['source_no'];
+                $recAgg[$no]['cnt'] = ($recAgg[$no]['cnt'] ?? 0) + 1;
+                $recAgg[$no]['open'] = round(($recAgg[$no]['open'] ?? 0) + ((float)$r['amount'] - (float)$r['settled_amount']), 2);
+            }
+        }
         foreach ($data['data'] as &$row) {
             $row['type_text'] = $typeMap[$row['outbound_type']] ?? $row['outbound_type'];
             $row['settle_mode_text'] = $settleMap[(string)($row['settle_mode'] ?? '')] ?? (string)($row['settle_mode'] ?? '');
             $row['price_status_text'] = $priceMap[(string)($row['price_status'] ?? '')] ?? (string)($row['price_status'] ?? '');
             $row['is_void'] = (string)($row['status'] ?? '') === ErpDict::OUTBOUND_STATUS_VOID;
-            // 可退回：挂单(非现结) + 未作废(收款与否由后端二次校验)
-            $row['can_cancel'] = !$row['is_void'] && (string)($row['settle_mode'] ?? '') !== ErpDict::SETTLE_MODE_NOW;
+            // 收款状态: 现结=已收款; 挂单=看应收是否结清(有应收且未结额<=0 即已收款)
+            $agg = $recAgg[(string)($row['outbound_no'] ?? '')] ?? null;
+            $hasRec = $agg && (int)($agg['cnt'] ?? 0) > 0;
+            $row['collected'] = (string)($row['settle_mode'] ?? '') === ErpDict::SETTLE_MODE_NOW
+                || ($hasRec && (float)($agg['open'] ?? 0) <= 0);
+            // 可退回：挂单 + 未作废 + 未收款(已收款的不能退, 需走退货)
+            $row['can_cancel'] = !$row['is_void']
+                && (string)($row['settle_mode'] ?? '') !== ErpDict::SETTLE_MODE_NOW
+                && !$row['collected'];
         }
         unset($row);
         return $data;

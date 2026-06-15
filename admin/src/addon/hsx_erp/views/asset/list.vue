@@ -892,7 +892,7 @@ const statusName = (status: string) => ({
     refurbishing: '整备中',
     pending_pricing: '待销售定价',
     available_for_sale: '可售',
-    locked: '已锁定(挂单待收款)',
+    locked: '已出货·待收款(挂单)',
     outbound: '已售/已出库'
 }[status] || status || '-')
 const statusType = (status: string) => ({

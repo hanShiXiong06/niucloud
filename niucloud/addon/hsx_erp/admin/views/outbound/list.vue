@@ -47,8 +47,8 @@
                     <template #default="{ row }">
                         <el-tag v-if="row.is_void" type="info" effect="light">已退回</el-tag>
                         <template v-else>
-                            <el-tag :type="row.settle_mode === 'now' ? 'success' : 'warning'" effect="light">{{ row.settle_mode === 'now' ? '现结·已售' : '挂单·锁定' }}</el-tag>
-                            <div v-if="row.settle_mode === 'later'" class="mt-0.5 text-xs" :class="row.price_status === 'pending' ? 'text-orange-500' : 'text-gray-400'">{{ row.price_status === 'pending' ? '待回填价' : '价格已定·待收款' }}</div>
+                            <el-tag :type="(row.settle_mode === 'now' || row.collected) ? 'success' : 'warning'" effect="light">{{ row.settle_mode === 'now' ? '现结·已售' : (row.collected ? '挂单·已收款' : '挂单·已出货') }}</el-tag>
+                            <div v-if="row.settle_mode === 'later'" class="mt-0.5 text-xs" :class="row.collected ? 'text-green-600' : (row.price_status === 'pending' ? 'text-orange-500' : 'text-gray-400')">{{ row.price_status === 'pending' ? '待回填价' : (row.collected ? '已收款·完成' : '价格已定·待收款') }}</div>
                         </template>
                     </template>
                 </el-table-column>
