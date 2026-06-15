@@ -68,6 +68,7 @@
                 v-loading="table.loading"
                 size="large"
                 @selection-change="handleSelectionChange"
+                @sort-change="handleSortChange"
             >
                 <el-table-column type="selection" width="52" :selectable="rowSelectable" />
                 <el-table-column prop="asset_no" label="资产编号" min-width="180" />
@@ -89,10 +90,10 @@
                         </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column label="成本" width="130" align="right">
+                <el-table-column label="成本" width="120" align="right" prop="current_cost" sortable="custom">
                     <template #default="{ row }">¥{{ money(row.current_cost) }}</template>
                 </el-table-column>
-                <el-table-column label="参考售价" width="150" align="right">
+                <el-table-column label="参考售价" width="140" align="right" prop="current_sale_price" sortable="custom">
                     <template #default="{ row }">
                         <template v-if="Number(row.current_sale_price) > 0">
                             <div class="font-medium text-gray-800">¥{{ money(row.current_sale_price) }}</div>
@@ -101,7 +102,7 @@
                         <span v-else class="text-gray-300">—</span>
                     </template>
                 </el-table-column>
-                <el-table-column label="状态" width="120">
+                <el-table-column label="状态" width="130">
                     <template #default="{ row }">
                         <el-tooltip
                             :content="nextStepText(row.inventory_status)"
@@ -109,15 +110,13 @@
                             placement="top"
                         >
                             <span class="inline-flex cursor-default items-center gap-1">
-                                <el-tag :type="statusType(row.inventory_status)">
-                                    {{ flowStatusName(row.inventory_status) }}
-                                </el-tag>
-                                <el-icon class="text-gray-300"><InfoFilled /></el-icon>
+                                <el-tag :type="displayStatusType(row)">{{ displayStatusText(row) }}</el-tag>
+                                <el-icon v-if="nextStepText(row.inventory_status)" class="text-gray-300"><InfoFilled /></el-icon>
                             </span>
                         </el-tooltip>
                     </template>
                 </el-table-column>
-                <el-table-column prop="stock_in_at" label="入库时间" width="180">
+                <el-table-column prop="stock_in_at" label="入库时间" width="170" sortable="custom">
                     <template #default="{ row }">{{ formatTime(row.stock_in_at) }}</template>
                 </el-table-column>
                 <el-table-column label="操作" fixed="right" width="250" align="center">
@@ -521,7 +520,7 @@ import { saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const router = useRouter()
-const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any })
+const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any, sort_field: '', sort_order: '' })
 const summary = reactive({ count: 0, total_cost: 0, total_sale: 0 })
 // 是否已接入中台(数据中台)：接入后拍照/定价交给中台，ERP 不再自行定价
 const integrated = ref(false)
@@ -1023,6 +1022,19 @@ const loadIntegration = async () => {
 // 列表与状态标签的展示名：联合模式下"待销售定价"语义其实是"已交中台·处理中"
 const flowStatusName = (status: string) =>
     integrated.value && status === 'pending_pricing' ? '已交中台·处理中' : statusName(status)
+
+// 细化状态展示：优先用后端算好的 status_text/status_type（已售/报废/盘亏丢失等），中台模式下待定价显示“已交中台”
+const displayStatusText = (row: any) =>
+    integrated.value && row.inventory_status === 'pending_pricing' ? '已交中台·处理中' : (row.status_text || statusName(row.inventory_status))
+const displayStatusType = (row: any) => row.status_type || statusType(row.inventory_status)
+
+// 列排序 → 服务端排序
+const handleSortChange = ({ prop, order }: { prop: string; order: string | null }) => {
+    search.sort_field = order ? prop : ''
+    search.sort_order = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : ''
+    table.page = 1
+    loadList()
+}
 
 // 参考售价来源标注：均为"参考价"，真实成交价在销售环节产生
 const priceSource = () => (integrated.value ? '中台参考价' : '门店参考价')

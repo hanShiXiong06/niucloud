@@ -11,6 +11,8 @@ use addon\hsx_erp\app\model\ErpCostLedger;
 use addon\hsx_erp\app\model\ErpCounterparty;
 use addon\hsx_erp\app\model\ErpLocationAssign;
 use addon\hsx_erp\app\model\ErpOperationEvent;
+use addon\hsx_erp\app\model\ErpOutboundItem;
+use addon\hsx_erp\app\model\ErpOutboundOrder;
 use addon\hsx_erp\app\model\ErpRefurbishItem;
 use addon\hsx_erp\app\model\ErpRefurbishOrder;
 use addon\hsx_erp\app\model\ErpStockLedger;
@@ -58,7 +60,7 @@ class ErpAssetService extends BaseAdminService
 
     public function getPage(array $where = []): array
     {
-        $query = ErpAsset::where([['site_id', '=', $this->site_id]])->order('id desc');
+        $query = ErpAsset::where([['site_id', '=', $this->site_id]]);
         if (!empty($where['keyword'])) {
             $keyword = trim((string)$where['keyword']);
             $query->where(function ($query) use ($keyword) {
@@ -99,15 +101,103 @@ class ErpAssetService extends BaseAdminService
         $totalCost = round((float)(clone $aggQuery)->sum('current_cost'), 2);
         $totalSale = round((float)(clone $aggQuery)->sum('current_sale_price'), 2);
 
+        // 排序(白名单字段, 防注入)
+        $sortMap = [
+            'current_cost' => 'current_cost', 'current_sale_price' => 'current_sale_price',
+            'stock_in_at' => 'stock_in_at', 'stock_out_at' => 'stock_out_at', 'id' => 'id',
+        ];
+        $sortField = $sortMap[(string)($where['sort_field'] ?? '')] ?? 'id';
+        $sortOrder = strtolower((string)($where['sort_order'] ?? '')) === 'asc' ? 'asc' : 'desc';
+        $query->order($sortField, $sortOrder);
+
         $result = $this->pageQuery($query);
         $this->appendCounterparties($result['data']);
         $this->appendWarehouseNames($result['data']);
+        $this->appendStatusLabels($result['data']);
         $result['summary'] = [
             'count'      => (int)$totalCount,
             'total_cost' => $totalCost,
             'total_sale' => $totalSale,
         ];
         return $result;
+    }
+
+    /**
+     * 细化状态展示：给每行补 status_text(明确中文) + status_type(标签色)。
+     * 出库要 join 出库单区分 已售(同行)/报废/其他出库；盘亏→盘亏丢失。
+     */
+    private function appendStatusLabels(array &$rows): void
+    {
+        if (empty($rows)) {
+            return;
+        }
+        // 出库的资产，查它最近一张出库明细对应的出库类型，区分已售/报废
+        $outAssetIds = [];
+        foreach ($rows as $r) {
+            if ((string)($r['inventory_status'] ?? '') === ErpDict::INVENTORY_OUTBOUND) {
+                $outAssetIds[] = (int)$r['id'];
+            }
+        }
+        $dispMap = [];
+        if (!empty($outAssetIds)) {
+            $items = ErpOutboundItem::where([['site_id', '=', $this->site_id]])
+                ->whereIn('asset_id', array_values(array_unique($outAssetIds)))
+                ->order('id desc')->field('asset_id,outbound_id')->select()->toArray();
+            $obIds = array_values(array_unique(array_filter(array_column($items, 'outbound_id'))));
+            $typeMap = [];
+            if (!empty($obIds)) {
+                foreach (ErpOutboundOrder::where([['site_id', '=', $this->site_id]])->whereIn('id', $obIds)->field('id,outbound_type')->select()->toArray() as $o) {
+                    $typeMap[(int)$o['id']] = (string)$o['outbound_type'];
+                }
+            }
+            foreach ($items as $it) {
+                $aid = (int)$it['asset_id'];
+                if (!isset($dispMap[$aid])) { // 取最近一条(已按 id desc)
+                    $dispMap[$aid] = $typeMap[(int)$it['outbound_id']] ?? '';
+                }
+            }
+        }
+
+        $textMap = [
+            ErpDict::INVENTORY_PENDING_IN          => '待入库',
+            ErpDict::INVENTORY_INBOUND_REJECTED    => '入库驳回',
+            ErpDict::INVENTORY_IN_STOCK            => '在库',
+            ErpDict::INVENTORY_REFURBISHING        => '整备中',
+            ErpDict::INVENTORY_PENDING_PRICING     => '待销售定价',
+            ErpDict::INVENTORY_AVAILABLE_FOR_SALE  => '在售',
+            ErpDict::INVENTORY_LOCKED              => '销售锁定',
+            ErpDict::INVENTORY_LOST                => '盘亏丢失',
+        ];
+        $typeTag = [
+            ErpDict::INVENTORY_PENDING_IN          => 'warning',
+            ErpDict::INVENTORY_INBOUND_REJECTED    => 'danger',
+            ErpDict::INVENTORY_IN_STOCK            => 'success',
+            ErpDict::INVENTORY_REFURBISHING        => 'warning',
+            ErpDict::INVENTORY_PENDING_PRICING     => 'primary',
+            ErpDict::INVENTORY_AVAILABLE_FOR_SALE  => 'success',
+            ErpDict::INVENTORY_LOCKED              => 'info',
+            ErpDict::INVENTORY_LOST                => 'danger',
+        ];
+        foreach ($rows as &$row) {
+            $st = (string)($row['inventory_status'] ?? '');
+            if ($st === ErpDict::INVENTORY_OUTBOUND) {
+                $disp = $dispMap[(int)$row['id']] ?? '';
+                if ($disp === ErpDict::OUTBOUND_TYPE_PEER_SALE) {
+                    $row['status_text'] = '已售(同行)';
+                    $row['status_type'] = 'info';
+                } elseif ($disp === ErpDict::OUTBOUND_TYPE_SCRAP) {
+                    $row['status_text'] = '已报废';
+                    $row['status_type'] = 'danger';
+                } else {
+                    $row['status_text'] = '已出库';
+                    $row['status_type'] = 'info';
+                }
+            } else {
+                $row['status_text'] = $textMap[$st] ?? ($st ?: '-');
+                $row['status_type'] = $typeTag[$st] ?? 'info';
+            }
+        }
+        unset($row);
     }
 
     /**
