@@ -89,7 +89,8 @@ class CollectDeviceTraceListener
             return ['summary' => [], 'events' => []];
         }
         $d = $device->toArray();
-        $ord = $this->orderMap($siteId, [(int)$d['order_id']])[(int)$d['order_id']] ?? [];
+        $orderId = (int)$d['order_id'];
+        $ord = $this->orderMap($siteId, [$orderId])[$orderId] ?? [];
 
         $orderNo = (string)($ord['order_no'] ?? '');
         $events = [];
