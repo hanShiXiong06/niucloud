@@ -416,6 +416,30 @@
                 <el-button type="primary" :loading="transfer.loading" @click="submitTransfer">确认调拨</el-button>
             </template>
         </el-dialog>
+
+        <el-dialog v-model="priceDialog.visible" :title="priceDialog.asset?.inventory_status === 'available_for_sale' ? '调价' : '销售定价'" width="480px">
+            <el-form label-width="90px">
+                <el-form-item label="设备">
+                    <span class="text-gray-600">{{ priceDialog.asset?.model || '-' }}（IMEI {{ priceDialog.asset?.imei || '-' }}）</span>
+                </el-form-item>
+                <el-form-item label="采购成本">
+                    <span class="text-gray-600">¥{{ money(priceDialog.asset?.purchase_cost) }}</span>
+                </el-form-item>
+                <el-form-item label="销售价" required>
+                    <el-input-number v-model="priceDialog.sale_price" :min="0" :precision="2" class="!w-full" />
+                </el-form-item>
+                <el-form-item label="最低利润">
+                    <el-input-number v-model="priceDialog.min_profit" :min="0" :precision="2" class="!w-full" />
+                </el-form-item>
+                <el-form-item label="备注">
+                    <el-input v-model.trim="priceDialog.remark" type="textarea" :rows="2" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="priceDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="priceDialog.submitting" @click="submitPricing">保存</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -436,6 +460,7 @@ import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
 import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
 import { transferErpAsset } from '@/addon/hsx_erp/api/outbound'
+import { saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const router = useRouter()
@@ -716,8 +741,38 @@ const startRefurbishment = (row: any) => {
     router.push({ path: '/hsx_erp/refurbishment', query: { asset_id: String(row.id) } })
 }
 
+// 改为内联定价/调价弹框（不再跳转到独立的"销售定价"页）
+const priceDialog = reactive<any>({
+    visible: false, submitting: false, asset: null, sale_price: 0, min_profit: 0, remark: ''
+})
 const openPricing = (row: any) => {
-    router.push({ path: '/hsx_erp/pricing', query: { asset_id: String(row.id) } })
+    priceDialog.asset = row
+    priceDialog.sale_price = Number(row.current_sale_price || 0)
+    priceDialog.min_profit = 0
+    priceDialog.remark = ''
+    priceDialog.visible = true
+}
+const submitPricing = async () => {
+    if (!priceDialog.asset?.id) return
+    if (Number(priceDialog.sale_price) <= 0) {
+        ElMessage.warning('请填写销售价')
+        return
+    }
+    priceDialog.submitting = true
+    try {
+        await saveErpAssetPrice(Number(priceDialog.asset.id), {
+            sale_price: Number(priceDialog.sale_price),
+            min_profit: Number(priceDialog.min_profit || 0),
+            remark: priceDialog.remark || ''
+        })
+        ElMessage.success('已保存销售定价')
+        priceDialog.visible = false
+        loadList()
+    } catch (error: any) {
+        ElMessage.error(error?.message || '定价失败')
+    } finally {
+        priceDialog.submitting = false
+    }
 }
 
 const skipRefurbishment = async (row: any) => {
