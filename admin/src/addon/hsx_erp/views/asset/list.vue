@@ -395,15 +395,20 @@
                     </el-tag>
                     <span v-else class="text-gray-400">未归位</span>
                 </el-form-item>
-                <el-form-item label="目标仓库" required>
-                    <el-select v-model="transfer.to_warehouse_id" class="w-full" @change="transfer.to_location_id = 0">
-                        <el-option v-for="item in warehouseOptions" :key="item.id" :label="item.warehouse_name" :value="item.id" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="目标库位">
-                    <el-select v-model="transfer.to_location_id" class="w-full" placeholder="可不选">
-                        <el-option v-for="item in transferLocations" :key="item.id" :label="item.location_name" :value="item.id" />
-                    </el-select>
+                <el-form-item label="目标库位" required>
+                    <el-tree-select
+                        v-model="transfer.target_value"
+                        :data="transferTreeData"
+                        node-key="value"
+                        :props="{ label: 'label', children: 'children', disabled: 'disabled' }"
+                        :render-after-expand="false"
+                        check-strictly
+                        default-expand-all
+                        class="w-full"
+                        placeholder="选择目标仓库 / 库位"
+                        @change="onTargetChange"
+                    />
+                    <div class="text-xs text-gray-400 mt-1">仓库为父节点、库位为子节点；选到库位即归位，选仓库则暂不指定库位。</div>
                 </el-form-item>
                 <el-form-item v-if="showConsignChoice" label="代卖处理" required>
                     <el-radio-group v-model="transfer.consign_action">
@@ -498,7 +503,7 @@ const availableLocations = computed(() =>
 // 调拨
 const transfer = reactive<any>({
     visible: false, loading: false, asset: null,
-    to_warehouse_id: 0, to_location_id: 0, remark: '',
+    to_warehouse_id: 0, to_location_id: 0, target_value: '', remark: '',
     consign_action: 'list', buyout_price: 0
 })
 const transferLocations = computed(() =>
@@ -522,6 +527,38 @@ const currentLocationName = computed(() => {
     const loc = (wh?.locations || []).find((l: any) => Number(l.id) === lid)
     return loc?.location_name || ('库位#' + lid)
 })
+// 目标仓库/库位树：仓库为父、库位为子；自有设备不能进代卖仓 → 该仓节点禁用
+const warehouseTypeLabel = (t: string) =>
+    (({ mall: '二手机仓', peer: '同行仓', consignment: '代卖仓', hold: '暂存仓' }) as Record<string, string>)[t] || ''
+const transferTreeData = computed(() => {
+    const ownedAsset = String(transfer.asset?.ownership_type || '') === 'owned'
+    return warehouseOptions.value.map((w: any) => {
+        const t = String(w.business_type || '')
+        const blocked = ownedAsset && t === 'consignment'
+        const tl = warehouseTypeLabel(t)
+        return {
+            value: 'w:' + w.id,
+            label: w.warehouse_name + (tl ? `（${tl}）` : '') + (blocked ? ' · 自有设备不可入' : ''),
+            disabled: blocked,
+            children: (w.locations || []).map((l: any) => ({
+                value: `l:${w.id}:${l.id}`,
+                label: l.location_name,
+                disabled: blocked
+            }))
+        }
+    })
+})
+const onTargetChange = (val: string) => {
+    if (!val) { transfer.to_warehouse_id = 0; transfer.to_location_id = 0; return }
+    if (val.startsWith('w:')) {
+        transfer.to_warehouse_id = Number(val.slice(2))
+        transfer.to_location_id = 0
+    } else if (val.startsWith('l:')) {
+        const parts = val.split(':')
+        transfer.to_warehouse_id = Number(parts[1])
+        transfer.to_location_id = Number(parts[2])
+    }
+}
 const transferTargetType = computed(() =>
     String(warehouseOptions.value.find((item: any) => Number(item.id) === Number(transfer.to_warehouse_id))?.business_type || '')
 )
@@ -538,6 +575,7 @@ const openTransfer = (row: any) => {
     transfer.asset = row
     transfer.to_warehouse_id = 0
     transfer.to_location_id = 0
+    transfer.target_value = ''
     transfer.remark = ''
     transfer.consign_action = 'list'
     transfer.buyout_price = 0
