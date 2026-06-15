@@ -79,6 +79,9 @@ Route::group('erp', function () {
     Route::get('finance/settlement/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@settlementLists');
     Route::get('finance/settlement/detail/:id', 'addon\hsx_erp\app\adminapi\controller\Finance@settlementDetail');
     Route::get('finance/summary', 'addon\hsx_erp\app\adminapi\controller\Finance@summary');
+    // 设备全链路追溯
+    Route::get('device_trace/search', 'addon\hsx_erp\app\adminapi\controller\DeviceTrace@search');
+    Route::get('device_trace/detail', 'addon\hsx_erp\app\adminapi\controller\DeviceTrace@detail');
     Route::post('finance/expense', 'addon\hsx_erp\app\adminapi\controller\Finance@recordExpense');
 })->middleware([
     AdminCheckToken::class,

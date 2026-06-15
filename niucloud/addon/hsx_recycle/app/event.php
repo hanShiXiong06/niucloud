@@ -49,6 +49,9 @@ return [
         // ERP 财务中心折账结清回收应付 → 回写设备打款状态(折账)+备注结算单号，形成闭环
         'FinanceSettlementCompleted' => [ 'addon\hsx_recycle\app\listener\downstream\FinanceSettlementCompletedListener' ],
 
+        // 设备全链路追溯：ERP 汇总时向回收取"回收段"数据(列表/时间线)
+        'CollectRecycleDeviceTrace' => [ 'addon\hsx_recycle\app\listener\downstream\CollectDeviceTraceListener' ],
+
         // 快递回调事件。易速推送统一在此分发，后续 ERP、通知、财务流水可挂载扩展。
         'RecycleExpressEvent' => [ 'addon\hsx_recycle\app\listener\express\RecycleExpressEventListener' ],
         
