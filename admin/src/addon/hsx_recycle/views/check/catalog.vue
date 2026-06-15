@@ -59,7 +59,15 @@ import { getCheckCatalogList, uploadCheckCatalog, importChunkCheckCatalog } from
 const loading = ref(false)
 const summary = reactive({ templates: 0, bindings: 0, options: 0 })
 const batches = ref<any[]>([])
-const formatTime = (t: number) => (t ? new Date(t * 1000).toLocaleString() : '-')
+const formatTime = (t: any) => {
+    if (t === null || t === undefined || t === '' || t === 0) return '-'
+    const n = Number(t)
+    // 数字：秒(10位)→×1000，毫秒(13位)直接用；非数字：当作已格式化字符串解析
+    const d = Number.isFinite(n) && n > 0
+        ? new Date(n < 1e12 ? n * 1000 : n)
+        : new Date(String(t).replace(/-/g, '/'))
+    return isNaN(d.getTime()) ? String(t) : d.toLocaleString()
+}
 
 async function loadSummary() {
     loading.value = true
