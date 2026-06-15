@@ -16,6 +16,45 @@ use core\base\BaseAdminService;
  */
 class FinanceCounterpartyBalanceService extends BaseAdminService
 {
+    /**
+     * 财务汇总：应收/应付未结合计 + 净额 + 各资金账户余额(+总余额)。供财务中心顶部卡片。
+     */
+    public function getSummary(): array
+    {
+        $open = [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL];
+        $payableTotal = round((float)FinancePayable::where([['site_id', '=', $this->site_id], ['status', 'in', $open]])
+            ->sum('amount - settled_amount'), 2);
+        $receivableTotal = round((float)FinanceReceivable::where([['site_id', '=', $this->site_id], ['status', 'in', $open]])
+            ->sum('amount - settled_amount'), 2);
+
+        $accounts = [];
+        $balanceTotal = 0.0;
+        try {
+            foreach ((new ErpCapitalAccountService())->getAll() as $a) {
+                if ((int)($a['status'] ?? 1) !== 1) {
+                    continue;
+                }
+                $bal = round((float)($a['balance'] ?? 0), 2);
+                $balanceTotal += $bal;
+                $accounts[] = [
+                    'id' => (int)$a['id'],
+                    'account_name' => (string)($a['account_name'] ?? ''),
+                    'account_type_text' => (string)($a['account_type_text'] ?? ''),
+                    'balance' => $bal,
+                ];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return [
+            'payable_total'    => $payableTotal,        // 应付未结(我欠)
+            'receivable_total' => $receivableTotal,     // 应收未结(欠我)
+            'net'              => round($payableTotal - $receivableTotal, 2),
+            'balance_total'    => round($balanceTotal, 2),
+            'accounts'         => $accounts,
+        ];
+    }
+
     public function getBoard(): array
     {
         $open = [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL];

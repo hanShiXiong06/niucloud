@@ -21,8 +21,23 @@ class FinanceReceivableService extends BaseAdminService
         if (!empty($where['status'])) {
             $query->where('status', '=', (string)$where['status']);
         }
+        if (!empty($where['source_type'])) {
+            $query->where('source_type', '=', (string)$where['source_type']);
+        }
         if (!empty($where['keyword'])) {
-            $query->where('counterparty_name', 'like', '%' . $where['keyword'] . '%');
+            $query->where('counterparty_name|source_no', 'like', '%' . trim((string)$where['keyword']) . '%');
+        }
+        if (!empty($where['start_time'])) {
+            $query->where('occurred_at', '>=', (int)$where['start_time']);
+        }
+        if (!empty($where['end_time'])) {
+            $query->where('occurred_at', '<=', (int)$where['end_time']);
+        }
+        if (isset($where['amount_min']) && $where['amount_min'] !== '') {
+            $query->where('amount', '>=', (float)$where['amount_min']);
+        }
+        if (isset($where['amount_max']) && $where['amount_max'] !== '') {
+            $query->where('amount', '<=', (float)$where['amount_max']);
         }
         $statusMap = FinanceDict::getStatusMap();
         $list = $query->order('id desc')->paginate([

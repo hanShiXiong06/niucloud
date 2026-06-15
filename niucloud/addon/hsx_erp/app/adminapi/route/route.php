@@ -69,6 +69,9 @@ Route::group('erp', function () {
     Route::get('finance/receivable/outstanding', 'addon\hsx_erp\app\adminapi\controller\Finance@receivableOutstanding');
     Route::post('finance/settlement/preview', 'addon\hsx_erp\app\adminapi\controller\Finance@settlementPreview');
     Route::post('finance/settlement/settle', 'addon\hsx_erp\app\adminapi\controller\Finance@settlementSettle');
+    Route::get('finance/settlement/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@settlementLists');
+    Route::get('finance/summary', 'addon\hsx_erp\app\adminapi\controller\Finance@summary');
+    Route::post('finance/expense', 'addon\hsx_erp\app\adminapi\controller\Finance@recordExpense');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,

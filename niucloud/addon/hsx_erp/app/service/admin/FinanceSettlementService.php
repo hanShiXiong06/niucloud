@@ -32,6 +32,26 @@ class FinanceSettlementService extends BaseAdminService
         return $this->plan($counterpartyId, $payableIds, $receivableIds)['summary'];
     }
 
+    /** 结算记录(已结清历史)，支持往来单位/关键词/时间筛选 + 分页 */
+    public function getPage(array $where = []): array
+    {
+        $query = FinanceSettlement::where([['site_id', '=', $this->site_id]])->order('id desc');
+        if (!empty($where['counterparty_id'])) {
+            $query->where('counterparty_id', '=', (int)$where['counterparty_id']);
+        }
+        if (!empty($where['keyword'])) {
+            $kw = trim((string)$where['keyword']);
+            $query->where('settlement_no|counterparty_name', 'like', '%' . $kw . '%');
+        }
+        if (!empty($where['start_time'])) {
+            $query->where('occurred_at', '>=', (int)$where['start_time']);
+        }
+        if (!empty($where['end_time'])) {
+            $query->where('occurred_at', '<=', (int)$where['end_time']);
+        }
+        return $this->pageQuery($query);
+    }
+
     /**
      * 按往来单位自动结算其全部未结往来(给回收"打款即折账"用)。
      * 自动取该单位所有待结应付+应收, 折账冲抵, 余下走现金净额。

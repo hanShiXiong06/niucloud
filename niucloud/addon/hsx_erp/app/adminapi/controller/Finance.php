@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\adminapi\controller;
 
+use addon\hsx_erp\app\service\admin\ErpCapitalAccountService;
 use addon\hsx_erp\app\service\admin\FinanceCounterpartyBalanceService;
 use addon\hsx_erp\app\service\admin\FinancePayableService;
 use addon\hsx_erp\app\service\admin\FinanceReceivableService;
@@ -33,7 +34,9 @@ class Finance extends BaseAdminController
     public function payableLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['status', ''], ['keyword', ''], ['page', 1], ['limit', 15],
+            ['counterparty_id', 0], ['status', ''], ['source_type', ''], ['keyword', ''],
+            ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
+            ['page', 1], ['limit', 15],
         ]);
         return success((new FinancePayableService())->getPage($where));
     }
@@ -42,7 +45,9 @@ class Finance extends BaseAdminController
     public function receivableLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['status', ''], ['keyword', ''], ['page', 1], ['limit', 15],
+            ['counterparty_id', 0], ['status', ''], ['source_type', ''], ['keyword', ''],
+            ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
+            ['page', 1], ['limit', 15],
         ]);
         return success((new FinanceReceivableService())->getPage($where));
     }
@@ -82,5 +87,42 @@ class Finance extends BaseAdminController
             (int)$p['counterparty_id'], (array)$p['payable_ids'], (array)$p['receivable_ids'],
             ['remark' => (string)$p['remark']]
         ));
+    }
+
+    /** 结算记录(已结清历史) */
+    public function settlementLists()
+    {
+        $where = $this->request->params([
+            ['counterparty_id', 0], ['keyword', ''], ['start_time', 0], ['end_time', 0], ['page', 1], ['limit', 15],
+        ]);
+        return success((new FinanceSettlementService())->getPage($where));
+    }
+
+    /** 财务汇总(应收/应付合计 + 净额 + 各资金账户余额) */
+    public function summary()
+    {
+        return success((new FinanceCounterpartyBalanceService())->getSummary());
+    }
+
+    /** 经营支出快捷记账(水电/房租/快递等)：从指定资金账户出账，必关联账户 */
+    public function recordExpense()
+    {
+        $p = $this->request->params([
+            ['account_id', 0], ['amount', 0], ['category', ''],
+            ['counterparty_id', 0], ['counterparty_name', ''], ['remark', ''],
+        ]);
+        $category = trim((string)$p['category']);
+        $remark = trim((string)$p['remark']);
+        $fullRemark = $category !== '' ? ('[' . $category . ']' . ($remark !== '' ? ' ' . $remark : '')) : $remark;
+        return success((new ErpCapitalAccountService())->recordEntry([
+            'account_id'        => (int)$p['account_id'],
+            'direction'         => 'out',
+            'amount'            => $p['amount'],
+            'biz_type'          => 'expense',
+            'counterparty_id'   => (int)$p['counterparty_id'],
+            'counterparty_name' => (string)$p['counterparty_name'],
+            'source_type'       => 'expense',
+            'remark'            => $fullRemark,
+        ]));
     }
 }

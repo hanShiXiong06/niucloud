@@ -119,6 +119,13 @@ class ErpCapitalAccountService extends BaseAdminService
                 throw new CommonException('账户不存在');
             }
             $before = round((float)$account->balance, 2);
+            // 出账校验：余额不足不允许出账（打款/支出等）；除非显式 allow_negative
+            if ($direction === 'out' && empty($data['allow_negative']) && $before < $amount) {
+                throw new CommonException(sprintf(
+                    '账户「%s」余额不足：当前 %.2f，需出账 %.2f',
+                    (string)$account->account_name, $before, $amount
+                ));
+            }
             $after = $direction === 'in' ? round($before + $amount, 2) : round($before - $amount, 2);
             $account->save(['balance' => $after, 'update_at' => $now]);
 
