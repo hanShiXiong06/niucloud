@@ -88,7 +88,7 @@
                         <el-select v-model="detail.status" placeholder="状态" clearable class="!w-[130px]">
                             <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
                         </el-select>
-                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="~" start-placeholder="开始日期" end-placeholder="结束日期" style="width:248px" />
+                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" class="!w-[340px] flex-none" />
                         <el-input v-model="detail.amount_min" placeholder="金额≥" class="!w-[110px]" />
                         <el-input v-model="detail.amount_max" placeholder="金额≤" class="!w-[110px]" />
                         <el-button type="primary" @click="loadDetail">查询</el-button>
@@ -134,7 +134,7 @@
                 <el-tab-pane label="结算记录" name="settlement">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                         <el-input v-model="settle.keyword" placeholder="结算单号/往来单位" clearable class="!w-[200px]" @keyup.enter="loadSettlement" />
-                        <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="~" start-placeholder="开始日期" end-placeholder="结束日期" style="width:248px" />
+                        <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" class="!w-[340px] flex-none" />
                         <el-button type="primary" @click="loadSettlement">查询</el-button>
                         <el-button @click="resetSettleFilter">重置</el-button>
                     </div>
@@ -156,8 +156,12 @@
                                 <span class="text-xs text-gray-400">{{ cashDirLabel(row.cash_direction) }}</span>
                             </template>
                         </el-table-column>
-                        <el-table-column label="方式" width="90" align="center">
-                            <template #default="{ row }"><el-tag size="small" effect="plain">{{ methodText(row.method) }}</el-tag></template>
+                        <el-table-column label="方式 / 户头" width="150" align="center">
+                            <template #default="{ row }">
+                                <el-tag size="small" :type="methodTagType(row.method)" effect="light">{{ methodText(row.method) }}</el-tag>
+                                <div v-if="row.method !== 'offset' && row.account_name" class="mt-0.5 text-xs text-gray-500">{{ row.account_name }}</div>
+                                <div v-else-if="row.method !== 'offset'" class="mt-0.5 text-xs text-gray-300">未记户头</div>
+                            </template>
                         </el-table-column>
                         <el-table-column label="已结清" width="90" align="center">
                             <template #default><el-tag type="success" size="small" effect="light">已结清</el-tag></template>

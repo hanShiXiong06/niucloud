@@ -37,7 +37,11 @@ class FinanceDict
             'sale'               => '销售',
             'sales'              => '销售',
             'outbound'           => '出库销售',
+            'erp_outbound'       => '出库销售',
             'peer_sale'          => '同行销售',
+            'erp_peer_sale'      => '同行销售',
+            'erp_sale'           => '销售',
+            'settlement'         => '结算',
             'manual'             => '手工',
         ];
     }

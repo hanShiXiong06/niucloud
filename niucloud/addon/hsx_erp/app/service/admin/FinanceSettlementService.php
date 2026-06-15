@@ -55,7 +55,19 @@ class FinanceSettlementService extends BaseAdminService
         // 注意：必须直接对 $page['data'] 取引用，不能用 `$page['data'] ?? []`(那会复制一份导致改动丢失)
         if (!empty($page['data']) && is_array($page['data'])) {
             $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($page['data'], 'counterparty_id'));
+            // 现金部分走了哪个资金账户(户头)：结算时记的资金流水 source_no=结算单号、biz_type=settlement，回查账户名
+            $acctMap = [];
+            $nos = array_values(array_filter(array_column($page['data'], 'settlement_no')));
+            if (!empty($nos)) {
+                $ledgers = \addon\hsx_erp\app\model\ErpCapitalLedger::where([
+                    ['site_id', '=', $this->site_id], ['biz_type', '=', 'settlement'],
+                ])->whereIn('source_no', $nos)->field('source_no,account_name')->select()->toArray();
+                foreach ($ledgers as $lg) {
+                    $acctMap[(string)$lg['source_no']] = (string)$lg['account_name'];
+                }
+            }
             foreach ($page['data'] as &$row) {
+                $row['account_name'] = (string)($acctMap[(string)($row['settlement_no'] ?? '')] ?? '');
                 $m = $memberMap[(int)($row['counterparty_id'] ?? 0)] ?? null;
                 if ($m) {
                     if ((string)($row['counterparty_name'] ?? '') === '') {
