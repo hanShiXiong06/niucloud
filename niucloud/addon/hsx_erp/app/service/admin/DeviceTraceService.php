@@ -78,7 +78,8 @@ class DeviceTraceService extends BaseAdminService
             }
             $bm = $buyerMap[(int)$a['counterparty_id']] ?? null;
             if ($bm && $items[$key]['buyer_name'] === '') {
-                $items[$key]['buyer_name'] = $bm['entity_name'] ?: $bm['name'];
+                $items[$key]['buyer_name'] = (string)$bm['name'];          // 对接人本人
+                $items[$key]['buyer_entity'] = (string)$bm['entity_name']; // 所属主体
             }
         }
         $rows = array_values($items);
@@ -124,12 +125,18 @@ class DeviceTraceService extends BaseAdminService
         usort($events, static fn($a, $b) => ((int)$a['time'] <=> (int)$b['time']));
 
         // 概览金额
-        $buyer = '';
+        $buyer = '';          // 对接人(交易人本人)
+        $buyerMobile = '';
+        $buyerEntity = '';    // 所属主体
         $buyerEntityId = 0;
         if ($asset) {
             $bm = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, [(int)$asset['counterparty_id']])[(int)$asset['counterparty_id']] ?? null;
-            $buyer = $bm ? ($bm['entity_name'] ?: $bm['name']) : '';
-            $buyerEntityId = $bm ? (int)$bm['entity_id'] : 0;
+            if ($bm) {
+                $buyer = (string)$bm['name'];
+                $buyerMobile = (string)$bm['mobile'];
+                $buyerEntity = (string)$bm['entity_name'];
+                $buyerEntityId = (int)$bm['entity_id'];
+            }
         }
         $recyclePrice = round((float)($recSummary['recycle_price'] ?? ($asset['purchase_cost'] ?? 0)), 2);
         $currentCost = round((float)($asset['current_cost'] ?? $recyclePrice), 2);
@@ -143,8 +150,11 @@ class DeviceTraceService extends BaseAdminService
             'asset_no'        => (string)($asset['asset_no'] ?? ''),
             'order_no'        => (string)($recSummary['order_no'] ?? ''),
             'inventory_status'=> (string)($asset['inventory_status'] ?? ''),
-            'customer_name'   => (string)($recSummary['customer_name'] ?? ''),   // 从谁收的
-            'buyer_name'      => $buyer,                                          // 卖给了谁
+            'customer_name'   => (string)($recSummary['customer_name'] ?? ''),   // 从谁收的(回收客户本人)
+            'customer_phone'  => (string)($recSummary['customer_phone'] ?? ''),
+            'buyer_name'      => $buyer,                                          // 卖给了谁(对接人本人)
+            'buyer_mobile'    => $buyerMobile,
+            'buyer_entity'    => $buyerEntity,                                   // 所属主体名
             'buyer_entity_id' => $buyerEntityId,                                 // 主体ID(可点开主体抽屉)
             'recycle_price'   => $recyclePrice,
             'refurbish_cost'  => round($cost['refurbish'], 2),

@@ -25,8 +25,11 @@
                 <el-table-column label="从谁收的" min-width="110" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.customer_name || '-' }}</template>
                 </el-table-column>
-                <el-table-column label="卖给了谁" min-width="110" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.buyer_name || '-' }}</template>
+                <el-table-column label="卖给了谁" min-width="120" show-overflow-tooltip>
+                    <template #default="{ row }">
+                        <div>{{ row.buyer_name || '-' }}</div>
+                        <div v-if="row.buyer_entity" class="text-xs text-gray-400">主体：{{ row.buyer_entity }}</div>
+                    </template>
                 </el-table-column>
                 <el-table-column label="回收价" width="100" align="right"><template #default="{ row }">{{ money(row.recycle_price) }}</template></el-table-column>
                 <el-table-column label="售价" width="100" align="right"><template #default="{ row }">{{ row.sale_price > 0 ? money(row.sale_price) : '-' }}</template></el-table-column>
@@ -54,10 +57,9 @@
                             <el-tag size="small" effect="light">{{ statusText(drawer.data.overview.inventory_status) }}</el-tag>
                         </div>
                         <div class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
-                            <span>从谁收的：<b>{{ drawer.data.overview.customer_name || '-' }}</b></span>
-                            <span>卖给了谁：
-                                <b v-if="drawer.data.overview.buyer_entity_id" class="cursor-pointer text-[var(--el-color-primary)]" @click="openEntity(drawer.data.overview.buyer_entity_id)">{{ drawer.data.overview.buyer_name || '-' }}</b>
-                                <b v-else>{{ drawer.data.overview.buyer_name || '-' }}</b>
+                            <span>从谁收的：<b>{{ drawer.data.overview.customer_name || '-' }}</b><span v-if="drawer.data.overview.customer_phone" class="text-gray-400"> · {{ drawer.data.overview.customer_phone }}</span></span>
+                            <span>卖给了谁：<b>{{ drawer.data.overview.buyer_name || '-' }}</b><span v-if="drawer.data.overview.buyer_mobile" class="text-gray-400"> · {{ drawer.data.overview.buyer_mobile }}</span>
+                                <span v-if="drawer.data.overview.buyer_entity" class="text-gray-500">（主体：<b class="cursor-pointer text-[var(--el-color-primary)]" @click="openEntity(drawer.data.overview.buyer_entity_id)">{{ drawer.data.overview.buyer_entity }}</b>）</span>
                             </span>
                             <span v-if="drawer.data.overview.order_no">回收单：{{ drawer.data.overview.order_no }}</span>
                         </div>
