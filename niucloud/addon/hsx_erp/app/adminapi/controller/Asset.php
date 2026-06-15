@@ -23,6 +23,7 @@ class Asset extends BaseAdminController
         $data = $this->request->params([
             ['keyword', ''],
             ['inventory_status', ''],
+            ['warehouse_id', 0],
             ['page', 1],
             ['limit', 20],
         ]);

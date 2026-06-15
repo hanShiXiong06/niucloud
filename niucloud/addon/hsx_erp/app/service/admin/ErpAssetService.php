@@ -67,7 +67,12 @@ class ErpAssetService extends BaseAdminService
             });
         }
         if (!empty($where['inventory_status'])) {
-            $query->where('inventory_status', '=', (string)$where['inventory_status']);
+            if ((string)$where['inventory_status'] === 'sold') {
+                // 已售/下架 = 已锁定(挂单) + 已出库
+                $query->whereIn('inventory_status', [ErpDict::INVENTORY_LOCKED, ErpDict::INVENTORY_OUTBOUND]);
+            } else {
+                $query->where('inventory_status', '=', (string)$where['inventory_status']);
+            }
         }
         // 可出库设备(在库/待定价/可售)，供出库选择用
         if (!empty($where['sellable'])) {
@@ -88,9 +93,20 @@ class ErpAssetService extends BaseAdminService
         if ($scope !== null) {
             $query->whereIn('location_id', $scope);
         }
+        // 合计(对当前筛选的全集, 非仅当前页)
+        $aggQuery = clone $query;
+        $totalCount = (clone $aggQuery)->count();
+        $totalCost = round((float)(clone $aggQuery)->sum('current_cost'), 2);
+        $totalSale = round((float)(clone $aggQuery)->sum('current_sale_price'), 2);
+
         $result = $this->pageQuery($query);
         $this->appendCounterparties($result['data']);
         $this->appendWarehouseNames($result['data']);
+        $result['summary'] = [
+            'count'      => (int)$totalCount,
+            'total_cost' => $totalCost,
+            'total_sale' => $totalSale,
+        ];
         return $result;
     }
 

@@ -19,6 +19,7 @@
                 <el-tab-pane label="整备中" name="refurbishing" />
                 <el-tab-pane :label="integrated ? '已交中台' : '待销售定价'" name="pending_pricing" />
                 <el-tab-pane label="可售" name="available_for_sale" />
+                <el-tab-pane label="已售/下架" name="sold" />
             </el-tabs>
 
             <el-form :inline="true" @submit.prevent>
@@ -31,11 +32,23 @@
                         @keyup.enter="handleSearch"
                     />
                 </el-form-item>
+                <el-form-item label="仓库">
+                    <el-select v-model="search.warehouse_id" placeholder="全部仓库" clearable filterable style="width: 180px" @change="handleSearch">
+                        <el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouse_name" :value="w.id" />
+                    </el-select>
+                </el-form-item>
                 <el-form-item>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
                     <el-button @click="handleReset">重置</el-button>
+                    <el-button @click="exportCsv" :disabled="!table.data.length">导出当前页</el-button>
                 </el-form-item>
             </el-form>
+
+            <div class="mb-3 flex flex-wrap gap-4 rounded-lg bg-gray-50 px-4 py-2 text-sm">
+                <span>共 <b class="text-[var(--el-color-primary)]">{{ summary.count }}</b> 台</span>
+                <span>成本合计 <b class="text-orange-600">{{ money(summary.total_cost) }}</b></span>
+                <span>参考售价合计 <b class="text-blue-600">{{ money(summary.total_sale) }}</b></span>
+            </div>
 
             <div class="mb-3 flex items-center justify-between">
                 <div class="text-sm text-gray-500">
@@ -484,7 +497,9 @@ import { saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const router = useRouter()
-const search = reactive({ keyword: '', inventory_status: '' })
+const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any })
+const summary = reactive({ count: 0, total_cost: 0, total_sale: 0 })
+const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 // 是否已接入中台(数据中台)：接入后拍照/定价交给中台，ERP 不再自行定价
 const integrated = ref(false)
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
@@ -670,6 +685,10 @@ const loadList = async () => {
         const res: any = await getErpAssetList({ ...search, page: table.page, limit: table.limit })
         table.data = res.data?.data || []
         table.total = Number(res.data?.total || 0)
+        const s = res.data?.summary || {}
+        summary.count = Number(s.count || 0)
+        summary.total_cost = Number(s.total_cost || 0)
+        summary.total_sale = Number(s.total_sale || 0)
     } finally {
         table.loading = false
     }
@@ -683,7 +702,24 @@ const handleSearch = () => {
 const handleReset = () => {
     search.keyword = ''
     search.inventory_status = ''
+    search.warehouse_id = ''
     handleSearch()
+}
+
+// 导出当前页为 CSV
+const exportCsv = () => {
+    const head = ['资产编号', 'IMEI', 'SN', '型号', '仓库', '成本', '参考售价', '状态']
+    const rows = table.data.map((r: any) => [
+        r.asset_no || '', r.imei || '', r.sn || '', r.model || '', r.warehouse_name || '',
+        Number(r.current_cost || 0).toFixed(2), Number(r.current_sale_price || 0).toFixed(2), statusName(r.inventory_status),
+    ])
+    const csv = [head, ...rows].map((line) => line.map((c: any) => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = '资产清单_' + Date.now() + '.csv'
+    a.click()
+    URL.revokeObjectURL(a.href)
 }
 
 const resetManualForm = () => {
