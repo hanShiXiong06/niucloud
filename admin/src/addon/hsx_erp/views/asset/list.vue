@@ -389,6 +389,12 @@
                 <el-form-item label="设备">
                     <span class="text-gray-600">{{ transfer.asset?.model || '-' }}（IMEI {{ transfer.asset?.imei || '-' }}）</span>
                 </el-form-item>
+                <el-form-item label="当前库位">
+                    <el-tag v-if="currentWarehouseName" type="info" effect="plain" size="small">
+                        {{ currentWarehouseName }}<template v-if="currentLocationName"> / {{ currentLocationName }}</template>
+                    </el-tag>
+                    <span v-else class="text-gray-400">未归位</span>
+                </el-form-item>
                 <el-form-item label="目标仓库" required>
                     <el-select v-model="transfer.to_warehouse_id" class="w-full" @change="transfer.to_location_id = 0">
                         <el-option v-for="item in warehouseOptions" :key="item.id" :label="item.warehouse_name" :value="item.id" />
@@ -498,6 +504,21 @@ const transfer = reactive<any>({
 const transferLocations = computed(() =>
     warehouseOptions.value.find((item: any) => Number(item.id) === Number(transfer.to_warehouse_id))?.locations || []
 )
+// 反显设备当前所在仓库/库位（名称从已加载的 warehouseOptions 解析，资产行只带 id）
+const currentWarehouseName = computed(() => {
+    const wid = Number(transfer.asset?.warehouse_id || 0)
+    if (!wid) return ''
+    const wh = warehouseOptions.value.find((w: any) => Number(w.id) === wid)
+    return wh?.warehouse_name || ('仓#' + wid)
+})
+const currentLocationName = computed(() => {
+    const wid = Number(transfer.asset?.warehouse_id || 0)
+    const lid = Number(transfer.asset?.location_id || 0)
+    if (!lid) return ''
+    const wh = warehouseOptions.value.find((w: any) => Number(w.id) === wid)
+    const loc = (wh?.locations || []).find((l: any) => Number(l.id) === lid)
+    return loc?.location_name || ('库位#' + lid)
+})
 const transferTargetType = computed(() =>
     String(warehouseOptions.value.find((item: any) => Number(item.id) === Number(transfer.to_warehouse_id))?.business_type || '')
 )
