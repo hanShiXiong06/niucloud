@@ -45,10 +45,21 @@ class FinancePayableService extends BaseAdminService
             'page'      => (int)($where['page'] ?? 1),
         ]);
         $data = $list->toArray();
+        $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($data['data'], 'counterparty_id'));
         foreach ($data['data'] as &$row) {
             $row['status_text']      = $statusMap[$row['status']] ?? $row['status'];
             $row['source_type_text'] = FinanceDict::sourceTypeText((string)($row['source_type'] ?? ''));
             $row['outstanding']      = round((float)$row['amount'] - (float)$row['settled_amount'], 2);
+            $m = $memberMap[(int)($row['counterparty_id'] ?? 0)] ?? null;
+            if ($m) {
+                if ((string)($row['counterparty_name'] ?? '') === '') {
+                    $row['counterparty_name'] = $m['name'];
+                }
+                $row['counterparty_mobile'] = $m['mobile'];
+            }
+            if ((string)($row['counterparty_name'] ?? '') === '') {
+                $row['counterparty_name'] = '往来#' . ($row['counterparty_id'] ?? 0);
+            }
         }
         unset($row);
         return $data;

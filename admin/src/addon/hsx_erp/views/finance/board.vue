@@ -47,8 +47,11 @@
                         <el-input v-model="boardKeyword" placeholder="按往来单位筛选" clearable class="!w-[220px]" />
                     </div>
                     <el-table :data="filteredBoard" v-loading="loading" size="large" empty-text="暂无未结往来">
-                        <el-table-column prop="counterparty_name" label="往来单位" min-width="160">
-                            <template #default="{ row }"><span class="font-medium">{{ row.counterparty_name || ('#' + row.counterparty_id) }}</span></template>
+                        <el-table-column label="往来单位" min-width="180">
+                            <template #default="{ row }">
+                                <span class="font-medium">{{ row.counterparty_name || ('#' + row.counterparty_id) }}</span>
+                                <span v-if="row.counterparty_mobile" class="ml-1 text-xs text-gray-400">{{ row.counterparty_mobile }}</span>
+                            </template>
                         </el-table-column>
                         <el-table-column label="应付(我欠)" width="140" align="right">
                             <template #default="{ row }"><span class="text-orange-600">{{ money(row.payable) }}</span></template>
@@ -91,7 +94,11 @@
                         <el-button @click="resetDetailFilter">重置</el-button>
                     </div>
                     <el-table :data="detail.list" v-loading="detail.loading" size="large" empty-text="暂无数据">
-                        <el-table-column prop="counterparty_name" label="往来单位" min-width="140" show-overflow-tooltip />
+                        <el-table-column label="往来单位" min-width="160" show-overflow-tooltip>
+                            <template #default="{ row }">
+                                {{ row.counterparty_name }}<span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column label="业务类型" width="100" align="center">
                             <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.source_type_text }}</el-tag></template>
                         </el-table-column>

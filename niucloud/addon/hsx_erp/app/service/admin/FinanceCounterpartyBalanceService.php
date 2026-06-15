@@ -17,6 +17,33 @@ use core\base\BaseAdminService;
 class FinanceCounterpartyBalanceService extends BaseAdminService
 {
     /**
+     * 按 counterparty_id(=会员member_id) 批量解析会员，精确到人。
+     * 返回 member_id => ['name'=>昵称/用户名, 'mobile'=>手机号]。会员表查不到的不返回。
+     */
+    public static function resolveMemberMap(int $siteId, array $counterpartyIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $counterpartyIds))));
+        if (empty($ids)) {
+            return [];
+        }
+        $map = [];
+        try {
+            $rows = \app\model\member\Member::where([['site_id', '=', $siteId]])
+                ->whereIn('member_id', $ids)
+                ->field('member_id,nickname,username,mobile')
+                ->select()->toArray();
+            foreach ($rows as $m) {
+                $map[(int)$m['member_id']] = [
+                    'name'   => (string)($m['nickname'] ?: $m['username'] ?: ''),
+                    'mobile' => (string)($m['mobile'] ?? ''),
+                ];
+            }
+        } catch (\Throwable $e) {
+        }
+        return $map;
+    }
+
+    /**
      * 财务汇总：应收/应付未结合计 + 净额 + 各资金账户余额(+总余额)。供财务中心顶部卡片。
      */
     public function getSummary(): array
@@ -84,6 +111,22 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
             $row['net_direction'] = $row['net'] > 0 ? 'pay' : ($row['net'] < 0 ? 'collect' : 'none');
             $rows[] = $row;
         }
+        // 关联会员表，精确到人(名字+手机)；名字为空时回填会员名，仍无则用 往来#ID
+        $memberMap = self::resolveMemberMap($this->site_id, array_column($rows, 'counterparty_id'));
+        foreach ($rows as &$row) {
+            $m = $memberMap[(int)$row['counterparty_id']] ?? null;
+            if ($m) {
+                if ((string)($row['counterparty_name'] ?? '') === '') {
+                    $row['counterparty_name'] = $m['name'];
+                }
+                $row['counterparty_mobile'] = $m['mobile'];
+            }
+            if ((string)($row['counterparty_name'] ?? '') === '') {
+                $row['counterparty_name'] = '往来#' . $row['counterparty_id'];
+            }
+        }
+        unset($row);
+
         // 可折账多的排前面, 方便优先处理
         usort($rows, static fn($a, $b) => $b['offsetable'] <=> $a['offsetable']);
         return $rows;
