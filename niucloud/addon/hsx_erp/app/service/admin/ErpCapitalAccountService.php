@@ -193,20 +193,23 @@ class ErpCapitalAccountService extends BaseAdminService
         }
         $page = $this->pageQuery($query);
         $map = $this->bizTypeMap();
-        // 对手方精确到人：counterparty_id(=会员member_id)关联 member 表回填姓名+手机
-        $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($page['data'] ?? [], 'counterparty_id'));
-        foreach (($page['data'] ?? []) as &$row) {
-            $bt = (string)($row['biz_type'] ?? '');
-            $row['biz_type_text'] = $map[$bt] ?? ($bt !== '' ? $bt : '其它');
-            $m = $memberMap[(int)($row['counterparty_id'] ?? 0)] ?? null;
-            if ($m) {
-                if ((string)($row['counterparty_name'] ?? '') === '') {
-                    $row['counterparty_name'] = $m['name'];
+        // 注意：直接对 $page['data'] 取引用，不能用 `?? []`(会复制导致回填丢失)
+        if (!empty($page['data']) && is_array($page['data'])) {
+            // 对手方精确到人：counterparty_id(=会员member_id)关联 member 表回填姓名+手机
+            $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($page['data'], 'counterparty_id'));
+            foreach ($page['data'] as &$row) {
+                $bt = (string)($row['biz_type'] ?? '');
+                $row['biz_type_text'] = $map[$bt] ?? ($bt !== '' ? $bt : '其它');
+                $m = $memberMap[(int)($row['counterparty_id'] ?? 0)] ?? null;
+                if ($m) {
+                    if ((string)($row['counterparty_name'] ?? '') === '') {
+                        $row['counterparty_name'] = $m['name'];
+                    }
+                    $row['counterparty_mobile'] = $m['mobile'];
                 }
-                $row['counterparty_mobile'] = $m['mobile'];
             }
+            unset($row);
         }
-        unset($row);
         return $page;
     }
 }
