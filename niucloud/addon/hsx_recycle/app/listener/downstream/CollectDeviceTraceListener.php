@@ -8,6 +8,8 @@ use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\order\RecycleDevicePayment;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\model\order\RecycleOrderLog;
+use app\model\member\Member;
 
 /**
  * 设备全链路追溯 — 回收段数据采集(应答 ERP 的 CollectRecycleDeviceTrace 事件)。
@@ -89,30 +91,54 @@ class CollectDeviceTraceListener
         $d = $device->toArray();
         $ord = $this->orderMap($siteId, [(int)$d['order_id']])[(int)$d['order_id']] ?? [];
 
+        $orderNo = (string)($ord['order_no'] ?? '');
         $events = [];
-        // 设备操作日志
-        $logs = RecycleDeviceLog::where([['site_id', '=', $siteId], ['device_id', '=', $deviceId]])->order('id asc')->select()->toArray();
-        foreach ($logs as $lg) {
+        // 设备操作日志(跳过打款/折账, 由打款记录覆盖, 避免重复+脏时间)
+        foreach (RecycleDeviceLog::where([['site_id', '=', $siteId], ['device_id', '=', $deviceId]])->order('id asc')->select()->toArray() as $lg) {
+            $op = (string)($lg['operation_type'] ?? '');
+            $ac = (string)($lg['action'] ?? '');
+            if (in_array($op, ['device_payment', 'device_offset_settle'], true) || in_array($ac, ['device_payment', 'device_offset_settle'], true)) {
+                continue;
+            }
             $events[] = [
                 'time'          => (int)$lg['create_at'],
                 'stage'         => '回收',
-                'title'         => $this->logTitle((string)$lg['action'], (string)$lg['operation_type']),
+                'title'         => RecycleOrderDict::getDeviceLogOperationName($lg),
                 'detail'        => (string)$lg['remark'],
                 'operator_name' => (string)$lg['operator_name'],
                 'operator_uid'  => (int)$lg['operator_id'],
                 'amount'        => 0,
-                'no'            => (string)($ord['order_no'] ?? ''),
-                'key'           => $this->isKeyAction((string)$lg['action']),
+                'no'            => $orderNo,
+                'key'           => true,
             ];
         }
-        // 打款/折账记录
-        $pays = RecycleDevicePayment::where([['site_id', '=', $siteId], ['device_id', '=', $deviceId]])->order('id asc')->select()->toArray();
-        foreach ($pays as $pay) {
+        // 订单操作日志(签收/质检/定价/确认 多记在订单层)
+        if ($orderId > 0) {
+            foreach (RecycleOrderLog::where([['site_id', '=', $siteId], ['order_id', '=', $orderId]])->order('id asc')->select()->toArray() as $lg) {
+                $title = $this->orderActionName((string)($lg['action'] ?? ''));
+                if ($title === '') {
+                    continue;
+                }
+                $events[] = [
+                    'time'          => (int)$lg['create_at'],
+                    'stage'         => '回收',
+                    'title'         => $title,
+                    'detail'        => (string)$lg['remark'],
+                    'operator_name' => (string)$lg['operator_name'],
+                    'operator_uid'  => (int)$lg['operator_id'],
+                    'amount'        => 0,
+                    'no'            => $orderNo,
+                    'key'           => true,
+                ];
+            }
+        }
+        // 打款/折账记录(时间准确)
+        foreach (RecycleDevicePayment::where([['site_id', '=', $siteId], ['device_id', '=', $deviceId]])->order('id asc')->select()->toArray() as $pay) {
             $isOffset = (string)$pay['pay_type'] === '折账';
             $events[] = [
                 'time'          => (int)$pay['pay_time'],
                 'stage'         => '回收',
-                'title'         => $isOffset ? '折账结清' : '打款',
+                'title'         => $isOffset ? '折账结清(回收应付)' : '打款',
                 'detail'        => ($isOffset ? '折账核销 ' : '打款方式:' . $pay['pay_type'] . ' ') . ($pay['pay_remark'] ?? ''),
                 'operator_name' => (string)($pay['pay_name'] ?? ''),
                 'operator_uid'  => (int)($pay['pay_uid'] ?? 0),
@@ -122,9 +148,20 @@ class CollectDeviceTraceListener
             ];
         }
 
+        // 回收客户(从谁收的): 订单 customer_name 空则取会员
+        $customer = (string)($ord['customer_name'] ?? '');
+        if ($customer === '' && !empty($ord['member_id'])) {
+            try {
+                $m = Member::where([['site_id', '=', $siteId], ['member_id', '=', (int)$ord['member_id']]])->field('nickname,username,mobile')->findOrEmpty();
+                if (!$m->isEmpty()) {
+                    $customer = (string)($m->nickname ?: $m->username ?: $m->mobile ?: '');
+                }
+            } catch (\Throwable $e) {
+            }
+        }
         $summary = [
-            'order_no'       => (string)($ord['order_no'] ?? ''),
-            'customer_name'  => (string)($ord['customer_name'] ?? ''),
+            'order_no'       => $orderNo,
+            'customer_name'  => $customer,
             'customer_phone' => (string)($ord['customer_phone'] ?? ''),
             'recycle_price'  => round((float)($d['final_price'] ?: $d['initial_price'] ?: 0), 2),
             'pay_status'     => (int)$d['pay_status'],
@@ -145,22 +182,23 @@ class CollectDeviceTraceListener
         return array_column($rows, null, 'id');
     }
 
-    private function logTitle(string $action, string $opType): string
+    /** 订单层日志 action → 中文(空=不展示, 避免噪音) */
+    private function orderActionName(string $action): string
     {
         $map = [
-            'device_payment'        => '打款',
-            'device_offset_settle'  => '折账结清',
-            'device_check'          => '质检',
-            'device_price'          => '定价',
-            'device_confirm'        => '定价确认',
-            'device_return'         => '退回',
-            'device_recycle'        => '回收入库',
+            'sign'             => '订单签收',
+            'signed'           => '订单签收',
+            'start_check'      => '开始质检',
+            'complete_check'   => '质检完成',
+            'check'            => '质检',
+            'price'            => '定价',
+            'confirm_price'    => '价格确认',
+            'confirm'          => '用户确认',
+            'confirm_payment'  => '确认打款',
+            'payment'          => '打款',
+            'order_cancel_auto_return' => '取消·自动退回',
+            'return'           => '退回',
         ];
-        return $map[$action] ?? ($action !== '' ? $action : ($opType !== '' ? $opType : '操作'));
-    }
-
-    private function isKeyAction(string $action): bool
-    {
-        return in_array($action, ['device_payment', 'device_offset_settle', 'device_confirm', 'device_price', 'device_recycle', 'device_return'], true);
+        return $map[$action] ?? '';
     }
 }

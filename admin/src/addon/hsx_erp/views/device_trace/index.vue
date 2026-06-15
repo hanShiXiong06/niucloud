@@ -55,7 +55,10 @@
                         </div>
                         <div class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
                             <span>从谁收的：<b>{{ drawer.data.overview.customer_name || '-' }}</b></span>
-                            <span>卖给了谁：<b>{{ drawer.data.overview.buyer_name || '-' }}</b></span>
+                            <span>卖给了谁：
+                                <b v-if="drawer.data.overview.buyer_entity_id" class="cursor-pointer text-[var(--el-color-primary)]" @click="openEntity(drawer.data.overview.buyer_entity_id)">{{ drawer.data.overview.buyer_name || '-' }}</b>
+                                <b v-else>{{ drawer.data.overview.buyer_name || '-' }}</b>
+                            </span>
                             <span v-if="drawer.data.overview.order_no">回收单：{{ drawer.data.overview.order_no }}</span>
                         </div>
                         <div class="mt-3 grid grid-cols-4 gap-3 text-center">
@@ -94,12 +97,16 @@
                 </template>
             </div>
         </el-drawer>
+
+        <!-- 主体抽屉(点"卖给了谁"打开) -->
+        <entity-drawer v-model="entityDrawer.visible" :entity-id="entityDrawer.id" />
     </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 import { searchDeviceTrace, getDeviceTraceDetail } from '@/addon/hsx_erp/api/device_trace'
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
@@ -137,6 +144,12 @@ const visibleEvents = computed(() => {
     const evs = drawer.data?.events || []
     return showDetail.value ? evs : evs.filter((e: any) => e.key)
 })
+const entityDrawer = reactive<any>({ visible: false, id: 0 })
+function openEntity(id: number) {
+    if (!id) return
+    entityDrawer.id = id
+    entityDrawer.visible = true
+}
 async function openDetail(row: any) {
     drawer.visible = true
     drawer.loading = true
