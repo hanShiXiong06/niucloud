@@ -27,3 +27,15 @@ export function getFinancePayableList(params: Record<string, any>) {
 export function getFinanceReceivableList(params: Record<string, any>) {
     return request.get('erp/finance/receivable/lists', { params })
 }
+// 财务汇总(应收/应付净额 + 各资金账户余额)
+export function getFinanceSummary() {
+    return request.get('erp/finance/summary')
+}
+// 结算记录(已结清历史)
+export function getFinanceSettlementList(params: Record<string, any>) {
+    return request.get('erp/finance/settlement/lists', { params })
+}
+// 经营支出快捷记账
+export function recordFinanceExpense(data: Record<string, any>) {
+    return request.post('erp/finance/expense', data)
+}
