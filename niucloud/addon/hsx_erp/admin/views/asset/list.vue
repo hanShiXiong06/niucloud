@@ -539,8 +539,8 @@ const transferTreeData = computed(() => {
     const fromConsign = transferFromType.value === 'consignment'
     return warehouseOptions.value.map((w: any) => {
         const t = String(w.business_type || '')
-        // 代卖仓不接受调入；代卖仓设备只能调去二手机仓
-        const blocked = t === 'consignment' || (fromConsign && t !== 'mall')
+        // 目标仓未开启「允许调入」则禁用；代卖仓设备只能调去二手机仓
+        const blocked = Number(w.allow_inbound ?? 1) !== 1 || (fromConsign && t !== 'mall')
         const tl = warehouseTypeLabel(t)
         return {
             value: 'w:' + w.id,
@@ -554,6 +554,9 @@ const transferTreeData = computed(() => {
         }
     })
 })
+const transferToWarehouse = computed(() =>
+    warehouseOptions.value.find((w: any) => Number(w.id) === Number(transfer.to_warehouse_id))
+)
 const onTargetChange = (val: string) => {
     if (!val) { transfer.to_warehouse_id = 0; transfer.to_location_id = 0; return }
     if (val.startsWith('w:')) {
@@ -570,16 +573,17 @@ const transferTargetType = computed(() =>
 )
 // 代卖仓锁死规则 → 禁用确认并提示
 const transferBlocked = computed(() => {
-    const to = transferTargetType.value
-    if (!to) return false
-    if (to === 'consignment') return true                               // 代卖仓不接受调入
-    if (transferFromType.value === 'consignment' && to !== 'mall') return true  // 代卖仓设备只能去二手机仓
+    const wh = transferToWarehouse.value
+    if (!wh) return false
+    if (Number(wh.allow_inbound ?? 1) !== 1) return true                                        // 目标仓未开启允许调入
+    if (transferFromType.value === 'consignment' && String(wh.business_type || '') !== 'mall') return true  // 代卖仓设备只能去二手机仓
     return false
 })
 const transferBlockedMsg = computed(() => {
-    const to = transferTargetType.value
-    if (to === 'consignment') return '代卖仓不接受调入，请改选其它目标仓。'
-    if (transferFromType.value === 'consignment' && to && to !== 'mall') return '代卖仓设备只能调拨到二手机仓（买断转回收），不能调往其它仓。'
+    const wh = transferToWarehouse.value
+    if (!wh) return ''
+    if (Number(wh.allow_inbound ?? 1) !== 1) return '目标仓库未开启「允许调入」，请在仓库管理中开启，或改选其它目标仓。'
+    if (transferFromType.value === 'consignment' && String(wh.business_type || '') !== 'mall') return '代卖仓设备只能调拨到二手机仓（买断转回收），不能调往其它仓。'
     return ''
 })
 // 代卖设备调进二手机仓(商城)时，需要选择"上架代卖 or 我方买断"

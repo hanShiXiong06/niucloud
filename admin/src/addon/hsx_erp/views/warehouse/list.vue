@@ -85,10 +85,14 @@
                 <el-form-item label="仓库名称" required><el-input v-model.trim="warehouseDialog.form.warehouse_name" /></el-form-item>
                 <el-form-item label="仓库编码"><el-input v-model.trim="warehouseDialog.form.warehouse_code" /></el-form-item>
                 <el-form-item label="业务类型" required>
-                    <el-select v-model="warehouseDialog.form.business_type" class="w-full">
+                    <el-select v-model="warehouseDialog.form.business_type" class="w-full" @change="onBizTypeChange">
                         <el-option v-for="t in businessTypeOptions" :key="t.value" :label="t.label" :value="t.value" />
                     </el-select>
                     <div class="text-xs text-gray-400 mt-1">决定入此仓设备的销售流向：商城走拍照定价、同行走同行出货、报废不进销售、暂存挂起。</div>
+                </el-form-item>
+                <el-form-item label="允许调入">
+                    <el-switch v-model="warehouseDialog.form.allow_inbound" :active-value="1" :inactive-value="0" />
+                    <div class="text-xs text-gray-400 mt-1">关闭后本仓不接受调拨/设库位调入（如代卖仓只由回收代卖入库进货，不允许从其它仓调入）。</div>
                 </el-form-item>
                 <el-form-item label="状态"><el-switch v-model="warehouseDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="默认入库仓"><el-switch v-model="warehouseDialog.form.is_default" :active-value="1" :inactive-value="0" /></el-form-item>
@@ -132,8 +136,12 @@ const loading = ref(false)
 const warehouses = ref<any[]>([])
 const warehouseDialog = reactive<any>({
     visible: false, loading: false,
-    form: { id: 0, warehouse_name: '', warehouse_code: '', business_type: 'mall', status: 1, is_default: 0, remark: '' }
+    form: { id: 0, warehouse_name: '', warehouse_code: '', business_type: 'mall', allow_inbound: 1, status: 1, is_default: 0, remark: '' }
 })
+// 切换业务类型时给「允许调入」一个合理默认：代卖仓默认关、其它默认开（用户仍可手动改）
+const onBizTypeChange = (v: string) => {
+    warehouseDialog.form.allow_inbound = v === 'consignment' ? 0 : 1
+}
 const businessTypeOptions = [
     { value: 'mall', label: '商城销售' },
     { value: 'peer', label: '同行出货' },
@@ -161,6 +169,7 @@ const openWarehouse = (row: any = {}) => {
     Object.assign(warehouseDialog.form, {
         id: Number(row.id || 0), warehouse_name: row.warehouse_name || '',
         warehouse_code: row.warehouse_code || '', business_type: row.business_type || 'mall',
+        allow_inbound: row.id ? (row.allow_inbound ?? 1) : 1,
         status: row.status ?? 1, is_default: row.is_default ?? 0, remark: row.remark || ''
     })
     warehouseDialog.visible = true

@@ -260,13 +260,15 @@ class ErpOutboundService extends BaseAdminService
             $buyoutMap[(int)($row['asset_id'] ?? 0)] = round((float)($row['amount'] ?? 0), 2);
         }
 
-        // 目标仓 / 来源仓 业务类型
-        $toType = (string)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $toWarehouseId]])->value('business_type') ?: '');
+        // 目标仓 业务类型 + 是否允许调入（allow_inbound 由仓库管理配置）
+        $toWarehouse = ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $toWarehouseId]])->findOrEmpty();
+        $toType = (string)($toWarehouse->business_type ?? '');
+        $toAllowInbound = $toWarehouse->isEmpty() ? 1 : (int)($toWarehouse->allow_inbound ?? 1);
         $now = time();
         $moved = 0;
         $linkages = ['photo' => [], 'delist' => [], 'payable' => [], 'consign_to_recycle' => []]; // 提交后再发事件
 
-        Db::transaction(function () use ($assetIds, $toWarehouseId, $toLocationId, $toType, $remark, $consignAction, $buyoutMap, $now, &$moved, &$linkages) {
+        Db::transaction(function () use ($assetIds, $toWarehouseId, $toLocationId, $toType, $toAllowInbound, $remark, $consignAction, $buyoutMap, $now, &$moved, &$linkages) {
             $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->lock(true)->select();
             foreach ($assets as $asset) {
                 if ((string)$asset->inventory_status === ErpDict::INVENTORY_OUTBOUND) {
@@ -275,11 +277,11 @@ class ErpOutboundService extends BaseAdminService
                 $fromWarehouseId = (int)$asset->warehouse_id;
                 $fromType = (string)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $fromWarehouseId]])->value('business_type') ?: '');
 
-                // 仓库类型调拨规则（代卖仓锁死）：
-                //  1) 代卖仓不接受任何调入（代卖设备只能由「回收代卖入库 / 手工建档」进，不能从其它仓调进来）；
+                // 调拨规则：
+                //  1) 目标仓「允许调入」开关关闭则禁止调入（仓库管理里配置；代卖仓默认关）；
                 //  2) 代卖仓里的设备只能调去二手机仓（买断转回收），不能调往同行仓/暂存仓等其它仓。
-                if ($toType === ErpDict::SALE_DESTINATION_CONSIGNMENT) {
-                    throw new CommonException('代卖仓不接受调入：设备[' . $asset->asset_no . ']不能调入代卖仓');
+                if ($toAllowInbound !== 1) {
+                    throw new CommonException('目标仓库不允许调入：设备[' . $asset->asset_no . ']不能调入该仓库（可在仓库管理中开启「允许调入」）');
                 }
                 if ($fromType === ErpDict::SALE_DESTINATION_CONSIGNMENT
                     && $toType !== ErpDict::SALE_DESTINATION_MALL) {

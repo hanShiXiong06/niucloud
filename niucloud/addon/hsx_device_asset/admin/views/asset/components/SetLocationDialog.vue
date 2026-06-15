@@ -27,7 +27,7 @@
                     class="sl-cascader"
                     clearable
                 />
-                <div class="sl-tip">自有设备不能放入代卖仓（与调拨规则一致）；二手机仓/同行仓/暂存仓均可。归位后负责该库位的员工即可在移动端「我的待办」看到这台设备。</div>
+                <div class="sl-tip">仅未开启「允许调入」的仓库被禁用（与调拨规则一致，可在 ERP 仓库管理里配置）。归位后负责该库位的员工即可在移动端「我的待办」看到这台设备。</div>
             </template>
         </div>
         <template #footer>
@@ -63,10 +63,10 @@ const targetValue = ref<string>('')
 const warehouseTypeLabel = (t?: string) =>
     (({ mall: '二手机仓', peer: '同行仓', consignment: '代卖仓', hold: '暂存仓' }) as Record<string, string>)[String(t || '')] || ''
 
-// 树形：仓库为父、库位为子。与调拨一致：自有设备(中台设备)不能进代卖仓，仅禁用代卖仓；二手机仓/同行仓/暂存仓放行。
+// 树形：仓库为父、库位为子。与调拨一致：目标仓未开启「允许调入」则禁用(仓库管理里配置)。
 const treeData = computed(() => warehouses.value.map((w) => {
     const t = String(w.business_type || '')
-    const blocked = t === 'consignment'
+    const blocked = Number((w as any).allow_inbound ?? 1) !== 1
     const tl = warehouseTypeLabel(t)
     return {
         value: 'w:' + w.id,

@@ -65,8 +65,12 @@ class ErpWarehouseService extends BaseAdminService
         $businessType = in_array((string)($data['business_type'] ?? ''), $allowedTypes, true)
             ? (string)$data['business_type']
             : 'mall';
+        // 允许调入：未显式传时，代卖仓默认不允许、其它仓默认允许
+        $allowInbound = array_key_exists('allow_inbound', $data)
+            ? ((int)$data['allow_inbound'] === 1 ? 1 : 0)
+            : ($businessType === 'consignment' ? 0 : 1);
         $warehouseId = 0;
-        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $businessType, &$warehouseId) {
+        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $businessType, $allowInbound, &$warehouseId) {
             if ($isDefault === 1) {
                 ErpWarehouse::where([['site_id', '=', $this->site_id]])->update([
                     'is_default' => 0,
@@ -77,6 +81,7 @@ class ErpWarehouseService extends BaseAdminService
                 'warehouse_name' => $name,
                 'warehouse_code' => trim((string)($data['warehouse_code'] ?? '')),
                 'business_type' => $businessType,
+                'allow_inbound' => $allowInbound,
                 'status' => (int)($data['status'] ?? 1) === 1 ? 1 : 0,
                 'is_default' => $isDefault,
                 'sort' => (int)($data['sort'] ?? 0),

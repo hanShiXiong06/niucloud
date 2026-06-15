@@ -754,9 +754,9 @@ class DeviceAssetService extends BaseAdminService
             throw new CommonException('请选择库位');
         }
         $warehouseId = (int)($data['warehouse_id'] ?? 0);
-        // 与调拨一致：自有设备(中台设备)不能放入代卖仓；二手机仓/同行仓/暂存仓均可。
-        // ERP 未装/查不到类型时不拦截（兜底放行）。
-        $this->assertNotConsignmentWarehouse($warehouseId);
+        // 与调拨一致：目标仓「允许调入」开关关闭则禁止放入（仓库管理里配置）。
+        // ERP 未装/查不到时不拦截（兜底放行）。
+        $this->assertWarehouseAllowInbound($warehouseId);
 
         $payload = [
             'warehouse_id' => $warehouseId,
@@ -772,10 +772,10 @@ class DeviceAssetService extends BaseAdminService
     }
 
     /**
-     * 校验目标仓库不是代卖仓（自有设备不能放入代卖仓，与调拨一致）。
-     * 二手机仓/同行仓/暂存仓均放行；ERP 未装或查不到类型则放行（兜底）。
+     * 校验目标仓库「允许调入」（与调拨一致，由仓库管理配置）。
+     * allow_inbound=0 拒绝；ERP 未装或查不到则放行（兜底）。
      */
-    private function assertNotConsignmentWarehouse(int $warehouseId): void
+    private function assertWarehouseAllowInbound(int $warehouseId): void
     {
         if ($warehouseId <= 0) {
             return;
@@ -785,12 +785,12 @@ class DeviceAssetService extends BaseAdminService
             return;
         }
         try {
-            $type = (string)$cls::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId]])->value('business_type');
+            $row = $cls::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId]])->findOrEmpty();
         } catch (\Throwable $e) {
             return;
         }
-        if ($type === 'consignment') {
-            throw new CommonException('自有设备不能放入代卖仓');
+        if (!$row->isEmpty() && (int)($row->allow_inbound ?? 1) !== 1) {
+            throw new CommonException('该仓库不允许调入（可在仓库管理中开启「允许调入」）');
         }
     }
 
