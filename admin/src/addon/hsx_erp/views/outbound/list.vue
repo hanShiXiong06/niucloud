@@ -67,7 +67,7 @@
 
         <!-- 新建出库 -->
         <el-dialog v-model="createVisible" title="新建出库" width="900px" @closed="resetCreate">
-            <el-form :model="form" label-width="90px">
+            <el-form :model="form" label-width="110px">
                 <el-form-item label="出库类型">
                     <el-radio-group v-model="form.outbound_type" @change="onTypeChange">
                         <el-radio label="peer_sale">同行销售</el-radio>
@@ -94,17 +94,17 @@
                 <el-form-item label="选择设备">
                     <div class="w-full">
                         <div class="mb-2 flex items-center gap-2">
-                            <el-select v-model="assetWarehouseId" placeholder="按仓库筛选" clearable class="!w-[200px]" @change="loadAvailableAssets">
+                            <el-select v-model="assetWarehouseId" placeholder="按仓库筛选" clearable class="!w-[200px]" @change="reloadAssets">
                                 <el-option v-for="w in warehouseOptions" :key="w.id"
                                     :label="w.warehouse_name + '（' + businessTypeLabel(w.business_type) + '）'" :value="w.id" />
                             </el-select>
-                            <el-input v-model.trim="assetKeyword" placeholder="资产号/IMEI/型号" clearable class="!w-[200px]" @keyup.enter="loadAvailableAssets" />
-                            <el-button @click="loadAvailableAssets" :loading="assetLoading">筛选</el-button>
+                            <el-input v-model.trim="assetKeyword" placeholder="资产号/IMEI/型号" clearable class="!w-[200px]" @keyup.enter="reloadAssets" />
+                            <el-button @click="reloadAssets" :loading="assetLoading">筛选</el-button>
                             <span class="text-xs text-gray-400">先按仓库性质筛选，再勾选要出库的设备</span>
                         </div>
-                        <el-table :data="availableAssets" size="small" max-height="300" @selection-change="onAssetSelect"
+                        <el-table :data="availableAssets" size="small" max-height="300" row-key="id" @selection-change="onAssetSelect"
                             v-loading="assetLoading" empty-text="无可出库设备（试试切换仓库）">
-                            <el-table-column type="selection" width="40" />
+                            <el-table-column type="selection" width="40" reserve-selection />
                             <el-table-column prop="asset_no" label="资产号" min-width="120" show-overflow-tooltip />
                             <el-table-column label="所在仓库" min-width="130" show-overflow-tooltip>
                                 <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
@@ -123,7 +123,10 @@
                                 </template>
                             </el-table-column>
                         </el-table>
-                        <div class="mt-1 text-xs text-gray-400">已选 {{ selectedAssets.length }} 台</div>
+                        <div class="mt-1 flex items-center justify-between">
+                            <span class="text-xs text-gray-400">已选 {{ selectedAssets.length }} 台（勾选跨页保留）</span>
+                            <el-pagination layout="total, prev, pager, next" :total="assetTotal" :page-size="assetLimit" :current-page="assetPage" @current-change="onAssetPage" />
+                        </div>
                     </div>
                 </el-form-item>
                 <el-form-item label="备注">
@@ -233,7 +236,7 @@ async function loadList() {
 // 新建出库
 const createVisible = ref(false)
 const submitting = ref(false)
-const form = reactive({ outbound_type: 'peer_sale', counterparty_id: 0, counterparty_name: '', settle_mode: 'now', remark: '' })
+const form = reactive<any>({ outbound_type: 'peer_sale', counterparty_id: undefined, counterparty_name: '', settle_mode: 'now', remark: '' })
 const contacts = ref<any[]>([])
 const cpLoading = ref(false)
 const warehouseOptions = ref<any[]>([])
@@ -244,6 +247,9 @@ const businessTypeLabel = (v: string) => businessTypeMap[v] || '商城'
 const warehouseName = (id: number) => warehouseOptions.value.find((w: any) => Number(w.id) === Number(id))?.warehouse_name || '-'
 const availableAssets = ref<any[]>([])
 const assetLoading = ref(false)
+const assetPage = ref(1)
+const assetTotal = ref(0)
+const assetLimit = 100
 const selectedAssets = ref<any[]>([])
 const priceInput = reactive<Record<number, number>>({})
 const consignorInput = reactive<Record<number, number>>({})
@@ -274,14 +280,24 @@ async function searchContacts(keyword: string) {
 async function loadAvailableAssets() {
     assetLoading.value = true
     try {
-        const params: any = { sellable: 1, page: 1, limit: 200 }
+        const params: any = { sellable: 1, page: assetPage.value, limit: assetLimit }
         if (assetWarehouseId.value) params.warehouse_id = assetWarehouseId.value
         if (assetKeyword.value) params.keyword = assetKeyword.value
         const res: any = await getErpAssetList(params)
         availableAssets.value = res.data?.data || []
+        assetTotal.value = res.data?.total || 0
     } finally {
         assetLoading.value = false
     }
+}
+// 改筛选条件回到第1页(勾选用 reserve-selection 跨页保留)
+function reloadAssets() {
+    assetPage.value = 1
+    loadAvailableAssets()
+}
+function onAssetPage(p: number) {
+    assetPage.value = p
+    loadAvailableAssets()
 }
 function onTypeChange() {
     if (form.outbound_type !== 'peer_sale') form.settle_mode = 'none'
@@ -323,6 +339,10 @@ function onAssetSelect(rows: any[]) {
 }
 async function doCreate() {
     if (selectedAssets.value.length === 0) return
+    if (form.outbound_type === 'peer_sale' && !form.counterparty_id) {
+        ElMessage.warning('请选择对接人/交易人(或点"快速建档")')
+        return
+    }
     const items = selectedAssets.value.map((a) => ({
         asset_id: a.id,
         sale_price: showPrice.value ? (priceInput[a.id] || 0) : 0,
@@ -351,13 +371,14 @@ async function doCreate() {
 }
 function resetCreate() {
     form.outbound_type = 'peer_sale'
-    form.counterparty_id = 0
+    form.counterparty_id = undefined
     form.counterparty_name = ''
     form.settle_mode = 'now'
     form.remark = ''
     selectedAssets.value = []
     assetWarehouseId.value = ''
     assetKeyword.value = ''
+    assetPage.value = 1
     Object.keys(priceInput).forEach((k) => delete priceInput[Number(k)])
     Object.keys(consignorInput).forEach((k) => delete consignorInput[Number(k)])
 }
