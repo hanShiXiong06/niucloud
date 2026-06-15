@@ -49,16 +49,19 @@ class PaymentHandler extends BaseFlowHandler
             throw new CommonException('订单金额为0，无法打款');
         }
 
-        // 2. 记录打款信息
+        // 2. 记录打款信息（统一把可能为数组的字段转成字符串，避免存字符串列时 Array to string conversion）
         $requestPaymentInfo = is_array($data['payment_info'] ?? null) ? $data['payment_info'] : [];
+        $toStr = static function ($v): string {
+            return is_array($v) ? implode(',', array_map('strval', $v)) : (string)$v;
+        };
         $paymentInfo = [
             'pay_time' => time(),
             'pay_account' => $totalAmount,
-            'pay_type' => $requestPaymentInfo['pay_type'] ?? $data['pay_type'] ?? '',
-            'account' => $requestPaymentInfo['account'] ?? $data['account'] ?? '',
-            'payment_images' => $requestPaymentInfo['payment_images'] ?? $data['payment_images'] ?? '',
+            'pay_type' => $toStr($requestPaymentInfo['pay_type'] ?? $data['pay_type'] ?? ''),
+            'account' => $toStr($requestPaymentInfo['account'] ?? $data['account'] ?? ''),
+            'payment_images' => $toStr($requestPaymentInfo['payment_images'] ?? $data['payment_images'] ?? ''),
             'operator_id' => $this->getOperatorId($context),
-            'remark' => $requestPaymentInfo['remark'] ?? $data['remark'] ?? ''
+            'remark' => $toStr($requestPaymentInfo['remark'] ?? $data['remark'] ?? '')
         ];
 
         // 3. 更新订单打款信息
