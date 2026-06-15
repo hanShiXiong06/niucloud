@@ -175,7 +175,7 @@ class DeviceAssetService extends BaseAdminService
      * 把库位为空、但有 ERP 资产关联(ext_json.erp_asset_id)的资产，
      * 从 ERP 资产 + 仓库/库位表批量解析名称并回填到中台资产(持久化一次，修存量0数据)。
      * 故障隔离：ERP 不可用/异常时静默跳过，不影响列表返回。
-     * @param array $rows 引用：页数据行，会就地补上 warehouse_*/location_*
+     * @param array $rows 引用：页数据行，会就地补上 warehouse 与 location 相关字段
      */
     private function backfillLocationsFromErp(array &$rows): void
     {
