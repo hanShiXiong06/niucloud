@@ -96,12 +96,12 @@
                         </el-table-column>
                         <el-table-column label="操作" width="190" align="center" fixed="right">
                             <template #default="{ row }">
-                                <template v-if="!row.is_child">
-                                    <el-button v-if="row.offsetable > 0" type="primary" link @click="openSettle(row)">折账</el-button>
-                                    <el-button v-if="!row.is_entity && row.payable > 0" type="warning" link @click="openPay(row)">付款</el-button>
-                                    <el-button v-if="!row.is_entity && row.receivable > 0" type="success" link @click="openCollect(row)">收款</el-button>
-                                    <span v-if="row.offsetable <= 0 && row.payable <= 0 && row.receivable <= 0" class="text-xs text-gray-400">-</span>
-                                </template>
+                                <!-- 折账: 主体行(跨人冲抵)或独立人行, 不在子行 -->
+                                <el-button v-if="!row.is_child && row.offsetable > 0" type="primary" link @click="openSettle(row)">折账</el-button>
+                                <!-- 付款/收款: 针对具体的人(子行 或 独立人行), 主体汇总行不显示 -->
+                                <el-button v-if="!row.is_entity && row.payable > 0" type="warning" link @click="openPay(row)">付款</el-button>
+                                <el-button v-if="!row.is_entity && row.receivable > 0" type="success" link @click="openCollect(row)">收款</el-button>
+                                <span v-if="!((!row.is_child && row.offsetable > 0) || (!row.is_entity && row.payable > 0) || (!row.is_entity && row.receivable > 0))" class="text-xs text-gray-400">-</span>
                             </template>
                         </el-table-column>
                     </el-table>
