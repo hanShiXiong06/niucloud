@@ -49,13 +49,13 @@
                     </div>
                 </div>
                 <el-form-item label="销售价" required>
-                    <el-input-number v-model="priceForm.sale_price" :min="0" :precision="2" class="!w-full" />
+                    <el-input-number v-model="priceForm.sale_price" :min="0" :precision="0" class="!w-full" />
                 </el-form-item>
                 <el-form-item label="同行价">
-                    <el-input-number v-model="priceForm.peer_price" :min="0" :precision="2" class="!w-full" />
+                    <el-input-number v-model="priceForm.peer_price" :min="0" :precision="0" class="!w-full" />
                 </el-form-item>
                 <el-form-item label="最低价">
-                    <el-input-number v-model="priceForm.min_price" :min="0" :precision="2" class="!w-full" />
+                    <el-input-number v-model="priceForm.min_price" :min="0" :precision="0" class="!w-full" />
                 </el-form-item>
                 <el-form-item label="备注">
                     <el-input v-model.trim="priceForm.remark" type="textarea" :rows="3" placeholder="成色、渠道、底价原因等" />

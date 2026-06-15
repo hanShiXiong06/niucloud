@@ -257,7 +257,7 @@ class RecycleDevicePaymentService extends BaseAdminService
         try {
             $devices = RecycleDevice::where([['site_id', '=', $this->site_id]])->whereIn('id', $deviceIds)->select();
             // 设备表无 member_id/order_no, 从订单补
-            $orderIdsAll = array_values(array_unique(array_filter(array_map(static fn($d) => (int)$d->order_id, $devices->toArray()))));
+            $orderIdsAll = array_values(array_unique(array_filter(array_map(static fn($d) => (int)$d['order_id'], $devices->toArray()))));
             $orderMap = [];
             if (!empty($orderIdsAll)) {
                 foreach (RecycleOrder::where([['site_id', '=', $this->site_id]])->whereIn('id', $orderIdsAll)->field('id,order_no,member_id')->select()->toArray() as $o) {
