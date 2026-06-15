@@ -163,7 +163,115 @@ class DeviceAssetService extends BaseAdminService
             $query->whereIn('location_id', $scope);
         }
 
-        return $this->pageQuery($query);
+        $page = $this->pageQuery($query);
+        // 修复存量：库位为空但有 ERP 资产关联的，从 ERP 解析仓库/库位并回填（设库位/调拨弹框即可正确反显）
+        if (!empty($page['data']) && is_array($page['data'])) {
+            $this->backfillLocationsFromErp($page['data']);
+        }
+        return $page;
+    }
+
+    /**
+     * 把库位为空、但有 ERP 资产关联(ext_json.erp_asset_id)的资产，
+     * 从 ERP 资产 + 仓库/库位表批量解析名称并回填到中台资产(持久化一次，修存量0数据)。
+     * 故障隔离：ERP 不可用/异常时静默跳过，不影响列表返回。
+     * @param array $rows 引用：页数据行，会就地补上 warehouse_*/location_*
+     */
+    private function backfillLocationsFromErp(array &$rows): void
+    {
+        try {
+            $erpAssetIds = [];
+            foreach ($rows as $row) {
+                if ($this->locationComplete($row)) {
+                    continue;
+                }
+                $ext = is_array($row['ext_json'] ?? null) ? $row['ext_json'] : [];
+                $eid = (int)($ext['erp_asset_id'] ?? 0);
+                if ($eid > 0) {
+                    $erpAssetIds[$eid] = $eid;
+                }
+            }
+            if (empty($erpAssetIds)) {
+                return;
+            }
+
+            $erpAssetCls = '\\addon\\hsx_erp\\app\\model\\ErpAsset';
+            if (!class_exists($erpAssetCls)) {
+                return; // ERP 未安装
+            }
+            $erpAssets = $erpAssetCls::where([['site_id', '=', $this->site_id]])
+                ->whereIn('id', array_values($erpAssetIds))
+                ->field('id,warehouse_id,location_id')
+                ->select()->toArray();
+            if (empty($erpAssets)) {
+                return;
+            }
+            $whIds = array_values(array_unique(array_filter(array_column($erpAssets, 'warehouse_id'))));
+            $locIds = array_values(array_unique(array_filter(array_column($erpAssets, 'location_id'))));
+            $whNames = $this->idNameMap('\\addon\\hsx_erp\\app\\model\\ErpWarehouse', $whIds, 'warehouse_name');
+            $locNames = $this->idNameMap('\\addon\\hsx_erp\\app\\model\\ErpWarehouseLocation', $locIds, 'location_name');
+
+            $erpById = [];
+            foreach ($erpAssets as $a) {
+                $erpById[(int)$a['id']] = $a;
+            }
+
+            $now = time();
+            foreach ($rows as &$row) {
+                if ($this->locationComplete($row)) {
+                    continue;
+                }
+                $ext = is_array($row['ext_json'] ?? null) ? $row['ext_json'] : [];
+                $eid = (int)($ext['erp_asset_id'] ?? 0);
+                $erp = $erpById[$eid] ?? null;
+                if (!$erp) {
+                    continue;
+                }
+                $wid = (int)$erp['warehouse_id'];
+                $lid = (int)$erp['location_id'];
+                if ($wid <= 0 && $lid <= 0) {
+                    continue;
+                }
+                $update = ['update_at' => $now];
+                if ($wid > 0) {
+                    $update['warehouse_id'] = $wid;
+                    $update['warehouse_name'] = (string)($whNames[$wid] ?? '');
+                }
+                if ($lid > 0) {
+                    $update['location_id'] = $lid;
+                    $update['location_name'] = (string)($locNames[$lid] ?? '');
+                }
+                // 回填响应行
+                $row = array_merge($row, $update);
+                // 持久化(一次性修存量)
+                DeviceAssetItem::where([['site_id', '=', $this->site_id], ['id', '=', (int)$row['id']]])->update($update);
+            }
+            unset($row);
+        } catch (\Throwable $e) {
+            // 静默跳过
+        }
+    }
+
+    private function locationComplete(array $row): bool
+    {
+        return (int)($row['warehouse_id'] ?? 0) > 0
+            && (string)($row['warehouse_name'] ?? '') !== ''
+            && (int)($row['location_id'] ?? 0) > 0
+            && (string)($row['location_name'] ?? '') !== '';
+    }
+
+    private function idNameMap(string $modelClass, array $ids, string $nameField): array
+    {
+        $map = [];
+        if (empty($ids) || !class_exists($modelClass)) {
+            return $map;
+        }
+        $rows = $modelClass::where([['site_id', '=', $this->site_id]])
+            ->whereIn('id', $ids)->field('id,' . $nameField)->select()->toArray();
+        foreach ($rows as $r) {
+            $map[(int)$r['id']] = (string)($r[$nameField] ?? '');
+        }
+        return $map;
     }
 
     public function getTaskStats(): array
