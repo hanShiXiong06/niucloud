@@ -43,6 +43,9 @@ return [
         'ErpDomainEvent' => [ 'addon\hsx_recycle\app\listener\downstream\ErpAssetDownstreamListener' ],
         'DeviceAssetPriceCompleted' => [ 'addon\hsx_recycle\app\listener\downstream\DeviceAssetPricedListener' ],
 
+        // 代卖转回收：ERP 把代卖设备买断为自有时，回收侧把该设备由代卖标记为回收（成本转移到我方）
+        'ErpConsignDeviceBoughtOut' => [ 'addon\hsx_recycle\app\listener\downstream\ConsignDeviceBoughtOutListener' ],
+
         // 快递回调事件。易速推送统一在此分发，后续 ERP、通知、财务流水可挂载扩展。
         'RecycleExpressEvent' => [ 'addon\hsx_recycle\app\listener\express\RecycleExpressEventListener' ],
         

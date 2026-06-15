@@ -264,7 +264,7 @@ class ErpOutboundService extends BaseAdminService
         $toType = (string)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $toWarehouseId]])->value('business_type') ?: '');
         $now = time();
         $moved = 0;
-        $linkages = ['photo' => [], 'delist' => [], 'payable' => []]; // 提交后再发事件
+        $linkages = ['photo' => [], 'delist' => [], 'payable' => [], 'consign_to_recycle' => []]; // 提交后再发事件
 
         Db::transaction(function () use ($assetIds, $toWarehouseId, $toLocationId, $toType, $remark, $consignAction, $buyoutMap, $now, &$moved, &$linkages) {
             $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->lock(true)->select();
@@ -274,6 +274,13 @@ class ErpOutboundService extends BaseAdminService
                 }
                 $fromWarehouseId = (int)$asset->warehouse_id;
                 $fromType = (string)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $fromWarehouseId]])->value('business_type') ?: '');
+
+                // 仓库类型调拨规则：自有设备(已是我的机器)不能调入代卖仓。
+                // 代卖仓只接受"代卖来源(ownership=consign)"的设备；二手机仓/同行仓的自有机不允许往代卖仓调。
+                if ($toType === ErpDict::SALE_DESTINATION_CONSIGNMENT
+                    && (string)$asset->ownership_type === ErpDict::OWNERSHIP_OWNED) {
+                    throw new CommonException('设备[' . $asset->asset_no . ']是自有设备，不能调入代卖仓（代卖仓只接受代卖来源的设备）');
+                }
 
                 ErpAssetMoveLog::create([
                     'site_id'           => $this->site_id,
@@ -315,8 +322,12 @@ class ErpOutboundService extends BaseAdminService
                     $asset->ownership_type = ErpDict::OWNERSHIP_OWNED;
                     $asset->purchase_cost = round((float)$asset->purchase_cost + $buyout, 2);
                     $asset->current_cost = $afterCost;
+                    // 代卖转回收：原代卖参考价失效，清零等中台按回收成本重新拍照定价
+                    $asset->current_sale_price = 0;
                     // 应付寄卖人(买断价) → 提交后发
                     $linkages['payable'][] = ['asset_id' => (int)$asset->id, 'cp_id' => (int)$asset->counterparty_id, 'device_id' => (int)$asset->source_device_id, 'amount' => $buyout, 'reason' => 'consign_buyout'];
+                    // 通知回收侧：该设备由代卖转回收（成本转移到我方），由回收业务体现 → 提交后发
+                    $linkages['consign_to_recycle'][] = ['asset_id' => (int)$asset->id, 'device_id' => (int)$asset->source_device_id, 'cp_id' => (int)$asset->counterparty_id, 'amount' => $buyout];
                 }
 
                 $asset->warehouse_id = $toWarehouseId;
@@ -394,6 +405,23 @@ class ErpOutboundService extends BaseAdminService
                 ]);
             } catch (\Throwable $e) {
                 Log::warning('[erp] 代卖买断发应付失败: ' . $e->getMessage());
+            }
+        }
+        // 代卖转回收：通知回收侧把该设备由代卖标记为回收（成本转移到我方，回收业务体现）。
+        // 解耦：回收未装则无人应答；失败只记日志，不影响调拨。
+        foreach (($linkages['consign_to_recycle'] ?? []) as $c) {
+            try {
+                event('ErpConsignDeviceBoughtOut', [
+                    'site_id'          => (int)$this->site_id,
+                    'source_device_id' => (int)$c['device_id'],
+                    'erp_asset_id'     => (int)$c['asset_id'],
+                    'counterparty_id'  => (int)$c['cp_id'],
+                    'buyout_amount'    => round((float)$c['amount'], 2),
+                    'occurred_at'      => $now,
+                    'operator'         => ['id' => (int)$this->uid, 'name' => (string)$this->username],
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('[erp] 代卖转回收通知回收失败: ' . $e->getMessage());
             }
         }
     }

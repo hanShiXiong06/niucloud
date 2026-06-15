@@ -409,11 +409,20 @@
                     <el-input-number v-model="transfer.buyout_price" :min="0" :precision="2" :controls="false" class="!w-[180px]" />
                     <span class="text-xs text-gray-400 ml-2">买断价计入成本，并对寄卖人生成应付</span>
                 </el-form-item>
+                <el-alert
+                    v-if="transferBlocked"
+                    class="mb-3"
+                    type="error"
+                    :closable="false"
+                    show-icon
+                    title="自有设备不能调入代卖仓"
+                    description="代卖仓只接受代卖来源的设备；二手机仓/同行仓的自有机器不允许往代卖仓调拨。"
+                />
                 <el-form-item label="备注"><el-input v-model.trim="transfer.remark" type="textarea" /></el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="transfer.visible = false">取消</el-button>
-                <el-button type="primary" :loading="transfer.loading" @click="submitTransfer">确认调拨</el-button>
+                <el-button type="primary" :loading="transfer.loading" :disabled="transferBlocked" @click="submitTransfer">确认调拨</el-button>
             </template>
         </el-dialog>
 
@@ -491,6 +500,10 @@ const transferLocations = computed(() =>
 )
 const transferTargetType = computed(() =>
     String(warehouseOptions.value.find((item: any) => Number(item.id) === Number(transfer.to_warehouse_id))?.business_type || '')
+)
+// 自有设备(已是我的机器)不能调入代卖仓 → 禁用确认并提示
+const transferBlocked = computed(() =>
+    transferTargetType.value === 'consignment' && String(transfer.asset?.ownership_type || '') === 'owned'
 )
 // 代卖设备调进二手机仓(商城)时，需要选择"上架代卖 or 我方买断"
 const showConsignChoice = computed(() =>
