@@ -15,10 +15,14 @@
                     <div class="sl-device__name">{{ asset?.model || asset?.asset_no || ('资产 #' + (asset?.id || '')) }}</div>
                     <div class="sl-device__meta">IMEI {{ asset?.imei || '-' }}</div>
                 </div>
-                <el-cascader
-                    v-model="path"
-                    :options="cascaderOptions"
-                    :props="{ expandTrigger: 'hover' }"
+                <el-tree-select
+                    v-model="targetValue"
+                    :data="treeData"
+                    node-key="value"
+                    :props="{ label: 'label', children: 'children' }"
+                    :render-after-expand="false"
+                    check-strictly
+                    default-expand-all
                     placeholder="选择 仓库 / 库位"
                     class="sl-cascader"
                     clearable
@@ -54,13 +58,20 @@ const loaded = ref(false)
 const saving = ref(false)
 const erpConnected = ref(false)
 const warehouses = ref<WarehouseItem[]>([])
-const path = ref<number[]>([])
+const targetValue = ref<string>('')
 
-const cascaderOptions = computed(() => warehouses.value.map((w) => ({
-    value: w.id,
-    label: w.warehouse_name,
-    children: (w.locations || []).map((l) => ({ value: l.id, label: l.location_name }))
-})))
+const warehouseTypeLabel = (t?: string) =>
+    (({ mall: '二手机仓', peer: '同行仓', consignment: '代卖仓', hold: '暂存仓' }) as Record<string, string>)[String(t || '')] || ''
+
+// 树形：仓库为父、库位为子
+const treeData = computed(() => warehouses.value.map((w) => {
+    const tl = warehouseTypeLabel(w.business_type)
+    return {
+        value: 'w:' + w.id,
+        label: w.warehouse_name + (tl ? `（${tl}）` : ''),
+        children: (w.locations || []).map((l) => ({ value: `l:${w.id}:${l.id}`, label: l.location_name }))
+    }
+}))
 
 const loadAll = async () => {
     loading.value = true
@@ -68,10 +79,10 @@ const loadAll = async () => {
         const res: any = await getAssignWarehouseTree()
         warehouses.value = res.data?.warehouses || []
         erpConnected.value = !!res.data?.erp_connected
-        // 回填当前库位
+        // 反显当前库位
         const wid = Number(props.asset?.warehouse_id || 0)
         const lid = Number(props.asset?.location_id || 0)
-        path.value = (wid > 0 && lid > 0) ? [wid, lid] : []
+        targetValue.value = (wid > 0 && lid > 0) ? `l:${wid}:${lid}` : (wid > 0 ? `w:${wid}` : '')
     } catch (e) {
         // 请求层已提示
     } finally {
@@ -81,11 +92,14 @@ const loadAll = async () => {
 }
 
 const handleSave = async () => {
-    if (!path.value || path.value.length < 2) {
+    const val = targetValue.value || ''
+    if (!val.startsWith('l:')) {
         ElMessage.warning('请选择到具体库位')
         return
     }
-    const [warehouseId, locationId] = path.value
+    const parts = val.split(':')
+    const warehouseId = Number(parts[1])
+    const locationId = Number(parts[2])
     const w = warehouses.value.find((item) => item.id === warehouseId)
     const l = w?.locations?.find((item) => item.id === locationId)
     saving.value = true
