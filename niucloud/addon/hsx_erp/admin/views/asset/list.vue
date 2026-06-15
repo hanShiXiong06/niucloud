@@ -573,9 +573,12 @@ const showConsignChoice = computed(() =>
 const canTransfer = (row: any) => !['pending_in', 'outbound'].includes(String(row.inventory_status))
 const openTransfer = (row: any) => {
     transfer.asset = row
-    transfer.to_warehouse_id = 0
-    transfer.to_location_id = 0
-    transfer.target_value = ''
+    // 反显：默认选中设备当前所在的仓库/库位
+    const wid = Number(row.warehouse_id || 0)
+    const lid = Number(row.location_id || 0)
+    transfer.to_warehouse_id = wid
+    transfer.to_location_id = lid
+    transfer.target_value = lid > 0 ? `l:${wid}:${lid}` : (wid > 0 ? `w:${wid}` : '')
     transfer.remark = ''
     transfer.consign_action = 'list'
     transfer.buyout_price = 0
