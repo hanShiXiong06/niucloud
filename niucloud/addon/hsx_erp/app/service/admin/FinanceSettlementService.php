@@ -50,7 +50,23 @@ class FinanceSettlementService extends BaseAdminService
         if (!empty($where['end_time'])) {
             $query->where('occurred_at', '<=', (int)$where['end_time']);
         }
-        return $this->pageQuery($query);
+        $page = $this->pageQuery($query);
+        // 往来单位精确到人：按 counterparty_id(=会员member_id)关联 member 表回填姓名+手机
+        $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($page['data'] ?? [], 'counterparty_id'));
+        foreach (($page['data'] ?? []) as &$row) {
+            $m = $memberMap[(int)($row['counterparty_id'] ?? 0)] ?? null;
+            if ($m) {
+                if ((string)($row['counterparty_name'] ?? '') === '') {
+                    $row['counterparty_name'] = $m['name'];
+                }
+                $row['counterparty_mobile'] = $m['mobile'];
+            }
+            if ((string)($row['counterparty_name'] ?? '') === '') {
+                $row['counterparty_name'] = '往来#' . ($row['counterparty_id'] ?? 0);
+            }
+        }
+        unset($row);
+        return $page;
     }
 
     /**

@@ -137,7 +137,11 @@
                     </div>
                     <el-table :data="settle.list" v-loading="settle.loading" size="large" empty-text="暂无结算记录">
                         <el-table-column prop="settlement_no" label="结算单号" min-width="170" show-overflow-tooltip />
-                        <el-table-column prop="counterparty_name" label="往来单位" min-width="140" show-overflow-tooltip />
+                        <el-table-column label="往来单位" min-width="160" show-overflow-tooltip>
+                            <template #default="{ row }">
+                                {{ row.counterparty_name }}<span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column label="应付合计" width="110" align="right"><template #default="{ row }">{{ money(row.payable_total) }}</template></el-table-column>
                         <el-table-column label="应收合计" width="110" align="right"><template #default="{ row }">{{ money(row.receivable_total) }}</template></el-table-column>
                         <el-table-column label="折账" width="100" align="right"><template #default="{ row }">{{ money(row.offset_amount) }}</template></el-table-column>
