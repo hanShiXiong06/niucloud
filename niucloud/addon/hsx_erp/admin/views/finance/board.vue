@@ -139,7 +139,12 @@
                         <el-table-column label="业务类型" width="100" align="center">
                             <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.source_type_text }}</el-tag></template>
                         </el-table-column>
-                        <el-table-column prop="source_no" label="来源单号" min-width="140" show-overflow-tooltip />
+                        <el-table-column label="来源单号" min-width="150" show-overflow-tooltip>
+                            <template #default="{ row }">
+                                <span v-if="row.source_device_id > 0" class="cursor-pointer text-[var(--el-color-primary)]" @click="openTraceFromRow(row)">{{ row.source_no || '溯源' }}</span>
+                                <span v-else>{{ row.source_no || '-' }}</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column label="金额" width="120" align="right" prop="amount" sortable="custom">
                             <template #default="{ row }">{{ money(row.amount) }}</template>
                         </el-table-column>
@@ -307,6 +312,9 @@
         <!-- 主体抽屉(信息/对接人/财务对账) -->
         <entity-drawer v-model="entityDrawer.visible" :entity-id="entityDrawer.id" @changed="onEntityChanged" />
 
+        <!-- 账目溯源到设备: 点应收/应付来源单号打开设备全链路 -->
+        <trace-detail v-model="trace.visible" :device-id="trace.deviceId" />
+
         <!-- 结算核销明细抽屉: 哪笔应付折哪笔应收 -->
         <el-drawer v-model="sdetail.visible" title="结算核销明细" size="720px" @closed="sdetail.data = null">
             <div v-loading="sdetail.loading">
@@ -393,6 +401,7 @@
 import { ref, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import EntityDrawer from './entity-drawer.vue'
+import TraceDetail from '@/addon/hsx_erp/views/device_trace/trace-detail.vue'
 import {
     getFinanceBalanceBoard,
     getFinancePayableOutstanding,
@@ -769,6 +778,14 @@ async function submitExpense() {
     } finally {
         expense.submitting = false
     }
+}
+
+// 账目溯源到设备
+const trace = reactive<any>({ visible: false, deviceId: 0 })
+function openTraceFromRow(row: any) {
+    if (!row.source_device_id) return
+    trace.deviceId = row.source_device_id
+    trace.visible = true
 }
 
 // 主体抽屉
