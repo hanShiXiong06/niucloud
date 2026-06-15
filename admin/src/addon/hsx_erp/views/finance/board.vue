@@ -99,9 +99,9 @@
                             <el-radio-button label="settled">已结清</el-radio-button>
                         </el-radio-group>
                         <el-input v-model="detail.keyword" placeholder="往来单位/来源单号" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" />
-                        <el-date-picker v-model="detail.start_date" type="date" value-format="X" placeholder="开始日期" style="width: 140px" />
-                        <span class="text-gray-400">至</span>
-                        <el-date-picker v-model="detail.end_date" type="date" value-format="X" placeholder="结束日期" style="width: 140px" />
+                        <div class="w-[260px] flex-none">
+                            <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="--el-date-editor-width: 100%" />
+                        </div>
                         <el-input v-model="detail.amount_min" placeholder="金额≥" class="!w-[100px]" />
                         <el-input v-model="detail.amount_max" placeholder="金额≤" class="!w-[100px]" />
                         <el-select v-model="detail.quickSort" placeholder="排序" class="!w-[150px]" @change="onQuickSort">
@@ -151,9 +151,9 @@
                 <el-tab-pane label="结算记录" name="settlement">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                         <el-input v-model="settle.keyword" placeholder="结算单号/往来单位" clearable class="!w-[200px]" @keyup.enter="loadSettlement" />
-                        <el-date-picker v-model="settle.start_date" type="date" value-format="X" placeholder="开始日期" style="width: 140px" />
-                        <span class="text-gray-400">至</span>
-                        <el-date-picker v-model="settle.end_date" type="date" value-format="X" placeholder="结束日期" style="width: 140px" />
+                        <div class="w-[260px] flex-none">
+                            <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="--el-date-editor-width: 100%" />
+                        </div>
                         <el-button type="primary" @click="loadSettlement">查询</el-button>
                         <el-button @click="resetSettleFilter">重置</el-button>
                     </div>
@@ -387,12 +387,13 @@ async function loadBoard() {
 }
 
 // 应收/应付明细
-const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', settle_state: '', start_date: '', end_date: '', amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
+const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
 function detailParams() {
+    const [start, end] = Array.isArray(detail.dateRange) ? detail.dateRange : []
     return {
         keyword: detail.keyword, settle_state: detail.settle_state,
-        start_time: detail.start_date ? Number(detail.start_date) : 0,
-        end_time: detail.end_date ? Number(detail.end_date) + 86399 : 0, // 含当日
+        start_time: start ? Number(start) : 0,
+        end_time: end ? Number(end) + 86399 : 0, // 含当日
         amount_min: detail.amount_min, amount_max: detail.amount_max,
         sort_field: detail.sort_field, sort_order: detail.sort_order,
         page: detail.page, limit: detail.limit,
@@ -425,19 +426,20 @@ async function loadDetail() {
 }
 function onDetailPage(p: number) { detail.page = p; loadDetail() }
 function resetDetailFilter() {
-    Object.assign(detail, { keyword: '', settle_state: '', start_date: '', end_date: '', amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc', page: 1 })
+    Object.assign(detail, { keyword: '', settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc', page: 1 })
     loadDetail()
 }
 
 // 结算记录
-const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', start_date: '', end_date: '' })
+const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', dateRange: [] })
 async function loadSettlement() {
     settle.loading = true
     try {
+        const [start, end] = Array.isArray(settle.dateRange) ? settle.dateRange : []
         const res: any = await getFinanceSettlementList({
             keyword: settle.keyword,
-            start_time: settle.start_date ? Number(settle.start_date) : 0,
-            end_time: settle.end_date ? Number(settle.end_date) + 86399 : 0,
+            start_time: start ? Number(start) : 0,
+            end_time: end ? Number(end) + 86399 : 0,
             page: settle.page, limit: settle.limit,
         })
         settle.list = res.data?.data || []
@@ -448,7 +450,7 @@ async function loadSettlement() {
 }
 function onSettlePage(p: number) { settle.page = p; loadSettlement() }
 function resetSettleFilter() {
-    Object.assign(settle, { keyword: '', start_date: '', end_date: '', page: 1 })
+    Object.assign(settle, { keyword: '', dateRange: [], page: 1 })
     loadSettlement()
 }
 
