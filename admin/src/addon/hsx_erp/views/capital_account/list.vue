@@ -130,7 +130,7 @@
                     <el-option v-for="(label, val) in bizTypeMap" :key="val" :label="label" :value="val" />
                 </el-select>
                 <el-input v-model="ledger.keyword" placeholder="流水号/对手方/单号/备注" clearable class="!w-[200px]" @keyup.enter="loadLedger" />
-                <el-date-picker v-model="ledger.dateRange" type="daterange" value-format="X" start-placeholder="起" end-placeholder="止" class="!w-[250px]" />
+                <el-date-picker v-model="ledger.dateRange" type="daterange" value-format="X" range-separator="~" start-placeholder="开始日期" end-placeholder="结束日期" style="width:248px" />
                 <el-button type="primary" @click="loadLedger">查询</el-button>
                 <el-button @click="resetLedgerFilter">重置</el-button>
             </div>

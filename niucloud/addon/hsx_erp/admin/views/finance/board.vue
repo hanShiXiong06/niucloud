@@ -84,7 +84,7 @@
                         <el-select v-model="detail.status" placeholder="状态" clearable class="!w-[130px]">
                             <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
                         </el-select>
-                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" start-placeholder="起" end-placeholder="止" class="!w-[260px]" />
+                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="~" start-placeholder="开始日期" end-placeholder="结束日期" style="width:248px" />
                         <el-input v-model="detail.amount_min" placeholder="金额≥" class="!w-[110px]" />
                         <el-input v-model="detail.amount_max" placeholder="金额≤" class="!w-[110px]" />
                         <el-button type="primary" @click="loadDetail">查询</el-button>
@@ -121,7 +121,7 @@
                 <el-tab-pane label="结算记录" name="settlement">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                         <el-input v-model="settle.keyword" placeholder="结算单号/往来单位" clearable class="!w-[200px]" @keyup.enter="loadSettlement" />
-                        <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" start-placeholder="起" end-placeholder="止" class="!w-[260px]" />
+                        <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="~" start-placeholder="开始日期" end-placeholder="结束日期" style="width:248px" />
                         <el-button type="primary" @click="loadSettlement">查询</el-button>
                         <el-button @click="resetSettleFilter">重置</el-button>
                     </div>
@@ -189,6 +189,12 @@
                     </div>
                     <div v-else class="mt-3 text-sm text-gray-400">勾选应付/应收后将自动计算折账与现金净额。</div>
                     <div v-if="preview" class="mt-3 text-center"><el-tag :type="methodTagType(preview.method)" effect="light">结算方式：{{ preview.method_text }}</el-tag></div>
+                </div>
+                <div v-if="preview && Number(preview.cash_amount) > 0" class="mt-4">
+                    <div class="mb-1 text-sm text-gray-500">现金{{ cashDirLabel(preview.cash_direction) }}账户(必选)：现金将从该资金账户{{ preview.cash_direction === 'pay' ? '出账' : '入账' }}</div>
+                    <el-select v-model="settleAccountId" filterable class="w-full" placeholder="选择资金账户">
+                        <el-option v-for="a in summary.accounts" :key="a.id" :label="`${a.account_name}（余额 ${money(a.balance)}）`" :value="a.id" />
+                    </el-select>
                 </div>
                 <el-input v-model="remark" class="mt-4" type="textarea" :rows="2" placeholder="结算备注(可选)" maxlength="200" show-word-limit />
             </div>
@@ -375,9 +381,16 @@ const preview = ref<any>(null)
 const previewing = ref(false)
 const submitting = ref(false)
 const remark = ref('')
+const settleAccountId = ref<number | undefined>(undefined)
 const dialogTitle = computed(() => '结算 · ' + (current.value?.counterparty_name || ''))
 const canPreview = computed(() => selectedPayables.value.length > 0 || selectedReceivables.value.length > 0)
-const canSettle = computed(() => !!preview.value && (preview.value.payable_total > 0 || preview.value.receivable_total > 0))
+const canSettle = computed(() => {
+    const p = preview.value
+    if (!p) return false
+    if (!(p.payable_total > 0 || p.receivable_total > 0)) return false
+    if (Number(p.cash_amount) > 0 && !settleAccountId.value) return false // 有现金必须选户头
+    return true
+})
 
 async function openSettle(row: any) {
     current.value = row
@@ -431,6 +444,7 @@ async function doSettle() {
             payable_ids: selectedPayables.value.map((x) => x.id),
             receivable_ids: selectedReceivables.value.map((x) => x.id),
             remark: remark.value,
+            capital_account_id: settleAccountId.value || 0,
         })
         ElMessage.success('结算完成')
         dialogVisible.value = false
@@ -441,7 +455,7 @@ async function doSettle() {
 }
 function resetDialog() {
     current.value = null; payables.value = []; receivables.value = []
-    selectedPayables.value = []; selectedReceivables.value = []; preview.value = null; remark.value = ''
+    selectedPayables.value = []; selectedReceivables.value = []; preview.value = null; remark.value = ''; settleAccountId.value = undefined
 }
 
 // 经营支出

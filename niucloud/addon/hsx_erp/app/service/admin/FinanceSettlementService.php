@@ -8,6 +8,7 @@ use addon\hsx_erp\app\model\FinancePayable;
 use addon\hsx_erp\app\model\FinanceReceivable;
 use addon\hsx_erp\app\model\FinanceSettlement;
 use addon\hsx_erp\app\model\FinanceSettlementLink;
+use addon\hsx_erp\app\service\admin\ErpCapitalAccountService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -166,6 +167,28 @@ class FinanceSettlementService extends BaseAdminService
                 $this->markSettled(new FinanceReceivable(), (int)$a['id'], $now);
             }
         });
+
+        // 现金部分关联资金账户：选了户头且有现金净额时，记一笔资金流水(我付=出账/我收=入账)，让现金真正进出账户。
+        $capitalAccountId = (int)($options['capital_account_id'] ?? 0);
+        $cashAmount = round((float)($summary['cash_amount'] ?? 0), 2);
+        if ($capitalAccountId > 0 && $cashAmount > 0) {
+            try {
+                (new ErpCapitalAccountService())->recordEntry([
+                    'account_id'        => $capitalAccountId,
+                    'direction'         => ($summary['cash_direction'] ?? '') === 'pay' ? 'out' : 'in',
+                    'amount'            => $cashAmount,
+                    'biz_type'          => 'settlement',
+                    'counterparty_id'   => $counterpartyId,
+                    'counterparty_name' => (string)($summary['counterparty_name'] ?? ''),
+                    'source_type'       => 'settlement',
+                    'source_no'         => $no,
+                    'source_id'         => $settlementId,
+                    'remark'            => '结算现金' . ((($summary['cash_direction'] ?? '') === 'pay') ? '付出' : '收取'),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('[erp_finance] 结算现金记资金流水失败: ' . $e->getMessage());
+            }
+        }
 
         // 发结算完成事件(故障隔离, 不回抛): 业务/ERP 订阅以更新各自展示
         $this->emitSettlementCompleted($settlementId, $counterpartyId, $summary, $plan, $eventId, $now);

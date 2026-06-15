@@ -22,10 +22,9 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
     public function getSummary(): array
     {
         $open = [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL];
-        $payableTotal = round((float)FinancePayable::where([['site_id', '=', $this->site_id], ['status', 'in', $open]])
-            ->sum('amount - settled_amount'), 2);
-        $receivableTotal = round((float)FinanceReceivable::where([['site_id', '=', $this->site_id], ['status', 'in', $open]])
-            ->sum('amount - settled_amount'), 2);
+        $pWhere = [['site_id', '=', $this->site_id], ['status', 'in', $open]];
+        $payableTotal = round((float)FinancePayable::where($pWhere)->sum('amount') - (float)FinancePayable::where($pWhere)->sum('settled_amount'), 2);
+        $receivableTotal = round((float)FinanceReceivable::where($pWhere)->sum('amount') - (float)FinanceReceivable::where($pWhere)->sum('settled_amount'), 2);
 
         $accounts = [];
         $balanceTotal = 0.0;
@@ -106,12 +105,9 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
         $siteId = $siteId ?? (int)$this->site_id;
         $open = [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL];
 
-        $payable = (float)FinancePayable::where([
-            ['site_id', '=', $siteId], ['counterparty_id', '=', $counterpartyId], ['status', 'in', $open],
-        ])->sum('amount - settled_amount');
-        $receivable = (float)FinanceReceivable::where([
-            ['site_id', '=', $siteId], ['counterparty_id', '=', $counterpartyId], ['status', 'in', $open],
-        ])->sum('amount - settled_amount');
+        $pWhere = [['site_id', '=', $siteId], ['counterparty_id', '=', $counterpartyId], ['status', 'in', $open]];
+        $payable = (float)FinancePayable::where($pWhere)->sum('amount') - (float)FinancePayable::where($pWhere)->sum('settled_amount');
+        $receivable = (float)FinanceReceivable::where($pWhere)->sum('amount') - (float)FinanceReceivable::where($pWhere)->sum('settled_amount');
 
         $payable = round($payable, 2);
         $receivable = round($receivable, 2);

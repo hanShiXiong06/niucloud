@@ -81,11 +81,11 @@ class Finance extends BaseAdminController
     public function settlementSettle()
     {
         $p = $this->request->params([
-            ['counterparty_id', 0], ['payable_ids', []], ['receivable_ids', []], ['remark', ''],
+            ['counterparty_id', 0], ['payable_ids', []], ['receivable_ids', []], ['remark', ''], ['capital_account_id', 0],
         ]);
         return success((new FinanceSettlementService())->settle(
             (int)$p['counterparty_id'], (array)$p['payable_ids'], (array)$p['receivable_ids'],
-            ['remark' => (string)$p['remark']]
+            ['remark' => (string)$p['remark'], 'capital_account_id' => (int)$p['capital_account_id']]
         ));
     }
 

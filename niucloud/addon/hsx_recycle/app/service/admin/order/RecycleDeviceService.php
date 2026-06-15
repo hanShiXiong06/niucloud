@@ -1320,7 +1320,7 @@ class RecycleDeviceService extends BaseAdminService
                     $order = RecycleOrder::where('id', (int)$device->order_id)->find();
                     if (!empty($order)) {
                         $orderNo = (string)($order->order_no ?? '');
-                        $memberName = (string)($order->member_name ?? $order->nickname ?? '');
+                        $memberName = (string)($order->customer_name ?? $order->member_name ?? $order->nickname ?? '');
                     }
                 } catch (\Throwable $ignore) {
                 }
