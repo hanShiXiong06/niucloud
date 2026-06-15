@@ -245,10 +245,27 @@
                             class="!w-full"
                         />
                     </el-form-item>
-                    <el-form-item label="建议销售价">
+                    <el-form-item label="销售价">
                         <el-input-number v-model="manualForm.suggested_sale_price" :min="0" :precision="2" class="!w-full" />
                     </el-form-item>
+                    <el-form-item label="入库仓库">
+                        <el-select v-model="manualForm.warehouse_id" filterable clearable class="w-full" placeholder="选仓库则入库即归位（不选则留待入库）" @change="manualForm.location_id = 0">
+                            <el-option v-for="item in warehouseOptions" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="入库库位" :required="Number(manualForm.warehouse_id) > 0">
+                        <el-select v-model="manualForm.location_id" filterable clearable class="w-full" :disabled="!Number(manualForm.warehouse_id)" placeholder="选了仓库需选库位">
+                            <el-option v-for="item in manualLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
                 </div>
+                <el-alert
+                    v-if="Number(manualForm.warehouse_id) > 0"
+                    class="mb-4"
+                    type="info"
+                    :closable="false"
+                    :title="Number(manualForm.suggested_sale_price) > 0 ? '已选库位+已填销售价：建档后自动确认入库并直接转「可售」，无需再单独定价。' : '已选库位：建档后自动确认入库到该库位；未填销售价则进入「待定价」。'"
+                />
                 <el-alert
                     class="mb-4"
                     :type="manualUnpaidAmount > 0 ? 'warning' : 'success'"
@@ -502,8 +519,14 @@ const manualForm = reactive({
     purchase_cost: 0,
     paid_amount: 0,
     suggested_sale_price: 0,
+    warehouse_id: 0,
+    location_id: 0,
     remark: ''
 })
+// 手工建档可选入库库位（与确认入库共用 warehouseOptions）
+const manualLocations = computed(() =>
+    warehouseOptions.value.find((item: any) => Number(item.id) === Number(manualForm.warehouse_id))?.locations || []
+)
 const counterpartyDialog = reactive<any>({
     visible: false,
     loading: false,
@@ -553,8 +576,16 @@ const resetManualForm = () => {
         purchase_cost: 0,
         paid_amount: 0,
         suggested_sale_price: 0,
+        warehouse_id: 0,
+        location_id: 0,
         remark: ''
     })
+    // 默认带出默认仓库及其首个库位，省一步点选
+    const def = warehouseOptions.value.find((item: any) => item.is_default === 1) || warehouseOptions.value[0]
+    if (def) {
+        manualForm.warehouse_id = Number(def.id || 0)
+        manualForm.location_id = Number(def.locations?.[0]?.id || 0)
+    }
 }
 
 const handleBusinessTypeChange = () => {
@@ -586,10 +617,14 @@ const submitManualInbound = async () => {
         ElMessage.warning('已付金额不能大于应付金额')
         return
     }
+    if (Number(manualForm.warehouse_id) > 0 && !Number(manualForm.location_id)) {
+        ElMessage.warning('选择了入库仓库，请同时选择库位')
+        return
+    }
     manualDialog.submitting = true
     try {
         await createErpManualInbound({ ...manualForm })
-        ElMessage.success('已创建待入库设备')
+        ElMessage.success(Number(manualForm.warehouse_id) > 0 ? '已建档并入库到指定库位' : '已创建待入库设备')
         manualDialog.visible = false
         search.inventory_status = 'pending_in'
         table.page = 1

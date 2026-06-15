@@ -93,6 +93,8 @@ class Asset extends BaseAdminController
             ['purchase_cost', 0],
             ['paid_amount', 0],
             ['suggested_sale_price', 0],
+            ['warehouse_id', 0],
+            ['location_id', 0],
             ['remark', ''],
         ]);
         return success((new ErpStandaloneInboundService())->create($data));

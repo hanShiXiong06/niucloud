@@ -4,10 +4,12 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\model\ErpAssetCycle;
+use addon\hsx_erp\app\service\admin\ErpAssetService;
 use addon\hsx_erp\app\service\core\ErpInboundService;
 use addon\hsx_erp\app\support\ErpMoney;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
+use think\facade\Log;
 
 /**
  * ERP 独立建档入口。
@@ -36,6 +38,13 @@ class ErpStandaloneInboundService extends BaseAdminService
         $counterpartyId = (int)($data['counterparty_id'] ?? 0);
         if ($businessType !== 'opening' && $counterpartyId <= 0) {
             throw new CommonException('请选择往来单位');
+        }
+        // 入库仓库/库位：选了即在建档后自动确认入库到该库位（不悬"待入库"）。
+        // 选了仓库就必须选库位（确认入库强制要库位）。
+        $warehouseId = (int)($data['warehouse_id'] ?? 0);
+        $locationId = (int)($data['location_id'] ?? 0);
+        if ($warehouseId > 0 && $locationId <= 0) {
+            throw new CommonException('选择了入库仓库，请同时选择库位');
         }
         $purchaseCost = ErpMoney::normalize($data['purchase_cost'] ?? 0);
         $paidAmount = ErpMoney::normalize($data['paid_amount'] ?? 0);
@@ -125,7 +134,33 @@ class ErpStandaloneInboundService extends BaseAdminService
             ]],
         ];
 
-        return (new ErpInboundService())->receive($event);
+        $result = (new ErpInboundService())->receive($event);
+
+        // 选了仓库+库位 → 建档即自动确认入库到该库位；随后由"无需整备"决策按是否带售价转「可售」或「待定价」。
+        // 故障隔离：确认失败仅记日志，资产留在"待入库"由人工确认，不影响建档主流程。
+        if ($warehouseId > 0 && $locationId > 0) {
+            $created = (array)($result['created_assets'] ?? []);
+            foreach ($created as $createdAsset) {
+                $assetId = (int)($createdAsset['id'] ?? 0);
+                if ($assetId <= 0) {
+                    continue;
+                }
+                try {
+                    (new ErpAssetService())->confirmInboundByAsset($assetId, [
+                        'warehouse_id' => $warehouseId,
+                        'location_id' => $locationId,
+                        'remark' => '手工建档入库，确认入库到指定库位',
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('手工建档自动确认入库失败：' . $e->getMessage(), [
+                        'site_id' => $this->site_id,
+                        'asset_id' => $assetId,
+                    ]);
+                }
+            }
+        }
+
+        return $result;
     }
 
     private function makeSourceDeviceId(): int
