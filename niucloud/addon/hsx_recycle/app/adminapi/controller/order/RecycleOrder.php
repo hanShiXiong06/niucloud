@@ -277,8 +277,8 @@ class RecycleOrder extends BaseAdminController
         $result = $this->flowService->payment($id, $data);
         // 打款成功后，若选了出账户头则在ERP记一笔出账流水（整单：按设备final_price合计）
         $this->recordCapitalOutflow($id, (int)($data['capital_account_id'] ?? 0), null, '');
-        // 同步核销该订单设备的应付（与资金扣减配套，形成完整账目往来）
-        $this->settleErpPayables($this->orderDeviceIds($id));
+        // 同步核销该订单设备的应付（与资金扣减配套，形成完整账目往来），并把出账户头带给结算用于对账展示
+        $this->settleErpPayables($this->orderDeviceIds($id), (int)($data['capital_account_id'] ?? 0));
         return success($result);
     }
 
@@ -313,8 +313,8 @@ class RecycleOrder extends BaseAdminController
             (float)($result['paid_amount'] ?? 0),
             (string)($result['pay_no'] ?? '')
         );
-        // 同步核销本批次设备的应付（与资金扣减配套）
-        $this->settleErpPayables(array_map('intval', (array)($data['device_ids'] ?? [])));
+        // 同步核销本批次设备的应付（与资金扣减配套），并把出账户头带给结算用于对账展示
+        $this->settleErpPayables(array_map('intval', (array)($data['device_ids'] ?? [])), (int)($data['capital_account_id'] ?? 0));
         return success($result);
     }
 
@@ -384,17 +384,19 @@ class RecycleOrder extends BaseAdminController
      * 打款成功后：核销这些设备在 ERP 财务的应付（与资金账户扣减配套，形成完整账目往来）。
      * 解耦：仅发事件，ERP 未装则无人应答；失败只吞日志，绝不影响打款主流程。
      */
-    private function settleErpPayables(array $deviceIds): void
+    private function settleErpPayables(array $deviceIds, int $capitalAccountId = 0): void
     {
         $deviceIds = array_values(array_filter(array_map('intval', $deviceIds)));
         if (empty($deviceIds)) {
             return;
         }
         try {
-            // 先走事件；若无人成功应答，直连 ERP 财务结算服务兜底核销，避免静默不核销。
+            // 现金已在 recordCapitalOutflow 扣账，这里只核销+记录户头(record_cash=false 防重复扣账)。
             $results = (array)event('SettleErpPayableByDevice', [
                 'site_id' => $this->request->siteId(),
                 'source_device_ids' => $deviceIds,
+                'capital_account_id' => $capitalAccountId,
+                'record_cash' => false,
                 'remark' => '回收打款核销应付',
             ]);
             $handled = false;
@@ -404,7 +406,11 @@ class RecycleOrder extends BaseAdminController
             if (!$handled) {
                 $cls = '\\addon\\hsx_erp\\app\\service\\admin\\FinanceSettlementService';
                 if (class_exists($cls)) {
-                    (new $cls())->settleByDeviceIds($deviceIds, ['remark' => '回收打款核销应付']);
+                    (new $cls())->settleByDeviceIds($deviceIds, [
+                        'remark' => '回收打款核销应付',
+                        'capital_account_id' => $capitalAccountId,
+                        'record_cash' => false,
+                    ]);
                 }
             }
         } catch (\Throwable $e) {

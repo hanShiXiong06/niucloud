@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_finance_settlement` (
   `offset_amount` decimal(12,2) NOT NULL DEFAULT '0.00' COMMENT '折账(净额冲抵)金额',
   `cash_amount` decimal(12,2) NOT NULL DEFAULT '0.00' COMMENT '现金净额(>0我付出, <0我收到)',
   `cash_direction` varchar(10) NOT NULL DEFAULT 'none' COMMENT 'pay我付/collect我收/none无现金',
+  `capital_account_id` int NOT NULL DEFAULT '0' COMMENT '现金所用资金账户ID(0=无/未记)',
+  `account_name` varchar(60) NOT NULL DEFAULT '' COMMENT '资金账户名(快照,用于结算记录展示)',
   `status` varchar(20) NOT NULL DEFAULT 'completed' COMMENT 'completed已完成/void已作废',
   `operator_uid` int NOT NULL DEFAULT '0' COMMENT '操作人',
   `operator_name` varchar(60) NOT NULL DEFAULT '' COMMENT '操作人名',

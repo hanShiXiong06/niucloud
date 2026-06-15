@@ -21,7 +21,9 @@ class SettlePayableByDeviceListener
         try {
             $deviceIds = (array)($payload['source_device_ids'] ?? []);
             $result = (new FinanceSettlementService())->settleByDeviceIds($deviceIds, [
-                'remark' => (string)($payload['remark'] ?? '回收打款核销应付'),
+                'remark'             => (string)($payload['remark'] ?? '回收打款核销应付'),
+                'capital_account_id' => (int)($payload['capital_account_id'] ?? 0),
+                'record_cash'        => ($payload['record_cash'] ?? true) !== false,
             ]);
             return ['ok' => true, 'settled' => (int)($result['settled'] ?? 0)];
         } catch (\Throwable $e) {

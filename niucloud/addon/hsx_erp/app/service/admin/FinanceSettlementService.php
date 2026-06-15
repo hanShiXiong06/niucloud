@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\FinanceDict;
+use addon\hsx_erp\app\model\ErpCapitalAccount;
 use addon\hsx_erp\app\model\FinancePayable;
 use addon\hsx_erp\app\model\FinanceReceivable;
 use addon\hsx_erp\app\model\FinanceSettlement;
@@ -67,7 +68,23 @@ class FinanceSettlementService extends BaseAdminService
                 }
             }
             foreach ($page['data'] as &$row) {
-                $row['account_name'] = (string)($acctMap[(string)($row['settlement_no'] ?? '')] ?? '');
+                // 户头解析: 1)结算单已存户头列 2)结算自身记的资金流水 3)同往来单位、结算时刻邻近的资金流水(回收打款等外部已扣账)
+                $acct = (string)($row['account_name'] ?? '');
+                if ($acct === '') {
+                    $acct = (string)($acctMap[(string)($row['settlement_no'] ?? '')] ?? '');
+                }
+                if ($acct === '' && (string)($row['method'] ?? '') !== 'offset' && (float)($row['cash_amount'] ?? 0) != 0.0) {
+                    $dir = ((string)($row['cash_direction'] ?? '') === 'collect') ? 'in' : 'out';
+                    $oc = (int)($row['occurred_at'] ?? 0);
+                    $near = \addon\hsx_erp\app\model\ErpCapitalLedger::where([
+                        ['site_id', '=', $this->site_id],
+                        ['counterparty_id', '=', (int)($row['counterparty_id'] ?? 0)],
+                        ['direction', '=', $dir],
+                    ])->where('occurred_at', '>=', $oc - 10)->where('occurred_at', '<=', $oc + 10)
+                        ->order('id desc')->value('account_name');
+                    $acct = (string)($near ?: '');
+                }
+                $row['account_name'] = $acct;
                 $m = $memberMap[(int)($row['counterparty_id'] ?? 0)] ?? null;
                 if ($m) {
                     if ((string)($row['counterparty_name'] ?? '') === '') {
@@ -166,12 +183,21 @@ class FinanceSettlementService extends BaseAdminService
         $eventId = 'finance_settle_' . $no;
         $settlementId = 0;
 
-        Db::transaction(function () use ($plan, $summary, $counterpartyId, $options, $now, $no, $eventId, &$settlementId) {
+        // 结算所用资金户头(用于展示/对账): 解析名称. 列若未迁移会被框架自动忽略, 不影响.
+        $optAccountId = (int)($options['capital_account_id'] ?? 0);
+        $optAccountName = '';
+        if ($optAccountId > 0) {
+            $optAccountName = (string)(ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $optAccountId]])->value('account_name') ?: '');
+        }
+
+        Db::transaction(function () use ($plan, $summary, $counterpartyId, $options, $optAccountId, $optAccountName, $now, $no, $eventId, &$settlementId) {
             $settlement = FinanceSettlement::create([
                 'site_id'          => $this->site_id,
                 'settlement_no'    => $no,
                 'counterparty_id'  => $counterpartyId,
                 'counterparty_name'=> $summary['counterparty_name'],
+                'capital_account_id' => $optAccountId,
+                'account_name'     => $optAccountName,
                 'method'           => $summary['method'],
                 'payable_total'    => $summary['payable_total'],
                 'receivable_total' => $summary['receivable_total'],
@@ -202,9 +228,11 @@ class FinanceSettlementService extends BaseAdminService
         });
 
         // 现金部分关联资金账户：选了户头且有现金净额时，记一笔资金流水(我付=出账/我收=入账)，让现金真正进出账户。
+        // record_cash=false: 现金已由外部(如回收打款)扣账, 此处只做核销/记录户头, 不再二次记流水(避免重复扣账)
+        $recordCash = ($options['record_cash'] ?? true) !== false;
         $capitalAccountId = (int)($options['capital_account_id'] ?? 0);
         $cashAmount = round((float)($summary['cash_amount'] ?? 0), 2);
-        if ($capitalAccountId > 0 && $cashAmount > 0) {
+        if ($recordCash && $capitalAccountId > 0 && $cashAmount > 0) {
             try {
                 (new ErpCapitalAccountService())->recordEntry([
                     'account_id'        => $capitalAccountId,
