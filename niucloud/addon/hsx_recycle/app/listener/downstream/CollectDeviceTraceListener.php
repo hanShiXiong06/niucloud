@@ -92,13 +92,16 @@ class CollectDeviceTraceListener
         if ($siteId <= 0 || $deviceId <= 0) {
             return ['summary' => [], 'events' => []];
         }
-        $device = RecycleDevice::where([['site_id', '=', $siteId], ['id', '=', $deviceId]])->findOrEmpty();
+        // 注意: 设备/日志数据写库时 site_id 常为0, 按 id 唯一主键取, 不卡 site_id
+        $device = RecycleDevice::where([['id', '=', $deviceId]])->findOrEmpty();
         if ($device->isEmpty()) {
             return ['summary' => [], 'events' => []];
         }
         $d = $device->toArray();
         $orderId = (int)$d['order_id'];
-        $ord = $this->orderMap($siteId, [$orderId])[$orderId] ?? [];
+        // 会员/主体仍按真实站点取; 站点优先用设备自身的 site_id, 回退传入的
+        $effSite = (int)($d['site_id'] ?? 0) ?: $siteId;
+        $ord = $this->orderMap($effSite, [$orderId])[$orderId] ?? [];
 
         $orderNo = (string)($ord['order_no'] ?? '');
         $events = [];
@@ -158,8 +161,8 @@ class CollectDeviceTraceListener
                 ];
             }
         }
-        // 打款/折账记录(时间准确)
-        foreach (RecycleDevicePayment::where([['site_id', '=', $siteId], ['device_id', '=', $deviceId]])->order('id asc')->select()->toArray() as $pay) {
+        // 打款/折账记录(时间准确; 按 device_id 取, 不卡 site_id)
+        foreach (RecycleDevicePayment::where([['device_id', '=', $deviceId]])->order('id asc')->select()->toArray() as $pay) {
             $isOffset = (string)$pay['pay_type'] === '折账';
             $events[] = [
                 'time'          => (int)$pay['pay_time'],
@@ -178,7 +181,7 @@ class CollectDeviceTraceListener
         $customer = (string)($ord['customer_name'] ?? '');
         if ($customer === '' && !empty($ord['member_id'])) {
             try {
-                $m = Member::where([['site_id', '=', $siteId], ['member_id', '=', (int)$ord['member_id']]])->field('nickname,username,mobile')->findOrEmpty();
+                $m = Member::where([['member_id', '=', (int)$ord['member_id']]])->field('nickname,username,mobile')->findOrEmpty();
                 if (!$m->isEmpty()) {
                     $customer = (string)($m->nickname ?: $m->username ?: $m->mobile ?: '');
                 }
@@ -204,7 +207,8 @@ class CollectDeviceTraceListener
         if (empty($orderIds)) {
             return [];
         }
-        $rows = RecycleOrder::where([['site_id', '=', $siteId]])->whereIn('id', $orderIds)
+        // 按订单ID(唯一)取, 不卡 site_id(历史数据 site_id 可能为0)
+        $rows = RecycleOrder::whereIn('id', $orderIds)
             ->field('id,order_no,customer_name,customer_phone,member_id,create_at,create_time')->select()->toArray();
         return array_column($rows, null, 'id');
     }
