@@ -132,7 +132,16 @@ class AuthService extends BaseAdminService
     }
 
     private function isCheckDomain() {
-        return !(request()->ip() == '127.0.0.1' || request()->host() == 'localhost');
+        // .env [SYSTEM] AUTH_DOMAIN_IGNORE_HOSTS（逗号分隔）：当前访问域名/IP 命中其一则不校验授权域名。
+        $ignore = array_filter(array_map('trim', explode(',', (string)env('system.auth_domain_ignore_hosts', ''))));
+        // 兼容原有逻辑：本机回环始终放过
+        $ignore = array_values(array_unique(array_merge($ignore, ['127.0.0.1', 'localhost'])));
+        $host = explode(':', (string)request()->host())[0];
+        $ip = (string)request()->ip();
+        if (in_array($host, $ignore, true) || in_array($ip, $ignore, true)) {
+            return false;
+        }
+        return true;
     }
 
     /**
