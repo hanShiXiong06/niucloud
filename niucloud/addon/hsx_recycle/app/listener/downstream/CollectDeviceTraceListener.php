@@ -56,9 +56,17 @@ class CollectDeviceTraceListener
             return [];
         }
         $orderMap = $this->orderMap($siteId, array_column($devices, 'order_id'));
+        $memberNameMap = $this->memberNames($siteId, array_column($orderMap, 'member_id'));
         $rows = [];
         foreach ($devices as $d) {
             $ord = $orderMap[(int)$d['order_id']] ?? [];
+            // 提交人(从谁收的): 订单 customer_name 空则按订单 member_id 取会员
+            $customer = (string)($ord['customer_name'] ?? '');
+            if ($customer === '' && !empty($ord['member_id'])) {
+                $customer = $memberNameMap[(int)$ord['member_id']] ?? '';
+            }
+            // 回收时间: 优先订单提交时间
+            $rtime = (int)($ord['create_at'] ?? 0) ?: (int)($ord['create_time'] ?? 0) ?: (int)($d['create_at'] ?? 0);
             $rows[] = [
                 'device_id'     => (int)$d['id'],
                 'erp_asset_id'  => (int)($d['downstream_erp_asset_id'] ?? 0),
@@ -67,10 +75,10 @@ class CollectDeviceTraceListener
                 'model'         => (string)$d['model'],
                 'order_id'      => (int)$d['order_id'],
                 'order_no'      => (string)($ord['order_no'] ?? ''),
-                'recycle_time'  => (int)$d['create_at'],
+                'recycle_time'  => $rtime,
                 'recycle_price' => round((float)($d['final_price'] ?: $d['initial_price'] ?: 0), 2),
                 'sale_price'    => round((float)($d['downstream_sale_price'] ?: $d['sell_price'] ?: 0), 2),
-                'customer_name' => (string)($ord['customer_name'] ?? ''),
+                'customer_name' => $customer,
                 'downstream_stage' => (int)($d['downstream_stage'] ?? 0),
                 'recycle_status_text' => RecycleOrderDict::DEVICE_STATUS_TEXT[(int)$d['status']] ?? (string)$d['status'],
             ];
@@ -175,7 +183,7 @@ class CollectDeviceTraceListener
             'recycle_price'  => round((float)($d['final_price'] ?: $d['initial_price'] ?: 0), 2),
             'pay_status'     => (int)$d['pay_status'],
             'pay_amount'     => round((float)($d['pay_amount'] ?? 0), 2),
-            'recycle_time'   => (int)$d['create_at'],
+            'recycle_time'   => (int)($ord['create_at'] ?? 0) ?: (int)($ord['create_time'] ?? 0) ?: (int)($d['create_at'] ?? 0),
         ];
         return ['summary' => $summary, 'events' => $events];
     }
@@ -187,8 +195,25 @@ class CollectDeviceTraceListener
             return [];
         }
         $rows = RecycleOrder::where([['site_id', '=', $siteId]])->whereIn('id', $orderIds)
-            ->field('id,order_no,customer_name,customer_phone,member_id')->select()->toArray();
+            ->field('id,order_no,customer_name,customer_phone,member_id,create_at,create_time')->select()->toArray();
         return array_column($rows, null, 'id');
+    }
+
+    /** 批量按 member_id 取会员名(昵称/用户名/手机) */
+    private function memberNames(int $siteId, array $memberIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $memberIds))));
+        if (empty($ids)) {
+            return [];
+        }
+        $map = [];
+        try {
+            foreach (Member::where([['site_id', '=', $siteId]])->whereIn('member_id', $ids)->field('member_id,nickname,username,mobile')->select()->toArray() as $m) {
+                $map[(int)$m['member_id']] = (string)($m['nickname'] ?: $m['username'] ?: $m['mobile'] ?: '');
+            }
+        } catch (\Throwable $e) {
+        }
+        return $map;
     }
 
     /** 订单层日志 action → 中文(空=不展示, 避免噪音) */
