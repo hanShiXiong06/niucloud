@@ -92,6 +92,9 @@
                     </div>
                     <el-table :data="detail.list" v-loading="detail.loading" size="large" empty-text="暂无数据">
                         <el-table-column prop="counterparty_name" label="往来单位" min-width="140" show-overflow-tooltip />
+                        <el-table-column label="业务类型" width="100" align="center">
+                            <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.source_type_text }}</el-tag></template>
+                        </el-table-column>
                         <el-table-column prop="source_no" label="来源单号" min-width="140" show-overflow-tooltip />
                         <el-table-column label="金额" width="120" align="right">
                             <template #default="{ row }">{{ money(row.amount) }}</template>

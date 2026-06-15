@@ -194,7 +194,8 @@ class ErpCapitalAccountService extends BaseAdminService
         $page = $this->pageQuery($query);
         $map = $this->bizTypeMap();
         foreach (($page['data'] ?? []) as &$row) {
-            $row['biz_type_text'] = $map[$row['biz_type']] ?? (string)$row['biz_type'];
+            $bt = (string)($row['biz_type'] ?? '');
+            $row['biz_type_text'] = $map[$bt] ?? ($bt !== '' ? $bt : '其它');
         }
         unset($row);
         return $page;

@@ -46,8 +46,9 @@ class FinancePayableService extends BaseAdminService
         ]);
         $data = $list->toArray();
         foreach ($data['data'] as &$row) {
-            $row['status_text']  = $statusMap[$row['status']] ?? $row['status'];
-            $row['outstanding']  = round((float)$row['amount'] - (float)$row['settled_amount'], 2);
+            $row['status_text']      = $statusMap[$row['status']] ?? $row['status'];
+            $row['source_type_text'] = FinanceDict::sourceTypeText((string)($row['source_type'] ?? ''));
+            $row['outstanding']      = round((float)$row['amount'] - (float)$row['settled_amount'], 2);
         }
         unset($row);
         return $data;

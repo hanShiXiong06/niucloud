@@ -24,6 +24,32 @@ class FinanceDict
         ];
     }
 
+    /** 应付/应收 来源(业务类型) → 中文 */
+    public static function getSourceTypeMap(): array
+    {
+        return [
+            'recycle_device'     => '回收',
+            'recycle_order'      => '回收',
+            'erp_consign_buyout' => '代卖买断',
+            'consign_buyout'     => '代卖买断',
+            'expense'            => '经营支出',
+            'manual_inbound'     => '手工建档',
+            'sale'               => '销售',
+            'sales'              => '销售',
+            'outbound'           => '出库销售',
+            'peer_sale'          => '同行销售',
+            'manual'             => '手工',
+        ];
+    }
+
+    public static function sourceTypeText(string $type): string
+    {
+        if ($type === '') {
+            return '其它';
+        }
+        return self::getSourceTypeMap()[$type] ?? $type;
+    }
+
     // 结算方式
     public const METHOD_CASH   = 'cash';   // 现金
     public const METHOD_OFFSET = 'offset'; // 折账(净额冲抵)
