@@ -48,6 +48,13 @@ class Asset extends BaseAdminController
         return success($this->service->getInfo($id));
     }
 
+    /** 实时调整在库设备成本(写成本流水) */
+    public function adjustCost(int $id)
+    {
+        $p = $this->request->params([['cost', 0], ['reason', '']]);
+        return success($this->service->adjustCost($id, (float)$p['cost'], (string)$p['reason']));
+    }
+
     public function confirmInbound(int $id)
     {
         $data = $this->request->params([

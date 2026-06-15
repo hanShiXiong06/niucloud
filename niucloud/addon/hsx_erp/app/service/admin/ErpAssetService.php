@@ -139,6 +139,58 @@ class ErpAssetService extends BaseAdminService
         unset($row);
     }
 
+    /**
+     * 实时调整在库设备成本（写成本流水留痕，不改已出库/已售/盘亏的）。
+     * @param int $assetId 资产ID
+     * @param float $newCost 新成本(>=0)
+     * @param string $reason 调整原因
+     */
+    public function adjustCost(int $assetId, float $newCost, string $reason = ''): array
+    {
+        if ($newCost < 0) {
+            throw new CommonException('成本不能为负');
+        }
+        $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])->findOrEmpty();
+        if ($asset->isEmpty()) {
+            throw new CommonException('ERP资产不存在');
+        }
+        $blocked = [ErpDict::INVENTORY_OUTBOUND, ErpDict::INVENTORY_LOST, ErpDict::INVENTORY_PENDING_IN, ErpDict::INVENTORY_INBOUND_REJECTED];
+        if (in_array((string)$asset->inventory_status, $blocked, true)) {
+            throw new CommonException('该设备当前状态不可调成本');
+        }
+        $before = round((float)$asset->current_cost, 2);
+        $newCost = round($newCost, 2);
+        if (abs($newCost - $before) < 0.001) {
+            throw new CommonException('成本未变化');
+        }
+        $now = time();
+        Db::transaction(function () use ($asset, $before, $newCost, $reason, $now) {
+            $asset->save([
+                'current_cost' => $newCost,
+                'version'      => (int)$asset->version + 1,
+                'update_at'    => $now,
+            ]);
+            ErpCostLedger::create([
+                'site_id'         => $this->site_id,
+                'ledger_no'       => $this->makeNo('CL'),
+                'asset_id'        => (int)$asset->id,
+                'cycle_id'        => (int)$asset->cycle_id,
+                'cost_type'       => 'manual_adjust',
+                'amount_delta'    => round($newCost - $before, 2),
+                'before_cost'     => $before,
+                'after_cost'      => $newCost,
+                'source_type'     => 'manual',
+                'source_id'       => 0,
+                'counterparty_id' => (int)$asset->counterparty_id,
+                'operator_id'     => $this->uid,
+                'operator_name'   => $this->username ?: '',
+                'occurred_at'     => $now,
+                'remark'          => '手动调成本' . ($reason !== '' ? '：' . $reason : ''),
+            ]);
+        });
+        return ['asset_id' => (int)$asset->id, 'before_cost' => $before, 'after_cost' => $newCost];
+    }
+
     public function getInfo(int $id): array
     {
         $asset = ErpAsset::where([

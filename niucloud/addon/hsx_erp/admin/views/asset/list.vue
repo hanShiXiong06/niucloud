@@ -155,6 +155,7 @@
                             <el-tag type="info" effect="plain" size="small">中台处理中</el-tag>
                         </el-tooltip>
                         <el-button v-if="canTransfer(row)" type="warning" link @click="openTransfer(row)">调拨</el-button>
+                        <el-button v-if="canAdjustCost(row)" type="info" link @click="openCostAdjust(row)">调成本</el-button>
                         <el-button type="primary" link @click="openDetail(row)">详情</el-button>
                     </template>
                 </el-table-column>
@@ -473,6 +474,28 @@
                 <el-button type="primary" :loading="priceDialog.submitting" @click="submitPricing">保存</el-button>
             </template>
         </el-dialog>
+
+        <el-dialog v-model="costDialog.visible" title="调整成本" width="460px">
+            <el-form label-width="90px">
+                <el-form-item label="设备">
+                    <span class="text-gray-600">{{ costDialog.asset?.model || '-' }}（IMEI {{ costDialog.asset?.imei || '-' }}）</span>
+                </el-form-item>
+                <el-form-item label="当前成本">
+                    <span class="text-gray-600">¥{{ money(costDialog.asset?.current_cost) }}</span>
+                </el-form-item>
+                <el-form-item label="新成本" required>
+                    <el-input-number v-model="costDialog.cost" :min="0" :precision="2" class="!w-full" />
+                </el-form-item>
+                <el-form-item label="原因">
+                    <el-input v-model.trim="costDialog.reason" type="textarea" :rows="2" placeholder="如：维修加价 / 录入有误修正" maxlength="200" show-word-limit />
+                </el-form-item>
+                <div class="text-xs text-gray-400">调整会写入成本流水留痕，已出库/已售/盘亏的设备不可调。</div>
+            </el-form>
+            <template #footer>
+                <el-button @click="costDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="costDialog.submitting" @click="submitCostAdjust">保存</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -487,7 +510,8 @@ import {
     createErpManualInbound,
     getErpAssetInfo,
     getErpAssetList,
-    getErpIntegrationStatus
+    getErpIntegrationStatus,
+    adjustErpAssetCost
 } from '@/addon/hsx_erp/api/asset'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
@@ -905,6 +929,31 @@ const submitPricing = async () => {
         ElMessage.error(error?.message || '定价失败')
     } finally {
         priceDialog.submitting = false
+    }
+}
+
+// 调成本（实时调整在库设备成本，写成本流水）
+const COST_ADJUSTABLE = ['in_stock', 'refurbishing', 'pending_pricing', 'available_for_sale', 'locked']
+const canAdjustCost = (row: any) => COST_ADJUSTABLE.includes(String(row.inventory_status))
+const costDialog = reactive<any>({ visible: false, submitting: false, asset: null, cost: 0, reason: '' })
+const openCostAdjust = (row: any) => {
+    costDialog.asset = row
+    costDialog.cost = Number(row.current_cost || 0)
+    costDialog.reason = ''
+    costDialog.visible = true
+}
+const submitCostAdjust = async () => {
+    if (!costDialog.asset?.id) return
+    costDialog.submitting = true
+    try {
+        await adjustErpAssetCost(Number(costDialog.asset.id), { cost: Number(costDialog.cost), reason: costDialog.reason || '' })
+        ElMessage.success('成本已调整')
+        costDialog.visible = false
+        loadList()
+    } catch (error: any) {
+        ElMessage.error(error?.message || '调成本失败')
+    } finally {
+        costDialog.submitting = false
     }
 }
 

@@ -49,6 +49,7 @@ Route::group('erp', function () {
     Route::get('asset/lists', 'addon\hsx_erp\app\adminapi\controller\Asset@lists');
     Route::get('asset/integration_status', 'addon\hsx_erp\app\adminapi\controller\Asset@integrationStatus');
     Route::post('asset/manual_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@manualInbound');
+    Route::post('asset/:id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\Asset@adjustCost');
     Route::get('asset/:id', 'addon\hsx_erp\app\adminapi\controller\Asset@info');
     Route::post('asset/batch_confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@batchConfirmInbound');
     Route::post('asset/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmAssetInbound');

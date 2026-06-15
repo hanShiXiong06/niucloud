@@ -27,3 +27,8 @@ export function batchConfirmErpAssetInbound(assetIds: number[], data: Record<str
         ...data
     })
 }
+
+// 实时调整在库设备成本(写成本流水)
+export function adjustErpAssetCost(id: number, data: Record<string, any>) {
+    return request.post(`erp/asset/${id}/adjust_cost`, data)
+}
