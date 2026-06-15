@@ -18,7 +18,13 @@ class FinanceReceivableService extends BaseAdminService
         if (!empty($where['counterparty_id'])) {
             $query->where('counterparty_id', '=', (int)$where['counterparty_id']);
         }
-        if (!empty($where['status'])) {
+        // 结清状态: settle_state 优先(open=未结清/settled=已结清), 否则用精确 status
+        $settleState = (string)($where['settle_state'] ?? '');
+        if ($settleState === 'open') {
+            $query->whereIn('status', [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL]);
+        } elseif ($settleState === 'settled') {
+            $query->where('status', '=', FinanceDict::STATUS_SETTLED);
+        } elseif (!empty($where['status'])) {
             $query->where('status', '=', (string)$where['status']);
         }
         if (!empty($where['source_type'])) {
@@ -40,7 +46,8 @@ class FinanceReceivableService extends BaseAdminService
             $query->where('amount', '<=', (float)$where['amount_max']);
         }
         $statusMap = FinanceDict::getStatusMap();
-        $list = $query->order('id desc')->paginate([
+        FinanceCounterpartyBalanceService::applySort($query, $where);
+        $list = $query->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page'      => (int)($where['page'] ?? 1),
         ]);

@@ -34,8 +34,9 @@ class Finance extends BaseAdminController
     public function payableLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['status', ''], ['source_type', ''], ['keyword', ''],
+            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''],
             ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
+            ['sort_field', 'occurred_at'], ['sort_order', 'desc'],
             ['page', 1], ['limit', 15],
         ]);
         return success((new FinancePayableService())->getPage($where));
@@ -45,8 +46,9 @@ class Finance extends BaseAdminController
     public function receivableLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['status', ''], ['source_type', ''], ['keyword', ''],
+            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''],
             ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
+            ['sort_field', 'occurred_at'], ['sort_order', 'desc'],
             ['page', 1], ['limit', 15],
         ]);
         return success((new FinanceReceivableService())->getPage($where));

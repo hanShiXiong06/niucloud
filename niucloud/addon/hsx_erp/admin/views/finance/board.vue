@@ -84,17 +84,23 @@
                 <!-- 应收明细 / 应付明细 -->
                 <el-tab-pane v-for="t in detailTabs" :key="t.name" :label="t.label" :name="t.name">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
-                        <el-input v-model="detail.keyword" placeholder="往来单位/来源单号" clearable class="!w-[200px]" @keyup.enter="loadDetail" />
-                        <el-select v-model="detail.status" placeholder="状态" clearable class="!w-[130px]">
-                            <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
+                        <el-radio-group v-model="detail.settle_state" @change="onDetailFilter">
+                            <el-radio-button label="">全部</el-radio-button>
+                            <el-radio-button label="open">未结清</el-radio-button>
+                            <el-radio-button label="settled">已结清</el-radio-button>
+                        </el-radio-group>
+                        <el-input v-model="detail.keyword" placeholder="往来单位/来源单号" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" />
+                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" class="!w-[300px] flex-none" />
+                        <el-input v-model="detail.amount_min" placeholder="金额≥" class="!w-[100px]" />
+                        <el-input v-model="detail.amount_max" placeholder="金额≤" class="!w-[100px]" />
+                        <el-select v-model="detail.quickSort" placeholder="排序" class="!w-[150px]" @change="onQuickSort">
+                            <el-option v-for="s in sortOptions" :key="s.value" :label="s.label" :value="s.value" />
                         </el-select>
-                        <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" class="!w-[340px] flex-none" />
-                        <el-input v-model="detail.amount_min" placeholder="金额≥" class="!w-[110px]" />
-                        <el-input v-model="detail.amount_max" placeholder="金额≤" class="!w-[110px]" />
-                        <el-button type="primary" @click="loadDetail">查询</el-button>
+                        <el-button type="primary" @click="onDetailFilter">查询</el-button>
                         <el-button @click="resetDetailFilter">重置</el-button>
                     </div>
-                    <el-table :data="detail.list" v-loading="detail.loading" size="large" empty-text="暂无数据">
+                    <el-table :data="detail.list" v-loading="detail.loading" size="large" empty-text="暂无数据" @sort-change="onSortChange"
+                        :default-sort="{ prop: detail.sort_field, order: detail.sort_order === 'asc' ? 'ascending' : 'descending' }">
                         <el-table-column label="主体 / 对接人" min-width="180" show-overflow-tooltip>
                             <template #default="{ row }">
                                 <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
@@ -106,13 +112,13 @@
                             <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.source_type_text }}</el-tag></template>
                         </el-table-column>
                         <el-table-column prop="source_no" label="来源单号" min-width="140" show-overflow-tooltip />
-                        <el-table-column label="金额" width="120" align="right">
+                        <el-table-column label="金额" width="120" align="right" prop="amount" sortable="custom">
                             <template #default="{ row }">{{ money(row.amount) }}</template>
                         </el-table-column>
-                        <el-table-column label="已结" width="120" align="right">
+                        <el-table-column label="已结" width="120" align="right" prop="settled_amount" sortable="custom">
                             <template #default="{ row }">{{ money(row.settled_amount) }}</template>
                         </el-table-column>
-                        <el-table-column label="未结" width="120" align="right">
+                        <el-table-column label="未结" width="120" align="right" prop="outstanding" sortable="custom">
                             <template #default="{ row }"><span class="font-medium">{{ money(row.outstanding) }}</span></template>
                         </el-table-column>
                         <el-table-column label="状态" width="100" align="center">
@@ -120,7 +126,7 @@
                                 <el-tag :type="statusTagType(row.status)" effect="light" size="small">{{ row.status_text }}</el-tag>
                             </template>
                         </el-table-column>
-                        <el-table-column label="时间" width="160">
+                        <el-table-column label="时间" width="160" prop="occurred_at" sortable="custom">
                             <template #default="{ row }">{{ formatTime(row.occurred_at) }}</template>
                         </el-table-column>
                         <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
@@ -297,6 +303,14 @@ const statusOptions = [
     { value: 'settled', label: '已结清' },
     { value: 'void', label: '已作废' },
 ]
+const sortOptions = [
+    { value: 'occurred_at:desc', label: '时间 最新优先' },
+    { value: 'occurred_at:asc', label: '时间 最早优先' },
+    { value: 'amount:desc', label: '金额 从高到低' },
+    { value: 'amount:asc', label: '金额 从低到高' },
+    { value: 'outstanding:desc', label: '未结额 从高到低' },
+    { value: 'outstanding:asc', label: '未结额 从低到高' },
+]
 const expenseCategories = ['水电', '房租', '快递/物流', '办公', '工资', '其它']
 const detailTabs = [
     { name: 'receivable', label: '应收明细' },
@@ -334,15 +348,30 @@ async function loadBoard() {
 }
 
 // 应收/应付明细
-const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', status: '', dateRange: [], amount_min: '', amount_max: '' })
+const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
 function detailParams() {
     const [start, end] = Array.isArray(detail.dateRange) ? detail.dateRange : []
     return {
-        keyword: detail.keyword, status: detail.status,
+        keyword: detail.keyword, settle_state: detail.settle_state,
         start_time: start || 0, end_time: end || 0,
         amount_min: detail.amount_min, amount_max: detail.amount_max,
+        sort_field: detail.sort_field, sort_order: detail.sort_order,
         page: detail.page, limit: detail.limit,
     }
+}
+// 改筛选/排序回到第1页
+function onDetailFilter() { detail.page = 1; loadDetail() }
+function onQuickSort(v: string) {
+    const [f, o] = String(v || 'occurred_at:desc').split(':')
+    detail.sort_field = f; detail.sort_order = o === 'asc' ? 'asc' : 'desc'
+    detail.page = 1; loadDetail()
+}
+// 点列头排序: el-table 给 {prop, order: 'ascending'|'descending'|null}
+function onSortChange({ prop, order }: any) {
+    if (!order) { detail.sort_field = 'occurred_at'; detail.sort_order = 'desc' }
+    else { detail.sort_field = prop; detail.sort_order = order === 'ascending' ? 'asc' : 'desc' }
+    detail.quickSort = `${detail.sort_field}:${detail.sort_order}`
+    detail.page = 1; loadDetail()
 }
 async function loadDetail() {
     detail.loading = true
@@ -357,7 +386,7 @@ async function loadDetail() {
 }
 function onDetailPage(p: number) { detail.page = p; loadDetail() }
 function resetDetailFilter() {
-    Object.assign(detail, { keyword: '', status: '', dateRange: [], amount_min: '', amount_max: '', page: 1 })
+    Object.assign(detail, { keyword: '', settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc', page: 1 })
     loadDetail()
 }
 

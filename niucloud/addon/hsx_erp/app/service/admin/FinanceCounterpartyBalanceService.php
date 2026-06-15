@@ -70,6 +70,25 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
     }
 
     /**
+     * 给应收/应付明细查询统一加排序。白名单字段, 支持未结额(amount-settled_amount)排序。
+     * @param mixed $query ThinkORM 查询对象
+     */
+    public static function applySort($query, array $where): void
+    {
+        $field = (string)($where['sort_field'] ?? 'occurred_at');
+        $order = strtolower((string)($where['sort_order'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+        $allow = ['occurred_at', 'amount', 'settled_amount', 'id'];
+        if ($field === 'outstanding') {
+            $query->orderRaw('(amount - settled_amount) ' . $order)->order('id', 'desc');
+            return;
+        }
+        if (!in_array($field, $allow, true)) {
+            $field = 'occurred_at';
+        }
+        $query->order($field, $order)->order('id', 'desc');
+    }
+
+    /**
      * 财务汇总：应收/应付未结合计 + 净额 + 各资金账户余额(+总余额)。供财务中心顶部卡片。
      */
     public function getSummary(): array
