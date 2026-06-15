@@ -81,6 +81,14 @@ class FinanceSettlementService extends BaseAdminService
         // 注意：必须直接对 $page['data'] 取引用，不能用 `$page['data'] ?? []`(那会复制一份导致改动丢失)
         if (!empty($page['data']) && is_array($page['data'])) {
             $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($page['data'], 'counterparty_id'));
+            // 主体级折账的结算单 counterparty_id 存的是主体ID(非会员), 回查主体名
+            $entityNameMap = [];
+            $allCpIds = array_values(array_unique(array_filter(array_map('intval', array_column($page['data'], 'counterparty_id')))));
+            if (!empty($allCpIds)) {
+                foreach (\addon\hsx_erp\app\model\ErpCounterparty::where([['site_id', '=', $this->site_id]])->whereIn('id', $allCpIds)->field('id,name')->select()->toArray() as $e) {
+                    $entityNameMap[(int)$e['id']] = (string)$e['name'];
+                }
+            }
             // 现金部分走了哪个资金账户(户头)：结算时记的资金流水 source_no=结算单号、biz_type=settlement，回查账户名
             $acctMap = [];
             $nos = array_values(array_filter(array_column($page['data'], 'settlement_no')));
@@ -110,22 +118,104 @@ class FinanceSettlementService extends BaseAdminService
                     $acct = (string)($near ?: '');
                 }
                 $row['account_name'] = $acct;
-                $m = $memberMap[(int)($row['counterparty_id'] ?? 0)] ?? null;
+                $cpid = (int)($row['counterparty_id'] ?? 0);
+                $row['is_entity'] = false;
+                $m = $memberMap[$cpid] ?? null;
                 if ($m) {
+                    // 单人结算: counterparty_id=会员
                     if ((string)($row['counterparty_name'] ?? '') === '') {
                         $row['counterparty_name'] = $m['name'];
                     }
                     $row['counterparty_mobile'] = $m['mobile'];
                     $row['entity_id'] = $m['entity_id'];
                     $row['entity_name'] = $m['entity_name'];
+                } elseif (isset($entityNameMap[$cpid])) {
+                    // 主体级折账: counterparty_id=主体ID
+                    $row['is_entity'] = true;
+                    $row['entity_id'] = $cpid;
+                    $row['entity_name'] = $entityNameMap[$cpid];
+                    if ((string)($row['counterparty_name'] ?? '') === '') {
+                        $row['counterparty_name'] = $entityNameMap[$cpid];
+                    }
                 }
                 if ((string)($row['counterparty_name'] ?? '') === '') {
-                    $row['counterparty_name'] = '往来#' . ($row['counterparty_id'] ?? 0);
+                    $row['counterparty_name'] = '往来#' . $cpid;
                 }
             }
             unset($row);
         }
         return $page;
+    }
+
+    /**
+     * 结算单核销明细: 这次结算把哪些应付、哪些应收核销了, 各自折账多少/现金多少, 关联到人和设备。
+     * 用于"点开结算记录看是哪笔折哪笔、谁给谁多少钱"。
+     */
+    public function getDetail(int $id): array
+    {
+        $st = FinanceSettlement::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
+        if ($st->isEmpty()) {
+            throw new CommonException('结算单不存在');
+        }
+        $head = $st->toArray();
+        // 主体名(主体级结算)
+        $cpid = (int)($head['counterparty_id'] ?? 0);
+        $entity = \addon\hsx_erp\app\model\ErpCounterparty::where([['site_id', '=', $this->site_id], ['id', '=', $cpid]])->value('name');
+        $head['entity_name'] = (string)($entity ?: '');
+
+        $links = FinanceSettlementLink::where([['site_id', '=', $this->site_id], ['settlement_id', '=', $id]])->select()->toArray();
+        $payIds = [];
+        $recIds = [];
+        foreach ($links as $l) {
+            if ((string)$l['target_type'] === FinanceDict::TARGET_PAYABLE) { $payIds[] = (int)$l['target_id']; }
+            else { $recIds[] = (int)$l['target_id']; }
+        }
+        $payMap = !empty($payIds) ? array_column(FinancePayable::where([['site_id', '=', $this->site_id]])->whereIn('id', $payIds)->select()->toArray(), null, 'id') : [];
+        $recMap = !empty($recIds) ? array_column(FinanceReceivable::where([['site_id', '=', $this->site_id]])->whereIn('id', $recIds)->select()->toArray(), null, 'id') : [];
+
+        // 对接人(会员)名 + 设备型号/IMEI
+        $cpIds = array_merge(array_column($payMap, 'counterparty_id'), array_column($recMap, 'counterparty_id'));
+        $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, $cpIds);
+        $deviceIds = array_values(array_filter(array_merge(array_column($payMap, 'source_device_id'), array_column($recMap, 'source_device_id'))));
+        $deviceMap = [];
+        if (!empty($deviceIds)) {
+            foreach (\addon\hsx_erp\app\model\ErpAsset::where([['site_id', '=', $this->site_id]])->whereIn('source_device_id', $deviceIds)->field('source_device_id,model,imei,asset_no')->select()->toArray() as $a) {
+                $deviceMap[(int)$a['source_device_id']] = $a;
+            }
+        }
+
+        $mk = function (array $l, ?array $src) use ($memberMap, $deviceMap) {
+            if (!$src) { return null; }
+            $m = $memberMap[(int)$src['counterparty_id']] ?? null;
+            $dev = $deviceMap[(int)($src['source_device_id'] ?? 0)] ?? null;
+            return [
+                'counterparty_name' => $m['name'] ?? (string)($src['counterparty_name'] ?? ''),
+                'counterparty_mobile' => $m['mobile'] ?? '',
+                'source_type_text'  => FinanceDict::sourceTypeText((string)($src['source_type'] ?? '')),
+                'source_no'         => (string)($src['source_no'] ?? ''),
+                'device_model'      => (string)($dev['model'] ?? ''),
+                'device_imei'       => (string)($dev['imei'] ?? ''),
+                'asset_no'          => (string)($dev['asset_no'] ?? ''),
+                'amount'            => round((float)($src['amount'] ?? 0), 2),
+                'applied_amount'    => round((float)($l['applied_amount'] ?? 0), 2),
+                'offset_part'       => round((float)($l['offset_part'] ?? 0), 2),
+                'cash_part'         => round((float)($l['pay_part'] ?? 0), 2),
+                'remark'            => (string)($src['remark'] ?? ''),
+            ];
+        };
+        $payables = [];
+        $receivables = [];
+        foreach ($links as $l) {
+            $tid = (int)$l['target_id'];
+            if ((string)$l['target_type'] === FinanceDict::TARGET_PAYABLE) {
+                $row = $mk($l, $payMap[$tid] ?? null);
+                if ($row) { $payables[] = $row; }
+            } else {
+                $row = $mk($l, $recMap[$tid] ?? null);
+                if ($row) { $receivables[] = $row; }
+            }
+        }
+        return ['settlement' => $head, 'payables' => $payables, 'receivables' => $receivables];
     }
 
     /**

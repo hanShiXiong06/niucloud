@@ -81,6 +81,12 @@ class Finance extends BaseAdminController
         ));
     }
 
+    /** 结算单核销明细(哪笔应付折哪笔应收、各折账/现金多少、关联到人和设备) */
+    public function settlementDetail(int $id)
+    {
+        return success((new FinanceSettlementService())->getDetail($id));
+    }
+
     /** 一组对接人(主体)的未结应付/应收, 供主体级折账勾选 */
     public function groupOutstanding()
     {

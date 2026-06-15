@@ -176,9 +176,12 @@
                         <el-table-column prop="settlement_no" label="结算单号" min-width="170" show-overflow-tooltip />
                         <el-table-column label="主体 / 对接人" min-width="180" show-overflow-tooltip>
                             <template #default="{ row }">
-                                <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
+                                <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click.stop="openEntity(row.entity_id)">{{ row.entity_name }}</div>
                                 <div v-else class="text-xs text-gray-400">未归属主体</div>
-                                <div class="text-xs text-gray-500">{{ row.counterparty_name }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></div>
+                                <div class="text-xs text-gray-500">
+                                    <span v-if="row.is_entity">多人折账</span>
+                                    <template v-else>{{ row.counterparty_name }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></template>
+                                </div>
                             </template>
                         </el-table-column>
                         <el-table-column label="应付合计" width="110" align="right"><template #default="{ row }">{{ money(row.payable_total) }}</template></el-table-column>
@@ -201,7 +204,12 @@
                             <template #default><el-tag type="success" size="small" effect="light">已结清</el-tag></template>
                         </el-table-column>
                         <el-table-column label="时间" width="160"><template #default="{ row }">{{ formatTime(row.occurred_at) }}</template></el-table-column>
-                        <el-table-column prop="operator_name" label="操作人" width="100" show-overflow-tooltip />
+                        <el-table-column prop="operator_name" label="操作人" width="90" show-overflow-tooltip />
+                        <el-table-column label="操作" width="90" align="center" fixed="right">
+                            <template #default="{ row }">
+                                <el-button type="primary" link @click="openSettleDetail(row)">核销明细</el-button>
+                            </template>
+                        </el-table-column>
                     </el-table>
                     <div class="mt-3 flex justify-end">
                         <el-pagination layout="total, prev, pager, next" :total="settle.total" :page-size="settle.limit" :current-page="settle.page" @current-change="onSettlePage" />
@@ -266,6 +274,57 @@
         <!-- 主体抽屉(信息/对接人/财务对账) -->
         <entity-drawer v-model="entityDrawer.visible" :entity-id="entityDrawer.id" @changed="onEntityChanged" />
 
+        <!-- 结算核销明细抽屉: 哪笔应付折哪笔应收 -->
+        <el-drawer v-model="sdetail.visible" title="结算核销明细" size="720px" @closed="sdetail.data = null">
+            <div v-loading="sdetail.loading">
+                <div v-if="sdetail.data" class="mb-4 rounded-lg bg-gray-50 px-4 py-3 text-sm">
+                    <div class="flex flex-wrap gap-x-6 gap-y-1">
+                        <span>结算单：<b>{{ sdetail.data.settlement.settlement_no }}</b></span>
+                        <span>主体/往来：<b>{{ sdetail.data.settlement.entity_name || sdetail.data.settlement.counterparty_name }}</b></span>
+                        <span>方式：<el-tag size="small" :type="methodTagType(sdetail.data.settlement.method)" effect="light">{{ methodText(sdetail.data.settlement.method) }}</el-tag></span>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-gray-600">
+                        <span>折账冲抵：<b class="text-blue-600">{{ money(sdetail.data.settlement.offset_amount) }}</b></span>
+                        <span>现金{{ cashDirLabel(sdetail.data.settlement.cash_direction) }}：<b>{{ money(sdetail.data.settlement.cash_amount) }}</b></span>
+                        <span v-if="sdetail.data.settlement.account_name">户头：<b>{{ sdetail.data.settlement.account_name }}</b></span>
+                        <span>时间：{{ formatTime(sdetail.data.settlement.occurred_at) }}</span>
+                    </div>
+                </div>
+
+                <div class="mb-2 font-medium text-orange-600">应付侧(我欠对方,核销 {{ (sdetail.data?.payables || []).length }} 笔)</div>
+                <el-table :data="sdetail.data?.payables || []" size="small" empty-text="无" class="mb-4">
+                    <el-table-column label="对接人" min-width="90" show-overflow-tooltip>
+                        <template #default="{ row }">{{ row.counterparty_name }}<div v-if="row.counterparty_mobile" class="text-xs text-gray-400">{{ row.counterparty_mobile }}</div></template>
+                    </el-table-column>
+                    <el-table-column label="业务/设备" min-width="150" show-overflow-tooltip>
+                        <template #default="{ row }">
+                            <div>{{ row.source_type_text }}<span v-if="row.device_model"> · {{ row.device_model }}</span></div>
+                            <div class="text-xs text-gray-400">{{ row.device_imei || row.source_no }}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="核销" width="90" align="right"><template #default="{ row }">{{ money(row.applied_amount) }}</template></el-table-column>
+                    <el-table-column label="其中折账" width="90" align="right"><template #default="{ row }"><span class="text-blue-600">{{ money(row.offset_part) }}</span></template></el-table-column>
+                    <el-table-column label="其中现金" width="90" align="right"><template #default="{ row }">{{ money(row.cash_part) }}</template></el-table-column>
+                </el-table>
+
+                <div class="mb-2 font-medium text-green-600">应收侧(对方欠我,核销 {{ (sdetail.data?.receivables || []).length }} 笔)</div>
+                <el-table :data="sdetail.data?.receivables || []" size="small" empty-text="无">
+                    <el-table-column label="对接人" min-width="90" show-overflow-tooltip>
+                        <template #default="{ row }">{{ row.counterparty_name }}<div v-if="row.counterparty_mobile" class="text-xs text-gray-400">{{ row.counterparty_mobile }}</div></template>
+                    </el-table-column>
+                    <el-table-column label="业务/设备" min-width="150" show-overflow-tooltip>
+                        <template #default="{ row }">
+                            <div>{{ row.source_type_text }}<span v-if="row.device_model"> · {{ row.device_model }}</span></div>
+                            <div class="text-xs text-gray-400">{{ row.device_imei || row.source_no }}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="核销" width="90" align="right"><template #default="{ row }">{{ money(row.applied_amount) }}</template></el-table-column>
+                    <el-table-column label="其中折账" width="90" align="right"><template #default="{ row }"><span class="text-blue-600">{{ money(row.offset_part) }}</span></template></el-table-column>
+                    <el-table-column label="其中现金" width="90" align="right"><template #default="{ row }">{{ money(row.cash_part) }}</template></el-table-column>
+                </el-table>
+            </div>
+        </el-drawer>
+
         <!-- 经营支出弹框 -->
         <el-dialog v-model="expense.visible" title="记一笔经营支出" width="460px">
             <el-form label-width="90px">
@@ -312,6 +371,7 @@ import {
     getFinancePayableList,
     getFinanceReceivableList,
     getFinanceSettlementList,
+    getFinanceSettlementDetail,
     recordFinanceExpense,
 } from '@/addon/hsx_erp/api/finance'
 
@@ -470,6 +530,20 @@ function onSettlePage(p: number) { settle.page = p; loadSettlement() }
 function resetSettleFilter() {
     Object.assign(settle, { keyword: '', dateRange: [], page: 1 })
     loadSettlement()
+}
+
+// 结算核销明细抽屉
+const sdetail = reactive<any>({ visible: false, loading: false, data: null })
+async function openSettleDetail(row: any) {
+    sdetail.visible = true
+    sdetail.loading = true
+    sdetail.data = null
+    try {
+        const res: any = await getFinanceSettlementDetail(row.id)
+        sdetail.data = res.data || null
+    } finally {
+        sdetail.loading = false
+    }
 }
 
 function onTabChange(name: string) {

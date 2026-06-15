@@ -39,6 +39,10 @@ export function getFinanceSummary() {
 export function getFinanceSettlementList(params: Record<string, any>) {
     return request.get('erp/finance/settlement/lists', { params })
 }
+// 结算单核销明细(哪笔折哪笔)
+export function getFinanceSettlementDetail(id: number) {
+    return request.get(`erp/finance/settlement/detail/${id}`)
+}
 // 经营支出快捷记账
 export function recordFinanceExpense(data: Record<string, any>) {
     return request.post('erp/finance/expense', data)
