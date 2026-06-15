@@ -176,49 +176,26 @@ class ErpOutboundService extends BaseAdminService
                     'receivable_emitted' => 0,
                     'create_at'          => $now,
                 ]));
-                // 仅挂单(later)且已有价才挂应收；现结(now)走即时收款不挂应收
-                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && $settleMode === ErpDict::SETTLE_MODE_LATER && $row['sale_price'] > 0) {
+                // 同行销售且有价 → 待处理应收(现结=生成后立即结清; 挂单=生成待结应收)
+                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && $row['sale_price'] > 0) {
                     $emitItems[] = ['item_id' => (int)$item->id, 'price' => $row['sale_price'], 'device_id' => $row['source_device_id']];
                 }
             }
         });
 
-        // 发应收(故障隔离)
+        // 应收处理(故障隔离):
+        //   现结(now): 生成应收并"立即结清", 钱进所选户头 → 应收明细见已结清记录 + 结算记录 + 资金流水, 对账完整
+        //   挂单(later): 此处无价(价格回填时再生成待结应收)
         if (!empty($emitItems)) {
-            $this->emitReceivables($outboundId, $cpId, (string)($p['counterparty_name'] ?? ''), $no, $emitItems);
+            if ($settleMode === ErpDict::SETTLE_MODE_NOW) {
+                $this->emitAndSettleNow($outboundId, $cpId, (string)($p['counterparty_name'] ?? ''), $no, $emitItems, $capitalAccountId, $now);
+            } else {
+                $this->emitReceivables($outboundId, $cpId, (string)($p['counterparty_name'] ?? ''), $no, $emitItems);
+            }
         }
         // 代卖卖出 → 发应付寄卖人(故障隔离)
         if (!empty($emitConsignPayables)) {
             $this->emitConsignorPayables($no, $emitConsignPayables);
-        }
-
-        // 现结: 出库即收款入账(无应收), 钱直接进所选户头
-        if ($settleMode === ErpDict::SETTLE_MODE_NOW && $capitalAccountId > 0) {
-            $total = 0.0;
-            foreach ($priceMap as $aid => $pr) {
-                if (in_array($aid, $assetIds, true)) {
-                    $total += round((float)$pr, 2);
-                }
-            }
-            $total = round($total, 2);
-            if ($total > 0) {
-                try {
-                    (new ErpCapitalAccountService())->recordEntry([
-                        'account_id'        => $capitalAccountId,
-                        'direction'         => 'in',
-                        'amount'            => $total,
-                        'biz_type'          => 'sale',
-                        'counterparty_id'   => $cpId,
-                        'counterparty_name' => (string)($p['counterparty_name'] ?? ''),
-                        'source_type'       => 'erp_peer_sale',
-                        'source_no'         => $no,
-                        'source_id'         => $outboundId,
-                        'remark'            => '同行现结收款',
-                    ]);
-                } catch (\Throwable $e) {
-                    Log::warning('[erp] 现结收款入账失败: ' . $e->getMessage());
-                }
-            }
         }
 
         return ['outbound_id' => $outboundId, 'outbound_no' => $no];
@@ -571,6 +548,50 @@ class ErpOutboundService extends BaseAdminService
         $data['type_text'] = ErpDict::getOutboundTypeMap()[$data['outbound_type']] ?? $data['outbound_type'];
         $data['items'] = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['outbound_id', '=', $id]])->select()->toArray();
         return $data;
+    }
+
+    /**
+     * 现结: 生成应收并立即结清(收款入所选户头)。
+     * 直连核心账务服务拿应收ID(幂等键按出库明细), 再用结算服务一次性结清并记现金入账。
+     */
+    private function emitAndSettleNow(int $outboundId, int $cpId, string $cpName, string $outboundNo, array $emitItems, int $capitalAccountId, int $now): void
+    {
+        if ($cpId <= 0) {
+            return;
+        }
+        try {
+            $core = new \addon\hsx_erp\app\service\core\CoreFinanceLedgerService();
+            $rids = [];
+            foreach ($emitItems as $it) {
+                $rid = (int)$core->recordReceivable([
+                    'event_id'          => 'erp_outbound_item_' . (int)$it['item_id'],
+                    'site_id'           => (int)$this->site_id,
+                    'counterparty_id'   => $cpId,
+                    'counterparty_name' => $cpName,
+                    'amount'            => round((float)$it['price'], 2),
+                    'source_type'       => 'erp_peer_sale',
+                    'source_no'         => $outboundNo,
+                    'source_device_id'  => (int)($it['device_id'] ?? 0),
+                    'occurred_at'       => $now,
+                    'remark'            => '同行现结销售',
+                ]);
+                if ($rid > 0) {
+                    $rids[] = $rid;
+                    ErpOutboundItem::where([['site_id', '=', $this->site_id], ['id', '=', (int)$it['item_id']]])
+                        ->update(['receivable_emitted' => 1]);
+                }
+            }
+            // 立即结清这些应收, 现金收入所选户头(settle 会记一笔 in 的资金流水)
+            if (!empty($rids)) {
+                (new FinanceSettlementService())->settle($cpId, [], $rids, [
+                    'capital_account_id' => $capitalAccountId,
+                    'record_cash'        => true,
+                    'remark'             => '同行现结收款',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('[erp] 现结生成应收并结清失败: ' . $e->getMessage());
+        }
     }
 
     /** 发应收事件给财务中心(同行欠我), 幂等键按出库明细 */
