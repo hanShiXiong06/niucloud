@@ -13,6 +13,7 @@ use addon\hsx_erp\app\model\FinancePayable;
 use addon\hsx_erp\app\model\FinanceReceivable;
 use addon\hsx_erp\app\model\FinanceSettlement;
 use addon\hsx_erp\app\model\FinanceSettlementLink;
+use app\model\member\Member;
 use app\model\sys\SysUser;
 use core\base\BaseAdminService;
 
@@ -139,6 +140,21 @@ class DeviceTraceService extends BaseAdminService
                 $buyerEntityId = (int)$bm['entity_id'];
             }
         }
+        // 从谁收的(回收客户): 优先回收段; 空则用 ERP 资产自带的 source_member_id 解析会员(最可靠)
+        $customerName = (string)($recSummary['customer_name'] ?? '');
+        $customerPhone = (string)($recSummary['customer_phone'] ?? '');
+        if ($customerName === '' && $asset && !empty($asset['source_member_id'])) {
+            try {
+                $m = Member::where([['member_id', '=', (int)$asset['source_member_id']]])->field('nickname,username,mobile')->findOrEmpty();
+                if (!$m->isEmpty()) {
+                    $customerName = (string)($m->nickname ?: $m->username ?: '');
+                    if ($customerPhone === '') {
+                        $customerPhone = (string)($m->mobile ?? '');
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
+        }
         $recyclePrice = round((float)($recSummary['recycle_price'] ?? ($asset['purchase_cost'] ?? 0)), 2);
         $currentCost = round((float)($asset['current_cost'] ?? $recyclePrice), 2);
         $salePrice = round((float)($asset['current_sale_price'] ?? 0), 2);
@@ -151,8 +167,8 @@ class DeviceTraceService extends BaseAdminService
             'asset_no'        => (string)($asset['asset_no'] ?? ''),
             'order_no'        => (string)($recSummary['order_no'] ?? ''),
             'inventory_status'=> (string)($asset['inventory_status'] ?? ''),
-            'customer_name'   => (string)($recSummary['customer_name'] ?? ''),   // 从谁收的(回收客户本人)
-            'customer_phone'  => (string)($recSummary['customer_phone'] ?? ''),
+            'customer_name'   => $customerName,    // 从谁收的(回收客户本人)
+            'customer_phone'  => $customerPhone,
             'buyer_name'      => $buyer,                                          // 卖给了谁(对接人本人)
             'buyer_mobile'    => $buyerMobile,
             'buyer_entity'    => $buyerEntity,                                   // 所属主体名
