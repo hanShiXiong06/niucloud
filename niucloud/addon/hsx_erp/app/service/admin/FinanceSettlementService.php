@@ -563,6 +563,7 @@ class FinanceSettlementService extends BaseAdminService
                 'operator'        => (string)$this->username,
                 'occurred_at'     => $now,
             ];
+            Log::info('[erp_finance] 触发结算完成事件 单号=' . $settlementNo . ' 应付来源=' . json_encode(array_filter($linked, static fn($x) => ($x['type'] ?? '') === 'payable'), JSON_UNESCAPED_UNICODE));
             Event::trigger('FinanceSettlementCompleted', $payload);
         } catch (\Throwable $e) {
             Log::warning('[erp_finance] 结算完成事件分发失败: ' . $e->getMessage());

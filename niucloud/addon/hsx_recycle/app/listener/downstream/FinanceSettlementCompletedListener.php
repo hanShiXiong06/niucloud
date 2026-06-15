@@ -34,15 +34,20 @@ class FinanceSettlementCompletedListener
                     $deviceIds[] = $did;
                 }
             }
+            // 诊断日志: 确认监听已触发 + 解析到的设备
+            Log::info('[hsx_recycle] 收到折账完成事件 单号=' . $settlementNo
+                . ' linked=' . json_encode($payload['linked'] ?? [], JSON_UNESCAPED_UNICODE)
+                . ' 匹配设备=' . json_encode($deviceIds));
             if (empty($deviceIds)) {
                 return false;
             }
             $marked = (new RecycleDevicePaymentService())->settleByOffset($deviceIds, $settlementNo, [
                 'operator' => (string)($payload['operator'] ?? '财务折账'),
             ]);
+            Log::info('[hsx_recycle] 折账回写完成 单号=' . $settlementNo . ' 实改设备数=' . $marked);
             return $marked > 0;
         } catch (\Throwable $e) {
-            Log::warning('[hsx_recycle] 折账回写打款状态失败: ' . $e->getMessage());
+            Log::error('[hsx_recycle] 折账回写打款状态失败: ' . $e->getMessage() . ' @' . $e->getFile() . ':' . $e->getLine());
             return false;
         }
     }
