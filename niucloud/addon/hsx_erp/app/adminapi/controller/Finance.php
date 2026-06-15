@@ -72,22 +72,40 @@ class Finance extends BaseAdminController
     public function settlementPreview()
     {
         $p = $this->request->params([
-            ['counterparty_id', 0], ['payable_ids', []], ['receivable_ids', []],
+            ['counterparty_id', 0], ['member_ids', []], ['payable_ids', []], ['receivable_ids', []],
         ]);
+        $memberIds = array_values(array_filter(array_map('intval', (array)$p['member_ids'])));
+        $scope = !empty($memberIds) ? $memberIds : (int)$p['counterparty_id'];
         return success((new FinanceSettlementService())->preview(
-            (int)$p['counterparty_id'], (array)$p['payable_ids'], (array)$p['receivable_ids']
+            $scope, (array)$p['payable_ids'], (array)$p['receivable_ids']
         ));
     }
 
-    /** 确认结算(现金/折账/混合自动判定) */
+    /** 一组对接人(主体)的未结应付/应收, 供主体级折账勾选 */
+    public function groupOutstanding()
+    {
+        $memberIds = array_values(array_filter(array_map('intval', (array)$this->request->param('member_ids', []))));
+        return success((new FinanceSettlementService())->outstandingByMembers($memberIds));
+    }
+
+    /** 确认结算(现金/折账/混合自动判定; 传 member_ids 则主体级跨人折账) */
     public function settlementSettle()
     {
         $p = $this->request->params([
-            ['counterparty_id', 0], ['payable_ids', []], ['receivable_ids', []], ['remark', ''], ['capital_account_id', 0],
+            ['counterparty_id', 0], ['member_ids', []], ['entity_id', 0], ['entity_name', ''],
+            ['payable_ids', []], ['receivable_ids', []], ['remark', ''], ['capital_account_id', 0],
         ]);
+        $memberIds = array_values(array_filter(array_map('intval', (array)$p['member_ids'])));
+        $options = ['remark' => (string)$p['remark'], 'capital_account_id' => (int)$p['capital_account_id']];
+        if (!empty($memberIds)) {
+            $options['anchor_id'] = (int)$p['entity_id'];
+            $options['anchor_name'] = (string)$p['entity_name'];
+            $scope = $memberIds;
+        } else {
+            $scope = (int)$p['counterparty_id'];
+        }
         return success((new FinanceSettlementService())->settle(
-            (int)$p['counterparty_id'], (array)$p['payable_ids'], (array)$p['receivable_ids'],
-            ['remark' => (string)$p['remark'], 'capital_account_id' => (int)$p['capital_account_id']]
+            $scope, (array)$p['payable_ids'], (array)$p['receivable_ids'], $options
         ));
     }
 

@@ -151,22 +151,24 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
 
         $rows = [];
         foreach ($map as $row) {
-            $row['offsetable'] = round(min($row['payable'], $row['receivable']), 2); // 可折账
-            $row['net'] = round($row['payable'] - $row['receivable'], 2);            // 净额(>0我付/<0我收)
-            $row['net_direction'] = $row['net'] > 0 ? 'pay' : ($row['net'] < 0 ? 'collect' : 'none');
+            $row['payable'] = round((float)$row['payable'], 2);
+            $row['receivable'] = round((float)$row['receivable'], 2);
             $rows[] = $row;
         }
-        // 关联会员表，精确到人(名字+手机)；名字为空时回填会员名，仍无则用 往来#ID
+        // 关联会员表，精确到人(名字+手机+所属主体)；名字为空时回填会员名，仍无则用 往来#ID
         $memberMap = self::resolveMemberMap($this->site_id, array_column($rows, 'counterparty_id'));
         foreach ($rows as &$row) {
             $m = $memberMap[(int)$row['counterparty_id']] ?? null;
+            $row['counterparty_mobile'] = '';
+            $row['entity_id'] = 0;
+            $row['entity_name'] = '';
             if ($m) {
                 if ((string)($row['counterparty_name'] ?? '') === '') {
                     $row['counterparty_name'] = $m['name'];
                 }
                 $row['counterparty_mobile'] = $m['mobile'];
-                $row['entity_id'] = $m['entity_id'];
-                $row['entity_name'] = $m['entity_name'];
+                $row['entity_id'] = (int)$m['entity_id'];
+                $row['entity_name'] = (string)$m['entity_name'];
             }
             if ((string)($row['counterparty_name'] ?? '') === '') {
                 $row['counterparty_name'] = '往来#' . $row['counterparty_id'];
@@ -174,9 +176,69 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
         }
         unset($row);
 
+        // 按主体聚合: 同一主体下多个对接人的应付/应收合并, 可跨人折账; 未归属主体的对接人各自成组。
+        $groups = [];
+        foreach ($rows as $r) {
+            $eid = (int)$r['entity_id'];
+            $child = [
+                'row_key'             => 'c' . (int)$r['counterparty_id'],
+                'is_entity'           => false,
+                'is_child'            => true,
+                'counterparty_id'     => (int)$r['counterparty_id'],
+                'counterparty_name'   => (string)$r['counterparty_name'],
+                'counterparty_mobile' => (string)$r['counterparty_mobile'],
+                'entity_id'           => $eid,
+                'entity_name'         => (string)$r['entity_name'],
+                'payable'             => (float)$r['payable'],
+                'receivable'          => (float)$r['receivable'],
+                'offsetable'          => round(min((float)$r['payable'], (float)$r['receivable']), 2),
+                'net'                 => round((float)$r['payable'] - (float)$r['receivable'], 2),
+                'member_ids'          => [(int)$r['counterparty_id']],
+            ];
+            $child['net_direction'] = $child['net'] > 0 ? 'pay' : ($child['net'] < 0 ? 'collect' : 'none');
+            if ($eid > 0) {
+                $key = 'e' . $eid;
+                if (!isset($groups[$key])) {
+                    $groups[$key] = [
+                        'row_key'             => $key,
+                        'is_entity'           => true,
+                        'is_child'            => false,
+                        'counterparty_id'     => 0,
+                        'counterparty_name'   => (string)$r['entity_name'],
+                        'counterparty_mobile' => '',
+                        'entity_id'           => $eid,
+                        'entity_name'         => (string)$r['entity_name'],
+                        'payable'             => 0.0,
+                        'receivable'          => 0.0,
+                        'member_ids'          => [],
+                        'children'            => [],
+                    ];
+                }
+                $groups[$key]['payable'] = round($groups[$key]['payable'] + (float)$r['payable'], 2);
+                $groups[$key]['receivable'] = round($groups[$key]['receivable'] + (float)$r['receivable'], 2);
+                $groups[$key]['member_ids'][] = (int)$r['counterparty_id'];
+                $groups[$key]['children'][] = $child;
+            } else {
+                // 未归属主体: 单人成组(无下级)
+                $groups['m' . (int)$r['counterparty_id']] = $child;
+            }
+        }
+
+        $result = [];
+        foreach ($groups as $g) {
+            $g['payable'] = round((float)$g['payable'], 2);
+            $g['receivable'] = round((float)$g['receivable'], 2);
+            $g['offsetable'] = round(min($g['payable'], $g['receivable']), 2);
+            $g['net'] = round($g['payable'] - $g['receivable'], 2);
+            $g['net_direction'] = $g['net'] > 0 ? 'pay' : ($g['net'] < 0 ? 'collect' : 'none');
+            if (!empty($g['is_entity'])) {
+                $g['member_count'] = count($g['member_ids']);
+            }
+            $result[] = $g;
+        }
         // 可折账多的排前面, 方便优先处理
-        usort($rows, static fn($a, $b) => $b['offsetable'] <=> $a['offsetable']);
-        return $rows;
+        usort($result, static fn($a, $b) => $b['offsetable'] <=> $a['offsetable']);
+        return $result;
     }
 
     /**

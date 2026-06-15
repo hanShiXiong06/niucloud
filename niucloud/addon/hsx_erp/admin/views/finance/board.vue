@@ -55,12 +55,25 @@
                             <el-option v-for="s in boardSortOptions" :key="s.value" :label="s.label" :value="s.value" />
                         </el-select>
                     </div>
-                    <el-table :data="filteredBoard" v-loading="loading" size="large" empty-text="暂无未结往来" @sort-change="onBoardSortChange">
-                        <el-table-column label="主体 / 对接人" min-width="200">
+                    <el-table :data="filteredBoard" v-loading="loading" size="large" empty-text="暂无未结往来" @sort-change="onBoardSortChange"
+                        row-key="row_key" :tree-props="{ children: 'children' }" default-expand-all>
+                        <el-table-column label="主体 / 对接人" min-width="220">
                             <template #default="{ row }">
-                                <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
-                                <div v-else class="text-xs text-gray-400">未归属主体</div>
-                                <div class="text-xs text-gray-500">{{ row.counterparty_name || ('#' + row.counterparty_id) }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></div>
+                                <!-- 主体汇总行 -->
+                                <template v-if="row.is_entity">
+                                    <span class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</span>
+                                    <span class="ml-1 text-xs text-gray-400">主体 · {{ row.member_count }}人</span>
+                                </template>
+                                <!-- 主体下的对接人(子行) -->
+                                <template v-else-if="row.is_child">
+                                    <span class="text-gray-700">{{ row.counterparty_name }}</span>
+                                    <span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span>
+                                </template>
+                                <!-- 未归属主体的独立对接人 -->
+                                <template v-else>
+                                    <div class="text-xs text-gray-400">未归属主体</div>
+                                    <div class="text-gray-700">{{ row.counterparty_name || ('#' + row.counterparty_id) }}<span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span></div>
+                                </template>
                             </template>
                         </el-table-column>
                         <el-table-column label="应付(我欠)" width="140" align="right" prop="payable" sortable="custom">
@@ -83,8 +96,10 @@
                         </el-table-column>
                         <el-table-column label="操作" width="110" align="center" fixed="right">
                             <template #default="{ row }">
-                                <el-button v-if="row.offsetable > 0" type="primary" link @click="openSettle(row)">折账</el-button>
-                                <span v-else class="text-xs text-gray-400">无可折</span>
+                                <template v-if="!row.is_child">
+                                    <el-button v-if="row.offsetable > 0" type="primary" link @click="openSettle(row)">折账</el-button>
+                                    <span v-else class="text-xs text-gray-400">无可折</span>
+                                </template>
                             </template>
                         </el-table-column>
                     </el-table>
@@ -205,16 +220,18 @@
                         <div class="mb-2 font-medium text-orange-600">应付(我欠对方)</div>
                         <el-table :data="payables" size="small" @selection-change="onPayableSelect" max-height="280" empty-text="无待结应付">
                             <el-table-column type="selection" width="40" />
-                            <el-table-column prop="source_no" label="来源单" min-width="120" show-overflow-tooltip />
-                            <el-table-column label="待结" width="110" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
+                            <el-table-column v-if="current?.is_entity" prop="counterparty_name" label="对接人" width="90" show-overflow-tooltip />
+                            <el-table-column prop="source_no" label="来源单" min-width="110" show-overflow-tooltip />
+                            <el-table-column label="待结" width="100" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
                         </el-table>
                     </div>
                     <div>
                         <div class="mb-2 font-medium text-green-600">应收(对方欠我)</div>
                         <el-table :data="receivables" size="small" @selection-change="onReceivableSelect" max-height="280" empty-text="无待结应收">
                             <el-table-column type="selection" width="40" />
-                            <el-table-column prop="source_no" label="来源单" min-width="120" show-overflow-tooltip />
-                            <el-table-column label="待结" width="110" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
+                            <el-table-column v-if="current?.is_entity" prop="counterparty_name" label="对接人" width="90" show-overflow-tooltip />
+                            <el-table-column prop="source_no" label="来源单" min-width="110" show-overflow-tooltip />
+                            <el-table-column label="待结" width="100" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
                         </el-table>
                     </div>
                 </div>
@@ -288,6 +305,7 @@ import {
     getFinanceBalanceBoard,
     getFinancePayableOutstanding,
     getFinanceReceivableOutstanding,
+    getFinanceGroupOutstanding,
     previewFinanceSettlement,
     settleFinance,
     getFinanceSummary,
@@ -496,17 +514,29 @@ const canSettle = computed(() => {
     return true
 })
 
+// 结算作用域: 主体级传 member_ids+entity, 单人传 counterparty_id
+function scopeParams() {
+    const c = current.value
+    if (c?.is_entity) return { member_ids: c.member_ids || [], entity_id: c.entity_id, entity_name: c.entity_name }
+    return { counterparty_id: c?.counterparty_id }
+}
 async function openSettle(row: any) {
     current.value = row
     dialogVisible.value = true
     dialogLoading.value = true
     try {
-        const [p, r]: any = await Promise.all([
-            getFinancePayableOutstanding(row.counterparty_id),
-            getFinanceReceivableOutstanding(row.counterparty_id),
-        ])
-        payables.value = p.data || []
-        receivables.value = r.data || []
+        if (row.is_entity) {
+            const res: any = await getFinanceGroupOutstanding(row.member_ids || [])
+            payables.value = res.data?.payables || []
+            receivables.value = res.data?.receivables || []
+        } else {
+            const [p, r]: any = await Promise.all([
+                getFinancePayableOutstanding(row.counterparty_id),
+                getFinanceReceivableOutstanding(row.counterparty_id),
+            ])
+            payables.value = p.data || []
+            receivables.value = r.data || []
+        }
     } finally {
         dialogLoading.value = false
     }
@@ -525,7 +555,7 @@ async function doPreview() {
     previewing.value = true
     try {
         const res: any = await previewFinanceSettlement({
-            counterparty_id: current.value.counterparty_id,
+            ...scopeParams(),
             payable_ids: selectedPayables.value.map((x) => x.id),
             receivable_ids: selectedReceivables.value.map((x) => x.id),
         })
@@ -544,7 +574,7 @@ async function doSettle() {
     submitting.value = true
     try {
         await settleFinance({
-            counterparty_id: current.value.counterparty_id,
+            ...scopeParams(),
             payable_ids: selectedPayables.value.map((x) => x.id),
             receivable_ids: selectedReceivables.value.map((x) => x.id),
             remark: remark.value,

@@ -29,9 +29,34 @@ use think\facade\Log;
 class FinanceSettlementService extends BaseAdminService
 {
     /** 预演: 只算不写, 供前端确认弹窗展示"折账多少、现金付/收多少" */
-    public function preview(int $counterpartyId, array $payableIds, array $receivableIds): array
+    public function preview($counterparty, array $payableIds, array $receivableIds): array
     {
-        return $this->plan($counterpartyId, $payableIds, $receivableIds)['summary'];
+        return $this->plan($counterparty, $payableIds, $receivableIds)['summary'];
+    }
+
+    /** 取一组对接人(主体)未结的应付/应收清单, 供主体级折账勾选 */
+    public function outstandingByMembers(array $memberIds): array
+    {
+        $cpIds = array_values(array_unique(array_filter(array_map('intval', $memberIds))));
+        if (empty($cpIds)) {
+            return ['payables' => [], 'receivables' => []];
+        }
+        $open = [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL];
+        $build = function ($model) use ($cpIds, $open) {
+            $list = $model->where([['site_id', '=', $this->site_id]])
+                ->whereIn('counterparty_id', $cpIds)
+                ->whereIn('status', $open)
+                ->order('occurred_at asc')->select()->toArray();
+            $rows = [];
+            foreach ($list as $r) {
+                $out = round((float)$r['amount'] - (float)$r['settled_amount'], 2);
+                if ($out <= 0) { continue; }
+                $r['outstanding'] = $out;
+                $rows[] = $r;
+            }
+            return $rows;
+        };
+        return ['payables' => $build(new FinancePayable()), 'receivables' => $build(new FinanceReceivable())];
     }
 
     /** 结算记录(已结清历史)，支持往来单位/关键词/时间筛选 + 分页 */
@@ -169,14 +194,24 @@ class FinanceSettlementService extends BaseAdminService
         return array_map('intval', $rows);
     }
 
-    /** 执行结算 */
-    public function settle(int $counterpartyId, array $payableIds, array $receivableIds, array $options = []): array
+    /**
+     * 执行结算
+     * @param int|array $counterparty 单个对接人ID, 或一组对接人ID(主体级折账, 跨人冲抵)
+     * @param array $options 可含 anchor_id/anchor_name(结算单归属与名称, 主体级时传主体ID与主体名)
+     */
+    public function settle($counterparty, array $payableIds, array $receivableIds, array $options = []): array
     {
-        $plan = $this->plan($counterpartyId, $payableIds, $receivableIds);
+        $cpIds = is_array($counterparty)
+            ? array_values(array_unique(array_filter(array_map('intval', $counterparty))))
+            : [(int)$counterparty];
+        $plan = $this->plan($cpIds, $payableIds, $receivableIds);
         $summary = $plan['summary'];
         if ($summary['payable_total'] <= 0 && $summary['receivable_total'] <= 0) {
             throw new CommonException('没有可结算的应付或应收');
         }
+        // 结算单归属锚点与名称: 主体级折账传主体ID/主体名; 否则用首个对接人
+        $anchorId = (int)($options['anchor_id'] ?? ($cpIds[0] ?? 0));
+        $anchorName = (string)($options['anchor_name'] ?? ($summary['counterparty_name'] ?? ''));
 
         $now = time();
         $no = 'JS' . date('YmdHis') . str_pad((string)random_int(0, 999), 3, '0', STR_PAD_LEFT);
@@ -190,12 +225,12 @@ class FinanceSettlementService extends BaseAdminService
             $optAccountName = (string)(ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $optAccountId]])->value('account_name') ?: '');
         }
 
-        Db::transaction(function () use ($plan, $summary, $counterpartyId, $options, $optAccountId, $optAccountName, $now, $no, $eventId, &$settlementId) {
+        Db::transaction(function () use ($plan, $summary, $anchorId, $anchorName, $options, $optAccountId, $optAccountName, $now, $no, $eventId, &$settlementId) {
             $settlement = FinanceSettlement::create([
                 'site_id'          => $this->site_id,
                 'settlement_no'    => $no,
-                'counterparty_id'  => $counterpartyId,
-                'counterparty_name'=> $summary['counterparty_name'],
+                'counterparty_id'  => $anchorId,
+                'counterparty_name'=> $anchorName,
                 'capital_account_id' => $optAccountId,
                 'account_name'     => $optAccountName,
                 'method'           => $summary['method'],
@@ -239,8 +274,8 @@ class FinanceSettlementService extends BaseAdminService
                     'direction'         => ($summary['cash_direction'] ?? '') === 'pay' ? 'out' : 'in',
                     'amount'            => $cashAmount,
                     'biz_type'          => 'settlement',
-                    'counterparty_id'   => $counterpartyId,
-                    'counterparty_name' => (string)($summary['counterparty_name'] ?? ''),
+                    'counterparty_id'   => $anchorId,
+                    'counterparty_name' => $anchorName,
                     'source_type'       => 'settlement',
                     'source_no'         => $no,
                     'source_id'         => $settlementId,
@@ -252,7 +287,7 @@ class FinanceSettlementService extends BaseAdminService
         }
 
         // 发结算完成事件(故障隔离, 不回抛): 业务/ERP 订阅以更新各自展示
-        $this->emitSettlementCompleted($settlementId, $counterpartyId, $summary, $plan, $eventId, $now);
+        $this->emitSettlementCompleted($settlementId, $anchorId, $summary, $plan, $eventId, $now);
 
         return ['settlement_id' => $settlementId, 'settlement_no' => $no, 'summary' => $summary];
     }
@@ -261,13 +296,16 @@ class FinanceSettlementService extends BaseAdminService
      * 计算结算方案(折账分配)
      * @return array{summary:array, payable_alloc:array, receivable_alloc:array}
      */
-    private function plan(int $counterpartyId, array $payableIds, array $receivableIds): array
+    private function plan($counterparty, array $payableIds, array $receivableIds): array
     {
-        if ($counterpartyId <= 0) {
+        $cpIds = is_array($counterparty)
+            ? array_values(array_unique(array_filter(array_map('intval', $counterparty))))
+            : [(int)$counterparty];
+        if (empty($cpIds)) {
             throw new CommonException('请选择往来单位');
         }
-        $payables    = $this->loadOutstanding(new FinancePayable(), $counterpartyId, $payableIds);
-        $receivables = $this->loadOutstanding(new FinanceReceivable(), $counterpartyId, $receivableIds);
+        $payables    = $this->loadOutstanding(new FinancePayable(), $cpIds, $payableIds);
+        $receivables = $this->loadOutstanding(new FinanceReceivable(), $cpIds, $receivableIds);
 
         $payableTotal    = round(array_sum(array_column($payables, 'outstanding')), 2);
         $receivableTotal = round(array_sum(array_column($receivables, 'outstanding')), 2);
@@ -337,15 +375,18 @@ class FinanceSettlementService extends BaseAdminService
         return $alloc;
     }
 
-    private function loadOutstanding($model, int $counterpartyId, array $ids): array
+    private function loadOutstanding($model, $counterparty, array $ids): array
     {
+        $cpIds = is_array($counterparty)
+            ? array_values(array_unique(array_filter(array_map('intval', $counterparty))))
+            : [(int)$counterparty];
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
-        if (empty($ids)) {
+        if (empty($ids) || empty($cpIds)) {
             return [];
         }
         $list = $model->where([
             ['site_id', '=', $this->site_id],
-            ['counterparty_id', '=', $counterpartyId],
+            ['counterparty_id', 'in', $cpIds],
             ['id', 'in', $ids],
             ['status', 'in', [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL]],
         ])->order('occurred_at asc')->order('id asc')->select()->toArray();

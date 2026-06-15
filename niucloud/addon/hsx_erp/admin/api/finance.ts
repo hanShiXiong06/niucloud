@@ -12,6 +12,10 @@ export function getFinancePayableOutstanding(counterpartyId: number) {
 export function getFinanceReceivableOutstanding(counterpartyId: number) {
     return request.get('erp/finance/receivable/outstanding', { params: { counterparty_id: counterpartyId } })
 }
+// 一组对接人(主体)的待结算应付/应收(主体级折账)
+export function getFinanceGroupOutstanding(memberIds: number[]) {
+    return request.get('erp/finance/group_outstanding', { params: { member_ids: memberIds } })
+}
 // 结算预演(只算不写)
 export function previewFinanceSettlement(data: Record<string, any>) {
     return request.post('erp/finance/settlement/preview', data)
