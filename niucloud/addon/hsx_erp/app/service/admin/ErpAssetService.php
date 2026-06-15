@@ -455,16 +455,34 @@ class ErpAssetService extends BaseAdminService
         }
 
         $beforeStatus = (string)$asset->inventory_status;
-        $asset->save([
-            'inventory_status' => ErpDict::INVENTORY_PENDING_PRICING,
+
+        // 定价归属（避免多处重复定价）：
+        //  - 商城销路 → 委托中台拍照定价，仍置待定价，由中台定价回流后转可售；
+        //  - 非商城销路且已带售价（回收侧已定价 / 手工建档已敲价）→ 入库即可售，直接用该售价，不再走 ERP 定价。
+        $sourceSnapshot = (array)$asset->source_snapshot;
+        $saleDestination = (string)($sourceSnapshot['sale_destination'] ?? '');
+        $suggestedPrice = round((float)($sourceSnapshot['suggested_sale_price'] ?? $asset->current_sale_price ?? 0), 2);
+        $isMall = $saleDestination === ErpDict::SALE_DESTINATION_MALL;
+        $directSellable = !$isMall && $suggestedPrice > 0;
+        $nextStatus = $directSellable ? ErpDict::INVENTORY_AVAILABLE_FOR_SALE : ErpDict::INVENTORY_PENDING_PRICING;
+        $decisionReason = $plan['reason'] ?: ($directSellable
+            ? '默认无需整备，已带售价，入库即可售'
+            : '默认无需整备，入库后进入待销售定价');
+
+        $assetSave = [
+            'inventory_status' => $nextStatus,
             'version' => (int)$asset->version + 1,
             'update_at' => $now,
-        ]);
+        ];
+        if ($directSellable) {
+            $assetSave['current_sale_price'] = $suggestedPrice;
+        }
+        $asset->save($assetSave);
         ErpAssetCycle::where([
             ['site_id', '=', $this->site_id],
             ['id', '=', (int)$asset->cycle_id],
         ])->update([
-            'status' => ErpDict::INVENTORY_PENDING_PRICING,
+            'status' => $nextStatus,
             'update_at' => $now,
         ]);
         ErpStockLedger::create([
@@ -475,7 +493,7 @@ class ErpAssetService extends BaseAdminService
             'stock_order_id' => $stockOrderId,
             'action' => 'skip_refurbishment',
             'before_status' => $beforeStatus,
-            'after_status' => ErpDict::INVENTORY_PENDING_PRICING,
+            'after_status' => $nextStatus,
             'warehouse_id' => (int)$asset->warehouse_id,
             'location_id' => (int)$asset->location_id,
             'operator_id' => $this->uid,
@@ -483,7 +501,8 @@ class ErpAssetService extends BaseAdminService
             'occurred_at' => $now,
             'payload' => [
                 'decision_source' => $plan['decision_source'] ?: 'default',
-                'reason' => $plan['reason'] ?: '默认无需整备，入库后直接进入待销售定价',
+                'reason' => $decisionReason,
+                'sale_price' => $directSellable ? $suggestedPrice : null,
             ],
         ]);
         $this->writeOperation(
@@ -496,8 +515,8 @@ class ErpAssetService extends BaseAdminService
                 'stock_order_id' => $stockOrderId,
                 'required' => false,
                 'decision_source' => $plan['decision_source'] ?: 'default',
-                'reason' => $plan['reason'] ?: '默认无需整备，入库后直接进入待销售定价',
-                'next_status' => ErpDict::INVENTORY_PENDING_PRICING,
+                'reason' => $decisionReason,
+                'next_status' => $nextStatus,
             ]
         );
 
@@ -505,8 +524,8 @@ class ErpAssetService extends BaseAdminService
             $this->writeDecisionEvent($asset, 'erp.refurbishment.skipped.v1', $stockOrderId, [
                 'required' => false,
                 'decision_source' => $plan['decision_source'] ?: 'default',
-                'reason' => $plan['reason'] ?: '默认无需整备，入库后直接进入待销售定价',
-                'next_status' => ErpDict::INVENTORY_PENDING_PRICING,
+                'reason' => $decisionReason,
+                'next_status' => $nextStatus,
             ], $now),
         ], $this->writeReadyForPhotoEvents($asset, $stockOrderId, $now));
     }

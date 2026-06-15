@@ -25,6 +25,14 @@ class ErpPricingService extends BaseAdminService
                 ErpDict::INVENTORY_PENDING_PRICING,
                 ErpDict::INVENTORY_AVAILABLE_FOR_SALE,
             ])
+            // 回收来源设备不在 ERP 定价：商城销路去中台拍照定价，非商城销路在回收定价时已定。
+            // 故 ERP 销售定价 list 只面向 ERP 自建档(手工入库)等非回收资产。
+            ->where('cycle_id', 'not in', function ($sub) {
+                $sub->name('erp_asset_cycle')
+                    ->where('site_id', $this->site_id)
+                    ->where('source_plugin', 'hsx_recycle')
+                    ->field('id');
+            })
             ->order('id desc');
 
         if (!empty($where['keyword'])) {
