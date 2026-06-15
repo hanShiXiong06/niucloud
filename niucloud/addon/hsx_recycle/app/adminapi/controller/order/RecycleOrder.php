@@ -274,6 +274,13 @@ class RecycleOrder extends BaseAdminController
 
         (new RecycleDevicePaymentService())->assertOrderPaymentAllowed($id);
 
+        // 选了出账户头则先校验余额够不够, 不够提示换户头(不动打款)
+        $capId = (int)($data['capital_account_id'] ?? 0);
+        if ($capId > 0) {
+            $amt = (float)RecycleDevice::where([['order_id', '=', $id], ['site_id', '=', $this->request->siteId()]])->sum('final_price');
+            $this->assertCapitalEnough($capId, $amt);
+        }
+
         $result = $this->flowService->payment($id, $data);
         // 打款成功后，若选了出账户头则在ERP记一笔出账流水（整单：按设备final_price合计）
         $this->recordCapitalOutflow($id, (int)($data['capital_account_id'] ?? 0), null, '');
@@ -304,6 +311,16 @@ class RecycleOrder extends BaseAdminController
             ['capital_account_id', 0]  // 出账户头ID（来自ERP资金账户，0=未选）
         ]);
         $data = $this->fillPaymentInfo($data);
+
+        // 选了出账户头则先校验余额(按本批次设备final_price合计), 不够提示换户头
+        $capId = (int)($data['capital_account_id'] ?? 0);
+        if ($capId > 0) {
+            $dids = array_values(array_filter(array_map('intval', (array)($data['device_ids'] ?? []))));
+            if (!empty($dids)) {
+                $amt = (float)RecycleDevice::where([['site_id', '=', $this->request->siteId()]])->whereIn('id', $dids)->sum('final_price');
+                $this->assertCapitalEnough($capId, $amt);
+            }
+        }
 
         $result = (new RecycleDevicePaymentService())->payDevices($id, $data);
         // 打款成功后，若选了出账户头则在ERP记一笔出账流水（设备级：本批次实付金额）
@@ -427,6 +444,18 @@ class RecycleOrder extends BaseAdminController
      * @param float|null $amount 出账金额；null 时按订单设备 final_price 合计计算（整单打款）
      * @param string $sourceNo 来源单号；空时回退用订单号
      */
+    /** 打款前校验所选 ERP 出账户头余额是否充足, 不足抛异常提示换户头(ERP未装则跳过) */
+    private function assertCapitalEnough(int $capitalAccountId, float $amount): void
+    {
+        if ($capitalAccountId <= 0 || $amount <= 0) {
+            return;
+        }
+        $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpCapitalAccountService';
+        if (class_exists($cls)) {
+            (new $cls())->assertBalanceEnough($capitalAccountId, $amount);
+        }
+    }
+
     private function recordCapitalOutflow(int $orderId, int $capitalAccountId, ?float $amount, string $sourceNo): void
     {
         if ($capitalAccountId <= 0) {
