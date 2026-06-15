@@ -275,11 +275,15 @@ class ErpOutboundService extends BaseAdminService
                 $fromWarehouseId = (int)$asset->warehouse_id;
                 $fromType = (string)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $fromWarehouseId]])->value('business_type') ?: '');
 
-                // 仓库类型调拨规则：自有设备(已是我的机器)不能调入代卖仓。
-                // 代卖仓只接受"代卖来源(ownership=consign)"的设备；二手机仓/同行仓的自有机不允许往代卖仓调。
-                if ($toType === ErpDict::SALE_DESTINATION_CONSIGNMENT
-                    && (string)$asset->ownership_type === ErpDict::OWNERSHIP_OWNED) {
-                    throw new CommonException('设备[' . $asset->asset_no . ']是自有设备，不能调入代卖仓（代卖仓只接受代卖来源的设备）');
+                // 仓库类型调拨规则（代卖仓锁死）：
+                //  1) 代卖仓不接受任何调入（代卖设备只能由「回收代卖入库 / 手工建档」进，不能从其它仓调进来）；
+                //  2) 代卖仓里的设备只能调去二手机仓（买断转回收），不能调往同行仓/暂存仓等其它仓。
+                if ($toType === ErpDict::SALE_DESTINATION_CONSIGNMENT) {
+                    throw new CommonException('代卖仓不接受调入：设备[' . $asset->asset_no . ']不能调入代卖仓');
+                }
+                if ($fromType === ErpDict::SALE_DESTINATION_CONSIGNMENT
+                    && $toType !== ErpDict::SALE_DESTINATION_MALL) {
+                    throw new CommonException('设备[' . $asset->asset_no . ']在代卖仓，只能调拨到二手机仓（买断转回收），不能调往其它仓');
                 }
 
                 ErpAssetMoveLog::create([

@@ -426,8 +426,8 @@
                     type="error"
                     :closable="false"
                     show-icon
-                    title="自有设备不能调入代卖仓"
-                    description="代卖仓只接受代卖来源的设备；二手机仓/同行仓的自有机器不允许往代卖仓调拨。"
+                    title="调拨受限"
+                    :description="transferBlockedMsg"
                 />
                 <el-form-item label="备注"><el-input v-model.trim="transfer.remark" type="textarea" /></el-form-item>
             </el-form>
@@ -527,18 +527,24 @@ const currentLocationName = computed(() => {
     const loc = (wh?.locations || []).find((l: any) => Number(l.id) === lid)
     return loc?.location_name || ('库位#' + lid)
 })
-// 目标仓库/库位树：仓库为父、库位为子；自有设备不能进代卖仓 → 该仓节点禁用
+// 目标仓库/库位树：仓库为父、库位为子。代卖仓锁死：不接受调入；代卖仓设备只能调去二手机仓。
 const warehouseTypeLabel = (t: string) =>
     (({ mall: '二手机仓', peer: '同行仓', consignment: '代卖仓', hold: '暂存仓' }) as Record<string, string>)[t] || ''
+// 设备当前所在仓的业务类型
+const transferFromType = computed(() => {
+    const wid = Number(transfer.asset?.warehouse_id || 0)
+    return String(warehouseOptions.value.find((w: any) => Number(w.id) === wid)?.business_type || '')
+})
 const transferTreeData = computed(() => {
-    const ownedAsset = String(transfer.asset?.ownership_type || '') === 'owned'
+    const fromConsign = transferFromType.value === 'consignment'
     return warehouseOptions.value.map((w: any) => {
         const t = String(w.business_type || '')
-        const blocked = ownedAsset && t === 'consignment'
+        // 代卖仓不接受调入；代卖仓设备只能调去二手机仓
+        const blocked = t === 'consignment' || (fromConsign && t !== 'mall')
         const tl = warehouseTypeLabel(t)
         return {
             value: 'w:' + w.id,
-            label: w.warehouse_name + (tl ? `（${tl}）` : '') + (blocked ? ' · 自有设备不可入' : ''),
+            label: w.warehouse_name + (tl ? `（${tl}）` : '') + (blocked ? ' · 不可调入' : ''),
             disabled: blocked,
             children: (w.locations || []).map((l: any) => ({
                 value: `l:${w.id}:${l.id}`,
@@ -562,10 +568,20 @@ const onTargetChange = (val: string) => {
 const transferTargetType = computed(() =>
     String(warehouseOptions.value.find((item: any) => Number(item.id) === Number(transfer.to_warehouse_id))?.business_type || '')
 )
-// 自有设备(已是我的机器)不能调入代卖仓 → 禁用确认并提示
-const transferBlocked = computed(() =>
-    transferTargetType.value === 'consignment' && String(transfer.asset?.ownership_type || '') === 'owned'
-)
+// 代卖仓锁死规则 → 禁用确认并提示
+const transferBlocked = computed(() => {
+    const to = transferTargetType.value
+    if (!to) return false
+    if (to === 'consignment') return true                               // 代卖仓不接受调入
+    if (transferFromType.value === 'consignment' && to !== 'mall') return true  // 代卖仓设备只能去二手机仓
+    return false
+})
+const transferBlockedMsg = computed(() => {
+    const to = transferTargetType.value
+    if (to === 'consignment') return '代卖仓不接受调入，请改选其它目标仓。'
+    if (transferFromType.value === 'consignment' && to && to !== 'mall') return '代卖仓设备只能调拨到二手机仓（买断转回收），不能调往其它仓。'
+    return ''
+})
 // 代卖设备调进二手机仓(商城)时，需要选择"上架代卖 or 我方买断"
 const showConsignChoice = computed(() =>
     transfer.asset && String(transfer.asset.ownership_type) === 'consign' && transferTargetType.value === 'mall'
