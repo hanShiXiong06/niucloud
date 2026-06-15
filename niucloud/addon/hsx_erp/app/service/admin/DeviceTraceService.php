@@ -59,7 +59,11 @@ class DeviceTraceService extends BaseAdminService
                 'inventory_status' => '',
             ];
         }
-        $buyerMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($assets, 'counterparty_id'));
+        // 一次解析 买家(counterparty_id) + 回收客户(source_member_id) 的人名/主体
+        $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap(
+            $this->site_id,
+            array_merge(array_column($assets, 'counterparty_id'), array_column($assets, 'source_member_id'))
+        );
         foreach ($assets as $a) {
             $did = (int)$a['source_device_id'];
             $key = $did > 0 ? 'd' . $did : 'a' . (int)$a['id'];
@@ -77,10 +81,15 @@ class DeviceTraceService extends BaseAdminService
             if ((float)$items[$key]['sale_price'] <= 0) {
                 $items[$key]['sale_price'] = round((float)$a['current_sale_price'], 2);
             }
-            $bm = $buyerMap[(int)$a['counterparty_id']] ?? null;
+            $bm = $memberMap[(int)$a['counterparty_id']] ?? null;
             if ($bm && $items[$key]['buyer_name'] === '') {
                 $items[$key]['buyer_name'] = (string)$bm['name'];          // 对接人本人
                 $items[$key]['buyer_entity'] = (string)$bm['entity_name']; // 所属主体
+            }
+            // 从谁收的: 资产 source_member_id 解析回收客户(列表 customer_name 常空)
+            $cm = $memberMap[(int)($a['source_member_id'] ?? 0)] ?? null;
+            if ($cm && (string)($items[$key]['customer_name'] ?? '') === '') {
+                $items[$key]['customer_name'] = (string)$cm['name'];
             }
         }
         $rows = array_values($items);
@@ -140,19 +149,23 @@ class DeviceTraceService extends BaseAdminService
                 $buyerEntityId = (int)$bm['entity_id'];
             }
         }
-        // 从谁收的(回收客户): 优先回收段; 空则用 ERP 资产自带的 source_member_id 解析会员(最可靠)
+        // 从谁收的(回收客户): 用 ERP 资产自带的 source_member_id 解析会员(含所属主体), 最可靠
         $customerName = (string)($recSummary['customer_name'] ?? '');
         $customerPhone = (string)($recSummary['customer_phone'] ?? '');
-        if ($customerName === '' && $asset && !empty($asset['source_member_id'])) {
-            try {
-                $m = Member::where([['member_id', '=', (int)$asset['source_member_id']]])->field('nickname,username,mobile')->findOrEmpty();
-                if (!$m->isEmpty()) {
-                    $customerName = (string)($m->nickname ?: $m->username ?: '');
-                    if ($customerPhone === '') {
-                        $customerPhone = (string)($m->mobile ?? '');
-                    }
+        $customerEntity = '';
+        $customerEntityId = 0;
+        $srcMemberId = $asset ? (int)($asset['source_member_id'] ?? 0) : 0;
+        if ($srcMemberId > 0) {
+            $cm = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, [$srcMemberId])[$srcMemberId] ?? null;
+            if ($cm) {
+                if ($customerName === '') {
+                    $customerName = (string)$cm['name'];
                 }
-            } catch (\Throwable $e) {
+                if ($customerPhone === '') {
+                    $customerPhone = (string)$cm['mobile'];
+                }
+                $customerEntity = (string)$cm['entity_name'];
+                $customerEntityId = (int)$cm['entity_id'];
             }
         }
         $recyclePrice = round((float)($recSummary['recycle_price'] ?? ($asset['purchase_cost'] ?? 0)), 2);
@@ -169,6 +182,8 @@ class DeviceTraceService extends BaseAdminService
             'inventory_status'=> (string)($asset['inventory_status'] ?? ''),
             'customer_name'   => $customerName,    // 从谁收的(回收客户本人)
             'customer_phone'  => $customerPhone,
+            'customer_entity' => $customerEntity,  // 回收客户所属主体
+            'customer_entity_id' => $customerEntityId,
             'buyer_name'      => $buyer,                                          // 卖给了谁(对接人本人)
             'buyer_mobile'    => $buyerMobile,
             'buyer_entity'    => $buyerEntity,                                   // 所属主体名

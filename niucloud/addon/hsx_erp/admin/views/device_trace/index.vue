@@ -57,7 +57,9 @@
                             <el-tag size="small" effect="light">{{ statusText(drawer.data.overview.inventory_status) }}</el-tag>
                         </div>
                         <div class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
-                            <span>从谁收的：<b>{{ drawer.data.overview.customer_name || '-' }}</b><span v-if="drawer.data.overview.customer_phone" class="text-gray-400"> · {{ drawer.data.overview.customer_phone }}</span></span>
+                            <span>从谁收的：<b>{{ drawer.data.overview.customer_name || '-' }}</b><span v-if="drawer.data.overview.customer_phone" class="text-gray-400"> · {{ drawer.data.overview.customer_phone }}</span>
+                                <span v-if="drawer.data.overview.customer_entity" class="text-gray-500">（主体：<b class="cursor-pointer text-[var(--el-color-primary)]" @click="openEntity(drawer.data.overview.customer_entity_id)">{{ drawer.data.overview.customer_entity }}</b>）</span>
+                            </span>
                             <span>卖给了谁：<b>{{ drawer.data.overview.buyer_name || '-' }}</b><span v-if="drawer.data.overview.buyer_mobile" class="text-gray-400"> · {{ drawer.data.overview.buyer_mobile }}</span>
                                 <span v-if="drawer.data.overview.buyer_entity" class="text-gray-500">（主体：<b class="cursor-pointer text-[var(--el-color-primary)]" @click="openEntity(drawer.data.overview.buyer_entity_id)">{{ drawer.data.overview.buyer_entity }}</b>）</span>
                             </span>
