@@ -119,29 +119,49 @@
             </template>
         </el-dialog>
 
-        <!-- 流水 -->
-        <el-dialog v-model="ledgerVisible" title="账目往来流水" width="760px">
-            <div class="mb-2 text-sm text-gray-500">账户：{{ ledgerAccountName }}</div>
-            <el-table :data="ledgerList" size="small" v-loading="ledgerLoading" max-height="420" empty-text="暂无流水">
+        <!-- 流水(抽屉：分页 + 检索) -->
+        <el-drawer v-model="ledgerVisible" :title="`账目往来流水 · ${ledger.accountName}`" size="62%">
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+                <el-select v-model="ledger.direction" placeholder="方向" clearable class="!w-[100px]">
+                    <el-option label="收" value="in" />
+                    <el-option label="付" value="out" />
+                </el-select>
+                <el-select v-model="ledger.biz_type" placeholder="业务类型" clearable class="!w-[140px]">
+                    <el-option v-for="(label, val) in bizTypeMap" :key="val" :label="label" :value="val" />
+                </el-select>
+                <el-input v-model="ledger.keyword" placeholder="流水号/对手方/单号/备注" clearable class="!w-[200px]" @keyup.enter="loadLedger" />
+                <el-date-picker v-model="ledger.dateRange" type="daterange" value-format="X" start-placeholder="起" end-placeholder="止" class="!w-[250px]" />
+                <el-button type="primary" @click="loadLedger">查询</el-button>
+                <el-button @click="resetLedgerFilter">重置</el-button>
+            </div>
+            <el-table :data="ledger.list" size="small" v-loading="ledger.loading" empty-text="暂无流水">
                 <el-table-column prop="ledger_no" label="流水号" min-width="160" show-overflow-tooltip />
-                <el-table-column label="方向" width="80" align="center">
+                <el-table-column label="方向" width="64" align="center">
                     <template #default="{ row }">
                         <el-tag :type="row.direction === 'in' ? 'success' : 'warning'" size="small" effect="light">{{ row.direction === 'in' ? '收' : '付' }}</el-tag>
                     </template>
                 </el-table-column>
+                <el-table-column label="业务" width="96" align="center">
+                    <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.biz_type_text }}</el-tag></template>
+                </el-table-column>
                 <el-table-column label="金额" width="120" align="right">
-                    <template #default="{ row }">{{ money(row.amount) }}</template>
+                    <template #default="{ row }"><span :class="row.direction === 'in' ? 'text-green-600' : 'text-orange-600'">{{ (row.direction === 'in' ? '+' : '-') + money(row.amount) }}</span></template>
                 </el-table-column>
                 <el-table-column label="记账后余额" width="120" align="right">
                     <template #default="{ row }">{{ money(row.balance_after) }}</template>
                 </el-table-column>
-                <el-table-column prop="counterparty_name" label="对手方" min-width="120" show-overflow-tooltip />
-                <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-                <el-table-column label="时间" width="160">
+                <el-table-column prop="counterparty_name" label="对手方" min-width="110" show-overflow-tooltip />
+                <el-table-column prop="source_no" label="来源单" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="operator_name" label="操作人" width="90" show-overflow-tooltip />
+                <el-table-column label="时间" width="150">
                     <template #default="{ row }">{{ formatTime(row.occurred_at) }}</template>
                 </el-table-column>
+                <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
             </el-table>
-        </el-dialog>
+            <div class="mt-3 flex justify-end">
+                <el-pagination layout="total, prev, pager, next" :total="ledger.total" :page-size="ledger.limit" :current-page="ledger.page" @current-change="onLedgerPage" />
+            </div>
+        </el-drawer>
     </div>
 </template>
 
@@ -222,21 +242,37 @@ async function onEntry() {
     }
 }
 
-// 流水
+// 流水(抽屉：分页 + 检索)
 const ledgerVisible = ref(false)
-const ledgerLoading = ref(false)
-const ledgerList = ref<any[]>([])
-const ledgerAccountName = ref('')
-async function openLedger(row: any) {
-    ledgerAccountName.value = row.account_name
-    ledgerVisible.value = true
-    ledgerLoading.value = true
+const bizTypeMap: Record<string, string> = {
+    manual: '手工', recycle_payment: '回收打款', expense: '经营支出',
+    settlement: '结算', sale: '销售收款', buyout: '代卖买断', transfer: '转账', fee: '费用',
+}
+const ledger = reactive<any>({ accountId: 0, accountName: '', list: [], loading: false, page: 1, limit: 15, total: 0, direction: '', biz_type: '', keyword: '', dateRange: [] })
+async function loadLedger() {
+    ledger.loading = true
     try {
-        const res: any = await getCapitalLedger({ account_id: row.id, page: 1, limit: 100 })
-        ledgerList.value = res.data?.data || []
+        const [start, end] = Array.isArray(ledger.dateRange) ? ledger.dateRange : []
+        const res: any = await getCapitalLedger({
+            account_id: ledger.accountId, direction: ledger.direction, biz_type: ledger.biz_type,
+            keyword: ledger.keyword, start_time: start || 0, end_time: end || 0,
+            page: ledger.page, limit: ledger.limit,
+        })
+        ledger.list = res.data?.data || []
+        ledger.total = res.data?.total || 0
     } finally {
-        ledgerLoading.value = false
+        ledger.loading = false
     }
+}
+function onLedgerPage(p: number) { ledger.page = p; loadLedger() }
+function resetLedgerFilter() {
+    Object.assign(ledger, { direction: '', biz_type: '', keyword: '', dateRange: [], page: 1 })
+    loadLedger()
+}
+function openLedger(row: any) {
+    Object.assign(ledger, { accountId: row.id, accountName: row.account_name, direction: '', biz_type: '', keyword: '', dateRange: [], page: 1 })
+    ledgerVisible.value = true
+    loadLedger()
 }
 
 onMounted(loadAll)

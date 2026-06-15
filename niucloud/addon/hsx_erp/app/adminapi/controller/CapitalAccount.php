@@ -55,7 +55,8 @@ class CapitalAccount extends BaseAdminController
     public function ledger()
     {
         return success($this->service->ledgerPage($this->request->params([
-            ['account_id', 0], ['direction', ''], ['keyword', ''], ['page', 1], ['limit', 15],
+            ['account_id', 0], ['direction', ''], ['biz_type', ''], ['keyword', ''],
+            ['start_time', 0], ['end_time', 0], ['page', 1], ['limit', 15],
         ])));
     }
 }

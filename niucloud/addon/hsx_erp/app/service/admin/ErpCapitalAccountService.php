@@ -154,6 +154,21 @@ class ErpCapitalAccountService extends BaseAdminService
     }
 
     /** 账目往来流水（可按账户/方向/对手方筛选） */
+    /** 资金流水业务类型 → 中文 */
+    public function bizTypeMap(): array
+    {
+        return [
+            'manual'          => '手工',
+            'recycle_payment' => '回收打款',
+            'expense'         => '经营支出',
+            'settlement'      => '结算',
+            'sale'            => '销售收款',
+            'buyout'          => '代卖买断',
+            'transfer'        => '转账',
+            'fee'             => '费用',
+        ];
+    }
+
     public function ledgerPage(array $where = []): array
     {
         $query = ErpCapitalLedger::where([['site_id', '=', $this->site_id]])->order('id desc');
@@ -163,10 +178,25 @@ class ErpCapitalAccountService extends BaseAdminService
         if (!empty($where['direction'])) {
             $query->where('direction', '=', (string)$where['direction']);
         }
+        if (!empty($where['biz_type'])) {
+            $query->where('biz_type', '=', (string)$where['biz_type']);
+        }
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->where('counterparty_name|source_no|remark', 'like', '%' . $kw . '%');
+            $query->where('ledger_no|counterparty_name|source_no|remark', 'like', '%' . $kw . '%');
         }
-        return $this->pageQuery($query);
+        if (!empty($where['start_time'])) {
+            $query->where('occurred_at', '>=', (int)$where['start_time']);
+        }
+        if (!empty($where['end_time'])) {
+            $query->where('occurred_at', '<=', (int)$where['end_time']);
+        }
+        $page = $this->pageQuery($query);
+        $map = $this->bizTypeMap();
+        foreach (($page['data'] ?? []) as &$row) {
+            $row['biz_type_text'] = $map[$row['biz_type']] ?? (string)$row['biz_type'];
+        }
+        unset($row);
+        return $page;
     }
 }
