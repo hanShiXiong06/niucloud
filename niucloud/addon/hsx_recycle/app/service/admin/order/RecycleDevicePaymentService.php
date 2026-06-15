@@ -251,7 +251,10 @@ class RecycleDevicePaymentService extends BaseAdminService
             return 0;
         }
         $now = time();
-        $payRemark = '折账结清 单号:' . $settlementNo;
+        // 结清方式: 现金(有户头支出)/折账/折账+现金, 由结算事件带来的 method 决定, 不再写死"折账"
+        $method = (string)($info['method'] ?? 'offset');
+        $payTypeText = $method === 'cash' ? '现金' : ($method === 'mixed' ? '折账+现金' : '折账');
+        $payRemark = $payTypeText . '结清 单号:' . $settlementNo;
         $marked = 0;
         Db::startTrans();
         try {
@@ -291,7 +294,7 @@ class RecycleDevicePaymentService extends BaseAdminService
                     'device_imei'  => (string)$device->imei,
                     'device_model' => (string)$device->model,
                     'amount'       => $amount,
-                    'pay_type'     => '折账',
+                    'pay_type'     => $payTypeText,
                     'pay_account'  => '',
                     'pay_name'     => (string)($info['operator'] ?? ''),
                     'pay_remark'   => $payRemark,
@@ -309,14 +312,14 @@ class RecycleDevicePaymentService extends BaseAdminService
                     'action'         => 'device_offset_settle',
                     'old_status'     => (int)$device->status,
                     'new_status'     => RecycleOrderDict::DEVICE_OP_TYPE_PAYMENT,
-                    'remark'         => sprintf('折账结清 | 金额: %.2f | 结算单: %s', $amount, $settlementNo),
+                    'remark'         => sprintf('%s结清 | 金额: %.2f | 结算单: %s', $payTypeText, $amount, $settlementNo),
                     'create_at'      => $now,
                 ]);
                 $orderIds[(int)$device->order_id] = true;
                 $marked++;
             }
             foreach (array_keys($orderIds) as $oid) {
-                $this->syncOrderPayStatus($oid, ['pay_type' => '折账', 'pay_remark' => $payRemark, 'pay_time' => $now]);
+                $this->syncOrderPayStatus($oid, ['pay_type' => $payTypeText, 'pay_remark' => $payRemark, 'pay_time' => $now]);
             }
             Db::commit();
             return $marked;

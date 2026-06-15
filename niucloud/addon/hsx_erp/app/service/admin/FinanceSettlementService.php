@@ -325,7 +325,9 @@ class FinanceSettlementService extends BaseAdminService
             $optAccountName = (string)(ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $optAccountId]])->value('account_name') ?: '');
         }
 
-        Db::transaction(function () use ($plan, $summary, $anchorId, $anchorName, $options, $optAccountId, $optAccountName, $now, $no, $eventId, &$settlementId) {
+        $recordCash = ($options['record_cash'] ?? true) !== false;
+        $cashAmount = round((float)($summary['cash_amount'] ?? 0), 2);
+        Db::transaction(function () use ($plan, $summary, $anchorId, $anchorName, $options, $optAccountId, $optAccountName, $recordCash, $cashAmount, $now, $no, $eventId, &$settlementId) {
             $settlement = FinanceSettlement::create([
                 'site_id'          => $this->site_id,
                 'settlement_no'    => $no,
@@ -360,17 +362,12 @@ class FinanceSettlementService extends BaseAdminService
                 $this->writeLink($settlementId, FinanceDict::TARGET_RECEIVABLE, $a, $now);
                 $this->markSettled(new FinanceReceivable(), (int)$a['id'], $now);
             }
-        });
 
-        // 现金部分关联资金账户：选了户头且有现金净额时，记一笔资金流水(我付=出账/我收=入账)，让现金真正进出账户。
-        // record_cash=false: 现金已由外部(如回收打款)扣账, 此处只做核销/记录户头, 不再二次记流水(避免重复扣账)
-        $recordCash = ($options['record_cash'] ?? true) !== false;
-        $capitalAccountId = (int)($options['capital_account_id'] ?? 0);
-        $cashAmount = round((float)($summary['cash_amount'] ?? 0), 2);
-        if ($recordCash && $capitalAccountId > 0 && $cashAmount > 0) {
-            try {
+            // 现金记账放在同一事务内: 余额不足 recordEntry 会抛异常 → 整笔结算回滚(不会出现"已结清但没扣钱")。
+            // record_cash=false: 现金已由外部(如回收打款)扣账, 此处只核销不再二次记流水。
+            if ($recordCash && $optAccountId > 0 && $cashAmount > 0) {
                 (new ErpCapitalAccountService())->recordEntry([
-                    'account_id'        => $capitalAccountId,
+                    'account_id'        => $optAccountId,
                     'direction'         => ($summary['cash_direction'] ?? '') === 'pay' ? 'out' : 'in',
                     'amount'            => $cashAmount,
                     'biz_type'          => 'settlement',
@@ -381,10 +378,8 @@ class FinanceSettlementService extends BaseAdminService
                     'source_id'         => $settlementId,
                     'remark'            => '结算现金' . ((($summary['cash_direction'] ?? '') === 'pay') ? '付出' : '收取'),
                 ]);
-            } catch (\Throwable $e) {
-                Log::warning('[erp_finance] 结算现金记资金流水失败: ' . $e->getMessage());
             }
-        }
+        });
 
         // 发结算完成事件(故障隔离, 不回抛): 业务/ERP 订阅以更新各自展示
         $this->emitSettlementCompleted($settlementId, $no, $anchorId, $summary, $plan, $eventId, $now);

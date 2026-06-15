@@ -43,6 +43,7 @@ class FinanceSettlementCompletedListener
             }
             $marked = (new RecycleDevicePaymentService())->settleByOffset($deviceIds, $settlementNo, [
                 'operator' => (string)($payload['operator'] ?? '财务折账'),
+                'method'   => (string)($payload['method'] ?? 'offset'),
             ]);
             Log::info('[hsx_recycle] 折账回写完成 单号=' . $settlementNo . ' 实改设备数=' . $marked);
             return $marked > 0;
