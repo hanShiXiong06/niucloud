@@ -119,7 +119,7 @@
                 <el-table-column prop="stock_in_at" label="入库时间" width="170" sortable="custom">
                     <template #default="{ row }">{{ formatTime(row.stock_in_at) }}</template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="250" align="center">
+                <el-table-column label="操作" fixed="right" width="320" align="center">
                     <template #default="{ row }">
                         <el-button
                             v-if="row.inventory_status === 'pending_in'"
@@ -974,9 +974,10 @@ const statusName = (status: string) => ({
     in_stock: '在库',
     refurbishing: '整备中',
     pending_pricing: '待销售定价',
-    available_for_sale: '可售',
-    locked: '已完成',
-    outbound: '已完成'
+    available_for_sale: '在售',
+    locked: '销售锁定',
+    outbound: '已出库',
+    lost: '丢失'
 }[status] || status || '-')
 const statusType = (status: string) => ({
     pending_in: 'warning',

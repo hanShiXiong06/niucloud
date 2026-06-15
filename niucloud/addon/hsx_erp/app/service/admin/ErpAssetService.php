@@ -166,7 +166,7 @@ class ErpAssetService extends BaseAdminService
             ErpDict::INVENTORY_PENDING_PRICING     => '待销售定价',
             ErpDict::INVENTORY_AVAILABLE_FOR_SALE  => '在售',
             ErpDict::INVENTORY_LOCKED              => '销售锁定',
-            ErpDict::INVENTORY_LOST                => '盘亏丢失',
+            ErpDict::INVENTORY_LOST                => '丢失',
         ];
         $typeTag = [
             ErpDict::INVENTORY_PENDING_IN          => 'warning',
