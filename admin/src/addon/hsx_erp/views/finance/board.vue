@@ -230,6 +230,9 @@
                 <el-form-item label="金额" required>
                     <el-input-number v-model="expense.amount" :min="0" :precision="2" class="!w-full" />
                 </el-form-item>
+                <el-form-item label="对手方">
+                    <el-input v-model.trim="expense.counterparty_name" placeholder="付给谁(可选)：如 国家电网 / 房东 / 顺丰" />
+                </el-form-item>
                 <el-form-item label="备注">
                     <el-input v-model.trim="expense.remark" type="textarea" :rows="2" placeholder="如：6月房租 / 顺丰快递费" />
                 </el-form-item>
@@ -469,9 +472,9 @@ function resetDialog() {
 }
 
 // 经营支出
-const expense = reactive<any>({ visible: false, submitting: false, account_id: undefined, category: '', amount: 0, remark: '' })
+const expense = reactive<any>({ visible: false, submitting: false, account_id: undefined, category: '', amount: 0, counterparty_name: '', remark: '' })
 function openExpense() {
-    Object.assign(expense, { account_id: undefined, category: '', amount: 0, remark: '' })
+    Object.assign(expense, { account_id: undefined, category: '', amount: 0, counterparty_name: '', remark: '' })
     if (!summary.accounts || !summary.accounts.length) loadSummary()
     expense.visible = true
 }
@@ -482,7 +485,7 @@ async function submitExpense() {
     try {
         await recordFinanceExpense({
             account_id: expense.account_id, amount: Number(expense.amount),
-            category: expense.category, remark: expense.remark,
+            category: expense.category, counterparty_name: expense.counterparty_name, remark: expense.remark,
         })
         ElMessage.success('已记一笔支出')
         expense.visible = false

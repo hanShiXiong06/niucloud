@@ -142,7 +142,7 @@
                     </template>
                 </el-table-column>
                 <el-table-column label="业务" width="96" align="center">
-                    <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.biz_type_text }}</el-tag></template>
+                    <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.biz_type_text || bizTypeMap[row.biz_type] || '其它' }}</el-tag></template>
                 </el-table-column>
                 <el-table-column label="金额" width="120" align="right">
                     <template #default="{ row }"><span :class="row.direction === 'in' ? 'text-green-600' : 'text-orange-600'">{{ (row.direction === 'in' ? '+' : '-') + money(row.amount) }}</span></template>
