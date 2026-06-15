@@ -754,9 +754,9 @@ class DeviceAssetService extends BaseAdminService
             throw new CommonException('请选择库位');
         }
         $warehouseId = (int)($data['warehouse_id'] ?? 0);
-        // 中台设备为商城销路：只能放入二手机仓(mall)，代卖仓/同行仓/暂存仓禁止（与前端禁用一致）。
+        // 与调拨一致：自有设备(中台设备)不能放入代卖仓；二手机仓/同行仓/暂存仓均可。
         // ERP 未装/查不到类型时不拦截（兜底放行）。
-        $this->assertMallWarehouse($warehouseId);
+        $this->assertNotConsignmentWarehouse($warehouseId);
 
         $payload = [
             'warehouse_id' => $warehouseId,
@@ -772,9 +772,10 @@ class DeviceAssetService extends BaseAdminService
     }
 
     /**
-     * 校验目标仓库必须是二手机仓(mall)。代卖仓/同行仓/暂存仓拒绝；ERP 未装或查不到类型则放行（兜底）。
+     * 校验目标仓库不是代卖仓（自有设备不能放入代卖仓，与调拨一致）。
+     * 二手机仓/同行仓/暂存仓均放行；ERP 未装或查不到类型则放行（兜底）。
      */
-    private function assertMallWarehouse(int $warehouseId): void
+    private function assertNotConsignmentWarehouse(int $warehouseId): void
     {
         if ($warehouseId <= 0) {
             return;
@@ -788,10 +789,8 @@ class DeviceAssetService extends BaseAdminService
         } catch (\Throwable $e) {
             return;
         }
-        if ($type !== '' && in_array($type, ['consignment', 'peer', 'hold'], true)) {
-            $map = ['consignment' => '代卖仓', 'peer' => '同行仓', 'hold' => '暂存仓'];
-            $name = $map[$type] ?? $type;
-            throw new CommonException('中台设备为商城销路，只能放入二手机仓，不能放入' . $name);
+        if ($type === 'consignment') {
+            throw new CommonException('自有设备不能放入代卖仓');
         }
     }
 
