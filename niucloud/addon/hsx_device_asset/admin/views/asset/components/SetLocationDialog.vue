@@ -19,7 +19,7 @@
                     v-model="targetValue"
                     :data="treeData"
                     node-key="value"
-                    :props="{ label: 'label', children: 'children' }"
+                    :props="{ label: 'label', children: 'children', disabled: 'disabled' }"
                     :render-after-expand="false"
                     check-strictly
                     default-expand-all
@@ -27,7 +27,7 @@
                     class="sl-cascader"
                     clearable
                 />
-                <div class="sl-tip">归到库位后，负责该库位的员工即可在移动端「我的待办」看到这台设备。</div>
+                <div class="sl-tip">中台设备为商城销路（拍照→定价→上架），只能放入二手机仓；代卖仓/同行仓/暂存仓不可放入。归位后负责该库位的员工即可在移动端「我的待办」看到这台设备。</div>
             </template>
         </div>
         <template #footer>
@@ -63,13 +63,16 @@ const targetValue = ref<string>('')
 const warehouseTypeLabel = (t?: string) =>
     (({ mall: '二手机仓', peer: '同行仓', consignment: '代卖仓', hold: '暂存仓' }) as Record<string, string>)[String(t || '')] || ''
 
-// 树形：仓库为父、库位为子
+// 树形：仓库为父、库位为子。中台设备只能放二手机仓(mall)；代卖仓/同行仓/暂存仓禁用。
 const treeData = computed(() => warehouses.value.map((w) => {
-    const tl = warehouseTypeLabel(w.business_type)
+    const t = String(w.business_type || '')
+    const blocked = ['consignment', 'peer', 'hold'].includes(t)
+    const tl = warehouseTypeLabel(t)
     return {
         value: 'w:' + w.id,
-        label: w.warehouse_name + (tl ? `（${tl}）` : ''),
-        children: (w.locations || []).map((l) => ({ value: `l:${w.id}:${l.id}`, label: l.location_name }))
+        label: w.warehouse_name + (tl ? `（${tl}）` : '') + (blocked ? ' · 不可放入' : ''),
+        disabled: blocked,
+        children: (w.locations || []).map((l) => ({ value: `l:${w.id}:${l.id}`, label: l.location_name, disabled: blocked }))
     }
 }))
 

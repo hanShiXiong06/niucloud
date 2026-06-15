@@ -753,9 +753,13 @@ class DeviceAssetService extends BaseAdminService
         if ($locationId <= 0) {
             throw new CommonException('请选择库位');
         }
+        $warehouseId = (int)($data['warehouse_id'] ?? 0);
+        // 中台设备为商城销路：只能放入二手机仓(mall)，代卖仓/同行仓/暂存仓禁止（与前端禁用一致）。
+        // ERP 未装/查不到类型时不拦截（兜底放行）。
+        $this->assertMallWarehouse($warehouseId);
 
         $payload = [
-            'warehouse_id' => (int)($data['warehouse_id'] ?? 0),
+            'warehouse_id' => $warehouseId,
             'warehouse_name' => (string)($data['warehouse_name'] ?? ''),
             'location_id' => $locationId,
             'location_name' => (string)($data['location_name'] ?? ''),
@@ -765,6 +769,30 @@ class DeviceAssetService extends BaseAdminService
         $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_SET_LOCATION, $payload);
 
         return $this->getInfo($assetId);
+    }
+
+    /**
+     * 校验目标仓库必须是二手机仓(mall)。代卖仓/同行仓/暂存仓拒绝；ERP 未装或查不到类型则放行（兜底）。
+     */
+    private function assertMallWarehouse(int $warehouseId): void
+    {
+        if ($warehouseId <= 0) {
+            return;
+        }
+        $cls = '\\addon\\hsx_erp\\app\\model\\ErpWarehouse';
+        if (!class_exists($cls)) {
+            return;
+        }
+        try {
+            $type = (string)$cls::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId]])->value('business_type');
+        } catch (\Throwable $e) {
+            return;
+        }
+        if ($type !== '' && in_array($type, ['consignment', 'peer', 'hold'], true)) {
+            $map = ['consignment' => '代卖仓', 'peer' => '同行仓', 'hold' => '暂存仓'];
+            $name = $map[$type] ?? $type;
+            throw new CommonException('中台设备为商城销路，只能放入二手机仓，不能放入' . $name);
+        }
     }
 
     public function exportExcel(array $where = []): string
