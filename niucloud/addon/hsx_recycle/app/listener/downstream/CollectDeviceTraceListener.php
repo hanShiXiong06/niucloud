@@ -42,9 +42,12 @@ class CollectDeviceTraceListener
         if ($siteId <= 0 || $keyword === '') {
             return [];
         }
-        $query = RecycleDevice::where([['site_id', '=', $siteId]]);
+       
+        // 注意：回收设备/订单写库时 site_id 常为 0（与 trace() 同坑），死卡 site_id 会把历史数据全过滤掉 → 查不到。
+        // 放宽为 site_id IN (0, 当前站点)，既兼容历史 0 数据，又不跨真实站点。
+        $query = RecycleDevice::where([['site_id', 'in', [0, $siteId]]]);
         // IMEI/SN 直配; 回收单号则先查订单再取其设备
-        $orderIds = RecycleOrder::where([['site_id', '=', $siteId]])->whereLike('order_no', '%' . $keyword . '%')->column('id');
+        $orderIds = RecycleOrder::where([['site_id', 'in', [0, $siteId]]])->whereLike('order_no', '%' . $keyword . '%')->column('id');
         $query->where(function ($q) use ($keyword, $orderIds) {
             $q->whereLike('imei', '%' . $keyword . '%')->whereOr('sn', 'like', '%' . $keyword . '%');
             if (!empty($orderIds)) {
