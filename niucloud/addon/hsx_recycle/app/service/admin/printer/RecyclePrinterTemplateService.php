@@ -968,8 +968,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'imei' => $device['imei'] ?? '',
             'imei2' => $device['imei2'] ?? '',
             'sn' => $device['sn'] ?? '',
-            // 截取 25 个字符
-            'model' => substr($device['model'] ?? '', 0, 25),
+            // 截取 25 个字符(必须用 mb_substr 按字符截，substr 按字节会把中文砍成半个 → 非法 UTF-8 → json_encode 报 Malformed UTF-8)
+            'model' => mb_substr($device['model'] ?? '', 0, 25, 'UTF-8'),
             'system_version' => $this->stringifyPrintValue($this->firstNotBlank($device['system_version'] ?? null, $deviceInfo['system_version'] ?? null)),
             'warranty_info' => $this->stringifyPrintValue($this->firstNotBlank($device['warranty_info'] ?? null, $deviceInfo['warranty_info'] ?? null)),
             'capacity' => $this->stringifyPrintValue($this->firstNotBlank($device['capacity'] ?? null, $deviceInfo['capacity'] ?? null)),
