@@ -20,6 +20,8 @@ use addon\hsx_erp\app\model\ErpStockOrder;
 use addon\hsx_erp\app\model\ErpStockOrderItem;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\ErpWarehouseLocation;
+use addon\hsx_erp\app\model\FinancePayable;
+use addon\hsx_erp\app\dict\FinanceDict;
 use addon\hsx_erp\app\support\ErpDomainEvent;
 use addon\hsx_erp\app\support\ErpMoney;
 use app\model\sys\SysUserRole;
@@ -288,7 +290,7 @@ class ErpAssetService extends BaseAdminService
      * @param float $newCost 新成本(>=0)
      * @param string $reason 调整原因
      */
-    public function adjustCost(int $assetId, float $newCost, string $reason = ''): array
+    public function adjustCost(int $assetId, float $newCost, string $reason = '', bool $syncPayable = false): array
     {
         if ($newCost < 0) {
             throw new CommonException('成本不能为负');
@@ -306,13 +308,48 @@ class ErpAssetService extends BaseAdminService
         if (abs($newCost - $before) < 0.001) {
             throw new CommonException('成本未变化');
         }
+        $delta = round($newCost - $before, 2);
+
+        // 选择"差额计入应付"时,先在事务外预校验该设备的入库应付(失败更干净)
+        $payableToSync = null;
+        if ($syncPayable) {
+            if ((int)$asset->source_device_id <= 0) {
+                throw new CommonException('该设备无来源单号,无法同步应付');
+            }
+            $payableToSync = FinancePayable::where([
+                ['site_id', '=', $this->site_id],
+                ['source_type', '=', 'erp_inbound'],
+                ['source_device_id', '=', (int)$asset->source_device_id],
+            ])->order('id desc')->findOrEmpty();
+            if ($payableToSync->isEmpty()) {
+                throw new CommonException('未找到该设备的入库应付(可能来自回收来源,成本调整已另行通知回收);如只调库存成本请取消勾选');
+            }
+            $newAmount = round((float)$payableToSync->amount + $delta, 2);
+            if ($newAmount < round((float)$payableToSync->settled_amount, 2) - 0.001) {
+                throw new CommonException(sprintf('下调后应付 ¥%.2f 低于已付 ¥%.2f,请改用退款/应收处理', $newAmount, (float)$payableToSync->settled_amount));
+            }
+        }
+
         $now = time();
-        Db::transaction(function () use ($asset, $before, $newCost, $reason, $now) {
+        Db::transaction(function () use ($asset, $before, $newCost, $delta, $reason, $now, $syncPayable, $payableToSync) {
             $asset->save([
                 'current_cost' => $newCost,
                 'version'      => (int)$asset->version + 1,
                 'update_at'    => $now,
             ]);
+            // 差额计入对供应商的应付:加/减应付额并重算结算状态(已付不变)
+            if ($syncPayable && $payableToSync && !$payableToSync->isEmpty()) {
+                $newAmount = round((float)$payableToSync->amount + $delta, 2);
+                $settled = round((float)$payableToSync->settled_amount, 2);
+                $status = ($settled + 0.001 >= $newAmount)
+                    ? FinanceDict::STATUS_SETTLED
+                    : ($settled > 0 ? FinanceDict::STATUS_PARTIAL : FinanceDict::STATUS_PENDING);
+                FinancePayable::where([['site_id', '=', $this->site_id], ['id', '=', (int)$payableToSync->id]])->update([
+                    'amount'      => $newAmount,
+                    'status'      => $status,
+                    'update_time' => $now,
+                ]);
+            }
             ErpCostLedger::create([
                 'site_id'         => $this->site_id,
                 'ledger_no'       => $this->makeNo('CL'),
@@ -343,6 +380,7 @@ class ErpAssetService extends BaseAdminService
                     'model'            => (string)$asset->model,
                     'before_cost'      => $before,
                     'after_cost'       => $newCost,
+                    'delta'            => round($newCost - $before, 2),
                     'reason'           => $reason,
                     'operator'         => (string)($this->username ?: ''),
                     'occurred_at'      => $now,
@@ -352,6 +390,45 @@ class ErpAssetService extends BaseAdminService
             }
         }
         return ['asset_id' => (int)$asset->id, 'before_cost' => $before, 'after_cost' => $newCost];
+    }
+
+    /**
+     * 承接"回收侧成本调整"事件: 按增量同步 ERP 资产成本 + 记成本流水(操作人=回收操作人)。
+     * 只改数据、不再回发事件(防与 ERP→回收 形成死循环)。
+     */
+    public function applyRecycleCostDelta(int $sourceDeviceId, float $delta, string $reason, string $operator): void
+    {
+        $delta = round($delta, 2);
+        if ($sourceDeviceId <= 0 || abs($delta) < 0.001) {
+            return;
+        }
+        $asset = ErpAsset::where([['source_device_id', '=', $sourceDeviceId]])->order('id desc')->findOrEmpty();
+        if ($asset->isEmpty()) {
+            return;
+        }
+        $before = round((float)$asset->current_cost, 2);
+        $after = round($before + $delta, 2);
+        $now = time();
+        Db::transaction(function () use ($asset, $before, $after, $delta, $reason, $operator, $now, $sourceDeviceId) {
+            $asset->save(['current_cost' => $after, 'version' => (int)$asset->version + 1, 'update_at' => $now]);
+            ErpCostLedger::create([
+                'site_id'         => (int)$asset->site_id ?: $this->site_id,
+                'ledger_no'       => $this->makeNo('CL'),
+                'asset_id'        => (int)$asset->id,
+                'cycle_id'        => (int)$asset->cycle_id,
+                'cost_type'       => 'recycle_cost_sync',
+                'amount_delta'    => $delta,
+                'before_cost'     => $before,
+                'after_cost'      => $after,
+                'source_type'     => 'recycle',
+                'source_id'       => $sourceDeviceId,
+                'counterparty_id' => (int)$asset->counterparty_id,
+                'operator_id'     => 0,
+                'operator_name'   => $operator !== '' ? $operator : '回收同步',
+                'occurred_at'     => $now,
+                'remark'          => '回收侧调成本同步' . ($reason !== '' ? '：' . $reason : ''),
+            ]);
+        });
     }
 
     public function getInfo(int $id): array

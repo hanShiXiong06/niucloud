@@ -563,7 +563,13 @@
                 <el-form-item label="原因">
                     <el-input v-model.trim="costDialog.reason" type="textarea" :rows="2" placeholder="如：维修加价 / 录入有误修正" maxlength="200" show-word-limit />
                 </el-form-item>
-                <div class="text-xs text-gray-400">调整会写入成本流水留痕，已出库/已售/盘亏的设备不可调。</div>
+                <el-form-item label="计入应付">
+                    <el-checkbox v-model="costDialog.sync_payable">此差额计入对该供应商的应付</el-checkbox>
+                </el-form-item>
+                <div v-if="costDialog.sync_payable && costAdjustDelta !== 0" class="mb-2 rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-600">
+                    对供应商应付将同步 {{ costAdjustDelta > 0 ? '+' : '' }}¥{{ money(costAdjustDelta) }}（从 ¥{{ money(costDialog.asset?.current_cost) }} 到 ¥{{ money(costDialog.cost) }}）。仅适用于手工建档入库的设备；回收来源请在回收侧处理。
+                </div>
+                <div class="text-xs text-gray-400">调整会写入成本流水留痕，已出库/已售/盘亏的设备不可调。不勾"计入应付"则只改库存成本（如整备费/运费），不影响欠供应商的钱。</div>
             </el-form>
             <template #footer>
                 <el-button @click="costDialog.visible = false">取消</el-button>
@@ -1138,18 +1144,20 @@ const submitPricing = async () => {
 // 调成本（实时调整在库设备成本，写成本流水）
 const COST_ADJUSTABLE = ['in_stock', 'refurbishing', 'pending_pricing', 'available_for_sale', 'locked']
 const canAdjustCost = (row: any) => COST_ADJUSTABLE.includes(String(row.inventory_status))
-const costDialog = reactive<any>({ visible: false, submitting: false, asset: null, cost: 0, reason: '' })
+const costDialog = reactive<any>({ visible: false, submitting: false, asset: null, cost: 0, reason: '', sync_payable: false })
+const costAdjustDelta = computed(() => Math.round((Number(costDialog.cost || 0) - Number(costDialog.asset?.current_cost || 0)) * 100) / 100)
 const openCostAdjust = (row: any) => {
     costDialog.asset = row
     costDialog.cost = Number(row.current_cost || 0)
     costDialog.reason = ''
+    costDialog.sync_payable = false
     costDialog.visible = true
 }
 const submitCostAdjust = async () => {
     if (!costDialog.asset?.id) return
     costDialog.submitting = true
     try {
-        await adjustErpAssetCost(Number(costDialog.asset.id), { cost: Number(costDialog.cost), reason: costDialog.reason || '' })
+        await adjustErpAssetCost(Number(costDialog.asset.id), { cost: Number(costDialog.cost), reason: costDialog.reason || '', sync_payable: costDialog.sync_payable ? 1 : 0 })
         ElMessage.success('成本已调整')
         costDialog.visible = false
         loadList()
