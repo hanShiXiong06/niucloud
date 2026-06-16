@@ -13,17 +13,35 @@
                     <el-input v-model.trim="search.keyword" clearable placeholder="名称 / 手机号 / 编号" @keyup.enter="loadData" />
                 </el-form-item>
                 <el-form-item label="角色">
-                    <el-select v-model="search.role_type" clearable class="!w-[150px]">
+                    <el-select v-model="search.role_type" clearable class="!w-[140px]" @change="loadData">
                         <el-option label="供应方" value="supplier" />
                         <el-option label="客户" value="customer" />
                         <el-option label="双向往来" value="both" />
                         <el-option label="代卖委托人" value="consignor" />
                     </el-select>
                 </el-form-item>
-                <el-form-item><el-button type="primary" @click="loadData">查询</el-button></el-form-item>
+                <el-form-item label="类型">
+                    <el-select v-model="search.counterparty_type" clearable class="!w-[120px]" @change="loadData">
+                        <el-option label="个人" value="individual" />
+                        <el-option label="门店/企业" value="company" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="状态">
+                    <el-select v-model="search.status" clearable class="!w-[110px]" @change="loadData">
+                        <el-option label="启用" :value="1" />
+                        <el-option label="停用" :value="0" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="手机号">
+                    <el-input v-model.trim="search.mobile" clearable class="!w-[140px]" placeholder="手机号" @keyup.enter="loadData" />
+                </el-form-item>
+                <el-form-item>
+                    <el-button type="primary" @click="loadData">查询</el-button>
+                    <el-button @click="resetSearch">重置</el-button>
+                </el-form-item>
             </el-form>
-            <el-table :data="table.data" v-loading="table.loading" size="large">
-                <el-table-column prop="counterparty_no" label="编号" min-width="190" />
+            <el-table :data="table.data" v-loading="table.loading" size="large" @sort-change="onSort">
+                <el-table-column prop="counterparty_no" label="编号" min-width="190" sortable="custom" />
                 <el-table-column prop="name" label="往来单位" min-width="180" />
                 <el-table-column label="类型" width="100">
                     <template #default="{ row }">{{ row.counterparty_type === 'company' ? '企业' : '个人' }}</template>
@@ -141,7 +159,18 @@ import {
 } from '@/addon/hsx_erp/api/counterparty'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
-const search = reactive({ keyword: '', role_type: '' })
+const search = reactive({ keyword: '', role_type: '', counterparty_type: '', status: '' as any, mobile: '', sort_field: '', sort_order: '' })
+const resetSearch = () => {
+    Object.assign(search, { keyword: '', role_type: '', counterparty_type: '', status: '', mobile: '', sort_field: '', sort_order: '' })
+    table.page = 1
+    loadData()
+}
+const onSort = ({ prop, order }: { prop: string; order: string | null }) => {
+    search.sort_field = order ? prop : ''
+    search.sort_order = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : ''
+    table.page = 1
+    loadData()
+}
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
 const emptyForm = () => ({
     id: 0, counterparty_type: 'individual', role_type: 'supplier', name: '', mobile: '',

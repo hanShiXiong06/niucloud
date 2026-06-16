@@ -20,7 +20,8 @@ class Counterparty extends BaseAdminController
     public function lists()
     {
         return success($this->service->getPage($this->request->params([
-            ['keyword', ''], ['role_type', ''], ['status', ''], ['page', 1], ['limit', 20],
+            ['keyword', ''], ['role_type', ''], ['counterparty_type', ''], ['status', ''], ['mobile', ''],
+            ['sort_field', ''], ['sort_order', ''], ['page', 1], ['limit', 20],
         ])));
     }
 

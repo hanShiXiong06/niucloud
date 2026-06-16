@@ -16,7 +16,7 @@ class ErpCounterpartyAdminService extends BaseAdminService
 {
     public function getPage(array $where = []): array
     {
-        $query = ErpCounterparty::where([['site_id', '=', $this->site_id]])->order('id desc');
+        $query = ErpCounterparty::where([['site_id', '=', $this->site_id]]);
         if (!empty($where['keyword'])) {
             $keyword = trim((string)$where['keyword']);
             $query->whereLike('counterparty_no|name|mobile|contact_name', '%' . $keyword . '%');
@@ -24,9 +24,20 @@ class ErpCounterpartyAdminService extends BaseAdminService
         if (($where['role_type'] ?? '') !== '') {
             $query->where('role_type', '=', (string)$where['role_type']);
         }
+        if (($where['counterparty_type'] ?? '') !== '') {
+            $query->where('counterparty_type', '=', (string)$where['counterparty_type']);
+        }
         if (($where['status'] ?? '') !== '') {
             $query->where('status', '=', (int)$where['status']);
         }
+        if (!empty($where['mobile'])) {
+            $query->whereLike('mobile', '%' . trim((string)$where['mobile']) . '%');
+        }
+        // 排序(白名单字段)
+        $sortMap = ['id' => 'id', 'counterparty_no' => 'counterparty_no', 'name' => 'name', 'create_at' => 'create_at'];
+        $sf = $sortMap[(string)($where['sort_field'] ?? '')] ?? 'id';
+        $so = strtolower((string)($where['sort_order'] ?? '')) === 'asc' ? 'asc' : 'desc';
+        $query->order($sf, $so);
         $page = $this->pageQuery($query);
         $counterpartyIds = array_column($page['data'] ?? [], 'id');
         if (!empty($counterpartyIds)) {
