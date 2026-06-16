@@ -157,6 +157,14 @@ class PrintScene extends BaseAdminController
             'biz_id' => (int)$data['biz_id'],
             'print_data_override' => is_array($data['print_data_override']) ? $data['print_data_override'] : [],
         ], false);
+        // ===== 临时调试 + 兜底:定位并清洗非UTF-8字段，避免 json_encode 抛 Malformed UTF-8 =====
+        array_walk_recursive($result, function (&$v, $k) {
+            if (is_string($v) && $v !== '' && !mb_check_encoding($v, 'UTF-8')) {
+                \think\facade\Log::write('[print-utf8] plan 非法字段 key=' . $k . ' hex=' . bin2hex(substr($v, 0, 80)), 'error');
+                $v = mb_convert_encoding($v, 'UTF-8', 'UTF-8'); // 丢掉非法字节，保证能返回
+            }
+        });
+        // =====================================================================
         if (!empty($result['can_print'])) {
             unset($result['template_info'], $result['printer_info'], $result['device_data'], $result['print_data']);
             return success($result);
