@@ -278,6 +278,26 @@ class ErpAssetService extends BaseAdminService
                 'remark'          => '手动调成本' . ($reason !== '' ? '：' . $reason : ''),
             ]);
         });
+
+        // 发"成本已调整"事件给来源插件(回收)承接留痕；故障隔离，不影响 ERP 调成本主流程
+        if ((int)$asset->source_device_id > 0) {
+            try {
+                event('ErpAssetCostAdjusted', [
+                    'site_id'          => (int)$this->site_id,
+                    'source_device_id' => (int)$asset->source_device_id,
+                    'asset_no'         => (string)$asset->asset_no,
+                    'imei'             => (string)$asset->imei,
+                    'model'            => (string)$asset->model,
+                    'before_cost'      => $before,
+                    'after_cost'       => $newCost,
+                    'reason'           => $reason,
+                    'operator'         => (string)($this->username ?: ''),
+                    'occurred_at'      => $now,
+                ]);
+            } catch (\Throwable $e) {
+                \think\facade\Log::warning('[erp] 发成本调整事件失败: ' . $e->getMessage());
+            }
+        }
         return ['asset_id' => (int)$asset->id, 'before_cost' => $before, 'after_cost' => $newCost];
     }
 

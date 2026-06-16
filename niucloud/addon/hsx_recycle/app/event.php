@@ -38,6 +38,8 @@ return [
         
         // 设备质检完成事件
         'AfterDeviceCheckComplete' => [ 'addon\hsx_recycle\app\listener\device\DeviceCheckCompleteListener' ],
+        // 承接 ERP 设备成本调整事件，在回收设备上留痕(未打款时提醒是否同步回收价)
+        'ErpAssetCostAdjusted' => [ 'addon\hsx_recycle\app\listener\ErpCostAdjustedListener' ],
 
         // 下游流转回流：订阅 ERP/数据中台事件，把设备下游生命周期(已入库/转中台/已定价)镜像回回收设备
         'ErpDomainEvent' => [ 'addon\hsx_recycle\app\listener\downstream\ErpAssetDownstreamListener' ],
