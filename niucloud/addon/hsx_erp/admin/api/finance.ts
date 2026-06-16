@@ -47,3 +47,8 @@ export function getFinanceSettlementDetail(id: number) {
 export function recordFinanceExpense(data: Record<string, any>) {
     return request.post('erp/finance/expense', data)
 }
+
+// 采购预付挂账:钱付了货没到——现金出账 + 生成采购预付应收(货到折账相抵)
+export function prepayFinance(data: Record<string, any>) {
+    return request.post('erp/finance/prepay', data)
+}

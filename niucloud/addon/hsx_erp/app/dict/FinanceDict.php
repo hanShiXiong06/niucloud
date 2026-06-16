@@ -33,6 +33,7 @@ class FinanceDict
             'erp_consign_buyout' => '代卖买断',
             'consign_buyout'     => '代卖买断',
             'expense'            => '经营支出',
+            'prepay'             => '采购预付',
             'manual_inbound'     => '手工建档',
             'sale'               => '销售',
             'sales'              => '销售',

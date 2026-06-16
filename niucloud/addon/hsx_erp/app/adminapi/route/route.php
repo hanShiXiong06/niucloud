@@ -92,6 +92,7 @@ Route::group('erp', function () {
     Route::get('device_trace/search', 'addon\hsx_erp\app\adminapi\controller\DeviceTrace@search');
     Route::get('device_trace/detail', 'addon\hsx_erp\app\adminapi\controller\DeviceTrace@detail');
     Route::post('finance/expense', 'addon\hsx_erp\app\adminapi\controller\Finance@recordExpense');
+    Route::post('finance/prepay', 'addon\hsx_erp\app\adminapi\controller\Finance@prepay');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,

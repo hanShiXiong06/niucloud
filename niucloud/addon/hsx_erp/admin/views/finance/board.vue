@@ -7,6 +7,7 @@
                     <div class="mt-1 text-sm text-gray-500">往来对账、应收应付明细、结算记录与经营支出，一处看清账目往来。</div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <el-button type="primary" plain @click="openPrepay">采购预付</el-button>
                     <el-button type="warning" plain @click="openExpense">记一笔支出</el-button>
                     <el-button @click="refreshAll" :loading="loading">刷新</el-button>
                 </div>
@@ -403,6 +404,32 @@
                 <el-button type="primary" :loading="expense.submitting" @click="submitExpense">确认出账</el-button>
             </template>
         </el-dialog>
+
+        <!-- 采购预付弹框:钱付了货没到 -->
+        <el-dialog v-model="prepay.visible" title="采购预付（钱付了，货还没到）" width="480px">
+            <el-form label-width="92px">
+                <el-form-item label="往来单位" required>
+                    <counterparty-select v-model="prepay.counterparty_id" value-field="member_id" role-type="supplier"
+                        placeholder="搜索姓名 / 手机号选择供应商" @resolved="onPrepayResolved" />
+                </el-form-item>
+                <el-form-item label="付款账户" required>
+                    <el-select v-model="prepay.account_id" filterable class="w-full" placeholder="从哪个资金账户付">
+                        <el-option v-for="a in summary.accounts" :key="a.id" :label="`${a.account_name}（余额 ${money(a.balance)}）`" :value="a.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="预付金额" required>
+                    <el-input-number v-model="prepay.amount" :min="0" :precision="2" class="!w-full" />
+                </el-form-item>
+                <el-form-item label="备注">
+                    <el-input v-model.trim="prepay.remark" type="textarea" :rows="2" placeholder="如：采购10台 iPhone 定金 / 全款" />
+                </el-form-item>
+            </el-form>
+            <div class="-mt-2 text-xs text-gray-400">现金即时出账，并生成一笔「采购预付」挂在该往来单位名下；货到手工建档生成应付后，到「折账」一键相抵即可，无需重复付款。</div>
+            <template #footer>
+                <el-button @click="prepay.visible = false">取消</el-button>
+                <el-button type="primary" :loading="prepay.submitting" @click="submitPrepay">确认预付</el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -424,7 +451,9 @@ import {
     getFinanceSettlementList,
     getFinanceSettlementDetail,
     recordFinanceExpense,
+    prepayFinance,
 } from '@/addon/hsx_erp/api/finance'
+import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 const netLabel = (d: string) => (d === 'pay' ? '我付' : d === 'collect' ? '我收' : '已平')
@@ -786,6 +815,36 @@ async function submitExpense() {
         ElMessage.error(e?.message || '记账失败')
     } finally {
         expense.submitting = false
+    }
+}
+
+// 采购预付:钱付了货没到
+const prepay = reactive<any>({ visible: false, submitting: false, counterparty_id: undefined, counterparty_name: '', account_id: undefined, amount: 0, remark: '' })
+function openPrepay() {
+    Object.assign(prepay, { counterparty_id: undefined, counterparty_name: '', account_id: undefined, amount: 0, remark: '' })
+    if (!summary.accounts || !summary.accounts.length) loadSummary()
+    prepay.visible = true
+}
+function onPrepayResolved(d: any) {
+    prepay.counterparty_name = d ? (d.member_name || '') : ''
+}
+async function submitPrepay() {
+    if (!prepay.counterparty_id) return ElMessage.warning('请选择往来单位')
+    if (!prepay.account_id) return ElMessage.warning('请选择付款账户')
+    if (!Number(prepay.amount) || Number(prepay.amount) <= 0) return ElMessage.warning('请填写预付金额')
+    prepay.submitting = true
+    try {
+        await prepayFinance({
+            counterparty_id: prepay.counterparty_id, counterparty_name: prepay.counterparty_name,
+            account_id: prepay.account_id, amount: Number(prepay.amount), remark: prepay.remark,
+        })
+        ElMessage.success('已记一笔采购预付')
+        prepay.visible = false
+        refreshAll()
+    } catch (e: any) {
+        ElMessage.error(e?.message || '预付失败')
+    } finally {
+        prepay.submitting = false
     }
 }
 

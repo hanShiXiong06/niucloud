@@ -7,6 +7,7 @@ use addon\hsx_erp\app\dict\FinanceDict;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\FinanceReceivable;
 use core\base\BaseAdminService;
+use core\exception\CommonException;
 
 /**
  * 财务-应收列表
@@ -111,5 +112,69 @@ class FinanceReceivableService extends BaseAdminService
         }
         $this->appendDeviceInfo($rows);
         return $rows;
+    }
+
+    /**
+     * 采购预付挂账:钱付了、货还没到。
+     *  1) 从资金账户现金出账(余额不足会抛);
+     *  2) 给该往来单位生成一笔"采购预付"应收(=对方欠我货)→ 形成预付往来余额;
+     *     货到手工建档生成应付后,用"一键结算/折账"自动与之相抵,无需再付现金。
+     *
+     * @param array $data counterparty_id(=会员锚) / amount / account_id / counterparty_name? / remark?
+     */
+    public function prepay(array $data): array
+    {
+        $counterpartyId = (int)($data['counterparty_id'] ?? 0);
+        $amount = round((float)($data['amount'] ?? 0), 2);
+        $accountId = (int)($data['account_id'] ?? 0);
+        $remark = trim((string)($data['remark'] ?? ''));
+        if ($counterpartyId <= 0) {
+            throw new CommonException('请选择往来单位');
+        }
+        if ($amount <= 0) {
+            throw new CommonException('预付金额必须大于0');
+        }
+        if ($accountId <= 0) {
+            throw new CommonException('请选择付款资金账户');
+        }
+
+        $name = trim((string)($data['counterparty_name'] ?? ''));
+        if ($name === '') {
+            $map = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, [$counterpartyId]);
+            $name = (string)($map[$counterpartyId]['name'] ?? ('往来#' . $counterpartyId));
+        }
+
+        // 1) 资金账户出账(余额不足直接抛)
+        $ledgerId = (new ErpCapitalAccountService())->recordEntry([
+            'account_id'        => $accountId,
+            'direction'         => 'out',
+            'amount'            => $amount,
+            'biz_type'          => 'prepay',
+            'counterparty_id'   => $counterpartyId,
+            'counterparty_name' => $name,
+            'source_type'       => 'prepay',
+            'remark'            => $remark !== '' ? ('采购预付 ' . $remark) : '采购预付',
+        ]);
+
+        // 2) 生成"采购预付"应收 → 货到应付时折账相抵
+        $eventId = 'erp-prepay-' . $this->site_id . '-' . date('YmdHis') . '-' . random_int(100000, 999999);
+        event('FinanceReceivableCreated', [
+            'site_id'           => $this->site_id,
+            'event_id'          => $eventId,
+            'amount'            => $amount,
+            'counterparty_id'   => $counterpartyId,
+            'counterparty_name' => $name,
+            'source_type'       => 'prepay',
+            'source_no'         => 'CAP#' . $ledgerId,
+            'occurred_at'       => time(),
+            'remark'            => $remark !== '' ? ('采购预付：' . $remark) : '采购预付(货到自动相抵应付)',
+        ]);
+
+        return [
+            'counterparty_id'   => $counterpartyId,
+            'counterparty_name' => $name,
+            'amount'            => $amount,
+            'capital_ledger_id' => $ledgerId,
+        ];
     }
 }

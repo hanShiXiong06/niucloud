@@ -151,4 +151,19 @@ class Finance extends BaseAdminController
             'remark'            => $fullRemark,
         ]));
     }
+
+    /** 采购预付挂账:钱付了货没到——现金出账 + 生成采购预付应收(货到折账相抵) */
+    public function prepay()
+    {
+        $p = $this->request->params([
+            ['counterparty_id', 0], ['counterparty_name', ''], ['amount', 0], ['account_id', 0], ['remark', ''],
+        ]);
+        return success((new FinanceReceivableService())->prepay([
+            'counterparty_id'   => (int)$p['counterparty_id'],
+            'counterparty_name' => (string)$p['counterparty_name'],
+            'amount'            => $p['amount'],
+            'account_id'        => (int)$p['account_id'],
+            'remark'            => (string)$p['remark'],
+        ]));
+    }
 }
