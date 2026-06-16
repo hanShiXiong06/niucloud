@@ -213,6 +213,9 @@
                         </el-table-column>
                         <el-table-column label="时间" width="160"><template #default="{ row }">{{ formatTime(row.occurred_at) }}</template></el-table-column>
                         <el-table-column prop="operator_name" label="操作人" width="90" show-overflow-tooltip />
+                        <el-table-column prop="remark" label="备注 / 原由" min-width="180" show-overflow-tooltip>
+                            <template #default="{ row }"><span :class="row.remark ? '' : 'text-gray-300'">{{ row.remark || '—' }}</span></template>
+                        </el-table-column>
                         <el-table-column label="操作" width="90" align="center" fixed="right">
                             <template #default="{ row }">
                                 <el-button type="primary" link @click="openSettleDetail(row)">核销明细</el-button>
