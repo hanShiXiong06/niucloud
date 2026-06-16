@@ -58,4 +58,10 @@ class Stocktake extends BaseAdminController
         $adjust = (int)$this->request->param('adjust_loss', 1) === 1;
         return success($this->service->finish($id, $adjust));
     }
+
+    /** 找回(误判盘亏纠正): 把盘亏设备恢复在库 */
+    public function restore(int $itemId)
+    {
+        return success($this->service->restoreLoss($itemId));
+    }
 }

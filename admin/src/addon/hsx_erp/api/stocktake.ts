@@ -20,3 +20,8 @@ export function scanStocktake(id: number, codes: string[]) {
 export function finishStocktake(id: number, adjustLoss = 1) {
     return request.post(`erp/stocktake/${id}/finish`, { adjust_loss: adjustLoss })
 }
+
+// 找回(误判盘亏纠正): 把盘亏设备恢复在库
+export function restoreStocktakeItem(itemId: number) {
+    return request.post(`erp/stocktake/item/${itemId}/restore`)
+}

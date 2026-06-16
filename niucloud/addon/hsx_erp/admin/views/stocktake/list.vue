@@ -8,7 +8,10 @@
                         选仓库/库位拉出应在库清单，逐台录入实物 IMEI，未盘到的判为盘亏、可据实核销离库。与「账实校验」互补：那个查数据，这个查实物。
                     </div>
                 </div>
-                <el-button type="primary" @click="openCreate">新建盘点</el-button>
+                <div class="flex gap-2">
+                    <el-button text @click="introVisible = true">这是什么？</el-button>
+                    <el-button type="primary" @click="openCreate">新建盘点</el-button>
+                </div>
             </div>
 
             <div class="mt-4 flex gap-3">
@@ -99,6 +102,11 @@
                         </template>
                     </el-table-column>
                     <el-table-column prop="remark" label="说明" min-width="120" show-overflow-tooltip />
+                    <el-table-column label="操作" width="90" align="center">
+                        <template #default="{ row }">
+                            <el-button v-if="row.result === 'loss'" type="primary" link :loading="row._restoring" @click="doRestore(row)">找回</el-button>
+                        </template>
+                    </el-table-column>
                 </el-table>
             </div>
             <template #footer>
@@ -108,13 +116,35 @@
                 </el-button>
             </template>
         </el-dialog>
+
+        <!-- 功能说明抽屉 -->
+        <el-drawer v-model="introVisible" title="库存盘点 · 它能干什么" size="460px">
+            <div class="space-y-4 text-sm leading-relaxed text-gray-600">
+                <div>
+                    <div class="font-medium text-gray-800">用来做什么</div>
+                    <p class="mt-1">核对"系统里说在库的设备"和"仓库里实际有的设备"是否一致。选仓库/库位拉出应在库清单，逐台扫码录入实物，对不上的就能查出来。</p>
+                </div>
+                <div>
+                    <div class="font-medium text-gray-800">完成盘点会改变什么</div>
+                    <p class="mt-1">没盘到的设备判为<b class="text-red-600">盘亏</b>，据实<b>核销离库</b>（状态变"丢失"，写一条库存流水留痕）；盘到但系统没有的记为<b class="text-orange-500">盘盈</b>。盘点单本身是一份审计记录。</p>
+                </div>
+                <div>
+                    <div class="font-medium text-gray-800">能撤销/回滚吗</div>
+                    <p class="mt-1">整张盘点单完成后<b>不可撤销</b>（账务要可追溯）。但如果某台机是<b>误判盘亏</b>，可在明细里点"<b>找回</b>"把它恢复在库，并写一条反向流水——纠错也留痕。</p>
+                </div>
+                <div>
+                    <div class="font-medium text-gray-800">和"账实校验"的区别</div>
+                    <p class="mt-1">账实校验只查<b>数据</b>是否自洽（流水 vs 快照），不动库存；盘点查<b>实物 vs 账面</b>的差，会据实核销。两者互补。</p>
+                </div>
+            </div>
+        </el-drawer>
     </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getStocktakeList, getStocktakeInfo, createStocktake, scanStocktake, finishStocktake } from '@/addon/hsx_erp/api/stocktake'
+import { getStocktakeList, getStocktakeInfo, createStocktake, scanStocktake, finishStocktake, restoreStocktakeItem } from '@/addon/hsx_erp/api/stocktake'
 import { getErpWarehouseList } from '@/addon/hsx_erp/api/warehouse'
 
 const fmt = (t: number) => (t ? new Date(t * 1000).toLocaleString() : '-')
@@ -173,7 +203,22 @@ function resetCreate() {
 }
 
 // 详情 / 录入
+const introVisible = ref(false)
 const detailVisible = ref(false)
+async function doRestore(row: any) {
+    try {
+        await ElMessageBox.confirm(`确认找回设备「${row.model || row.imei}」？将从"丢失"恢复在库，并写一条反向流水。`, '找回设备', { type: 'warning' })
+    } catch { return }
+    row._restoring = true
+    try {
+        await restoreStocktakeItem(row.id)
+        ElMessage.success('已找回，恢复在库')
+        await openDetail(detail.value)
+        loadList()
+    } finally {
+        row._restoring = false
+    }
+}
 const detailLoading = ref(false)
 const detail = ref<any>(null)
 const scanText = ref('')

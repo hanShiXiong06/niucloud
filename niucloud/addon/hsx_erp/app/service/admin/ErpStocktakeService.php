@@ -263,6 +263,69 @@ class ErpStocktakeService extends BaseAdminService
         return $data;
     }
 
+    /**
+     * 找回(误判盘亏纠正)：把盘亏核销的设备从"丢失"恢复到盘点前状态，写反向库存流水。
+     * 不撤销整张盘点单(账务可追溯)，只对个别误判设备做反向纠正。
+     * @param int $itemId 盘点明细ID(result=loss)
+     */
+    public function restoreLoss(int $itemId): array
+    {
+        $item = ErpStocktakeItem::where([['site_id', '=', $this->site_id], ['id', '=', $itemId]])->findOrEmpty();
+        if ($item->isEmpty()) {
+            throw new CommonException('盘点明细不存在');
+        }
+        if ((string)$item->result !== ErpDict::STOCKTAKE_RESULT_LOSS) {
+            throw new CommonException('只有盘亏(丢失)的设备可以找回');
+        }
+        $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->asset_id]])->findOrEmpty();
+        if ($asset->isEmpty()) {
+            throw new CommonException('设备不存在');
+        }
+        if ((string)$asset->inventory_status !== ErpDict::INVENTORY_LOST) {
+            throw new CommonException('该设备当前不是丢失状态，无需找回');
+        }
+        // 恢复到盘点前的状态(快照)，无快照则回到在库
+        $restoreStatus = (string)$item->system_status;
+        if ($restoreStatus === '' || $restoreStatus === ErpDict::INVENTORY_LOST || $restoreStatus === ErpDict::INVENTORY_OUTBOUND) {
+            $restoreStatus = ErpDict::INVENTORY_IN_STOCK;
+        }
+        $now = time();
+        Db::transaction(function () use ($item, $asset, $restoreStatus, $now) {
+            $asset->save([
+                'inventory_status' => $restoreStatus,
+                'stock_out_at'     => 0,
+                'version'          => (int)$asset->version + 1,
+                'update_at'        => $now,
+            ]);
+            ErpStockLedger::create([
+                'site_id'       => $this->site_id,
+                'ledger_no'     => $this->makeNo('SL'),
+                'asset_id'      => (int)$asset->id,
+                'cycle_id'      => (int)$asset->cycle_id,
+                'action'        => 'stocktake_restore',
+                'before_status' => ErpDict::INVENTORY_LOST,
+                'after_status'  => $restoreStatus,
+                'warehouse_id'  => (int)$asset->warehouse_id,
+                'location_id'   => (int)$asset->location_id,
+                'operator_id'   => $this->uid,
+                'operator_name' => $this->username ?: '',
+                'occurred_at'   => $now,
+                'payload'       => ['stocktake_item_id' => (int)$item->id, 'reason' => '盘亏误判找回'],
+            ]);
+            $item->save(['result' => ErpDict::STOCKTAKE_RESULT_MATCHED, 'counted' => 1, 'remark' => '盘亏找回(已恢复在库)', 'update_at' => $now]);
+            // 回写盘点单计数
+            $order = ErpStocktakeOrder::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->stocktake_id]])->findOrEmpty();
+            if (!$order->isEmpty()) {
+                $order->save([
+                    'loss_count'  => max(0, (int)$order->loss_count - 1),
+                    'match_count' => (int)$order->match_count + 1,
+                    'update_at'   => $now,
+                ]);
+            }
+        });
+        return ['restored_status' => $restoreStatus];
+    }
+
     private function mustCounting(int $stocktakeId): ErpStocktakeOrder
     {
         $order = ErpStocktakeOrder::where([['site_id', '=', $this->site_id], ['id', '=', $stocktakeId]])->findOrEmpty();
