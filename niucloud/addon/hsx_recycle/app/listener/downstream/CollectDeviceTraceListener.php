@@ -38,31 +38,21 @@ class CollectDeviceTraceListener
         }
     }
 
-    /** 按关键词搜回收设备(生命周期列表) */
+    /** 串号(IMEI)追踪：按 IMEI 找回收设备(每条=一次回收生命周期)，再由 device_id 去日志表拉详情 */
     private function search(int $siteId, string $keyword): array
     {
-        $keyword = trim($keyword);
-        \think\facade\Log::info('[CollectDeviceTrace] search 入参 site_id=' . $siteId . ' keyword=' . $keyword);
-        if ($siteId <= 0 || $keyword === '') {
-            \think\facade\Log::info('[CollectDeviceTrace] search 提前返回: site_id<=0 或 keyword 为空');
+        $imei = trim($keyword);
+        \think\facade\Log::info('[CollectDeviceTrace] search imei=' . $imei . ' site_id=' . $siteId);
+        if ($imei === '') {
             return [];
         }
-       
-        // 注意：回收设备/订单写库时 site_id 常为 0（与 trace() 同坑），死卡 site_id 会把历史数据全过滤掉 → 查不到。
-        // 放宽为 site_id IN (0, 当前站点)，既兼容历史 0 数据，又不跨真实站点。
-        $query = RecycleDevice::where([['site_id', 'in', [0, $siteId]]]);
-        // IMEI/SN 直配; 回收单号则先查订单再取其设备
-        $orderIds = RecycleOrder::where([['site_id', 'in', [0, $siteId]]])->whereLike('order_no', '%' . $keyword . '%')->column('id');
-        $query->where(function ($q) use ($keyword, $orderIds) {
-            $q->whereLike('imei', '%' . $keyword . '%')->whereOr('sn', 'like', '%' . $keyword . '%');
-            if (!empty($orderIds)) {
-                $q->whereOr('order_id', 'in', $orderIds);
-            }
-        });
-        $devices = $query->order('id desc')->limit(50)->select()->toArray();
-        \think\facade\Log::info('[CollectDeviceTrace] 命中设备数=' . count($devices) . ' 命中订单数=' . count($orderIds));
+        // 串号追踪：只按 IMEI 检索；IMEI 只存在主表 recycle_device(日志表无 imei 列)。
+        // 不死卡 site_id：回收设备写库 site_id 常为 0(与 trace() 同坑)，IMEI 本身唯一，按 IMEI 取最稳。
+        $devices = RecycleDevice::where('imei', 'like', '%' . $imei . '%')
+            ->order('id desc')->limit(50)->select()->toArray();
+        \think\facade\Log::info('[CollectDeviceTrace] imei命中设备数=' . count($devices));
         if (empty($devices)) {
-            \think\facade\Log::info('[CollectDeviceTrace] 设备查询为空(检查 site_id 是否=0 / 关键词是否匹配 imei|sn|order_no)');
+            \think\facade\Log::info('[CollectDeviceTrace] 按IMEI未命中(确认该 imei 在 recycle_device 主表存在)');
             return [];
         }
         $orderMap = $this->orderMap($siteId, array_column($devices, 'order_id'));
