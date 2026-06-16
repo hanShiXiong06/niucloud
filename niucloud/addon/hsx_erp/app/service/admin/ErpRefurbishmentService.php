@@ -26,9 +26,18 @@ class ErpRefurbishmentService extends BaseAdminService
 
     public function getPage(array $where = []): array
     {
-        $query = ErpRefurbishOrder::where([['site_id', '=', $this->site_id]])->order('id desc');
+        $query = ErpRefurbishOrder::where([['site_id', '=', $this->site_id]]);
         if (($where['status'] ?? '') !== '') {
             $query->where('status', '=', (string)$where['status']);
+        }
+        if (!empty($where['assigned_uid'])) {
+            $query->where('assigned_uid', '=', (int)$where['assigned_uid']);
+        }
+        if (!empty($where['start_time'])) {
+            $query->where('create_at', '>=', (int)$where['start_time']);
+        }
+        if (!empty($where['end_time'])) {
+            $query->where('create_at', '<=', (int)$where['end_time']);
         }
         if (!empty($where['keyword'])) {
             $keyword = trim((string)$where['keyword']);
@@ -41,6 +50,11 @@ class ErpRefurbishmentService extends BaseAdminService
                 }
             });
         }
+
+        $sortMap = ['id' => 'id', 'order_no' => 'order_no', 'create_at' => 'create_at'];
+        $sf = $sortMap[(string)($where['sort_field'] ?? '')] ?? 'id';
+        $so = strtolower((string)($where['sort_order'] ?? '')) === 'asc' ? 'asc' : 'desc';
+        $query->order($sf, $so);
 
         $page = $this->pageQuery($query);
         $this->appendRelations($page['data']);

@@ -20,11 +20,20 @@
                         placeholder="工单号 / IMEI / 型号 / 负责人" @keyup.enter="handleSearch" />
                 </el-form-item>
                 <el-form-item label="状态">
-                    <el-select v-model="search.status" clearable class="!w-[150px]">
+                    <el-select v-model="search.status" clearable class="!w-[130px]" @change="handleSearch">
                         <el-option label="整备中" value="processing" />
                         <el-option label="已完成" value="completed" />
                         <el-option label="已取消" value="cancelled" />
                     </el-select>
+                </el-form-item>
+                <el-form-item label="负责人">
+                    <el-select v-model="search.assigned_uid" clearable filterable class="!w-[150px]" placeholder="全部负责人" @change="handleSearch">
+                        <el-option v-for="item in userOptions" :key="item.uid" :label="item.username || item.nickname || ('员工#' + item.uid)" :value="item.uid" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="创建时间">
+                    <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" range-separator="至"
+                        start-placeholder="开始" end-placeholder="结束" style="width: 240px" @change="handleSearch" />
                 </el-form-item>
                 <el-form-item>
                     <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -32,8 +41,8 @@
                 </el-form-item>
             </el-form>
 
-            <el-table :data="table.data" v-loading="table.loading" size="large">
-                <el-table-column prop="order_no" label="整备单号" min-width="190" />
+            <el-table :data="table.data" v-loading="table.loading" size="large" @sort-change="onSort">
+                <el-table-column prop="order_no" label="整备单号" min-width="190" sortable="custom" />
                 <el-table-column label="设备" min-width="240">
                     <template #default="{ row }">
                         <div class="font-medium">{{ row.asset?.model || '-' }}</div>
@@ -60,7 +69,7 @@
                         <el-tag :type="statusType(row.status)">{{ statusName(row.status) }}</el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column label="开始时间" width="170">
+                <el-table-column label="开始时间" width="170" prop="create_at" sortable="custom">
                     <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
                 </el-table-column>
                 <el-table-column label="操作" fixed="right" width="180" align="center">
@@ -242,7 +251,7 @@ const presets = [
 ]
 const route = useRoute()
 const router = useRouter()
-const search = reactive({ keyword: '', status: '' })
+const search = reactive({ keyword: '', status: '', assigned_uid: '' as any, dateRange: [] as any, sort_field: '', sort_order: '' })
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
 const assetOptions = ref<any[]>([])
 const userOptions = ref<any[]>([])
@@ -261,12 +270,27 @@ const completeTotal = computed(() =>
 const loadList = async () => {
     table.loading = true
     try {
-        const res: any = await getErpRefurbishmentList({ ...search, page: table.page, limit: table.limit })
+        const params: any = {
+            keyword: search.keyword, status: search.status, assigned_uid: search.assigned_uid,
+            sort_field: search.sort_field, sort_order: search.sort_order,
+            page: table.page, limit: table.limit,
+        }
+        if (Array.isArray(search.dateRange) && search.dateRange.length === 2) {
+            params.start_time = search.dateRange[0]
+            params.end_time = search.dateRange[1]
+        }
+        const res: any = await getErpRefurbishmentList(params)
         table.data = res.data?.data || []
         table.total = Number(res.data?.total || 0)
     } finally {
         table.loading = false
     }
+}
+const onSort = ({ prop, order }: { prop: string; order: string | null }) => {
+    search.sort_field = order ? prop : ''
+    search.sort_order = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : ''
+    table.page = 1
+    loadList()
 }
 const loadOptions = async () => {
     const [assetRes, userRes]: any[] = await Promise.all([
@@ -353,7 +377,7 @@ const openDetail = async (row: any) => {
     detail.visible = true
 }
 const handleSearch = () => { table.page = 1; loadList() }
-const resetSearch = () => { search.keyword = ''; search.status = ''; handleSearch() }
+const resetSearch = () => { Object.assign(search, { keyword: '', status: '', assigned_uid: '', dateRange: [], sort_field: '', sort_order: '' }); handleSearch() }
 const money = (value: any) => Number(value || 0).toFixed(2)
 const formatTime = (value: any) => {
     if (!value) return '-'

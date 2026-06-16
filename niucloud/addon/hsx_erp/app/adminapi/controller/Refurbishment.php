@@ -20,7 +20,8 @@ class Refurbishment extends BaseAdminController
     public function lists()
     {
         return success($this->service->getPage($this->request->params([
-            ['keyword', ''], ['status', ''], ['page', 1], ['limit', 20],
+            ['keyword', ''], ['status', ''], ['assigned_uid', 0], ['start_time', 0], ['end_time', 0],
+            ['sort_field', ''], ['sort_order', ''], ['page', 1], ['limit', 20],
         ])));
     }
 
