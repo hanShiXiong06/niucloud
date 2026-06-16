@@ -44,7 +44,7 @@
                             <span class="font-medium">{{ e.title }}</span>
                             <span v-if="Number(e.amount) > 0" class="text-sm text-gray-600">¥{{ Number(e.amount).toFixed(2) }}</span>
                         </div>
-                        <div v-if="e.detail" class="mt-0.5 text-sm text-gray-600">{{ e.detail }}</div>
+                        <clamp-text v-if="e.detail" :text="e.detail" :rows="3" class="mt-0.5 text-sm text-gray-600" />
                         <div class="mt-0.5 text-xs text-gray-400">
                             <span v-if="e.operator_name">操作人：{{ e.operator_name }}</span>
                             <span v-if="e.no"> · 单号：{{ e.no }}</span>
@@ -62,6 +62,7 @@
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
 import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
+import ClampText from '@/addon/hsx_erp/components/clamp-text.vue'
 import { getDeviceTraceDetail } from '@/addon/hsx_erp/api/device_trace'
 
 const props = defineProps<{ modelValue: boolean; assetId?: number; deviceId?: number }>()
