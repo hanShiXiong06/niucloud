@@ -350,11 +350,13 @@ class ErpCounterpartyAdminService extends BaseAdminService
 
     private function find(int $id): ErpCounterparty
     {
-        $counterparty = ErpCounterparty::where([
-            ['site_id', '=', $this->site_id],
-            ['id', '=', $id],
-        ])->findOrEmpty();
+        // 按 id 查; 允许 site_id 为当前站点或 0(历史数据 site_id 未存对), 真·跨别的站点才拦
+        $counterparty = ErpCounterparty::where([['id', '=', $id]])->findOrEmpty();
         if ($counterparty->isEmpty()) {
+            throw new CommonException('往来单位不存在');
+        }
+        $sid = (int)$counterparty->site_id;
+        if ($sid !== 0 && $sid !== (int)$this->site_id) {
             throw new CommonException('往来单位不存在');
         }
         return $counterparty;

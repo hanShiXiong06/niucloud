@@ -52,7 +52,8 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
                 $cpIds = array_values(array_unique(array_filter(array_column($rels, 'counterparty_id'))));
                 $cpNameMap = [];
                 if (!empty($cpIds)) {
-                    foreach (ErpCounterparty::where([['site_id', '=', $siteId]])->whereIn('id', $cpIds)->field('id,name')->select()->toArray() as $cp) {
+                    // 主体名按 id 取(id 来自本站会员的关系, 已隐含站点); 不卡 site_id, 兼容历史 site_id=0 的主体
+                    foreach (ErpCounterparty::whereIn('id', $cpIds)->field('id,name')->select()->toArray() as $cp) {
                         $cpNameMap[(int)$cp['id']] = (string)$cp['name'];
                     }
                 }
