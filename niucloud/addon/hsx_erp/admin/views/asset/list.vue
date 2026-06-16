@@ -42,8 +42,13 @@
                     />
                 </el-form-item>
                 <el-form-item label="仓库">
-                    <el-select v-model="search.warehouse_id" placeholder="全部仓库" clearable filterable style="width: 180px" @change="handleSearch">
+                    <el-select v-model="search.warehouse_id" placeholder="全部仓库" clearable filterable style="width: 160px" @change="onWarehouseFilterChange">
                         <el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouse_name" :value="w.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="库位">
+                    <el-select v-model="search.location_id" placeholder="全部库位" clearable filterable style="width: 150px" :disabled="!search.warehouse_id" @change="handleSearch">
+                        <el-option v-for="l in filterLocations" :key="l.id" :label="l.location_name" :value="l.id" />
                     </el-select>
                 </el-form-item>
                 <el-form-item>
@@ -545,7 +550,9 @@ import { saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
 const router = useRouter()
-const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any, sort_field: '', sort_order: '' })
+const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any, location_id: '' as any, sort_field: '', sort_order: '' })
+const filterLocations = computed(() => warehouseOptions.value.find((w: any) => Number(w.id) === Number(search.warehouse_id))?.locations || [])
+const onWarehouseFilterChange = () => { search.location_id = ''; handleSearch() }
 const summary = reactive({ count: 0, total_cost: 0, total_sale: 0 })
 // 是否已接入中台(数据中台)：接入后拍照/定价交给中台，ERP 不再自行定价
 const integrated = ref(false)
@@ -750,6 +757,7 @@ const handleReset = () => {
     search.keyword = ''
     search.inventory_status = ''
     search.warehouse_id = ''
+    search.location_id = ''
     handleSearch()
 }
 
