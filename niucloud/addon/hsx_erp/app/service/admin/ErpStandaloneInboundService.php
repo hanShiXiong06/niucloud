@@ -241,6 +241,17 @@ class ErpStandaloneInboundService extends BaseAdminService
                                     ['record_cash' => false, 'remark' => '入库核销采购预付（' . $payableNo . '）']
                                 );
                             }
+                            // 差额补付:预付<成本时,抵扣后仍欠的部分,若选了账户则从该账户当场付清(否则挂应付)
+                            if ($paidAccountId > 0) {
+                                $fresh = FinancePayable::where([
+                                    ['site_id', '=', $this->site_id],
+                                    ['id', '=', (int)$payable->id],
+                                ])->findOrEmpty();
+                                $remain = $fresh->isEmpty() ? 0.0 : round((float)$fresh->amount - (float)$fresh->settled_amount, 2);
+                                if ($remain > 0) {
+                                    (new FinanceSettlementService())->payCashByPayable((int)$payable->id, $remain, $paidAccountId, ['remark' => '入库预付差额补付（' . $payableNo . '）']);
+                                }
+                            }
                         } elseif ($paidAccountId > 0 && ErpMoney::compare($paidAmount, '0.00') > 0) {
                             // 已付>0: 从户头当场结清这部分(部分=订金, 全额=结清)
                             (new FinanceSettlementService())->payCashByPayable((int)$payable->id, (float)$paidAmount, $paidAccountId, ['remark' => '入库已付（' . $payableNo . '）']);

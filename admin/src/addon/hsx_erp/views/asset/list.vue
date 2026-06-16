@@ -304,6 +304,12 @@
                     <el-checkbox v-model="manualForm.use_prepay" @change="onUsePrepayChange">用预付抵扣本台应付</el-checkbox>
                     <span class="ml-2 text-xs text-green-600">该卖方可用预付 ¥{{ money(manualPrepay.available) }}（货款已提前付过，建档即从预付里核销这台）</span>
                 </el-form-item>
+                <el-form-item v-if="manualForm.use_prepay && manualPrepayShortfall > 0" :label="`差额补付（¥${money(manualPrepayShortfall)}）`">
+                    <el-select v-model="manualForm.paid_account_id" filterable clearable class="w-full" placeholder="预付不够这台，差额从哪个户头补付（不选则挂应付）">
+                        <el-option v-for="acc in accountOptions" :key="acc.id" :value="acc.id"
+                            :label="`${acc.account_name}（余额 ¥${money(acc.balance)}）`" :disabled="Number(acc.balance) < manualPrepayShortfall" />
+                    </el-select>
+                </el-form-item>
                 <el-form-item v-if="!manualForm.use_prepay && !['consignment', 'opening'].includes(manualForm.business_type)" label="结算方式">
                     <el-radio-group v-model="manualForm.settle_mode" @change="handleSettleModeChange">
                         <el-radio-button label="cash">现结（当场付清）</el-radio-button>
@@ -812,9 +818,15 @@ const counterpartyDialog = reactive<any>({
 const manualUnpaidAmount = computed(() =>
     Math.max(0, Number(manualForm.purchase_cost || 0) - Number(manualForm.paid_amount || 0))
 )
-// 本次实际付款额：用预付=0(纯折账)，现结=采购成本，挂账=订金
+// 用预付时,成本超出可用预付的"还欠差额"
+const manualPrepayShortfall = computed(() =>
+    manualForm.use_prepay ? Math.max(0, Number(manualForm.purchase_cost || 0) - Number(manualPrepay.available || 0)) : 0
+)
+// 本次实际付款额：用预付时=差额补付额(选了账户才付)，现结=采购成本，挂账=订金
 const payNowAmount = computed(() =>
-    manualForm.use_prepay ? 0 : (Number(manualForm.settle_mode === 'cash' ? manualForm.purchase_cost : manualForm.paid_amount) || 0)
+    manualForm.use_prepay
+        ? (Number(manualForm.paid_account_id) > 0 ? manualPrepayShortfall.value : 0)
+        : (Number(manualForm.settle_mode === 'cash' ? manualForm.purchase_cost : manualForm.paid_amount) || 0)
 )
 // 付款户头显示：用预付时不需现金户头；否则现结一定显示，挂账填了订金才显示
 const showPayAccount = computed(() =>
@@ -827,10 +839,11 @@ const manualSettlementText = computed(() => {
     if (manualForm.business_type === 'opening') return `期初成本 ¥${money(manualForm.purchase_cost)}，不自动形成外部应付。`
     if (manualForm.use_prepay) {
         const offset = Math.min(Number(manualPrepay.available || 0), Number(manualForm.purchase_cost || 0))
-        const rest = Math.max(0, Number(manualForm.purchase_cost || 0) - offset)
-        return rest > 0
-            ? `用预付抵扣 ¥${money(offset)}，剩余 ¥${money(rest)} 仍挂应付卖方（可后续付款或再抵扣）`
-            : `用预付抵扣 ¥${money(offset)}，本台应付已结清，无需付现金`
+        const rest = manualPrepayShortfall.value
+        if (rest <= 0) return `用预付抵扣 ¥${money(offset)}，本台应付已结清，无需付现金`
+        return Number(manualForm.paid_account_id) > 0
+            ? `用预付抵扣 ¥${money(offset)}，差额 ¥${money(rest)} 从所选账户当场补付，本台结清`
+            : `用预付抵扣 ¥${money(offset)}，差额 ¥${money(rest)} 暂挂应付卖方（选个账户可当场补付）`
     }
     const mode = manualForm.settle_mode === 'cash' ? '现结' : '挂账'
     return `${mode}：成本 ¥${money(manualForm.purchase_cost)}，本次付 ¥${money(manualForm.paid_amount)}，挂账应付卖方 ¥${money(manualUnpaidAmount.value)}`
