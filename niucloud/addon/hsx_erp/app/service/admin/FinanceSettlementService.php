@@ -274,6 +274,113 @@ class FinanceSettlementService extends BaseAdminService
         return ['settled' => $settled, 'results' => $results];
     }
 
+    /**
+     * 单笔应付的「部分/全额现金付款」(给 ERP 入库"已付"当场结用)。
+     * 与 settle() 不同: settle 把所选应付整笔结清; 这里按金额部分核销, 支持订金。
+     * 现金从指定户头出账(余额预检 + 扣减 + 资金流水), 操作人留痕。同一事务: 余额不足整笔回滚。
+     * @param int   $payableId 应付ID
+     * @param float $payAmount 本次付款金额(超过未结额时自动按未结额封顶)
+     * @param int   $accountId 付款户头
+     * @param array $options   可含 remark
+     * @return array ['settlement_id','settlement_no','paid','full']
+     */
+    public function payCashByPayable(int $payableId, float $payAmount, int $accountId, array $options = []): array
+    {
+        $payAmount = round($payAmount, 2);
+        if ($payableId <= 0 || $payAmount <= 0) {
+            throw new CommonException('付款参数不正确');
+        }
+        if ($accountId <= 0) {
+            throw new CommonException('请选择付款户头');
+        }
+        $payable = FinancePayable::where([['site_id', '=', $this->site_id], ['id', '=', $payableId]])->findOrEmpty();
+        if ($payable->isEmpty()) {
+            throw new CommonException('应付单不存在');
+        }
+        $outstanding = round((float)$payable->amount - (float)$payable->settled_amount, 2);
+        if ($outstanding <= 0) {
+            throw new CommonException('该应付已结清');
+        }
+        if ($payAmount > $outstanding) {
+            $payAmount = $outstanding; // 不超付
+        }
+        $acc = ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $accountId]])->findOrEmpty();
+        if ($acc->isEmpty()) {
+            throw new CommonException('付款户头不存在');
+        }
+        if (round((float)$acc->balance, 2) < $payAmount) {
+            throw new CommonException(sprintf('账户「%s」余额不足：当前 %.2f，需付出 %.2f，请改用其他户头', (string)$acc->account_name, (float)$acc->balance, $payAmount));
+        }
+
+        $cpId = (int)$payable->counterparty_id;
+        $cpName = (string)$payable->counterparty_name;
+        $now = time();
+        $no = 'JS' . date('YmdHis') . str_pad((string)random_int(0, 999), 3, '0', STR_PAD_LEFT);
+        $eventId = 'finance_pay_' . $no;
+        $newSettled = round((float)$payable->settled_amount + $payAmount, 2);
+        $fullSettled = $newSettled + 0.001 >= round((float)$payable->amount, 2);
+        $settlementId = 0;
+
+        Db::transaction(function () use ($payable, $payAmount, $accountId, $acc, $cpId, $cpName, $now, $no, $eventId, $newSettled, $fullSettled, $options, &$settlementId) {
+            $settlement = FinanceSettlement::create([
+                'site_id'            => $this->site_id,
+                'settlement_no'      => $no,
+                'counterparty_id'    => $cpId,
+                'counterparty_name'  => $cpName,
+                'capital_account_id' => $accountId,
+                'account_name'       => (string)$acc->account_name,
+                'method'             => FinanceDict::METHOD_CASH,
+                'payable_total'      => $payAmount,
+                'receivable_total'   => 0,
+                'offset_amount'      => 0,
+                'cash_amount'        => $payAmount,
+                'cash_direction'     => FinanceDict::CASH_PAY,
+                'status'             => 'completed',
+                'operator_uid'       => (int)$this->uid,
+                'operator_name'      => (string)$this->username,
+                'event_id'           => $eventId,
+                'occurred_at'        => $now,
+                'remark'             => (string)($options['remark'] ?? '入库已付'),
+                'create_time'        => $now,
+                'update_time'        => $now,
+            ]);
+            $settlementId = (int)$settlement->id;
+
+            FinanceSettlementLink::create([
+                'site_id'        => $this->site_id,
+                'settlement_id'  => $settlementId,
+                'target_type'    => FinanceDict::TARGET_PAYABLE,
+                'target_id'      => (int)$payable->id,
+                'applied_amount' => $payAmount,
+                'pay_part'       => $payAmount,
+                'offset_part'    => 0,
+                'create_time'    => $now,
+            ]);
+
+            FinancePayable::where([['site_id', '=', $this->site_id], ['id', '=', (int)$payable->id]])->update([
+                'settled_amount' => $newSettled,
+                'status'         => $fullSettled ? FinanceDict::STATUS_SETTLED : FinanceDict::STATUS_PARTIAL,
+                'update_time'    => $now,
+            ]);
+
+            // 现金出账(余额不足 recordEntry 抛异常 → 整笔回滚)
+            (new ErpCapitalAccountService())->recordEntry([
+                'account_id'        => $accountId,
+                'direction'         => 'out',
+                'amount'            => $payAmount,
+                'biz_type'          => 'settlement',
+                'counterparty_id'   => $cpId,
+                'counterparty_name' => $cpName,
+                'source_type'       => 'settlement',
+                'source_no'         => $no,
+                'source_id'         => $settlementId,
+                'remark'            => '入库已付现金付出',
+            ]);
+        });
+
+        return ['settlement_id' => $settlementId, 'settlement_no' => $no, 'paid' => $payAmount, 'full' => $fullSettled];
+    }
+
     private function allOutstandingIds($model, int $counterpartyId): array
     {
         $rows = $model->where([
@@ -391,6 +498,108 @@ class FinanceSettlementService extends BaseAdminService
      * 计算结算方案(折账分配)
      * @return array{summary:array, payable_alloc:array, receivable_alloc:array}
      */
+    /**
+     * 预付折抵专用:用指定应收(如采购预付)"部分核销"指定应付。
+     * 与 settle() 不同——只折抵 min(应付未结, 应收未结)，按分配额部分核销，
+     * 多出的应收仍留作余额(不抹平、不走现金)。返回实际折抵额。
+     */
+    public function offsetPrepay(int $payableId, array $receivableIds, array $options = []): float
+    {
+        $payable = FinancePayable::where([['site_id', '=', $this->site_id], ['id', '=', $payableId]])->findOrEmpty();
+        if ($payable->isEmpty()) {
+            return 0.0;
+        }
+        $payOut = round((float)$payable->amount - (float)$payable->settled_amount, 2);
+        if ($payOut <= 0) {
+            return 0.0;
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $receivableIds))));
+        if (empty($ids)) {
+            return 0.0;
+        }
+        $recs = FinanceReceivable::where([
+            ['site_id', '=', $this->site_id],
+            ['id', 'in', $ids],
+            ['status', 'in', [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL]],
+        ])->order('occurred_at asc')->order('id asc')->select();
+        $recOut = [];
+        $pool = 0.0;
+        foreach ($recs as $r) {
+            $o = round((float)$r->amount - (float)$r->settled_amount, 2);
+            if ($o <= 0) {
+                continue;
+            }
+            $recOut[] = ['id' => (int)$r->id, 'out' => $o];
+            $pool = round($pool + $o, 2);
+        }
+        $offset = round(min($payOut, $pool), 2);
+        if ($offset <= 0) {
+            return 0.0;
+        }
+
+        $cpId = (int)$payable->counterparty_id;
+        $cpName = (string)$payable->counterparty_name;
+        $now = time();
+        $no = 'JS' . date('YmdHis') . str_pad((string)random_int(0, 999), 3, '0', STR_PAD_LEFT);
+        $eventId = 'finance_offset_' . $no;
+
+        Db::transaction(function () use ($payableId, $recOut, $offset, $cpId, $cpName, $now, $no, $eventId, $options) {
+            $settlement = FinanceSettlement::create([
+                'site_id'            => $this->site_id,
+                'settlement_no'      => $no,
+                'counterparty_id'    => $cpId,
+                'counterparty_name'  => $cpName,
+                'capital_account_id' => 0,
+                'account_name'       => '',
+                'method'             => FinanceDict::METHOD_OFFSET,
+                'payable_total'      => $offset,
+                'receivable_total'   => $offset,
+                'offset_amount'      => $offset,
+                'cash_amount'        => 0,
+                'cash_direction'     => FinanceDict::CASH_NONE,
+                'status'             => 'completed',
+                'operator_uid'       => (int)$this->uid,
+                'operator_name'      => (string)$this->username,
+                'event_id'           => $eventId,
+                'occurred_at'        => $now,
+                'remark'             => (string)($options['remark'] ?? '预付折抵应付'),
+                'create_time'        => $now,
+                'update_time'        => $now,
+            ]);
+            $sid = (int)$settlement->id;
+            // 应付:部分核销 offset
+            $this->applyPartial(new FinancePayable(), $payableId, $offset, $sid, FinanceDict::TARGET_PAYABLE, $now);
+            // 应收:FIFO 分摊 offset(多出的预付仍留作应收余额)
+            $left = $offset;
+            foreach ($recOut as $ro) {
+                if ($left <= 0) {
+                    break;
+                }
+                $take = round(min($left, $ro['out']), 2);
+                $left = round($left - $take, 2);
+                $this->applyPartial(new FinanceReceivable(), $ro['id'], $take, $sid, FinanceDict::TARGET_RECEIVABLE, $now);
+            }
+        });
+        return $offset;
+    }
+
+    /** 按分配额"部分核销"一条应付/应收: settled_amount 累加, 满额→已结清, 否则→部分结算, 并写核销链接 */
+    private function applyPartial($model, int $id, float $amount, int $settlementId, string $targetType, int $now): void
+    {
+        $row = $model->where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
+        if ($row->isEmpty() || $amount <= 0) {
+            return;
+        }
+        $newSettled = round((float)$row->settled_amount + $amount, 2);
+        $full = $newSettled + 0.001 >= round((float)$row->amount, 2);
+        $model->where([['site_id', '=', $this->site_id], ['id', '=', $id]])->update([
+            'settled_amount' => $newSettled,
+            'status'         => $full ? FinanceDict::STATUS_SETTLED : FinanceDict::STATUS_PARTIAL,
+            'update_time'    => $now,
+        ]);
+        $this->writeLink($settlementId, $targetType, ['id' => $id, 'applied' => $amount, 'offset_part' => $amount, 'cash_part' => 0.0], $now);
+    }
+
     private function plan($counterparty, array $payableIds, array $receivableIds): array
     {
         $cpIds = is_array($counterparty)

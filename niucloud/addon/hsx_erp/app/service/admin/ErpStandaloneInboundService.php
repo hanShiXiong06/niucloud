@@ -234,11 +234,11 @@ class ErpStandaloneInboundService extends BaseAdminService
                                 ['status', 'in', [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL]],
                             ])->order('occurred_at asc')->column('id');
                             if (!empty($prepayIds)) {
-                                (new FinanceSettlementService())->settle(
-                                    $memberId,
-                                    [(int)$payable->id],
+                                // 部分折抵:只核销 min(本台应付, 预付余额)，预付多出的部分仍留作应收(不抹平)
+                                (new FinanceSettlementService())->offsetPrepay(
+                                    (int)$payable->id,
                                     array_map('intval', $prepayIds),
-                                    ['record_cash' => false, 'remark' => '入库核销采购预付（' . $payableNo . '）']
+                                    ['remark' => '入库核销采购预付（' . $payableNo . '）']
                                 );
                             }
                             // 差额补付:预付<成本时,抵扣后仍欠的部分,若选了账户则从该账户当场付清(否则挂应付)
