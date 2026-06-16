@@ -230,6 +230,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useListQuery } from '@/addon/hsx_erp/composables/useListQuery'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
@@ -251,8 +252,13 @@ const presets = [
 ]
 const route = useRoute()
 const router = useRouter()
-const search = reactive({ keyword: '', status: '', assigned_uid: '' as any, dateRange: [] as any, sort_field: '', sort_order: '' })
-const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
+const { search, table, loadList, handleSearch, reset: resetSearch, onSort } = useListQuery({
+    api: getErpRefurbishmentList,
+    defaults: { keyword: '', status: '', assigned_uid: '' as any, dateRange: [] as any, sort_field: '', sort_order: '' },
+    dateRangeField: 'dateRange',
+    pageSize: 20,
+    immediate: false,
+})
 const assetOptions = ref<any[]>([])
 const userOptions = ref<any[]>([])
 const createDialog = reactive<any>({
@@ -267,31 +273,6 @@ const completeTotal = computed(() =>
     completeDialog.items.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0)
 )
 
-const loadList = async () => {
-    table.loading = true
-    try {
-        const params: any = {
-            keyword: search.keyword, status: search.status, assigned_uid: search.assigned_uid,
-            sort_field: search.sort_field, sort_order: search.sort_order,
-            page: table.page, limit: table.limit,
-        }
-        if (Array.isArray(search.dateRange) && search.dateRange.length === 2) {
-            params.start_time = search.dateRange[0]
-            params.end_time = search.dateRange[1]
-        }
-        const res: any = await getErpRefurbishmentList(params)
-        table.data = res.data?.data || []
-        table.total = Number(res.data?.total || 0)
-    } finally {
-        table.loading = false
-    }
-}
-const onSort = ({ prop, order }: { prop: string; order: string | null }) => {
-    search.sort_field = order ? prop : ''
-    search.sort_order = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : ''
-    table.page = 1
-    loadList()
-}
 const loadOptions = async () => {
     const [assetRes, userRes]: any[] = await Promise.all([
         getErpAssetList({ inventory_status: 'in_stock', page: 1, limit: 100 }),
@@ -376,8 +357,6 @@ const openDetail = async (row: any) => {
     detail.data = res.data || {}
     detail.visible = true
 }
-const handleSearch = () => { table.page = 1; loadList() }
-const resetSearch = () => { Object.assign(search, { keyword: '', status: '', assigned_uid: '', dateRange: [], sort_field: '', sort_order: '' }); handleSearch() }
 const money = (value: any) => Number(value || 0).toFixed(2)
 const formatTime = (value: any) => {
     if (!value) return '-'

@@ -23,10 +23,10 @@
                     <el-option label="已完成" value="finished" />
                 </el-select>
                 <el-input v-model.trim="search.keyword" placeholder="单号/仓库/库位" clearable class="w-52" @keyup.enter="loadList" />
-                <el-button type="primary" @click="loadList" :loading="loading">查询</el-button>
+                <el-button type="primary" @click="loadList" :loading="table.loading">查询</el-button>
             </div>
 
-            <el-table class="mt-4" :data="list" v-loading="loading" size="large" empty-text="暂无盘点单">
+            <el-table class="mt-4" :data="table.data" v-loading="table.loading" size="large" empty-text="暂无盘点单">
                 <el-table-column prop="stocktake_no" label="盘点单号" min-width="170" />
                 <el-table-column label="范围" min-width="160">
                     <template #default="{ row }">{{ row.warehouse_name }}{{ row.location_name ? ' / ' + row.location_name : ' / 整仓' }}</template>
@@ -48,7 +48,7 @@
                 </el-table-column>
             </el-table>
             <div class="mt-4 flex justify-end">
-                <el-pagination layout="total, prev, pager, next" :total="total" :page-size="search.limit" :current-page="search.page" @current-change="onPage" />
+                <el-pagination layout="total, prev, pager, next" :total="table.total" :page-size="table.limit" :current-page="table.page" @current-change="onPage" />
             </div>
         </el-card>
 
@@ -143,6 +143,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
+import { useListQuery } from '@/addon/hsx_erp/composables/useListQuery'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getStocktakeList, getStocktakeInfo, createStocktake, scanStocktake, finishStocktake, restoreStocktakeItem } from '@/addon/hsx_erp/api/stocktake'
 import { getErpWarehouseList } from '@/addon/hsx_erp/api/warehouse'
@@ -150,28 +151,19 @@ import { getErpWarehouseList } from '@/addon/hsx_erp/api/warehouse'
 const fmt = (t: number) => (t ? new Date(t * 1000).toLocaleString() : '-')
 const resultType = (r: string) => (r === 'loss' ? 'danger' : r === 'profit' ? 'warning' : r === 'matched' ? 'success' : 'info')
 
-const loading = ref(false)
-const list = ref<any[]>([])
-const total = ref(0)
-const search = reactive({ warehouse_id: undefined as any, status: '', keyword: '', page: 1, limit: 15 })
+const { search, table, loadList, onPage } = useListQuery({
+    api: getStocktakeList,
+    defaults: { warehouse_id: undefined as any, status: '', keyword: '' },
+    pageSize: 15,
+    immediate: false,
+})
 const warehouses = ref<any[]>([])
 
-function onPage(p: number) { search.page = p; loadList() }
 async function loadWarehouses() {
     try {
         const res: any = await getErpWarehouseList()
         warehouses.value = res.data?.data || res.data || []
     } catch { warehouses.value = [] }
-}
-async function loadList() {
-    loading.value = true
-    try {
-        const res: any = await getStocktakeList(search)
-        list.value = res.data?.data || []
-        total.value = res.data?.total || 0
-    } finally {
-        loading.value = false
-    }
 }
 
 // 新建

@@ -153,25 +153,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useListQuery } from '@/addon/hsx_erp/composables/useListQuery'
 import { ElMessage } from 'element-plus'
 import {
     getErpCounterpartyList, saveErpCounterparty, getErpMemberOptions, getErpCounterpartyMembers
 } from '@/addon/hsx_erp/api/counterparty'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 
-const search = reactive({ keyword: '', role_type: '', counterparty_type: '', status: '' as any, mobile: '', sort_field: '', sort_order: '' })
-const resetSearch = () => {
-    Object.assign(search, { keyword: '', role_type: '', counterparty_type: '', status: '', mobile: '', sort_field: '', sort_order: '' })
-    table.page = 1
-    loadData()
-}
-const onSort = ({ prop, order }: { prop: string; order: string | null }) => {
-    search.sort_field = order ? prop : ''
-    search.sort_order = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : ''
-    table.page = 1
-    loadData()
-}
-const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
+const { search, table, loadList: loadData, reset: resetSearch, onSort } = useListQuery({
+    api: getErpCounterpartyList,
+    defaults: { keyword: '', role_type: '', counterparty_type: '', status: '' as any, mobile: '', sort_field: '', sort_order: '' },
+    pageSize: 20,
+    immediate: false,
+})
 const emptyForm = () => ({
     id: 0, counterparty_type: 'individual', role_type: 'supplier', name: '', mobile: '',
     contact_name: '', tax_no: '', bank_name: '', bank_account: '', status: 1, remark: '',
@@ -181,16 +175,6 @@ const dialog = reactive<any>({ visible: false, loading: false, form: emptyForm()
 const memberOptions = reactive<any[]>([])
 const memberLoading = ref(false)
 
-const loadData = async () => {
-    table.loading = true
-    try {
-        const res: any = await getErpCounterpartyList({ ...search, page: table.page, limit: table.limit })
-        table.data = res.data?.data || []
-        table.total = Number(res.data?.total || 0)
-    } finally {
-        table.loading = false
-    }
-}
 const openEdit = async (row: any = {}) => {
     dialog.form = { ...emptyForm(), ...row }
     memberOptions.splice(0)
