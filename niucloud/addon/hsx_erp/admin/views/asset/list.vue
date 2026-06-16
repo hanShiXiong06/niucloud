@@ -247,15 +247,11 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="manualDialog.visible" title="入库" width="680px" destroy-on-close>
-            <el-alert
-                class="mb-4"
-                type="info"
-                :closable="false"
-                title="ERP 可独立使用：手工录入后同样进入待入库，后续核对、库存和成本流水与回收同步设备完全一致。"
-            />
-            <el-form label-width="110px">
-                <div class="grid grid-cols-2 gap-x-4">
+        <el-dialog v-model="manualDialog.visible" title="入库建档" width="760px" destroy-on-close top="6vh">
+            <el-form label-width="84px" label-position="right" class="manual-inbound-form">
+                <!-- 设备信息 -->
+                <el-divider content-position="left"><span class="text-sm font-medium text-gray-700">设备信息</span></el-divider>
+                <div class="grid grid-cols-2 gap-x-6">
                     <el-form-item label="设备型号" required>
                         <el-input v-model.trim="manualForm.model" placeholder="例如 iPhone 15 Pro" />
                     </el-form-item>
@@ -267,11 +263,13 @@
                             <el-option label="期初库存" value="opening" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="往来单位" :required="manualForm.business_type !== 'opening'">
-                        <counterparty-select v-model="manualForm.counterparty_id" role-type="supplier" placeholder="搜索姓名 / 手机号选择货物来源" />
-                    </el-form-item>
+                </div>
+                <el-form-item v-if="manualForm.business_type !== 'opening'" :label="manualForm.business_type === 'consignment' ? '寄卖人' : '卖方客户'" required>
+                    <counterparty-select v-model="manualForm.counterparty_id" role-type="supplier" placeholder="搜索姓名 / 手机号选择卖方（货物来源）" @resolved="onSupplierResolved" />
+                </el-form-item>
+                <div class="grid grid-cols-2 gap-x-6">
                     <el-form-item label="IMEI">
-                        <el-input v-model.trim="manualForm.imei" />
+                        <el-input v-model.trim="manualForm.imei" placeholder="IMEI / SN 至少填一个" />
                     </el-form-item>
                     <el-form-item label="IMEI2">
                         <el-input v-model.trim="manualForm.imei2" />
@@ -285,30 +283,45 @@
                     <el-form-item label="颜色">
                         <el-input v-model.trim="manualForm.color" />
                     </el-form-item>
-                    <el-form-item :label="manualForm.business_type === 'consignment' ? '入库成本' : '应付/成本'">
-                        <el-input-number
-                            v-model="manualForm.purchase_cost"
-                            :min="0"
-                            :precision="2"
-                            :disabled="manualForm.business_type === 'consignment'"
-                            class="!w-full"
-                        />
-                    </el-form-item>
-                    <el-form-item label="已付金额">
-                        <el-input-number
-                            v-model="manualForm.paid_amount"
-                            :min="0"
-                            :max="manualForm.purchase_cost"
-                            :precision="2"
-                            :disabled="['consignment', 'opening'].includes(manualForm.business_type)"
-                            class="!w-full"
-                        />
-                    </el-form-item>
                     <el-form-item label="销售价">
-                        <el-input-number v-model="manualForm.suggested_sale_price" :min="0" :precision="2" class="!w-full" />
+                        <el-input-number v-model="manualForm.suggested_sale_price" :min="0" :precision="2" controls-position="right" class="!w-full" />
                     </el-form-item>
+                </div>
+
+                <!-- 结算（钱） -->
+                <el-divider content-position="left"><span class="text-sm font-medium text-gray-700">结算（钱）</span></el-divider>
+                <div class="grid grid-cols-2 gap-x-6">
+                    <el-form-item :label="manualForm.business_type === 'consignment' ? '入库成本' : '应付/成本'">
+                        <el-input-number v-model="manualForm.purchase_cost" :min="0" :precision="2" controls-position="right"
+                            :disabled="manualForm.business_type === 'consignment'" class="!w-full" />
+                    </el-form-item>
+                    <el-form-item v-if="!['consignment', 'opening'].includes(manualForm.business_type)" :label="manualForm.settle_mode === 'cash' ? '付款金额' : '订金/已付'">
+                        <el-input-number v-model="manualForm.paid_amount" :min="0" :max="manualForm.purchase_cost" :precision="2"
+                            controls-position="right" :disabled="manualForm.settle_mode === 'cash'" class="!w-full" />
+                    </el-form-item>
+                </div>
+                <el-form-item v-if="!['consignment', 'opening'].includes(manualForm.business_type)" label="结算方式">
+                    <el-radio-group v-model="manualForm.settle_mode" @change="handleSettleModeChange">
+                        <el-radio-button label="cash">现结（当场付清）</el-radio-button>
+                        <el-radio-button label="credit">挂账（应付卖方）</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item v-if="showPayAccount" label="付款户头" :required="payNowAmount > 0">
+                    <el-select v-model="manualForm.paid_account_id" filterable clearable class="w-full" placeholder="本次付款从哪个户头出账">
+                        <el-option v-for="acc in accountOptions" :key="acc.id" :value="acc.id"
+                            :label="`${acc.account_name}（余额 ¥${money(acc.balance)}）`" :disabled="payNowAmount > 0 && Number(acc.balance) < payNowAmount" />
+                    </el-select>
+                </el-form-item>
+                <div v-if="!['consignment', 'opening'].includes(manualForm.business_type)"
+                    class="mb-4 rounded-md px-3 py-2 text-sm" :class="manualUnpaidAmount > 0 ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'">
+                    {{ manualSettlementText }}
+                </div>
+
+                <!-- 入库（货） -->
+                <el-divider content-position="left"><span class="text-sm font-medium text-gray-700">入库（货）</span></el-divider>
+                <div class="grid grid-cols-2 gap-x-6">
                     <el-form-item label="入库仓库">
-                        <el-select v-model="manualForm.warehouse_id" filterable clearable class="w-full" placeholder="选仓库则入库即归位（不选则留待入库）" @change="manualForm.location_id = 0">
+                        <el-select v-model="manualForm.warehouse_id" filterable clearable class="w-full" placeholder="不选=待入库" @change="manualForm.location_id = 0">
                             <el-option v-for="item in warehouseOptions" :key="item.id" :label="item.warehouse_name" :value="item.id" />
                         </el-select>
                     </el-form-item>
@@ -317,32 +330,23 @@
                             <el-option v-for="item in manualLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="是否整备">
-                        <el-switch v-model="manualForm.need_refurb" active-text="需要整备" inactive-text="免整备" inline-prompt />
-                        <span class="ml-2 text-xs text-gray-400">{{ manualForm.need_refurb ? '入库后自动建整备工单，进入「整备中」' : '入库后直接进「待定价」/「可售」' }}</span>
-                    </el-form-item>
                 </div>
-                <el-alert
-                    v-if="Number(manualForm.warehouse_id) > 0"
-                    class="mb-4"
-                    type="info"
-                    :closable="false"
-                    :title="Number(manualForm.suggested_sale_price) > 0 ? '已选库位+已填销售价：建档后自动确认入库并直接转「可售」，无需再单独定价。' : '已选库位：建档后自动确认入库到该库位；未填销售价则进入「待定价」。'"
-                />
-                <el-alert
-                    class="mb-4"
-                    :type="manualUnpaidAmount > 0 ? 'warning' : 'success'"
-                    :closable="false"
-                    :title="manualSettlementText"
-                />
-                <el-form-item label="备注">
-                    <el-input v-model.trim="manualForm.remark" type="textarea" :rows="3" placeholder="录入来源、采购说明等" />
+                <el-form-item label="是否整备">
+                    <el-switch v-model="manualForm.need_refurb" active-text="需要整备" inactive-text="免整备" inline-prompt />
+                    <span class="ml-2 text-xs text-gray-400">{{ manualForm.need_refurb ? '入库后自动建整备工单，进入「整备中」' : '入库后直接进「待定价」/「可售」' }}</span>
                 </el-form-item>
+                <el-form-item label="备注">
+                    <el-input v-model.trim="manualForm.remark" type="textarea" :rows="2" placeholder="录入来源、采购说明等" />
+                </el-form-item>
+                <div class="-mt-1 text-xs leading-5 text-gray-400">
+                    付款与入库相互独立：可先付款后入库（不选仓库=待入库），也可先入库后挂账。
+                    <template v-if="Number(manualForm.warehouse_id) > 0">已选库位则建档即确认入库{{ Number(manualForm.suggested_sale_price) > 0 ? '并转「可售」' : '，未填销售价进「待定价」' }}。</template>
+                </div>
             </el-form>
             <template #footer>
                 <el-button @click="manualDialog.visible = false">取消</el-button>
                 <el-button type="primary" :loading="manualDialog.submitting" @click="submitManualInbound">
-                    创建待入库设备
+                    {{ Number(manualForm.warehouse_id) > 0 ? '建档并入库' : '创建待入库设备' }}
                 </el-button>
             </template>
         </el-dialog>
@@ -562,7 +566,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search, InfoFilled } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
@@ -576,6 +580,7 @@ import {
     adjustErpAssetCost
 } from '@/addon/hsx_erp/api/asset'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
+import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
 import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
 import { transferErpAsset } from '@/addon/hsx_erp/api/outbound'
@@ -738,19 +743,34 @@ const manualForm = reactive({
     model: '',
     business_type: 'recycle',
     counterparty_id: 0,
+    counterparty_member_id: 0,
     imei: '',
     imei2: '',
     sn: '',
     capacity: '',
     color: '',
     purchase_cost: 0,
+    settle_mode: 'cash',
     paid_amount: 0,
+    paid_account_id: 0,
     suggested_sale_price: 0,
     warehouse_id: 0,
     location_id: 0,
     need_refurb: false,
     remark: ''
 })
+// 选定供应商时记下其会员ID(财务应付锚定到人, 与回收口径一致, 才能正确归到主体)
+const onSupplierResolved = (d: any) => { manualForm.counterparty_member_id = Number(d?.member_id || 0) }
+// 付款户头选项（已付>0 时建档即从该户头出账）
+const accountOptions = ref<any[]>([])
+const loadAccountOptions = async () => {
+    try {
+        const res: any = await getCapitalAccounts()
+        accountOptions.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || [])
+    } catch (e) {
+        accountOptions.value = []
+    }
+}
 // 手工建档可选入库库位（与确认入库共用 warehouseOptions）
 const manualLocations = computed(() =>
     warehouseOptions.value.find((item: any) => Number(item.id) === Number(manualForm.warehouse_id))?.locations || []
@@ -763,10 +783,20 @@ const counterpartyDialog = reactive<any>({
 const manualUnpaidAmount = computed(() =>
     Math.max(0, Number(manualForm.purchase_cost || 0) - Number(manualForm.paid_amount || 0))
 )
+// 本次实际付款额：现结=采购成本，挂账=订金
+const payNowAmount = computed(() =>
+    Number(manualForm.settle_mode === 'cash' ? manualForm.purchase_cost : manualForm.paid_amount) || 0
+)
+// 付款户头显示：现结一定显示（让用户清楚从哪出账），挂账填了订金才显示
+const showPayAccount = computed(() =>
+    !['consignment', 'opening'].includes(manualForm.business_type) &&
+    (manualForm.settle_mode === 'cash' || Number(manualForm.paid_amount) > 0)
+)
 const manualSettlementText = computed(() => {
     if (manualForm.business_type === 'consignment') return '代卖入库：暂不形成采购成本和应付，销售后按代卖结算规则处理。'
     if (manualForm.business_type === 'opening') return `期初成本 ¥${money(manualForm.purchase_cost)}，不自动形成外部应付。`
-    return `应付 ¥${money(manualForm.purchase_cost)}，已付 ¥${money(manualForm.paid_amount)}，未付 ¥${money(manualUnpaidAmount.value)}`
+    const mode = manualForm.settle_mode === 'cash' ? '现结' : '挂账'
+    return `${mode}：成本 ¥${money(manualForm.purchase_cost)}，本次付 ¥${money(manualForm.paid_amount)}，挂账应付卖方 ¥${money(manualUnpaidAmount.value)}`
 })
 
 const loadList = async () => {
@@ -826,13 +856,16 @@ const resetManualForm = () => {
         model: '',
         business_type: 'recycle',
         counterparty_id: 0,
+        counterparty_member_id: 0,
         imei: '',
         imei2: '',
         sn: '',
         capacity: '',
         color: '',
         purchase_cost: 0,
+        settle_mode: 'cash',
         paid_amount: 0,
+        paid_account_id: 0,
         suggested_sale_price: 0,
         warehouse_id: 0,
         location_id: 0,
@@ -849,12 +882,33 @@ const resetManualForm = () => {
 const handleBusinessTypeChange = () => {
     if (['consignment', 'opening'].includes(manualForm.business_type)) {
         manualForm.paid_amount = 0
+        manualForm.paid_account_id = 0
+    } else if (manualForm.settle_mode === 'cash') {
+        manualForm.paid_amount = Number(manualForm.purchase_cost || 0)
     }
     if (manualForm.business_type === 'consignment') manualForm.purchase_cost = 0
 }
 
+// 结算方式: 现结=本次付清(已付=采购成本, 锁定), 挂账=应付卖方(已付默认0, 可填订金)
+const handleSettleModeChange = () => {
+    if (manualForm.settle_mode === 'cash') {
+        manualForm.paid_amount = Number(manualForm.purchase_cost || 0)
+    } else {
+        manualForm.paid_amount = 0
+        manualForm.paid_account_id = 0
+    }
+}
+
+// 现结时, 采购成本变化则已付跟随(始终付清)
+watch(() => manualForm.purchase_cost, (v) => {
+    if (manualForm.settle_mode === 'cash' && !['consignment', 'opening'].includes(manualForm.business_type)) {
+        manualForm.paid_amount = Number(v || 0)
+    }
+})
+
 const openManualInbound = () => {
     resetManualForm()
+    if (!accountOptions.value.length) loadAccountOptions()
     manualDialog.visible = true
 }
 
@@ -868,12 +922,27 @@ const submitManualInbound = async () => {
         return
     }
     if (manualForm.business_type !== 'opening' && !manualForm.counterparty_id) {
-        ElMessage.warning('请选择往来单位')
+        ElMessage.warning('请选择卖方客户')
         return
+    }
+    // 现结=本次付清, 提交前确保已付=采购成本
+    if (manualForm.settle_mode === 'cash' && !['consignment', 'opening'].includes(manualForm.business_type)) {
+        manualForm.paid_amount = Number(manualForm.purchase_cost || 0)
     }
     if (Number(manualForm.paid_amount) > Number(manualForm.purchase_cost)) {
         ElMessage.warning('已付金额不能大于应付金额')
         return
+    }
+    if (Number(manualForm.paid_amount) > 0 && !['consignment', 'opening'].includes(manualForm.business_type)) {
+        if (!Number(manualForm.paid_account_id)) {
+            ElMessage.warning('填写了已付金额，请选择付款户头')
+            return
+        }
+        const acc = accountOptions.value.find((a: any) => Number(a.id) === Number(manualForm.paid_account_id))
+        if (acc && Number(acc.balance) < Number(manualForm.paid_amount)) {
+            ElMessage.warning(`户头「${acc.account_name}」余额不足，请改用其他户头`)
+            return
+        }
     }
     if (Number(manualForm.warehouse_id) > 0 && !Number(manualForm.location_id)) {
         ElMessage.warning('选择了入库仓库，请同时选择库位')
