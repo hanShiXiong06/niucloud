@@ -128,6 +128,7 @@ class RecycleDevice extends BaseAdminController
             ['images', ''],
             ['customer_handled', 0],
             ['inventory_tip_confirmed', 0],
+            ['auto_sync_erp', 1],
         ]);
 
         return success($this->cost_adjustment_service->adjust($id, $data));
@@ -661,12 +662,14 @@ class RecycleDevice extends BaseAdminController
                 $result = $this->template_service->printDeviceLabel($id, $data['template_type']);
             }
             
-            return success([
+            // 兜底清洗:设备数据/打印结果可能含非 UTF-8 字节(GBK 报错、二进制标签指令等)，
+            // 不清洗会让 json_encode 抛 "Malformed UTF-8 characters" 导致接口 500
+            return success(\addon\hsx_recycle\app\support\Utf8::clean([
                 'device_id' => $id,
                 'device_data' => $device_data,
                 'print_result' => $result
-            ]);
-            
+            ]));
+
         } catch (\Exception $e) {
             return error('测试打印失败: ' . $e->getMessage());
         }
