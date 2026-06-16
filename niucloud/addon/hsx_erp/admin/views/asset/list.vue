@@ -327,6 +327,10 @@
                             <el-option v-for="item in manualLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                         </el-select>
                     </el-form-item>
+                    <el-form-item label="是否整备">
+                        <el-switch v-model="manualForm.need_refurb" active-text="需要整备" inactive-text="免整备" inline-prompt />
+                        <span class="ml-2 text-xs text-gray-400">{{ manualForm.need_refurb ? '入库后自动建整备工单，进入「整备中」' : '入库后直接进「待定价」/「可售」' }}</span>
+                    </el-form-item>
                 </div>
                 <el-alert
                     v-if="Number(manualForm.warehouse_id) > 0"
@@ -753,6 +757,7 @@ const manualForm = reactive({
     suggested_sale_price: 0,
     warehouse_id: 0,
     location_id: 0,
+    need_refurb: false,
     remark: ''
 })
 // 手工建档可选入库库位（与确认入库共用 warehouseOptions）
@@ -886,9 +891,15 @@ const submitManualInbound = async () => {
     manualDialog.submitting = true
     try {
         await createErpManualInbound({ ...manualForm })
-        ElMessage.success(Number(manualForm.warehouse_id) > 0 ? '已建档并入库到指定库位' : '已创建待入库设备')
+        const hasLoc = Number(manualForm.warehouse_id) > 0
+        ElMessage.success(hasLoc ? '已建档并入库到指定库位' : '已创建待入库设备')
         manualDialog.visible = false
-        search.inventory_status = 'pending_in'
+        // 跳到设备实际落到的状态页：未选库位→待入库；选了库位则按是否整备/是否带价分流
+        search.inventory_status = !hasLoc
+            ? 'pending_in'
+            : (manualForm.need_refurb
+                ? 'refurbishing'
+                : (Number(manualForm.suggested_sale_price) > 0 ? 'available_for_sale' : 'pending_pricing'))
         table.page = 1
         await loadList()
     } finally {

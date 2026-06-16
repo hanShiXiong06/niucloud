@@ -46,6 +46,7 @@ class ErpStandaloneInboundService extends BaseAdminService
         if ($warehouseId > 0 && $locationId <= 0) {
             throw new CommonException('选择了入库仓库，请同时选择库位');
         }
+        $needRefurb = !empty($data['need_refurb']);
         $purchaseCost = ErpMoney::normalize($data['purchase_cost'] ?? 0);
         $paidAmount = ErpMoney::normalize($data['paid_amount'] ?? 0);
         if (in_array($businessType, ['consignment', 'opening'], true)) {
@@ -114,9 +115,9 @@ class ErpStandaloneInboundService extends BaseAdminService
                     'suggested_sale_price' => round((float)($data['suggested_sale_price'] ?? 0), 2),
                 ],
                 'refurbishment' => [
-                    'required' => false,
-                    'decision_source' => 'default',
-                    'reason' => '手工入库默认无需整备',
+                    'required' => $needRefurb,
+                    'decision_source' => 'manual',
+                    'reason' => $needRefurb ? '建档时标记需要整备' : '建档时标记无需整备',
                     'suggested_items' => [],
                     'estimated_cost' => '0.00',
                     'decided_by' => [
