@@ -99,4 +99,52 @@ class ErpDict
     public const STOCKTAKE_RESULT_MATCHED   = 'matched';   // 账实相符
     public const STOCKTAKE_RESULT_LOSS      = 'loss';      // 盘亏(应在库却未盘到)
     public const STOCKTAKE_RESULT_PROFIT    = 'profit';    // 盘盈(盘到但系统无在库记录)
+
+    /** 库存状态中文(用于流水 before/after_status 等映射) */
+    public static function getInventoryStatusMap(): array
+    {
+        return [
+            self::INVENTORY_PENDING_IN         => '待入库',
+            self::INVENTORY_INBOUND_REJECTED   => '入库驳回',
+            self::INVENTORY_IN_STOCK           => '在库',
+            self::INVENTORY_REFURBISHING       => '整备中',
+            self::INVENTORY_PENDING_PRICING    => '待销售定价',
+            self::INVENTORY_AVAILABLE_FOR_SALE => '在售',
+            self::INVENTORY_LOCKED             => '销售锁定',
+            self::INVENTORY_OUTBOUND           => '已出库',
+            self::INVENTORY_LOST               => '丢失',
+        ];
+    }
+
+    /** 库存/操作流水动作中文 */
+    public static function getLedgerActionMap(): array
+    {
+        return [
+            'create_pending_asset'      => '建档待入库',
+            'stock_in'                  => '入库',
+            'confirm_stock_in'          => '确认入库',
+            'skip_refurbishment'        => '跳过整备',
+            'auto_create_refurbishment' => '自动发起整备',
+            'refurbishment_start'       => '发起整备',
+            'refurbishment_complete'    => '整备完工',
+            'sales_priced'              => '销售定价',
+            'price_adjust'              => '调价',
+            'manual_cost_adjust'        => '手动调成本',
+            'transfer'                  => '调拨',
+            'outbound'                  => '出库',
+            'return_outbound'           => '退货出库',
+            'stocktake_loss'            => '盘点核销丢失',
+        ];
+    }
+
+    /** 成本流水类型中文 */
+    public static function getCostTypeMap(): array
+    {
+        return [
+            'purchase'       => '采购成本',
+            'manual_adjust'  => '手动调成本',
+            'refurbishment'  => '整备费用',
+            'return_reverse' => '退货冲回',
+        ];
+    }
 }

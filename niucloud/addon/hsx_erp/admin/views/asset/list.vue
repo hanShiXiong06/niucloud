@@ -7,7 +7,7 @@
                     <div class="mt-1 text-sm text-gray-500">一条主线跟着设备走：待入库 → 在库/整备 → 待定价 → 可售。按阶段切换，就地处理当前该做的动作。</div>
                 </div>
                 <div class="flex gap-2">
-                    <el-button type="primary" @click="openManualInbound">手工建档入库</el-button>
+                    <el-button type="primary" @click="openManualInbound">入库</el-button>
                     <el-button :icon="Refresh" @click="loadList">刷新</el-button>
                 </div>
             </div>
@@ -175,10 +175,10 @@
                         v-else
                         icon="box"
                         title="还没有库存设备"
-                        description="点击「手工建档入库」录入第一台；或在回收订单确认回收后，设备会自动同步到这里的待入库池。"
+                        description="点击「入库」录入第一台；或在回收订单确认回收后，设备会自动同步到这里的待入库池。"
                     >
                         <template #action>
-                            <el-button type="primary" @click="openManualInbound">手工建档入库</el-button>
+                            <el-button type="primary" @click="openManualInbound">入库</el-button>
                         </template>
                     </EmptyState>
                 </template>
@@ -196,7 +196,7 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="manualDialog.visible" title="手工建档入库" width="680px" destroy-on-close>
+        <el-dialog v-model="manualDialog.visible" title="入库" width="680px" destroy-on-close>
             <el-alert
                 class="mb-4"
                 type="info"
@@ -327,14 +327,21 @@
                 <el-descriptions-item label="IMEI">{{ detail.asset.imei || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="SN">{{ detail.asset.sn || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="型号" :span="2">{{ detail.asset.model || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="往来单位">
-                    {{ detail.counterparty?.name || '-' }}
-                </el-descriptions-item>
-                <el-descriptions-item label="联系电话">
-                    {{ detail.counterparty?.mobile || '-' }}
-                </el-descriptions-item>
+                <el-descriptions-item label="来源主体">{{ detail.contact?.unit_name || '散户/未关联' }}</el-descriptions-item>
+                <el-descriptions-item label="主体电话">{{ detail.contact?.unit_mobile || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="关联人">{{ detail.contact?.person_name || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="关联人电话">{{ detail.contact?.person_mobile || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="采购成本">¥{{ money(detail.asset.purchase_cost) }}</el-descriptions-item>
                 <el-descriptions-item label="当前总成本">¥{{ money(detail.asset.current_cost) }}</el-descriptions-item>
+            </el-descriptions>
+
+            <el-descriptions v-if="detail.outbound_info" class="mt-4" :column="2" border title="出库信息">
+                <el-descriptions-item label="出库类型">{{ detail.outbound_info.type_text }}</el-descriptions-item>
+                <el-descriptions-item label="出库单号">{{ detail.outbound_info.outbound_no }}</el-descriptions-item>
+                <el-descriptions-item label="卖给/出给">{{ detail.outbound_info.buyer_name || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="出货价">¥{{ money(detail.outbound_info.sale_price) }}</el-descriptions-item>
+                <el-descriptions-item label="操作出库人">{{ detail.outbound_info.operator_name || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="出库时间">{{ formatTime(detail.outbound_info.out_at) }}</el-descriptions-item>
             </el-descriptions>
 
             <el-alert
@@ -347,9 +354,11 @@
 
             <div class="mt-5 font-medium">库存流水</div>
             <el-table class="mt-3" :data="detail.stock_ledger || []" size="small" empty-text="暂无库存流水">
-                <el-table-column prop="action" label="动作" width="120" />
+                <el-table-column label="动作" width="130">
+                    <template #default="{ row }">{{ row.action_text || row.action }}</template>
+                </el-table-column>
                 <el-table-column label="状态变化" min-width="160">
-                    <template #default="{ row }">{{ statusName(row.before_status) }} → {{ statusName(row.after_status) }}</template>
+                    <template #default="{ row }">{{ row.before_status_text || statusName(row.before_status) }} → {{ row.after_status_text || statusName(row.after_status) }}</template>
                 </el-table-column>
                 <el-table-column prop="operator_name" label="操作人" width="120" />
                 <el-table-column label="时间" width="170">
@@ -359,7 +368,9 @@
 
             <div class="mt-5 font-medium">成本流水</div>
             <el-table class="mt-3" :data="detail.cost_ledger || []" size="small" empty-text="暂无成本流水">
-                <el-table-column prop="cost_type" label="成本类型" width="120" />
+                <el-table-column label="成本类型" width="120">
+                    <template #default="{ row }">{{ row.cost_type_text || row.cost_type }}</template>
+                </el-table-column>
                 <el-table-column label="变动金额" width="120" align="right">
                     <template #default="{ row }">¥{{ money(row.amount_delta) }}</template>
                 </el-table-column>
@@ -377,7 +388,7 @@
                     :key="item.id"
                     :timestamp="formatTime(item.occurred_at)"
                 >
-                    {{ item.action }} · {{ item.operator_name || '系统' }}
+                    {{ item.action_text || item.action }} · {{ item.operator_name || '系统' }}
                 </el-timeline-item>
             </el-timeline>
         </el-drawer>

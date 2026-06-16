@@ -297,21 +297,69 @@ class ErpAssetService extends BaseAdminService
                 ['id', '=', (int)$asset->counterparty_id],
             ])->findOrEmpty()->toArray()
             : [];
+
+        // 联系人：主体(往来单位)+主体电话 + 关联人(source_member)+关联人电话(两个电话区分)
+        $memberMap = (int)$asset->source_member_id > 0
+            ? FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, [(int)$asset->source_member_id])
+            : [];
+        $person = $memberMap[(int)$asset->source_member_id] ?? null;
+        $contact = [
+            'unit_name'     => (string)($counterparty['name'] ?? ($person['entity_name'] ?? '')),
+            'unit_mobile'   => (string)($counterparty['mobile'] ?? ''),
+            'unit_contact'  => (string)($counterparty['contact_name'] ?? ''),
+            'person_name'   => (string)($person['name'] ?? ''),
+            'person_mobile' => (string)($person['mobile'] ?? ''),
+        ];
+
+        $statusMap = ErpDict::getInventoryStatusMap();
+        $actionMap = ErpDict::getLedgerActionMap();
+        $costMap   = ErpDict::getCostTypeMap();
+
+        $stockLedger = ErpStockLedger::where([['site_id', '=', $this->site_id], ['asset_id', '=', $id]])->order('id desc')->select()->toArray();
+        foreach ($stockLedger as &$r) {
+            $r['action_text'] = $actionMap[(string)($r['action'] ?? '')] ?? (string)($r['action'] ?? '');
+            $r['before_status_text'] = $statusMap[(string)($r['before_status'] ?? '')] ?? (string)($r['before_status'] ?? '');
+            $r['after_status_text'] = $statusMap[(string)($r['after_status'] ?? '')] ?? (string)($r['after_status'] ?? '');
+        }
+        unset($r);
+        $costLedger = ErpCostLedger::where([['site_id', '=', $this->site_id], ['asset_id', '=', $id]])->order('id desc')->select()->toArray();
+        foreach ($costLedger as &$r) {
+            $r['cost_type_text'] = $costMap[(string)($r['cost_type'] ?? '')] ?? (string)($r['cost_type'] ?? '');
+        }
+        unset($r);
+        $timeline = ErpOperationEvent::where([['site_id', '=', $this->site_id], ['asset_id', '=', $id]])->order('occurred_at desc,id desc')->select()->toArray();
+        foreach ($timeline as &$r) {
+            $r['action_text'] = $actionMap[(string)($r['action'] ?? '')] ?? (string)($r['action'] ?? '');
+        }
+        unset($r);
+
+        // 已出库/已售：出库人、时间、卖给了谁(买家主体/电话)
+        $outboundInfo = null;
+        if ((string)$asset->inventory_status === ErpDict::INVENTORY_OUTBOUND) {
+            $item = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['asset_id', '=', $id]])->order('id desc')->findOrEmpty();
+            if (!$item->isEmpty()) {
+                $order = ErpOutboundOrder::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->outbound_id]])->findOrEmpty();
+                if (!$order->isEmpty()) {
+                    $outboundInfo = [
+                        'outbound_no'   => (string)$order->outbound_no,
+                        'type_text'     => ErpDict::getOutboundTypeMap()[(string)$order->outbound_type] ?? (string)$order->outbound_type,
+                        'operator_name' => (string)$order->operator_name,
+                        'out_at'        => (int)$order->out_at,
+                        'buyer_name'    => (string)$order->counterparty_name,
+                        'sale_price'    => (float)$item->sale_price,
+                    ];
+                }
+            }
+        }
+
         return [
-            'asset' => $asset->toArray(),
-            'counterparty' => $counterparty,
-            'stock_ledger' => ErpStockLedger::where([
-                ['site_id', '=', $this->site_id],
-                ['asset_id', '=', $id],
-            ])->order('id desc')->select()->toArray(),
-            'cost_ledger' => ErpCostLedger::where([
-                ['site_id', '=', $this->site_id],
-                ['asset_id', '=', $id],
-            ])->order('id desc')->select()->toArray(),
-            'timeline' => ErpOperationEvent::where([
-                ['site_id', '=', $this->site_id],
-                ['asset_id', '=', $id],
-            ])->order('occurred_at desc,id desc')->select()->toArray(),
+            'asset'         => $asset->toArray(),
+            'counterparty'  => $counterparty,
+            'contact'       => $contact,
+            'outbound_info' => $outboundInfo,
+            'stock_ledger'  => $stockLedger,
+            'cost_ledger'   => $costLedger,
+            'timeline'      => $timeline,
         ];
     }
 
