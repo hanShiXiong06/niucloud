@@ -38,12 +38,12 @@
                     <el-input v-model="search.amount_max" placeholder="最高" clearable style="width: 90px" @keyup.enter="loadList" />
                 </el-form-item>
                 <el-form-item>
-                    <el-button type="primary" @click="loadList" :loading="loading">查询</el-button>
+                    <el-button type="primary" @click="loadList" :loading="table.loading">查询</el-button>
                     <el-button @click="resetSearch">重置</el-button>
                 </el-form-item>
             </el-form>
 
-            <el-table class="mt-4" :data="list" v-loading="loading" size="large" empty-text="暂无出库单" @sort-change="onSort">
+            <el-table class="mt-4" :data="table.data" v-loading="table.loading" size="large" empty-text="暂无出库单" @sort-change="onSort">
                 <el-table-column prop="outbound_no" label="出库单号" min-width="170" />
                 <el-table-column prop="type_text" label="类型" width="100" />
                 <el-table-column label="往来单位" min-width="140">
@@ -74,8 +74,8 @@
                 </el-table-column>
             </el-table>
             <div class="mt-4 flex justify-end">
-                <el-pagination layout="total, prev, pager, next" :total="total" :page-size="search.limit"
-                    :current-page="search.page" @current-change="onPageChange" />
+                <el-pagination layout="total, prev, pager, next" :total="table.total" :page-size="table.limit"
+                    :current-page="table.page" @current-change="onPageChange" />
             </div>
         </el-card>
 
@@ -295,46 +295,17 @@ import { getErpMemberOptions, quickCreateErpContact } from '@/addon/hsx_erp/api/
 import TraceDetail from '@/addon/hsx_erp/views/device_trace/trace-detail.vue'
 import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
+import { useListQuery } from '@/addon/hsx_erp/composables/useListQuery'
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 const formatTime = (t: number) => new Date(t * 1000).toLocaleString()
 
-const loading = ref(false)
-const list = ref<any[]>([])
-const total = ref(0)
-const search = reactive<any>({ outbound_type: '', price_status: '', keyword: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '', page: 1, limit: 15 })
-
-function onPageChange(p: number) {
-    search.page = p
-    loadList()
-}
-function resetSearch() {
-    Object.assign(search, { outbound_type: '', price_status: '', keyword: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '', page: 1 })
-    loadList()
-}
-function onSort({ prop, order }: { prop: string; order: string | null }) {
-    search.sort_field = order ? prop : ''
-    search.sort_order = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : ''
-    search.page = 1
-    loadList()
-}
-
-async function loadList() {
-    loading.value = true
-    try {
-        const params: any = { ...search }
-        if (Array.isArray(search.dateRange) && search.dateRange.length === 2) {
-            params.start_time = search.dateRange[0]
-            params.end_time = search.dateRange[1]
-        }
-        delete params.dateRange
-        const res: any = await getErpOutboundList(params)
-        list.value = res.data?.data || []
-        total.value = res.data?.total || 0
-    } finally {
-        loading.value = false
-    }
-}
+// 列表查询统一走 useListQuery：search/分页/排序/日期区间/loading 都收敛在里面
+const { search, table, loadList, reset: resetSearch, onSort, onPage: onPageChange } = useListQuery({
+    api: getErpOutboundList,
+    defaults: { outbound_type: '', price_status: '', keyword: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '' },
+    dateRangeField: 'dateRange',
+})
 
 async function doCancel(row: any) {
     try {
@@ -570,6 +541,5 @@ function openEntity(id: number) {
     entityDrawer.id = id
     entityDrawer.visible = true
 }
-
-loadList()
+// 首次加载由 useListQuery(immediate) 触发，这里不再手动 loadList()
 </script>

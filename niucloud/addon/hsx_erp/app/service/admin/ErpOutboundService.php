@@ -13,6 +13,7 @@ use addon\hsx_erp\app\model\ErpOutboundItem;
 use addon\hsx_erp\app\model\ErpOutboundOrder;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\FinanceReceivable;
+use addon\hsx_erp\app\service\admin\concern\SortableQuery;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -30,6 +31,8 @@ use think\facade\Log;
  */
 class ErpOutboundService extends BaseAdminService
 {
+    use SortableQuery;
+
     /** 物理在库、可出库的状态 */
     private function outboundableStatuses(): array
     {
@@ -556,11 +559,9 @@ class ErpOutboundService extends BaseAdminService
         if (($where['amount_max'] ?? '') !== '') {
             $query->where('total_amount', '<=', (float)$where['amount_max']);
         }
-        $sortMap = ['id' => 'id', 'out_at' => 'out_at', 'total_amount' => 'total_amount', 'qty' => 'qty'];
-        $sf = $sortMap[(string)($where['sort_field'] ?? '')] ?? 'id';
-        $so = strtolower((string)($where['sort_order'] ?? '')) === 'asc' ? 'asc' : 'desc';
+        $this->applySort($query, $where, ['id', 'out_at', 'total_amount', 'qty']);
         $typeMap = ErpDict::getOutboundTypeMap();
-        $list = $query->order($sf, $so)->paginate([
+        $list = $query->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page'      => (int)($where['page'] ?? 1),
         ]);
