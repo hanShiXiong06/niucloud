@@ -195,9 +195,13 @@ class PrintScene extends BaseAdminController
             'biz_id' => (int)$data['biz_id'],
             'print_data_override' => is_array($data['print_data_override']) ? $data['print_data_override'] : [],
         ]);
-        // 兜底清洗:打印结果可能含云打印 GBK 报错/标签二进制指令等非 UTF-8 字节，
-        // 不清洗会让 json_encode 抛 "Malformed UTF-8 characters" 导致接口 500
-        $result = \addon\hsx_recycle\app\support\Utf8::clean($result, 'PrintScene.print');
+        // 同 plan:定位并清洗非UTF-8字段，避免 json_encode 抛 Malformed UTF-8
+        array_walk_recursive($result, function (&$v, $k) {
+            if (is_string($v) && $v !== '' && !mb_check_encoding($v, 'UTF-8')) {
+                \think\facade\Log::write('[print-utf8] print 非法字段 key=' . $k . ' hex=' . bin2hex(substr($v, 0, 80)), 'error');
+                $v = mb_convert_encoding($v, 'UTF-8', 'UTF-8');
+            }
+        });
         if (!empty($result['success'])) {
             return success($result);
         }
