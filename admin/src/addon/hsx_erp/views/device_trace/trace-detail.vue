@@ -71,7 +71,8 @@ const show = computed({ get: () => props.modelValue, set: (v: boolean) => emit('
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 const formatTime = (t: any) => {
     const n = Number(t || 0)
-    if (!n) return '-'
+    // 0 或明显非法的早期时间(2000年前)都当空，避免显示 1970-01-01
+    if (!n || n < 946684800) return '-'
     const d = new Date(n * 1000)
     const p = (x: number) => String(x).padStart(2, '0')
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
