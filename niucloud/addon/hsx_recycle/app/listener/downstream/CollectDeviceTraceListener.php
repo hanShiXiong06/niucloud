@@ -66,7 +66,7 @@ class CollectDeviceTraceListener
                 $customer = $memberNameMap[(int)$ord['member_id']] ?? '';
             }
             // 回收时间: 优先订单提交时间
-            $rtime = (int)($ord['create_at'] ?? 0) ?: (int)($ord['create_time'] ?? 0) ?: (int)($d['create_at'] ?? 0);
+            $rtime = $this->ts($ord['create_at'] ?? 0) ?: $this->ts($ord['create_time'] ?? 0) ?: $this->ts($d['create_at'] ?? 0);
             $rows[] = [
                 'device_id'     => (int)$d['id'],
                 'erp_asset_id'  => (int)($d['downstream_erp_asset_id'] ?? 0),
@@ -121,7 +121,7 @@ class CollectDeviceTraceListener
                 continue; // 打款/折账由打款记录覆盖
             }
             $events[] = [
-                'time'          => (int)($lg['create_at'] ?? 0),
+                'time'          => $this->ts($lg['create_at'] ?? 0),
                 'stage'         => '回收',
                 'title'         => (string)($lg['status_name'] ?? RecycleOrderDict::getDeviceLogOperationName($lg)),
                 'detail'        => (string)($lg['remark'] ?? ''),
@@ -148,7 +148,7 @@ class CollectDeviceTraceListener
                     }
                 }
                 $events[] = [
-                    'time'          => (int)$lg['create_at'],
+                    'time'          => $this->ts($lg['create_at'] ?? 0),
                     'stage'         => '回收',
                     'title'         => $title,
                     'detail'        => (string)$lg['remark'],
@@ -164,7 +164,7 @@ class CollectDeviceTraceListener
         foreach (RecycleDevicePayment::where([['device_id', '=', $deviceId]])->order('id asc')->select()->toArray() as $pay) {
             $isOffset = (string)$pay['pay_type'] === '折账';
             $events[] = [
-                'time'          => (int)$pay['pay_time'],
+                'time'          => $this->ts($pay['pay_time'] ?? 0),
                 'stage'         => '回收',
                 'title'         => $isOffset ? '折账结清(回收应付)' : '打款',
                 'detail'        => ($isOffset ? '折账核销 ' : '打款方式:' . $pay['pay_type'] . ' ') . ($pay['pay_remark'] ?? ''),
@@ -194,10 +194,23 @@ class CollectDeviceTraceListener
             'recycle_price'  => round((float)(($d['final_price'] ?? 0) ?: ($d['initial_price'] ?? 0) ?: 0), 2),
             'pay_status'     => (int)($d['pay_status'] ?? 0),
             'pay_amount'     => round((float)($d['pay_amount'] ?? 0), 2),
-            'recycle_time'   => (int)($ord['create_at'] ?? 0) ?: (int)($ord['create_time'] ?? 0) ?: (int)($d['create_at'] ?? 0),
+            'recycle_time'   => $this->ts($ord['create_at'] ?? 0) ?: $this->ts($ord['create_time'] ?? 0) ?: $this->ts($d['create_at'] ?? 0),
         ];
         \think\facade\Log::info('[trace] device_id=' . $deviceId . ' 回收段事件合计=' . count($events));
         return ['summary' => $summary, 'events' => $events];
+    }
+
+    /**
+     * 时间归一：模型设了 $createTime 会把 create_at 读成日期字符串("Y-m-d H:i:s")，
+     * 直接 (int) 只会取到开头年份(如 2026)→ 1970-01-01 08:33。这里兼容 int 时间戳与字符串。
+     */
+    private function ts($v): int
+    {
+        if (is_numeric($v)) {
+            return (int)$v;
+        }
+        $s = trim((string)$v);
+        return $s === '' ? 0 : (int)(strtotime($s) ?: 0);
     }
 
     private function orderMap(int $siteId, array $orderIds): array
