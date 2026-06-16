@@ -31,6 +31,9 @@ class CollectDeviceTraceListener
             }
             return ['list' => $this->search($siteId, (string)($p['keyword'] ?? ''))];
         } catch (\Throwable $e) {
+            // 关键：原来这里静默吞异常 → 出错时什么都查不到、也看不到原因。现在记下来。
+            \think\facade\Log::error('[CollectDeviceTrace] 处理失败: ' . $e->getMessage()
+                . ' @ ' . $e->getFile() . ':' . $e->getLine());
             return [];
         }
     }
@@ -39,7 +42,9 @@ class CollectDeviceTraceListener
     private function search(int $siteId, string $keyword): array
     {
         $keyword = trim($keyword);
+        \think\facade\Log::info('[CollectDeviceTrace] search 入参 site_id=' . $siteId . ' keyword=' . $keyword);
         if ($siteId <= 0 || $keyword === '') {
+            \think\facade\Log::info('[CollectDeviceTrace] search 提前返回: site_id<=0 或 keyword 为空');
             return [];
         }
        
@@ -55,7 +60,9 @@ class CollectDeviceTraceListener
             }
         });
         $devices = $query->order('id desc')->limit(50)->select()->toArray();
+        \think\facade\Log::info('[CollectDeviceTrace] 命中设备数=' . count($devices) . ' 命中订单数=' . count($orderIds));
         if (empty($devices)) {
+            \think\facade\Log::info('[CollectDeviceTrace] 设备查询为空(检查 site_id 是否=0 / 关键词是否匹配 imei|sn|order_no)');
             return [];
         }
         $orderMap = $this->orderMap($siteId, array_column($devices, 'order_id'));
