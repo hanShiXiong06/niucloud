@@ -125,14 +125,23 @@ class ErpAssetService extends BaseAdminService
         $sortOrder = strtolower((string)($where['sort_order'] ?? '')) === 'asc' ? 'asc' : 'desc';
         $query->order($sortField, $sortOrder);
 
+        // 流速：当前筛选集里"在库"设备的平均库龄(天)
+        $onHand = [ErpDict::INVENTORY_IN_STOCK, ErpDict::INVENTORY_REFURBISHING, ErpDict::INVENTORY_PENDING_PRICING, ErpDict::INVENTORY_AVAILABLE_FOR_SALE, ErpDict::INVENTORY_LOCKED];
+        $inStockCount = (clone $aggQuery)->whereIn('inventory_status', $onHand)->where('stock_in_at', '>', 0)->count();
+        $avgStockIn = (float)(clone $aggQuery)->whereIn('inventory_status', $onHand)->where('stock_in_at', '>', 0)->avg('stock_in_at');
+        $avgAgeDays = $avgStockIn > 0 ? round((time() - $avgStockIn) / 86400, 1) : 0;
+
         $result = $this->pageQuery($query);
         $this->appendCounterparties($result['data']);
         $this->appendWarehouseNames($result['data']);
         $this->appendStatusLabels($result['data']);
+        $this->appendStockAge($result['data']);
         $result['summary'] = [
-            'count'      => (int)$totalCount,
-            'total_cost' => $totalCost,
-            'total_sale' => $totalSale,
+            'count'          => (int)$totalCount,
+            'total_cost'     => $totalCost,
+            'total_sale'     => $totalSale,
+            'in_stock_count' => (int)$inStockCount,
+            'avg_age_days'   => $avgAgeDays,
         ];
         return $result;
     }
@@ -213,6 +222,35 @@ class ErpAssetService extends BaseAdminService
             }
         }
         unset($row);
+    }
+
+    /**
+     * 周转/库龄：在库设备=库龄(至今多少天)；已出库/丢失=周转天数(入库到离库用了多少天)。
+     */
+    private function appendStockAge(array &$rows): void
+    {
+        if (empty($rows)) {
+            return;
+        }
+        $now = time();
+        $left = [ErpDict::INVENTORY_OUTBOUND, ErpDict::INVENTORY_LOST];
+        foreach ($rows as &$r) {
+            $in = (int)($r['stock_in_at'] ?? 0);
+            $out = (int)($r['stock_out_at'] ?? 0);
+            if ($in <= 0) {
+                $r['age_days'] = null;
+                $r['age_type'] = '';
+                continue;
+            }
+            if (in_array((string)($r['inventory_status'] ?? ''), $left, true) && $out > 0) {
+                $r['age_days'] = round(($out - $in) / 86400, 1);  // 周转：收到离库
+                $r['age_type'] = 'turnover';
+            } else {
+                $r['age_days'] = round(($now - $in) / 86400, 1);  // 库龄：在库时长
+                $r['age_type'] = 'in_stock';
+            }
+        }
+        unset($r);
     }
 
     /**

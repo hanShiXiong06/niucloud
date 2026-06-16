@@ -77,6 +77,7 @@
                 <span>共 <b class="text-[var(--el-color-primary)]">{{ summary.count }}</b> 台</span>
                 <span>成本合计 <b class="text-orange-600">¥{{ money(summary.total_cost) }}</b></span>
                 <span>参考售价合计 <b class="text-blue-600">¥{{ money(summary.total_sale) }}</b></span>
+                <span v-if="summary.in_stock_count">在库 <b>{{ summary.in_stock_count }}</b> 台 · 平均库龄 <b :class="Number(summary.avg_age_days) >= 30 ? 'text-red-600' : 'text-green-600'">{{ summary.avg_age_days }}</b> 天</span>
             </div>
 
             <div class="mb-3 flex items-center justify-between">
@@ -157,6 +158,15 @@
                 </el-table-column>
                 <el-table-column prop="stock_in_at" label="入库时间" width="170" sortable="custom">
                     <template #default="{ row }">{{ formatTime(row.stock_in_at) }}</template>
+                </el-table-column>
+                <el-table-column label="库龄/周转" width="110" align="right">
+                    <template #default="{ row }">
+                        <span v-if="row.age_days === null || row.age_days === undefined" class="text-gray-300">-</span>
+                        <template v-else>
+                            <span v-if="row.age_type === 'turnover'" class="text-gray-500">周转 {{ row.age_days }}天</span>
+                            <span v-else :class="Number(row.age_days) >= 30 ? 'text-red-600' : (Number(row.age_days) >= 14 ? 'text-orange-500' : 'text-gray-700')">在库 {{ row.age_days }}天</span>
+                        </template>
+                    </template>
                 </el-table-column>
                 <el-table-column label="操作" fixed="right" width="320" align="center">
                     <template #default="{ row }">
@@ -576,7 +586,7 @@ const router = useRouter()
 const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any, location_id: '' as any, ownership_type: '', cost_min: '' as any, cost_max: '' as any, stockInRange: [] as any, sort_field: '', sort_order: '' })
 const filterLocations = computed(() => warehouseOptions.value.find((w: any) => Number(w.id) === Number(search.warehouse_id))?.locations || [])
 const onWarehouseFilterChange = () => { search.location_id = ''; handleSearch() }
-const summary = reactive({ count: 0, total_cost: 0, total_sale: 0 })
+const summary = reactive({ count: 0, total_cost: 0, total_sale: 0, in_stock_count: 0, avg_age_days: 0 })
 // 是否已接入中台(数据中台)：接入后拍照/定价交给中台，ERP 不再自行定价
 const integrated = ref(false)
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
@@ -772,6 +782,8 @@ const loadList = async () => {
         summary.count = Number(s.count || 0)
         summary.total_cost = Number(s.total_cost || 0)
         summary.total_sale = Number(s.total_sale || 0)
+        summary.in_stock_count = Number(s.in_stock_count || 0)
+        summary.avg_age_days = Number(s.avg_age_days || 0)
     } finally {
         table.loading = false
     }
