@@ -52,3 +52,8 @@ export function recordFinanceExpense(data: Record<string, any>) {
 export function prepayFinance(data: Record<string, any>) {
     return request.post('erp/finance/prepay', data)
 }
+
+// 某供应商可用采购预付余额(入库建档抵扣展示)
+export function getFinancePrepayBalance(counterpartyId: number) {
+    return request.get('erp/finance/prepay_balance', { params: { counterparty_id: counterpartyId } })
+}

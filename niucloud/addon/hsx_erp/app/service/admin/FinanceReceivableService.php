@@ -115,6 +115,40 @@ class FinanceReceivableService extends BaseAdminService
     }
 
     /**
+     * 某供应商(member锚)的可用采购预付余额 + 明细。
+     * 供入库建档时展示"可用预付¥X"并选择抵扣本台应付。
+     */
+    public function prepayBalance(int $memberId): array
+    {
+        if ($memberId <= 0) {
+            return ['available' => 0.0, 'items' => []];
+        }
+        $list = FinanceReceivable::where([
+            ['site_id', '=', $this->site_id],
+            ['counterparty_id', '=', $memberId],
+            ['source_type', '=', 'prepay'],
+            ['status', 'in', [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL]],
+        ])->order('occurred_at asc')->select()->toArray();
+        $available = 0.0;
+        $items = [];
+        foreach ($list as $r) {
+            $out = round((float)$r['amount'] - (float)$r['settled_amount'], 2);
+            if ($out <= 0) {
+                continue;
+            }
+            $available += $out;
+            $items[] = [
+                'id'          => (int)$r['id'],
+                'amount'      => round((float)$r['amount'], 2),
+                'outstanding' => $out,
+                'occurred_at' => (int)$r['occurred_at'],
+                'remark'      => (string)$r['remark'],
+            ];
+        }
+        return ['available' => round($available, 2), 'items' => $items];
+    }
+
+    /**
      * 采购预付挂账:钱付了、货还没到。
      *  1) 从资金账户现金出账(余额不足会抛);
      *  2) 给该往来单位生成一笔"采购预付"应收(=对方欠我货)→ 形成预付往来余额;

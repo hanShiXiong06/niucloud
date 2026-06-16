@@ -3,8 +3,16 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\service\admin;
 
+use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetCycle;
+use addon\hsx_erp\app\model\ErpCapitalAccount;
+use addon\hsx_erp\app\model\ErpCounterparty;
+use addon\hsx_erp\app\model\FinancePayable;
+use addon\hsx_erp\app\model\FinanceReceivable;
+use addon\hsx_erp\app\dict\FinanceDict;
 use addon\hsx_erp\app\service\admin\ErpAssetService;
+use addon\hsx_erp\app\service\admin\FinanceCounterpartyBalanceService;
+use addon\hsx_erp\app\service\admin\FinanceSettlementService;
 use addon\hsx_erp\app\service\core\ErpInboundService;
 use addon\hsx_erp\app\support\ErpMoney;
 use core\base\BaseAdminService;
@@ -64,6 +72,21 @@ class ErpStandaloneInboundService extends BaseAdminService
             : (ErpMoney::compare($paidAmount, '0.00') === 0
                 ? 'unpaid'
                 : (ErpMoney::compare($paidAmount, $payableAmount) >= 0 ? 'paid' : 'partial'));
+
+        // 已付>0 必须选付款户头, 且建档前先校验余额(不够直接拦, 不创建资产)
+        $paidAccountId = (int)($data['paid_account_id'] ?? 0);
+        if (in_array($businessType, ['recycle', 'purchase'], true) && ErpMoney::compare($paidAmount, '0.00') > 0) {
+            if ($paidAccountId <= 0) {
+                throw new CommonException('填写了已付金额，请选择付款户头');
+            }
+            $payAcc = ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $paidAccountId]])->findOrEmpty();
+            if ($payAcc->isEmpty()) {
+                throw new CommonException('付款户头不存在');
+            }
+            if (round((float)$payAcc->balance, 2) < round((float)$paidAmount, 2)) {
+                throw new CommonException(sprintf('账户「%s」余额不足：当前 %.2f，需付出 %.2f，请改用其他户头', (string)$payAcc->account_name, (float)$payAcc->balance, (float)$paidAmount));
+            }
+        }
 
         $sourceDeviceId = $this->makeSourceDeviceId();
         $now = time();
@@ -158,6 +181,77 @@ class ErpStandaloneInboundService extends BaseAdminService
                         'asset_id' => $assetId,
                     ]);
                 }
+            }
+        }
+
+        // 接入财务: 建档生成"应付"(全额, 锚主体), 已付部分当场从户头结清。
+        // 故障隔离: 发应付/结算失败只记日志, 不影响建档(余额已在建档前预检)。
+        if (in_array($businessType, ['recycle', 'purchase'], true) && ErpMoney::compare($payableAmount, '0.00') > 0) {
+            try {
+                $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['source_device_id', '=', $sourceDeviceId]])->order('id desc')->findOrEmpty();
+                $assetId = (int)($asset->id ?? 0);
+                // 财务应付锚定到「对接人(member_id)」, 与回收/出库口径一致, 才能按主体正确归账、跨人折账。
+                // 拿不到 member_id 时退回主体PK(至少能查到账, 仅可能落到"未归属")。
+                $memberId = (int)($data['counterparty_member_id'] ?? 0);
+                $entityId = (int)($asset->counterparty_id ?? 0) ?: $counterpartyId;
+                $cpId = $memberId > 0 ? $memberId : $entityId;
+                if ($assetId > 0 && $cpId > 0) {
+                    if ($memberId > 0) {
+                        $mm = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, [$memberId]);
+                        $cpName = (string)($mm[$memberId]['name'] ?? '');
+                    } else {
+                        $cpName = (string)(ErpCounterparty::where([['site_id', '=', $this->site_id], ['id', '=', $cpId]])->value('name') ?: '');
+                    }
+                    $payableNo = 'ERPIN' . $assetId;
+                    event('FinancePayableCreated', [
+                        'event'             => 'finance.payable.created.v1',
+                        'event_id'          => 'erp_inbound_payable_' . $sourceDeviceId,
+                        'site_id'           => (int)$this->site_id,
+                        'counterparty_id'   => $cpId,
+                        'counterparty_name' => $cpName,
+                        'amount'            => round((float)$payableAmount, 2),
+                        'source_type'       => 'erp_inbound',
+                        'source_no'         => $payableNo,
+                        'source_device_id'  => $sourceDeviceId,
+                        'occurred_at'       => $now,
+                        'remark'            => '手工建档入库应付',
+                    ]);
+
+                    // 找到刚生成的应付，按选择处理：用预付折账 / 现金已付 / 都不(挂应付)
+                    $payable = FinancePayable::where([
+                        ['site_id', '=', $this->site_id],
+                        ['source_device_id', '=', $sourceDeviceId],
+                        ['source_type', '=', 'erp_inbound'],
+                    ])->order('id desc')->findOrEmpty();
+                    if (!$payable->isEmpty()) {
+                        if (!empty($data['use_prepay']) && $memberId > 0 && (int)$payable->counterparty_id === $memberId) {
+                            // 用该供应商未结"采购预付"应收折账核销本台应付(不再走现金)；
+                            // settlement_link 会记录"这台设备的应付 ↔ 哪笔预付"，预付花在哪台可追溯。
+                            $prepayIds = FinanceReceivable::where([
+                                ['site_id', '=', $this->site_id],
+                                ['counterparty_id', '=', $memberId],
+                                ['source_type', '=', 'prepay'],
+                                ['status', 'in', [FinanceDict::STATUS_PENDING, FinanceDict::STATUS_PARTIAL]],
+                            ])->order('occurred_at asc')->column('id');
+                            if (!empty($prepayIds)) {
+                                (new FinanceSettlementService())->settle(
+                                    $memberId,
+                                    [(int)$payable->id],
+                                    array_map('intval', $prepayIds),
+                                    ['record_cash' => false, 'remark' => '入库核销采购预付（' . $payableNo . '）']
+                                );
+                            }
+                        } elseif ($paidAccountId > 0 && ErpMoney::compare($paidAmount, '0.00') > 0) {
+                            // 已付>0: 从户头当场结清这部分(部分=订金, 全额=结清)
+                            (new FinanceSettlementService())->payCashByPayable((int)$payable->id, (float)$paidAmount, $paidAccountId, ['remark' => '入库已付（' . $payableNo . '）']);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('[erp] 入库接入财务失败：' . $e->getMessage(), [
+                    'site_id' => $this->site_id,
+                    'source_device_id' => $sourceDeviceId,
+                ]);
             }
         }
 

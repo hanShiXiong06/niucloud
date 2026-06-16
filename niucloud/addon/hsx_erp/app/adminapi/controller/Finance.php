@@ -152,6 +152,13 @@ class Finance extends BaseAdminController
         ]));
     }
 
+    /** 某供应商可用采购预付余额(供入库建档抵扣展示) */
+    public function prepayBalance()
+    {
+        $cpId = (int)$this->request->param('counterparty_id', 0);
+        return success((new FinanceReceivableService())->prepayBalance($cpId));
+    }
+
     /** 采购预付挂账:钱付了货没到——现金出账 + 生成采购预付应收(货到折账相抵) */
     public function prepay()
     {

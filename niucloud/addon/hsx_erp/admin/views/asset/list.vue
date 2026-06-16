@@ -297,10 +297,14 @@
                     </el-form-item>
                     <el-form-item v-if="!['consignment', 'opening'].includes(manualForm.business_type)" :label="manualForm.settle_mode === 'cash' ? '付款金额' : '订金/已付'">
                         <el-input-number v-model="manualForm.paid_amount" :min="0" :max="manualForm.purchase_cost" :precision="2"
-                            controls-position="right" :disabled="manualForm.settle_mode === 'cash'" class="!w-full" />
+                            controls-position="right" :disabled="manualForm.settle_mode === 'cash' || manualForm.use_prepay" class="!w-full" />
                     </el-form-item>
                 </div>
-                <el-form-item v-if="!['consignment', 'opening'].includes(manualForm.business_type)" label="结算方式">
+                <el-form-item v-if="manualPrepay.available > 0 && !['consignment', 'opening'].includes(manualForm.business_type)" label="采购预付">
+                    <el-checkbox v-model="manualForm.use_prepay" @change="onUsePrepayChange">用预付抵扣本台应付</el-checkbox>
+                    <span class="ml-2 text-xs text-green-600">该卖方可用预付 ¥{{ money(manualPrepay.available) }}（货款已提前付过，建档即从预付里核销这台）</span>
+                </el-form-item>
+                <el-form-item v-if="!manualForm.use_prepay && !['consignment', 'opening'].includes(manualForm.business_type)" label="结算方式">
                     <el-radio-group v-model="manualForm.settle_mode" @change="handleSettleModeChange">
                         <el-radio-button label="cash">现结（当场付清）</el-radio-button>
                         <el-radio-button label="credit">挂账（应付卖方）</el-radio-button>
@@ -581,6 +585,7 @@ import {
 } from '@/addon/hsx_erp/api/asset'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
+import { getFinancePrepayBalance } from '@/addon/hsx_erp/api/finance'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
 import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
 import { transferErpAsset } from '@/addon/hsx_erp/api/outbound'
@@ -757,10 +762,34 @@ const manualForm = reactive({
     warehouse_id: 0,
     location_id: 0,
     need_refurb: false,
+    use_prepay: false,
     remark: ''
 })
-// 选定供应商时记下其会员ID(财务应付锚定到人, 与回收口径一致, 才能正确归到主体)
-const onSupplierResolved = (d: any) => { manualForm.counterparty_member_id = Number(d?.member_id || 0) }
+// 该供应商可用采购预付余额(选定供应商后拉取)
+const manualPrepay = reactive<any>({ available: 0 })
+// 选定供应商时:记会员ID(应付锚到人) + 拉取其可用预付余额，供入库直接抵扣
+const onSupplierResolved = async (d: any) => {
+    manualForm.counterparty_member_id = Number(d?.member_id || 0)
+    manualForm.use_prepay = false
+    manualPrepay.available = 0
+    const mid = Number(d?.member_id || 0)
+    if (mid > 0) {
+        try {
+            const res: any = await getFinancePrepayBalance(mid)
+            manualPrepay.available = Number(res?.data?.available || 0)
+        } catch (e) {
+            manualPrepay.available = 0
+        }
+    }
+}
+// 勾选"用预付抵扣"时:本台不再走现金，置挂账 + 已付0
+const onUsePrepayChange = (v: boolean) => {
+    if (v) {
+        manualForm.settle_mode = 'credit'
+        manualForm.paid_amount = 0
+        manualForm.paid_account_id = 0
+    }
+}
 // 付款户头选项（已付>0 时建档即从该户头出账）
 const accountOptions = ref<any[]>([])
 const loadAccountOptions = async () => {
@@ -783,18 +812,26 @@ const counterpartyDialog = reactive<any>({
 const manualUnpaidAmount = computed(() =>
     Math.max(0, Number(manualForm.purchase_cost || 0) - Number(manualForm.paid_amount || 0))
 )
-// 本次实际付款额：现结=采购成本，挂账=订金
+// 本次实际付款额：用预付=0(纯折账)，现结=采购成本，挂账=订金
 const payNowAmount = computed(() =>
-    Number(manualForm.settle_mode === 'cash' ? manualForm.purchase_cost : manualForm.paid_amount) || 0
+    manualForm.use_prepay ? 0 : (Number(manualForm.settle_mode === 'cash' ? manualForm.purchase_cost : manualForm.paid_amount) || 0)
 )
-// 付款户头显示：现结一定显示（让用户清楚从哪出账），挂账填了订金才显示
+// 付款户头显示：用预付时不需现金户头；否则现结一定显示，挂账填了订金才显示
 const showPayAccount = computed(() =>
+    !manualForm.use_prepay &&
     !['consignment', 'opening'].includes(manualForm.business_type) &&
     (manualForm.settle_mode === 'cash' || Number(manualForm.paid_amount) > 0)
 )
 const manualSettlementText = computed(() => {
     if (manualForm.business_type === 'consignment') return '代卖入库：暂不形成采购成本和应付，销售后按代卖结算规则处理。'
     if (manualForm.business_type === 'opening') return `期初成本 ¥${money(manualForm.purchase_cost)}，不自动形成外部应付。`
+    if (manualForm.use_prepay) {
+        const offset = Math.min(Number(manualPrepay.available || 0), Number(manualForm.purchase_cost || 0))
+        const rest = Math.max(0, Number(manualForm.purchase_cost || 0) - offset)
+        return rest > 0
+            ? `用预付抵扣 ¥${money(offset)}，剩余 ¥${money(rest)} 仍挂应付卖方（可后续付款或再抵扣）`
+            : `用预付抵扣 ¥${money(offset)}，本台应付已结清，无需付现金`
+    }
     const mode = manualForm.settle_mode === 'cash' ? '现结' : '挂账'
     return `${mode}：成本 ¥${money(manualForm.purchase_cost)}，本次付 ¥${money(manualForm.paid_amount)}，挂账应付卖方 ¥${money(manualUnpaidAmount.value)}`
 })
@@ -869,8 +906,10 @@ const resetManualForm = () => {
         suggested_sale_price: 0,
         warehouse_id: 0,
         location_id: 0,
+        use_prepay: false,
         remark: ''
     })
+    manualPrepay.available = 0
     // 默认带出默认仓库及其首个库位，省一步点选
     const def = warehouseOptions.value.find((item: any) => item.is_default === 1) || warehouseOptions.value[0]
     if (def) {
