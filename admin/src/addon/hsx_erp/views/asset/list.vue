@@ -1,10 +1,10 @@
 <template>
     <div class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
-                <div>
+            <div class="flex items-start justify-between gap-4 mb-3">
+                <div class="flex items-center">
                     <div class="text-page-title">设备流转</div>
-                    <div class="mt-1 text-sm text-gray-500">一条主线跟着设备走：待入库 → 在库/整备 → 待定价 → 可售。按阶段切换，就地处理当前该做的动作。</div>
+                    <div class="  ml-2 mt-1 text-sm text-gray-500">一条主线跟着设备走：待入库 → 在库/整备 → 待定价 → 可售。按阶段切换，就地处理当前该做的动作。</div>
                 </div>
                 <div class="flex gap-2">
                     <el-button type="primary" @click="openManualInbound">入库</el-button>
@@ -21,7 +21,7 @@
                 title="已与回收系统打通：回收单确认回收后，设备会自动同步到这里（待入库池），无需在此手动入库。手动入库仅用于非回收来源（如自行采购/期初建档）。"
             />
 
-            <el-tabs v-model="search.inventory_status" class="mt-5" @tab-change="handleSearch">
+            <el-tabs v-model="search.inventory_status" class="mt-3" @tab-change="handleSearch">
                 <el-tab-pane label="全部" name="" />
                 <el-tab-pane label="待入库" name="pending_in" />
                 <el-tab-pane label="在库待整备" name="in_stock" />
@@ -96,7 +96,12 @@
                 <el-table-column prop="source_device_id" label="来源设备ID" width="120" />
                 <el-table-column label="往来单位 / 关联人" min-width="180">
                     <template #default="{ row }">
-                        <div class="font-medium text-gray-800">{{ row.contact?.unit_name || row.counterparty?.name || '散户/未关联' }}</div>
+                        <div
+                            v-if="row.counterparty_id > 0"
+                            class="cursor-pointer font-medium text-[var(--el-color-primary)]"
+                            @click="openEntity(row.counterparty_id)"
+                        >{{ row.contact?.unit_name || row.counterparty?.name || ('主体#' + row.counterparty_id) }}</div>
+                        <div v-else class="font-medium text-gray-800">{{ row.contact?.unit_name || '散户/未关联' }}</div>
                         <div v-if="row.contact?.person_name || row.contact?.person_mobile" class="mt-0.5 text-xs text-gray-500">
                             {{ row.contact?.person_name || '-' }}<span v-if="row.contact?.person_mobile"> · {{ row.contact.person_mobile }}</span>
                         </div>
@@ -525,6 +530,8 @@
                 <el-button type="primary" :loading="costDialog.submitting" @click="submitCostAdjust">保存</el-button>
             </template>
         </el-dialog>
+
+        <entity-drawer v-model="entityDrawer.visible" :entity-id="entityDrawer.id" @changed="loadList" />
     </div>
 </template>
 
@@ -548,6 +555,7 @@ import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
 import { transferErpAsset } from '@/addon/hsx_erp/api/outbound'
 import { saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
+import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 
 const router = useRouter()
 const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any, location_id: '' as any, sort_field: '', sort_order: '' })
@@ -1042,6 +1050,14 @@ const loadWarehouses = async () => {
     const defaultWarehouse = warehouseOptions.value.find((item: any) => item.is_default === 1) || warehouseOptions.value[0]
     inbound.warehouse_id = Number(defaultWarehouse?.id || 0)
     inbound.location_id = Number(defaultWarehouse?.locations?.[0]?.id || 0)
+}
+
+// 往来主体抽屉(复用财务中心同一组件: 查看/编辑主体+联系人)
+const entityDrawer = reactive<any>({ visible: false, id: 0 })
+const openEntity = (id: number) => {
+    if (!id) return
+    entityDrawer.id = id
+    entityDrawer.visible = true
 }
 
 const recycleConnected = ref(false)
