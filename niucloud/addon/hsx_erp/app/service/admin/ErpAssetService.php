@@ -991,37 +991,43 @@ class ErpAssetService extends BaseAdminService
 
     private function appendCounterparties(array &$rows): void
     {
-        $ids = array_values(array_unique(array_filter(array_map(
-            fn(array $row) => (int)($row['counterparty_id'] ?? 0),
-            $rows
-        ))));
-        if (empty($ids)) {
+        if (empty($rows)) {
             return;
         }
-        $map = [];
-        foreach (ErpCounterparty::where([['site_id', '=', $this->site_id]])
-                     ->whereIn('id', $ids)->select()->toArray() as $counterparty) {
-            $map[(int)$counterparty['id']] = $counterparty;
+        // counterparty_id(销售买家)与 source_member_id(回收来源)都是"会员ID", 统一用 member→人+主体 口径解析
+        $memberIds = [];
+        foreach ($rows as $r) {
+            $memberIds[] = (int)($r['source_member_id'] ?? 0);
+            $memberIds[] = (int)($r['counterparty_id'] ?? 0);
         }
-        // 关联人：任何设备都来自某个人(回收客户/采购联系人)。解析 source_member_id → 姓名/手机/所属主体
-        // 复用财务中心同一套人+主体解析口径，保证"单位+人"展示一致
-        $memberIds = array_values(array_unique(array_filter(array_map(
-            fn(array $row) => (int)($row['source_member_id'] ?? 0),
-            $rows
-        ))));
-        $memberMap = !empty($memberIds)
+        $memberIds = array_values(array_unique(array_filter($memberIds)));
+        $mmap = !empty($memberIds)
             ? FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, $memberIds)
             : [];
+        $sold = [ErpDict::INVENTORY_OUTBOUND, ErpDict::INVENTORY_LOCKED];
+        $party = static function (?array $m): ?array {
+            if (!$m) { return null; }
+            return [
+                'name'        => (string)$m['name'],
+                'mobile'      => (string)$m['mobile'],
+                'entity_name' => (string)$m['entity_name'],
+                'entity_id'   => (int)$m['entity_id'],
+            ];
+        };
         foreach ($rows as &$row) {
-            $cp = $map[(int)($row['counterparty_id'] ?? 0)] ?? null;
-            $row['counterparty'] = $cp;
-            $m = $memberMap[(int)($row['source_member_id'] ?? 0)] ?? null;
-            // 单位：优先用资产关联的往来单位，其次用该人所属主体
-            $unitName = $cp['name'] ?? ($m['entity_name'] ?? '');
+            $rm = $mmap[(int)($row['source_member_id'] ?? 0)] ?? null;
+            // 回收单位(从谁收的)
+            $row['recycle_party'] = $party($rm);
+            // 销售单位(卖给谁): 仅已售出/锁定的资产才有买家
+            $sm = in_array((string)($row['inventory_status'] ?? ''), $sold, true)
+                ? ($mmap[(int)($row['counterparty_id'] ?? 0)] ?? null)
+                : null;
+            $row['sales_party'] = $party($sm);
+            // 旧字段兼容(以回收来源为准)
             $row['contact'] = [
-                'unit_name'     => (string)$unitName,
-                'person_name'   => (string)($m['name'] ?? ''),
-                'person_mobile' => (string)($m['mobile'] ?? ''),
+                'unit_name'     => (string)($rm['entity_name'] ?? ''),
+                'person_name'   => (string)($rm['name'] ?? ''),
+                'person_mobile' => (string)($rm['mobile'] ?? ''),
             ];
         }
         unset($row);

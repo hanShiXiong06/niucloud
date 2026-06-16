@@ -110,17 +110,24 @@
                     </template>
                 </el-table-column>
                 <el-table-column prop="source_device_id" label="来源设备ID" width="120" />
-                <el-table-column label="往来单位 / 关联人" min-width="180">
+                <el-table-column label="回收单位 / 来源" min-width="160">
                     <template #default="{ row }">
-                        <div
-                            v-if="row.counterparty_id > 0"
-                            class="cursor-pointer font-medium text-[var(--el-color-primary)]"
-                            @click="openEntity(row.counterparty_id)"
-                        >{{ row.contact?.unit_name || row.counterparty?.name || ('主体#' + row.counterparty_id) }}</div>
-                        <div v-else class="font-medium text-gray-800">{{ row.contact?.unit_name || '散户/未关联' }}</div>
-                        <div v-if="row.contact?.person_name || row.contact?.person_mobile" class="mt-0.5 text-xs text-gray-500">
-                            {{ row.contact?.person_name || '-' }}<span v-if="row.contact?.person_mobile"> · {{ row.contact.person_mobile }}</span>
-                        </div>
+                        <template v-if="row.recycle_party">
+                            <div v-if="row.recycle_party.entity_id" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.recycle_party.entity_id)">{{ row.recycle_party.entity_name || row.recycle_party.name }}</div>
+                            <div v-else class="font-medium text-gray-800">{{ row.recycle_party.entity_name || '未归属主体' }}</div>
+                            <div class="mt-0.5 text-xs text-gray-500">{{ row.recycle_party.name || '-' }}<span v-if="row.recycle_party.mobile"> · {{ row.recycle_party.mobile }}</span></div>
+                        </template>
+                        <span v-else class="text-gray-300">-</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="销售单位 / 买家" min-width="160">
+                    <template #default="{ row }">
+                        <template v-if="row.sales_party">
+                            <div v-if="row.sales_party.entity_id" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.sales_party.entity_id)">{{ row.sales_party.entity_name || row.sales_party.name }}</div>
+                            <div v-else class="font-medium text-gray-800">{{ row.sales_party.entity_name || '未归属主体' }}</div>
+                            <div class="mt-0.5 text-xs text-gray-500">{{ row.sales_party.name || '-' }}<span v-if="row.sales_party.mobile"> · {{ row.sales_party.mobile }}</span></div>
+                        </template>
+                        <span v-else class="text-gray-300">未售出</span>
                     </template>
                 </el-table-column>
                 <el-table-column label="归属" width="100">
