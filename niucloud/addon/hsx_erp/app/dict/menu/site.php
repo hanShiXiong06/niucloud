@@ -119,7 +119,7 @@ return [
                 'router_path' => 'hsx_erp/refurbishment',
                 'view_path' => 'refurbishment/list',
                 'methods' => 'get',
-                'sort' => '105',
+                'sort' => '90',
                 'status' => '1',
                 'is_show' => '1',
                 'children' => [

@@ -49,7 +49,7 @@
                 <el-table-column label="往来单位" min-width="140">
                     <template #default="{ row }">{{ row.counterparty_name || (row.counterparty_id ? '#' + row.counterparty_id : '-') }}</template>
                 </el-table-column>
-                <el-table-column prop="qty" label="台数" width="80" align="center" sortable="custom" />
+                <el-table-column prop="qty" label="台数" width="100" align="center" sortable="custom" />
                 <el-table-column label="出货总额" width="120" align="right" prop="total_amount" sortable="custom">
                     <template #default="{ row }">{{ money(row.total_amount) }}</template>
                 </el-table-column>

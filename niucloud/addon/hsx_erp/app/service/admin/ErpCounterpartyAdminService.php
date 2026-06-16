@@ -103,6 +103,7 @@ class ErpCounterpartyAdminService extends BaseAdminService
         try {
             if ($id > 0) {
                 $counterparty = $this->find($id);
+                $id = (int)$counterparty->id;   // 传进来可能是会员ID, 用真实主键
                 $counterparty->save($values);
             } else {
                 $counterparty = ErpCounterparty::create(array_merge($values, [
@@ -132,10 +133,12 @@ class ErpCounterpartyAdminService extends BaseAdminService
      */
     public function detail(int $id): array
     {
-        $cp = $this->find($id)->toArray();
-        $cp['members'] = $this->getMembers($id);
-        $cp['finance'] = $this->financeRecon($id);
-        return $cp;
+        $cp = $this->find($id);
+        $realId = (int)$cp->id;   // 传进来可能是会员ID, 用解析出的真实主体主键查对接人/对账
+        $data = $cp->toArray();
+        $data['members'] = $this->getMembers($realId);
+        $data['finance'] = $this->financeRecon($realId);
+        return $data;
     }
 
     /** 主体财务对账：聚合旗下对接人(会员)的未结应付/应收/净额/可折账 */
@@ -171,7 +174,7 @@ class ErpCounterpartyAdminService extends BaseAdminService
     /** 往主体里添加一名对接人(会员)。一个会员只能属于一个主体，已属其他主体则改归本主体。 */
     public function addMember(int $counterpartyId, int $memberId, string $relationRole = 'business', int $isFinanceContact = 0): void
     {
-        $this->find($counterpartyId);
+        $counterpartyId = (int)$this->find($counterpartyId)->id;   // 传进来可能是会员ID, 统一解析为真实主体主键
         if ($memberId <= 0) {
             throw new CommonException('请选择会员');
         }
@@ -203,6 +206,7 @@ class ErpCounterpartyAdminService extends BaseAdminService
     /** 从主体移除一名对接人 */
     public function removeMember(int $counterpartyId, int $memberId): void
     {
+        $counterpartyId = (int)$this->find($counterpartyId)->id;
         $relation = ErpCounterpartyMember::where([
             ['site_id', '=', $this->site_id],
             ['counterparty_id', '=', $counterpartyId],
@@ -281,9 +285,10 @@ class ErpCounterpartyAdminService extends BaseAdminService
     public function delete(int $id): void
     {
         $cp = $this->find($id);
+        $realId = (int)$cp->id;
         Db::startTrans();
         try {
-            ErpCounterpartyMember::where([['site_id', '=', $this->site_id], ['counterparty_id', '=', $id]])
+            ErpCounterpartyMember::where([['site_id', '=', $this->site_id], ['counterparty_id', '=', $realId]])
                 ->update(['status' => 0, 'is_finance_contact' => 0, 'update_at' => time()]);
             $cp->delete();
             Db::commit();
@@ -350,11 +355,20 @@ class ErpCounterpartyAdminService extends BaseAdminService
 
     private function find(int $id): ErpCounterparty
     {
-        // 按 id 查; 允许 site_id 为当前站点或 0(历史数据 site_id 未存对), 真·跨别的站点才拦
+        // 先按主键 id 查
         $counterparty = ErpCounterparty::where([['id', '=', $id]])->findOrEmpty();
+        // 查不到则兼容: 传进来的可能是会员ID(source_id), 按 source 找其对应主体
+        if ($counterparty->isEmpty()) {
+            $counterparty = ErpCounterparty::where([
+                ['site_id', '=', $this->site_id],
+                ['source_type', '=', 'member'],
+                ['source_id', '=', $id],
+            ])->order('id desc')->findOrEmpty();
+        }
         if ($counterparty->isEmpty()) {
             throw new CommonException('往来单位不存在');
         }
+        // 允许 site_id 为当前站点或 0(历史数据 site_id 未存对), 真·跨别的站点才拦
         $sid = (int)$counterparty->site_id;
         if ($sid !== 0 && $sid !== (int)$this->site_id) {
             throw new CommonException('往来单位不存在');

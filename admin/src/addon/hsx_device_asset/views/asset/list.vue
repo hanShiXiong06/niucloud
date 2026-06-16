@@ -2,31 +2,12 @@
     <div class="main-container device-asset-page">
         <el-card class="!border-none" shadow="never">
             <div class="page-head">
-                <div>
+                <div class="flex items-center">
                     <div class="text-page-title">设备资产中台</div>
-                    <div class="page-subtitle">承接 ERP 转入的设备，完成拍照、定价、归位与资料导出</div>
+                    <div class=" ml-2 page-subtitle">承接 ERP 转入的设备，完成拍照、定价、归位与资料导出</div>
                 </div>
                 <div class="head-actions">
                     <el-button :icon="Download" :loading="exportLoading" @click="handleExport">导出 Excel</el-button>
-                </div>
-            </div>
-
-            <div class="stat-grid">
-                <div class="stat-card">
-                    <div class="stat-label">资产总数</div>
-                    <div class="stat-value">{{ taskStats.total }}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">待拍照</div>
-                    <div class="stat-value">{{ taskStats.photo }}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">待定价</div>
-                    <div class="stat-value">{{ taskStats.price }}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">本页预估毛利</div>
-                    <div class="stat-value">¥{{ money(pageGrossProfit) }}</div>
                 </div>
             </div>
 
@@ -1127,37 +1108,7 @@ const refreshCurrentDetail = async () => {
         display: none;
     }
 
-    .stat-grid {
-        display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 12px;
-        margin-bottom: 16px;
-    }
 
-    .stat-card {
-        border: 1px solid var(--el-border-color-light);
-        border-radius: 8px;
-        padding: 14px 16px;
-        background: var(--el-bg-color-page);
-    }
-
-    .stat-label {
-        color: var(--el-text-color-secondary);
-        font-size: 13px;
-    }
-
-    .stat-value {
-        margin-top: 8px;
-        color: var(--el-text-color-primary);
-        font-size: 24px;
-        font-weight: 700;
-        line-height: 1;
-    }
-
-    .search-panel {
-        margin-bottom: 12px;
-        background: var(--el-bg-color-page);
-    }
 
     .pager {
         display: flex;

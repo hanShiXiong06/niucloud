@@ -2,9 +2,9 @@
     <div class="main-container">
         <el-card class="!border-none" shadow="never">
             <div class="flex items-start justify-between gap-4">
-                <div>
+                <div class="flex items-center">
                     <div class="text-page-title">整备工作台</div>
-                    <div class="mt-1 text-sm text-gray-500">
+                    <div class="ml-2 mt-1 text-sm text-gray-500">
                         一次记录整备项目和实际费用，完工后自动更新单机总成本并进入待销售定价。
                     </div>
                 </div>
