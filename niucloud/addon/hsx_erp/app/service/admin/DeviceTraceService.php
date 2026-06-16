@@ -202,6 +202,23 @@ class DeviceTraceService extends BaseAdminService
             'received'        => $recv['received'],
             'unreceived'      => $recv['unreceived'],
         ];
+
+        // 周转/各段耗时(天)：回收 → 入库 → 售出/至今
+        $recycleTime = (int)($recSummary['recycle_time'] ?? 0);
+        $stockInAt   = (int)($asset['stock_in_at'] ?? 0);
+        $stockOutAt  = (int)($asset['stock_out_at'] ?? 0);
+        $sold        = in_array((string)($asset['inventory_status'] ?? ''), ['outbound', 'lost'], true) && $stockOutAt > 0;
+        $endTs       = $sold ? $stockOutAt : time();
+        $days = static fn(int $a, int $b) => ($a > 0 && $b > 0 && $b >= $a) ? round(($b - $a) / 86400, 1) : null;
+        $overview['turnaround'] = [
+            'recycle_time'       => $recycleTime,
+            'stock_in_at'        => $stockInAt,
+            'stock_out_at'       => $stockOutAt,
+            'sold'               => $sold,
+            'recycle_to_instock' => $days($recycleTime, $stockInAt),  // 回收→入库
+            'instock_to_end'     => $days($stockInAt, $endTs),        // 在库时长(售出或至今)
+            'total'              => $days($recycleTime, $endTs),      // 总周转
+        ];
         return ['overview' => $overview, 'events' => array_values($events)];
     }
 

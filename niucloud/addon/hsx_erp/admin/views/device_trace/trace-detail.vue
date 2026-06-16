@@ -31,6 +31,16 @@
                     </div>
                 </div>
 
+                <!-- 周转 / 各段耗时 -->
+                <div v-if="data.overview.turnaround" class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg bg-gray-50 px-4 py-2 text-sm">
+                    <span class="font-medium text-gray-700">周转耗时：</span>
+                    <span>回收→入库 <b>{{ tDays(data.overview.turnaround.recycle_to_instock) }}</b></span>
+                    <span>{{ data.overview.turnaround.sold ? '在库→售出' : '在库至今' }}
+                        <b :class="!data.overview.turnaround.sold && Number(data.overview.turnaround.instock_to_end) >= 30 ? 'text-red-600' : 'text-gray-800'">{{ tDays(data.overview.turnaround.instock_to_end) }}</b>
+                    </span>
+                    <span>{{ data.overview.turnaround.sold ? '总周转' : '累计' }} <b class="text-[var(--el-color-primary)]">{{ tDays(data.overview.turnaround.total) }}</b></span>
+                </div>
+
                 <!-- 时间线 -->
                 <div class="mt-4 flex items-center justify-between">
                     <span class="font-medium">全链路时间线</span>
@@ -70,6 +80,7 @@ const emit = defineEmits(['update:modelValue'])
 const show = computed({ get: () => props.modelValue, set: (v: boolean) => emit('update:modelValue', v) })
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
+const tDays = (v: any) => (v === null || v === undefined || v === '') ? '-' : `${v} 天`
 const formatTime = (t: any) => {
     const n = Number(t || 0)
     // 0 或明显非法的早期时间(2000年前)都当空，避免显示 1970-01-01
