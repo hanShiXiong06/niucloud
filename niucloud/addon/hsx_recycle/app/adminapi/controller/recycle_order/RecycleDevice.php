@@ -434,7 +434,7 @@ class RecycleDevice extends BaseAdminController
                 'device_id' => $id,
                 'device_data' => $device_data,
                 'print_result' => $result
-            ]));
+            ], 'recycle_order.testPrint'));
 
         } catch (\Exception $e) {
             return error('测试打印失败: ' . $e->getMessage());

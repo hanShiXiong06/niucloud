@@ -3,52 +3,71 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\support;
 
+use think\facade\Log;
+
 /**
- * UTF-8 清洗工具。
+ * UTF-8 清洗 + 调试日志工具。
  *
- * 用途：打印链路返回的数据里常混入非 UTF-8 字节(云打印 SDK 的 GBK 报错、
- * 标签指令里的二进制控制字符、历史数据里被粘贴进来的 GBK 文本等)。
- * 这些字节会让 think\response\Json 在 json_encode 时抛
- * "Malformed UTF-8 characters, possibly incorrectly encoded"。
+ * 背景：打印接口偶发 "Malformed UTF-8 characters, possibly incorrectly encoded"。
+ * 现象常见为"第一次打印正常，第二次手动打印报错"——多半是第一次把云打印的 GBK
+ * 返回 / 二进制标签指令落库到某字段，第二次读出来塞进 JSON 响应，json_encode 抛错。
  *
- * 在 return success(...) 之前用 Utf8::clean() 兜一层，
- * 保证响应一定是合法 UTF-8，避免整个接口 500。
+ * clean() 做两件事：
+ *  1) 兜底清洗：把非法 UTF-8 字节转成合法 UTF-8(GBK 按 GB18030 救回中文；
+ *     真二进制丢弃非法字节)，避免接口 500。
+ *  2) 调试定位：每发现一个非法字段，就把【字段路径 / 长度 / 原始字节 hex / 转换方式 /
+ *     结果预览】写到日志,reproduce 一次就能精确定位是哪个字段、什么编码坏了。
  *
- * 规则：
- *  - 已是合法 UTF-8 的字符串原样返回(零副作用)。
- *  - 非法的优先按 GB18030(兼容 GBK/GB2312)转 UTF-8，能救回中文。
- *  - 转换失败再用 mb_convert_encoding 丢弃非法字节。
- *  - 数组递归处理；其它标量(int/bool/null/float)原样返回。
+ * 用法：return success(Utf8::clean($data, '场景标签'));
+ * 日志在 runtime/log 里，搜 "[print-utf8]"。
  */
 class Utf8
 {
-    public static function clean($value)
+    /** 是否记录非法字段日志(定位完可改 false 关掉) */
+    public static bool $debug = true;
+
+    /**
+     * @param mixed  $value 任意返回数据(数组/字符串/标量)
+     * @param string $path  当前字段路径(顶层传个场景标签，便于区分是哪个接口)
+     */
+    public static function clean($value, string $path = 'root')
     {
         if (is_array($value)) {
             $out = [];
             foreach ($value as $k => $v) {
-                $key = is_string($k) ? self::cleanString($k) : $k;
-                $out[$key] = self::clean($v);
+                $key = is_string($k) ? self::cleanString($k, $path . '.<key>') : $k;
+                $out[$key] = self::clean($v, $path . '.' . $k);
             }
             return $out;
         }
         if (is_string($value)) {
-            return self::cleanString($value);
+            return self::cleanString($value, $path);
         }
         return $value;
     }
 
-    public static function cleanString(string $s): string
+    public static function cleanString(string $s, string $path = ''): string
     {
         if ($s === '' || mb_check_encoding($s, 'UTF-8')) {
-            return $s;
+            return $s; // 合法 UTF-8：零副作用，也不记日志
         }
+
         // 多数是 GBK/GB2312 文本，用 GB18030 兜底转换可救回中文
         $converted = @iconv('GB18030', 'UTF-8//IGNORE', $s);
-        if ($converted !== false && mb_check_encoding($converted, 'UTF-8')) {
-            return $converted;
+        $byGbk = ($converted !== false && mb_check_encoding($converted, 'UTF-8'));
+        $result = $byGbk ? $converted : mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+
+        if (self::$debug) {
+            Log::write(sprintf(
+                '[print-utf8] 非法UTF-8字段 path=%s len=%d 原始前80字节hex=%s 方式=%s 结果预览=%s',
+                $path,
+                strlen($s),
+                bin2hex(substr($s, 0, 80)),
+                $byGbk ? 'GB18030->UTF8' : 'strip-invalid',
+                mb_substr($result, 0, 50)
+            ), 'error');
         }
-        // 仍非法(如真二进制)→ 丢弃非法字节，保证合法 UTF-8
-        return mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+
+        return $result;
     }
 }

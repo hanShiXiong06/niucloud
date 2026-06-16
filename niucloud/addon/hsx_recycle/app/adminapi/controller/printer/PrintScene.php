@@ -189,7 +189,7 @@ class PrintScene extends BaseAdminController
         ]);
         // 兜底清洗:打印结果可能含云打印 GBK 报错/标签二进制指令等非 UTF-8 字节，
         // 不清洗会让 json_encode 抛 "Malformed UTF-8 characters" 导致接口 500
-        $result = \addon\hsx_recycle\app\support\Utf8::clean($result);
+        $result = \addon\hsx_recycle\app\support\Utf8::clean($result, 'PrintScene.print');
         if (!empty($result['success'])) {
             return success($result);
         }

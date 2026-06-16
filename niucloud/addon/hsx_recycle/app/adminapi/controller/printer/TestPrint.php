@@ -62,7 +62,7 @@ class TestPrint extends BaseAdminApiController
                         $print_results[] = $print_result;
                     }
                     // 兜底清洗:打印结果可能含非 UTF-8 字节(GBK 报错/二进制指令)，避免 json_encode 抛 Malformed UTF-8
-                    return success('打印任务已发送', \addon\hsx_recycle\app\support\Utf8::clean(['results' => $print_results]));
+                    return success('打印任务已发送', \addon\hsx_recycle\app\support\Utf8::clean(['results' => $print_results], 'TestPrint'));
                 } else {
                     return error('没有可用的打印数据');
                 }
@@ -113,7 +113,7 @@ class TestPrint extends BaseAdminApiController
                         $print_results[] = $print_result;
                     }
                     // 兜底清洗:打印结果可能含非 UTF-8 字节(GBK 报错/二进制指令)，避免 json_encode 抛 Malformed UTF-8
-                    return success('打印任务已发送', \addon\hsx_recycle\app\support\Utf8::clean(['results' => $print_results]));
+                    return success('打印任务已发送', \addon\hsx_recycle\app\support\Utf8::clean(['results' => $print_results], 'TestPrint'));
                 } else {
                     return error('没有可用的打印数据');
                 }
