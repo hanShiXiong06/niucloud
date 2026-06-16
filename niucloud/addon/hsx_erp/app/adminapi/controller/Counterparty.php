@@ -72,6 +72,14 @@ class Counterparty extends BaseAdminController
         ])));
     }
 
+    public function resolveContact()
+    {
+        return success($this->service->resolveContact($this->request->params([
+            ['member_id', 0], ['name', ''], ['mobile', ''],
+            ['counterparty_type', 'individual'], ['role_type', 'customer'],
+        ])));
+    }
+
     public function save(int $id = 0)
     {
         return success($this->service->save($this->request->params([

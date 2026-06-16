@@ -268,17 +268,7 @@
                         </el-select>
                     </el-form-item>
                     <el-form-item label="往来单位" :required="manualForm.business_type !== 'opening'">
-                        <div class="flex w-full gap-2">
-                            <el-select v-model="manualForm.counterparty_id" filterable class="flex-1" placeholder="请选择货物来源">
-                                <el-option
-                                    v-for="item in counterpartyOptions"
-                                    :key="item.id"
-                                    :label="`${item.name}${item.mobile ? ` (${item.mobile})` : ''}`"
-                                    :value="item.id"
-                                />
-                            </el-select>
-                            <el-button @click="openQuickCounterparty">新增</el-button>
-                        </div>
+                        <counterparty-select v-model="manualForm.counterparty_id" role-type="supplier" placeholder="搜索姓名 / 手机号选择货物来源" />
                     </el-form-item>
                     <el-form-item label="IMEI">
                         <el-input v-model.trim="manualForm.imei" />
@@ -591,6 +581,7 @@ import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
 import { transferErpAsset } from '@/addon/hsx_erp/api/outbound'
 import { saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
+import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 
 const router = useRouter()

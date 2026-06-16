@@ -90,14 +90,9 @@
                     </el-radio-group>
                 </el-form-item>
                 <el-form-item v-if="form.outbound_type === 'peer_sale'" label="对接人/交易人">
-                    <el-select v-model="form.counterparty_id" filterable remote clearable :remote-method="searchContacts"
-                        :loading="cpLoading" placeholder="按姓名/手机检索交易人" class="!w-[320px]" @change="onContactChange">
-                        <el-option v-for="c in contacts" :key="c.member_id"
-                            :label="(c.nickname || c.username || ('会员#' + c.member_id)) + (c.mobile ? ('·' + c.mobile) : '') + (c.counterparty_name ? ('（' + c.counterparty_name + '）') : '')"
-                            :value="c.member_id" />
-                    </el-select>
-                    <el-button class="!ml-2" link type="primary" @click="openQuickContact">+ 快速建档</el-button>
-                    <div class="mt-1 text-xs text-gray-400">出库按"交易人"记账(与回收同口径,可折账)。同行没建档点"快速建档"一步搞定。</div>
+                    <counterparty-select v-model="form.counterparty_id" value-field="member_id" role-type="customer"
+                        placeholder="按姓名 / 手机检索交易人" class="!w-[420px]" @resolved="onContactResolved" />
+                    <div class="mt-1 text-xs text-gray-400">出库按"交易人(人)"记账(与回收同口径,可折账)。检索选人即可,没建档的人点"新建"一步搞定,无往来主体会自动补建。</div>
                 </el-form-item>
                 <el-form-item v-if="form.outbound_type === 'peer_sale'" label="结算方式">
                     <el-radio-group v-model="form.settle_mode">
@@ -292,6 +287,7 @@ import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutbo
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
 import { getErpMemberOptions, quickCreateErpContact } from '@/addon/hsx_erp/api/counterparty'
+import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import TraceDetail from '@/addon/hsx_erp/views/device_trace/trace-detail.vue'
 import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
@@ -403,6 +399,10 @@ function onTypeChange() {
 function onContactChange(id: number) {
     const c = contacts.value.find((x) => x.member_id === id)
     form.counterparty_name = c ? (c.nickname || c.username || '') : ''
+}
+// counterparty-select 解析回调:以人为锚,记账名取交易人姓名
+function onContactResolved(d: any) {
+    form.counterparty_name = d ? (d.member_name || '') : ''
 }
 
 // 快速建档:一步建对接人+主体

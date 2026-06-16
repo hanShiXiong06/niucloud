@@ -41,3 +41,8 @@ export function deleteErpCounterparty(id: number) {
 export function quickCreateErpContact(data: Record<string, any>) {
     return request.post('erp/counterparty/quick_contact', data)
 }
+
+// 以"人"为锚解析往来单位:传 member_id(无主体则自动建个人主体)或 name+mobile 新建,返回 {member_id, counterparty_id, ...}
+export function resolveErpContact(data: Record<string, any>) {
+    return request.post('erp/counterparty/resolve_contact', data)
+}
