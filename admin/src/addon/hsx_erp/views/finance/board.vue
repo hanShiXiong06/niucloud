@@ -236,7 +236,9 @@
                         <el-table :data="payables" size="small" @selection-change="onPayableSelect" max-height="280" empty-text="无待结应付">
                             <el-table-column type="selection" width="40" />
                             <el-table-column v-if="current?.is_entity" prop="counterparty_name" label="对接人" width="90" show-overflow-tooltip />
-                            <el-table-column prop="source_no" label="来源单" min-width="110" show-overflow-tooltip />
+                            <el-table-column label="设备" min-width="130" show-overflow-tooltip>
+                                <template #default="{ row }"><div>{{ row.device_model || '-' }}</div><div class="text-xs text-gray-400">{{ row.device_imei || row.source_no }}</div></template>
+                            </el-table-column>
                             <el-table-column label="待结" width="100" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
                         </el-table>
                     </div>
@@ -245,7 +247,9 @@
                         <el-table :data="receivables" size="small" @selection-change="onReceivableSelect" max-height="280" empty-text="无待结应收">
                             <el-table-column type="selection" width="40" />
                             <el-table-column v-if="current?.is_entity" prop="counterparty_name" label="对接人" width="90" show-overflow-tooltip />
-                            <el-table-column prop="source_no" label="来源单" min-width="110" show-overflow-tooltip />
+                            <el-table-column label="设备" min-width="130" show-overflow-tooltip>
+                                <template #default="{ row }"><div>{{ row.device_model || '-' }}</div><div class="text-xs text-gray-400">{{ row.device_imei || row.source_no }}</div></template>
+                            </el-table-column>
                             <el-table-column label="待结" width="100" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
                         </el-table>
                     </div>
@@ -286,9 +290,14 @@
                 <el-table :data="payColl.rows" size="small" @selection-change="onPayCollSelect" max-height="300"
                     :empty-text="payColl.mode === 'pay' ? '无待付应付' : '无待收应收'">
                     <el-table-column type="selection" width="40" />
-                    <el-table-column prop="source_no" label="来源单" min-width="120" show-overflow-tooltip />
-                    <el-table-column prop="remark" label="说明" min-width="120" show-overflow-tooltip />
-                    <el-table-column label="待结" width="120" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
+                    <el-table-column label="设备" min-width="160" show-overflow-tooltip>
+                        <template #default="{ row }">
+                            <div class="font-medium text-gray-700">{{ row.device_model || '-' }}</div>
+                            <div class="text-xs text-gray-400">IMEI：{{ row.device_imei || '-' }}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="source_no" label="来源单" min-width="110" show-overflow-tooltip />
+                    <el-table-column label="待结" width="110" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
                 </el-table>
                 <div class="mt-3 text-right text-sm text-gray-500">已选 {{ payColl.selected.length }} 笔，合计
                     <b :class="payColl.mode === 'pay' ? 'text-orange-600' : 'text-green-600'">{{ money(payCollTotal) }}</b>

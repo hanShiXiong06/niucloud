@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\FinanceDict;
+use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\FinanceReceivable;
 use core\base\BaseAdminService;
 
@@ -12,6 +13,25 @@ use core\base\BaseAdminService;
  */
 class FinanceReceivableService extends BaseAdminService
 {
+    /** 给应收明细补设备信息(型号/IMEI) */
+    protected function appendDeviceInfo(array &$rows): void
+    {
+        $devIds = array_values(array_unique(array_filter(array_map(static fn($r) => (int)($r['source_device_id'] ?? 0), $rows))));
+        if (empty($devIds)) {
+            return;
+        }
+        $map = [];
+        foreach (ErpAsset::where([['site_id', '=', $this->site_id]])->whereIn('source_device_id', $devIds)
+                     ->field('source_device_id,model,imei')->select()->toArray() as $a) {
+            $map[(int)$a['source_device_id']] = $a;
+        }
+        foreach ($rows as &$r) {
+            $a = $map[(int)($r['source_device_id'] ?? 0)] ?? null;
+            $r['device_model'] = (string)($a['model'] ?? '');
+            $r['device_imei'] = (string)($a['imei'] ?? '');
+        }
+        unset($r);
+    }
     public function getPage(array $where = []): array
     {
         $query = FinanceReceivable::where([['site_id', '=', $this->site_id]]);
@@ -89,6 +109,7 @@ class FinanceReceivableService extends BaseAdminService
             $r['outstanding'] = $out;
             $rows[] = $r;
         }
+        $this->appendDeviceInfo($rows);
         return $rows;
     }
 }
