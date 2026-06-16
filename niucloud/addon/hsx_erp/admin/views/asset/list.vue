@@ -12,6 +12,15 @@
                 </div>
             </div>
 
+            <el-alert
+                v-if="recycleConnected"
+                class="mt-3"
+                type="success"
+                :closable="false"
+                show-icon
+                title="已与回收系统打通：回收单确认回收后，设备会自动同步到这里（待入库池），无需在此手动入库。手动入库仅用于非回收来源（如自行采购/期初建档）。"
+            />
+
             <el-tabs v-model="search.inventory_status" class="mt-5" @tab-change="handleSearch">
                 <el-tab-pane label="全部" name="" />
                 <el-tab-pane label="待入库" name="pending_in" />
@@ -1027,12 +1036,15 @@ const loadWarehouses = async () => {
     inbound.location_id = Number(defaultWarehouse?.locations?.[0]?.id || 0)
 }
 
+const recycleConnected = ref(false)
 const loadIntegration = async () => {
     try {
         const res: any = await getErpIntegrationStatus()
         integrated.value = !!res.data?.device_asset_connected
+        recycleConnected.value = !!res.data?.recycle_connected
     } catch (e) {
         integrated.value = false
+        recycleConnected.value = false
     }
 }
 

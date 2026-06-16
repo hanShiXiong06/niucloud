@@ -38,8 +38,10 @@ class Asset extends BaseAdminController
     public function integrationStatus()
     {
         $deviceAsset = class_exists('\\addon\\hsx_device_asset\\app\\service\\admin\\DeviceAssetService');
+        $recycle = class_exists('\\addon\\hsx_recycle\\app\\service\\admin\\order\\RecycleDeviceService');
         return success([
             'device_asset_connected' => $deviceAsset,
+            'recycle_connected'      => $recycle,
         ]);
     }
 
