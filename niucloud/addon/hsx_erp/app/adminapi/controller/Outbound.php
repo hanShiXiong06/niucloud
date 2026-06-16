@@ -23,7 +23,9 @@ class Outbound extends BaseAdminController
     public function lists()
     {
         $where = $this->request->params([
-            ['outbound_type', ''], ['price_status', ''], ['keyword', ''], ['page', 1], ['limit', 15],
+            ['outbound_type', ''], ['price_status', ''], ['keyword', ''],
+            ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
+            ['sort_field', ''], ['sort_order', ''], ['page', 1], ['limit', 15],
         ]);
         return success($this->service->getPage($where));
     }

@@ -544,8 +544,23 @@ class ErpOutboundService extends BaseAdminService
         if (!empty($where['keyword'])) {
             $query->where('outbound_no|counterparty_name', 'like', '%' . $where['keyword'] . '%');
         }
+        if (!empty($where['start_time'])) {
+            $query->where('out_at', '>=', (int)$where['start_time']);
+        }
+        if (!empty($where['end_time'])) {
+            $query->where('out_at', '<=', (int)$where['end_time']);
+        }
+        if (($where['amount_min'] ?? '') !== '') {
+            $query->where('total_amount', '>=', (float)$where['amount_min']);
+        }
+        if (($where['amount_max'] ?? '') !== '') {
+            $query->where('total_amount', '<=', (float)$where['amount_max']);
+        }
+        $sortMap = ['id' => 'id', 'out_at' => 'out_at', 'total_amount' => 'total_amount', 'qty' => 'qty'];
+        $sf = $sortMap[(string)($where['sort_field'] ?? '')] ?? 'id';
+        $so = strtolower((string)($where['sort_order'] ?? '')) === 'asc' ? 'asc' : 'desc';
         $typeMap = ErpDict::getOutboundTypeMap();
-        $list = $query->order('id desc')->paginate([
+        $list = $query->order($sf, $so)->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page'      => (int)($where['page'] ?? 1),
         ]);

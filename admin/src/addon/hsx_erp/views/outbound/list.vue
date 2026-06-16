@@ -26,21 +26,31 @@
                     </el-select>
                 </el-form-item>
                 <el-form-item label="关键词">
-                    <el-input v-model.trim="search.keyword" placeholder="出库单号 / 往来单位" clearable class="!w-[200px]" @keyup.enter="loadList" />
+                    <el-input v-model.trim="search.keyword" placeholder="出库单号 / 卖给谁(往来单位)" clearable class="!w-[200px]" @keyup.enter="loadList" />
+                </el-form-item>
+                <el-form-item label="出库时间">
+                    <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" range-separator="至"
+                        start-placeholder="开始" end-placeholder="结束" style="width: 230px" @change="loadList" />
+                </el-form-item>
+                <el-form-item label="金额">
+                    <el-input v-model="search.amount_min" placeholder="最低" clearable style="width: 90px" @keyup.enter="loadList" />
+                    <span class="mx-1 text-gray-400">~</span>
+                    <el-input v-model="search.amount_max" placeholder="最高" clearable style="width: 90px" @keyup.enter="loadList" />
                 </el-form-item>
                 <el-form-item>
                     <el-button type="primary" @click="loadList" :loading="loading">查询</el-button>
+                    <el-button @click="resetSearch">重置</el-button>
                 </el-form-item>
             </el-form>
 
-            <el-table class="mt-4" :data="list" v-loading="loading" size="large" empty-text="暂无出库单">
+            <el-table class="mt-4" :data="list" v-loading="loading" size="large" empty-text="暂无出库单" @sort-change="onSort">
                 <el-table-column prop="outbound_no" label="出库单号" min-width="170" />
                 <el-table-column prop="type_text" label="类型" width="100" />
                 <el-table-column label="往来单位" min-width="140">
                     <template #default="{ row }">{{ row.counterparty_name || (row.counterparty_id ? '#' + row.counterparty_id : '-') }}</template>
                 </el-table-column>
-                <el-table-column prop="qty" label="台数" width="80" align="center" />
-                <el-table-column label="出货总额" width="120" align="right">
+                <el-table-column prop="qty" label="台数" width="80" align="center" sortable="custom" />
+                <el-table-column label="出货总额" width="120" align="right" prop="total_amount" sortable="custom">
                     <template #default="{ row }">{{ money(row.total_amount) }}</template>
                 </el-table-column>
                 <el-table-column label="结算/状态" width="150" align="center">
@@ -52,7 +62,7 @@
                         </template>
                     </template>
                 </el-table-column>
-                <el-table-column label="出库时间" width="170">
+                <el-table-column label="出库时间" width="170" prop="out_at" sortable="custom">
                     <template #default="{ row }">{{ row.out_at ? formatTime(row.out_at) : '-' }}</template>
                 </el-table-column>
                 <el-table-column label="操作" width="200" align="center" fixed="right">
@@ -292,17 +302,33 @@ const formatTime = (t: number) => new Date(t * 1000).toLocaleString()
 const loading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
-const search = reactive({ outbound_type: '', price_status: '', keyword: '', page: 1, limit: 15 })
+const search = reactive<any>({ outbound_type: '', price_status: '', keyword: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '', page: 1, limit: 15 })
 
 function onPageChange(p: number) {
     search.page = p
+    loadList()
+}
+function resetSearch() {
+    Object.assign(search, { outbound_type: '', price_status: '', keyword: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '', page: 1 })
+    loadList()
+}
+function onSort({ prop, order }: { prop: string; order: string | null }) {
+    search.sort_field = order ? prop : ''
+    search.sort_order = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : ''
+    search.page = 1
     loadList()
 }
 
 async function loadList() {
     loading.value = true
     try {
-        const res: any = await getErpOutboundList(search)
+        const params: any = { ...search }
+        if (Array.isArray(search.dateRange) && search.dateRange.length === 2) {
+            params.start_time = search.dateRange[0]
+            params.end_time = search.dateRange[1]
+        }
+        delete params.dateRange
+        const res: any = await getErpOutboundList(params)
         list.value = res.data?.data || []
         total.value = res.data?.total || 0
     } finally {
