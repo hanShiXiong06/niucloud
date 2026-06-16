@@ -90,6 +90,21 @@ class ErpAssetService extends BaseAdminService
         if (!empty($where['location_id'])) {
             $query->where('location_id', '=', (int)$where['location_id']);
         }
+        if (($where['ownership_type'] ?? '') !== '') {
+            $query->where('ownership_type', '=', (string)$where['ownership_type']);
+        }
+        if (($where['cost_min'] ?? '') !== '') {
+            $query->where('current_cost', '>=', (float)$where['cost_min']);
+        }
+        if (($where['cost_max'] ?? '') !== '') {
+            $query->where('current_cost', '<=', (float)$where['cost_max']);
+        }
+        if (!empty($where['stock_in_start'])) {
+            $query->where('stock_in_at', '>=', (int)$where['stock_in_start']);
+        }
+        if (!empty($where['stock_in_end'])) {
+            $query->where('stock_in_at', '<=', (int)$where['stock_in_end']);
+        }
         // 员工只看自己负责库位的设备；管理员看全部
         $scope = $this->scopedLocationIds();
         if ($scope !== null) {

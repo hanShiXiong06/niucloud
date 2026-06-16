@@ -51,6 +51,21 @@
                         <el-option v-for="l in filterLocations" :key="l.id" :label="l.location_name" :value="l.id" />
                     </el-select>
                 </el-form-item>
+                <el-form-item label="归属">
+                    <el-select v-model="search.ownership_type" placeholder="全部" clearable style="width: 110px" @change="handleSearch">
+                        <el-option label="自有" value="owned" />
+                        <el-option label="代卖" value="consign" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="成本">
+                    <el-input v-model="search.cost_min" placeholder="最低" clearable style="width: 90px" @keyup.enter="handleSearch" />
+                    <span class="mx-1 text-gray-400">~</span>
+                    <el-input v-model="search.cost_max" placeholder="最高" clearable style="width: 90px" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item label="入库时间">
+                    <el-date-picker v-model="search.stockInRange" type="daterange" value-format="X" range-separator="至"
+                        start-placeholder="开始" end-placeholder="结束" style="width: 230px" @change="handleSearch" />
+                </el-form-item>
                 <el-form-item>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
                     <el-button @click="handleReset">重置</el-button>
@@ -558,7 +573,7 @@ import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 
 const router = useRouter()
-const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any, location_id: '' as any, sort_field: '', sort_order: '' })
+const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any, location_id: '' as any, ownership_type: '', cost_min: '' as any, cost_max: '' as any, stockInRange: [] as any, sort_field: '', sort_order: '' })
 const filterLocations = computed(() => warehouseOptions.value.find((w: any) => Number(w.id) === Number(search.warehouse_id))?.locations || [])
 const onWarehouseFilterChange = () => { search.location_id = ''; handleSearch() }
 const summary = reactive({ count: 0, total_cost: 0, total_sale: 0 })
@@ -744,7 +759,13 @@ const manualSettlementText = computed(() => {
 const loadList = async () => {
     table.loading = true
     try {
-        const res: any = await getErpAssetList({ ...search, page: table.page, limit: table.limit })
+        const params: any = { ...search, page: table.page, limit: table.limit }
+        if (Array.isArray(search.stockInRange) && search.stockInRange.length === 2) {
+            params.stock_in_start = search.stockInRange[0]
+            params.stock_in_end = search.stockInRange[1]
+        }
+        delete params.stockInRange
+        const res: any = await getErpAssetList(params)
         table.data = res.data?.data || []
         table.total = Number(res.data?.total || 0)
         const s = res.data?.summary || {}
@@ -762,10 +783,10 @@ const handleSearch = () => {
 }
 
 const handleReset = () => {
-    search.keyword = ''
-    search.inventory_status = ''
-    search.warehouse_id = ''
-    search.location_id = ''
+    Object.assign(search, {
+        keyword: '', inventory_status: '', warehouse_id: '', location_id: '',
+        ownership_type: '', cost_min: '', cost_max: '', stockInRange: [], sort_field: '', sort_order: '',
+    })
     handleSearch()
 }
 
