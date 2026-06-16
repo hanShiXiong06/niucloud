@@ -22,6 +22,7 @@ use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\ErpWarehouseLocation;
 use addon\hsx_erp\app\model\FinancePayable;
 use addon\hsx_erp\app\dict\FinanceDict;
+use addon\hsx_erp\app\service\core\CoreFinanceLedgerService;
 use addon\hsx_erp\app\support\ErpDomainEvent;
 use addon\hsx_erp\app\support\ErpMoney;
 use app\model\sys\SysUserRole;
@@ -324,10 +325,6 @@ class ErpAssetService extends BaseAdminService
             if ($payableToSync->isEmpty()) {
                 throw new CommonException('未找到该设备的入库应付(可能来自回收来源,成本调整已另行通知回收);如只调库存成本请取消勾选');
             }
-            $newAmount = round((float)$payableToSync->amount + $delta, 2);
-            if ($newAmount < round((float)$payableToSync->settled_amount, 2) - 0.001) {
-                throw new CommonException(sprintf('下调后应付 ¥%.2f 低于已付 ¥%.2f,请改用退款/应收处理', $newAmount, (float)$payableToSync->settled_amount));
-            }
         }
 
         $now = time();
@@ -337,18 +334,42 @@ class ErpAssetService extends BaseAdminService
                 'version'      => (int)$asset->version + 1,
                 'update_at'    => $now,
             ]);
-            // 差额计入对供应商的应付:加/减应付额并重算结算状态(已付不变)
+            // 差额计入对供应商的应付:加/减应付额并重算结算状态
             if ($syncPayable && $payableToSync && !$payableToSync->isEmpty()) {
                 $newAmount = round((float)$payableToSync->amount + $delta, 2);
                 $settled = round((float)$payableToSync->settled_amount, 2);
-                $status = ($settled + 0.001 >= $newAmount)
-                    ? FinanceDict::STATUS_SETTLED
-                    : ($settled > 0 ? FinanceDict::STATUS_PARTIAL : FinanceDict::STATUS_PENDING);
-                FinancePayable::where([['site_id', '=', $this->site_id], ['id', '=', (int)$payableToSync->id]])->update([
-                    'amount'      => $newAmount,
-                    'status'      => $status,
-                    'update_time' => $now,
-                ]);
+                if ($newAmount >= $settled - 0.001) {
+                    // 正常:已付不变,按新应付额重算状态
+                    $status = ($settled + 0.001 >= $newAmount)
+                        ? FinanceDict::STATUS_SETTLED
+                        : ($settled > 0 ? FinanceDict::STATUS_PARTIAL : FinanceDict::STATUS_PENDING);
+                    FinancePayable::where([['site_id', '=', $this->site_id], ['id', '=', (int)$payableToSync->id]])->update([
+                        'amount'      => $newAmount,
+                        'status'      => $status,
+                        'update_time' => $now,
+                    ]);
+                } else {
+                    // 下调到低于已付:应付封到新额并结清, 多付的部分转应收(供应商欠我, 等退款或下次抵)
+                    $overpay = round($settled - $newAmount, 2);
+                    FinancePayable::where([['site_id', '=', $this->site_id], ['id', '=', (int)$payableToSync->id]])->update([
+                        'amount'         => $newAmount,
+                        'settled_amount' => $newAmount,
+                        'status'         => FinanceDict::STATUS_SETTLED,
+                        'update_time'    => $now,
+                    ]);
+                    (new CoreFinanceLedgerService())->recordReceivable([
+                        'site_id'           => $this->site_id,
+                        'event_id'          => 'erp_cost_adjust_refund_' . (int)$payableToSync->id . '_' . $now,
+                        'amount'            => $overpay,
+                        'counterparty_id'   => (int)$payableToSync->counterparty_id,
+                        'counterparty_name' => (string)$payableToSync->counterparty_name,
+                        'source_type'       => 'cost_adjust',
+                        'source_no'         => 'ADJ' . (int)$asset->id,
+                        'source_device_id'  => (int)$asset->source_device_id,
+                        'occurred_at'       => $now,
+                        'remark'            => '成本下调 ¥' . number_format($overpay, 2) . ' 多付转应收' . ($reason !== '' ? '：' . $reason : ''),
+                    ]);
+                }
             }
             ErpCostLedger::create([
                 'site_id'         => $this->site_id,

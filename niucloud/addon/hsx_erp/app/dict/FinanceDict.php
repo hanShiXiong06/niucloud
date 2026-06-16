@@ -34,6 +34,7 @@ class FinanceDict
             'consign_buyout'     => '代卖买断',
             'expense'            => '经营支出',
             'prepay'             => '采购预付',
+            'cost_adjust'        => '成本下调返还',
             'manual_inbound'     => '手工建档',
             'sale'               => '销售',
             'sales'              => '销售',
