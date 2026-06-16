@@ -207,8 +207,9 @@ class CollectDeviceTraceListener
             return [];
         }
         // 按订单ID(唯一)取, 不卡 site_id(历史数据 site_id 可能为0)
+        // 注意：recycle_order 只有 create_at，没有 create_time。误选 create_time 会 1054 报错并被上层catch吞掉→查不到。
         $rows = RecycleOrder::whereIn('id', $orderIds)
-            ->field('id,order_no,customer_name,customer_phone,member_id,create_at,create_time')->select()->toArray();
+            ->field('id,order_no,customer_name,customer_phone,member_id,create_at')->select()->toArray();
         return array_column($rows, null, 'id');
     }
 
