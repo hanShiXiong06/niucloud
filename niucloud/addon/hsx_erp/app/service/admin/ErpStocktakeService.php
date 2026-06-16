@@ -229,6 +229,9 @@ class ErpStocktakeService extends BaseAdminService
         if (!empty($where['status'])) {
             $query->where('status', '=', (string)$where['status']);
         }
+        if (!empty($where['keyword'])) {
+            $query->whereLike('stocktake_no|warehouse_name|location_name', '%' . trim((string)$where['keyword']) . '%');
+        }
         $statusMap = [
             ErpDict::STOCKTAKE_STATUS_COUNTING => '盘点中',
             ErpDict::STOCKTAKE_STATUS_FINISHED => '已完成',

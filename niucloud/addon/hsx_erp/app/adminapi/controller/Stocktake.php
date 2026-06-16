@@ -23,7 +23,7 @@ class Stocktake extends BaseAdminController
     public function lists()
     {
         $where = $this->request->params([
-            ['warehouse_id', 0], ['status', ''], ['page', 1], ['limit', 15],
+            ['warehouse_id', 0], ['status', ''], ['keyword', ''], ['page', 1], ['limit', 15],
         ]);
         return success($this->service->getPage($where));
     }

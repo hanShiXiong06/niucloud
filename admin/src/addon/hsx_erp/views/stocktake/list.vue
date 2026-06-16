@@ -19,7 +19,8 @@
                     <el-option label="盘点中" value="counting" />
                     <el-option label="已完成" value="finished" />
                 </el-select>
-                <el-button @click="loadList" :loading="loading">查询</el-button>
+                <el-input v-model.trim="search.keyword" placeholder="单号/仓库/库位" clearable class="w-52" @keyup.enter="loadList" />
+                <el-button type="primary" @click="loadList" :loading="loading">查询</el-button>
             </div>
 
             <el-table class="mt-4" :data="list" v-loading="loading" size="large" empty-text="暂无盘点单">
@@ -122,7 +123,7 @@ const resultType = (r: string) => (r === 'loss' ? 'danger' : r === 'profit' ? 'w
 const loading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
-const search = reactive({ warehouse_id: undefined as any, status: '', page: 1, limit: 15 })
+const search = reactive({ warehouse_id: undefined as any, status: '', keyword: '', page: 1, limit: 15 })
 const warehouses = ref<any[]>([])
 
 function onPage(p: number) { search.page = p; loadList() }
