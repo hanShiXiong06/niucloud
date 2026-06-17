@@ -62,6 +62,9 @@
                         </template>
                     </template>
                 </el-table-column>
+                <el-table-column label="快递单号" min-width="140" show-overflow-tooltip>
+                    <template #default="{ row }"><span :class="row.express_no ? '' : 'text-gray-300'">{{ row.express_no || '—' }}</span></template>
+                </el-table-column>
                 <el-table-column label="出库时间" width="170" prop="out_at" sortable="custom">
                     <template #default="{ row }">{{ row.out_at ? formatTime(row.out_at) : '-' }}</template>
                 </el-table-column>

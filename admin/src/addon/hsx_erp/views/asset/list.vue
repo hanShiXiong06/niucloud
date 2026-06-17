@@ -106,17 +106,16 @@
                 <span v-if="summary.in_stock_count">在库 <b>{{ summary.in_stock_count }}</b> 台 · 平均库龄 <b :class="Number(summary.avg_age_days) >= 30 ? 'text-red-600' : 'text-green-600'">{{ summary.avg_age_days }}</b> 天</span>
             </div>
 
-            <div class="mb-3 flex items-center justify-between">
-                <div class="text-sm text-gray-500">
-                    已选择 {{ selectedAssets.length }} 台待入库设备
+            <div v-if="selectedAssets.length" class="mb-3 flex items-center justify-between rounded-md bg-blue-50 px-3 py-2">
+                <div class="text-sm text-gray-600">已选 {{ selectedAssets.length }} 台</div>
+                <div class="flex gap-2">
+                    <el-button v-if="selectedPendingIn.length" type="primary" @click="batchConfirmInbound">
+                        批量确认入库 ({{ selectedPendingIn.length }})
+                    </el-button>
+                    <el-button v-if="selectedSellable.length" type="danger" @click="openOutboundBatch">
+                        批量卖同行 ({{ selectedSellable.length }})
+                    </el-button>
                 </div>
-                <el-button
-                    type="primary"
-                    :disabled="selectedAssets.length === 0"
-                    @click="batchConfirmInbound"
-                >
-                    批量确认入库{{ selectedAssets.length ? ` (${selectedAssets.length})` : '' }}
-                </el-button>
             </div>
 
             <el-table
@@ -631,13 +630,8 @@
             </template>
         </el-dialog>
 
-        <!-- 卖同行 / 就地出库 -->
-        <el-dialog v-model="outbound.visible" title="卖同行 / 出库" width="520px" destroy-on-close>
-            <div v-if="outbound.row" class="mb-3 rounded bg-gray-50 px-3 py-2 text-sm">
-                <span class="font-medium">{{ outbound.row.model || '设备' }}</span>
-                <span class="text-gray-500"> · {{ outbound.row.imei || outbound.row.asset_no }}</span>
-                <span class="ml-2 text-xs text-gray-400">成本 ¥{{ money(outbound.row.current_cost) }}</span>
-            </div>
+        <!-- 卖同行 / 就地出库（单台或批量） -->
+        <el-dialog v-model="outbound.visible" :title="`卖同行 / 出库（${outbound.rows.length} 台）`" width="640px" destroy-on-close>
             <el-form label-width="92px">
                 <el-form-item label="买家" required>
                     <counterparty-select v-model="outbound.counterparty_id" value-field="member_id" role-type="customer" placeholder="搜索姓名/手机号选择买家" class="w-full" />
@@ -648,21 +642,32 @@
                         <el-radio label="later">先出货（不填价，回款时再回填）</el-radio>
                     </el-radio-group>
                 </el-form-item>
-                <el-form-item label="售价" :required="outbound.settle_mode === 'now'">
-                    <el-input-number v-model="outbound.sale_price" :min="0" :controls="false" class="!w-40" />
-                    <span class="ml-2 text-gray-400">元</span>
-                    <span v-if="outbound.settle_mode === 'later'" class="ml-2 text-xs text-gray-400">先出货可不填，回款时再回填价格生成应收</span>
+                <el-form-item label="设备清单">
+                    <el-table :data="outbound.rows" size="small" max-height="240" border class="w-full">
+                        <el-table-column type="index" label="#" width="44" />
+                        <el-table-column label="设备" min-width="160">
+                            <template #default="{ row }"><span class="font-medium">{{ row.model || '设备' }}</span><span class="ml-1 text-xs text-gray-400">{{ row.imei }}</span></template>
+                        </el-table-column>
+                        <el-table-column label="成本" width="90" align="right"><template #default="{ row }">¥{{ money(row.current_cost) }}</template></el-table-column>
+                        <el-table-column v-if="outbound.settle_mode === 'now'" label="售价" width="130" align="right">
+                            <template #default="{ row }"><el-input-number v-model="row.price" :min="0" :controls="false" size="small" class="!w-28" /></template>
+                        </el-table-column>
+                    </el-table>
+                    <div v-if="outbound.settle_mode === 'later'" class="mt-1 text-xs text-gray-400">先出货不填价，回款时到出库单回填价格再生成应收。</div>
                 </el-form-item>
                 <el-form-item v-if="outbound.settle_mode === 'now'" label="收款户头" required>
                     <el-select v-model="outbound.capital_account_id" filterable class="w-full" placeholder="款项收入哪个账户">
                         <el-option v-for="acc in accountOptions" :key="acc.id" :value="acc.id" :label="`${acc.account_name}（余额 ¥${money(acc.balance)}）`" />
                     </el-select>
                 </el-form-item>
+                <el-form-item label="快递单号">
+                    <el-input v-model.trim="outbound.express_no" placeholder="打包发货填物流单号，便于追踪（选填）" maxlength="64" />
+                </el-form-item>
                 <el-form-item label="备注">
                     <el-input v-model="outbound.remark" type="textarea" :rows="2" placeholder="选填" />
                 </el-form-item>
             </el-form>
-            <div class="text-xs text-gray-400">在库即可直接卖：无需拍照、无需先上架商城。挂账方式会生成对该买家的应收。</div>
+            <div class="text-xs text-gray-400">在库即可直接卖：无需拍照、无需先上架商城。先出货方式会在回填价格后生成对该买家的应收。</div>
             <template #footer>
                 <el-button @click="outbound.visible = false">取消</el-button>
                 <el-button type="primary" :loading="outbound.submitting" @click="submitOutbound">确认出库</el-button>
@@ -822,21 +827,34 @@ const canTransfer = (row: any) => !['pending_in', 'outbound', 'locked'].includes
 
 // —— 就地出库 / 卖出 ——（在库/待定价/可售即可直接卖）
 const canOutbound = (row: any) => ['in_stock', 'pending_pricing', 'available_for_sale'].includes(String(row.inventory_status))
-const outbound = reactive<any>({ visible: false, submitting: false, row: null, counterparty_id: '', sale_price: undefined, settle_mode: 'now', capital_account_id: '', remark: '' })
-const openOutbound = (row: any) => {
+const outbound = reactive<any>({ visible: false, submitting: false, rows: [] as any[], counterparty_id: '', settle_mode: 'now', capital_account_id: '', express_no: '', remark: '' })
+const toOutboundRow = (row: any) => ({
+    id: Number(row.id), model: row.model, imei: row.imei || row.asset_no, asset_no: row.asset_no,
+    current_cost: row.current_cost,
+    price: Number(row.current_sale_price) > 0 ? Number(row.current_sale_price) : undefined,
+})
+const startOutbound = (rows: any[]) => {
     if (!accountOptions.value.length) loadAccountOptions()
-    outbound.row = row
+    outbound.rows = rows.map(toOutboundRow)
     outbound.counterparty_id = ''
-    outbound.sale_price = Number(row.current_sale_price) > 0 ? Number(row.current_sale_price) : undefined
     outbound.settle_mode = 'now'
     outbound.capital_account_id = ''
+    outbound.express_no = ''
     outbound.remark = ''
     outbound.visible = true
 }
+const openOutbound = (row: any) => startOutbound([row])
+const openOutboundBatch = () => {
+    if (!selectedSellable.value.length) return ElMessage.warning('请先勾选要卖的在库设备')
+    startOutbound(selectedSellable.value)
+}
 const submitOutbound = async () => {
+    if (!outbound.rows.length) return ElMessage.warning('没有可出库的设备')
     if (!outbound.counterparty_id) return ElMessage.warning('请选择买家')
-    if (outbound.settle_mode === 'now' && !(Number(outbound.sale_price) > 0)) return ElMessage.warning('现结需填写售价')
-    if (outbound.settle_mode === 'now' && !outbound.capital_account_id) return ElMessage.warning('现结需选择收款户头')
+    if (outbound.settle_mode === 'now') {
+        if (outbound.rows.some((r: any) => !(Number(r.price) > 0))) return ElMessage.warning('现结需为每台填写售价')
+        if (!outbound.capital_account_id) return ElMessage.warning('现结需选择收款户头')
+    }
     outbound.submitting = true
     try {
         await createErpOutbound({
@@ -844,10 +862,11 @@ const submitOutbound = async () => {
             counterparty_id: outbound.counterparty_id,
             settle_mode: outbound.settle_mode,
             capital_account_id: outbound.capital_account_id || 0,
+            express_no: outbound.express_no,
             remark: outbound.remark,
-            items: [{ asset_id: Number(outbound.row.id), sale_price: Number(outbound.sale_price) || 0 }],
+            items: outbound.rows.map((r: any) => ({ asset_id: Number(r.id), sale_price: outbound.settle_mode === 'now' ? Number(r.price) || 0 : 0 })),
         })
-        ElMessage.success('出库成功')
+        ElMessage.success(outbound.rows.length > 1 ? `已出库 ${outbound.rows.length} 台` : '出库成功')
         outbound.visible = false
         loadList()
     } finally {
@@ -1222,10 +1241,13 @@ const submitPhoto = async () => {
     }
 }
 
-const rowSelectable = (row: any) => row.inventory_status === 'pending_in'
+const sellableStatuses = ['in_stock', 'pending_pricing', 'available_for_sale']
+const rowSelectable = (row: any) => row.inventory_status === 'pending_in' || sellableStatuses.includes(String(row.inventory_status))
 const handleSelectionChange = (rows: any[]) => {
     selectedAssets.value = rows.filter(rowSelectable)
 }
+const selectedPendingIn = computed(() => selectedAssets.value.filter((r: any) => r.inventory_status === 'pending_in'))
+const selectedSellable = computed(() => selectedAssets.value.filter((r: any) => sellableStatuses.includes(String(r.inventory_status))))
 
 const confirmInbound = async (row: any) => {
     inbound.assetIds = [Number(row.id)]
@@ -1234,7 +1256,7 @@ const confirmInbound = async (row: any) => {
 }
 
 const batchConfirmInbound = async () => {
-    const assetIds = selectedAssets.value.map((item: any) => Number(item.id))
+    const assetIds = selectedPendingIn.value.map((item: any) => Number(item.id))
     if (assetIds.length === 0) {
         ElMessage.warning('请先勾选待入库设备')
         return

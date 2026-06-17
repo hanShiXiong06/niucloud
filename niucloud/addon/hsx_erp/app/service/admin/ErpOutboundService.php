@@ -171,6 +171,7 @@ class ErpOutboundService extends BaseAdminService
                 'operator_uid'               => (int)$this->uid,
                 'operator_name'              => (string)$this->username,
                 'remark'                     => (string)($p['remark'] ?? ''),
+                'express_no'                 => trim((string)($p['express_no'] ?? '')),
                 'out_at'                     => $now,
                 'create_at'                  => $now,
                 'update_at'                  => $now,
@@ -260,7 +261,7 @@ class ErpOutboundService extends BaseAdminService
         $restored = 0;
         Db::transaction(function () use ($order, $receivables, $now, $reason, &$restored) {
             $items = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['outbound_id', '=', (int)$order->id]])->select();
-            $assetIds = array_values(array_filter(array_map(static fn($it) => (int)$it->asset_id, $items->toArray())));
+            $assetIds = array_values(array_filter(array_map(static fn($it) => (int)($it['asset_id'] ?? 0), $items->toArray())));
             if (!empty($assetIds)) {
                 $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->select();
                 foreach ($assets as $asset) {

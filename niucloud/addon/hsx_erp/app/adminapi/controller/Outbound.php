@@ -41,7 +41,7 @@ class Outbound extends BaseAdminController
         $p = $this->request->params([
             ['outbound_type', 'peer_sale'], ['counterparty_id', 0], ['counterparty_name', ''],
             ['counterparty_enterprise_id', 0], ['settle_mode', 'now'], ['capital_account_id', 0],
-            ['remark', ''], ['items', []],
+            ['remark', ''], ['express_no', ''], ['items', []],
         ]);
         return success($this->service->createOutbound($p));
     }
