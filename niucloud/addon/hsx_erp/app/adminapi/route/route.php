@@ -47,10 +47,13 @@ Route::group('erp', function () {
     Route::post('stock_order/:id/confirm_items', 'addon\hsx_erp\app\adminapi\controller\StockOrder@confirmItems');
     Route::post('stock_order/:id/reject_items', 'addon\hsx_erp\app\adminapi\controller\StockOrder@rejectItems');
     Route::post('stock_order/:id/item/:item_id/resubmit', 'addon\hsx_erp\app\adminapi\controller\StockOrder@resubmitItem');
+    Route::get('dashboard/data', 'addon\hsx_erp\app\adminapi\controller\Dashboard@data');
     Route::get('asset/lists', 'addon\hsx_erp\app\adminapi\controller\Asset@lists');
+    Route::get('asset/overview', 'addon\hsx_erp\app\adminapi\controller\Asset@overview');
     Route::get('asset/integration_status', 'addon\hsx_erp\app\adminapi\controller\Asset@integrationStatus');
     Route::post('asset/manual_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@manualInbound');
     Route::post('asset/:id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\Asset@adjustCost');
+    Route::post('asset/:id/complete_photo', 'addon\hsx_erp\app\adminapi\controller\Asset@completePhoto');
     Route::get('asset/:id', 'addon\hsx_erp\app\adminapi\controller\Asset@info');
     Route::post('asset/batch_confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@batchConfirmInbound');
     Route::post('asset/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmAssetInbound');
@@ -94,6 +97,19 @@ Route::group('erp', function () {
     Route::post('finance/expense', 'addon\hsx_erp\app\adminapi\controller\Finance@recordExpense');
     Route::get('finance/prepay_balance', 'addon\hsx_erp\app\adminapi\controller\Finance@prepayBalance');
     Route::post('finance/prepay', 'addon\hsx_erp\app\adminapi\controller\Finance@prepay');
+    // AI 助手
+    Route::get('ai/config', 'addon\hsx_erp\app\adminapi\controller\Ai@config');
+    Route::post('ai/config', 'addon\hsx_erp\app\adminapi\controller\Ai@saveConfig');
+    Route::get('ai/models', 'addon\hsx_erp\app\adminapi\controller\Ai@models');
+    Route::post('ai/ping', 'addon\hsx_erp\app\adminapi\controller\Ai@ping');
+    Route::post('ai/chat', 'addon\hsx_erp\app\adminapi\controller\Ai@chat');
+    Route::get('ai/scenes', 'addon\hsx_erp\app\adminapi\controller\Ai@scenes');
+    Route::post('ai/run', 'addon\hsx_erp\app\adminapi\controller\Ai@run');
+    Route::post('ai/stream', 'addon\hsx_erp\app\adminapi\controller\Ai@stream');
+    Route::get('ai/conversations', 'addon\hsx_erp\app\adminapi\controller\Ai@conversations');
+    Route::get('ai/conversation/:id', 'addon\hsx_erp\app\adminapi\controller\Ai@conversationDetail');
+    Route::post('ai/conversation/save', 'addon\hsx_erp\app\adminapi\controller\Ai@conversationSave');
+    Route::delete('ai/conversation/:id', 'addon\hsx_erp\app\adminapi\controller\Ai@conversationDelete');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,

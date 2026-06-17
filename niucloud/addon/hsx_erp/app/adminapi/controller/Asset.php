@@ -72,6 +72,13 @@ class Asset extends BaseAdminController
         return success($this->service->adjustCost($id, (float)$p['cost'], (string)$p['reason'], (bool)$p['sync_payable']));
     }
 
+    /** 完成拍照:待拍照 → 入库在库(传图) */
+    public function completePhoto(int $id)
+    {
+        $images = (array)$this->request->param('images', []);
+        return success($this->service->completePhoto($id, $images));
+    }
+
     public function confirmInbound(int $id)
     {
         $data = $this->request->params([

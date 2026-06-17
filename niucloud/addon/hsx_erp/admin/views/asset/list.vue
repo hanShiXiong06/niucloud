@@ -49,6 +49,7 @@
                 <el-tab-pane label="在手库存" name="onhand" />
                 <el-tab-pane label="全部" name="" />
                 <el-tab-pane label="待入库" name="pending_in" />
+                <el-tab-pane label="待拍照" name="pending_photo" />
                 <el-tab-pane label="在库待整备" name="in_stock" />
                 <el-tab-pane label="整备中" name="refurbishing" />
                 <el-tab-pane :label="integrated ? '已交中台' : '待销售定价'" name="pending_pricing" />
@@ -200,43 +201,41 @@
                         </template>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="320" align="center">
+                <el-table-column label="操作" fixed="right" width="200" align="center">
                     <template #default="{ row }">
-                        <el-button
-                            v-if="row.inventory_status === 'pending_in'"
-                            type="primary"
-                            link
-                            :loading="row._confirming"
-                            @click="confirmInbound(row)"
-                        >
-                            确认入库
-                        </el-button>
-                        <el-button v-if="row.inventory_status === 'in_stock'" type="primary" link @click="startRefurbishment(row)">
-                            发起整备
-                        </el-button>
-                        <el-button v-if="row.inventory_status === 'in_stock'" type="success" link @click="skipRefurbishment(row)">
-                            无需整备
-                        </el-button>
-                        <!-- 独立模式:ERP 自己定价/调价 -->
-                        <el-button
-                            v-if="!integrated && ['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
-                            type="primary"
-                            link
-                            @click="openPricing(row)"
-                        >
-                            {{ row.inventory_status === 'available_for_sale' ? '调价' : '定价' }}
-                        </el-button>
-                        <!-- 联合模式:定价交给中台,ERP 不再定价,仅提示进度 -->
+                        <el-tooltip v-if="row.inventory_status === 'pending_in'" content="确认入库" placement="top">
+                            <el-button type="primary" link :icon="Check" :loading="row._confirming" @click="confirmInbound(row)" />
+                        </el-tooltip>
+                        <el-tooltip v-if="row.inventory_status === 'pending_photo'" content="完成拍照" placement="top">
+                            <el-button type="primary" link :icon="Camera" @click="openPhoto(row)" />
+                        </el-tooltip>
+                        <el-tooltip v-if="row.inventory_status === 'in_stock'" content="发起整备" placement="top">
+                            <el-button type="primary" link :icon="MagicStick" @click="startRefurbishment(row)" />
+                        </el-tooltip>
+                        <el-tooltip v-if="row.inventory_status === 'in_stock'" content="无需整备" placement="top">
+                            <el-button type="success" link :icon="DArrowRight" @click="skipRefurbishment(row)" />
+                        </el-tooltip>
+                        <!-- 独立模式:ERP 自己定价/调价（联合模式不再显示「中台处理中」） -->
                         <el-tooltip
-                            v-else-if="integrated && row.inventory_status === 'pending_pricing'"
-                            content="拍照与销售定价由数据中台完成，完成后自动回写参考价并转可售"
+                            v-if="!integrated && ['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
+                            :content="row.inventory_status === 'available_for_sale' ? '调价' : '定价'"
                             placement="top"
                         >
-                            <el-tag type="info" effect="plain" size="small">中台处理中</el-tag>
+                            <el-button type="primary" link :icon="Money" @click="openPricing(row)" />
                         </el-tooltip>
-                        <el-button v-if="canTransfer(row)" type="warning" link @click="openTransfer(row)">调拨</el-button>
-                        <el-button v-if="canAdjustCost(row)" type="info" link @click="openCostAdjust(row)">调成本</el-button>
-                        <el-button type="primary" link @click="openDetail(row)">详情</el-button>
+                        <!-- 就地出库/卖出：在库即可直接卖，无需拍照/上架 -->
+                        <el-tooltip v-if="canOutbound(row)" content="出库 / 卖出" placement="top">
+                            <el-button type="danger" link :icon="Sell" @click="openOutbound(row)" />
+                        </el-tooltip>
+                        <el-tooltip v-if="canTransfer(row)" content="调拨" placement="top">
+                            <el-button type="warning" link :icon="Sort" @click="openTransfer(row)" />
+                        </el-tooltip>
+                        <el-tooltip v-if="canAdjustCost(row)" content="调成本" placement="top">
+                            <el-button type="info" link :icon="Edit" @click="openCostAdjust(row)" />
+                        </el-tooltip>
+                        <el-tooltip content="详情" placement="top">
+                            <el-button type="primary" link :icon="View" @click="openDetail(row)" />
+                        </el-tooltip>
                     </template>
                 </el-table-column>
 
@@ -613,6 +612,62 @@
             </template>
         </el-dialog>
 
+        <!-- 完成拍照：待拍照 → 入库在库 -->
+        <el-dialog v-model="photoDialog.visible" title="完成拍照" width="560px">
+            <el-form label-width="80px">
+                <el-form-item label="设备">
+                    <span class="text-gray-600">{{ photoDialog.asset?.model || '-' }}（IMEI {{ photoDialog.asset?.imei || '-' }}）</span>
+                </el-form-item>
+                <el-form-item label="商品图片" required>
+                    <div class="w-full">
+                        <upload-image v-model="photoDialog.images" :limit="9" />
+                        <div class="mt-1 text-xs text-gray-400">拍清楚每张图，传完点确认即入库在库、进入「待定价」交销售；若有售价会直推商城待上架货源。</div>
+                    </div>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="photoDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="photoDialog.submitting" :disabled="!photoDialog.images.length" @click="submitPhoto">确认拍照完成</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 就地出库 / 卖出 -->
+        <el-dialog v-model="outbound.visible" title="出库 / 卖出" width="520px" destroy-on-close>
+            <div v-if="outbound.row" class="mb-3 rounded bg-gray-50 px-3 py-2 text-sm">
+                <span class="font-medium">{{ outbound.row.model || '设备' }}</span>
+                <span class="text-gray-500"> · {{ outbound.row.imei || outbound.row.asset_no }}</span>
+                <span class="ml-2 text-xs text-gray-400">成本 ¥{{ money(outbound.row.current_cost) }}</span>
+            </div>
+            <el-form label-width="92px">
+                <el-form-item label="买家" required>
+                    <counterparty-select v-model="outbound.counterparty_id" value-field="member_id" role-type="customer" placeholder="搜索姓名/手机号选择买家" class="w-full" />
+                </el-form-item>
+                <el-form-item label="售价" required>
+                    <el-input-number v-model="outbound.sale_price" :min="0" :controls="false" class="!w-40" />
+                    <span class="ml-2 text-gray-400">元</span>
+                </el-form-item>
+                <el-form-item label="结算方式">
+                    <el-radio-group v-model="outbound.settle_mode">
+                        <el-radio label="now">现结（立即收款）</el-radio>
+                        <el-radio label="later">挂账（先出货，后收款）</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item v-if="outbound.settle_mode === 'now'" label="收款户头" required>
+                    <el-select v-model="outbound.capital_account_id" filterable class="w-full" placeholder="款项收入哪个账户">
+                        <el-option v-for="acc in accountOptions" :key="acc.id" :value="acc.id" :label="`${acc.account_name}（余额 ¥${money(acc.balance)}）`" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="备注">
+                    <el-input v-model="outbound.remark" type="textarea" :rows="2" placeholder="选填" />
+                </el-form-item>
+            </el-form>
+            <div class="text-xs text-gray-400">在库即可直接卖：无需拍照、无需先上架商城。挂账方式会生成对该买家的应收。</div>
+            <template #footer>
+                <el-button @click="outbound.visible = false">取消</el-button>
+                <el-button type="primary" :loading="outbound.submitting" @click="submitOutbound">确认出库</el-button>
+            </template>
+        </el-dialog>
+
         <entity-drawer v-model="entityDrawer.visible" :entity-id="entityDrawer.id" @changed="loadList" />
     </div>
 </template>
@@ -620,7 +675,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Search, InfoFilled } from '@element-plus/icons-vue'
+import { Refresh, Search, InfoFilled, Check, MagicStick, Money, Sort, Edit, View, Sell, DArrowRight, Camera } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
     batchConfirmErpAssetInbound,
@@ -630,14 +685,15 @@ import {
     getErpAssetList,
     getErpAssetOverview,
     getErpIntegrationStatus,
-    adjustErpAssetCost
+    adjustErpAssetCost,
+    completeErpAssetPhoto
 } from '@/addon/hsx_erp/api/asset'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getFinancePrepayBalance } from '@/addon/hsx_erp/api/finance'
 import { getErpCounterpartyOptions, saveErpCounterparty } from '@/addon/hsx_erp/api/counterparty'
 import { skipErpRefurbishment } from '@/addon/hsx_erp/api/refurbishment'
-import { transferErpAsset } from '@/addon/hsx_erp/api/outbound'
+import { transferErpAsset, createErpOutbound } from '@/addon/hsx_erp/api/outbound'
 import { saveErpAssetPrice } from '@/addon/hsx_erp/api/pricing'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
@@ -762,6 +818,41 @@ const showConsignChoice = computed(() =>
     transfer.asset && String(transfer.asset.ownership_type) === 'consign' && transferTargetType.value === 'mall'
 )
 const canTransfer = (row: any) => !['pending_in', 'outbound', 'locked'].includes(String(row.inventory_status))
+
+// —— 就地出库 / 卖出 ——（在库/待定价/可售即可直接卖）
+const canOutbound = (row: any) => ['in_stock', 'pending_pricing', 'available_for_sale'].includes(String(row.inventory_status))
+const outbound = reactive<any>({ visible: false, submitting: false, row: null, counterparty_id: '', sale_price: undefined, settle_mode: 'now', capital_account_id: '', remark: '' })
+const openOutbound = (row: any) => {
+    if (!accountOptions.value.length) loadAccountOptions()
+    outbound.row = row
+    outbound.counterparty_id = ''
+    outbound.sale_price = Number(row.current_sale_price) > 0 ? Number(row.current_sale_price) : undefined
+    outbound.settle_mode = 'now'
+    outbound.capital_account_id = ''
+    outbound.remark = ''
+    outbound.visible = true
+}
+const submitOutbound = async () => {
+    if (!outbound.counterparty_id) return ElMessage.warning('请选择买家')
+    if (!(Number(outbound.sale_price) > 0)) return ElMessage.warning('请填写售价')
+    if (outbound.settle_mode === 'now' && !outbound.capital_account_id) return ElMessage.warning('现结需选择收款户头')
+    outbound.submitting = true
+    try {
+        await createErpOutbound({
+            outbound_type: 'peer_sale',
+            counterparty_id: outbound.counterparty_id,
+            settle_mode: outbound.settle_mode,
+            capital_account_id: outbound.capital_account_id || 0,
+            remark: outbound.remark,
+            items: [{ asset_id: Number(outbound.row.id), sale_price: Number(outbound.sale_price) }],
+        })
+        ElMessage.success('出库成功')
+        outbound.visible = false
+        loadList()
+    } finally {
+        outbound.submitting = false
+    }
+}
 const openTransfer = (row: any) => {
     transfer.asset = row
     // 反显：默认选中设备当前所在的仓库/库位
@@ -1103,6 +1194,30 @@ const submitQuickCounterparty = async () => {
         ElMessage.success('往来单位已新增并选中')
     } finally {
         counterpartyDialog.loading = false
+    }
+}
+
+// 完成拍照
+const photoDialog = reactive<any>({ visible: false, submitting: false, asset: null, images: [] as string[] })
+const openPhoto = (row: any) => {
+    photoDialog.asset = row
+    photoDialog.images = []
+    photoDialog.visible = true
+}
+const submitPhoto = async () => {
+    if (!photoDialog.asset?.id) return
+    if (!photoDialog.images.length) return ElMessage.warning('请至少上传一张照片')
+    photoDialog.submitting = true
+    try {
+        await completeErpAssetPhoto(Number(photoDialog.asset.id), photoDialog.images)
+        ElMessage.success('拍照完成，已入库进入待定价')
+        photoDialog.visible = false
+        search.inventory_status = 'pending_pricing'
+        loadList()
+    } catch (e: any) {
+        ElMessage.error(e?.message || '完成拍照失败')
+    } finally {
+        photoDialog.submitting = false
     }
 }
 

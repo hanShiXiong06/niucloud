@@ -8,6 +8,7 @@ class ErpDict
     public const TARGET_SELF_ERP = 'self_erp';
 
     public const INVENTORY_PENDING_IN = 'pending_in';
+    public const INVENTORY_PENDING_PHOTO = 'pending_photo'; // 待拍照(已指派到"必拍照"仓, 拍完才入库在库)
     public const INVENTORY_INBOUND_REJECTED = 'inbound_rejected';
     public const INVENTORY_IN_STOCK = 'in_stock';
     public const INVENTORY_REFURBISHING = 'refurbishing';
@@ -105,6 +106,7 @@ class ErpDict
     {
         return [
             self::INVENTORY_PENDING_IN         => '待入库',
+            self::INVENTORY_PENDING_PHOTO      => '待拍照',
             self::INVENTORY_INBOUND_REJECTED   => '入库驳回',
             self::INVENTORY_IN_STOCK           => '在库',
             self::INVENTORY_REFURBISHING       => '整备中',

@@ -94,6 +94,10 @@
                     <el-switch v-model="warehouseDialog.form.allow_inbound" :active-value="1" :inactive-value="0" />
                     <div class="text-xs text-gray-400 mt-1">关闭后本仓不接受调拨/设库位调入（如代卖仓只由回收代卖入库进货，不允许从其它仓调入）。</div>
                 </el-form-item>
+                <el-form-item label="进仓必拍照">
+                    <el-switch v-model="warehouseDialog.form.require_photo" :active-value="1" :inactive-value="0" />
+                    <div class="text-xs text-gray-400 mt-1">开启后，设备进此仓（入库/调拨）必须先拍照才入库在库，走「待拍照→定价→上架」流水线；关闭则直接入库、ERP 定价即可卖。</div>
+                </el-form-item>
                 <el-form-item label="状态"><el-switch v-model="warehouseDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="默认入库仓"><el-switch v-model="warehouseDialog.form.is_default" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="备注"><el-input v-model.trim="warehouseDialog.form.remark" type="textarea" /></el-form-item>
@@ -136,7 +140,7 @@ const loading = ref(false)
 const warehouses = ref<any[]>([])
 const warehouseDialog = reactive<any>({
     visible: false, loading: false,
-    form: { id: 0, warehouse_name: '', warehouse_code: '', business_type: 'mall', allow_inbound: 1, status: 1, is_default: 0, remark: '' }
+    form: { id: 0, warehouse_name: '', warehouse_code: '', business_type: 'mall', allow_inbound: 1, require_photo: 0, status: 1, is_default: 0, remark: '' }
 })
 // 切换业务类型时给「允许调入」一个合理默认：代卖仓默认关、其它默认开（用户仍可手动改）
 const onBizTypeChange = (v: string) => {
@@ -170,6 +174,7 @@ const openWarehouse = (row: any = {}) => {
         id: Number(row.id || 0), warehouse_name: row.warehouse_name || '',
         warehouse_code: row.warehouse_code || '', business_type: row.business_type || 'mall',
         allow_inbound: row.id ? (row.allow_inbound ?? 1) : 1,
+        require_photo: row.id ? (row.require_photo ?? 0) : 0,
         status: row.status ?? 1, is_default: row.is_default ?? 0, remark: row.remark || ''
     })
     warehouseDialog.visible = true

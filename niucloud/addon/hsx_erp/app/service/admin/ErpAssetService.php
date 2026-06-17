@@ -195,6 +195,7 @@ class ErpAssetService extends BaseAdminService
 
         $textMap = [
             ErpDict::INVENTORY_PENDING_IN          => '待入库',
+            ErpDict::INVENTORY_PENDING_PHOTO       => '待拍照',
             ErpDict::INVENTORY_INBOUND_REJECTED    => '入库驳回',
             ErpDict::INVENTORY_IN_STOCK            => '在库',
             ErpDict::INVENTORY_REFURBISHING        => '整备中',
@@ -205,6 +206,7 @@ class ErpAssetService extends BaseAdminService
         ];
         $typeTag = [
             ErpDict::INVENTORY_PENDING_IN          => 'warning',
+            ErpDict::INVENTORY_PENDING_PHOTO       => 'warning',
             ErpDict::INVENTORY_INBOUND_REJECTED    => 'danger',
             ErpDict::INVENTORY_IN_STOCK            => 'success',
             ErpDict::INVENTORY_REFURBISHING        => 'warning',
@@ -591,6 +593,9 @@ class ErpAssetService extends BaseAdminService
         $warehouseId = (int)($data['warehouse_id'] ?? 0);
         $locationId = (int)($data['location_id'] ?? 0);
         (new ErpWarehouseService())->validateInboundLocation($warehouseId, $locationId);
+        // 进仓门槛:目的仓"必须拍照"则落「待拍照」(不进在库、不走定价决策),拍完才入库
+        $requirePhoto = $warehouseId > 0 && (new ErpWarehouseService())->requiresPhoto($warehouseId);
+        $targetStatus = $requirePhoto ? ErpDict::INVENTORY_PENDING_PHOTO : ErpDict::INVENTORY_IN_STOCK;
         $remark = trim((string)($data['remark'] ?? ''));
         $now = time();
         $outboxIds = [];
@@ -646,11 +651,12 @@ class ErpAssetService extends BaseAdminService
                 $beforeStatus = (string)$asset->inventory_status;
                 $purchaseCost = ErpMoney::normalize($asset->purchase_cost);
                 $asset->save([
-                    'inventory_status' => ErpDict::INVENTORY_IN_STOCK,
+                    'inventory_status' => $targetStatus,
                     'warehouse_id' => $warehouseId,
                     'location_id' => $locationId,
                     'current_cost' => $purchaseCost,
-                    'stock_in_at' => $now,
+                    // 待拍照阶段逻辑未在库, 库龄从真正入库(拍完)起算
+                    'stock_in_at' => $requirePhoto ? 0 : $now,
                     'version' => (int)$asset->version + 1,
                     'update_at' => $now,
                 ]);
@@ -658,7 +664,7 @@ class ErpAssetService extends BaseAdminService
                     ['site_id', '=', $this->site_id],
                     ['id', '=', (int)$asset->cycle_id],
                 ])->update([
-                    'status' => ErpDict::INVENTORY_IN_STOCK,
+                    'status' => $targetStatus,
                     'update_at' => $now,
                 ]);
                 $item->save(['status' => 'confirmed', 'update_at' => $now]);
@@ -672,7 +678,7 @@ class ErpAssetService extends BaseAdminService
                     'stock_order_id' => $stockOrderId,
                     'action' => 'stock_in',
                     'before_status' => $beforeStatus,
-                    'after_status' => ErpDict::INVENTORY_IN_STOCK,
+                    'after_status' => $targetStatus,
                     'warehouse_id' => $warehouseId,
                     'location_id' => $locationId,
                     'operator_id' => $this->uid,
@@ -741,10 +747,13 @@ class ErpAssetService extends BaseAdminService
                 );
                 $outbox = ErpDomainEvent::writeOutbox($domainEvent, $now);
                 $outboxIds[] = (int)$outbox->id;
-                $outboxIds = array_merge(
-                    $outboxIds,
-                    $this->applyPostInboundRefurbishmentDecision($asset, $stockOrderId, $now)
-                );
+                // 待拍照:暂不走整备/定价决策,等拍完照确认入库后再决策
+                if (!$requirePhoto) {
+                    $outboxIds = array_merge(
+                        $outboxIds,
+                        $this->applyPostInboundRefurbishmentDecision($asset, $stockOrderId, $now)
+                    );
+                }
             }
 
             foreach ($orderIds as $orderId) {
@@ -798,6 +807,69 @@ class ErpAssetService extends BaseAdminService
                 'asset_ids' => $confirmedAssetIds,
                 'order_ids' => array_values($orderIds),
             ];
+        } catch (\Throwable $e) {
+            Db::rollback();
+            throw new CommonException($e->getMessage());
+        }
+    }
+
+    /**
+     * 完成拍照:待拍照 → 真正入库在库,存图片,并走整备/定价决策(图片已存→抑制 ready_for_photo,直接进待定价/可售)。
+     */
+    public function completePhoto(int $assetId, array $images): array
+    {
+        $images = array_values(array_filter(array_map('strval', $images), static fn($u) => trim($u) !== ''));
+        if (empty($images)) {
+            throw new CommonException('请至少上传一张照片');
+        }
+        $now = time();
+        $outboxIds = [];
+        Db::startTrans();
+        try {
+            $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])->lock(true)->findOrEmpty();
+            if ($asset->isEmpty()) {
+                throw new CommonException('设备不存在');
+            }
+            if ((string)$asset->inventory_status !== ErpDict::INVENTORY_PENDING_PHOTO) {
+                throw new CommonException('该设备不在待拍照状态');
+            }
+            $snapshot = (array)$asset->source_snapshot;
+            $snapshot['images'] = $images;
+            $beforeStatus = (string)$asset->inventory_status;
+            $asset->save([
+                'inventory_status' => ErpDict::INVENTORY_IN_STOCK,
+                'source_snapshot' => $snapshot,
+                'stock_in_at' => $now,
+                'version' => (int)$asset->version + 1,
+                'update_at' => $now,
+            ]);
+            ErpAssetCycle::where([['site_id', '=', $this->site_id], ['id', '=', (int)$asset->cycle_id]])->update([
+                'status' => ErpDict::INVENTORY_IN_STOCK,
+                'update_at' => $now,
+            ]);
+            ErpStockLedger::create([
+                'site_id' => $this->site_id,
+                'ledger_no' => $this->makeNo('SL'),
+                'asset_id' => (int)$asset->id,
+                'cycle_id' => (int)$asset->cycle_id,
+                'stock_order_id' => 0,
+                'action' => 'photo_completed',
+                'before_status' => $beforeStatus,
+                'after_status' => ErpDict::INVENTORY_IN_STOCK,
+                'warehouse_id' => (int)$asset->warehouse_id,
+                'location_id' => (int)$asset->location_id,
+                'operator_id' => $this->uid,
+                'operator_name' => $this->username ?: '',
+                'occurred_at' => $now,
+                'payload' => ['image_count' => count($images)],
+            ]);
+            $this->writeOperation((int)$asset->id, (int)$asset->cycle_id, 'erp.asset.photographed.v1', 'complete_photo', 0, ['image_count' => count($images)]);
+            $outboxIds = $this->applyPostInboundRefurbishmentDecision($asset, 0, $now);
+            Db::commit();
+            foreach ($outboxIds as $outboxId) {
+                PublishOutboxEvent::dispatch(['outbox_id' => $outboxId]);
+            }
+            return ['asset_id' => $assetId, 'status' => ErpDict::INVENTORY_IN_STOCK, 'image_count' => count($images)];
         } catch (\Throwable $e) {
             Db::rollback();
             throw new CommonException($e->getMessage());

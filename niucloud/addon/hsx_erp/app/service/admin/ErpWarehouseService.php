@@ -69,8 +69,10 @@ class ErpWarehouseService extends BaseAdminService
         $allowInbound = array_key_exists('allow_inbound', $data)
             ? ((int)$data['allow_inbound'] === 1 ? 1 : 0)
             : ($businessType === 'consignment' ? 0 : 1);
+        // 进仓是否必须拍照：开启则进此仓走拍照→定价→上架流水线
+        $requirePhoto = (int)($data['require_photo'] ?? 0) === 1 ? 1 : 0;
         $warehouseId = 0;
-        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $businessType, $allowInbound, &$warehouseId) {
+        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $businessType, $allowInbound, $requirePhoto, &$warehouseId) {
             if ($isDefault === 1) {
                 ErpWarehouse::where([['site_id', '=', $this->site_id]])->update([
                     'is_default' => 0,
@@ -82,6 +84,7 @@ class ErpWarehouseService extends BaseAdminService
                 'warehouse_code' => trim((string)($data['warehouse_code'] ?? '')),
                 'business_type' => $businessType,
                 'allow_inbound' => $allowInbound,
+                'require_photo' => $requirePhoto,
                 'status' => (int)($data['status'] ?? 1) === 1 ? 1 : 0,
                 'is_default' => $isDefault,
                 'sort' => (int)($data['sort'] ?? 0),
@@ -165,6 +168,15 @@ class ErpWarehouseService extends BaseAdminService
         }
         ErpWarehouseLocation::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->delete();
         return true;
+    }
+
+    /** 该仓是否要求进仓必须拍照 */
+    public function requiresPhoto(int $warehouseId): bool
+    {
+        if ($warehouseId <= 0) {
+            return false;
+        }
+        return (int)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId]])->value('require_photo') ?: 0) === 1;
     }
 
     public function validateInboundLocation(int $warehouseId, int $locationId): array
