@@ -224,7 +224,7 @@
                             <el-button type="primary" link :icon="Money" @click="openPricing(row)" />
                         </el-tooltip>
                         <!-- 就地出库/卖出：在库即可直接卖，无需拍照/上架 -->
-                        <el-tooltip v-if="canOutbound(row)" content="出库 / 卖出" placement="top">
+                        <el-tooltip v-if="canOutbound(row)" content="卖同行 / 出库" placement="top">
                             <el-button type="danger" link :icon="Sell" @click="openOutbound(row)" />
                         </el-tooltip>
                         <el-tooltip v-if="canTransfer(row)" content="调拨" placement="top">
@@ -631,8 +631,8 @@
             </template>
         </el-dialog>
 
-        <!-- 就地出库 / 卖出 -->
-        <el-dialog v-model="outbound.visible" title="出库 / 卖出" width="520px" destroy-on-close>
+        <!-- 卖同行 / 就地出库 -->
+        <el-dialog v-model="outbound.visible" title="卖同行 / 出库" width="520px" destroy-on-close>
             <div v-if="outbound.row" class="mb-3 rounded bg-gray-50 px-3 py-2 text-sm">
                 <span class="font-medium">{{ outbound.row.model || '设备' }}</span>
                 <span class="text-gray-500"> · {{ outbound.row.imei || outbound.row.asset_no }}</span>
@@ -642,15 +642,16 @@
                 <el-form-item label="买家" required>
                     <counterparty-select v-model="outbound.counterparty_id" value-field="member_id" role-type="customer" placeholder="搜索姓名/手机号选择买家" class="w-full" />
                 </el-form-item>
-                <el-form-item label="售价" required>
-                    <el-input-number v-model="outbound.sale_price" :min="0" :controls="false" class="!w-40" />
-                    <span class="ml-2 text-gray-400">元</span>
-                </el-form-item>
                 <el-form-item label="结算方式">
                     <el-radio-group v-model="outbound.settle_mode">
-                        <el-radio label="now">现结（立即收款）</el-radio>
-                        <el-radio label="later">挂账（先出货，后收款）</el-radio>
+                        <el-radio label="now">现结（当场填价、立即收款）</el-radio>
+                        <el-radio label="later">先出货（不填价，回款时再回填）</el-radio>
                     </el-radio-group>
+                </el-form-item>
+                <el-form-item label="售价" :required="outbound.settle_mode === 'now'">
+                    <el-input-number v-model="outbound.sale_price" :min="0" :controls="false" class="!w-40" />
+                    <span class="ml-2 text-gray-400">元</span>
+                    <span v-if="outbound.settle_mode === 'later'" class="ml-2 text-xs text-gray-400">先出货可不填，回款时再回填价格生成应收</span>
                 </el-form-item>
                 <el-form-item v-if="outbound.settle_mode === 'now'" label="收款户头" required>
                     <el-select v-model="outbound.capital_account_id" filterable class="w-full" placeholder="款项收入哪个账户">
@@ -834,7 +835,7 @@ const openOutbound = (row: any) => {
 }
 const submitOutbound = async () => {
     if (!outbound.counterparty_id) return ElMessage.warning('请选择买家')
-    if (!(Number(outbound.sale_price) > 0)) return ElMessage.warning('请填写售价')
+    if (outbound.settle_mode === 'now' && !(Number(outbound.sale_price) > 0)) return ElMessage.warning('现结需填写售价')
     if (outbound.settle_mode === 'now' && !outbound.capital_account_id) return ElMessage.warning('现结需选择收款户头')
     outbound.submitting = true
     try {
@@ -844,7 +845,7 @@ const submitOutbound = async () => {
             settle_mode: outbound.settle_mode,
             capital_account_id: outbound.capital_account_id || 0,
             remark: outbound.remark,
-            items: [{ asset_id: Number(outbound.row.id), sale_price: Number(outbound.sale_price) }],
+            items: [{ asset_id: Number(outbound.row.id), sale_price: Number(outbound.sale_price) || 0 }],
         })
         ElMessage.success('出库成功')
         outbound.visible = false
