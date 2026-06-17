@@ -223,9 +223,7 @@
                             <el-button type="primary" link :icon="Money" @click="openPricing(row)" />
                         </el-tooltip>
                         <!-- 就地出库/卖出：在库即可直接卖，无需拍照/上架 -->
-                        <el-tooltip v-if="canOutbound(row)" content="卖同行 / 出库" placement="top">
-                            <el-button type="danger" link :icon="Sell" @click="openOutbound(row)" />
-                        </el-tooltip>
+                        <el-button v-if="canOutbound(row)" type="danger" link size="small" :icon="Sell" @click="openOutbound(row)">卖同行</el-button>
                         <el-tooltip v-if="canTransfer(row)" content="调拨" placement="top">
                             <el-button type="warning" link :icon="Sort" @click="openTransfer(row)" />
                         </el-tooltip>
