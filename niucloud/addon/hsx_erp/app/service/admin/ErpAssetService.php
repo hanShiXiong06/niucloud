@@ -1029,6 +1029,10 @@ class ErpAssetService extends BaseAdminService
         if (!empty($sourceSnapshot['images'])) {
             return [];
         }
+        // 进仓未要求拍照 → 不交中台,直接可售/可打包卖同行(require_photo 是"交不交中台"的唯一开关)
+        if (!(new ErpWarehouseService())->requiresPhoto((int)$asset->warehouse_id)) {
+            return [];
+        }
         return [
             $this->writeDecisionEvent($asset, 'erp.asset.ready_for_photo.v1', $documentId, [
                 'source_device_id' => (int)$asset->source_device_id,
