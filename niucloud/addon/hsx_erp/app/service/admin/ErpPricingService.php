@@ -215,6 +215,39 @@ class ErpPricingService extends BaseAdminService
             throw new CommonException($e->getMessage());
         }
 
+        // 正规路打通商城 + 调价回流:这台走过拍照(有图片=三要素齐图片+价格+质检)→ 定价/调价即发出口事件,
+        // 落商城「待上架货源」并按 erp_asset_id 幂等更新(再次定价=改价回流)。故障隔离,不影响定价主流程。
+        try {
+            $snapshot = (array)$asset->source_snapshot;
+            $images = array_values(array_filter(array_map('strval', (array)($snapshot['images'] ?? [])), static fn($u) => trim($u) !== ''));
+            if (!empty($images)) {
+                event('DeviceAssetPriceCompleted', [
+                    'event_name' => 'device_asset.price.completed.v1',
+                    'site_id'    => (int)$this->site_id,
+                    'asset_id'   => 0,
+                    'device_id'  => 0,
+                    'operator'   => ['id' => $this->uid, 'name' => $this->username ?: ''],
+                    'payload'    => [
+                        'erp_asset_id' => (int)$asset->id,
+                        'site_id'      => (int)$this->site_id,
+                        'sale_price'   => (float)$salePrice,
+                        'peer_price'   => 0,
+                        'min_price'    => (float)$minProfit,
+                        'cost_price'   => (float)$currentCost,
+                        'remark'       => $remark,
+                        'model_name'   => (string)$asset->model,
+                        'memory'       => (string)$asset->capacity,
+                        'color'        => (string)$asset->color,
+                        'imei'         => (string)$asset->imei,
+                        'qc_info'      => (array)$asset->check_snapshot,
+                        'images'       => $images,
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \think\facade\Log::warning('[erp] 定价后推商城货源失败：' . $e->getMessage());
+        }
+
         PublishOutboxEvent::dispatch(['outbox_id' => $outboxId]);
         return $this->getInfo($assetId);
     }

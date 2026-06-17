@@ -216,6 +216,8 @@ class ErpAssetService extends BaseAdminService
             ErpDict::INVENTORY_LOST                => 'danger',
         ];
         foreach ($rows as &$row) {
+            // 是否走过拍照(有图片)：供前端判断 ERP 定价员可定价(即使全局接了中台)
+            $row['has_photo'] = !empty(((array)($row['source_snapshot'] ?? []))['images']);
             $st = (string)($row['inventory_status'] ?? '');
             if ($st === ErpDict::INVENTORY_OUTBOUND) {
                 $disp = $dispMap[(int)$row['id']] ?? '';
@@ -1284,12 +1286,28 @@ class ErpAssetService extends BaseAdminService
         $inCount = $base()->where('stock_in_at', '>=', $start)->where('stock_in_at', '<=', $end)->count();
         $inCost  = round((float)$base()->where('stock_in_at', '>=', $start)->where('stock_in_at', '<=', $end)->sum('purchase_cost'), 2);
 
-        // 销售出库（毛利）
-        $soldQ = fn() => $base()->where('inventory_status', '=', ErpDict::INVENTORY_OUTBOUND)
-            ->where('stock_out_at', '>=', $start)->where('stock_out_at', '<=', $end);
-        $soldCount   = $soldQ()->count();
-        $saleAmount  = round((float)$soldQ()->sum('current_sale_price'), 2);
-        $soldCost    = round((float)$soldQ()->sum('current_cost'), 2);
+        // 销售出库（毛利）：按出库单统计——同行销售、未作废；现结(已出库)与挂单(已售未发货/锁定)都算。
+        // 按出库时刻 out_at 落区间；台数/销售额/成本取明细，挂单未回填价时 sale_price=0 但台数仍计入。
+        $orderIds = ErpOutboundOrder::where([['site_id', '=', $this->site_id]])
+            ->where('outbound_type', '=', ErpDict::OUTBOUND_TYPE_PEER_SALE)
+            ->where('status', '<>', ErpDict::OUTBOUND_STATUS_VOID)
+            ->where('out_at', '>=', $start)->where('out_at', '<=', $end)
+            ->column('id');
+        $soldCount = 0;
+        $saleAmount = 0.0;
+        $soldCost = 0.0;
+        if (!empty($orderIds)) {
+            $items = ErpOutboundItem::where([['site_id', '=', $this->site_id]])
+                ->whereIn('outbound_id', array_map('intval', $orderIds))
+                ->field('sale_price, cost')->select()->toArray();
+            $soldCount = count($items);
+            foreach ($items as $it) {
+                $saleAmount += (float)($it['sale_price'] ?? 0);
+                $soldCost   += (float)($it['cost'] ?? 0);
+            }
+        }
+        $saleAmount  = round($saleAmount, 2);
+        $soldCost    = round($soldCost, 2);
         $grossProfit = round($saleAmount - $soldCost, 2);
 
         // 期末在库

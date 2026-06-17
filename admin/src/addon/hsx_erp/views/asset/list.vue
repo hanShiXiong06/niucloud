@@ -7,7 +7,7 @@
                     <div class="  ml-2 mt-1 text-sm text-gray-500">默认看「在手库存」——你现在手上有哪些货。按状态切换；切到「全部」可看含已售的所有设备。</div>
                 </div>
                 <div class="flex gap-2">
-                    <el-button type="primary" @click="openManualInbound">入库</el-button>
+                    <el-button v-permission="'hsx_erp_asset_manual_inbound'" type="primary" @click="openManualInbound">入库</el-button>
                     <el-button :icon="Refresh" @click="loadList">刷新</el-button>
                 </div>
             </div>
@@ -109,7 +109,7 @@
             <div v-if="selectedAssets.length" class="mb-3 flex items-center justify-between rounded-md bg-blue-50 px-3 py-2">
                 <div class="text-sm text-gray-600">已选 {{ selectedAssets.length }} 台</div>
                 <div class="flex gap-2">
-                    <el-button v-if="selectedPendingIn.length" type="primary" @click="batchConfirmInbound">
+                    <el-button v-if="selectedPendingIn.length" v-permission="'hsx_erp_asset_batch_confirm_inbound'" type="primary" @click="batchConfirmInbound">
                         批量确认入库 ({{ selectedPendingIn.length }})
                     </el-button>
                     <el-button v-if="selectedSellable.length" type="danger" @click="openOutboundBatch">
@@ -202,32 +202,33 @@
                 </el-table-column>
                 <el-table-column label="操作" fixed="right" width="200" align="center">
                     <template #default="{ row }">
-                        <el-tooltip v-if="row.inventory_status === 'pending_in'" content="确认入库" placement="top">
+                        <el-tooltip v-if="row.inventory_status === 'pending_in'" v-permission="'hsx_erp_asset_confirm_inbound'" content="确认入库" placement="top">
                             <el-button type="primary" link :icon="Check" :loading="row._confirming" @click="confirmInbound(row)" />
                         </el-tooltip>
                         <el-tooltip v-if="row.inventory_status === 'pending_photo'" content="完成拍照" placement="top">
                             <el-button type="primary" link :icon="Camera" @click="openPhoto(row)" />
                         </el-tooltip>
-                        <el-tooltip v-if="row.inventory_status === 'in_stock'" content="发起整备" placement="top">
+                        <el-tooltip v-if="row.inventory_status === 'in_stock'" v-permission="'hsx_erp_refurbishment_create'" content="发起整备" placement="top">
                             <el-button type="primary" link :icon="MagicStick" @click="startRefurbishment(row)" />
                         </el-tooltip>
-                        <el-tooltip v-if="row.inventory_status === 'in_stock'" content="无需整备" placement="top">
+                        <el-tooltip v-if="row.inventory_status === 'in_stock'" v-permission="'hsx_erp_refurbishment_skip'" content="无需整备" placement="top">
                             <el-button type="success" link :icon="DArrowRight" @click="skipRefurbishment(row)" />
                         </el-tooltip>
-                        <!-- 独立模式:ERP 自己定价/调价（联合模式不再显示「中台处理中」） -->
+                        <!-- ERP 定价/调价：独立模式全显；联合模式下，走过拍照(有图)的设备也由 ERP 定价员定价并推商城 -->
                         <el-tooltip
-                            v-if="!integrated && ['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
+                            v-if="(!integrated || row.has_photo) && ['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
+                            v-permission="'hsx_erp_pricing_save'"
                             :content="row.inventory_status === 'available_for_sale' ? '调价' : '定价'"
                             placement="top"
                         >
                             <el-button type="primary" link :icon="Money" @click="openPricing(row)" />
                         </el-tooltip>
                         <!-- 就地出库/卖出：在库即可直接卖，无需拍照/上架 -->
-                        <el-button v-if="canOutbound(row)" type="danger" link size="small" :icon="Sell" @click="openOutbound(row)">卖同行</el-button>
-                        <el-tooltip v-if="canTransfer(row)" content="调拨" placement="top">
+                        <el-button v-if="canOutbound(row)" v-permission="'hsx_erp_outbound_create'" type="danger" link size="small" :icon="Sell" @click="openOutbound(row)">卖同行</el-button>
+                        <el-tooltip v-if="canTransfer(row)" v-permission="'hsx_erp_outbound_transfer'" content="调拨" placement="top">
                             <el-button type="warning" link :icon="Sort" @click="openTransfer(row)" />
                         </el-tooltip>
-                        <el-tooltip v-if="canAdjustCost(row)" content="调成本" placement="top">
+                        <el-tooltip v-if="canAdjustCost(row)" v-permission="'hsx_erp_asset_adjust_cost'" content="调成本" placement="top">
                             <el-button type="info" link :icon="Edit" @click="openCostAdjust(row)" />
                         </el-tooltip>
                         <el-tooltip content="详情" placement="top">
@@ -250,7 +251,7 @@
                         description="点击「入库」录入第一台；或在回收订单确认回收后，设备会自动同步到这里的待入库池。"
                     >
                         <template #action>
-                            <el-button type="primary" @click="openManualInbound">入库</el-button>
+                            <el-button v-permission="'hsx_erp_asset_manual_inbound'" type="primary" @click="openManualInbound">入库</el-button>
                         </template>
                     </EmptyState>
                 </template>
