@@ -75,6 +75,14 @@ class ErpAssetService extends BaseAdminService
             if ((string)$where['inventory_status'] === 'sold') {
                 // 已售/下架 = 已锁定(挂单) + 已出库
                 $query->whereIn('inventory_status', [ErpDict::INVENTORY_LOCKED, ErpDict::INVENTORY_OUTBOUND]);
+            } elseif ((string)$where['inventory_status'] === 'onhand') {
+                // 在手库存 = 在库 + 整备中 + 待定价 + 可售（未卖掉的货）
+                $query->whereIn('inventory_status', [
+                    ErpDict::INVENTORY_IN_STOCK,
+                    ErpDict::INVENTORY_REFURBISHING,
+                    ErpDict::INVENTORY_PENDING_PRICING,
+                    ErpDict::INVENTORY_AVAILABLE_FOR_SALE,
+                ]);
             } else {
                 $query->where('inventory_status', '=', (string)$where['inventory_status']);
             }
@@ -945,6 +953,10 @@ class ErpAssetService extends BaseAdminService
         if ((string)($sourceSnapshot['sale_destination'] ?? '') !== ErpDict::SALE_DESTINATION_MALL) {
             return [];
         }
+        // 轻量路:手工入库已内联补了图片(+价格)→ 走直推商城,不再生成拍照工单,避免重复
+        if (!empty($sourceSnapshot['images'])) {
+            return [];
+        }
         return [
             $this->writeDecisionEvent($asset, 'erp.asset.ready_for_photo.v1', $documentId, [
                 'source_device_id' => (int)$asset->source_device_id,
@@ -1129,5 +1141,97 @@ class ErpAssetService extends BaseAdminService
             ];
         }
         unset($row);
+    }
+
+    /**
+     * 库存概览（设备中心顶部卡片）：在手、可售、本月已售毛利、平均库龄
+     */
+    public function inventoryOverview(): array
+    {
+        $scope = $this->scopedLocationIds();
+        $base = function () use ($scope) {
+            $q = ErpAsset::where([['site_id', '=', $this->site_id]]);
+            if ($scope !== null) {
+                $q->whereIn('location_id', $scope);
+            }
+            return $q;
+        };
+
+        $onHand = [
+            ErpDict::INVENTORY_IN_STOCK,
+            ErpDict::INVENTORY_REFURBISHING,
+            ErpDict::INVENTORY_PENDING_PRICING,
+            ErpDict::INVENTORY_AVAILABLE_FOR_SALE,
+        ];
+
+        // 在手库存
+        $onHandCount = $base()->whereIn('inventory_status', $onHand)->count();
+        $onHandCost  = round((float)$base()->whereIn('inventory_status', $onHand)->sum('current_cost'), 2);
+
+        // 可售
+        $sellableCount  = $base()->where('inventory_status', '=', ErpDict::INVENTORY_AVAILABLE_FOR_SALE)->count();
+        $sellableAmount = round((float)$base()->where('inventory_status', '=', ErpDict::INVENTORY_AVAILABLE_FOR_SALE)->sum('current_sale_price'), 2);
+
+        // 本月已售（毛利）
+        $mStart = strtotime(date('Y-m') . '-01 00:00:00');
+        $now = time();
+        $soldQ = fn() => $base()->where('inventory_status', '=', ErpDict::INVENTORY_OUTBOUND)
+            ->where('stock_out_at', '>=', $mStart)->where('stock_out_at', '<=', $now);
+        $soldCount = $soldQ()->count();
+        $soldSale  = round((float)$soldQ()->sum('current_sale_price'), 2);
+        $soldCost  = round((float)$soldQ()->sum('current_cost'), 2);
+        $grossProfit = round($soldSale - $soldCost, 2);
+
+        // 平均库龄(在手)
+        $avgStockIn = (float)$base()->whereIn('inventory_status', $onHand)->where('stock_in_at', '>', 0)->avg('stock_in_at');
+        $avgAgeDays = $avgStockIn > 0 ? round(($now - $avgStockIn) / 86400, 1) : 0;
+
+        return [
+            'on_hand'        => ['count' => $onHandCount, 'cost' => $onHandCost],
+            'sellable'       => ['count' => $sellableCount, 'amount' => $sellableAmount],
+            'sold_month'     => ['count' => $soldCount, 'amount' => $soldSale, 'gross_profit' => $grossProfit],
+            'avg_age_days'   => $avgAgeDays,
+        ];
+    }
+
+    /**
+     * 经营报表（按发生时间区间聚合资产，真实毛利）
+     * - 采购入库：stock_in_at 落在区间
+     * - 销售：stock_out_at 落在区间 且 已出库，毛利 = 售价 - 当前成本
+     * - 期末在库：当前在库设备及其成本
+     */
+    public function businessReport(int $start, int $end): array
+    {
+        $base = fn() => ErpAsset::where([['site_id', '=', $this->site_id]]);
+
+        // 采购入库
+        $inCount = $base()->where('stock_in_at', '>=', $start)->where('stock_in_at', '<=', $end)->count();
+        $inCost  = round((float)$base()->where('stock_in_at', '>=', $start)->where('stock_in_at', '<=', $end)->sum('purchase_cost'), 2);
+
+        // 销售出库（毛利）
+        $soldQ = fn() => $base()->where('inventory_status', '=', ErpDict::INVENTORY_OUTBOUND)
+            ->where('stock_out_at', '>=', $start)->where('stock_out_at', '<=', $end);
+        $soldCount   = $soldQ()->count();
+        $saleAmount  = round((float)$soldQ()->sum('current_sale_price'), 2);
+        $soldCost    = round((float)$soldQ()->sum('current_cost'), 2);
+        $grossProfit = round($saleAmount - $soldCost, 2);
+
+        // 期末在库
+        $onHand = [
+            ErpDict::INVENTORY_IN_STOCK,
+            ErpDict::INVENTORY_REFURBISHING,
+            ErpDict::INVENTORY_PENDING_PRICING,
+            ErpDict::INVENTORY_AVAILABLE_FOR_SALE,
+            ErpDict::INVENTORY_LOCKED,
+        ];
+        $stockCount = $base()->whereIn('inventory_status', $onHand)->count();
+        $stockCost  = round((float)$base()->whereIn('inventory_status', $onHand)->sum('current_cost'), 2);
+
+        return [
+            'range'     => ['start' => date('Y-m-d', $start), 'end' => date('Y-m-d', $end)],
+            'purchase'  => ['count' => $inCount, 'cost' => $inCost],
+            'sales'     => ['count' => $soldCount, 'amount' => $saleAmount, 'cost' => $soldCost, 'gross_profit' => $grossProfit],
+            'inventory' => ['on_hand_count' => $stockCount, 'on_hand_cost' => $stockCost],
+        ];
     }
 }

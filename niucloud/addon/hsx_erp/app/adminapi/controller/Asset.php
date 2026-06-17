@@ -39,6 +39,12 @@ class Asset extends BaseAdminController
         return success($this->service->getPage($data));
     }
 
+    /** 库存概览（设备中心顶部卡片） */
+    public function overview()
+    {
+        return success($this->service->inventoryOverview());
+    }
+
     /**
      * 集成状态：探测中台(数据中台)是否接入。
      * 接入后拍照与销售定价由中台负责，ERP 隐藏自身定价、改显示"已交中台"。
@@ -117,6 +123,8 @@ class Asset extends BaseAdminController
             ['suggested_sale_price', 0],
             ['warehouse_id', 0],
             ['location_id', 0],
+            ['images', []],
+            ['qc_note', ''],
             ['remark', ''],
         ]);
         return success((new ErpStandaloneInboundService())->create($data));

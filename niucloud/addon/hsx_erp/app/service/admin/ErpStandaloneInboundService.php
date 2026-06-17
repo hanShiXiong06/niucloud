@@ -55,6 +55,9 @@ class ErpStandaloneInboundService extends BaseAdminService
             throw new CommonException('选择了入库仓库，请同时选择库位');
         }
         $needRefurb = !empty($data['need_refurb']);
+        // 轻量上架路:手工入库直接补"图片+质检"，凑齐三要素(图片+价格+质检)即可推商城,无需走拍照工单
+        $images = array_values(array_filter(array_map('strval', (array)($data['images'] ?? [])), static fn($u) => trim($u) !== ''));
+        $qcNote = trim((string)($data['qc_note'] ?? ''));
         $purchaseCost = ErpMoney::normalize($data['purchase_cost'] ?? 0);
         $paidAmount = ErpMoney::normalize($data['paid_amount'] ?? 0);
         if (in_array($businessType, ['consignment', 'opening'], true)) {
@@ -127,7 +130,8 @@ class ErpStandaloneInboundService extends BaseAdminService
                 'settlement_status' => $settlementStatus,
                 'suggested_sale_price' => round((float)($data['suggested_sale_price'] ?? 0), 2),
                 'acquired_at' => $now,
-                'check_snapshot' => [],
+                'images' => $images,
+                'check_snapshot' => $qcNote !== '' ? ['manual_note' => $qcNote] : [],
                 'sales_pricing_snapshot' => [
                     'purchase_cost' => $purchaseCost,
                     'suggested_sale_price' => round((float)($data['suggested_sale_price'] ?? 0), 2),
@@ -180,6 +184,44 @@ class ErpStandaloneInboundService extends BaseAdminService
                         'site_id' => $this->site_id,
                         'asset_id' => $assetId,
                     ]);
+                }
+            }
+        }
+
+        // 轻量上架路:已确认入仓 + 带了图片和售价(三要素齐：图片+价格+质检)→ 直接发"定价完成"出口事件,
+        // 落商城「待上架货源」并由 ERP 自身监听转「可售」,跳过拍照/定价工单。故障隔离,不影响建档。
+        $suggestedSalePrice = round((float)($data['suggested_sale_price'] ?? 0), 2);
+        if ($warehouseId > 0 && $locationId > 0 && !empty($images) && $suggestedSalePrice > 0) {
+            foreach ((array)($result['created_assets'] ?? []) as $createdAsset) {
+                $assetId = (int)($createdAsset['id'] ?? 0);
+                if ($assetId <= 0) {
+                    continue;
+                }
+                try {
+                    event('DeviceAssetPriceCompleted', [
+                        'event_name' => 'device_asset.price.completed.v1',
+                        'site_id'    => (int)$this->site_id,
+                        'asset_id'   => 0,
+                        'device_id'  => 0,
+                        'operator'   => ['id' => $this->uid, 'name' => $this->username ?: ''],
+                        'payload'    => [
+                            'erp_asset_id' => $assetId,
+                            'site_id'      => (int)$this->site_id,
+                            'sale_price'   => $suggestedSalePrice,
+                            'peer_price'   => 0,
+                            'min_price'    => 0,
+                            'cost_price'   => round((float)$purchaseCost, 2),
+                            'remark'       => '手工入库直接补三要素',
+                            'model_name'   => $model,
+                            'memory'       => trim((string)($data['capacity'] ?? '')),
+                            'color'        => trim((string)($data['color'] ?? '')),
+                            'imei'         => $imei,
+                            'qc_info'      => $qcNote !== '' ? ['manual_note' => $qcNote] : [],
+                            'images'       => $images,
+                        ],
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('手工入库直推商城货源失败：' . $e->getMessage(), ['site_id' => $this->site_id, 'asset_id' => $assetId]);
                 }
             }
         }

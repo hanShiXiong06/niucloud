@@ -3,8 +3,8 @@
         <el-card class="!border-none" shadow="never">
             <div class="flex items-start justify-between gap-4 mb-3">
                 <div class="flex items-center">
-                    <div class="text-page-title">设备流转</div>
-                    <div class="  ml-2 mt-1 text-sm text-gray-500">一条主线跟着设备走：待入库 → 在库/整备 → 待定价 → 可售。按阶段切换，就地处理当前该做的动作。</div>
+                    <div class="text-page-title">设备中心</div>
+                    <div class="  ml-2 mt-1 text-sm text-gray-500">默认看「在手库存」——你现在手上有哪些货。按状态切换；切到「全部」可看含已售的所有设备。</div>
                 </div>
                 <div class="flex gap-2">
                     <el-button type="primary" @click="openManualInbound">入库</el-button>
@@ -21,7 +21,32 @@
                 title="已与回收系统打通：回收单确认回收后，设备会自动同步到这里（待入库池），无需在此手动入库。手动入库仅用于非回收来源（如自行采购/期初建档）。"
             />
 
+            <!-- 库存概览 -->
+            <div class="mt-3 grid grid-cols-4 gap-3">
+                <div class="rounded-lg bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500">在手库存</div>
+                    <div class="mt-1 text-xl font-semibold text-gray-800">{{ overview.on_hand.count }} <span class="text-sm font-normal text-gray-400">台</span></div>
+                    <div class="text-xs text-gray-400">成本 ¥{{ money(overview.on_hand.cost) }}</div>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500">可售</div>
+                    <div class="mt-1 text-xl font-semibold text-blue-600">{{ overview.sellable.count }} <span class="text-sm font-normal text-gray-400">台</span></div>
+                    <div class="text-xs text-gray-400">可售金额 ¥{{ money(overview.sellable.amount) }}</div>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500">本月已售</div>
+                    <div class="mt-1 text-xl font-semibold text-gray-800">{{ overview.sold_month.count }} <span class="text-sm font-normal text-gray-400">台</span></div>
+                    <div class="text-xs" :class="Number(overview.sold_month.gross_profit) >= 0 ? 'text-green-600' : 'text-red-600'">毛利 ¥{{ money(overview.sold_month.gross_profit) }}</div>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500">平均库龄</div>
+                    <div class="mt-1 text-xl font-semibold" :class="Number(overview.avg_age_days) >= 30 ? 'text-red-600' : 'text-green-600'">{{ overview.avg_age_days }} <span class="text-sm font-normal text-gray-400">天</span></div>
+                    <div class="text-xs text-gray-400">在手平均在库时长</div>
+                </div>
+            </div>
+
             <el-tabs v-model="search.inventory_status" class="mt-3" @tab-change="handleSearch">
+                <el-tab-pane label="在手库存" name="onhand" />
                 <el-tab-pane label="全部" name="" />
                 <el-tab-pane label="待入库" name="pending_in" />
                 <el-tab-pane label="在库待整备" name="in_stock" />
@@ -345,6 +370,17 @@
                     <el-switch v-model="manualForm.need_refurb" active-text="需要整备" inactive-text="免整备" inline-prompt />
                     <span class="ml-2 text-xs text-gray-400">{{ manualForm.need_refurb ? '入库后自动建整备工单，进入「整备中」' : '入库后直接进「待定价」/「可售」' }}</span>
                 </el-form-item>
+                <!-- 商城上架(选填)：手工补图片+质检，与售价凑齐三要素即直推商城「待上架货源」，免走拍照工单 -->
+                <el-divider content-position="left"><span class="text-sm font-medium text-gray-700">商城上架（选填）</span></el-divider>
+                <el-form-item label="商品图片">
+                    <div class="w-full">
+                        <upload-image v-model="manualForm.images" :limit="9" />
+                        <div class="mt-1 text-xs text-gray-400">传了图片 + 填了销售价(上面)即"三要素齐"，入库后自动推送商城「待上架货源」，无需拍照工单；不传则走正常入库。</div>
+                    </div>
+                </el-form-item>
+                <el-form-item label="质检简述">
+                    <el-input v-model.trim="manualForm.qc_note" type="textarea" :rows="2" placeholder="简单描述成色/功能/瑕疵，如：99新，功能全好，左下角轻微划痕" maxlength="500" show-word-limit />
+                </el-form-item>
                 <el-form-item label="备注">
                     <el-input v-model.trim="manualForm.remark" type="textarea" :rows="2" placeholder="录入来源、采购说明等" />
                 </el-form-item>
@@ -592,6 +628,7 @@ import {
     createErpManualInbound,
     getErpAssetInfo,
     getErpAssetList,
+    getErpAssetOverview,
     getErpIntegrationStatus,
     adjustErpAssetCost
 } from '@/addon/hsx_erp/api/asset'
@@ -607,7 +644,15 @@ import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/i
 import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 
 const router = useRouter()
-const search = reactive({ keyword: '', inventory_status: '', warehouse_id: '' as any, location_id: '' as any, ownership_type: '', cost_min: '' as any, cost_max: '' as any, stockInRange: [] as any, sort_field: '', sort_order: '' })
+const search = reactive({ keyword: '', inventory_status: 'onhand', warehouse_id: '' as any, location_id: '' as any, ownership_type: '', cost_min: '' as any, cost_max: '' as any, stockInRange: [] as any, sort_field: '', sort_order: '' })
+
+// 库存概览（顶部卡片，全局口径，不随 tab 变）
+const overview = reactive({
+    on_hand: { count: 0, cost: 0 },
+    sellable: { count: 0, amount: 0 },
+    sold_month: { count: 0, amount: 0, gross_profit: 0 },
+    avg_age_days: 0,
+})
 const filterLocations = computed(() => warehouseOptions.value.find((w: any) => Number(w.id) === Number(search.warehouse_id))?.locations || [])
 const onWarehouseFilterChange = () => { search.location_id = ''; handleSearch() }
 const summary = reactive({ count: 0, total_cost: 0, total_sale: 0, in_stock_count: 0, avg_age_days: 0 })
@@ -775,6 +820,8 @@ const manualForm = reactive({
     location_id: 0,
     need_refurb: false,
     use_prepay: false,
+    images: [] as string[],
+    qc_note: '',
     remark: ''
 })
 // 该供应商可用采购预付余额(选定供应商后拉取)
@@ -875,6 +922,8 @@ const loadList = async () => {
         summary.avg_age_days = Number(s.avg_age_days || 0)
     } finally {
         table.loading = false
+        // 概览随列表刷新（入库/调拨/定价等动作后保持最新）
+        loadOverview()
     }
 }
 
@@ -926,6 +975,8 @@ const resetManualForm = () => {
         warehouse_id: 0,
         location_id: 0,
         use_prepay: false,
+        images: [],
+        qc_note: '',
         remark: ''
     })
     manualPrepay.available = 0
@@ -1231,6 +1282,13 @@ const openEntity = (id: number) => {
     entityDrawer.visible = true
 }
 
+const loadOverview = async () => {
+    try {
+        const res: any = await getErpAssetOverview()
+        Object.assign(overview, res.data || {})
+    } catch (e) { /* ignore */ }
+}
+
 const recycleConnected = ref(false)
 const loadIntegration = async () => {
     try {
@@ -1263,5 +1321,5 @@ const handleSortChange = ({ prop, order }: { prop: string; order: string | null 
 // 参考售价来源标注：均为"参考价"，真实成交价在销售环节产生
 const priceSource = () => (integrated.value ? '中台参考价' : '门店参考价')
 
-onMounted(() => Promise.all([loadIntegration(), loadList(), loadWarehouses(), loadCounterparties()]))
+onMounted(() => Promise.all([loadIntegration(), loadOverview(), loadList(), loadWarehouses(), loadCounterparties()]))
 </script>
