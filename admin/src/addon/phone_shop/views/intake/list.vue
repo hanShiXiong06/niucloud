@@ -302,6 +302,7 @@ loadOptions()
 // 发货方式可选项（默认快递；可扩展到店自提等）
 const deliveryOptions = [
     { value: 'express', label: '快递发货' },
+    { value: 'local', label: '同城配送' },
     { value: 'store', label: '到店自提' }
 ]
 const serviceOptions = reactive<any[]>([]) // 服务标签可选项（站点服务保障）
