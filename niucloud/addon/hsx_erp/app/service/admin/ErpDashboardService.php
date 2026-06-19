@@ -88,6 +88,16 @@ class ErpDashboardService extends BaseAdminService
         // 周转率（区间售出成本 / 当前在手成本，近似）
         $turnover = $onHandCost > 0 ? round($salesCost / $onHandCost, 2) : 0;
 
+        // —— 经营 KPI ——（口径在此处单一定义，全系统复用）
+        $soldCount = count($soldRows);
+        // 均台毛利 = 区间毛利 / 成交台数
+        $avgGrossProfit = $soldCount > 0 ? round($grossProfit / $soldCount, 2) : 0;
+        // 客单价 = 销售额 / 成交台数（=均价；同一买家多台不并单。如需按"客户数"另议）
+        $avgPrice = $soldCount > 0 ? round($salesAmount / $soldCount, 2) : 0;
+        // 动销率 = 区间已售台数 / 区间初在库台数(≈当前在手 + 区间已售)，百分比
+        $sellThroughBase = $onHandCount + $soldCount;
+        $sellThroughRate = $sellThroughBase > 0 ? round($soldCount / $sellThroughBase * 100, 1) : 0;
+
         // —— 销售/毛利趋势（补全每一天，最多 180 天防爆）——
         $trend = [];
         $cursor = strtotime(date('Y-m-d', $start));
@@ -148,7 +158,10 @@ class ErpDashboardService extends BaseAdminService
                 'margin'          => $margin,
                 'purchase_cost'   => $purchaseCost,
                 'purchase_count'  => $purchaseCount,
-                'sold_count'      => count($soldRows),
+                'sold_count'      => $soldCount,
+                'avg_gross_profit' => $avgGrossProfit,   // 均台毛利
+                'avg_price'        => $avgPrice,          // 客单价(均价)
+                'sell_through'     => $sellThroughRate,   // 动销率(%)
                 'on_hand_count'   => $onHandCount,
                 'on_hand_cost'    => $onHandCost,
                 'sellable_count'  => $sellableCount,

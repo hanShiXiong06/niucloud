@@ -63,6 +63,21 @@
                     <div class="kpi-value" :class="Number(data.kpi.avg_age_days) >= 30 ? '!text-red-500' : ''">{{ data.kpi.avg_age_days }} 天</div>
                     <div class="kpi-sub">周转率 {{ data.kpi.turnover }}</div>
                 </div>
+                <div class="kpi" style="--c:#5ad8a6">
+                    <div class="kpi-label">均台毛利</div>
+                    <div class="kpi-value">¥{{ money(data.kpi.avg_gross_profit) }}</div>
+                    <div class="kpi-sub">毛利率 {{ data.kpi.margin }}%</div>
+                </div>
+                <div class="kpi" style="--c:#5b8ff9">
+                    <div class="kpi-label">客单价</div>
+                    <div class="kpi-value">¥{{ money(data.kpi.avg_price) }}</div>
+                    <div class="kpi-sub">销售额 ÷ 成交台数</div>
+                </div>
+                <div class="kpi" style="--c:#945fb9">
+                    <div class="kpi-label">动销率</div>
+                    <div class="kpi-value">{{ data.kpi.sell_through }}%</div>
+                    <div class="kpi-sub">已售 ÷ 期初在库</div>
+                </div>
             </div>
 
             <!-- 趋势 -->
@@ -109,7 +124,7 @@ const warehouses = ref<any[]>([])
 
 const data = reactive<any>({
     range: { start: '', end: '' },
-    kpi: { sales_amount: 0, gross_profit: 0, margin: 0, purchase_cost: 0, purchase_count: 0, sold_count: 0, on_hand_count: 0, on_hand_cost: 0, sellable_count: 0, sellable_amount: 0, avg_age_days: 0, turnover: 0 },
+    kpi: { sales_amount: 0, gross_profit: 0, margin: 0, purchase_cost: 0, purchase_count: 0, sold_count: 0, avg_gross_profit: 0, avg_price: 0, sell_through: 0, on_hand_count: 0, on_hand_cost: 0, sellable_count: 0, sellable_amount: 0, avg_age_days: 0, turnover: 0 },
     sales_trend: [],
     top_models: [],
     stock_status: [],
