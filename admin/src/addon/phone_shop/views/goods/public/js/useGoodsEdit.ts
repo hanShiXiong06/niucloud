@@ -445,8 +445,9 @@ export function useGoodsEdit(params: any = {}) {
             formData.is_gift = data.goods_info.is_gift
 
             /*************** 商品参数-start ****************/
-            formData.attr_format = data.goods_info.attr_format
-            formData.attr_ids = data.goods_info.attr_ids
+            // 兜底：attr_format/attr_ids 为 null 时，下面 attrChange 会读 .length 抛错，导致价格库存/详情整段不回填
+            formData.attr_format = data.goods_info.attr_format || []
+            formData.attr_ids = data.goods_info.attr_ids || []
 
             attrChange(formData.attr_ids, true)
             /*************** 商品参数-end ****************/
