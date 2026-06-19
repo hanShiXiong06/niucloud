@@ -32,7 +32,8 @@ function mapKeys(string $file, string $methodSig): array
     return [];
 }
 
-/** 扫描 app/ 下所有 PHP，提取 '<field>' => '<value>' 的 value 集合 */
+/** 扫描 app/ 下所有 PHP，提取 '<field>' => '<value>' 的 value 集合；
+ *  action 字段额外扫 writeOperation(...,'<action>',...) 第4个位置参数与价格动作常量。 */
 function writtenValues(string $appDir, string $field): array
 {
     $out = [];
@@ -42,6 +43,16 @@ function writtenValues(string $appDir, string $field): array
         $src = file_get_contents($f->getPathname());
         if (preg_match_all("/'" . preg_quote($field, '/') . "'\s*=>\s*'([a-zA-Z0-9_]+)'/", $src, $m)) {
             foreach ($m[1] as $v) $out[$v] = true;
+        }
+        // action 还来自操作事件：writeOperation($id,$cycle,$eventName,'<action>',...) 的第4个参数
+        if ($field === 'action') {
+            if (preg_match_all("/writeOperation\([^,]+,[^,]+,[^,]+,\s*'([a-zA-Z0-9_]+)'/", $src, $m2)) {
+                foreach ($m2[1] as $v) $out[$v] = true;
+            }
+            // 价格动作常量 PRICE_ACTION_* 的字面量
+            if (preg_match_all("/PRICE_ACTION_[A-Z]+\s*=\s*'([a-z_]+)'/", $src, $m3)) {
+                foreach ($m3[1] as $v) $out[$v] = true;
+            }
         }
     }
     return array_keys($out);

@@ -138,6 +138,15 @@ class ErpDict
             'return_outbound'           => '退货出库',
             'stocktake_loss'            => '盘点核销丢失',
             'stocktake_restore'         => '盘点找回',
+            // —— 操作事件/价格动作（时间线复用本表）——
+            'hand_to_mid'               => '交中台拍照定价',
+            'complete_photo'            => '完成拍照',
+            'refurbishment_required'    => '判定需整备',
+            'complete_refurbishment'    => '整备完工',
+            'reject_inbound'            => '驳回入库',
+            'resubmit_inbound'          => '重新提交入库',
+            'initial'                   => '初次定价',
+            'adjust'                    => '调价',
         ];
     }
 
