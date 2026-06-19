@@ -782,7 +782,7 @@ const enabledEvent = (row: any) => {
 
 }
 const back = () => {
-    router.push('/shop/marketing/discount/list')
+    router.push('/phone_shop/marketing/discount/list')
 }
 </script>
 

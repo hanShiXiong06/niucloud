@@ -65,7 +65,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits(['update:modelValue', 'resolved'])
 
-const picked = ref<number>(0) // 选择项以 member_id(人)为展示锚
+const picked = ref<number | undefined>(undefined) // 选择项以 member_id(人)为展示锚; 空用 undefined 以正常显示 placeholder
 const options = ref<any[]>([])
 const loading = ref(false)
 const resolving = ref(false)
@@ -99,7 +99,7 @@ const onPick = async (memberId: number) => {
         resolving.value = false
     }
 }
-const onClear = () => { picked.value = 0; emit('update:modelValue', 0); emit('resolved', null) }
+const onClear = () => { picked.value = undefined; emit('update:modelValue', 0); emit('resolved', null) }
 
 // 新建对接人
 const createVisible = ref(false)
@@ -131,5 +131,5 @@ const doCreate = async () => {
     }
 }
 
-watch(() => props.modelValue, (v) => { if (!v) picked.value = 0 })
+watch(() => props.modelValue, (v) => { if (!v) picked.value = undefined })
 </script>

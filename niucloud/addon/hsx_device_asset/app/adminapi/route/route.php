@@ -20,6 +20,7 @@ Route::group('device_asset', function () {
     Route::post('photos/confirm/:id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@confirmPhotos');
     Route::post('location/:id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@setLocation');
     Route::post('price/:id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@price');
+    Route::post('re_push/:id', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@rePush');
     Route::get('export', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@export');
     Route::post('export', 'addon\hsx_device_asset\app\adminapi\controller\DeviceAsset@export');
 

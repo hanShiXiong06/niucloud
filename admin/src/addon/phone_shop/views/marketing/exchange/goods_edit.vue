@@ -722,7 +722,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
             // formData.value.goods_data = JSON.stringify(formData.value.product_list)
             editActiveExchange(formData.value).then(res => {
                 loading.value = false
-                router.push('/shop/marketing/exchange/goods_list')
+                router.push('/phone_shop/marketing/exchange/goods_list')
             }).catch(() => {
                 loading.value = false
             })
@@ -731,7 +731,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
 }
 
 const back = () => {
-    router.push('/shop/marketing/exchange/goods_list')
+    router.push('/phone_shop/marketing/exchange/goods_list')
 }
 </script>
 

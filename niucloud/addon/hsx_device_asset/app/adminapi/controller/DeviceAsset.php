@@ -172,6 +172,14 @@ class DeviceAsset extends BaseAdminController
         return success($this->service->completePrice((int)$id, $data));
     }
 
+    /**
+     * 重新推送：把已定价资产最新数据再发一次事件（商城据此更新货源）
+     */
+    public function rePush($id)
+    {
+        return success($this->service->rePushPriceCompleted((int)$id));
+    }
+
     public function export()
     {
         $data = $this->request->params([

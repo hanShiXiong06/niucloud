@@ -233,16 +233,22 @@ class ErpRefurbishmentService extends BaseAdminService
                 $totalCost = ErpMoney::add($totalCost, $amount);
             }
 
+            // 整备完成后的去向:仓库要求拍照且尚未拍照(stock_in_at=0) → 先回「待拍照」(先整备再拍照);
+            // 否则直接「待定价」。
+            $requirePhoto = (int)$asset->warehouse_id > 0
+                && (new ErpWarehouseService())->requiresPhoto((int)$asset->warehouse_id)
+                && (int)$asset->stock_in_at <= 0;
+            $afterStatus = $requirePhoto ? ErpDict::INVENTORY_PENDING_PHOTO : ErpDict::INVENTORY_PENDING_PRICING;
             $asset->save([
                 'current_cost' => $currentCost,
-                'inventory_status' => ErpDict::INVENTORY_PENDING_PRICING,
+                'inventory_status' => $afterStatus,
                 'version' => (int)$asset->version + 1,
                 'update_at' => $now,
             ]);
             ErpAssetCycle::where([
                 ['site_id', '=', $this->site_id],
                 ['id', '=', (int)$asset->cycle_id],
-            ])->update(['status' => ErpDict::INVENTORY_PENDING_PRICING, 'update_at' => $now]);
+            ])->update(['status' => $afterStatus, 'update_at' => $now]);
             $order->save([
                 'status' => ErpDict::REFURBISH_COMPLETED,
                 'completed_at' => $now,
@@ -252,7 +258,7 @@ class ErpRefurbishmentService extends BaseAdminService
                 'completion_remark' => trim((string)($data['completion_remark'] ?? '')),
                 'update_at' => $now,
             ]);
-            $this->writeStatusLedger($asset, ErpDict::INVENTORY_REFURBISHING, ErpDict::INVENTORY_PENDING_PRICING, 'refurbishment_complete', $id, $now);
+            $this->writeStatusLedger($asset, ErpDict::INVENTORY_REFURBISHING, $afterStatus, 'refurbishment_complete', $id, $now);
             $this->writeOperation($asset, 'erp.refurbishment.completed.v1', 'complete_refurbishment', $id, [
                 'before_cost' => $beforeCost,
                 'added_cost' => $totalCost,
@@ -262,7 +268,7 @@ class ErpRefurbishmentService extends BaseAdminService
                 'refurbish_order_id' => $id,
                 'added_cost' => $totalCost,
                 'current_cost' => $currentCost,
-                'next_status' => ErpDict::INVENTORY_PENDING_PRICING,
+                'next_status' => $afterStatus,
             ], $now);
             $outboxIds = array_merge($outboxIds, $this->writeReadyForPhotoEvents($asset, $id, $now));
             if (ErpMoney::compare($totalCost, '0.00') > 0) {

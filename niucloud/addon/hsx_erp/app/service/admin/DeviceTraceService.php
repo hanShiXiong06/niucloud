@@ -8,6 +8,7 @@ use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetMoveLog;
 use addon\hsx_erp\app\model\ErpCapitalLedger;
 use addon\hsx_erp\app\model\ErpCostLedger;
+use addon\hsx_erp\app\model\ErpOutboundOrder;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\FinancePayable;
 use addon\hsx_erp\app\model\FinanceReceivable;
@@ -182,6 +183,10 @@ class DeviceTraceService extends BaseAdminService
             'imei'            => (string)($asset['imei'] ?? ''),
             'sn'              => (string)($asset['sn'] ?? ''),
             'model'           => (string)($asset['model'] ?? ''),
+            'imei2'           => (string)($asset['imei2'] ?? ''),
+            'capacity'        => (string)($asset['capacity'] ?? ''),
+            'color'           => (string)($asset['color'] ?? ''),
+            'check'           => $this->decodeSnapshot($asset['check_snapshot'] ?? null),
             'asset_no'        => (string)($asset['asset_no'] ?? ''),
             'order_no'        => (string)($recSummary['order_no'] ?? ''),
             'inventory_status'=> (string)($asset['inventory_status'] ?? ''),
@@ -265,22 +270,39 @@ class DeviceTraceService extends BaseAdminService
     {
         $payables = $deviceId > 0 ? FinancePayable::where([['site_id', '=', $this->site_id], ['source_device_id', '=', $deviceId]])->select()->toArray() : [];
         $receivables = $deviceId > 0 ? FinanceReceivable::where([['site_id', '=', $this->site_id], ['source_device_id', '=', $deviceId]])->select()->toArray() : [];
+        // 应收来源出库单的操作人(历史数据兜底: 出库单本身存了 operator)
+        $rcvNos = array_values(array_unique(array_filter(array_map(static fn($r) => (string)$r['source_no'], $receivables))));
+        $outOpByNo = [];
+        if (!empty($rcvNos)) {
+            foreach (ErpOutboundOrder::where([['site_id', '=', $this->site_id]])->whereIn('outbound_no', $rcvNos)
+                ->field('outbound_no, operator_name')->select()->toArray() as $o) {
+                $outOpByNo[(string)$o['outbound_no']] = (string)$o['operator_name'];
+            }
+        }
+        $extOp = static function ($extJson): array {
+            $ext = json_decode((string)$extJson, true);
+            return is_array($ext) ? ['name' => (string)($ext['operator_name'] ?? ''), 'uid' => (int)($ext['operator_uid'] ?? 0)] : ['name' => '', 'uid' => 0];
+        };
+
         $finIds = ['payable' => [], 'receivable' => []];
         foreach ($payables as $p) {
             $finIds['payable'][] = (int)$p['id'];
+            $op = $extOp($p['ext_json'] ?? '');
             $events[] = [
                 'time' => (int)$p['occurred_at'], 'stage' => '财务', 'title' => '生成应付(我欠)',
                 'detail' => FinanceDict::sourceTypeText((string)$p['source_type']) . ' ¥' . round((float)$p['amount'], 2),
-                'operator_name' => '', 'operator_uid' => 0, 'amount' => round((float)$p['amount'], 2),
+                'operator_name' => $op['name'], 'operator_uid' => $op['uid'], 'amount' => round((float)$p['amount'], 2),
                 'no' => (string)$p['source_no'], 'key' => true,
             ];
         }
         foreach ($receivables as $r) {
             $finIds['receivable'][] = (int)$r['id'];
+            $op = $extOp($r['ext_json'] ?? '');
+            $opName = $op['name'] !== '' ? $op['name'] : (string)($outOpByNo[(string)$r['source_no']] ?? '');
             $events[] = [
                 'time' => (int)$r['occurred_at'], 'stage' => '财务', 'title' => '生成应收(欠我)',
                 'detail' => FinanceDict::sourceTypeText((string)$r['source_type']) . ' ¥' . round((float)$r['amount'], 2),
-                'operator_name' => '', 'operator_uid' => 0, 'amount' => round((float)$r['amount'], 2),
+                'operator_name' => $opName, 'operator_uid' => $op['uid'], 'amount' => round((float)$r['amount'], 2),
                 'no' => (string)$r['source_no'], 'key' => true,
             ];
         }
@@ -315,7 +337,7 @@ class DeviceTraceService extends BaseAdminService
                     'time' => (int)$lg['occurred_at'], 'stage' => '财务', 'title' => ((string)$lg['direction'] === 'in' ? '收款' : '付款'),
                     'detail' => (string)$lg['account_name'] . ' ¥' . round((float)$lg['amount'], 2) . ' ' . (string)$lg['remark'],
                     'operator_name' => (string)$lg['operator_name'], 'operator_uid' => (int)$lg['operator_uid'],
-                    'amount' => round((float)$lg['amount'], 2), 'no' => (string)$lg['ledger_no'], 'key' => false,
+                    'amount' => round((float)$lg['amount'], 2), 'no' => (string)$lg['ledger_no'], 'key' => true,
                 ];
             }
         }
@@ -337,6 +359,19 @@ class DeviceTraceService extends BaseAdminService
     }
 
     /** 操作人补名: 有 name 用 name; 否则按 uid 查系统用户 */
+    /** 解码质检/来源快照 JSON（来自回收质检，结构不固定） */
+    private function decodeSnapshot($raw): array
+    {
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (is_string($raw) && $raw !== '') {
+            $data = json_decode($raw, true);
+            return is_array($data) ? $data : [];
+        }
+        return [];
+    }
+
     private function resolveOperators(array &$events): void
     {
         $uids = [];

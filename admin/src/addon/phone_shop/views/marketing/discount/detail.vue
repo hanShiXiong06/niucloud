@@ -246,7 +246,7 @@ const router = useRouter()
 const pageName = route.meta.title
 
 const back = () => {
-    router.push('/shop/marketing/discount/list')
+    router.push('/phone_shop/marketing/discount/list')
 }
 
 const formData:Record<string, any> = ref({})

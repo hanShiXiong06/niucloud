@@ -6,7 +6,7 @@
                     <div class="text-page-title">往来单位</div>
                     <div class="mt-1 text-sm text-gray-500">会员是具体经办人，往来主体是最终结算对象。一个门店可关联多名会员，账款统一归集到门店。</div>
                 </div>
-                <el-button type="primary" @click="openEdit()">新增往来单位</el-button>
+                <el-button v-permission="'hsx_erp_counterparty_save'" type="primary" @click="openEdit()">新增往来单位</el-button>
             </div>
             <el-form :inline="true" class="mt-5">
                 <el-form-item label="关键词">
@@ -63,7 +63,7 @@
                     </template>
                 </el-table-column>
                 <el-table-column label="操作" width="100" align="center">
-                    <template #default="{ row }"><el-button type="primary" link @click="openEdit(row)">编辑/归属</el-button></template>
+                    <template #default="{ row }"><el-button v-permission="'hsx_erp_counterparty_save'" type="primary" link @click="openEdit(row)">编辑/归属</el-button></template>
                 </el-table-column>
 
                 <template #empty>
@@ -80,7 +80,7 @@
                         description="往来单位是回收客户、供应商、代卖委托方等结算主体；手工建档或回收同步时也会自动生成。"
                     >
                         <template #action>
-                            <el-button type="primary" @click="openEdit()">新增往来单位</el-button>
+                            <el-button v-permission="'hsx_erp_counterparty_save'" type="primary" @click="openEdit()">新增往来单位</el-button>
                         </template>
                     </EmptyState>
                 </template>

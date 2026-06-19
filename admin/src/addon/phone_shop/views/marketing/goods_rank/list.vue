@@ -142,11 +142,11 @@ const resetForm = (formEl: FormInstance | undefined) => {
 
 // 添加榜单
 const handleChange = () => {
-    router.push('/shop/marketing/goods_rank/edit')
+    router.push('/phone_shop/marketing/goods_rank/edit')
 }
 
 const editEvent = (data: any) => {
-    router.push('/shop/marketing/goods_rank/edit?rank_id=' + data.rank_id)
+    router.push('/phone_shop/marketing/goods_rank/edit?rank_id=' + data.rank_id)
 }
 
 const showClick = (row: any) => {

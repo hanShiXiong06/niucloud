@@ -1,7 +1,7 @@
 <template>
     <div class="main-container">
         <el-card class="box-card !border-none" shadow="never">
-            <el-page-header :content="pageName" :icon="ArrowLeft" @back="router.push('/shop/order/delivery')" />
+            <el-page-header :content="pageName" :icon="ArrowLeft" @back="router.push('/phone_shop/order/delivery')" />
         </el-card>
 
         <el-card class="box-card mt-[15px] !border-none" shadow="never">
@@ -124,7 +124,7 @@ const router = useRouter()
  * 添加自提门店
  */
 const addEvent = () => {
-    router.push('/shop/order/delivery/store/edit')
+    router.push('/phone_shop/order/delivery/store/edit')
 }
 
 /**
@@ -132,7 +132,7 @@ const addEvent = () => {
  * @param data
  */
 const editEvent = (data: any) => {
-    router.push('/shop/order/delivery/store/edit?id=' + data.store_id)
+    router.push('/phone_shop/order/delivery/store/edit?id=' + data.store_id)
 }
 
 /**

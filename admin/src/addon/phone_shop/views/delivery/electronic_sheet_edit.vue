@@ -253,7 +253,7 @@ const confirm = async(formEl: FormInstance | undefined) => {
             save(data).then(res => {
                 repeat.value = false
                 if (!formData.id) {
-                    router.push('/shop/delivery/electronic_sheet')
+                    router.push('/phone_shop/delivery/electronic_sheet')
                 }
             }).catch(err => {
                 repeat.value = false
@@ -263,7 +263,7 @@ const confirm = async(formEl: FormInstance | undefined) => {
 }
 
 const back = () => {
-    router.push('/shop/delivery/electronic_sheet')
+    router.push('/phone_shop/delivery/electronic_sheet')
 }
 </script>
 

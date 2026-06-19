@@ -821,7 +821,7 @@ const onSave = async () => {
 }
 
 const back = () => {
-    router.push('/shop/marketing/manjian/list')
+    router.push('/phone_shop/marketing/manjian/list')
 }
 
 </script>

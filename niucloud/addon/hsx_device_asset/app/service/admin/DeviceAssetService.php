@@ -477,7 +477,7 @@ class DeviceAssetService extends BaseAdminService
                 'url' => $url,
                 'oss_key' => (string)($item['oss_key'] ?? ''),
                 'source' => (string)($item['source'] ?? $data['source'] ?? 'manual'),
-                'status' => DeviceAssetDict::MEDIA_STATUS_PENDING,
+                'status' => DeviceAssetDict::MEDIA_STATUS_APPROVED, // 取消复检：上传即视为通过，不再有"待复检"
                 'sort' => (int)($item['sort'] ?? 0),
                 'operator_uid' => $this->uid,
             ];
@@ -718,20 +718,7 @@ class DeviceAssetService extends BaseAdminService
             }
 
             $this->writeLog($assetId, (int)$asset->device_id, DeviceAssetDict::ACTION_PRICE_COMPLETE, $orderData);
-            $completedEvent = [
-                'event_name' => 'device_asset.price.completed.v1',
-                'site_id' => $this->site_id,
-                'asset_id' => $assetId,
-                'device_id' => (int)$asset->device_id,
-                'operator' => ['id' => $this->uid, 'name' => $this->username ?: ''],
-                'payload' => [
-                    'erp_asset_id' => (int)(((array)$asset->ext_json)['erp_asset_id'] ?? 0),
-                    'sale_price' => $priceData['sale_price'],
-                    'peer_price' => $priceData['peer_price'],
-                    'min_price' => $priceData['min_price'],
-                    'remark' => $priceData['price_remark'],
-                ],
-            ];
+            $completedEvent = $this->buildPriceCompletedEvent($asset, (int)$assetId);
             Db::commit();
         } catch (\Throwable $e) {
             Db::rollback();
@@ -740,6 +727,59 @@ class DeviceAssetService extends BaseAdminService
         event('DeviceAssetPriceCompleted', $completedEvent);
 
         return $this->getInfo($assetId);
+    }
+
+    /**
+     * 构建"定价完成"事件（price 与 重新推送 共用）。
+     * 价格/型号/质检/图片均从资产当前数据取，保证重推也是最新。
+     */
+    private function buildPriceCompletedEvent(DeviceAssetItem $asset, int $assetId): array
+    {
+        // 本资产可用图片：与中台导出口径一致——排除已退回(rejected)，待复检(pending)与已通过(approved)都带
+        $images = (new DeviceAssetMedia())->where([
+            ['site_id', '=', $this->site_id],
+            ['asset_id', '=', $assetId],
+            ['media_type', '=', 'image'],
+            ['status', '<>', DeviceAssetDict::MEDIA_STATUS_REJECTED],
+        ])->order('sort asc, id asc')->column('url');
+
+        return [
+            'event_name' => 'device_asset.price.completed.v1',
+            'site_id'    => $this->site_id,
+            'asset_id'   => $assetId,
+            'device_id'  => (int)$asset->device_id,
+            'operator'   => ['id' => $this->uid, 'name' => $this->username ?: ''],
+            'payload'    => [
+                'erp_asset_id'    => (int)(((array)$asset->ext_json)['erp_asset_id'] ?? 0),
+                'site_id'         => $this->site_id,
+                'sale_price'      => (float)$asset->sale_price,
+                'peer_price'      => (float)$asset->peer_price,
+                'min_price'       => (float)$asset->min_price,
+                'cost_price'      => (float)$asset->recycle_final_price,
+                'remark'          => (string)$asset->price_remark,
+                'model_name'      => (string)$asset->model,
+                'imei'            => (string)$asset->imei,
+                'qc_info'         => $asset->check_summary, // json 字段(模型已转对象/数组)，原样传，勿强转字符串
+                'images'          => $images,
+            ],
+        ];
+    }
+
+    /**
+     * 重新推送：把已定价资产的最新数据再发一次事件，商城据此幂等更新货源。
+     */
+    public function rePushPriceCompleted(int $assetId): array
+    {
+        $asset = $this->getAsset($assetId);
+        if ((string)$asset->price_status !== DeviceAssetDict::PRICE_STATUS_COMPLETED) {
+            throw new CommonException('该设备尚未完成定价，无法推送');
+        }
+        $event = $this->buildPriceCompletedEvent($asset, $assetId);
+        event('DeviceAssetPriceCompleted', $event);
+        return [
+            'pushed'       => true,
+            'erp_asset_id' => $event['payload']['erp_asset_id'],
+        ];
     }
 
     /**

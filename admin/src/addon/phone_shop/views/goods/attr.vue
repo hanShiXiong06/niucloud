@@ -207,7 +207,7 @@ const confirm = async (formEl: FormInstance | undefined) => {
  * @param data
  */
 const manageEvent = (data: any) => {
-    router.push('/shop/goods/attr_edit?attr_id=' + data.attr_id)
+    router.push('/phone_shop/goods/attr_edit?attr_id=' + data.attr_id)
 }
 
 /**

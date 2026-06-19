@@ -1,7 +1,7 @@
 <template>
     <div class="main-container">
         <el-card class="card !border-none mb-[15px]" shadow="never">
-            <el-page-header :content="pageName" :icon="ArrowLeft" @back="router.push(`/shop/goods/attr`)" />
+            <el-page-header :content="pageName" :icon="ArrowLeft" @back="router.push(`/phone_shop/goods/attr`)" />
         </el-card>
         
         <el-card class="box-card !border-none" shadow="never">

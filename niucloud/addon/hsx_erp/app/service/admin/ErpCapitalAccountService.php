@@ -183,6 +183,7 @@ class ErpCapitalAccountService extends BaseAdminService
             'recycle_payment' => '回收打款',
             'expense'         => '经营支出',
             'prepay'          => '采购预付',
+            'sale_income'     => '销售收款',
             'settlement'      => '结算',
             'sale'            => '销售收款',
             'buyout'          => '代卖买断',

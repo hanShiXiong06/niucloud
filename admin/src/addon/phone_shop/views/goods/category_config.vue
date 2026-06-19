@@ -3,9 +3,9 @@
         <div class="flex ml-[18px] justify-between items-center mb-[5px]">
             <span class="text-page-title">{{ pageName }}</span>
         </div>
-        <el-tabs class="demo-tabs mx-[18px]" model-value="/shop/goods/category/config" @tab-change="handleClick">
-            <el-tab-pane :label="t('tabGoodsCategory')" name="/shop/goods/category" />
-            <el-tab-pane :label="t('tabGoodsCategoryConfig')" name="/shop/goods/category/config" />
+        <el-tabs class="demo-tabs mx-[18px]" model-value="/phone_shop/goods/category/config" @tab-change="handleClick">
+            <el-tab-pane :label="t('tabGoodsCategory')" name="/phone_shop/goods/category" />
+            <el-tab-pane :label="t('tabGoodsCategoryConfig')" name="/phone_shop/goods/category/config" />
         </el-tabs>
         <el-form v-if="Object.keys(formData).length" :model="formData" label-width="170" ref="formRef" :rules="rules" class="page-form" v-loading="loading">
             <el-card class="box-card !border-none" shadow="never">

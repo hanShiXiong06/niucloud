@@ -1335,6 +1335,8 @@ class RecycleDeviceService extends BaseAdminService
                     'source_no'         => $orderNo !== '' ? $orderNo : ('DEV' . (int)$device->id),
                     'source_device_id'  => (int)$device->id,
                     'occurred_at'       => time(),
+                    'operator_uid'      => (int)$this->uid,
+                    'operator_name'     => (string)($this->username ?? ''),
                     'remark'            => '确认回收生成应付',
                 ]);
             }
@@ -1810,7 +1812,7 @@ class RecycleDeviceService extends BaseAdminService
                 $orderStatus = RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT;
                 $this->addDeviceLog(0, 0, 0, "所有设备都处于终态，有{$deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_RECYCLED]}台设备已回收，订单进入待打款状态", $orderId);
             }
-            // 如果没有普通回收设备，但存在代卖设备，主回收订单处理已闭环
+            // 如果没有普通回收设备，但存在代卖设备，主回收订单处理已完成
             else if ($deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED] > 0) {
                 $orderStatus = RecycleOrderDict::ORDER_STATUS_COMPLETED;
                 $this->addDeviceLog(0, 0, 0, "所有设备都处于终态，有{$deviceStatusCounts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED]}台设备已转代卖，订单进入已完成状态", $orderId);

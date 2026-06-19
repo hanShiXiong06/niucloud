@@ -176,7 +176,7 @@ const getActiveDiscountStatusListFn = () => {
 getActiveDiscountStatusListFn()
 // 添加折扣券
 const handleChange = () => {
-    router.push('/shop/marketing/discount/add')
+    router.push('/phone_shop/marketing/discount/add')
 }
 // 详情
 const discountDetailDialog: Record<string, any> | null = ref(null)
@@ -187,7 +187,7 @@ const detailEvent = (id:number) => {
 }
 // 编辑折扣券
 const editEvent = (id:number) => {
-    router.push({ path: '/shop/marketing/discount/edit', query: { id } })
+    router.push({ path: '/phone_shop/marketing/discount/edit', query: { id } })
 }
 // 关闭
 const closeEvent = (id:number) => {

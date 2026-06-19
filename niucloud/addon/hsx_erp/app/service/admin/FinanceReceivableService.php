@@ -51,8 +51,23 @@ class FinanceReceivableService extends BaseAdminService
         if (!empty($where['source_type'])) {
             $query->where('source_type', '=', (string)$where['source_type']);
         }
+        if (!empty($where['operator'])) {
+            $devIds = FinanceCounterpartyBalanceService::deviceIdsByOperator($this->site_id, (string)$where['operator']);
+            if (empty($devIds)) {
+                $query->where('id', '=', -1);
+            } else {
+                $query->whereIn('source_device_id', $devIds);
+            }
+        }
         if (!empty($where['keyword'])) {
-            $query->where('counterparty_name|source_no', 'like', '%' . trim((string)$where['keyword']) . '%');
+            $kw = trim((string)$where['keyword']);
+            $cpIds = FinanceCounterpartyBalanceService::counterpartyIdsByKeyword($this->site_id, $kw);
+            $query->where(function ($q) use ($kw, $cpIds) {
+                $q->whereLike('counterparty_name', '%' . $kw . '%')->whereOr('source_no', 'like', '%' . $kw . '%');
+                if (!empty($cpIds)) {
+                    $q->whereOr('counterparty_id', 'in', $cpIds);
+                }
+            });
         }
         if (!empty($where['start_time'])) {
             $query->where('occurred_at', '>=', (int)$where['start_time']);
@@ -92,6 +107,10 @@ class FinanceReceivableService extends BaseAdminService
             }
         }
         unset($row);
+        // 经手人（销售应收 → 销售员）
+        if (!empty($data['data']) && is_array($data['data'])) {
+            FinanceCounterpartyBalanceService::attachOperators($this->site_id, $data['data']);
+        }
         return $data;
     }
 

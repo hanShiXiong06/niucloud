@@ -7,9 +7,9 @@
                 <el-button type="primary" @click="addEvent">{{ t('addElectronicSheet') }}</el-button>
             </div>
 
-            <el-tabs model-value="/shop/delivery/electronic_sheet" @tab-change="handleClick">
-                <el-tab-pane :label="t('tabESTemplate')" name="/shop/delivery/electronic_sheet" />
-                <el-tab-pane :label="t('tabESConfig')" name="/shop/delivery/electronic_sheet/config" />
+            <el-tabs model-value="/phone_shop/delivery/electronic_sheet" @tab-change="handleClick">
+                <el-tab-pane :label="t('tabESTemplate')" name="/phone_shop/delivery/electronic_sheet" />
+                <el-tab-pane :label="t('tabESConfig')" name="/phone_shop/delivery/electronic_sheet/config" />
             </el-tabs>
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
@@ -143,7 +143,7 @@ getCompanyList({
  * 添加电子面单
  */
 const addEvent = () => {
-    router.push('/shop/delivery/electronic_sheet_add')
+    router.push('/phone_shop/delivery/electronic_sheet_add')
 }
 
 /**
@@ -151,7 +151,7 @@ const addEvent = () => {
  * @param data
  */
 const editEvent = (data: any) => {
-    router.push('/shop/delivery/electronic_sheet_edit?id=' + data.id)
+    router.push('/phone_shop/delivery/electronic_sheet_edit?id=' + data.id)
 }
 
 /**

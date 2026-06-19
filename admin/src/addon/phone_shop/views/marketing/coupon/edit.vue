@@ -446,7 +446,7 @@ const goodsSelect = (value: any) => {
 }
 
 const back = () => {
-    router.push('/shop/marketing/coupon/list')
+    router.push('/phone_shop/marketing/coupon/list')
 }
 </script>
 

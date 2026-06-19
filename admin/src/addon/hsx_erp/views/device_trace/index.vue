@@ -52,7 +52,8 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import TraceDetail from './trace-detail.vue'
 import { searchDeviceTrace } from '@/addon/hsx_erp/api/device_trace'
@@ -88,4 +89,15 @@ function openDetail(row: any) {
     td.deviceId = row.device_id || 0
     td.visible = true
 }
+
+// 支持从 AI 助手等处带 device_id 进来，直接打开链路详情
+const route = useRoute()
+onMounted(() => {
+    const did = Number(route.query.device_id || 0)
+    if (did > 0) {
+        td.assetId = 0
+        td.deviceId = did
+        td.visible = true
+    }
+})
 </script>

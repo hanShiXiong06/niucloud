@@ -126,7 +126,7 @@ export function useGoodsEdit(params: any = {}) {
     // 切换商品类型
     const changeGoodsType = (data: any) => {
         // 添加商品是切换类型不应该是edit
-        let url = '/shop/goods/'+data.type + '_add'
+        let url = '/phone_shop/goods/'+data.type + '_add'
         router.push(url)
     }
 
@@ -153,7 +153,7 @@ export function useGoodsEdit(params: any = {}) {
     // 跳转到商品分类，添加分类
     const toGoodsCategoryEvent = () => {
         const url = router.resolve({
-            path: '/shop/goods/category'
+            path: '/phone_shop/goods/category'
         })
         window.open(url.href)
     }
@@ -199,7 +199,7 @@ export function useGoodsEdit(params: any = {}) {
     // 跳转到商品品牌，添加品牌
     const toGoodsBrandEvent = () => {
         const url = router.resolve({
-            path: '/shop/goods/brand'
+            path: '/phone_shop/goods/brand'
         })
         window.open(url.href)
     }
@@ -337,7 +337,7 @@ export function useGoodsEdit(params: any = {}) {
     // 跳转到商品标签，添加标签
     const toGoodsLabelEvent = () => {
         const url = router.resolve({
-            path: '/shop/goods/label'
+            path: '/phone_shop/goods/label'
         })
         window.open(url.href)
     }
@@ -360,7 +360,7 @@ export function useGoodsEdit(params: any = {}) {
     // 跳转到商品服务，添加服务
     const toGoodsServiceEvent = () => {
         const url = router.resolve({
-            path: '/shop/goods/service'
+            path: '/phone_shop/goods/service'
         })
         window.open(url.href)
     }
@@ -1426,7 +1426,7 @@ export function useGoodsEdit(params: any = {}) {
 
             api(data).then((res: any) => {
                 repeat.value = false
-                router.push('/shop/goods/list')
+                router.push('/phone_shop/goods/list')
             }).catch(() => {
                 repeat.value = false
             })
@@ -1434,7 +1434,7 @@ export function useGoodsEdit(params: any = {}) {
     }
 
     const back = () => {
-        router.push('/shop/goods/list')
+        router.push('/phone_shop/goods/list')
     }
 
     const filterSpecial = (event: any) => {

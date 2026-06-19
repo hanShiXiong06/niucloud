@@ -9,9 +9,9 @@
                 </el-button>
             </div>
 
-            <el-tabs model-value="/shop/goods/label/group" @tab-change="handleClick">
-                <el-tab-pane :label="t('tabGoodsLabel')" name="/shop/goods/label" />
-                <el-tab-pane :label="t('tabGoodsLabelGroup')" name="/shop/goods/label/group" />
+            <el-tabs model-value="/phone_shop/goods/label/group" @tab-change="handleClick">
+                <el-tab-pane :label="t('tabGoodsLabel')" name="/phone_shop/goods/label" />
+                <el-tab-pane :label="t('tabGoodsLabelGroup')" name="/phone_shop/goods/label/group" />
             </el-tabs>
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">

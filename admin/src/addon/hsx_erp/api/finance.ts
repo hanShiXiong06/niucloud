@@ -4,6 +4,10 @@ import request from '@/utils/request'
 export function getFinanceBalanceBoard() {
     return request.get('erp/finance/board')
 }
+// 按设备对账(导出用): 一台机器一行的全链路账目
+export function getFinanceReconciliation(params: Record<string, any> = {}) {
+    return request.get('erp/finance/reconciliation', { params })
+}
 // 某往来单位待结算应付
 export function getFinancePayableOutstanding(counterpartyId: number) {
     return request.get('erp/finance/payable/outstanding', { params: { counterparty_id: counterpartyId } })

@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\service\admin;
 
+use addon\hsx_erp\app\dict\ErpDict;
 use addon\hsx_erp\app\dict\FinanceDict;
+use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpCapitalAccount;
 use addon\hsx_erp\app\model\FinancePayable;
 use addon\hsx_erp\app\model\FinanceReceivable;
@@ -68,7 +70,16 @@ class FinanceSettlementService extends BaseAdminService
         }
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->where('settlement_no|counterparty_name', 'like', '%' . $kw . '%');
+            $cpIds = FinanceCounterpartyBalanceService::counterpartyIdsByKeyword($this->site_id, $kw);
+            $query->where(function ($q) use ($kw, $cpIds) {
+                $q->whereLike('settlement_no|counterparty_name', '%' . $kw . '%');
+                if (!empty($cpIds)) {
+                    $q->whereOr('counterparty_id', 'in', $cpIds);
+                }
+            });
+        }
+        if (!empty($where['operator'])) {
+            $query->whereLike('operator_name', '%' . trim((string)$where['operator']) . '%');
         }
         if (!empty($where['start_time'])) {
             $query->where('occurred_at', '>=', (int)$where['start_time']);
@@ -491,7 +502,41 @@ class FinanceSettlementService extends BaseAdminService
         // 发结算完成事件(故障隔离, 不回抛): 业务/ERP 订阅以更新各自展示
         $this->emitSettlementCompleted($settlementId, $no, $anchorId, $summary, $plan, $eventId, $now);
 
+        // 同行销售应收被收齐 → 把对应设备从「销售锁定」翻成「已售/下架」(所有收款入口统一闭环)
+        $this->markPeerSaleSoldByReceivables($plan['receivable_alloc'] ?? []);
+
         return ['settlement_id' => $settlementId, 'settlement_no' => $no, 'summary' => $summary];
+    }
+
+    /**
+     * 同行销售应收被收齐后, 把对应设备从「销售锁定(LOCKED)」翻成「已售/下架(OUTBOUND)」。
+     * 覆盖所有收款入口(财务中心收款 / 出库回填收款 / 卖同行待办), 故障隔离不回抛。
+     * @param array $receivableAlloc plan 的 receivable_alloc(含被本次核销的应收 id)
+     */
+    private function markPeerSaleSoldByReceivables(array $receivableAlloc): void
+    {
+        try {
+            $rids = array_values(array_filter(array_map(static fn($a) => (int)($a['id'] ?? 0), $receivableAlloc)));
+            if (empty($rids)) {
+                return;
+            }
+            // 只取已收齐(无未结额)的同行销售应收对应的设备
+            $deviceIds = FinanceReceivable::where([['site_id', '=', $this->site_id]])
+                ->whereIn('id', $rids)
+                ->where('source_type', '=', 'erp_peer_sale')
+                ->whereRaw('amount - settled_amount <= 0.001')
+                ->column('source_device_id');
+            $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
+            if (empty($deviceIds)) {
+                return;
+            }
+            $now = time();
+            ErpAsset::where([['site_id', '=', $this->site_id], ['inventory_status', '=', ErpDict::INVENTORY_LOCKED]])
+                ->whereIn('source_device_id', $deviceIds)
+                ->update(['inventory_status' => ErpDict::INVENTORY_OUTBOUND, 'stock_out_at' => $now, 'update_at' => $now]);
+        } catch (\Throwable $e) {
+            Log::warning('[erp] 同行收齐翻已售失败: ' . $e->getMessage());
+        }
     }
 
     /**

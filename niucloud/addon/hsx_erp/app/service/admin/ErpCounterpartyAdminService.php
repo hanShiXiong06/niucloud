@@ -171,6 +171,119 @@ class ErpCounterpartyAdminService extends BaseAdminService
         ];
     }
 
+    /**
+     * 主体级往来流水明细（含已结清），每笔标注归属对接人（谁的账目）
+     * 口径：财务表 counterparty_id 即对接人 member_id；主体下可能有多名对接人，统一汇总。
+     * @param int $entityId 主体(往来单位)id；>0 则展开其下全部对接人
+     * @param int $memberId 对接人 id；当 entityId<=0 时按此人单独查
+     */
+    public function counterpartyDealings(int $entityId, int $memberId = 0, int $start = 0, int $end = 0): array
+    {
+        if ($entityId > 0) {
+            $memberIds = ErpCounterpartyMember::where([
+                ['site_id', '=', $this->site_id],
+                ['counterparty_id', '=', $entityId],
+                ['status', '=', 1],
+            ])->column('member_id');
+        } elseif ($memberId > 0) {
+            $memberIds = [$memberId];
+        } else {
+            $memberIds = [];
+        }
+        $memberIds = array_values(array_unique(array_filter(array_map('intval', $memberIds))));
+
+        $entity = $entityId > 0
+            ? ErpCounterparty::where([['id', '=', $entityId]])->field('id,name')->findOrEmpty()->toArray()
+            : [];
+
+        $empty = [
+            'entity_id'    => $entityId,
+            'entity_name'  => (string)($entity['name'] ?? ''),
+            'members'      => [],
+            'record_count' => 0,
+            'totals'       => ['payable_total' => 0, 'receivable_total' => 0, 'payable_outstanding' => 0, 'receivable_outstanding' => 0, 'net_outstanding' => 0],
+            'records'      => [],
+            'note'         => '未找到对接人，无法查询往来',
+        ];
+        if (empty($memberIds)) {
+            return $empty;
+        }
+
+        // 对接人名片（谁的账目）
+        $memberRows = Member::where([['site_id', '=', $this->site_id]])
+            ->whereIn('member_id', $memberIds)
+            ->field('member_id,username,nickname,mobile')->select()->toArray();
+        $memberMap = [];
+        $memberList = [];
+        foreach ($memberRows as $m) {
+            $name = (string)($m['nickname'] ?: $m['username'] ?: ('会员#' . $m['member_id']));
+            $memberMap[(int)$m['member_id']] = ['name' => $name, 'mobile' => (string)($m['mobile'] ?? '')];
+            $memberList[] = ['member_id' => (int)$m['member_id'], 'name' => $name, 'mobile' => (string)($m['mobile'] ?? '')];
+        }
+
+        $open = ['pending', 'partial'];
+        $records = [];
+        $totals = ['payable_total' => 0.0, 'receivable_total' => 0.0, 'payable_outstanding' => 0.0, 'receivable_outstanding' => 0.0];
+
+        $payQ = FinancePayable::where([['site_id', '=', $this->site_id]])->whereIn('counterparty_id', $memberIds);
+        $recQ = FinanceReceivable::where([['site_id', '=', $this->site_id]])->whereIn('counterparty_id', $memberIds);
+        if ($start > 0) {
+            $payQ->where('occurred_at', '>=', $start);
+            $recQ->where('occurred_at', '>=', $start);
+        }
+        if ($end > 0) {
+            $payQ->where('occurred_at', '<=', $end);
+            $recQ->where('occurred_at', '<=', $end);
+        }
+        $payRows = $payQ->order('occurred_at desc')->limit(200)->select()->toArray();
+        $recRows = $recQ->order('occurred_at desc')->limit(200)->select()->toArray();
+
+        $build = function (array $rows, string $type, string $label) use (&$records, &$totals, $memberMap, $open) {
+            foreach ($rows as $r) {
+                $amount = (float)($r['amount'] ?? 0);
+                $settled = (float)($r['settled_amount'] ?? 0);
+                $outstanding = round($amount - $settled, 2);
+                $owner = $memberMap[(int)($r['counterparty_id'] ?? 0)] ?? ['name' => '', 'mobile' => ''];
+                $totals[$type . '_total'] += $amount;
+                $totals[$type . '_outstanding'] += $outstanding;
+                $status = (string)($r['status'] ?? '');
+                $records[] = [
+                    'direction'    => $label,
+                    'owner'        => $owner['name'],
+                    'owner_mobile' => $owner['mobile'],
+                    'amount'       => round($amount, 2),
+                    'settled'      => round($settled, 2),
+                    'outstanding'  => $outstanding,
+                    'status'       => in_array($status, $open, true) ? '未结清' : ($status === 'settled' ? '已结清' : ($status === 'void' ? '已作废' : $status)),
+                    'source_no'    => (string)($r['source_no'] ?? ''),
+                    'device_id'    => (int)($r['source_device_id'] ?? 0),
+                    'remark'       => (string)($r['remark'] ?? ''),
+                    'occurred_at'  => !empty($r['occurred_at']) ? date('Y-m-d H:i', (int)$r['occurred_at']) : '',
+                ];
+            }
+        };
+        $build($payRows, 'payable', '应付');
+        $build($recRows, 'receivable', '应收');
+
+        foreach ($totals as $k => $v) {
+            $totals[$k] = round($v, 2);
+        }
+        $totals['net_outstanding'] = round($totals['payable_outstanding'] - $totals['receivable_outstanding'], 2);
+
+        usort($records, fn($a, $b) => strcmp((string)$b['occurred_at'], (string)$a['occurred_at']));
+
+        return [
+            'entity_id'    => $entityId,
+            'entity_name'  => (string)($entity['name'] ?? ''),
+            'range'        => ['start' => $start > 0 ? date('Y-m-d', $start) : '不限', 'end' => $end > 0 ? date('Y-m-d', $end) : '不限'],
+            'members'      => $memberList,
+            'record_count' => count($records),
+            'totals'       => $totals,
+            'records'      => $records,
+            'note'         => $records ? '' : '该时间段内该主体暂无往来记录',
+        ];
+    }
+
     /** 往主体里添加一名对接人(会员)。一个会员只能属于一个主体，已属其他主体则改归本主体。 */
     public function addMember(int $counterpartyId, int $memberId, string $relationRole = 'business', int $isFinanceContact = 0): void
     {

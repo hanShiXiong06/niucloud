@@ -73,6 +73,7 @@
         <div v-if="props.orderStatusMap[row.status]?.action?.length" class="mb-2 flex flex-wrap gap-2">
           <el-button
             v-for="action in props.orderStatusMap[row.status].action"
+            v-show="hasActionPerm(action.key)"
             :key="action.key"
             size="small"
             :type="props.getActionButtonType(action.key)"
@@ -82,7 +83,7 @@
             {{ action.value }}
           </el-button>
           <el-button
-            v-if="row.available_actions?.can_pay_devices && !props.orderStatusMap[row.status]?.action?.some((action: any) => action.key === 'order_payment')"
+            v-if="hasActionPerm('order_payment') && row.available_actions?.can_pay_devices && !props.orderStatusMap[row.status]?.action?.some((action: any) => action.key === 'order_payment')"
             type="primary"
             size="small"
             :icon="props.getActionIcon('order_payment')"
@@ -118,7 +119,7 @@
         </div>
         <div v-else class="mb-2 flex flex-wrap gap-2">
           <el-button
-            v-if="row.available_actions?.can_pay_devices"
+            v-if="hasActionPerm('order_payment') && row.available_actions?.can_pay_devices"
             type="primary"
             size="small"
             :icon="props.getActionIcon('order_payment')"
@@ -275,6 +276,19 @@ import {
 } from "@element-plus/icons-vue";
 import DeviceStatusBadge from "./DeviceStatusBadge.vue";
 import { useDeviceRowActions } from "@/addon/hsx_recycle/hooks/useDeviceRowActions";
+import useUserStore from "@/stores/modules/user";
+
+// 高危订单动作 → 权限点（无权限不显示）
+const userStore = useUserStore();
+const ACTION_PERM: Record<string, string> = {
+  order_payment: "recycle_order_payment_confirm",
+  order_payment_confirm: "recycle_order_payment_confirm",
+  order_delete: "recycle_order_delete",
+};
+const hasActionPerm = (key: string) => {
+  const perm = ACTION_PERM[key];
+  return !perm || (userStore.rules || []).includes(perm);
+};
 
 interface Props {
   loading: boolean;

@@ -125,6 +125,7 @@ class ErpDict
             'create_pending_asset'      => '建档待入库',
             'stock_in'                  => '入库',
             'confirm_stock_in'          => '确认入库',
+            'photo_completed'           => '完成拍照入库',
             'skip_refurbishment'        => '跳过整备',
             'auto_create_refurbishment' => '自动发起整备',
             'refurbishment_start'       => '发起整备',
@@ -136,6 +137,7 @@ class ErpDict
             'outbound'                  => '出库',
             'return_outbound'           => '退货出库',
             'stocktake_loss'            => '盘点核销丢失',
+            'stocktake_restore'         => '盘点找回',
         ];
     }
 
@@ -143,10 +145,12 @@ class ErpDict
     public static function getCostTypeMap(): array
     {
         return [
-            'purchase'       => '采购成本',
-            'manual_adjust'  => '手动调成本',
-            'refurbishment'  => '整备费用',
-            'return_reverse' => '退货冲回',
+            'purchase'           => '采购成本',
+            'manual_adjust'      => '手动调成本',
+            'refurbishment'      => '整备费用',
+            'return_reverse'     => '退货冲回',
+            'buyout'             => '代卖买断成本',
+            'recycle_cost_sync'  => '回收成本同步',
         ];
     }
 }

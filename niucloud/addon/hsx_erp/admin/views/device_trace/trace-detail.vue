@@ -41,27 +41,50 @@
                     <span>{{ data.overview.turnaround.sold ? '总周转' : '累计' }} <b class="text-[var(--el-color-primary)]">{{ tDays(data.overview.turnaround.total) }}</b></span>
                 </div>
 
+                <!-- 关键财务节点摘要(日志多时一眼看清钱的走向) -->
+                <div v-if="finEvents.length" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2">
+                    <div class="mb-1 text-xs font-medium text-amber-700">关键财务节点</div>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                        <span v-if="finSummary.payable > 0" class="text-orange-600">应付 ¥{{ finSummary.payable.toFixed(2) }}</span>
+                        <span v-if="finSummary.paid > 0" class="text-orange-600">已付 ¥{{ finSummary.paid.toFixed(2) }}</span>
+                        <span v-if="finSummary.receivable > 0" class="text-green-600">应收 ¥{{ finSummary.receivable.toFixed(2) }}</span>
+                        <span v-if="finSummary.received > 0" class="text-green-600">已收 ¥{{ finSummary.received.toFixed(2) }}</span>
+                        <span v-if="finSummary.settle > 0" class="text-[var(--el-color-primary)]">结算 {{ finSummary.settle }} 笔</span>
+                    </div>
+                </div>
+
                 <!-- 时间线 -->
                 <div class="mt-4 flex items-center justify-between">
-                    <span class="font-medium">全链路时间线</span>
-                    <el-checkbox v-model="showDetail" label="显示细节节点" />
+                    <div class="flex items-center gap-2">
+                        <span class="font-medium">全链路时间线</span>
+                        <el-tag v-if="visibleEvents.length" size="small" type="info" effect="plain">{{ visibleEvents.length }} 条</el-tag>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <el-checkbox v-model="finOnly" label="只看财务" />
+                        <el-checkbox v-model="showDetail" :disabled="finOnly" label="显示细节节点" />
+                    </div>
                 </div>
-                <el-timeline class="mt-3">
-                    <el-timeline-item v-for="(e, i) in visibleEvents" :key="i" :timestamp="formatTime(e.time)" placement="top"
-                        :type="stageType(e.stage)" :hollow="!e.key">
-                        <div class="flex items-center gap-2">
-                            <el-tag size="small" :type="stageType(e.stage)" effect="plain">{{ e.stage }}</el-tag>
-                            <span class="font-medium">{{ e.title }}</span>
-                            <span v-if="Number(e.amount) > 0" class="text-sm text-gray-600">¥{{ Number(e.amount).toFixed(2) }}</span>
-                        </div>
-                        <clamp-text v-if="e.detail" :text="e.detail" :rows="3" class="mt-0.5 text-sm text-gray-600" />
-                        <div class="mt-0.5 text-xs text-gray-400">
-                            <span v-if="e.operator_name">操作人：{{ e.operator_name }}</span>
-                            <span v-if="e.no"> · 单号：{{ e.no }}</span>
-                        </div>
-                    </el-timeline-item>
-                </el-timeline>
-                <div v-if="!visibleEvents.length" class="py-6 text-center text-sm text-gray-400">暂无可展示的链路节点</div>
+                <!-- 固定高度内滚动，避免整页拉得过长 -->
+                <div class="trace-timeline-scroll mt-3">
+                    <el-timeline>
+                        <el-timeline-item v-for="(e, i) in visibleEvents" :key="i" :timestamp="formatTime(e.time)" placement="top"
+                            :type="stageType(e.stage)" :hollow="!e.key">
+                            <div :class="e.stage === '财务' ? 'rounded-md border-l-[3px] border-amber-400 bg-amber-50 px-2.5 py-1.5' : ''">
+                                <div class="flex items-center gap-2">
+                                    <el-tag size="small" :type="stageType(e.stage)" :effect="e.stage === '财务' ? 'dark' : 'plain'">{{ e.stage }}</el-tag>
+                                    <span class="font-medium" :class="e.stage === '财务' ? 'text-amber-700' : ''">{{ e.title }}</span>
+                                    <el-tag v-if="Number(e.amount) > 0" size="small" :type="e.stage === '财务' ? 'warning' : 'info'" effect="light">¥{{ Number(e.amount).toFixed(2) }}</el-tag>
+                                </div>
+                                <clamp-text v-if="e.detail" :text="e.detail" :rows="3" class="mt-0.5 text-sm text-gray-600" />
+                                <div class="mt-0.5 text-xs text-gray-400">
+                                    <span v-if="e.operator_name">操作人：{{ e.operator_name }}</span>
+                                    <span v-if="e.no"> · 单号：{{ e.no }}</span>
+                                </div>
+                            </div>
+                        </el-timeline-item>
+                    </el-timeline>
+                    <div v-if="!visibleEvents.length" class="py-6 text-center text-sm text-gray-400">暂无可展示的链路节点</div>
+                </div>
             </template>
         </div>
 
@@ -98,9 +121,26 @@ const stageType = (s: string) => (s === '回收' ? 'success' : s === '中台' ? 
 const loading = ref(false)
 const data = ref<any>(null)
 const showDetail = ref(true)
+const finOnly = ref(false)
 const visibleEvents = computed(() => {
     const evs = data.value?.events || []
+    if (finOnly.value) return evs.filter((e: any) => e.stage === '财务')
     return showDetail.value ? evs : evs.filter((e: any) => e.key)
+})
+// 财务节点 + 摘要(应付/已付/应收/已收/结算)
+const finEvents = computed(() => (data.value?.events || []).filter((e: any) => e.stage === '财务'))
+const finSummary = computed(() => {
+    const out = { payable: 0, paid: 0, receivable: 0, received: 0, settle: 0 }
+    for (const e of finEvents.value) {
+        const t = String(e.title || '')
+        const a = Number(e.amount || 0)
+        if (t.includes('应付')) out.payable += a
+        else if (t.includes('付款')) out.paid += a
+        else if (t.includes('应收')) out.receivable += a
+        else if (t.includes('收款')) out.received += a
+        else if (t.includes('结算')) out.settle += 1
+    }
+    return out
 })
 async function onOpen() {
     loading.value = true
@@ -120,3 +160,17 @@ function openEntity(id: number) {
     entityDrawer.visible = true
 }
 </script>
+
+<style lang="scss" scoped>
+/* 时间线固定高度内滚动，长链路不再撑长整页 */
+.trace-timeline-scroll {
+    max-height: 420px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 6px;
+
+    &::-webkit-scrollbar { width: 5px; }
+    &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+}
+</style>

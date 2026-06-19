@@ -134,7 +134,7 @@ const resetForm = (formEl: FormInstance | undefined) => {
 }
 
 const handleChange = () => {
-    router.push('/shop/marketing/manjian/edit')
+    router.push('/phone_shop/marketing/manjian/edit')
 }
 
 const statusList = ref<{ [key: string]: string }>({})
@@ -147,7 +147,7 @@ const getManjianStatusListFn = () => {
 getManjianStatusListFn()
 // 编辑满减送活动
 const editEvent = (data: any) => {
-    router.push('/shop/marketing/manjian/edit?id=' + data.manjian_id)
+    router.push('/phone_shop/marketing/manjian/edit?id=' + data.manjian_id)
 }
 
 // 详情

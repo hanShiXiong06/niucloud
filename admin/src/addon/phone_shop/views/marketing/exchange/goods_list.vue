@@ -209,12 +209,12 @@ const getActiveExchangeStatusFn = () => {
 getActiveExchangeStatusFn()
 // 添加商品
 const handleChange = () => {
-    router.push('/shop/marketing/exchange/goods_add')
+    router.push('/phone_shop/marketing/exchange/goods_add')
 }
 
 // 编辑商品
 const editEvent = (id: number) => {
-    router.push({ path: '/shop/marketing/exchange/goods_edit', query: { id } })
+    router.push({ path: '/phone_shop/marketing/exchange/goods_edit', query: { id } })
 }
 // 商品推广
 const spreadPopupRef = ref(null)

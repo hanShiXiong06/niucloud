@@ -290,6 +290,7 @@
 <script setup lang="ts">
 import { ElMessageBox, ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import useUserStore from '@/stores/modules/user'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import { useDeviceRowActions } from '@/addon/hsx_recycle/hooks/useDeviceRowActions'
 import {
@@ -349,6 +350,18 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+// 高危订单动作 → 权限点（没权限则该动作不显示）
+const userStore = useUserStore()
+const ACTION_PERM: Record<string, string> = {
+  order_payment: 'recycle_order_payment_confirm',
+  order_payment_confirm: 'recycle_order_payment_confirm',
+  order_delete: 'recycle_order_delete',
+}
+const hasActionPerm = (key: string) => {
+  const perm = ACTION_PERM[key]
+  return !perm || (userStore.rules || []).includes(perm)
+}
 const emit = defineEmits(['refresh'])
 
 // 设备操作主次：主行动 + 更多动作（单一真源，桌面/移动复用）
@@ -415,7 +428,8 @@ const getRowActions = (row: any) => {
     { key: 'notice_logs', value: '通知记录', type: 'notice_logs', icon: Bell, raw: null },
   )
 
-  return actions
+  // 按权限过滤高危动作（打款/删除等）
+  return actions.filter((a: any) => hasActionPerm(a.key))
 }
 
 const handleRowAction = (row: any, item: any) => {

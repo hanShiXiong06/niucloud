@@ -306,10 +306,14 @@
             与客户差额已沟通/已处理
           </el-checkbox>
         </el-form-item>
-        <el-form-item label="进销存提醒" required>
-          <el-checkbox v-model="costAdjustForm.inventory_tip_confirmed" :true-label="1" :false-label="0">
-            我已知晓：提交后需要同步修改进销存软件中的该设备库存成本
-          </el-checkbox>
+        <el-form-item label="同步进销存">
+          <div>
+            <el-switch v-model="costAdjustForm.auto_sync_erp" :active-value="1" :inactive-value="0" active-text="自动同步" inactive-text="手动处理" inline-prompt />
+            <div class="text-xs text-gray-400 mt-1">
+              <template v-if="Number(costAdjustForm.auto_sync_erp) === 1">开启后，调整将自动同步到 ERP（进销存）的该设备库存成本；若未使用 ERP 则自动忽略，无影响。</template>
+              <template v-else>关闭后仅在回收侧调整，请记得手动同步进销存软件中的库存成本。</template>
+            </div>
+          </div>
         </el-form-item>
       </el-form>
 
@@ -420,7 +424,7 @@ const costAdjustForm = reactive({
     adjust_amount: 0,
     reason: '',
     customer_handled: 0,
-    inventory_tip_confirmed: 0
+    auto_sync_erp: 1
 })
 
 const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
@@ -512,7 +516,7 @@ const openCostAdjustDialog = () => {
     costAdjustForm.adjust_amount = 0
     costAdjustForm.reason = ''
     costAdjustForm.customer_handled = 0
-    costAdjustForm.inventory_tip_confirmed = 0
+    costAdjustForm.auto_sync_erp = 1
     costAdjustDialog.visible = true
     loadCostAdjustLogs()
 }
@@ -538,10 +542,6 @@ const submitCostAdjust = async () => {
         ElMessage.warning('请填写成本调整原因')
         return
     }
-    if (Number(costAdjustForm.inventory_tip_confirmed) !== 1) {
-        ElMessage.warning('请先确认进销存成本同步提醒')
-        return
-    }
     costAdjustDialog.submitting = true
     try {
         const res: any = await adjustDeviceCost(deviceData.value.id, { ...costAdjustForm })
@@ -553,7 +553,7 @@ const submitCostAdjust = async () => {
         deviceData.value.last_cost_adjust_no = data.adjust_no
         await loadCostAdjustLogs()
         costAdjustDialog.visible = false
-        ElMessage.success('成本已调整，请同步修改进销存软件成本')
+        ElMessage.success(Number(costAdjustForm.auto_sync_erp) === 1 ? '成本已调整，并已自动同步至 ERP（进销存）' : '成本已调整，请记得手动同步进销存软件成本')
         emit('updated', deviceData.value)
     } catch (error: any) {
         ElMessage.error(error?.msg || error?.message || '成本调整失败')

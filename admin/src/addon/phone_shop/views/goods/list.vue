@@ -171,6 +171,9 @@
 
                     <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
                         <template #default="{ row }">
+                            <el-button v-if="canSell(row)" type="success" link @click="openSell(row)">开单卖出</el-button>
+                            <el-tag v-else-if="row.sale_status === 'sold'" type="info" size="small" effect="plain">已售</el-tag>
+                            <el-tag v-else-if="row.sale_status === 'locked'" type="warning" size="small" effect="plain">锁定</el-tag>
                             <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
                             <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods') }}</el-button>
                             <el-button type="primary" link @click="memberPriceEvent(row)">{{ t('memberPrice') }}</el-button>
@@ -213,6 +216,9 @@
 
         <!-- 批量设置弹出框 -->
         <goods-batch-settings-popup ref="goodsBatchSettingPopupRef" @load="loadGoodsListReset" />
+
+        <!-- 开单卖出（调 ERP 出库） -->
+        <sell-dialog v-model="sellState.visible" :goods="sellState.row" @done="loadGoodsList(getTablePageStorage(goodsTable.searchParam).page)" />
     </div>
 </template>
 
@@ -227,6 +233,7 @@ import goodsMemberPricePopup from '@/addon/phone_shop/views/goods/components/goo
 import goodsStockEditPopup from '@/addon/phone_shop/views/goods/components/goods-stock-edit-popup.vue'
 import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods-price-edit-popup.vue'
 import goodsBatchSettingsPopup from '@/addon/phone_shop/views/goods/components/goods-batch-settings-popup.vue'
+import sellDialog from '@/addon/phone_shop/views/goods/components/sell-dialog.vue'
 import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods,editGoodssingleStatus } from '@/addon/phone_shop/api/goods'
 import { getMemberLevelAll } from '@/app/api/member'
 import spreadPopup from '@/components/spread-popup/index.vue'
@@ -719,9 +726,9 @@ loadGoodsList(getTablePageStorage(goodsTable.searchParam).page)
  * 添加商品
  */
 const addEvent = () => {
-    router.push('/shop/goods/real_add')
+    router.push('/phone_shop/goods/real_add')
     // let url = router.resolve({
-    //     path: '/shop/goods/real_edit',
+    //     path: '/phone_shop/goods/real_edit',
     // });
     // window.open(url.href);
 }
@@ -730,6 +737,18 @@ const addEvent = () => {
  * 编辑商品
  * @param data
  */
+// 开单卖出（仅在售 + 关联了 ERP 设备的机可开单）
+const sellState = reactive<{ visible: boolean; row: any }>({ visible: false, row: {} })
+const canSell = (row: any) => {
+    const sku = row?.goodsSku || row?.goods_sku || {}
+    const saleStatus = row?.sale_status || 'available'
+    return Number(sku?.erp_asset_id) > 0 && saleStatus === 'available' && row?.status == 1
+}
+const openSell = (row: any) => {
+    sellState.row = row
+    sellState.visible = true
+}
+
 const editEvent = (data: any) => {
     router.push(data.goods_edit_path + '?goods_id=' + data.goods_id)
     // let url = router.resolve({

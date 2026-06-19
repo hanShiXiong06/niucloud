@@ -254,7 +254,7 @@ const handleClick = (event: any) => {
 // 订单详情
 const detailEvent = (data: any) => {
     const url = router.resolve({
-        path: '/shop/order/detail',
+        path: '/phone_shop/order/detail',
         query: {
             order_id: data.order_id
         }

@@ -208,6 +208,15 @@ class ErpOutboundService extends BaseAdminService
         }
 
         // 同行销售出库 → 通知回收"已售/下架"(回收 downstream_stage 推进到 SOLD; 无商城也闭环)
+        // 买家 member_id：交易人(counterparty) 经归属表取主 member(优先业务联系人)，供商城建订单/折账锚
+        $buyerMemberId = $cpId > 0 ? (int)(\addon\hsx_erp\app\model\ErpCounterpartyMember::where([
+            ['site_id', '=', $this->site_id],
+            ['counterparty_id', '=', $cpId],
+            ['status', '=', 1],
+        ])->order('is_finance_contact asc, id asc')->value('member_id') ?? 0) : 0;
+        // 结果状态：现结=已售(sold) / 挂单=锁定(locked)，商城据此置商品状态
+        $resultStatus = $settleMode === ErpDict::SETTLE_MODE_NOW ? 'sold' : 'locked';
+
         foreach ($soldDevices as $sd) {
             try {
                 event('ErpDomainEvent', [
@@ -220,6 +229,10 @@ class ErpOutboundService extends BaseAdminService
                         'source_device_id' => (int)$sd['source_device_id'],
                         'outbound_no'      => $no,
                         'reason'           => 'peer_sale',
+                        'member_id'        => $buyerMemberId,                       // 商城建订单的买家
+                        'sale_price'       => (float)($priceMap[(int)$sd['asset_id']] ?? 0),
+                        'settle_mode'      => $settleMode,
+                        'result_status'    => $resultStatus,                        // sold / locked
                     ],
                     'operator'     => ['id' => (int)$this->uid, 'name' => (string)$this->username],
                 ]);
@@ -281,7 +294,7 @@ class ErpOutboundService extends BaseAdminService
                 $r->save(['status' => FinanceDict::STATUS_VOID, 'update_at' => $now]);
             }
             $order->status = ErpDict::OUTBOUND_STATUS_VOID;
-            $order->remark = trim((string)$order->remark . ' [退回:' . ($reason ?: '无') . ']');
+            $order->remark = trim((string)$order->remark . ' [退回:' . ($reason ?: '无') . ' · 操作人:' . ((string)$this->username ?: ('uid' . (int)$this->uid)) . ' · ' . date('Y-m-d H:i', $now) . ']');
             $order->update_at = $now;
             $order->save();
         });
@@ -290,15 +303,36 @@ class ErpOutboundService extends BaseAdminService
     }
 
     /**
-     * 回填价格(settle_mode=later 的出库单, 补齐出货价后生成应收)
-     * @param int $outboundId
+     * 回填价格(settle_mode=later 的出库单, 补齐出货价后生成应收)。
+     * 可选「立即收款」: 生成应收并立即从指定户头结清(钱入账), 同时把锁定设备转「已售/下架」。
+     * @param int   $outboundId
      * @param array $itemPrices [{item_id, sale_price}]
+     * @param array $options    [collect_now=bool, capital_account_id=int]
      */
-    public function fillPrice(int $outboundId, array $itemPrices): array
+    public function fillPrice(int $outboundId, array $itemPrices, array $options = []): array
     {
         $order = ErpOutboundOrder::where([['site_id', '=', $this->site_id], ['id', '=', $outboundId]])->findOrEmpty();
         if ($order->isEmpty()) {
             throw new CommonException('出库单不存在');
+        }
+        $collectNow = !empty($options['collect_now']);
+        $capitalAccountId = (int)($options['capital_account_id'] ?? 0);
+        if ($collectNow && $capitalAccountId <= 0) {
+            throw new CommonException('选择了「已收款」请指定收款账户');
+        }
+        // 防重复收款: 该单已生成应收且已全部结清(无未结额) → 不再二次收款
+        if ($collectNow) {
+            $recvRows = FinanceReceivable::where([['site_id', '=', $this->site_id], ['source_no', '=', (string)$order->outbound_no]])
+                ->field('amount, settled_amount')->select()->toArray();
+            if (!empty($recvRows)) {
+                $outstanding = 0.0;
+                foreach ($recvRows as $r) {
+                    $outstanding += max(0, round((float)$r['amount'] - (float)$r['settled_amount'], 2));
+                }
+                if ($outstanding <= 0.001) {
+                    throw new CommonException('本单应收已收齐，无需重复收款');
+                }
+            }
         }
         $priceMap = [];
         foreach ($itemPrices as $row) {
@@ -309,22 +343,28 @@ class ErpOutboundService extends BaseAdminService
         }
 
         $now = time();
-        $emitItems = [];
-        Db::transaction(function () use ($order, $priceMap, $now, &$emitItems) {
+        $emitItems = [];      // 未收款路径: 仅未发过应收的明细
+        $collectItems = [];   // 收款路径: 所有有价明细(emitAndSettleNow 幂等, 已发过的也能一起结)
+        $soldAssetIds = [];
+        Db::transaction(function () use ($order, $priceMap, $now, $collectNow, &$emitItems, &$collectItems, &$soldAssetIds) {
             $items = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['outbound_id', '=', (int)$order->id]])->select();
             $total = 0.0;
             foreach ($items as $item) {
                 $price = $priceMap[(int)$item->id] ?? (float)$item->sale_price;
                 if (isset($priceMap[(int)$item->id]) && $price > 0) {
                     $item->sale_price = $price;
-                    $item->create_at = $item->create_at; // no-op keep
                     $item->save();
-                    // 回填后, 同步资产售价
                     ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->asset_id]])
                         ->update(['current_sale_price' => $price, 'update_at' => $now]);
-                    if ((int)$item->receivable_emitted === 0 && $price > 0) {
-                        $emitItems[] = ['item_id' => (int)$item->id, 'price' => $price, 'device_id' => (int)$item->source_device_id];
+                }
+                $finalPrice = (float)$item->sale_price;
+                if ($finalPrice > 0) {
+                    $row = ['item_id' => (int)$item->id, 'price' => $finalPrice, 'device_id' => (int)$item->source_device_id];
+                    $collectItems[] = $row;
+                    if ((int)$item->receivable_emitted === 0) {
+                        $emitItems[] = $row;
                     }
+                    $soldAssetIds[] = (int)$item->asset_id;
                 }
                 $total += (float)$item->sale_price;
             }
@@ -334,10 +374,138 @@ class ErpOutboundService extends BaseAdminService
             $order->save();
         });
 
+        if ($collectNow) {
+            // 生成应收并立即收款入账(幂等); 收款即下架: 锁定设备转「已售」
+            if (!empty($collectItems)) {
+                $this->emitAndSettleNow((int)$order->id, (int)$order->counterparty_id, (string)$order->counterparty_name, (string)$order->outbound_no, $collectItems, $capitalAccountId, $now);
+            }
+            $soldAssetIds = array_values(array_unique(array_filter($soldAssetIds)));
+            if (!empty($soldAssetIds)) {
+                ErpAsset::where([['site_id', '=', $this->site_id], ['inventory_status', '=', ErpDict::INVENTORY_LOCKED]])
+                    ->whereIn('id', $soldAssetIds)
+                    ->update(['inventory_status' => ErpDict::INVENTORY_OUTBOUND, 'stock_out_at' => $now, 'update_at' => $now]);
+            }
+            return ['outbound_id' => (int)$order->id, 'collected' => true, 'count' => count($collectItems)];
+        }
+
         if (!empty($emitItems)) {
             $this->emitReceivables((int)$order->id, (int)$order->counterparty_id, (string)$order->counterparty_name, (string)$order->outbound_no, $emitItems);
         }
-        return ['outbound_id' => (int)$order->id, 'emitted' => count($emitItems)];
+        return ['outbound_id' => (int)$order->id, 'collected' => false, 'emitted' => count($emitItems)];
+    }
+
+    /**
+     * 「卖同行待办」: 列出同行销售、挂单(未现结)、未作废, 且 待回填价 或 已回填未收齐 的出库单。
+     * 给设备中心的专门处理页用。返回每单含明细(设备/型号/IMEI/成本/出货价/应收已收)。
+     */
+    public function peerSaleTodo(array $where = []): array
+    {
+        $query = ErpOutboundOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['outbound_type', '=', ErpDict::OUTBOUND_TYPE_PEER_SALE],
+            ['settle_mode', '=', ErpDict::SETTLE_MODE_LATER],
+            ['status', '<>', ErpDict::OUTBOUND_STATUS_VOID],
+        ])->order('id desc');
+        if (!empty($where['keyword'])) {
+            $kw = trim((string)$where['keyword']);
+            $query->where(function ($q) use ($kw) {
+                $q->whereLike('outbound_no', '%' . $kw . '%')
+                    ->whereOr('counterparty_name', 'like', '%' . $kw . '%')
+                    ->whereOr('express_no', 'like', '%' . $kw . '%');
+            });
+        }
+        // 快递单号(独立筛选)
+        if (!empty($where['express_no'])) {
+            $query->whereLike('express_no', '%' . trim((string)$where['express_no']) . '%');
+        }
+        // 操作人(姓名模糊)
+        if (!empty($where['operator'])) {
+            $query->whereLike('operator_name', '%' . trim((string)$where['operator']) . '%');
+        }
+        // 出库时间区间
+        if (!empty($where['start_time'])) {
+            $query->where('out_at', '>=', (int)$where['start_time']);
+        }
+        if (!empty($where['end_time'])) {
+            $query->where('out_at', '<=', (int)$where['end_time']);
+        }
+        // 台数区间
+        if (($where['qty_min'] ?? '') !== '') {
+            $query->where('qty', '>=', (int)$where['qty_min']);
+        }
+        if (($where['qty_max'] ?? '') !== '') {
+            $query->where('qty', '<=', (int)$where['qty_max']);
+        }
+        // 按 IMEI 找含该机的出库单
+        if (!empty($where['imei'])) {
+            $oids = ErpOutboundItem::where([['site_id', '=', $this->site_id]])
+                ->whereLike('imei', '%' . trim((string)$where['imei']) . '%')
+                ->column('outbound_id');
+            $query->whereIn('id', !empty($oids) ? array_values(array_unique(array_map('intval', $oids))) : [0]);
+        }
+        // 状态依赖应收(回填/收款后才算闭环), 故先全量取候选(封顶1000)→聚合算状态→按状态筛→再分页
+        $page = max(1, (int)($where['page'] ?? 1));
+        $limit = max(1, (int)($where['limit'] ?? 15));
+        $stateFilter = (string)($where['state'] ?? ''); // ''全部 / pending_fill待回填 / pending_collect待收款 / done已完成 / todo需处理
+        $orders = $query->limit(1000)->select()->toArray();
+        if (empty($orders)) {
+            return ['data' => [], 'total' => 0, 'page' => $page, 'limit' => $limit];
+        }
+        $orderIds = array_column($orders, 'id');
+        // 明细
+        $itemsByOrder = [];
+        $items = ErpOutboundItem::where([['site_id', '=', $this->site_id]])->whereIn('outbound_id', $orderIds)->select()->toArray();
+        foreach ($items as $it) {
+            $itemsByOrder[(int)$it['outbound_id']][] = [
+                'item_id'     => (int)$it['id'],
+                'asset_id'    => (int)$it['asset_id'],
+                'imei'        => (string)$it['imei'],
+                'model'       => (string)$it['model'],
+                'cost'        => round((float)$it['cost'], 2),
+                'sale_price'  => round((float)$it['sale_price'], 2),
+            ];
+        }
+        // 每单已收款(按 source_no 汇总应收的 settled_amount)
+        $recvByNo = [];
+        $nos = array_column($orders, 'outbound_no');
+        $recvRows = FinanceReceivable::where([['site_id', '=', $this->site_id]])->whereIn('source_no', $nos)
+            ->field('source_no, sum(amount) as amt, sum(settled_amount) as paid')->group('source_no')->select()->toArray();
+        foreach ($recvRows as $r) {
+            $recvByNo[(string)$r['source_no']] = ['amt' => round((float)$r['amt'], 2), 'paid' => round((float)$r['paid'], 2)];
+        }
+        $enriched = [];
+        foreach ($orders as $o) {
+            $no = (string)$o['outbound_no'];
+            $o['items'] = $itemsByOrder[(int)$o['id']] ?? [];
+            $pricePending = (string)$o['price_status'] !== ErpDict::OUTBOUND_PRICE_FILLED;
+            $recv = $recvByNo[$no] ?? ['amt' => 0, 'paid' => 0];
+            $o['price_pending'] = $pricePending;
+            $o['receivable_total'] = $recv['amt'];
+            $o['received'] = $recv['paid'];
+            $o['unreceived'] = round($recv['amt'] - $recv['paid'], 2);
+            // 状态: 待回填 / 待收款 / 已完成
+            if ($pricePending) {
+                $state = 'pending_fill';
+            } elseif ($o['unreceived'] > 0.001 || $recv['amt'] <= 0) {
+                $state = 'pending_collect';
+            } else {
+                $state = 'done';
+            }
+            $o['state'] = $state;
+            $o['todo'] = $state !== 'done';
+            // 按状态筛选
+            if ($stateFilter === 'todo') {
+                if ($state === 'done') {
+                    continue;
+                }
+            } elseif ($stateFilter !== '' && $state !== $stateFilter) {
+                continue;
+            }
+            $enriched[] = $o;
+        }
+        $total = count($enriched);
+        $data = array_slice($enriched, ($page - 1) * $limit, $limit);
+        return ['data' => $data, 'total' => $total, 'page' => $page, 'limit' => $limit];
     }
 
     /**
@@ -709,6 +877,8 @@ class ErpOutboundService extends BaseAdminService
                     'source_no'         => $outboundNo,
                     'source_device_id'  => (int)($it['device_id'] ?? 0),
                     'occurred_at'       => $now,
+                    'operator_uid'      => (int)$this->uid,
+                    'operator_name'     => (string)$this->username,
                     'remark'            => '同行现结销售',
                 ]);
                 if ($rid > 0) {
@@ -750,6 +920,8 @@ class ErpOutboundService extends BaseAdminService
                     'source_no'         => $outboundNo,
                     'source_device_id'  => (int)($it['device_id'] ?? 0),
                     'occurred_at'       => $now,
+                    'operator_uid'      => (int)$this->uid,
+                    'operator_name'     => (string)$this->username,
                     'remark'            => '同行出货生成应收',
                 ]);
                 ErpOutboundItem::where([['site_id', '=', $this->site_id], ['id', '=', (int)$it['item_id']]])

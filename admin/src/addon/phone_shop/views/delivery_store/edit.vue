@@ -1019,7 +1019,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
                 const api = formData.store_id ? editDeliveryStore : addDeliveryStore
                 api(param).then(() => {
                     loading.value = false
-                    router.push({ path: '/shop/delivery_store' })
+                    router.push({ path: '/phone_shop/delivery_store' })
                 }).catch(() => {
                     loading.value = false
                 })
@@ -1028,13 +1028,13 @@ const onSave = async (formEl: FormInstance | undefined) => {
     })
 }
 const back = () => {
-    router.push({ path: '/shop/delivery_store' })
+    router.push({ path: '/phone_shop/delivery_store' })
 }
 
 // 新窗口打开
 const newWindow = () => {
     const url = router.resolve({
-        path: '/shop/setting'
+        path: '/phone_shop/setting'
     })
     window.open(url.href)
 }

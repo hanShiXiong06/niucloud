@@ -88,6 +88,15 @@
                     <span class="mx-1 text-gray-400">~</span>
                     <el-input v-model="search.cost_max" placeholder="最高" clearable style="width: 90px" @keyup.enter="handleSearch" />
                 </el-form-item>
+                <el-form-item label="库龄">
+                    <el-select v-model="search.stock_age" placeholder="全部" clearable style="width: 120px" @change="handleSearch">
+                        <el-option label="0-3 天" value="0-3" />
+                        <el-option label="3-7 天" value="3-7" />
+                        <el-option label="7-15 天" value="7-15" />
+                        <el-option label="15-30 天" value="15-30" />
+                        <el-option label="30 天以上" value="30+" />
+                    </el-select>
+                </el-form-item>
                 <el-form-item label="入库时间">
                     <el-date-picker v-model="search.stockInRange" type="daterange" value-format="X" range-separator="至"
                         start-placeholder="开始" end-placeholder="结束" style="width: 230px" @change="handleSearch" />
@@ -705,7 +714,7 @@ import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/i
 import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 
 const router = useRouter()
-const search = reactive({ keyword: '', inventory_status: 'onhand', warehouse_id: '' as any, location_id: '' as any, ownership_type: '', cost_min: '' as any, cost_max: '' as any, stockInRange: [] as any, sort_field: '', sort_order: '' })
+const search = reactive({ keyword: '', inventory_status: 'onhand', warehouse_id: '' as any, location_id: '' as any, ownership_type: '', cost_min: '' as any, cost_max: '' as any, stock_age: '', stockInRange: [] as any, sort_field: '', sort_order: '' })
 
 // 库存概览（顶部卡片，全局口径，不随 tab 变）
 const overview = reactive({
@@ -930,7 +939,7 @@ const manualForm = reactive({
     location_id: 0,
     need_refurb: false,
     use_prepay: false,
-    images: [] as string[],
+    images: '',
     qc_note: '',
     remark: ''
 })
@@ -1016,11 +1025,21 @@ const loadList = async () => {
     table.loading = true
     try {
         const params: any = { ...search, page: table.page, limit: table.limit }
-        if (Array.isArray(search.stockInRange) && search.stockInRange.length === 2) {
+        // 库龄筛选(优先于自定义入库时间区间): 把"在库天数"换算成 stock_in_at 区间
+        const ageMap: Record<string, [number | null, number]> = {
+            '0-3': [3, 0], '3-7': [7, 3], '7-15': [15, 7], '15-30': [30, 15], '30+': [null, 30],
+        }
+        if (search.stock_age && ageMap[search.stock_age]) {
+            const now = Math.floor(Date.now() / 1000)
+            const [maxDays, minDays] = ageMap[search.stock_age]
+            params.stock_in_end = now - minDays * 86400
+            if (maxDays !== null) params.stock_in_start = now - maxDays * 86400
+        } else if (Array.isArray(search.stockInRange) && search.stockInRange.length === 2) {
             params.stock_in_start = search.stockInRange[0]
             params.stock_in_end = search.stockInRange[1]
         }
         delete params.stockInRange
+        delete params.stock_age
         const res: any = await getErpAssetList(params)
         table.data = res.data?.data || []
         table.total = Number(res.data?.total || 0)
@@ -1045,7 +1064,7 @@ const handleSearch = () => {
 const handleReset = () => {
     Object.assign(search, {
         keyword: '', inventory_status: '', warehouse_id: '', location_id: '',
-        ownership_type: '', cost_min: '', cost_max: '', stockInRange: [], sort_field: '', sort_order: '',
+        ownership_type: '', cost_min: '', cost_max: '', stock_age: '', stockInRange: [], sort_field: '', sort_order: '',
     })
     handleSearch()
 }
@@ -1085,7 +1104,7 @@ const resetManualForm = () => {
         warehouse_id: 0,
         location_id: 0,
         use_prepay: false,
-        images: [],
+        images: '',
         qc_note: '',
         remark: ''
     })
@@ -1169,7 +1188,7 @@ const submitManualInbound = async () => {
     }
     manualDialog.submitting = true
     try {
-        await createErpManualInbound({ ...manualForm })
+        await createErpManualInbound({ ...manualForm, images: String(manualForm.images || '').split(',').filter(Boolean) })
         const hasLoc = Number(manualForm.warehouse_id) > 0
         ElMessage.success(hasLoc ? '已建档并入库到指定库位' : '已创建待入库设备')
         manualDialog.visible = false
@@ -1217,18 +1236,19 @@ const submitQuickCounterparty = async () => {
 }
 
 // 完成拍照
-const photoDialog = reactive<any>({ visible: false, submitting: false, asset: null, images: [] as string[] })
+const photoDialog = reactive<any>({ visible: false, submitting: false, asset: null, images: '' })
 const openPhoto = (row: any) => {
     photoDialog.asset = row
-    photoDialog.images = []
+    photoDialog.images = ''
     photoDialog.visible = true
 }
 const submitPhoto = async () => {
     if (!photoDialog.asset?.id) return
-    if (!photoDialog.images.length) return ElMessage.warning('请至少上传一张照片')
+    const imgs = String(photoDialog.images || '').split(',').filter(Boolean)
+    if (!imgs.length) return ElMessage.warning('请至少上传一张照片')
     photoDialog.submitting = true
     try {
-        await completeErpAssetPhoto(Number(photoDialog.asset.id), photoDialog.images)
+        await completeErpAssetPhoto(Number(photoDialog.asset.id), imgs)
         ElMessage.success('拍照完成，已入库进入待定价')
         photoDialog.visible = false
         search.inventory_status = 'pending_pricing'
@@ -1343,6 +1363,12 @@ const openCostAdjust = (row: any) => {
 }
 const submitCostAdjust = async () => {
     if (!costDialog.asset?.id) return
+    if (costAdjustDelta.value === 0) { ElMessage.warning('成本未变化'); return }
+    const deltaTxt = `成本 ${costAdjustDelta.value > 0 ? '+' : ''}¥${money(costAdjustDelta.value)}（¥${money(costDialog.asset?.current_cost)} → ¥${money(costDialog.cost)}）`
+    const payTxt = costDialog.sync_payable ? '，并同步调整对供应商的应付' : ''
+    try {
+        await ElMessageBox.confirm(`确认调整成本？${deltaTxt}${payTxt}。`, '调成本', { type: 'warning' })
+    } catch { return }
     costDialog.submitting = true
     try {
         await adjustErpAssetCost(Number(costDialog.asset.id), { cost: Number(costDialog.cost), reason: costDialog.reason || '', sync_payable: costDialog.sync_payable ? 1 : 0 })

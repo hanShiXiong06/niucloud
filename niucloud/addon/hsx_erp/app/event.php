@@ -50,6 +50,10 @@ return [
         'SettleErpPayableByDevice' => [
             'addon\hsx_erp\app\listener\SettlePayableByDeviceListener',
         ],
+        // 承接"回收侧成本调整" — 按增量同步 ERP 资产成本 + 记成本流水(不回发, 防死循环)
+        'RecycleDeviceCostAdjusted' => [
+            'addon\hsx_erp\app\listener\RecycleCostAdjustedListener',
+        ],
     ],
     'subscribe' => [],
 ];

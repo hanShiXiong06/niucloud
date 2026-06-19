@@ -493,7 +493,7 @@ const transferEvent = () => {
 // 订单详情
 const toOrderDetail = (id:number) => {
     const routeUrl = router.resolve({
-        path: '/shop/order/detail',
+        path: '/phone_shop/order/detail',
         query: { order_id: id }
     })
     window.open(routeUrl.href, '_blank')

@@ -6,7 +6,7 @@
                     <div class="text-page-title">仓库与库位</div>
                     <div class="mt-1 text-sm text-gray-500">正式入库必须落到具体仓库和库位，停用不会影响历史流水。</div>
                 </div>
-                <el-button type="primary" @click="openWarehouse()">新增仓库</el-button>
+                <el-button v-permission="'hsx_erp_warehouse_save'" type="primary" @click="openWarehouse()">新增仓库</el-button>
             </div>
 
             <el-table class="mt-5" :data="warehouses" v-loading="loading" row-key="id" size="large">
@@ -15,7 +15,7 @@
                         <div class="px-12 py-3">
                             <div class="mb-3 flex items-center justify-between">
                                 <span class="font-medium">库位</span>
-                                <el-button type="primary" link @click="openLocation(row)">新增库位</el-button>
+                                <el-button v-permission="'hsx_erp_warehouse_location_save'" type="primary" link @click="openLocation(row)">新增库位</el-button>
                             </div>
                             <el-table :data="row.locations || []" border size="small" empty-text="暂无库位">
                                 <el-table-column prop="location_name" label="库位名称" />
@@ -29,8 +29,8 @@
                                 </el-table-column>
                                 <el-table-column label="操作" width="150" align="center">
                                     <template #default="{ row: location }">
-                                        <el-button type="primary" link @click="openLocation(row, location)">编辑</el-button>
-                                        <el-button type="danger" link @click="removeLocation(location)">删除</el-button>
+                                        <el-button v-permission="'hsx_erp_warehouse_location_save'" type="primary" link @click="openLocation(row, location)">编辑</el-button>
+                                        <el-button v-permission="'hsx_erp_warehouse_location_delete'" type="danger" link @click="removeLocation(location)">删除</el-button>
                                     </template>
                                 </el-table-column>
                             </el-table>
@@ -61,8 +61,8 @@
                 <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
                 <el-table-column label="操作" width="170" align="center">
                     <template #default="{ row }">
-                        <el-button type="primary" link @click="openWarehouse(row)">编辑</el-button>
-                        <el-button type="danger" link @click="removeWarehouse(row)">删除</el-button>
+                        <el-button v-permission="'hsx_erp_warehouse_save'" type="primary" link @click="openWarehouse(row)">编辑</el-button>
+                        <el-button v-permission="'hsx_erp_warehouse_delete'" type="danger" link @click="removeWarehouse(row)">删除</el-button>
                     </template>
                 </el-table-column>
 
@@ -73,7 +73,7 @@
                         description="先建一个仓库和库位，设备确认入库时才能选择存放位置。"
                     >
                         <template #action>
-                            <el-button type="primary" @click="openWarehouse()">新增仓库</el-button>
+                            <el-button v-permission="'hsx_erp_warehouse_save'" type="primary" @click="openWarehouse()">新增仓库</el-button>
                         </template>
                     </EmptyState>
                 </template>

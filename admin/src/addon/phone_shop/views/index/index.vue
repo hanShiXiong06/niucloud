@@ -118,7 +118,7 @@
                 <span class="text-lg font-extrabold">{{t('agentMatters')}}</span>
             </template>
             <el-row>
-                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/shop/order/index', query: {status: 1}})">
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/order/index', query: {status: 1}})">
                     <div class="ml-[10px]">
                         <el-statistic :value="statOrder.wait_pay_order">
                             <template #title>
@@ -134,35 +134,35 @@
                         </el-statistic>
                     </div>
                 </el-col>
-                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/shop/order/index', query: {status: 2}})">
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/order/index', query: {status: 2}})">
                     <el-statistic :value="statOrder.wait_delivery_order">
                         <template #title>
                             <div style="display: inline-flex; align-items: center">{{t('waitDeliveryOrder')}}</div>
                         </template>
                     </el-statistic>
                 </el-col>
-                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/shop/order/index', query: {status: 3}})">
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/order/index', query: {status: 3}})">
                     <el-statistic :value="statOrder.wait_take_order">
                         <template #title>
                             <div style="display: inline-flex; align-items: center">{{t('waitTakeOrder')}}</div>
                         </template>
                     </el-statistic>
                 </el-col>
-                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/shop/order/refund'})">
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/order/refund'})">
                     <el-statistic :value="statOrder.refund_order">
                         <template #title>
                             <div style="display: inline-flex; align-items: center">退款订单</div>
                         </template>
                     </el-statistic>
                 </el-col>
-                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/shop/goods/list'})">
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/goods/list'})">
                     <el-statistic :value="statGoods.sale_goods_num">
                         <template #title>
                             <div style="display: inline-flex; align-items: center">{{t('saleGoodsNum')}}</div>
                         </template>
                     </el-statistic>
                 </el-col>
-                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/shop/goods/list', query: {status: 0}})">
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/goods/list', query: {status: 0}})">
                     <el-statistic :value="statGoods.warehouse_goods_num">
                         <template #title>
                             <div style="display: inline-flex; align-items: center">{{t('warehouseGoodsNum')}}</div>

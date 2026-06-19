@@ -7,36 +7,60 @@
                     <div class="mt-1 text-sm text-gray-500">往来对账、应收应付明细、结算记录与经营支出，一处看清账目往来。</div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <el-button type="primary" plain @click="openPrepay">采购预付</el-button>
-                    <el-button type="warning" plain @click="openExpense">记一笔支出</el-button>
+                    <el-button v-permission="'hsx_erp_capital_account_entry'" type="primary" plain @click="openPrepay">采购预付</el-button>
+                    <el-button v-permission="'hsx_erp_capital_account_entry'" type="warning" plain @click="openExpense">记一笔支出</el-button>
+                    <ai-assistant
+                        scene="finance"
+                        permission="hsx_erp_ai_finance"
+                        title="AI 财务分析"
+                        button-text="AI 财务分析"
+                        button-type="success"
+                        :question="aiFinanceQuestion"
+                        :get-payload="buildAiFinancePayload"
+                    />
                     <el-button @click="refreshAll" :loading="loading">刷新</el-button>
                 </div>
             </div>
 
             <!-- 汇总卡片 -->
-            <div class="mt-5 grid grid-cols-4 gap-4">
-                <div class="rounded-lg bg-gray-50 px-5 py-4">
-                    <div class="text-sm text-gray-500">应收未结(欠我)</div>
-                    <div class="mt-1 text-2xl font-semibold text-green-600">{{ money(summary.receivable_total) }}</div>
+            <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div class="stat-card" style="--c:#2ba471">
+                    <el-icon class="stat-ic"><Coin /></el-icon>
+                    <div class="stat-label">应收未结(欠我)</div>
+                    <div class="stat-value">{{ money(summary.receivable_total) }}</div>
                 </div>
-                <div class="rounded-lg bg-gray-50 px-5 py-4">
-                    <div class="text-sm text-gray-500">应付未结(我欠)</div>
-                    <div class="mt-1 text-2xl font-semibold text-orange-600">{{ money(summary.payable_total) }}</div>
+                <div class="stat-card" style="--c:#e6792b">
+                    <el-icon class="stat-ic"><Money /></el-icon>
+                    <div class="stat-label">应付未结(我欠)</div>
+                    <div class="stat-value">{{ money(summary.payable_total) }}</div>
                 </div>
-                <div class="rounded-lg bg-gray-50 px-5 py-4">
-                    <div class="text-sm text-gray-500">净额(应付-应收)</div>
-                    <div class="mt-1 text-2xl font-semibold" :class="Number(summary.net) >= 0 ? 'text-orange-600' : 'text-green-600'">
+                <div class="stat-card" :style="{ '--c': Number(summary.net) >= 0 ? '#e6792b' : '#2ba471' }">
+                    <el-icon class="stat-ic"><Sort /></el-icon>
+                    <div class="stat-label">净额(应付-应收)</div>
+                    <div class="stat-value">
                         {{ money(Math.abs(Number(summary.net || 0))) }}
-                        <span class="text-xs text-gray-400">{{ Number(summary.net) > 0 ? '净付' : (Number(summary.net) < 0 ? '净收' : '已平') }}</span>
+                        <span class="stat-tag">{{ Number(summary.net) > 0 ? '净付' : (Number(summary.net) < 0 ? '净收' : '已平') }}</span>
                     </div>
                 </div>
-                <div class="rounded-lg bg-gray-50 px-5 py-4">
-                    <div class="text-sm text-gray-500">资金账户总余额</div>
-                    <div class="mt-1 text-2xl font-semibold text-blue-600">{{ money(summary.balance_total) }}</div>
-                    <div v-if="summary.accounts && summary.accounts.length" class="mt-2 flex flex-wrap gap-1">
-                        <el-tag v-for="a in summary.accounts" :key="a.id" size="small" effect="plain">
+                <div class="stat-card" style="--c:#5b8ff9">
+                    <el-icon class="stat-ic"><Wallet /></el-icon>
+                    <div class="stat-label">资金账户总余额</div>
+                    <div class="stat-value">{{ money(summary.balance_total) }}</div>
+                    <div v-if="summary.accounts && summary.accounts.length" class="acct-tags mt-2">
+                        <el-tag v-for="a in summary.accounts.slice(0, 3)" :key="a.id" size="small" effect="plain">
                             {{ a.account_name }}：{{ money(a.balance) }}
                         </el-tag>
+                        <el-popover v-if="summary.accounts.length > 3" placement="bottom" trigger="hover" width="240">
+                            <template #reference>
+                                <el-tag size="small" type="info" effect="plain" class="cursor-pointer">+{{ summary.accounts.length - 3 }} 个</el-tag>
+                            </template>
+                            <div class="flex flex-col gap-1">
+                                <div v-for="a in summary.accounts" :key="a.id" class="flex justify-between text-xs">
+                                    <span class="text-gray-600">{{ a.account_name }}</span>
+                                    <span class="font-medium text-blue-600">{{ money(a.balance) }}</span>
+                                </div>
+                            </div>
+                        </el-popover>
                     </div>
                 </div>
             </div>
@@ -56,56 +80,105 @@
                             <el-option v-for="s in boardSortOptions" :key="s.value" :label="s.label" :value="s.value" />
                         </el-select>
                     </div>
-                    <el-table :data="filteredBoard" v-loading="loading" size="large" empty-text="暂无未结往来" @sort-change="onBoardSortChange"
-                        row-key="row_key" :tree-props="{ children: 'children' }" default-expand-all>
-                        <el-table-column label="主体 / 对接人" min-width="220">
-                            <template #default="{ row }">
-                                <!-- 主体汇总行 -->
-                                <template v-if="row.is_entity">
-                                    <span class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</span>
-                                    <span class="ml-1 text-xs text-gray-400">主体 · {{ row.member_count }}人</span>
-                                </template>
-                                <!-- 主体下的对接人(子行) -->
-                                <template v-else-if="row.is_child">
-                                    <span class="text-gray-700">{{ row.counterparty_name }}</span>
-                                    <span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span>
-                                </template>
-                                <!-- 未归属主体的独立对接人 -->
-                                <template v-else>
-                                    <div class="text-xs text-gray-400">未归属主体</div>
-                                    <div class="text-gray-700">{{ row.counterparty_name || ('#' + row.counterparty_id) }}<span v-if="row.counterparty_mobile" class="text-xs text-gray-400"> · {{ row.counterparty_mobile }}</span></div>
-                                </template>
+                    <!-- 往来汇总：卡片 + 折叠（账目明细默认折叠） -->
+                    <div v-loading="loading" class="board-cards">
+                        <el-empty v-if="!filteredBoard.length" description="暂无未结往来" :image-size="70" />
+
+                        <div v-for="g in filteredBoard" :key="g.row_key" class="board-card">
+                            <!-- ====== 主体卡 ====== -->
+                            <template v-if="g.is_entity">
+                                <div class="bc-head" @click="toggleEntity(g.row_key)">
+                                    <div class="bc-main">
+                                        <el-icon class="bc-caret" :class="{ open: !closedEntities.has(g.row_key) }"><CaretRight /></el-icon>
+                                        <span class="bc-name" @click.stop="openEntity(g.entity_id)">{{ g.entity_name }}</span>
+                                        <el-tag size="small" effect="plain" round>主体 · {{ g.member_count }}人</el-tag>
+                                    </div>
+                                    <div class="bc-amounts">
+                                        <span v-if="g.payable > 0" class="amt pay">应付 ¥{{ money(g.payable) }}</span>
+                                        <span v-if="g.receivable > 0" class="amt rec">应收 ¥{{ money(g.receivable) }}</span>
+                                        <el-tag v-if="g.offsetable > 0" size="small" type="primary" effect="light">可折 ¥{{ money(g.offsetable) }}</el-tag>
+                                        <span class="net" :class="netClass(g.net)">净 ¥{{ money(Math.abs(g.net)) }} <i>{{ netLabel(g.net_direction) }}</i></span>
+                                    </div>
+                                    <div class="bc-ops" @click.stop>
+                                        <el-tooltip v-if="g.offsetable > 0" content="折账（跨人冲抵）" placement="top">
+                                            <el-button v-permission="'hsx_erp_finance_settlement_settle'" type="primary" text :icon="Switch" @click="openSettle(g)" />
+                                        </el-tooltip>
+                                    </div>
+                                </div>
+
+                                <div v-show="!closedEntities.has(g.row_key)" class="bc-members">
+                                    <div v-for="m in g.children" :key="m.row_key" class="member-row">
+                                        <div class="mr-head">
+                                            <div class="mr-main" @click="m.children && m.children.length && toggleMember(m.row_key)">
+                                                <el-icon v-if="m.children && m.children.length" class="mr-caret" :class="{ open: openMembers.has(m.row_key) }"><CaretRight /></el-icon>
+                                                <span v-else class="mr-dot"></span>
+                                                <span class="mr-name">{{ m.counterparty_name }}</span>
+                                                <span v-if="m.counterparty_mobile" class="mr-mobile">{{ m.counterparty_mobile }}</span>
+                                                <span v-if="m.children && m.children.length" class="mr-count">{{ m.children.length }} 笔</span>
+                                            </div>
+                                            <div class="mr-amounts">
+                                                <span v-if="m.payable > 0" class="amt pay">应付 ¥{{ money(m.payable) }}</span>
+                                                <span v-if="m.receivable > 0" class="amt rec">应收 ¥{{ money(m.receivable) }}</span>
+                                            </div>
+                                            <div class="mr-ops" @click.stop>
+                                                <el-tooltip v-if="m.payable > 0" content="付款" placement="top">
+                                                    <el-button v-permission="'hsx_erp_finance_settlement_settle'" type="warning" text :icon="Wallet" @click="openPay(m)" />
+                                                </el-tooltip>
+                                                <el-tooltip v-if="m.receivable > 0" content="收款" placement="top">
+                                                    <el-button v-permission="'hsx_erp_finance_settlement_settle'" type="success" text :icon="Coin" @click="openCollect(m)" />
+                                                </el-tooltip>
+                                            </div>
+                                        </div>
+                                        <div v-show="openMembers.has(m.row_key)" class="mr-items">
+                                            <div v-for="it in (m.children || [])" :key="it.row_key" class="item-row">
+                                                <el-tag size="small" :type="it.direction === '应付' ? 'warning' : 'success'" effect="plain">{{ it.direction }}</el-tag>
+                                                <span class="it-title">{{ it.title }}</span>
+                                                <span v-if="it.imei" class="it-sub">· {{ it.imei }}</span>
+                                                <span v-if="it.operator" class="it-op">经手 {{ it.operator }}</span>
+                                                <span class="it-amt">¥{{ money(it.payable || it.receivable) }}</span>
+                                                <span class="it-meta">{{ it.source_type_text || '账目' }}<template v-if="it.source_no"> · {{ it.source_no }}</template><template v-if="it.occurred_at"> · {{ formatTime(it.occurred_at) }}</template></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </template>
-                        </el-table-column>
-                        <el-table-column label="应付(我欠)" width="140" align="right" prop="payable" sortable="custom">
-                            <template #default="{ row }"><span class="text-orange-600">{{ money(row.payable) }}</span></template>
-                        </el-table-column>
-                        <el-table-column label="应收(欠我)" width="140" align="right" prop="receivable" sortable="custom">
-                            <template #default="{ row }"><span class="text-green-600">{{ money(row.receivable) }}</span></template>
-                        </el-table-column>
-                        <el-table-column label="可折账" width="120" align="right" prop="offsetable" sortable="custom">
-                            <template #default="{ row }">
-                                <el-tag v-if="row.offsetable > 0" type="primary" effect="light">{{ money(row.offsetable) }}</el-tag>
-                                <span v-else class="text-gray-400">-</span>
+
+                            <!-- ====== 未归属主体的独立对接人卡 ====== -->
+                            <template v-else>
+                                <div class="bc-head" @click="g.children && g.children.length && toggleMember(g.row_key)">
+                                    <div class="bc-main">
+                                        <el-icon v-if="g.children && g.children.length" class="bc-caret" :class="{ open: openMembers.has(g.row_key) }"><CaretRight /></el-icon>
+                                        <span v-else class="mr-dot"></span>
+                                        <span class="bc-name">{{ g.counterparty_name || ('#' + g.counterparty_id) }}</span>
+                                        <span v-if="g.counterparty_mobile" class="mr-mobile">{{ g.counterparty_mobile }}</span>
+                                        <el-tag size="small" effect="plain" round type="info">未归属主体</el-tag>
+                                    </div>
+                                    <div class="bc-amounts">
+                                        <span v-if="g.payable > 0" class="amt pay">应付 ¥{{ money(g.payable) }}</span>
+                                        <span v-if="g.receivable > 0" class="amt rec">应收 ¥{{ money(g.receivable) }}</span>
+                                        <span class="net" :class="netClass(g.net)">净 ¥{{ money(Math.abs(g.net)) }} <i>{{ netLabel(g.net_direction) }}</i></span>
+                                    </div>
+                                    <div class="bc-ops" @click.stop>
+                                        <el-tooltip v-if="g.payable > 0" content="付款" placement="top">
+                                            <el-button v-permission="'hsx_erp_finance_settlement_settle'" type="warning" text :icon="Wallet" @click="openPay(g)" />
+                                        </el-tooltip>
+                                        <el-tooltip v-if="g.receivable > 0" content="收款" placement="top">
+                                            <el-button v-permission="'hsx_erp_finance_settlement_settle'" type="success" text :icon="Coin" @click="openCollect(g)" />
+                                        </el-tooltip>
+                                    </div>
+                                </div>
+                                <div v-show="openMembers.has(g.row_key)" class="mr-items mr-items-flat">
+                                    <div v-for="it in (g.children || [])" :key="it.row_key" class="item-row">
+                                        <el-tag size="small" :type="it.direction === '应付' ? 'warning' : 'success'" effect="plain">{{ it.direction }}</el-tag>
+                                        <span class="it-title">{{ it.title }}</span>
+                                        <span v-if="it.imei" class="it-sub">· {{ it.imei }}</span>
+                                        <span class="it-amt">¥{{ money(it.payable || it.receivable) }}</span>
+                                        <span class="it-meta">{{ it.source_type_text || '账目' }}<template v-if="it.source_no"> · {{ it.source_no }}</template><template v-if="it.occurred_at"> · {{ formatTime(it.occurred_at) }}</template></span>
+                                    </div>
+                                </div>
                             </template>
-                        </el-table-column>
-                        <el-table-column label="净额" width="150" align="right" prop="net" sortable="custom">
-                            <template #default="{ row }">
-                                <span :class="row.net > 0 ? 'text-orange-600' : (row.net < 0 ? 'text-green-600' : 'text-gray-400')">{{ money(Math.abs(row.net)) }}</span>
-                                <span class="ml-1 text-xs text-gray-400">{{ netLabel(row.net_direction) }}</span>
-                            </template>
-                        </el-table-column>
-                        <el-table-column label="操作" width="190" align="center" fixed="right">
-                            <template #default="{ row }">
-                                <!-- 折账: 主体行(跨人冲抵)或独立人行, 不在子行 -->
-                                <el-button v-if="!row.is_child && row.offsetable > 0" type="primary" link @click="openSettle(row)">折账</el-button>
-                                <!-- 付款/收款: 针对具体的人(子行 或 独立人行), 主体汇总行不显示 -->
-                                <el-button v-if="!row.is_entity && row.payable > 0" type="warning" link @click="openPay(row)">付款</el-button>
-                                <el-button v-if="!row.is_entity && row.receivable > 0" type="success" link @click="openCollect(row)">收款</el-button>
-                                <span v-if="!((!row.is_child && row.offsetable > 0) || (!row.is_entity && row.payable > 0) || (!row.is_entity && row.receivable > 0))" class="text-xs text-gray-400">-</span>
-                            </template>
-                        </el-table-column>
-                    </el-table>
+                        </div>
+                    </div>
                 </el-tab-pane>
 
                 <!-- 应收明细 / 应付明细 -->
@@ -116,7 +189,8 @@
                             <el-radio-button label="open">未结清</el-radio-button>
                             <el-radio-button label="settled">已结清</el-radio-button>
                         </el-radio-group>
-                        <el-input v-model="detail.keyword" placeholder="往来单位/来源单号" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" />
+                        <el-input v-model="detail.keyword" placeholder="主体/对接人/手机号/单号" clearable class="!w-[200px]" @keyup.enter="onDetailFilter" @clear="onDetailFilter" />
+                        <el-input v-model="detail.operator" placeholder="经手人" clearable class="!w-[120px]" @keyup.enter="onDetailFilter" @clear="onDetailFilter" />
                         <div class="w-[260px] flex-none">
                             <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="--el-date-editor-width: 100%" />
                         </div>
@@ -160,6 +234,12 @@
                                 <el-tag :type="statusTagType(row.status)" effect="light" size="small">{{ row.status_text }}</el-tag>
                             </template>
                         </el-table-column>
+                        <el-table-column label="经手人" width="100" align="center">
+                            <template #default="{ row }">
+                                <el-tag v-if="row.operator" size="small" effect="plain" type="info">{{ row.operator }}</el-tag>
+                                <span v-else class="text-gray-300">-</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column label="时间" width="160" prop="occurred_at" sortable="custom">
                             <template #default="{ row }">{{ formatTime(row.occurred_at) }}</template>
                         </el-table-column>
@@ -173,7 +253,8 @@
                 <!-- 结算记录 -->
                 <el-tab-pane label="结算记录" name="settlement">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
-                        <el-input v-model="settle.keyword" placeholder="结算单号/往来单位" clearable class="!w-[200px]" @keyup.enter="loadSettlement" />
+                        <el-input v-model="settle.keyword" placeholder="主体/对接人/手机号/结算单号" clearable class="!w-[220px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
+                        <el-input v-model="settle.operator" placeholder="经手人" clearable class="!w-[120px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
                         <div class="w-[260px] flex-none">
                             <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="--el-date-editor-width: 100%" />
                         </div>
@@ -208,6 +289,12 @@
                                 <div v-else-if="row.method !== 'offset'" class="mt-0.5 text-xs text-gray-300">未记户头</div>
                             </template>
                         </el-table-column>
+                        <el-table-column label="经手人" width="100" align="center">
+                            <template #default="{ row }">
+                                <el-tag v-if="row.operator_name" size="small" effect="plain" type="info">{{ row.operator_name }}</el-tag>
+                                <span v-else class="text-gray-300">-</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column label="已结清" width="90" align="center">
                             <template #default><el-tag type="success" size="small" effect="light">已结清</el-tag></template>
                         </el-table-column>
@@ -216,7 +303,7 @@
                         <el-table-column prop="remark" label="备注 / 原由" min-width="180" show-overflow-tooltip>
                             <template #default="{ row }"><span :class="row.remark ? '' : 'text-gray-300'">{{ row.remark || '—' }}</span></template>
                         </el-table-column>
-                        <el-table-column label="操作" width="90" align="center" fixed="right">
+                        <el-table-column label="操作" width="100" align="center" fixed="right">
                             <template #default="{ row }">
                                 <el-button type="primary" link @click="openSettleDetail(row)">核销明细</el-button>
                             </template>
@@ -416,7 +503,7 @@
                         placeholder="搜索姓名 / 手机号选择供应商" @resolved="onPrepayResolved" />
                 </el-form-item>
                 <el-form-item label="付款账户" required>
-                    <el-select v-model="prepay.account_id" filterable class="w-full" placeholder="从哪个资金账户付">
+                    <el-select v-model="prepay.account_id" filterable class="!w-full" placeholder="从哪个资金账户付">
                         <el-option v-for="a in summary.accounts" :key="a.id" :label="`${a.account_name}（余额 ${money(a.balance)}）`" :value="a.id" />
                     </el-select>
                 </el-form-item>
@@ -438,6 +525,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
+import { CaretRight, Switch, Wallet, Coin, Money, Sort } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import EntityDrawer from './entity-drawer.vue'
 import TraceDetail from '@/addon/hsx_erp/views/device_trace/trace-detail.vue'
@@ -457,6 +545,7 @@ import {
     prepayFinance,
 } from '@/addon/hsx_erp/api/finance'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
+import AiAssistant from '@/addon/hsx_erp/components/ai-assistant/index.vue'
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 const netLabel = (d: string) => (d === 'pay' ? '我付' : d === 'collect' ? '我收' : '已平')
@@ -503,6 +592,23 @@ async function loadSummary() {
     } catch (e) { /* ignore */ }
 }
 
+// —— AI 财务分析：把本页财务数据作为上下文交给通用 AI 组件 ——
+const aiFinanceQuestion = '请基于以上财务汇总与往来数据，分析当前应收应付与资金状况，指出欠款/回款风险，并按优先级给出处理建议。'
+const buildAiFinancePayload = () => {
+    return {
+        context: {
+            汇总: {
+                应收未结_欠我: summary.receivable_total,
+                应付未结_我欠: summary.payable_total,
+                净额_应付减应收: summary.net,
+                资金账户总余额: summary.balance_total,
+                资金账户: (summary.accounts || []).map((a: any) => ({ 账户: a.account_name, 余额: a.balance })),
+            },
+            往来未结_前20: (board.value || []).slice(0, 20),
+        },
+    }
+}
+
 // 往来汇总(数据全量在前端，筛选+排序均在本地)
 const board = ref<any[]>([])
 const boardKeyword = ref('')
@@ -519,11 +625,15 @@ const filteredBoard = computed(() => {
     const kw = boardKeyword.value.trim()
     let rows = board.value.slice()
     if (kw) {
-        rows = rows.filter((r: any) =>
+        // 命中：行本身 或 其下任意对接人(名字/手机/ID) —— 这样按"对接人/电话"搜也能带出所属主体
+        const hit = (r: any): boolean =>
             String(r.entity_name || '').includes(kw) ||
             String(r.counterparty_name || '').includes(kw) ||
             String(r.counterparty_mobile || '').includes(kw) ||
-            String(r.counterparty_id || '') === kw)
+            String(r.counterparty_id || '') === kw
+        const hitDeep = (r: any): boolean =>
+            hit(r) || (Array.isArray(r.children) && r.children.some((c: any) => hit(c) || hitDeep(c)))
+        rows = rows.filter(hitDeep)
     }
     if (boardFilter.value === 'offsetable') rows = rows.filter((r: any) => Number(r.offsetable) > 0)
     else if (boardFilter.value === 'pay') rows = rows.filter((r: any) => Number(r.net) > 0)
@@ -533,6 +643,13 @@ const filteredBoard = computed(() => {
     rows.sort((a: any, b: any) => (Number(a[f] || 0) - Number(b[f] || 0)) * sign)
     return rows
 })
+
+// 往来汇总卡片折叠：主体默认展开（看到对接人）；账目明细(第三级)默认折叠
+const closedEntities = reactive(new Set<string>())
+const openMembers = reactive(new Set<string>())
+const toggleEntity = (k: string) => { closedEntities.has(k) ? closedEntities.delete(k) : closedEntities.add(k) }
+const toggleMember = (k: string) => { openMembers.has(k) ? openMembers.delete(k) : openMembers.add(k) }
+const netClass = (net: number) => (net > 0 ? 'is-pay' : (net < 0 ? 'is-collect' : 'is-zero'))
 function onBoardSortChange({ prop, order }: any) {
     if (!order) { boardSort.value = 'offsetable:desc'; return }
     boardSort.value = `${prop}:${order === 'ascending' ? 'asc' : 'desc'}`
@@ -548,11 +665,11 @@ async function loadBoard() {
 }
 
 // 应收/应付明细
-const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
+const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', operator: '', settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
 function detailParams() {
     const [start, end] = Array.isArray(detail.dateRange) ? detail.dateRange : []
     return {
-        keyword: detail.keyword, settle_state: detail.settle_state,
+        keyword: detail.keyword, operator: detail.operator, settle_state: detail.settle_state,
         start_time: start ? Number(start) : 0,
         end_time: end ? Number(end) + 86399 : 0, // 含当日
         amount_min: detail.amount_min, amount_max: detail.amount_max,
@@ -592,13 +709,14 @@ function resetDetailFilter() {
 }
 
 // 结算记录
-const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', dateRange: [] })
+const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', operator: '', dateRange: [] })
 async function loadSettlement() {
     settle.loading = true
     try {
         const [start, end] = Array.isArray(settle.dateRange) ? settle.dateRange : []
         const res: any = await getFinanceSettlementList({
             keyword: settle.keyword,
+            operator: settle.operator,
             start_time: start ? Number(start) : 0,
             end_time: end ? Number(end) + 86399 : 0,
             page: settle.page, limit: settle.limit,
@@ -873,3 +991,168 @@ function onEntityChanged() {
 loadSummary()
 loadBoard()
 </script>
+
+<style lang="scss" scoped>
+.board-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 60px;
+}
+
+.board-card {
+    border: 1px solid #eef0f4;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+    transition: box-shadow 0.18s;
+}
+.board-card:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06); }
+
+/* 主体/独立人 头部 */
+.bc-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    background: linear-gradient(180deg, #fafbfc, #fff);
+}
+.bc-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+.bc-caret, .mr-caret {
+    color: #b0b3bb;
+    transition: transform 0.2s;
+}
+.bc-caret.open, .mr-caret.open { transform: rotate(90deg); color: var(--el-color-primary); }
+.bc-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f2733;
+    cursor: pointer;
+}
+.bc-name:hover { color: var(--el-color-primary); }
+
+.bc-amounts, .mr-amounts {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+.amt { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.amt.pay { color: #e6792b; }
+.amt.rec { color: #2ba471; }
+.net { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.net i { font-size: 11px; font-weight: 400; font-style: normal; color: #b0b3bb; }
+.net.is-pay { color: #e6792b; }
+.net.is-collect { color: #2ba471; }
+.net.is-zero { color: #b0b3bb; }
+.bc-ops, .mr-ops { display: flex; align-items: center; gap: 2px; flex-shrink: 0; width: 70px; justify-content: flex-end; }
+
+/* 对接人行 */
+.bc-members { border-top: 1px solid #f2f4f7; }
+.member-row { border-bottom: 1px solid #f6f7f9; }
+.member-row:last-child { border-bottom: none; }
+.mr-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px 10px 28px;
+}
+.mr-main {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+.mr-dot { width: 6px; height: 6px; border-radius: 50%; background: #dcdfe6; flex-shrink: 0; margin-left: 3px; }
+.mr-name { font-size: 14px; color: #303133; }
+.mr-mobile { font-size: 12px; color: #b0b3bb; }
+.mr-count {
+    font-size: 11px;
+    color: #909399;
+    background: #f0f2f5;
+    border-radius: 8px;
+    padding: 1px 7px;
+}
+
+/* 账目明细（第三级，默认折叠） */
+.mr-items { background: #fafbfc; padding: 4px 0; }
+.mr-items-flat { padding-left: 0; }
+.item-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 16px 8px 50px;
+    font-size: 13px;
+    border-top: 1px dashed #eef0f4;
+}
+.mr-items-flat .item-row { padding-left: 28px; }
+.it-title { color: #303133; font-weight: 500; }
+.it-sub { color: #b0b3bb; font-size: 12px; }
+.it-amt { color: #e6792b; font-weight: 600; margin-left: auto; }
+.it-op {
+    font-size: 12px;
+    color: #5b8ff9;
+    background: rgba(91, 143, 249, 0.1);
+    border-radius: 8px;
+    padding: 1px 8px;
+}
+.it-meta { width: 100%; color: #b0b3bb; font-size: 12px; padding-left: 2px; }
+
+/* 顶部汇总卡：accent 色条 + 图标水印 */
+.stat-card {
+    position: relative;
+    border-radius: 12px;
+    padding: 16px 18px;
+    background: #fff;
+    border: 1px solid #f0f2f5;
+    overflow: hidden;
+}
+.stat-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--c);
+}
+.stat-ic {
+    position: absolute;
+    right: 10px;
+    bottom: 6px;
+    font-size: 64px;
+    color: var(--c);
+    opacity: 0.1;
+    pointer-events: none;
+}
+.stat-label { font-size: 13px; color: #909399; position: relative; z-index: 1; }
+.stat-value {
+    margin-top: 6px;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--c);
+    line-height: 1.2;
+    position: relative;
+    z-index: 1;
+}
+.stat-tag { font-size: 12px; font-weight: 400; color: #b0b3bb; }
+.acct-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+    max-height: 52px;
+    overflow: hidden;
+}
+</style>

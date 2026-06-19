@@ -6,9 +6,9 @@
                 <span class="text-lg">{{ pageName }}</span>
             </div>
 
-            <el-tabs model-value="/shop/delivery/electronic_sheet/config" @tab-change="handleClick">
-                <el-tab-pane :label="t('tabESTemplate')" name="/shop/delivery/electronic_sheet" />
-                <el-tab-pane :label="t('tabESConfig')" name="/shop/delivery/electronic_sheet/config" />
+            <el-tabs model-value="/phone_shop/delivery/electronic_sheet/config" @tab-change="handleClick">
+                <el-tab-pane :label="t('tabESTemplate')" name="/phone_shop/delivery/electronic_sheet" />
+                <el-tab-pane :label="t('tabESConfig')" name="/phone_shop/delivery/electronic_sheet/config" />
             </el-tabs>
 
             <el-form class="page-form" :model="formData" :rules="formRules" label-width="150px" ref="formRef" v-loading="loading">

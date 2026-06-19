@@ -11,45 +11,34 @@
                 </div>
             </div>
 
-            <div class="task-tabbar">
-                <button
-                    v-for="item in taskTabs"
-                    :key="item.key"
-                    type="button"
-                    class="task-tab"
-                    :class="{ active: activeTaskTab === item.key }"
-                    @click="handleTaskTab(item.key)"
-                >
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.count }}</strong>
-                </button>
-            </div>
-
-            <el-tabs v-model="activeTab" class="asset-tabs" @tab-change="handleTabChange">
-                <el-tab-pane label="资产流转" name="asset">
+            <!-- 状态(任务流)主标签：全部 / 待拍照 / 待定价 / 已完成（带数量） -->
+            <el-tabs v-model="activeTaskTab" class="asset-task-tabs mt-2" @tab-change="handleTaskTab">
+                <el-tab-pane name="" label="全部" />
+                <el-tab-pane v-for="t in taskTabs" :key="t.key" :name="t.key" :label="`${t.label} ${t.count}`" />
+            </el-tabs>
                     <el-card class="search-panel !border-none" shadow="never">
                         <el-form :inline="true" :model="assetSearch" ref="assetSearchRef">
                             <el-form-item label="关键词" prop="keyword">
                                 <el-input v-model.trim="assetSearch.keyword" class="!w-[240px]" clearable placeholder="资产编号 / IMEI / 型号 / 设备ID" @keyup.enter="loadAssets" />
                             </el-form-item>
-                            <el-form-item label="资产状态" prop="status">
-                                <el-select v-model="assetSearch.status" clearable class="!w-[150px]" placeholder="全部">
-                                    <el-option v-for="item in assetStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-                                </el-select>
-                            </el-form-item>
-                            <el-form-item label="拍照状态" prop="photo_status">
-                                <el-select v-model="assetSearch.photo_status" clearable class="!w-[150px]" placeholder="全部">
-                                    <el-option v-for="item in photoStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-                                </el-select>
-                            </el-form-item>
-                            <el-form-item label="定价状态" prop="price_status">
-                                <el-select v-model="assetSearch.price_status" clearable class="!w-[150px]" placeholder="全部">
-                                    <el-option v-for="item in priceStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-                                </el-select>
-                            </el-form-item>
+                            <template v-if="showAdvanced">
+                                <el-form-item label="拍照状态" prop="photo_status">
+                                    <el-select v-model="assetSearch.photo_status" clearable class="!w-[150px]" placeholder="全部">
+                                        <el-option v-for="item in photoStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+                                    </el-select>
+                                </el-form-item>
+                                <el-form-item label="定价状态" prop="price_status">
+                                    <el-select v-model="assetSearch.price_status" clearable class="!w-[150px]" placeholder="全部">
+                                        <el-option v-for="item in priceStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+                                    </el-select>
+                                </el-form-item>
+                            </template>
                             <el-form-item>
                                 <el-button type="primary" :icon="Search" @click="loadAssets">查询</el-button>
                                 <el-button @click="resetAssetSearch">重置</el-button>
+                                <el-button text type="primary" @click="showAdvanced = !showAdvanced">
+                                    {{ showAdvanced ? '收起筛选' : '高级筛选' }}
+                                </el-button>
                             </el-form-item>
                         </el-form>
                     </el-card>
@@ -88,7 +77,6 @@
                         <el-table-column label="状态" width="180">
                             <template #default="{ row }">
                                 <el-tag :type="statusType(row.status)" effect="light" round>{{ row.status_name || row.status }}</el-tag>
-                                <div class="next-action">{{ nextActionLabel(row) }}</div>
                                 <div class="loc-line">
                                     <el-tag v-if="Number(row.location_id) > 0" type="success" size="small" effect="plain">库位：{{ row.location_name || ('#' + row.location_id) }}</el-tag>
                                     <el-tag v-else type="info" size="small" effect="plain">未归位</el-tag>
@@ -96,24 +84,34 @@
                             </template>
                         </el-table-column>
                         <el-table-column prop="create_at" label="入库时间" width="170" />
-                        <el-table-column label="操作" fixed="right" width="400" align="center">
+                        <el-table-column label="操作" fixed="right" width="170" align="center">
                             <template #default="{ row }">
-                                <el-button type="primary" link :icon="View" @click="openDetail(row)">详情</el-button>
-                                <el-button type="primary" link :icon="Location" @click="openLocationDialog(row)">设库位</el-button>
-                                <el-button v-if="canUploadMedia(row)" type="primary" link :icon="Camera" @click="openMediaDialog(row)">
-                                    {{ row.photo_status === 'rejected' ? '重新补图' : '拍照/补图' }}
-                                </el-button>
+                                <!-- 主操作：当前阶段最该做的那一步 -->
                                 <el-button
-                                    v-if="canConfirmPhotos(row)"
-                                    type="warning"
-                                    link
-                                    :icon="CircleCheck"
-                                    :loading="row._confirmingPhotos"
-                                    @click="handleConfirmPhotos(row)"
+                                    v-if="primaryAction(row)"
+                                    :type="primaryAction(row).type"
+                                    size="small"
+                                    :icon="primaryAction(row).icon"
+                                    :loading="row._confirmingPhotos && primaryAction(row).label === '确认照片'"
+                                    @click="primaryAction(row).run()"
                                 >
-                                    确认照片
+                                    {{ primaryAction(row).label }}
                                 </el-button>
-                                <el-button v-if="canPrice(row)" type="success" link :icon="Money" @click="openPriceDialog(row)">定价</el-button>
+                                <!-- 更多：详情/设库位 等次要操作 -->
+                                <el-dropdown trigger="click" class="ml-1 align-middle">
+                                    <el-button size="small" text :icon="MoreFilled" />
+                                    <template #dropdown>
+                                        <el-dropdown-menu>
+                                            <el-dropdown-item
+                                                v-for="(m, mi) in moreActions(row)"
+                                                :key="mi"
+                                                @click="m.run()"
+                                            >
+                                                {{ m.label }}
+                                            </el-dropdown-item>
+                                        </el-dropdown-menu>
+                                    </template>
+                                </el-dropdown>
                             </template>
                         </el-table-column>
                     </el-table>
@@ -128,8 +126,6 @@
                             @current-change="loadAssets"
                         />
                     </div>
-                </el-tab-pane>
-            </el-tabs>
         </el-card>
 
         <el-drawer v-model="detailVisible" title="资产详情" size="760px" destroy-on-close>
@@ -381,7 +377,7 @@
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
-import { Camera, CircleCheck, Download, Location, Money, Refresh, Search, View } from '@element-plus/icons-vue'
+import { Camera, CircleCheck, Download, Money, Refresh, Search, MoreFilled } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 import {
     confirmAssetPhotos,
@@ -392,7 +388,8 @@ import {
     getAssetStats,
     reviewAssetMedia,
     reviewAssetMediaBatch,
-    saveAssetMedia
+    saveAssetMedia,
+    rePushAsset
 } from '@/addon/hsx_device_asset/api/device_asset'
 import { getToken, img } from '@/utils/common'
 import storage from '@/utils/storage'
@@ -405,7 +402,7 @@ const {
     money, imgUrl,
     statusType, mediaStatusType,
     checkSummaryEntries, recycleCheckImages, deviceSpecText,
-    canConfirmPhotos, canUploadMedia, canPrice, nextActionLabel,
+    canConfirmPhotos, canUploadMedia, canPrice,
     expandedSummaryKeys, isLongSummary, toggleSummary
 } = useAssetFormat()
 
@@ -422,6 +419,7 @@ const exportLoading = ref(false)
 
 const assetSearchRef = ref<FormInstance>()
 const assetSearch = reactive({ keyword: '', status: '', photo_status: '', price_status: '', task_type: 'photo' })
+const showAdvanced = ref(false)
 
 const assetTable = reactive({ data: [] as any[], total: 0, page: 1, limit: 10, loading: false })
 const selectedAssetRows = ref<any[]>([])
@@ -460,6 +458,63 @@ const localCamera = reactive({
 const priceDialogVisible = ref(false)
 const priceRow = ref<Record<string, any> | null>(null)
 const onPriceSuccess = () => { Promise.all([loadAssets(), loadStats()]) }
+
+// 重新推送：把已定价资产最新数据再发一次事件，商城据此更新货源
+// 按工作流阶段决定「主操作」（与 nextActionLabel 同口径），其余收进「更多」
+const primaryAction = (row: any) => {
+    const noImg = Number(row.image_count || 0) <= 0
+    if (canUploadMedia(row) && (row.photo_status === 'rejected' || row.status === 'photo_rejected')) {
+        return { label: '重新补图', icon: Camera, type: 'primary', run: () => openMediaDialog(row) }
+    }
+    if (canUploadMedia(row) && (['wait_photo', 'photoing'].includes(row.photo_status) || noImg)) {
+        return { label: '拍照/补图', icon: Camera, type: 'primary', run: () => openMediaDialog(row) }
+    }
+    if (canConfirmPhotos(row)) {
+        return { label: '确认照片', icon: CircleCheck, type: 'warning', run: () => handleConfirmPhotos(row) }
+    }
+    if (canPrice(row)) {
+        return { label: '定价', icon: Money, type: 'success', run: () => openPriceDialog(row) }
+    }
+    if (row.price_status === 'completed') {
+        return { label: '重新推送', icon: Refresh, type: 'primary', run: () => handleRePush(row) }
+    }
+    return null
+}
+
+// 「更多」里的次要操作（排除已作为主操作的那个）
+const moreActions = (row: any) => {
+    const p = primaryAction(row)
+    const pk = p ? p.label : ''
+    const items: Array<{ label: string; run: () => void }> = [
+        { label: '详情', run: () => openDetail(row) },
+        { label: '设库位', run: () => openLocationDialog(row) },
+    ]
+    if (canUploadMedia(row) && pk !== '拍照/补图' && pk !== '重新补图') {
+        items.push({ label: '拍照/补图', run: () => openMediaDialog(row) })
+    }
+    if (canConfirmPhotos(row) && pk !== '确认照片') {
+        items.push({ label: '确认照片', run: () => handleConfirmPhotos(row) })
+    }
+    if (canPrice(row) && pk !== '定价') {
+        items.push({ label: '定价', run: () => openPriceDialog(row) })
+    }
+    if (row.price_status === 'completed' && pk !== '重新推送') {
+        items.push({ label: '重新推送', run: () => handleRePush(row) })
+    }
+    return items
+}
+
+const handleRePush = (row: Record<string, any>) => {
+    ElMessageBox.confirm('将把该设备最新的定价/型号/质检/图片重新推送给商城（幂等更新货源），是否继续？', '重新推送', {
+        confirmButtonText: '推送',
+        cancelButtonText: '取消',
+        type: 'info'
+    }).then(() => {
+        rePushAsset(row.id).then(() => {
+            ElMessage.success('已重新推送到商城')
+        })
+    }).catch(() => {})
+}
 
 const assetStatusOptions = [
     { label: '待拍照', value: 'wait_photo' },

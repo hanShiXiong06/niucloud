@@ -48,6 +48,13 @@ export function completeAssetPrice(id: number, data: Record<string, any>) {
     return request.post(`device_asset/price/${ id }`, data)
 }
 
+/**
+ * 重新推送：把已定价资产最新数据再发一次事件，商城据此更新货源
+ */
+export function rePushAsset(id: number) {
+    return request.post(`device_asset/re_push/${ id }`)
+}
+
 export function exportAssetExcel(params: Record<string, any>) {
     return request.post('device_asset/export', params, { responseType: 'blob' })
 }

@@ -59,6 +59,12 @@ class CoreFinanceLedgerService extends BaseCoreService
         }
 
         $now = time();
+        // 操作人(谁触发的应付/应收)并入 ext_json, 供全链路展示; 表无独立字段, 用扩展位存
+        $ext = (array)($payload['ext'] ?? []);
+        if (($payload['operator_name'] ?? '') !== '' || (int)($payload['operator_uid'] ?? 0) > 0) {
+            $ext['operator_uid'] = (int)($payload['operator_uid'] ?? 0);
+            $ext['operator_name'] = (string)($payload['operator_name'] ?? '');
+        }
         $row = $model->create([
             'site_id'           => $siteId,
             'counterparty_id'   => $cpId,
@@ -72,7 +78,7 @@ class CoreFinanceLedgerService extends BaseCoreService
             'event_id'          => $eventId,
             'occurred_at'       => (int)($payload['occurred_at'] ?? $now),
             'remark'            => (string)($payload['remark'] ?? ''),
-            'ext_json'          => isset($payload['ext']) ? json_encode($payload['ext'], JSON_UNESCAPED_UNICODE) : null,
+            'ext_json'          => !empty($ext) ? json_encode($ext, JSON_UNESCAPED_UNICODE) : null,
             'create_time'       => $now,
             'update_time'       => $now,
         ]);

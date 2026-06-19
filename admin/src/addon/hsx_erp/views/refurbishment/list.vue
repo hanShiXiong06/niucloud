@@ -14,17 +14,18 @@
             <el-alert class="mt-4" type="info" :closable="false"
                 title="建议只记录实际发生的单机费用。整备完成后的成本不可直接修改，纠错应通过成本冲销。" />
 
-            <el-form :inline="true" class="mt-5" @submit.prevent>
+            <!-- 状态切换 -->
+            <el-tabs v-model="search.status" class="mt-3" @tab-change="handleSearch">
+                <el-tab-pane label="全部" name="" />
+                <el-tab-pane label="整备中" name="processing" />
+                <el-tab-pane label="已完成" name="completed" />
+                <el-tab-pane label="已取消" name="cancelled" />
+            </el-tabs>
+
+            <el-form :inline="true" @submit.prevent>
                 <el-form-item label="关键词">
                     <el-input v-model.trim="search.keyword" clearable class="!w-[260px]"
                         placeholder="工单号 / IMEI / 型号 / 负责人" @keyup.enter="handleSearch" />
-                </el-form-item>
-                <el-form-item label="状态">
-                    <el-select v-model="search.status" clearable class="!w-[130px]" @change="handleSearch">
-                        <el-option label="整备中" value="processing" />
-                        <el-option label="已完成" value="completed" />
-                        <el-option label="已取消" value="cancelled" />
-                    </el-select>
                 </el-form-item>
                 <el-form-item label="负责人">
                     <el-select v-model="search.assigned_uid" clearable filterable class="!w-[150px]" placeholder="全部负责人" @change="handleSearch">

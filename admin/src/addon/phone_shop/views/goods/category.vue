@@ -7,9 +7,9 @@
                     {{ t('addCategory') }}
                 </el-button>
             </div>
-            <el-tabs class="demo-tabs" model-value="/shop/goods/category" @tab-change="handleClick">
-                <el-tab-pane :label="t('tabGoodsCategory')" name="/shop/goods/category" />
-                <el-tab-pane :label="t('tabGoodsCategoryConfig')" name="/shop/goods/category/config" />
+            <el-tabs class="demo-tabs" model-value="/phone_shop/goods/category" @tab-change="handleClick">
+                <el-tab-pane :label="t('tabGoodsCategory')" name="/phone_shop/goods/category" />
+                <el-tab-pane :label="t('tabGoodsCategoryConfig')" name="/phone_shop/goods/category/config" />
             </el-tabs>
             <div class="mt-[10px]">
                 <el-table :data="categoryTable.data" ref="tableRef" size="large" v-loading="categoryTable.loading" row-key="category_id" :tree-props="{ hasChildren: 'hasChildren', children: 'child_list' }">

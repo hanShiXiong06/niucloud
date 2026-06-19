@@ -112,7 +112,7 @@ const setFormData = async (row: any = null) => {
 }
 
 const toLink = () => {
-    const path = '/shop/order/detail'
+    const path = '/phone_shop/order/detail'
     const url = router.resolve({
         path,
         query: {

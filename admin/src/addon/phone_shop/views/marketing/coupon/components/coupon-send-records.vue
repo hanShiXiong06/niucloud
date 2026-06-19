@@ -110,7 +110,7 @@ init()
 // 订单详情
 const showOrder = (data: any) => {
     showDialog.value = false;
-    router.push('/shop/order/detail?order_id=' + data.trade_id)
+    router.push('/phone_shop/order/detail?order_id=' + data.trade_id)
 }
 
 const resetForm = (formEl: FormInstance | undefined) => {

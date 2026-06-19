@@ -775,7 +775,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
 }
 
 const back = () => {
-    router.push('/shop/marketing/exchange/goods_list')
+    router.push('/phone_shop/marketing/exchange/goods_list')
 }
 </script>
 

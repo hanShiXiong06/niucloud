@@ -30,11 +30,21 @@ class Finance extends BaseAdminController
         return success((new FinanceCounterpartyBalanceService())->getCounterpartyBalance($cpId));
     }
 
+    /** 按设备对账（导出用）：一台机器一行，回收→销售全链路 + 结算方式/折账原因 */
+    public function reconciliation()
+    {
+        $where = $this->request->params([
+            ['counterparty_id', 0], ['settle_method', ''], ['pay_state', ''], ['recv_state', ''], ['keyword', ''],
+            ['start_time', 0], ['end_time', 0],
+        ]);
+        return success((new \addon\hsx_erp\app\service\admin\FinanceReconciliationService())->deviceRows($where));
+    }
+
     /** 应付列表 */
     public function payableLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''],
+            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''], ['operator', ''],
             ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
             ['sort_field', 'occurred_at'], ['sort_order', 'desc'],
             ['page', 1], ['limit', 15],
@@ -46,7 +56,7 @@ class Finance extends BaseAdminController
     public function receivableLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''],
+            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''], ['operator', ''],
             ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
             ['sort_field', 'occurred_at'], ['sort_order', 'desc'],
             ['page', 1], ['limit', 15],
@@ -119,7 +129,7 @@ class Finance extends BaseAdminController
     public function settlementLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['keyword', ''], ['start_time', 0], ['end_time', 0], ['page', 1], ['limit', 15],
+            ['counterparty_id', 0], ['keyword', ''], ['operator', ''], ['start_time', 0], ['end_time', 0], ['page', 1], ['limit', 15],
         ]);
         return success((new FinanceSettlementService())->getPage($where));
     }

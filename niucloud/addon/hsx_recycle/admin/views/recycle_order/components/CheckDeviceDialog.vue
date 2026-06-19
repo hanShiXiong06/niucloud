@@ -203,7 +203,7 @@
         <span class="cdd-footer__info">已填质检项：{{ checkedCount }}</span>
         <div class="cdd-footer__btns">
           <el-button class="cdd-footer__cancel" size="large" @click="handleCancel">取消</el-button>
-          <el-button class="cdd-return-btn" type="danger" plain size="large" :disabled="savingDraft || submitting" @click="handleReturnDevice">退回设备</el-button>
+          <el-button v-permission="'recycle_device_batch_return'" class="cdd-return-btn" type="danger" plain size="large" :disabled="savingDraft || submitting" @click="handleReturnDevice">退回设备</el-button>
           <el-button type="warning" size="large" :loading="savingDraft" @click="handleSaveDraft">{{ savingDraft ? '暂存中...' : '暂存草稿' }}</el-button>
           <el-button type="primary" size="large" :loading="submitting" @click="handleConfirm"><el-icon v-if="!submitting"><Check /></el-icon>{{ submitting ? '提交中...' : '完成质检' }}</el-button>
         </div>

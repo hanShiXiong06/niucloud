@@ -459,7 +459,7 @@ const exportSelectEvent = () => {
 
 // 订单详情
 const detailEvent = (data: any) => {
-    router.push('/shop/order/detail?order_id=' + data.order_id)
+    router.push('/phone_shop/order/detail?order_id=' + data.order_id)
 }
 
 const memberEvent = (id: number) => {
@@ -683,7 +683,7 @@ const batchDeleteFn = () => {
 
 const toDelivery = (data: any) => {
     const url = router.resolve({
-        path: '/shop/delivery/local/record',
+        path: '/phone_shop/delivery/local/record',
         query: {
             trade_no: data.order_no
         }

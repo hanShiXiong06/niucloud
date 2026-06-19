@@ -83,10 +83,10 @@ const editEvent = (data: any, index: number) => {
 }
 
 const toStaff = () => {
-    router.push('/shop/delivery/staff')
+    router.push('/phone_shop/delivery/staff')
 }
 const toRecord = () => {
-    router.push('/shop/delivery/merchant/record')
+    router.push('/phone_shop/delivery/merchant/record')
 }
 </script>
 

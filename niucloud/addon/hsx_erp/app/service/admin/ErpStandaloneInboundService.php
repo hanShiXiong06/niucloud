@@ -256,6 +256,8 @@ class ErpStandaloneInboundService extends BaseAdminService
                         'source_no'         => $payableNo,
                         'source_device_id'  => $sourceDeviceId,
                         'occurred_at'       => $now,
+                        'operator_uid'      => (int)$this->uid,
+                        'operator_name'     => (string)($this->username ?? ''),
                         'remark'            => '手工建档入库应付',
                     ]);
 

@@ -5,10 +5,8 @@
                 <el-input v-model.trim="formData.category_name" clearable :placeholder="t('categoryNamePlaceholder')" class="input-width" maxlength="10" show-word-limit />
             </el-form-item>
             <el-form-item :label="t('pid')" prop="pid">
-                <el-select v-model="formData.pid" clearable :disabled="formData.child_count" :placeholder="t('pidPlaceholder')" class="input-width">
-                    <el-option label="顶级分类" :value="0" />
-                    <el-option v-for="(item) in optionList" :key="item.category_id" :label="item.category_name" :value="item.category_id" />
-                </el-select>
+                <el-cascader v-model="formData.pid" :options="optionList" :props="categoryProps" clearable filterable
+                             :disabled="!!formData.child_count" :placeholder="'顶级分类（不选即一级）'" class="input-width" />
             </el-form-item>
             <el-form-item :label="t('image')">
                 <upload-image v-model="formData.image" />
@@ -32,7 +30,10 @@
 import { ref, reactive, computed } from 'vue'
 import { t } from '@/lang'
 import type { FormInstance } from 'element-plus'
-import { addCategory, editCategory, getCategoryInfo, getCategoryList } from '@/addon/phone_shop/api/goods'
+import { addCategory, editCategory, getCategoryInfo, getCategoryTree } from '@/addon/phone_shop/api/goods'
+
+// 级联选择器属性：选任意层级节点作为上级，返回该节点 category_id
+const categoryProps = { value: 'category_id', label: 'category_name', children: 'child_list', checkStrictly: true, emitPath: false }
 
 const showDialog = ref(false)
 const loading = ref(false)
@@ -63,18 +64,12 @@ const formRules = computed(() => {
         ],
         category_name: [
             { required: true, message: t('categoryNamePlaceholder'), trigger: 'blur' }
-        ],
-        pid: [
-            { required: true, message: t('pidPlaceholder'), trigger: 'change' }
         ]
+        // pid 不必填：不选即顶级（一级）分类
     }
 })
 
-interface optionListType {
-    category_id: number
-    category_name: string
-}
-const optionList = ref<optionListType[]>([])
+const optionList = ref<any[]>([])
 const emit = defineEmits(['complete'])
 
 /**
@@ -89,7 +84,7 @@ const confirm = async (formEl: FormInstance | undefined) => {
         if (valid) {
             loading.value = true
 
-            const data = formData
+            const data = { ...formData, pid: formData.pid || 0 } // 未选上级 = 顶级(一级)
 
             save(data).then(res => {
                 loading.value = false
@@ -102,12 +97,17 @@ const confirm = async (formEl: FormInstance | undefined) => {
     })
 }
 
-// 获取全部分类
+// 递归剔除"自己及其子树"，避免把自己设为上级
+const filterSelf = (list: any[], selfId: any): any[] => {
+    return (list || [])
+        .filter((el: any) => el.category_id != selfId)
+        .map((el: any) => ({ ...el, child_list: filterSelf(el.child_list || [], selfId) }))
+}
+
+// 获取完整分类树作为上级候选（支持选到二级 → 建三级）
 const getCategoryAllFn = () => {
-    getCategoryList({
-        level: 1
-    }).then(res => {
-        optionList.value = res.data.filter((el: any) => el.category_id != formData.category_id)
+    getCategoryTree().then((res: any) => {
+        optionList.value = filterSelf(res.data || [], formData.category_id)
     })
 }
 

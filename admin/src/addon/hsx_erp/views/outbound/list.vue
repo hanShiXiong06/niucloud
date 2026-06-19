@@ -8,7 +8,7 @@
                         把在库设备卖给同行并出库。可现结(出库即填价)或先出库、价格未来回填。同行销售出库会按往来单位生成应收。
                     </div>
                 </div>
-                <el-button type="primary" @click="openCreate">新建出库</el-button>
+                <el-button v-permission="'hsx_erp_outbound_create'" type="primary" @click="openCreate">新建出库</el-button>
             </div>
 
             <el-form :inline="true" class="mt-4" @submit.prevent>
@@ -71,8 +71,8 @@
                 <el-table-column label="操作" width="200" align="center" fixed="right">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openInfo(row)">详情</el-button>
-                        <el-button v-if="!row.is_void && row.price_status === 'pending'" type="warning" link @click="openFill(row)">回填价格</el-button>
-                        <el-button v-if="row.can_cancel" type="danger" link @click="doCancel(row)">退回</el-button>
+                        <el-button v-if="!row.is_void && row.price_status === 'pending'" v-permission="'hsx_erp_outbound_fill_price'" type="warning" link @click="openFill(row)">回填价格</el-button>
+                        <el-button v-if="row.can_cancel" v-permission="'hsx_erp_outbound_cancel'" type="danger" link @click="doCancel(row)">退回</el-button>
                     </template>
                 </el-table-column>
             </el-table>

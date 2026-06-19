@@ -802,7 +802,7 @@ getShopDeliveryList().then((res) => {
 // 跳转到运费模板
 const toDeliveryTemplateEvent = () => {
     const url = router.resolve({
-        path: '/shop/order/shipping/template'
+        path: '/phone_shop/order/shipping/template'
     })
     window.open(url.href)
 }

@@ -135,7 +135,7 @@ const router = useRouter()
 const loading = ref(true)
 
 const back = () => {
-    router.push('/shop/delivery/company')
+    router.push('/phone_shop/delivery/company')
 }
 
 /**
@@ -301,7 +301,7 @@ const save = async(formEl: FormInstance | undefined) => {
 
             const data = formData
             api(data).then(res => {
-                router.push('/shop/delivery/company')
+                router.push('/phone_shop/delivery/company')
                 repeat.value = false
             }).catch(() => {
                 repeat.value = false

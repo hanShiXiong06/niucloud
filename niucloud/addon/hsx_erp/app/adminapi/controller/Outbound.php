@@ -52,11 +52,27 @@ class Outbound extends BaseAdminController
         return success($this->service->cancelOutbound($id, (string)$this->request->param('reason', '')));
     }
 
-    /** 回填价格(价格未来回填的出库单) */
+    /** 回填价格(价格未来回填的出库单), 可选立即收款入账 */
     public function fillPrice(int $id)
     {
-        $items = $this->request->param('items', []);
-        return success($this->service->fillPrice($id, (array)$items));
+        $p = $this->request->params([
+            ['items', []], ['collect_now', 0], ['capital_account_id', 0],
+        ]);
+        return success($this->service->fillPrice($id, (array)$p['items'], [
+            'collect_now'        => (int)$p['collect_now'] === 1,
+            'capital_account_id' => (int)$p['capital_account_id'],
+        ]));
+    }
+
+    /** 卖同行待办: 待回填价 / 待收款 的同行挂单(设备中心专门处理页用) */
+    public function peerSaleTodo()
+    {
+        $where = $this->request->params([
+            ['keyword', ''], ['imei', ''], ['express_no', ''], ['operator', ''], ['state', ''],
+            ['start_time', 0], ['end_time', 0], ['qty_min', ''], ['qty_max', ''],
+            ['page', 1], ['limit', 15],
+        ]);
+        return success($this->service->peerSaleTodo($where));
     }
 
     /** 调拨(移仓/移库位, 如划拨到同行仓)。consign_action: list 上架代卖(默认) / buyout 我方买断 */

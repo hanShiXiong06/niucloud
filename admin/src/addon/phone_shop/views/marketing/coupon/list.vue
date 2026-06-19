@@ -259,11 +259,11 @@ const spreadEvent = (data: any) => {
 
 // 添加优惠券
 const handleChange = () => {
-    router.push('/shop/marketing/coupon/add')
+    router.push('/phone_shop/marketing/coupon/add')
 }
 // 编辑优惠券
 const editEvent = (data: any) => {
-    router.push('/shop/marketing/coupon/edit?id=' + data.id)
+    router.push('/phone_shop/marketing/coupon/edit?id=' + data.id)
 }
 
 // 发放优惠券

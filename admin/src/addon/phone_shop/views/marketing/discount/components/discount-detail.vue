@@ -392,7 +392,7 @@ const setFormData = async (row: any = null) => {
 const toGoodsCategoryEvent = (order_id:any) => {
     // 你可以在这里根据 orderNo 来动态传递参数
     const url = router.resolve({
-        path: "/shop/order/detail",
+        path: "/phone_shop/order/detail",
         query: { order_id } // 传递 orderNo 到商品分类页面
     })
     window.open(url.href)

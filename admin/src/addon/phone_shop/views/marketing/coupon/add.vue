@@ -390,7 +390,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
 }
 
 const back = () => {
-    router.push('/shop/marketing/coupon/list')
+    router.push('/phone_shop/marketing/coupon/list')
 }
 // 删除商品
 

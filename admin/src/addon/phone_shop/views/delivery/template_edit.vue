@@ -474,7 +474,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
             data.area = Object.values(area)
             save(data).then(() => {
                 loading.value = false
-                router.push({ path: '/shop/shipping/template' })
+                router.push({ path: '/phone_shop/shipping/template' })
             }).catch(() => {
                 loading.value = false
             })
@@ -483,7 +483,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
 }
 
 const back = () => {
-    router.push({ path: '/shop/shipping/template' })
+    router.push({ path: '/phone_shop/shipping/template' })
 }
 </script>
 

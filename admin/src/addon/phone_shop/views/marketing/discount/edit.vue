@@ -849,7 +849,7 @@ const inputBlur = (row: any, discount_type: string, index: number) => {
 
 }
 const back = () => {
-    router.push('/shop/marketing/discount/list')
+    router.push('/phone_shop/marketing/discount/list')
 }
 </script>
 

@@ -116,7 +116,7 @@ const setFormData = async (row: any = null) => {
 
 const toLink = () => {
     const url = router.resolve({
-        path: '/shop/order/detail',
+        path: '/phone_shop/order/detail',
         query: {
             order_id: detailData.value.trade_id
         }

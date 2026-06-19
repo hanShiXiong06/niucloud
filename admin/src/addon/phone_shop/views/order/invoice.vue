@@ -187,7 +187,7 @@ const invoiceEvent = (data: any) => {
 const checkOrder = (data: any) => {
     if (data.trade_type === 'phone_shop') {
         const routeUrl = router.resolve({
-            path: '/shop/order/detail',
+            path: '/phone_shop/order/detail',
             query: { order_id: data.trade_id }
         })
         window.open(routeUrl.href, '_blank')

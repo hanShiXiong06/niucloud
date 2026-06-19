@@ -14,17 +14,27 @@
                 </div>
             </div>
 
-            <div class="mt-4 flex gap-3">
-                <el-select v-model="search.warehouse_id" placeholder="仓库" clearable class="w-44" @change="loadList">
-                    <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouse_name" :value="w.id" />
-                </el-select>
-                <el-select v-model="search.status" placeholder="状态" clearable class="w-36" @change="loadList">
-                    <el-option label="盘点中" value="counting" />
-                    <el-option label="已完成" value="finished" />
-                </el-select>
-                <el-input v-model.trim="search.keyword" placeholder="单号/仓库/库位" clearable class="w-52" @keyup.enter="loadList" />
-                <el-button type="primary" @click="loadList" :loading="table.loading">查询</el-button>
-            </div>
+            <!-- 状态切换 -->
+            <el-tabs v-model="search.status" class="mt-3" @tab-change="loadList">
+                <el-tab-pane label="全部" name="" />
+                <el-tab-pane label="盘点中" name="counting" />
+                <el-tab-pane label="已完成" name="finished" />
+            </el-tabs>
+
+            <el-form :inline="true" @submit.prevent>
+                <el-form-item label="仓库">
+                    <el-select v-model="search.warehouse_id" placeholder="全部仓库" clearable class="!w-[180px]" @change="loadList">
+                        <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouse_name" :value="w.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="关键词">
+                    <el-input v-model.trim="search.keyword" placeholder="单号 / 仓库 / 库位" clearable class="!w-[220px]" @keyup.enter="loadList" />
+                </el-form-item>
+                <el-form-item>
+                    <el-button type="primary" @click="loadList" :loading="table.loading">查询</el-button>
+                    <el-button @click="resetSearch">重置</el-button>
+                </el-form-item>
+            </el-form>
 
             <el-table class="mt-4" :data="table.data" v-loading="table.loading" size="large" empty-text="暂无盘点单">
                 <el-table-column prop="stocktake_no" label="盘点单号" min-width="170" />
@@ -151,7 +161,7 @@ import { getErpWarehouseList } from '@/addon/hsx_erp/api/warehouse'
 const fmt = (t: number) => (t ? new Date(t * 1000).toLocaleString() : '-')
 const resultType = (r: string) => (r === 'loss' ? 'danger' : r === 'profit' ? 'warning' : r === 'matched' ? 'success' : 'info')
 
-const { search, table, loadList, onPage } = useListQuery({
+const { search, table, loadList, onPage, reset: resetSearch } = useListQuery({
     api: getStocktakeList,
     defaults: { warehouse_id: undefined as any, status: '', keyword: '' },
     pageSize: 15,

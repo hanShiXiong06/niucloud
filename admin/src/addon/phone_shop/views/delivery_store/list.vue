@@ -119,15 +119,15 @@ loadDeliveryStoreList()
  * 添加门店
  */
 const addEvent = () => {
-    router.push('/shop/delivery_store/edit')
+    router.push('/phone_shop/delivery_store/edit')
 }
 // 配送设置
 const deliverySetEvent = (data: any) => {
-    router.push('/shop/delivery_store/delivery_set?id=' + data.store_id)
+    router.push('/phone_shop/delivery_store/delivery_set?id=' + data.store_id)
 }
 // 编辑
 const editEvent = (row: any) => {
-    router.push({ path: '/shop/delivery_store/edit', query: { store_id: row.store_id } })
+    router.push({ path: '/phone_shop/delivery_store/edit', query: { store_id: row.store_id } })
 }
 // 删除
 const deleteEvent = (row: any) => {

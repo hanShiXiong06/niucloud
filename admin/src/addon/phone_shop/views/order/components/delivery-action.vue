@@ -602,14 +602,14 @@ const handleClose = () => {
 // 去开通
 const toThirdDelivery = () => {
     const url = router.resolve({
-        path: '/shop/delivery/local_delivery_service'
+        path: '/phone_shop/delivery/local_delivery_service'
     })
     window.open(url.href)
 }
 
 const toAddress = () => {
     const url = router.resolve({
-        path: '/shop/delivery_store/delivery_set',
+        path: '/phone_shop/delivery_store/delivery_set',
         query: {
             id: formData.store_id
         }

@@ -749,8 +749,11 @@ class ErpAssetService extends BaseAdminService
                 );
                 $outbox = ErpDomainEvent::writeOutbox($domainEvent, $now);
                 $outboxIds[] = (int)$outbox->id;
-                // 待拍照:暂不走整备/定价决策,等拍完照确认入库后再决策
-                if (!$requirePhoto) {
+                // 待拍照:暂不走整备/定价决策,等拍完照确认入库后再决策。
+                // 例外:需整备的机器要"先整备再拍照"——即使仓库要求拍照, 也先走整备决策(置整备中),
+                // 整备完成后再转「待拍照」, 避免带病/未修的机器先被拍照。
+                $needRefurb = (bool)($this->normalizeRefurbishmentPlan((array)($sourceSnapshot['refurbishment'] ?? []))['required'] ?? false);
+                if (!$requirePhoto || $needRefurb) {
                     $outboxIds = array_merge(
                         $outboxIds,
                         $this->applyPostInboundRefurbishmentDecision($asset, $stockOrderId, $now)
@@ -907,7 +910,9 @@ class ErpAssetService extends BaseAdminService
     {
         $sourceSnapshot = (array)$asset->source_snapshot;
         $plan = $this->normalizeRefurbishmentPlan((array)($sourceSnapshot['refurbishment'] ?? []));
-        if ($plan['required']) {
+        // 防二次整备:该设备已建过整备单(先整备再拍照场景, 拍完照又回到这里)则不再重复建单, 直接走定价决策
+        $alreadyRefurbished = ErpRefurbishOrder::where([['site_id', '=', $this->site_id], ['asset_id', '=', (int)$asset->id]])->count() > 0;
+        if ($plan['required'] && !$alreadyRefurbished) {
             $refurbishOrder = $this->createRefurbishmentOrderFromDecision($asset, $plan, $stockOrderId, $now);
             $this->writeOperation(
                 (int)$asset->id,
@@ -1310,22 +1315,77 @@ class ErpAssetService extends BaseAdminService
         $soldCost    = round($soldCost, 2);
         $grossProfit = round($saleAmount - $soldCost, 2);
 
-        // 期末在库
+        // 期末在库 = 真正在手可售/在途整备的货；不含 LOCKED(销售锁定=挂单已售给同行,待结/待发,已不算在库)
         $onHand = [
             ErpDict::INVENTORY_IN_STOCK,
             ErpDict::INVENTORY_REFURBISHING,
             ErpDict::INVENTORY_PENDING_PRICING,
             ErpDict::INVENTORY_AVAILABLE_FOR_SALE,
-            ErpDict::INVENTORY_LOCKED,
         ];
         $stockCount = $base()->whereIn('inventory_status', $onHand)->count();
         $stockCost  = round((float)$base()->whereIn('inventory_status', $onHand)->sum('current_cost'), 2);
+        // 已售锁定(挂单卖给同行, 未结/未发) 单列, 避免和"在库"混淆
+        $lockedCount = $base()->where('inventory_status', '=', ErpDict::INVENTORY_LOCKED)->count();
+        $lockedCost  = round((float)$base()->where('inventory_status', '=', ErpDict::INVENTORY_LOCKED)->sum('current_cost'), 2);
 
         return [
             'range'     => ['start' => date('Y-m-d', $start), 'end' => date('Y-m-d', $end)],
             'purchase'  => ['count' => $inCount, 'cost' => $inCost],
             'sales'     => ['count' => $soldCount, 'amount' => $saleAmount, 'cost' => $soldCost, 'gross_profit' => $grossProfit],
             'inventory' => ['on_hand_count' => $stockCount, 'on_hand_cost' => $stockCost],
+            'locked'    => ['count' => $lockedCount, 'cost' => $lockedCost], // 已售锁定(挂单待结/待发)
         ];
+    }
+
+    /**
+     * 给 AI「列出库存设备」用：按状态列设备(默认在手未售)，可按型号/IMEI 过滤。
+     * 受当前用户库位范围限制(员工只看自己负责库位)。
+     * @param string $status onhand在手(默认)/available可售/in_stock在库/refurbishing整备中/locked已售锁定/sold已售/all全部
+     */
+    public function listForAi(string $status = 'onhand', string $keyword = '', int $limit = 50): array
+    {
+        $statusMap = [
+            'onhand' => [ErpDict::INVENTORY_IN_STOCK, ErpDict::INVENTORY_REFURBISHING, ErpDict::INVENTORY_PENDING_PRICING, ErpDict::INVENTORY_AVAILABLE_FOR_SALE],
+            'available' => [ErpDict::INVENTORY_AVAILABLE_FOR_SALE],
+            'in_stock' => [ErpDict::INVENTORY_IN_STOCK],
+            'refurbishing' => [ErpDict::INVENTORY_REFURBISHING],
+            'pending_pricing' => [ErpDict::INVENTORY_PENDING_PRICING],
+            'locked' => [ErpDict::INVENTORY_LOCKED],
+            'sold' => [ErpDict::INVENTORY_LOCKED, ErpDict::INVENTORY_OUTBOUND],
+        ];
+        $query = ErpAsset::where([['site_id', '=', $this->site_id]]);
+        if ($status !== 'all' && isset($statusMap[$status])) {
+            $query->whereIn('inventory_status', $statusMap[$status]);
+        }
+        $keyword = trim($keyword);
+        if ($keyword !== '') {
+            $query->where(function ($q) use ($keyword) {
+                $q->whereLike('model|imei|imei2|sn|asset_no', '%' . $keyword . '%');
+            });
+        }
+        // 员工只看自己负责库位
+        $scope = $this->scopedLocationIds();
+        if ($scope !== null) {
+            $query->whereIn('location_id', $scope);
+        }
+        $limit = max(1, min($limit, 100));
+        $total = (clone $query)->count();
+        $rows = $query->order('id desc')->limit($limit)->select()->toArray();
+        $this->appendStatusLabels($rows);
+        $this->appendWarehouseNames($rows);
+        $records = [];
+        foreach ($rows as $r) {
+            $records[] = [
+                'device_id'   => (int)($r['source_device_id'] ?? 0),
+                'asset_no'    => (string)($r['asset_no'] ?? ''),
+                'model'       => (string)($r['model'] ?? ''),
+                'imei'        => (string)($r['imei'] ?? ''),
+                'cost'        => round((float)($r['current_cost'] ?? 0), 2),
+                'sale_price'  => round((float)($r['current_sale_price'] ?? 0), 2),
+                'status'      => (string)($r['status_text'] ?? $r['inventory_status'] ?? ''),
+                'warehouse'   => (string)($r['warehouse_name'] ?? ''),
+            ];
+        }
+        return ['count' => count($records), 'total' => $total, 'status' => $status, 'records' => $records];
     }
 }

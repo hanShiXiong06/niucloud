@@ -32,6 +32,9 @@ Route::group('erp', function () {
     Route::get('location_assign/lists', 'addon\hsx_erp\app\adminapi\controller\LocationAssign@lists');
     Route::post('location_assign/location/:location_id/staff', 'addon\hsx_erp\app\adminapi\controller\LocationAssign@setLocationStaff');
     Route::post('location_assign/staff/:uid/locations', 'addon\hsx_erp\app\adminapi\controller\LocationAssign@setStaffLocations');
+    // 推荐角色「一键生成」(不入侵框架, 调框架 RoleService)
+    Route::get('role_preset/preview', 'addon\hsx_erp\app\adminapi\controller\RolePreset@preview');
+    Route::post('role_preset/generate', 'addon\hsx_erp\app\adminapi\controller\RolePreset@generate');
     Route::get('refurbishment/lists', 'addon\hsx_erp\app\adminapi\controller\Refurbishment@lists');
     Route::get('refurbishment/user_options', 'addon\hsx_erp\app\adminapi\controller\Refurbishment@userOptions');
     Route::post('refurbishment/create', 'addon\hsx_erp\app\adminapi\controller\Refurbishment@create');
@@ -61,6 +64,7 @@ Route::group('erp', function () {
     // 财务中心: 往来对账 / 应付应收 / 结算·折账
     // 出库 / 调拨(同行出货)
     Route::get('outbound/lists', 'addon\hsx_erp\app\adminapi\controller\Outbound@lists');
+    Route::get('outbound/peer_sale_todo', 'addon\hsx_erp\app\adminapi\controller\Outbound@peerSaleTodo');
     Route::get('outbound/:id', 'addon\hsx_erp\app\adminapi\controller\Outbound@info');
     Route::post('outbound/create', 'addon\hsx_erp\app\adminapi\controller\Outbound@create');
     Route::post('outbound/:id/fill_price', 'addon\hsx_erp\app\adminapi\controller\Outbound@fillPrice');
@@ -80,6 +84,7 @@ Route::group('erp', function () {
     Route::post('capital_account/entry', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@entry');
     Route::get('capital_account/ledger', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@ledger');
     Route::get('finance/board', 'addon\hsx_erp\app\adminapi\controller\Finance@board');
+    Route::get('finance/reconciliation', 'addon\hsx_erp\app\adminapi\controller\Finance@reconciliation');
     Route::get('finance/counterparty_balance', 'addon\hsx_erp\app\adminapi\controller\Finance@counterpartyBalance');
     Route::get('finance/payable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@payableLists');
     Route::get('finance/receivable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@receivableLists');

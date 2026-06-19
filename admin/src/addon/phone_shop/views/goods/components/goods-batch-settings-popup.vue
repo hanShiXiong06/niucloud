@@ -395,7 +395,7 @@ const labelOptions = reactive([])
 // 跳转到商品标签，添加标签
 const toGoodsLabelEvent = () => {
     const url = router.resolve({
-        path: '/shop/goods/label'
+        path: '/phone_shop/goods/label'
     })
     window.open(url.href)
 }
@@ -424,7 +424,7 @@ const serviceOptions = reactive([])
 // 跳转到商品服务，添加服务
 const toGoodsServiceEvent = () => {
     const url = router.resolve({
-        path: '/shop/goods/service'
+        path: '/phone_shop/goods/service'
     })
     window.open(url.href)
 }
@@ -461,7 +461,7 @@ const categoryHandleChange = (value: any) => {
 // 跳转到商品分类，添加分类
 const toGoodsCategoryEvent = () => {
     const url = router.resolve({
-        path: '/shop/goods/category'
+        path: '/phone_shop/goods/category'
     })
     window.open(url.href)
 }
@@ -509,7 +509,7 @@ const brandOptions = reactive([])
 // 跳转到商品品牌，添加品牌
 const toGoodsBrandEvent = () => {
     const url = router.resolve({
-        path: '/shop/goods/brand'
+        path: '/phone_shop/goods/brand'
     })
     window.open(url.href)
 }
@@ -586,7 +586,7 @@ getShopDeliveryList().then((res) => {
 // 跳转到运费模板
 const toDeliveryTemplateEvent = () => {
     const url = router.resolve({
-        path: '/shop/order/shipping/template'
+        path: '/phone_shop/order/shipping/template'
     })
     window.open(url.href)
 }

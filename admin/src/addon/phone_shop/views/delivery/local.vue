@@ -505,17 +505,17 @@ const onSave = async (formEl: FormInstance | undefined) => {
 // 新窗口打开
 const newWindow = () => {
     const url = router.resolve({
-        path: '/shop/delivery_store'
+        path: '/phone_shop/delivery_store'
     })
     window.open(url.href)
 }
 const back = () => {
-    router.push({ path: '/shop/delivery/config' })
+    router.push({ path: '/phone_shop/delivery/config' })
 }
 
 const toLink = (data: any) => {
     const url = router.resolve({
-        path: '/shop/delivery_store/edit',
+        path: '/phone_shop/delivery_store/edit',
         query: {
             store_id: data.store_id
         }
