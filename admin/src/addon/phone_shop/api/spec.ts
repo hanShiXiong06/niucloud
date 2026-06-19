@@ -25,6 +25,11 @@ export function delSpecItem(id: number) {
     return request.delete(`phone_shop/goods/spec/item/${id}`)
 }
 
+// 建品表单：按分类取可选规格(分组+子项) + 全部成色
+export function getSpecOptionsByCategory(params: Record<string, any>) {
+    return request.get('phone_shop/goods/spec/options', { params })
+}
+
 // 成色等级（扁平）
 export function getGrades() {
     return request.get('phone_shop/goods/grade')
