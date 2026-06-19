@@ -31,8 +31,9 @@
                 </div>
             </div>
 
-            <!-- KPI 卡 -->
-            <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <!-- ① 销售经营 -->
+            <div class="section-head" style="--c:#5b8ff9"><span class="section-bar"></span>销售经营</div>
+            <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                 <div class="kpi" style="--c:#5b8ff9">
                     <div class="kpi-label">销售额</div>
                     <div class="kpi-value">¥{{ money(data.kpi.sales_amount) }}</div>
@@ -42,26 +43,6 @@
                     <div class="kpi-label">毛利</div>
                     <div class="kpi-value">¥{{ money(data.kpi.gross_profit) }}</div>
                     <div class="kpi-sub">毛利率 {{ data.kpi.margin }}%</div>
-                </div>
-                <div class="kpi" style="--c:#f6bd16">
-                    <div class="kpi-label">采购额</div>
-                    <div class="kpi-value">¥{{ money(data.kpi.purchase_cost) }}</div>
-                    <div class="kpi-sub">{{ data.kpi.purchase_count }} 台入库</div>
-                </div>
-                <div class="kpi" style="--c:#5d7092">
-                    <div class="kpi-label">在手库存</div>
-                    <div class="kpi-value">{{ data.kpi.on_hand_count }} 台</div>
-                    <div class="kpi-sub">成本 ¥{{ money(data.kpi.on_hand_cost) }}</div>
-                </div>
-                <div class="kpi" style="--c:#6dc8ec">
-                    <div class="kpi-label">可售</div>
-                    <div class="kpi-value">{{ data.kpi.sellable_count }} 台</div>
-                    <div class="kpi-sub">¥{{ money(data.kpi.sellable_amount) }}</div>
-                </div>
-                <div class="kpi" style="--c:#ff9d4d">
-                    <div class="kpi-label">平均库龄</div>
-                    <div class="kpi-value" :class="Number(data.kpi.avg_age_days) >= 30 ? '!text-red-500' : ''">{{ data.kpi.avg_age_days }} 天</div>
-                    <div class="kpi-sub">周转率 {{ data.kpi.turnover }}</div>
                 </div>
                 <div class="kpi" style="--c:#5ad8a6">
                     <div class="kpi-label">均台毛利</div>
@@ -79,15 +60,50 @@
                     <div class="kpi-sub">已售 ÷ 期初在库</div>
                 </div>
             </div>
-
-            <!-- 趋势 -->
-            <div class="chart-card mt-4">
+            <div class="chart-card mt-3">
                 <div class="chart-title">销售额 &amp; 毛利趋势</div>
                 <vue-chart :option="trendOption" height="320px" />
             </div>
+            <div class="chart-card mt-4">
+                <div class="chart-title">热销机型 Top10（按毛利）</div>
+                <vue-chart :option="modelOption" height="360px" />
+            </div>
 
-            <!-- 结构图 -->
-            <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <!-- ② 回收 / 进货 -->
+            <div class="section-head mt-6" style="--c:#f6bd16"><span class="section-bar"></span>回收 / 进货</div>
+            <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div class="kpi" style="--c:#f6bd16">
+                    <div class="kpi-label">采购额</div>
+                    <div class="kpi-value">¥{{ money(data.kpi.purchase_cost) }}</div>
+                    <div class="kpi-sub">本期进货成本</div>
+                </div>
+                <div class="kpi" style="--c:#f6bd16">
+                    <div class="kpi-label">入库台数</div>
+                    <div class="kpi-value">{{ data.kpi.purchase_count }} 台</div>
+                    <div class="kpi-sub">本期新进设备</div>
+                </div>
+            </div>
+
+            <!-- ③ 库存家底（公共） -->
+            <div class="section-head mt-6" style="--c:#5d7092"><span class="section-bar"></span>库存家底</div>
+            <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div class="kpi" style="--c:#5d7092">
+                    <div class="kpi-label">在手库存</div>
+                    <div class="kpi-value">{{ data.kpi.on_hand_count }} 台</div>
+                    <div class="kpi-sub">成本 ¥{{ money(data.kpi.on_hand_cost) }}</div>
+                </div>
+                <div class="kpi" style="--c:#6dc8ec">
+                    <div class="kpi-label">可售</div>
+                    <div class="kpi-value">{{ data.kpi.sellable_count }} 台</div>
+                    <div class="kpi-sub">¥{{ money(data.kpi.sellable_amount) }}</div>
+                </div>
+                <div class="kpi" style="--c:#ff9d4d">
+                    <div class="kpi-label">平均库龄</div>
+                    <div class="kpi-value" :class="Number(data.kpi.avg_age_days) >= 30 ? '!text-red-500' : ''">{{ data.kpi.avg_age_days }} 天</div>
+                    <div class="kpi-sub">周转率 {{ data.kpi.turnover }}</div>
+                </div>
+            </div>
+            <div class="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div class="chart-card">
                     <div class="chart-title">库存状态分布</div>
                     <vue-chart :option="statusOption" height="300px" />
@@ -96,12 +112,6 @@
                     <div class="chart-title">库龄分布（在手）</div>
                     <vue-chart :option="ageOption" height="300px" />
                 </div>
-            </div>
-
-            <!-- 热销机型 -->
-            <div class="chart-card mt-4">
-                <div class="chart-title">热销机型 Top10（按毛利）</div>
-                <vue-chart :option="modelOption" height="360px" />
             </div>
         </el-card>
     </div>
@@ -256,6 +266,22 @@ onMounted(() => { loadWarehouses(); load() })
 </script>
 
 <style lang="scss" scoped>
+.section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 20px 0 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f2733;
+}
+.section-head .section-bar {
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--c);
+}
 .kpi {
     position: relative;
     border-radius: 10px;
