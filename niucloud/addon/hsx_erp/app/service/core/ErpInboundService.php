@@ -196,7 +196,12 @@ class ErpInboundService
         $identity = $this->resolveIdentity($siteId, $device, $now);
         $counterpartyId = $this->resolveCounterparty($siteId, $device, $now);
         $ownershipType = (string)($device['ownership_type'] ?? ErpDict::OWNERSHIP_OWNED);
+        // 成本根因兜底: 回收来源常把价钱放在 payable_amount(用于生成应付), 未填 purchase_cost,
+        // 导致资产成本=0、毛利虚高。purchase_cost 缺省时回退到 payable_amount, 保证成本有值。
         $purchaseCost = ErpMoney::normalize($device['purchase_cost'] ?? 0);
+        if ($purchaseCost <= 0) {
+            $purchaseCost = ErpMoney::normalize($device['payable_amount'] ?? 0);
+        }
         $sourceMemberId = (int)($device['member_id'] ?? 0);
         $device['counterparty_id'] = $counterpartyId;
         $device['refurbishment'] = $this->normalizeRefurbishmentPlan($device);
@@ -236,7 +241,8 @@ class ErpInboundService
             'ownership_type' => $ownershipType,
             'inventory_status' => ErpDict::INVENTORY_PENDING_IN,
             'purchase_cost' => $purchaseCost,
-            'current_cost' => '0.00',
+            // 初始即用进货成本(确认入库会再次确认为 purchase_cost); 避免任何路径跳过确认导致成本=0
+            'current_cost' => $purchaseCost,
             'current_sale_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
             'check_snapshot' => (array)($device['check_snapshot'] ?? []),
             'source_snapshot' => $device,

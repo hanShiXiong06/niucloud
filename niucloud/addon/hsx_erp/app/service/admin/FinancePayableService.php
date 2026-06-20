@@ -13,6 +13,23 @@ use core\base\BaseAdminService;
  */
 class FinancePayableService extends BaseAdminService
 {
+    /** 应付明细的筛选项:实际出现过的业务类型 + 经手人(供前端下拉) */
+    public function filterOptions(): array
+    {
+        $types = FinancePayable::where([['site_id', '=', $this->site_id]])
+            ->where('source_type', '<>', '')->distinct(true)->column('source_type');
+        $sourceTypes = [];
+        foreach (array_values(array_unique($types)) as $t) {
+            if ($t === '' || $t === null) continue;
+            $sourceTypes[] = ['value' => (string)$t, 'text' => FinanceDict::sourceTypeText((string)$t)];
+        }
+        usort($sourceTypes, static fn($a, $b) => strcmp($a['text'], $b['text']));
+        return [
+            'source_types' => $sourceTypes,
+            'operators'    => FinanceCounterpartyBalanceService::operatorOptions($this->site_id),
+        ];
+    }
+
     /** 给应付/应收明细补设备信息(型号/IMEI), 让付款/收款时知道结的是哪台机 */
     protected function appendDeviceInfo(array &$rows): void
     {

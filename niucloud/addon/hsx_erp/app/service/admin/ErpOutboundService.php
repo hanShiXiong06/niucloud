@@ -55,6 +55,10 @@ class ErpOutboundService extends BaseAdminService
         $items = is_array($p['items'] ?? null) ? $p['items'] : [];
         $cpId = (int)($p['counterparty_id'] ?? 0);
         $capitalAccountId = (int)($p['capital_account_id'] ?? 0);
+        $payments = is_array($p['payments'] ?? null) ? $p['payments'] : []; // 多账户收款 [{account_id, method, amount}]
+        // 是否在商城侧建订单：默认 true(兼容历史)。代下单收银台传 false → 纯 ERP 出库,
+        // 商城只把对应商品下架(不建商城订单),ERP 为唯一事实源。
+        $buildMallOrder = !array_key_exists('build_mall_order', $p) || (bool)$p['build_mall_order'];
 
         if (empty($items)) {
             throw new CommonException('请选择要出库的设备');
@@ -73,8 +77,19 @@ class ErpOutboundService extends BaseAdminService
                     throw new CommonException('现结出库必须为每台填写出货价');
                 }
             }
-            if ($capitalAccountId <= 0) {
+            // 收款户头：单账户(capital_account_id) 或 多账户(payments[])，二选一
+            if ($capitalAccountId <= 0 && empty($payments)) {
                 throw new CommonException('现结出库请选择收款户头(款项即时入账)');
+            }
+            // 多账户：合计必须等于成交总额
+            if (!empty($payments)) {
+                $payTotal = 0.0;
+                foreach ($payments as $pm) $payTotal += round((float)($pm['amount'] ?? 0), 2);
+                $saleTotal = 0.0;
+                foreach ($items as $it) $saleTotal += round((float)($it['sale_price'] ?? 0), 2);
+                if (round($payTotal, 2) !== round($saleTotal, 2)) {
+                    throw new CommonException(sprintf('多账户收款合计 %.2f 与成交总额 %.2f 不一致', $payTotal, $saleTotal));
+                }
             }
         }
         // 设备目标状态: 现结=已售下架(outbound); 挂单/未定价=锁定可退(locked); 报废/其他=已出库
@@ -103,6 +118,7 @@ class ErpOutboundService extends BaseAdminService
         $soldDevices = [];         // 同行销售已售设备(来源回收), 出库后通知回收"已售/下架"
 
         Db::transaction(function () use ($assetIds, $priceMap, $consignorMap, $type, $settleMode, $priceStatus, $targetStatus, $cpId, $p, $no, $now, &$outboundId, &$emitItems, &$emitConsignPayables, &$soldDevices) {
+            $saleChannel = (string)($p['sale_channel'] ?? 'peer');
             // 锁定并校验资产
             $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->select();
             if (count($assets) !== count($assetIds)) {
@@ -136,8 +152,8 @@ class ErpOutboundService extends BaseAdminService
                     'cost'             => round((float)$asset->current_cost, 2),
                     'sale_price'       => $price,
                 ];
-                // 同行销售且来源回收 → 出库后通知回收"已售/下架"(无商城也能闭环)
-                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && (int)$asset->source_device_id > 0) {
+                // 同行/商城销售 → 出库后发成交事件；商城可仅凭 asset_id 找 SKU，不强依赖 source_device_id
+                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && ((int)$asset->source_device_id > 0 || $saleChannel === 'mall')) {
                     $soldDevices[] = ['asset_id' => (int)$asset->id, 'source_device_id' => (int)$asset->source_device_id];
                 }
                 // 代卖设备卖出 → 收集"应付寄卖人"(人手填金额, 锚定该设备的寄卖人 counterparty_id)
@@ -160,6 +176,7 @@ class ErpOutboundService extends BaseAdminService
                 'site_id'                    => $this->site_id,
                 'outbound_no'                => $no,
                 'outbound_type'              => $type,
+                'sale_channel'               => (string)($p['sale_channel'] ?? 'peer'),
                 'counterparty_id'            => $cpId,
                 'counterparty_name'          => (string)($p['counterparty_name'] ?? ''),
                 'counterparty_enterprise_id' => (int)($p['counterparty_enterprise_id'] ?? 0),
@@ -185,8 +202,8 @@ class ErpOutboundService extends BaseAdminService
                     'receivable_emitted' => 0,
                     'create_at'          => $now,
                 ]));
-                // 同行销售且有价 → 待处理应收(现结=生成后立即结清; 挂单=生成待结应收)
-                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && $row['sale_price'] > 0) {
+                // 现结才在出库时立即生成应收；挂单等"处理挂单/回填价格"确认客户留下的设备后再入账。
+                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && $settleMode === ErpDict::SETTLE_MODE_NOW && $row['sale_price'] > 0) {
                     $emitItems[] = ['item_id' => (int)$item->id, 'price' => $row['sale_price'], 'device_id' => $row['source_device_id']];
                 }
             }
@@ -196,10 +213,14 @@ class ErpOutboundService extends BaseAdminService
         //   现结(now): 生成应收并"立即结清", 钱进所选户头 → 应收明细见已结清记录 + 结算记录 + 资金流水, 对账完整
         //   挂单(later): 此处无价(价格回填时再生成待结应收)
         if (!empty($emitItems)) {
+            // 销售渠道：mall=商城销售 / peer=同行销售（默认同行）。只影响应收的来源类型与备注，不动出库/库存逻辑。
+            $saleChannel = (string)($p['sale_channel'] ?? 'peer');
+            $saleSourceType = $saleChannel === 'mall' ? 'erp_mall_sale' : 'erp_peer_sale';
+            $saleLabel = $saleChannel === 'mall' ? '商城' : '同行';
             if ($settleMode === ErpDict::SETTLE_MODE_NOW) {
-                $this->emitAndSettleNow($outboundId, $cpId, (string)($p['counterparty_name'] ?? ''), $no, $emitItems, $capitalAccountId, $now);
+                $this->emitAndSettleNow($outboundId, $cpId, (string)($p['counterparty_name'] ?? ''), $no, $emitItems, $capitalAccountId, $payments, $now, $saleSourceType, $saleLabel);
             } else {
-                $this->emitReceivables($outboundId, $cpId, (string)($p['counterparty_name'] ?? ''), $no, $emitItems);
+                $this->emitReceivables($outboundId, $cpId, (string)($p['counterparty_name'] ?? ''), $no, $emitItems, $saleSourceType, $saleLabel);
             }
         }
         // 代卖卖出 → 发应付寄卖人(故障隔离)
@@ -208,12 +229,8 @@ class ErpOutboundService extends BaseAdminService
         }
 
         // 同行销售出库 → 通知回收"已售/下架"(回收 downstream_stage 推进到 SOLD; 无商城也闭环)
-        // 买家 member_id：交易人(counterparty) 经归属表取主 member(优先业务联系人)，供商城建订单/折账锚
-        $buyerMemberId = $cpId > 0 ? (int)(\addon\hsx_erp\app\model\ErpCounterpartyMember::where([
-            ['site_id', '=', $this->site_id],
-            ['counterparty_id', '=', $cpId],
-            ['status', '=', 1],
-        ])->order('is_finance_contact asc, id asc')->value('member_id') ?? 0) : 0;
+        // 买家 member_id：本系统"往来单位锚 = member_id"，出库传入的 counterparty_id 即买家 member_id
+        $buyerMemberId = $cpId;
         // 结果状态：现结=已售(sold) / 挂单=锁定(locked)，商城据此置商品状态
         $resultStatus = $settleMode === ErpDict::SETTLE_MODE_NOW ? 'sold' : 'locked';
 
@@ -228,16 +245,22 @@ class ErpOutboundService extends BaseAdminService
                         'asset_id'         => (int)$sd['asset_id'],
                         'source_device_id' => (int)$sd['source_device_id'],
                         'outbound_no'      => $no,
-                        'reason'           => 'peer_sale',
+                        'reason'           => ((string)($p['sale_channel'] ?? 'peer') === 'mall') ? 'mall_sale' : 'peer_sale',
                         'member_id'        => $buyerMemberId,                       // 商城建订单的买家
                         'sale_price'       => (float)($priceMap[(int)$sd['asset_id']] ?? 0),
                         'settle_mode'      => $settleMode,
                         'result_status'    => $resultStatus,                        // sold / locked
+                        'build_mall_order' => $buildMallOrder,                       // false=只下架不建商城订单
                     ],
                     'operator'     => ['id' => (int)$this->uid, 'name' => (string)$this->username],
                 ]);
             } catch (\Throwable $e) {
                 Log::warning('[erp] 出库通知回收已售失败: ' . $e->getMessage());
+            }
+
+            // 仅当 build_mall_order=true 时在商城建订单;false(代下单收银台)只靠 sold 事件下架商品。
+            if ($buildMallOrder && (string)($p['sale_channel'] ?? 'peer') === 'mall') {
+                $this->syncMallSaleOrder((int)$sd['asset_id'], (int)$sd['source_device_id'], $buyerMemberId, $no, (float)($priceMap[(int)$sd['asset_id']] ?? 0), $settleMode, $now);
             }
         }
 
@@ -272,22 +295,35 @@ class ErpOutboundService extends BaseAdminService
 
         $now = time();
         $restored = 0;
-        Db::transaction(function () use ($order, $receivables, $now, $reason, &$restored) {
-            $items = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['outbound_id', '=', (int)$order->id]])->select();
-            $assetIds = array_values(array_filter(array_map(static fn($it) => (int)($it['asset_id'] ?? 0), $items->toArray())));
+        $saleChannel = (string)($order->sale_channel ?? 'peer');
+        $returnedItems = [];
+        Db::transaction(function () use ($order, $receivables, $now, $reason, $saleChannel, &$restored, &$returnedItems) {
+            $items = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['outbound_id', '=', (int)$order->id]])->select()->toArray();
+            $assetIds = array_values(array_filter(array_map(static fn($it) => (int)($it['asset_id'] ?? 0), $items)));
             if (!empty($assetIds)) {
                 $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->select();
                 foreach ($assets as $asset) {
                     // 仅恢复仍处于锁定态的设备(避免覆盖被其它流程改动的状态)
                     if ((string)$asset->inventory_status === ErpDict::INVENTORY_LOCKED) {
-                        $asset->inventory_status = ErpDict::INVENTORY_IN_STOCK;
+                        // 商城渠道→恢复"可售"(商城回在售); 同行→回在库。与 partialReturn 口径一致。
+                        $asset->inventory_status = $saleChannel === 'mall'
+                            ? ErpDict::INVENTORY_AVAILABLE_FOR_SALE
+                            : ErpDict::INVENTORY_IN_STOCK;
                         $asset->stock_out_at = 0;
+                        $asset->counterparty_id = 0;
                         $asset->version = (int)$asset->version + 1;
                         $asset->update_at = $now;
                         $asset->save();
                         $restored++;
                     }
                 }
+            }
+            // 收集退回明细(商城渠道用于回源上架 + 关闭挂账订单)
+            foreach ($items as $it) {
+                $returnedItems[] = [
+                    'asset_id'         => (int)($it['asset_id'] ?? 0),
+                    'source_device_id' => (int)($it['source_device_id'] ?? 0),
+                ];
             }
             // 作废未收款的应收
             foreach ($receivables as $r) {
@@ -299,7 +335,309 @@ class ErpOutboundService extends BaseAdminService
             $order->save();
         });
 
+        // 商城渠道: 通知商城回源上架 + 关闭/退空挂账订单(与 partialReturn 一致, 故障隔离)
+        if ($saleChannel === 'mall') {
+            foreach ($returnedItems as $ri) {
+                if ((int)$ri['asset_id'] <= 0) {
+                    continue;
+                }
+                try {
+                    event('ErpDomainEvent', [
+                        'event_name'   => 'erp.asset.returned.v1',
+                        'event_id'     => 'erp_returned_' . (int)$ri['asset_id'] . '_' . $now,
+                        'site_id'      => (int)$this->site_id,
+                        'aggregate_id' => (int)$ri['asset_id'],
+                        'payload'      => [
+                            'asset_id'         => (int)$ri['asset_id'],
+                            'source_device_id' => (int)$ri['source_device_id'],
+                            'outbound_id'      => $outboundId,
+                            'outbound_no'      => (string)$order->outbound_no,
+                            'reason'           => 'cancel_outbound',
+                        ],
+                        'operator' => ['id' => (int)$this->uid, 'name' => (string)$this->username],
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('[erp] 整单退回通知商城回源上架失败: ' . $e->getMessage());
+                }
+                $this->syncMallReturned((int)$ri['asset_id'], (string)$order->outbound_no);
+            }
+        }
+
         return ['outbound_id' => $outboundId, 'restored' => $restored];
+    }
+
+    /**
+     * 部分退回: 挂账(settle_mode=later)出库单中, 退回指定明细设备。
+     *
+     * 每台被退回的设备:
+     *   1. 库存状态恢复: 商城渠道→available_for_sale; 同行→in_stock
+     *   2. 对应待结应收作废(已收款的拒绝退回, 需走退货流程)
+     *   3. 商城渠道额外发 erp.asset.returned.v1 通知商城回源上架
+     * 出库单 qty/total_amount 同步缩减; 全部退完则整单 void。
+     *
+     * @param int    $outboundId
+     * @param array  $itemIds   要退回的明细 ID 列表
+     * @param string $reason    退回原因
+     */
+    public function partialReturn(int $outboundId, array $itemIds, string $reason = ''): array
+    {
+        if (empty($itemIds)) {
+            throw new CommonException('请选择要退回的设备');
+        }
+        $order = ErpOutboundOrder::where([['site_id', '=', $this->site_id], ['id', '=', $outboundId]])->findOrEmpty();
+        if ($order->isEmpty()) {
+            throw new CommonException('出库单不存在');
+        }
+        if ((string)$order->status === ErpDict::OUTBOUND_STATUS_VOID) {
+            throw new CommonException('该出库单已全部退回');
+        }
+        if ((string)$order->settle_mode === ErpDict::SETTLE_MODE_NOW) {
+            throw new CommonException('现结(已收款已售)出库不支持退回，请走退货流程');
+        }
+
+        $itemIds = array_values(array_unique(array_map('intval', $itemIds)));
+
+        // 查要退回的明细(必须未退回、属于本单)
+        $items = ErpOutboundItem::where([
+            ['site_id', '=', $this->site_id],
+            ['outbound_id', '=', $outboundId],
+            ['is_returned', '=', 0],
+        ])->whereIn('id', $itemIds)->select()->toArray();
+
+        if (empty($items)) {
+            throw new CommonException('未找到可退回的设备，可能已退回或不属于本单');
+        }
+
+        // 应收已部分/全部收款的明细不允许直接退回
+        foreach ($items as $it) {
+            if ((int)$it['receivable_emitted'] === 1) {
+                $recv = FinanceReceivable::where([
+                    ['site_id', '=', $this->site_id],
+                    ['event_id', '=', 'erp_outbound_item_' . (int)$it['id']],
+                ])->field('settled_amount')->findOrEmpty();
+                if (!$recv->isEmpty() && round((float)$recv->settled_amount, 2) > 0) {
+                    throw new CommonException('设备[' . $it['imei'] . ']对应应收已收款，无法直接退回，请走退货流程');
+                }
+            }
+        }
+
+        $now = time();
+        $saleChannel = (string)($order->sale_channel ?? 'peer');
+        $returnedItems = [];
+
+        Db::transaction(function () use ($order, $items, $now, $reason, $saleChannel, &$returnedItems) {
+            $assetIds = array_values(array_filter(array_map(static fn($it) => (int)($it['asset_id'] ?? 0), $items)));
+            $assetMap = [];
+            if (!empty($assetIds)) {
+                $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['id', 'in', $assetIds]])->lock(true)->select();
+                foreach ($assets as $a) {
+                    $assetMap[(int)$a->id] = $a;
+                }
+            }
+
+            foreach ($items as $it) {
+                $asset = $assetMap[(int)$it['asset_id']] ?? null;
+
+                // 恢复库存: 仅锁定态的设备才恢复(避免覆盖已被其它流程变更的状态)
+                if ($asset && (string)$asset->inventory_status === ErpDict::INVENTORY_LOCKED) {
+                    $restoreStatus = $saleChannel === 'mall'
+                        ? ErpDict::INVENTORY_AVAILABLE_FOR_SALE
+                        : ErpDict::INVENTORY_IN_STOCK;
+                    $asset->inventory_status = $restoreStatus;
+                    $asset->stock_out_at     = 0;
+                    $asset->counterparty_id  = 0;
+                    $asset->version          = (int)$asset->version + 1;
+                    $asset->update_at        = $now;
+                    $asset->save();
+                }
+
+                // 标记明细已退回
+                ErpOutboundItem::where([['site_id', '=', $this->site_id], ['id', '=', (int)$it['id']]])
+                    ->update(['is_returned' => 1, 'returned_at' => $now]);
+
+                // 作废该明细对应的待结应收
+                if ((int)$it['receivable_emitted'] === 1) {
+                    FinanceReceivable::where([
+                        ['site_id', '=', $this->site_id],
+                        ['event_id', '=', 'erp_outbound_item_' . (int)$it['id']],
+                        ['status', '<>', FinanceDict::STATUS_SETTLED],
+                    ])->update(['status' => FinanceDict::STATUS_VOID, 'update_time' => $now]);
+                }
+
+                $returnedItems[] = [
+                    'asset_id'         => (int)$it['asset_id'],
+                    'source_device_id' => (int)$it['source_device_id'],
+                ];
+            }
+
+            // 重算出库单台数/金额(仅未退回明细)
+            $activeItems = ErpOutboundItem::where([
+                ['site_id', '=', $this->site_id],
+                ['outbound_id', '=', (int)$order->id],
+                ['is_returned', '=', 0],
+            ])->field('sale_price')->select()->toArray();
+
+            $activeQty   = count($activeItems);
+            $activeTotal = round((float)array_sum(array_column($activeItems, 'sale_price')), 2);
+
+            $remarkSuffix = sprintf(
+                ' [部分退回%d台：%s · 操作人：%s · %s]',
+                count($items),
+                $reason ?: '无',
+                $this->username ?: ('uid' . $this->uid),
+                date('Y-m-d H:i', $now)
+            );
+            $newRemark = substr(trim((string)$order->remark . $remarkSuffix), 0, 500);
+
+            $updateData = [
+                'qty'          => $activeQty,
+                'total_amount' => $activeTotal,
+                'remark'       => $newRemark,
+                'update_at'    => $now,
+            ];
+            if ($activeQty === 0) {
+                $updateData['status'] = ErpDict::OUTBOUND_STATUS_VOID;
+            }
+            ErpOutboundOrder::where([['site_id', '=', $this->site_id], ['id', '=', (int)$order->id]])->update($updateData);
+        });
+
+        // 商城渠道: 通知商城回源上架(故障隔离)
+        if ($saleChannel === 'mall') {
+            foreach ($returnedItems as $ri) {
+                try {
+                    event('ErpDomainEvent', [
+                        'event_name'   => 'erp.asset.returned.v1',
+                        'event_id'     => 'erp_returned_' . (int)$ri['asset_id'] . '_' . $now,
+                        'site_id'      => (int)$this->site_id,
+                        'aggregate_id' => (int)$ri['asset_id'],
+                        'payload'      => [
+                            'asset_id'         => (int)$ri['asset_id'],
+                            'source_device_id' => (int)$ri['source_device_id'],
+                            'outbound_id'      => $outboundId,
+                            'outbound_no'      => (string)$order->outbound_no,
+                            'reason'           => 'partial_return',
+                        ],
+                        'operator' => ['id' => (int)$this->uid, 'name' => (string)$this->username],
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('[erp] 退回通知商城回源上架失败: ' . $e->getMessage());
+                }
+                $this->syncMallReturned((int)$ri['asset_id'], (string)$order->outbound_no);
+            }
+        }
+
+        return ['outbound_id' => $outboundId, 'returned' => count($returnedItems)];
+    }
+
+    /**
+     * 商城侧主动关闭挂账订单 → 反向回写 ERP。
+     * 口径(已与业务确认): 仅"挂账(settle_mode=later)且未收款"的明细 → 作废未结应收 + 设备恢复"可售"。
+     * 已收款明细不动(需走退货流程); 现结单不处理。不回发商城事件(商城已关单, 防回环)。
+     * @param int    $siteId
+     * @param string $outboundNo 出库单号(=商城订单 relate_source)
+     * @param array  $assetIds   限定要退的设备(空=该出库单全部未退明细)
+     * @param string $reason
+     */
+    public function returnByMallClose(int $siteId, string $outboundNo, array $assetIds = [], string $reason = '商城关单'): array
+    {
+        if ($siteId <= 0 || $outboundNo === '') {
+            return ['skipped' => true, 'reason' => 'missing_key'];
+        }
+        $order = ErpOutboundOrder::where([['site_id', '=', $siteId], ['outbound_no', '=', $outboundNo]])->findOrEmpty();
+        if ($order->isEmpty()) {
+            return ['skipped' => true, 'reason' => 'outbound_not_found'];
+        }
+        if ((string)$order->status === ErpDict::OUTBOUND_STATUS_VOID) {
+            return ['skipped' => true, 'reason' => 'already_void'];
+        }
+        // 仅挂账单可由商城关单反向触发; 现结(已收款已售)不动
+        if ((string)$order->settle_mode === ErpDict::SETTLE_MODE_NOW) {
+            return ['skipped' => true, 'reason' => 'settle_now_need_refund'];
+        }
+
+        $assetIds = array_values(array_filter(array_map('intval', $assetIds)));
+        $itemQuery = ErpOutboundItem::where([
+            ['site_id', '=', $siteId],
+            ['outbound_id', '=', (int)$order->id],
+            ['is_returned', '=', 0],
+        ]);
+        if (!empty($assetIds)) {
+            $itemQuery->whereIn('asset_id', $assetIds);
+        }
+        $items = $itemQuery->select()->toArray();
+        if (empty($items)) {
+            return ['skipped' => true, 'reason' => 'no_returnable_item'];
+        }
+
+        $now = time();
+        $returned = 0;
+        $skipped = [];
+        $returnedAssetIds = [];
+        Db::transaction(function () use ($siteId, $order, $items, $now, $reason, &$returned, &$skipped, &$returnedAssetIds) {
+            foreach ($items as $it) {
+                // 仅未收款: 已收款明细跳过(需走退货流程)
+                if ((int)$it['receivable_emitted'] === 1) {
+                    $recv = FinanceReceivable::where([
+                        ['site_id', '=', $siteId],
+                        ['event_id', '=', 'erp_outbound_item_' . (int)$it['id']],
+                    ])->field('settled_amount')->findOrEmpty();
+                    if (!$recv->isEmpty() && round((float)$recv->settled_amount, 2) > 0) {
+                        $skipped[] = (int)$it['id'];
+                        continue;
+                    }
+                }
+                // 设备回"可售"(仅锁定态才恢复, 避免覆盖其它流程)
+                $asset = ErpAsset::where([['site_id', '=', $siteId], ['id', '=', (int)$it['asset_id']]])->lock(true)->findOrEmpty();
+                if (!$asset->isEmpty() && (string)$asset->inventory_status === ErpDict::INVENTORY_LOCKED) {
+                    $asset->inventory_status = ErpDict::INVENTORY_AVAILABLE_FOR_SALE;
+                    $asset->stock_out_at     = 0;
+                    $asset->counterparty_id  = 0;
+                    $asset->version          = (int)$asset->version + 1;
+                    $asset->update_at        = $now;
+                    $asset->save();
+                }
+                // 明细标记已退回
+                ErpOutboundItem::where([['site_id', '=', $siteId], ['id', '=', (int)$it['id']]])
+                    ->update(['is_returned' => 1, 'returned_at' => $now]);
+                // 作废未结应收
+                if ((int)$it['receivable_emitted'] === 1) {
+                    FinanceReceivable::where([
+                        ['site_id', '=', $siteId],
+                        ['event_id', '=', 'erp_outbound_item_' . (int)$it['id']],
+                        ['status', '<>', FinanceDict::STATUS_SETTLED],
+                    ])->update(['status' => FinanceDict::STATUS_VOID, 'update_time' => $now]);
+                }
+                $returnedAssetIds[] = (int)$it['asset_id'];
+                $returned++;
+            }
+
+            // 重算出库单台数/金额(仅未退回明细); 全退则整单 void
+            $activeItems = ErpOutboundItem::where([
+                ['site_id', '=', $siteId],
+                ['outbound_id', '=', (int)$order->id],
+                ['is_returned', '=', 0],
+            ])->field('sale_price')->select()->toArray();
+            $updateData = [
+                'qty'          => count($activeItems),
+                'total_amount' => round((float)array_sum(array_column($activeItems, 'sale_price')), 2),
+                'remark'       => substr(trim((string)$order->remark . sprintf(' [商城关单回写：退%d台 · %s · %s]', $returned, $reason, date('Y-m-d H:i', $now))), 0, 500),
+                'update_at'    => $now,
+            ];
+            if (count($activeItems) === 0) {
+                $updateData['status'] = ErpDict::OUTBOUND_STATUS_VOID;
+            }
+            ErpOutboundOrder::where([['site_id', '=', $siteId], ['id', '=', (int)$order->id]])->update($updateData);
+        });
+
+        // 商城商品回在售上架(直接 update, 不发事件、商城订单已关则跳过, 无回环)。
+        // 不发 erp.asset.returned.v1(商城已主动关单), 仅同步商品可售状态使 ERP/商城一致。
+        foreach (array_unique($returnedAssetIds) as $aid) {
+            if ((int)$aid > 0) {
+                $this->syncMallReturned((int)$aid, (string)$order->outbound_no, $siteId);
+            }
+        }
+
+        return ['outbound_id' => (int)$order->id, 'returned' => $returned, 'skipped' => $skipped];
     }
 
     /**
@@ -377,7 +715,7 @@ class ErpOutboundService extends BaseAdminService
         if ($collectNow) {
             // 生成应收并立即收款入账(幂等); 收款即下架: 锁定设备转「已售」
             if (!empty($collectItems)) {
-                $this->emitAndSettleNow((int)$order->id, (int)$order->counterparty_id, (string)$order->counterparty_name, (string)$order->outbound_no, $collectItems, $capitalAccountId, $now);
+                $this->emitAndSettleNow((int)$order->id, (int)$order->counterparty_id, (string)$order->counterparty_name, (string)$order->outbound_no, $collectItems, $capitalAccountId, [], $now);
             }
             $soldAssetIds = array_values(array_unique(array_filter($soldAssetIds)));
             if (!empty($soldAssetIds)) {
@@ -708,10 +1046,29 @@ class ErpOutboundService extends BaseAdminService
     {
         $query = ErpOutboundOrder::where([['site_id', '=', $this->site_id]]);
         if (!empty($where['outbound_type'])) {
-            $query->where('outbound_type', '=', (string)$where['outbound_type']);
+            $ot = (string)$where['outbound_type'];
+            if ($ot === ErpDict::OUTBOUND_TYPE_MALL_SALE) {
+                // 商城销售 = 同行销售出库 + 商城渠道
+                $query->where('outbound_type', '=', ErpDict::OUTBOUND_TYPE_PEER_SALE)->where('sale_channel', '=', 'mall');
+            } elseif ($ot === ErpDict::OUTBOUND_TYPE_PEER_SALE) {
+                // 同行销售 = 同行销售出库 且 非商城渠道
+                $query->where('outbound_type', '=', ErpDict::OUTBOUND_TYPE_PEER_SALE)->where('sale_channel', '<>', 'mall');
+            } else {
+                $query->where('outbound_type', '=', $ot);
+            }
         }
-        if (!empty($where['price_status'])) {
-            $query->where('price_status', '=', (string)$where['price_status']);
+        // 单据状态筛选(待回填 / 已定价 / 已退回)。
+        // price_status(待回填/已定价) 与 退回(status=void) 是两个正交维度: 一张退回单的
+        // price_status 仍可能是 pending, 若只 where price_status 会把"已退回"单错误带入"待回填"结果。
+        // 故: 待回填/已定价 一律排除已退回; 已退回 单独按 status=void 过滤。
+        $bizStatus = (string)($where['biz_status'] ?? $where['price_status'] ?? '');
+        if ($bizStatus !== '') {
+            if ($bizStatus === ErpDict::OUTBOUND_STATUS_VOID) {
+                $query->where('status', '=', ErpDict::OUTBOUND_STATUS_VOID);
+            } elseif (in_array($bizStatus, [ErpDict::OUTBOUND_PRICE_PENDING, ErpDict::OUTBOUND_PRICE_FILLED], true)) {
+                $query->where('price_status', '=', $bizStatus)
+                      ->where('status', '<>', ErpDict::OUTBOUND_STATUS_VOID);
+            }
         }
         if (!empty($where['keyword'])) {
             $query->where('outbound_no|counterparty_name', 'like', '%' . $where['keyword'] . '%');
@@ -751,7 +1108,9 @@ class ErpOutboundService extends BaseAdminService
             }
         }
         foreach ($data['data'] as &$row) {
-            $row['type_text'] = $typeMap[$row['outbound_type']] ?? $row['outbound_type'];
+            $viewType = ErpDict::resolveOutboundViewType((string)$row['outbound_type'], (string)($row['sale_channel'] ?? 'peer'));
+            $row['outbound_type_view'] = $viewType;
+            $row['type_text'] = $typeMap[$viewType] ?? $viewType;
             $row['settle_mode_text'] = $settleMap[(string)($row['settle_mode'] ?? '')] ?? (string)($row['settle_mode'] ?? '');
             $row['price_status_text'] = $priceMap[(string)($row['price_status'] ?? '')] ?? (string)($row['price_status'] ?? '');
             $row['is_void'] = (string)($row['status'] ?? '') === ErpDict::OUTBOUND_STATUS_VOID;
@@ -760,10 +1119,13 @@ class ErpOutboundService extends BaseAdminService
             $hasRec = $agg && (int)($agg['cnt'] ?? 0) > 0;
             $row['collected'] = (string)($row['settle_mode'] ?? '') === ErpDict::SETTLE_MODE_NOW
                 || ($hasRec && (float)($agg['open'] ?? 0) <= 0);
-            // 可退回：挂单 + 未作废 + 未收款(已收款的不能退, 需走退货)
+            // 整单退回：挂单 + 未作废 + 完全未收款
             $row['can_cancel'] = !$row['is_void']
                 && (string)($row['settle_mode'] ?? '') !== ErpDict::SETTLE_MODE_NOW
                 && !$row['collected'];
+            // 部分退回：挂单 + 未作废(整单退回后不再显示)
+            $row['can_partial_return'] = !$row['is_void']
+                && (string)($row['settle_mode'] ?? '') === ErpDict::SETTLE_MODE_LATER;
         }
         unset($row);
         return $data;
@@ -777,7 +1139,9 @@ class ErpOutboundService extends BaseAdminService
         }
         $data = $order->toArray();
         $no = (string)$data['outbound_no'];
-        $data['type_text'] = ErpDict::getOutboundTypeMap()[$data['outbound_type']] ?? $data['outbound_type'];
+        $viewType = ErpDict::resolveOutboundViewType((string)$data['outbound_type'], (string)($data['sale_channel'] ?? 'peer'));
+        $data['outbound_type_view'] = $viewType;
+        $data['type_text'] = ErpDict::getOutboundTypeMap()[$viewType] ?? $viewType;
         $settleMap = ['now' => '现结(已收款)', 'later' => '挂单(待收款)', 'none' => '无结算'];
         $data['settle_mode_text'] = $settleMap[(string)$data['settle_mode']] ?? (string)$data['settle_mode'];
         $data['is_void'] = (string)$data['status'] === ErpDict::OUTBOUND_STATUS_VOID;
@@ -801,6 +1165,7 @@ class ErpOutboundService extends BaseAdminService
         $invMap = ['in_stock' => '在库', 'refurbishing' => '整备中', 'pending_pricing' => '待定价', 'available_for_sale' => '可售', 'locked' => '已售/锁定', 'outbound' => '已售/已出库'];
         $totalCost = 0.0;
         $totalSale = 0.0;
+        $hasReturnableItem = false; // 是否有可退回(locked)的未退回明细
         foreach ($items as &$it) {
             $a = $assetMap[(int)$it['asset_id']] ?? [];
             $cost = round((float)($it['cost'] ?: ($a['current_cost'] ?? 0)), 2);
@@ -810,11 +1175,23 @@ class ErpOutboundService extends BaseAdminService
             $it['inventory_status_text'] = $invMap[(string)($a['inventory_status'] ?? '')] ?? (string)($a['inventory_status'] ?? '');
             $it['cost'] = $cost;
             $it['profit'] = round($sale - $cost, 2);
-            $totalCost += $cost;
-            $totalSale += $sale;
+            $it['is_returned'] = (int)($it['is_returned'] ?? 0) === 1;
+            // 可退回条件：未退回 + 设备仍锁定
+            $it['can_return'] = !$it['is_returned'] && (string)($a['inventory_status'] ?? '') === ErpDict::INVENTORY_LOCKED;
+            if ($it['can_return']) {
+                $hasReturnableItem = true;
+            }
+            if (!$it['is_returned']) {
+                $totalCost += $cost;
+                $totalSale += $sale;
+            }
         }
         unset($it);
         $data['items'] = $items;
+        // 可部分退回: 挂单 + 未全部作废 + 至少一台可退回的锁定设备
+        $data['can_partial_return'] = !$data['is_void']
+            && (string)$data['settle_mode'] === ErpDict::SETTLE_MODE_LATER
+            && $hasReturnableItem;
         $data['total_cost'] = round($totalCost, 2);
         $data['total_profit'] = round($totalSale - $totalCost, 2);
 
@@ -858,7 +1235,7 @@ class ErpOutboundService extends BaseAdminService
      * 现结: 生成应收并立即结清(收款入所选户头)。
      * 直连核心账务服务拿应收ID(幂等键按出库明细), 再用结算服务一次性结清并记现金入账。
      */
-    private function emitAndSettleNow(int $outboundId, int $cpId, string $cpName, string $outboundNo, array $emitItems, int $capitalAccountId, int $now): void
+    private function emitAndSettleNow(int $outboundId, int $cpId, string $cpName, string $outboundNo, array $emitItems, int $capitalAccountId, array $payments, int $now, string $sourceType = 'erp_peer_sale', string $saleLabel = '同行'): void
     {
         if ($cpId <= 0) {
             return;
@@ -873,13 +1250,13 @@ class ErpOutboundService extends BaseAdminService
                     'counterparty_id'   => $cpId,
                     'counterparty_name' => $cpName,
                     'amount'            => round((float)$it['price'], 2),
-                    'source_type'       => 'erp_peer_sale',
+                    'source_type'       => $sourceType,
                     'source_no'         => $outboundNo,
                     'source_device_id'  => (int)($it['device_id'] ?? 0),
                     'occurred_at'       => $now,
                     'operator_uid'      => (int)$this->uid,
                     'operator_name'     => (string)$this->username,
-                    'remark'            => '同行现结销售',
+                    'remark'            => $saleLabel . '现结销售',
                 ]);
                 if ($rid > 0) {
                     $rids[] = $rid;
@@ -887,13 +1264,40 @@ class ErpOutboundService extends BaseAdminService
                         ->update(['receivable_emitted' => 1]);
                 }
             }
-            // 立即结清这些应收, 现金收入所选户头(settle 会记一笔 in 的资金流水)
+            // 立即结清这些应收
             if (!empty($rids)) {
-                (new FinanceSettlementService())->settle($cpId, [], $rids, [
-                    'capital_account_id' => $capitalAccountId,
-                    'record_cash'        => true,
-                    'remark'             => '同行现结收款',
-                ]);
+                if (!empty($payments)) {
+                    // 多账户：先只核销应收(不二次记现金)，再按每笔 payment 记入对应账户
+                    (new FinanceSettlementService())->settle($cpId, [], $rids, [
+                        'record_cash' => false,
+                        'remark'      => $saleLabel . '现结收款(多账户)',
+                    ]);
+                    $capSvc = new \addon\hsx_erp\app\service\admin\ErpCapitalAccountService();
+                    foreach ($payments as $pm) {
+                        $accId = (int)($pm['account_id'] ?? 0);
+                        $amt = round((float)($pm['amount'] ?? 0), 2);
+                        if ($accId <= 0 || $amt <= 0) continue;
+                        $capSvc->recordEntry([
+                            'account_id'        => $accId,
+                            'direction'         => 'in',
+                            'amount'            => $amt,
+                            'biz_type'          => 'sale_income',
+                            'counterparty_id'   => $cpId,
+                            'counterparty_name' => $cpName,
+                            'source_type'       => $sourceType,
+                            'source_no'         => $outboundNo,
+                            'remark'            => $saleLabel . '现结收款·' . (string)($pm['method'] ?? ''),
+                            'occurred_at'       => $now,
+                        ]);
+                    }
+                } else {
+                    // 单账户：现金收入所选户头(settle 记一笔 in 流水)
+                    (new FinanceSettlementService())->settle($cpId, [], $rids, [
+                        'capital_account_id' => $capitalAccountId,
+                        'record_cash'        => true,
+                        'remark'             => $saleLabel . '现结收款',
+                    ]);
+                }
             }
         } catch (\Throwable $e) {
             Log::warning('[erp] 现结生成应收并结清失败: ' . $e->getMessage());
@@ -901,7 +1305,7 @@ class ErpOutboundService extends BaseAdminService
     }
 
     /** 发应收事件给财务中心(同行欠我), 幂等键按出库明细 */
-    private function emitReceivables(int $outboundId, int $cpId, string $cpName, string $outboundNo, array $emitItems): void
+    private function emitReceivables(int $outboundId, int $cpId, string $cpName, string $outboundNo, array $emitItems, string $sourceType = 'erp_peer_sale', string $saleLabel = '同行'): void
     {
         if ($cpId <= 0) {
             return;
@@ -916,13 +1320,13 @@ class ErpOutboundService extends BaseAdminService
                     'counterparty_id'   => $cpId,
                     'counterparty_name' => $cpName,
                     'amount'            => round((float)$it['price'], 2),
-                    'source_type'       => 'erp_peer_sale',
+                    'source_type'       => $sourceType,
                     'source_no'         => $outboundNo,
                     'source_device_id'  => (int)($it['device_id'] ?? 0),
                     'occurred_at'       => $now,
                     'operator_uid'      => (int)$this->uid,
                     'operator_name'     => (string)$this->username,
-                    'remark'            => '同行出货生成应收',
+                    'remark'            => $saleLabel . '出货生成应收',
                 ]);
                 ErpOutboundItem::where([['site_id', '=', $this->site_id], ['id', '=', (int)$it['item_id']]])
                     ->update(['receivable_emitted' => 1]);
@@ -958,6 +1362,52 @@ class ErpOutboundService extends BaseAdminService
             } catch (\Throwable $e) {
                 Log::warning('[erp] 代卖卖出发应付失败: ' . $e->getMessage());
             }
+        }
+    }
+
+    private function syncMallSaleOrder(int $assetId, int $sourceDeviceId, int $memberId, string $outboundNo, float $salePrice, string $settleMode, int $now): void
+    {
+        if ($assetId <= 0 || $memberId <= 0) {
+            return;
+        }
+        $svcClass = '\\addon\\phone_shop\\app\\service\\core\\order\\CoreOfflineSaleService';
+        if (!class_exists($svcClass)) {
+            return;
+        }
+        try {
+            $res = (new $svcClass())->createSaleOrder([
+                'site_id'          => (int)$this->site_id,
+                'member_id'        => $memberId,
+                'sku_id'           => (int)(\addon\phone_shop\app\model\goods\GoodsSku::where('erp_asset_id', $assetId)->value('sku_id') ?: 0),
+                'sale_price'       => $salePrice,
+                'payment_mode'     => $settleMode === ErpDict::SETTLE_MODE_NOW ? 'offline_cash' : 'offline_credit',
+                'buyer_type'       => 'b',
+                'source_device_id' => $sourceDeviceId,
+                'staff_id'         => (int)$this->uid,
+                'outbound_no'      => $outboundNo,
+                'result_status'    => $settleMode === ErpDict::SETTLE_MODE_NOW ? 'sold' : 'locked',
+            ]);
+            Log::write('[erp] 商城出库同步建单 asset_id=' . $assetId . ' result=' . json_encode($res, JSON_UNESCAPED_UNICODE));
+        } catch (\Throwable $e) {
+            Log::warning('[erp] 商城出库同步建单失败: ' . $e->getMessage());
+        }
+    }
+
+    private function syncMallReturned(int $assetId, string $outboundNo, int $siteId = 0): void
+    {
+        if ($assetId <= 0) {
+            return;
+        }
+        $siteId = $siteId > 0 ? $siteId : (int)$this->site_id;
+        $svcClass = '\\addon\\phone_shop\\app\\service\\core\\order\\CoreOfflineSaleService';
+        if (!class_exists($svcClass)) {
+            return;
+        }
+        try {
+            $res = (new $svcClass())->returnSaleItemByAsset($siteId, $assetId, $outboundNo);
+            Log::write('[erp] 商城退回同步 asset_id=' . $assetId . ' result=' . json_encode($res, JSON_UNESCAPED_UNICODE));
+        } catch (\Throwable $e) {
+            Log::warning('[erp] 商城退回同步失败: ' . $e->getMessage());
         }
     }
 }

@@ -14,6 +14,23 @@ use core\exception\CommonException;
  */
 class FinanceReceivableService extends BaseAdminService
 {
+    /** 应收明细的筛选项:实际出现过的业务类型 + 经手人(供前端下拉) */
+    public function filterOptions(): array
+    {
+        $types = FinanceReceivable::where([['site_id', '=', $this->site_id]])
+            ->where('source_type', '<>', '')->distinct(true)->column('source_type');
+        $sourceTypes = [];
+        foreach (array_values(array_unique($types)) as $t) {
+            if ($t === '' || $t === null) continue;
+            $sourceTypes[] = ['value' => (string)$t, 'text' => FinanceDict::sourceTypeText((string)$t)];
+        }
+        usort($sourceTypes, static fn($a, $b) => strcmp($a['text'], $b['text']));
+        return [
+            'source_types' => $sourceTypes,
+            'operators'    => FinanceCounterpartyBalanceService::operatorOptions($this->site_id),
+        ];
+    }
+
     /** 给应收明细补设备信息(型号/IMEI) */
     protected function appendDeviceInfo(array &$rows): void
     {

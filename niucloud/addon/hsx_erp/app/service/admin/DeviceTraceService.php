@@ -224,7 +224,8 @@ class DeviceTraceService extends BaseAdminService
             'instock_to_end'     => $days($stockInAt, $endTs),        // 在库时长(售出或至今)
             'total'              => $days($recycleTime, $endTs),      // 总周转
         ];
-        return ['overview' => $overview, 'events' => array_values($events)];
+        // 带级别的质检数据(来自回收段),供全链路组件渲染公共质检面板
+        return ['overview' => $overview, 'events' => array_values($events), 'check' => (array)($rec['check'] ?? [])];
     }
 
     /** 中台段: 调拨/移动日志 + 成本台账 */

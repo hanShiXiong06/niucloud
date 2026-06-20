@@ -28,3 +28,7 @@ export function transferErpAsset(data: Record<string, any>) {
 export function cancelErpOutbound(id: number, reason = '') {
     return request.post(`erp/outbound/${id}/cancel`, { reason })
 }
+// 部分退回: 按明细退回指定设备, 自动勾销应收并回源上架
+export function partialReturnErpOutbound(id: number, itemIds: number[], reason = '') {
+    return request.post(`erp/outbound/${id}/partial_return`, { item_ids: itemIds, reason })
+}

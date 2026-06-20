@@ -54,6 +54,10 @@ return [
         'RecycleDeviceCostAdjusted' => [
             'addon\hsx_erp\app\listener\RecycleCostAdjustedListener',
         ],
+        // 商城关闭挂账订单 → 反向回写 ERP: 作废未收款应收 + 设备回可售(不回发商城, 防回环)
+        'PhoneShopOrderClosedToErp' => [
+            'addon\hsx_erp\app\listener\MallOrderClosedListener',
+        ],
     ],
     'subscribe' => [],
 ];

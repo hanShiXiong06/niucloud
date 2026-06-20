@@ -773,9 +773,9 @@ return [
                 ],
             ],
             [
-                'menu_name' => '设备追溯',
+                'menu_name' => '串号追踪',
                 'menu_key' => 'hsx_erp_device_trace',
-                'menu_short_name' => '设备追溯',
+                'menu_short_name' => '串号追踪',
                 'parent_select_key' => '',
                 'menu_type' => '1',
                 'icon' => 'nc-iconfont nc-icon-sousuo',
@@ -788,9 +788,9 @@ return [
                 'is_show' => '1',
                 'children' => [
                     [
-                        'menu_name' => '追溯详情',
+                        'menu_name' => '追踪详情',
                         'menu_key' => 'hsx_erp_device_trace_detail',
-                        'menu_short_name' => '追溯详情',
+                        'menu_short_name' => '追踪详情',
                         'parent_select_key' => '',
                         'menu_type' => '2',
                         'icon' => '',

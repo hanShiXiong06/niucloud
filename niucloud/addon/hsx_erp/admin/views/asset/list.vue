@@ -9,6 +9,10 @@
                 <div class="flex gap-2">
                     <el-button v-permission="'hsx_erp_asset_manual_inbound'" type="primary" @click="openManualInbound">入库</el-button>
                     <el-button :icon="Refresh" @click="loadList">刷新</el-button>
+                    <el-button text @click="showOverview = !showOverview">
+                        {{ showOverview ? '收起看板' : '展开看板' }}
+                        <el-icon class="ml-1"><ArrowUp v-if="showOverview" /><ArrowDown v-else /></el-icon>
+                    </el-button>
                 </div>
             </div>
 
@@ -21,8 +25,8 @@
                 title="已与回收系统打通：回收单确认回收后，设备会自动同步到这里（待入库池），无需在此手动入库。手动入库仅用于非回收来源（如自行采购/期初建档）。"
             />
 
-            <!-- 库存概览 -->
-            <div class="mt-3 grid grid-cols-4 gap-3">
+            <!-- 库存概览(可折叠,腾出列表空间) -->
+            <div v-show="showOverview" class="mt-3 grid grid-cols-4 gap-3">
                 <div class="rounded-lg bg-gray-50 px-4 py-3">
                     <div class="text-xs text-gray-500">在手库存</div>
                     <div class="mt-1 text-xl font-semibold text-gray-800">{{ overview.on_hand.count }} <span class="text-sm font-normal text-gray-400">台</span></div>
@@ -62,8 +66,8 @@
                     <el-input
                         v-model.trim="search.keyword"
                         clearable
-                        class="!w-[260px]"
-                        placeholder="资产编号 / IMEI / SN / 型号"
+                        class="!w-[300px]"
+                        placeholder="资产号/IMEI/SN/型号，可空格或逗号隔开搜多台"
                         @keyup.enter="handleSearch"
                     />
                 </el-form-item>
@@ -116,25 +120,28 @@
             </div>
 
             <div v-if="selectedAssets.length" class="mb-3 flex items-center justify-between rounded-md bg-blue-50 px-3 py-2">
-                <div class="text-sm text-gray-600">已选 {{ selectedAssets.length }} 台</div>
+                <div class="text-sm text-gray-600">已选 <b class="text-blue-600">{{ selectedAssets.length }}</b> 台（跨页累计，翻页/搜索不丢）</div>
                 <div class="flex gap-2">
                     <el-button v-if="selectedPendingIn.length" v-permission="'hsx_erp_asset_batch_confirm_inbound'" type="primary" @click="batchConfirmInbound">
                         批量确认入库 ({{ selectedPendingIn.length }})
                     </el-button>
                     <el-button v-if="selectedSellable.length" type="danger" @click="openOutboundBatch">
-                        批量卖同行 ({{ selectedSellable.length }})
+                        批量卖出 ({{ selectedSellable.length }})
                     </el-button>
+                    <el-button text @click="clearAssetSelection">清空已选</el-button>
                 </div>
             </div>
 
             <el-table
+                ref="assetTableRef"
                 :data="table.data"
                 v-loading="table.loading"
                 size="large"
+                row-key="id"
                 @selection-change="handleSelectionChange"
                 @sort-change="handleSortChange"
             >
-                <el-table-column type="selection" width="52" :selectable="rowSelectable" />
+                <el-table-column type="selection" width="52" :selectable="rowSelectable" reserve-selection />
                 <el-table-column prop="asset_no" label="资产编号" min-width="180" />
                 <el-table-column label="设备" min-width="260">
                     <template #default="{ row }">
@@ -223,9 +230,9 @@
                         <el-tooltip v-if="row.inventory_status === 'in_stock'" v-permission="'hsx_erp_refurbishment_skip'" content="无需整备" placement="top">
                             <el-button type="success" link :icon="DArrowRight" @click="skipRefurbishment(row)" />
                         </el-tooltip>
-                        <!-- ERP 定价/调价：独立模式全显；联合模式下，走过拍照(有图)的设备也由 ERP 定价员定价并推商城 -->
+                        <!-- ERP 定价/调价：独立模式全显；联合模式下，走过拍照(有图)的、或未真正交中台的本地设备，也由 ERP 定价 -->
                         <el-tooltip
-                            v-if="(!integrated || row.has_photo) && ['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
+                            v-if="(!integrated || row.has_photo || !row.delegated_to_mid) && ['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
                             v-permission="'hsx_erp_pricing_save'"
                             :content="row.inventory_status === 'available_for_sale' ? '调价' : '定价'"
                             placement="top"
@@ -242,6 +249,9 @@
                         </el-tooltip>
                         <el-tooltip content="详情" placement="top">
                             <el-button type="primary" link :icon="View" @click="openDetail(row)" />
+                        </el-tooltip>
+                        <el-tooltip content="全链路追踪" placement="top">
+                            <el-button type="primary" link :icon="Share" @click="openTrace({ assetId: Number(row.id) })" />
                         </el-tooltip>
                     </template>
                 </el-table-column>
@@ -605,13 +615,16 @@
                 <el-form-item label="原因">
                     <el-input v-model.trim="costDialog.reason" type="textarea" :rows="2" placeholder="如：维修加价 / 录入有误修正" maxlength="200" show-word-limit />
                 </el-form-item>
-                <el-form-item label="计入应付">
+                <el-form-item v-if="costDialog.asset?.inventory_status !== 'outbound'" label="计入应付">
                     <el-checkbox v-model="costDialog.sync_payable">此差额计入对该供应商的应付</el-checkbox>
                 </el-form-item>
-                <div v-if="costDialog.sync_payable && costAdjustDelta !== 0" class="mb-2 rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-600">
+                <div v-if="costDialog.asset?.inventory_status !== 'outbound' && costDialog.sync_payable && costAdjustDelta !== 0" class="mb-2 rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-600">
                     对供应商应付将同步 {{ costAdjustDelta > 0 ? '+' : '' }}¥{{ money(costAdjustDelta) }}（从 ¥{{ money(costDialog.asset?.current_cost) }} 到 ¥{{ money(costDialog.cost) }}）。仅适用于手工建档入库的设备；回收来源请在回收侧处理。
                 </div>
-                <div class="text-xs text-gray-400">调整会写入成本流水留痕，已出库/已售/盘亏的设备不可调。不勾"计入应付"则只改库存成本（如整备费/运费），不影响欠供应商的钱。</div>
+                <div v-if="costDialog.asset?.inventory_status === 'outbound'" class="mb-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-600">
+                    该设备已售/已出库，此处为财务订正：仅修正库存成本与毛利口径并记成本流水，不改动已生成的应付/应收。
+                </div>
+                <div class="text-xs text-gray-400">调整会写入成本流水留痕。不勾"计入应付"则只改库存成本（如整备费/运费），不影响欠供应商的钱。</div>
             </el-form>
             <template #footer>
                 <el-button @click="costDialog.visible = false">取消</el-button>
@@ -639,8 +652,9 @@
         </el-dialog>
 
         <!-- 卖同行 / 就地出库（单台或批量） -->
-        <el-dialog v-model="outbound.visible" :title="`卖同行 / 出库（${outbound.rows.length} 台）`" width="640px" destroy-on-close>
+        <el-dialog v-model="outbound.visible" :title="`卖给同行 / 出库（${outbound.rows.length} 台）`" width="640px" destroy-on-close>
             <el-form label-width="92px">
+                <div class="mb-3 rounded bg-gray-50 px-3 py-2 text-xs text-gray-400">ERP 直接出库 = 同行渠道。零售给客户请走「商城·线下开单」(需安装商城)。</div>
                 <el-form-item label="买家" required>
                     <counterparty-select v-model="outbound.counterparty_id" value-field="member_id" role-type="customer" placeholder="搜索姓名/手机号选择买家" class="w-full" />
                 </el-form-item>
@@ -689,7 +703,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Search, InfoFilled, Check, MagicStick, Money, Sort, Edit, View, Sell, DArrowRight, Camera } from '@element-plus/icons-vue'
+import { Refresh, Search, InfoFilled, Check, MagicStick, Money, Sort, Edit, View, Sell, DArrowRight, Camera, Share, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+import { useDeviceTrace } from '@/addon/hsx_erp/composables/useDeviceTrace'
+
+const { openTrace } = useDeviceTrace()
 import { useRouter } from 'vue-router'
 import {
     batchConfirmErpAssetInbound,
@@ -728,10 +745,13 @@ const onWarehouseFilterChange = () => { search.location_id = ''; handleSearch() 
 const summary = reactive({ count: 0, total_cost: 0, total_sale: 0, in_stock_count: 0, avg_age_days: 0 })
 // 是否已接入中台(数据中台)：接入后拍照/定价交给中台，ERP 不再自行定价
 const integrated = ref(false)
+const showOverview = ref(true) // 顶部库存概览看板,可折叠以腾出列表空间
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
 const detailVisible = ref(false)
 const detail = reactive<any>({ asset: null, timeline: [] })
 const selectedAssets = ref<any[]>([])
+const assetTableRef = ref<any>(null)
+const clearAssetSelection = () => assetTableRef.value?.clearSelection()
 const warehouseOptions = ref<any[]>([])
 const counterpartyOptions = ref<any[]>([])
 const inbound = reactive<any>({
@@ -867,6 +887,7 @@ const submitOutbound = async () => {
     try {
         await createErpOutbound({
             outbound_type: 'peer_sale',
+            sale_channel: 'peer',
             counterparty_id: outbound.counterparty_id,
             settle_mode: outbound.settle_mode,
             capital_account_id: outbound.capital_account_id || 0,
@@ -876,6 +897,7 @@ const submitOutbound = async () => {
         })
         ElMessage.success(outbound.rows.length > 1 ? `已出库 ${outbound.rows.length} 台` : '出库成功')
         outbound.visible = false
+        clearAssetSelection()
         loadList()
     } finally {
         outbound.submitting = false
@@ -1350,7 +1372,8 @@ const submitPricing = async () => {
 }
 
 // 调成本（实时调整在库设备成本，写成本流水）
-const COST_ADJUSTABLE = ['in_stock', 'refurbishing', 'pending_pricing', 'available_for_sale', 'locked']
+// outbound(已售/已出库)允许财务订正成本: 卖后才发现成本=0/填错时的兜底, 后端对已售只改成本+记流水、不动应付
+const COST_ADJUSTABLE = ['in_stock', 'refurbishing', 'pending_pricing', 'available_for_sale', 'locked', 'outbound']
 const canAdjustCost = (row: any) => COST_ADJUSTABLE.includes(String(row.inventory_status))
 const costDialog = reactive<any>({ visible: false, submitting: false, asset: null, cost: 0, reason: '', sync_payable: false })
 const costAdjustDelta = computed(() => Math.round((Number(costDialog.cost || 0) - Number(costDialog.asset?.current_cost || 0)) * 100) / 100)
@@ -1468,9 +1491,12 @@ const loadIntegration = async () => {
 const flowStatusName = (status: string) =>
     integrated.value && status === 'pending_pricing' ? '已交中台·处理中' : statusName(status)
 
-// 细化状态展示：优先用后端算好的 status_text/status_type（已售/报废/盘亏丢失等），中台模式下待定价显示“已交中台”
+// 细化状态展示：只有"真的交给了中台"(delegated_to_mid)的待定价才显示"已交中台·处理中"；
+// 本地/手工入库的待定价仍显示"待销售定价"，由 ERP 自行定价。
 const displayStatusText = (row: any) =>
-    integrated.value && row.inventory_status === 'pending_pricing' ? '已交中台·处理中' : (row.status_text || statusName(row.inventory_status))
+    integrated.value && row.inventory_status === 'pending_pricing' && row.delegated_to_mid
+        ? '已交中台·处理中'
+        : (row.status_text || statusName(row.inventory_status))
 const displayStatusType = (row: any) => row.status_type || statusType(row.inventory_status)
 
 // 列排序 → 服务端排序

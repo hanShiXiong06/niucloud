@@ -65,11 +65,20 @@ class ErpAssetService extends BaseAdminService
     {
         $query = ErpAsset::where([['site_id', '=', $this->site_id]]);
         if (!empty($where['keyword'])) {
-            $keyword = trim((string)$where['keyword']);
-            $query->where(function ($query) use ($keyword) {
-                $query->whereLike('asset_no|imei|imei2|sn|model', '%' . $keyword . '%')
-                    ->whereOr('source_device_id', '=', is_numeric($keyword) ? (int)$keyword : 0);
-            });
+            // 支持多设备检索：空格/逗号/分号/换行分隔多个 IMEI/资产号/SN，命中任意一个即返回
+            $terms = array_values(array_filter(array_map('trim', preg_split('/[\s,，;；\r\n]+/u', trim((string)$where['keyword'])))));
+            if (!empty($terms)) {
+                $query->where(function ($q) use ($terms) {
+                    foreach ($terms as $t) {
+                        $q->whereOr(function ($w) use ($t) {
+                            $w->whereLike('asset_no|imei|imei2|sn|model', '%' . $t . '%');
+                            if (is_numeric($t)) {
+                                $w->whereOr('source_device_id', '=', (int)$t);
+                            }
+                        });
+                    }
+                });
+            }
         }
         if (!empty($where['inventory_status'])) {
             if ((string)$where['inventory_status'] === 'sold') {
@@ -147,6 +156,7 @@ class ErpAssetService extends BaseAdminService
         $this->appendWarehouseNames($result['data']);
         $this->appendStatusLabels($result['data']);
         $this->appendStockAge($result['data']);
+        $this->appendMidDelegation($result['data']);
         $result['summary'] = [
             'count'          => (int)$totalCount,
             'total_cost'     => $totalCost,
@@ -161,6 +171,48 @@ class ErpAssetService extends BaseAdminService
      * 细化状态展示：给每行补 status_text(明确中文) + status_type(标签色)。
      * 出库要 join 出库单区分 已售(同行)/报废/其他出库；盘亏→盘亏丢失。
      */
+    /**
+     * 交数据中台拍照定价:标记已交中台(用于列表显示/定价归属)并发 ready_for_photo 事件(中台据此建拍照任务)。
+     * @return int[] outbox id 列表
+     */
+    private function handToMid(ErpAsset $asset, int $stockOrderId, int $now): array
+    {
+        $snap = (array)$asset->source_snapshot;
+        $snap['delegated_mid'] = true;
+        $asset->save(['source_snapshot' => $snap, 'update_at' => $now]);
+        $this->writeOperation((int)$asset->id, (int)$asset->cycle_id, 'erp.asset.ready_for_photo.v1', 'hand_to_mid', $stockOrderId, ['require_photo' => true]);
+        return [
+            $this->writeDecisionEvent($asset, 'erp.asset.ready_for_photo.v1', $stockOrderId, [
+                'source_device_id' => (int)$asset->source_device_id,
+                'require_photo' => true,
+                'next_status' => ErpDict::INVENTORY_PENDING_PRICING,
+            ], $now),
+        ];
+    }
+
+    /**
+     * 标记"是否真的交给了中台处理"(delegated_to_mid)：只有商城销路(sale_destination=mall)的待定价设备
+     * 才是真正委托中台拍照/定价的;本地/手工入库的待定价是 ERP 自己待标价, 不应显示"已交中台", ERP 可自行定价。
+     */
+    private function appendMidDelegation(array &$rows): void
+    {
+        foreach ($rows as &$r) {
+            $snap = $r['source_snapshot'] ?? null;
+            if (is_string($snap)) {
+                $snap = (array)json_decode($snap, true);
+            } elseif (is_object($snap)) {
+                $snap = (array)$snap;
+            } elseif (!is_array($snap)) {
+                $snap = [];
+            }
+            $dest = $snap['sale_destination'] ?? '';
+            $dest = is_scalar($dest) ? (string)$dest : '';
+            $r['delegated_to_mid'] = (string)($r['inventory_status'] ?? '') === ErpDict::INVENTORY_PENDING_PRICING
+                && ($dest === ErpDict::SALE_DESTINATION_MALL || !empty($snap['delegated_mid']));
+        }
+        unset($r);
+    }
+
     private function appendStatusLabels(array &$rows): void
     {
         if (empty($rows)) {
@@ -312,9 +364,16 @@ class ErpAssetService extends BaseAdminService
         if ($asset->isEmpty()) {
             throw new CommonException('ERP资产不存在');
         }
-        $blocked = [ErpDict::INVENTORY_OUTBOUND, ErpDict::INVENTORY_LOST, ErpDict::INVENTORY_PENDING_IN, ErpDict::INVENTORY_INBOUND_REJECTED];
+        // 已售/已出库(OUTBOUND)允许财务订正成本: 常见于"卖后才发现成本=0/填错"。
+        // 此情形按既定口径只改成本+记成本流水, 不联动应付/应收(下方强制 syncPayable=false)。
+        // 仍禁止真正无意义的状态: 盘亏 / 待入库 / 入库被拒。
+        $blocked = [ErpDict::INVENTORY_LOST, ErpDict::INVENTORY_PENDING_IN, ErpDict::INVENTORY_INBOUND_REJECTED];
         if (in_array((string)$asset->inventory_status, $blocked, true)) {
             throw new CommonException('该设备当前状态不可调成本');
+        }
+        // 已售设备订正: 仅改成本与毛利口径, 不动应付/应收
+        if ((string)$asset->inventory_status === ErpDict::INVENTORY_OUTBOUND) {
+            $syncPayable = false;
         }
         $before = round((float)$asset->current_cost, 2);
         $newCost = round($newCost, 2);
@@ -595,9 +654,15 @@ class ErpAssetService extends BaseAdminService
         $warehouseId = (int)($data['warehouse_id'] ?? 0);
         $locationId = (int)($data['location_id'] ?? 0);
         (new ErpWarehouseService())->validateInboundLocation($warehouseId, $locationId);
-        // 进仓门槛:目的仓"必须拍照"则落「待拍照」(不进在库、不走定价决策),拍完才入库
+        // 进仓门槛:目的仓"必须拍照"则不进在库、不走定价决策,拍完才入库。由仓库设置决定。
+        // 要求拍照 + 数据中台已接入 → 交中台拍照定价(置「已交中台·处理中」=待定价并发 ready_for_photo);
+        // 中台未接入 → ERP 自己走「待拍照」(completePhoto)。
         $requirePhoto = $warehouseId > 0 && (new ErpWarehouseService())->requiresPhoto($warehouseId);
-        $targetStatus = $requirePhoto ? ErpDict::INVENTORY_PENDING_PHOTO : ErpDict::INVENTORY_IN_STOCK;
+        $midConnected = class_exists('\\addon\\hsx_device_asset\\app\\service\\admin\\DeviceAssetService');
+        $delegateToMid = $requirePhoto && $midConnected;
+        $targetStatus = $requirePhoto
+            ? ($delegateToMid ? ErpDict::INVENTORY_PENDING_PRICING : ErpDict::INVENTORY_PENDING_PHOTO)
+            : ErpDict::INVENTORY_IN_STOCK;
         $remark = trim((string)($data['remark'] ?? ''));
         $now = time();
         $outboxIds = [];
@@ -657,8 +722,8 @@ class ErpAssetService extends BaseAdminService
                     'warehouse_id' => $warehouseId,
                     'location_id' => $locationId,
                     'current_cost' => $purchaseCost,
-                    // 待拍照阶段逻辑未在库, 库龄从真正入库(拍完)起算
-                    'stock_in_at' => $requirePhoto ? 0 : $now,
+                    // ERP 待拍照阶段逻辑未在库, 库龄从真正入库(拍完)起算; 交中台/不要求拍照的已在库
+                    'stock_in_at' => ($requirePhoto && !$delegateToMid) ? 0 : $now,
                     'version' => (int)$asset->version + 1,
                     'update_at' => $now,
                 ]);
@@ -758,6 +823,9 @@ class ErpAssetService extends BaseAdminService
                         $outboxIds,
                         $this->applyPostInboundRefurbishmentDecision($asset, $stockOrderId, $now)
                     );
+                } elseif ($delegateToMid) {
+                    // 要求拍照 + 中台接入 + 无需整备 → 交中台拍照定价
+                    $outboxIds = array_merge($outboxIds, $this->handToMid($asset, $stockOrderId, $now));
                 }
             }
 

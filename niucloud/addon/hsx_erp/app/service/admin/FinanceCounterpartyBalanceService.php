@@ -354,6 +354,8 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
                     'source_no'        => (string)$r['source_no'],
                     'remark'           => (string)$r['remark'],
                     'occurred_at'      => (int)$r['occurred_at'],
+                    'amount'           => round((float)$r['amount'], 2),          // 总额(定价/成本)
+                    'settled'          => round((float)$r['settled_amount'], 2),  // 已付/已结
                     'payable'          => $type === 'pay' ? $out : 0.0,
                     'receivable'       => $type === 'rec' ? $out : 0.0,
                     'offsetable'       => 0.0,
@@ -401,6 +403,20 @@ class FinanceCounterpartyBalanceService extends BaseAdminService
         } catch (\Throwable $e) {
         }
         return array_values(array_unique(array_filter($memberIds)));
+    }
+
+    /** 经手人候选(去重),取自实际操作记录 ErpOperationEvent.operator_name,与经手人筛选同源 */
+    public static function operatorOptions(int $siteId): array
+    {
+        try {
+            $names = \addon\hsx_erp\app\model\ErpOperationEvent::where([['site_id', '=', $siteId]])
+                ->where('operator_name', '<>', '')->distinct(true)->column('operator_name');
+            $names = array_values(array_unique(array_filter(array_map(static fn($x) => trim((string)$x), $names), static fn($x) => $x !== '')));
+            sort($names);
+            return $names;
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /**

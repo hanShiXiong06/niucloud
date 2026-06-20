@@ -64,16 +64,31 @@ class ErpDict
 
     // 出库类型
     public const OUTBOUND_TYPE_PEER_SALE = 'peer_sale'; // 同行销售
+    public const OUTBOUND_TYPE_MALL_SALE = 'mall_sale'; // 商城销售(展示口径: peer_sale 出库 + sale_channel=mall)
     public const OUTBOUND_TYPE_SCRAP     = 'scrap';     // 报废出库
     public const OUTBOUND_TYPE_OTHER     = 'other';     // 其他出库
 
     public static function getOutboundTypeMap(): array
     {
         return [
+            self::OUTBOUND_TYPE_MALL_SALE => '商城销售',
             self::OUTBOUND_TYPE_PEER_SALE => '同行销售',
             self::OUTBOUND_TYPE_SCRAP     => '报废出库',
             self::OUTBOUND_TYPE_OTHER     => '其他出库',
         ];
+    }
+
+    /**
+     * 出库单"展示类型"口径。
+     * 底层 outbound_type 不变(销售统一存 peer_sale, 商城卖出额外带 sale_channel=mall),
+     * 列表/详情/筛选据此把"同行销售+mall 渠道"显示成"商城销售", 不改任何出库/应收/库存业务规则。
+     */
+    public static function resolveOutboundViewType(string $outboundType, string $saleChannel = 'peer'): string
+    {
+        if ($outboundType === self::OUTBOUND_TYPE_PEER_SALE && $saleChannel === 'mall') {
+            return self::OUTBOUND_TYPE_MALL_SALE;
+        }
+        return $outboundType;
     }
 
     // 结算方式(出库时)

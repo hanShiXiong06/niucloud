@@ -61,10 +61,127 @@ class FinanceSettlementService extends BaseAdminService
         return ['payables' => $build(new FinancePayable()), 'receivables' => $build(new FinanceReceivable())];
     }
 
-    /** 结算记录(已结清历史)，支持往来单位/关键词/时间筛选 + 分页 */
+    /** 结算记录(已结清历史)，支持往来单位/关键词/时间筛选 + 分页（逐条结算） */
     public function getPage(array $where = []): array
     {
         $query = FinanceSettlement::where([['site_id', '=', $this->site_id]])->order('id desc');
+        $this->applySettlementFilters($query, $where);
+        $page = $this->pageQuery($query);
+        if (!empty($page['data']) && is_array($page['data'])) {
+            $this->enrichSettlementRows($page['data']);
+        }
+        return $page;
+    }
+
+    /**
+     * 结算记录「按设备/账单分组」分页：同一台机器的多次结算永远合并为一行（跨页也不拆），
+     * 单次结算直接平铺，多次结算返回父行 + children 明细。分页单位是"设备/账单"而非"每条结算"。
+     */
+    public function getGroupedByDevice(array $where = []): array
+    {
+        $page  = max(1, (int)($where['page'] ?? 1));
+        $limit = max(1, (int)($where['limit'] ?? 15));
+
+        // 1) 命中的全部结算 id + 时间（轻量）
+        $q = FinanceSettlement::where([['site_id', '=', $this->site_id]]);
+        $this->applySettlementFilters($q, $where);
+        $idRows = $q->field('id,occurred_at')->order('id desc')->select()->toArray();
+        if (empty($idRows)) {
+            return ['data' => [], 'total' => 0, 'current_page' => $page, 'last_page' => 0, 'per_page' => $limit];
+        }
+        $tsMap = [];
+        foreach ($idRows as $r) {
+            $tsMap[(int)$r['id']] = (int)$r['occurred_at'];
+        }
+        $allIds = array_keys($tsMap);
+
+        // 2) 每条结算 → 主设备 + 来源单
+        $devOf = $this->settlementPrimaryDevice($allIds);
+
+        // 3) 按设备分组（无设备的各自成组）
+        $groups = [];
+        foreach ($allIds as $sid) {
+            $did = (int)($devOf[$sid]['device_id'] ?? 0);
+            $key = $did > 0 ? 'd' . $did : 's' . $sid;
+            if (!isset($groups[$key])) {
+                $groups[$key] = ['device_id' => $did, 'source_no' => (string)($devOf[$sid]['source_no'] ?? ''), 'sids' => [], 'ts' => 0];
+            }
+            $groups[$key]['sids'][] = $sid;
+            $groups[$key]['ts'] = max($groups[$key]['ts'], $tsMap[$sid] ?? 0);
+        }
+        $groupList = array_values($groups);
+        usort($groupList, static fn($a, $b) => $b['ts'] <=> $a['ts']);
+        $total = count($groupList);
+        $pageGroups = array_slice($groupList, ($page - 1) * $limit, $limit);
+
+        // 4) 取本页涉及的结算完整行并富化
+        $pageSids = [];
+        foreach ($pageGroups as $g) {
+            $pageSids = array_merge($pageSids, $g['sids']);
+        }
+        $rowMap = [];
+        if (!empty($pageSids)) {
+            $rows = FinanceSettlement::where([['site_id', '=', $this->site_id]])->whereIn('id', $pageSids)->select()->toArray();
+            $this->enrichSettlementRows($rows);
+            foreach ($rows as $r) {
+                $rowMap[(int)$r['id']] = $r;
+            }
+        }
+
+        // 5) 组装：单条平铺；多条父行 + children
+        $data = [];
+        foreach ($pageGroups as $g) {
+            $list = [];
+            foreach ($g['sids'] as $sid) {
+                if (isset($rowMap[$sid])) {
+                    $list[] = $rowMap[$sid];
+                }
+            }
+            if (count($list) <= 1) {
+                if (!empty($list)) {
+                    $one = $list[0];
+                    $one['row_key'] = 'one_' . $one['id'];
+                    $data[] = $one;
+                }
+                continue;
+            }
+            usort($list, static fn($a, $b) => (int)$b['occurred_at'] <=> (int)$a['occurred_at']);
+            $sum = static fn($f) => array_sum(array_map(static fn($r) => (float)($r[$f] ?? 0), $list));
+            $t0 = $list[0]['targets'][0] ?? [];
+            $children = [];
+            foreach ($list as $r) {
+                $r['row_key'] = 'cld_' . $r['id'];
+                $children[] = $r;
+            }
+            $data[] = [
+                'row_key'            => 'grp_' . $g['device_id'] . '_' . $g['source_no'],
+                '_group'             => true,
+                'count'              => count($list),
+                'settlement_no'      => '共 ' . count($list) . ' 笔结算',
+                'is_entity'          => $list[0]['is_entity'] ?? false,
+                'entity_id'          => $list[0]['entity_id'] ?? 0,
+                'entity_name'        => $list[0]['entity_name'] ?? '',
+                'counterparty_name'  => $list[0]['counterparty_name'] ?? '',
+                'counterparty_mobile' => $list[0]['counterparty_mobile'] ?? '',
+                'targets'            => $t0 ? [['model' => $t0['model'] ?? '', 'source_no' => $t0['source_no'] ?? '', 'amount' => round($sum('cash_amount') + $sum('offset_amount'), 2)]] : [],
+                'payable_total'      => round($sum('payable_total'), 2),
+                'receivable_total'   => round($sum('receivable_total'), 2),
+                'offset_amount'      => round($sum('offset_amount'), 2),
+                'cash_amount'        => round($sum('cash_amount'), 2),
+                'cash_direction'     => $list[0]['cash_direction'] ?? '',
+                'operator_name'      => '',
+                'method'             => '',
+                'account_name'       => '',
+                'occurred_at'        => (int)$g['ts'],
+                'children'           => $children,
+            ];
+        }
+        return ['data' => $data, 'total' => $total, 'current_page' => $page, 'last_page' => (int)ceil($total / $limit), 'per_page' => $limit];
+    }
+
+    /** 结算列表的筛选条件（getPage 与分组分页共用） */
+    private function applySettlementFilters($query, array $where): void
+    {
         if (!empty($where['counterparty_id'])) {
             $query->where('counterparty_id', '=', (int)$where['counterparty_id']);
         }
@@ -87,75 +204,185 @@ class FinanceSettlementService extends BaseAdminService
         if (!empty($where['end_time'])) {
             $query->where('occurred_at', '<=', (int)$where['end_time']);
         }
-        $page = $this->pageQuery($query);
-        // 往来单位精确到人：按 counterparty_id(=会员member_id)关联 member 表回填姓名+手机
-        // 注意：必须直接对 $page['data'] 取引用，不能用 `$page['data'] ?? []`(那会复制一份导致改动丢失)
-        if (!empty($page['data']) && is_array($page['data'])) {
-            $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($page['data'], 'counterparty_id'));
-            // 主体级折账的结算单 counterparty_id 存的是主体ID(非会员), 回查主体名
-            $entityNameMap = [];
-            $allCpIds = array_values(array_unique(array_filter(array_map('intval', array_column($page['data'], 'counterparty_id')))));
-            if (!empty($allCpIds)) {
-                foreach (\addon\hsx_erp\app\model\ErpCounterparty::where([['site_id', '=', $this->site_id]])->whereIn('id', $allCpIds)->field('id,name')->select()->toArray() as $e) {
-                    $entityNameMap[(int)$e['id']] = (string)$e['name'];
-                }
-            }
-            // 现金部分走了哪个资金账户(户头)：结算时记的资金流水 source_no=结算单号、biz_type=settlement，回查账户名
-            $acctMap = [];
-            $nos = array_values(array_filter(array_column($page['data'], 'settlement_no')));
-            if (!empty($nos)) {
-                $ledgers = \addon\hsx_erp\app\model\ErpCapitalLedger::where([
-                    ['site_id', '=', $this->site_id], ['biz_type', '=', 'settlement'],
-                ])->whereIn('source_no', $nos)->field('source_no,account_name')->select()->toArray();
-                foreach ($ledgers as $lg) {
-                    $acctMap[(string)$lg['source_no']] = (string)$lg['account_name'];
-                }
-            }
-            foreach ($page['data'] as &$row) {
-                // 户头解析: 1)结算单已存户头列 2)结算自身记的资金流水 3)同往来单位、结算时刻邻近的资金流水(回收打款等外部已扣账)
-                $acct = (string)($row['account_name'] ?? '');
-                if ($acct === '') {
-                    $acct = (string)($acctMap[(string)($row['settlement_no'] ?? '')] ?? '');
-                }
-                if ($acct === '' && (string)($row['method'] ?? '') !== 'offset' && (float)($row['cash_amount'] ?? 0) != 0.0) {
-                    $dir = ((string)($row['cash_direction'] ?? '') === 'collect') ? 'in' : 'out';
-                    $oc = (int)($row['occurred_at'] ?? 0);
-                    $near = \addon\hsx_erp\app\model\ErpCapitalLedger::where([
-                        ['site_id', '=', $this->site_id],
-                        ['counterparty_id', '=', (int)($row['counterparty_id'] ?? 0)],
-                        ['direction', '=', $dir],
-                    ])->where('occurred_at', '>=', $oc - 10)->where('occurred_at', '<=', $oc + 10)
-                        ->order('id desc')->value('account_name');
-                    $acct = (string)($near ?: '');
-                }
-                $row['account_name'] = $acct;
-                $cpid = (int)($row['counterparty_id'] ?? 0);
-                $row['is_entity'] = false;
-                $m = $memberMap[$cpid] ?? null;
-                if ($m) {
-                    // 单人结算: counterparty_id=会员
-                    if ((string)($row['counterparty_name'] ?? '') === '') {
-                        $row['counterparty_name'] = $m['name'];
-                    }
-                    $row['counterparty_mobile'] = $m['mobile'];
-                    $row['entity_id'] = $m['entity_id'];
-                    $row['entity_name'] = $m['entity_name'];
-                } elseif (isset($entityNameMap[$cpid])) {
-                    // 主体级折账: counterparty_id=主体ID
-                    $row['is_entity'] = true;
-                    $row['entity_id'] = $cpid;
-                    $row['entity_name'] = $entityNameMap[$cpid];
-                    if ((string)($row['counterparty_name'] ?? '') === '') {
-                        $row['counterparty_name'] = $entityNameMap[$cpid];
-                    }
-                }
-                if ((string)($row['counterparty_name'] ?? '') === '') {
-                    $row['counterparty_name'] = '往来#' . $cpid;
-                }
-            }
-            unset($row);
+    }
+
+    /** 取每条结算的"主设备"(第一个核销目标的 source_device_id) + 来源单号 */
+    private function settlementPrimaryDevice(array $sids): array
+    {
+        if (empty($sids)) {
+            return [];
         }
-        return $page;
+        $links = FinanceSettlementLink::where([['site_id', '=', $this->site_id]])
+            ->whereIn('settlement_id', $sids)
+            ->field('settlement_id,target_type,target_id')->order('id asc')->select()->toArray();
+        if (empty($links)) {
+            return [];
+        }
+        $payIds = [];
+        $recIds = [];
+        foreach ($links as $l) {
+            if ((string)$l['target_type'] === 'payable') {
+                $payIds[] = (int)$l['target_id'];
+            } else {
+                $recIds[] = (int)$l['target_id'];
+            }
+        }
+        $finMap = [];
+        if (!empty($payIds)) {
+            foreach (FinancePayable::where([['site_id', '=', $this->site_id]])->whereIn('id', array_unique($payIds))
+                         ->field('id,source_no,source_device_id')->select()->toArray() as $f) {
+                $finMap['payable_' . (int)$f['id']] = $f;
+            }
+        }
+        if (!empty($recIds)) {
+            foreach (FinanceReceivable::where([['site_id', '=', $this->site_id]])->whereIn('id', array_unique($recIds))
+                         ->field('id,source_no,source_device_id')->select()->toArray() as $f) {
+                $finMap['receivable_' . (int)$f['id']] = $f;
+            }
+        }
+        $out = [];
+        foreach ($links as $l) {
+            $sid = (int)$l['settlement_id'];
+            if (isset($out[$sid])) {
+                continue; // 取第一个目标作为主设备
+            }
+            $f = $finMap[(string)$l['target_type'] . '_' . (int)$l['target_id']] ?? null;
+            if (!$f) {
+                continue;
+            }
+            $out[$sid] = ['device_id' => (int)($f['source_device_id'] ?? 0), 'source_no' => (string)($f['source_no'] ?? '')];
+        }
+        return $out;
+    }
+
+    /** 富化结算行：户头 + 主体/对接人 + 结算对象设备 */
+    private function enrichSettlementRows(array &$rows): void
+    {
+        if (empty($rows)) {
+            return;
+        }
+        $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($rows, 'counterparty_id'));
+        $entityNameMap = [];
+        $allCpIds = array_values(array_unique(array_filter(array_map('intval', array_column($rows, 'counterparty_id')))));
+        if (!empty($allCpIds)) {
+            foreach (\addon\hsx_erp\app\model\ErpCounterparty::where([['site_id', '=', $this->site_id]])->whereIn('id', $allCpIds)->field('id,name')->select()->toArray() as $e) {
+                $entityNameMap[(int)$e['id']] = (string)$e['name'];
+            }
+        }
+        $acctMap = [];
+        $nos = array_values(array_filter(array_column($rows, 'settlement_no')));
+        if (!empty($nos)) {
+            $ledgers = \addon\hsx_erp\app\model\ErpCapitalLedger::where([
+                ['site_id', '=', $this->site_id], ['biz_type', '=', 'settlement'],
+            ])->whereIn('source_no', $nos)->field('source_no,account_name')->select()->toArray();
+            foreach ($ledgers as $lg) {
+                $acctMap[(string)$lg['source_no']] = (string)$lg['account_name'];
+            }
+        }
+        foreach ($rows as &$row) {
+            $acct = (string)($row['account_name'] ?? '');
+            if ($acct === '') {
+                $acct = (string)($acctMap[(string)($row['settlement_no'] ?? '')] ?? '');
+            }
+            if ($acct === '' && (string)($row['method'] ?? '') !== 'offset' && (float)($row['cash_amount'] ?? 0) != 0.0) {
+                $dir = ((string)($row['cash_direction'] ?? '') === 'collect') ? 'in' : 'out';
+                $oc = (int)($row['occurred_at'] ?? 0);
+                $near = \addon\hsx_erp\app\model\ErpCapitalLedger::where([
+                    ['site_id', '=', $this->site_id],
+                    ['counterparty_id', '=', (int)($row['counterparty_id'] ?? 0)],
+                    ['direction', '=', $dir],
+                ])->where('occurred_at', '>=', $oc - 10)->where('occurred_at', '<=', $oc + 10)
+                    ->order('id desc')->value('account_name');
+                $acct = (string)($near ?: '');
+            }
+            $row['account_name'] = $acct;
+            $cpid = (int)($row['counterparty_id'] ?? 0);
+            $row['is_entity'] = false;
+            $m = $memberMap[$cpid] ?? null;
+            if ($m) {
+                if ((string)($row['counterparty_name'] ?? '') === '') {
+                    $row['counterparty_name'] = $m['name'];
+                }
+                $row['counterparty_mobile'] = $m['mobile'];
+                $row['entity_id'] = $m['entity_id'];
+                $row['entity_name'] = $m['entity_name'];
+            } elseif (isset($entityNameMap[$cpid])) {
+                $row['is_entity'] = true;
+                $row['entity_id'] = $cpid;
+                $row['entity_name'] = $entityNameMap[$cpid];
+                if ((string)($row['counterparty_name'] ?? '') === '') {
+                    $row['counterparty_name'] = $entityNameMap[$cpid];
+                }
+            }
+            if ((string)($row['counterparty_name'] ?? '') === '') {
+                $row['counterparty_name'] = '往来#' . $cpid;
+            }
+        }
+        unset($row);
+        $this->appendSettlementTargets($rows);
+    }
+
+    /**
+     * 给每条结算单补「结算对象」摘要：关联的设备型号 + 来源单号。
+     * 这样列表里能看出多条结算其实指向同一台机器/同一笔账。
+     */
+    private function appendSettlementTargets(array &$rows): void
+    {
+        $sids = array_values(array_filter(array_map(static fn($r) => (int)($r['id'] ?? 0), $rows)));
+        if (empty($sids)) {
+            return;
+        }
+        $links = FinanceSettlementLink::where([['site_id', '=', $this->site_id]])
+            ->whereIn('settlement_id', $sids)
+            ->field('settlement_id,target_type,target_id,applied_amount')->select()->toArray();
+        if (empty($links)) {
+            foreach ($rows as &$r) { $r['targets'] = []; }
+            unset($r);
+            return;
+        }
+        $payIds = array_values(array_unique(array_filter(array_map(static fn($l) => (string)$l['target_type'] === 'payable' ? (int)$l['target_id'] : 0, $links))));
+        $recIds = array_values(array_unique(array_filter(array_map(static fn($l) => (string)$l['target_type'] === 'receivable' ? (int)$l['target_id'] : 0, $links))));
+        $finMap = [];
+        if (!empty($payIds)) {
+            foreach (FinancePayable::where([['site_id', '=', $this->site_id]])->whereIn('id', $payIds)
+                         ->field('id,source_no,source_device_id')->select()->toArray() as $f) {
+                $finMap['payable_' . (int)$f['id']] = $f;
+            }
+        }
+        if (!empty($recIds)) {
+            foreach (FinanceReceivable::where([['site_id', '=', $this->site_id]])->whereIn('id', $recIds)
+                         ->field('id,source_no,source_device_id')->select()->toArray() as $f) {
+                $finMap['receivable_' . (int)$f['id']] = $f;
+            }
+        }
+        $deviceIds = array_values(array_unique(array_filter(array_map(static fn($f) => (int)($f['source_device_id'] ?? 0), $finMap))));
+        $deviceMap = [];
+        if (!empty($deviceIds)) {
+            foreach (\addon\hsx_erp\app\model\ErpAsset::where([['site_id', '=', $this->site_id]])
+                         ->whereIn('source_device_id', $deviceIds)->field('source_device_id,model,imei')->select()->toArray() as $a) {
+                $deviceMap[(int)$a['source_device_id']] = $a;
+            }
+        }
+        $bySettlement = [];
+        foreach ($links as $l) {
+            $key = (string)$l['target_type'] . '_' . (int)$l['target_id'];
+            $f = $finMap[$key] ?? null;
+            if (!$f) {
+                continue;
+            }
+            $dev = $deviceMap[(int)($f['source_device_id'] ?? 0)] ?? null;
+            $bySettlement[(int)$l['settlement_id']][] = [
+                'model'     => (string)($dev['model'] ?? ''),
+                'imei'      => (string)($dev['imei'] ?? ''),
+                'source_no' => (string)($f['source_no'] ?? ''),
+                'amount'    => round((float)$l['applied_amount'], 2),
+                'device_id' => (int)($f['source_device_id'] ?? 0),
+            ];
+        }
+        foreach ($rows as &$r) {
+            $r['targets'] = $bySettlement[(int)($r['id'] ?? 0)] ?? [];
+        }
+        unset($r);
     }
 
     /**
@@ -520,10 +747,10 @@ class FinanceSettlementService extends BaseAdminService
             if (empty($rids)) {
                 return;
             }
-            // 只取已收齐(无未结额)的同行销售应收对应的设备
+            // 只取已收齐(无未结额)的销售应收(同行/商城)对应的设备
             $deviceIds = FinanceReceivable::where([['site_id', '=', $this->site_id]])
                 ->whereIn('id', $rids)
-                ->where('source_type', '=', 'erp_peer_sale')
+                ->whereIn('source_type', ['erp_peer_sale', 'erp_mall_sale'])
                 ->whereRaw('amount - settled_amount <= 0.001')
                 ->column('source_device_id');
             $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));

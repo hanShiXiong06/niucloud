@@ -67,8 +67,11 @@ Route::group('erp', function () {
     Route::get('outbound/peer_sale_todo', 'addon\hsx_erp\app\adminapi\controller\Outbound@peerSaleTodo');
     Route::get('outbound/:id', 'addon\hsx_erp\app\adminapi\controller\Outbound@info');
     Route::post('outbound/create', 'addon\hsx_erp\app\adminapi\controller\Outbound@create');
+    // 快速出入库(一单成账)
+    Route::post('quick_trade/create', 'addon\hsx_erp\app\adminapi\controller\QuickTrade@create');
     Route::post('outbound/:id/fill_price', 'addon\hsx_erp\app\adminapi\controller\Outbound@fillPrice');
     Route::post('outbound/:id/cancel', 'addon\hsx_erp\app\adminapi\controller\Outbound@cancel');
+    Route::post('outbound/:id/partial_return', 'addon\hsx_erp\app\adminapi\controller\Outbound@partialReturn');
     Route::post('outbound/transfer', 'addon\hsx_erp\app\adminapi\controller\Outbound@transfer');
     // 库存盘点
     Route::get('stocktake/lists', 'addon\hsx_erp\app\adminapi\controller\Stocktake@lists');
@@ -88,6 +91,7 @@ Route::group('erp', function () {
     Route::get('finance/counterparty_balance', 'addon\hsx_erp\app\adminapi\controller\Finance@counterpartyBalance');
     Route::get('finance/payable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@payableLists');
     Route::get('finance/receivable/lists', 'addon\hsx_erp\app\adminapi\controller\Finance@receivableLists');
+    Route::get('finance/detail/filter_options', 'addon\hsx_erp\app\adminapi\controller\Finance@detailFilterOptions');
     Route::get('finance/payable/outstanding', 'addon\hsx_erp\app\adminapi\controller\Finance@payableOutstanding');
     Route::get('finance/receivable/outstanding', 'addon\hsx_erp\app\adminapi\controller\Finance@receivableOutstanding');
     Route::post('finance/settlement/preview', 'addon\hsx_erp\app\adminapi\controller\Finance@settlementPreview');

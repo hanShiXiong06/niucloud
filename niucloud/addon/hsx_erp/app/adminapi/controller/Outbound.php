@@ -23,7 +23,7 @@ class Outbound extends BaseAdminController
     public function lists()
     {
         $where = $this->request->params([
-            ['outbound_type', ''], ['price_status', ''], ['keyword', ''],
+            ['outbound_type', ''], ['biz_status', ''], ['price_status', ''], ['keyword', ''],
             ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
             ['sort_field', ''], ['sort_order', ''], ['page', 1], ['limit', 15],
         ]);
@@ -39,9 +39,9 @@ class Outbound extends BaseAdminController
     public function create()
     {
         $p = $this->request->params([
-            ['outbound_type', 'peer_sale'], ['counterparty_id', 0], ['counterparty_name', ''],
+            ['outbound_type', 'peer_sale'], ['sale_channel', 'peer'], ['counterparty_id', 0], ['counterparty_name', ''],
             ['counterparty_enterprise_id', 0], ['settle_mode', 'now'], ['capital_account_id', 0],
-            ['remark', ''], ['express_no', ''], ['items', []],
+            ['payments', []], ['remark', ''], ['express_no', ''], ['items', []],
         ]);
         return success($this->service->createOutbound($p));
     }
@@ -50,6 +50,13 @@ class Outbound extends BaseAdminController
     public function cancel(int $id)
     {
         return success($this->service->cancelOutbound($id, (string)$this->request->param('reason', '')));
+    }
+
+    /** 部分退回: 挂账出库单按明细退回指定设备, 自动勾销应收并回源上架 */
+    public function partialReturn(int $id)
+    {
+        $p = $this->request->params([['item_ids', []], ['reason', '']]);
+        return success($this->service->partialReturn($id, (array)$p['item_ids'], (string)$p['reason']));
     }
 
     /** 回填价格(价格未来回填的出库单), 可选立即收款入账 */

@@ -130,6 +130,7 @@ class Asset extends BaseAdminController
             ['suggested_sale_price', 0],
             ['warehouse_id', 0],
             ['location_id', 0],
+            ['need_refurb', 0],
             ['images', []],
             ['qc_note', ''],
             ['remark', ''],

@@ -124,6 +124,7 @@ class ErpStandaloneInboundService extends BaseAdminService
                 'business_type' => $businessType,
                 'ownership_type' => $businessType === 'consignment' ? 'consign' : 'owned',
                 'counterparty' => $counterpartyId > 0 ? ['id' => $counterpartyId] : [],
+                'member_id' => (int)($data['counterparty_member_id'] ?? 0), // 回收来源会员→资产 source_member_id，列表"回收单位"据此解析
                 'purchase_cost' => $purchaseCost,
                 'payable_amount' => $payableAmount,
                 'paid_amount' => $paidAmount,
@@ -177,6 +178,7 @@ class ErpStandaloneInboundService extends BaseAdminService
                     (new ErpAssetService())->confirmInboundByAsset($assetId, [
                         'warehouse_id' => $warehouseId,
                         'location_id' => $locationId,
+                        // 是否进拍照流程由仓库决定:要求拍照的仓(如二手仓)→「待拍照」并交中台;否则本地可售/待定价
                         'remark' => '手工建档入库，确认入库到指定库位',
                     ]);
                 } catch (\Throwable $e) {

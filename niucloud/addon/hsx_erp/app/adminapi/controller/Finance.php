@@ -64,6 +64,16 @@ class Finance extends BaseAdminController
         return success((new FinanceReceivableService())->getPage($where));
     }
 
+    /** 应收/应付明细的筛选项(业务类型 + 经手人),target=payable|receivable */
+    public function detailFilterOptions()
+    {
+        $target = (string)$this->request->param('target', 'receivable');
+        $opts = $target === 'payable'
+            ? (new FinancePayableService())->filterOptions()
+            : (new FinanceReceivableService())->filterOptions();
+        return success($opts);
+    }
+
     /** 某往来单位待结算应付(结算选择用) */
     public function payableOutstanding()
     {
@@ -131,7 +141,7 @@ class Finance extends BaseAdminController
         $where = $this->request->params([
             ['counterparty_id', 0], ['keyword', ''], ['operator', ''], ['start_time', 0], ['end_time', 0], ['page', 1], ['limit', 15],
         ]);
-        return success((new FinanceSettlementService())->getPage($where));
+        return success((new FinanceSettlementService())->getGroupedByDevice($where));
     }
 
     /** 财务汇总(应收/应付合计 + 净额 + 各资金账户余额) */

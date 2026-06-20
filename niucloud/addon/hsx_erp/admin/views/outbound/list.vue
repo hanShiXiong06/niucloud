@@ -11,18 +11,21 @@
                 <el-button v-permission="'hsx_erp_outbound_create'" type="primary" @click="openCreate">新建出库</el-button>
             </div>
 
-            <el-form :inline="true" class="mt-4" @submit.prevent>
-                <el-form-item label="出库类型">
-                    <el-select v-model="search.outbound_type" placeholder="全部" clearable @change="loadList" class="!w-[140px]">
-                        <el-option label="同行销售" value="peer_sale" />
-                        <el-option label="报废出库" value="scrap" />
-                        <el-option label="其他出库" value="other" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="价格状态">
-                    <el-select v-model="search.price_status" placeholder="全部" clearable @change="loadList" class="!w-[120px]">
+            <!-- 出库类型分栏: 区分商城订单 / 同行订单, 更清晰 -->
+            <el-tabs v-model="search.outbound_type" class="mt-3 erp-outbound-tabs" @tab-change="loadList">
+                <el-tab-pane label="全部" name="" />
+                <el-tab-pane label="商城销售" name="mall_sale" />
+                <el-tab-pane label="同行销售" name="peer_sale" />
+                <el-tab-pane label="报废出库" name="scrap" />
+                <el-tab-pane label="其他出库" name="other" />
+            </el-tabs>
+
+            <el-form :inline="true" @submit.prevent>
+                <el-form-item label="单据状态">
+                    <el-select v-model="search.biz_status" placeholder="全部" clearable @change="loadList" class="!w-[120px]">
                         <el-option label="待回填" value="pending" />
                         <el-option label="已定价" value="filled" />
+                        <el-option label="已退回" value="void" />
                     </el-select>
                 </el-form-item>
                 <el-form-item label="关键词">
@@ -71,8 +74,8 @@
                 <el-table-column label="操作" width="200" align="center" fixed="right">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openInfo(row)">详情</el-button>
-                        <el-button v-if="!row.is_void && row.price_status === 'pending'" v-permission="'hsx_erp_outbound_fill_price'" type="warning" link @click="openFill(row)">回填价格</el-button>
-                        <el-button v-if="row.can_cancel" v-permission="'hsx_erp_outbound_cancel'" type="danger" link @click="doCancel(row)">退回</el-button>
+                        <el-button v-if="canProcessPending(row)" v-permission="'hsx_erp_outbound_fill_price'" type="warning" link @click="openPendingProcess(row)">处理挂单</el-button>
+                        <el-button v-if="row.can_cancel" v-permission="'hsx_erp_outbound_cancel'" type="danger" link @click="doCancel(row)">整单退回</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -159,20 +162,49 @@
             </template>
         </el-dialog>
 
-        <!-- 回填价格 -->
-        <el-dialog v-model="fillVisible" title="回填出货价" width="640px" @closed="fillItems = []">
-            <el-table :data="fillItems" size="small" empty-text="无明细">
-                <el-table-column prop="model" label="型号" min-width="120" show-overflow-tooltip />
-                <el-table-column prop="imei" label="IMEI" min-width="120" show-overflow-tooltip />
-                <el-table-column label="出货价" width="160">
+        <!-- 处理挂单：留下的填价格，退回的勾退回 -->
+        <el-dialog v-model="pendingProcess.visible" title="处理挂单" width="780px" @closed="resetPendingProcess">
+            <div class="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-gray-500">
+                <span>客户：{{ pendingProcess.buyer || '-' }}</span>
+                <span>单号：{{ pendingProcess.outboundNo || '-' }}</span>
+                <span>留下 {{ keptProcessCount }} 台 / 退回 {{ returnProcessCount }} 台</span>
+            </div>
+            <el-table :data="pendingProcess.items" size="small" empty-text="无明细">
+                <el-table-column label="设备" min-width="180" show-overflow-tooltip>
                     <template #default="{ row }">
-                        <el-input-number v-model="row.sale_price" :min="0" :controls="false" size="small" class="w-32" />
+                        <div :class="row.is_returned ? 'line-through text-gray-400' : ''">{{ row.model }}</div>
+                        <div class="text-xs text-gray-400">IMEI {{ row.imei || '-' }}<span v-if="row.asset_no"> · {{ row.asset_no }}</span></div>
+                    </template>
+                </el-table-column>
+                <el-table-column label="客户留下/成交价" width="170" align="right">
+                    <template #default="{ row }">
+                        <el-input-number v-if="!row.is_returned && !row.return_selected" v-model="row.sale_price" :min="0" :precision="2" :controls="false" size="small" class="w-32" />
+                        <span v-else class="text-gray-400">{{ money(row.sale_price) }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="当前状态" width="110" align="center">
+                    <template #default="{ row }">
+                        <el-tag v-if="row.is_returned" size="small" type="info" effect="light">已退回</el-tag>
+                        <el-tag v-else-if="row.return_selected" size="small" type="danger" effect="light">本次退回</el-tag>
+                        <el-tag v-else-if="row.can_return" size="small" type="warning" effect="light">锁定</el-tag>
+                        <el-tag v-else size="small" effect="light">{{ row.inventory_status_text || '-' }}</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="处理" width="100" align="center">
+                    <template #default="{ row }">
+                        <el-checkbox v-if="row.can_return && !row.is_returned" v-model="row.return_selected">退回</el-checkbox>
+                        <span v-else class="text-xs text-gray-300">不可退</span>
                     </template>
                 </el-table-column>
             </el-table>
+            <el-form class="mt-4" label-width="70px">
+                <el-form-item label="退回原因">
+                    <el-input v-model="pendingProcess.reason" placeholder="如：客户只留其中1台 / 货不对板" maxlength="100" show-word-limit />
+                </el-form-item>
+            </el-form>
             <template #footer>
-                <el-button @click="fillVisible = false">取消</el-button>
-                <el-button type="primary" :loading="submitting" @click="doFill">确认回填</el-button>
+                <el-button @click="pendingProcess.visible = false">取消</el-button>
+                <el-button type="primary" :loading="pendingProcess.submitting" @click="doPendingProcess">确认处理</el-button>
             </template>
         </el-dialog>
 
@@ -203,18 +235,26 @@
                 </div>
 
                 <!-- 设备明细 -->
-                <div class="mt-4 mb-2 font-medium">设备明细（{{ (infoData.items || []).length }} 台）</div>
+                <div class="mt-4 mb-2 flex items-center justify-between">
+                    <span class="font-medium">设备明细（{{ (infoData.items || []).length }} 台）</span>
+                    <el-button v-if="canProcessPending(infoData)" v-permission="'hsx_erp_outbound_fill_price'" size="small" type="warning" @click="openPendingProcessFromDrawer(infoData)">处理挂单</el-button>
+                </div>
                 <el-table :data="infoData.items || []" size="small" empty-text="无明细">
                     <el-table-column label="设备" min-width="150" show-overflow-tooltip>
                         <template #default="{ row }">
-                            <div>{{ row.model }}</div>
+                            <div :class="row.is_returned ? 'line-through text-gray-400' : ''">{{ row.model }}</div>
                             <div class="text-xs text-gray-400">IMEI {{ row.imei || '-' }}<span v-if="row.asset_no"> · {{ row.asset_no }}</span></div>
                         </template>
                     </el-table-column>
                     <el-table-column label="成本" width="90" align="right"><template #default="{ row }">{{ money(row.cost) }}</template></el-table-column>
                     <el-table-column label="出货价" width="90" align="right"><template #default="{ row }">{{ money(row.sale_price) }}</template></el-table-column>
                     <el-table-column label="毛利" width="90" align="right"><template #default="{ row }"><span :class="row.profit >= 0 ? 'text-green-600' : 'text-red-600'">{{ money(row.profit) }}</span></template></el-table-column>
-                    <el-table-column label="库存状态" width="100" align="center"><template #default="{ row }"><el-tag size="small" effect="light">{{ row.inventory_status_text || '-' }}</el-tag></template></el-table-column>
+                    <el-table-column label="状态" width="100" align="center">
+                        <template #default="{ row }">
+                            <el-tag v-if="row.is_returned" size="small" type="info" effect="light">已退回</el-tag>
+                            <el-tag v-else size="small" effect="light">{{ row.inventory_status_text || '-' }}</el-tag>
+                        </template>
+                    </el-table-column>
                     <el-table-column label="操作" width="90" align="center">
                         <template #default="{ row }">
                             <el-button type="primary" link @click="openTrace(row)">全链路</el-button>
@@ -286,7 +326,7 @@
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutboundPrice, cancelErpOutbound } from '@/addon/hsx_erp/api/outbound'
+import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutboundPrice, cancelErpOutbound, partialReturnErpOutbound } from '@/addon/hsx_erp/api/outbound'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
 import { getErpMemberOptions, quickCreateErpContact } from '@/addon/hsx_erp/api/counterparty'
@@ -302,7 +342,7 @@ const formatTime = (t: number) => new Date(t * 1000).toLocaleString()
 // 列表查询统一走 useListQuery：search/分页/排序/日期区间/loading 都收敛在里面
 const { search, table, loadList, reset: resetSearch, onSort, onPage: onPageChange } = useListQuery({
     api: getErpOutboundList,
-    defaults: { outbound_type: '', price_status: '', keyword: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '' },
+    defaults: { outbound_type: '', biz_status: '', keyword: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '' },
     dateRangeField: 'dateRange',
 })
 
@@ -489,30 +529,71 @@ function resetCreate() {
     Object.keys(consignorInput).forEach((k) => delete consignorInput[Number(k)])
 }
 
-// 回填价格
-const fillVisible = ref(false)
-const fillItems = ref<any[]>([])
-const fillOrderId = ref(0)
-async function openFill(row: any) {
-    fillOrderId.value = row.id
-    const res: any = await getErpOutboundInfo(row.id)
-    fillItems.value = (res.data?.items || []).map((it: any) => ({ ...it, sale_price: Number(it.sale_price || 0) }))
-    fillVisible.value = true
+// 处理挂单：一个弹窗完成回填价格 + 部分退回
+const pendingProcess = reactive<any>({
+    visible: false, submitting: false,
+    orderId: 0, outboundNo: '', buyer: '', priceStatus: '', items: [], reason: '',
+})
+const canProcessPending = (row: any) => !row?.is_void && row?.settle_mode === 'later' && (row?.price_status === 'pending' || row?.can_partial_return)
+const keptProcessCount = computed(() => pendingProcess.items.filter((it: any) => !it.is_returned && !it.return_selected).length)
+const returnProcessCount = computed(() => pendingProcess.items.filter((it: any) => it.return_selected).length)
+function setPendingProcess(data: any) {
+    pendingProcess.orderId = data.id
+    pendingProcess.outboundNo = data.outbound_no || ''
+    pendingProcess.buyer = data.buyer_name || data.counterparty_name || ''
+    pendingProcess.priceStatus = data.price_status || ''
+    pendingProcess.reason = ''
+    pendingProcess.items = (data.items || []).map((it: any) => ({
+        ...it,
+        sale_price: Number(it.sale_price || 0),
+        return_selected: false,
+    }))
+    pendingProcess.visible = true
 }
-async function doFill() {
-    const items = fillItems.value.map((it) => ({ item_id: it.id, sale_price: it.sale_price }))
-    if (items.some((i) => !i.sale_price)) {
-        ElMessage.warning('请为每台填写出货价')
+async function openPendingProcess(row: any) {
+    const res: any = await getErpOutboundInfo(row.id)
+    setPendingProcess(res.data || {})
+}
+function openPendingProcessFromDrawer(data: any) {
+    setPendingProcess(data)
+}
+function resetPendingProcess() {
+    pendingProcess.orderId = 0
+    pendingProcess.outboundNo = ''
+    pendingProcess.buyer = ''
+    pendingProcess.priceStatus = ''
+    pendingProcess.items = []
+    pendingProcess.reason = ''
+}
+async function doPendingProcess() {
+    const returnIds = pendingProcess.items.filter((it: any) => it.return_selected).map((it: any) => it.id)
+    const keptItems = pendingProcess.items.filter((it: any) => !it.is_returned && !it.return_selected)
+    if (pendingProcess.priceStatus === 'pending' && keptItems.some((it: any) => !(Number(it.sale_price) > 0))) {
+        ElMessage.warning('客户留下的设备请填写成交价；不要的设备请勾选退回')
         return
     }
-    submitting.value = true
+    pendingProcess.submitting = true
     try {
-        await fillErpOutboundPrice(fillOrderId.value, items)
-        ElMessage.success('回填成功，已生成应收')
-        fillVisible.value = false
+        if (returnIds.length) {
+            await partialReturnErpOutbound(pendingProcess.orderId, returnIds, pendingProcess.reason)
+        }
+        if (keptItems.length) {
+            const pricedItems = keptItems.map((it: any) => ({ item_id: it.id, sale_price: Number(it.sale_price) || 0 }))
+            if (pricedItems.some((it: any) => it.sale_price > 0)) {
+                await fillErpOutboundPrice(pendingProcess.orderId, pricedItems)
+            }
+        }
+        ElMessage.success(`处理完成：留下 ${keptItems.length} 台，退回 ${returnIds.length} 台`)
+        pendingProcess.visible = false
         loadList()
+        if (infoVisible.value && infoData.value?.id === pendingProcess.orderId) {
+            const r: any = await getErpOutboundInfo(pendingProcess.orderId)
+            infoData.value = r.data
+        }
+    } catch (e: any) {
+        ElMessage.error(e?.message || '处理失败')
     } finally {
-        submitting.value = false
+        pendingProcess.submitting = false
     }
 }
 
