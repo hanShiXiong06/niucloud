@@ -19,11 +19,15 @@
                         :get-payload="buildAiFinancePayload"
                     />
                     <el-button @click="refreshAll" :loading="loading">刷新</el-button>
+                    <el-button text @click="showSummary = !showSummary">
+                        {{ showSummary ? '收起看板' : '展开看板' }}
+                        <el-icon class="ml-1"><ArrowUp v-if="showSummary" /><ArrowDown v-else /></el-icon>
+                    </el-button>
                 </div>
             </div>
 
-            <!-- 汇总卡片 -->
-            <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <!-- 汇总卡片(可折叠,腾出屏幕空间) -->
+            <div v-show="showSummary" class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="stat-card" style="--c:#2ba471">
                     <el-icon class="stat-ic"><Coin /></el-icon>
                     <div class="stat-label">应收未结(欠我)</div>
@@ -75,10 +79,7 @@
                             <el-radio-button label="pay">我应付</el-radio-button>
                             <el-radio-button label="collect">我应收</el-radio-button>
                         </el-radio-group>
-                        <el-input v-model="boardKeyword" placeholder="主体/对接人/电话" clearable class="!w-[200px]" />
-                        <el-select v-model="boardSort" placeholder="排序" style="width: 170px">
-                            <el-option v-for="s in boardSortOptions" :key="s.value" :label="s.label" :value="s.value" />
-                        </el-select>
+                        <el-input v-model="boardKeyword" placeholder="主体/对接人/电话/IMEI" clearable class="!w-[220px]" />
                     </div>
                     <!-- 往来汇总：卡片 + 折叠（账目明细默认折叠） -->
                     <div v-loading="loading" class="board-cards">
@@ -135,8 +136,8 @@
                                                 <span class="it-title">{{ it.title }}</span>
                                                 <span v-if="it.imei" class="it-sub">· {{ it.imei }}</span>
                                                 <span v-if="it.operator" class="it-op">经手 {{ it.operator }}</span>
-                                                <span class="it-amt">¥{{ money(it.payable || it.receivable) }}</span>
-                                                <span class="it-meta">{{ it.source_type_text || '账目' }}<template v-if="it.source_no"> · {{ it.source_no }}</template><template v-if="it.occurred_at"> · {{ formatTime(it.occurred_at) }}</template></span>
+                                                <span class="it-amt"><template v-if="it.settled > 0">欠 </template>¥{{ money(it.payable || it.receivable) }}</span>
+                                                <span class="it-meta"><template v-if="it.settled > 0"><b class="it-total">总额 ¥{{ money(it.amount) }} · 已付 ¥{{ money(it.settled) }}</b> · </template>{{ it.source_type_text || '账目' }}<template v-if="it.source_no"> · {{ it.source_no }}</template><template v-if="it.occurred_at"> · {{ formatTime(it.occurred_at) }}</template></span>
                                             </div>
                                         </div>
                                     </div>
@@ -183,24 +184,61 @@
 
                 <!-- 应收明细 / 应付明细 -->
                 <el-tab-pane v-for="t in detailTabs" :key="t.name" :label="t.label" :name="t.name">
-                    <div class="mb-3 flex flex-wrap items-center gap-2">
-                        <el-radio-group v-model="detail.settle_state" @change="onDetailFilter">
-                            <el-radio-button label="">全部</el-radio-button>
-                            <el-radio-button label="open">未结清</el-radio-button>
-                            <el-radio-button label="settled">已结清</el-radio-button>
-                        </el-radio-group>
-                        <el-input v-model="detail.keyword" placeholder="主体/对接人/手机号/单号" clearable class="!w-[200px]" @keyup.enter="onDetailFilter" @clear="onDetailFilter" />
-                        <el-input v-model="detail.operator" placeholder="经手人" clearable class="!w-[120px]" @keyup.enter="onDetailFilter" @clear="onDetailFilter" />
-                        <div class="w-[260px] flex-none">
-                            <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="--el-date-editor-width: 100%" />
+                    <div class="mb-3 flex flex-wrap items-end gap-x-4 gap-y-2">
+                        <div class="flt">
+                            <span class="flt__l">结算状态</span>
+                            <el-radio-group v-model="detail.settle_state" @change="onDetailFilter">
+                                <el-radio-button label="">全部</el-radio-button>
+                                <el-radio-button label="open">未结清</el-radio-button>
+                                <el-radio-button label="settled">已结清</el-radio-button>
+                            </el-radio-group>
                         </div>
-                        <el-input v-model="detail.amount_min" placeholder="金额≥" class="!w-[100px]" />
-                        <el-input v-model="detail.amount_max" placeholder="金额≤" class="!w-[100px]" />
-                        <el-select v-model="detail.quickSort" placeholder="排序" class="!w-[150px]" @change="onQuickSort">
-                            <el-option v-for="s in sortOptions" :key="s.value" :label="s.label" :value="s.value" />
-                        </el-select>
-                        <el-button type="primary" @click="onDetailFilter">查询</el-button>
-                        <el-button @click="resetDetailFilter">重置</el-button>
+                        <div class="flt">
+                            <span class="flt__l">业务类型</span>
+                            <el-select v-model="detail.source_type" :placeholder="activeTab === 'payable' ? '全部(回收/入库/整备…)' : '全部(商城/同行/出库…)'" clearable class="!w-[180px]" @change="onDetailFilter">
+                                <el-option v-for="t in filterOpts.source_types" :key="t.value" :label="t.text" :value="t.value" />
+                            </el-select>
+                        </div>
+                        <div class="flt">
+                            <span class="flt__l">主体 / 对接人</span>
+                            <counterparty-select v-model="detail.counterparty_id" value-field="counterparty_id"
+                                :role-type="activeTab === 'payable' ? 'supplier' : 'customer'"
+                                placeholder="搜索姓名 / 手机号" class="!w-[200px]" @update:modelValue="onDetailFilter" />
+                        </div>
+                        <div class="flt">
+                            <span class="flt__l">经手人</span>
+                            <el-select v-model="detail.operator" filterable clearable placeholder="全部经手人" class="!w-[140px]" @change="onDetailFilter">
+                                <el-option v-for="op in filterOpts.operators" :key="op" :label="op" :value="op" />
+                            </el-select>
+                        </div>
+                        <div class="flt">
+                            <span class="flt__l">发生时间</span>
+                            <el-date-picker v-model="detail.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" class="!w-[260px]" @change="onDetailFilter" />
+                        </div>
+                        <div class="flt">
+                            <span class="flt__l">金额区间(元)</span>
+                            <div class="flex items-center gap-1">
+                                <el-input v-model="detail.amount_min" placeholder="最低" clearable class="!w-[90px]" @keyup.enter="onDetailFilter" />
+                                <span class="text-gray-400">~</span>
+                                <el-input v-model="detail.amount_max" placeholder="最高" clearable class="!w-[90px]" @keyup.enter="onDetailFilter" />
+                            </div>
+                        </div>
+                        <div class="flt">
+                            <span class="flt__l">单号 / 关键字</span>
+                            <el-input v-model="detail.keyword" placeholder="来源单号 / 手机号" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" @clear="onDetailFilter" />
+                        </div>
+                        <div class="flt">
+                            <span class="flt__l">IMEI</span>
+                            <el-input v-model.trim="detail.imei" placeholder="设备串号(支持模糊)" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" @clear="onDetailFilter" />
+                        </div>
+
+                        <div class="flt">
+                            <span class="flt__l">&nbsp;</span>
+                            <div class="flex items-center gap-2">
+                                <el-button type="primary" @click="onDetailFilter">查询</el-button>
+                                <el-button @click="resetDetailFilter">重置</el-button>
+                            </div>
+                        </div>
                     </div>
                     <el-table :data="detail.list" v-loading="detail.loading" size="large" empty-text="暂无数据" @sort-change="onSortChange"
                         :default-sort="{ prop: detail.sort_field, order: detail.sort_order === 'asc' ? 'ascending' : 'descending' }">
@@ -254,6 +292,7 @@
                 <el-tab-pane label="结算记录" name="settlement">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                         <el-input v-model="settle.keyword" placeholder="主体/对接人/手机号/结算单号" clearable class="!w-[220px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
+                        <el-input v-model.trim="settle.imei" placeholder="IMEI 设备串号" clearable class="!w-[180px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
                         <el-input v-model="settle.operator" placeholder="经手人" clearable class="!w-[120px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
                         <div class="w-[260px] flex-none">
                             <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="--el-date-editor-width: 100%" />
@@ -261,8 +300,14 @@
                         <el-button type="primary" @click="loadSettlement">查询</el-button>
                         <el-button @click="resetSettleFilter">重置</el-button>
                     </div>
-                    <el-table :data="settle.list" v-loading="settle.loading" size="large" empty-text="暂无结算记录">
-                        <el-table-column prop="settlement_no" label="结算单号" min-width="170" show-overflow-tooltip />
+                    <el-table :data="settle.list" v-loading="settle.loading" size="large" empty-text="暂无结算记录"
+                        row-key="row_key" :tree-props="{ children: 'children' }">
+                        <el-table-column label="结算单号" min-width="180" show-overflow-tooltip>
+                            <template #default="{ row }">
+                                <span v-if="row._group" class="font-medium text-[var(--el-color-primary)]">{{ row.settlement_no }}</span>
+                                <span v-else>{{ row.settlement_no }}</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column label="主体 / 对接人" min-width="180" show-overflow-tooltip>
                             <template #default="{ row }">
                                 <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click.stop="openEntity(row.entity_id)">{{ row.entity_name }}</div>
@@ -273,8 +318,20 @@
                                 </div>
                             </template>
                         </el-table-column>
-                        <el-table-column label="应付合计" width="110" align="right"><template #default="{ row }">{{ money(row.payable_total) }}</template></el-table-column>
-                        <el-table-column label="应收合计" width="110" align="right"><template #default="{ row }">{{ money(row.receivable_total) }}</template></el-table-column>
+                        <el-table-column label="结算对象（设备/单据）" min-width="180" show-overflow-tooltip>
+                            <template #default="{ row }">
+                                <div v-if="row.targets && row.targets.length">
+                                    <div v-for="(t, ti) in row.targets" :key="ti" class="text-xs">
+                                        <span class="text-gray-700">{{ t.model || '账目' }}</span>
+                                        <span v-if="t.source_no" class="text-gray-400"> · {{ t.source_no }}</span>
+                                        <span class="text-gray-400"> · ¥{{ money(t.amount) }}</span>
+                                    </div>
+                                </div>
+                                <span v-else class="text-gray-300">-</span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="本次结算·应付" width="120" align="right"><template #default="{ row }">{{ money(row.payable_total) }}</template></el-table-column>
+                        <el-table-column label="本次结算·应收" width="120" align="right"><template #default="{ row }">{{ money(row.receivable_total) }}</template></el-table-column>
                         <el-table-column label="折账" width="100" align="right"><template #default="{ row }">{{ money(row.offset_amount) }}</template></el-table-column>
                         <el-table-column label="现金" width="130" align="right">
                             <template #default="{ row }">
@@ -284,28 +341,36 @@
                         </el-table-column>
                         <el-table-column label="方式 / 户头" width="150" align="center">
                             <template #default="{ row }">
-                                <el-tag size="small" :type="methodTagType(row.method)" effect="light">{{ methodText(row.method) }}</el-tag>
-                                <div v-if="row.method !== 'offset' && row.account_name" class="mt-0.5 text-xs text-gray-500">{{ row.account_name }}</div>
-                                <div v-else-if="row.method !== 'offset'" class="mt-0.5 text-xs text-gray-300">未记户头</div>
+                                <span v-if="row._group" class="text-xs text-gray-400">多笔（展开看）</span>
+                                <template v-else>
+                                    <el-tag size="small" :type="methodTagType(row.method)" effect="light">{{ methodText(row.method) }}</el-tag>
+                                    <div v-if="row.method !== 'offset' && row.account_name" class="mt-0.5 text-xs text-gray-500">{{ row.account_name }}</div>
+                                    <div v-else-if="row.method !== 'offset'" class="mt-0.5 text-xs text-gray-300">未记户头</div>
+                                </template>
                             </template>
                         </el-table-column>
                         <el-table-column label="经手人" width="100" align="center">
                             <template #default="{ row }">
                                 <el-tag v-if="row.operator_name" size="small" effect="plain" type="info">{{ row.operator_name }}</el-tag>
-                                <span v-else class="text-gray-300">-</span>
+                                <span v-else class="text-gray-300">{{ row._group ? '多人' : '-' }}</span>
                             </template>
                         </el-table-column>
-                        <el-table-column label="已结清" width="90" align="center">
-                            <template #default><el-tag type="success" size="small" effect="light">已结清</el-tag></template>
+                        <el-table-column label="结算状态" width="110" align="center">
+                            <template #default>
+                                <el-tooltip placement="top" content="仅表示这笔结算动作已完成；该客户/设备账目是否全部结清，请看「往来汇总」或「应收/应付明细」的未结金额。">
+                                    <el-tag type="success" size="small" effect="light">本次完成</el-tag>
+                                </el-tooltip>
+                            </template>
                         </el-table-column>
                         <el-table-column label="时间" width="160"><template #default="{ row }">{{ formatTime(row.occurred_at) }}</template></el-table-column>
                         <el-table-column prop="operator_name" label="操作人" width="90" show-overflow-tooltip />
                         <el-table-column prop="remark" label="备注 / 原由" min-width="180" show-overflow-tooltip>
                             <template #default="{ row }"><span :class="row.remark ? '' : 'text-gray-300'">{{ row.remark || '—' }}</span></template>
                         </el-table-column>
-                        <el-table-column label="操作" width="100" align="center" fixed="right">
+                        <el-table-column label="操作" width="120" align="center" fixed="right">
                             <template #default="{ row }">
-                                <el-button type="primary" link @click="openSettleDetail(row)">核销明细</el-button>
+                                <span v-if="row._group" class="text-xs text-gray-400">展开看每笔</span>
+                                <el-button v-else type="primary" link @click="openSettleDetail(row)">核销明细</el-button>
                             </template>
                         </el-table-column>
                     </el-table>
@@ -388,7 +453,15 @@
                         </template>
                     </el-table-column>
                     <el-table-column prop="source_no" label="来源单" min-width="110" show-overflow-tooltip />
-                    <el-table-column label="待结" width="110" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
+                    <el-table-column label="总额 / 已付" width="130" align="right">
+                        <template #default="{ row }">
+                            <div class="text-gray-700">{{ money(row.amount) }}</div>
+                            <div v-if="Number(row.settled_amount) > 0" class="text-xs text-green-600">已付 {{ money(row.settled_amount) }}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="待结" width="110" align="right">
+                        <template #default="{ row }"><span class="font-medium text-orange-600">{{ money(row.outstanding) }}</span></template>
+                    </el-table-column>
                 </el-table>
                 <div class="mt-3 text-right text-sm text-gray-500">已选 {{ payColl.selected.length }} 笔，合计
                     <b :class="payColl.mode === 'pay' ? 'text-orange-600' : 'text-green-600'">{{ money(payCollTotal) }}</b>
@@ -525,7 +598,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
-import { CaretRight, Switch, Wallet, Coin, Money, Sort } from '@element-plus/icons-vue'
+import { CaretRight, Switch, Wallet, Coin, Money, Sort, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import EntityDrawer from './entity-drawer.vue'
 import TraceDetail from '@/addon/hsx_erp/views/device_trace/trace-detail.vue'
@@ -543,6 +616,7 @@ import {
     getFinanceSettlementDetail,
     recordFinanceExpense,
     prepayFinance,
+    getFinanceDetailFilterOptions,
 } from '@/addon/hsx_erp/api/finance'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import AiAssistant from '@/addon/hsx_erp/components/ai-assistant/index.vue'
@@ -582,6 +656,7 @@ const detailTabs = [
 
 const loading = ref(false)
 const activeTab = ref('board')
+const showSummary = ref(true) // 顶部汇总看板,可折叠以腾出列表空间
 
 // 汇总
 const summary = reactive<any>({ payable_total: 0, receivable_total: 0, net: 0, balance_total: 0, accounts: [] })
@@ -630,6 +705,7 @@ const filteredBoard = computed(() => {
             String(r.entity_name || '').includes(kw) ||
             String(r.counterparty_name || '').includes(kw) ||
             String(r.counterparty_mobile || '').includes(kw) ||
+            String(r.imei || '').includes(kw) ||
             String(r.counterparty_id || '') === kw
         const hitDeep = (r: any): boolean =>
             hit(r) || (Array.isArray(r.children) && r.children.some((c: any) => hit(c) || hitDeep(c)))
@@ -665,11 +741,21 @@ async function loadBoard() {
 }
 
 // 应收/应付明细
-const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', operator: '', settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
+const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', imei: '', operator: '', source_type: '', counterparty_id: undefined, settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
+// 业务类型 / 经手人 下拉选项(随 tab 取实际值)
+const filterOpts = reactive<{ source_types: any[]; operators: string[] }>({ source_types: [], operators: [] })
+async function loadFilterOpts() {
+    try {
+        const res: any = await getFinanceDetailFilterOptions({ target: activeTab.value })
+        filterOpts.source_types = res.data?.source_types || []
+        filterOpts.operators = res.data?.operators || []
+    } catch (e) { filterOpts.source_types = []; filterOpts.operators = [] }
+}
 function detailParams() {
     const [start, end] = Array.isArray(detail.dateRange) ? detail.dateRange : []
     return {
-        keyword: detail.keyword, operator: detail.operator, settle_state: detail.settle_state,
+        keyword: detail.keyword, imei: detail.imei, operator: detail.operator, settle_state: detail.settle_state,
+        source_type: detail.source_type, counterparty_id: detail.counterparty_id || 0,
         start_time: start ? Number(start) : 0,
         end_time: end ? Number(end) + 86399 : 0, // 含当日
         amount_min: detail.amount_min, amount_max: detail.amount_max,
@@ -704,18 +790,20 @@ async function loadDetail() {
 }
 function onDetailPage(p: number) { detail.page = p; loadDetail() }
 function resetDetailFilter() {
-    Object.assign(detail, { keyword: '', settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc', page: 1 })
+    Object.assign(detail, { keyword: '', imei: '', operator: '', source_type: '', counterparty_id: undefined, settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc', page: 1 })
     loadDetail()
 }
 
 // 结算记录
-const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', operator: '', dateRange: [] })
+const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', imei: '', operator: '', dateRange: [] })
+// 结算记录的"按设备分组"已改由后端完成（跨页也不拆），前端直接渲染 settle.list（含父行 _group + children）
 async function loadSettlement() {
     settle.loading = true
     try {
         const [start, end] = Array.isArray(settle.dateRange) ? settle.dateRange : []
         const res: any = await getFinanceSettlementList({
             keyword: settle.keyword,
+            imei: settle.imei,
             operator: settle.operator,
             start_time: start ? Number(start) : 0,
             end_time: end ? Number(end) + 86399 : 0,
@@ -729,18 +817,20 @@ async function loadSettlement() {
 }
 function onSettlePage(p: number) { settle.page = p; loadSettlement() }
 function resetSettleFilter() {
-    Object.assign(settle, { keyword: '', dateRange: [], page: 1 })
+    Object.assign(settle, { keyword: '', imei: '', operator: '', dateRange: [], page: 1 })
     loadSettlement()
 }
 
 // 结算核销明细抽屉
 const sdetail = reactive<any>({ visible: false, loading: false, data: null })
 async function openSettleDetail(row: any) {
+    const sid = Number(row.id)
+    if (row._group || !sid) return  // 合并父行无单条id，应展开看每笔
     sdetail.visible = true
     sdetail.loading = true
     sdetail.data = null
     try {
-        const res: any = await getFinanceSettlementDetail(row.id)
+        const res: any = await getFinanceSettlementDetail(sid)
         sdetail.data = res.data || null
     } finally {
         sdetail.loading = false
@@ -749,7 +839,9 @@ async function openSettleDetail(row: any) {
 
 function onTabChange(name: string) {
     if (name === 'receivable' || name === 'payable') {
-        Object.assign(detail, { page: 1 })
+        // 切换应收/应付时,业务类型语义不同,清掉已选并重新拉取选项
+        Object.assign(detail, { page: 1, source_type: '', operator: '', counterparty_id: undefined })
+        loadFilterOpts()
         loadDetail()
     } else if (name === 'settlement') {
         settle.page = 1
@@ -993,6 +1085,9 @@ loadBoard()
 </script>
 
 <style lang="scss" scoped>
+/* 财务明细筛选:每项"标签在左、控件在右",清楚每个框是什么且省竖向空间 */
+.flt { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.flt__l { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1; white-space: nowrap; flex-shrink: 0; }
 .board-cards {
     display: flex;
     flex-direction: column;
@@ -1108,6 +1203,7 @@ loadBoard()
     padding: 1px 8px;
 }
 .it-meta { width: 100%; color: #b0b3bb; font-size: 12px; padding-left: 2px; }
+.it-total { color: #909399; font-weight: 600; }
 
 /* 顶部汇总卡：accent 色条 + 图标水印 */
 .stat-card {

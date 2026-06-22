@@ -349,7 +349,8 @@ class DeviceTraceService extends BaseAdminService
         if ($deviceId <= 0) {
             return ['received' => 0, 'unreceived' => 0];
         }
-        $rows = FinanceReceivable::where([['site_id', '=', $this->site_id], ['source_device_id', '=', $deviceId]])->field('amount,settled_amount')->select()->toArray();
+        // 排除已作废(void)的应收: 退货/取消产生的作废应收不计入已收/未收
+        $rows = FinanceReceivable::where([['site_id', '=', $this->site_id], ['source_device_id', '=', $deviceId], ['status', '<>', 'void']])->field('amount,settled_amount')->select()->toArray();
         $received = 0.0;
         $unreceived = 0.0;
         foreach ($rows as $r) {

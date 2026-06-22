@@ -187,7 +187,7 @@ export function useDiyGoodsDetail(params: any = {}) {
             diyData.value.forEach((item: any, index) => {
                 let detailComponent:any = []
                 if(diyStore.mode != 'decorate'){
-                    detailComponent = ['ShopGoodsDetailBottom','ShopGoodsDetailDesc','ShopGoodsDetailAttr','ShopGoodsDetailEvaluate','ShopGoodsDetailSow','ShopGoodsDetailPurchaseService','ShopGoodsDetailBasicInfo']
+                    detailComponent = ['ShopGoodsDetailBottom','ShopGoodsDetailDesc','ShopGoodsDetailAttr','ShopGoodsDetailQc','ShopGoodsDetailEvaluate','ShopGoodsDetailSow','ShopGoodsDetailPurchaseService','ShopGoodsDetailBasicInfo']
                 }
                 if(detailComponent.indexOf(item.componentName) > -1){
                     item.componentIsShow = false // 是否显示

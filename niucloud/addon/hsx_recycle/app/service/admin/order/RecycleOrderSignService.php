@@ -126,17 +126,28 @@ class RecycleOrderSignService extends BaseAdminService
         $deviceService = new RecycleDeviceService();
         
         foreach ($devices as $device) {
+            // 型号触发的质检模板与摘要字段（最多 5 个），归一化为 { field_key: value }
+            $summaryValues = $this->normalizeSummaryValues($device['summary'] ?? []);
+            $checkTemplateId = (int)($device['check_template_id'] ?? 0);
+
             // 检查是否有设备ID并且该ID是否在现有设备中
             if (!empty($device['id']) && isset($existingDevices[$device['id']])) {
-                // 设备已存在，执行更新操作
+                // 设备已存在，执行更新操作。
+                // 注意：不要用 null 覆盖 info，否则会清空代客下单录入时保存的分类/摘要等信息。
                 $deviceData = [
                     'imei' => $device['imei'] ?? '',
                     'model' => $device['model'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
                     'category_id' => (int)($device['category_id'] ?? 0),
                     'update_at' => time(),
-                    'info'=>$this->info??null
                 ];
+                if ($checkTemplateId > 0) {
+                    $deviceData['check_template_id'] = $checkTemplateId;
+                }
+                $mergedInfo = $this->mergeDeviceInfo($existingDevices[$device['id']]['info'] ?? null, $summaryValues);
+                if ($mergedInfo !== null) {
+                    $deviceData['info'] = $mergedInfo;
+                }
                 $deviceService->signUpdate((int)$device['id'], $deviceData);
             } else {
                 // 设备不存在，添加新设备
@@ -146,15 +157,85 @@ class RecycleOrderSignService extends BaseAdminService
                     'model' => $device['model'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
                     'category_id' => (int)($device['category_id'] ?? 0),
+                    'check_template_id' => $checkTemplateId,
                     'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
                     'create_at' => time(),
                     'update_at' => time(),
                     'member_id' => $memberId,
                     'site_id' => $this->site_id,
-                    'info'=>$this->info??null
+                    'info' => $this->mergeDeviceInfo(null, $summaryValues) ?? [],
                 ];
                 $deviceService->add($deviceData);
             }
         }
+    }
+
+    /**
+     * 合并设备 info：在原有 info 基础上写入摘要字段值，不丢失既有数据。
+     * @param mixed $existingInfo 原 info（JSON 字符串或数组）
+     * @param array $summaryValues 归一化后的 { field_key: value }
+     * @return array|null 有变更时返回合并后的数组；无任何信息时返回 null（调用方据此决定是否写库）
+     */
+    private function mergeDeviceInfo($existingInfo, array $summaryValues): ?array
+    {
+        $info = [];
+        if (is_string($existingInfo) && $existingInfo !== '') {
+            $decoded = json_decode($existingInfo, true);
+            $info = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($existingInfo)) {
+            $info = $existingInfo;
+        }
+
+        if (!empty($summaryValues)) {
+            foreach ($summaryValues as $fieldKey => $val) {
+                $info[$fieldKey] = $val;
+            }
+            $info['sign_summary'] = $summaryValues;
+        }
+
+        if (empty($info)) {
+            return null;
+        }
+        return $info;
+    }
+
+    /**
+     * 归一化质检摘要字段值，兼容 { field_key: value } 与 [ {field_key, value} ] 两种形态。
+     * @param mixed $summary
+     * @return array
+     */
+    private function normalizeSummaryValues($summary): array
+    {
+        if (is_string($summary) && $summary !== '') {
+            $decoded = json_decode($summary, true);
+            $summary = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($summary) || empty($summary)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($summary as $key => $item) {
+            if (is_array($item) && isset($item['field_key'])) {
+                $fieldKey = (string)$item['field_key'];
+                $value = $item['value'] ?? '';
+            } else {
+                $fieldKey = (string)$key;
+                $value = $item;
+            }
+            if ($fieldKey === '') {
+                continue;
+            }
+            if (is_array($value)) {
+                $value = array_values(array_filter($value, static fn($v) => $v !== '' && $v !== null));
+                if (empty($value)) {
+                    continue;
+                }
+            } elseif ($value === '' || $value === null) {
+                continue;
+            }
+            $result[$fieldKey] = $value;
+        }
+        return $result;
     }
 } 

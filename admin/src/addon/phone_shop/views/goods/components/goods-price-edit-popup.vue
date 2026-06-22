@@ -59,6 +59,13 @@
                     </template>
                 </el-table-column>
 
+                <!-- 会员价(仅当商品启用了"指定会员价"时渲染,各等级一列) -->
+                <el-table-column v-for="(lv, li) in (hasMemberPrice ? memberLevels : [])" :key="'mp' + li" :label="lv.level_name + '会员价'" min-width="130">
+                    <template #default="{ row }">
+                        <el-input v-model.trim="row[lkey(lv)]" clearable placeholder="0.00" maxlength="8" />
+                    </template>
+                </el-table-column>
+
             </el-table>
 
             <template #footer>
@@ -73,20 +80,27 @@
 
 <script lang="ts" setup>
 import { t } from '@/lang'
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { img } from '@/utils/common'
 import { ElMessage } from 'element-plus'
 
 import {
     getActiveGoodsCount,
     getGoodsSkuList,
-    editGoodsListPrice
+    editGoodsListPrice,
+    editGoodsListMemberPrice
 } from '@/addon/phone_shop/api/goods'
 
 const goods: any = reactive({})
 const activeGoodsCount: any = ref(0)
 
 const showDialog = ref(false)
+
+// 会员等级 + 会员价 JSON 键(统一 level_no,回退 level_id)
+const memberLevels: any = ref([])
+const lkey = (lv: any): string => 'level_' + (lv.level_no || lv.level_id)
+// 仅"指定会员价"(fixed_price)且有等级时,才在表格里渲染会员价列
+const hasMemberPrice = computed(() => goods.member_discount === 'fixed_price' && memberLevels.value.length > 0)
 
 const emit = defineEmits(['load'])
 
@@ -152,14 +166,25 @@ const loadGoodsList = () => {
         goods_id: goods.goods_id
     }).then(res => {
         goodsTable.loading = false
-        goodsTable.data = res.data
+        const data = res.data || []
+        // 预填会员价:按 level_no 取,兼容老 level_id;无则用零售价兜底
+        data.forEach((item: any) => {
+            let mp: any = {}
+            try { mp = item.member_price ? JSON.parse(item.member_price) : {} } catch (e) { mp = {} }
+            memberLevels.value.forEach((lv: any) => {
+                const v = mp[lkey(lv)] ?? mp[`level_${lv.level_id}`] ?? null
+                item[lkey(lv)] = parseFloat(v != null && v !== '' ? v : item.price).toFixed(2)
+            })
+        })
+        goodsTable.data = data
     }).catch(() => {
         goodsTable.loading = false
     })
 }
 
-const show = (data: any) => {
+const show = (data: any, levels: any = []) => {
     Object.assign(goods, data)
+    memberLevels.value = levels || []
     getActiveGoodsCountFn();
     loadGoodsList()
     showDialog.value = true
@@ -235,25 +260,59 @@ const verify = () => {
     return result
 }
 
-const save = () => {
-    if (verify()) {
-        let sku_list = <any>[]
-        goodsTable.data.forEach((item: any) => {
-            sku_list.push({
-                sku_id: item.sku_id,
-                price: item.price,
-                market_price: item.market_price,
-                cost_price: item.cost_price
-            })
-        })
-        editGoodsListPrice({
-            goods_id: goods.goods_id,
-            sku_list
-        }).then(res => {
-            emit('load');
-            showDialog.value = false
-        })
+// 校验会员价:>0 且不大于零售价
+const verifyMember = (): boolean => {
+    for (const item of goodsTable.data as any[]) {
+        for (const lv of memberLevels.value) {
+            const val = parseFloat(item[lkey(lv)])
+            if (isNaN(val) || val <= 0) {
+                ElMessage.warning(`[${lv.level_name}]会员价必须大于 0`)
+                return false
+            }
+            if (val > parseFloat(item.price)) {
+                ElMessage.warning(`[${lv.level_name}]会员价不能大于零售价`)
+                return false
+            }
+        }
     }
+    return true
+}
+
+const save = () => {
+    if (!verify()) return
+    if (hasMemberPrice.value && !verifyMember()) return
+
+    const sku_list = <any>[]
+    goodsTable.data.forEach((item: any) => {
+        sku_list.push({
+            sku_id: item.sku_id,
+            price: item.price,
+            market_price: item.market_price,
+            cost_price: item.cost_price
+        })
+    })
+
+    // 价格保存 + (有会员价时)会员价保存,两个请求都成功才算完成,一次确定生效
+    const tasks: Promise<any>[] = [
+        editGoodsListPrice({ goods_id: goods.goods_id, sku_list })
+    ]
+    if (hasMemberPrice.value) {
+        const member_sku_list = goodsTable.data.map((item: any) => {
+            const obj: any = { sku_id: item.sku_id, member_price: {} }
+            memberLevels.value.forEach((lv: any) => { obj.member_price[lkey(lv)] = item[lkey(lv)] })
+            return obj
+        })
+        tasks.push(editGoodsListMemberPrice({
+            goods_id: goods.goods_id,
+            member_discount: 'fixed_price',
+            sku_list: member_sku_list
+        }))
+    }
+
+    Promise.all(tasks).then(() => {
+        emit('load')
+        showDialog.value = false
+    })
 }
 
 defineExpose({

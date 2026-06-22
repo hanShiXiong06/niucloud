@@ -92,8 +92,371 @@ class RecycleDeviceService extends BaseAdminService
         ->findOrEmpty()
         ->append(['status_name', 'pay_status_name', 'confirm_status_name', 'dispose_type_name', 'dispose_status_name', 'check_template_name', 'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small'])
         ->toArray();
-       
+
+        // 后端统一产出"自描述"的设备基本信息列表 check_summary(每项自带 field_name/label/value),
+        // 前端只需 v-for 渲染 {field_name}:{label},不再硬编码字段键与名称。存储仍是 ID(规范)。
+        $info = $this->attachCheckSummary($info);
+
+        // 给 check_meta.result_items 逐项打上级别(severity, 实时取字典), 并备好 abnormal_items / severity_summary
+        $info = $this->enrichResultItemsSeverity($info);
+
         return $info;
+    }
+
+    /**
+     * 产出设备基本质检字段(capacity/color/system_version/warranty_info)的自描述渲染列表。
+     * - 按 recycle_check_field 取 field_name/component/unit;按 recycle_check_option 把存储 ID→label;
+     * - input/number 等无选项字段 label 即原值;查不到选项也回退原值;
+     * - 不改库,只增强返回。前端遍历 check_summary 渲染,零硬编码。
+     * @param array $info getInfo 的设备数组
+     * @return array 增加 $info['check_summary'] = [{field_key,field_name,component,value,label,unit}, ...]
+     */
+    private function attachCheckSummary(array $info): array
+    {
+        $templateId = (int)($info['check_template_id'] ?? 0);
+        if ($templateId <= 0) {
+            return $info;
+        }
+        // 设备级基本字段(存在设备列/info 里),数组顺序即展示顺序
+        $reserved = ['capacity', 'color', 'system_version', 'warranty_info'];
+
+        $fields = Db::name('recycle_check_field')
+            ->where('site_id', $this->site_id)
+            ->where('template_id', $templateId)
+            ->whereIn('field_key', $reserved)
+            ->field('id,field_key,field_name,component,unit')
+            ->select()->toArray();
+        if (empty($fields)) {
+            return $info;
+        }
+        $byKey = [];
+        $fieldKeyById = [];
+        foreach ($fields as $f) {
+            $byKey[(string)$f['field_key']] = $f;
+            $fieldKeyById[(int)$f['id']] = (string)$f['field_key'];
+        }
+
+        $options = Db::name('recycle_check_option')
+            ->where('site_id', $this->site_id)
+            ->whereIn('field_id', array_keys($fieldKeyById))
+            ->field('field_id,option_value,option_label')
+            ->select()->toArray();
+        $optMap = []; // field_key => [option_value => label]
+        foreach ($options as $o) {
+            $fk = $fieldKeyById[(int)$o['field_id']] ?? '';
+            if ($fk === '') {
+                continue;
+            }
+            $optMap[$fk][(string)$o['option_value']] = (string)$o['option_label'];
+        }
+
+        $nested = is_array($info['info'] ?? null) ? $info['info'] : [];
+        $summary = [];
+        foreach ($reserved as $fk) {
+            if (empty($byKey[$fk])) {
+                continue;
+            }
+            $raw = (string)($nested[$fk] ?? ($info[$fk] ?? ''));
+            if ($raw === '') {
+                continue;
+            }
+            $summary[] = [
+                'field_key'  => $fk,
+                'field_name' => (string)$byKey[$fk]['field_name'],
+                'component'  => (string)$byKey[$fk]['component'],
+                'value'      => $raw,                         // 存储值(ID),规范
+                'label'      => $optMap[$fk][$raw] ?? $raw,   // 选项类→文字;input/number→原值
+                'unit'       => (string)($byKey[$fk]['unit'] ?? ''),
+            ];
+        }
+        if (!empty($summary)) {
+            $info['check_summary'] = $summary;
+        }
+        return $info;
+    }
+
+    /**
+     * 把设备详情按 UI 区块组织成干净结构,前端按区块渲染,不再面对一坨平铺字段。
+     * 区块:base 设备基础信息 / price 价格信息 / check 质检信息 / logs 操作日志。
+     * 入参为 getInfo() 返回(含 check_summary、status_name 等 append)+ 外部已挂的 logs。
+     * @param array $d
+     * @return array
+     */
+    public function buildDetailView(array $d): array
+    {
+        $checkUser = is_array($d['checkUser'] ?? null) ? $d['checkUser'] : [];
+        return [
+            'base' => [
+                'model'       => (string)($d['model'] ?? ''),
+                'imei'        => (string)($d['imei'] ?? ''),
+                'status'      => $d['status'] ?? null,
+                'status_name' => (string)($d['status_name'] ?? ''),
+                'created_at'  => (string)($d['create_at'] ?? ''),
+                // 内存/颜色/系统版本/保修 的自描述列表(field_name + label + value),前端 v-for 渲染
+                'summary'     => $d['check_summary'] ?? [],
+            ],
+            'price' => [
+                'initial_price' => $d['initial_price'] ?? '0.00',
+                'final_price'   => $d['final_price'] ?? '0.00',
+                'sell_price'    => $d['sell_price'] ?? '0.00',
+                'final_status'  => $d['final_status'] ?? 0,
+                'price_remark'  => (string)($d['price_remark'] ?? ''),
+            ],
+            'check' => [
+                'check_at'      => $d['check_at'] ?? 0,
+                'checker_name'  => (string)($checkUser['real_name'] ?? ($checkUser['username'] ?? '')),
+                'status_name'   => (string)($d['status_name'] ?? ''),
+                'result_seller' => (string)($d['check_result_seller'] ?? ''),
+                'result_buyer'  => (string)($d['check_result_buyer'] ?? ''),
+                // 扣费说明:优先价格备注,其次设备备注(若你的口径不同告诉我即可改)
+                'fee_remark'    => (string)($d['price_remark'] ?? ($d['remark'] ?? '')),
+                'images'        => $d['check_images_seller_thumb_small'] ?? [],
+                // 按项的质检结果, 每项带 severity(实时取字典)。前端据此着色/筛选异常。
+                'items'          => $this->buildCheckItemsWithSeverity($d),
+                'summary_fields' => $this->checkMetaOf($d)['summary_fields'] ?? [],
+                'abnormal_items' => $this->checkMetaOf($d)['abnormal_items'] ?? [],
+                'severity_summary' => $this->checkMetaOf($d)['severity_summary'] ?? null,
+            ],
+            'logs' => $d['logs'] ?? [],
+        ];
+    }
+
+    /**
+     * 把 check_meta.result_items 整理成"带级别"的结果项列表。
+     * severity 实时取自字典 recycle_check_dict(按选项文本),字典改动即时反映,无快照、无同步。
+     * 结果项级别 = 其各选项标签里最严重的一档。
+     * @param array $d getInfo 的设备数组(含 info.check_meta)
+     * @return array
+     */
+    private function buildCheckItemsWithSeverity(array $d): array
+    {
+        $infoData = $this->toArr($d['info'] ?? null);
+        $checkMeta = $this->toArr($infoData['check_meta'] ?? null);
+        $resultItems = is_array($checkMeta['result_items'] ?? null) ? $checkMeta['result_items'] : [];
+        if (empty($resultItems)) {
+            return [];
+        }
+        $sevMap = $this->optionSeverityMap();
+        $out = [];
+        foreach ($resultItems as $it) {
+            if (!is_array($it)) {
+                continue;
+            }
+            $labels = $it['labels'] ?? [];
+            if (!is_array($labels)) {
+                $labels = [$labels];
+            }
+            // 级别 = 选中选项文本在字典里的级别(直取,不聚合)
+            $firstLabel = mb_strtolower(trim((string)($labels[0] ?? '')));
+            $out[] = [
+                'field_key'  => (string)($it['field_key'] ?? ''),
+                'field_name' => (string)($it['field_name'] ?? ''),
+                'text'       => (string)($it['text'] ?? ''),
+                'labels'     => array_values(array_map('strval', $labels)),
+                'severity'   => $sevMap[$firstLabel] ?? 'normal',
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * 选项级别字典:recycle_check_dict(dict_type=option) 的 text → severity(唯一事实源)。
+     * @return array [lower(text) => severity]
+     */
+    private function optionSeverityMap(): array
+    {
+        $rows = Db::name('recycle_check_dict')
+            ->where('site_id', '=', $this->site_id)
+            ->where('dict_type', '=', 'option')
+            ->field('text,severity')
+            ->select()->toArray();
+        $map = [];
+        foreach ($rows as $r) {
+            $t = mb_strtolower(trim((string)($r['text'] ?? '')));
+            if ($t === '') {
+                continue;
+            }
+            $map[$t] = (string)($r['severity'] ?? 'normal');
+        }
+        return $map;
+    }
+
+    /**
+     * 给设备 check_meta.result_items 逐项打级别(severity, 按选项文本实时取字典),
+     * 并在 check_meta 上备好 abnormal_items(异常+一般, 异常在前)与 severity_summary(计数)。
+     * 前端无需自己过滤/排序。级别直取、不聚合、不快照、不同步。
+     * @param array $info getInfo 的设备数组
+     * @return array
+     */
+    private function enrichResultItemsSeverity(array $info): array
+    {
+        // info 是模型 $json 字段, ThinkPHP 未开 jsonAssoc 时 toArray 后是 stdClass 对象 → 统一转数组
+        $infoData = $this->toArr($info['info'] ?? null);
+        if (empty($infoData)) {
+            return $info;
+        }
+        $checkMeta = $this->toArr($infoData['check_meta'] ?? null);
+        $items = is_array($checkMeta['result_items'] ?? null) ? $checkMeta['result_items'] : [];
+        if (empty($items)) {
+            return $info;
+        }
+        $sevMap = $this->optionSeverityMap();
+        $sevOrder = ['abnormal' => 0, 'general' => 1, 'normal' => 2];
+        $flagged = [];
+        $count = ['abnormal' => 0, 'general' => 0, 'normal' => 0];
+        foreach ($items as &$it) {
+            if (!is_array($it)) {
+                continue;
+            }
+            $labels = is_array($it['labels'] ?? null) ? $it['labels'] : [];
+            // 结果项级别 = 选中选项文本的字典级别(单选直取)
+            $sev = $sevMap[mb_strtolower(trim((string)($labels[0] ?? '')))] ?? 'normal';
+            $it['severity'] = $sev;
+            // option_items 也各打级别
+            if (is_array($it['option_items'] ?? null)) {
+                foreach ($it['option_items'] as &$oi) {
+                    if (is_array($oi)) {
+                        $oi['severity'] = $sevMap[mb_strtolower(trim((string)($oi['label'] ?? '')))] ?? 'normal';
+                    }
+                }
+                unset($oi);
+            }
+            $count[$sev] = ($count[$sev] ?? 0) + 1;
+            if ($sev !== 'normal') {
+                $flagged[] = $it;
+            }
+        }
+        unset($it);
+        usort($flagged, static fn($a, $b) => ($sevOrder[$a['severity'] ?? 'normal'] ?? 9) <=> ($sevOrder[$b['severity'] ?? 'normal'] ?? 9));
+        $checkMeta['result_items'] = $items;
+        $checkMeta['abnormal_items'] = $flagged;
+        $checkMeta['severity_summary'] = $count;
+        // 突出项:由质检模板"设备摘要"勾选的关键字段(≤5)驱动,匹配质检值+级别
+        $templateId = (int)($checkMeta['template_id'] ?? ($info['check_template_id'] ?? 0));
+        $checkMeta['summary_fields'] = $this->buildSummaryFields(
+            $templateId,
+            $items,
+            is_array($info['check_summary'] ?? null) ? $info['check_summary'] : []
+        );
+        $infoData['check_meta'] = $checkMeta;
+        $info['info'] = $infoData;
+        return $info;
+    }
+
+    /**
+     * 质检模板"设备摘要"字段(extra_config.summary_visible=1, ≤5, 按 sort)→ 突出项列表。
+     * 值/级别优先取自 result_items(同 field_key), 其次取自已解析的 check_summary(capacity/color 等)。
+     * @return array [{field_key, field_name, label, severity}]
+     */
+    private function buildSummaryFields(int $templateId, array $resultItems, array $checkSummary): array
+    {
+        if ($templateId <= 0) {
+            return [];
+        }
+        $fields = Db::name('recycle_check_field')
+            ->where('site_id', '=', $this->site_id)
+            ->where('template_id', '=', $templateId)
+            ->where('is_show', '=', 1)
+            ->field('field_key,field_name,sort,extra_config')
+            ->order('sort asc,id asc')->select()->toArray();
+        $picked = [];
+        foreach ($fields as $f) {
+            $ec = $this->toArr($f['extra_config'] ?? null);
+            if ((int)($ec['summary_visible'] ?? ($ec['show_in_summary'] ?? 0)) === 1) {
+                $picked[] = $f;
+                if (count($picked) >= 5) {
+                    break;
+                }
+            }
+        }
+        if (empty($picked)) {
+            return [];
+        }
+        // 值/级别查找表
+        $lookup = [];
+        foreach ($resultItems as $it) {
+            if (!is_array($it)) {
+                continue;
+            }
+            $fk = (string)($it['field_key'] ?? '');
+            if ($fk === '') {
+                continue;
+            }
+            $labels = is_array($it['labels'] ?? null) ? $it['labels'] : [];
+            $lookup[$fk] = ['label' => (string)($labels[0] ?? ($it['text'] ?? '')), 'severity' => (string)($it['severity'] ?? 'normal')];
+        }
+        foreach ($checkSummary as $cs) {
+            if (!is_array($cs)) {
+                continue;
+            }
+            $fk = (string)($cs['field_key'] ?? '');
+            if ($fk !== '' && !isset($lookup[$fk])) {
+                $lookup[$fk] = ['label' => (string)($cs['label'] ?? ''), 'severity' => 'normal'];
+            }
+        }
+        $out = [];
+        foreach ($picked as $f) {
+            $fk = (string)$f['field_key'];
+            $v = $lookup[$fk] ?? ['label' => '', 'severity' => 'normal'];
+            $out[] = [
+                'field_key'  => $fk,
+                'field_name' => (string)$f['field_name'],
+                'label'      => $v['label'],
+                'severity'   => $v['severity'],
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * 跨插件取用(中台/ERP 全链路):某回收设备"带级别"的质检数据。
+     * 复用 getInfo 的增强:result_items.severity / abnormal_items / severity_summary / summary_fields。
+     * @param int $deviceId 回收设备ID
+     * @return array check_meta(含上述增强字段);无质检则空数组
+     */
+    public function enrichedCheckMetaForDevice(int $deviceId): array
+    {
+        if ($deviceId <= 0) {
+            return [];
+        }
+        $device = (new RecycleDevice())
+            ->where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])
+            ->findOrEmpty();
+        if ($device->isEmpty()) {
+            // 设备写库 site_id 可能为0, 兜底按主键取
+            $device = (new RecycleDevice())->where([['id', '=', $deviceId]])->findOrEmpty();
+        }
+        if ($device->isEmpty()) {
+            return [];
+        }
+        $arr = $device->toArray();
+        $arr = $this->attachCheckSummary($arr);
+        $arr = $this->enrichResultItemsSeverity($arr);
+        return $this->checkMetaOf($arr);
+    }
+
+    /** 取设备 info.check_meta(已归一为数组) */
+    private function checkMetaOf(array $d): array
+    {
+        $info = $this->toArr($d['info'] ?? null);
+        return $this->toArr($info['check_meta'] ?? null);
+    }
+
+    /** 把 模型 $json 字段(可能是 stdClass / json字符串 / 数组)统一转成深层数组 */
+    private function toArr($value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+        if (is_object($value)) {
+            $decoded = json_decode(json_encode($value), true);
+            return is_array($decoded) ? $decoded : [];
+        }
+        return [];
     }
 
     /**
@@ -1707,7 +2070,7 @@ class RecycleDeviceService extends BaseAdminService
         // 获取订单信息
         $order = RecycleOrder::findOrEmpty($orderId);
         if ($order->isEmpty()) {
-            return false;
+            return f已闭环e;
         }
         
         // 获取订单下所有设备

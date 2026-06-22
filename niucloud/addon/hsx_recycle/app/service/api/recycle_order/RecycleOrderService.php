@@ -6,6 +6,7 @@ namespace addon\hsx_recycle\app\service\api\recycle_order;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\express\ExpressProviderDict;
 use addon\hsx_recycle\app\model\check\RecycleCheckField;
+use think\facade\Db;
 use addon\hsx_recycle\app\model\check\RecycleCheckOption;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
@@ -296,6 +297,9 @@ class RecycleOrderService extends BaseApiService
         }
 
         $templateOptionMap = $this->getTemplateOptionMap(array_values($templateIds));
+        // 选项级别(severity)实时取自字典 recycle_check_dict(唯一事实源),不读模板快照、不做聚合计算:
+        // 级别直接绑在"选项文本"上,字典一改、下次读即生效,无需任何同步动作。
+        $severityMap = $this->getOptionSeverityMap();
         foreach ($devices as &$device) {
             $info = $this->normalizeArray($device['info'] ?? []);
             $checkMeta = $this->normalizeArray($info['check_meta'] ?? []);
@@ -318,9 +322,11 @@ class RecycleOrderService extends BaseApiService
                     $option = $fieldOptions[$value] ?? [];
                     $style = $this->extractResultStyle($option['extra_config'] ?? []);
                     $label = $labels[$index] ?? ($option['label'] ?? $option['name'] ?? $value);
+                    // 按选项文本直接取字典级别(normal/general/abnormal),不计算
                     $optionItem = [
                         'value' => $value,
                         'label' => $label,
+                        'severity' => $severityMap[mb_strtolower(trim((string)$label))] ?? 'normal',
                     ];
                     if (!empty($style)) {
                         $optionItem['style'] = $style;
@@ -330,14 +336,39 @@ class RecycleOrderService extends BaseApiService
 
                 if (!empty($optionItems)) {
                     $item['option_items'] = $optionItems;
+                    // 结果项级别 = 其选中选项的级别(单选即该项;直取,不聚合)
+                    $item['severity'] = $optionItems[0]['severity'];
                 }
                 if (count($optionItems) > 1) {
                     unset($item['style']);
                 } elseif (count($optionItems) === 1 && !empty($optionItems[0]['style'])) {
                     $item['style'] = $optionItems[0]['style'];
                 }
+                // input/number 等无选项项不参与级别评定, 统一记 normal, 保证字段恒存在
+                if (!isset($item['severity'])) {
+                    $item['severity'] = 'normal';
+                }
             }
             unset($item);
+
+            // 给客户最直观:把"有问题"的项(异常/一般)单独拎成数组、异常在前;并给级别计数汇总。
+            // 前端无需自己过滤/排序,直接用 abnormal_items 展示重点、用 severity_summary 显示"X 项异常"。
+            $sevOrder = ['abnormal' => 0, 'general' => 1, 'normal' => 2];
+            $flagged = [];
+            $sevCount = ['abnormal' => 0, 'general' => 0, 'normal' => 0];
+            foreach ($checkMeta['result_items'] as $ri) {
+                if (!is_array($ri)) {
+                    continue;
+                }
+                $s = (string)($ri['severity'] ?? 'normal');
+                $sevCount[$s] = ($sevCount[$s] ?? 0) + 1;
+                if ($s !== 'normal') {
+                    $flagged[] = $ri;
+                }
+            }
+            usort($flagged, static fn($a, $b) => ($sevOrder[$a['severity'] ?? 'normal'] ?? 9) <=> ($sevOrder[$b['severity'] ?? 'normal'] ?? 9));
+            $checkMeta['abnormal_items'] = $flagged;
+            $checkMeta['severity_summary'] = $sevCount;
 
             $info['check_meta'] = $checkMeta;
             $device['info'] = $info;
@@ -389,6 +420,30 @@ class RecycleOrderService extends BaseApiService
             ];
         }
 
+        return $map;
+    }
+
+    /**
+     * 选项级别字典:recycle_check_dict(dict_type=option) 的 text → severity。
+     * 这是级别的唯一事实源;质检结果读取时按选项文本实时取此处级别,字典改动即时反映,无需同步。
+     * key 统一小写,与导入时 resolveOptionSeverity 的大小写口径一致。
+     * @return array [lower(text) => severity]
+     */
+    private function getOptionSeverityMap(): array
+    {
+        $rows = Db::name('recycle_check_dict')
+            ->where('site_id', '=', $this->site_id)
+            ->where('dict_type', '=', 'option')
+            ->field('text,severity')
+            ->select()->toArray();
+        $map = [];
+        foreach ($rows as $r) {
+            $text = mb_strtolower(trim((string)($r['text'] ?? '')));
+            if ($text === '') {
+                continue;
+            }
+            $map[$text] = (string)($r['severity'] ?? 'normal');
+        }
         return $map;
     }
 

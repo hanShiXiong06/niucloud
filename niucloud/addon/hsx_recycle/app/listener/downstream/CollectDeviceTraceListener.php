@@ -196,8 +196,16 @@ class CollectDeviceTraceListener
             'pay_amount'     => round((float)($d['pay_amount'] ?? 0), 2),
             'recycle_time'   => $this->ts($ord['create_at'] ?? 0) ?: $this->ts($ord['create_time'] ?? 0) ?: $this->ts($d['create_at'] ?? 0),
         ];
+        // 带级别的质检数据(突出项/异常/计数), 供全链路组件渲染公共质检面板。故障隔离。
+        $check = [];
+        try {
+            $check = (new \addon\hsx_recycle\app\service\admin\order\RecycleDeviceService())->enrichedCheckMetaForDevice($deviceId);
+        } catch (\Throwable $e) {
+            \think\facade\Log::warning('[trace] 质检增强失败: ' . $e->getMessage());
+        }
+
         \think\facade\Log::info('[trace] device_id=' . $deviceId . ' 回收段事件合计=' . count($events));
-        return ['summary' => $summary, 'events' => $events];
+        return ['summary' => $summary, 'events' => $events, 'check' => $check];
     }
 
     /**

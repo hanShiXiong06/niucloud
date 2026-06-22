@@ -655,7 +655,16 @@ class ErpOutboundService extends BaseAdminService
         }
         $collectNow = !empty($options['collect_now']);
         $capitalAccountId = (int)($options['capital_account_id'] ?? 0);
-        if ($collectNow && $capitalAccountId <= 0) {
+        // 多账户分笔收款(微信一笔/支付宝一笔…),账户本身已区分收款方式
+        $payments = [];
+        foreach (is_array($options['payments'] ?? null) ? $options['payments'] : [] as $pm) {
+            $accId = (int)($pm['account_id'] ?? 0);
+            $amt   = round((float)($pm['amount'] ?? 0), 2);
+            if ($accId > 0 && $amt > 0) {
+                $payments[] = ['account_id' => $accId, 'amount' => $amt];
+            }
+        }
+        if ($collectNow && $capitalAccountId <= 0 && empty($payments)) {
             throw new CommonException('选择了「已收款」请指定收款账户');
         }
         // 防重复收款: 该单已生成应收且已全部结清(无未结额) → 不再二次收款
@@ -688,6 +697,10 @@ class ErpOutboundService extends BaseAdminService
             $items = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['outbound_id', '=', (int)$order->id]])->select();
             $total = 0.0;
             foreach ($items as $item) {
+                // 已退回的设备不计价、不收款、不计入总额(支持"退N台留M台并对留下的收款"一次性处理)
+                if ((int)$item->is_returned === 1) {
+                    continue;
+                }
                 $price = $priceMap[(int)$item->id] ?? (float)$item->sale_price;
                 if (isset($priceMap[(int)$item->id]) && $price > 0) {
                     $item->sale_price = $price;
@@ -697,7 +710,7 @@ class ErpOutboundService extends BaseAdminService
                 }
                 $finalPrice = (float)$item->sale_price;
                 if ($finalPrice > 0) {
-                    $row = ['item_id' => (int)$item->id, 'price' => $finalPrice, 'device_id' => (int)$item->source_device_id];
+                    $row = ['item_id' => (int)$item->id, 'price' => $finalPrice, 'device_id' => (int)$item->source_device_id, 'asset_id' => (int)$item->asset_id];
                     $collectItems[] = $row;
                     if ((int)$item->receivable_emitted === 0) {
                         $emitItems[] = $row;
@@ -713,15 +726,55 @@ class ErpOutboundService extends BaseAdminService
         });
 
         if ($collectNow) {
+            // 多账户:本次收款合计须等于待结明细总额(进财务流水,逐笔进对应户头,可追溯)
+            if (!empty($payments)) {
+                $collectTotal = 0.0;
+                foreach ($collectItems as $ci) {
+                    $collectTotal += round((float)($ci['price'] ?? 0), 2);
+                }
+                $payTotal = 0.0;
+                foreach ($payments as $pm) {
+                    $payTotal += round((float)$pm['amount'], 2);
+                }
+                if (round($payTotal, 2) !== round($collectTotal, 2)) {
+                    throw new CommonException(sprintf('多账户收款合计 %.2f 与本单待收 %.2f 不一致', $payTotal, $collectTotal));
+                }
+            }
             // 生成应收并立即收款入账(幂等); 收款即下架: 锁定设备转「已售」
             if (!empty($collectItems)) {
-                $this->emitAndSettleNow((int)$order->id, (int)$order->counterparty_id, (string)$order->counterparty_name, (string)$order->outbound_no, $collectItems, $capitalAccountId, [], $now);
+                $this->emitAndSettleNow((int)$order->id, (int)$order->counterparty_id, (string)$order->counterparty_name, (string)$order->outbound_no, $collectItems, $capitalAccountId, $payments, $now);
             }
             $soldAssetIds = array_values(array_unique(array_filter($soldAssetIds)));
             if (!empty($soldAssetIds)) {
                 ErpAsset::where([['site_id', '=', $this->site_id], ['inventory_status', '=', ErpDict::INVENTORY_LOCKED]])
                     ->whereIn('id', $soldAssetIds)
                     ->update(['inventory_status' => ErpDict::INVENTORY_OUTBOUND, 'stock_out_at' => $now, 'update_at' => $now]);
+            }
+            // 挂单收款成交后通知商城: 把原先「锁定(locked)」的商品真正下架(sold)。
+            // 仅下架不重复建单(build_mall_order=false), 退回时另由 returned 事件回在售。
+            foreach ($collectItems as $ci) {
+                try {
+                    event('ErpDomainEvent', [
+                        'event_name'   => 'erp.asset.sold.v1',
+                        'event_id'     => 'erp_sold_fill_' . (int)$ci['asset_id'] . '_' . $now,
+                        'site_id'      => (int)$this->site_id,
+                        'aggregate_id' => (int)$ci['asset_id'],
+                        'payload'      => [
+                            'asset_id'         => (int)$ci['asset_id'],
+                            'source_device_id' => (int)$ci['device_id'],
+                            'outbound_no'      => (string)$order->outbound_no,
+                            'reason'           => 'peer_sale',
+                            'member_id'        => (int)$order->counterparty_id,
+                            'sale_price'       => (float)$ci['price'],
+                            'settle_mode'      => 'now',
+                            'result_status'    => 'sold',   // 收款成交 → 商城下架
+                            'build_mall_order' => false,     // 只下架, 不重复建单
+                        ],
+                        'operator'     => ['id' => (int)$this->uid, 'name' => (string)$this->username],
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('[erp] 收款后通知商城下架失败: ' . $e->getMessage());
+                }
             }
             return ['outbound_id' => (int)$order->id, 'collected' => true, 'count' => count($collectItems)];
         }
@@ -1107,10 +1160,21 @@ class ErpOutboundService extends BaseAdminService
                 $recAgg[$no]['open'] = round(($recAgg[$no]['open'] ?? 0) + ((float)$r['amount'] - (float)$r['settled_amount']), 2);
             }
         }
+        // 往来单位富化(同财务中心口径): 对接人姓名/电话 + 所属主体(对接单位)
+        $memberMap = FinanceCounterpartyBalanceService::resolveMemberMap($this->site_id, array_column($data['data'], 'counterparty_id'));
         foreach ($data['data'] as &$row) {
             $viewType = ErpDict::resolveOutboundViewType((string)$row['outbound_type'], (string)($row['sale_channel'] ?? 'peer'));
             $row['outbound_type_view'] = $viewType;
             $row['type_text'] = $typeMap[$viewType] ?? $viewType;
+            $m = $memberMap[(int)($row['counterparty_id'] ?? 0)] ?? null;
+            if ($m) {
+                if ((string)($row['counterparty_name'] ?? '') === '') {
+                    $row['counterparty_name'] = $m['name'];
+                }
+                $row['counterparty_mobile'] = $m['mobile'];
+                $row['entity_id'] = $m['entity_id'];
+                $row['entity_name'] = $m['entity_name'];
+            }
             $row['settle_mode_text'] = $settleMap[(string)($row['settle_mode'] ?? '')] ?? (string)($row['settle_mode'] ?? '');
             $row['price_status_text'] = $priceMap[(string)($row['price_status'] ?? '')] ?? (string)($row['price_status'] ?? '');
             $row['is_void'] = (string)($row['status'] ?? '') === ErpDict::OUTBOUND_STATUS_VOID;
@@ -1202,7 +1266,12 @@ class ErpOutboundService extends BaseAdminService
         $statusMap = FinanceDict::getStatusMap();
         foreach ($recs as &$r) {
             $r['status_text'] = $statusMap[$r['status']] ?? $r['status'];
-            $r['outstanding'] = round((float)$r['amount'] - (float)$r['settled_amount'], 2);
+            $isVoid = (string)$r['status'] === FinanceDict::STATUS_VOID;
+            // 已作废应收(退货/取消)不计入已收/未收, 但仍在明细中以"已作废"展示
+            $r['outstanding'] = $isVoid ? 0.0 : round((float)$r['amount'] - (float)$r['settled_amount'], 2);
+            if ($isVoid) {
+                continue;
+            }
             $received += (float)$r['settled_amount'];
             $unreceived += $r['outstanding'];
         }
@@ -1286,7 +1355,7 @@ class ErpOutboundService extends BaseAdminService
                             'counterparty_name' => $cpName,
                             'source_type'       => $sourceType,
                             'source_no'         => $outboundNo,
-                            'remark'            => $saleLabel . '现结收款·' . (string)($pm['method'] ?? ''),
+                            'remark'            => $saleLabel . '现结收款' . (((string)($pm['method'] ?? '') !== '') ? '·' . (string)$pm['method'] : ''),
                             'occurred_at'       => $now,
                         ]);
                     }

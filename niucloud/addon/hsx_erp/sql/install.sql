@@ -673,3 +673,22 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_stocktake_item` (
   KEY `idx_take` (`stocktake_id`,`result`),
   KEY `idx_asset` (`asset_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-盘点明细';
+
+
+-- 1) 追加列(若已存在会报 Duplicate column,可忽略)
+ALTER TABLE `{{prefix}}member_level`
+    ADD COLUMN `level_no` INT(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT '站内序号(每站从1开始,跨站统一引用口径)' AFTER `site_id`;
+
+-- 2) 站内联合索引,按 (site_id, level_no) 快速取号
+ALTER TABLE `{{prefix}}member_level`
+    ADD INDEX `idx_site_level_no` (`site_id`, `level_no`);
+
+-- 3) 历史数据回填:每个站点按 level_id 升序(创建顺序)从 1 编号
+UPDATE `{{prefix}}member_level` ml
+JOIN (
+    SELECT level_id,
+           ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY level_id ASC) AS rn
+    FROM `{{prefix}}member_level`
+) seq ON seq.level_id = ml.level_id
+SET ml.level_no = seq.rn
+WHERE ml.level_no = 0;

@@ -98,13 +98,16 @@ class FinanceSettlementService extends BaseAdminService
         // 2) 每条结算 → 主设备 + 来源单
         $devOf = $this->settlementPrimaryDevice($allIds);
 
-        // 3) 按设备分组（无设备的各自成组）
+        // 3) 按"主单据 source_no"分组（同一销售单/同一单据的多笔结算合并；无单据的各自成组）
+        //    注意：不能按 device_id 分组——同一台设备既有"进货(回收应付)"又有"卖货(销售应收)"的结算，
+        //    它们 source_no 不同(R… vs CK…)，按设备会把买进与卖出两笔无关结算错误合并成一条。
         $groups = [];
         foreach ($allIds as $sid) {
             $did = (int)($devOf[$sid]['device_id'] ?? 0);
-            $key = $did > 0 ? 'd' . $did : 's' . $sid;
+            $srcNo = trim((string)($devOf[$sid]['source_no'] ?? ''));
+            $key = $srcNo !== '' ? 'src_' . $srcNo : 's_' . $sid;
             if (!isset($groups[$key])) {
-                $groups[$key] = ['device_id' => $did, 'source_no' => (string)($devOf[$sid]['source_no'] ?? ''), 'sids' => [], 'ts' => 0];
+                $groups[$key] = ['device_id' => $did, 'source_no' => $srcNo, 'sids' => [], 'ts' => 0];
             }
             $groups[$key]['sids'][] = $sid;
             $groups[$key]['ts'] = max($groups[$key]['ts'], $tsMap[$sid] ?? 0);
@@ -198,12 +201,58 @@ class FinanceSettlementService extends BaseAdminService
         if (!empty($where['operator'])) {
             $query->whereLike('operator_name', '%' . trim((string)$where['operator']) . '%');
         }
+        // IMEI 检索: 设备串号 → 命中应付/应收 → 经核销关系反查结算单 id
+        if (!empty($where['imei'])) {
+            $sids = $this->settlementIdsByImei(trim((string)$where['imei']));
+            $query->whereIn('id', !empty($sids) ? $sids : [-1]);
+        }
         if (!empty($where['start_time'])) {
             $query->where('occurred_at', '>=', (int)$where['start_time']);
         }
         if (!empty($where['end_time'])) {
             $query->where('occurred_at', '<=', (int)$where['end_time']);
         }
+    }
+
+    /** 按 IMEI 反查命中的结算单 id: 设备串号 → source_device_id → 应付/应收 id → 核销关系 settlement_id */
+    private function settlementIdsByImei(string $imei): array
+    {
+        if ($imei === '') {
+            return [];
+        }
+        $devIds = ErpAsset::where([['site_id', '=', $this->site_id]])
+            ->whereLike('imei', '%' . $imei . '%')->column('source_device_id');
+        $devIds = array_values(array_unique(array_filter(array_map('intval', $devIds))));
+        if (empty($devIds)) {
+            return [];
+        }
+        $payIds = FinancePayable::where([['site_id', '=', $this->site_id]])
+            ->whereIn('source_device_id', $devIds)->column('id');
+        $recIds = FinanceReceivable::where([['site_id', '=', $this->site_id]])
+            ->whereIn('source_device_id', $devIds)->column('id');
+        $payIds = array_values(array_filter(array_map('intval', $payIds)));
+        $recIds = array_values(array_filter(array_map('intval', $recIds)));
+        if (empty($payIds) && empty($recIds)) {
+            return [];
+        }
+        $linkQuery = FinanceSettlementLink::where([['site_id', '=', $this->site_id]]);
+        $linkQuery->where(function ($q) use ($payIds, $recIds) {
+            $has = false;
+            if (!empty($payIds)) {
+                $q->where(function ($w) use ($payIds) {
+                    $w->where('target_type', '=', 'payable')->whereIn('target_id', $payIds);
+                });
+                $has = true;
+            }
+            if (!empty($recIds)) {
+                $method = $has ? 'whereOr' : 'where';
+                $q->{$method}(function ($w) use ($recIds) {
+                    $w->where('target_type', '=', 'receivable')->whereIn('target_id', $recIds);
+                });
+            }
+        });
+        $sids = $linkQuery->column('settlement_id');
+        return array_values(array_unique(array_filter(array_map('intval', $sids))));
     }
 
     /** 取每条结算的"主设备"(第一个核销目标的 source_device_id) + 来源单号 */
@@ -748,12 +797,13 @@ class FinanceSettlementService extends BaseAdminService
                 return;
             }
             // 只取已收齐(无未结额)的销售应收(同行/商城)对应的设备
-            $deviceIds = FinanceReceivable::where([['site_id', '=', $this->site_id]])
+            $recs = FinanceReceivable::where([['site_id', '=', $this->site_id]])
                 ->whereIn('id', $rids)
                 ->whereIn('source_type', ['erp_peer_sale', 'erp_mall_sale'])
                 ->whereRaw('amount - settled_amount <= 0.001')
-                ->column('source_device_id');
-            $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
+                ->field('source_device_id,source_no,counterparty_id,amount')
+                ->select()->toArray();
+            $deviceIds = array_values(array_unique(array_filter(array_map(static fn($r) => (int)($r['source_device_id'] ?? 0), $recs))));
             if (empty($deviceIds)) {
                 return;
             }
@@ -761,6 +811,43 @@ class FinanceSettlementService extends BaseAdminService
             ErpAsset::where([['site_id', '=', $this->site_id], ['inventory_status', '=', ErpDict::INVENTORY_LOCKED]])
                 ->whereIn('source_device_id', $deviceIds)
                 ->update(['inventory_status' => ErpDict::INVENTORY_OUTBOUND, 'stock_out_at' => $now, 'update_at' => $now]);
+
+            // 通知商城闭环:把对应商城商品下架 + ERP 托管展示单标记完成。
+            // 覆盖所有收款入口(财务中心收款 / 出库管理收款 / 卖同行待办),故障隔离不回抛。
+            $assetMap = [];
+            foreach (ErpAsset::where([['site_id', '=', $this->site_id]])->whereIn('source_device_id', $deviceIds)
+                         ->field('id,source_device_id')->select()->toArray() as $a) {
+                $assetMap[(int)$a['source_device_id']] = (int)$a['id'];
+            }
+            foreach ($recs as $r) {
+                $did = (int)($r['source_device_id'] ?? 0);
+                $assetId = $assetMap[$did] ?? 0;
+                if ($assetId <= 0) {
+                    continue;
+                }
+                try {
+                    event('ErpDomainEvent', [
+                        'event_name'   => 'erp.asset.sold.v1',
+                        'event_id'     => 'erp_sold_settle_' . $assetId . '_' . $now,
+                        'site_id'      => (int)$this->site_id,
+                        'aggregate_id' => $assetId,
+                        'payload'      => [
+                            'asset_id'         => $assetId,
+                            'source_device_id' => $did,
+                            'outbound_no'      => (string)($r['source_no'] ?? ''),
+                            'reason'           => 'peer_sale',
+                            'member_id'        => (int)($r['counterparty_id'] ?? 0),
+                            'sale_price'       => round((float)($r['amount'] ?? 0), 2),
+                            'settle_mode'      => 'now',
+                            'result_status'    => 'sold',     // 收齐成交 → 商城下架 + 展示单完成
+                            'build_mall_order' => false,       // 只下架/收口, 不重复建单
+                        ],
+                        'operator'     => ['id' => (int)$this->uid, 'name' => (string)$this->username],
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('[erp] 收齐通知商城下架/完成失败: ' . $e->getMessage());
+                }
+            }
         } catch (\Throwable $e) {
             Log::warning('[erp] 同行收齐翻已售失败: ' . $e->getMessage());
         }

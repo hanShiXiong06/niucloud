@@ -82,11 +82,70 @@ class RecycleDevice extends BaseAdminController
         $this->validate->scene('detail')->check(['id' => $id]);
 
         $data = $this->service->getInfo($id);
-        
+
         // 获取设备完整操作链路日志：设备主流程 + 关联代卖流程
         $data['logs'] = $this->service->getTimelineLogs($id, 50);
-        
+
+        // 按 UI 区块组织的干净结构,前端只读 view.base / view.price / view.check / view.logs
+        $data['view'] = $this->service->buildDetailView($data);
+
         return success($data);
+    }
+
+    /**
+     * 设备详情(详情弹窗专用):按 UI 区块组织 + 裁掉弹窗用不到的重字段。
+     * 单独接口,不影响 getInfo 的其它调用方。
+     * @param int $id
+     * @return mixed
+     */
+    public function detailView(int $id)
+    {
+        $this->validate->scene('detail')->check(['id' => $id]);
+
+        $data = $this->service->getInfo($id);
+        $data['logs'] = $this->service->getTimelineLogs($id, 50);
+
+        // 区块结构
+        $data['view'] = $this->service->buildDetailView($data);
+
+        // 只保留详情弹窗 + 子组件(DeviceInfoCard / DownstreamProgress)实际读取的字段,其余一律不返回。
+        // 字段清单来自对组件的实读统计,改组件时同步维护此清单。
+        $keep = [
+            // 基础信息
+            'id', 'model', 'imei', 'sn', 'status', 'status_name', 'create_at',
+            'check_summary', 'capacity', 'color', 'system_version', 'warranty_info',
+            // 价格信息
+            'initial_price', 'final_price', 'sell_price', 'price_remark', 'final_status',
+            'cost_adjust_amount', 'cost_adjust_count', 'last_cost_adjust_time', 'last_cost_adjust_no',
+            // 下游流转
+            'downstream_stage', 'downstream_sale_price', 'downstream_stage_at', 'downstream_erp_asset_id',
+            'pay_status', 'dispose_status',
+            // 质检信息
+            'check_at', 'checkUser', 'check_result', 'check_result_seller', 'check_result_buyer',
+            'check_images', 'check_images_buyer', 'check_images_seller',
+            'check_images_thumb_small', 'check_images_seller_thumb_small', 'check_images_buyer_thumb_small',
+            'remark',
+        ];
+        $slim = [];
+        foreach ($keep as $k) {
+            if (array_key_exists($k, $data)) {
+                $slim[$k] = $data[$k];
+            }
+        }
+        // info 精简:只留 sn 与 basic_labels(去掉 check_meta、goods_category 等)
+        $srcInfo = is_array($data['info'] ?? null) ? $data['info'] : [];
+        $slimInfo = [];
+        if (isset($srcInfo['sn'])) {
+            $slimInfo['sn'] = $srcInfo['sn'];
+        }
+        if (isset($srcInfo['basic_labels'])) {
+            $slimInfo['basic_labels'] = $srcInfo['basic_labels'];
+        }
+        $slim['info'] = $slimInfo;
+        $slim['logs'] = $data['logs'] ?? [];
+        $slim['view'] = $data['view'] ?? [];
+
+        return success($slim);
     }
 
     /**

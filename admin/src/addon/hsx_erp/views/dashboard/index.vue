@@ -8,7 +8,7 @@
                     <div class="mt-1 text-sm text-gray-500">人 · 货 · 钱，一屏看清经营全局。数据范围：{{ data.range.start }} ~ {{ data.range.end }}</div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <el-button type="primary" size="large" class="quick-trade-btn" @click="quickVisible = true">
+                    <el-button type="primary" size="medium" class="quick-trade-btn" @click="quickVisible = true">
                         <el-icon class="mr-1"><Sell /></el-icon>快速出入库
                     </el-button>
                     <el-radio-group v-model="rangeType" @change="onRangeTypeChange">

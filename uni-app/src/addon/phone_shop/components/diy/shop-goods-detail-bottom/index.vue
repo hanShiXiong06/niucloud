@@ -42,7 +42,6 @@
                     <text class="nc-iconfont text-[36rpx] nc-icon-fenxiangV6xx text-[#303133]"></text>
                     <text class="text-[18rpx] mt-[6rpx]">分享</text>
                 </view>
-                
             </view>
             <view class="flex flex-1" v-if="diyComponent.goods.status == 1">
                 <button v-if="diyComponent.goods.is_gift"
@@ -55,11 +54,15 @@
                         {{ diyComponent.cartName }}
                     </button>
                     <button
-                        v-if="isShowSingleSku"
+                        v-if="isShowSingleSku && diyComponent.buyIsShow !== false"
                         class="flex-1 !h-[70rpx] font-500 text-[26rpx] !m-0 !mr-[16rpx] leading-[70rpx] rounded-full remove-border" :style="buyBtnStyle"
                         @click="buyFn('buy_now')">{{ diyComponent.buyName }}
                     </button>
-                    <button v-else
+                    <!-- 一键转发朋友圈:与立即购买同款按钮(同 buyBtnStyle),文字可配置;可隐藏立即购买实现替换 -->
+                    <button v-if="diyComponent.forwardIsShow"
+                        class="flex-1 !h-[70rpx] font-500 text-[26rpx] !m-0 !mr-[16rpx] leading-[70rpx] rounded-full remove-border" :style="buyBtnStyle"
+                        @click="forwardFn">{{ diyComponent.forwardName || '一键转发' }}</button>
+                    <button v-if="!isShowSingleSku"
                             :style="{ width : (diyComponent.goods.goods_type == 'real' || (diyComponent.goods.goods_type == 'virtual' && diyComponent.goods.virtual_receive_type != 'verify')) ?  '200rpx' : '400rpx' + '!important'  }"
                             class="flex-1 !h-[70rpx] font-500 text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 !mr-[16rpx] leading-[70rpx] rounded-full remove-border"
                     >已售罄</button>
@@ -74,10 +77,12 @@
                     class="flex-1 !h-[70rpx] font-500 text-[26rpx] !m-0 !mr-[16rpx] leading-[70rpx] rounded-full remove-border" :style="cartBtnStyle">
                     {{ diyComponent.cartName }}
                 </button>
-                <button
+                <button v-if="diyComponent.buyIsShow !== false"
                     class="flex-1 !h-[70rpx] font-500 text-[26rpx] !m-0 !mr-[16rpx] leading-[70rpx] rounded-full remove-border" :style="buyBtnStyle"
                     @click="buyFn('buy_now')">{{ diyComponent.buyName }}
                 </button>
+                <button v-if="diyComponent.forwardIsShow"
+                    class="flex-1 !h-[70rpx] font-500 text-[26rpx] !m-0 !mr-[16rpx] leading-[70rpx] rounded-full remove-border" :style="buyBtnStyle">{{ diyComponent.forwardName || '一键转发' }}</button>
             </template>
             <view class="flex flex-1" v-else>
                 <button class="w-[100%] !h-[70rpx] font-500 text-[26rpx] !text-[#fff] !bg-[#ccc] !m-0 leading-[70rpx] rounded-full remove-border">该商品已下架</button>
@@ -86,6 +91,8 @@
         <!-- 装修时，防止点击 -->
         <view v-if="diyStore.mode == 'decorate'" class="absolute z-10 top-0 right-0 bottom-0 left-0"></view>
     </view>
+    <!-- 一键转发朋友圈:下载配置弹窗 -->
+    <download-config-dialog :show="showConfigDialog" @close="showConfigDialog = false" @confirm="onForwardConfigConfirm" />
 </template>
 
 <script setup lang="ts">
@@ -95,6 +102,8 @@ import useDiyStore from '@/app/stores/diy';
 import useMemberStore from '@/stores/member'
 import { collect, cancelCollect } from '@/addon/phone_shop/api/goods';
 import useGoodsDetailStore from '@/addon/phone_shop/stores/goodsDetail'
+import { useGoodsDownload } from '@/addon/phone_shop/hooks/useGoodsDownload'
+import DownloadConfigDialog from '@/addon/phone_shop/components/download-config-dialog/download-config-dialog.vue'
 
 const props = defineProps(['component', 'index', 'value', 'global']);
 const diyStore = useDiyStore();
@@ -157,6 +166,35 @@ const buyBtnStyle = computed(() => {
     }
     return style;
 })
+
+// 一键转发朋友圈:下载商品图到相册 + 复制商品信息(复用 useGoodsDownload hook)
+const { downloadGoodsImagesWithConfig, needShowConfigDialog, saveConfig } = useGoodsDownload()
+const showConfigDialog = ref(false)
+const pendingDownload: any = ref(null)
+const forwardFn = async () => {
+    try {
+        const item: any = diyComponent.value || {}
+        const gi = item.goods && item.goods.goods_image
+        let images: string[] = []
+        if (gi) images = Array.isArray(gi) ? gi : String(gi).split(',').map((u: string) => img(u.trim()))
+        if (needShowConfigDialog()) {
+            pendingDownload.value = { images, item }
+            showConfigDialog.value = true
+        } else {
+            await downloadGoodsImagesWithConfig(images, item, undefined, undefined, true)
+        }
+    } catch (e) {
+        uni.showToast({ title: '转发失败', icon: 'none' })
+    }
+}
+const onForwardConfigConfirm = async (config: any) => {
+    saveConfig(config)
+    showConfigDialog.value = false
+    if (pendingDownload.value) {
+        await downloadGoodsImagesWithConfig(pendingDownload.value.images, pendingDownload.value.item, config, undefined, true)
+        pendingDownload.value = null
+    }
+}
 
 // 加入购物车按钮
 const cartBtnStyle = computed(() => {

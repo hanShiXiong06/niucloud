@@ -79,10 +79,7 @@
                             <el-radio-button label="pay">我应付</el-radio-button>
                             <el-radio-button label="collect">我应收</el-radio-button>
                         </el-radio-group>
-                        <el-input v-model="boardKeyword" placeholder="主体/对接人/电话" clearable class="!w-[200px]" />
-                        <el-select v-model="boardSort" placeholder="排序" style="width: 170px">
-                            <el-option v-for="s in boardSortOptions" :key="s.value" :label="s.label" :value="s.value" />
-                        </el-select>
+                        <el-input v-model="boardKeyword" placeholder="主体/对接人/电话/IMEI" clearable class="!w-[220px]" />
                     </div>
                     <!-- 往来汇总：卡片 + 折叠（账目明细默认折叠） -->
                     <div v-loading="loading" class="board-cards">
@@ -231,11 +228,10 @@
                             <el-input v-model="detail.keyword" placeholder="来源单号 / 手机号" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" @clear="onDetailFilter" />
                         </div>
                         <div class="flt">
-                            <span class="flt__l">排序</span>
-                            <el-select v-model="detail.quickSort" placeholder="排序" class="!w-[150px]" @change="onQuickSort">
-                                <el-option v-for="s in sortOptions" :key="s.value" :label="s.label" :value="s.value" />
-                            </el-select>
+                            <span class="flt__l">IMEI</span>
+                            <el-input v-model.trim="detail.imei" placeholder="设备串号(支持模糊)" clearable class="!w-[180px]" @keyup.enter="onDetailFilter" @clear="onDetailFilter" />
                         </div>
+
                         <div class="flt">
                             <span class="flt__l">&nbsp;</span>
                             <div class="flex items-center gap-2">
@@ -296,6 +292,7 @@
                 <el-tab-pane label="结算记录" name="settlement">
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                         <el-input v-model="settle.keyword" placeholder="主体/对接人/手机号/结算单号" clearable class="!w-[220px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
+                        <el-input v-model.trim="settle.imei" placeholder="IMEI 设备串号" clearable class="!w-[180px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
                         <el-input v-model="settle.operator" placeholder="经手人" clearable class="!w-[120px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
                         <div class="w-[260px] flex-none">
                             <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="--el-date-editor-width: 100%" />
@@ -708,6 +705,7 @@ const filteredBoard = computed(() => {
             String(r.entity_name || '').includes(kw) ||
             String(r.counterparty_name || '').includes(kw) ||
             String(r.counterparty_mobile || '').includes(kw) ||
+            String(r.imei || '').includes(kw) ||
             String(r.counterparty_id || '') === kw
         const hitDeep = (r: any): boolean =>
             hit(r) || (Array.isArray(r.children) && r.children.some((c: any) => hit(c) || hitDeep(c)))
@@ -743,7 +741,7 @@ async function loadBoard() {
 }
 
 // 应收/应付明细
-const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', operator: '', source_type: '', counterparty_id: undefined, settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
+const detail = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', imei: '', operator: '', source_type: '', counterparty_id: undefined, settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc' })
 // 业务类型 / 经手人 下拉选项(随 tab 取实际值)
 const filterOpts = reactive<{ source_types: any[]; operators: string[] }>({ source_types: [], operators: [] })
 async function loadFilterOpts() {
@@ -756,7 +754,7 @@ async function loadFilterOpts() {
 function detailParams() {
     const [start, end] = Array.isArray(detail.dateRange) ? detail.dateRange : []
     return {
-        keyword: detail.keyword, operator: detail.operator, settle_state: detail.settle_state,
+        keyword: detail.keyword, imei: detail.imei, operator: detail.operator, settle_state: detail.settle_state,
         source_type: detail.source_type, counterparty_id: detail.counterparty_id || 0,
         start_time: start ? Number(start) : 0,
         end_time: end ? Number(end) + 86399 : 0, // 含当日
@@ -792,12 +790,12 @@ async function loadDetail() {
 }
 function onDetailPage(p: number) { detail.page = p; loadDetail() }
 function resetDetailFilter() {
-    Object.assign(detail, { keyword: '', operator: '', source_type: '', counterparty_id: undefined, settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc', page: 1 })
+    Object.assign(detail, { keyword: '', imei: '', operator: '', source_type: '', counterparty_id: undefined, settle_state: '', dateRange: [], amount_min: '', amount_max: '', sort_field: 'occurred_at', sort_order: 'desc', quickSort: 'occurred_at:desc', page: 1 })
     loadDetail()
 }
 
 // 结算记录
-const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', operator: '', dateRange: [] })
+const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', imei: '', operator: '', dateRange: [] })
 // 结算记录的"按设备分组"已改由后端完成（跨页也不拆），前端直接渲染 settle.list（含父行 _group + children）
 async function loadSettlement() {
     settle.loading = true
@@ -805,6 +803,7 @@ async function loadSettlement() {
         const [start, end] = Array.isArray(settle.dateRange) ? settle.dateRange : []
         const res: any = await getFinanceSettlementList({
             keyword: settle.keyword,
+            imei: settle.imei,
             operator: settle.operator,
             start_time: start ? Number(start) : 0,
             end_time: end ? Number(end) + 86399 : 0,
@@ -818,7 +817,7 @@ async function loadSettlement() {
 }
 function onSettlePage(p: number) { settle.page = p; loadSettlement() }
 function resetSettleFilter() {
-    Object.assign(settle, { keyword: '', dateRange: [], page: 1 })
+    Object.assign(settle, { keyword: '', imei: '', operator: '', dateRange: [], page: 1 })
     loadSettlement()
 }
 

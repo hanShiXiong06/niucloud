@@ -63,11 +63,12 @@ class Outbound extends BaseAdminController
     public function fillPrice(int $id)
     {
         $p = $this->request->params([
-            ['items', []], ['collect_now', 0], ['capital_account_id', 0],
+            ['items', []], ['collect_now', 0], ['capital_account_id', 0], ['payments', []],
         ]);
         return success($this->service->fillPrice($id, (array)$p['items'], [
             'collect_now'        => (int)$p['collect_now'] === 1,
             'capital_account_id' => (int)$p['capital_account_id'],
+            'payments'           => (array)$p['payments'],
         ]));
     }
 

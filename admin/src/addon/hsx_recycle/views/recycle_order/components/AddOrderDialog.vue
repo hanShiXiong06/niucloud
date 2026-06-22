@@ -2,7 +2,7 @@
     <el-dialog
         v-model="dialogVisible"
         title="代客户下单"
-        :width="isMobile ? '95vw' : '1120px'"
+        :width="isMobile ? '95vw' : '1280px'"
         top="4vh"
         class="add-order-dialog hsx-premium-overlay"
         :destroy-on-close="true"
@@ -140,6 +140,142 @@
                                     >
                                     </el-button>
                                 </div>
+
+                                <!-- 按型号触发的质检模板摘要字段录入（最多 5 个） -->
+                                <div v-if="row.summary_loading" class="summary-tip">
+                                    <el-icon><Loading class="is-loading" /></el-icon>
+                                    <span>正在加载型号对应的质检模板...</span>
+                                </div>
+                                <div
+                                    v-else-if="row.summary_fields && row.summary_fields.length"
+                                    class="summary-box"
+                                    :class="{ 'summary-box--collapsed': isSummaryCollapsed(row) }"
+                                >
+                                    <div class="summary-box__head">
+                                        <el-icon><Document /></el-icon>
+                                        <span>质检摘要</span>
+                                        <el-tag v-if="row.check_template_name" size="small" type="success" effect="plain">
+                                            {{ row.check_template_name }}
+                                        </el-tag>
+                                        <el-button
+                                            v-if="isSummaryCollapsed(row) && !row.saved"
+                                            link
+                                            type="primary"
+                                            size="small"
+                                            class="summary-head__btn"
+                                            :icon="EditPen"
+                                            @click="expandSummary(row)"
+                                        >编辑</el-button>
+                                    </div>
+
+                                    <!-- 已录入：仅显示文字，超出省略，悬浮显示全部 -->
+                                    <el-tooltip
+                                        v-if="isSummaryCollapsed(row)"
+                                        placement="top"
+                                        :show-after="200"
+                                        effect="dark"
+                                        popper-class="summary-tooltip"
+                                    >
+                                        <template #content>
+                                            <div class="summary-tooltip__inner">{{ buildSummaryText(row) || '未录入摘要' }}</div>
+                                        </template>
+                                        <div class="summary-text" :class="{ 'is-empty': !hasSummaryValues(row) }">
+                                            {{ buildSummaryText(row) || '未录入摘要' }}
+                                        </div>
+                                    </el-tooltip>
+
+                                    <!-- 录入中：显示控件 -->
+                                    <template v-else>
+                                        <div class="summary-grid">
+                                            <div
+                                                v-for="field in row.summary_fields"
+                                                :key="field.field_key"
+                                                class="summary-item"
+                                            >
+                                                <label class="summary-item__label">
+                                                    <span v-if="field.is_required" class="summary-required">*</span>
+                                                    {{ field.field_name }}
+                                                    <span v-if="field.unit" class="summary-unit">({{ field.unit }})</span>
+                                                </label>
+                                                <el-select
+                                                    v-if="field.component === 'select' || (field.component === 'radio' && field.selection_mode !== 'multiple' && (field.options || []).length > 4)"
+                                                    v-model="row.summary_values[field.field_key]"
+                                                    :placeholder="field.placeholder || '请选择'"
+                                                    clearable
+                                                    size="small"
+                                                    class="summary-control"
+                                                >
+                                                    <el-option
+                                                        v-for="opt in field.options"
+                                                        :key="String(opt.value)"
+                                                        :label="opt.label"
+                                                        :value="opt.value"
+                                                    />
+                                                </el-select>
+                                                <el-radio-group
+                                                    v-else-if="field.component === 'radio'"
+                                                    v-model="row.summary_values[field.field_key]"
+                                                    size="small"
+                                                >
+                                                    <el-radio
+                                                        v-for="opt in field.options"
+                                                        :key="String(opt.value)"
+                                                        :label="opt.value"
+                                                    >{{ opt.label }}</el-radio>
+                                                </el-radio-group>
+                                                <el-checkbox-group
+                                                    v-else-if="field.component === 'checkbox' || field.selection_mode === 'multiple'"
+                                                    v-model="row.summary_values[field.field_key]"
+                                                    size="small"
+                                                >
+                                                    <el-checkbox
+                                                        v-for="opt in field.options"
+                                                        :key="String(opt.value)"
+                                                        :label="opt.value"
+                                                    >{{ opt.label }}</el-checkbox>
+                                                </el-checkbox-group>
+                                                <el-switch
+                                                    v-else-if="field.component === 'switch'"
+                                                    v-model="row.summary_values[field.field_key]"
+                                                />
+                                                <el-input-number
+                                                    v-else-if="field.component === 'number'"
+                                                    v-model="row.summary_values[field.field_key]"
+                                                    :controls="false"
+                                                    :placeholder="field.placeholder || '请输入'"
+                                                    size="small"
+                                                    class="summary-control"
+                                                />
+                                                <el-input
+                                                    v-else-if="field.component === 'textarea'"
+                                                    v-model="row.summary_values[field.field_key]"
+                                                    type="textarea"
+                                                    :rows="1"
+                                                    :placeholder="field.placeholder || '请输入'"
+                                                    size="small"
+                                                    class="summary-control"
+                                                />
+                                                <el-input
+                                                    v-else
+                                                    v-model="row.summary_values[field.field_key]"
+                                                    :placeholder="field.placeholder || '请输入'"
+                                                    clearable
+                                                    size="small"
+                                                    class="summary-control"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div class="summary-actions">
+                                            <el-button
+                                                link
+                                                type="primary"
+                                                size="small"
+                                                :icon="Finished"
+                                                @click="collapseSummary(row)"
+                                            >完成录入，收起</el-button>
+                                        </div>
+                                    </template>
+                                </div>
                             </template>
                         </el-table-column>
                         <el-table-column label="预估价" width="130">
@@ -199,9 +335,10 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Delete, Loading, Aim, Plus, ZoomOut, EditPen, List } from '@element-plus/icons-vue'
+import { Search, Delete, Loading, Aim, Plus, ZoomOut, EditPen, List, Document, Finished } from '@element-plus/icons-vue'
 import { addOrderDevice, createRecycleOrder, getUserByMobile, updateRecycleOrder } from '@/addon/hsx_recycle/api/recycle_order'
 import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
+import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
 // import { searchMembers } from '@/api/member'
 
 interface Member {
@@ -210,6 +347,19 @@ interface Member {
     username?: string;
     mobile?: string;
     headimg?: string;
+}
+
+interface CheckSummaryField {
+    id: number;
+    field_key: string;
+    field_name: string;
+    component: string;
+    selection_mode?: string;
+    unit?: string;
+    placeholder?: string;
+    default_value?: any;
+    is_required?: number;
+    options?: Array<{ value: string | number; label: string; name?: string }>;
 }
 
 interface DraftDeviceRow {
@@ -223,6 +373,13 @@ interface DraftDeviceRow {
     saving?: boolean;
     model_path?: Array<string | number>;
     model_input_mode?: boolean;
+    // 质检模板（按型号触发）
+    check_template_id?: number;
+    check_template_name?: string;
+    summary_loading?: boolean;
+    summary_fields?: CheckSummaryField[];
+    summary_values?: Record<string, any>;
+    summary_collapsed?: boolean;
 }
 
 const props = defineProps({
@@ -242,7 +399,7 @@ const form = ref({
     delivery_type: '1',
     express_no: '',
     devices: [
-        { imei: '', model: '', initial_price: 0 }
+        { imei: '', model: '', initial_price: 0, summary_fields: [], summary_values: {} }
     ] as DraftDeviceRow[]
 })
 const draftOrder = ref<{ id: number | string; order_no: string }>({ id: '', order_no: '' })
@@ -367,17 +524,102 @@ const handleModelPathChange = (row: DraftDeviceRow, value: Array<string | number
     row.model =  leaf?.node_name || ''
     row.category_id = leafId || 0
     row.category_path = path.filter(item => item !== undefined && item !== null && item !== '')
+    // 选定型号后，按型号触发对应的质检模板并加载摘要字段
+    if (row.category_id) {
+        loadCheckTemplate(row)
+    } else {
+        clearCheckTemplate(row)
+    }
+}
+
+// 清空型号绑定的质检模板与摘要字段
+const clearCheckTemplate = (row: DraftDeviceRow) => {
+    row.check_template_id = 0
+    row.check_template_name = ''
+    row.summary_fields = []
+    row.summary_values = {}
+}
+
+// 按型号（category_id）加载质检模板及其摘要字段（summary_visible 字段，最多 5 个）
+const loadCheckTemplate = async (row: DraftDeviceRow) => {
+    const categoryId = Number(row.category_id || 0)
+    if (!categoryId) {
+        clearCheckTemplate(row)
+        return
+    }
+    row.summary_loading = true
+    try {
+        const res = await getCheckTemplateSchema({ category_id: categoryId })
+        const data = res?.data || {}
+        const groups = data.groups || []
+        const resolve = data.resolve || {}
+        const template = data.template || {}
+
+        // 从所有分组的字段里筛出"设备摘要"字段（extra_config.summary_visible === 1），最多取 5 个
+        const summaryFields: CheckSummaryField[] = []
+        groups.forEach((group: any) => {
+            (group.fields || []).forEach((field: any) => {
+                if (Number(field?.extra_config?.summary_visible || 0) === 1 && summaryFields.length < 5) {
+                    summaryFields.push({
+                        id: Number(field.id),
+                        field_key: String(field.field_key),
+                        field_name: String(field.field_name),
+                        component: String(field.component || 'input'),
+                        selection_mode: field.selection_mode,
+                        unit: field.unit,
+                        placeholder: field.placeholder,
+                        default_value: field.default_value,
+                        is_required: Number(field.is_required || 0),
+                        options: (field.options || []).map((opt: any) => ({
+                            value: opt.value,
+                            label: opt.label || opt.name,
+                            name: opt.name
+                        }))
+                    })
+                }
+            })
+        })
+
+        row.check_template_id = Number(resolve.template_id || template.id || 0)
+        row.check_template_name = String(resolve.template_name || template.template_name || '')
+        row.summary_fields = summaryFields
+        // 新选定型号后默认进入录入状态（展开）
+        row.summary_collapsed = false
+
+        // 初始化摘要字段录入值（保留已填值，并应用默认值）
+        const values: Record<string, any> = { ...(row.summary_values || {}) }
+        summaryFields.forEach((field) => {
+            if (values[field.field_key] === undefined || values[field.field_key] === '') {
+                const isMultiple = field.component === 'checkbox' || field.selection_mode === 'multiple'
+                if (field.default_value !== undefined && field.default_value !== null && field.default_value !== '') {
+                    values[field.field_key] = isMultiple
+                        ? (Array.isArray(field.default_value) ? field.default_value : [field.default_value])
+                        : field.default_value
+                } else {
+                    values[field.field_key] = isMultiple ? [] : ''
+                }
+            }
+        })
+        row.summary_values = values
+    } catch (error) {
+        console.error('加载质检模板摘要字段失败:', error)
+        clearCheckTemplate(row)
+    } finally {
+        row.summary_loading = false
+    }
 }
 
 const toggleModelInputMode = (row: DraftDeviceRow) => {
     row.model_input_mode = !row.model_input_mode
     if (row.model_input_mode) {
         row.model_path = []
+        // 手动输入型号无法关联分类节点，无法按型号触发质检模板
+        clearCheckTemplate(row)
     }
 }
 
 const addDeviceRow = () => {
-    form.value.devices.push({ imei: '', model: '', initial_price: 0 })
+    form.value.devices.push({ imei: '', model: '', initial_price: 0, summary_fields: [], summary_values: {} })
 }
 
 const removeDeviceRow = (index: number) => {
@@ -586,18 +828,99 @@ const ensureDraftOrder = async () => {
     return draftOrder.value
 }
 
+// 是否处于"折叠/只读"展示状态：已保存的设备恒为折叠，或用户手动收起
+const isSummaryCollapsed = (row: DraftDeviceRow): boolean => !!(row.saved || row.summary_collapsed)
+
+// 展开摘要重新编辑
+const expandSummary = (row: DraftDeviceRow) => {
+    row.summary_collapsed = false
+}
+
+// 收起摘要为文字展示
+const collapseSummary = (row: DraftDeviceRow) => {
+    row.summary_collapsed = true
+}
+
+// 取某个摘要字段值对应的展示文案（选项类映射为 label，开关映射为 是/否）
+const summaryOptionLabel = (field: CheckSummaryField, val: any): string => {
+    if (Array.isArray(val)) {
+        return val.map(v => summaryOptionLabel(field, v)).filter(Boolean).join('、')
+    }
+    if (field.component === 'switch') {
+        return val ? '是' : '否'
+    }
+    const opt = (field.options || []).find(o => String(o.value) === String(val))
+    if (opt) return String(opt.label)
+    return val === undefined || val === null ? '' : String(val)
+}
+
+// 拼装已录入摘要的展示文字，如「容量：256G ｜ 颜色：黑色」
+const buildSummaryText = (row: DraftDeviceRow): string => {
+    const fields = row.summary_fields || []
+    const values = row.summary_values || {}
+    const parts: string[] = []
+    fields.forEach((field) => {
+        const v = values[field.field_key]
+        const empty = Array.isArray(v) ? v.length === 0 : (v === undefined || v === null || v === '')
+        if (empty) return
+        parts.push(`${field.field_name}：${summaryOptionLabel(field, v)}${field.unit || ''}`)
+    })
+    return parts.join('　｜　')
+}
+
+// 是否有已录入的摘要值
+const hasSummaryValues = (row: DraftDeviceRow): boolean => buildSummaryText(row).length > 0
+
+// 收集摘要字段的有效录入值，返回 { field_key: value }（剔除空值）
+const collectSummaryValues = (device: DraftDeviceRow): Record<string, any> => {
+    const result: Record<string, any> = {}
+    const fields = device.summary_fields || []
+    const values = device.summary_values || {}
+    fields.forEach((field) => {
+        const val = values[field.field_key]
+        if (Array.isArray(val)) {
+            if (val.length) result[field.field_key] = val
+        } else if (val !== undefined && val !== null && val !== '') {
+            result[field.field_key] = val
+        }
+    })
+    return result
+}
+
 const normalizeDevice = (device: DraftDeviceRow) => ({
     imei: (device.imei || '').trim(),
     model: (device.model || '').trim(),
     initial_price: Number(device.initial_price || 0),
     category_id: device.category_id || 0,
-    category_path: Array.isArray(device.category_path) ? device.category_path : []
+    category_path: Array.isArray(device.category_path) ? device.category_path : [],
+    check_template_id: Number(device.check_template_id || 0),
+    summary: collectSummaryValues(device)
 })
+
+// 校验摘要必填字段（必填与否跟随质检模板字段自身配置）
+const validateSummaryRequired = (device: DraftDeviceRow): string => {
+    const fields = device.summary_fields || []
+    const values = device.summary_values || {}
+    for (const field of fields) {
+        if (Number(field.is_required || 0) !== 1) continue
+        const val = values[field.field_key]
+        const empty = Array.isArray(val) ? val.length === 0 : (val === undefined || val === null || val === '')
+        if (empty) {
+            return `请填写质检摘要项「${field.field_name}」`
+        }
+    }
+    return ''
+}
 
 const saveDeviceRow = async (row: DraftDeviceRow, index: number) => {
     const payload = normalizeDevice(row)
     if (!payload.imei && !payload.model) {
         ElMessage.warning('请填写 IMEI/SN 或设备型号')
+        return
+    }
+    const summaryError = validateSummaryRequired(row)
+    if (summaryError) {
+        ElMessage.warning(summaryError)
         return
     }
 
@@ -610,6 +933,7 @@ const saveDeviceRow = async (row: DraftDeviceRow, index: number) => {
         }
         row.id = res.data.device_id
         row.saved = true
+        row.summary_collapsed = true
         ElMessage.success('设备已保存')
         if (index === form.value.devices.length - 1) {
             addDeviceRow()
@@ -678,7 +1002,7 @@ const resetForm = () => {
         delivery_type: '1',
         express_no: '',
         devices: [
-            { imei: '', model: '', initial_price: 0 }
+            { imei: '', model: '', initial_price: 0, summary_fields: [], summary_values: {} }
         ]
     }
     draftOrder.value = { id: '', order_no: '' }
@@ -865,6 +1189,106 @@ if (props.visible) {
     line-height: 1.45;
     white-space: normal;
     word-break: break-all;
+}
+
+.summary-tip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+    color: #409eff;
+    font-size: 12px;
+}
+
+.summary-box {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px dashed #c6e2ff;
+    border-radius: 6px;
+    background-color: #f5faff;
+}
+
+.summary-box--collapsed {
+    padding: 8px 12px;
+    border-style: solid;
+    border-color: #e4e7ed;
+    background-color: #fafafa;
+}
+
+.summary-box__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #409eff;
+}
+
+.summary-box--collapsed .summary-box__head {
+    margin-bottom: 4px;
+}
+
+.summary-head__btn {
+    margin-left: auto;
+}
+
+/* 折叠后的一行文字：超出省略，悬浮显示全部 */
+.summary-text {
+    font-size: 13px;
+    color: #303133;
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+}
+
+.summary-text.is-empty {
+    color: #c0c4cc;
+}
+
+.summary-tooltip__inner {
+    max-width: 460px;
+    line-height: 1.6;
+    white-space: normal;
+    word-break: break-all;
+}
+
+.summary-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 6px;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 10px 16px;
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.summary-item__label {
+    font-size: 12px;
+    color: #606266;
+}
+
+.summary-required {
+    color: #f56c6c;
+    margin-right: 2px;
+}
+
+.summary-unit {
+    color: #909399;
+}
+
+.summary-control {
+    width: 100%;
 }
 
 .dialog-footer {

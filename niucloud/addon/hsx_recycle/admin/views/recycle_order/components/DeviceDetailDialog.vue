@@ -12,8 +12,16 @@
 
     <div v-if="deviceData" class="ddd-wrap">
 
-      <!-- ===== 设备信息卡片 ===== -->
-      <DeviceInfoCard :device="deviceData" mode="full" class="ddd-section" />
+      <!-- ===== 头部:设备信息(左) + 价格(右) ===== -->
+      <div class="ddd-header-row ddd-section">
+        <DeviceInfoCard :device="deviceData" mode="full" class="ddd-header-row__info" />
+        <div class="ddd-header-price">
+          <div class="ddd-header-price__label">最终价格</div>
+          <div class="ddd-header-price__value">{{ deviceData.final_price ? `¥${deviceData.final_price}` : '未定价' }}</div>
+          <div v-if="deviceData.initial_price" class="ddd-header-price__sub">初始参考 ¥{{ deviceData.initial_price }}</div>
+          <div v-if="Number(deviceData.sell_price) > 0" class="ddd-header-price__sub">卖货价 ¥{{ deviceData.sell_price }}</div>
+        </div>
+      </div>
 
       <!-- ===== 下游流转进度 ===== -->
       <DownstreamProgress
@@ -27,32 +35,8 @@
         :dispose-status="deviceData.dispose_status"
       />
 
-      <!-- ===== 价格信息 ===== -->
-      <div class="ddd-section ddd-price-section">
-        <div class="ddd-section-header">
-          <svg class="ddd-section-icon text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd"/>
-          </svg>
-          <span class="ddd-section-title">价格信息</span>
-        </div>
-        <div class="ddd-price-grid">
-          <div class="ddd-price-card ddd-price-card--final">
-            <div class="ddd-price-label flex items-center">
-              <!-- 初始参考价格 -->
-               <div>最终价格</div>
-               <div class="text-[10px] text-[#909399]"  v-if="deviceData.initial_price"> 初始参考价格：{{ deviceData.initial_price }}</div> 
-            </div>
-            <div class="ddd-price-value">
-              {{ deviceData.final_price ? `¥${deviceData.final_price}` : '未定价' }}
-            </div>
-          </div>
-          <div class="ddd-price-card ddd-price-card--sell">
-            <div class="ddd-price-label">卖货价格</div>
-            <div class="ddd-price-value">
-              {{ deviceData.sell_price ? `¥${deviceData.sell_price}` : '未填写' }}
-            </div>
-          </div>
-        </div>
+      <!-- ===== 价格补充:成本调整 / 价格备注(主价格已上移到头部) ===== -->
+      <div v-if="hasCostAdjustment || canAdjustCost || deviceData.price_remark" class="ddd-section ddd-price-section">
         <div v-if="hasCostAdjustment || canAdjustCost" class="ddd-cost-adjust">
           <div class="ddd-cost-adjust__summary">
             <div>
@@ -104,6 +88,17 @@
               <span v-if="deviceData.checkUser" class="ddd-check-meta-item">
                 👤 {{ deviceData.checkUser.real_name || deviceData.checkUser.username }}
               </span>
+            </div>
+
+            <!-- 质检结果:公共组件(突出项 + 级别计数 + 异常突出 + 折叠) -->
+            <div v-if="checkItems.length || sellerCheckResult" class="ddd-result-block">
+              <CheckResultPanel
+                :summary-fields="viewCheck.summary_fields"
+                :severity-summary="viewCheck.severity_summary"
+                :abnormal-items="viewCheck.abnormal_items"
+                :items="viewCheck.items"
+                :text="sellerCheckResult"
+              />
             </div>
 
             <!-- 卖家质检结果 -->
@@ -355,6 +350,7 @@ import { adjustDeviceCost, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/a
 import useUserStore from '@/stores/modules/user'
 import DeviceInfoCard from './DeviceInfoCard.vue'
 import DownstreamProgress from './DownstreamProgress.vue'
+import CheckResultPanel from './CheckResultPanel.vue'
 
 // 定义设备信息接口
 interface DeviceLog {
@@ -469,6 +465,16 @@ const sellerCheckResult = computed(() =>
 )
 const buyerCheckResult = computed(() => deviceData.value?.check_result_buyer || '')
 const hasCheckResult = computed(() => !!(sellerCheckResult.value || buyerCheckResult.value))
+
+// 质检结果:统一用公共组件渲染,数据取后端 view.check(突出项/级别/异常/全部项)
+const viewCheck = computed<any>(() => deviceData.value?.view?.check || {})
+const checkItems = computed<any[]>(() => deviceData.value?.view?.check?.items || [])
+const abnormalCount = computed(() => checkItems.value.filter((i: any) => i.severity === 'abnormal').length)
+const generalCount = computed(() => checkItems.value.filter((i: any) => i.severity === 'general').length)
+const onlyAbnormal = ref(false)
+const visibleCheckItems = computed(() =>
+    onlyAbnormal.value ? checkItems.value.filter((i: any) => i.severity !== 'normal') : checkItems.value
+)
 const hasCostAdjustment = computed(() => Number(deviceData.value?.cost_adjust_count || 0) > 0)
 const hasCostAdjustPermission = computed(() => (userStore.rules || []).includes('recycle_device_cost_adjust'))
 const canAdjustCost = computed(() => hasCostAdjustPermission.value && Number(deviceData.value?.pay_status || 0) === 1 && Number(deviceData.value?.status || 0) !== 6)
@@ -638,6 +644,34 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
   border-radius: 10px;
   border: 1px solid #e5e7eb;
 
+}
+
+/* 头部:设备信息(左) + 价格(右) */
+.ddd-header-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: transparent;
+  border: none;
+}
+.ddd-header-row__info { flex: 1; min-width: 240px; }
+.ddd-header-price {
+  flex-shrink: 0;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+  text-align: right;
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: var(--el-color-danger-light-9);
+  border: 1px solid var(--el-color-danger-light-7);
+
+  &__label { font-size: 12px; color: var(--el-text-color-secondary); }
+  &__value { font-size: 22px; font-weight: 700; color: var(--el-color-danger); line-height: 1.35; }
+  &__sub { font-size: 11px; color: var(--el-text-color-secondary); margin-top: 2px; }
 }
 
 .ddd-section-header {
@@ -821,6 +855,43 @@ onBeforeUnmount(() => { window.removeEventListener('resize', updateResponsiveSta
 .ddd-check-meta-item {
   font-size: 11px;
   color: #6b7280;
+}
+
+.ddd-check-items-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ddd-check-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ddd-check-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border-left: 3px solid transparent;
+  background: var(--el-fill-color-lighter);
+
+  .ddd-check-item__name { color: var(--el-text-color-secondary); flex-shrink: 0; }
+  .ddd-check-item__val { color: var(--el-text-color-primary); text-align: right; }
+
+  &.is-abnormal {
+    background: var(--el-color-danger-light-9);
+    border-left-color: var(--el-color-danger);
+    .ddd-check-item__val { color: var(--el-color-danger); font-weight: 600; }
+  }
+  &.is-general {
+    background: var(--el-color-warning-light-9);
+    border-left-color: var(--el-color-warning);
+    .ddd-check-item__val { color: var(--el-color-warning); }
+  }
+  &.is-normal { border-left-color: var(--el-border-color-lighter); }
 }
 
 .ddd-result-block {

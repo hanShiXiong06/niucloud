@@ -16,6 +16,10 @@
                     </el-checkbox-group>
                     <div class="text-sm text-gray-400">{{ t('菜单内容最少选择2个') }}</div>
                 </el-form-item>
+                <el-form-item label="展示IMEI">
+                    <el-switch v-model="diyStore.editComponent.imeiShow" />
+                    <span class="text-sm text-gray-400 ml-[10px]">二手机一机一码,开启后详情展示 IMEI</span>
+                </el-form-item>
             </el-form>
         </div>
         <div class="edit-attr-item-wrap">

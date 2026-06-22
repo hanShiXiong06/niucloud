@@ -160,22 +160,35 @@
                     </el-checkbox-group>
                 </el-form-item>
                 <el-form-item label="价格">
-                    <div class="flex items-center gap-2">
-                        <el-input-number v-model="build.form.price" :min="0" :precision="2" controls-position="right" />
-                        <span class="text-xs text-gray-400">销售价</span>
-                        <el-input-number v-model="build.form.market_price" :min="0" :precision="2" controls-position="right" />
-                        <span class="text-xs text-gray-400">划线价</span>
-                        <el-input-number v-model="build.form.cost_price" :min="0" :precision="2" controls-position="right" />
-                        <span class="text-xs text-gray-400">成本价</span>
+                    <div class="price-grid">
+                        <div class="price-cell">
+                            <span class="price-lbl">销售价</span>
+                            <el-input-number v-model="build.form.price" :min="0" :precision="2" :controls="false" class="price-num" />
+                        </div>
+                        <div class="price-cell">
+                            <span class="price-lbl">划线价</span>
+                            <el-input-number v-model="build.form.market_price" :min="0" :precision="2" :controls="false" class="price-num" />
+                        </div>
+                        <div class="price-cell">
+                            <span class="price-lbl">成本价</span>
+                            <el-input-number v-model="build.form.cost_price" :min="0" :precision="2" :controls="false" class="price-num" />
+                        </div>
+                        <div class="price-cell">
+                            <span class="price-lbl">同行价</span>
+                            <el-input-number v-model="build.form.peer_price" :min="0" :precision="2" :controls="false" class="price-num" disabled />
+                            <span class="price-hint">来自货源 · 推送为同行会员价</span>
+                        </div>
                     </div>
                 </el-form-item>
                 <el-form-item label="质检报告">
                     <div class="w-full">
-                        <div v-if="build.qcReport.items && build.qcReport.items.length" class="qc-grid">
-                            <div v-for="(it, i) in build.qcReport.items" :key="i" class="qc-cell">
-                                <span class="qc-k">{{ it.key }}</span><span class="qc-v">{{ it.value }}</span>
-                            </div>
-                        </div>
+                        <CheckResultPanel
+                            v-if="build.check && ((build.check.result_items && build.check.result_items.length) || (build.check.summary_fields && build.check.summary_fields.length))"
+                            :summary-fields="build.check.summary_fields"
+                            :severity-summary="build.check.severity_summary"
+                            :abnormal-items="build.check.abnormal_items"
+                            :items="build.check.result_items"
+                        />
                         <el-text v-else type="info" size="small">该货源无结构化质检项（已并入下方商品详情）</el-text>
                     </div>
                 </el-form-item>
@@ -202,6 +215,7 @@ import { ElMessage } from 'element-plus'
 import { getDeviceIntakePages, getDeviceIntakeInfo, setDeviceIntakeStatus, seedTestDeviceIntake, buildDeviceIntake, syncDeviceIntakeSchema, previewDeviceIntake } from '@/addon/phone_shop/api/device_intake'
 import { getBrandList, getCategoryTree, getLabelList } from '@/addon/phone_shop/api/goods'
 import { getSpecOptionsByCategory, getGrades } from '@/addon/phone_shop/api/spec'
+import CheckResultPanel from '@/addon/hsx_recycle/views/recycle_order/components/CheckResultPanel.vue'
 
 const router = useRouter()
 
@@ -329,6 +343,7 @@ const build = reactive({
     prefilling: false,
     imageCount: 0,
     qcReport: { title: '', items: [] as any[], text: '', enabled: true },
+    check: {} as any, // 结构化质检(异常优先/折叠),由预览接口的 check 字段提供
     form: {
         intake_id: 0,
         goods_name: '',
@@ -343,6 +358,7 @@ const build = reactive({
         price: 0,
         market_price: 0,
         cost_price: 0,
+        peer_price: 0,
         goods_desc: ''
     }
 })
@@ -352,6 +368,7 @@ const openBuild = (row: any) => {
     const name = [row.model_name, row.memory, row.condition_grade].filter(Boolean).join(' ')
     build.imageCount = imageList(row).length
     build.qcReport = { title: '', items: [], text: '', enabled: true }
+    build.check = {}
     build.form = {
         intake_id: row.intake_id,
         goods_name: name,
@@ -366,6 +383,7 @@ const openBuild = (row: any) => {
         price: Number(row.sale_price) || 0,
         market_price: 0,
         cost_price: Number(row.cost_price) || 0,
+        peer_price: Number(row.peer_price) || 0,
         goods_desc: ''
     }
     specGroups.splice(0) // 清空上一台的规格选项，按本台分类重新取
@@ -376,6 +394,7 @@ const openBuild = (row: any) => {
         const m = res.data || {}
         serviceOptions.splice(0, serviceOptions.length, ...(m.service_options || []))
         build.qcReport = m.qc_report || build.qcReport
+        build.check = m.check || {}
         build.form.goods_name = m.goods_name || build.form.goods_name
         build.form.sub_title = m.sub_title || ''
         build.form.memory = m.memory_group || build.form.memory
@@ -384,6 +403,7 @@ const openBuild = (row: any) => {
         build.form.label_ids = m.label_ids || []
         build.form.delivery_type = (m.delivery_type && m.delivery_type.length) ? m.delivery_type : ['express']
         build.form.price = Number(m.price) || build.form.price
+        build.form.peer_price = Number(m.peer_price) || build.form.peer_price
         // 商品详情默认用清洗后的质检报告文本（可改）
         build.form.goods_desc = (m.qc_report && m.qc_report.text) ? m.qc_report.text : build.form.goods_name
     }).finally(() => { build.prefilling = false })
@@ -408,6 +428,31 @@ const goGoods = (row: any) => {
 </script>
 
 <style lang="scss" scoped>
+/* 价格区:2 列网格,标签在左、输入加宽,避免换行;同行价只读展示 */
+.price-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 20px;
+    width: 100%;
+}
+.price-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.price-lbl {
+    flex: none;
+    width: 48px;
+    font-size: 13px;
+    color: var(--el-text-color-regular);
+}
+.price-num {
+    width: 160px;
+}
+.price-hint {
+    font-size: 11px;
+    color: var(--el-text-color-placeholder);
+}
 .qc-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

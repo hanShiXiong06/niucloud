@@ -31,6 +31,11 @@ class PrinterSceneDict
                         'name' => '质检保存后',
                         'description' => '管理端暂存或完成设备质检后触发。',
                     ],
+                    [
+                        'key' => 'device.sign.saved',
+                        'name' => '设备签收保存后',
+                        'description' => '代客下单/签收时每录入并保存一台设备后触发，常用于即时打印设备标签。',
+                    ],
                 ],
                 'condition_config' => [
                     'button' => [
@@ -131,6 +136,32 @@ class PrinterSceneDict
                         'confirm_required' => 1,
                     ],
                     'trigger' => ['key' => 'return.created', 'name' => '创建退货单后'],
+                ],
+            ],
+            'order_receipt_after_sign' => [
+                'scene_key' => 'order_receipt_after_sign',
+                'trigger_key' => 'order.signed',
+                'scene_name' => '订单签收凭证打印',
+                'biz_type' => 'order',
+                'template_type' => 'order_receipt',
+                'trigger_name' => '订单签收后',
+                'auto_print' => 0,
+                'idempotency_scope' => 'site_scene_order',
+                'description' => '用于订单签收凭证/小票打印。可在订单操作区显示手动按钮，也可绑定签收后自动打印；代客下单完成签收时会按此场景配置自动触发。',
+                'trigger_options' => [
+                    ['key' => 'order.signed', 'name' => '订单签收后', 'description' => '管理端代客下单完成签收或订单确认收货后触发。'],
+                    ['key' => 'order.created', 'name' => '订单创建后', 'description' => '回收订单创建成功后触发。'],
+                    ['key' => 'order.completed', 'name' => '订单完成后', 'description' => '订单完成后触发。'],
+                ],
+                'condition_config' => [
+                    'button' => [
+                        'enabled' => 1,
+                        'text' => '打印订单凭证',
+                        'position' => 'order_actions',
+                        'visible_device_status' => [],
+                        'confirm_required' => 1,
+                    ],
+                    'trigger' => ['key' => 'order.signed', 'name' => '订单签收后'],
                 ],
             ],
         ];

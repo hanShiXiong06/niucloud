@@ -9,6 +9,10 @@
                 <div class="flex gap-2">
                     <el-button v-permission="'hsx_erp_asset_manual_inbound'" type="primary" @click="openManualInbound">入库</el-button>
                     <el-button :icon="Refresh" @click="loadList">刷新</el-button>
+                    <el-button text @click="showOverview = !showOverview">
+                        {{ showOverview ? '收起看板' : '展开看板' }}
+                        <el-icon class="ml-1"><ArrowUp v-if="showOverview" /><ArrowDown v-else /></el-icon>
+                    </el-button>
                 </div>
             </div>
 
@@ -21,8 +25,8 @@
                 title="已与回收系统打通：回收单确认回收后，设备会自动同步到这里（待入库池），无需在此手动入库。手动入库仅用于非回收来源（如自行采购/期初建档）。"
             />
 
-            <!-- 库存概览 -->
-            <div class="mt-3 grid grid-cols-4 gap-3">
+            <!-- 库存概览(可折叠,腾出列表空间) -->
+            <div v-show="showOverview" class="mt-3 grid grid-cols-4 gap-3">
                 <div class="rounded-lg bg-gray-50 px-4 py-3">
                     <div class="text-xs text-gray-500">在手库存</div>
                     <div class="mt-1 text-xl font-semibold text-gray-800">{{ overview.on_hand.count }} <span class="text-sm font-normal text-gray-400">台</span></div>
@@ -245,6 +249,9 @@
                         </el-tooltip>
                         <el-tooltip content="详情" placement="top">
                             <el-button type="primary" link :icon="View" @click="openDetail(row)" />
+                        </el-tooltip>
+                        <el-tooltip content="全链路追踪" placement="top">
+                            <el-button type="primary" link :icon="Share" @click="openTrace({ assetId: Number(row.id) })" />
                         </el-tooltip>
                     </template>
                 </el-table-column>
@@ -696,7 +703,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Search, InfoFilled, Check, MagicStick, Money, Sort, Edit, View, Sell, DArrowRight, Camera } from '@element-plus/icons-vue'
+import { Refresh, Search, InfoFilled, Check, MagicStick, Money, Sort, Edit, View, Sell, DArrowRight, Camera, Share, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+import { useDeviceTrace } from '@/addon/hsx_erp/composables/useDeviceTrace'
+
+const { openTrace } = useDeviceTrace()
 import { useRouter } from 'vue-router'
 import {
     batchConfirmErpAssetInbound,
@@ -735,6 +745,7 @@ const onWarehouseFilterChange = () => { search.location_id = ''; handleSearch() 
 const summary = reactive({ count: 0, total_cost: 0, total_sale: 0, in_stock_count: 0, avg_age_days: 0 })
 // 是否已接入中台(数据中台)：接入后拍照/定价交给中台，ERP 不再自行定价
 const integrated = ref(false)
+const showOverview = ref(true) // 顶部库存概览看板,可折叠以腾出列表空间
 const table = reactive({ data: [] as any[], total: 0, page: 1, limit: 20, loading: false })
 const detailVisible = ref(false)
 const detail = reactive<any>({ asset: null, timeline: [] })

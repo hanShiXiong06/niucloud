@@ -143,6 +143,7 @@ Route::group('recycle', function () {
     Route::get('recycle_device/sale_destination_options', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@saleDestinationOptions');
     Route::get('recycle_device/refurbishment_assignee_options', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@refurbishmentAssigneeOptions');
     // 设备管理
+    Route::get('recycle_device/:id/detail_view', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@detailView');
     Route::get('recycle_device/:id', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@getInfo');
     Route::get('recycle_device/:id/cost_adjust_ability', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@costAdjustAbility');
     Route::get('recycle_device/:id/cost_adjust_logs', 'addon\hsx_recycle\app\adminapi\controller\order\RecycleDevice@costAdjustLogs');

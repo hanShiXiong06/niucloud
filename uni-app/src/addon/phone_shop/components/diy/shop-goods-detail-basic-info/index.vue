@@ -63,7 +63,7 @@
             <view class="text-[#fff] leading-[normal]">
                 <text class="text-[26rpx] mr-[10rpx] font-500 leading-[36rpx]" v-if="priceType == 'newcomer_price'">新人价</text>
                 <text class="text-[26rpx] mr-[10rpx] font-500 leading-[36rpx]" v-else-if="priceType == 'discount_price'">折扣价</text>
-                <text class="text-[26rpx] mr-[10rpx] font-500 leading-[36rpx]" v-else-if="priceType == 'member_price'">会员价</text>
+                <text class="text-[26rpx] mr-[10rpx] font-500 leading-[36rpx]" v-else-if="priceType == 'member_price'">同行价</text>
                 <view class="inline-block mr-[14rpx] relative top-[2rpx]">
                     <text class="text-[32rpx] price-font mr-[4rpx]">￥</text>
                     <text class="text-[48rpx] -mb-[4rpx] price-font">{{ parseFloat(goodsPrice).toFixed(2).split('.')[0] }}</text>
@@ -131,6 +131,12 @@
                         <view class="base-tag middle" v-else-if="item.style_type == 'diy' || !item.icon" :style="diyGoods.baseTagStyle(item)">{{ item.label_name }}</view>
                     </template>
                 </view>
+                <!-- 二手机:内存 / 成色等级 / IMEI(参考标签样式;IMEI 可在装修中勾选显隐) -->
+                <view class="flex flex-wrap items-center mt-[12rpx]" v-if="diyComponent.goods.memory_group || diyComponent.goods.condition_grade || (diyComponent.imeiShow !== false && imeiVal)">
+                    <view class="device-tag" v-if="diyComponent.goods.memory_group">{{ diyComponent.goods.memory_group }}</view>
+                    <view class="device-tag" v-if="diyComponent.goods.condition_grade">{{ diyComponent.goods.condition_grade }}</view>
+                    <view class="device-tag device-imei" v-if="diyComponent.imeiShow !== false && imeiVal">IMEI: {{ imeiVal }}</view>
+                </view>
                 <view class="flex justify-between items-start mt-[24rpx]">
                     <view class="text-[24rpx] leading-[34rpx]" v-if="diyComponent.market_price && parseFloat(diyComponent.market_price) && saleInfo.includes('underlined_price')"  :style="{'color': diyComponent.goodsInfo.saleInfoColor}">
                         <text class="whitespace-nowrap mr-[4rpx]">划线价:</text>
@@ -195,6 +201,14 @@ const diyComponent = computed(() => {
     } else {
         return Object.assign({}, props.component, useGoodsDetailStore().goodsDetail);
     }
+})
+// IMEI(二手机一机一码)= 默认 SKU 的 sku_no。详情接口把默认 sku 放在顶层(同 price/market_price),
+// 故优先取 diyComponent.sku_no;再兜底 goods 下结构。
+const imeiVal = computed(() => {
+    const c: any = diyComponent.value || {};
+    const g: any = c.goods || {};
+    const sku: any = g.goodsSku || g.sku || (Array.isArray(g.sku_list) ? g.sku_list[0] : null);
+    return c.sku_no || g.sku_no || (sku && sku.sku_no) || '';
 })
 const saleInfo = ref([])
 const diyGlobal = computed(() => {
@@ -668,6 +682,21 @@ onMounted(() => {
     font-size: 20rpx;
     margin-right: 6rpx;
   }
+}
+.device-tag {
+    font-size: 22rpx;
+    color: #5a6573;
+    background: #f2f4f7;
+    border-radius: 8rpx;
+    padding: 4rpx 14rpx;
+    margin-right: 12rpx;
+    margin-bottom: 8rpx;
+    line-height: 32rpx;
+}
+.device-tag.device-imei {
+    color: #8a94a6;
+    font-family: monospace;
+    letter-spacing: 0.5rpx;
 }
 .base-tag {
   display: flex;

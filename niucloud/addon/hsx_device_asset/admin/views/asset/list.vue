@@ -144,15 +144,19 @@
 
                 <div class="section-title">回收质检信息</div>
                 <div class="check-panel">
-                    <div v-if="checkSummaryEntries(currentAsset).length" class="check-summary">
-                        <div v-for="item in checkSummaryEntries(currentAsset)" :key="item.key" class="check-summary__item">
-                            <span>{{ item.key }}</span>
-                            <strong :class="{ 'is-clamped': isLongSummary(item.value) && !expandedSummaryKeys.has(item.key) }">{{ item.value }}</strong>
-                            <a v-if="isLongSummary(item.value)" class="summary-toggle" @click="toggleSummary(item.key)">
-                                {{ expandedSummaryKeys.has(item.key) ? '收起' : '展开' }}
-                            </a>
-                        </div>
+                    <!-- 基础信息兜底: 模板未配置"设备摘要"时, 仍展示容量/颜色 -->
+                    <div v-if="!assetCheckMeta.summary_fields?.length && basicSummary.length" class="asset-basic">
+                        <span v-for="b in basicSummary" :key="b.key" class="asset-basic__chip">{{ b.key }}：<strong>{{ b.value }}</strong></span>
                     </div>
+                    <!-- 质检结果: 突出项(模板设备摘要驱动) + 级别计数 + 异常突出 + 全部折叠 -->
+                    <CheckResultPanel
+                        v-if="assetCheckMeta.result_items?.length || sellerCheckText"
+                        :summary-fields="assetCheckMeta.summary_fields"
+                        :severity-summary="assetCheckMeta.severity_summary"
+                        :abnormal-items="assetCheckMeta.abnormal_items"
+                        :items="assetCheckMeta.result_items"
+                        :text="sellerCheckText"
+                    />
                     <el-empty v-else description="暂无质检摘要" :image-size="70" />
                     <div v-if="recycleCheckImages(currentAsset).length" class="check-images">
                         <el-image
@@ -272,19 +276,17 @@
                 </div>
 
                 <el-form label-width="96px" class="mt-[16px]">
-                    <el-form-item label="图片链接">
-                        <el-input
-                            v-model.trim="mediaForm.url"
-                            type="textarea"
-                            :rows="3"
-                            placeholder="兜底补录：每行一个图片/视频 URL。正常情况建议用手机扫码拍照。"
-                        />
+                    <el-form-item label="PC 上传">
+                        <div class="w-full">
+                            <upload-image v-model="pcImages" :limit="20" />
+                            <div class="mt-2 flex items-center gap-2">
+                                <el-button type="primary" size="small" :disabled="!pcImages" :loading="mediaSaveLoading" @click="savePcImages">加入商品图</el-button>
+                                <span class="text-xs text-gray-400">从电脑上传或资源库选择，点「加入商品图」即进入上方列表 —— PC 端直接管图，不必扫码。</span>
+                            </div>
+                        </div>
                     </el-form-item>
-                    <el-form-item label="媒体类型">
-                        <el-radio-group v-model="mediaForm.media_type">
-                            <el-radio-button label="image">图片</el-radio-button>
-                            <el-radio-button label="video">视频</el-radio-button>
-                        </el-radio-group>
+                    <el-form-item label="链接补录">
+                        <el-input v-model.trim="mediaForm.url" type="textarea" :rows="2" placeholder="兜底：每行一个图片/视频 URL（一般用上面的 PC 上传即可）" />
                     </el-form-item>
                     <el-form-item label="拍摄场景">
                         <el-select v-model="mediaForm.scene" class="!w-[220px]">
@@ -361,10 +363,11 @@
                 </el-collapse>
             </div>
             <template #footer>
-                <el-button @click="mediaDialogVisible = false">取消</el-button>
+                <el-button @click="mediaDialogVisible = false">关闭</el-button>
                 <el-button :loading="photoTaskLoading" @click="handleCreatePhotoTask">生成手机拍照任务</el-button>
-                <el-button :disabled="!mediaForm.url" type="primary" :loading="mediaSaveLoading" @click="handleSaveMedia">保存补录链接</el-button>
-                <el-button type="success" :disabled="!canConfirmPhotos(mediaAsset)" @click="handleConfirmPhotos(mediaAsset, false)">确认进入定价</el-button>
+                <el-button v-if="mediaForm.url" :loading="mediaSaveLoading" @click="handleSaveMedia">保存补录链接</el-button>
+                <el-button type="warning" :disabled="!canConfirmPhotos(mediaAsset)" @click="confirmAndClose">确认并关闭</el-button>
+                <el-button type="success" :disabled="!canConfirmPhotos(mediaAsset)" @click="confirmAndNext">确认并拍下一台</el-button>
             </template>
         </el-dialog>
 
@@ -396,6 +399,8 @@ import storage from '@/utils/storage'
 import SetLocationDialog from './components/SetLocationDialog.vue'
 import PriceDialog from './components/PriceDialog.vue'
 import { useAssetFormat } from './composables/useAssetFormat'
+// 复用回收侧的质检结果面板(级别计数/异常突出/折叠)
+import CheckResultPanel from '@/addon/hsx_recycle/views/recycle_order/components/CheckResultPanel.vue'
 
 // 共享格式化/判定工具（同名解构，模板与方法里的调用点完全不变）
 const {
@@ -426,6 +431,18 @@ const selectedAssetRows = ref<any[]>([])
 
 const detailVisible = ref(false)
 const currentAsset = ref<any>(null)
+// 质检结果(级别)来自关联回收设备的 check_meta;后端已实时打好 severity/abnormal_items/severity_summary
+const assetCheckMeta = computed<any>(() => (currentAsset.value as any)?.recycleDevice?.info?.check_meta || {})
+const sellerCheckText = computed<string>(() => {
+    const cs: any = (currentAsset.value as any)?.check_summary
+    const fromCs = cs && !Array.isArray(cs) ? (cs['卖家质检'] || '') : ''
+    return fromCs || (currentAsset.value as any)?.recycleDevice?.check_result_seller || (currentAsset.value as any)?.recycleDevice?.check_result || ''
+})
+// 基础信息(容量/颜色等),排除质检长文本
+const basicSummary = computed<any[]>(() => {
+    if (!currentAsset.value) return []
+    return checkSummaryEntries(currentAsset.value).filter((e: any) => !['卖家质检', '买家质检', '内部质检'].includes(e.key))
+})
 const mediaDialogVisible = ref(false)
 const mediaAsset = ref<any>(null)
 const mobileCaptureUrl = ref('')
@@ -438,6 +455,43 @@ const selectedMediaIds = ref<number[]>([])
 const showDiscardedMedia = ref(false)
 const photoTaskForm = reactive({ station_id: '', camera_job_id: '' })
 const mediaForm = reactive({ url: '', media_type: 'image', scene: 'common' })
+// PC 端上传/资源库选图（逗号分隔 URL 字符串，由 upload-image 维护）
+const pcImages = ref('')
+const savePcImages = async () => {
+    if (!mediaAsset.value?.id) return
+    const urls = String(pcImages.value || '').split(',').map((s: string) => s.trim()).filter(Boolean)
+    if (!urls.length) { ElMessage.warning('请先上传图片'); return }
+    mediaSaveLoading.value = true
+    try {
+        await saveAssetMedia(mediaAsset.value.id, {
+            media: urls.map((url: string, i: number) => ({ url, media_type: 'image', scene: mediaForm.scene, source: 'pc', sort: i + 1 }))
+        })
+        ElMessage.success(`已加入 ${urls.length} 张商品图`)
+        pcImages.value = ''
+        await refreshMediaAsset()
+        await loadAssets()
+    } finally {
+        mediaSaveLoading.value = false
+    }
+}
+// 确认并关闭 / 确认并拍下一台（连续拍照，少点几次）
+const confirmAndClose = async () => {
+    await handleConfirmPhotos(mediaAsset.value, false)
+    mediaDialogVisible.value = false
+}
+const confirmAndNext = async () => {
+    const curId = Number(mediaAsset.value?.id || 0)
+    await handleConfirmPhotos(mediaAsset.value, false)
+    // handleConfirmPhotos 已 loadAssets：当前页里取下一台还在「待拍照/待确认」的设备
+    const next = (assetTable.data || []).find((a: any) => Number(a.id) !== curId
+        && (Number(a.image_count || 0) === 0 || a.photo_status !== 'approved'))
+    if (next) {
+        await openMediaDialog(next)
+    } else {
+        mediaDialogVisible.value = false
+        ElMessage.success('本页待拍照设备已全部处理完 🎉')
+    }
+}
 const activePhotoTask = ref<any>(null)
 const localCamera = reactive({
     serviceUrl: localStorage.getItem('hsx_device_asset_camera_url') || 'http://127.0.0.1:5200',
@@ -626,6 +680,7 @@ const openMediaDialog = async (row: any) => {
     mediaForm.url = ''
     mediaForm.media_type = 'image'
     mediaForm.scene = 'common'
+    pcImages.value = ''
     selectedMediaIds.value = []
     showDiscardedMedia.value = false
     localCamera.error = ''
@@ -1229,6 +1284,23 @@ const refreshCurrentDetail = async () => {
         border-radius: 8px;
         padding: 12px;
         background: var(--el-bg-color-page);
+    }
+
+    .asset-basic {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+
+        &__chip {
+            font-size: 12px;
+            color: var(--el-text-color-secondary);
+            background: var(--el-fill-color-light);
+            border-radius: 6px;
+            padding: 4px 10px;
+
+            strong { color: var(--el-text-color-primary); margin-left: 2px; }
+        }
     }
 
     .check-summary {

@@ -49,8 +49,12 @@
             <el-table class="mt-4" :data="table.data" v-loading="table.loading" size="large" empty-text="暂无出库单" @sort-change="onSort">
                 <el-table-column prop="outbound_no" label="出库单号" min-width="170" />
                 <el-table-column prop="type_text" label="类型" width="100" />
-                <el-table-column label="往来单位" min-width="140">
-                    <template #default="{ row }">{{ row.counterparty_name || (row.counterparty_id ? '#' + row.counterparty_id : '-') }}</template>
+                <el-table-column label="往来单位(对接人/单位)" min-width="180" show-overflow-tooltip>
+                    <template #default="{ row }">
+                        <div v-if="row.entity_name" class="cursor-pointer font-medium text-[var(--el-color-primary)]" @click="openEntity(row.entity_id)">{{ row.entity_name }}</div>
+                        <div v-else class="text-xs text-gray-400">未归属主体</div>
+                        <div class="text-xs text-gray-500">{{ row.counterparty_name || (row.counterparty_id ? '#' + row.counterparty_id : '-') }}<span v-if="row.counterparty_mobile"> · {{ row.counterparty_mobile }}</span></div>
+                    </template>
                 </el-table-column>
                 <el-table-column prop="qty" label="台数" width="100" align="center" sortable="custom" />
                 <el-table-column label="出货总额" width="120" align="right" prop="total_amount" sortable="custom">
@@ -164,47 +168,82 @@
 
         <!-- 处理挂单：留下的填价格，退回的勾退回 -->
         <el-dialog v-model="pendingProcess.visible" title="处理挂单" width="780px" @closed="resetPendingProcess">
-            <div class="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-gray-500">
-                <span>客户：{{ pendingProcess.buyer || '-' }}</span>
-                <span>单号：{{ pendingProcess.outboundNo || '-' }}</span>
-                <span>留下 {{ keptProcessCount }} 台 / 退回 {{ returnProcessCount }} 台</span>
+            <!-- 概览:客户/单号 + 留下/退回 对比 -->
+            <div class="pp-summary">
+                <div class="pp-meta">客户 <b>{{ pendingProcess.buyer || '-' }}</b><span class="pp-sep">·</span>单号 <b>{{ pendingProcess.outboundNo || '-' }}</b></div>
+                <div class="pp-chips">
+                    <span class="pp-chip keep">✓ 留下 {{ keptProcessCount }} 台 · 应收 ¥{{ keptTotal.toFixed(2) }}</span>
+                    <span class="pp-chip back" :class="{ on: returnProcessCount > 0 }">↩ 退回 {{ returnProcessCount }} 台</span>
+                </div>
             </div>
-            <el-table :data="pendingProcess.items" size="small" empty-text="无明细">
+
+            <!-- 第一步:逐台决定 留下 / 退回 -->
+            <div class="pp-step"><span class="pp-step-no">1</span>逐台决定:留下的填成交价,不要的点退回</div>
+            <el-table :data="pendingProcess.items" size="small" :row-class-name="processRowClass" empty-text="无明细">
                 <el-table-column label="设备" min-width="180" show-overflow-tooltip>
                     <template #default="{ row }">
-                        <div :class="row.is_returned ? 'line-through text-gray-400' : ''">{{ row.model }}</div>
+                        <div :class="(row.is_returned || row.return_selected) ? 'line-through text-gray-400' : 'font-medium'">{{ row.model }}</div>
                         <div class="text-xs text-gray-400">IMEI {{ row.imei || '-' }}<span v-if="row.asset_no"> · {{ row.asset_no }}</span></div>
                     </template>
                 </el-table-column>
-                <el-table-column label="客户留下/成交价" width="170" align="right">
+                <el-table-column label="成交价" width="150" align="right">
                     <template #default="{ row }">
-                        <el-input-number v-if="!row.is_returned && !row.return_selected" v-model="row.sale_price" :min="0" :precision="2" :controls="false" size="small" class="w-32" />
-                        <span v-else class="text-gray-400">{{ money(row.sale_price) }}</span>
+                        <el-input-number v-if="!row.is_returned && !row.return_selected" v-model="row.sale_price" :min="0" :precision="2" :controls="false" size="small" class="w-28" placeholder="填价" />
+                        <span v-else class="text-gray-300">—</span>
                     </template>
                 </el-table-column>
-                <el-table-column label="当前状态" width="110" align="center">
+                <el-table-column label="处理" width="180" align="center">
                     <template #default="{ row }">
-                        <el-tag v-if="row.is_returned" size="small" type="info" effect="light">已退回</el-tag>
-                        <el-tag v-else-if="row.return_selected" size="small" type="danger" effect="light">本次退回</el-tag>
-                        <el-tag v-else-if="row.can_return" size="small" type="warning" effect="light">锁定</el-tag>
-                        <el-tag v-else size="small" effect="light">{{ row.inventory_status_text || '-' }}</el-tag>
-                    </template>
-                </el-table-column>
-                <el-table-column label="处理" width="100" align="center">
-                    <template #default="{ row }">
-                        <el-checkbox v-if="row.can_return && !row.is_returned" v-model="row.return_selected">退回</el-checkbox>
-                        <span v-else class="text-xs text-gray-300">不可退</span>
+                        <el-radio-group v-if="row.can_return && !row.is_returned" v-model="row.return_selected" size="small">
+                            <el-radio-button :label="false">留下</el-radio-button>
+                            <el-radio-button :label="true">退回</el-radio-button>
+                        </el-radio-group>
+                        <el-tag v-else-if="row.is_returned" size="small" type="info" effect="plain">已退回</el-tag>
+                        <el-tag v-else size="small" type="success" effect="plain">留下(不可退)</el-tag>
                     </template>
                 </el-table-column>
             </el-table>
-            <el-form class="mt-4" label-width="70px">
+            <el-form v-if="returnProcessCount > 0" class="mt-3" label-width="84px">
                 <el-form-item label="退回原因">
                     <el-input v-model="pendingProcess.reason" placeholder="如：客户只留其中1台 / 货不对板" maxlength="100" show-word-limit />
                 </el-form-item>
             </el-form>
+
+            <!-- 第二步:对留下的设备收款 -->
+            <div class="pp-step mt-4"><span class="pp-step-no">2</span>对留下的 {{ keptProcessCount }} 台收款<span class="pp-step-amt">应收 ¥{{ keptTotal.toFixed(2) }}</span></div>
+            <el-radio-group v-model="pendingProcess.collect_now" class="pp-collect-mode" @change="onCollectToggle">
+                <el-radio :label="false">暂不收款(挂应收,留给财务中心收)</el-radio>
+                <el-radio :label="true" :disabled="keptProcessCount === 0">当场收款</el-radio>
+            </el-radio-group>
+            <div v-if="pendingProcess.collect_now" class="pp-pay">
+                <div v-for="(p, i) in pendingProcess.payments" :key="i" class="pp-pay-row">
+                    <el-select v-model="p.account_id" filterable placeholder="收款户头(微信/支付宝…)" class="!w-[280px]">
+                        <el-option v-for="a in collectAccounts" :key="a.id" :label="`${a.account_name}（余额 ${money(a.balance)}）`" :value="a.id" />
+                    </el-select>
+                    <el-input-number v-model="p.amount" :min="0" :precision="2" :controls="false" class="!w-[130px]" />
+                    <el-button :icon="Delete" link type="danger" @click="pendingProcess.payments.splice(i, 1)" />
+                </div>
+                <div class="pp-pay-foot">
+                    <el-button link type="primary" size="small" @click="addCollectPayment">+ 加一笔(分多账户)</el-button>
+                    <span class="pp-pay-sum" :class="{ bad: !collectSumOk }">已分 ¥{{ collectPaid.toFixed(2) }} / 应收 ¥{{ keptTotal.toFixed(2) }}<template v-if="!collectSumOk">　差 ¥{{ (keptTotal - collectPaid).toFixed(2) }}</template><template v-else>　✓ 已对平</template></span>
+                </div>
+                <div class="pp-pay-tip">逐笔进对应资金账户并核销应收,财务中心「应收/结算/流水」均可查;收款后留下的设备转「已售·下架」。</div>
+            </div>
+
             <template #footer>
-                <el-button @click="pendingProcess.visible = false">取消</el-button>
-                <el-button type="primary" :loading="pendingProcess.submitting" @click="doPendingProcess">确认处理</el-button>
+                <div class="pp-footer">
+                    <div class="pp-footer-hint">
+                        <template v-if="pendingProcess.collect_now">将退回 {{ returnProcessCount }} 台 · 收款 ¥{{ keptTotal.toFixed(2) }}</template>
+                        <template v-else-if="returnProcessCount > 0">将退回 {{ returnProcessCount }} 台 · 留下 {{ keptProcessCount }} 台挂应收</template>
+                        <template v-else>留下 {{ keptProcessCount }} 台挂应收</template>
+                    </div>
+                    <div>
+                        <el-button @click="pendingProcess.visible = false">取消</el-button>
+                        <el-button type="primary" :loading="pendingProcess.submitting" :disabled="pendingProcess.collect_now && !collectSumOk" @click="doPendingProcess">
+                            {{ pendingProcess.collect_now ? `确认收款 ¥${keptTotal.toFixed(2)}` : '确认处理' }}
+                        </el-button>
+                    </div>
+                </div>
             </template>
         </el-dialog>
 
@@ -221,9 +260,12 @@
                         </el-tag>
                         <span class="text-sm text-gray-500">{{ formatTime(infoData.out_at) }} · {{ infoData.operator_name || '-' }}</span>
                     </div>
-                    <div class="mt-2 text-sm text-gray-600">
-                        卖给了谁：<b>{{ infoData.buyer_name || '-' }}</b><span v-if="infoData.buyer_mobile" class="text-gray-400"> · {{ infoData.buyer_mobile }}</span>
-                        <span v-if="infoData.buyer_entity" class="text-gray-500">（主体：<b class="cursor-pointer text-[var(--el-color-primary)]" @click="openEntity(infoData.buyer_entity_id)">{{ infoData.buyer_entity }}</b>）</span>
+                    <div class="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-gray-600">
+                        <span>对接人：<b>{{ infoData.buyer_name || '-' }}</b><span v-if="infoData.buyer_mobile" class="text-gray-400"> · {{ infoData.buyer_mobile }}</span></span>
+                        <span>对接单位：
+                            <b v-if="infoData.buyer_entity" class="cursor-pointer text-[var(--el-color-primary)]" @click="openEntity(infoData.buyer_entity_id)">{{ infoData.buyer_entity }}</b>
+                            <span v-else class="text-gray-400">未归属主体</span>
+                        </span>
                     </div>
                     <div v-if="infoData.remark" class="mt-1 text-sm text-gray-500">备注：{{ infoData.remark }}</div>
                     <div class="mt-3 grid grid-cols-4 gap-3 text-center">
@@ -326,6 +368,7 @@
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete } from '@element-plus/icons-vue'
 import { getErpOutboundList, getErpOutboundInfo, createErpOutbound, fillErpOutboundPrice, cancelErpOutbound, partialReturnErpOutbound } from '@/addon/hsx_erp/api/outbound'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
@@ -533,16 +576,44 @@ function resetCreate() {
 const pendingProcess = reactive<any>({
     visible: false, submitting: false,
     orderId: 0, outboundNo: '', buyer: '', priceStatus: '', items: [], reason: '',
+    collect_now: false, payments: [] as Array<{ account_id: number | undefined; amount: number }>,
 })
-const canProcessPending = (row: any) => !row?.is_void && row?.settle_mode === 'later' && (row?.price_status === 'pending' || row?.can_partial_return)
+// 同行挂单(later)未收齐都可处理:回填价 / 部分退回 / 当场收款
+const canProcessPending = (row: any) => !row?.is_void && row?.settle_mode === 'later' && !row?.collected
 const keptProcessCount = computed(() => pendingProcess.items.filter((it: any) => !it.is_returned && !it.return_selected).length)
 const returnProcessCount = computed(() => pendingProcess.items.filter((it: any) => it.return_selected).length)
+// 留下设备的应收合计(当场收款的目标金额)
+const keptTotal = computed(() => pendingProcess.items
+    .filter((it: any) => !it.is_returned && !it.return_selected)
+    .reduce((s: number, it: any) => s + Number(it.sale_price || 0), 0))
+const collectPaid = computed(() => (pendingProcess.payments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0))
+const collectSumOk = computed(() => Math.abs(keptTotal.value - collectPaid.value) < 0.01)
+// 收款账户(微信/支付宝…户头),首次打开收款时加载
+const collectAccounts = ref<any[]>([])
+async function loadCollectAccounts() {
+    if (collectAccounts.value.length) return
+    try { const res: any = await getCapitalAccounts(); collectAccounts.value = (res.data?.list || res.data || []).filter((a: any) => Number(a.status) === 1) } catch { collectAccounts.value = [] }
+}
+const addCollectPayment = () => {
+    const remain = Math.max(0, Number((keptTotal.value - collectPaid.value).toFixed(2)))
+    pendingProcess.payments.push({ account_id: undefined, amount: remain })
+}
+const onCollectToggle = (v: any) => {
+    if (v) {
+        loadCollectAccounts()
+        if (!pendingProcess.payments.length) pendingProcess.payments = [{ account_id: undefined, amount: Number(keptTotal.value.toFixed(2)) }]
+    }
+}
+// 行底色:已退回灰、本次退回浅红
+const processRowClass = ({ row }: any) => row.is_returned ? 'pp-row-returned' : (row.return_selected ? 'pp-row-back' : '')
 function setPendingProcess(data: any) {
     pendingProcess.orderId = data.id
     pendingProcess.outboundNo = data.outbound_no || ''
     pendingProcess.buyer = data.buyer_name || data.counterparty_name || ''
     pendingProcess.priceStatus = data.price_status || ''
     pendingProcess.reason = ''
+    pendingProcess.collect_now = false
+    pendingProcess.payments = []
     pendingProcess.items = (data.items || []).map((it: any) => ({
         ...it,
         sale_price: Number(it.sale_price || 0),
@@ -564,6 +635,8 @@ function resetPendingProcess() {
     pendingProcess.priceStatus = ''
     pendingProcess.items = []
     pendingProcess.reason = ''
+    pendingProcess.collect_now = false
+    pendingProcess.payments = []
 }
 async function doPendingProcess() {
     const returnIds = pendingProcess.items.filter((it: any) => it.return_selected).map((it: any) => it.id)
@@ -571,6 +644,14 @@ async function doPendingProcess() {
     if (pendingProcess.priceStatus === 'pending' && keptItems.some((it: any) => !(Number(it.sale_price) > 0))) {
         ElMessage.warning('客户留下的设备请填写成交价；不要的设备请勾选退回')
         return
+    }
+    // 当场收款校验:每台需有价、多账户合计须=应收合计
+    const collectNow = !!pendingProcess.collect_now && keptItems.length > 0
+    if (collectNow) {
+        if (keptItems.some((it: any) => !(Number(it.sale_price) > 0))) { ElMessage.warning('当场收款需为留下的每台填写成交价'); return }
+        const pays = pendingProcess.payments.filter((p: any) => p.account_id && Number(p.amount) > 0)
+        if (!pays.length) { ElMessage.warning('请至少添加一笔收款并选择账户'); return }
+        if (!collectSumOk.value) { ElMessage.warning(`收款合计 ¥${collectPaid.value.toFixed(2)} 与应收 ¥${keptTotal.value.toFixed(2)} 不一致`); return }
     }
     pendingProcess.submitting = true
     try {
@@ -580,10 +661,13 @@ async function doPendingProcess() {
         if (keptItems.length) {
             const pricedItems = keptItems.map((it: any) => ({ item_id: it.id, sale_price: Number(it.sale_price) || 0 }))
             if (pricedItems.some((it: any) => it.sale_price > 0)) {
-                await fillErpOutboundPrice(pendingProcess.orderId, pricedItems)
+                const opts: any = collectNow
+                    ? { collect_now: 1, payments: pendingProcess.payments.filter((p: any) => p.account_id && Number(p.amount) > 0).map((p: any) => ({ account_id: p.account_id, amount: Number(p.amount) })) }
+                    : {}
+                await fillErpOutboundPrice(pendingProcess.orderId, pricedItems, opts)
             }
         }
-        ElMessage.success(`处理完成：留下 ${keptItems.length} 台，退回 ${returnIds.length} 台`)
+        ElMessage.success(`处理完成：留下 ${keptItems.length} 台，退回 ${returnIds.length} 台${collectNow ? '，已收款' : ''}`)
         pendingProcess.visible = false
         loadList()
         if (infoVisible.value && infoData.value?.id === pendingProcess.orderId) {
@@ -627,3 +711,41 @@ function openEntity(id: number) {
 }
 // 首次加载由 useListQuery(immediate) 触发，这里不再手动 loadList()
 </script>
+
+<style lang="scss" scoped>
+/* 处理挂单弹窗:概览/分步/收款 */
+.pp-summary {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    padding: 10px 14px; margin-bottom: 12px;
+    background: var(--el-fill-color-light); border-radius: 8px;
+}
+.pp-meta { font-size: 13px; color: var(--el-text-color-regular); }
+.pp-meta b { color: var(--el-text-color-primary); }
+.pp-sep { margin: 0 8px; color: var(--el-text-color-placeholder); }
+.pp-chips { display: flex; gap: 8px; }
+.pp-chip { font-size: 12px; padding: 3px 10px; border-radius: 14px; font-weight: 600; }
+.pp-chip.keep { color: var(--el-color-success); background: var(--el-color-success-light-9); }
+.pp-chip.back { color: var(--el-text-color-placeholder); background: var(--el-fill-color); }
+.pp-chip.back.on { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
+.pp-step {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); margin-bottom: 8px;
+}
+.pp-step-no {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--el-color-primary); color: #fff; font-size: 12px;
+}
+.pp-step-amt { margin-left: 6px; font-weight: 700; color: var(--el-color-danger); }
+.pp-collect-mode { margin-bottom: 8px; }
+.pp-pay { padding: 12px 14px; background: var(--el-fill-color-lighter); border-radius: 8px; }
+.pp-pay-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pp-pay-foot { display: flex; align-items: center; justify-content: space-between; }
+.pp-pay-sum { font-size: 12px; color: var(--el-text-color-secondary); font-weight: 600; }
+.pp-pay-sum.bad { color: var(--el-color-danger); }
+.pp-pay-tip { margin-top: 8px; font-size: 12px; color: var(--el-text-color-placeholder); line-height: 1.5; }
+.pp-footer { display: flex; align-items: center; justify-content: space-between; }
+.pp-footer-hint { font-size: 12px; color: var(--el-text-color-secondary); }
+:deep(.pp-row-returned) { background: var(--el-fill-color-light) !important; }
+:deep(.pp-row-back) { background: var(--el-color-danger-light-9) !important; }
+</style>

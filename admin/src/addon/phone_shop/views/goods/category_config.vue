@@ -14,6 +14,7 @@
                     <el-radio-group class="mx-[10px]" v-model="formData.level" @change="formData.template='style-1'">
                         <el-radio :label="1">{{ t('categorystyleOne') }}</el-radio>
                         <el-radio :label="2">{{ t('categorystyleTwo') }}</el-radio>
+                        <el-radio :label="3">三级分类</el-radio>
                     </el-radio-group>
                 </el-form-item>
                 <el-form-item :label="t('categoryTemplate')">
@@ -38,6 +39,10 @@
                 </el-form-item>
                 <el-form-item v-if="formData.search.control" :label="t('searchTitle')" prop="search.title">
                     <el-input v-model.trim="formData.search.title" clearable :placeholder="t('searchTitlePlaceholder')" class="input-width" maxlength="12" show-word-limit />
+                </el-form-item>
+                <el-form-item v-if="formData.level===3" label="成色/质检">
+                    <el-switch v-model="formData.show_quality" />
+                    <span class="text-[12px] text-[#999] ml-[10px]">二手机:开启后商品卡片显示成色等级、质检异常数(默认只显核心信息)</span>
                 </el-form-item>
                 <template v-if="formData.level!=2||(formData.level===2&&formData.template != 'style-1')">
                     <!-- <el-form-item :label="t('sort')" prop="sort">
@@ -91,7 +96,12 @@
                             <el-radio-group class="mx-[10px]" v-model="formData.cart.event">
                                 <el-radio label="detail">{{ t('detail') }}</el-radio>
                                 <el-radio label="cart">{{ t('cart') }}</el-radio>
+                                <el-radio label="download">下载转发</el-radio>
                             </el-radio-group>
+                            <div class="text-[12px] text-[#999] w-full">二手机:选「下载转发」后,商品卡片显示转发按钮(下载商品图+复制信息,首次设加价规则)</div>
+                        </el-form-item>
+                        <el-form-item v-if="formData.cart.event === 'download'" label="转发按钮文字">
+                            <el-input v-model.trim="formData.cart.text" placeholder="一键转发" clearable maxlength="6" show-word-limit class="!w-[200px]" />
                         </el-form-item>
                     </template>
                 </template>
@@ -174,6 +184,12 @@ const config = reactive<configType|any>({
         {
             template: 'style-2',
             preview: 'addon/phone_shop/category_style2_2.png'
+        }
+    ],
+    level_3: [
+        {
+            template: 'style-1',
+            preview: 'addon/phone_shop/category_style2_1.png'
         }
     ]
 })

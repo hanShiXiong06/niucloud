@@ -85,6 +85,18 @@ class FinancePayableService extends BaseAdminService
                 }
             });
         }
+        // IMEI 检索: 按设备串号反查回收/采购设备 → 限定 source_device_id
+        if (!empty($where['imei'])) {
+            $imei = trim((string)$where['imei']);
+            $devIds = ErpAsset::where([['site_id', '=', $this->site_id]])
+                ->whereLike('imei', '%' . $imei . '%')->column('source_device_id');
+            $devIds = array_values(array_unique(array_filter(array_map('intval', $devIds))));
+            if (empty($devIds)) {
+                $query->where('id', '=', -1);
+            } else {
+                $query->whereIn('source_device_id', $devIds);
+            }
+        }
         if (!empty($where['start_time'])) {
             $query->where('occurred_at', '>=', (int)$where['start_time']);
         }

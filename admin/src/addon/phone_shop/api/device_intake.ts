@@ -36,6 +36,27 @@ export function buildDeviceIntake(params: Record<string, any>) {
 }
 
 /**
+ * 建品预览：按"清洗映射引擎+站点配置"算出 6 字段默认，供表单预填
+ */
+export function previewDeviceIntake(params: Record<string, any>) {
+    return request.post('phone_shop/device_intake/preview', params)
+}
+
+/**
+ * 上架映射配置（扩展口）：读取
+ */
+export function getIntakeMappingConfig() {
+    return request.get('phone_shop/device_intake/mapping_config')
+}
+
+/**
+ * 上架映射配置（扩展口）：保存
+ */
+export function saveIntakeMappingConfig(params: Record<string, any>) {
+    return request.post('phone_shop/device_intake/mapping_config', params, { showSuccessMessage: true })
+}
+
+/**
  * 手动同步表结构（给老库补缺列，等价 reinstall 跑迁移）
  */
 export function syncDeviceIntakeSchema() {

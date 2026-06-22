@@ -24,6 +24,19 @@
                     <el-input v-model.trim="diyStore.editComponent.cartName"
                               :placeholder="t('goodsBtnTextPlaceholder')" clearable maxlength="5" show-word-limit />
                 </el-form-item>
+                <el-form-item label="立即购买">
+                    <el-radio-group v-model="diyStore.editComponent.buyIsShow">
+                        <el-radio :label="true">显示</el-radio>
+                        <el-radio :label="false">隐藏</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item label="一键转发朋友圈">
+                    <el-switch v-model="diyStore.editComponent.forwardIsShow" />
+                    <div class="text-sm text-gray-400">开启后,在右侧加一个与"立即购买"同款的按钮(下载商品图+复制商品信息);可隐藏"立即购买"实现替换。</div>
+                </el-form-item>
+                <el-form-item label="转发按钮名称" v-show="diyStore.editComponent.forwardIsShow">
+                    <el-input v-model.trim="diyStore.editComponent.forwardName" placeholder="一键转发" clearable maxlength="6" show-word-limit />
+                </el-form-item>
                 <el-form-item :label="t('购买名称')">
                     <el-input v-model.trim="diyStore.editComponent.buyName"
                               :placeholder="t('goodsBtnTextPlaceholder')" clearable maxlength="5" show-word-limit />

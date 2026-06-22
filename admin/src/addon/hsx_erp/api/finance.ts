@@ -35,6 +35,10 @@ export function getFinancePayableList(params: Record<string, any>) {
 export function getFinanceReceivableList(params: Record<string, any>) {
     return request.get('erp/finance/receivable/lists', { params })
 }
+// 明细筛选项(业务类型 + 经手人),target=payable|receivable
+export function getFinanceDetailFilterOptions(params: Record<string, any>) {
+    return request.get('erp/finance/detail/filter_options', { params })
+}
 // 财务汇总(应收/应付净额 + 各资金账户余额)
 export function getFinanceSummary() {
     return request.get('erp/finance/summary')

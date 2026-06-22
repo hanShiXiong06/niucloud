@@ -7,6 +7,7 @@
             <category-template-one-one class="category" v-if="config.level===1 && config.template === 'style-1'" :categoryId="categoryId" :config="config" />
             <category-template-two-one v-if="config.level===2 && config.template === 'style-1'" :categoryId="categoryId" :config="config" />
             <category-template-two-two class="category" v-if="config.level===2 && config.template === 'style-2'" :categoryId="categoryId" :config="config" />
+            <category-template-three-one v-if="config.level===3 && config.template === 'style-1'" :categoryId="categoryId" :config="config" />
         </view>
         <tabbar addon="phone_shop"/>
     </view>
@@ -17,6 +18,7 @@ import { ref } from 'vue';
 import categoryTemplateTwoOne from '@/addon/phone_shop/pages/goods/components/category-template-two-one.vue';
 import categoryTemplateOneOne from '@/addon/phone_shop/pages/goods/components/category-template-one-one.vue';
 import categoryTemplateTwoTwo from '@/addon/phone_shop/pages/goods/components/category-template-two-two.vue';
+import categoryTemplateThreeOne from '@/addon/phone_shop/pages/goods/components/category-template-three-one.vue';
 import { getGoodsCategoryConfig } from '@/addon/phone_shop/api/goods';
 import { topTabar } from '@/utils/topTabbar';
 import useSystemStore from '@/stores/system';

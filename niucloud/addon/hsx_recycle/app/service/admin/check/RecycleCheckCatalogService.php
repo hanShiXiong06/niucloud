@@ -153,22 +153,36 @@ class RecycleCheckCatalogService extends BaseAdminService
                 if ($stable !== '') {
                     $usedStable[$stable] = true;
                 }
-                $fid = (int)Db::name('recycle_check_field')->insertGetId([
+                // 电池健康度建成"数值字段":存真实百分比、可由「查电池」API 回填。
+                // 不建 radio 序号选项——从根上杜绝"电池健康度1%"(序号)与"电池健康度: 电池健康度100%"(区间标签重复前缀)。
+                $isBatteryHealth = ($fieldKey === 'battery');
+                $fieldRow = [
                     'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $groupId[$g],
-                    'field_key' => $fieldKey, 'field_name' => $it['field'], 'component' => 'radio',
-                    'selection_mode' => 'single', 'is_required' => 0, 'is_show' => 1,
+                    'field_key' => $fieldKey, 'field_name' => $it['field'],
+                    'component' => $isBatteryHealth ? 'number' : 'radio',
+                    'selection_mode' => $isBatteryHealth ? '' : 'single',
+                    'is_required' => 0, 'is_show' => 1,
                     'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
                     'sort' => $fi, 'create_at' => $now, 'update_at' => $now,
-                ]);
-                $oi = 0;
-                foreach ($it['opts'] as $o) {
-                    $oi++;
-                    Db::name('recycle_check_option')->insert([
-                        'site_id' => $this->site_id, 'field_id' => $fid, 'option_label' => $o,
-                        'option_value' => (string)$oi, 'is_default' => ($o === $it['default'] ? 1 : 0),
-                        'is_show' => 1, 'severity' => $this->resolveOptionSeverity($optCache, $o, $now),
-                        'sort' => $oi, 'create_at' => $now, 'update_at' => $now,
-                    ]);
+                ];
+                if ($isBatteryHealth) {
+                    $fieldRow['unit'] = '%';
+                    // $fieldRow['result_template'] = '电池健康度{value}%';
+                    $fieldRow['api_fill_enabled'] = 1;
+                    $fieldRow['api_fill_policy'] = 'overwrite';
+                }
+                $fid = (int)Db::name('recycle_check_field')->insertGetId($fieldRow);
+                if (!$isBatteryHealth) {
+                    $oi = 0;
+                    foreach ($it['opts'] as $o) {
+                        $oi++;
+                        Db::name('recycle_check_option')->insert([
+                            'site_id' => $this->site_id, 'field_id' => $fid, 'option_label' => $o,
+                            'option_value' => (string)$oi, 'is_default' => ($o === $it['default'] ? 1 : 0),
+                            'is_show' => 1, 'severity' => $this->resolveOptionSeverity($optCache, $o, $now),
+                            'sort' => $oi, 'create_at' => $now, 'update_at' => $now,
+                        ]);
+                    }
                 }
             }
             // 补「设备信息」组 + 保修信息字段(input，允许API回填)：拍机堂数据不含保修，留此字段供「查保修」回填。
@@ -191,7 +205,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                 'field_key' => 'package_type', 'field_name' => '包装', 'component' => 'radio',
                 'selection_mode' => 'single', 'is_required' => 0, 'is_show' => 1,
                 'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
-                'result_template' => '包装: {value}', 'sort' => 2, 'create_at' => $now, 'update_at' => $now,
+                'result_template' => '', 'sort' => 2, 'create_at' => $now, 'update_at' => $now,
             ]);
             $pkgOi = 0;
             foreach (['全套', '单机', '带配件'] as $po) {
@@ -238,7 +252,8 @@ class RecycleCheckCatalogService extends BaseAdminService
             'capacity'       => ['内存', '容量', '规格', '存储'],
             'color'          => ['颜色'],
             'system_version' => ['系统'],
-            'battery'        => ['电池'],
+            // 仅"电池健康度"占用 battery 数值键;"电池维修/电池情况/电池循环次数"等不再抢键(走 f{N} 普通检测项)
+            'battery'        => ['电池健康度', '电池健康'],
         ];
         foreach ($rules as $key => $keywords) {
             foreach ($keywords as $kw) {

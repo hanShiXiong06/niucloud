@@ -584,11 +584,16 @@ class RecycleReturnOrderService extends BaseCoreService
         $allDevicesChecked = true;
         $allDevicesPriced = true;
         $allDevicesInFinalState = true;
+        $recycledPaidCount = 0; // 已回收且已打款的设备数(打款只改 pay_status, status 仍为 RECYCLED)
 
         foreach ($devices as $device) {
             $deviceStatus = (int)($device['status'] ?? 0);
             if (isset($counts[$deviceStatus])) {
                 $counts[$deviceStatus]++;
+            }
+            if ($deviceStatus === RecycleOrderDict::DEVICE_STATUS_RECYCLED
+                && (int)($device['pay_status'] ?? 0) === RecycleOrderDict::PAY_STATUS_PAID) {
+                $recycledPaidCount++;
             }
 
             if (in_array($deviceStatus, [
@@ -621,7 +626,11 @@ class RecycleReturnOrderService extends BaseCoreService
             if ($counts[RecycleOrderDict::DEVICE_STATUS_RETURNED] === $total) {
                 $newStatus = RecycleOrderDict::ORDER_STATUS_CLOSED;
             } elseif ($counts[RecycleOrderDict::DEVICE_STATUS_RECYCLED] > 0) {
-                $newStatus = RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT;
+                // 已回收设备:全部打过款 → 订单已完成;还有未打款的 → 维持待打款。
+                // (打款只改 pay_status, 设备 status 仍是 RECYCLED, 故须看 pay_status 而非仅 status)
+                $newStatus = ($recycledPaidCount >= $counts[RecycleOrderDict::DEVICE_STATUS_RECYCLED])
+                    ? RecycleOrderDict::ORDER_STATUS_COMPLETED
+                    : RecycleOrderDict::ORDER_STATUS_PENDING_PAYMENT;
             } elseif ($counts[RecycleOrderDict::DEVICE_STATUS_CONSIGNED] > 0) {
                 $newStatus = RecycleOrderDict::ORDER_STATUS_COMPLETED;
             }

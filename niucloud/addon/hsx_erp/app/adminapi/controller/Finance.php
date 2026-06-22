@@ -44,7 +44,7 @@ class Finance extends BaseAdminController
     public function payableLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''], ['operator', ''],
+            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''], ['imei', ''], ['operator', ''],
             ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
             ['sort_field', 'occurred_at'], ['sort_order', 'desc'],
             ['page', 1], ['limit', 15],
@@ -56,7 +56,7 @@ class Finance extends BaseAdminController
     public function receivableLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''], ['operator', ''],
+            ['counterparty_id', 0], ['status', ''], ['settle_state', ''], ['source_type', ''], ['keyword', ''], ['imei', ''], ['operator', ''],
             ['start_time', 0], ['end_time', 0], ['amount_min', ''], ['amount_max', ''],
             ['sort_field', 'occurred_at'], ['sort_order', 'desc'],
             ['page', 1], ['limit', 15],
@@ -139,7 +139,7 @@ class Finance extends BaseAdminController
     public function settlementLists()
     {
         $where = $this->request->params([
-            ['counterparty_id', 0], ['keyword', ''], ['operator', ''], ['start_time', 0], ['end_time', 0], ['page', 1], ['limit', 15],
+            ['counterparty_id', 0], ['keyword', ''], ['imei', ''], ['operator', ''], ['start_time', 0], ['end_time', 0], ['page', 1], ['limit', 15],
         ]);
         return success((new FinanceSettlementService())->getGroupedByDevice($where));
     }

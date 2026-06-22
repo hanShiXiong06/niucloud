@@ -1202,6 +1202,12 @@ class RecyclePrintSceneService extends BaseAdminService
                 'description' => '管理端暂存或完成设备质检后触发。',
             ],
             [
+                'key' => 'device.sign.saved',
+                'name' => '设备签收保存后',
+                'biz_type' => 'device',
+                'description' => '代客下单/签收时每录入并保存一台设备后触发，常用于即时打印设备标签。',
+            ],
+            [
                 'key' => 'device.price.saved',
                 'name' => '设备定价后',
                 'biz_type' => 'device',

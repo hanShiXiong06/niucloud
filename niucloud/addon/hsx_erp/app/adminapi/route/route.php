@@ -7,6 +7,7 @@ use app\adminapi\middleware\AdminLog;
 use think\facade\Route;
 
 Route::group('erp', function () {
+    Route::get('member_level/no_lists', 'addon\hsx_erp\app\adminapi\controller\MemberLevelNo@lists');
     Route::get('counterparty/lists', 'addon\hsx_erp\app\adminapi\controller\Counterparty@lists');
     Route::get('counterparty/options', 'addon\hsx_erp\app\adminapi\controller\Counterparty@options');
     Route::get('counterparty/member_options', 'addon\hsx_erp\app\adminapi\controller\Counterparty@memberOptions');

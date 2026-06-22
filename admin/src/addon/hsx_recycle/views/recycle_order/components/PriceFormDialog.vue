@@ -19,27 +19,16 @@
       <div class="pfd-layout">
         <aside class="pfd-sidebar">
           <div class="pfd-summary-card">
-            <div class="pfd-summary-card__title">质检摘要</div>
-            <div class="pfd-summary-card__content">
-              {{ deviceData.check_result_seller || deviceData.check_result || '暂无质检摘要' }}
-            </div>
+            <div class="pfd-summary-card__title">质检结果</div>
+            <CheckResultPanel
+              :summary-fields="checkMeta.summary_fields"
+              :severity-summary="checkMeta.severity_summary"
+              :abnormal-items="checkMeta.abnormal_items"
+              :items="checkMeta.result_items"
+              :text="deviceData.check_result_seller || deviceData.check_result"
+            />
           </div>
 
-          <div class="pfd-summary-card">
-            <div class="pfd-summary-card__title">价格参考</div>
-            <div class="pfd-metric">
-              <span>预估价</span>
-              <strong>¥{{ moneyText(deviceData.initial_price) }}</strong>
-            </div>
-            <div class="pfd-metric">
-              <span>原报价</span>
-              <strong>¥{{ moneyText(deviceData.before_price || deviceData.final_price) }}</strong>
-            </div>
-            <div class="pfd-metric" v-if="deviceForm.final_price !== undefined">
-              <span>本次报价</span>
-              <strong class="pfd-metric__primary">¥{{ moneyText(deviceForm.final_price) }}</strong>
-            </div>
-          </div>
 
           <div class="pfd-process-note">
             <strong>流程边界</strong>
@@ -74,7 +63,7 @@
                   </div>
                 </el-form-item>
 
-                <el-form-item label="内部卖货参考价">
+                <!-- <el-form-item label="内部卖货参考价">
                   <el-input-number
                     v-model="deviceForm.sell_price"
                     placeholder="可选"
@@ -84,7 +73,7 @@
                     style="width: 100%;"
                   />
                   <div class="pfd-hint">仅用于内部参考，不等同于 ERP 销售定价。</div>
-                </el-form-item>
+                </el-form-item> -->
               </div>
 
               <div v-if="deviceData.before_price && deviceForm.final_price !== undefined" class="pfd-price-diff">
@@ -252,6 +241,7 @@ import { ElMessage } from 'element-plus'
 import DeviceInfoCard from './DeviceInfoCard.vue'
 import FormDialog from '@/addon/hsx_recycle/components/FormDialog.vue'
 import { getDevice, getRefurbishmentOptions, getSaleDestinationOptions, getRefurbishmentAssigneeOptions } from '@/addon/hsx_recycle/api/recycle_order'
+import CheckResultPanel from './CheckResultPanel.vue'
 
 interface DeviceInfo {
     id?: string | number;
@@ -291,6 +281,8 @@ const emit = defineEmits(['update:visible', 'confirm', 'cancel'])
 
 const dialogVisible = ref(props.visible)
 const deviceData = ref<DeviceInfo>({ ...props.device })
+// 质检结果元数据(severity_summary / abnormal_items / result_items),由后端 getInfo 实时带级别返回
+const checkMeta = computed<any>(() => (deviceData.value as any)?.info?.check_meta || {})
 const isMobile = ref(false)
 const userOptions = ref<any[]>([])
 const detailLoading = ref(false)

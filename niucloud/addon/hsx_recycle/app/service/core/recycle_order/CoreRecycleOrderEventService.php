@@ -46,6 +46,18 @@ class CoreRecycleOrderEventService extends BaseCoreService
             if (!empty($data['order_id']) && !empty($data['site_id'])) {
                 $notifyService = new CoreRecycleOrderNotifyService();
                 $notifyService->orderSignNotify($data);
+
+                // 按打印场景配置自动触发云打印机（如订单签收凭证）。
+                // 触发结果（含成功/跳过/失败）由打印框架写入 recycle_print_task / recycle_print_log，即触发日志。
+                try {
+                    (new \addon\hsx_recycle\app\service\admin\printer\RecyclePrintTriggerService())
+                        ->auto('order.signed', [
+                            'order_id' => $data['order_id'],
+                            'biz_id'   => $data['order_id'],
+                        ]);
+                } catch (\Throwable $e) {
+                    Log::error('订单签收后自动打印触发失败：' . $e->getMessage(), $data);
+                }
             }
 
         } catch (\Exception $e) {

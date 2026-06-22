@@ -39,6 +39,8 @@ export function useGoodsEdit(params: any = {}) {
         goods_image: '',
         goods_video: '',
         goods_category: '',
+        memory_group: '',      // 内存(二手机)
+        condition_grade: '',   // 成色等级(二手机)
         brand_id: '',
         poster_id: '',
         diy_detail_id: '',
@@ -163,23 +165,16 @@ export function useGoodsEdit(params: any = {}) {
         getCategoryTree().then((res) => {
             const data = res.data
             if (data) {
-                const goodsCategoryTree: any = []
-                data.forEach((item: any) => {
-                    const children: any = []
-                    if (item.child_list) {
-                        item.child_list.forEach((childItem: any) => {
-                            children.push({
-                                value: childItem.category_id,
-                                label: childItem.category_name
-                            })
-                        })
+                // 递归构建分类树(最多三级;限深度以杜绝异常数据(pid 自引用/成环)导致的死循环白屏)
+                const buildCatNode = (item: any, depth = 1): any => {
+                    const node: any = { value: item.category_id, label: item.category_name }
+                    const kids = item.child_list || item.children || []
+                    if (kids.length && depth < 3) {
+                        node.children = kids.map((k: any) => buildCatNode(k, depth + 1))
                     }
-                    goodsCategoryTree.push({
-                        value: item.category_id,
-                        label: item.category_name,
-                        children
-                    })
-                })
+                    return node
+                }
+                const goodsCategoryTree: any = (Array.isArray(data) ? data : []).map((it: any) => buildCatNode(it))
                 goodsCategoryOptions.splice(0, goodsCategoryOptions.length, ...goodsCategoryTree)
                 if (bool) {
                     ElMessage({
@@ -433,6 +428,9 @@ export function useGoodsEdit(params: any = {}) {
             formData.goods_image = data.goods_info.goods_image
             formData.goods_video = data.goods_info.goods_video
             formData.goods_category = data.goods_info.goods_category
+            formData.memory_group = data.goods_info.memory_group || ''
+            formData.condition_grade = data.goods_info.condition_grade || ''
+            loadQcItems(data.goods_info.qc_report) // 质检报告 → 可编辑项
             formData.brand_id = data.goods_info.brand_id
             formData.poster_id = data.goods_info.poster_id
             formData.form_id = data.goods_info.form_id
@@ -1359,6 +1357,66 @@ export function useGoodsEdit(params: any = {}) {
         }, 10)
     }
 
+    /** ************ 质检报告 CRUD ************ */
+    const qcMeta: any = ref({}) // 保留 qc_report 里非 result_items 的元信息(template_id/version/summary_fields 等)
+    // 注意:用 reactive 而非 ref——goodsEdit 是普通对象返回,模板 goodsEdit.qcItems 不会自动解包 ref,
+    // 传给 el-table 的 :data 会变成 Ref 触发"Maximum recursive updates"。reactive 数组是代理,直接可用。
+    const qcItems: any = reactive([]) // 可编辑质检项:{field_key, field_name, value, severity, component}
+    const qcSeverityOptions = [
+        { label: '正常', value: 'normal' },
+        { label: '一般', value: 'general' },
+        { label: '异常', value: 'abnormal' }
+    ]
+    const addQcItem = () => {
+        qcItems.push({ field_key: 'c' + Date.now() + Math.floor(Math.random() * 1000), field_name: '', value: '', severity: 'normal', component: 'input' })
+    }
+    const removeQcItem = (i: number) => { qcItems.splice(i, 1) }
+    // 加载:把 qc_report JSON 解析成可编辑项(原地替换,保持 reactive 引用)
+    const loadQcItems = (raw: any) => {
+        let obj: any = {}
+        try { obj = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {} } catch (e) { obj = {} }
+        qcMeta.value = obj || {}
+        const arr = Array.isArray(obj.result_items) ? obj.result_items.map((r: any) => ({
+            field_key: r.field_key || ('c' + Date.now()),
+            field_name: r.field_name || '',
+            value: (Array.isArray(r.labels) && r.labels.length) ? r.labels.join('、') : (r.value ?? ''),
+            severity: ['normal', 'general', 'abnormal'].includes(r.severity) ? r.severity : 'normal',
+            component: r.component || 'input'
+        })) : []
+        qcItems.splice(0, qcItems.length, ...arr)
+    }
+    // 序列化:可编辑项 → qc_report JSON(重算异常项 + 汇总),保留元信息
+    const buildQcReport = (): string => {
+        const valid = qcItems.filter((it: any) => String(it.field_name || '').trim() || String(it.value || '').trim())
+        if (!valid.length) return ''
+        const result_items = valid.map((it: any) => {
+            const sev = ['normal', 'general', 'abnormal'].includes(it.severity) ? it.severity : 'normal'
+            const val = String(it.value ?? '').trim()
+            const name = String(it.field_name || '').trim()
+            return {
+                field_key: it.field_key || ('c' + Date.now()),
+                field_name: name,
+                text: name + (val ? ': ' + val : ''),
+                value: val,
+                labels: val ? [val] : [],
+                values: val ? [val] : [],
+                component: it.component || 'input',
+                option_items: val ? [{ label: val, value: val, severity: sev }] : [],
+                option_styles: [],
+                severity: sev
+            }
+        })
+        const abnormal_items = result_items.filter((r: any) => r.severity === 'abnormal' || r.severity === 'general')
+        const severity_summary = {
+            abnormal: result_items.filter((r: any) => r.severity === 'abnormal').length,
+            general: result_items.filter((r: any) => r.severity === 'general').length,
+            normal: result_items.filter((r: any) => r.severity === 'normal').length
+        }
+        const keys = new Set(result_items.map((r: any) => r.field_key))
+        const summary_fields = Array.isArray(qcMeta.value.summary_fields) ? qcMeta.value.summary_fields.filter((f: any) => keys.has(f.field_key)) : []
+        return JSON.stringify({ ...qcMeta.value, result_items, abnormal_items, severity_summary, summary_fields })
+    }
+
     // 保存数据
     const save = (callback: any = null) => {
         verify(async() => {
@@ -1368,6 +1426,7 @@ export function useGoodsEdit(params: any = {}) {
 
             const api = formData.goods_id ? editApi : addApi
             const data = cloneDeep(formData)
+            data.qc_report = buildQcReport() // 质检报告:可编辑项序列化(空则传空串)
             const coverImage = data.goods_image.split(',')[0]
 
             const info = await getImageDimensions(coverImage)
@@ -1614,6 +1673,12 @@ export function useGoodsEdit(params: any = {}) {
 
     return {
         formData,
+
+        // 质检报告 CRUD
+        qcItems,
+        qcSeverityOptions,
+        addQcItem,
+        removeQcItem,
 
         activeName,
         tabHandleClick,

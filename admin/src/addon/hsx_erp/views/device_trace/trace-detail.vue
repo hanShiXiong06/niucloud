@@ -1,6 +1,6 @@
 <template>
     <el-drawer v-model="show" title="设备全链路" size="760px" @open="onOpen" @closed="data = null">
-        <div v-loading="loading">
+        <div v-loading="loading" class="trace-body">
             <template v-if="data">
                 <!-- 概览 -->
                 <div class="rounded-lg bg-gray-50 px-4 py-3">
@@ -53,6 +53,17 @@
                     </div>
                 </div>
 
+                <!-- 质检结果:突出项 + 异常 + 折叠(公共组件) -->
+                <div v-if="checkMeta.result_items?.length || checkMeta.summary_fields?.length" class="mt-4 rounded-lg border border-gray-100 p-1">
+                    <div class="mb-1 px-2 text-xs font-medium text-gray-600">质检结果</div>
+                    <CheckResultPanel
+                        :summary-fields="checkMeta.summary_fields"
+                        :severity-summary="checkMeta.severity_summary"
+                        :abnormal-items="checkMeta.abnormal_items"
+                        :items="checkMeta.result_items"
+                    />
+                </div>
+
                 <!-- 时间线 -->
                 <div class="mt-4 flex items-center justify-between">
                     <div class="flex items-center gap-2">
@@ -97,6 +108,7 @@ import { ref, reactive, computed } from 'vue'
 import EntityDrawer from '@/addon/hsx_erp/views/finance/entity-drawer.vue'
 import ClampText from '@/addon/hsx_erp/components/clamp-text.vue'
 import { getDeviceTraceDetail } from '@/addon/hsx_erp/api/device_trace'
+import CheckResultPanel from '@/addon/hsx_recycle/views/recycle_order/components/CheckResultPanel.vue'
 
 const props = defineProps<{ modelValue: boolean; assetId?: number; deviceId?: number }>()
 const emit = defineEmits(['update:modelValue'])
@@ -120,6 +132,8 @@ const stageType = (s: string) => (s === '回收' ? 'success' : s === '中台' ? 
 
 const loading = ref(false)
 const data = ref<any>(null)
+// 带级别的质检数据(突出项/异常/计数),由全链路后端从回收段带回
+const checkMeta = computed<any>(() => data.value?.check || {})
 const showDetail = ref(true)
 const finOnly = ref(false)
 const visibleEvents = computed(() => {
@@ -162,9 +176,25 @@ function openEntity(id: number) {
 </script>
 
 <style lang="scss" scoped>
-/* 时间线固定高度内滚动，长链路不再撑长整页 */
+/* 抽屉满屏高:body 做成纵向 flex,时间线自动填充剩余高度、内部滚动,不再写死高度 */
+:deep(.el-drawer__body) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.trace-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 时间线:占满剩余高度,长链路在框内滚动;随屏幕高度自适应 */
 .trace-timeline-scroll {
-    max-height: 420px;
+    flex: 1 1 auto;
+    min-height: 120px;
+    max-height: calc(100vh - 440px);
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 6px;

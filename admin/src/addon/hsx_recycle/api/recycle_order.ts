@@ -68,8 +68,13 @@ export function deleteOrderDevice(deviceId: number) {
 // getDevice
 // 获取单个设备信息
 export function getDevice(deviceId: number) {
-  
+
   return request.get(`/recycle/recycle_device/${deviceId}`);
+}
+
+// 设备详情(详情弹窗专用):按区块组织 + 裁掉无用重字段
+export function getDeviceDetailView(deviceId: number) {
+  return request.get(`/recycle/recycle_device/${deviceId}/detail_view`);
 }
 
 // 获取设备成本调整记录

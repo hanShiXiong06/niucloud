@@ -12,14 +12,13 @@
                     <el-form-item :label="t('goodsName')" prop="goods_name">
                         <el-input v-model.trim="goodsTable.searchParam.goods_name" :placeholder="t('goodsNamePlaceholder')" maxlength="60" />
                     </el-form-item>
+                    <el-form-item label="多设备" prop="device_keywords">
+                        <el-input v-model.trim="goodsTable.searchParam.device_keywords" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }"
+                            placeholder="IMEI/资产ID，空格或换行分隔" clearable class="!w-[220px]" @keyup.enter="loadGoodsList()" />
+                    </el-form-item>
                     <el-form-item :label="t('goodsCategory')" prop="goods_category">
                         <!-- <el-cascader v-model="goodsTable.searchParam.goods_category" :options="goodsCategoryOptions" :placeholder="t('goodsCategoryPlaceholder')" clearable :props="{ value: 'value', label: 'label', emitPath:false }"/> -->
                         <el-cascader v-model="goodsTable.searchParam.goods_category" ref="cascader" :options="goodsCategoryOptions"  :placeholder="t('goodsCategoryPlaceholder')" clearable :props="goodsCategoryProps"/>
-                    </el-form-item>
-                    <el-form-item :label="t('goodsType')" prop="goods_type">
-                        <el-select v-model="goodsTable.searchParam.goods_type" :placeholder="t('goodsTypePlaceholder')" clearable>
-                            <el-option v-for="item in goodsType" :key="item.type" :label="item.name" :value="item.type" />
-                        </el-select>
                     </el-form-item>
 
                     <el-form-item :label="t('brand')" prop="brand_id">
@@ -32,19 +31,35 @@
                             <el-option v-for="item in labelOptions" :key="item.label_id" :label="item.label_name" :value="item.label_id" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item :label="t('saleNum')" prop="sale_num">
-                        <div class="region-input">
-                            <input type="text" :placeholder="t('startSaleNumPlaceholder')" maxlength="10" v-model.trim="goodsTable.searchParam.start_sale_num" @keyup="filterDigit($event)">
-                            <span class="separator">-</span>
-                            <input type="text" :placeholder="t('endSaleNumPlaceholder')" maxlength="10" v-model.trim="goodsTable.searchParam.end_sale_num" @keyup="filterDigit($event)">
-                        </div>
-                    </el-form-item>
                     <el-form-item :label="t('skuPrice')" prop="sku_price">
                         <div class="region-input">
                             <input type="text" :placeholder="t('startPricePlaceholder')" maxlength="10" v-model.trim="goodsTable.searchParam.start_price" @keyup="filterDigit($event)">
                             <span class="separator">-</span>
                             <input type="text" :placeholder="t('endPricePlaceholder')" maxlength="10" v-model.trim="goodsTable.searchParam.end_price" @keyup="filterDigit($event)">
                         </div>
+                    </el-form-item>
+
+                    <el-form-item label="内存" prop="memory_group">
+                        <el-select v-model="goodsTable.searchParam.memory_group" placeholder="全部内存" clearable filterable class="!w-[140px]">
+                            <el-option v-for="m in memOptions" :key="m" :label="m" :value="m" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="成色" prop="condition_grade">
+                        <el-select v-model="goodsTable.searchParam.condition_grade" placeholder="全部成色" clearable filterable class="!w-[140px]">
+                            <el-option v-for="g in gradeOptions" :key="g" :label="g" :value="g" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="售卖状态" prop="sale_status">
+                        <el-select v-model="goodsTable.searchParam.sale_status" placeholder="全部" clearable class="!w-[140px]">
+                            <el-option label="在售" value="available" />
+                            <el-option label="锁定" value="locked" />
+                            <el-option label="已售" value="sold" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="库龄(天)" prop="stock_age">
+                        <el-select v-model="stockAgeRange" placeholder="全部库龄" clearable class="!w-[140px]" @change="onStockAgeChange">
+                            <el-option v-for="r in stockAgeOptions" :key="r.value" :label="r.label" :value="r.value" />
+                        </el-select>
                     </el-form-item>
 
                     <el-form-item>
@@ -66,7 +81,7 @@
                     <el-dropdown class="mr-[20px] !text-primary w-[125px]">
                         <span class="el-dropdown-link">
                             <span>{{ currentSelectMode === 'all' ? t('全选所有页') : t('全选当前页')}}</span>(<span class="text-center inline-block">{{ selectedCount }}</span>)
-                            <el-icon> 
+                            <el-icon>
                                 <arrow-down />
                             </el-icon>
                         </span>
@@ -83,6 +98,7 @@
                     </el-dropdown>
 
                     <!-- <el-checkbox v-model="toggleCheckbox" size="large" class="px-[14px]" @change="toggleChange" :indeterminate="isIndeterminate" /> -->
+
                     <el-button @click="batchGoodsStatus(1)" size="small" v-if="goodsTable.searchParam.status != '1'">{{ t('batchOnGoods') }}</el-button>
                     <el-button @click="batchGoodsStatus(0)" size="small" v-if="goodsTable.searchParam.status != '0'">{{ t('batchOffGoods') }}</el-button>
                     <el-button @click="batchDeleteGoods" size="small">{{ t('batchDeleteGoods') }}</el-button>
@@ -108,9 +124,17 @@
                                     </el-image>
                                     <img v-else class="w-[70px] h-[70px]" src="@/addon/phone_shop/assets/goods_default.png" fit="contain" />
                                 </div>
-                                <div class="ml-2  flex flex-col items-start">
+                                <div class="ml-2  flex flex-col items-start min-w-0">
                                     <span :title="row.goods_name" class="multi-hidden">{{ row.goods_name }}</span>
-                                    <span class="text-primary text-[12px]">{{ row.goods_type_name }}</span>
+                                    <span v-if="row.sub_title" :title="row.sub_title" class="text-[12px] text-[#94a3b8] ellipsis-1 max-w-[220px]">{{ row.sub_title }}</span>
+                                    <span v-if="(row.goodsSku || {}).sku_no" class="text-[11px] text-[#64748b] font-mono" :title="row.goodsSku.sku_no">IMEI: {{ row.goodsSku.sku_no }}</span>
+                                    <div class="flex items-center flex-wrap gap-[4px] mt-[2px]">
+                                        <span v-if="row.memory_group" class="text-[11px] text-[#64748b] bg-[#f1f5f9] rounded px-[4px]">{{ row.memory_group }}</span>
+                                        <span v-if="row.condition_grade" class="text-[11px] text-[#64748b] bg-[#f1f5f9] rounded px-[4px]">{{ row.condition_grade }}</span>
+                                        <el-tag v-if="row.sale_status === 'sold'" type="info" size="small" effect="plain">已售</el-tag>
+                                        <el-tag v-else-if="row.sale_status === 'locked'" type="warning" size="small" effect="plain">锁定</el-tag>
+                                        <el-tag v-else-if="Number((row.goodsSku || row.goods_sku || {}).erp_asset_id) > 0" type="success" size="small" effect="plain">在售</el-tag>
+                                    </div>
                                     <span class="px-[4px]  text-[12px] text-[#fff] rounded-[4px] bg-primary leading-[18px]" v-if="row.is_gift == 1">赠品</span>
                                     <div class="flex flex-wrap mt-[4px] gap-[4px]">
                                         <el-tooltip v-for="(item, index) in row.active" :key="index" placement="top">
@@ -129,13 +153,16 @@
                         </template>
                     </el-table-column>
 
-                    <el-table-column prop="price" :label="t('skuPrice')" min-width="120" align="right" sortable="custom">
+                    <el-table-column prop="price" label="价格" min-width="150" sortable="custom">
                         <template #default="{ row }">
-                            <div class="cursor-pointer price-wrap" @click="editPriceEvent(row)">
-                                <span>￥{{ row.goodsSku.price }}</span>
-                                <el-icon class="icon-wrap ml-[5px] invisible">
-                                    <EditPen />
-                                </el-icon>
+                            <div class="price-cell">
+                                <div class="cursor-pointer price-wrap" @click="editPriceEvent(row)">
+                                    <span class="price-tag retail">零售</span>
+                                    <span class="price-val">￥{{ row.goodsSku.price }}</span>
+                                    <el-icon class="icon-wrap ml-[3px] invisible"><EditPen /></el-icon>
+                                </div>
+                                <div><span class="price-tag member">会员</span><span class="price-val member-val">{{ memberPriceText(row) }}</span></div>
+                                <div><span class="price-tag cost">成本</span><span class="price-val text-[#94a3b8]">￥{{ (row.goodsSku || {}).cost_price ?? '—' }}</span></div>
                             </div>
                         </template>
                     </el-table-column>
@@ -163,16 +190,34 @@
                         </template>
                     </el-table-column>
 
-                    <el-table-column prop="create_time" :label="t('createTime')" min-width="150" sortable="custom">
+                    <el-table-column label="库龄" min-width="80" align="center">
                         <template #default="{ row }">
-                            <div>{{ row.create_time }}</div>
+                            <el-tag :type="stockAgeType(row.create_time)" size="small" effect="plain">{{ stockAgeDays(row.create_time) }}天</el-tag>
+                        </template>
+                    </el-table-column>
+
+                    <el-table-column prop="create_time" :label="t('createTime')" min-width="110" sortable="custom">
+                        <template #default="{ row }">
+                            <div class="time-cell">
+                                <div>{{ dtPart(row.create_time, 'date') }}</div>
+                                <div class="time-hms">{{ dtPart(row.create_time, 'time') }}</div>
+                            </div>
+                        </template>
+                    </el-table-column>
+
+                    <el-table-column prop="update_time" label="更新时间" min-width="110" sortable="custom">
+                        <template #default="{ row }">
+                            <div class="time-cell">
+                                <div>{{ dtPart(row.update_time, 'date') }}</div>
+                                <div class="time-hms">{{ dtPart(row.update_time, 'time') }}</div>
+                            </div>
                         </template>
                     </el-table-column>
 
                     <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
                         <template #default="{ row }">
-                            <el-button v-if="canSell(row)" type="success" link @click="openSell(row)">开单卖出</el-button>
-                            <el-tag v-else-if="row.sale_status === 'sold'" type="info" size="small" effect="plain">已售</el-tag>
+
+                            <el-tag v-if="row.sale_status === 'sold'" type="info" size="small" effect="plain">已售</el-tag>
                             <el-tag v-else-if="row.sale_status === 'locked'" type="warning" size="small" effect="plain">锁定</el-tag>
                             <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
                             <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoods') }}</el-button>
@@ -217,8 +262,6 @@
         <!-- 批量设置弹出框 -->
         <goods-batch-settings-popup ref="goodsBatchSettingPopupRef" @load="loadGoodsListReset" />
 
-        <!-- 开单卖出（调 ERP 出库） -->
-        <sell-dialog v-model="sellState.visible" :goods="sellState.row" @done="loadGoodsList(getTablePageStorage(goodsTable.searchParam).page)" />
     </div>
 </template>
 
@@ -234,7 +277,8 @@ import goodsStockEditPopup from '@/addon/phone_shop/views/goods/components/goods
 import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods-price-edit-popup.vue'
 import goodsBatchSettingsPopup from '@/addon/phone_shop/views/goods/components/goods-batch-settings-popup.vue'
 import sellDialog from '@/addon/phone_shop/views/goods/components/sell-dialog.vue'
-import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods,editGoodssingleStatus } from '@/addon/phone_shop/api/goods'
+import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods,editGoodssingleStatus, getMemberLevelNoList } from '@/addon/phone_shop/api/goods'
+import { getSpecGroups, getGrades } from '@/addon/phone_shop/api/spec'
 import { getMemberLevelAll } from '@/app/api/member'
 import spreadPopup from '@/components/spread-popup/index.vue'
 
@@ -242,6 +286,41 @@ const router = useRouter()
 const route = useRoute()
 const pageName = route.meta.title
 const repeat = ref(false)
+
+// 库龄区间(天)下拉:value = "min-max"(max 空表示无上限),选中后联动 start/end_stock_age
+const stockAgeRange = ref('')
+const stockAgeOptions = [
+    { label: '7天内', value: '0-7' },
+    { label: '8-15天', value: '8-15' },
+    { label: '16-30天', value: '16-30' },
+    { label: '31-60天', value: '31-60' },
+    { label: '60天以上', value: '61-' }
+]
+const onStockAgeChange = (val: string) => {
+    const [min, max] = (val || '').split('-')
+    goodsTable.searchParam.start_stock_age = min ?? ''
+    goodsTable.searchParam.end_stock_age = max ?? ''
+}
+
+// 内存 / 成色 下拉选项(取自规格组、成色字典,与建品/收银台同源)
+const memOptions = ref<string[]>([])
+const gradeOptions = ref<string[]>([])
+const loadMemGradeOptions = async () => {
+    try {
+        const res: any = await getSpecGroups({ category_id: 0 })
+        const groups = res.data || []
+        const memGroups = groups.filter((g: any) => String(g.label || '').includes('内存'))
+        const useGroups = memGroups.length ? memGroups : groups
+        const set = new Set<string>()
+        useGroups.forEach((g: any) => (g.items || []).forEach((it: any) => { const v = String(it.item_value ?? '').trim(); if (v) set.add(v) }))
+        memOptions.value = Array.from(set).sort()
+    } catch (e) { /* */ }
+    try {
+        const res: any = await getGrades()
+        gradeOptions.value = (res.data || []).map((x: any) => String(x.grade_name ?? '').trim()).filter(Boolean)
+    } catch (e) { /* */ }
+}
+loadMemGradeOptions()
 
 const goodsTable = reactive({
     page: 1,
@@ -260,10 +339,54 @@ const goodsTable = reactive({
         start_price: '',
         end_price: '',
         status: route.query.status || '1',
+        memory_group: '',
+        condition_grade: '',
+        sale_status: '',
+        device_keywords: '',
+        start_stock_age: '',
+        end_stock_age: '',
         order: '',
         sort: ''
     }
 })
+
+// 会员价显示:member_price 是 {level_x: 价} 的 JSON,取代表值(多条取最低)
+const memberPriceText = (row: any): string => {
+    const raw = (row.goodsSku || {}).member_price
+    if (!raw) return '—'
+    let obj: any = raw
+    try { if (typeof raw === 'string') obj = JSON.parse(raw) } catch (e) { return '—' }
+    const vals = Object.values(obj || {}).map((v: any) => Number(v)).filter((n: number) => !isNaN(n) && n > 0)
+    if (!vals.length) return '—'
+    return '￥' + Math.min(...vals).toFixed(2)
+}
+// 库龄(天):now - 创建时间
+const tsOf = (val: any): number => {
+    if (!val) return 0
+    if (typeof val === 'number') return val > 1e12 ? Math.floor(val / 1000) : val
+    const s = String(val).trim()
+    if (/^\d+$/.test(s)) { const n = Number(s); return n > 1e12 ? Math.floor(n / 1000) : n }
+    const t = Date.parse(s.replace(/-/g, '/'))
+    return isNaN(t) ? 0 : Math.floor(t / 1000)
+}
+const stockAgeDays = (ct: any): number => {
+    const ts = tsOf(ct)
+    if (!ts) return 0
+    return Math.max(0, Math.floor((Date.now() / 1000 - ts) / 86400))
+}
+const stockAgeType = (ct: any): string => {
+    const d = stockAgeDays(ct)
+    return d >= 60 ? 'danger' : (d >= 30 ? 'warning' : 'success')
+}
+// 时间叠两行:date=日期, time=时分秒
+const dtPart = (val: any, which: 'date' | 'time'): string => {
+    const ts = tsOf(val)
+    if (!ts) return which === 'date' ? '—' : ''
+    const d = new Date(ts * 1000)
+    const p = (n: number) => String(n).padStart(2, '0')
+    if (which === 'date') return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
 
 const searchFormRef = ref<FormInstance>()
 
@@ -294,33 +417,19 @@ const initData = () => {
     getCategoryTree().then((res) => {
         const data = res.data
         if (data) {
-            const goodsCategoryTree: any = []
-            // 增加全部筛选选择
-            goodsCategoryTree.push({
-                value: '',
-                label: '全部',
-                children: []
-            })
-            data.forEach((item: any) => {
-                const children: any = []
-                if (item.child_list) {
-                    children.push({
-                        value: item.category_id,
-                        label: '全部'
-                    })
-                    item.child_list.forEach((childItem: any) => {
-                        children.push({
-                            value: childItem.category_id,
-                            label: childItem.category_name
-                        })
-                    })
+            // 递归构建分类树(最多三级;限深度以杜绝异常数据(pid 自引用/成环)导致的死循环)
+            const buildCatNode = (item: any, depth = 1): any => {
+                const node: any = { value: item.category_id, label: item.category_name }
+                const kids = item.child_list || item.children || []
+                if (kids.length && depth < 3) {
+                    node.children = [{ value: item.category_id, label: '全部' }, ...kids.map((k: any) => buildCatNode(k, depth + 1))]
                 }
-                goodsCategoryTree.push({
-                    value: item.category_id,
-                    label: item.category_name,
-                    children
-                })
-            })
+                return node
+            }
+            const goodsCategoryTree: any = [
+                { value: '', label: '全部', children: [] },
+                ...(Array.isArray(data) ? data : []).map((it: any) => buildCatNode(it))
+            ]
             goodsCategoryOptions.splice(0, goodsCategoryOptions.length, ...goodsCategoryTree)
         }
     })
@@ -453,6 +562,8 @@ const selectedCount = computed(() => {
         return multipleSelection.value.length
     }
 })
+const selectedSellableRows = computed(() => (multipleSelection.value || []).filter(canSell))
+const selectedSellableCount = computed(() => selectedSellableRows.value.length)
 
 const getBatchPayload = () => {
     if (isSelectAllPages.value) {
@@ -737,17 +848,6 @@ const addEvent = () => {
  * 编辑商品
  * @param data
  */
-// 开单卖出（仅在售 + 关联了 ERP 设备的机可开单）
-const sellState = reactive<{ visible: boolean; row: any }>({ visible: false, row: {} })
-const canSell = (row: any) => {
-    const sku = row?.goodsSku || row?.goods_sku || {}
-    const saleStatus = row?.sale_status || 'available'
-    return Number(sku?.erp_asset_id) > 0 && saleStatus === 'available' && row?.status == 1
-}
-const openSell = (row: any) => {
-    sellState.row = row
-    sellState.visible = true
-}
 
 const editEvent = (data: any) => {
     router.push(data.goods_edit_path + '?goods_id=' + data.goods_id)
@@ -760,9 +860,9 @@ const editEvent = (data: any) => {
 
 const goodsPriceEditPopupRef: any = ref(null)
 
-// 编辑商品价格
+// 编辑商品价格(同一弹窗内含会员价,一次保存)
 const editPriceEvent = (data: any) => {
-    goodsPriceEditPopupRef.value.show(data)
+    goodsPriceEditPopupRef.value.show(data, memberLevel.value)
 }
 
 const goodsStockEditPopupRef: any = ref(null)
@@ -788,10 +888,17 @@ const spreadEvent = (data: any) => {
 /** ***************** 会员价-start *************************/
 // 会员等级
 const memberLevel = ref([])
-const getMemberLevelAllFn = () => {
-    getMemberLevelAll().then(res => {
-        memberLevel.value = res.data ? res.data : []
-    })
+const getMemberLevelAllFn = async () => {
+    const res: any = await getMemberLevelAll()
+    const levels = res.data ? res.data : []
+    // 给每个等级补"站内序号 level_no"(会员价 JSON 统一按 level_no 存取);hsx_erp 未启用则跳过,回退 level_id
+    try {
+        const noRes: any = await getMemberLevelNoList()
+        const noMap: Record<number, number> = {}
+        ;(noRes.data || []).forEach((it: any) => { noMap[Number(it.level_id)] = Number(it.level_no) })
+        levels.forEach((lv: any) => { if (noMap[Number(lv.level_id)]) lv.level_no = noMap[Number(lv.level_id)] })
+    } catch (e) { /* 无 ERP 时按 level_id */ }
+    memberLevel.value = levels
 }
 getMemberLevelAllFn()
 
@@ -867,6 +974,9 @@ const resetForm = (formEl: FormInstance | undefined) => {
     goodsTable.searchParam.end_price = ''
     goodsTable.searchParam.start_sale_num = ''
     goodsTable.searchParam.end_sale_num = ''
+    stockAgeRange.value = ''
+    goodsTable.searchParam.start_stock_age = ''
+    goodsTable.searchParam.end_stock_age = ''
     isReset.value = true
     loadGoodsList()
 }
@@ -888,6 +998,19 @@ const resetForm = (formEl: FormInstance | undefined) => {
     }
 </style>
 <style lang="scss" scoped>
+    /* 单行省略 */
+    .ellipsis-1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 价格三行:零售/会员/成本 */
+    .price-cell { display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 1.5; }
+    .price-tag { display: inline-block; width: 30px; text-align: center; font-size: 10px; border-radius: 3px; margin-right: 4px; color: #fff; }
+    .price-tag.retail { background: #f56c6c; }
+    .price-tag.member { background: #e6a23c; }
+    .price-tag.cost { background: #c0c4cc; }
+    .price-val { font-weight: 600; color: #303133; }
+    .price-val.member-val { color: #e6a23c; }
+    /* 时间叠两行 */
+    .time-cell { line-height: 1.4; font-size: 12px; }
+    .time-cell .time-hms { color: #94a3b8; font-size: 11px; }
     .price-wrap, .stock-wrap {
         &:hover {
             .icon-wrap {

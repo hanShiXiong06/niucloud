@@ -25,7 +25,7 @@
                         </el-form-item>
                         <el-form-item :label="t('buyers')">
                             <div class="input-width">
-                                <span class="text-[14px] text-primary cursor-pointer" @click="memberEvent(formData.member.member_id)">{{ formData.member.nickname }}</span>
+                                <span class="text-[14px] text-primary cursor-pointer" @click="memberEvent(formData.member?.member_id)">{{ formData.member?.nickname || '—' }}</span>
                             </div>
                         </el-form-item>
                         <template v-if="formData.delivery_type == 'store'">

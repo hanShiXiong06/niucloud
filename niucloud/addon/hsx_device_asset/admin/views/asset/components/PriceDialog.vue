@@ -11,14 +11,16 @@
                 </div>
                 <div class="price-context__cols">
                     <div>
-                        <div class="context-title">质检摘要</div>
-                        <div v-if="checkSummaryEntries(priceAsset).length" class="mini-summary">
-                            <div v-for="item in checkSummaryEntries(priceAsset).slice(0, 8)" :key="item.key">
-                                <span>{{ item.key }}</span>
-                                <strong>{{ item.value }}</strong>
-                            </div>
-                        </div>
-                        <el-empty v-else description="暂无摘要" :image-size="48" />
+                        <div class="context-title">质检结果</div>
+                        <CheckResultPanel
+                            v-if="priceCheckMeta.result_items?.length || priceSellerText"
+                            :summary-fields="priceCheckMeta.summary_fields"
+                            :severity-summary="priceCheckMeta.severity_summary"
+                            :abnormal-items="priceCheckMeta.abnormal_items"
+                            :items="priceCheckMeta.result_items"
+                            :text="priceSellerText"
+                        />
+                        <el-empty v-else description="暂无质检" :image-size="48" />
                     </div>
                     <div>
                         <div class="context-title">图片对比</div>
@@ -73,6 +75,7 @@
 import { computed, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { completeAssetPrice, getAssetInfo } from '@/addon/hsx_device_asset/api/device_asset'
+import CheckResultPanel from '@/addon/hsx_recycle/views/recycle_order/components/CheckResultPanel.vue'
 import { useAssetFormat } from '../composables/useAssetFormat'
 
 const props = defineProps<{ modelValue: boolean; assetRow: Record<string, any> | null }>()
@@ -87,6 +90,13 @@ const { money, imgUrl, photoStatusType, checkSummaryEntries, priceCompareImages 
 
 const priceAsset = ref<any>(null)
 const priceLoading = ref(false)
+// 质检结果(突出项/级别/异常)来自关联回收设备的 check_meta,后端已实时增强
+const priceCheckMeta = computed<any>(() => priceAsset.value?.recycleDevice?.info?.check_meta || {})
+const priceSellerText = computed<string>(() => {
+    const cs: any = priceAsset.value?.check_summary
+    const fromCs = cs && !Array.isArray(cs) ? (cs['卖家质检'] || '') : ''
+    return fromCs || priceAsset.value?.recycleDevice?.check_result_seller || priceAsset.value?.recycleDevice?.check_result || ''
+})
 const priceForm = reactive({ sale_price: 0, peer_price: 0, min_price: 0, remark: '' })
 
 const grossProfit = computed(() => Number(priceForm.sale_price || 0) - Number(priceAsset.value?.recycle_final_price || 0))

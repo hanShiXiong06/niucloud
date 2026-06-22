@@ -318,7 +318,207 @@ class DeviceAssetService extends BaseAdminService
         if (empty($asset)) {
             throw new CommonException('资产不存在');
         }
-        return  $asset->toArray();
+        return $this->enrichAssetQc($asset->toArray());
+    }
+
+    /**
+     * 质检数据增强(读时, 不改库):
+     *  1) recycleDevice.info.check_meta.result_items 逐项打级别 severity(按选项文本实时查 recycle 字典),
+     *     并备好 abnormal_items(异常在前)/ severity_summary 计数 —— 供 CheckResultPanel 直接渲染;
+     *  2) check_summary 的 容量/颜色 由选项 ID 解析成 label(查 recycle 该模板的选项)。
+     * 级别字典/模板选项均属 hsx_recycle, 同库直查(中台本就深读回收数据)。
+     * @param array $data
+     * @return array
+     */
+    private function enrichAssetQc(array $data): array
+    {
+        $rd = $this->daToArr($data['recycleDevice'] ?? null);
+        $templateId = (int)($rd['check_template_id'] ?? 0);
+
+        // 1) result_items 级别
+        $info = $this->daToArr($rd['info'] ?? null);
+        $checkMeta = $this->daToArr($info['check_meta'] ?? null);
+        $items = is_array($checkMeta['result_items'] ?? null) ? $checkMeta['result_items'] : [];
+        if (!empty($items)) {
+            $sevMap = $this->recycleSeverityMap();
+            $sevOrder = ['abnormal' => 0, 'general' => 1, 'normal' => 2];
+            $flagged = [];
+            $count = ['abnormal' => 0, 'general' => 0, 'normal' => 0];
+            foreach ($items as &$it) {
+                if (!is_array($it)) {
+                    continue;
+                }
+                $labels = is_array($it['labels'] ?? null) ? $it['labels'] : [];
+                $sev = $sevMap[mb_strtolower(trim((string)($labels[0] ?? '')))] ?? 'normal';
+                $it['severity'] = $sev;
+                if (is_array($it['option_items'] ?? null)) {
+                    foreach ($it['option_items'] as &$oi) {
+                        if (is_array($oi)) {
+                            $oi['severity'] = $sevMap[mb_strtolower(trim((string)($oi['label'] ?? '')))] ?? 'normal';
+                        }
+                    }
+                    unset($oi);
+                }
+                $count[$sev] = ($count[$sev] ?? 0) + 1;
+                if ($sev !== 'normal') {
+                    $flagged[] = $it;
+                }
+            }
+            unset($it);
+            usort($flagged, static fn($a, $b) => ($sevOrder[$a['severity'] ?? 'normal'] ?? 9) <=> ($sevOrder[$b['severity'] ?? 'normal'] ?? 9));
+            $checkMeta['result_items'] = $items;
+            $checkMeta['abnormal_items'] = $flagged;
+            $checkMeta['severity_summary'] = $count;
+            $checkMeta['summary_fields'] = $this->buildAssetSummaryFields($templateId, $items, $rd);
+            $info['check_meta'] = $checkMeta;
+            $rd['info'] = $info;
+            $data['recycleDevice'] = $rd;
+        }
+
+        // 2) check_summary 容量/颜色 ID → label
+        $cs = $this->daToArr($data['check_summary'] ?? null);
+        if ($templateId > 0 && (isset($cs['容量']) || isset($cs['颜色']))) {
+            $labelMap = $this->recycleBasicLabelMap($templateId);
+            if (isset($cs['容量'])) {
+                $cs['容量'] = $labelMap['capacity'][(string)$cs['容量']] ?? $cs['容量'];
+            }
+            if (isset($cs['颜色'])) {
+                $cs['颜色'] = $labelMap['color'][(string)$cs['颜色']] ?? $cs['颜色'];
+            }
+            $data['check_summary'] = $cs;
+        }
+        return $data;
+    }
+
+    /**
+     * 质检模板"设备摘要"字段(extra_config.summary_visible=1, ≤5)→ 突出项,匹配质检值+级别。
+     * @param int $templateId
+     * @param array $resultItems 已带 severity 的 result_items
+     * @param array $rd recycleDevice(含 capacity/color)
+     * @return array
+     */
+    private function buildAssetSummaryFields(int $templateId, array $resultItems, array $rd): array
+    {
+        if ($templateId <= 0) {
+            return [];
+        }
+        $fields = Db::name('recycle_check_field')
+            ->where('site_id', '=', $this->site_id)
+            ->where('template_id', '=', $templateId)
+            ->where('is_show', '=', 1)
+            ->field('field_key,field_name,sort,extra_config')
+            ->order('sort asc,id asc')->select()->toArray();
+        $picked = [];
+        foreach ($fields as $f) {
+            $ec = $this->daToArr($f['extra_config'] ?? null);
+            if ((int)($ec['summary_visible'] ?? ($ec['show_in_summary'] ?? 0)) === 1) {
+                $picked[] = $f;
+                if (count($picked) >= 5) {
+                    break;
+                }
+            }
+        }
+        if (empty($picked)) {
+            return [];
+        }
+        $lookup = [];
+        foreach ($resultItems as $it) {
+            if (!is_array($it)) {
+                continue;
+            }
+            $fk = (string)($it['field_key'] ?? '');
+            if ($fk === '') {
+                continue;
+            }
+            $labels = is_array($it['labels'] ?? null) ? $it['labels'] : [];
+            $lookup[$fk] = ['label' => (string)($labels[0] ?? ($it['text'] ?? '')), 'severity' => (string)($it['severity'] ?? 'normal')];
+        }
+        // capacity/color 不在 result_items, 取设备值 + 模板选项解析
+        $basic = $this->recycleBasicLabelMap($templateId);
+        foreach (['capacity', 'color'] as $bk) {
+            if (isset($lookup[$bk])) {
+                continue;
+            }
+            $val = (string)($rd[$bk] ?? '');
+            if ($val !== '') {
+                $lookup[$bk] = ['label' => $basic[$bk][$val] ?? $val, 'severity' => 'normal'];
+            }
+        }
+        $out = [];
+        foreach ($picked as $f) {
+            $fk = (string)$f['field_key'];
+            $v = $lookup[$fk] ?? ['label' => '', 'severity' => 'normal'];
+            $out[] = [
+                'field_key'  => $fk,
+                'field_name' => (string)$f['field_name'],
+                'label'      => $v['label'],
+                'severity'   => $v['severity'],
+            ];
+        }
+        return $out;
+    }
+
+    /** 模型 $json 字段(stdClass/json字符串/数组)统一转深层数组 */
+    private function daToArr($value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_string($value)) {
+            $d = json_decode($value, true);
+            return is_array($d) ? $d : [];
+        }
+        if (is_object($value)) {
+            $d = json_decode(json_encode($value), true);
+            return is_array($d) ? $d : [];
+        }
+        return [];
+    }
+
+    /** recycle 选项级别字典: lower(text) => severity */
+    private function recycleSeverityMap(): array
+    {
+        $rows = Db::name('recycle_check_dict')
+            ->where('site_id', '=', $this->site_id)
+            ->where('dict_type', '=', 'option')
+            ->field('text,severity')->select()->toArray();
+        $map = [];
+        foreach ($rows as $r) {
+            $t = mb_strtolower(trim((string)($r['text'] ?? '')));
+            if ($t !== '') {
+                $map[$t] = (string)($r['severity'] ?? 'normal');
+            }
+        }
+        return $map;
+    }
+
+    /** recycle 某模板的 capacity/color 选项: [field_key => [option_value => option_label]] */
+    private function recycleBasicLabelMap(int $templateId): array
+    {
+        $fields = Db::name('recycle_check_field')
+            ->where('site_id', '=', $this->site_id)
+            ->where('template_id', '=', $templateId)
+            ->whereIn('field_key', ['capacity', 'color'])
+            ->field('id,field_key')->select()->toArray();
+        if (empty($fields)) {
+            return [];
+        }
+        $fkById = [];
+        foreach ($fields as $f) {
+            $fkById[(int)$f['id']] = (string)$f['field_key'];
+        }
+        $opts = Db::name('recycle_check_option')
+            ->where('site_id', '=', $this->site_id)
+            ->whereIn('field_id', array_keys($fkById))
+            ->field('field_id,option_value,option_label')->select()->toArray();
+        $map = [];
+        foreach ($opts as $o) {
+            $fk = $fkById[(int)$o['field_id']] ?? '';
+            if ($fk !== '') {
+                $map[$fk][(string)$o['option_value']] = (string)$o['option_label'];
+            }
+        }
+        return $map;
     }
 
     /**

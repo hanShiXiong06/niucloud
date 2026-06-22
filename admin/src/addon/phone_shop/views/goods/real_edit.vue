@@ -57,6 +57,16 @@
                                     </div>
                                 </div>
                         </el-form-item>
+                        <el-form-item label="内存" prop="memory_group">
+                            <el-select v-model="goodsEdit.formData.memory_group" placeholder="选择内存" clearable filterable allow-create default-first-option class="input-width">
+                                <el-option v-for="m in memOptions" :key="m" :label="m" :value="m" />
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="成色" prop="condition_grade">
+                            <el-select v-model="goodsEdit.formData.condition_grade" placeholder="选择成色等级" clearable filterable allow-create default-first-option class="input-width">
+                                <el-option v-for="g in gradeOptions" :key="g" :label="g" :value="g" />
+                            </el-select>
+                        </el-form-item>
                         <el-form-item :label="t('goodsCategory')" prop="goods_category">
                             <el-cascader v-model="goodsEdit.formData.goods_category" :options="goodsEdit.goodsCategoryOptions" :props="goodsEdit.goodsCategoryProps" clearable filterable @change="goodsEdit.categoryHandleChange" popper-class="choice" />
                             <div class="ml-[10px]">
@@ -560,6 +570,39 @@
 
                     </el-form>
                 </el-tab-pane>
+                <el-tab-pane label="质检报告" name="qc_report">
+                    <div class="px-[20px] py-[10px]">
+                        <div class="flex items-center justify-between mb-[12px]">
+                            <span class="text-[13px] text-gray-500">维护本机的质检项:项名、检测值、级别(异常项会在商品详情优先展示、正常项折叠)。</span>
+                            <el-button type="primary" plain size="small" @click="goodsEdit.addQcItem">新增质检项</el-button>
+                        </div>
+                        <el-table :data="goodsEdit.qcItems" size="large" border max-height="520" empty-text="暂无质检项,点右上角新增">
+                            <el-table-column type="index" label="#" width="50" align="center" />
+                            <el-table-column label="质检项" min-width="180">
+                                <template #default="{ row }">
+                                    <el-input v-model.trim="row.field_name" placeholder="如:屏幕显示 / 健康度" maxlength="30" />
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="检测值" min-width="220">
+                                <template #default="{ row }">
+                                    <el-input v-model.trim="row.value" placeholder="如:显示完美 / 健康度100%" maxlength="60" />
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="级别" width="140" align="center">
+                                <template #default="{ row }">
+                                    <el-select v-model="row.severity" class="w-full">
+                                        <el-option v-for="s in goodsEdit.qcSeverityOptions" :key="s.value" :label="s.label" :value="s.value" />
+                                    </el-select>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="操作" width="90" align="center">
+                                <template #default="{ $index }">
+                                    <el-button type="danger" link @click="goodsEdit.removeQcItem($index)">删除</el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </div>
+                </el-tab-pane>
                 <el-tab-pane :label="t('goodsDesc')" name="detail">
                     <el-form :model="goodsEdit.formData" label-width="120px" ref="detailFormRef" :rules="goodsEdit.formRules" class="page-form">
                         <el-form-item :label="t('goodsDesc')" prop="goods_desc">
@@ -620,6 +663,7 @@ import { Rank, ArrowLeft } from '@element-plus/icons-vue'
 import { filterNumber } from '@/utils/common'
 import { useRouter } from 'vue-router'
 import { addGoods, editGoods, getGoodsInit } from '@/addon/phone_shop/api/goods'
+import { getSpecGroups, getGrades } from '@/addon/phone_shop/api/spec'
 import {
     getShopDeliveryList,
     getShippingTemplateList
@@ -881,6 +925,26 @@ const skuVolumeRules = () => {
 const save = () => {
     goodsEdit.save()
 }
+
+// 内存 / 成色 下拉选项(取自规格组、成色字典,与列表/收银台同源;allow-create 兼容自定义值)
+const memOptions = ref<string[]>([])
+const gradeOptions = ref<string[]>([])
+const loadMemGradeOptions = async () => {
+    try {
+        const res: any = await getSpecGroups({ category_id: 0 })
+        const groups = res.data || []
+        const memGroups = groups.filter((g: any) => String(g.label || '').includes('内存'))
+        const useGroups = memGroups.length ? memGroups : groups
+        const set = new Set<string>()
+        useGroups.forEach((g: any) => (g.items || []).forEach((it: any) => { const v = String(it.item_value ?? '').trim(); if (v) set.add(v) }))
+        memOptions.value = Array.from(set).sort()
+    } catch (e) { /* */ }
+    try {
+        const res: any = await getGrades()
+        gradeOptions.value = (res.data || []).map((x: any) => String(x.grade_name ?? '').trim()).filter(Boolean)
+    } catch (e) { /* */ }
+}
+loadMemGradeOptions()
 
 onMounted(() => {
     nextTick(() => {

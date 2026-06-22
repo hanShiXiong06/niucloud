@@ -148,8 +148,10 @@ class RecycleOrderFlowModeService extends BaseAdminService
         $summary['all_closed'] = $summary['total'] > 0 && $summary['closed'] >= $summary['total'];
 
         // 按 DeviceProgressDict 分组输出（供前端直接渲染）
+        // 待处理 = 真正未进入"待确认/待打款/已打款/异常"任一桶的设备;
+        // 减去 pending_confirm,避免"待确认"的设备又被算进"待处理"(一台机器只落一个标签)。
         $pending = $summary['pending_check'] + $summary['checking']
-            + ($summary['checked'] - $summary['confirmed'] - $summary['returned'] - ($summary['consigned'] ?? 0));
+            + ($summary['checked'] - $summary['confirmed'] - $summary['returned'] - ($summary['consigned'] ?? 0) - $summary['pending_confirm']);
         if ($pending < 0) $pending = 0;
         $summary['progress'] = [
             ['key' => 'total', 'label' => '共', 'value' => $summary['total'], 'color' => 'info'],

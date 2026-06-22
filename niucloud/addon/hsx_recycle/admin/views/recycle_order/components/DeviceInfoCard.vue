@@ -32,18 +32,7 @@
       </div>
     </div>
 
-    <!-- ===== 规格栏：内存 / 颜色 / 系统版本 / 保修信息 ===== -->
-    <div class="dic-specs">
-      <div class="dic-spec-item" v-for="spec in specs" :key="spec.key">
-        <el-icon class="dic-spec-icon"><component :is="spec.icon" /></el-icon>
-        <div class="dic-spec-body">
-          <span class="dic-spec-label">{{ spec.label }}</span>
-          <span :class="['dic-spec-value', !spec.value && 'dic-spec-value--empty']">
-            {{ spec.value || '—' }}
-          </span>
-        </div>
-      </div>
-    </div>
+
 
     <!-- ===== full 模式额外：创建时间 ===== -->
     <div class="dic-footer" v-if="mode === 'full' && device.create_at">
@@ -110,13 +99,26 @@ const statusTagType = computed(() => {
   return map[status] || 'info'
 })
 
-// 规格列表 —— 四项固定展示，无值显示"—"
-const specs = computed(() => [
-  { key: 'capacity',       icon: Coin,      label: '内存',   value: props.device?.capacity },
-  { key: 'color',          icon: Brush,     label: '颜色',   value: props.device?.color },
-  { key: 'system_version', icon: Cellphone, label: '系统版本', value: props.device?.system_version },
-  { key: 'warranty_info',  icon: Medal,     label: '保修信息', value: props.device?.warranty_info }
-])
+// 规格列表 —— 优先用后端自描述的 check_summary(field_name + 已解析 label),前端零硬编码;
+// 无 check_summary(如列表行场景)时回退旧字段,保证不破。
+const SPEC_ICONS: Record<string, any> = { capacity: Coin, color: Brush, system_version: Cellphone, warranty_info: Medal }
+const specs = computed(() => {
+  const summary = (props.device as any)?.check_summary
+  if (Array.isArray(summary) && summary.length) {
+    return summary.map((s: any) => ({
+      key: String(s.field_key ?? ''),
+      icon: SPEC_ICONS[s.field_key] || Cellphone,
+      label: String(s.field_name ?? ''),
+      value: `${s.label ?? ''}${s.unit ?? ''}`.trim()
+    }))
+  }
+  return [
+    { key: 'capacity',       icon: Coin,      label: '内存',   value: props.device?.capacity },
+    { key: 'color',          icon: Brush,     label: '颜色',   value: props.device?.color },
+    { key: 'system_version', icon: Cellphone, label: '系统版本', value: props.device?.system_version },
+    { key: 'warranty_info',  icon: Medal,     label: '保修信息', value: props.device?.warranty_info }
+  ]
+})
 
 const formatDate = (dateStr: string | number) => {
   if (!dateStr) return '—'
@@ -131,6 +133,12 @@ const formatDate = (dateStr: string | number) => {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit'
   })
+}
+
+const moneyText = (value: any) => {
+    const amount = typeof value === 'number' ? value : parseFloat(value || '0')
+    if (!Number.isFinite(amount)) return '0'
+    return Number.isInteger(amount) ? String(amount) : amount.toFixed(2)
 }
 </script>
 
@@ -180,21 +188,7 @@ $spec-border: #e2e8f0;
     padding: 0;
   }
 
-  .dic-specs {
-    margin-top: 10px;
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-
-    .dic-spec-item {
-      border-bottom-color: rgba(255, 255, 255, 0.1);
-    }
-
-    .dic-spec-label { color: rgba(255, 255, 255, 0.7); }
-    .dic-spec-value { color: #fff; }
-    .dic-spec-value--empty { color: rgba(255, 255, 255, 0.35); }
-    .dic-spec-icon { opacity: 0.8; }
-  }
+  
 }
 
 /* ============================
@@ -272,18 +266,7 @@ $spec-border: #e2e8f0;
   flex-shrink: 0;
 }
 
-/* ============================
-   规格栏
-   ============================ */
-.dic-specs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-top: 1px solid $spec-border;
 
-  .device-info-card--full & {
-    background: $spec-bg;
-  }
-}
 
 .dic-spec-item {
   display: flex;
@@ -350,29 +333,5 @@ $spec-border: #e2e8f0;
   color: #6b7280;
 }
 
-/* ============================
-   响应式：移动端 2 列
-   ============================ */
-@media (max-width: 640px) {
-  .dic-specs {
-    grid-template-columns: repeat(2, 1fr);
 
-    .dic-spec-item {
-      border-bottom: 1px solid $spec-border;
-
-      &:nth-child(3),
-      &:nth-child(4) {
-        border-bottom: none;
-      }
-
-      &:nth-child(2n) {
-        border-right: none;
-      }
-
-      &:nth-child(2n-1) {
-        border-right: 1px solid $spec-border;
-      }
-    }
-  }
-}
 </style>

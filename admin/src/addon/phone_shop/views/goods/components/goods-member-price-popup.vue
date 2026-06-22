@@ -34,7 +34,7 @@
                 <el-form-item v-if="formData.member_discount == 'fixed_price'">
                     <div class="mb-[10px] flex items-center">
                         <el-checkbox v-model="toggleCheckbox"  @change="toggleChange" size="large" class="px-[14px]" :indeterminate="isIndeterminate" />
-                        <el-button v-for="(item,index) in tableData.member_level" :key="index" size="small" @click="batchGoodsBtn(item.level_id)">
+                        <el-button v-for="(item,index) in tableData.member_level" :key="index" size="small" @click="batchGoodsBtn(item)">
                             {{item.level_name}}
                         </el-button>
                     </div>
@@ -47,7 +47,7 @@
                         <el-table-column fixed prop="price" :label="t('skuPrice')" width="120" />
                         <el-table-column v-for="(item,index) in tableData.member_level" :key="index" :label="item.level_name" width="190">
                             <template #default="{ row }">
-                                <el-input v-model.trim="row[`level_${item.level_id}`]" maxlength="8" clearable class="w-full"  @keyup="filterDigit($event)">
+                                <el-input v-model.trim="row[lkey(item)]" maxlength="8" clearable class="w-full"  @keyup="filterDigit($event)">
                                     <template #append>{{t('yuanUnit')}}</template>
                                 </el-input>
                             </template>
@@ -93,6 +93,8 @@ import {
 } from '@/addon/phone_shop/api/goods'
 
 const goodsListTableRef = ref()
+// 会员价 JSON 的键统一用"站内序号 level_no"(跨站口径一致);没有 level_no 时回退 level_id
+const lkey = (lv: any): string => 'level_' + (lv.level_no || lv.level_id)
 const formData: any = reactive({
     member_discount: ''
 })
@@ -123,18 +125,16 @@ const loadGoodsList = () => {
             if (!item.sku_name) {
                 Array[index].sku_name = goods.goods_name
             }
-            // 处理商品的会员价
+            // 处理商品的会员价:键优先用 level_no,兼容老数据的 level_id
             tableData.member_level.forEach((levelItem: any, levelIndex) => {
-                if (!item.member_price) {
-                    Array[index][`level_${levelItem.level_id}`] = parseFloat(item.price).toFixed(2)
-                } else if (item.member_price) {
-                    const memberPrice = JSON.parse(item.member_price)
-                    if (memberPrice[`level_${levelItem.level_id}`]) {
-                        Array[index][`level_${levelItem.level_id}`] = parseFloat(memberPrice[`level_${levelItem.level_id}`]).toFixed(2)
-                    } else {
-                        Array[index][`level_${levelItem.level_id}`] = parseFloat(item.price).toFixed(2)
-                    }
+                const key = lkey(levelItem)
+                let priced: any = null
+                if (item.member_price) {
+                    let mp: any = {}
+                    try { mp = JSON.parse(item.member_price) } catch (e) { mp = {} }
+                    priced = mp[key] ?? mp[`level_${levelItem.level_id}`] ?? null
                 }
+                Array[index][key] = parseFloat(priced != null && priced !== '' ? priced : item.price).toFixed(2)
             })
         })
     }).catch(() => {
@@ -203,8 +203,8 @@ const handleSelectionChange = (val: []) => {
 }
 
 // 按钮
-const currLevelId = ref('')
-const batchGoodsBtn = (level_id:any) => {
+const currLevelKey = ref('')
+const batchGoodsBtn = (level:any) => {
     if (!multipleSelection.value.length) {
         ElMessage({
             message: '请选择要操作的商品',
@@ -212,7 +212,7 @@ const batchGoodsBtn = (level_id:any) => {
         })
         return false
     }
-    currLevelId.value = level_id
+    currLevelKey.value = lkey(level)
     memberPriceDialog.value = true
 }
 
@@ -226,7 +226,7 @@ const memberPriceSave = () => {
 
     const idArr = multipleSelection.value.map((obj: any) => obj.sku_id)
     tableData.data.forEach((item: any, index, Array: any) => {
-        if (idArr.indexOf(item.sku_id) > -1) { Array[index][`level_${currLevelId.value}`] = parseFloat(memberPrice.value).toFixed(2) }
+        if (idArr.indexOf(item.sku_id) > -1) { Array[index][currLevelKey.value] = parseFloat(memberPrice.value).toFixed(2) }
     })
 
     memberPrice.value = ''
@@ -244,12 +244,13 @@ const save = () => {
             obj.member_price = {}
             tableData.member_level.forEach((levelItem: any, levelIndex) => {
                 if (verify) {
-                    obj.member_price[`level_${ levelItem.level_id }`] = item[`level_${ levelItem.level_id }`]
-                    if (parseFloat(item[`level_${ levelItem.level_id }`]) <= 0) {
+                    const key = lkey(levelItem)
+                    obj.member_price[key] = item[key]
+                    if (parseFloat(item[key]) <= 0) {
                         verify = false
                         ElMessage.warning(`[${ item.sku_name }][${ levelItem.level_name }]的指定价格不能小于等于零`)
                     }
-                    if (parseFloat(item[`level_${ levelItem.level_id }`]) > parseFloat(item.price)) {
+                    if (parseFloat(item[key]) > parseFloat(item.price)) {
                         verify = false
                         ElMessage.warning(`[${ item.sku_name }][${ levelItem.level_name }]的指定价格不能大于商品原价`)
                     }

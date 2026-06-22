@@ -67,15 +67,28 @@ class RecycleOrderDeviceService extends BaseAdminService
             // }
 
             // 4. 组装设备数据
+            $info = [
+                'goods_category' => $this->normalizeCategoryPath($deviceData['category_path'] ?? null, (int)($deviceData['category_id'] ?? 0))
+            ];
+
+            // 代客下单签收时一次性录入的质检摘要字段值（由设备型号触发的质检模板，最多 5 个）。
+            // 摘要值按 field_key 平铺写入 info，后续正式质检可直接预填/展示，避免二次弹窗重复录入。
+            $summaryValues = $this->normalizeSummaryValues($deviceData['summary'] ?? []);
+            if (!empty($summaryValues)) {
+                foreach ($summaryValues as $fieldKey => $val) {
+                    $info[$fieldKey] = $val;
+                }
+                $info['sign_summary'] = $summaryValues;
+            }
+
             $data = [
                 'order_id' => $orderId,
                 'imei' => $deviceData['imei'] ?? '',
                 'model' => $deviceData['model'] ?? '',
                 'initial_price' => $deviceData['initial_price'] ?? 0,
                 'category_id' => (int)($deviceData['category_id'] ?? 0),
-                'info' => [
-                    'goods_category' => $this->normalizeCategoryPath($deviceData['category_path'] ?? null, (int)($deviceData['category_id'] ?? 0))
-                ],
+                'check_template_id' => (int)($deviceData['check_template_id'] ?? 0),
+                'info' => $info,
                 'status' => $this->getInitialDeviceStatus($order->status),
                 'member_id' => $order->member_id,
                 'site_id' => $this->site_id,
@@ -94,6 +107,20 @@ class RecycleOrderDeviceService extends BaseAdminService
             $this->syncOrderDeviceCount($orderId);
 
             Db::commit();
+
+            // 7. 设备录入保存后按打印场景配置触发（如即时打印设备标签）。
+            // 必须在事务提交后执行，确保打印框架能读到已落库的设备数据；失败不影响录入主流程。
+            try {
+                (new \addon\hsx_recycle\app\service\admin\printer\RecyclePrintTriggerService())
+                    ->auto('device.sign.saved', [
+                        'device_id' => $deviceId,
+                        'order_id'  => $orderId,
+                        'biz_id'    => $deviceId,
+                    ]);
+            } catch (\Throwable $e) {
+                \think\facade\Log::error('设备签收保存后自动打印触发失败：' . $e->getMessage(), ['device_id' => $deviceId]);
+            }
+
             return $deviceId;
         } catch (\Exception $e) {
             Db::rollback();
@@ -211,5 +238,51 @@ class RecycleOrderDeviceService extends BaseAdminService
         }
 
         return is_array($categoryPath) ? array_values(array_map('strval', $categoryPath)) : [];
+    }
+
+    /**
+     * 归一化质检摘要字段值。
+     * 兼容两种入参：
+     *  - 关联数组 { field_key: value }
+     *  - 列表 [ {field_key, value}, ... ]
+     * 返回 { field_key: value }，空值/无 field_key 的项会被丢弃。
+     * @param mixed $summary
+     * @return array
+     */
+    private function normalizeSummaryValues($summary): array
+    {
+        if (is_string($summary) && $summary !== '') {
+            $decoded = json_decode($summary, true);
+            $summary = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($summary) || empty($summary)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($summary as $key => $item) {
+            if (is_array($item) && isset($item['field_key'])) {
+                // 列表形态：{ field_key, value }
+                $fieldKey = (string)$item['field_key'];
+                $value = $item['value'] ?? '';
+            } else {
+                // 关联数组形态：{ field_key: value }
+                $fieldKey = (string)$key;
+                $value = $item;
+            }
+            if ($fieldKey === '') {
+                continue;
+            }
+            if (is_array($value)) {
+                $value = array_values(array_filter($value, static fn($v) => $v !== '' && $v !== null));
+                if (empty($value)) {
+                    continue;
+                }
+            } elseif ($value === '' || $value === null) {
+                continue;
+            }
+            $result[$fieldKey] = $value;
+        }
+        return $result;
     }
 } 

@@ -146,7 +146,7 @@
                                     <el-table-column min-width="120">
                                         <template #default>
                                             <div class="flex flex-col">
-                                                <span class="text-[12px] text-primary cursor-pointer" @click="memberEvent(item.member.member_id)">{{ item.member.nickname }}</span>
+                                                <span class="text-[12px] text-primary cursor-pointer" @click="memberEvent(item.member?.member_id)">{{ item.member?.nickname || '—' }}</span>
                                                 <span class="text-[12px] mt-[5px]">{{ item.taker_name }} {{ item.taker_mobile }}</span>
                                                 <span class="text-[12px] mt-[5px]">{{ item.taker_full_address }}</span>
                                             </div>

@@ -362,6 +362,7 @@ import {
   getRecycleOrderStatusList,
   updateRecycleOrder,
   getDevice,
+  getDeviceDetailView,
   paymentConfirm,
   devicePaymentConfirm,
 } from "@/addon/hsx_recycle/api/recycle_order";
@@ -853,9 +854,9 @@ const viewConsignmentOrder = (device: any) => {
 
 // viewDetail
 const viewDetail = async (row) => {
-  // 直接通过 getDevice 获取设备信息
+  // 详情弹窗专用接口：按区块组织 + 裁掉无用重字段
   try {
-    const data = await getDevice(row.id);
+    const data = await getDeviceDetailView(row.id);
     if (data.code !== 1) {
       ElMessage.error(data.msg || "获取设备详情失败");
       return;
