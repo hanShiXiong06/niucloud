@@ -2,8 +2,9 @@
     <view class="rtg">
         <!-- 轻量 chip：用普通 view 复刻 uview u-tag 外观（同尺寸/圆角/1px 边框/橙色选中态），
              避免在长表单里渲染上百个 u-tag 组件实例导致真机滚动卡顿。视觉与 u-tag mini 完全一致。 -->
-        <!-- 横向滚动（选项多时，如质检项）：scroll-view 内放 inline-flex 行 + flex:0 0 auto 格子 -->
-        <scroll-view v-if="scroll" scroll-x :show-scrollbar="false" class="rtg__scroll">
+        <!-- 横向滚动（选项多时，如质检项）：u-scroll-list 内必须放「一个 flex-direction:row 的整体容器」包住所有项，
+             内容才会撑成一条横排、超出可滑（官方用法）。直接平铺多个子节点是滑不动的。 -->
+        <u-scroll-list v-if="scroll" :indicator="false" class="rtg__scroll">
             <view class="rtg__row">
                 <view
                     v-for="(opt, i) in normalizedOptions"
@@ -14,7 +15,7 @@
                     @click="toggle(opt.value)"
                 >{{ opt.label }}</view>
             </view>
-        </scroll-view>
+        </u-scroll-list>
 
         <!-- 换行排列（默认） -->
         <view v-else class="rtg__wrap">
@@ -122,15 +123,17 @@ const toggle = (val: any) => {
 .rtg__scroll {
     width: 100%;
 }
+/* 关键：单层 flex-direction:row 容器包住所有 chip，nowrap 不换行 → 内容撑宽可横滑 */
 .rtg__row {
-    display: inline-flex;
+    display: flex;
+    flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 14rpx;
     padding: 2rpx 0;
 }
 .rtg__cell {
     flex: 0 0 auto;
+    margin-right: 14rpx;
 }
 .rtg__wrap {
     display: flex;

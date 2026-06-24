@@ -2,11 +2,17 @@
     <u-popup :show="show" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="handleClose">
         <view class="device-detail-popup">
             <view class="detail-header">
-                <view class="detail-header__main">
-                    <view class="detail-title">{{ device.model || device.device_name || '设备详情' }}</view>
-                    <view class="detail-subtitle">{{ device.imei || device.user_sn || '暂无串号' }}</view>
+                <view class="detail-header__top">
+                    <view class="detail-header__main">
+                        <view class="detail-title">{{ device.model || device.device_name || '设备详情' }}</view>
+                        <view class="detail-subtitle">IMEI {{ device.imei || device.user_sn || '暂无串号' }}</view>
+                    </view>
+                    <text class="nc-iconfont nc-icon-guanbiV6xx1 detail-close" @click="handleClose"></text>
                 </view>
-                <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx]" @click="handleClose"></text>
+                <view class="detail-header__meta">
+                    <view class="detail-chip">{{ currentStageText }}</view>
+                    <view class="detail-price">¥{{ formatMoney(device.final_price || 0) }}</view>
+                </view>
             </view>
 
             <scroll-view scroll-y class="detail-content">
@@ -42,12 +48,17 @@
                     <view v-else class="cost-tip">当前暂无成本调整记录。</view>
                 </view>
 
-                <view v-if="checkRows.length || checkMetaItems.length" class="section">
+                <view v-if="checkRows.length || checkMetaItems.length || device.remark" class="section">
                     <view class="section-title">质检信息</view>
                     <u-cell-group v-if="checkRows.length" :border="false">
                         <u-cell v-for="item in checkRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
                     </u-cell-group>
-                    <RecycleCheckSummary v-if="checkMetaItems.length" :items="checkMetaItems" :style="{ marginTop: checkRows.length ? '16rpx' : '0' }" />
+                    <RecycleCheckSummary
+                        v-if="checkMetaItems.length || device.remark"
+                        :items="checkMetaItems"
+                        :remark="device.remark"
+                        :style="{ marginTop: checkRows.length ? '16rpx' : '0' }"
+                    />
                 </view>
 
                 <view v-if="imageGroups.length" class="section">
@@ -200,7 +211,7 @@ import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import DeviceDownstreamProgress from '@/addon/hsx_recycle/components/DeviceDownstreamProgress.vue'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import { formatMoney, formatTime } from '@/addon/hsx_recycle/utils/helper'
-import { isConsignedDevice } from '@/addon/hsx_recycle/utils/device'
+import { isConsignedDevice, isReturnedDevice } from '@/addon/hsx_recycle/utils/device'
 
 interface RowItem {
     label: string
@@ -330,8 +341,12 @@ const basicRows = computed<RowItem[]>(() => compactRows([
     row('更新时间', formatTimeValue(device.value.update_at || device.value.update_time))
 ]))
 
-// 当前阶段状态（只显示一个）：代卖 > 打款 > 确认 > 设备质检状态
+const isReturned = computed(() => isReturnedDevice(device.value))
+
+// 当前阶段状态（只显示一个）：已退回 > 代卖 > 打款 > 确认 > 设备质检状态
 const currentStageText = computed(() => {
+    // 已退回最高优先级，否则会被退回前残留的 confirm_status_name(待客户确认) 盖掉，导致和设备卡不一致
+    if (isReturned.value) return device.value.status_name || device.value.dispose_status_name || '已退回'
     if (isConsigned.value) return device.value.consignmentOrder?.status_name || device.value.dispose_status_name || '已转代卖'
     // 打款状态只在客户确认后才显示
     if (Number(device.value.confirm_status) === 1 && device.value.pay_status_name) return String(device.value.pay_status_name)
@@ -347,8 +362,8 @@ const statusRows = computed<RowItem[]>(() => compactRows([
     priceRow('已打款金额', isConsigned.value ? '' : device.value.pay_amount),
     row('确认时间', isConsigned.value ? '' : formatTimeValue(device.value.confirm_time)),
     row('打款时间', isConsigned.value ? '' : formatTimeValue(device.value.pay_time)),
-    row('确认备注', isConsigned.value ? '' : device.value.confirm_remark, true),
-    row('备注', device.value.remark, true)
+    row('确认备注', isConsigned.value ? '' : device.value.confirm_remark, true)
+    // 质检备注移到「质检信息」区的 RecycleCheckSummary 里着重展示，避免重复
 ]))
 
 const costAdjustRows = computed<RowItem[]>(() => compactRows([
@@ -643,13 +658,18 @@ const handleClose = () => {
 }
 
 .detail-header {
+    flex-shrink: 0;
+    padding: 30rpx;
+    border-radius: 20rpx 20rpx 0 0;
+    background: linear-gradient(135deg, #3c9cff, #2b85e4);
+    box-shadow: 0 8rpx 20rpx rgba(60, 156, 255, 0.25);
+}
+
+.detail-header__top {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 20rpx;
-    padding: 30rpx;
-    border-bottom: 1rpx solid #f2f3f5;
-    flex-shrink: 0;
 }
 
 .detail-header__main {
@@ -658,17 +678,46 @@ const handleClose = () => {
 }
 
 .detail-title {
-    font-size: 32rpx;
-    font-weight: 600;
-    color: #1f2937;
-    line-height: 1.35;
+    font-size: 34rpx;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.3;
 }
 
 .detail-subtitle {
     margin-top: 8rpx;
     font-size: 22rpx;
-    color: #8c8c8c;
+    color: rgba(255, 255, 255, 0.82);
     word-break: break-all;
+}
+
+.detail-close {
+    flex-shrink: 0;
+    font-size: 32rpx;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1;
+}
+
+.detail-header__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 24rpx;
+}
+
+.detail-chip {
+    padding: 8rpx 22rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+    font-size: 24rpx;
+    font-weight: 600;
+}
+
+.detail-price {
+    color: #fff;
+    font-size: 38rpx;
+    font-weight: 800;
 }
 
 .detail-content {

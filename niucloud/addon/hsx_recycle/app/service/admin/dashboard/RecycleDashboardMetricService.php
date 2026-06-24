@@ -554,6 +554,29 @@ class RecycleDashboardMetricService extends BaseAdminService
             ];
         }
 
+        // 型号分布（老板视角：今天收了哪些型号、各多少台）。model 存的是面包屑路径，取末段作展示名
+        $modelRows = (clone $baseDeviceQuery)
+            ->field('model, COUNT(*) as count, SUM(final_price) as amount')
+            ->group('model')
+            ->order('count desc')
+            ->limit(10)
+            ->select()
+            ->toArray();
+        $modelBreakdown = [];
+        $modelTotal = array_sum(array_map(static fn($row) => (int)($row['count'] ?? 0), $modelRows));
+        foreach ($modelRows as $row) {
+            $count = (int)($row['count'] ?? 0);
+            $rawModel = trim((string)($row['model'] ?? ''));
+            $segs = array_values(array_filter(array_map('trim', explode('/', $rawModel))));
+            $modelBreakdown[] = [
+                'model' => $rawModel,
+                'model_name' => $segs ? end($segs) : '未识别型号',
+                'count' => $count,
+                'amount' => $this->money((float)($row['amount'] ?? 0)),
+                'rate' => $modelTotal > 0 ? round($count / $modelTotal * 100, 2) : 0,
+            ];
+        }
+
         $priceRows = [];
         if (!empty($createdDeviceIds)) {
             $priceRows = (new RecycleDevice())
@@ -595,6 +618,7 @@ class RecycleDashboardMetricService extends BaseAdminService
                 ])
                 ->count(),
             'category_breakdown' => $categoryBreakdown,
+            'model_breakdown' => $modelBreakdown,
             'source_breakdown' => $this->buildSourceBreakdown($params),
             'delivery_breakdown' => $this->buildDeliveryBreakdown($params),
             'order_status_breakdown' => $this->buildOrderStatusBreakdown($params),

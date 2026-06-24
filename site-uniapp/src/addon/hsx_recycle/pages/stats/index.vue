@@ -1,17 +1,37 @@
 <template>
-    <scroll-view scroll-y class="stats-page">
+    <scroll-view
+        scroll-y
+        class="stats-page"
+        refresher-enabled
+        :refresher-triggered="refreshing"
+        @refresherrefresh="onRefresh"
+    >
         <view class="hero-card">
             <view class="hero-top">
-                <view>
-                    <text class="hero-kicker">{{ currentDateLabel }}</text>
-                    <view class="hero-title">回收经营看板</view>
-                </view>
+                <text class="hero-kicker">{{ currentDateLabel }} · 回收经营</text>
                 <view class="refresh-btn" @click="loadStats">
                     <text class="nc-iconfont nc-icon-shuaxinV6xx"></text>
-                    <text>刷新</text>
                 </view>
             </view>
-            <view class="hero-summary">{{ overviewText }}</view>
+            <view class="hero-main">
+                <text class="hero-num">{{ heroRecycled }}</text>
+                <text class="hero-num__unit">台</text>
+                <text class="hero-num__label">收货设备</text>
+            </view>
+            <view class="hero-stats">
+                <view class="hero-stat">
+                    <text class="hero-stat__v">{{ heroOrders }}</text>
+                    <text class="hero-stat__k">订单</text>
+                </view>
+                <view class="hero-stat">
+                    <text class="hero-stat__v">{{ heroNew }}</text>
+                    <text class="hero-stat__k">新增设备</text>
+                </view>
+                <view class="hero-stat">
+                    <text class="hero-stat__v">¥{{ heroPaid }}</text>
+                    <text class="hero-stat__k">已打款</text>
+                </view>
+            </view>
         </view>
 
         <view class="date-filter">
@@ -31,8 +51,10 @@
         <template v-else>
             <view class="section">
                 <view class="section-head">
-                    <text class="section-title">关键指标</text>
-                    <text class="section-desc">点击卡片查看明细</text>
+                    <view class="section-title-row">
+                        <u-icon name="grid-fill" color="#3c9cff" size="15"></u-icon>
+                        <text class="section-title">关键指标</text>
+                    </view>
                 </view>
                 <view class="metric-grid">
                     <view
@@ -47,15 +69,41 @@
                             <text class="metric-unit">{{ item.unit }}</text>
                         </view>
                         <text class="metric-label">{{ item.label }}</text>
-                        <text class="metric-note">{{ item.note }}</text>
                     </view>
                 </view>
             </view>
 
+            <view class="section section--card">
+                <view class="section-head">
+                    <view class="section-title-row">
+                        <u-icon name="star-fill" color="#fa5c1e" size="15"></u-icon>
+                        <text class="section-title">型号分布</text>
+                    </view>
+                    <text class="section-desc">收货 TOP 型号</text>
+                </view>
+                <view v-if="modelBreakdown.length" class="model-list">
+                    <view v-for="(m, i) in modelBreakdown" :key="i" class="model-row">
+                        <text class="model-rank" :class="{ 'model-rank--top': i < 3 }">{{ i + 1 }}</text>
+                        <view class="model-main">
+                            <view class="model-name-row">
+                                <text class="model-name">{{ m.name }}</text>
+                                <text class="model-count">{{ m.count }} 台</text>
+                            </view>
+                            <view class="model-bar">
+                                <view class="model-bar__fill" :style="{ width: m.rate + '%' }"></view>
+                            </view>
+                        </view>
+                    </view>
+                </view>
+                <u-empty v-else text="暂无收货型号" mode="list"></u-empty>
+            </view>
+
             <view class="section">
                 <view class="section-head">
-                    <text class="section-title">待办跟进</text>
-                    <text class="section-desc">按当前状态统计</text>
+                    <view class="section-title-row">
+                        <u-icon name="clock-fill" color="#f97316" size="15"></u-icon>
+                        <text class="section-title">待办跟进</text>
+                    </view>
                 </view>
                 <view class="todo-grid">
                     <view
@@ -74,17 +122,20 @@
             <view class="chart-card">
                 <view class="section-head">
                     <text class="section-title">经营趋势</text>
-                    <text class="section-desc">{{ trendExplain }}</text>
                 </view>
                 <view class="uchart-box uchart-box--trend">
-                    <canvas
-                        v-if="hasTrendData"
-                        canvas-id="recycle-trend-chart"
-                        id="recycle-trend-chart"
-                        class="uchart-canvas uchart-canvas--trend"
-                        @touchstart="touchChart('trend', $event)"
-                    ></canvas>
-                    <view v-else class="chart-empty">暂无趋势数据</view>
+                    <view class="chart-render chart-render--trend">
+                        <qiun-data-charts
+                            v-if="hasTrendData"
+                            type="column"
+                            :chartData="trendChart"
+                            :opts="trendOpts"
+                            :canvas2d="true"
+                            canvasId="recycleTrend"
+                            :ontouch="true"
+                        />
+                        <view v-else class="chart-empty">暂无趋势数据</view>
+                    </view>
                     <view class="chart-legend">
                         <view class="legend-item">
                             <view class="legend-dot legend-dot--order"></view>
@@ -102,52 +153,66 @@
             <view class="chart-card">
                 <view class="section-head">
                     <text class="section-title">设备生命周期</text>
-                    <text class="section-desc">按回收处理顺序排列</text>
                 </view>
                 <view class="uchart-box">
-                    <canvas
-                        v-if="hasLifecycleData"
-                        canvas-id="recycle-lifecycle-chart"
-                        id="recycle-lifecycle-chart"
-                        class="uchart-canvas"
-                        @touchstart="touchChart('lifecycle', $event)"
-                    ></canvas>
-                    <view v-else class="chart-empty">暂无生命周期数据</view>
+                    <view class="chart-render chart-render--lifecycle">
+                        <qiun-data-charts
+                            v-if="hasLifecycleData"
+                            type="column"
+                            :chartData="lifecycleChartData"
+                            :opts="lifecycleOpts"
+                            :canvas2d="true"
+                            canvasId="recycleLifecycle"
+                            :ontouch="true"
+                        />
+                        <view v-else class="chart-empty">暂无生命周期数据</view>
+                    </view>
                 </view>
             </view>
 
             <view class="chart-card">
                 <view class="section-head">
                     <text class="section-title">来源与履约</text>
-                    <text class="section-desc">订单来源、配送方式占比</text>
                 </view>
                 <view class="uchart-box uchart-box--ring">
-                    <canvas
-                        v-if="hasSourceData"
-                        canvas-id="recycle-source-chart"
-                        id="recycle-source-chart"
-                        class="uchart-canvas uchart-canvas--ring"
-                        @touchstart="touchChart('source', $event)"
-                    ></canvas>
-                    <view v-else class="chart-empty">暂无来源数据</view>
+                    <view class="chart-render chart-render--ring">
+                        <qiun-data-charts
+                            v-if="hasSourceData"
+                            type="ring"
+                            :chartData="sourceChartData"
+                            :opts="sourceOpts"
+                            :canvas2d="true"
+                            canvasId="recycleSource"
+                            :ontouch="true"
+                        />
+                        <view v-else class="chart-empty">暂无来源数据</view>
+                    </view>
                 </view>
             </view>
 
-            <view class="chart-card">
+            <view class="section section--card">
                 <view class="section-head">
-                    <text class="section-title">分类排行</text>
-                    <text class="section-desc">按设备数量展示前 6 项</text>
+                    <view class="section-title-row">
+                        <u-icon name="list" color="#3c9cff" size="15"></u-icon>
+                        <text class="section-title">分类排行</text>
+                    </view>
+                    <text class="section-desc">按设备数量</text>
                 </view>
-                <view class="uchart-box uchart-box--bar">
-                    <canvas
-                        v-if="hasCategoryData"
-                        canvas-id="recycle-category-chart"
-                        id="recycle-category-chart"
-                        class="uchart-canvas uchart-canvas--bar"
-                        @touchstart="touchChart('category', $event)"
-                    ></canvas>
-                    <view v-else class="chart-empty">暂无分类数据</view>
+                <view v-if="categoryRank.length" class="model-list">
+                    <view v-for="(c, i) in categoryRank" :key="i" class="model-row">
+                        <text class="model-rank" :class="{ 'model-rank--top': i < 3 }">{{ i + 1 }}</text>
+                        <view class="model-main">
+                            <view class="model-name-row">
+                                <text class="model-name">{{ c.name }}</text>
+                                <text class="model-count model-count--blue">{{ c.count }} 台</text>
+                            </view>
+                            <view class="model-bar">
+                                <view class="model-bar__fill model-bar__fill--blue" :style="{ width: c.rate + '%' }"></view>
+                            </view>
+                        </view>
+                    </view>
                 </view>
+                <u-empty v-else text="暂无分类数据" mode="list"></u-empty>
             </view>
 
             <view class="section">
@@ -172,11 +237,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getDashboardOverview, getDashboardTrend } from '@/addon/hsx_recycle/api/stats'
 import { redirect } from '@/utils/common'
-import uCharts from '@/components/qiun-data-charts/js_sdk/u-charts/u-charts.js'
+import qiunDataCharts from '@/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 
 type DrilldownTarget = {
@@ -211,26 +276,10 @@ type DashboardCard = {
 }
 
 const loading = ref(true)
+const refreshing = ref(false)
 const currentDate = ref('week')
 const statsData = ref<Record<string, any>>({})
 const trendData = ref<Record<string, any>>({})
-const chartWidth = ref(320)
-const chartInstances: Record<string, any> = {}
-
-const chartIds = {
-    trend: 'recycle-trend-chart',
-    lifecycle: 'recycle-lifecycle-chart',
-    source: 'recycle-source-chart',
-    category: 'recycle-category-chart'
-}
-
-const chartHeights = {
-    trend: 260,
-    lifecycle: 260,
-    source: 240,
-    category: 280
-}
-
 const dateOptions = [
     { label: '今日', value: 'today' },
     { label: '昨日', value: 'yesterday' },
@@ -276,6 +325,34 @@ const overviewText = computed(() => {
     const paidAmount = formatMoney(valueOf(financeSummary.value, 'selected_paid_amount', statsData.value.selected_payment_amount))
     const pending = valueOf(ledger.value, 'pending_check_device_count') + valueOf(ledger.value, 'checking_device_count') + valueOf(ledger.value, 'pending_confirm_count')
     return `${currentDateLabel.value}新增 ${orderCount} 单、${deviceCount} 台，已打款 ¥${paidAmount}，当前待处理 ${pending} 台。`
+})
+
+// hero 主视觉：收了多少台 + 单数/新增/打款
+const heroRecycled = computed(() => valueOf(ledger.value, 'signed_device_count'))
+const heroOrders = computed(() => valueOf(ledger.value, 'order_count', statsData.value.today_order_count))
+const heroNew = computed(() => valueOf(ledger.value, 'device_count', statsData.value.today_device_count))
+const heroPaid = computed(() => formatMoney(valueOf(financeSummary.value, 'selected_paid_amount', statsData.value.selected_payment_amount)))
+
+// 型号分布（老板要看：收了哪些型号、各多少台）。bar 宽按最大值归一
+const modelBreakdown = computed(() => {
+    const rows = Array.isArray(todayBusiness.value.model_breakdown) ? todayBusiness.value.model_breakdown : []
+    const max = Math.max(...rows.map((r: any) => Number(r.count || 0)), 1)
+    return rows.slice(0, 8).map((r: any) => ({
+        name: r.model_name || r.model || '未识别型号',
+        count: Number(r.count || 0),
+        amount: r.amount,
+        rate: Math.round(Number(r.count || 0) / max * 100)
+    }))
+})
+
+// 分类排行：换成榜单（原柱状图左侧标签占太大、不好看）
+const categoryRank = computed(() => {
+    const rows = normalizeBreakdown(todayBusiness.value.category_breakdown)
+    const max = Math.max(...rows.map((r: any) => Number(r.count || 0)), 1)
+    return [...rows]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+        .map((r: any) => ({ name: r.label, count: r.count, rate: Math.round(Number(r.count || 0) / max * 100) }))
 })
 
 const primaryMetrics = computed<MetricItem[]>(() => [
@@ -408,6 +485,11 @@ const getCardDrilldown = (card: DashboardCard | undefined): DrilldownTarget | un
 }
 
 const openDrilldown = (item: MetricItem) => {
+    // 退货待处理 → 退货单列表（而非订单列表）
+    if (item.key === 'pending_return') {
+        redirect({ url: '/addon/hsx_recycle/pages/return/list' })
+        return
+    }
     if (!item.drilldown) return
     const range = getDateRange(currentDate.value)
     const param: Record<string, any> = {
@@ -462,119 +544,52 @@ const formatDate = (d: Date) => {
 }
 
 const formatShortDate = (value: any) => {
+    // 趋势 X 轴只留「日」，去掉年月，30 天也不会挤满看不清
     const text = String(value || '')
-    return text.includes('-') ? text.slice(5) : text
+    const parts = text.split('-')
+    return parts.length ? parts[parts.length - 1] : text
 }
 
-const getChartWidth = () => {
-    try {
-        const info = uni.getSystemInfoSync()
-        return Math.max(info.windowWidth - uni.upx2px(84), 260)
-    } catch (e) {
-        return 320
-    }
-}
+// trend 图只展示 订单/设备 两条柱（打款金额另用文字 trendPaidText 展示）
+const trendChart = computed(() => ({
+    categories: trendChartData.value.categories,
+    series: trendChartData.value.series.filter((s: any) => s.name === '新增订单' || s.name === '新增设备')
+}))
 
-const createChart = (key: keyof typeof chartIds, options: Record<string, any>) => {
-    const canvasId = chartIds[key]
-    chartInstances[key] = new uCharts({
-        canvasId,
-        context: uni.createCanvasContext(canvasId),
-        width: chartWidth.value,
-        height: chartHeights[key],
-        pixelRatio: 1,
-        animation: true,
-        background: '#FFFFFF',
-        ...options
-    })
+// qiun-data-charts(canvas2d) 各图配置。颜色用真实 hex（canvas 不识别 CSS 变量）
+const trendOpts = {
+    color: ['#3c9cff', '#10b981'],
+    padding: [12, 10, 8, 10],
+    legend: { show: false },
+    dataLabel: false,
+    xAxis: { disableGrid: true, fontColor: '#94a3b8' },
+    yAxis: { gridType: 'dash', dashLength: 4, data: [{ min: 0, fontColor: '#94a3b8' }] },
+    extra: { column: { type: 'group', width: 12, activeBgColor: '#eef2ff' } }
 }
-
-const renderCharts = async () => {
-    chartWidth.value = getChartWidth()
-    await nextTick()
-    setTimeout(() => {
-        if (hasTrendData.value) renderTrendChart()
-        if (hasLifecycleData.value) renderLifecycleChart()
-        if (hasSourceData.value) renderSourceChart()
-        if (hasCategoryData.value) renderCategoryChart()
-    }, 120)
+const lifecycleOpts = {
+    color: ['#3c9cff'],
+    padding: [12, 10, 18, 10],
+    legend: { show: false },
+    dataLabel: true,
+    xAxis: { disableGrid: true, rotateLabel: true, fontColor: '#64748b' },
+    yAxis: { gridType: 'dash', dashLength: 4, data: [{ min: 0, fontColor: '#94a3b8' }] },
+    extra: { column: { type: 'group', width: 16, activeBgColor: '#eef2ff' } }
 }
-
-const renderTrendChart = () => {
-    const orderSeries = trendChartData.value.series.find((item: any) => item.name === '新增订单')?.data || []
-    const deviceSeries = trendChartData.value.series.find((item: any) => item.name === '新增设备')?.data || []
-    createChart('trend', {
-        type: 'column',
-        categories: trendChartData.value.categories,
-        series: [
-            { name: '新增订单', data: orderSeries },
-            { name: '新增设备', data: deviceSeries }
-        ],
-        color: ['var(--hsx-primary)', '#10b981'],
-        padding: [12, 10, 8, 10],
-        legend: { show: false },
-        dataLabel: false,
-        xAxis: { disableGrid: true, fontColor: '#94a3b8' },
-        yAxis: { gridType: 'dash', dashLength: 4, data: [{ min: 0, fontColor: '#94a3b8' }] },
-        extra: { column: { type: 'group', width: 12, activeBgColor: '#eef2ff' } }
-    })
+const sourceOpts = {
+    color: ['#3c9cff', '#10b981', '#f97316', '#7c3aed', '#dc2626', '#0d9488'],
+    padding: [8, 8, 8, 8],
+    legend: { show: true, position: 'bottom', fontColor: '#64748b' },
+    dataLabel: true,
+    extra: { ring: { ringWidth: 24, activeOpacity: 0.65, activeRadius: 8, offsetAngle: 0, labelWidth: 12 } }
 }
-
-const renderLifecycleChart = () => {
-    createChart('lifecycle', {
-        type: 'column',
-        categories: lifecycleChartData.value.categories,
-        series: lifecycleChartData.value.series,
-        color: ['var(--hsx-primary)'],
-        padding: [12, 10, 18, 10],
-        legend: { show: false },
-        dataLabel: true,
-        xAxis: { disableGrid: true, rotateLabel: true, fontColor: '#64748b' },
-        yAxis: { gridType: 'dash', dashLength: 4, data: [{ min: 0, fontColor: '#94a3b8' }] },
-        extra: { column: { type: 'group', width: 16, activeBgColor: '#eef2ff' } }
-    })
-}
-
-const renderSourceChart = () => {
-    createChart('source', {
-        type: 'ring',
-        series: sourceChartData.value.series,
-        color: ['var(--hsx-primary)', '#10b981', '#f97316', '#7c3aed', '#dc2626', '#0d9488'],
-        padding: [8, 8, 8, 8],
-        legend: { show: true, position: 'bottom', fontColor: '#64748b' },
-        dataLabel: true,
-        extra: {
-            ring: {
-                ringWidth: 24,
-                activeOpacity: 0.65,
-                activeRadius: 8,
-                offsetAngle: 0,
-                labelWidth: 12
-            }
-        }
-    })
-}
-
-const renderCategoryChart = () => {
-    createChart('category', {
-        type: 'bar',
-        categories: categoryChartData.value.categories,
-        series: categoryChartData.value.series,
-        color: ['#7c3aed'],
-        padding: [8, 12, 8, 30],
-        legend: { show: false },
-        dataLabel: true,
-        xAxis: { disabled: true },
-        yAxis: { disabled: false, fontColor: '#64748b' },
-        extra: { bar: { type: 'group', width: 16, categoryGap: 8 } }
-    })
-}
-
-const touchChart = (key: keyof typeof chartIds, e: any) => {
-    const chart = chartInstances[key]
-    if (!chart) return
-    if (typeof chart.showToolTip === 'function') chart.showToolTip(e)
-    if (typeof chart.touchLegend === 'function') chart.touchLegend(e)
+const categoryOpts = {
+    color: ['#7c3aed'],
+    padding: [8, 12, 8, 30],
+    legend: { show: false },
+    dataLabel: true,
+    xAxis: { disabled: true },
+    yAxis: { disabled: false, fontColor: '#64748b' },
+    extra: { bar: { type: 'group', width: 16, categoryGap: 8 } }
 }
 
 const getDateRange = (type: string) => {
@@ -599,7 +614,14 @@ const getDateRange = (type: string) => {
     return { start_time: start, end_time: end }
 }
 
+let statsInflight = false
 const loadStats = async () => {
+    // in-flight 守卫：下拉/切日期/刷新按钮/onShow 任一在请求中，后续调用直接跳过，避免并发与抖动
+    if (statsInflight) {
+        refreshing.value = false
+        return
+    }
+    statsInflight = true
     loading.value = true
     try {
         const params = getDateRange(currentDate.value)
@@ -614,10 +636,18 @@ const loadStats = async () => {
         trendData.value = {}
         uni.showToast({ title: e?.msg || e?.message || '统计数据加载失败', icon: 'none' })
     } finally {
+        statsInflight = false
         loading.value = false
+        refreshing.value = false
         uni.stopPullDownRefresh()
-        renderCharts()
+        // 图表由 qiun-data-charts 响应式自渲染，无需手动触发
     }
+}
+
+const onRefresh = () => {
+    if (refreshing.value) return
+    refreshing.value = true
+    loadStats()
 }
 
 const switchDate = (value: string) => {
@@ -654,6 +684,7 @@ onPullDownRefresh(() => {
 
 .hero-top {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 20rpx;
 }
@@ -663,28 +694,63 @@ onPullDownRefresh(() => {
     color: rgba(255, 255, 255, 0.78);
 }
 
-.hero-title {
-    margin-top: 8rpx;
-    font-size: 38rpx;
+.hero-main {
+    display: flex;
+    align-items: baseline;
+    gap: 8rpx;
+    margin-top: 16rpx;
+}
+
+.hero-num {
+    font-size: 72rpx;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.hero-num__unit {
+    font-size: 28rpx;
+    font-weight: 600;
+}
+
+.hero-num__label {
+    margin-left: 10rpx;
+    font-size: 24rpx;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.hero-stats {
+    display: flex;
+    margin-top: 24rpx;
+    padding-top: 22rpx;
+    border-top: 1rpx solid rgba(255, 255, 255, 0.18);
+}
+
+.hero-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+}
+
+.hero-stat__v {
+    font-size: 30rpx;
     font-weight: 700;
 }
 
-.hero-summary {
-    margin-top: 18rpx;
-    font-size: 24rpx;
-    line-height: 1.7;
-    color: rgba(255, 255, 255, 0.86);
+.hero-stat__k {
+    font-size: 21rpx;
+    color: rgba(255, 255, 255, 0.72);
 }
 
 .refresh-btn {
-    height: 58rpx;
-    padding: 0 18rpx;
-    border-radius: 999rpx;
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 50%;
     background: rgba(255, 255, 255, 0.16);
     display: flex;
     align-items: center;
-    gap: 8rpx;
-    font-size: 22rpx;
+    justify-content: center;
+    font-size: 26rpx;
     flex-shrink: 0;
 }
 
@@ -741,16 +807,105 @@ onPullDownRefresh(() => {
 
 .section-head {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
     gap: 20rpx;
     margin-bottom: 14rpx;
+}
+
+.section-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+}
+
+/* 整块白色卡片（如型号分布） */
+.section--card {
+    padding: 24rpx;
+    border-radius: 20rpx;
+    background: #fff;
+    box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.05);
+}
+.section--card .section-head {
+    margin-bottom: 18rpx;
 }
 
 .section-title {
     font-size: 29rpx;
     font-weight: 700;
     color: #0f172a;
+}
+
+/* 型号分布榜单 */
+.model-list {
+    display: flex;
+    flex-direction: column;
+    gap: 18rpx;
+}
+.model-row {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+}
+.model-rank {
+    flex-shrink: 0;
+    width: 40rpx;
+    height: 40rpx;
+    line-height: 40rpx;
+    text-align: center;
+    border-radius: 12rpx;
+    background: #f1f5f9;
+    color: #94a3b8;
+    font-size: 24rpx;
+    font-weight: 700;
+}
+.model-rank--top {
+    background: #fff2e9;
+    color: #fa5c1e;
+}
+.model-main {
+    flex: 1;
+    min-width: 0;
+}
+.model-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+    margin-bottom: 10rpx;
+}
+.model-name {
+    flex: 1;
+    min-width: 0;
+    color: #1f2937;
+    font-size: 26rpx;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.model-count {
+    flex-shrink: 0;
+    color: #fa5c1e;
+    font-size: 24rpx;
+    font-weight: 700;
+}
+.model-bar {
+    height: 12rpx;
+    border-radius: 999rpx;
+    background: #f1f5f9;
+    overflow: hidden;
+}
+.model-bar__fill {
+    height: 100%;
+    border-radius: 999rpx;
+    background: linear-gradient(90deg, #fa5c1e, #ff8a4c);
+}
+.model-count--blue {
+    color: #3c9cff;
+}
+.model-bar__fill--blue {
+    background: linear-gradient(90deg, #3c9cff, #5aa9ff);
 }
 
 .section-desc {
@@ -860,41 +1015,30 @@ onPullDownRefresh(() => {
 
 .uchart-box {
     width: 100%;
-    min-height: 260px;
     overflow: hidden;
 }
 
-.uchart-box--trend {
-    min-height: 330px;
-}
-
-.uchart-box--ring {
-    min-height: 240px;
-}
-
-.uchart-box--bar {
-    min-height: 280px;
-}
-
-.uchart-canvas {
+/* 图表渲染区：必须定高，qiun-data-charts 才能正确测量尺寸、不溢出/不错位 */
+.chart-render {
+    position: relative;
     width: 100%;
     height: 260px;
 }
-
-.uchart-canvas--trend {
+.chart-render--trend {
+    height: 300px;
+}
+.chart-render--lifecycle {
     height: 260px;
 }
-
-.uchart-canvas--ring {
+.chart-render--ring {
     height: 240px;
 }
-
-.uchart-canvas--bar {
+.chart-render--bar {
     height: 280px;
 }
 
 .chart-empty {
-    height: 260px;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;

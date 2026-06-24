@@ -401,7 +401,9 @@ const footerActions = computed(() => {
         )
     }
 
-    return [...actions, ...orderActions.value]
+    // 订单区不放打印按钮：打印跟场景/设备挂钩，不在订单层级出现
+    const orderLevel = orderActions.value.filter((a: any) => !String(a.type || '').startsWith('print:'))
+    return [...actions, ...orderLevel]
 })
 
 const normalizeBusinessStageOptions = (data: any) => {

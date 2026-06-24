@@ -1,15 +1,26 @@
 <template>
-    <view v-if="rows.length" class="rcs">
-        <view
-            v-for="(it, i) in rows"
-            :key="i"
-            class="rcs__item"
-            :class="{ 'rcs__item--bad': it.abnormal }"
-        >
-            <text class="rcs__label">{{ it.label }}</text>
-            <text class="rcs__value">{{ it.value }}</text>
+    <view v-if="rows.length || remarkText" class="rcs-wrap">
+        <!-- 质检员手填备注：着重显示（橙色块），模板覆盖不到的关键补充信息 -->
+        <view v-if="remarkText" class="rcs-remark">
+            <view class="rcs-remark__head">
+                <u-icon name="edit-pen-fill" color="#fa5c1e" size="14"></u-icon>
+                <text class="rcs-remark__label">质检备注</text>
+            </view>
+            <text class="rcs-remark__text">{{ remarkText }}</text>
+        </view>
+        <view v-if="rows.length" class="rcs">
+            <view
+                v-for="(it, i) in rows"
+                :key="i"
+                class="rcs__item"
+                :class="{ 'rcs__item--bad': it.abnormal }"
+            >
+                <text class="rcs__label">{{ it.label }}</text>
+                <text class="rcs__value">{{ it.value }}</text>
+            </view>
         </view>
     </view>
+    
     <text v-else-if="emptyText" class="rcs__empty">{{ emptyText }}</text>
 </template>
 
@@ -27,12 +38,16 @@ const props = withDefaults(defineProps<{
     meta?: Record<string, any>
     labelMap?: Record<string, Record<string, string>>
     emptyText?: string
+    remark?: string
 }>(), {
     items: undefined,
     meta: () => ({}),
     labelMap: () => ({}),
-    emptyText: ''
+    emptyText: '',
+    remark: ''
 })
+
+const remarkText = computed(() => String(props.remark || '').trim())
 
 const isOn = (v: any) => v === true || v === 1 || v === '1' || v === 'true' || v === '开启'
 
@@ -91,11 +106,45 @@ const rows = computed<Array<{ label: string, value: string, abnormal: boolean }>
 </script>
 
 <style scoped lang="scss">
+.rcs-wrap {
+    width: 100%;
+}
+/* 质检备注：橙色弱底 + 笔形图标，着重突出人工补充信息 */
+.rcs-remark {
+    margin: 14rpx 0 ;
+    padding: 16rpx 18rpx;
+    border-radius: 14rpx;
+    background: #fff7f2;
+    border: 1rpx solid #ffe0cf;
+}
+.rcs-remark__head {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    margin-bottom: 8rpx;
+}
+.rcs-remark__label {
+    color: #fa5c1e;
+    font-size: 23rpx;
+    font-weight: 700;
+}
+.rcs-remark__text {
+    display: block;
+    color: #5b4636;
+    font-size: 24rpx;
+    line-height: 1.55;
+    word-break: break-word;
+}
 .rcs {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 24rpx;
     row-gap: 12rpx;
+    /* 浅底 + 边框，让质检两列与上方的内存/颜色/保修标签拉开层次 */
+    padding: 18rpx 20rpx;
+    border-radius: 14rpx;
+    background: #f8fafc;
+    border: 1rpx solid #eef2f7;
 }
 .rcs__item {
     display: flex;

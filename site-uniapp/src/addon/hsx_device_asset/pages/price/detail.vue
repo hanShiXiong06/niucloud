@@ -44,6 +44,14 @@
                 :items="checkText ? undefined : checkItems"
                 empty-text="暂无质检摘要"
             ></AssetCheckSummary>
+            <!-- 质检员手填备注：模板覆盖不到的补充信息，重要，单独突出 -->
+            <view v-if="checkRemark" class="check-remark">
+                <view class="check-remark__head">
+                    <u-icon name="edit-pen-fill" color="#fa5c1e" size="14"></u-icon>
+                    <text class="check-remark__label">质检备注</text>
+                </view>
+                <text class="check-remark__text">{{ checkRemark }}</text>
+            </view>
         </view>
 
         <!-- 定价提醒 -->
@@ -172,6 +180,12 @@ const checkText = computed(() => {
     const device = asset.value?.recycle_device || asset.value?.recycleDevice || {}
     const snap = toObject(asset.value?.check_snapshot)
     return String(snap.check_result || device.check_result_seller || device.check_result || device.check_result_buyer || '')
+})
+// 质检员手填补充备注：优先入库快照透传的 check_remark，其次回收设备 remark
+const checkRemark = computed(() => {
+    const device = asset.value?.recycle_device || asset.value?.recycleDevice || {}
+    const snap = toObject(asset.value?.check_snapshot)
+    return String(snap.check_remark || device.remark || asset.value?.check_remark || '').trim()
 })
 const checkItems = computed(() => {
     const obj = toObject(asset.value?.check_summary)
@@ -332,6 +346,33 @@ const toObject = (value: any): Record<string, any> => {
     background: #f1f5f9;
     color: #475569;
     font-size: 22rpx;
+}
+
+/* 质检员补充备注：橙色弱底，强调它是人工补充的关键信息 */
+.check-remark {
+    margin-top: 18rpx;
+    padding: 16rpx 18rpx;
+    border-radius: 14rpx;
+    background: #fff7f2;
+    border: 1rpx solid #ffe0cf;
+}
+.check-remark__head {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    margin-bottom: 8rpx;
+}
+.check-remark__label {
+    color: #fa5c1e;
+    font-size: 23rpx;
+    font-weight: 700;
+}
+.check-remark__text {
+    display: block;
+    color: #5b4636;
+    font-size: 24rpx;
+    line-height: 1.55;
+    word-break: break-word;
 }
 
 .main-image {

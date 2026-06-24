@@ -53,7 +53,7 @@
             ></u-tag>
         </view>
 
-        <RecycleCheckSummary v-if="deviceCheckMeta" :meta="deviceCheckMeta" class="device-flow-card__check" />
+        <RecycleCheckSummary v-if="deviceCheckMeta || device.remark" :meta="deviceCheckMeta" :remark="device.remark" class="device-flow-card__check" />
 
         <view v-if="!isReturned && device.pay_disabled_reason && !device.can_pay" class="device-flow-card__hint device-flow-card__hint--danger">
             {{ device.pay_disabled_reason }}
@@ -62,7 +62,8 @@
             {{ device.confirm_disabled_reason }}
         </view>
 
-        <view class="device-flow-card__flow"  v-if="flowHighlights.length">
+        <!-- 设备流转：按需求隐藏（详情页只看当前状态关心的信息，不铺历史流转） -->
+        <view class="device-flow-card__flow" v-if="false">
             <view class="device-flow-card__flow-head" @click="expanded = !expanded">
                 <view class="device-flow-card__flow-title">设备流转</view>
                 <!-- <view class="device-flow-card__flow-toggle">

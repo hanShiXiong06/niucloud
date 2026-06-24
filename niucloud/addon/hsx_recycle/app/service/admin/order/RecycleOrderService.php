@@ -296,7 +296,7 @@ class RecycleOrderService extends BaseAdminService
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->with([
                 'devices' => function($query) use ($filterKey, $viewMode, $where, $filterService) {
-                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,info,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,dispose_type,dispose_status,settlement_mode,sale_destination,consignment_order_id,return_order_id,refurbishment_required,refurbishment_assignee_uid,refurbishment_assignee_name,refurbishment_reason,refurbishment_items,refurbishment_estimated_cost')
+                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,info,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,remark,dispose_type,dispose_status,settlement_mode,sale_destination,consignment_order_id,return_order_id,refurbishment_required,refurbishment_assignee_uid,refurbishment_assignee_name,refurbishment_reason,refurbishment_items,refurbishment_estimated_cost')
                         ->with(['consignmentOrder' => function($q) {
                             $q->field('id,consignment_no,source_device_id,status,listing_price,sold_price,settlement_amount,pay_status');
                         }])
@@ -357,7 +357,7 @@ class RecycleOrderService extends BaseAdminService
             ->field($field)
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id,info, status,check_result,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,dispose_type,dispose_status,settlement_mode,sale_destination,consignment_order_id,return_order_id,refurbishment_required,refurbishment_assignee_uid,refurbishment_assignee_name,refurbishment_reason,refurbishment_items,refurbishment_estimated_cost')
+                    $query->field('id,site_id,order_id,imei,user_sn,model,initial_price, category_id , check_template_id,info, status,check_result,final_price,sell_price,pay_status,pay_amount,pay_time,pay_uid,pay_no,confirm_status,confirm_time,confirm_member_id,confirm_remark,remark,dispose_type,dispose_status,settlement_mode,sale_destination,consignment_order_id,return_order_id,refurbishment_required,refurbishment_assignee_uid,refurbishment_assignee_name,refurbishment_reason,refurbishment_items,refurbishment_estimated_cost')
                         ->with(['consignmentOrder' => function($q) {
                             $q->field('id,consignment_no,source_device_id,status,listing_price,sold_price,settlement_amount,pay_status');
                         }])

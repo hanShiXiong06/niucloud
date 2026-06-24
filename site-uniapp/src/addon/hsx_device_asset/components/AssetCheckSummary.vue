@@ -12,19 +12,18 @@
             </view>
         </view>
 
-        <!-- 异常 / 需关注：常驻显示 -->
-        <view v-if="abnormalRows.length" class="acs__grid">
-            <view v-for="(it, i) in abnormalRows" :key="`b${i}`" class="acs__item acs__item--bad">
-                <text class="acs__label">{{ it.label }}</text>
-                <text class="acs__value">{{ it.value }}</text>
-            </view>
-        </view>
-
-        <!-- 正常项：默认折叠 -->
-        <view v-if="expanded && normalRows.length" class="acs__grid acs__grid--normal">
-            <view v-for="(it, i) in normalRows" :key="`n${i}`" class="acs__item">
-                <text class="acs__label">{{ it.label }}</text>
-                <text class="acs__value">{{ it.value }}</text>
+        <!-- 异常常驻 + 展开后接正常项，统一在一个浅底块里（参考回收插件，分隔更干净） -->
+        <view v-if="displayRows.length" class="acs__body">
+            <view class="acs__grid">
+                <view
+                    v-for="(it, i) in displayRows"
+                    :key="i"
+                    class="acs__item"
+                    :class="{ 'acs__item--bad': it.abnormal }"
+                >
+                    <text class="acs__label">{{ it.label }}</text>
+                    <text class="acs__value">{{ it.value }}</text>
+                </view>
             </view>
         </view>
 
@@ -87,6 +86,21 @@ const parseText = (raw: string): Array<{ label: string, value: string }> => {
         .filter(it => it.value !== '')
 }
 
+// 值本身就是「字段：值;字段：值」整段（如 卖家质检 把整段塞进一个 value）→ 拆成多行，丢掉外层包装 label
+const expandStructured = (items: Array<{ label: string, value: string, abnormal?: boolean }>) => {
+    const out: Array<{ label: string, value: string, abnormal?: boolean }> = []
+    items.forEach(it => {
+        const v = String(it.value ?? '')
+        const parsed = parseText(v)
+        if (parsed.length >= 2 && parsed.every(p => p.label)) {
+            out.push(...parsed)
+        } else {
+            out.push(it)
+        }
+    })
+    return out
+}
+
 const rows = computed<Array<{ label: string, value: string, abnormal: boolean }>>(() => {
     let base: Array<{ label: string, value: string, abnormal?: boolean }> = []
     if (Array.isArray(props.items) && props.items.length) {
@@ -98,13 +112,15 @@ const rows = computed<Array<{ label: string, value: string, abnormal: boolean }>
     } else if (props.text) {
         base = parseText(props.text)
     }
-    return base
+    return expandStructured(base)
         .filter(it => it.value !== '' && it.value !== 'null' && it.value !== 'undefined')
         .map(it => ({ label: it.label, value: it.value, abnormal: detectAbnormal(it.value, it.abnormal) }))
 })
 
 const abnormalRows = computed(() => rows.value.filter(r => r.abnormal))
 const normalRows = computed(() => rows.value.filter(r => !r.abnormal))
+// 异常常驻在前；展开后再接上正常项，合并到同一个块内渲染
+const displayRows = computed(() => expanded.value ? [...abnormalRows.value, ...normalRows.value] : abnormalRows.value)
 </script>
 
 <style scoped lang="scss">
@@ -138,16 +154,18 @@ const normalRows = computed(() => rows.value.filter(r => !r.abnormal))
     color: #16a34a;
     background: #f0fdf4;
 }
+/* 浅底整块（参考回收插件 RecycleCheckSummary），异常+正常统一在内，分隔干净 */
+.acs__body {
+    padding: 18rpx 20rpx;
+    border-radius: 14rpx;
+    background: #f8fafc;
+    border: 1rpx solid #eef2f7;
+}
 .acs__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 24rpx;
     row-gap: 14rpx;
-}
-.acs__grid--normal {
-    margin-top: 14rpx;
-    padding-top: 14rpx;
-    border-top: 1rpx dashed #e2e8f0;
 }
 .acs__item {
     display: flex;
@@ -179,9 +197,7 @@ const normalRows = computed(() => rows.value.filter(r => !r.abnormal))
     align-items: center;
     justify-content: center;
     gap: 8rpx;
-    margin-top: 16rpx;
-    padding-top: 14rpx;
-    border-top: 1rpx solid #f1f5f9;
+    margin-top: 14rpx;
     color: #3c9cff;
     font-size: 23rpx;
 }

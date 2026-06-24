@@ -889,7 +889,9 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
     min-width: 0;
     flex: 1;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .dashboard-filter-card__label {

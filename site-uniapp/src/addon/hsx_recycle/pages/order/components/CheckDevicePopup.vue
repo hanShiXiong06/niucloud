@@ -2,22 +2,21 @@
     <u-popup :show="show" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="handleClose">
         <view class="check-popup">
             <view class="check-header">
-                <view>
+                <view class="check-header__main">
                     <view class="check-title">设备质检</view>
-                    <view class="check-subtitle">{{ deviceData?.model || '未识别设备' }}</view>
+                    <view class="check-model">{{ deviceData?.model || '未识别设备' }}</view>
+                    <view class="check-meta">
+                        <view class="check-meta__item">
+                            <text class="check-meta__label">IMEI</text>
+                            <text class="check-meta__value">{{ deviceData?.imei || deviceData?.user_sn || '-' }}</text>
+                        </view>
+                        <view class="check-meta__item check-meta__item--price">
+                            <text class="check-meta__label">参考价</text>
+                            <text class="check-meta__value">¥{{ formatMoney(deviceData?.initial_price || 0) }}</text>
+                        </view>
+                    </view>
                 </view>
-                <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx]" @click="handleClose"></text>
-            </view>
-
-            <view class="device-info">
-                <view class="device-info__row">
-                    <text class="device-info__label">IMEI</text>
-                    <text class="device-info__value">{{ deviceData?.imei || deviceData?.user_sn || '-' }}</text>
-                </view>
-                <view class="device-info__row">
-                    <text class="device-info__label">参考价</text>
-                    <text class="device-info__value price">¥{{ formatMoney(deviceData?.initial_price || 0) }}</text>
-                </view>
+                <text class="nc-iconfont nc-icon-guanbiV6xx1 check-close" @click="handleClose"></text>
             </view>
 
             <scroll-view scroll-y class="check-content">
@@ -45,6 +44,8 @@
                     </view>
                 </view>
 
+                <!-- 退回时整块隐藏：质检项 / 质检图片 / 质检摘要 -->
+                <template v-if="!isReject">
                 <view v-if="schemaLoading" class="loading-card">
                     <text>正在加载检测项...</text>
                 </view>
@@ -92,7 +93,7 @@
                                 ></u-switch>
                             </view>
 
-                            <!-- 选项：通用标签选择组件（换行，稳定不卡），全项目统一 -->
+                            <!-- 选项：换行铺开（跨端最稳；横滑在小程序纵向scroll-view弹窗内拿不到手势，已实测放弃） -->
                             <RecycleTagGroup
                                 v-else
                                 v-model="fieldValues[field.field_key]"
@@ -135,12 +136,13 @@
                         <view class="summary-preview__value">{{ generatedSummary }}</view>
                     </view>
                 </view>
+                </template>
 
                 <view class="section">
-                    <view class="section-title">备注说明</view>
+                    <view class="section-title">{{ isReject ? '退回原因' : '备注说明' }}</view>
                     <u-textarea
                         v-model="formData.remark"
-                        placeholder="如：特殊扣费说明、外观描述、退回原因"
+                        :placeholder="isReject ? '请填写退回原因（如：用户不卖了、报价不符、设备异常）' : '如：特殊扣费说明、外观描述、退回原因'"
                         :maxlength="200"
                         :height="120"
                         count
@@ -209,6 +211,8 @@ const formData = ref({
 })
 const summaryAutoSync = ref(true)
 const checkConclusion = ref(1)
+// 退回：隐藏质检模板，提交时质检信息全部清空
+const isReject = computed(() => Number(checkConclusion.value) === 2)
 const originalInfo = ref<Record<string, any>>({})
 const latestDeviceData = ref<any>(null)
 
@@ -558,7 +562,8 @@ const submitForm = async (action: 'check' | 'save_draft') => {
     }
 
     if (action === 'check') {
-        if (!formData.value.check_result_seller.trim() && !generatedSummary.value) {
+        // 退回不需要质检摘要；正常回收才校验
+        if (!isReject.value && !formData.value.check_result_seller.trim() && !generatedSummary.value) {
             uni.showToast({ title: '请填写质检摘要', icon: 'none' })
             return
         }
@@ -628,6 +633,25 @@ const buildSubmitPayload = (action: 'check' | 'save_draft') => {
         ...infoFields,
         goods_category: resolveGoodsCategory(),
         check_meta: checkMeta
+    }
+
+    // 退回：质检信息全部清空，只保留退回标记 + 退回原因(remark) + 设备基本信息
+    if (isReject.value) {
+        return {
+            action,
+            check_status: checkConclusion.value,
+            check_result: '',
+            check_result_seller: '',
+            check_result_buyer: '',
+            check_images: '',
+            check_images_seller: '',
+            check_images_buyer: '',
+            remark: formData.value.remark.trim(),
+            imei: String(deviceData.value.imei || deviceData.value.user_sn || ''),
+            check_template_id: 0,
+            model: String(deviceData.value.model || originalInfo.value.model || ''),
+            info: { ...originalInfo.value, goods_category: resolveGoodsCategory(), check_meta: {} }
+        }
     }
 
     return {
@@ -885,49 +909,77 @@ const resolveGoodsCategory = () => {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    padding: 30rpx;
+    gap: 18rpx;
+    padding: 28rpx 30rpx 22rpx;
     border-bottom: 1rpx solid #f2f3f5;
     flex-shrink: 0;
 }
 
+.check-header__main {
+    flex: 1;
+    min-width: 0;
+}
+
 .check-title {
     font-size: 32rpx;
-    font-weight: 600;
+    font-weight: 700;
     color: #1f2937;
 }
 
-.check-subtitle {
+.check-model {
     margin-top: 8rpx;
-    font-size: 24rpx;
-    color: #64748b;
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #334155;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.device-info {
-    margin: 20rpx 30rpx 0;
-    padding: 22rpx 24rpx;
-    border-radius: 16rpx;
-    background: linear-gradient(135deg, #fff3e9, #fff8f3);
-    flex-shrink: 0;
-}
-
-.device-info__row {
+.check-meta {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12rpx;
+    margin-top: 14rpx;
+}
+
+.check-meta__item {
+    display: flex;
     align-items: center;
-    font-size: 24rpx;
+    gap: 8rpx;
+    padding: 6rpx 14rpx;
+    border-radius: 999rpx;
+    background: #f4f5f7;
 }
 
-.device-info__row + .device-info__row {
-    margin-top: 10rpx;
+.check-meta__label {
+    font-size: 21rpx;
+    color: #94a3b8;
 }
 
-.device-info__label {
-    color: #64748b;
+.check-meta__value {
+    font-size: 23rpx;
+    font-weight: 600;
+    color: #334155;
 }
 
-.device-info__value {
-    color: #0f172a;
-    font-weight: 500;
+.check-meta__item--price {
+    background: #fff2e9;
+}
+
+.check-meta__item--price .check-meta__label {
+    color: #fa9a73;
+}
+
+.check-meta__item--price .check-meta__value {
+    color: #fa5c1e;
+}
+
+.check-close {
+    flex-shrink: 0;
+    font-size: 36rpx;
+    color: #94a3b8;
+    line-height: 1;
 }
 
 .price {

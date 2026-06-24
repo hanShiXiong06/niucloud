@@ -214,6 +214,8 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 'check_images_buyer' => (string)($device['check_images_buyer'] ?? ''),
                 'check_uid' => (int)($device['check_uid'] ?? 0),
                 'check_at' => (int)($device['check_at'] ?? 0),
+                // 质检员手填的补充备注，透传给中台展示（模板覆盖不到的关键信息）
+                'check_remark' => (string)($device['remark'] ?? ''),
             ],
             'recycle_pricing_snapshot' => [
                 'recycle_price' => round((float)($device['final_price'] ?? 0), 2),
