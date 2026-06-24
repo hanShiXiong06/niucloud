@@ -12,17 +12,7 @@
             <scroll-view scroll-y class="order-filter__body">
                 <view class="filter-section">
                     <view class="filter-section__title">订单状态</view>
-                    <view class="status-grid">
-                        <view
-                            v-for="item in statusOptions"
-                            :key="item.value"
-                            class="status-item"
-                            :class="{ 'status-item--active': form.status === item.value }"
-                            @click="form.status = item.value"
-                        >
-                            {{ item.label }}
-                        </view>
-                    </view>
+                    <RecycleTagGroup v-model="form.status" :options="statusOptions" :deselectable="false" />
                 </view>
 
                 <view class="filter-section">
@@ -46,23 +36,11 @@
                     </view>
                     <view class="form-row">
                         <text class="form-row__label">配送方式</text>
-                        <view class="segmented">
-                            <view
-                                class="segmented__item"
-                                :class="{ 'segmented__item--active': form.delivery_type === '' }"
-                                @click="form.delivery_type = ''"
-                            >全部</view>
-                            <view
-                                class="segmented__item"
-                                :class="{ 'segmented__item--active': form.delivery_type === '1' }"
-                                @click="form.delivery_type = '1'"
-                            >快递</view>
-                            <view
-                                class="segmented__item"
-                                :class="{ 'segmented__item--active': form.delivery_type === '2' }"
-                                @click="form.delivery_type = '2'"
-                            >自送</view>
-                        </view>
+                        <RecycleTagGroup
+                            v-model="form.delivery_type"
+                            :options="[{ label: '全部', value: '' }, { label: '快递', value: '1' }, { label: '自送', value: '2' }]"
+                            :deselectable="false"
+                        />
                     </view>
                 </view>
 
@@ -179,6 +157,7 @@ import { reactive, ref, watch } from 'vue'
 import { searchMemberList } from '@/addon/hsx_recycle/api/order'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import DateRangeFilterRow from './DateRangeFilterRow.vue'
+import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
 
 // 抽屉从屏幕顶部 0 起，头部需让出状态栏/胶囊安全区，否则标题与关闭按钮会被微信胶囊遮住

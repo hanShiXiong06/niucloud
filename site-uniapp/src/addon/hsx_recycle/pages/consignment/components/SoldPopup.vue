@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 
 interface Props {
     visible: boolean
@@ -93,7 +94,7 @@ const handleClose = () => {
     show.value = false
 }
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
     if (!formData.value.sold_price || Number(formData.value.sold_price) <= 0) {
         uni.showToast({ title: '请输入有效的成交价', icon: 'none' })
         return
@@ -106,6 +107,7 @@ const handleSubmit = () => {
         uni.showToast({ title: '客户结算金额不能大于成交价', icon: 'none' })
         return
     }
+    if (!(await confirmDanger(`确认以成交价 ¥${ formData.value.sold_price }、结算 ¥${ formData.value.settlement_amount } 标记已售？`, { title: '确认标记已售', confirmText: '确认已售' }))) return
     emit('submit', { ...formData.value })
 }
 

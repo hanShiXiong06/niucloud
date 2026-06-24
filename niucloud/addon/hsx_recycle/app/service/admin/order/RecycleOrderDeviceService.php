@@ -8,6 +8,7 @@ use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogServic
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -66,29 +67,24 @@ class RecycleOrderDeviceService extends BaseAdminService
             //     }
             // }
 
-            // 4. 组装设备数据
-            $info = [
-                'goods_category' => $this->normalizeCategoryPath($deviceData['category_path'] ?? null, (int)($deviceData['category_id'] ?? 0))
-            ];
-
-            // 代客下单签收时一次性录入的质检摘要字段值（由设备型号触发的质检模板，最多 5 个）。
-            // 摘要值按 field_key 平铺写入 info，后续正式质检可直接预填/展示，避免二次弹窗重复录入。
-            $summaryValues = $this->normalizeSummaryValues($deviceData['summary'] ?? []);
-            if (!empty($summaryValues)) {
-                foreach ($summaryValues as $fieldKey => $val) {
-                    $info[$fieldKey] = $val;
-                }
-                $info['sign_summary'] = $summaryValues;
-            }
+            // 4. 组装设备数据（统一摘要契约：summary = { field_key: value }，与签收/Handler 同口径）
+            $categoryId = (int)($deviceData['category_id'] ?? 0);
+            $categoryPath = DeviceSummaryHelper::normalizeCategoryPath($deviceData['category_path'] ?? null, $categoryId);
+            $summary = DeviceSummaryHelper::normalizeSummary($deviceData['summary'] ?? []);
+            $cols = DeviceSummaryHelper::reservedColumns($summary, $deviceData);
 
             $data = [
                 'order_id' => $orderId,
                 'imei' => $deviceData['imei'] ?? '',
                 'model' => $deviceData['model'] ?? '',
                 'initial_price' => $deviceData['initial_price'] ?? 0,
-                'category_id' => (int)($deviceData['category_id'] ?? 0),
+                'category_id' => $categoryId,
                 'check_template_id' => (int)($deviceData['check_template_id'] ?? 0),
-                'info' => $info,
+                'color' => $cols['color'],
+                'capacity' => $cols['capacity'],
+                'system_version' => $cols['system_version'],
+                'warranty_info' => $cols['warranty_info'],
+                'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, $deviceData),
                 'status' => $this->getInitialDeviceStatus($order->status),
                 'member_id' => $order->member_id,
                 'site_id' => $this->site_id,
@@ -222,67 +218,4 @@ class RecycleOrderDeviceService extends BaseAdminService
         ]);
     }
 
-    private function normalizeCategoryPath($categoryPath, int $categoryId): array
-    {
-        if (is_string($categoryPath) && $categoryPath !== '') {
-            $decoded = json_decode($categoryPath, true);
-            if (is_array($decoded)) {
-                $categoryPath = $decoded;
-            } else {
-                $categoryPath = array_filter(array_map('trim', explode(',', $categoryPath)));
-            }
-        }
-
-        if ((!is_array($categoryPath) || empty($categoryPath)) && $categoryId > 0) {
-            $categoryPath = [ $categoryId ];
-        }
-
-        return is_array($categoryPath) ? array_values(array_map('strval', $categoryPath)) : [];
-    }
-
-    /**
-     * 归一化质检摘要字段值。
-     * 兼容两种入参：
-     *  - 关联数组 { field_key: value }
-     *  - 列表 [ {field_key, value}, ... ]
-     * 返回 { field_key: value }，空值/无 field_key 的项会被丢弃。
-     * @param mixed $summary
-     * @return array
-     */
-    private function normalizeSummaryValues($summary): array
-    {
-        if (is_string($summary) && $summary !== '') {
-            $decoded = json_decode($summary, true);
-            $summary = is_array($decoded) ? $decoded : [];
-        }
-        if (!is_array($summary) || empty($summary)) {
-            return [];
-        }
-
-        $result = [];
-        foreach ($summary as $key => $item) {
-            if (is_array($item) && isset($item['field_key'])) {
-                // 列表形态：{ field_key, value }
-                $fieldKey = (string)$item['field_key'];
-                $value = $item['value'] ?? '';
-            } else {
-                // 关联数组形态：{ field_key: value }
-                $fieldKey = (string)$key;
-                $value = $item;
-            }
-            if ($fieldKey === '') {
-                continue;
-            }
-            if (is_array($value)) {
-                $value = array_values(array_filter($value, static fn($v) => $v !== '' && $v !== null));
-                if (empty($value)) {
-                    continue;
-                }
-            } elseif ($value === '' || $value === null) {
-                continue;
-            }
-            $result[$fieldKey] = $value;
-        }
-        return $result;
-    }
-} 
+}

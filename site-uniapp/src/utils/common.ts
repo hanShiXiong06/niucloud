@@ -149,12 +149,12 @@ export const currShareRoute = () => {
     }
     let currentRoute = pages[pages.length - 1].route //获取当前页面路由
 
+    let currentParam: any = {}; //获取路由参数
     // #ifdef H5
-    let currentParam: any = pages[pages.length - 1].$page.options; //获取路由参数
+    currentParam = (pages[pages.length - 1].$page && pages[pages.length - 1].$page.options) || {};
     // #endif
-
-    // #ifdef MP
-    let currentParam: any = pages[pages.length - 1].options || {}; //获取路由参数
+    // #ifndef H5
+    currentParam = pages[pages.length - 1].options || {};
     // #endif
 
     // 拼接参数

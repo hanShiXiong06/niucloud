@@ -26,14 +26,29 @@
             <!-- 表单内容 -->
             <scroll-view scroll-y class="price-content">
                 <view class="price-content__inner">
-                    <!-- 质检结果展示 -->
-                    <view v-if="device.check_result || device.check_result_seller" class="form-section">
+                    <!-- 检测概要：异常项突出 / 正常项折叠（定价只关心异常） -->
+                    <view v-if="checkItems.length" class="form-section">
                         <view class="section-title">
-                            <text>质检结果</text>
-                            <text v-if="detailLoading" class="section-loading">加载中...</text>
+                            <text>检测概要</text>
+                            <text v-if="abnormalItems.length" class="text-[#fa5c1e] text-[24rpx]">{{ abnormalItems.length }} 项异常</text>
                         </view>
-                        <view class="check-result-box">
-                            {{ device.check_result_seller || device.check_result }}
+
+                        <view v-if="abnormalItems.length" class="check-lines">
+                            <view v-for="(it, i) in abnormalItems" :key="'ab' + i" class="check-line">
+                                <text class="check-line__name">{{ it.name }}</text>
+                                <u-tag :text="it.value" type="error" plain size="mini"></u-tag>
+                            </view>
+                        </view>
+
+                        <view v-if="normalItems.length" class="check-lines">
+                            <view v-for="(it, i) in visibleNormalItems" :key="'no' + i" class="check-line">
+                                <text class="check-line__name">{{ it.name }}</text>
+                                <u-tag :text="it.value" type="success" plain size="mini"></u-tag>
+                            </view>
+                            <view v-if="normalItems.length > 2" class="check-toggle" @click="normalExpanded = !normalExpanded">
+                                <text>{{ normalExpanded ? '收起正常项' : `展开其余 ${ normalItems.length - 2 } 个正常项` }}</text>
+                                <u-icon :name="normalExpanded ? 'arrow-up' : 'arrow-down'" color="#909399" size="13"></u-icon>
+                            </view>
                         </view>
                     </view>
 
@@ -75,50 +90,6 @@
                         </view>
                     </view>
 
-                    <!-- 最终定价 -->
-                    <view class="form-section">
-                        <view class="section-title">
-                            <text>最终定价</text>
-                            <text class="text-[#e6a23c] text-[24rpx] ml-[16rpx]">*必填</text>
-                        </view>
-                        <view class="price-input-wrapper">
-                            <text class="price-symbol">¥</text>
-                            <u-input
-                                v-model="formData.final_price"
-                                type="number"
-                                placeholder="请输入回收价格"
-                                class="price-input"
-                                border="none"
-                                clearable
-                                inputAlign="right"
-                                fontSize="34rpx"
-                                placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
-                            ></u-input>
-                        </view>
-                        <view v-if="device.initial_price && Number(device.initial_price) > 0" class="text-[22rpx] text-[#999] mt-[8rpx]">
-                            参考预估：¥{{ amountText(device.initial_price) }}
-                        </view>
-                    </view>
-
-                    <!-- 卖货价格 -->
-                    <view class="form-section">
-                        <view class="section-title">卖货价格 <text class="text-[22rpx] text-[#999]">（选填，内部使用）</text></view>
-                        <view class="price-input-wrapper">
-                            <text class="price-symbol">¥</text>
-                            <u-input
-                                v-model="formData.sell_price"
-                                type="number"
-                                placeholder="选填"
-                                class="price-input"
-                                border="none"
-                                clearable
-                                inputAlign="right"
-                                fontSize="34rpx"
-                                placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
-                            ></u-input>
-                        </view>
-                    </view>
-
                     <!-- 调价说明 -->
                     <view class="form-section">
                         <view class="section-title">价格备注</view>
@@ -138,25 +109,31 @@
                         <template v-if="warehouseMode">
                             <view class="dest-hint">选择目标仓库即可（库位可不选，入库时再定）；流向按仓库类型自动确定。</view>
                             <view class="dest-chips">
-                                <view
+                                <u-tag
                                     v-for="w in erpWarehouses"
                                     :key="w.id"
-                                    class="dest-chip"
-                                    :class="{ 'dest-chip--active': Number(formData.target_warehouse_id) === Number(w.id) }"
+                                    :text="`${ w.warehouse_name } · ${ WH_TYPE_LABEL[w.business_type || 'mall'] || '商城' }`"
+                                    size="mini"
+                                    :plain="Number(formData.target_warehouse_id) !== Number(w.id)"
+                                    :type="Number(formData.target_warehouse_id) === Number(w.id) ? 'warning' : 'info'"
+                                    :customStyle="{ marginRight: '14rpx', marginBottom: '14rpx' }"
                                     @click="selectWarehouse(w)"
-                                >{{ w.warehouse_name }} · {{ WH_TYPE_LABEL[w.business_type || 'mall'] || '商城' }}</view>
+                                ></u-tag>
                             </view>
 
                             <template v-if="currentWarehouseLocations.length">
                                 <view class="dest-sub-label">库位（可选）</view>
                                 <view class="dest-chips">
-                                    <view
+                                    <u-tag
                                         v-for="loc in currentWarehouseLocations"
                                         :key="loc.id"
-                                        class="dest-chip"
-                                        :class="{ 'dest-chip--active': Number(formData.target_location_id) === Number(loc.id) }"
+                                        :text="loc.location_name"
+                                        size="mini"
+                                        :plain="Number(formData.target_location_id) !== Number(loc.id)"
+                                        :type="Number(formData.target_location_id) === Number(loc.id) ? 'warning' : 'info'"
+                                        :customStyle="{ marginRight: '14rpx', marginBottom: '14rpx' }"
                                         @click="selectLocation(loc)"
-                                    >{{ loc.location_name }}</view>
+                                    ></u-tag>
                                 </view>
                             </template>
 
@@ -167,19 +144,23 @@
 
                         <template v-else>
                             <view class="dest-chips">
-                                <view
+                                <u-tag
                                     v-for="item in saleDestinationOptions"
                                     :key="item.value"
-                                    class="dest-chip"
-                                    :class="{ 'dest-chip--active': formData.sale_destination === item.value }"
+                                    :text="item.label"
+                                    size="mini"
+                                    :plain="formData.sale_destination !== item.value"
+                                    :type="formData.sale_destination === item.value ? 'warning' : 'info'"
+                                    :customStyle="{ marginRight: '14rpx', marginBottom: '14rpx' }"
                                     @click="selectDestination(item.value)"
-                                >{{ item.label }}</view>
+                                ></u-tag>
                             </view>
                             <view v-if="saleDestinationDescription" class="dest-desc">{{ saleDestinationDescription }}</view>
                         </template>
                     </view>
 
-                    <view class="form-section">
+                    <!-- 整备安排：暂时隐藏，后续更新再放出 -->
+                    <view v-if="false" class="form-section">
                         <view class="section-title">整备安排</view>
                         <view class="refurbish-toggle">
                             <view class="refurbish-toggle__text" @click="toggleRefurbishment">
@@ -245,6 +226,28 @@
                 </view>
             </scroll-view>
 
+            <!-- 常驻定价输入：永远显示，突出"写价格"这一步 -->
+            <view class="price-bar">
+                <view class="price-bar__label">
+                    <text class="price-bar__title">最终定价</text>
+                    <text v-if="device.initial_price && Number(device.initial_price) > 0" class="price-bar__hint">预估 ¥{{ amountText(device.initial_price) }}</text>
+                </view>
+                <view class="price-bar__input">
+                    <text class="price-bar__symbol">¥</text>
+                    <u-input
+                        v-model="formData.final_price"
+                        type="number"
+                        placeholder="请输入回收价"
+                        border="none"
+                        clearable
+                        inputAlign="left"
+                        fontSize="40rpx"
+                        :customStyle="{ padding: 0 }"
+                        placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
+                    ></u-input>
+                </view>
+            </view>
+
             <!-- 底部按钮 -->
             <view class="price-footer">
                 <u-button @click="handleClose" :customStyle="{flex: 1, marginRight: '20rpx'}">
@@ -262,6 +265,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { confirmPrice, getDevice, getRefurbishmentOptions, getSaleDestinationOptions, getStaffOptions } from '@/addon/hsx_recycle/api/order'
+import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
 import { img } from '@/utils/common'
 import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import { useRecycleSubmit } from '@/addon/hsx_recycle/hooks/useRecycleSubmit'
@@ -395,6 +399,57 @@ const amountText = (value: any) => {
     return Number.isInteger(amount) ? String(amount) : amount.toFixed(2)
 }
 
+// ===== 检测概要：异常项突出 / 正常项折叠（定价只关心异常） =====
+const toObj = (v: any): Record<string, any> => {
+    if (!v) return {}
+    if (typeof v === 'string') { try { const p = JSON.parse(v); return p && typeof p === 'object' && !Array.isArray(p) ? p : {} } catch { return {} } }
+    return typeof v === 'object' && !Array.isArray(v) ? v : {}
+}
+const isOn = (v: any) => v === true || v === 1 || v === '1' || v === 'true' || v === '开启'
+
+const checkItems = ref<Array<{ name: string, value: string, abnormal: boolean }>>([])
+const normalExpanded = ref(false)
+const abnormalItems = computed(() => checkItems.value.filter((i) => i.abnormal))
+const normalItems = computed(() => checkItems.value.filter((i) => !i.abnormal))
+const visibleNormalItems = computed(() => normalExpanded.value ? normalItems.value : normalItems.value.slice(0, 2))
+
+const loadCheckItems = async () => {
+    checkItems.value = []
+    normalExpanded.value = false
+    const id = Number(device.value?.id || 0)
+    if (!id) return
+    try {
+        const res: any = await getCheckTemplateSchema({ device_id: id })
+        const groups = Array.isArray(res?.data?.groups) ? res.data.groups : []
+        const info = toObj(device.value?.info)
+        let meta = toObj(info.check_meta)
+        if (Array.isArray(meta.result_items)) {
+            meta = { ...meta }
+            meta.result_items.forEach((it: any) => { if (it.field_key) meta[it.field_key] = it.value })
+        }
+        const items: Array<{ name: string, value: string, abnormal: boolean }> = []
+        groups.forEach((g: any) => (g.fields || []).forEach((f: any) => {
+            const val = meta[f.field_key]
+            const empty = val === undefined || val === null || val === '' || (Array.isArray(val) && !val.length)
+            if (empty) return
+            const opts = Array.isArray(f.options) ? f.options : []
+            const valArr = Array.isArray(val) ? val.map(String) : [String(val)]
+            const labels = valArr.map((v) => {
+                const o = opts.find((o: any) => String(o.value) === String(v))
+                return o ? (o.label || o.name) : (f.component === 'switch' ? (isOn(v) ? '是' : '否') : v)
+            })
+            let abnormal = false
+            const defVals = opts.filter((o: any) => Number(o.is_default) === 1).map((o: any) => String(o.value))
+            if (opts.length && defVals.length) abnormal = valArr.some((v) => !defVals.includes(v))
+            else if (f.component === 'switch') abnormal = isOn(val)
+            items.push({ name: f.field_name, value: labels.join('、'), abnormal })
+        }))
+        checkItems.value = items
+    } catch (error) {
+        checkItems.value = []
+    }
+}
+
 type ImageItem = {
     url: string
     thumb: string
@@ -469,6 +524,7 @@ const loadDeviceDetail = async () => {
             ...(props.deviceData || {}),
             ...detail
         }
+        loadCheckItems()
         const fp = deviceDetail.value.final_price
         formData.value = {
             final_price: (fp && Number(fp) > 0) ? amountText(fp) : (deviceDetail.value.initial_price ? amountText(deviceDetail.value.initial_price) : ''),
@@ -980,5 +1036,71 @@ const handleSubmit = async () => {
     border-top: 1rpx solid #f5f5f5;
     background: #fff;
     flex-shrink: 0;
+}
+
+/* 检测概要 */
+.check-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 14rpx;
+}
+.check-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+}
+.check-line__name {
+    font-size: 26rpx;
+    color: #606266;
+}
+.check-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6rpx;
+    margin-top: 4rpx;
+    font-size: 24rpx;
+    color: #909399;
+}
+
+/* 常驻定价输入条 */
+.price-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+    padding: 16rpx 30rpx;
+    background: #fff;
+    border-top: 1rpx solid #f2f3f5;
+    flex-shrink: 0;
+}
+.price-bar__label {
+    display: flex;
+    flex-direction: column;
+}
+.price-bar__title {
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #1f2937;
+}
+.price-bar__hint {
+    font-size: 22rpx;
+    color: #909399;
+}
+.price-bar__input {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    padding: 8rpx 20rpx;
+    border-radius: 14rpx;
+    background: #fff6f1;
+    border: 1rpx solid #ffd2bd;
+}
+.price-bar__symbol {
+    font-size: 32rpx;
+    font-weight: 600;
+    color: #fa5c1e;
 }
 </style>

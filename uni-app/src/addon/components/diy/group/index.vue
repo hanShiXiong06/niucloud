@@ -156,9 +156,6 @@
                 <template v-if="component.componentName == 'ShopGoodsDetailAttr'">
                    <diy-shop-goods-detail-attr ref="diyShopGoodsDetailAttrRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopGoodsDetailAttr" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'ShopGoodsDetailQc'">
-                   <diy-shop-goods-detail-qc ref="diyShopGoodsDetailQcRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopGoodsDetailQc" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
                 <template v-if="component.componentName == 'ShopGoodsDetailBasicInfo'">
                    <diy-shop-goods-detail-basic-info ref="diyShopGoodsDetailBasicInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopGoodsDetailBasicInfo" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -173,6 +170,9 @@
                 </template>
                 <template v-if="component.componentName == 'ShopGoodsDetailPurchaseService'">
                    <diy-shop-goods-detail-purchase-service ref="diyShopGoodsDetailPurchaseServiceRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopGoodsDetailPurchaseService" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'ShopGoodsDetailQc'">
+                   <diy-shop-goods-detail-qc ref="diyShopGoodsDetailQcRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopGoodsDetailQc" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
                 <template v-if="component.componentName == 'ShopGoodsDetailSow'">
                    <diy-shop-goods-detail-sow ref="diyShopGoodsDetailSowRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ShopGoodsDetailSow" @update:componentIsShow="component.componentIsShow = $event" />
@@ -226,12 +226,12 @@
    import diyShopExchangeGoods from '@/addon/phone_shop/components/diy/shop-exchange-goods/index.vue';
    import diyShopExchangeInfo from '@/addon/phone_shop/components/diy/shop-exchange-info/index.vue';
    import diyShopGoodsDetailAttr from '@/addon/phone_shop/components/diy/shop-goods-detail-attr/index.vue';
-   import diyShopGoodsDetailQc from '@/addon/phone_shop/components/diy/shop-goods-detail-qc/index.vue';
    import diyShopGoodsDetailBasicInfo from '@/addon/phone_shop/components/diy/shop-goods-detail-basic-info/index.vue';
    import diyShopGoodsDetailBottom from '@/addon/phone_shop/components/diy/shop-goods-detail-bottom/index.vue';
    import diyShopGoodsDetailDesc from '@/addon/phone_shop/components/diy/shop-goods-detail-desc/index.vue';
    import diyShopGoodsDetailEvaluate from '@/addon/phone_shop/components/diy/shop-goods-detail-evaluate/index.vue';
    import diyShopGoodsDetailPurchaseService from '@/addon/phone_shop/components/diy/shop-goods-detail-purchase-service/index.vue';
+   import diyShopGoodsDetailQc from '@/addon/phone_shop/components/diy/shop-goods-detail-qc/index.vue';
    import diyShopGoodsDetailSow from '@/addon/phone_shop/components/diy/shop-goods-detail-sow/index.vue';
    import diyShopGoodsHot from '@/addon/phone_shop/components/diy/shop-goods-hot/index.vue';
    import diyShopGoodsRanking from '@/addon/phone_shop/components/diy/shop-goods-ranking/index.vue';

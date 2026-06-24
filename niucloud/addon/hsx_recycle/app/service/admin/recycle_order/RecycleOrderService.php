@@ -89,7 +89,8 @@ class RecycleOrderService extends BaseAdminService
             ->where([['site_id', '=', $this->site_id], ['delete_at', '=', 0]])
             ->with([
                 'devices' => function($query) {
-                    $query->field('id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price,return_order_id')
+                    // info 内含质检摘要值与分类路径(goods_category)，列表透传给"设备信息确认"弹窗用于反显，避免用户重填
+                    $query->field('id,order_id,imei,user_sn,model,initial_price,status,category_id,check_template_id,final_price,return_order_id,info')
                         ->append(['status_name', 'category_name']);
                 },
                 'member' => function($query) {

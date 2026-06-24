@@ -10,12 +10,13 @@
             </view>
 
             <scroll-view scroll-y class="popup-body">
-                <view class="warning-box">
-                    <view class="warning-title">确认拒绝回收？</view>
-                    <view class="warning-text">
-                        PC 端逻辑会按订单聚合处理：同一订单已有退回单时追加设备，没有退回单时自动创建退回单。
-                    </view>
-                </view>
+                <u-alert
+                    type="warning"
+                    title="确认拒绝回收？"
+                    description="按订单聚合处理：同一订单已有退回单时追加设备，没有退回单时自动创建退回单。"
+                    show-icon
+                    :customStyle="{ marginBottom: '18rpx' }"
+                ></u-alert>
 
                 <view class="section">
                     <view class="section-header">
@@ -59,6 +60,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 import { batchReturnDevices } from '@/addon/hsx_recycle/api/order'
 import { getReturnOrderList } from '@/addon/hsx_recycle/api/return-order'
 import { formatMoney } from '@/addon/hsx_recycle/utils/helper'
@@ -101,6 +103,7 @@ const handleSubmit = async () => {
         uni.showToast({ title: '请选择退回设备', icon: 'none' })
         return
     }
+    if (!(await confirmDanger(`确认拒绝回收并退回 ${ selectedDeviceIds.value.length } 台设备？`, { title: '确认退回', confirmText: '确认退回' }))) return
 
     submitting.value = true
     try {

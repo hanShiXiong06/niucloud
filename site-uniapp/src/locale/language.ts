@@ -1,6 +1,10 @@
 import { nextTick } from 'vue'
 import { getAppPages, getSubPackagesPages} from "@/utils/pages"
 
+// 预加载所有语言包，避免变量路径的动态 import() 产生代码分包
+// （App 端打包为 iife 单文件，不支持 code-splitting）
+const localeModules = import.meta.glob('../**/locale/**/*.json', { eager: true })
+
 export class Language {
     private i18n: any
     private loadLocale: Array<string> = [] //已加载的语言
@@ -46,8 +50,13 @@ export class Language {
             }
             this.loadLocale.push(`${fileKey}.${locale}`)
 
-            // 引入语言包文件
-            const messages = await import(route == 'app' ? `../${route}/locale/${locale}/${file}.json` : `../addon/${route}/locale/${locale}/${file}.json`)
+            // 引入语言包文件（从预加载的模块中取，路径需与 import.meta.glob 的 key 一致）
+            const localePath = route == 'app' ? `../app/locale/${locale}/${file}.json` : `../addon/${route}/locale/${locale}/${file}.json`
+            const messages: any = localeModules[localePath]
+            if (!messages || !messages.default) {
+                this.setI18nLanguage(locale)
+                return nextTick()
+            }
             let data: Record<string, string> = {}
             Object.keys(messages.default).forEach(key => {
                 data[`${fileKey}.${key}`] = messages.default[key]
@@ -68,7 +77,7 @@ export class Language {
         const pathArr = path.split('/')
         let route = pathArr[1] == 'app' ? pathArr[1] : pathArr[2];
 
-        let file = path == '/' ? 'pages.index.index' : path.replace('/', '').replaceAll('/', '.')
+        let file = path == '/' ? 'pages.index.index' : path.replace('/', '').replace(/\//g, '.')
 
         // 如果是系统页面，则移除“app.”
         let fileKey = ''

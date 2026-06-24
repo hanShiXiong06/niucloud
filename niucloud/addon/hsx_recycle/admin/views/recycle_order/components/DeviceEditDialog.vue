@@ -74,11 +74,6 @@
                 </el-input>
             </el-form-item>
 
-            <el-form-item label="卖货价格">
-                <el-input v-model="form.sell_price" type="number">
-                    <template #append>元</template>
-                </el-input>
-            </el-form-item>
             
             <el-form-item label="价格备注" prop="price_remark">
                 <el-input 

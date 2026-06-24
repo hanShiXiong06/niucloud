@@ -15,6 +15,7 @@ use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use core\exception\CommonException;
 
 /**
@@ -94,7 +95,11 @@ class SignHandler extends BaseFlowHandler
 
         foreach ($devices as $device) {
             $categoryId = (int)($device['category_id'] ?? 0);
-            $categoryPath = $this->normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
+            $categoryPath = DeviceSummaryHelper::normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
+            // 统一摘要契约：summary = { field_key: value }
+            $summary = DeviceSummaryHelper::normalizeSummary($device['summary'] ?? []);
+            $cols = DeviceSummaryHelper::reservedColumns($summary, $device);
+            $checkTemplateId = (int)($device['check_template_id'] ?? 0);
 
             // 检查是否有设备ID并且该ID是否在现有设备中
             if (!empty($device['id']) && isset($existingDevices[$device['id']])) {
@@ -105,17 +110,19 @@ class SignHandler extends BaseFlowHandler
                     'model' => $device['model'] ?? '',
                     'initial_price' => $device['initial_price'] ?? 0,
                     'category_id' => $categoryId,
-                     'site_id' => $siteId,
-                    // 扩展字段
+                    'site_id' => $siteId,
+                    // 保留字段(从 summary 回填，兼容顶层)
                     'sn' => $device['serial_number'] ?? '',
-                    'color' => $device['color'] ?? '',
-                    'capacity' => $device['capacity'] ?? '',
-                    'system_version' => $device['system_version'] ?? '',
-
-                    'warranty_info' => $device['warranty_info'] ?? '',
-                    'info' => $this->buildDeviceInfo($existingDevices[$device['id']]['info'] ?? [], $categoryPath, $device),
+                    'color' => $cols['color'],
+                    'capacity' => $cols['capacity'],
+                    'system_version' => $cols['system_version'],
+                    'warranty_info' => $cols['warranty_info'],
+                    'info' => DeviceSummaryHelper::buildInfo($existingDevices[$device['id']]['info'] ?? [], $categoryPath, $summary, $device),
                     'update_at' => time()
                 ];
+                if ($checkTemplateId > 0) {
+                    $deviceData['check_template_id'] = $checkTemplateId;
+                }
                 $deviceService->signUpdate((int)$device['id'], $deviceData);
                 (new RecycleDeviceModelDictService())->ensureFromModelName((string)($deviceData['model'] ?? ''), $siteId);
                 $deviceIds[] = $device['id'];
@@ -126,15 +133,16 @@ class SignHandler extends BaseFlowHandler
                     'imei' => $device['imei'] ?? '',
                     'imei2' => $device['imei2'] ?? '',
                     'model' => $device['model'] ?? '',
-                    // 扩展字段
+                    // 保留字段(从 summary 回填，兼容顶层)
                     'sn' => $device['serial_number'] ?? '',
-                    'color' => $device['color'] ?? '',
-                    'capacity' => $device['capacity'] ?? '',
-                    'system_version' => $device['system_version'] ?? '',
-                    'warranty_info' => $device['warranty_info'] ?? '',
+                    'color' => $cols['color'],
+                    'capacity' => $cols['capacity'],
+                    'system_version' => $cols['system_version'],
+                    'warranty_info' => $cols['warranty_info'],
                     'initial_price' => $device['initial_price'] ?? 0,
                     'category_id' => $categoryId,
-                    'info' => $this->buildDeviceInfo([], $categoryPath, $device),
+                    'check_template_id' => $checkTemplateId,
+                    'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, $device),
                     'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
                     'create_at' => time(),
                     'update_at' => time(),
@@ -148,66 +156,5 @@ class SignHandler extends BaseFlowHandler
         }
 
         return $deviceIds;
-    }
-
-    /**
-     * 规范化分类路径，统一存储为字符串数组
-     * @param mixed $categoryPath
-     * @param int $categoryId
-     * @return array
-     */
-    private function normalizeCategoryPath($categoryPath, int $categoryId): array
-    {
-        if (is_string($categoryPath) && $categoryPath !== '') {
-            $decoded = json_decode($categoryPath, true);
-            if (is_array($decoded)) {
-                $categoryPath = $decoded;
-            } else {
-                $categoryPath = array_filter(array_map('trim', explode(',', $categoryPath)));
-            }
-        }
-
-        if ((!is_array($categoryPath) || empty($categoryPath)) && $categoryId > 0) {
-            $categoryPath = [ $categoryId ];
-        }
-
-        return is_array($categoryPath) ? array_values(array_map('strval', $categoryPath)) : [];
-    }
-
-    /**
-     * 合并设备info信息，补充商城分类路径和电池数据
-     * @param mixed $originInfo
-     * @param array $categoryPath
-     * @param array $device 设备数据
-     * @return array
-     */
-    private function buildDeviceInfo($originInfo, array $categoryPath, array $device = []): array
-    {
-        if (is_string($originInfo) && $originInfo !== '') {
-            $decoded = json_decode($originInfo, true);
-            $originInfo = is_array($decoded) ? $decoded : [];
-        }
-
-        if (!is_array($originInfo)) {
-            $originInfo = [];
-        }
-
-        $originInfo['goods_category'] = $categoryPath;
-
-        // 初始化 check_meta 如果不存在
-        if (!isset($originInfo['check_meta'])) {
-            $originInfo['check_meta'] = [];
-        }
-
-        // 添加电池数据到 check_meta
-        if (!empty($device['battery_health'])) {
-            $originInfo['check_meta']['battery'] = $device['battery_health'];
-        }
-
-        if (!empty($device['battery_cycle'])) {
-            $originInfo['check_meta']['battery_num'] = $device['battery_cycle'];
-        }
-
-        return $originInfo;
     }
 }

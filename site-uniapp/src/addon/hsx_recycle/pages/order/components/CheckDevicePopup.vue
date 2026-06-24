@@ -25,7 +25,7 @@
                     <view class="section-title">质检结论</view>
                     <u-radio-group v-model="checkConclusion" placement="row" iconPlacement="left">
                         <u-radio
-                            activeColor="var(--primary-color)"
+                            activeColor="#fa5c1e"
                             :name="1"
                             label="正常回收"
                             labelColor="#334155"
@@ -45,101 +45,91 @@
                     </view>
                 </view>
 
-                <view v-if="templateOptions.length" class="section">
-                    <view class="section-title">质检模板</view>
-                    <scroll-view
-                        scroll-x
-                        class="template-scroll"
-                        :show-scrollbar="false"
-                        :scroll-into-view="activeTemplateScrollId"
-                    >
-                        <view class="template-row">
-                            <view
-                                v-for="item in templateOptions"
-                                :id="`check-template-${ item.id }`"
-                                :key="item.id"
-                                class="template-chip"
-                                :class="{ 'template-chip--active': Number(selectedTemplateId) === Number(item.id) }"
-                                @tap="handleTemplateChange(item.id)"
-                            >
-                                {{ item.template_name }}
-                            </view>
-                        </view>
-                    </scroll-view>
-                </view>
-
                 <view v-if="schemaLoading" class="loading-card">
-                    <text>正在加载模板字段...</text>
+                    <text>正在加载检测项...</text>
                 </view>
 
+                <!-- 质检项：分区卡片，每个检测项一行（标签左 + 选项横向滚动右），参考拍机堂 -->
                 <view v-for="group in schemaGroups" :key="group.id || group.group_key" class="section section-card">
                     <view class="section-title">
-                        <text>{{ group.group_name }}</text>
-                        <text v-if="group.description" class="section-title__desc">{{ group.description }}</text>
+                        <text class="section-title__name">{{ group.group_name }}</text>
+                        <text class="group-default-btn" @tap="applyGroupDefaults(group)">一键默认</text>
                     </view>
+                    <view v-if="group.description" class="group-desc">{{ group.description }}</view>
 
                     <view
                         v-for="field in group.fields || []"
                         :key="field.id || field.field_key"
-                        class="field-block"
-                        :class="{ 'field-block--inline': isInlineField(field) }"
+                        class="field-row"
+                        :class="{ 'field-row--block': !isTextField(field) && field.component !== 'switch' }"
                     >
-                        <view class="field-label">
+                        <view class="field-row__label">
                             {{ field.field_name }}
                             <text v-if="Number(field.is_required || 0) === 1" class="field-required">*</text>
                         </view>
 
-                        <view v-if="isTextField(field)" class="field-control">
+                        <view class="field-row__control">
                             <u-input
+                                v-if="isTextField(field)"
                                 v-model="fieldValues[field.field_key]"
                                 class="field-input"
                                 :type="field.component === 'number' ? 'digit' : 'text'"
                                 :placeholder="field.placeholder || `请输入${ field.field_name }`"
                                 border="none"
                                 clearable
-                                inputAlign="right"
+                                inputAlign="left"
                                 fontSize="26rpx"
                                 placeholderClass="text-[var(--text-color-light9)] text-[26rpx]"
                                 @input="handleTemplateValueChange"
                             ></u-input>
-                        </view>
 
-                        <view v-else-if="field.component === 'switch'" class="field-switch">
-                            <text class="field-switch__text">{{ fieldValues[field.field_key] ? '已开启' : '未开启' }}</text>
-                            <u-switch
-                                v-model="fieldValues[field.field_key]"
-                                activeColor="var(--hsx-primary)"
-                                @change="handleTemplateValueChange"
-                            ></u-switch>
-                        </view>
-
-                        <view v-else class="option-grid">
-                            <view
-                                v-for="option in field.options || []"
-                                :key="`${ field.field_key }-${ option.value }`"
-                                class="option-chip"
-                                :class="getOptionClass(field, option.value)"
-                                @click="toggleFieldOption(field, option.value)"
-                            >
-                                {{ option.label || option.name }}
+                            <view v-else-if="field.component === 'switch'" class="field-switch">
+                                <text class="field-switch__text">{{ fieldValues[field.field_key] ? '已开启' : '未开启' }}</text>
+                                <u-switch
+                                    v-model="fieldValues[field.field_key]"
+                                    activeColor="#fa5c1e"
+                                    @change="handleTemplateValueChange"
+                                ></u-switch>
                             </view>
+
+                            <!-- 选项：通用标签选择组件（换行，稳定不卡），全项目统一 -->
+                            <RecycleTagGroup
+                                v-else
+                                v-model="fieldValues[field.field_key]"
+                                :options="field.options || []"
+                                :multiple="field.component === 'checkbox'"
+                                @change="handleTemplateValueChange"
+                            />
                         </view>
                     </view>
                 </view>
-
+                  <view class="section">
+                    <view class="section-title">
+                        <text>质检图片</text>
+                        <text class="section-suffix">{{ checkImageCount }}/9</text>
+                    </view>
+                    <RecycleImageUploader
+                        v-model="checkImages"
+                        add-text="添加图片"
+                        fail-text="质检图片上传失败"
+                        :max-count="9"
+                        :multiple="true"
+                        @uploading="imageUploading = $event"
+                    />
+                </view>
                 <view class="section">
                     <view class="section-title">
                         <text>质检摘要</text>
                         <text class="section-action" @click="resetSummaryToTemplate">按模板生成</text>
                     </view>
-                    <u-textarea
+                    <!-- <u-textarea
                         v-model="formData.check_result_seller"
                         placeholder="请输入质检结果描述"
                         :maxlength="500"
                         :height="180"
                         count
                         @input="handleSummaryInput"
-                    ></u-textarea>
+                    ></u-textarea> -->
                     <view v-if="generatedSummary" class="summary-preview">
                         <view class="summary-preview__label">模板摘要：</view>
                         <view class="summary-preview__value">{{ generatedSummary }}</view>
@@ -157,20 +147,7 @@
                     ></u-textarea>
                 </view>
 
-                <view class="section">
-                    <view class="section-title">
-                        <text>质检图片</text>
-                        <text class="section-suffix">{{ checkImageCount }}/9</text>
-                    </view>
-                    <RecycleImageUploader
-                        v-model="checkImages"
-                        add-text="添加图片"
-                        fail-text="质检图片上传失败"
-                        :max-count="9"
-                        :multiple="true"
-                        @uploading="imageUploading = $event"
-                    />
-                </view>
+              
             </scroll-view>
 
             <view class="check-footer">
@@ -189,9 +166,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { getCheckTemplateAll, getCheckTemplateSchema, resolveDeviceTemplateBinding } from '@/addon/hsx_recycle/api/check-template'
+import { getCheckTemplateAll, getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
+import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import { batchReturnDevices, getDevice, updateDevice } from '@/addon/hsx_recycle/api/order'
 import RecycleImageUploader from '@/addon/hsx_recycle/components/RecycleImageUploader.vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 
 interface Props {
     visible: boolean
@@ -312,19 +291,23 @@ const loadTemplates = async () => {
     try {
         const res: any = await getCheckTemplateAll()
         templateOptions.value = Array.isArray(res?.data) ? res.data : []
-        const boundTemplateId = await resolveBoundCheckTemplateId()
-        const currentTemplateId = Number(
-            deviceData.value.check_template_id ||
-            normalizeObject(originalInfo.value.check_meta).template_id ||
-            boundTemplateId ||
-            templateOptions.value.find((item: any) => Number(item.is_default || 0) === 1)?.id ||
-            templateOptions.value[0]?.id ||
-            0
-        )
-        selectedTemplateId.value = currentTemplateId
-        activeTemplateScrollId.value = currentTemplateId ? `check-template-${ currentTemplateId }` : ''
-        if (currentTemplateId) {
-            await fetchTemplateSchema(currentTemplateId)
+
+        // 已有质检模板（之前质检过 / 中台带过来）→ 直接用；否则按 device_id 解析（与 PC check_template/schema?device_id 同口径）
+        const explicitTplId = Number(deviceData.value.check_template_id || normalizeObject(originalInfo.value.check_meta).template_id || 0)
+        if (explicitTplId > 0) {
+            selectedTemplateId.value = explicitTplId
+            activeTemplateScrollId.value = `check-template-${ explicitTplId }`
+            await fetchTemplateSchema(explicitTplId)
+        } else if (deviceData.value.id) {
+            await loadSchemaByDevice()
+        } else {
+            const def = Number(
+                templateOptions.value.find((item: any) => Number(item.is_default || 0) === 1)?.id ||
+                templateOptions.value[0]?.id || 0
+            )
+            selectedTemplateId.value = def
+            activeTemplateScrollId.value = def ? `check-template-${ def }` : ''
+            if (def) await fetchTemplateSchema(def)
         }
     } catch (error) {
         templateOptions.value = []
@@ -332,23 +315,25 @@ const loadTemplates = async () => {
     }
 }
 
-const resolveBoundCheckTemplateId = async () => {
-    const existingTemplateId = Number(deviceData.value.check_template_id || normalizeObject(originalInfo.value.check_meta).template_id || 0)
-    if (existingTemplateId > 0 || !deviceData.value.id) {
-        return 0
-    }
-
+// 按 device_id 解析设备绑定的质检模板 + 字段（后端 resolveByDeviceId，一次返回 resolve+groups）
+const loadSchemaByDevice = async () => {
+    schemaLoading.value = true
     try {
-        const res: any = await resolveDeviceTemplateBinding({
-            device_id: deviceData.value.id,
-            scene_key: 'manual_device_label'
-        })
-        const templateId = Number(res?.data?.check_template_id || 0)
-        const exists = templateOptions.value.some((item: any) => Number(item.id || 0) === templateId)
-        return exists ? templateId : 0
+        const res: any = await getCheckTemplateSchema({ device_id: deviceData.value.id })
+        const data = res?.data || {}
+        const resolve = data.resolve || {}
+        const tplId = Number(resolve.template_id || data.template?.id || 0)
+        if (tplId) {
+            selectedTemplateId.value = tplId
+            activeTemplateScrollId.value = `check-template-${ tplId }`
+        }
+        schemaGroups.value = Array.isArray(data.groups) ? data.groups : []
+        restoreFieldValues()
     } catch (error) {
-        console.warn('解析设备质检模板绑定失败，使用默认模板', error)
-        return 0
+        console.warn('按设备解析质检模板失败', error)
+        schemaGroups.value = []
+    } finally {
+        schemaLoading.value = false
     }
 }
 
@@ -375,6 +360,47 @@ const fetchTemplateSchema = async (templateId: number | string) => {
     }
 }
 
+// 空值判断（与 PC useCheckMeta 口径一致）
+const isEmptyFieldValue = (value: any) =>
+    value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)
+
+// 反显签收/代下单录入的设备信息：优先取 info.sign_summary（对象），兼容旧数据扁平存于 info。
+// 与 PC applySignSummary 口径一致：reserved 键不当作质检字段。
+const extractSignValues = (info: Record<string, any>): Record<string, any> => {
+    const summary = normalizeObject(info?.sign_summary)
+    if (summary && Object.keys(summary).length) {
+        return { ...summary }
+    }
+    const reserved = new Set(['goods_category', 'check_meta', 'sign_summary', 'coverage'])
+    const out: Record<string, any> = {}
+    Object.entries(info || {}).forEach(([key, value]) => {
+        if (!reserved.has(key) && !isEmptyFieldValue(value)) out[key] = value
+    })
+    return out
+}
+
+// 字段默认值：选项类取 is_default 的项；开关/文本取 default_value
+const fieldDefaultValue = (field: any) => {
+    const multi = field.component === 'checkbox'
+    const opts = Array.isArray(field.options) ? field.options : []
+    if (opts.length) {
+        const defs = opts.filter((o: any) => Number(o.is_default) === 1).map((o: any) => String(o.value))
+        return multi ? defs : (defs.length ? defs[0] : '')
+    }
+    if (field.component === 'switch') return normalizeBoolean(field.default_value)
+    return (field.default_value !== undefined && field.default_value !== null) ? field.default_value : ''
+}
+
+// 一键默认：把某大类下所有检测项设为默认选项
+const applyGroupDefaults = (group: any) => {
+    const next = { ...fieldValues.value }
+    ;(group.fields || []).forEach((field: any) => {
+        next[field.field_key] = fieldDefaultValue(field)
+    })
+    fieldValues.value = next
+    handleTemplateValueChange()
+}
+
 const restoreFieldValues = () => {
     const nextValues: Record<string, any> = {}
     const checkMeta = normalizeObject(originalInfo.value.check_meta)
@@ -389,7 +415,16 @@ const restoreFieldValues = () => {
         })
     }
 
+    // 是否已有真实质检数据（有 result_items，或除 template_id 外存在有效键）
+    const hasRealCheckMeta =
+        (Array.isArray(checkMeta.result_items) && checkMeta.result_items.length > 0) ||
+        Object.keys(checkMeta).some((key) => !['template_id', 'result_items'].includes(key) && !isEmptyFieldValue(checkMeta[key]))
+
+    // 签收/代下单录入值：仅在无真实质检时作为底层预填，真实质检与设备字段仍优先覆盖
+    const signValues = hasRealCheckMeta ? {} : extractSignValues(originalInfo.value)
+
     const source = {
+        ...signValues,
         ...flatCheckMeta,
         capacity: deviceData.value.capacity || originalInfo.value.capacity || flatCheckMeta.capacity || '',
         color: deviceData.value.color || originalInfo.value.color || flatCheckMeta.color || '',
@@ -409,9 +444,15 @@ const restoreFieldValues = () => {
                 return
             }
 
-            const rawValue = source[field.field_key]
+            let rawValue = source[field.field_key]
+            // 无录入值 → 用模板默认（默认选中 is_default 选项）
+            if (isEmptyFieldValue(rawValue)) {
+                rawValue = fieldDefaultValue(field)
+            }
             if (field.component === 'checkbox') {
-                nextValues[field.field_key] = Array.isArray(rawValue) ? rawValue.map((item: any) => String(item)) : []
+                nextValues[field.field_key] = Array.isArray(rawValue)
+                    ? rawValue.map((item: any) => String(item))
+                    : (isEmptyFieldValue(rawValue) ? [] : [String(rawValue)])
             } else if (field.component === 'switch') {
                 nextValues[field.field_key] = normalizeBoolean(rawValue)
             } else if (field.component === 'number') {
@@ -449,6 +490,14 @@ const getOptionClass = (field: TemplateField, optionValue: string) => {
     const value = fieldValues.value[field.field_key]
     const active = Array.isArray(value) ? value.includes(optionValue) : String(value) === String(optionValue)
     return active ? 'option-chip option-chip--active' : 'option-chip'
+}
+
+// u-tag 选中态判断
+const isOptionActive = (field: TemplateField, optionValue: any) => {
+    const value = fieldValues.value[field.field_key]
+    return Array.isArray(value)
+        ? value.some((v: any) => String(v) === String(optionValue))
+        : String(value) === String(optionValue)
 }
 
 const handleTemplateValueChange = () => {
@@ -513,6 +562,12 @@ const submitForm = async (action: 'check' | 'save_draft') => {
             uni.showToast({ title: '请填写质检摘要', icon: 'none' })
             return
         }
+        // 二次确认：质检提交进入下一环节，避免误提交
+        const tip = Number(checkConclusion.value) === 2
+            ? '确认将该设备按【退回】处理并提交质检？'
+            : '确认提交质检结果？提交后进入回收定价环节。'
+        const ok = await confirmDanger(tip, { title: '确认提交质检', confirmText: '确认提交' })
+        if (!ok) return
     }
 
     if (action === 'check') submitting.value = true
@@ -851,7 +906,7 @@ const resolveGoodsCategory = () => {
     margin: 20rpx 30rpx 0;
     padding: 22rpx 24rpx;
     border-radius: 16rpx;
-    background: linear-gradient(135deg, var(--hsx-primary-50), #eef2ff);
+    background: linear-gradient(135deg, #fff3e9, #fff8f3);
     flex-shrink: 0;
 }
 
@@ -880,22 +935,61 @@ const resolveGoodsCategory = () => {
 }
 
 .check-content {
-    flex: none;
-    height: calc(88vh - 340rpx - env(safe-area-inset-bottom));
-    min-height: 420rpx;
-    padding: 20rpx 30rpx 0;
+    /* 用 flex 自适应填满"头部+设备信息"之外的剩余空间，而非写死 calc(88vh-340rpx)。
+       硬编码估算高度算不准时 scroll-view 会错位、滚动发涩；flex:1+min-height:0 让它拿到精确高度，原生滚动最稳。 */
+    flex: 1 1 0;
+    min-height: 0;
+    padding: 20rpx 30rpx 30rpx;
     box-sizing: border-box;
+    background: #f5f6f8;
 }
 
-.section {
-    margin-bottom: 26rpx;
-}
-
+.section,
 .section-card,
 .loading-card {
-    padding: 22rpx;
-    border-radius: 16rpx;
-    background: #f8fafc;
+    margin-bottom: 24rpx;
+    padding: 24rpx 26rpx;
+    border-radius: 20rpx;
+    background: #ffffff;
+    box-shadow: 0 6rpx 24rpx rgba(17, 24, 39, 0.06);
+    border: 1rpx solid #f1f2f4;
+}
+
+.section-title__name {
+    position: relative;
+    padding-left: 18rpx;
+    font-size: 28rpx;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.section-title__name::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6rpx;
+    bottom: 6rpx;
+    width: 6rpx;
+    border-radius: 4rpx;
+    background: #fa5c1e;
+}
+
+.group-default-btn {
+    flex: 0 0 auto;
+    font-size: 24rpx;
+    font-weight: 500;
+    color: #fa5c1e;
+    padding: 6rpx 20rpx;
+    border: 1rpx solid #ffd2bd;
+    border-radius: 999rpx;
+    background: #fff6f1;
+}
+
+.group-desc {
+    font-size: 22rpx;
+    color: #94a3b8;
+    margin: -6rpx 0 14rpx;
+    line-height: 1.5;
 }
 
 .section-title {
@@ -918,7 +1012,7 @@ const resolveGoodsCategory = () => {
 }
 
 .section-action {
-    color: var(--hsx-primary);
+    color: #fa5c1e;
 }
 
 .section-tip {
@@ -949,9 +1043,9 @@ const resolveGoodsCategory = () => {
 .chip--active,
 .template-chip--active,
 .option-chip--active {
-    background: var(--hsx-primary-50);
-    border-color: var(--hsx-primary-300);
-    color: var(--hsx-primary);
+    background: #fff2e9;
+    border-color: #fa5c1e;
+    color: #fa5c1e;
 }
 
 .chip--danger {
@@ -1108,5 +1202,66 @@ const resolveGoodsCategory = () => {
     border-top: 1rpx solid #f2f3f5;
     background: #fff;
     flex-shrink: 0;
+}
+
+/* 质检项：每行 标签左 + 选项横向滚动右（参考拍机堂） */
+.field-row {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+    padding: 12rpx 0;
+}
+
+.field-row + .field-row {
+    border-top: 1rpx solid #f2f4f7;
+}
+
+.field-row__label {
+    flex: 0 0 auto;
+    width: 150rpx;
+    font-size: 26rpx;
+    color: #303133;
+    line-height: 1.4;
+}
+
+.field-row__control {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+/* 选项类字段：标签在上，选项整行换行铺开（不滑动，最稳） */
+.field-row--block {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12rpx;
+}
+.field-row--block .field-row__label {
+    width: auto;
+}
+.field-row--block .field-row__control {
+    width: 100%;
+    flex: none;
+}
+
+.option-scroll {
+    width: 100%;
+    white-space: nowrap;
+}
+
+.option-scroll-row {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    gap: 16rpx;
+    padding: 2rpx 0;
+}
+
+.option-scroll .option-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 26rpx;
+    padding: 14rpx 28rpx;
 }
 </style>

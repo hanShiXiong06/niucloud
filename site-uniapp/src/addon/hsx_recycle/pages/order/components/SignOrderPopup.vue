@@ -112,6 +112,40 @@
                         </view>
                     </view>
 
+                    <!-- 质检摘要（型号触发的模板摘要字段，最多5个；签收即录，质检时反显） -->
+                    <view v-if="summaryLoading" class="summary-loading">
+                        <text>加载质检摘要项…</text>
+                    </view>
+                    <view v-else-if="editForm.summary_fields && editForm.summary_fields.length" class="summary-section">
+                        <view class="summary-section__title">质检摘要 <text class="summary-section__tip">（签收即录，质检时自动带出）</text></view>
+                        <view v-for="field in editForm.summary_fields" :key="field.field_key" class="summary-field">
+                            <view class="summary-field__label">
+                                <text v-if="Number(field.is_required) === 1" class="summary-required">*</text>
+                                {{ field.field_name }}<text v-if="field.unit" class="summary-unit">（{{ field.unit }}）</text>
+                            </view>
+                            <!-- 选项类：通用标签选择组件 -->
+                            <RecycleTagGroup
+                                v-if="isOptionSummaryField(field)"
+                                v-model="editForm.summary_values[field.field_key]"
+                                :options="field.options"
+                                :multiple="isMultiSummaryField(field)"
+                            />
+                            <!-- 开关类 -->
+                            <u-switch v-else-if="isSwitchSummaryField(field)" v-model="editForm.summary_values[field.field_key]" size="22" />
+                            <!-- 文本/数字 -->
+                            <u-input
+                                v-else
+                                v-model="editForm.summary_values[field.field_key]"
+                                border="bottom"
+                                clearable
+                                :placeholder="field.placeholder || '请输入'"
+                                fontSize="28rpx"
+                                inputAlign="right"
+                                placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
+                            ></u-input>
+                        </view>
+                    </view>
+
                 </scroll-view>
 
                 <view class="popup-footer">
@@ -198,7 +232,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { getDeviceModelDictChildren, searchDeviceModelDictOptions, updateOrder } from '@/addon/hsx_recycle/api/order'
+import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
+import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 
 interface Props {
     visible: boolean
@@ -211,7 +247,100 @@ const emit = defineEmits(['update:visible', 'success'])
 
 const show = ref(false)
 const submitting = ref(false)
+const summaryLoading = ref(false) // 质检摘要字段加载中
 const devices = ref<any[]>([])
+
+// 摘要字段类型判断 / 取值（与 PC device-entry 口径一致）
+const isMultiSummaryField = (field: any) => field?.component === 'checkbox' || field?.selection_mode === 'multiple'
+const isOptionSummaryField = (field: any) =>
+    ['radio', 'select', 'checkbox'].includes(field?.component) || (Array.isArray(field?.options) && field.options.length > 0)
+const isSwitchSummaryField = (field: any) => field?.component === 'switch'
+
+const summaryOptionActive = (field: any, optionValue: any) => {
+    const cur = editForm.value.summary_values?.[field.field_key]
+    return Array.isArray(cur) ? cur.some((v: any) => String(v) === String(optionValue)) : String(cur) === String(optionValue)
+}
+const toggleSummaryOption = (field: any, optionValue: any) => {
+    const values = editForm.value.summary_values || (editForm.value.summary_values = {})
+    if (isMultiSummaryField(field)) {
+        const cur = Array.isArray(values[field.field_key]) ? [...values[field.field_key]] : []
+        const idx = cur.findIndex((v: any) => String(v) === String(optionValue))
+        if (idx >= 0) cur.splice(idx, 1)
+        else cur.push(optionValue)
+        values[field.field_key] = cur
+    } else {
+        values[field.field_key] = String(values[field.field_key]) === String(optionValue) ? '' : optionValue
+    }
+}
+// 收集有效摘要值 { field_key: value }（剔除空值）
+const collectSummaryValues = (fields: any[] = [], values: Record<string, any> = {}) => {
+    const out: Record<string, any> = {}
+    fields.forEach((field) => {
+        const v = values[field.field_key]
+        if (Array.isArray(v)) {
+            if (v.length) out[field.field_key] = v
+        } else if (v !== undefined && v !== null && v !== '') {
+            out[field.field_key] = v
+        }
+    })
+    return out
+}
+
+// 选型号后解析质检模板 + 摘要字段（summary_visible 最多 5 个），并预填默认/已有值
+const loadSummaryFields = async () => {
+    const categoryId = Number(editForm.value.category_id || 0)
+    editForm.value.summary_fields = []
+    editForm.value.check_template_id = 0
+    if (!categoryId) return
+    summaryLoading.value = true
+    try {
+        const res: any = await getCheckTemplateSchema({ category_id: categoryId })
+        const data = res?.data || {}
+        const groups = Array.isArray(data.groups) ? data.groups : []
+        const resolve = data.resolve || {}
+        const template = data.template || {}
+        const fields: any[] = []
+        groups.forEach((group: any) => {
+            ;(group.fields || []).forEach((field: any) => {
+                if (Number(field?.extra_config?.summary_visible || 0) === 1 && fields.length < 5) {
+                    fields.push({
+                        field_key: String(field.field_key),
+                        field_name: String(field.field_name),
+                        component: String(field.component || 'input'),
+                        selection_mode: field.selection_mode,
+                        unit: field.unit,
+                        placeholder: field.placeholder,
+                        default_value: field.default_value,
+                        is_required: Number(field.is_required || 0),
+                        options: (field.options || []).map((opt: any) => ({ value: opt.value, label: opt.label || opt.name }))
+                    })
+                }
+            })
+        })
+        editForm.value.check_template_id = Number(resolve.template_id || template.id || 0)
+        editForm.value.summary_fields = fields
+        const values: Record<string, any> = { ...(editForm.value.summary_values || {}) }
+        fields.forEach((field) => {
+            const multi = isMultiSummaryField(field)
+            if (values[field.field_key] === undefined || values[field.field_key] === '') {
+                if (field.default_value !== undefined && field.default_value !== null && field.default_value !== '') {
+                    values[field.field_key] = multi
+                        ? (Array.isArray(field.default_value) ? field.default_value : [field.default_value])
+                        : field.default_value
+                } else {
+                    values[field.field_key] = multi ? [] : (isSwitchSummaryField(field) ? false : '')
+                }
+            } else if (multi && !Array.isArray(values[field.field_key])) {
+                values[field.field_key] = [values[field.field_key]]
+            }
+        })
+        editForm.value.summary_values = values
+    } catch (error) {
+        console.warn('加载质检摘要字段失败', error)
+    } finally {
+        summaryLoading.value = false
+    }
+}
 const modelColumns = ref<Array<{ pid: number | string, items: any[], activeId: string | number }>>([])
 const modelKeyword = ref('')
 const modelSearchList = ref<any[]>([])
@@ -227,7 +356,10 @@ const editForm = ref({
     user_sn: '',
     initial_price: '',
     category_id: 0,
-    category_path: [] as Array<string | number>
+    category_path: [] as Array<string | number>,
+    check_template_id: 0,
+    summary_fields: [] as any[],
+    summary_values: {} as Record<string, any>
 })
 
 const visibleModelColumns = computed(() => {
@@ -301,8 +433,20 @@ const handleClose = () => {
 
 const addDevice = () => {
     editingIndex.value = -1
-    editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', category_id: 0, category_path: [] }
+    editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', category_id: 0, category_path: [], check_template_id: 0, summary_fields: [], summary_values: {} }
     editVisible.value = true
+}
+
+// 从已签收设备的 info 还原已录入的摘要值（优先 sign_summary）
+const extractDeviceSummaryValues = (device: any): Record<string, any> => {
+    const info = typeof device?.info === 'string' ? safeJson(device.info) : (device?.info || {})
+    if (info?.sign_summary && typeof info.sign_summary === 'object' && !Array.isArray(info.sign_summary)) {
+        return { ...info.sign_summary }
+    }
+    if (device?.summary_values && typeof device.summary_values === 'object') {
+        return { ...device.summary_values }
+    }
+    return {}
 }
 
 const editDevice = (device: any, index: number) => {
@@ -313,9 +457,18 @@ const editDevice = (device: any, index: number) => {
         user_sn: device.user_sn || '',
         initial_price: device.initial_price || '',
         category_id: device.category_id || 0,
-        category_path: normalizeCategoryPath(device.category_path || device.info?.goods_category || [], device.category_id || 0)
+        category_path: normalizeCategoryPath(device.category_path || device.info?.goods_category || [], device.category_id || 0),
+        check_template_id: Number(device.check_template_id || 0),
+        summary_fields: Array.isArray(device.summary_fields) ? device.summary_fields : [],
+        summary_values: extractDeviceSummaryValues(device)
     }
     editVisible.value = true
+    // 按分类解析模板/摘要字段（保留已录入值）
+    if (editForm.value.category_id) loadSummaryFields()
+}
+
+const safeJson = (value: any) => {
+    try { const v = JSON.parse(value); return v && typeof v === 'object' ? v : {} } catch { return {} }
 }
 
 const deleteDevice = (index: number) => {
@@ -362,6 +515,9 @@ const chooseModelNode = (node: any) => {
     editForm.value.category_id = node.id || 0
     editForm.value.category_path = resolveNodePath(node)
     closeModelPicker()
+    // 换型号 → 重新解析质检模板与摘要字段（清掉上一型号的录入值）
+    editForm.value.summary_values = {}
+    loadSummaryFields()
 }
 
 const resolveNodePath = (node: any): Array<string | number> => {
@@ -436,6 +592,16 @@ const saveEdit = () => {
         uni.showToast({ title: '请选择设备分类', icon: 'none' })
         return
     }
+    // 必填摘要项校验
+    for (const field of editForm.value.summary_fields || []) {
+        if (Number(field.is_required) !== 1) continue
+        const v = editForm.value.summary_values?.[field.field_key]
+        const empty = Array.isArray(v) ? v.length === 0 : (v === undefined || v === null || v === '')
+        if (empty) {
+            uni.showToast({ title: `请填写「${field.field_name}」`, icon: 'none' })
+            return
+        }
+    }
 
     const data = {
         ...editForm.value
@@ -476,7 +642,10 @@ const handleSubmit = async () => {
                 user_sn: d.user_sn || '',
                 initial_price: Number(d.initial_price) || 0,
                 category_id: d.category_id || 0,
-                category_path: normalizeCategoryPath(d.category_path, d.category_id || 0)
+                category_path: normalizeCategoryPath(d.category_path, d.category_id || 0),
+                // 质检模板 + 摘要(field_key: value)，后端落 sign_summary，质检时反显
+                check_template_id: Number(d.check_template_id || 0),
+                summary: collectSummaryValues(d.summary_fields || [], d.summary_values || {})
             }))
         })
         uni.showToast({ title: '签收成功' })
@@ -912,5 +1081,72 @@ const handleSubmit = async () => {
     color: #c0c4cc;
     font-size: 22rpx;
     flex-shrink: 0;
+}
+
+.summary-loading {
+    padding: 20rpx 0;
+    font-size: 24rpx;
+    color: #999;
+    text-align: center;
+}
+
+.summary-section {
+    margin-top: 8rpx;
+    padding-top: 16rpx;
+    border-top: 1rpx dashed #eee;
+}
+
+.summary-section__title {
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12rpx;
+}
+
+.summary-section__tip {
+    font-size: 22rpx;
+    font-weight: 400;
+    color: #999;
+}
+
+.summary-field {
+    margin-bottom: 20rpx;
+}
+
+.summary-field__label {
+    font-size: 26rpx;
+    color: #606266;
+    margin-bottom: 10rpx;
+}
+
+.summary-required {
+    color: #fa3534;
+    margin-right: 4rpx;
+}
+
+.summary-unit {
+    color: #999;
+    font-size: 22rpx;
+}
+
+.summary-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14rpx;
+}
+
+.summary-chip {
+    padding: 10rpx 24rpx;
+    font-size: 26rpx;
+    color: #555;
+    background: #f4f5f7;
+    border: 1rpx solid #e6e8eb;
+    border-radius: 30rpx;
+}
+
+.summary-chip--active {
+    color: #2b6bff;
+    background: #eaf1ff;
+    border-color: #2b6bff;
 }
 </style>

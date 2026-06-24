@@ -17,18 +17,13 @@
             </view>
         </view>
 
-        <view class="mode-grid">
-            <view
-                v-for="item in shipmentModes"
-                :key="item.value"
-                class="mode-item"
-                :class="{ 'mode-item--active': shipmentMode === item.value }"
-                @click="selectShipmentMode(item.value)"
-            >
-                <text class="mode-item__name">{{ item.name }}</text>
-                <text class="mode-item__desc">{{ item.desc }}</text>
-            </view>
-        </view>
+        <RecycleCardRadio
+            class="mode-grid"
+            :model-value="shipmentMode"
+            :options="shipmentModes"
+            :columns="2"
+            @change="selectShipmentMode"
+        />
 
         <view v-if="shipmentMode === 'system'" class="shipment-panel">
             <view class="panel-head" @click="toggleSection('sender')">
@@ -201,6 +196,7 @@ import { getReturnShipmentModes } from '@/addon/hsx_recycle/api/return-order'
 import { createExpressOrderDirect, getExpressQuote } from '@/addon/hsx_recycle/api/express'
 import { getShopAddressList, getShopDefaultDeliveryAddressInfo } from '@/addon/hsx_recycle/api/shop-address'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
+import RecycleCardRadio from '@/addon/hsx_recycle/components/RecycleCardRadio.vue'
 
 type ShipmentMode = {
     value: string

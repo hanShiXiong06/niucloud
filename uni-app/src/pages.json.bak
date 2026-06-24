@@ -1,0 +1,889 @@
+{
+    "pages": [
+        // pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+        {
+            "path": "app/pages/index/index",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.index.index%",
+                "usingComponents": {
+                    "diy-group": "../../../../addon/components/diy/group/index"
+                },
+                "componentPlaceholder": {
+                    "diy-group": "view"
+                }
+            }
+        },
+        {
+            "path": "app/pages/auth/index",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.auth.index%"
+            }
+        },
+        {
+            "path": "app/pages/auth/agreement",
+            "style": {
+                "navigationBarTitleText": "%pages.auth.agreement%"
+            }
+        },
+        {
+            "path": "app/pages/auth/bind",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.auth.bind%"
+            }
+        },
+        {
+            "path": "app/pages/auth/login",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.auth.login%"
+            }
+        },
+        {
+            "path": "app/pages/auth/register",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.auth.register%"
+            }
+        },
+        {
+            "path": "app/pages/auth/resetpwd",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.auth.resetpwd%"
+            }
+        },
+        {
+            "path": "app/pages/index/diy",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.index.diy%",
+                "usingComponents": {
+                    "diy-group": "../../../../addon/components/diy/group/index"
+                },
+                "componentPlaceholder": {
+                    "diy-group": "view"
+                }
+            }
+        },
+        {
+            "path": "app/pages/index/diy_form",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.index.diy_form%",
+                "usingComponents": {
+                    "diy-group": "../../../../addon/components/diy/group/index"
+                },
+                "componentPlaceholder": {
+                    "diy-group": "view"
+                }
+            }
+        },
+        {
+            "path": "app/pages/index/diy_form_result",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.index.diy_form_result%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/index/diy_form_detail",
+            "style": {
+                "navigationBarTitleText": "%pages.index.diy_form_detail%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/index/close",
+            "style": {
+                "navigationBarTitleText": "%pages.index.close%"
+            }
+        },
+        {
+            "path": "app/pages/index/nosite",
+            "style": {
+                "navigationBarTitleText": "%pages.index.nosite%"
+            }
+        },
+        {
+            "path": "app/pages/pay/browser",
+            "style": {
+                "navigationBarTitleText": "%pages.pay.browser%"
+            }
+        },
+        {
+            "path": "app/pages/pay/result",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.pay.result%"
+            }
+        },
+        {
+            "path": "app/pages/setting/index",
+            "style": {
+                "navigationBarTitleText": "%pages.setting.index%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/setting/authorization",
+            "style": {
+                "navigationBarTitleText": "%pages.setting.authorization%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/webview/index",
+            "style": {
+                "navigationBarTitleText": "%pages.webview.index%"
+            }
+        },
+        {
+            "path": "app/pages/index/develop",
+            "style": {
+                "navigationBarTitleText": "%pages.index.develop%"
+            }
+        },
+        {
+            "path": "app/pages/verify/index",
+            "style": {
+                "navigationBarTitleText": "%pages.verify.index%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/verify/verify",
+            "style": {
+                "navigationBarTitleText": "%pages.verify.verify%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/verify/detail",
+            "style": {
+                "navigationBarTitleText": "%pages.verify.detail%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/verify/record",
+            "style": {
+                "navigationBarTitleText": "%pages.verify.record%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/weapp/order_shipping",
+            "style": {
+                "navigationBarTitleText": "%pages.weapp.order_shipping%"
+            }
+        },
+        {
+            "path": "app/pages/friendspay/share",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.friendspay.share%"
+            },
+            "needLogin": true
+        },
+        {
+            "path": "app/pages/friendspay/money",
+            "style": {
+                // #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+                "navigationBarTitleText": "%pages.friendspay.money%"
+            }
+        }
+    ],
+    "subPackages": [
+        // {{ PAGE_BEGAIN }}
+        // HSX_RECYCLE_PAGE_BEGIN
+		 {
+            "root": "addon/recycle",
+            "pages": [
+                {
+                    "path": "pages/order/order",
+                    "style": {
+                        "navigationBarTitleText": "回收下单"
+                    }
+                }
+            ]
+        },
+        {
+            "root": "addon/hsx_recycle", 
+            "pages": [
+				{
+					"path": "pages/index",
+					"style": {
+						"navigationBarTitleText": "回收主页",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+					}
+				},{
+					"path": "pages/price",
+					"style": {
+						"navigationBarTitleText": "回收报价单",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/order",
+					"style": {
+						"navigationBarTitleText": "立即下单",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/list",
+					"style": {
+						"navigationBarTitleText": "订单列表",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/detail",
+					"style": {
+						"navigationBarTitleText": "订单详情",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/payment/index",
+					"style": {
+						"navigationBarTitleText": "收款管理",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+					},
+					"needLogin": true
+				},
+				{
+                    "path": "pages/return_order/list",
+                    "style": {
+                        "navigationBarTitleText": "退货订单",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                    },
+                    "needLogin": true
+                },{
+                    "path": "pages/return_order/detail",
+                    "style": {
+                        "navigationBarTitleText": "退货订单详情",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/consignment/list",
+                    "style": {
+                        "navigationBarTitleText": "代卖订单",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/consignment/detail",
+                    "style": {
+                        "navigationBarTitleText": "代卖详情",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                    },
+                    "needLogin": true
+                },
+                {
+					"path": "pages/price/show_price",
+					"style": {
+						"navigationBarTitleText": "二手机回收报价单",
+						 // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+					},
+					"needLogin": true
+				},
+                {
+					"path": "pages/member/index",
+					"style": {
+                        // #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                        "navigationBarTitleText": "%recycle.pages.member.index%"
+					}
+				}
+			]
+        },
+// HSX_RECYCLE_PAGE_END
+        // HSX_PHONE_QUERY_PAGE_BEGIN
+        {
+            "root": "addon/hsx_phone_query", 
+            "pages": [
+				{
+					"path": "pages/index",
+					"style": {
+						"navigationBarTitleText": "查询界面"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/history",
+					"style": {
+						"navigationBarTitleText": "查询历史"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/detail",
+					"style": {
+						"navigationBarTitleText": "查询详情"
+					},
+					"needLogin": true,
+				}
+			]
+        },
+// HSX_PHONE_QUERY_PAGE_END
+        // RECYCLE_DAHENG_QUOTE_PAGE_BEGIN
+        {
+            "root": "addon/recycle_daheng_quote",
+            "pages": [
+                {
+                    "path": "pages/price/show_price",
+                    "style": {
+                        "navigationBarTitleText": "二手机回收报价单",
+                         // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                    },
+                    "needLogin": true
+                }
+            ]
+        },
+// RECYCLE_DAHENG_QUOTE_PAGE_END
+        // RECYCLE_QUOTE_SPIDER_PAGE_BEGIN
+        {
+            "root": "addon/recycle_quote_spider",
+            "pages": [
+                {
+                    "path": "pages/price/show_price",
+                    "style": {
+                        "navigationBarTitleText": "二手机回收报价单",
+                         // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                    },
+                    "needLogin": true
+                }
+            ]
+        },
+// RECYCLE_QUOTE_SPIDER_PAGE_END
+        // PHONE_SHOP_PAGE_BEGIN
+        {
+            "root": "addon/phone_shop",
+            "pages": [
+                // *********************************** 商城 ***********************************
+                {
+                    "path": "pages/index",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.index%"
+                    }
+                },
+                {
+                    "path": "pages/coupon/list",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.coupon.list%"
+                    }
+                },
+                {
+                    "path": "pages/coupon/detail",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.coupon.detail%"
+                    }
+                },
+                {
+                    "path": "pages/discount/list",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.discount.list%"
+                    }
+                },
+                {
+                    "path": "pages/evaluate/list",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.evaluate.list%"
+                    }
+                },
+                {
+                    "path": "pages/evaluate/order_evaluate",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.evaluate.order_evaluate%"
+                    }
+                },
+                {
+                    "path": "pages/evaluate/order_evaluate_view",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.evaluate.order_evaluate_view%"
+                    }
+                },
+                {
+                    "path": "pages/member/my_coupon",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.member.my_coupon%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/member/index",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.member.index%"
+                    }
+                },
+                {
+                    "path": "pages/goods/search",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.goods.search%"
+                    }
+                },
+                {
+                    "path": "pages/goods/list",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.goods.list%"
+                    }
+                },
+                {
+                    "path": "pages/goods/rank",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.goods.rank%"
+                    }
+                },
+                {
+                    "path": "pages/newcomer/list",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.newcomer.list%"
+                    }
+                },
+                {
+                    "path": "pages/goods/detail",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.goods.detail%",
+                        "navigationStyle": "custom"
+                    }
+                },
+                {
+                    "path": "pages/goods/cart",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.goods.cart%"
+                    }
+                },
+                {
+                    "path": "pages/goods/collect",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.goods.collect%"
+                    },
+					"needLogin": true
+                },
+                {
+                    "path": "pages/goods/browse",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.goods.browse%"
+                    },
+					"needLogin": true
+                },
+                {
+                    "path": "pages/goods/category",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.goods.category%"
+                    }
+                },
+                {
+                    "path": "pages/order/detail",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.order.detail%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/order/list",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.order.list%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/order/payment",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.order.payment%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/refund/apply",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.refund.apply%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/refund/edit_apply",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.refund.edit_apply%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/refund/list",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.refund.list%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/refund/detail",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.refund.detail%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/refund/log",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.refund.log%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/point/index",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.point.index%"
+                    }
+                },
+                {
+                    "path": "pages/point/list",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.point.list%"
+                    }
+                },
+                {
+                    "path": "pages/point/detail",
+                    "style": {
+                        "navigationStyle": "custom",
+                        "navigationBarTitleText": "%shop.pages.point.detail%"
+                    }
+                },
+                {
+                    "path": "pages/point/payment",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%shop.pages.point.payment%"
+                    }
+                },
+                {
+                    "path": "pages/point/order_list",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.point.order_list%"
+                    }
+                },
+                {
+                    "path": "pages/invoice/list",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.invoice.list%"
+                    }
+                },
+                {
+                    "path": "pages/invoice/detail",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.invoice.detail%"
+                    }
+                },
+                {
+                    "path": "pages/invoice/invoice",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.invoice.invoice%"
+                    }
+                },
+                {
+                    "path": "pages/invoice/invoice_edit",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.invoice.invoice_edit%"
+                    }
+                },
+                {
+                    "path": "pages/invoice/invoice_order",
+                    "style": {
+                        "navigationBarTitleText": "%shop.pages.invoice.invoice_order%"
+                    }
+                }
+            ]
+        },
+        // PHONE_SHOP_PAGE_END
+// {{ PAGE_END }}
+        {
+            "root": "app/components",
+            "pages": []
+        },
+        {
+            "root": "app/pages/member",
+            "pages": [
+                {
+                    "path": "apply_cash_out",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.apply_cash_out%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "commission",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%pages.member.commission%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "balance",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%pages.member.balance%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "level",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%pages.member.level%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "detailed_account",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.detailed_account%"
+                    }
+                },
+                {
+                    "path": "cash_out",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.cash_out%"
+                    }
+                },
+                {
+                    "path": "cash_out_detail",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.cash_out_detail%"
+                    }
+                },
+                {
+                    "path": "index",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%pages.member.index%",
+                        "usingComponents": {
+                            "diy-group": "../../../../addon/components/diy/group/index"
+                        },
+                        "componentPlaceholder": {
+                            "diy-group": "view"
+                        }
+                    }
+                },
+                {
+                    "path": "personal",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.personal%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "personal_form",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%pages.member.personal_form%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "point",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%pages.member.point%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "point_detail",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.point_detail%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "account",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.account%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "account_edit",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.account_edit%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "address",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.address%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "address_edit",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.address_edit%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "sign_in",
+                    "style": {
+                        // #ifndef H5
+                        "navigationStyle": "custom",
+                        // #endif
+                        "navigationBarTitleText": "%pages.member.sign_in%"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "contact",
+                    "style": {
+                        "navigationBarTitleText": "%pages.member.contact%"
+                    }
+                }
+            ]
+        }
+    ],
+    "globalStyle": {
+        "navigationBarTextStyle": "black",
+        "navigationBarTitleText": "",
+        "navigationBarBackgroundColor": "#F6F6F6",
+        "backgroundColor": "#F6F6F6",
+        "backgroundColorTop": "#F6F6F6",
+        "backgroundColorBottom": "#F6F6F6"
+    },
+    "tabBar": {
+        "list": [{
+                "pagePath": "app/pages/index/index"
+            },
+            {
+                "pagePath": "app/pages/index/nosite"
+            }
+        ]
+    },
+    "easycom": {
+        "custom": {
+            "diy-group": "@/addon/components/diy/group/index.vue",
+            "u--(.*)": "uview-plus/components/u-$1/u-$1.vue",
+            "up-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+            "u-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+            "diy-(\W.*)": "@/app/components/diy/$1/index.vue"
+        }
+    }
+}

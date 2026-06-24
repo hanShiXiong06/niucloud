@@ -35,17 +35,12 @@
             <scroll-view scroll-y class="payment-content">
                 <view class="section">
                     <view class="section-title">收款方式</view>
-                    <view v-if="paymentMethods.length" class="method-list">
-                        <view
-                            v-for="(item, index) in paymentMethods"
-                            :key="`${ item.pay_type || 'custom' }-${ index }`"
-                            class="method-chip"
-                            :class="{ 'method-chip--active': selectedMethodIndex === index }"
-                            @click="selectedMethodIndex = index"
-                        >
-                            {{ item.pay_type || `方式${ index + 1 }` }}
-                        </view>
-                    </view>
+                    <RecycleTagGroup
+                        v-if="paymentMethods.length"
+                        v-model="selectedMethodIndex"
+                        :options="paymentMethods.map((m, i) => ({ label: m.pay_type || ('方式' + (i + 1)), value: i }))"
+                        :deselectable="false"
+                    />
                     <view v-else class="empty-card">
                         <text>客户未维护收款方式，请手动填写本次打款信息。</text>
                     </view>
@@ -187,6 +182,7 @@ import { devicePaymentConfirm, getMerchantPayInfo, paymentConfirm } from '@/addo
 import { img } from '@/utils/common'
 import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import RecycleImageUploader from '@/addon/hsx_recycle/components/RecycleImageUploader.vue'
+import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import { formatMoney } from '@/addon/hsx_recycle/utils/helper'
 import { getDeviceSettlementAmount, isConsignedDevice } from '@/addon/hsx_recycle/utils/device'
 
@@ -436,7 +432,7 @@ const getDevicePaymentLabel = (device: any) => {
 
 .summary-card {
     padding: 22rpx 24rpx;
-    background: linear-gradient(135deg, var(--hsx-primary-50), #eef2ff);
+    background: linear-gradient(135deg, var(--hsx-primary-50), #ecf5ff);
 }
 
 .summary-row {

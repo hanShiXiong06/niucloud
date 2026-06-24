@@ -47,20 +47,7 @@
             </view>
             <!-- #endif -->
 
-            <scroll-view scroll-x class="status-scroll">
-                <view class="status-row">
-                    <view
-                        v-for="item in statusList"
-                        :key="item.value"
-                        class="status-chip"
-                        :class="{ 'status-chip--active': currentStatus === item.value }"
-                        @click="switchStatus(item.value)"
-                    >
-                        <text>{{ item.label }}</text>
-                        <text v-if="typeof item.count !== 'undefined' && item.count " class="status-chip__count"> {{ item.count }} </text>
-                    </view>
-                </view>
-            </scroll-view>
+            <RecycleStatusTabs :model-value="currentStatus" :options="statusList" @change="switchStatus" />
         </view>
 
         <z-paging
@@ -82,7 +69,7 @@
             <view class="list-content">
                 <view v-if="dashboardFilterTitle" class="dashboard-filter-card">
                     <view class="dashboard-filter-card__main">
-                        <text class="dashboard-filter-card__label">来自看板</text>
+                        <u-tag text="来自看板" type="primary" plain size="mini" :customStyle="{ marginRight: '12rpx' }"></u-tag>
                         <text class="dashboard-filter-card__title">{{ dashboardFilterTitle }}</text>
                         <text v-if="dashboardDateRangeText" class="dashboard-filter-card__date">{{ dashboardDateRangeText }}</text>
                     </view>
@@ -100,8 +87,8 @@
                             <text class="nc-iconfont nc-icon-fuzhiV6xx1 ml-[8rpx]"></text>
                         </view>
                         <view class="order-card__status-wrap">
-                            <text class="order-card__status" :class="getStatusClass(item.status)">{{ item.status_name }}</text>
-                            <text class="order-card__flow">{{ item.flow_mode_name || '整单流转' }}</text>
+                            <u-tag :text="item.status_name" :type="getStatusTagType(item.status)" plain plainFill size="mini"></u-tag>
+                            <!-- <u-tag :text="item.flow_mode_name || '整单流转'" type="info" plain plainFill size="mini" :customStyle="{ marginLeft: '12rpx' }"></u-tag> -->
                         </view>
                     </view>
 
@@ -234,6 +221,7 @@ import { copyOrderNo, copyIMEI } from '@/addon/hsx_recycle/utils/clipboard'
 import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.vue'
 import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
 import RecycleEmptyState from '@/addon/hsx_recycle/components/RecycleEmptyState.vue'
+import RecycleStatusTabs from '@/addon/hsx_recycle/components/RecycleStatusTabs.vue'
 import OrderFilterDrawer from './components/OrderFilterDrawer.vue'
 import { getDeviceListPriceMeta, isConsignedDevice, shouldShowConfirmStatus } from '@/addon/hsx_recycle/utils/device'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
@@ -578,6 +566,14 @@ const getStatusClass = (status: number) => {
     if (status === 8 || status === 9) return 'is-muted'
     if (status === 6) return 'is-warning'
     return 'is-primary'
+}
+
+// 订单状态 → u-tag 类型（uview 标准配色）
+const getStatusTagType = (status: number) => {
+    if (status === 7) return 'success'
+    if (status === 8 || status === 9) return 'info'
+    if (status === 6) return 'warning'
+    return 'primary'
 }
 
 const getDeviceCount = (item: any) => {
@@ -949,6 +945,8 @@ const formatMoney = (value: number | string) => Number(value || 0).toFixed(2)
 
 .order-card__status-wrap {
     text-align: right;
+    // position: absolute;
+    // right: 20rpx;
 }
 
 .order-card__status {

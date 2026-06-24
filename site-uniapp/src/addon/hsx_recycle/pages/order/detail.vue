@@ -296,6 +296,7 @@ import {
     updateOrder
 } from '@/addon/hsx_recycle/api/order'
 import { generateOrderShortLink } from '@/addon/hsx_recycle/api/shortlink'
+import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
 import { copy } from '@/utils/common'
 import { copyText } from '@/addon/hsx_recycle/utils/clipboard'
 import { makePhoneCall } from '@/addon/hsx_recycle/utils/helper'
@@ -442,9 +443,41 @@ const loadDetail = async () => {
         order.value = res?.data || null
         applyRouteDeviceKeyword()
         syncBatchSelection()
+        loadOptionLabels()
     } finally {
         loading.value = false
     }
+}
+
+// 质检字段选项 value→label 映射（设备摘要里内存/颜色等显示可读文案，而非存储的 key）
+const optionLabelMap = ref<Record<string, Record<string, string>>>({})
+const loadOptionLabels = async () => {
+    const devices = order.value?.devices || []
+    const device = devices[0] || {}
+    const tplId = Number(device.check_template_id || 0)
+    const deviceId = Number(device.id || 0)
+    if (!tplId && !deviceId) return
+    try {
+        const res: any = await getCheckTemplateSchema(tplId ? { template_id: tplId } : { device_id: deviceId })
+        const groups = Array.isArray(res?.data?.groups) ? res.data.groups : []
+        const map: Record<string, Record<string, string>> = {}
+        groups.forEach((g: any) => (g.fields || []).forEach((f: any) => {
+            const opts = Array.isArray(f.options) ? f.options : []
+            if (!opts.length) return
+            const m: Record<string, string> = {}
+            opts.forEach((o: any) => { m[String(o.value)] = String(o.label || o.name || o.value) })
+            map[String(f.field_key)] = m
+        }))
+        optionLabelMap.value = map
+    } catch (error) {
+        // 解析失败不影响展示，回退显示原值
+    }
+}
+const resolveOptionLabel = (fieldKey: string, value: any): string => {
+    if (value === undefined || value === null || value === '') return ''
+    const m = optionLabelMap.value[fieldKey]
+    if (Array.isArray(value)) return value.map((v) => (m && m[String(v)]) || String(v)).join('、')
+    return (m && m[String(value)]) || String(value)
 }
 
 const syncBatchSelection = () => {
@@ -967,10 +1000,10 @@ const getDeviceSummary = (device: any) => {
     const meta = normalizeObject(info.check_meta)
     const summary: Array<{ label: string, value: string }> = []
     const candidates = [
-        ['内存', device.capacity || info.capacity || meta.capacity],
-        ['颜色', device.color || info.color || meta.color],
-        ['系统', device.system_version || info.system_version || meta.system_version],
-        ['保修', device.warranty_info || info.warranty_info || meta.warranty_info],
+        ['内存', resolveOptionLabel('capacity', device.capacity || info.capacity || meta.capacity)],
+        ['颜色', resolveOptionLabel('color', device.color || info.color || meta.color)],
+        ['系统', resolveOptionLabel('system_version', device.system_version || info.system_version || meta.system_version)],
+        ['保修', resolveOptionLabel('warranty_info', device.warranty_info || info.warranty_info || meta.warranty_info)],
         ['电池', meta.battery ? `${ meta.battery }%` : '']
     ]
     candidates.forEach(([label, value]) => {
@@ -1057,6 +1090,7 @@ const handleConsignmentSuccess = () => loadDetail()
     min-height: 64rpx;
     padding: 0 !important;
     background: transparent !important;
+    color: #fff;
 }
 
 .detail-search-input :deep(.u-input__content__field-wrapper__field),

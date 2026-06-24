@@ -10,7 +10,6 @@
                 ></view>
                 <view class="device-flow-card__title-main">
                     <view class="device-flow-card__title">{{ device.model || device.device_name || device.model_name || '未知型号' }}</view>
-                    <view v-if="device.category_name" class="device-flow-card__category">{{ device.category_name }}</view>
                 </view>
             </view>
 
@@ -38,27 +37,28 @@
         </view>
 
         <view class="device-flow-card__tags">
-            <DeviceStatusBadge :status="device.status" :status-name="device.status_name" />
-            <text v-if="showConfirmTag" class="tag tag--warning">{{ device.confirm_status_name }}</text>
-            <text v-if="showPayTag" class="tag tag--success">{{ device.pay_status_name }}</text>
-            <text v-if="isConsigned" class="tag tag--purple">{{ device.consignmentOrder?.status_name || device.dispose_status_name || '已转代卖' }}</text>
+            <!-- 只显示当前阶段对应的那一个状态：代卖 > 打款 > 确认 > 质检 -->
+            <u-tag v-if="stageTag" :text="stageTag.text" :type="stageTag.type" plain plainFill size="mini"></u-tag>
+            <DeviceStatusBadge v-else :status="device.status" :status-name="device.status_name" />
         </view>
 
         <view v-if="summaryItems.length" class="device-flow-card__summary">
-            <text v-for="item in summaryItems" :key="item.label" class="summary-chip">
-                {{ item.label }}：{{ item.value }}
-            </text>
+            <u-tag
+                v-for="item in summaryItems"
+                :key="item.label"
+                :text="`${ item.label }：${ item.value }`"
+                type="info"
+                plain
+                size="mini"
+            ></u-tag>
         </view>
 
-        <view v-if="device.check_result_seller || device.check_result_buyer" class="device-flow-card__check-result">
-            <view v-if="device.check_result_seller" class="device-flow-card__check-line">卖家质检：{{ device.check_result_seller }}</view>
-            <view v-if="device.check_result_buyer" class="device-flow-card__check-line">买家质检：{{ device.check_result_buyer }}</view>
-        </view>
+        <RecycleCheckSummary v-if="deviceCheckMeta" :meta="deviceCheckMeta" class="device-flow-card__check" />
 
-        <view v-if="device.pay_disabled_reason && !device.can_pay" class="device-flow-card__hint device-flow-card__hint--danger">
+        <view v-if="!isReturned && device.pay_disabled_reason && !device.can_pay" class="device-flow-card__hint device-flow-card__hint--danger">
             {{ device.pay_disabled_reason }}
         </view>
-        <view v-if="device.confirm_disabled_reason && !device.can_confirm && showConfirmTag" class="device-flow-card__hint">
+        <view v-if="!isReturned && device.confirm_disabled_reason && !device.can_confirm && showConfirmTag" class="device-flow-card__hint">
             {{ device.confirm_disabled_reason }}
         </view>
 
@@ -160,6 +160,7 @@
 import { computed, ref } from 'vue'
 import { img } from '@/utils/common'
 import DeviceStatusBadge from '@/addon/hsx_recycle/components/DeviceStatusBadge.vue'
+import RecycleCheckSummary from '@/addon/hsx_recycle/components/RecycleCheckSummary.vue'
 import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import { formatMoney, formatTime } from '@/addon/hsx_recycle/utils/helper'
 import { copyIMEI } from '@/addon/hsx_recycle/utils/clipboard'
@@ -168,6 +169,7 @@ import {
     getDevicePriceLabel,
     getDevicePriceSubLabel,
     isConsignedDevice,
+    isReturnedDevice,
     shouldShowConfirmStatus
 } from '@/addon/hsx_recycle/utils/device'
 
@@ -207,10 +209,36 @@ const expanded = ref(false)
 
 const device = computed(() => props.device || {})
 const isConsigned = computed(() => isConsignedDevice(device.value))
+const isReturned = computed(() => isReturnedDevice(device.value))
 const priceLabel = computed(() => getDevicePriceLabel(device.value))
 const priceSubLabel = computed(() => getDevicePriceSubLabel(device.value))
 const showConfirmTag = computed(() => !isConsigned.value && shouldShowConfirmStatus(device.value) && Boolean(device.value.confirm_status_name))
-const showPayTag = computed(() => !isConsigned.value && Boolean(device.value.pay_status_name))
+// 打款状态只在「客户已确认」之后才显示（确认前不显示是否打款）
+const showPayTag = computed(() => !isConsigned.value && Number(device.value.confirm_status) === 1 && Boolean(device.value.pay_status_name))
+
+// 质检结果（结构化 check_meta），统一用 RecycleCheckSummary 展示
+const deviceCheckMeta = computed(() => {
+    const parse = (v: any): Record<string, any> => {
+        if (!v) return {}
+        if (typeof v === 'string') { try { const p = JSON.parse(v); return p && typeof p === 'object' && !Array.isArray(p) ? p : {} } catch { return {} } }
+        return typeof v === 'object' && !Array.isArray(v) ? v : {}
+    }
+    const meta = parse(parse(device.value.info).check_meta)
+    return Array.isArray(meta.result_items) && meta.result_items.length ? meta : null
+})
+
+// 当前阶段状态（只显示一个）：已退回 > 代卖 > 打款 > 确认 > 质检基础状态
+const stageTag = computed<{ text: string, type: string } | null>(() => {
+    if (isReturned.value) {
+        return { text: device.value.status_name || device.value.dispose_status_name || '已退回', type: 'error' }
+    }
+    if (isConsigned.value) {
+        return { text: device.value.consignmentOrder?.status_name || device.value.dispose_status_name || '已转代卖', type: 'warning' }
+    }
+    if (showPayTag.value) return { text: String(device.value.pay_status_name), type: 'success' }
+    if (showConfirmTag.value) return { text: String(device.value.confirm_status_name), type: 'warning' }
+    return null
+})
 const logs = computed(() => Array.isArray(device.value.logs) ? device.value.logs : [])
 const flowHighlights = computed(() => buildDeviceFlowHighlights(device.value))
 const inspectorName = computed(() => device.value.checkUser?.real_name || device.value.checkUser?.username || '')

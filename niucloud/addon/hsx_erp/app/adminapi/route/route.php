@@ -7,6 +7,9 @@ use app\adminapi\middleware\AdminLog;
 use think\facade\Route;
 
 Route::group('erp', function () {
+    // ERP / 财务 设置:总开关、现结开关
+    Route::get('config', 'addon\hsx_erp\app\adminapi\controller\Config@get');
+    Route::post('config', 'addon\hsx_erp\app\adminapi\controller\Config@save');
     Route::get('member_level/no_lists', 'addon\hsx_erp\app\adminapi\controller\MemberLevelNo@lists');
     Route::get('counterparty/lists', 'addon\hsx_erp\app\adminapi\controller\Counterparty@lists');
     Route::get('counterparty/options', 'addon\hsx_erp\app\adminapi\controller\Counterparty@options');

@@ -22,9 +22,12 @@
         </view>
 
         <!-- 提示 -->
-        <view class="tip-box">
-            <text class="tip-text">确认后，该设备会在原回收订单中变为"已转代卖"，同时生成独立代卖订单。后续售出和结算在代卖订单中处理。</text>
-        </view>
+        <u-alert
+            type="info"
+            description='确认后，该设备会在原回收订单中变为"已转代卖"，同时生成独立代卖订单。后续售出和结算在代卖订单中处理。'
+            show-icon
+            :customStyle="{ margin: '0 30rpx 18rpx' }"
+        ></u-alert>
 
         <!-- 表单 -->
         <view class="form-content">
@@ -68,6 +71,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 import { transferDeviceToConsignment } from '@/addon/hsx_recycle/api/order'
 import RecycleFormDialog from '@/addon/hsx_recycle/components/RecycleFormDialog.vue'
 import { useRecycleSubmit } from '@/addon/hsx_recycle/hooks/useRecycleSubmit'
@@ -114,6 +118,7 @@ const handleSubmit = async () => {
         uni.showToast({ title: '请选择设备', icon: 'none' })
         return
     }
+    if (!(await confirmDanger('确认将该设备转为代卖？转后将在原订单标记「已转代卖」并生成代卖单。', { title: '确认转代卖', confirmText: '确认转代卖' }))) return
 
     // 提交守卫：进行中忽略重复点击，成功后统一提示
     await submit.run(async () => {

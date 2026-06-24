@@ -16,22 +16,16 @@
                 <template v-else>
                 <view class="section">
                     <view class="section-title">基础信息</view>
-                    <view class="info-list">
-                        <view v-for="item in basicRows" :key="item.label" class="info-row" :class="{ 'info-row--top': item.long }">
-                            <text class="info-label">{{ item.label }}</text>
-                            <text class="info-value">{{ item.value }}</text>
-                        </view>
-                    </view>
+                    <u-cell-group :border="false">
+                        <u-cell v-for="item in basicRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
+                    </u-cell-group>
                 </view>
 
                 <view class="section">
                     <view class="section-title">价格与状态</view>
-                    <view class="info-list">
-                        <view v-for="item in statusRows" :key="item.label" class="info-row" :class="{ 'info-row--top': item.long }">
-                            <text class="info-label">{{ item.label }}</text>
-                            <text class="info-value" :class="{ 'info-value--price': item.price }">{{ item.value }}</text>
-                        </view>
-                    </view>
+                    <u-cell-group :border="false">
+                        <u-cell v-for="item in statusRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
+                    </u-cell-group>
                 </view>
 
                 <view v-if="hasCostAdjustment || canAdjustCost" class="section">
@@ -42,35 +36,18 @@
                         </view>
                         <view v-if="canAdjustCost" class="small-action" @click="openCostAdjust">调整</view>
                     </view>
-                    <view v-if="hasCostAdjustment" class="info-list">
-                        <view v-for="item in costAdjustRows" :key="item.label" class="info-row">
-                            <text class="info-label">{{ item.label }}</text>
-                            <text class="info-value" :class="{ 'info-value--price': item.price }">{{ item.value }}</text>
-                        </view>
-                    </view>
+                    <u-cell-group v-if="hasCostAdjustment" :border="false">
+                        <u-cell v-for="item in costAdjustRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
+                    </u-cell-group>
                     <view v-else class="cost-tip">当前暂无成本调整记录。</view>
                 </view>
 
-                <view v-if="checkRows.length || checkResultRows.length || checkMetaItems.length" class="section">
+                <view v-if="checkRows.length || checkMetaItems.length" class="section">
                     <view class="section-title">质检信息</view>
-                    <view v-if="checkRows.length" class="info-list">
-                        <view v-for="item in checkRows" :key="item.label" class="info-row" :class="{ 'info-row--top': item.long }">
-                            <text class="info-label">{{ item.label }}</text>
-                            <text class="info-value">{{ item.value }}</text>
-                        </view>
-                    </view>
-                    <view v-if="checkResultRows.length" class="check-result-list">
-                        <view v-for="item in checkResultRows" :key="item.label" class="check-result">
-                            <view class="check-result__label">{{ item.label }}</view>
-                            <view class="check-result__text">{{ item.value }}</view>
-                        </view>
-                    </view>
-                    <view v-if="checkMetaItems.length" class="meta-grid">
-                        <view v-for="item in checkMetaItems" :key="item.key" class="meta-item">
-                            <text class="meta-item__label">{{ item.label }}</text>
-                            <text class="meta-item__value">{{ item.value }}</text>
-                        </view>
-                    </view>
+                    <u-cell-group v-if="checkRows.length" :border="false">
+                        <u-cell v-for="item in checkRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
+                    </u-cell-group>
+                    <RecycleCheckSummary v-if="checkMetaItems.length" :items="checkMetaItems" :style="{ marginTop: checkRows.length ? '16rpx' : '0' }" />
                 </view>
 
                 <view v-if="imageGroups.length" class="section">
@@ -92,12 +69,9 @@
 
                 <view v-if="consignmentRows.length" class="section">
                     <view class="section-title">代卖信息</view>
-                    <view class="info-list">
-                        <view v-for="item in consignmentRows" :key="item.label" class="info-row" :class="{ 'info-row--top': item.long }">
-                            <text class="info-label">{{ item.label }}</text>
-                            <text class="info-value" :class="{ 'info-value--price': item.price }">{{ item.value }}</text>
-                        </view>
-                    </view>
+                    <u-cell-group :border="false">
+                        <u-cell v-for="item in consignmentRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
+                    </u-cell-group>
                 </view>
 
                 <view
@@ -124,7 +98,7 @@
                             </view>
                             <view class="timeline__content">
                                 <view class="timeline__top">
-                                    <text class="timeline__status">{{ log.status_name || log.operation_type || log.action || '状态更新' }}</text>
+                                    <u-tag :text="log.status_name || log.operation_type || log.action || '状态更新'" type="primary" plain size="mini"></u-tag>
                                     <text class="timeline__time">{{ formatTime(log.create_at) }}</text>
                                 </view>
                                 <view class="timeline__operator">{{ log.operator_name || '系统' }}</view>
@@ -154,31 +128,25 @@
                 <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx]" @click="closeCostAdjust"></text>
             </view>
             <scroll-view scroll-y class="cost-adjust-content">
-                <view class="warning-box">
-                    此操作会修改设备当前成本，不会修改历史打款记录。提交后请同步修改进销存软件中的库存成本。
-                </view>
+                <u-alert
+                    type="warning"
+                    description="此操作会修改设备当前成本，不会修改历史打款记录。提交后请同步修改进销存软件中的库存成本。"
+                    show-icon
+                    :customStyle="{ marginBottom: '18rpx' }"
+                ></u-alert>
 
                 <view class="form-block">
                     <view class="form-label">调整类型</view>
-                    <view class="type-grid">
-                        <view
-                            v-for="item in adjustTypes"
-                            :key="item.value"
-                            class="type-item"
-                            :class="{ 'type-item--active': costAdjustForm.adjust_type === item.value }"
-                            @click="costAdjustForm.adjust_type = item.value"
-                        >
-                            {{ item.label }}
-                        </view>
-                    </view>
+                    <RecycleTagGroup v-model="costAdjustForm.adjust_type" :options="adjustTypes" :deselectable="false" />
                 </view>
 
                 <view v-if="costAdjustForm.adjust_type === 'cost_correction'" class="form-block">
                     <view class="form-label">修正方向</view>
-                    <view class="type-grid type-grid--two">
-                        <view class="type-item" :class="{ 'type-item--active': costAdjustForm.direction === 'decrease' }" @click="costAdjustForm.direction = 'decrease'">成本减少</view>
-                        <view class="type-item" :class="{ 'type-item--active': costAdjustForm.direction === 'increase' }" @click="costAdjustForm.direction = 'increase'">成本增加</view>
-                    </view>
+                    <RecycleTagGroup
+                        v-model="costAdjustForm.direction"
+                        :options="[{ label: '成本减少', value: 'decrease' }, { label: '成本增加', value: 'increase' }]"
+                        :deselectable="false"
+                    />
                 </view>
 
                 <view class="form-block">
@@ -225,8 +193,12 @@
 import { computed, ref, watch } from 'vue'
 import { img } from '@/utils/common'
 import { adjustDeviceCost, getDevice, getDeviceCostAdjustAbility, getDeviceCostAdjustLogs } from '@/addon/hsx_recycle/api/order'
+import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
+import RecycleCheckSummary from '@/addon/hsx_recycle/components/RecycleCheckSummary.vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import DeviceDownstreamProgress from '@/addon/hsx_recycle/components/DeviceDownstreamProgress.vue'
+import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 import { formatMoney, formatTime } from '@/addon/hsx_recycle/utils/helper'
 import { isConsignedDevice } from '@/addon/hsx_recycle/utils/device'
 
@@ -273,6 +245,35 @@ const adjustTypes = [
 const device = computed(() => latestDeviceData.value || props.deviceData || {})
 const info = computed(() => normalizeObject(device.value.info))
 const checkMeta = computed(() => normalizeObject(info.value.check_meta))
+
+// 质检字段选项 value→label 映射（容量/颜色等显示可读文案，而非存储的 key）
+const optionLabelMap = ref<Record<string, Record<string, string>>>({})
+const loadOptionLabels = async () => {
+    const tplId = Number(device.value.check_template_id || 0)
+    const deviceId = Number(device.value.id || 0)
+    if (!tplId && !deviceId) return
+    try {
+        const res: any = await getCheckTemplateSchema(tplId ? { template_id: tplId } : { device_id: deviceId })
+        const groups = Array.isArray(res?.data?.groups) ? res.data.groups : []
+        const map: Record<string, Record<string, string>> = {}
+        groups.forEach((g: any) => (g.fields || []).forEach((f: any) => {
+            const opts = Array.isArray(f.options) ? f.options : []
+            if (!opts.length) return
+            const m: Record<string, string> = {}
+            opts.forEach((o: any) => { m[String(o.value)] = String(o.label || o.name || o.value) })
+            map[String(f.field_key)] = m
+        }))
+        optionLabelMap.value = map
+    } catch (error) {
+        // 回退原值
+    }
+}
+const resolveOptionLabel = (fieldKey: string, value: any): string => {
+    if (value === undefined || value === null || value === '') return ''
+    const m = optionLabelMap.value[fieldKey]
+    if (Array.isArray(value)) return value.map((v) => (m && m[String(v)]) || String(v)).join('、')
+    return (m && m[String(value)]) || String(value)
+}
 const logs = computed(() => Array.isArray(device.value.logs) ? device.value.logs : [])
 const isConsigned = computed(() => isConsignedDevice(device.value))
 const hasCostAdjustment = computed(() => Number(device.value.cost_adjust_count || 0) > 0)
@@ -303,6 +304,7 @@ const loadDeviceDetail = async () => {
     try {
         const res: any = await getDevice(deviceId)
         latestDeviceData.value = res?.data || props.deviceData || null
+        loadOptionLabels()
         await loadCostAdjustAbility()
         await loadCostAdjustLogs()
     } catch (error: any) {
@@ -320,20 +322,25 @@ const basicRows = computed<RowItem[]>(() => compactRows([
     row('用户串号', device.value.user_sn),
     row('SN', device.value.sn || info.value.serial_number),
     row('分类', device.value.category_name),
-    row('容量', device.value.capacity || info.value.capacity || checkMeta.value.capacity),
-    row('颜色', device.value.color || info.value.color || checkMeta.value.color),
-    row('系统版本', device.value.system_version || info.value.system_version || checkMeta.value.system_version),
-    row('保修信息', device.value.warranty_info || info.value.warranty_info || checkMeta.value.warranty_info, true),
+    row('容量', resolveOptionLabel('capacity', device.value.capacity || info.value.capacity || checkMeta.value.capacity)),
+    row('颜色', resolveOptionLabel('color', device.value.color || info.value.color || checkMeta.value.color)),
+    row('系统版本', resolveOptionLabel('system_version', device.value.system_version || info.value.system_version || checkMeta.value.system_version)),
+    row('保修信息', resolveOptionLabel('warranty_info', device.value.warranty_info || info.value.warranty_info || checkMeta.value.warranty_info), true),
     row('创建时间', formatTimeValue(device.value.create_at)),
     row('更新时间', formatTimeValue(device.value.update_at || device.value.update_time))
 ]))
 
+// 当前阶段状态（只显示一个）：代卖 > 打款 > 确认 > 设备质检状态
+const currentStageText = computed(() => {
+    if (isConsigned.value) return device.value.consignmentOrder?.status_name || device.value.dispose_status_name || '已转代卖'
+    // 打款状态只在客户确认后才显示
+    if (Number(device.value.confirm_status) === 1 && device.value.pay_status_name) return String(device.value.pay_status_name)
+    if (device.value.confirm_status_name) return String(device.value.confirm_status_name)
+    return resolveBackendText(device.value.status_name, device.value.status)
+})
+
 const statusRows = computed<RowItem[]>(() => compactRows([
-    row('设备状态', resolveBackendText(device.value.status_name, device.value.status)),
-    row('确认状态', isConsigned.value ? '' : resolveBackendText(device.value.confirm_status_name, device.value.confirm_status)),
-    row('打款状态', isConsigned.value ? '' : resolveBackendText(device.value.pay_status_name, device.value.pay_status)),
-    row('处置类型', isConsigned.value ? '' : resolveBackendText(device.value.dispose_type_name, '')),
-    row('处置状态', isConsigned.value ? '' : resolveBackendText(device.value.dispose_status_name, '')),
+    row('当前状态', currentStageText.value),
     priceRow('预估价', device.value.initial_price),
     priceRow(isConsigned.value ? '转代卖前报价' : '回收报价', device.value.final_price),
     priceRow(isConsigned.value ? '代卖参考价' : '代卖/卖货价', device.value.sell_price),
@@ -475,10 +482,10 @@ const formatCheckMetaItemValue = (item: any) => {
     }
 
     if (Array.isArray(item?.value)) {
-        return item.value.filter(Boolean).join('、')
+        return resolveOptionLabel(item.field_key, item.value.filter(Boolean))
     }
 
-    if (hasValue(item?.value)) return String(item.value)
+    if (hasValue(item?.value)) return resolveOptionLabel(item.field_key, item.value)
     return item?.text || ''
 }
 
@@ -591,6 +598,7 @@ const submitCostAdjust = async () => {
         uni.showToast({ title: '请先确认进销存成本同步提醒', icon: 'none' })
         return
     }
+    if (!(await confirmDanger(`确认调整成本 ¥${ costAdjustForm.value.adjust_amount }？调整会留痕且影响账目。`, { title: '确认调整成本', confirmText: '确认调整' }))) return
 
     costAdjustSubmitting.value = true
     try {

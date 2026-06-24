@@ -194,6 +194,7 @@ function openEntity(id: number) {
 .trace-timeline-scroll {
     flex: 1 1 auto;
     min-height: 120px;
+    max-height: calc(100vh - 440px);
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 6px;

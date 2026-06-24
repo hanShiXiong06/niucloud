@@ -7,10 +7,12 @@
             </view>
 
             <view class="popup-body">
-                <view class="warning-box">
-                    <text class="nc-iconfont nc-icon-jinggaoV6xx warning-icon"></text>
-                    <text class="warning-text">取消后将无法恢复，请谨慎操作</text>
-                </view>
+                <u-alert
+                    type="warning"
+                    description="取消后将无法恢复，请谨慎操作"
+                    show-icon
+                    :customStyle="{ marginBottom: '18rpx' }"
+                ></u-alert>
 
                 <view class="form-item">
                     <view class="form-label">取消原因 <text class="required">*</text></view>
@@ -35,6 +37,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 
 interface Props {
     visible: boolean
@@ -65,11 +68,12 @@ const handleClose = () => {
     show.value = false
 }
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
     if (!formData.value.remark.trim()) {
         uni.showToast({ title: '请输入取消原因', icon: 'none' })
         return
     }
+    if (!(await confirmDanger('确认关闭该代卖单？关闭后无法恢复。', { title: '确认关闭', confirmText: '确认关闭' }))) return
     emit('submit', { ...formData.value })
 }
 

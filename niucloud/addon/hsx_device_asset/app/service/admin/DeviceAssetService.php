@@ -1238,13 +1238,14 @@ class DeviceAssetService extends BaseAdminService
     protected function applyTaskType($query, string $taskType): void
     {
         $statusMap = [
+            // 中台只做两件事：拍照、定价。完成定价即置 ready_export（待导出=完成）。
+            // priced 属"已定价完成"，归入 completed，不再混进待办/待定价。
             'pending' => [
                 DeviceAssetDict::STATUS_WAIT_PHOTO,
                 DeviceAssetDict::STATUS_PHOTOING,
                 DeviceAssetDict::STATUS_PHOTO_REVIEW,
                 DeviceAssetDict::STATUS_PHOTO_REJECTED,
                 DeviceAssetDict::STATUS_WAIT_PRICE,
-                DeviceAssetDict::STATUS_PRICED,
             ],
             'photo' => [
                 DeviceAssetDict::STATUS_WAIT_PHOTO,
@@ -1254,9 +1255,9 @@ class DeviceAssetService extends BaseAdminService
             ],
             'price' => [
                 DeviceAssetDict::STATUS_WAIT_PRICE,
-                DeviceAssetDict::STATUS_PRICED,
             ],
             'completed' => [
+                DeviceAssetDict::STATUS_PRICED,
                 DeviceAssetDict::STATUS_READY_EXPORT,
                 DeviceAssetDict::STATUS_EXPORTED,
                 DeviceAssetDict::STATUS_ARCHIVED,

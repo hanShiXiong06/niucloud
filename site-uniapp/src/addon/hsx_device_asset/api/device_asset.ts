@@ -1,11 +1,11 @@
 import request from '@/utils/request'
 
 export function getAssetPool(params: Record<string, any>) {
-    return request.get('device_asset/pool', { params })
+    return request.get('device_asset/pool', params)
 }
 
 export function getAssetList(params: Record<string, any>) {
-    return request.get('device_asset/lists', { params })
+    return request.get('device_asset/lists', params)
 }
 
 export function getAssetStats() {

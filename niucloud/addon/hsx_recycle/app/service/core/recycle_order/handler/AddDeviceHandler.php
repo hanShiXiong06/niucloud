@@ -13,6 +13,7 @@ namespace addon\hsx_recycle\app\service\core\recycle_order\handler;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use core\exception\CommonException;
 
 /**
@@ -51,7 +52,10 @@ class AddDeviceHandler extends BaseFlowHandler
 
         foreach ($devices as $device) {
             $categoryId = (int)($device['category_id'] ?? 0);
-            $categoryPath = $this->normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
+            $categoryPath = DeviceSummaryHelper::normalizeCategoryPath($device['category_path'] ?? null, $categoryId);
+            // 统一摘要契约：summary = { field_key: value }
+            $summary = DeviceSummaryHelper::normalizeSummary($device['summary'] ?? []);
+            $cols = DeviceSummaryHelper::reservedColumns($summary, $device);
 
             // 添加新设备
             $deviceData = [
@@ -61,9 +65,12 @@ class AddDeviceHandler extends BaseFlowHandler
                 'model' => $device['model'] ?? '',
                 'initial_price' => $device['initial_price'] ?? 0,
                 'category_id' => $categoryId,
-                'info' => [
-                    'goods_category' => $categoryPath
-                ],
+                'check_template_id' => (int)($device['check_template_id'] ?? 0),
+                'color' => $cols['color'],
+                'capacity' => $cols['capacity'],
+                'system_version' => $cols['system_version'],
+                'warranty_info' => $cols['warranty_info'],
+                'info' => DeviceSummaryHelper::buildInfo([], $categoryPath, $summary, $device),
                 'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK, // 1-待质检
                 'create_at' => time(),
                 'update_at' => time(),
@@ -78,29 +85,5 @@ class AddDeviceHandler extends BaseFlowHandler
             'device_ids' => $deviceIds,
             'device_count' => count($deviceIds)
         ]);
-    }
-
-    /**
-     * 规范化分类路径，统一存储为字符串数组
-     * @param mixed $categoryPath
-     * @param int $categoryId
-     * @return array
-     */
-    private function normalizeCategoryPath($categoryPath, int $categoryId): array
-    {
-        if (is_string($categoryPath) && $categoryPath !== '') {
-            $decoded = json_decode($categoryPath, true);
-            if (is_array($decoded)) {
-                $categoryPath = $decoded;
-            } else {
-                $categoryPath = array_filter(array_map('trim', explode(',', $categoryPath)));
-            }
-        }
-
-        if ((!is_array($categoryPath) || empty($categoryPath)) && $categoryId > 0) {
-            $categoryPath = [ $categoryId ];
-        }
-
-        return is_array($categoryPath) ? array_values(array_map('strval', $categoryPath)) : [];
     }
 }

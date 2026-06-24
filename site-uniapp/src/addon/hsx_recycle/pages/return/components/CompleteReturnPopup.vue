@@ -10,10 +10,13 @@
             </view>
 
             <view class="popup-body">
-                <view class="warning-box">
-                    <text class="warning-title">完成后将结束退回流程</text>
-                    <text class="warning-text">建议填写本次退回说明，例如签收情况、异常备注或仓库交接说明，便于后续追踪。</text>
-                </view>
+                <u-alert
+                    type="primary"
+                    title="完成后将结束退回流程"
+                    description="建议填写本次退回说明，例如签收情况、异常备注或仓库交接说明，便于后续追踪。"
+                    show-icon
+                    :customStyle="{ marginBottom: '18rpx' }"
+                ></u-alert>
 
                 <view class="form-item">
                     <view class="form-label">退回说明</view>
@@ -39,6 +42,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 
 const props = defineProps<{
     visible: boolean
@@ -70,7 +74,8 @@ const handleClose = () => {
     show.value = false
 }
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
+    if (!(await confirmDanger('确认完成本次退回？完成后退回流程结束、不可撤销。', { title: '确认完成退回', confirmText: '确认完成' }))) return
     emit('submit', { remark: remark.value.trim() })
 }
 

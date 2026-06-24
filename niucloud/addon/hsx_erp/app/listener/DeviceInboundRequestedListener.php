@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\listener;
 
 use addon\hsx_erp\app\dict\ErpDict;
+use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\model\ErpWarehouseLocation;
 use addon\hsx_erp\app\service\admin\ErpAssetService;
 use addon\hsx_erp\app\service\core\ErpInboundService;
@@ -43,20 +44,28 @@ class DeviceInboundRequestedListener
             return;
         }
 
-        // source_device_id → 定价选定的目标仓位
+        $siteId = (int)($event['site_id'] ?? 0);
+
+        // source_device_id → 目标仓位。
+        // 未指定仓库时(如移动端确认回收没选仓)，按销售流向(sale_destination)自动落到对应默认仓——
+        // 若该仓为「必拍照仓」(如二手机仓/商城)，confirmInbound 会自动把设备转「待拍照」进中台，
+        // 与 PC「确认回收即进中台拍照」对齐。
         $targetMap = [];
         foreach ((array)($event['devices'] ?? []) as $device) {
             $sid = (int)($device['source_device_id'] ?? 0);
             if ($sid <= 0) {
                 continue;
             }
+            $warehouseId = (int)($device['target_warehouse_id'] ?? 0);
+            if ($warehouseId <= 0) {
+                $warehouseId = $this->resolveWarehouseByDestination($siteId, (string)($device['sale_destination'] ?? ''));
+            }
             $targetMap[$sid] = [
-                'warehouse_id' => (int)($device['target_warehouse_id'] ?? 0),
+                'warehouse_id' => $warehouseId,
                 'location_id' => (int)($device['target_location_id'] ?? 0),
             ];
         }
 
-        $siteId = (int)($event['site_id'] ?? 0);
         $assetService = new ErpAssetService();
         foreach ($created as $asset) {
             $sid = (int)($asset['source_device_id'] ?? 0);
@@ -82,6 +91,25 @@ class DeviceInboundRequestedListener
             } catch (\Throwable $e) {
                 // 单台失败不影响其它；该台留在待入库由人工处理
             }
+        }
+    }
+
+    /**
+     * 按销售流向解析默认仓（未显式选仓时的兜底）。
+     * 优先取该 business_type 的启用仓，按 is_default 优先；用于让"确认回收即自动入仓→必拍照仓进中台"。
+     */
+    private function resolveWarehouseByDestination(int $siteId, string $destination): int
+    {
+        $destination = $destination !== '' ? $destination : ErpDict::SALE_DESTINATION_MALL;
+        try {
+            $id = ErpWarehouse::where([
+                ['site_id', '=', $siteId],
+                ['business_type', '=', $destination],
+                ['status', '=', 1],
+            ])->order('is_default desc,id asc')->value('id');
+            return (int)($id ?: 0);
+        } catch (\Throwable $e) {
+            return 0;
         }
     }
 

@@ -43,6 +43,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 
 interface Props {
     visible: boolean
@@ -78,11 +79,12 @@ const handleClose = () => {
     show.value = false
 }
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
     if (!formData.value.settlement_amount || Number(formData.value.settlement_amount) <= 0) {
         uni.showToast({ title: '请输入有效的结算金额', icon: 'none' })
         return
     }
+    if (!(await confirmDanger(`确认按 ¥${ formData.value.settlement_amount } 结算？结算后不可撤销。`, { title: '确认结算', confirmText: '确认结算' }))) return
     emit('submit', { ...formData.value })
 }
 

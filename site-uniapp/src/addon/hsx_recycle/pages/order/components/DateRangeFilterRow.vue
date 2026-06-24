@@ -3,17 +3,13 @@
         <text class="date-range-row__label">{{ label }}</text>
         <view class="date-range-row__control">
             <!-- 快捷选项 -->
-            <view class="date-range-row__shortcuts">
-                <view
-                    v-for="item in shortcutOptions"
-                    :key="item.value"
-                    class="date-range-row__shortcut"
-                    :class="{ 'date-range-row__shortcut--active': currentShortcut === item.value }"
-                    @click="handleShortcut(item.value)"
-                >
-                    {{ item.label }}
-                </view>
-            </view>
+            <RecycleTagGroup
+                class="date-range-row__shortcuts"
+                :model-value="currentShortcut"
+                :options="shortcutOptions"
+                :deselectable="false"
+                @change="handleShortcut"
+            />
             
             <!-- 自定义日期范围：点击调起页面级 u-calendar 范围日历（由父级在抽屉外渲染，避免被抽屉裁切） -->
             <view v-if="showCustomRange" class="date-range-row__custom" @click="emit('request-calendar')">
@@ -34,6 +30,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 
 interface ShortcutOption {
     label: string

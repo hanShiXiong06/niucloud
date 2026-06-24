@@ -788,28 +788,77 @@ export function useCheckMeta({ dictOptions, deviceForm, fieldConfigByKey, templa
     return Object.values(meta.custom_fields || {}).some((value) => !isEmptyValue(value))
   }
 
+  // 把一组"扁平的 field_key => value"按字段类型分发到 deviceForm / 内置选择 / 自定义字段
+  const applyFlatFieldValues = (values: Record<string, any>) => {
+    const fieldMap = fieldConfigByKey?.value || {}
+    Object.entries(values || {}).forEach(([fieldKey, value]) => {
+      if (isEmptyValue(value)) return
+      if ((FORM_FIELD_KEYS as readonly string[]).includes(fieldKey)) {
+        ;(deviceForm as any)[fieldKey] = value
+        return
+      }
+      switch (fieldKey) {
+        case 'battery': templateSelections.battery = toOptionalNumber(value); return
+        case 'battery_num': templateSelections.battery_num = toOptionalNumber(value); return
+        case 'screen_id': templateSelections.screenId = toStringValue(value); return
+        case 'indisplay_id': templateSelections.indisplayId = toStringValue(value); return
+        case 'appearance_id': templateSelections.appearanceId = toStringValue(value); return
+        case 'function_ids': templateSelections.functionIds = Array.isArray(value) ? value.map(toStringValue) : [toStringValue(value)]; return
+        case 'fix_ids': templateSelections.fixIds = Array.isArray(value) ? value.map(toStringValue) : [toStringValue(value)]; return
+        case 'activation_lock': templateSelections.activationLock = toBooleanValue(value); return
+        case 'mdm_lock': templateSelections.mdmLock = toBooleanValue(value); return
+        default:
+          // 自定义字段:仅当属于当前模板,避免把 goods_category 等脏键塞进来
+          if (!Object.keys(fieldMap).length || fieldMap[fieldKey]) {
+            templateSelections.customFields[fieldKey] = value
+          }
+      }
+    })
+  }
+
+  // 反显签收/代下单时录入的设备信息(存于 info.sign_summary,兼容扁平 info)
+  const applySignSummary = (device: DeviceCheckMetaSource): boolean => {
+    const info = normalizeInfo(device?.info)
+    let values: Record<string, any> = {}
+    if (info.sign_summary && typeof info.sign_summary === 'object' && !Array.isArray(info.sign_summary)) {
+      values = { ...info.sign_summary }
+    } else {
+      const reserved = new Set(['goods_category', 'check_meta', 'sign_summary', 'coverage'])
+      Object.entries(info).forEach(([key, value]) => {
+        if (!reserved.has(key) && !isEmptyValue(value)) values[key] = value
+      })
+    }
+    if (!Object.keys(values).length) return false
+    applyFlatFieldValues(values)
+    return true
+  }
+
   const restoreFromDevice = (device: DeviceCheckMetaSource) => {
     const checkMeta = resolveCheckMeta(device)
     // 仅当 meta 属于当前模板且确有勾选时才恢复;否则(空占位 / 模板不匹配)落到默认值预填
     if (checkMeta && (!shouldRestoreMeta || shouldRestoreMeta(checkMeta)) && metaHasSelections(checkMeta)) {
+      // 已有真实质检记录:完全以质检 meta 为准，不用更早的签收录入值覆盖
       applyCheckMeta(checkMeta)
       updateCheckResult()
       return
     }
 
+    resetTemplateSelections()
+
     // 旧数据回退：优先从 check_result_seller 解析，再 fallback 到 check_result
     const restoredFromLegacy = applyLegacyCheckResult(
       device.check_result_seller || device.check_result || ''
     )
-    if (restoredFromLegacy) {
-      updateCheckResult()
-      return
+    // 未命中旧文本时,按模板默认选项预填
+    if (!restoredFromLegacy) {
+      applyTemplateDefaults()
     }
 
-    // 没有任何历史质检数据时(含代下单空占位 meta),按模板默认选项预填
-    resetTemplateSelections()
-    applyTemplateDefaults()
+    // 覆盖反显签收/代下单录入值(用户录入优先于模板默认值)
+    applySignSummary(device)
+
     deviceForm.info = getSubmitInfo()
+    updateCheckResult()
   }
 
   return {

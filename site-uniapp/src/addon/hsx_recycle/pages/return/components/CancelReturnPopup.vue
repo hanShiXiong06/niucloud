@@ -10,10 +10,13 @@
             </view>
 
             <view class="popup-body">
-                <view class="warning-box">
-                    <text class="warning-title">请确认取消原因</text>
-                    <text class="warning-text">取消原因会写入退回单和后续日志，便于客服与仓库追踪。取消后不在继续流转并且无法回到之前的状态, 请谨慎操作. (如果需要恢复,请重新入库创建订单)</text>
-                </view>
+                <u-alert
+                    type="warning"
+                    title="请确认取消原因"
+                    description="取消原因会写入退回单和后续日志，便于客服与仓库追踪。取消后不再继续流转且无法回到之前状态，请谨慎操作（如需恢复请重新入库创建订单）。"
+                    show-icon
+                    :customStyle="{ marginBottom: '18rpx' }"
+                ></u-alert>
 
                 <view class="form-item">
                     <view class="form-label">取消原因 <text class="required">*</text></view>
@@ -39,6 +42,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { confirmDanger } from '@/addon/hsx_recycle/utils/confirm'
 
 const props = defineProps<{
     visible: boolean
@@ -70,11 +74,12 @@ const handleClose = () => {
     show.value = false
 }
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
     if (!remark.value.trim()) {
         uni.showToast({ title: '请输入取消原因', icon: 'none' })
         return
     }
+    if (!(await confirmDanger('确认取消该退回单？取消后无法恢复。', { title: '确认取消退回', confirmText: '确认取消' }))) return
     emit('submit', { remark: remark.value.trim() })
 }
 

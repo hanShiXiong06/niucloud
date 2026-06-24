@@ -12,13 +12,13 @@
 
 :root,
 page {
-  /* ===== 主色（靛蓝，对齐 admin #4f46e5） ===== */
-  --hsx-primary: #4f46e5;        /* 主色：原蓝 #2563eb / #2979ff */
-  --hsx-primary-dark: #4338ca;   /* 深主色（悬停/按压）：原 #1d4ed8 / #1e40af */
-  --hsx-primary-light: #6366f1;  /* 浅主色（次级强调）：原 #3b82f6 */
-  --hsx-primary-300: #a5b4fc;    /* 浅主色边线：原 #93c5fd */
-  --hsx-primary-100: #e0e7ff;    /* 浅主色块底：原 #dbeafe */
-  --hsx-primary-50: #eef2ff;     /* 极浅主色背景：原 #eff6ff */
+  /* ===== 主色（对齐 uview-plus 标准主色 #3c9cff，去自制靛紫） ===== */
+  --hsx-primary: #1b73e8;        /* uview-plus primary */
+  --hsx-primary-dark: #2b85e4;   /* 深主色（悬停/按压） */
+  --hsx-primary-light: #5aa9ff;  /* 浅主色（次级强调） */
+  --hsx-primary-300: #a0cfff;    /* 浅主色边线 */
+  --hsx-primary-100: #d4e9ff;    /* 浅主色块底 */
+  --hsx-primary-50: #ecf5ff;     /* 极浅主色背景（uview primary-light bg） */
 
   /* ===== 状态色（柔和药丸 / 标签，供 DeviceStatusBadge 等使用） ===== */
   --hsx-info: #6b7280;           --hsx-info-bg: #f3f4f6;     /* 灰：待处理/中性 */

@@ -15,15 +15,12 @@
         </view>
 
         <view class="date-filter">
-            <view
-                v-for="item in dateOptions"
-                :key="item.value"
-                class="date-chip"
-                :class="{ 'date-chip--active': currentDate === item.value }"
-                @click="switchDate(item.value)"
-            >
-                <text>{{ item.label }}</text>
-            </view>
+            <RecycleTagGroup
+                :model-value="currentDate"
+                :options="dateOptions"
+                :deselectable="false"
+                @change="switchDate"
+            />
         </view>
 
         <view v-if="loading" class="loading-box">
@@ -180,6 +177,7 @@ import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getDashboardOverview, getDashboardTrend } from '@/addon/hsx_recycle/api/stats'
 import { redirect } from '@/utils/common'
 import uCharts from '@/components/qiun-data-charts/js_sdk/u-charts/u-charts.js'
+import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
 
 type DrilldownTarget = {
     filter_key: string

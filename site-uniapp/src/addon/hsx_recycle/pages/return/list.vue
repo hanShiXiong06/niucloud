@@ -39,20 +39,7 @@
             </view>
             <!-- #endif -->
 
-            <scroll-view scroll-x class="status-scroll">
-                <view class="status-row">
-                    <view
-                        v-for="(item, index) in statusTabs"
-                        :key="getStatusKey(item, index)"
-                        class="status-chip"
-                        :class="{ 'status-chip--active': isActiveStatus(getStatusValue(item)) }"
-                        @click="switchStatus(getStatusValue(item))"
-                    >
-                        <text>{{ getStatusLabel(item) }}</text>
-                        <text v-if="hasStatusCount(item)" class="status-chip__count">{{ item.count }}</text>
-                    </view>
-                </view>
-            </scroll-view>
+            <RecycleStatusTabs :model-value="currentStatus" :options="statusTabs" @change="switchStatus" />
         </view>
 
         <z-paging
@@ -126,6 +113,7 @@ import RecyclePageHeader from '@/addon/hsx_recycle/components/RecyclePageHeader.
 import { useRecycleListHeader } from '@/addon/hsx_recycle/hooks/useRecycleListHeader'
 import { useRecyclePaging } from '@/addon/hsx_recycle/hooks/useRecyclePaging'
 import { getStatusKey, getStatusLabel, getStatusValue, hasStatusCount, isSameStatus } from '@/addon/hsx_recycle/hooks/useRecycleStatusTabs'
+import RecycleStatusTabs from '@/addon/hsx_recycle/components/RecycleStatusTabs.vue'
 import { getRecycleMemberAvatar, getRecycleMemberInitial, getRecycleMemberMobile, getRecycleMemberName } from '@/addon/hsx_recycle/hooks/useRecycleMember'
 
 const { pagingRef, list, reload, complete } = useRecyclePaging()

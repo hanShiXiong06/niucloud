@@ -141,7 +141,10 @@ const previewImages = (index: number) => {
     openPreview(urls, index)
 }
 
-const toValue = () => {
+// 用函数声明(会被提升)而非 const 箭头函数：
+// 上方 watch(modelValue, ..., { immediate:true }) 会在 setup 阶段同步首次执行并调用 toValue()，
+// 若用 const 声明，此时尚未初始化 → 真机报 "Cannot access 'toValue' before initialization" (TDZ)。
+function toValue() {
     return imageItems.value
         .filter(item => item.status === 'success' && item.path)
         .map(item => item.path)

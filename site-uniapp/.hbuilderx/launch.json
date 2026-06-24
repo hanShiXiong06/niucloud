@@ -1,0 +1,17 @@
+{
+    "version" : "1.0",
+    "configurations" : [
+        {
+            "customPlaygroundType" : "device",
+            "localRepoPath" : "/Users/a123/Documents/1-work/niucloud/niucloud/site-uniapp/dist/build/app",
+            "packageName" : "com.yifanghua",
+            "playground" : "standard",
+            "type" : "uni-app:app-android"
+        },
+        {
+            "customPlaygroundType" : "device",
+            "playground" : "standard",
+            "type" : "uni-app:app-ios"
+        }
+    ]
+}
