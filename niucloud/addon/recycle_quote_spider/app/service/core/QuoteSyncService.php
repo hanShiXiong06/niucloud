@@ -8,6 +8,7 @@ use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\model\QuoteSyncLog;
+use addon\recycle_quote_spider\app\service\core\QuotePriceHistoryService;
 use app\service\core\upload\CoreBase64Service;
 use app\service\core\upload\CoreFetchService;
 use core\base\BaseCoreService;
@@ -408,10 +409,13 @@ class QuoteSyncService extends BaseCoreService
 
         if (empty($old)) {
             $save['manual_prices'] = [];
-            $model->create($save);
+            $record = $model->create($save);
+            $savedRowId = (int)$record->id;
         } else {
             $model->where('id', $old['id'])->update($save);
+            $savedRowId = (int)$old['id'];
         }
+        (new QuotePriceHistoryService())->record((int)$source['site_id'], array_merge($save, ['id' => $savedRowId]));
         $stats['rows']++;
     }
 

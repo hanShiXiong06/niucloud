@@ -98,4 +98,18 @@ class QuoteItem extends BaseModel
             $query->whereLike('name|brand|tab|keywords|parent_name', '%' . $value . '%');
         }
     }
+
+    public function searchCreateAtStartAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('create_at', '>=', (int)$value);
+        }
+    }
+
+    public function searchCreateAtEndAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('create_at', '<=', (int)$value);
+        }
+    }
 }

@@ -1,5 +1,5 @@
 <template>
-    <view v-if="list.length" class="quote-category-tabs" :class="[`quote-category-tabs--${variant}`, { 'has-cue': showScrollCue }]" :style="wrapStyle">
+    <view v-if="chips.length" class="quote-category-tabs" :class="[`quote-category-tabs--${variant}`, { 'has-cue': showScrollCue }]" :style="wrapStyle">
         <scroll-view
             class="quote-category-tabs__scroll"
             scroll-x
@@ -8,24 +8,24 @@
         >
             <view class="quote-category-tabs__track" :style="trackStyle">
                 <view
-                    v-for="(item, index) in list"
-                    :key="item.id || index"
+                    v-for="(chip, index) in chips"
+                    :key="chip.id"
                     class="quote-category-tabs__chip"
-                    :class="{ active: Number(index) === Number(current) }"
-                    :style="getChipStyle(Number(index))"
-                    @click="handleChange(item, Number(index))"
+                    :class="{ active: chip.active }"
+                    :style="chip.chipStyle"
+                    @click="handleChange(index)"
                 >
-                    <text class="quote-category-tabs__text" :style="getTextStyle(Number(index))">{{ item.name }}</text>
-                    <text v-if="item.levelLabel" class="quote-category-tabs__level" :style="getLevelStyle(Number(index))">{{ item.levelLabel }}</text>
+                    <text class="quote-category-tabs__text" :style="chip.textStyle">{{ chip.name }}</text>
+                    <text v-if="chip.levelLabel" class="quote-category-tabs__level" :style="chip.levelStyle">{{ chip.levelLabel }}</text>
                     <view
-                        v-if="variant === 'underline' && Number(index) === Number(current)"
+                        v-if="chip.showLine"
                         class="quote-category-tabs__line"
                         :style="lineStyle"
                     ></view>
                 </view>
             </view>
         </scroll-view>
-        <view v-if="showScrollCue && list.length > 3" class="quote-category-tabs__cue" :style="cueStyle">
+        <view v-if="showScrollCue && chips.length > 3" class="quote-category-tabs__cue" :style="cueStyle">
             <up-icon name="arrow-right" size="14" :color="inactiveTextColorValue"></up-icon>
         </view>
     </view>
@@ -132,8 +132,7 @@ const lineStyle = computed(() => {
     return `width:34rpx;height:5rpx;border-radius:999rpx;background:${themeColorValue.value};`
 })
 
-function getChipStyle(index: number) {
-    const active = Number(index) === Number(props.current)
+function buildChipStyle(active: boolean) {
     if (variant.value === 'underline') {
         return [
             `height:${itemHeight.value}rpx`,
@@ -159,8 +158,7 @@ function getChipStyle(index: number) {
     ].join(';') + ';'
 }
 
-function getTextStyle(index: number) {
-    const active = Number(index) === Number(props.current)
+function buildTextStyle(active: boolean) {
     return [
         `color:${active ? activeTextColorValue.value : inactiveTextColorValue.value}`,
         `font-size:${itemFontSize.value}rpx`,
@@ -170,8 +168,7 @@ function getTextStyle(index: number) {
     ].join(';') + ';'
 }
 
-function getLevelStyle(index: number) {
-    const active = Number(index) === Number(props.current)
+function buildLevelStyle(active: boolean) {
     return [
         `color:${active ? activeTextColorValue.value : inactiveTextColorValue.value}`,
         'font-size:18rpx',
@@ -181,7 +178,26 @@ function getLevelStyle(index: number) {
     ].join(';') + ';'
 }
 
-function handleChange(item: Record<string, any>, index: number) {
+// 预计算每个 chip 的样式，模板只绑定纯字符串，避免小程序逐项枚举组件实例（ownKeys 警告/卡顿）
+const chips = computed(() => {
+    const cur = Number(props.current)
+    return props.list.map((item, index) => {
+        const active = index === cur
+        return {
+            id: item.id ?? index,
+            name: String(item.name ?? '未命名分类'),
+            levelLabel: item.levelLabel || '',
+            active,
+            showLine: variant.value === 'underline' && active,
+            chipStyle: buildChipStyle(active),
+            textStyle: buildTextStyle(active),
+            levelStyle: buildLevelStyle(active)
+        }
+    })
+})
+
+function handleChange(index: number) {
+    const item = props.list[index] || {}
     emit('change', {
         ...item,
         index

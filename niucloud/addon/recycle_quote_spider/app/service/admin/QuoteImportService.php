@@ -7,6 +7,7 @@ use addon\recycle_quote_spider\app\model\QuoteImportTask;
 use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
+use addon\recycle_quote_spider\app\service\core\QuotePriceHistoryService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -226,9 +227,10 @@ class QuoteImportService extends BaseAdminService
         }
 
         $rowModel = new QuoteRow();
+        $history = new QuotePriceHistoryService();
         foreach ($parsed['rows'] as $index => $row) {
             $prices = $row['prices'];
-            $rowModel->create([
+            $record = $rowModel->create([
                 'site_id' => $this->site_id,
                 'source_id' => $sourceId,
                 'item_id' => $itemId,
@@ -251,6 +253,14 @@ class QuoteImportService extends BaseAdminService
                 'round_mode' => 'round',
                 'raw_data' => $row['raw'],
                 'source_hash' => md5(json_encode($row, JSON_UNESCAPED_UNICODE)),
+            ]);
+            $history->record($this->site_id, [
+                'id' => (int)$record->id,
+                'item_id' => $itemId,
+                'source_id' => $sourceId,
+                'model_name' => $row['model_name'],
+                'columns' => $parsed['price_columns'],
+                'final_prices' => $prices,
             ]);
         }
 
@@ -329,6 +339,21 @@ class QuoteImportService extends BaseAdminService
                 ];
             }
         }
+
+        // 兜底:未识别且非元信息(型号/容量/备注等)的列,若整列大多为数字则当作价格列,
+        // 避免「充新/大花」之外的新等级词漏掉(图片转表格、自定义表头都适用)
+        foreach ($headerColumns as &$header) {
+            if (($header['field'] ?? '') !== '') {
+                continue;
+            }
+            if ($this->isMetaOnlyHeader($header['label'])) {
+                continue;
+            }
+            if ($this->columnLooksNumeric($sheet, $header['col'], $headerRow, $highestRow)) {
+                $header['field'] = 'price:' . $header['label'];
+            }
+        }
+        unset($header);
 
         $priceColumns = [];
         foreach ($headerColumns as $header) {
@@ -422,6 +447,27 @@ class QuoteImportService extends BaseAdminService
         return $mapping;
     }
 
+    /**
+     * 采样某列的数据单元格,判断是否为「数字列」(用于价格列兜底识别)
+     */
+    private function columnLooksNumeric($sheet, string $col, int $headerRow, int $highestRow): bool
+    {
+        $total = 0;
+        $numeric = 0;
+        for ($row = $headerRow + 1; $row <= $highestRow && $total < 12; $row++) {
+            $value = trim((string)$sheet->getCell($col . $row)->getFormattedValue());
+            if ($value === '') {
+                continue;
+            }
+            $total++;
+            $normalized = str_replace([',', '，', '￥', '¥', ' '], '', $value);
+            if (is_numeric($normalized)) {
+                $numeric++;
+            }
+        }
+        return $total >= 2 && ($numeric / $total) >= 0.6;
+    }
+
     private function inferHeaderField(string $header): string
     {
         $name = trim($header);
@@ -449,7 +495,7 @@ class QuoteImportService extends BaseAdminService
         if (str_contains($name, '备注')) {
             return 'remark';
         }
-        if (preg_match('/价|靓机|小花|内爆|外爆|开机|不开机|废板/u', $name)) {
+        if (preg_match('/价|充新|准新|靓机|小花|大花|微瑕|内爆|外爆|开机|不开机|废板/u', $name)) {
             return 'price:' . $name;
         }
         return '';

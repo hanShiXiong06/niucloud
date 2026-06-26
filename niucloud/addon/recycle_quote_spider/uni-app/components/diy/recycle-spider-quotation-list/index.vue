@@ -820,16 +820,8 @@ function openQuotation(item: QuoteSpiderItem) {
         })
         return
     }
-    const titleText = encodeURIComponent(displayItemName(item) || '报价查询')
-    const hotParams = [
-        `show_hot_badge=${showHotBadgeConfig.value ? 1 : 0}`,
-        `hot_badge_size=${encodeURIComponent(String(hotBadgeSize.value))}`
-    ]
-    if (hotBadgeImage.value) {
-        hotParams.push(`hot_badge_image=${encodeURIComponent(hotBadgeImage.value)}`)
-    }
     redirect({
-        url: `/addon/recycle_quote_spider/pages/price/show_price?source=spider&item_id=${item.id}&title=${titleText}&${hotParams.join('&')}`
+        url: `/addon/recycle_quote_spider/pages/price/show_price?id=${item.id}`
     })
 }
 
@@ -911,7 +903,7 @@ function scheduleMeasureStickyTabs() {
 
 function measureStickyTabs() {
     if (!instance || categoryTabsFixed.value) return
-    const query = uni.createSelectorQuery().in(instance)
+    const query = uni.createSelectorQuery().in(instance.proxy)
     query.select(`#${categoryTabsId.value}`).boundingClientRect()
     query.select('.quotation-wrap').boundingClientRect()
     query.exec((rects: any[]) => {

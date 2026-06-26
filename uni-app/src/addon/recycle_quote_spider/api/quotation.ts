@@ -22,6 +22,13 @@ export function getQuoteSpiderDetail(id: number | string) {
 }
 
 /**
+ * 获取某个型号(行)的历史价格序列
+ */
+export function getQuoteSpiderPriceHistory(id: number | string, days = 30) {
+  return request.get(`recycle_quote_spider/row/${id}/price-history`, { days });
+}
+
+/**
  * 报价数据接口类型定义
  */
 export interface QuotationPriceData {

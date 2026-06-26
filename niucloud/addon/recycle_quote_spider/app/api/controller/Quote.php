@@ -47,4 +47,10 @@ class Quote extends BaseApiController
     {
         return success((new QuoteQueryService())->detail($id));
     }
+
+    public function priceHistory(int $id)
+    {
+        $days = (int)$this->request->param('days', 30);
+        return success((new QuoteQueryService())->priceHistory($id, $days));
+    }
 }

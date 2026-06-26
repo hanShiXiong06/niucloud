@@ -7,6 +7,7 @@ use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use addon\recycle_quote_spider\app\service\core\QuotePriceCalculator;
+use addon\recycle_quote_spider\app\service\core\QuotePriceHistoryService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -39,10 +40,24 @@ class QuoteItemService extends BaseAdminService
                 'tab',
                 'quote_type',
                 'keyword',
+                'create_at_start',
+                'create_at_end',
             ], $where)
-            ->order('sort asc,id desc');
+            ->order($this->resolveItemOrder($where));
         $this->applyCategoryScope($search, $where);
         return $this->pageQuery($search);
+    }
+
+    private function resolveItemOrder(array $where): string
+    {
+        $orderBy = (string)($where['order_by'] ?? '');
+        $map = [
+            'view' => 'view_count desc,id desc',
+            'view_asc' => 'view_count asc,id desc',
+            'new' => 'create_at desc,id desc',
+            'old' => 'create_at asc,id asc',
+        ];
+        return $map[$orderBy] ?? 'sort asc,id desc';
     }
 
     public function getFilterOptions(array $where = []): array
@@ -127,14 +142,29 @@ class QuoteItemService extends BaseAdminService
                 'brand',
                 'tab',
                 'is_show',
+                'is_hot',
                 'follow_source',
                 'has_update',
                 'keyword',
+                'create_at_start',
+                'create_at_end',
             ], $where)
             ->order('sort asc,id asc');
-        return $this->pageQuery($search, function ($row) {
-            return $this->appendRowDisplayFields($row);
-        });
+        // 一个报价项下的型号行需要整张矩阵展示，返回全量 list 而非分页
+        $list = $search->select()->toArray();
+        $list = array_map(fn($row) => $this->appendRowDisplayFields($row), $list);
+        // 附带「今天之前最近一次」的价格，供前端做今天 vs 昨天涨跌对比
+        $prevMap = (new QuotePriceHistoryService())->previousMap($this->site_id, array_column($list, 'id'));
+        foreach ($list as &$row) {
+            $row['prev_final_prices'] = $prevMap[(int)($row['id'] ?? 0)] ?? [];
+        }
+        unset($row);
+        return ['data' => $list, 'total' => count($list)];
+    }
+
+    public function priceHistory(int $rowId, int $days): array
+    {
+        return (new QuotePriceHistoryService())->series($this->site_id, $rowId, $days);
     }
 
     public function addRow(array $data): int
@@ -167,6 +197,7 @@ class QuoteItemService extends BaseAdminService
             'remark' => (string)($data['remark'] ?? ''),
             'source_is_show' => 1,
             'is_show' => (int)($data['is_show'] ?? 1),
+            'is_hot' => (int)($data['is_hot'] ?? 0),
             'sort' => (int)($data['sort'] ?? 0),
             'follow_source' => (int)($data['follow_source'] ?? 0),
             'adjust_type' => 0,
@@ -175,6 +206,14 @@ class QuoteItemService extends BaseAdminService
             'round_mode' => 'round',
             'raw_data' => ['manual' => true],
             'source_hash' => md5($modelName . json_encode($manualPrices, JSON_UNESCAPED_UNICODE)),
+        ]);
+        (new QuotePriceHistoryService())->record($this->site_id, [
+            'id' => (int)$record->id,
+            'item_id' => $itemId,
+            'source_id' => (int)($data['source_id'] ?? $item['source_id']),
+            'model_name' => $modelName,
+            'columns' => $columns,
+            'final_prices' => $manualPrices,
         ]);
         $this->refreshApiCache();
         return (int)$record->id;
@@ -201,10 +240,12 @@ class QuoteItemService extends BaseAdminService
 
         if ($this->hasAdjustRule($data)) {
             $rows = (new QuoteRow())->where('site_id', $this->site_id)->where('item_id', $id)->select()->toArray();
+            $history = new QuotePriceHistoryService();
             foreach ($rows as $row) {
                 $rule = array_merge($row, $save);
                 $finalPrices = $this->calculator->calculateList($row['source_prices'] ?? [], $rule);
                 (new QuoteRow())->where('id', $row['id'])->update(['final_prices' => $finalPrices]);
+                $history->record($this->site_id, array_merge($row, ['final_prices' => $finalPrices]));
             }
         }
         $this->refreshApiCache();
@@ -219,7 +260,7 @@ class QuoteItemService extends BaseAdminService
             throw new CommonException('报价行不存在');
         }
 
-        $save = $this->buildAdjustSave($data, ['follow_source', 'is_show', 'sort']);
+        $save = $this->buildAdjustSave($data, ['follow_source', 'is_show', 'is_hot', 'sort']);
         foreach (['model_name', 'brand', 'tab', 'keywords', 'remark'] as $field) {
             if (array_key_exists($field, $data) && $data[$field] !== '') {
                 $save[$field] = (string)$data[$field];
@@ -239,6 +280,33 @@ class QuoteItemService extends BaseAdminService
         if (!empty($save)) {
             $model->where('id', $id)->update($save);
         }
+        if (array_key_exists('final_prices', $save)) {
+            (new QuotePriceHistoryService())->record($this->site_id, array_merge($row, $save, ['id' => $id]));
+        }
+        $this->refreshApiCache();
+        return true;
+    }
+
+    public function deleteItem(int $id): bool
+    {
+        $info = $this->model->where('site_id', $this->site_id)->where('id', $id)->findOrEmpty()->toArray();
+        if (empty($info)) {
+            throw new CommonException('报价项不存在');
+        }
+        (new QuoteRow())->where('site_id', $this->site_id)->where('item_id', $id)->delete();
+        $this->model->where('site_id', $this->site_id)->where('id', $id)->delete();
+        $this->refreshApiCache();
+        return true;
+    }
+
+    public function deleteRow(int $id): bool
+    {
+        $model = new QuoteRow();
+        $row = $model->where('site_id', $this->site_id)->where('id', $id)->findOrEmpty()->toArray();
+        if (empty($row)) {
+            throw new CommonException('报价行不存在');
+        }
+        $model->where('site_id', $this->site_id)->where('id', $id)->delete();
         $this->refreshApiCache();
         return true;
     }

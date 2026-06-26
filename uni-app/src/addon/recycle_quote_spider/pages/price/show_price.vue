@@ -7,7 +7,7 @@
 				</view>
 				<view class="navbar-center" :style="navbarCenterStyle">
 					<text class="navbar-title">{{ navbarTitle }}</text>
-					<text v-if="isScrolled" class="navbar-subtitle">{{ priceDateDisplay }}</text>
+					<text v-if="priceDateDisplay && priceDateDisplay !== '--'" class="navbar-date">{{ priceDateDisplay }}</text>
 				</view>
 				<view class="navbar-capsule-space" :style="navbarSideStyle"></view>
 			</view>
@@ -161,8 +161,13 @@
 												:key="column.key"
 												class="price-cell price-body-cell"
 												:style="getPriceColumnStyle(column)"
+												@click="openTrend(row, column.name)"
 											>
-												<text v-if="hasPriceValue(row.prices?.[column.name])" class="price-value">{{ formatPrice(row.prices?.[column.name]) }}</text>
+												<text
+													v-if="hasPriceValue(row.prices?.[column.name])"
+													class="price-value"
+													:class="spiderPriceTrend(row, column.name) === 'up' ? 'price-up' : spiderPriceTrend(row, column.name) === 'down' ? 'price-down' : ''"
+												>{{ formatPrice(row.prices?.[column.name]) }}<text v-if="spiderPriceTrend(row, column.name) === 'up'" class="trend-arrow">▲</text><text v-else-if="spiderPriceTrend(row, column.name) === 'down'" class="trend-arrow">▼</text></text>
 												<text v-else class="empty-cell">--</text>
 											</view>
 										</view>
@@ -251,6 +256,7 @@
 			@update:only-hot="onlyHotModels = $event"
 			@close="showModelFilter = false"
 		/>
+		<PriceTrendPopup v-model:visible="trendVisible" :row-id="trendRowId" :title="trendTitle" :active-column="trendColumn" :theme="priceTheme" />
 	</view>
 </template>
 
@@ -261,6 +267,7 @@ import { getQuoteSpiderDetail, type QuoteSpiderItem, type QuotationPriceData } f
 import { getOrderSubmitConfig } from '@/addon/hsx_recycle/api/order'
 import { img } from '@/utils/common'
 import ModelFilterPopup from './components/ModelFilterPopup.vue'
+import PriceTrendPopup from './components/PriceTrendPopup.vue'
 
 const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准'
 
@@ -416,6 +423,19 @@ const isSeriesClickScrolling = ref(false)
 let seriesClickTimer: ReturnType<typeof setTimeout> | null = null
 let seriesScrollMeasurePending = false
 const onlyHotModels = ref(false)
+const trendVisible = ref(false)
+const trendRowId = ref<number | string>(0)
+const trendTitle = ref('')
+const trendColumn = ref('')
+
+function openTrend(row: Record<string, any>, columnName = '') {
+	if (!row?.id) return
+	trendRowId.value = row.id
+	trendColumn.value = columnName
+	trendTitle.value = [row.goods_name, row.capacity, columnName].filter(Boolean).join(' · ')
+	trendVisible.value = true
+}
+
 const currentScrollTop = ref(0)
 const TOP_SERIES_RESET_THRESHOLD = 80
 const priceTheme = ref<Record<string, string>>({})
@@ -899,6 +919,14 @@ function formatPrice(value: unknown): string {
 	return `${Math.round(num)}`
 }
 
+// 今天 vs 昨天：'up' 涨 / 'down' 跌 / '' 不变或无历史
+function spiderPriceTrend(row: Record<string, any>, columnName: string): '' | 'up' | 'down' {
+	const cur = parsePriceValue(row?.prices?.[columnName])
+	const prev = parsePriceValue(row?.prevPrices?.[columnName])
+	if (cur === null || prev === null || !prev || cur === prev) return ''
+	return cur > prev ? 'up' : 'down'
+}
+
 function formatDate(timestamp: number | string): string {
 	if (!timestamp) return '--'
 	const raw = Number(timestamp)
@@ -1001,6 +1029,7 @@ function normalizeSpiderRows(item: QuoteSpiderItem): QuotationPriceData[] {
 
 	return rows.map(row => {
 		const prices = normalizeSpiderPrices(row.final_prices || row.manual_prices || row.source_prices || {}, row.columns || [])
+		const prevPrices = normalizeSpiderPrices(row.prev_final_prices || {}, row.columns || [])
 		const seriesName = normalizeText(row.tab || item.tab || '')
 		return {
 			id: row.id,
@@ -1013,11 +1042,12 @@ function normalizeSpiderRows(item: QuoteSpiderItem): QuotationPriceData[] {
 			is_hot: Number(item.is_hot || 0),
 			capacity: resolveSpiderCapacity(row, seriesName),
 			prices,
+			prevPrices,
 			add_value_info: 0,
 			value_info: row.remark || '',
 			adjustment_items: row.remark ? [{ field_name: '备注', content_text: row.remark }] : [],
 			adjustment_summary: row.remark || '',
-			price_date: '',
+			price_date: row.price_date || item.price_date || '',
 			create_at: row.create_at || '',
 			update_at: row.update_at || ''
 		}
@@ -1814,18 +1844,10 @@ function getErrorMessage(error: unknown): string {
 
 onLoad((options: PricePageOptions) => {
 	loadPriceTheme()
-	if (options?.source) {
-		source.value = options.source
-	}
-	if (options?.dataset_id) {
-		datasetId.value = options.dataset_id
-	}
-	if (options?.item_id) {
-		spiderItemId.value = options.item_id
-	}
 	if (options?.price_date) {
 		priceDate.value = options.price_date
 	}
+	// 旧参数仍兼容（新入口已不再下发），不传则用默认值
 	if (options?.show_hot_badge !== undefined) {
 		showHotBadge.value = String(options.show_hot_badge) !== '0'
 	}
@@ -1836,17 +1858,30 @@ onLoad((options: PricePageOptions) => {
 		const size = Number(options.hot_badge_size)
 		if (Number.isFinite(size)) hotBadgeSize.value = Math.max(24, Math.min(size, 80))
 	}
-	if (source.value === 'spider' && spiderItemId.value) {
-		pageTitle.value = options?.title ? safeDecode(options.title) : '报价查询'
-		loadPriceData()
-		return
+
+	// 数据集 / 其它来源的通用报价：保留原逻辑
+	const datasetIdVal = options?.dataset_id || ''
+	const quotationIdVal = options?.quotation_id || ''
+	const explicitOther = !!options?.source && options.source !== 'spider'
+	if (explicitOther || datasetIdVal || quotationIdVal) {
+		source.value = options?.source || ''
+		datasetId.value = datasetIdVal
+		priceTypeId.value = options?.id || quotationIdVal || ''
+		if (priceTypeId.value || datasetId.value) {
+			pageTitle.value = options?.title ? safeDecode(options.title) : '报价查询'
+			loadPriceData()
+			loadQuotationTypes()
+			return
+		}
 	}
-	const id = options?.id || options?.quotation_id || ''
-	if (id || datasetId.value) {
-		priceTypeId.value = id
+
+	// 本插件报价：入口只需 id（兼容旧的 item_id），标题由详情里的名称决定
+	const itemId = options?.item_id || options?.id || ''
+	if (itemId) {
+		source.value = 'spider'
+		spiderItemId.value = itemId
 		pageTitle.value = options?.title ? safeDecode(options.title) : '报价查询'
 		loadPriceData()
-		loadQuotationTypes()
 		return
 	}
 
@@ -2270,6 +2305,18 @@ onPageScroll((event) => {
 	text-align: center;
 }
 
+/* 今天 vs 昨天：涨红、跌绿 */
+.price-value.price-up {
+	color: #e04b4b;
+}
+.price-value.price-down {
+	color: #1faa6b;
+}
+.trend-arrow {
+	font-size: 18rpx;
+	margin-left: 2rpx;
+}
+
 .empty-cell {
 	color: var(--text-sub);
 	font-size: 24rpx;
@@ -2379,21 +2426,23 @@ onPageScroll((event) => {
 		position: absolute;
 		left: 50%;
 		transform: translateX(-50%);
-		min-width: 260rpx;
+		max-width: 66%;
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
 		align-items: center;
 		justify-content: center;
+		gap: 12rpx;
 		padding: 0 10rpx;
 		box-sizing: border-box;
 		pointer-events: none;
 	}
 
 	.navbar-title {
-		display: block;
-		width: 100%;
+		flex: 0 1 auto;
+		min-width: 0;
+		max-width: 360rpx;
 		font-size: 30rpx;
-		line-height: 40rpx;
+		line-height: 44rpx;
 		font-weight: 700;
 		text-align: center;
 		color: var(--button-text);
@@ -2402,11 +2451,13 @@ onPageScroll((event) => {
 		white-space: nowrap;
 	}
 
-	.navbar-subtitle {
-		margin-top: 2rpx;
-		font-size: 20rpx;
-		line-height: 28rpx;
+	.navbar-date {
+		flex: 0 0 auto;
+		font-size: 22rpx;
+		line-height: 44rpx;
 		color: var(--button-text);
+		opacity: 0.72;
+		white-space: nowrap;
 	}
 
 	.navbar-capsule-space {

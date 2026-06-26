@@ -1,0 +1,562 @@
+/* 回收报价插件后台 —— 全局样式（命名空间 .qs-scope，页面根节点与所有弹窗/抽屉都挂这个类） */
+
+.qs-scope.quote-spider-page {
+    min-height: calc(100vh - 84px);
+    padding: 14px;
+    border-radius: 10px;
+    background: #f5f7fa;
+    color: var(--el-text-color-primary);
+}
+
+.qs-scope .el-card {
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: none;
+}
+
+.qs-scope .table-search-wrap {
+    background: #fff;
+    border: 1px solid var(--el-border-color-lighter);
+    box-shadow: none;
+}
+
+.qs-scope .el-table {
+    --el-table-header-bg-color: var(--el-fill-color-light);
+    --el-table-header-text-color: var(--el-text-color-primary);
+    --el-table-border-color: var(--el-border-color-lighter);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* ---------- 通用文字 ---------- */
+.qs-scope .panel-title,
+.qs-scope .name-main,
+.qs-scope .strong-text {
+    font-weight: 600;
+}
+
+.qs-scope .panel-subtitle,
+.qs-scope .muted,
+.qs-scope .name-sub {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* ---------- 页头 ---------- */
+.qs-scope .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.qs-scope .page-header-title {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.qs-scope .page-header-desc {
+    margin-top: 4px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+}
+
+/* ---------- 报价源切换器（数据管理顶部） ---------- */
+.qs-scope .source-switcher {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 10px;
+    background: #fff;
+}
+
+.qs-scope .source-switcher-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--el-text-color-regular);
+    margin-right: 2px;
+}
+
+.qs-scope .source-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 14px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 999px;
+    background: var(--el-fill-color-lighter);
+    color: var(--el-text-color-regular);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.qs-scope .source-chip:hover {
+    border-color: var(--el-color-primary-light-5);
+    color: var(--el-color-primary);
+}
+
+.qs-scope .source-chip.is-active {
+    border-color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+    color: var(--el-color-primary);
+    font-weight: 600;
+}
+
+.qs-scope .source-chip .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--el-color-success);
+}
+
+.qs-scope .source-chip .dot.off {
+    background: var(--el-text-color-disabled);
+}
+
+.qs-scope .source-switcher-spacer {
+    flex: 1;
+}
+
+/* ---------- 数据管理布局 ---------- */
+.qs-scope .filter-form {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.qs-scope .manage-layout {
+    display: grid;
+    grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.6fr);
+    gap: 12px;
+    align-items: start;
+}
+
+.qs-scope .panel {
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    padding: 14px;
+    min-width: 0;
+    background: #fff;
+    box-shadow: none;
+}
+
+.qs-scope .category-nav-panel {
+    position: sticky;
+    top: 12px;
+}
+
+.qs-scope .item-main-panel {
+    min-width: 0;
+}
+
+.qs-scope .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 40px;
+    margin-bottom: 10px;
+}
+
+.qs-scope .panel-actions,
+.qs-scope .row-toolbar,
+.qs-scope .drawer-actions,
+.qs-scope .excel-pane {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.qs-scope .panel-actions {
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.qs-scope .auto-sync-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
+/* ---------- 分类树 ---------- */
+.qs-scope .category-name-column .cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.qs-scope .category-name-column .el-table__placeholder {
+    flex: 0 0 auto;
+}
+
+.qs-scope .category-name-column .el-table__expand-icon {
+    flex: 0 0 auto;
+    margin-top: 0;
+}
+
+.qs-scope .category-name-text {
+    min-width: 0;
+    line-height: 1.45;
+}
+
+.qs-scope .category-row-actions {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+
+/* ---------- 报价项 ---------- */
+.qs-scope .quote-item-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.qs-scope .quote-item-icon {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
+}
+
+.qs-scope .quote-item-copy {
+    min-width: 0;
+}
+
+.qs-scope .switch-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 24px;
+}
+
+.qs-scope .sort-input {
+    width: 72px;
+}
+
+.qs-scope .view-count {
+    font-variant-numeric: tabular-nums;
+    color: var(--el-text-color-regular);
+}
+
+/* ---------- 抽屉 ---------- */
+.qs-scope.quote-spider-drawer .el-drawer__body {
+    padding: 16px 20px;
+}
+
+.qs-scope .drawer-shell {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.qs-scope .drawer-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.qs-scope .drawer-title {
+    color: var(--el-text-color-primary);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.qs-scope .drawer-tabs {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.qs-scope .drawer-tabs .el-tabs__content {
+    flex: 1;
+    min-height: 0;
+}
+
+.qs-scope .drawer-tabs .el-tab-pane {
+    height: 100%;
+}
+
+/* 行价格页：表单不占高，表格占满剩余空间 */
+.qs-scope .rows-pane {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.qs-scope .rows-pane .row-filter-form {
+    flex: 0 0 auto;
+    margin-bottom: 6px;
+}
+
+.qs-scope .rows-pane .row-filter-form .el-form-item {
+    margin-bottom: 8px;
+}
+
+.qs-scope .rows-table-wrap {
+    flex: 1;
+    min-height: 0;
+}
+
+.qs-scope .row-toolbar {
+    margin-bottom: 12px;
+}
+
+.qs-scope .drawer-import,
+.qs-scope .item-info-layout {
+    max-width: 980px;
+}
+
+/* ---------- Excel / 矩阵表 ---------- */
+.qs-scope .excel-notice-input {
+    width: 360px;
+}
+
+.qs-scope .excel-price-cell {
+    display: block;
+    min-height: 24px;
+    color: var(--el-color-primary);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.qs-scope .excel-plain-cell {
+    display: block;
+    min-height: 24px;
+    color: var(--el-text-color-primary);
+}
+
+.qs-scope .excel-remark-cell {
+    display: block;
+    min-height: 24px;
+    color: var(--el-text-color-secondary);
+}
+
+/* 涨跌：涨红、跌绿（放在 .excel-price-cell 之后以覆盖其默认主色） */
+.qs-scope .excel-price-cell.price-up {
+    color: var(--el-color-danger);
+}
+
+.qs-scope .excel-price-cell.price-down {
+    color: var(--el-color-success);
+}
+
+.qs-scope .trend-arrow {
+    font-size: 10px;
+    font-style: normal;
+    margin-left: 2px;
+}
+
+.qs-scope .excel-matrix-table {
+    --el-table-border-color: var(--el-border-color-lighter);
+}
+
+.qs-scope .excel-matrix-table .el-table__header th {
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-primary);
+    font-weight: 600;
+}
+
+.qs-scope .excel-matrix-table .el-table__cell {
+    padding: 8px 0;
+}
+
+.qs-scope .row-price-matrix .el-table__body td:nth-child(2),
+.qs-scope .row-price-matrix .el-table__body td:nth-child(3) {
+    background: var(--el-fill-color-extra-light);
+}
+
+.qs-scope .matrix-group-cell {
+    color: var(--el-text-color-primary);
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.qs-scope .excel-upload-card {
+    border: 1px dashed var(--el-border-color);
+    border-radius: 10px;
+    padding: 16px;
+    background: var(--el-fill-color-lighter);
+}
+
+/* ---------- 报价项基础信息 ---------- */
+.qs-scope .item-info-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.qs-scope .image-setting-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.qs-scope .image-setting-card {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
+}
+
+.qs-scope .image-setting-title {
+    margin-bottom: 10px;
+    color: var(--el-text-color-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* ---------- 分页 ---------- */
+.qs-scope .pager {
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+.qs-scope .pagination-wrap {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* ---------- 表单提示 / 弹窗 ---------- */
+.qs-scope .form-tip {
+    width: 100%;
+    margin-top: 6px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.qs-scope .source-parse-actions {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.qs-scope .json-example {
+    width: 100%;
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+/* ---------- 行价格编辑 ---------- */
+.qs-scope .row-edit-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.qs-scope .row-edit-section {
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    padding: 12px;
+    background: #fff;
+}
+
+.qs-scope .section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.qs-scope .row-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 14px;
+}
+
+.qs-scope .row-price-table {
+    width: 100%;
+}
+
+.qs-scope .manual-price-input {
+    width: 100%;
+}
+
+.qs-scope .final-price {
+    font-weight: 600;
+    color: var(--el-color-primary);
+}
+
+.qs-scope .create-price-columns {
+    margin-bottom: 12px;
+}
+
+/* ---------- 批量调价 ---------- */
+.qs-scope .batch-adjust-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+    gap: 14px;
+}
+
+.qs-scope .adjust-preview-card {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-fill-color-lighter);
+}
+
+.qs-scope .adjust-preview-main {
+    margin-top: 6px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1400px) {
+    .qs-scope .manage-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .qs-scope .category-nav-panel {
+        position: static;
+    }
+}
+
+@media (max-width: 900px) {
+    .qs-scope .image-setting-grid,
+    .qs-scope .row-edit-grid,
+    .qs-scope .batch-adjust-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .qs-scope .drawer-head {
+        flex-direction: column;
+    }
+}

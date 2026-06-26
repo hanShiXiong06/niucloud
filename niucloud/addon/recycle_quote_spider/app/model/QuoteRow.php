@@ -71,10 +71,31 @@ class QuoteRow extends BaseModel
         }
     }
 
+    public function searchIsHotAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('is_hot', '=', $value);
+        }
+    }
+
     public function searchKeywordAttr($query, $value, $data)
     {
         if ($value !== '' && $value !== null) {
             $query->whereLike('model_name|brand|tab|keywords|remark', '%' . $value . '%');
+        }
+    }
+
+    public function searchCreateAtStartAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('create_at', '>=', (int)$value);
+        }
+    }
+
+    public function searchCreateAtEndAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('create_at', '<=', (int)$value);
         }
     }
 }

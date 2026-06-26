@@ -8,8 +8,10 @@ use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
+use addon\recycle_quote_spider\app\service\core\QuotePriceHistoryService;
 use core\base\BaseApiService;
 use core\exception\CommonException;
+use think\facade\Db;
 
 class QuoteQueryService extends BaseApiService
 {
@@ -122,9 +124,36 @@ class QuoteQueryService extends BaseApiService
 
     public function detail(int $id): array
     {
+        // 浏览量埋点：每次访问 +1，放在缓存外，避免被详情缓存挡掉
+        $this->incrementViewCount($id);
         return (new QuoteApiCacheService())->remember($this->site_id, 'detail', ['id' => $id], function () use ($id) {
             return $this->buildDetail($id);
         });
+    }
+
+    private function incrementViewCount(int $id): void
+    {
+        try {
+            // 用查询构造器直接自增，避免模型 autoWriteTimestamp 每次浏览都改 update_at
+            Db::name('recycle_quote_spider_item')
+                ->where('site_id', $this->site_id)
+                ->where('id', $id)
+                ->where('is_show', 1)
+                ->inc('view_count')
+                ->update();
+        } catch (\Throwable $e) {
+            // 埋点失败不影响详情返回
+        }
+    }
+
+    public function priceHistory(int $rowId, int $days): array
+    {
+        return (new QuoteApiCacheService())->remember(
+            $this->site_id,
+            'price_history',
+            ['id' => $rowId, 'days' => $days],
+            fn() => (new QuotePriceHistoryService())->series($this->site_id, $rowId, $days)
+        );
     }
 
     private function buildDetail(int $id): array
@@ -136,8 +165,18 @@ class QuoteQueryService extends BaseApiService
         $rows = (new QuoteRow())->where('site_id', $this->site_id)->where('item_id', $id)->where('is_show', 1)->order('sort asc,id asc')->select()->toArray();
         $this->sanitizeItemImages($item);
         $item['notice_text'] = $this->resolveNoticeText($item['notice_text'] ?? '');
+        // 报价更新时间（取最近同步时间，回退到更新时间），给 C 端展示用
+        $itemUpdated = $this->resolveTimestamp($item['last_sync_at'] ?? 0) ?: $this->resolveTimestamp($item['update_at'] ?? 0);
+        $item['update_at_text'] = $itemUpdated ? $this->formatTime($itemUpdated) : '';
+        $item['price_date'] = $itemUpdated ? date('Y-m-d', $itemUpdated) : '';
+        // 今天 vs 昨天涨跌对比所需的上一次价格
+        $prevMap = (new QuotePriceHistoryService())->previousMap($this->site_id, array_column($rows, 'id'));
         foreach ($rows as &$row) {
             $this->appendRowDisplayFields($row);
+            $row['prev_final_prices'] = $prevMap[(int)($row['id'] ?? 0)] ?? [];
+            $rowUpdated = $this->resolveTimestamp($row['update_at'] ?? 0) ?: $this->resolveTimestamp($row['create_at'] ?? 0);
+            $row['update_at_text'] = $rowUpdated ? $this->formatTime($rowUpdated) : '';
+            $row['price_date'] = $rowUpdated ? date('Y-m-d', $rowUpdated) : '';
         }
         unset($row);
         $item['rows'] = $rows;
@@ -304,6 +343,22 @@ class QuoteQueryService extends BaseApiService
             return '待同步';
         }
         return date('Y-m-d H:i', $timestamp);
+    }
+
+    /**
+     * 兼容 int 时间戳与 'Y-m-d H:i:s' 字符串（模型自动时间字段会被格式化成字符串）
+     */
+    private function resolveTimestamp($value): int
+    {
+        if (is_numeric($value)) {
+            return (int)$value;
+        }
+        $value = trim((string)$value);
+        if ($value === '') {
+            return 0;
+        }
+        $ts = strtotime($value);
+        return $ts ?: 0;
     }
 
     private function buildTree(array $list, int $parentId = 0): array

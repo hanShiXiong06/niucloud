@@ -36,6 +36,10 @@ export function editQuoteCategory(id: number, params: Record<string, any>) {
     return request.put(`recycle_quote_spider/category/${id}`, params, { showErrorMessage: true })
 }
 
+export function deleteQuoteCategory(id: number) {
+    return request.delete(`recycle_quote_spider/category/${id}`, { showErrorMessage: true })
+}
+
 export function addQuoteCategory(params: Record<string, any>) {
     return request.post('recycle_quote_spider/category', params, { showErrorMessage: true })
 }
@@ -56,6 +60,10 @@ export function addQuoteItem(params: Record<string, any>) {
     return request.post('recycle_quote_spider/item', params, { showErrorMessage: true })
 }
 
+export function deleteQuoteItem(id: number) {
+    return request.delete(`recycle_quote_spider/item/${id}`, { showErrorMessage: true })
+}
+
 export function getQuoteRowList(params: Record<string, any>) {
     return request.get('recycle_quote_spider/row', { params })
 }
@@ -66,6 +74,14 @@ export function editQuoteRow(id: number, params: Record<string, any>) {
 
 export function addQuoteRow(params: Record<string, any>) {
     return request.post('recycle_quote_spider/row', params, { showErrorMessage: true })
+}
+
+export function deleteQuoteRow(id: number) {
+    return request.delete(`recycle_quote_spider/row/${id}`, { showErrorMessage: true })
+}
+
+export function getQuoteRowPriceHistory(id: number, days: number) {
+    return request.get(`recycle_quote_spider/row/${id}/price-history`, { params: { days } })
 }
 
 export function uploadQuoteExcel(formData: FormData) {

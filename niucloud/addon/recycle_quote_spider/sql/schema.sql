@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quote_spider_item` (
   `source_is_hot` tinyint(1) NOT NULL DEFAULT '0',
   `is_show` tinyint(1) NOT NULL DEFAULT '1',
   `is_hot` tinyint(1) NOT NULL DEFAULT '0',
+  `view_count` int NOT NULL DEFAULT '0' COMMENT '浏览量',
   `sort` int NOT NULL DEFAULT '0',
   `follow_source` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否跟随爬虫数据',
   `adjust_type` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0无 1固定 2比例 3覆盖',
@@ -117,6 +118,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quote_spider_row` (
   `remark` text COMMENT '备注',
   `source_is_show` tinyint(1) NOT NULL DEFAULT '1' COMMENT '第三方显示状态',
   `is_show` tinyint(1) NOT NULL DEFAULT '1' COMMENT '本地显示状态',
+  `is_hot` tinyint(1) NOT NULL DEFAULT '0' COMMENT '本地热门状态',
   `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
   `follow_source` tinyint(1) NOT NULL DEFAULT '1',
   `adjust_type` tinyint(1) NOT NULL DEFAULT '0',
@@ -134,6 +136,23 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quote_spider_row` (
   KEY `idx_show_sort` (`site_id`,`item_id`,`is_show`,`sort`),
   KEY `idx_model` (`model_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收报价爬虫报价行';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quote_spider_price_history` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `site_id` int NOT NULL DEFAULT '0' COMMENT '站点ID',
+  `source_id` int NOT NULL DEFAULT '0' COMMENT '报价源ID',
+  `item_id` int NOT NULL DEFAULT '0' COMMENT '报价项ID',
+  `row_id` int NOT NULL DEFAULT '0' COMMENT '报价行ID',
+  `model_name` varchar(180) NOT NULL DEFAULT '' COMMENT '型号/行名称',
+  `columns` json DEFAULT NULL COMMENT '等级列快照',
+  `final_prices` json DEFAULT NULL COMMENT '最终价快照',
+  `record_date` date NOT NULL COMMENT '快照日期',
+  `create_at` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_row_date` (`site_id`,`row_id`,`record_date`),
+  KEY `idx_item_date` (`site_id`,`item_id`,`record_date`),
+  KEY `idx_row_date` (`site_id`,`row_id`,`record_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收报价历史价格快照';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_quote_spider_sync_log` (
   `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '主键ID',

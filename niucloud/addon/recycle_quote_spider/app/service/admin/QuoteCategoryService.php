@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\recycle_quote_spider\app\service\admin;
 
 use addon\recycle_quote_spider\app\model\QuoteCategory;
+use addon\recycle_quote_spider\app\model\QuoteItem;
 use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -95,6 +96,25 @@ class QuoteCategoryService extends BaseAdminService
         if (!empty($save)) {
             $this->model->where('id', $id)->update($save);
         }
+        $this->refreshApiCache();
+        return true;
+    }
+
+    public function delete(int $id): bool
+    {
+        $info = $this->model->where('site_id', $this->site_id)->where('id', $id)->findOrEmpty()->toArray();
+        if (empty($info)) {
+            throw new CommonException('分类不存在');
+        }
+        $childCount = $this->model->where('site_id', $this->site_id)->where('parent_id', $id)->count();
+        if ($childCount > 0) {
+            throw new CommonException('该分类下还有子分类，请先删除子分类');
+        }
+        $itemCount = (new QuoteItem())->where('site_id', $this->site_id)->where('category_id', $id)->count();
+        if ($itemCount > 0) {
+            throw new CommonException('该分类下还有报价项，请先移除或删除报价项');
+        }
+        $this->model->where('site_id', $this->site_id)->where('id', $id)->delete();
         $this->refreshApiCache();
         return true;
     }

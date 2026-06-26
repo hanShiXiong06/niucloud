@@ -23,6 +23,9 @@ class Item extends BaseAdminController
             ['tab', ''],
             ['quote_type', ''],
             ['keyword', ''],
+            ['create_at_start', ''],
+            ['create_at_end', ''],
+            ['order_by', ''],
         ]);
         return success((new QuoteItemService())->getPage($data));
     }
@@ -61,6 +64,7 @@ class Item extends BaseAdminController
             ['columns', []],
             ['manual_prices', []],
             ['is_show', 1],
+            ['is_hot', 0],
             ['sort', 0],
             ['follow_source', 0],
         ], false);
@@ -75,9 +79,12 @@ class Item extends BaseAdminController
             ['brand', ''],
             ['tab', ''],
             ['is_show', ''],
+            ['is_hot', ''],
             ['follow_source', ''],
             ['has_update', ''],
             ['keyword', ''],
+            ['create_at_start', ''],
+            ['create_at_end', ''],
         ]);
         return success((new QuoteItemService())->rows($data));
     }
@@ -99,6 +106,7 @@ class Item extends BaseAdminController
             ['remark', ''],
             ['manual_prices', []],
             ['is_show', ''],
+            ['is_hot', ''],
             ['sort', ''],
             ['follow_source', ''],
             ['adjust_type', ''],
@@ -108,6 +116,24 @@ class Item extends BaseAdminController
         ], false));
         (new QuoteItemService())->editRow($id, $data);
         return success('EDIT_SUCCESS');
+    }
+
+    public function del(int $id)
+    {
+        (new QuoteItemService())->deleteItem($id);
+        return success('DELETE_SUCCESS');
+    }
+
+    public function priceHistory(int $id)
+    {
+        $days = (int)$this->request->param('days', 30);
+        return success((new QuoteItemService())->priceHistory($id, $days));
+    }
+
+    public function delRow(int $id)
+    {
+        (new QuoteItemService())->deleteRow($id);
+        return success('DELETE_SUCCESS');
     }
 
     private function editParams(): array

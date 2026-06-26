@@ -53,4 +53,10 @@ class Category extends BaseAdminController
         (new QuoteCategoryService())->edit($id, $data);
         return success('EDIT_SUCCESS');
     }
+
+    public function del(int $id)
+    {
+        (new QuoteCategoryService())->delete($id);
+        return success('DELETE_SUCCESS');
+    }
 }
