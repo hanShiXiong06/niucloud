@@ -53,4 +53,9 @@ class Quote extends BaseApiController
         $days = (int)$this->request->param('days', 30);
         return success((new QuoteQueryService())->priceHistory($id, $days));
     }
+
+    public function reportPermission()
+    {
+        return success((new QuoteQueryService())->reportPermission());
+    }
 }

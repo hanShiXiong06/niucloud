@@ -55,7 +55,7 @@
                     </u-cell-group>
                     <RecycleCheckSummary
                         v-if="checkMetaItems.length || device.remark"
-                        :items="checkMetaItems"
+                        :meta="checkMeta"
                         :remark="device.remark"
                         :style="{ marginTop: checkRows.length ? '16rpx' : '0' }"
                     />
@@ -412,7 +412,10 @@ const checkMetaItems = computed(() => {
         .map((item: any, index: number) => ({
             key: item.field_key || String(index),
             label: item.field_name || item.field_key || '质检项',
-            value: formatCheckMetaItemValue(item)
+            value: formatCheckMetaItemValue(item),
+            // 异常级别透传(后端已按字典实时塞入 result_items),供 RecycleCheckSummary 标识异常/注意
+            severity: String(item.severity || 'normal'),
+            option_items: Array.isArray(item.option_items) ? item.option_items : undefined
         }))
         .filter((item: any) => item.value !== undefined && item.value !== null && String(item.value).trim() !== '')
 })

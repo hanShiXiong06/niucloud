@@ -27,7 +27,7 @@ class Counterparty extends BaseAdminController
 
     public function options()
     {
-        return success($this->service->options($this->request->params([['keyword', '']])));
+        return success($this->service->options($this->request->params([['keyword', ''], ['role_type', '']])));
     }
 
     public function memberOptions()

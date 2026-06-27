@@ -176,7 +176,12 @@ class ErpWarehouseService extends BaseAdminService
         if ($warehouseId <= 0) {
             return false;
         }
-        return (int)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId]])->value('require_photo') ?: 0) === 1;
+        try {
+            return (int)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId]])->value('require_photo') ?: 0) === 1;
+        } catch (\Throwable $e) {
+            // require_photo 列缺失(未补迁移)等异常 → 降级为"不强制拍照",避免整条入库/整备流程被带崩
+            return false;
+        }
     }
 
     public function validateInboundLocation(int $warehouseId, int $locationId): array

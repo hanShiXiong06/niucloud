@@ -38,7 +38,7 @@ class RecycleDeviceService extends BaseApiService
     public function getPage(array $where = [])
     {
       
-        $field = 'id,order_id,site_id,imei,model,initial_price,final_price,cost_adjust_amount,cost_adjust_count,last_cost_adjust_time,last_cost_adjust_no,price_remark,status,check_status,check_result,check_result_seller,check_images,check_images_seller,check_at,remark,create_at,update_at';
+        $field = 'id,order_id,site_id,imei,model,initial_price,final_price,cost_adjust_amount,cost_adjust_count,last_cost_adjust_time,last_cost_adjust_no,price_remark,status,check_status,check_result,check_result_seller,check_images,check_images_seller,check_at,info,remark,create_at,update_at';
         $order = 'create_at desc';
 
         $search_model = $this->model->where([
@@ -60,6 +60,9 @@ class RecycleDeviceService extends BaseApiService
                 $item['status_name'] = RecycleOrderDict::getDeviceStatusName($item['status']);
                 $item['check_status_name'] = RecycleOrderDict::getDeviceCheckStatusName($item['check_status']);
             }
+            unset($item);
+            // 统一注入质检异常级别,设备列表与详情/定价同口径
+            $list['data'] = (new RecycleOrderService())->applyInspectionSeverity($list['data']);
         }
 
         return $list;
@@ -91,7 +94,11 @@ class RecycleDeviceService extends BaseApiService
         $info['status_name'] = RecycleOrderDict::getDeviceStatusName($info['status']);
         $info['check_status_name'] = RecycleOrderDict::getDeviceCheckStatusName($info['check_status']);
 
-        return $info;
+        // 注入质检异常级别(severity/option_items/abnormal_items):与订单详情同口径(字典唯一事实源),
+        // 供 C 端 RecycleCheckSummary 标识"异常/注意"。原单设备接口缺这步,导致设备详情弹窗标不出异常。
+        $device = $info->toArray();
+        $enriched = (new RecycleOrderService())->applyInspectionSeverity([$device]);
+        return $enriched[0] ?? $device;
     }
 
     /**
@@ -124,6 +131,11 @@ class RecycleDeviceService extends BaseApiService
             $item['status_name'] = RecycleOrderDict::getDeviceStatusName($item['status']);
             $item['check_status_name'] = RecycleOrderDict::getDeviceCheckStatusName($item['check_status']);
         }
+        unset($item);
+
+        // 统一注入质检异常级别(severity/option_items/abnormal_items),与订单详情/单设备同口径,
+        // 避免设备列表只做基础渲染、质检显示成 ID/不标异常。
+        $list = (new RecycleOrderService())->applyInspectionSeverity($list);
 
         return $list;
     }

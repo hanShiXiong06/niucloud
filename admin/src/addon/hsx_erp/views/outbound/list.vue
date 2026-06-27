@@ -31,6 +31,9 @@
                 <el-form-item label="关键词">
                     <el-input v-model.trim="search.keyword" placeholder="出库单号 / 卖给谁(往来单位)" clearable class="!w-[200px]" @keyup.enter="loadList" />
                 </el-form-item>
+                <el-form-item label="IMEI">
+                    <el-input v-model.trim="search.imei" placeholder="串号精确查询" clearable class="!w-[180px]" @keyup.enter="loadList" @clear="loadList" />
+                </el-form-item>
                 <el-form-item label="出库时间">
                     <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" range-separator="至"
                         start-placeholder="开始" end-placeholder="结束" style="width: 230px" @change="loadList" />
@@ -209,39 +212,20 @@
                 </el-form-item>
             </el-form>
 
-            <!-- 第二步:对留下的设备收款 -->
-            <div class="pp-step mt-4"><span class="pp-step-no">2</span>对留下的 {{ keptProcessCount }} 台收款<span class="pp-step-amt">应收 ¥{{ keptTotal.toFixed(2) }}</span></div>
-            <el-radio-group v-model="pendingProcess.collect_now" class="pp-collect-mode" @change="onCollectToggle">
-                <el-radio :label="false">暂不收款(挂应收,留给财务中心收)</el-radio>
-                <el-radio :label="true" :disabled="keptProcessCount === 0">当场收款</el-radio>
-            </el-radio-group>
-            <div v-if="pendingProcess.collect_now" class="pp-pay">
-                <div v-for="(p, i) in pendingProcess.payments" :key="i" class="pp-pay-row">
-                    <el-select v-model="p.account_id" filterable placeholder="收款户头(微信/支付宝…)" class="!w-[280px]">
-                        <el-option v-for="a in collectAccounts" :key="a.id" :label="`${a.account_name}（余额 ${money(a.balance)}）`" :value="a.id" />
-                    </el-select>
-                    <el-input-number v-model="p.amount" :min="0" :precision="2" :controls="false" class="!w-[130px]" />
-                    <el-button :icon="Delete" link type="danger" @click="pendingProcess.payments.splice(i, 1)" />
-                </div>
-                <div class="pp-pay-foot">
-                    <el-button link type="primary" size="small" @click="addCollectPayment">+ 加一笔(分多账户)</el-button>
-                    <span class="pp-pay-sum" :class="{ bad: !collectSumOk }">已分 ¥{{ collectPaid.toFixed(2) }} / 应收 ¥{{ keptTotal.toFixed(2) }}<template v-if="!collectSumOk">　差 ¥{{ (keptTotal - collectPaid).toFixed(2) }}</template><template v-else>　✓ 已对平</template></span>
-                </div>
-                <div class="pp-pay-tip">逐笔进对应资金账户并核销应收,财务中心「应收/结算/流水」均可查;收款后留下的设备转「已售·下架」。</div>
+            <!-- 留下的设备:回填价后挂「待结应收」,收款一律到财务中心。出库管理不收款(职责分明)。 -->
+            <div v-if="keptProcessCount > 0" class="pp-keep-note">
+                留下的 <b>{{ keptProcessCount }}</b> 台将挂「待结应收 ¥{{ keptTotal.toFixed(2) }}」,收款请到 <b>财务中心</b> 操作。出库管理只负责离库/回填,不收款。
             </div>
 
             <template #footer>
                 <div class="pp-footer">
                     <div class="pp-footer-hint">
-                        <template v-if="pendingProcess.collect_now">将退回 {{ returnProcessCount }} 台 · 收款 ¥{{ keptTotal.toFixed(2) }}</template>
-                        <template v-else-if="returnProcessCount > 0">将退回 {{ returnProcessCount }} 台 · 留下 {{ keptProcessCount }} 台挂应收</template>
+                        <template v-if="returnProcessCount > 0">将退回 {{ returnProcessCount }} 台 · 留下 {{ keptProcessCount }} 台挂应收</template>
                         <template v-else>留下 {{ keptProcessCount }} 台挂应收</template>
                     </div>
                     <div>
                         <el-button @click="pendingProcess.visible = false">取消</el-button>
-                        <el-button type="primary" :loading="pendingProcess.submitting" :disabled="pendingProcess.collect_now && !collectSumOk" @click="doPendingProcess">
-                            {{ pendingProcess.collect_now ? `确认收款 ¥${keptTotal.toFixed(2)}` : '确认处理' }}
-                        </el-button>
+                        <el-button type="primary" :loading="pendingProcess.submitting" @click="doPendingProcess">确认处理</el-button>
                     </div>
                 </div>
             </template>
@@ -385,7 +369,7 @@ const formatTime = (t: number) => new Date(t * 1000).toLocaleString()
 // 列表查询统一走 useListQuery：search/分页/排序/日期区间/loading 都收敛在里面
 const { search, table, loadList, reset: resetSearch, onSort, onPage: onPageChange } = useListQuery({
     api: getErpOutboundList,
-    defaults: { outbound_type: '', biz_status: '', keyword: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '' },
+    defaults: { outbound_type: '', biz_status: '', keyword: '', imei: '', dateRange: [], amount_min: '', amount_max: '', sort_field: '', sort_order: '' },
     dateRangeField: 'dateRange',
 })
 
@@ -645,14 +629,7 @@ async function doPendingProcess() {
         ElMessage.warning('客户留下的设备请填写成交价；不要的设备请勾选退回')
         return
     }
-    // 当场收款校验:每台需有价、多账户合计须=应收合计
-    const collectNow = !!pendingProcess.collect_now && keptItems.length > 0
-    if (collectNow) {
-        if (keptItems.some((it: any) => !(Number(it.sale_price) > 0))) { ElMessage.warning('当场收款需为留下的每台填写成交价'); return }
-        const pays = pendingProcess.payments.filter((p: any) => p.account_id && Number(p.amount) > 0)
-        if (!pays.length) { ElMessage.warning('请至少添加一笔收款并选择账户'); return }
-        if (!collectSumOk.value) { ElMessage.warning(`收款合计 ¥${collectPaid.value.toFixed(2)} 与应收 ¥${keptTotal.value.toFixed(2)} 不一致`); return }
-    }
+    // 出库管理只回填价/退回,不收款:留下的设备挂待结应收,收款由财务中心处理(职责分明)。
     pendingProcess.submitting = true
     try {
         if (returnIds.length) {
@@ -661,13 +638,10 @@ async function doPendingProcess() {
         if (keptItems.length) {
             const pricedItems = keptItems.map((it: any) => ({ item_id: it.id, sale_price: Number(it.sale_price) || 0 }))
             if (pricedItems.some((it: any) => it.sale_price > 0)) {
-                const opts: any = collectNow
-                    ? { collect_now: 1, payments: pendingProcess.payments.filter((p: any) => p.account_id && Number(p.amount) > 0).map((p: any) => ({ account_id: p.account_id, amount: Number(p.amount) })) }
-                    : {}
-                await fillErpOutboundPrice(pendingProcess.orderId, pricedItems, opts)
+                await fillErpOutboundPrice(pendingProcess.orderId, pricedItems, {})
             }
         }
-        ElMessage.success(`处理完成：留下 ${keptItems.length} 台，退回 ${returnIds.length} 台${collectNow ? '，已收款' : ''}`)
+        ElMessage.success(`处理完成：留下 ${keptItems.length} 台挂待结应收，退回 ${returnIds.length} 台。收款请到财务中心`)
         pendingProcess.visible = false
         loadList()
         if (infoVisible.value && infoData.value?.id === pendingProcess.orderId) {

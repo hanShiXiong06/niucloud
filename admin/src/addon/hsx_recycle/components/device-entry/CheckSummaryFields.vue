@@ -40,6 +40,13 @@
                 :placeholder="field.placeholder || '请输入'"
                 class="summary-control"
             />
+            <WarrantyQueryInput
+                v-else-if="field.field_key === 'warranty_info'"
+                v-model="modelValue[field.field_key]"
+                :imei="imei"
+                :placeholder="field.placeholder || '保修日期 / 过保 / 未激活'"
+                class="summary-control"
+            />
             <el-input
                 v-else
                 v-model="modelValue[field.field_key]"
@@ -54,15 +61,19 @@
 
 <script setup lang="ts">
 import type { CheckSummaryField } from './types'
+import WarrantyQueryInput from './WarrantyQueryInput.vue'
 
 withDefaults(defineProps<{
     /** 摘要字段定义 */
     fields?: CheckSummaryField[]
     /** 字段录入值 { field_key: value }，v-model（就地修改对象属性） */
     modelValue?: Record<string, any>
+    /** 本机 IMEI/SN，供「查保修」按钮使用 */
+    imei?: string
 }>(), {
     fields: () => [],
-    modelValue: () => ({})
+    modelValue: () => ({}),
+    imei: ''
 })
 
 defineEmits<{ (e: 'update:modelValue', value: Record<string, any>): void }>()

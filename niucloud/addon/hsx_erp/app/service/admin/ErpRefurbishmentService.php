@@ -8,7 +8,9 @@ use addon\hsx_erp\app\job\PublishOutboxEvent;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetCycle;
 use addon\hsx_erp\app\model\ErpCostLedger;
+use addon\hsx_erp\app\model\ErpCounterparty;
 use addon\hsx_erp\app\model\ErpOperationEvent;
+use addon\hsx_erp\app\service\core\CoreFinanceLedgerService;
 use addon\hsx_erp\app\model\ErpRefurbishItem;
 use addon\hsx_erp\app\model\ErpRefurbishOrder;
 use addon\hsx_erp\app\model\ErpStockLedger;
@@ -190,6 +192,17 @@ class ErpRefurbishmentService extends BaseAdminService
                 throw new CommonException('设备当前不在整备中');
             }
 
+            // 维修供货商(往来单位,可选):选了就精确到人/单位并生成应付;不选=自修,只记设备成本。
+            $repairCpId = (int)($data['counterparty_id'] ?? 0);
+            $repairCpName = '';
+            if ($repairCpId > 0) {
+                $cp = ErpCounterparty::where([['site_id', '=', $this->site_id], ['id', '=', $repairCpId]])->findOrEmpty();
+                if ($cp->isEmpty()) {
+                    throw new CommonException('维修供货商不存在');
+                }
+                $repairCpName = (string)$cp->name;
+            }
+
             ErpRefurbishItem::where([
                 ['site_id', '=', $this->site_id],
                 ['order_id', '=', $id],
@@ -223,7 +236,7 @@ class ErpRefurbishmentService extends BaseAdminService
                     'source_plugin' => 'hsx_erp',
                     'source_type' => 'refurbishment',
                     'source_id' => $id,
-                    'counterparty_id' => 0,
+                    'counterparty_id' => $repairCpId,
                     'operator_id' => $this->uid,
                     'operator_name' => $this->username ?: '',
                     'occurred_at' => $now,
@@ -254,10 +267,31 @@ class ErpRefurbishmentService extends BaseAdminService
                 'completed_at' => $now,
                 'accepted_by' => $this->uid,
                 'accepted_name' => $this->username ?: '',
+                'counterparty_id' => $repairCpId,
+                'counterparty_name' => $repairCpName,
                 'total_cost' => $totalCost,
                 'completion_remark' => trim((string)($data['completion_remark'] ?? '')),
                 'update_at' => $now,
             ]);
+
+            // 选了维修供货商 + 有整备费 → 生成一笔"应付维修供货商",挂这台设备,进往来(精确到人/单位)。
+            // 幂等键按整备单,重复完工(返修再完工)用同键不会重复生成。
+            if ($repairCpId > 0 && ErpMoney::compare($totalCost, '0.00') > 0) {
+                (new CoreFinanceLedgerService())->recordPayable([
+                    'site_id'           => (int)$this->site_id,
+                    'counterparty_id'   => $repairCpId,
+                    'counterparty_name' => $repairCpName,
+                    'amount'            => (float)$totalCost,
+                    'source_type'       => 'refurbishment',
+                    'source_no'         => (string)$order->order_no,
+                    'source_device_id'  => (int)$asset->source_device_id,
+                    'event_id'          => 'erp_refurbish_' . $id,
+                    'occurred_at'       => $now,
+                    'operator_uid'      => (int)$this->uid,
+                    'operator_name'     => (string)($this->username ?: ''),
+                    'remark'            => '整备费 · ' . $repairCpName,
+                ]);
+            }
             $this->writeStatusLedger($asset, ErpDict::INVENTORY_REFURBISHING, $afterStatus, 'refurbishment_complete', $id, $now);
             $this->writeOperation($asset, 'erp.refurbishment.completed.v1', 'complete_refurbishment', $id, [
                 'before_cost' => $beforeCost,
@@ -557,8 +591,17 @@ class ErpRefurbishmentService extends BaseAdminService
 
     private function publish(array $outboxIds): void
     {
+        // 同步派发,保证中台等监听方当场收到(dev/未跑队列 worker 时异步 dispatch 会卡在 outbox)。
         foreach ($outboxIds as $outboxId) {
-            PublishOutboxEvent::dispatch(['outbox_id' => (int)$outboxId]);
+            $id = (int)$outboxId;
+            if ($id <= 0) {
+                continue;
+            }
+            try {
+                (new PublishOutboxEvent())->doJob($id);
+            } catch (\Throwable $e) {
+                // 单条失败已被 job 标记 failed,不打断本次动作
+            }
         }
     }
 

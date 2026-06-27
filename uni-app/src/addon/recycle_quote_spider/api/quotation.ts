@@ -29,6 +29,20 @@ export function getQuoteSpiderPriceHistory(id: number | string, days = 30) {
 }
 
 /**
+ * 获取报价项列表（按分类，含子分类）
+ */
+export function getQuoteSpiderItems(params: any = {}) {
+  return request.get("recycle_quote_spider/item", params);
+}
+
+/**
+ * 生成报价单权限（会员权益 quote_report）
+ */
+export function getQuoteSpiderReportPermission() {
+  return request.get("recycle_quote_spider/report/permission");
+}
+
+/**
  * 报价数据接口类型定义
  */
 export interface QuotationPriceData {

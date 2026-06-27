@@ -531,9 +531,10 @@ class RecycleCheckTemplateService extends BaseAdminService
             ->order('sort asc,id asc')
             ->select()
             ->toArray();
+        $sevMap = $this->optionSeverityMap();
         $optionMap = [];
         foreach ($options as $option) {
-            $optionMap[(int)$option['field_id']][] = $this->formatOption($option);
+            $optionMap[(int)$option['field_id']][] = $this->formatOption($option, $sevMap);
         }
         $fieldMap = [];
         foreach ($fields as $field) {
@@ -713,17 +714,44 @@ class RecycleCheckTemplateService extends BaseAdminService
         ];
     }
 
-    private function formatOption(array $option): array
+    private function formatOption(array $option, array $sevMap = []): array
     {
+        // 异常级别(severity)以 recycle_check_dict(dict_type=option) 为唯一事实源;
+        // 字典未命中时回退选项自身列;再回退 normal。前端只认这个 severity,不再自己判异常。
+        $label = (string)($option['option_label'] ?? '');
+        $key = mb_strtolower(trim($label));
+        $severity = $sevMap[$key] ?? (string)($option['severity'] ?? 'normal');
+        if (!in_array($severity, ['normal', 'general', 'abnormal'], true)) {
+            $severity = 'normal';
+        }
         return [
             'id' => (int)$option['id'],
             'name' => $option['option_label'],
             'label' => $option['option_label'],
             'value' => (string)$option['option_value'],
             'is_default' => (int)$option['is_default'],
+            'severity' => $severity,
             'sort' => (int)$option['sort'],
             'extra_config' => $option['extra_config'] ?? [],
         ];
+    }
+
+    /** 选项级别字典:recycle_check_dict(dict_type=option) 的 text → severity(唯一事实源) */
+    private function optionSeverityMap(): array
+    {
+        $rows = Db::name('recycle_check_dict')
+            ->where('site_id', '=', $this->site_id)
+            ->where('dict_type', '=', 'option')
+            ->field('text,severity')
+            ->select()->toArray();
+        $map = [];
+        foreach ($rows as $r) {
+            $t = mb_strtolower(trim((string)($r['text'] ?? '')));
+            if ($t !== '') {
+                $map[$t] = (string)($r['severity'] ?? 'normal');
+            }
+        }
+        return $map;
     }
 
     private function normalizeJsonConfig($value): array

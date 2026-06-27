@@ -1,4 +1,11 @@
 {
+    "easycom": {
+        "autoscan": true,
+        "custom": {
+            "^l-(.*)": "lime-painter/components/l-$1/l-$1.vue",
+            "^lime-(.*)": "lime-painter/components/lime-$1/lime-$1.vue"
+        }
+    },
     "pages": [
         // pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
         {
@@ -413,6 +420,27 @@
                          // #ifndef H5
                         "navigationStyle": "custom",
                         // #endif
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/config",
+                    "style": {
+                        "navigationBarTitleText": "生成报价单"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/preview",
+                    "style": {
+                        "navigationBarTitleText": "报价单预览"
+                    },
+                    "needLogin": true
+                },
+                {
+                    "path": "pages/report/personalize",
+                    "style": {
+                        "navigationBarTitleText": "个性化调整"
                     },
                     "needLogin": true
                 }

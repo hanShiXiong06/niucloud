@@ -46,6 +46,21 @@ class Import extends BaseAdminController
         return success('导入成功', (new QuoteImportService())->confirm($data));
     }
 
+    public function batchConfirm()
+    {
+        $data = $this->request->params([
+            ['task_id', 0],
+            ['source_id', 0],
+            ['category_id', 0],
+            ['notice_text', ''],
+            ['brand', ''],
+            ['header_row', 1],
+            ['mode', 'replace'],
+            ['sheets', []],
+        ], false);
+        return success('批量导入成功', (new QuoteImportService())->batchConfirm($data));
+    }
+
     public function lists()
     {
         $data = $this->request->params([

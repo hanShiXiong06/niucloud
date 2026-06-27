@@ -45,8 +45,8 @@
                             :options="modelTreeOptions"
                             :props="modelCascaderProps"
                             :filter-method="filterModelNode"
-                            :before-filter="handleModelBeforeFilter"
-                            placeholder="选择品牌/系列/型号"
+                            :show-all-levels="false"
+                            placeholder="选择/搜索型号"
                             filterable
                             clearable
                             size="small"
@@ -80,6 +80,7 @@
             :values="activeRow?.summary_values || {}"
             :template-name="activeRow?.check_template_name || ''"
             :device-title="activeRow?.model || ''"
+            :imei="activeRow?.imei || ''"
             :loading="!!activeRow?.summary_loading"
             @confirm="handleSummaryConfirm"
         />
@@ -91,7 +92,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, EditPen, List, Connection } from '@element-plus/icons-vue'
 import { addOrderDevice, updateOrderDevice, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
-import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
+import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions, getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
 import DeviceEntryCard from './DeviceEntryCard.vue'
 import CheckSummaryDialog from './CheckSummaryDialog.vue'
@@ -121,26 +122,32 @@ const savedDeviceCount = computed(() => props.devices.filter(d => d.saved && d.i
 const modelLoading = ref(false)
 const modelTreeOptions = ref<any[]>([])
 const modelNodeMap = ref<Record<string, any>>({})
+// 非懒加载:一次性加载整棵型号树。el-cascader 的 filterable 搜索+选中 与 lazy 不兼容
+// (搜到未加载分支的末级点不中),改为整树后搜索/选中都正常。
 const modelCascaderProps = {
     value: 'id',
     label: 'node_name',
     children: 'child_list',
-    leaf: 'leaf',
     emitPath: true,
     checkStrictly: false,
     expandTrigger: 'hover' as const,
-    lazy: true,
-    lazyLoad: async (node: any, resolve: (nodes: any[]) => void) => {
-        const pid = node?.level ? node.value : 0
-        resolve(await loadModelChildren(pid))
-    }
 }
+
+// 递归归一化整棵树:建 child_list、登记 modelNodeMap、按有无子节点标 leaf。兼容 child_list / children 两种字段。
+const normalizeModelTree = (nodes: any[]): any[] => (nodes || []).map((item) => {
+    const rawChildren = item.child_list || item.children || []
+    const children = normalizeModelTree(rawChildren)
+    const node = { ...item, leaf: children.length === 0, child_list: children.length ? children : undefined }
+    modelNodeMap.value[String(node.id)] = node
+    return node
+})
 
 const loadModelOptions = async () => {
     modelLoading.value = true
     try {
         modelNodeMap.value = {}
-        modelTreeOptions.value = await loadModelChildren(0)
+        const res = await getRecycleDeviceModelDictTree({})
+        modelTreeOptions.value = normalizeModelTree(res.data || [])
     } catch (error) {
         console.error('加载型号字典失败:', error)
     } finally {
@@ -462,7 +469,8 @@ const matchModelToCategory = async (row: DeviceEntryRow, modelName: string, allo
                 : [Number(best.id)]
             row.category_path = full
             row.model_path = full
-            if (best.node_name) row.model = best.node_name
+            // 不再用字典标准名覆盖型号:数据已规范,保留查询/录入的原始型号名(仅用它来匹配分类)。
+            // if (best.node_name) row.model = best.node_name
             // 解析到完整路径后切到级联，真正"选中"该分类
             row.model_input_mode = false
             await loadCheckTemplate(row)

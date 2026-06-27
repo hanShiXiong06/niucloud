@@ -21,7 +21,80 @@
             </div>
         </div>
 
-        <template v-if="excelPreview.rows?.length">
+        <div v-if="excelSheets.length > 1" class="excel-mode-switch mb-[12px]">
+            <span class="mr-[10px]">该文件有 <b>{{ excelSheets.length }}</b> 个工作表，</span>
+            <el-radio-group v-model="batchMode" size="small">
+                <el-radio-button :value="true">按品牌批量分流（每个工作表→一个报价项）</el-radio-button>
+                <el-radio-button :value="false">单表导入</el-radio-button>
+            </el-radio-group>
+        </div>
+
+        <template v-if="excelPreview.rows?.length && batchMode">
+            <el-card class="box-card !border-none mb-[10px] table-search-wrap" shadow="never">
+                <div class="section-title">② 选择品牌分类，确认每个工作表导入到哪个报价项</div>
+                <el-form :inline="true" :model="excelImportForm">
+                    <el-form-item label="报价源">
+                        <el-select v-model="excelImportForm.source_id" filterable placeholder="选择报价源" class="w-[200px]" @change="handleBatchCategoryChange">
+                            <el-option v-for="item in sourceOptions" :key="item.id" :label="item.source_name" :value="item.id" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="品牌分类">
+                        <el-tree-select
+                            v-model="excelImportForm.category_id"
+                            check-strictly
+                            node-key="id"
+                            :data="categoryOptions"
+                            :props="{ label: 'name', value: 'id', children: 'children' }"
+                            placeholder="选择该品牌对应的分类"
+                            class="w-[220px]"
+                            @change="handleBatchCategoryChange"
+                        />
+                    </el-form-item>
+                    <el-form-item label="报价提示">
+                        <el-input v-model="excelImportForm.notice_text" type="textarea" :rows="1" class="excel-notice-input" placeholder="默认使用系统提示；留空则读取 Excel" />
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" :loading="batchImporting" :disabled="batchSelectedCount === 0" @click="batchConfirmExcelImport">
+                            ③ 一键批量导入（{{ batchSelectedCount }}）
+                        </el-button>
+                    </el-form-item>
+                </el-form>
+
+                <el-table :data="batchTargets" border size="large" class="mt-[6px]">
+                    <el-table-column label="导入" width="64" align="center">
+                        <template #default="{ row }">
+                            <el-checkbox v-model="row.enabled" />
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="工作表（系列）" min-width="160">
+                        <template #default="{ row }">
+                            <span class="font-medium">{{ row.sheet_name }}</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="row_count" label="数据行" width="90" align="center" />
+                    <el-table-column label="导入到报价项" min-width="240">
+                        <template #default="{ row }">
+                            <el-select v-model="row.item_id" filterable placeholder="新建同名报价项" class="w-[100%]" :disabled="!row.enabled">
+                                <el-option :value="0" label="➕ 新建同名报价项" />
+                                <el-option v-for="item in batchCategoryItems" :key="item.id" :label="item.name" :value="item.id" />
+                            </el-select>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="新报价项名称" min-width="160">
+                        <template #default="{ row }">
+                            <el-input v-if="!row.item_id" v-model="row.item_name" placeholder="新建时的名称" :disabled="!row.enabled" />
+                            <span v-else class="muted">覆盖已选报价项</span>
+                        </template>
+                    </el-table-column>
+                </el-table>
+                <div class="form-tip">
+                    每个勾选的工作表会按其表头自动识别价格列，<b>清空目标报价项原有行价格后重新写入</b>。
+                    未匹配到的工作表会在该分类下新建同名报价项。适合每天上传整个品牌的报价表一次性覆盖。
+                </div>
+            </el-card>
+        </template>
+
+        <template v-if="excelPreview.rows?.length && !batchMode">
             <el-card class="box-card !border-none mb-[10px] table-search-wrap" shadow="never">
                 <div class="section-title">② 确认导入目标</div>
                 <el-form :inline="true" :model="excelImportForm">
@@ -91,7 +164,7 @@
             </el-table>
         </template>
 
-        <el-empty v-else description="还没有预览数据，先选择一个 Excel 文件" />
+        <el-empty v-if="!excelPreview.rows?.length" description="还没有预览数据，先选择一个 Excel 文件" />
     </div>
 </template>
 
@@ -113,6 +186,14 @@ const {
     downloadExcelTemplate,
     handleExcelSourceChange,
     confirmExcelImport,
-    resetExcel
+    resetExcel,
+    excelSheets,
+    batchMode,
+    batchImporting,
+    batchTargets,
+    batchCategoryItems,
+    batchSelectedCount,
+    handleBatchCategoryChange,
+    batchConfirmExcelImport
 } = useQuoteSpider()
 </script>

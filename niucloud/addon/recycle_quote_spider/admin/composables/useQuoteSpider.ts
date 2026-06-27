@@ -7,6 +7,7 @@ import {
     addQuoteItem,
     addQuoteRow,
     addQuoteSource,
+    batchConfirmQuoteExcel,
     confirmQuoteExcel,
     createDefaultQuoteSource,
     deleteQuoteCategory,
@@ -58,6 +59,12 @@ const excelPreview = ref<any>({})
 const excelTaskId = ref(0)
 const excelImporting = ref(false)
 const logRefreshTimer = ref<number | null>(null)
+// 按品牌批量导入(一张多工作表的表 → 分流到分类下多个报价项)
+const excelSheets = ref<any[]>([])
+const batchMode = ref(false)
+const batchImporting = ref(false)
+const batchCategoryItems = ref<any[]>([])
+const batchTargets = ref<any[]>([])
 
 const sourceTable = reactive({ data: [] as any[], page: 1, limit: 10, total: 0 })
 const categoryTable = reactive({ data: [] as any[], total: 0 })
@@ -1480,6 +1487,7 @@ const handleExcelChange = async (file: UploadFile) => {
     if (excelSourceId.value) formData.append('source_id', String(excelSourceId.value))
     const uploadRes: any = await uploadQuoteExcel(formData)
     excelTaskId.value = Number(uploadRes.data.task_id || 0)
+    excelSheets.value = Array.isArray(uploadRes.data.sheets) ? uploadRes.data.sheets : []
     const previewRes: any = await previewQuoteExcel({ task_id: uploadRes.data.task_id, preview_count: 20 })
     excelPreview.value = previewRes.data
     const drawerItem = rowDrawer.visible ? rowDrawer.item : {}
@@ -1491,14 +1499,139 @@ const handleExcelChange = async (file: UploadFile) => {
     excelImportForm.item_name =
         excelImportForm.item_name || selectedItemName.value || drawerItem.name || file.name.replace(/\.(xls|xlsx)$/i, '')
     excelImportForm.notice_text = excelImportForm.notice_text || previewRes.data?.notice_text || ''
+    // 多工作表 → 默认进入「按品牌批量分流」模式
+    batchMode.value = excelSheets.value.length > 1
+    if (batchMode.value) {
+        await loadBatchCategoryItems()
+        buildBatchTargets()
+    }
     if (rowDrawer.visible) rowDrawer.activeTab = 'import'
     else activeTab.value = 'excel'
+}
+
+/* ----------------------- 按品牌批量导入 ----------------------- */
+
+const normalizeSeriesName = (name: any) =>
+    String(name || '')
+        .toLowerCase()
+        .replace(/\s|系列|系|\//g, '')
+
+const loadBatchCategoryItems = async () => {
+    if (!excelImportForm.category_id) {
+        batchCategoryItems.value = []
+        return
+    }
+    const res: any = await getQuoteItemList({
+        source_id: excelImportForm.source_id || undefined,
+        category_id: excelImportForm.category_id,
+        page: 1,
+        limit: 100
+    })
+    batchCategoryItems.value = res.data?.data || []
+}
+
+const matchSheetItem = (sheetName: string) => {
+    const key = normalizeSeriesName(sheetName)
+    if (!key) return 0
+    let hit = batchCategoryItems.value.find(it => {
+        const n = normalizeSeriesName(it.name)
+        const t = normalizeSeriesName(it.tab)
+        return n === key || t === key
+    })
+    if (!hit) {
+        hit = batchCategoryItems.value.find(it => {
+            const n = normalizeSeriesName(it.name)
+            const t = normalizeSeriesName(it.tab)
+            return (n && (n.includes(key) || key.includes(n))) || (t && (t.includes(key) || key.includes(t)))
+        })
+    }
+    return hit ? Number(hit.id) : 0
+}
+
+const buildBatchTargets = () => {
+    batchTargets.value = excelSheets.value.map((s: any) => {
+        const sheetName = s.name || s.sheet_name || ''
+        return {
+            sheet_name: sheetName,
+            row_count: s.row_count || 0,
+            enabled: true,
+            item_id: matchSheetItem(sheetName),
+            item_name: sheetName
+        }
+    })
+}
+
+const handleBatchCategoryChange = async () => {
+    await loadBatchCategoryItems()
+    batchTargets.value.forEach(t => {
+        t.item_id = matchSheetItem(t.sheet_name)
+    })
+}
+
+const batchSelectedCount = computed(() => batchTargets.value.filter(t => t.enabled).length)
+
+const batchConfirmExcelImport = async () => {
+    if (!excelTaskId.value) {
+        ElMessage.error('请先上传Excel')
+        return
+    }
+    if (!excelImportForm.source_id) {
+        ElMessage.error('请选择报价源')
+        return
+    }
+    if (!excelImportForm.category_id) {
+        ElMessage.error('请选择导入到的分类')
+        return
+    }
+    const sheets = batchTargets.value
+        .filter(t => t.enabled)
+        .map(t => ({
+            sheet_name: t.sheet_name,
+            item_id: t.item_id || 0,
+            item_name: t.item_name || t.sheet_name
+        }))
+    if (!sheets.length) {
+        ElMessage.error('请至少勾选一个工作表')
+        return
+    }
+    batchImporting.value = true
+    try {
+        const res: any = await batchConfirmQuoteExcel({
+            task_id: excelTaskId.value,
+            source_id: excelImportForm.source_id,
+            category_id: excelImportForm.category_id,
+            notice_text: excelImportForm.notice_text,
+            brand: excelImportForm.brand,
+            mode: 'replace',
+            sheets
+        })
+        const data = res.data || {}
+        const failed = (data.sheets || []).filter((s: any) => !s.success)
+        if (failed.length) {
+            ElMessage.warning(
+                `已导入 ${data.sheet_count || 0} 个工作表 / ${data.total_rows || 0} 行；${failed.length} 个失败：` +
+                    failed.map((f: any) => `${f.sheet_name}(${f.message})`).join('、')
+            )
+        } else {
+            ElMessage.success(`批量导入完成，共 ${data.sheet_count || 0} 个工作表 / ${data.total_rows || 0} 行`)
+        }
+        activeTab.value = 'manage'
+        selectedSourceId.value = excelImportForm.source_id
+        selectedCategoryId.value = excelImportForm.category_id
+        refreshManage()
+    } finally {
+        batchImporting.value = false
+    }
 }
 
 const resetExcel = () => {
     excelFileName.value = ''
     excelPreview.value = {}
     excelTaskId.value = 0
+    excelSheets.value = []
+    batchMode.value = false
+    batchTargets.value = []
+    batchCategoryItems.value = []
 }
 
 const downloadExcelTemplate = () => {
@@ -1735,6 +1868,15 @@ export function useQuoteSpider() {
         resetExcel,
         downloadExcelTemplate,
         handleExcelSourceChange,
-        confirmExcelImport
+        confirmExcelImport,
+        // excel 批量分流
+        excelSheets,
+        batchMode,
+        batchImporting,
+        batchTargets,
+        batchCategoryItems,
+        batchSelectedCount,
+        handleBatchCategoryChange,
+        batchConfirmExcelImport
     }
 }

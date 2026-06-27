@@ -219,7 +219,10 @@
 
 		<view v-if="!loading" class="action-bar">
 			<view class="action-bar-inner">
-				<text class="action-tip">数据仅供参考，实际价格以最终评估为准</text>
+				<view class="report-btn" @click="goReport">
+					生成报价单
+					<text class="report-badge">会员免费</text>
+				</view>
 				<view class="order-btn" @click="goToOrder">去下单</view>
 			</view>
 		</view>
@@ -230,20 +233,38 @@
 					<text class="type-title">选择报价单</text>
 					<text class="type-close" @click="showTypeSheet = false">关闭</text>
 				</view>
-				<view v-if="quotationTypes.length === 0" class="type-empty">暂无可切换报价单</view>
-				<view
-					v-for="item in quotationTypes"
-					:key="item.dataset_id || item.quotation_id"
-					class="type-item"
-					:class="{ active: String(item.dataset_id) === String(datasetId) || String(item.quotation_id) === String(priceTypeId) }"
-					@click="switchQuotation(item)"
-				>
-					<view>
-						<text class="type-name">{{ item.title || item.dataset_name || item.price_name }}</text>
-						<text class="type-meta">{{ item.last_sync_at_text || '待同步' }} · {{ item.model_count || 0 }} 个型号</text>
+				<block v-if="source === 'spider'">
+					<view v-if="spiderSheets.length === 0" class="type-empty">暂无可切换报价单</view>
+					<view
+						v-for="it in spiderSheets"
+						:key="it.id"
+						class="type-item"
+						:class="{ active: String(it.id) === String(spiderItemId) }"
+						@click="switchSpiderSheet(it)"
+					>
+						<view>
+							<text class="type-name">{{ it.name || it.title }}</text>
+							<text class="type-meta">{{ it.model_count || 0 }} 个型号</text>
+						</view>
+						<text class="type-check">✓</text>
 					</view>
-					<text class="type-check">✓</text>
-				</view>
+				</block>
+				<block v-else>
+					<view v-if="quotationTypes.length === 0" class="type-empty">暂无可切换报价单</view>
+					<view
+						v-for="item in quotationTypes"
+						:key="item.dataset_id || item.quotation_id"
+						class="type-item"
+						:class="{ active: String(item.dataset_id) === String(datasetId) || String(item.quotation_id) === String(priceTypeId) }"
+						@click="switchQuotation(item)"
+					>
+						<view>
+							<text class="type-name">{{ item.title || item.dataset_name || item.price_name }}</text>
+							<text class="type-meta">{{ item.last_sync_at_text || '待同步' }} · {{ item.model_count || 0 }} 个型号</text>
+						</view>
+						<text class="type-check">✓</text>
+					</view>
+				</block>
 			</view>
 		</view>
 		<ModelFilterPopup
@@ -263,7 +284,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onLoad, onPageScroll } from '@dcloudio/uni-app'
-import { getQuoteSpiderDetail, type QuoteSpiderItem, type QuotationPriceData } from '@/addon/recycle_quote_spider/api/quotation'
+import { getQuoteSpiderDetail, getQuoteSpiderCategoryTree, getQuoteSpiderItems, getQuoteSpiderReportPermission, type QuoteSpiderItem, type QuotationPriceData } from '@/addon/recycle_quote_spider/api/quotation'
 import { getOrderSubmitConfig } from '@/addon/hsx_recycle/api/order'
 import { img } from '@/utils/common'
 import ModelFilterPopup from './components/ModelFilterPopup.vue'
@@ -400,6 +421,9 @@ const ADJUSTMENT_COLUMN_WIDTH_CONFIG = {
 const priceTypeId = ref('')
 const datasetId = ref('')
 const spiderItemId = ref('')
+const spiderCategoryId = ref(0)
+const spiderSourceId = ref(0)
+const spiderSheets = ref<any[]>([])
 const source = ref('')
 const priceDate = ref('')
 const pageTitle = ref('报价查询')
@@ -989,6 +1013,8 @@ async function loadSpiderPriceData() {
 		const res = await getQuoteSpiderDetail(spiderItemId.value) as any
 		if (res.code === 1 && res.data) {
 			const item = res.data as QuoteSpiderItem
+			spiderCategoryId.value = Number((item as any).category_id || 0)
+			spiderSourceId.value = Number((item as any).source_id || 0)
 			spiderImageUrl.value = resolveSpiderImage(item)
 			spiderIsHot.value = Number(item.is_hot || 0) === 1
 			quoteNoticeText.value = String(item.notice_text || DEFAULT_NOTICE_TEXT)
@@ -1151,6 +1177,36 @@ function goToOrder() {
 	if (spiderItemId.value) queryParts.push(`quote_spider_item_id=${encodeURIComponent(spiderItemId.value)}`)
 	const query = queryParts.length ? `?${queryParts.join('&')}` : ''
 	uni.navigateTo({ url: `${ORDER_PAGE_URL}${query}` })
+}
+
+async function goReport() {
+	if (!spiderItemId.value) {
+		uni.showToast({ title: '当前报价不支持生成', icon: 'none' })
+		return
+	}
+	// 会员权益校验:仅开通「报价单生成」的会员可用
+	let allowed = false
+	try {
+		const res = (await getQuoteSpiderReportPermission()) as any
+		allowed = res?.code === 1 && Number(res?.data?.allowed || 0) === 1
+	} catch (e) {
+		allowed = false
+	}
+	if (!allowed) {
+		uni.showModal({
+			title: '会员专享',
+			content: '「生成报价单」为会员专享功能，开通会员后即可使用',
+			confirmText: '去开通',
+			cancelText: '取消',
+			success: r => {
+				if (r.confirm) uni.navigateTo({ url: '/app/pages/member/level' })
+			}
+		})
+		return
+	}
+	uni.navigateTo({
+		url: `/addon/recycle_quote_spider/pages/report/config?id=${encodeURIComponent(spiderItemId.value)}&source=spider`
+	})
 }
 
 function goBack() {
@@ -1803,14 +1859,57 @@ async function loadPriceTheme() {
 }
 
 function openTypeSheet() {
+	showTypeSheet.value = true
 	if (source.value === 'spider') {
-		uni.showToast({ title: '当前报价暂不支持切换', icon: 'none' })
+		loadSpiderSheets()
 		return
 	}
-	showTypeSheet.value = true
 	if (quotationTypes.value.length === 0) {
 		loadQuotationTypes()
 	}
+}
+
+// 找一级分类祖先
+function topAncestorCat(tree: any[], catId: number): number {
+	const map: Record<number, number> = {}
+	const walk = (nodes: any[]) => {
+		;(nodes || []).forEach(n => {
+			map[Number(n.id)] = Number(n.parent_id || 0)
+			if (Array.isArray(n.children)) walk(n.children)
+		})
+	}
+	walk(tree)
+	let cur = Number(catId || 0)
+	let guard = 0
+	while (cur && map[cur] && guard < 30) {
+		cur = map[cur]
+		guard++
+	}
+	return cur || Number(catId || 0)
+}
+
+async function loadSpiderSheets() {
+	try {
+		const treeRes = (await getQuoteSpiderCategoryTree({ source_id: spiderSourceId.value })) as any
+		const tree = Array.isArray(treeRes?.data) ? treeRes.data : []
+		const rootId = topAncestorCat(tree, spiderCategoryId.value)
+		const res = (await getQuoteSpiderItems({ source_id: spiderSourceId.value, category_id: rootId })) as any
+		spiderSheets.value = res?.data?.data || res?.data || []
+	} catch (e) {
+		spiderSheets.value = []
+	}
+}
+
+function switchSpiderSheet(it: any) {
+	spiderItemId.value = String(it.id)
+	pageTitle.value = it.name || it.title || '报价查询'
+	showTypeSheet.value = false
+	keyword.value = ''
+	selectedModels.value = []
+	activeSeriesKey.value = 'all'
+	syncActiveSeriesTabView('all')
+	onlyHotModels.value = false
+	loadSpiderPriceData()
 }
 
 function switchQuotation(item: QuotationV2Type) {
@@ -2378,6 +2477,34 @@ onPageScroll((event) => {
 	border-radius: 999rpx;
 	background: var(--button-bg);
 	box-shadow: 0 8rpx 18rpx rgba(59, 130, 246, 0.32);
+}
+
+.report-btn {
+	position: relative;
+	flex: 1;
+	height: 72rpx;
+	line-height: 72rpx;
+	text-align: center;
+	font-size: 28rpx;
+	font-weight: 700;
+	color: var(--brand);
+	border-radius: 999rpx;
+	background: var(--bg-soft);
+	border: 1rpx solid var(--brand);
+	box-sizing: border-box;
+}
+.report-badge {
+	position: absolute;
+	top: -14rpx;
+	right: -8rpx;
+	padding: 0 10rpx;
+	height: 30rpx;
+	line-height: 30rpx;
+	font-size: 18rpx;
+	font-weight: 600;
+	color: #fff;
+	background: #ff5b4a;
+	border-radius: 999rpx 999rpx 999rpx 0;
 }
 
 @keyframes skeleton-shimmer {

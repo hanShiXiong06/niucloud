@@ -9,20 +9,55 @@
 namespace addon\hsx_erp\app\service\admin;
 
 use app\model\member\MemberLevel;
+use think\facade\Db;
 
 class MemberLevelNoService
 {
     /** 请求内缓存:site_id => [level_id => level_no],避免列表逐条查库 */
     protected static array $idToNoCache = [];
+    /** 本次请求是否已确认过 level_no 列存在(避免每次都查 information_schema) */
+    protected static bool $columnEnsured = false;
+
+    /**
+     * 按需建列:判断共享表 member_level 是否已有 level_no 列,没有才加(有则跳过,绝不碰已有数据)。
+     * 取代 install.sql 里的裸 ALTER —— 后者在重装时会撞 "Duplicate column" 把整个安装回滚。
+     * 这里用 PHP 判断,幂等、安全,不删任何字段。
+     */
+    protected static function ensureColumn(): void
+    {
+        if (self::$columnEnsured) {
+            return;
+        }
+        self::$columnEnsured = true;
+        try {
+            $table = (new MemberLevel())->getTable(); // 带前缀真实表名,如 saas_member_level
+            $has = Db::query(
+                "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = ? AND column_name = 'level_no'",
+                [$table]
+            );
+            if ((int) ($has[0]['c'] ?? 0) === 0) {
+                Db::execute("ALTER TABLE `{$table}` ADD COLUMN `level_no` INT(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT '站内序号(每站从1开始)' AFTER `site_id`");
+                try {
+                    Db::execute("ALTER TABLE `{$table}` ADD INDEX `idx_site_level_no` (`site_id`, `level_no`)");
+                } catch (\Throwable $e) {
+                    // 索引已存在等情况静默
+                }
+            }
+        } catch (\Throwable $e) {
+            // 权限不足/库不支持 information_schema 等情况静默,不打断业务
+        }
+    }
+
     /**
      * 给指定站点尚未编号(level_no=0)的等级补号,从该站当前最大号往后续,按 level_id 升序(创建顺序)。
-     * 幂等:已编号的不动;无待补号直接返回。列不存在(未执行迁移)时静默。
+     * 幂等:已编号的不动;无待补号直接返回。先确保 level_no 列存在(按需建列),不存在则静默。
      */
     public static function ensureForSite(int $siteId): void
     {
         if ($siteId <= 0) {
             return;
         }
+        self::ensureColumn();
         try {
             $pending = MemberLevel::where([['site_id', '=', $siteId], ['level_no', '=', 0]])
                 ->order('level_id asc')->column('level_id');

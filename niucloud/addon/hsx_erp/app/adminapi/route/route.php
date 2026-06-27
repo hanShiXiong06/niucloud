@@ -63,6 +63,7 @@ Route::group('erp', function () {
     Route::post('asset/:id/complete_photo', 'addon\hsx_erp\app\adminapi\controller\Asset@completePhoto');
     Route::get('asset/:id', 'addon\hsx_erp\app\adminapi\controller\Asset@info');
     Route::post('asset/batch_confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@batchConfirmInbound');
+    Route::post('asset/push_to_photo', 'addon\hsx_erp\app\adminapi\controller\Asset@pushToPhoto');
     Route::post('asset/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmAssetInbound');
     Route::post('stock_order/:id/confirm_inbound', 'addon\hsx_erp\app\adminapi\controller\Asset@confirmInbound');
     // 财务中心: 往来对账 / 应付应收 / 结算·折账

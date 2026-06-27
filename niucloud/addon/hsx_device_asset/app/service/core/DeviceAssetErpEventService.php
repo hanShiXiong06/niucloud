@@ -35,6 +35,7 @@ class DeviceAssetErpEventService
             return ['skipped' => true, 'reason' => 'missing_source_device_id'];
         }
 
+        $now = time();
         $existing = DeviceAssetItem::where([
             ['site_id', '=', $siteId],
             ['device_id', '=', $sourceDeviceId],
@@ -45,7 +46,6 @@ class DeviceAssetErpEventService
             return ['created' => false, 'asset_id' => (int)$existing->id];
         }
 
-        $now = time();
         Db::startTrans();
         try {
             $asset = DeviceAssetItem::create($this->buildAssetData($siteId, $erpAsset, $event, $now));

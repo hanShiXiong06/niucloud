@@ -9,6 +9,7 @@ use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\service\core\QuoteApiCacheService;
 use addon\recycle_quote_spider\app\service\core\QuotePriceHistoryService;
+use app\model\member\Member;
 use core\base\BaseApiService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -119,7 +120,11 @@ class QuoteQueryService extends BaseApiService
         if (!empty($where['keyword'])) {
             $query->whereLike('name|brand|tab|keywords|parent_name', '%' . $where['keyword'] . '%');
         }
-        return $this->pageQuery($query->order('is_hot desc,sort desc,id desc'));
+        $siteId = $this->site_id;
+        return $this->pageQuery($query->order('is_hot desc,sort desc,id desc'), function ($item) use ($siteId) {
+            $item['model_count'] = (new QuoteRow())->where('site_id', $siteId)->where('is_show', 1)->where('item_id', (int)$item['id'])->count();
+            return $item;
+        });
     }
 
     public function detail(int $id): array
@@ -143,6 +148,32 @@ class QuoteQueryService extends BaseApiService
                 ->update();
         } catch (\Throwable $e) {
             // 埋点失败不影响详情返回
+        }
+    }
+
+    /**
+     * 生成报价单权限：会员需开通「报价单生成」权益(level_benefits.quote_report.is_use)
+     */
+    public function reportPermission(): array
+    {
+        try {
+            if (empty($this->member_id)) {
+                return ['allowed' => 0];
+            }
+            $member = (new Member())
+                ->where([['site_id', '=', $this->site_id], ['member_id', '=', $this->member_id]])
+                ->field('member_level')
+                ->with([
+                    'memberLevelData' => function ($query) {
+                        $query->field('level_id, site_id, level_name, status, level_benefits, level_gifts');
+                    }
+                ])
+                ->findOrEmpty()
+                ->toArray();
+            $allowed = !empty($member['memberLevelData']['level_benefits']['quote_report']['is_use']) ? 1 : 0;
+            return ['allowed' => $allowed];
+        } catch (\Throwable $e) {
+            return ['allowed' => 0];
         }
     }
 

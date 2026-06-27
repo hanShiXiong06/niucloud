@@ -104,6 +104,17 @@ class RecycleDeviceService extends BaseAdminService
     }
 
     /**
+     * 对外复用:给单个设备数组(含 info.check_meta)注入 check_summary + result_items 级别 severity / abnormal_items。
+     * 订单详情等"设备列表"场景复用此入口,保证与单设备详情同口径(字典唯一事实源),设备列表也能标异常。
+     */
+    public function enrichDeviceCheckMeta(array $device): array
+    {
+        $device = $this->attachCheckSummary($device);
+        $device = $this->enrichResultItemsSeverity($device);
+        return $device;
+    }
+
+    /**
      * 产出设备基本质检字段(capacity/color/system_version/warranty_info)的自描述渲染列表。
      * - 按 recycle_check_field 取 field_name/component/unit;按 recycle_check_option 把存储 ID→label;
      * - input/number 等无选项字段 label 即原值;查不到选项也回退原值;
@@ -440,6 +451,113 @@ class RecycleDeviceService extends BaseAdminService
     {
         $info = $this->toArr($d['info'] ?? null);
         return $this->toArr($info['check_meta'] ?? null);
+    }
+
+    /**
+     * 统一"设备身份"拼装器(跨插件复用:财务/ERP/中台/追踪/商城都用同一口径)。
+     * 返回:name=型号, imei=串号, summary_fields=≤5"加入描述"质检项, subtitle=label 拼接, identity_text=整行文字。
+     * @param int $deviceId 回收设备ID
+     */
+    public function deviceIdentity(int $deviceId): array
+    {
+        if ($deviceId <= 0) {
+            return $this->emptyDeviceIdentity();
+        }
+        $device = (new RecycleDevice())
+            ->where([['site_id', '=', $this->site_id], ['id', '=', $deviceId]])
+            ->findOrEmpty();
+        if ($device->isEmpty()) {
+            // 设备写库 site_id 可能为0,兜底按主键取
+            $device = (new RecycleDevice())->where([['id', '=', $deviceId]])->findOrEmpty();
+        }
+        if ($device->isEmpty()) {
+            return $this->emptyDeviceIdentity();
+        }
+        return $this->composeDeviceIdentity($device->toArray());
+    }
+
+    /**
+     * 批量取设备身份(按 deviceId 映射),供列表场景避免逐行散查。
+     * @param array $deviceIds
+     * @return array<int,array> deviceId => identity
+     */
+    public function deviceIdentityMap(array $deviceIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $deviceIds), static fn ($v) => $v > 0)));
+        $map = [];
+        foreach ($ids as $id) {
+            try {
+                $map[$id] = $this->deviceIdentity($id);
+            } catch (\Throwable $e) {
+                $map[$id] = $this->emptyDeviceIdentity();
+            }
+        }
+        return $map;
+    }
+
+    /** 由设备记录数组拼装身份三件套 */
+    private function composeDeviceIdentity(array $d): array
+    {
+        $deviceId = (int)($d['id'] ?? 0);
+        $name = trim((string)($d['model'] ?? ''));
+        $imei = trim((string)($d['imei'] ?? ''));
+        if ($imei === '') {
+            $imei = trim((string)($d['imei2'] ?? ''));
+        }
+        if ($imei === '') {
+            $imei = trim((string)($d['sn'] ?? ''));
+        }
+
+        $summaryFields = [];
+        $meta = $this->enrichedCheckMetaForDevice($deviceId);
+        foreach (($meta['summary_fields'] ?? []) as $sf) {
+            if (!is_array($sf)) {
+                continue;
+            }
+            $label = trim((string)($sf['label'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $summaryFields[] = [
+                'field_key'  => (string)($sf['field_key'] ?? ''),
+                'field_name' => (string)($sf['field_name'] ?? ''),
+                'label'      => $label,
+                'severity'   => (string)($sf['severity'] ?? 'normal'),
+            ];
+            if (count($summaryFields) >= 5) {
+                break;
+            }
+        }
+
+        $subtitle = implode(' · ', array_map(static fn ($s) => $s['label'], $summaryFields));
+        $parts = array_filter([
+            $name,
+            $subtitle,
+            $imei !== '' ? ('IMEI ' . $imei) : '',
+        ], static fn ($v) => $v !== '');
+        $identityText = implode('  ｜  ', $parts);
+
+        return [
+            'device_id'     => $deviceId,
+            'name'          => $name,
+            'imei'          => $imei,
+            'summary_fields' => $summaryFields,
+            'subtitle'      => $subtitle,
+            'identity_text' => $identityText,
+        ];
+    }
+
+    /** 空身份占位(口径统一,前端无需判空) */
+    private function emptyDeviceIdentity(): array
+    {
+        return [
+            'device_id'     => 0,
+            'name'          => '',
+            'imei'          => '',
+            'summary_fields' => [],
+            'subtitle'      => '',
+            'identity_text' => '',
+        ];
     }
 
     /** 把 模型 $json 字段(可能是 stdClass / json字符串 / 数组)统一转成深层数组 */

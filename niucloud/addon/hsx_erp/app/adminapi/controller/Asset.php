@@ -79,6 +79,13 @@ class Asset extends BaseAdminController
         return success($this->service->completePhoto($id, $images));
     }
 
+    /** 手动推入拍照/中台(安全网) */
+    public function pushToPhoto()
+    {
+        $assetIds = (array)$this->request->param('asset_ids', []);
+        return success($this->service->pushToPhoto($assetIds));
+    }
+
     public function confirmInbound(int $id)
     {
         $data = $this->request->params([

@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse` (
   `warehouse_code` varchar(64) NOT NULL DEFAULT '',
   `business_type` varchar(20) NOT NULL DEFAULT 'mall' COMMENT '业务类型(=销售流向)：mall商城/peer同行/consignment代卖/scrap报废/hold暂存',
   `allow_inbound` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许调拨/设库位调入本仓(0否1是)',
+  `require_photo` tinyint(1) NOT NULL DEFAULT 0 COMMENT '进仓是否必须拍照(0否1是):开启则走拍照→定价→上架流水线',
   `status` tinyint(1) NOT NULL DEFAULT 1,
   `is_default` tinyint(1) NOT NULL DEFAULT 0,
   `sort` int NOT NULL DEFAULT 0,
@@ -285,6 +286,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_refurbish_order` (
   `completed_at` int NOT NULL DEFAULT 0,
   `accepted_by` int NOT NULL DEFAULT 0,
   `accepted_name` varchar(100) NOT NULL DEFAULT '',
+  `counterparty_id` int NOT NULL DEFAULT 0 COMMENT '维修供货商(往来单位id,0=自修/无对手方)',
+  `counterparty_name` varchar(100) NOT NULL DEFAULT '' COMMENT '维修供货商名(冗余展示)',
   `total_cost` decimal(12,2) NOT NULL DEFAULT 0.00,
   `rework_count` int NOT NULL DEFAULT 0,
   `remark` varchar(1000) NOT NULL DEFAULT '',
@@ -518,6 +521,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_outbound_order` (
   `operator_uid` int NOT NULL DEFAULT 0 COMMENT '操作人',
   `operator_name` varchar(60) NOT NULL DEFAULT '' COMMENT '操作人名',
   `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
+  `express_no` varchar(64) NOT NULL DEFAULT '' COMMENT '快递/物流单号',
   `out_at` int NOT NULL DEFAULT 0 COMMENT '出库时间',
   `create_at` int NOT NULL DEFAULT 0,
   `update_at` int NOT NULL DEFAULT 0,
@@ -674,21 +678,22 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_stocktake_item` (
   KEY `idx_asset` (`asset_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-盘点明细';
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_ai_conversation` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0,
+  `uid` int NOT NULL DEFAULT 0 COMMENT '操作人(管理员)uid',
+  `scene` varchar(32) NOT NULL DEFAULT 'general' COMMENT '场景 key',
+  `title` varchar(100) NOT NULL DEFAULT '' COMMENT '对话标题(取首条提问)',
+  `messages` json DEFAULT NULL COMMENT '消息体: [{role,content,references}]',
+  `tokens` int NOT NULL DEFAULT 0 COMMENT '累计 token',
+  `create_time` int NOT NULL DEFAULT 0,
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_site_uid` (`site_id`,`uid`,`update_time`),
+  KEY `idx_site_scene` (`site_id`,`scene`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI对话记录';
 
--- 1) 追加列(若已存在会报 Duplicate column,可忽略)
-ALTER TABLE `{{prefix}}member_level`
-    ADD COLUMN `level_no` INT(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT '站内序号(每站从1开始,跨站统一引用口径)' AFTER `site_id`;
 
--- 2) 站内联合索引,按 (site_id, level_no) 快速取号
-ALTER TABLE `{{prefix}}member_level`
-    ADD INDEX `idx_site_level_no` (`site_id`, `level_no`);
-
--- 3) 历史数据回填:每个站点按 level_id 升序(创建顺序)从 1 编号
-UPDATE `{{prefix}}member_level` ml
-JOIN (
-    SELECT level_id,
-           ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY level_id ASC) AS rn
-    FROM `{{prefix}}member_level`
-) seq ON seq.level_id = ml.level_id
-SET ml.level_no = seq.rn
-WHERE ml.level_no = 0;
+-- 共享表 member_level 的 level_no 列:不在 install.sql 里 ALTER(裸 ALTER 重装会撞 Duplicate column
+-- 导致整个安装回滚)。改由 MemberLevelNoService::ensureColumn() 在运行时"判断存在才加",
+-- 并由 ensureForSite() 懒补号 —— 幂等、安全、不删任何已有数据。

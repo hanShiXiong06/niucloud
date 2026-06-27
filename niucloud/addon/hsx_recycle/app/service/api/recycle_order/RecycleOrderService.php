@@ -280,6 +280,15 @@ class RecycleOrderService extends BaseApiService
      * 历史质检结果可能只有 result_items / option_styles，无法支撑多选项独立样式。
      * 这里按模板选项配置补出 option_items，只增强接口返回，不修改存量数据库。
      */
+    /**
+     * 对外复用入口:给一批设备的 check_meta.result_items 实时注入 severity / option_items / abnormal_items。
+     * 单设备详情(RecycleDeviceService::getInfo)等也走这里,保证"异常判定"全站一个口径(字典唯一事实源)。
+     */
+    public function applyInspectionSeverity(array $devices): array
+    {
+        return $this->fillInspectionReportMeta($devices);
+    }
+
     private function fillInspectionReportMeta(array $devices): array
     {
         $templateIds = [];

@@ -38,6 +38,11 @@ export function completeErpAssetPhoto(id: number, images: string[]) {
     return request.post(`erp/asset/${id}/complete_photo`, { images })
 }
 
+// 手动推入拍照/中台(安全网):在库/待定价/可售 → 拍照流程
+export function pushErpAssetToPhoto(assetIds: number[]) {
+    return request.post('erp/asset/push_to_photo', { asset_ids: assetIds })
+}
+
 // 实时调整在库设备成本(写成本流水)
 export function adjustErpAssetCost(id: number, data: Record<string, any>) {
     return request.post(`erp/asset/${id}/adjust_cost`, data)

@@ -6,6 +6,9 @@
                 <div class="rounded-lg bg-gray-50 px-4 py-3">
                     <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
                         <span class="font-medium">{{ data.overview.model }}</span>
+                        <span v-if="data.overview.capacity || data.overview.color" class="text-sm text-gray-600">
+                            {{ data.overview.capacity }}<span v-if="data.overview.capacity && data.overview.color"> · </span>{{ data.overview.color }}
+                        </span>
                         <span class="text-sm text-gray-600">IMEI：{{ data.overview.imei || '-' }}</span>
                         <span class="text-sm text-gray-600">资产号：{{ data.overview.asset_no || '-' }}</span>
                         <el-tag size="small" effect="light">{{ statusText(data.overview.inventory_status) }}</el-tag>

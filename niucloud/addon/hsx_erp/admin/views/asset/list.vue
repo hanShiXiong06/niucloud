@@ -230,6 +230,9 @@
                         <el-tooltip v-if="row.inventory_status === 'in_stock'" v-permission="'hsx_erp_refurbishment_skip'" content="无需整备" placement="top">
                             <el-button type="success" link :icon="DArrowRight" @click="skipRefurbishment(row)" />
                         </el-tooltip>
+                        <el-tooltip v-if="integrated && !row.in_mid && ['in_stock', 'pending_pricing', 'available_for_sale'].includes(row.inventory_status)" content="推入拍照(中台)" placement="top">
+                            <el-button type="warning" link :icon="Camera" :loading="row._pushing" @click="pushToPhoto(row)" />
+                        </el-tooltip>
                         <!-- ERP 定价/调价：独立模式全显；联合模式下，走过拍照(有图)的、或未真正交中台的本地设备，也由 ERP 定价 -->
                         <el-tooltip
                             v-if="(!integrated || row.has_photo || !row.delegated_to_mid) && ['pending_pricing', 'available_for_sale'].includes(row.inventory_status)"
@@ -717,7 +720,8 @@ import {
     getErpAssetOverview,
     getErpIntegrationStatus,
     adjustErpAssetCost,
-    completeErpAssetPhoto
+    completeErpAssetPhoto,
+    pushErpAssetToPhoto
 } from '@/addon/hsx_erp/api/asset'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
@@ -1414,6 +1418,21 @@ const skipRefurbishment = async (row: any) => {
     await skipErpRefurbishment(Number(row.id), { remark: '库存工作台确认无需整备' })
     ElMessage.success('设备已进入待销售定价')
     await loadList()
+}
+
+const pushToPhoto = async (row: any) => {
+    await ElMessageBox.confirm(
+        `把 ${row.model || row.asset_no} 推入拍照流程吗？接入中台则交中台拍照,否则进 ERP「待拍照」。`,
+        '推入拍照', { type: 'warning', confirmButtonText: '推入', cancelButtonText: '取消' }
+    )
+    row._pushing = true
+    try {
+        const res: any = await pushErpAssetToPhoto([Number(row.id)])
+        ElMessage.success((res?.data?.to_mid ? '已交中台拍照' : '已进入待拍照') + `(成功${res?.data?.ok ?? 0}台)`)
+        await loadList()
+    } finally {
+        row._pushing = false
+    }
 }
 
 const money = (value: any) => Number(value || 0).toFixed(2)

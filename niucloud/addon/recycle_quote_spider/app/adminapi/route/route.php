@@ -37,6 +37,7 @@ Route::group('recycle_quote_spider', function () {
     Route::post('import/upload', 'addon\recycle_quote_spider\app\adminapi\controller\Import@upload');
     Route::post('import/preview', 'addon\recycle_quote_spider\app\adminapi\controller\Import@preview');
     Route::post('import/confirm', 'addon\recycle_quote_spider\app\adminapi\controller\Import@confirm');
+    Route::post('import/batch-confirm', 'addon\recycle_quote_spider\app\adminapi\controller\Import@batchConfirm');
     Route::get('import', 'addon\recycle_quote_spider\app\adminapi\controller\Import@lists');
 
     Route::get('log', 'addon\recycle_quote_spider\app\adminapi\controller\Log@lists');

@@ -157,6 +157,7 @@ class ErpAssetService extends BaseAdminService
         $this->appendStatusLabels($result['data']);
         $this->appendStockAge($result['data']);
         $this->appendMidDelegation($result['data']);
+        $this->appendMidPresence($result['data']);
         $result['summary'] = [
             'count'          => (int)$totalCount,
             'total_cost'     => $totalCost,
@@ -191,6 +192,64 @@ class ErpAssetService extends BaseAdminService
     }
 
     /**
+     * 手动「推入拍照/中台」:把在库/待定价/可售的设备推进拍照流程(安全网,绕过仓库必拍照设置)。
+     * 中台已接入 → 交中台(待定价 + ready_for_photo);未接入 → ERP 自己的「待拍照」。
+     * 已售/已出库/整备中/待入库 等状态不可推,跳过。
+     */
+    public function pushToPhoto(array $assetIds): array
+    {
+        $assetIds = array_values(array_unique(array_filter(array_map('intval', $assetIds))));
+        if (empty($assetIds)) {
+            throw new CommonException('请选择要推入拍照的设备');
+        }
+        $midConnected = class_exists('\\addon\\hsx_device_asset\\app\\service\\admin\\DeviceAssetService');
+        $allowed = [ErpDict::INVENTORY_IN_STOCK, ErpDict::INVENTORY_PENDING_PRICING, ErpDict::INVENTORY_AVAILABLE_FOR_SALE];
+        $now = time();
+        $ok = 0;
+        $skip = 0;
+        $outboxIds = [];
+        Db::transaction(function () use ($assetIds, $midConnected, $allowed, $now, &$ok, &$skip, &$outboxIds) {
+            foreach ($assetIds as $aid) {
+                $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', $aid]])->lock(true)->findOrEmpty();
+                if ($asset->isEmpty() || !in_array((string)$asset->inventory_status, $allowed, true)) {
+                    $skip++;
+                    continue;
+                }
+                if ($midConnected) {
+                    $asset->save(['inventory_status' => ErpDict::INVENTORY_PENDING_PRICING, 'update_at' => $now]);
+                    $outboxIds = array_merge($outboxIds, $this->handToMid($asset, 0, $now));
+                } else {
+                    $asset->save(['inventory_status' => ErpDict::INVENTORY_PENDING_PHOTO, 'stock_in_at' => 0, 'update_at' => $now]);
+                }
+                ErpAssetCycle::where([['site_id', '=', $this->site_id], ['id', '=', (int)$asset->cycle_id]])
+                    ->update(['status' => (string)$asset->inventory_status, 'update_at' => $now]);
+                $ok++;
+            }
+        });
+        $this->publish($outboxIds);
+        return ['ok' => $ok, 'skipped' => $skip, 'to_mid' => $midConnected];
+    }
+
+    /**
+     * 同步派发 outbox 事件:直接执行 PublishOutboxEvent(不入队列),保证中台等监听方当场收到
+     * (dev/未跑队列 worker 时,异步 dispatch 会卡在 outbox 表里送不出去)。已发布的会被 job 自身跳过。
+     */
+    private function publish(array $outboxIds): void
+    {
+        foreach ($outboxIds as $outboxId) {
+            $id = (int)$outboxId;
+            if ($id <= 0) {
+                continue;
+            }
+            try {
+                (new \addon\hsx_erp\app\job\PublishOutboxEvent())->doJob($id);
+            } catch (\Throwable $e) {
+                // 单条派发失败已被 job 标记 failed,不影响其余,不打断本次动作
+            }
+        }
+    }
+
+    /**
      * 标记"是否真的交给了中台处理"(delegated_to_mid)：只有商城销路(sale_destination=mall)的待定价设备
      * 才是真正委托中台拍照/定价的;本地/手工入库的待定价是 ERP 自己待标价, 不应显示"已交中台", ERP 可自行定价。
      */
@@ -211,6 +270,41 @@ class ErpAssetService extends BaseAdminService
                 && ($dest === ErpDict::SALE_DESTINATION_MALL || !empty($snap['delegated_mid']));
         }
         unset($r);
+    }
+
+    /**
+     * 标记"中台是否真的有这台设备"(in_mid):查 device_asset_item 是否存在该 source_device_id。
+     * 这是"是否已进拍照中台"的权威信号——用于前端判断"推入拍照(中台)"按钮显隐:
+     * 已在中台 → 不显示;未在中台(在库未交 / 交了但卡住没落库)→ 显示,允许手动补推。
+     */
+    private function appendMidPresence(array &$rows): void
+    {
+        foreach ($rows as &$r) {
+            $r['in_mid'] = false;
+        }
+        unset($r);
+        if (!class_exists('\addon\hsx_device_asset\app\model\DeviceAssetItem')) {
+            return;
+        }
+        $devIds = array_values(array_unique(array_filter(array_map(
+            static fn ($r) => (int)($r['source_device_id'] ?? 0),
+            $rows
+        ))));
+        if (empty($devIds)) {
+            return;
+        }
+        try {
+            $present = \addon\hsx_device_asset\app\model\DeviceAssetItem::whereIn('site_id', [$this->site_id, 0])
+                ->whereIn('device_id', $devIds)
+                ->column('device_id');
+            $set = array_flip(array_map('intval', $present));
+            foreach ($rows as &$r) {
+                $r['in_mid'] = isset($set[(int)($r['source_device_id'] ?? 0)]);
+            }
+            unset($r);
+        } catch (\Throwable $e) {
+            // 查询失败时保持 in_mid=false(宁可多显示按钮,也不误判已入中台)
+        }
     }
 
     private function appendStatusLabels(array &$rows): void
@@ -872,7 +966,7 @@ class ErpAssetService extends BaseAdminService
 
             Db::commit();
             foreach ($outboxIds as $outboxId) {
-                PublishOutboxEvent::dispatch(['outbox_id' => $outboxId]);
+                $this->publish([(int)$outboxId]); // 同步派发,保证中台当场收到(不依赖队列 worker)
             }
             return [
                 'confirmed_count' => count($confirmedAssetIds),
@@ -940,7 +1034,7 @@ class ErpAssetService extends BaseAdminService
             $outboxIds = $this->applyPostInboundRefurbishmentDecision($asset, 0, $now);
             Db::commit();
             foreach ($outboxIds as $outboxId) {
-                PublishOutboxEvent::dispatch(['outbox_id' => $outboxId]);
+                $this->publish([(int)$outboxId]); // 同步派发,保证中台当场收到(不依赖队列 worker)
             }
             return ['asset_id' => $assetId, 'status' => ErpDict::INVENTORY_IN_STOCK, 'image_count' => count($images)];
         } catch (\Throwable $e) {

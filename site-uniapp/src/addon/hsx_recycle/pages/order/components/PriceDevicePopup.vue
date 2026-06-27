@@ -26,30 +26,10 @@
             <!-- 表单内容 -->
             <scroll-view scroll-y class="price-content">
                 <view class="price-content__inner">
-                    <!-- 检测概要：异常项突出 / 正常项折叠（定价只关心异常） -->
-                    <view v-if="checkItems.length" class="form-section">
-                        <view class="section-title">
-                            <text>检测概要</text>
-                            <text v-if="abnormalItems.length" class="text-[#fa5c1e] text-[24rpx]">{{ abnormalItems.length }} 项异常</text>
-                        </view>
-
-                        <view v-if="abnormalItems.length" class="check-lines">
-                            <view v-for="(it, i) in abnormalItems" :key="'ab' + i" class="check-line">
-                                <text class="check-line__name">{{ it.name }}</text>
-                                <u-tag :text="it.value" type="error" plain size="mini"></u-tag>
-                            </view>
-                        </view>
-
-                        <view v-if="normalItems.length" class="check-lines">
-                            <view v-for="(it, i) in visibleNormalItems" :key="'no' + i" class="check-line">
-                                <text class="check-line__name">{{ it.name }}</text>
-                                <u-tag :text="it.value" type="success" plain size="mini"></u-tag>
-                            </view>
-                            <view v-if="normalItems.length > 2" class="check-toggle" @click="normalExpanded = !normalExpanded">
-                                <text>{{ normalExpanded ? '收起正常项' : `展开其余 ${ normalItems.length - 2 } 个正常项` }}</text>
-                                <u-icon :name="normalExpanded ? 'arrow-up' : 'arrow-down'" color="#909399" size="13"></u-icon>
-                            </view>
-                        </view>
+                    <!-- 检测概要：统一用 RecycleCheckSummary(与设备详情/设备卡同一组件、同一样式) -->
+                    <view v-if="deviceCheckMeta" class="form-section">
+                        <view class="section-title"><text>检测概要</text></view>
+                        <RecycleCheckSummary :meta="deviceCheckMeta" />
                     </view>
 
                     <view v-if="imageGroups.length" class="form-section">
@@ -265,7 +245,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { confirmPrice, getDevice, getRefurbishmentOptions, getSaleDestinationOptions, getStaffOptions } from '@/addon/hsx_recycle/api/order'
-import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
+import RecycleCheckSummary from '@/addon/hsx_recycle/components/RecycleCheckSummary.vue'
 import { img } from '@/utils/common'
 import { previewImages as openPreview } from '@/addon/hsx_recycle/utils/preview'
 import { useRecycleSubmit } from '@/addon/hsx_recycle/hooks/useRecycleSubmit'
@@ -405,50 +385,12 @@ const toObj = (v: any): Record<string, any> => {
     if (typeof v === 'string') { try { const p = JSON.parse(v); return p && typeof p === 'object' && !Array.isArray(p) ? p : {} } catch { return {} } }
     return typeof v === 'object' && !Array.isArray(v) ? v : {}
 }
-const isOn = (v: any) => v === true || v === 1 || v === '1' || v === 'true' || v === '开启'
-
-const checkItems = ref<Array<{ name: string, value: string, abnormal: boolean }>>([])
-const normalExpanded = ref(false)
-const abnormalItems = computed(() => checkItems.value.filter((i) => i.abnormal))
-const normalItems = computed(() => checkItems.value.filter((i) => !i.abnormal))
-const visibleNormalItems = computed(() => normalExpanded.value ? normalItems.value : normalItems.value.slice(0, 2))
-
-const loadCheckItems = async () => {
-    checkItems.value = []
-    normalExpanded.value = false
-    const id = Number(device.value?.id || 0)
-    if (!id) return
-    try {
-        const res: any = await getCheckTemplateSchema({ device_id: id })
-        const groups = Array.isArray(res?.data?.groups) ? res.data.groups : []
-        const info = toObj(device.value?.info)
-        let meta = toObj(info.check_meta)
-        if (Array.isArray(meta.result_items)) {
-            meta = { ...meta }
-            meta.result_items.forEach((it: any) => { if (it.field_key) meta[it.field_key] = it.value })
-        }
-        const items: Array<{ name: string, value: string, abnormal: boolean }> = []
-        groups.forEach((g: any) => (g.fields || []).forEach((f: any) => {
-            const val = meta[f.field_key]
-            const empty = val === undefined || val === null || val === '' || (Array.isArray(val) && !val.length)
-            if (empty) return
-            const opts = Array.isArray(f.options) ? f.options : []
-            const valArr = Array.isArray(val) ? val.map(String) : [String(val)]
-            const labels = valArr.map((v) => {
-                const o = opts.find((o: any) => String(o.value) === String(v))
-                return o ? (o.label || o.name) : (f.component === 'switch' ? (isOn(v) ? '是' : '否') : v)
-            })
-            let abnormal = false
-            const defVals = opts.filter((o: any) => Number(o.is_default) === 1).map((o: any) => String(o.value))
-            if (opts.length && defVals.length) abnormal = valArr.some((v) => !defVals.includes(v))
-            else if (f.component === 'switch') abnormal = isOn(val)
-            items.push({ name: f.field_name, value: labels.join('、'), abnormal })
-        }))
-        checkItems.value = items
-    } catch (error) {
-        checkItems.value = []
-    }
-}
+// 质检结果统一交给 RecycleCheckSummary 展示。device 走 getDevice→getInfo,check_meta 已注入
+// severity / option_items(中文 label),组件自己解析+异常前置+折叠,无需本组件再算一套。
+const deviceCheckMeta = computed(() => {
+    const meta = toObj(toObj(device.value?.info).check_meta)
+    return Array.isArray(meta.result_items) && meta.result_items.length ? meta : null
+})
 
 type ImageItem = {
     url: string
@@ -524,7 +466,6 @@ const loadDeviceDetail = async () => {
             ...(props.deviceData || {}),
             ...detail
         }
-        loadCheckItems()
         const fp = deviceDetail.value.final_price
         formData.value = {
             final_price: (fp && Number(fp) > 0) ? amountText(fp) : (deviceDetail.value.initial_price ? amountText(deviceDetail.value.initial_price) : ''),
@@ -1043,6 +984,7 @@ const handleSubmit = async () => {
     display: flex;
     flex-direction: column;
     gap: 14rpx;
+    margin-top: 10rpx;
 }
 .check-line {
     display: flex;

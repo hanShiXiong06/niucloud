@@ -99,6 +99,10 @@ export function confirmQuoteExcel(params: Record<string, any>) {
     return request.post('recycle_quote_spider/import/confirm', params, { showErrorMessage: true })
 }
 
+export function batchConfirmQuoteExcel(params: Record<string, any>) {
+    return request.post('recycle_quote_spider/import/batch-confirm', params, { showErrorMessage: true })
+}
+
 export function getQuoteSyncLogList(params: Record<string, any>) {
     return request.get('recycle_quote_spider/log', { params })
 }

@@ -13,6 +13,7 @@ Route::group('recycle_quote_spider', function () {
     Route::get('item', 'addon\recycle_quote_spider\app\api\controller\Quote@items');
     Route::get('item/:id', 'addon\recycle_quote_spider\app\api\controller\Quote@detail');
     Route::get('row/:id/price-history', 'addon\recycle_quote_spider\app\api\controller\Quote@priceHistory');
+    Route::get('report/permission', 'addon\recycle_quote_spider\app\api\controller\Quote@reportPermission');
 })->middleware(ApiChannel::class)
     ->middleware(ApiCheckToken::class, false)
     ->middleware(ApiLog::class);

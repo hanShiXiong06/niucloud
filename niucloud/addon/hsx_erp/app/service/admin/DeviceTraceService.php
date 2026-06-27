@@ -331,15 +331,36 @@ class DeviceTraceService extends BaseAdminService
                 ];
             }
         }
-        // 资金流水(按来源设备)
+        // 资金流水(逐笔):去重收集本台设备相关的全部流水,确保"分几笔、各进哪个账户"都看得到。
+        //   ① 回收付款侧:按 source_id=设备 + recycle_* 来源
+        //   ② 销售收款侧:按 应付/应收的来源单号(出库单/回收单)反查 —— 多账户分笔收款就在这里
+        $seenLedger = [];
+        $addLedger = function (array $lg) use (&$events, &$seenLedger) {
+            $no = (string)$lg['ledger_no'];
+            if ($no !== '' && isset($seenLedger[$no])) {
+                return;
+            }
+            $seenLedger[$no] = true;
+            $events[] = [
+                'time' => (int)$lg['occurred_at'], 'stage' => '财务', 'title' => ((string)$lg['direction'] === 'in' ? '收款' : '付款'),
+                'detail' => (string)$lg['account_name'] . ' ¥' . round((float)$lg['amount'], 2)
+                    . ((string)($lg['source_no'] ?? '') !== '' ? ' · 单号:' . (string)$lg['source_no'] : '')
+                    . ((string)($lg['remark'] ?? '') !== '' ? ' · ' . (string)$lg['remark'] : ''),
+                'operator_name' => (string)$lg['operator_name'], 'operator_uid' => (int)$lg['operator_uid'],
+                'amount' => round((float)$lg['amount'], 2), 'no' => $no, 'key' => true,
+            ];
+        };
         if ($deviceId > 0) {
             foreach (ErpCapitalLedger::where([['site_id', '=', $this->site_id], ['source_id', '=', $deviceId]])->whereIn('source_type', ['recycle_order', 'recycle_device'])->select()->toArray() as $lg) {
-                $events[] = [
-                    'time' => (int)$lg['occurred_at'], 'stage' => '财务', 'title' => ((string)$lg['direction'] === 'in' ? '收款' : '付款'),
-                    'detail' => (string)$lg['account_name'] . ' ¥' . round((float)$lg['amount'], 2) . ' ' . (string)$lg['remark'],
-                    'operator_name' => (string)$lg['operator_name'], 'operator_uid' => (int)$lg['operator_uid'],
-                    'amount' => round((float)$lg['amount'], 2), 'no' => (string)$lg['ledger_no'], 'key' => true,
-                ];
+                $addLedger($lg);
+            }
+        }
+        // ② 按本台设备的应付/应收来源单号,把销售收款 / 其它收付的逐笔流水也带出来(含多账户分笔)
+        $payNos = array_values(array_unique(array_filter(array_map(static fn($p) => (string)$p['source_no'], $payables))));
+        $allNos = array_values(array_unique(array_merge($rcvNos, $payNos)));
+        if (!empty($allNos)) {
+            foreach (ErpCapitalLedger::where([['site_id', '=', $this->site_id]])->whereIn('source_no', $allNos)->select()->toArray() as $lg) {
+                $addLedger($lg);
             }
         }
     }

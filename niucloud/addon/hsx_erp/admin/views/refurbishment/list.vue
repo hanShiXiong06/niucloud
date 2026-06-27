@@ -190,6 +190,17 @@
                 <div class="text-base font-medium">本次增加成本：¥{{ money(completeTotal) }}</div>
             </div>
             <el-form class="mt-4" label-width="100px">
+                <el-form-item label="维修供货商">
+                    <el-select v-model="completeDialog.counterparty_id" filterable clearable
+                        placeholder="谁修的(选了才生成应付往来;自己修可不选)" class="!w-[360px]"
+                        :loading="repairLoading" @visible-change="onRepairOpen">
+                        <el-option v-for="c in repairOptions" :key="c.id" :label="c.name + (c.mobile ? ' · ' + c.mobile : '')" :value="c.id" />
+                    </el-select>
+                    <div class="mt-1 text-xs text-gray-400">
+                        选择后:生成一笔「应付维修供货商」挂在本台设备上,进往来,可单独结算/付款;不选=自己修,只计入设备成本。
+                        没有可去「往来单位」按角色「维修供货商」新建。
+                    </div>
+                </el-form-item>
                 <el-form-item label="验收说明">
                     <el-input v-model.trim="completeDialog.completion_remark" type="textarea" :rows="3"
                         placeholder="例如：功能复检通过、外观清洁完成" />
@@ -240,6 +251,7 @@ import {
     getErpRefurbishmentInfo, getErpRefurbishmentList, getErpRefurbishmentUsers
 } from '@/addon/hsx_erp/api/refurbishment'
 import EmptyState from '@/addon/hsx_erp/components/empty-state/index.vue'
+import { getErpCounterpartyOptions } from '@/addon/hsx_erp/api/counterparty'
 
 const presets = [
     { key: 'clean', name: '清洁消毒', type: 'labor' },
@@ -267,8 +279,17 @@ const createDialog = reactive<any>({
     form: { asset_id: 0, assigned_uid: 0, planned_finish_at: '', preset_keys: [], custom_item: '', remark: '' }
 })
 const completeDialog = reactive<any>({
-    visible: false, loading: false, order_id: 0, items: [], completion_remark: ''
+    visible: false, loading: false, order_id: 0, items: [], completion_remark: '', counterparty_id: undefined
 })
+// 维修供货商(往来单位 role=repair)选项,完工弹窗打开时加载
+const repairOptions = ref<any[]>([])
+const repairLoading = ref(false)
+const loadRepairOptions = async () => {
+    repairLoading.value = true
+    try { const res: any = await getErpCounterpartyOptions({ role_type: 'repair' }); repairOptions.value = res?.data || [] }
+    catch { repairOptions.value = [] } finally { repairLoading.value = false }
+}
+const onRepairOpen = (open: boolean) => { if (open && !repairOptions.value.length) loadRepairOptions() }
 const detail = reactive<any>({ visible: false, data: {} })
 const completeTotal = computed(() =>
     completeDialog.items.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0)
@@ -325,7 +346,9 @@ const openComplete = (row: any) => {
         item_type: item.item_type, item_name: item.item_name, amount: Number(item.amount || 0), remark: item.remark || ''
     }))
     completeDialog.completion_remark = ''
+    completeDialog.counterparty_id = undefined
     completeDialog.visible = true
+    loadRepairOptions()
 }
 const addCompleteItem = () => completeDialog.items.push({
     item_type: 'other', item_name: '', amount: 0, remark: ''
@@ -336,7 +359,8 @@ const submitComplete = async () => {
     completeDialog.loading = true
     try {
         await completeErpRefurbishment(completeDialog.order_id, {
-            items, completion_remark: completeDialog.completion_remark
+            items, completion_remark: completeDialog.completion_remark,
+            counterparty_id: completeDialog.counterparty_id || 0
         })
         ElMessage.success('整备已完成，设备已进入待销售定价')
         completeDialog.visible = false

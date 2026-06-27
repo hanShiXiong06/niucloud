@@ -118,6 +118,31 @@
                     </view>
                 </view>
 
+                <!-- 提现规则 -->
+                <view class="mt-[20rpx] card-template">
+                    <view class="font-500 text-[30rpx] text-[#333] leading-[42rpx] mb-[24rpx]">提现规则</view>
+                    <view class="flex items-start mb-[20rpx]">
+                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
+                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">可提现额度：单笔最低提现金额为 1 元，每次提现金额不可超过当前可提现余额。</view>
+                    </view>
+                    <view class="flex items-start mb-[20rpx]">
+                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
+                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">提现手续费：按提现金额的 1% 收取，实际到账金额为提现金额扣除手续费后的余额。</view>
+                    </view>
+                    <view class="flex items-start mb-[20rpx]">
+                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
+                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">每日提现次数：每日最多可提现 3 次，超过次数请次日再试。</view>
+                    </view>
+                    <view class="flex items-start mb-[20rpx]">
+                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
+                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">提现时间：每日 9:00-21:00 可提交提现申请，其余时间提交的申请将在次日处理。</view>
+                    </view>
+                    <view class="flex items-start">
+                        <text class="mt-[14rpx] mr-[16rpx] w-[8rpx] h-[8rpx] rounded-full bg-[var(--text-color-light9)] flex-shrink-0"></text>
+                        <view class="flex-1 text-[24rpx] text-[var(--text-color-light6)] leading-[36rpx]">到账时间：提交申请后由平台审核，审核通过后预计 1-3 个工作日到账；若审核不通过，提现金额将原路退回至账户余额。</view>
+                    </view>
+                </view>
+
                 <view class="tab-bar-placeholder"></view>
                 <view class="fixed bottom-[0] tab-bar left-0 right-0 px-[var(--sidebar-m)] bg-[var(--page-bg-color)]">
                     <button class="h-[80rpx] !text-[#fff] leading-[80rpx] primary-btn-bg rounded-[50rpx] text-[26rpx]" :disabled="applyData.apply_money == '' || applyData.apply_money == 0" :loading="loading" @click="cashOut">立即提现</button>

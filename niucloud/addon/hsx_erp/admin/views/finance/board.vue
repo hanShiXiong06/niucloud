@@ -79,7 +79,7 @@
                             <el-radio-button label="pay">我应付</el-radio-button>
                             <el-radio-button label="collect">我应收</el-radio-button>
                         </el-radio-group>
-                        <el-input v-model="boardKeyword" placeholder="主体/对接人/电话/IMEI" clearable class="!w-[220px]" />
+                        <ErpFilterBar v-model="boardSearch" :fields="boardFilterFields" :show-actions="false" />
                     </div>
                     <!-- 往来汇总：卡片 + 折叠（账目明细默认折叠） -->
                     <div v-loading="loading" class="board-cards">
@@ -252,6 +252,11 @@
                         <el-table-column label="业务类型" width="100" align="center">
                             <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.source_type_text }}</el-tag></template>
                         </el-table-column>
+                        <el-table-column label="设备" min-width="170">
+                            <template #default="{ row }">
+                                <device-identity-cell :row="row" />
+                            </template>
+                        </el-table-column>
                         <el-table-column label="来源单号" min-width="150" show-overflow-tooltip>
                             <template #default="{ row }">
                                 <span v-if="row.source_device_id > 0" class="cursor-pointer text-[var(--el-color-primary)]" @click="openTraceFromRow(row)">{{ row.source_no || '溯源' }}</span>
@@ -290,16 +295,8 @@
 
                 <!-- 结算记录 -->
                 <el-tab-pane label="结算记录" name="settlement">
-                    <div class="mb-3 flex flex-wrap items-center gap-2">
-                        <el-input v-model="settle.keyword" placeholder="主体/对接人/手机号/结算单号" clearable class="!w-[220px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
-                        <el-input v-model.trim="settle.imei" placeholder="IMEI 设备串号" clearable class="!w-[180px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
-                        <el-input v-model="settle.operator" placeholder="经手人" clearable class="!w-[120px]" @keyup.enter="loadSettlement" @clear="loadSettlement" />
-                        <div class="w-[260px] flex-none">
-                            <el-date-picker v-model="settle.dateRange" type="daterange" value-format="X" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="--el-date-editor-width: 100%" />
-                        </div>
-                        <el-button type="primary" @click="loadSettlement">查询</el-button>
-                        <el-button @click="resetSettleFilter">重置</el-button>
-                    </div>
+                    <ErpFilterBar v-model="settle" :fields="settleFilterFields" class="mb-3"
+                        @search="onSettleSearch" @change="onSettleSearch" @reset="resetSettleFilter" />
                     <el-table :data="settle.list" v-loading="settle.loading" size="large" empty-text="暂无结算记录"
                         row-key="row_key" :tree-props="{ children: 'children' }">
                         <el-table-column label="结算单号" min-width="180" show-overflow-tooltip>
@@ -393,7 +390,7 @@
                             <el-table-column type="selection" width="40" />
                             <el-table-column v-if="current?.is_entity" prop="counterparty_name" label="对接人" width="90" show-overflow-tooltip />
                             <el-table-column label="设备" min-width="130" show-overflow-tooltip>
-                                <template #default="{ row }"><div>{{ row.device_model || '-' }}</div><div class="text-xs text-gray-400">{{ row.device_imei || row.source_no }}</div></template>
+                                <template #default="{ row }"><device-identity-cell :row="row" /></template>
                             </el-table-column>
                             <el-table-column label="待结" width="100" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
                         </el-table>
@@ -404,7 +401,7 @@
                             <el-table-column type="selection" width="40" />
                             <el-table-column v-if="current?.is_entity" prop="counterparty_name" label="对接人" width="90" show-overflow-tooltip />
                             <el-table-column label="设备" min-width="130" show-overflow-tooltip>
-                                <template #default="{ row }"><div>{{ row.device_model || '-' }}</div><div class="text-xs text-gray-400">{{ row.device_imei || row.source_no }}</div></template>
+                                <template #default="{ row }"><device-identity-cell :row="row" /></template>
                             </el-table-column>
                             <el-table-column label="待结" width="100" align="right"><template #default="{ row }">{{ money(row.outstanding) }}</template></el-table-column>
                         </el-table>
@@ -446,10 +443,9 @@
                 <el-table :data="payColl.rows" size="small" @selection-change="onPayCollSelect" max-height="300"
                     :empty-text="payColl.mode === 'pay' ? '无待付应付' : '无待收应收'">
                     <el-table-column type="selection" width="40" />
-                    <el-table-column label="设备" min-width="160" show-overflow-tooltip>
+                    <el-table-column label="设备" min-width="160">
                         <template #default="{ row }">
-                            <div class="font-medium text-gray-700">{{ row.device_model || '-' }}</div>
-                            <div class="text-xs text-gray-400">IMEI：{{ row.device_imei || '-' }}</div>
+                            <device-identity-cell :row="row" />
                         </template>
                     </el-table-column>
                     <el-table-column prop="source_no" label="来源单" min-width="110" show-overflow-tooltip />
@@ -512,8 +508,8 @@
                     </el-table-column>
                     <el-table-column label="业务/设备" min-width="150" show-overflow-tooltip>
                         <template #default="{ row }">
-                            <div>{{ row.source_type_text }}<span v-if="row.device_model"> · {{ row.device_model }}</span></div>
-                            <div class="text-xs text-gray-400">{{ row.device_imei || row.source_no }}</div>
+                            <div class="text-xs text-gray-500 mb-0.5">{{ row.source_type_text }}</div>
+                            <device-identity-cell :row="row" />
                         </template>
                     </el-table-column>
                     <el-table-column label="核销" width="90" align="right"><template #default="{ row }">{{ money(row.applied_amount) }}</template></el-table-column>
@@ -528,8 +524,8 @@
                     </el-table-column>
                     <el-table-column label="业务/设备" min-width="150" show-overflow-tooltip>
                         <template #default="{ row }">
-                            <div>{{ row.source_type_text }}<span v-if="row.device_model"> · {{ row.device_model }}</span></div>
-                            <div class="text-xs text-gray-400">{{ row.device_imei || row.source_no }}</div>
+                            <div class="text-xs text-gray-500 mb-0.5">{{ row.source_type_text }}</div>
+                            <device-identity-cell :row="row" />
                         </template>
                     </el-table-column>
                     <el-table-column label="核销" width="90" align="right"><template #default="{ row }">{{ money(row.applied_amount) }}</template></el-table-column>
@@ -620,6 +616,8 @@ import {
 } from '@/addon/hsx_erp/api/finance'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import AiAssistant from '@/addon/hsx_erp/components/ai-assistant/index.vue'
+import DeviceIdentityCell from '@/addon/hsx_erp/components/device-identity-cell/index.vue'
+import ErpFilterBar from '@/addon/hsx_erp/components/erp-filter-bar/index.vue'
 
 const money = (v: any) => '¥' + Number(v || 0).toFixed(2)
 const netLabel = (d: string) => (d === 'pay' ? '我付' : d === 'collect' ? '我收' : '已平')
@@ -686,7 +684,6 @@ const buildAiFinancePayload = () => {
 
 // 往来汇总(数据全量在前端，筛选+排序均在本地)
 const board = ref<any[]>([])
-const boardKeyword = ref('')
 const boardFilter = ref('')        // '' | offsetable | pay | collect
 const boardSort = ref('offsetable:desc')
 const boardSortOptions = [
@@ -696,17 +693,18 @@ const boardSortOptions = [
     { value: 'payable:desc', label: '应付 高→低' },
     { value: 'receivable:desc', label: '应收 高→低' },
 ]
+// 往来汇总检索栏(本地聚合视图:主体/对接人 异步选择,选中后本地筛该人所属卡片)
+const boardSearch = reactive<any>({ counterparty_id: undefined })
+const boardFilterFields = [
+    { key: 'counterparty_id', label: '主体/对接人', type: 'entity', valueField: 'counterparty_id', placeholder: '搜索姓名 / 手机号', width: 220 },
+]
 const filteredBoard = computed(() => {
-    const kw = boardKeyword.value.trim()
+    const cp = Number(boardSearch.counterparty_id || 0)
     let rows = board.value.slice()
-    if (kw) {
-        // 命中：行本身 或 其下任意对接人(名字/手机/ID) —— 这样按"对接人/电话"搜也能带出所属主体
+    if (cp > 0) {
+        // 命中：主体行本身 或 其下任意对接人 的 counterparty_id/entity_id
         const hit = (r: any): boolean =>
-            String(r.entity_name || '').includes(kw) ||
-            String(r.counterparty_name || '').includes(kw) ||
-            String(r.counterparty_mobile || '').includes(kw) ||
-            String(r.imei || '').includes(kw) ||
-            String(r.counterparty_id || '') === kw
+            Number(r.counterparty_id || 0) === cp || Number(r.entity_id || 0) === cp
         const hitDeep = (r: any): boolean =>
             hit(r) || (Array.isArray(r.children) && r.children.some((c: any) => hit(c) || hitDeep(c)))
         rows = rows.filter(hitDeep)
@@ -795,7 +793,15 @@ function resetDetailFilter() {
 }
 
 // 结算记录
-const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', imei: '', operator: '', dateRange: [] })
+const settle = reactive<any>({ list: [], loading: false, page: 1, limit: 15, total: 0, keyword: '', imei: '', operator: '', counterparty_id: undefined, dateRange: [] })
+// 结算记录检索栏(标准化:实体异步 + 经手人 select + IMEI 精确 + 单号模糊 + 时间段)
+const settleFilterFields = computed(() => [
+    { key: 'counterparty_id', label: '主体/对接人', type: 'entity', valueField: 'counterparty_id', placeholder: '搜索姓名 / 手机号', width: 200 },
+    { key: 'operator', label: '经手人', type: 'select', placeholder: '全部经手人', width: 150, options: (filterOpts.operators || []).map((o: string) => ({ label: o, value: o })) },
+    { key: 'keyword', label: '结算单号', type: 'text', placeholder: '结算单号', width: 160 },
+    { key: 'imei', label: 'IMEI', type: 'imei', match: 'exact', width: 180 },
+    { key: 'dateRange', label: '时间', type: 'daterange', width: 260 },
+])
 // 结算记录的"按设备分组"已改由后端完成（跨页也不拆），前端直接渲染 settle.list（含父行 _group + children）
 async function loadSettlement() {
     settle.loading = true
@@ -805,6 +811,7 @@ async function loadSettlement() {
             keyword: settle.keyword,
             imei: settle.imei,
             operator: settle.operator,
+            counterparty_id: settle.counterparty_id || 0,
             start_time: start ? Number(start) : 0,
             end_time: end ? Number(end) + 86399 : 0,
             page: settle.page, limit: settle.limit,
@@ -816,8 +823,9 @@ async function loadSettlement() {
     }
 }
 function onSettlePage(p: number) { settle.page = p; loadSettlement() }
+function onSettleSearch() { settle.page = 1; loadSettlement() }
 function resetSettleFilter() {
-    Object.assign(settle, { keyword: '', imei: '', operator: '', dateRange: [], page: 1 })
+    Object.assign(settle, { keyword: '', imei: '', operator: '', counterparty_id: undefined, dateRange: [], page: 1 })
     loadSettlement()
 }
 

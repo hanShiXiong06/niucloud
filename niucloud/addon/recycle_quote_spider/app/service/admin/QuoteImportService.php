@@ -145,10 +145,7 @@ class QuoteImportService extends BaseAdminService
     public function confirm(array $data): array
     {
         $taskId = (int)($data['task_id'] ?? 0);
-        $task = $this->model->where('site_id', $this->site_id)->where('id', $taskId)->findOrEmpty()->toArray();
-        if (empty($task)) {
-            throw new CommonException('导入任务不存在');
-        }
+        $task = $this->getTaskOrFail($taskId);
 
         $sourceId = (int)($data['source_id'] ?? $task['source_id'] ?? 0);
         $categoryId = (int)($data['category_id'] ?? 0);
@@ -159,25 +156,143 @@ class QuoteImportService extends BaseAdminService
             throw new CommonException('请选择分类');
         }
 
-        $mapping = $data['mapping'] ?? ($task['mapping'] ?? []);
-        if (is_string($mapping)) {
-            $mapping = json_decode($mapping, true) ?: [];
+        $result = $this->importSheetToItem((string)$task['file_path'], [
+            'source_id' => $sourceId,
+            'category_id' => $categoryId,
+            'item_id' => (int)($data['item_id'] ?? 0),
+            'item_name' => (string)($data['item_name'] ?? ''),
+            'tab' => (string)($data['tab'] ?? ''),
+            'brand' => (string)($data['brand'] ?? ''),
+            'notice_text' => $data['notice_text'] ?? '',
+            'sheet_name' => (string)($data['sheet_name'] ?? ''),
+            'header_row' => (int)($data['header_row'] ?? 1),
+            'mapping' => $this->normalizeMapping($data['mapping'] ?? ($task['mapping'] ?? [])),
+            'mode' => $data['mode'] ?? 'replace',
+            'fallback_item_name' => $task['file_name'] ?: '手工报价单',
+        ]);
+
+        $this->model->where('site_id', $this->site_id)->where('id', $taskId)->update([
+            'source_id' => $sourceId,
+            'status' => 1,
+            'row_count' => (int)$result['rows'],
+            'message' => '已导入并覆盖报价项',
+        ]);
+
+        $this->refreshApiCache();
+        return $result;
+    }
+
+    /**
+     * 按品牌批量导入:一张多工作表的 Excel,每个工作表(系列)分流到该分类下的一个报价项。
+     * sheets: [{ sheet_name, item_id(0=新建同名报价项), item_name?, tab?, brand?, enabled? }]
+     */
+    public function batchConfirm(array $data): array
+    {
+        $taskId = (int)($data['task_id'] ?? 0);
+        $task = $this->getTaskOrFail($taskId);
+
+        $sourceId = (int)($data['source_id'] ?? $task['source_id'] ?? 0);
+        $categoryId = (int)($data['category_id'] ?? 0);
+        if ($sourceId <= 0) {
+            throw new CommonException('请选择报价源');
         }
-        $parsed = $this->parseRows((string)$task['file_path'], (string)($data['sheet_name'] ?? ''), (int)($data['header_row'] ?? 1), $mapping);
+        if ($categoryId <= 0) {
+            throw new CommonException('请选择分类');
+        }
+
+        $sheets = $data['sheets'] ?? [];
+        if (is_string($sheets)) {
+            $sheets = json_decode($sheets, true) ?: [];
+        }
+        if (!is_array($sheets) || empty($sheets)) {
+            throw new CommonException('请至少选择一个工作表进行导入');
+        }
+
+        $noticeText = $data['notice_text'] ?? '';
+        $mode = $data['mode'] ?? 'replace';
+        $defaultBrand = (string)($data['brand'] ?? '');
+        $headerRow = (int)($data['header_row'] ?? 1);
+
+        $results = [];
+        $totalRows = 0;
+        $okCount = 0;
+        foreach ($sheets as $sheet) {
+            $sheetName = trim((string)($sheet['sheet_name'] ?? ''));
+            if ($sheetName === '') {
+                continue;
+            }
+            if (array_key_exists('enabled', $sheet) && !$sheet['enabled']) {
+                continue;
+            }
+            try {
+                $res = $this->importSheetToItem((string)$task['file_path'], [
+                    'source_id' => $sourceId,
+                    'category_id' => $categoryId,
+                    'item_id' => (int)($sheet['item_id'] ?? 0),
+                    'item_name' => (string)($sheet['item_name'] ?? $sheetName),
+                    'tab' => (string)($sheet['tab'] ?? ''),
+                    'brand' => (string)($sheet['brand'] ?? $defaultBrand),
+                    'notice_text' => $noticeText,
+                    'sheet_name' => $sheetName,
+                    'header_row' => $headerRow,
+                    'mapping' => [],
+                    'mode' => $mode,
+                    'fallback_item_name' => $sheetName,
+                ]);
+                $totalRows += (int)$res['rows'];
+                $okCount++;
+                $results[] = array_merge($res, ['sheet_name' => $sheetName, 'success' => true, 'message' => '']);
+            } catch (\Throwable $e) {
+                $results[] = [
+                    'sheet_name' => $sheetName,
+                    'item_id' => (int)($sheet['item_id'] ?? 0),
+                    'rows' => 0,
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        $this->model->where('site_id', $this->site_id)->where('id', $taskId)->update([
+            'source_id' => $sourceId,
+            'status' => 1,
+            'row_count' => $totalRows,
+            'message' => "批量导入完成:{$okCount} 个工作表 / {$totalRows} 行",
+        ]);
+
+        $this->refreshApiCache();
+        return [
+            'total_rows' => $totalRows,
+            'sheet_count' => $okCount,
+            'sheets' => $results,
+        ];
+    }
+
+    /**
+     * 把单个工作表导入到指定(或新建)报价项。confirm / batchConfirm 共用。
+     * 不在此处刷新缓存 / 更新任务状态,由调用方统一处理。
+     */
+    private function importSheetToItem(string $filePath, array $opts): array
+    {
+        $sourceId = (int)$opts['source_id'];
+        $categoryId = (int)$opts['category_id'];
+
+        $parsed = $this->parseRows($filePath, (string)($opts['sheet_name'] ?? ''), (int)($opts['header_row'] ?? 1), $opts['mapping'] ?? []);
         if (empty($parsed['rows'])) {
             throw new CommonException('没有可导入的报价行');
         }
-        $noticeText = $this->resolveNoticeText($data['notice_text'] ?? '', $parsed['notice_text'] ?? '');
-        $importBrand = $this->normalizeImportFallback((string)($data['brand'] ?? ''), ['分组', '系列']);
+        $noticeText = $this->resolveNoticeText($opts['notice_text'] ?? '', $parsed['notice_text'] ?? '');
+        $importBrand = $this->normalizeImportFallback((string)($opts['brand'] ?? ''), ['分组', '系列']);
         if ($importBrand === '') {
             $importBrand = $this->firstParsedValue($parsed['rows'], 'brand');
         }
 
-        $itemId = (int)($data['item_id'] ?? 0);
+        $tab = (string)($opts['tab'] ?? '');
+        $itemId = (int)($opts['item_id'] ?? 0);
+        $itemName = trim((string)($opts['item_name'] ?? ''));
         if ($itemId <= 0) {
-            $itemName = trim((string)($data['item_name'] ?? ''));
             if ($itemName === '') {
-                $itemName = $task['file_name'] ?: '手工报价单';
+                $itemName = (string)($opts['fallback_item_name'] ?? '手工报价单');
             }
             $item = (new QuoteItem())->create([
                 'site_id' => $this->site_id,
@@ -185,7 +300,7 @@ class QuoteImportService extends BaseAdminService
                 'category_id' => $categoryId,
                 'source_item_id' => 'manual_import_' . uniqid('', true),
                 'brand' => $importBrand,
-                'tab' => (string)($data['tab'] ?? ''),
+                'tab' => $tab,
                 'name' => $itemName,
                 'quote_type' => 'manual_excel',
                 'is_image_quote' => 0,
@@ -208,11 +323,14 @@ class QuoteImportService extends BaseAdminService
             $itemBrand = $importBrand !== ''
                 ? $importBrand
                 : $this->normalizeImportFallback((string)($oldItem['brand'] ?? ''), ['分组', '系列']);
+            // tab 留空时保留报价项原有系列名,避免批量覆盖把已有 tab 清空
+            $itemTab = $tab !== '' ? $tab : (string)($oldItem['tab'] ?? '');
+            $itemName = $itemName !== '' ? $itemName : (string)($oldItem['name'] ?? '');
             $itemModel->where('site_id', $this->site_id)->where('id', $itemId)->update([
                 'source_id' => $sourceId,
                 'category_id' => $categoryId > 0 ? $categoryId : (int)$oldItem['category_id'],
                 'brand' => $itemBrand,
-                'tab' => (string)($data['tab'] ?? ''),
+                'tab' => $itemTab,
                 'quote_type' => 'manual_excel',
                 'is_image_quote' => 0,
                 'notice_text' => $noticeText,
@@ -222,40 +340,80 @@ class QuoteImportService extends BaseAdminService
             ]);
         }
 
-        if (($data['mode'] ?? 'replace') === 'replace') {
-            (new QuoteRow())->where('site_id', $this->site_id)->where('item_id', $itemId)->delete();
-        }
-
+        // 重复导入/每天覆盖时,按「型号+容量」稳定标识原地更新同一行、保留行 id,
+        // 保证价格历史(按 row_id 关联)跨天可对比,不会因删后重建换 id 而丢失昨天数据。
         $rowModel = new QuoteRow();
         $history = new QuotePriceHistoryService();
+        $existing = $rowModel->field('id,source_row_id,model_name,raw_data')
+            ->where('site_id', $this->site_id)->where('item_id', $itemId)->select()->toArray();
+        $byKey = [];       // source_row_id => id
+        $byModelCap = [];  // model|capacity => id(旧数据/首次切换兜底匹配)
+        foreach ($existing as $ex) {
+            if (!empty($ex['source_row_id'])) {
+                $byKey[(string)$ex['source_row_id']] = (int)$ex['id'];
+            }
+            $rawEx = $ex['raw_data'];
+            if (is_string($rawEx)) {
+                $rawEx = json_decode($rawEx, true) ?: [];
+            }
+            $capEx = is_array($rawEx) ? (string)($rawEx['capacity'] ?? '') : '';
+            $byModelCap[(string)$ex['model_name'] . '|' . $capEx] = (int)$ex['id'];
+        }
+
+        $usedKeys = [];
+        $keptIds = [];
         foreach ($parsed['rows'] as $index => $row) {
             $prices = $row['prices'];
-            $record = $rowModel->create([
-                'site_id' => $this->site_id,
-                'source_id' => $sourceId,
-                'item_id' => $itemId,
-                'source_row_id' => 'manual_import_' . md5($row['model_name'] . '#' . $index),
+            $capacity = (string)($row['raw']['capacity'] ?? '');
+            $baseKey = $row['model_name'] . '#' . $capacity;
+            $key = $baseKey;
+            $dup = 1;
+            while (isset($usedKeys[$key])) {
+                $key = $baseKey . '#' . (++$dup);
+            }
+            $usedKeys[$key] = true;
+            $sourceRowId = 'manual_import_' . md5($key);
+
+            $payload = [
                 'brand' => $row['brand'] ?: $importBrand,
-                'tab' => $row['tab'] ?: (string)($data['tab'] ?? ''),
+                'tab' => $row['tab'] ?: $tab,
                 'model_name' => $row['model_name'],
                 'columns' => $parsed['price_columns'],
                 'source_prices' => $prices,
                 'manual_prices' => $prices,
                 'final_prices' => $prices,
                 'remark' => $row['remark'],
-                'source_is_show' => 1,
-                'is_show' => 1,
                 'sort' => $index,
-                'follow_source' => 0,
-                'adjust_type' => 0,
-                'adjust_value' => 0,
-                'adjust_ratio' => 1,
-                'round_mode' => 'round',
                 'raw_data' => $row['raw'],
                 'source_hash' => md5(json_encode($row, JSON_UNESCAPED_UNICODE)),
-            ]);
+            ];
+
+            $rid = $byKey[$sourceRowId] ?? ($byModelCap[$row['model_name'] . '|' . $capacity] ?? 0);
+            if ($rid > 0 && !in_array($rid, $keptIds, true)) {
+                $rowModel->where('site_id', $this->site_id)->where('id', $rid)->update(array_merge($payload, [
+                    'source_id' => $sourceId,
+                    'source_row_id' => $sourceRowId,
+                ]));
+            } else {
+                $record = $rowModel->create(array_merge($payload, [
+                    'site_id' => $this->site_id,
+                    'source_id' => $sourceId,
+                    'item_id' => $itemId,
+                    'source_row_id' => $sourceRowId,
+                    'source_is_show' => 1,
+                    'is_show' => 1,
+                    'follow_source' => 0,
+                    'adjust_type' => 0,
+                    'adjust_value' => 0,
+                    'adjust_ratio' => 1,
+                    'round_mode' => 'round',
+                ]));
+                $rid = (int)$record->id;
+            }
+            $keptIds[] = $rid;
+
             $history->record($this->site_id, [
-                'id' => (int)$record->id,
+                'id' => $rid,
                 'item_id' => $itemId,
                 'source_id' => $sourceId,
                 'model_name' => $row['model_name'],
@@ -264,20 +422,38 @@ class QuoteImportService extends BaseAdminService
             ]);
         }
 
-        $this->model->where('site_id', $this->site_id)->where('id', $taskId)->update([
-            'source_id' => $sourceId,
-            'status' => 1,
-            'row_count' => count($parsed['rows']),
-            'mapping' => $mapping,
-            'message' => '已导入并覆盖报价项',
-        ]);
+        // 覆盖模式:删除本次表里已不存在的旧型号行;仍在的行原地更新保留 id
+        if (($opts['mode'] ?? 'replace') === 'replace') {
+            $allIds = array_map(fn($e) => (int)$e['id'], $existing);
+            $toDelete = array_values(array_diff($allIds, $keptIds));
+            if (!empty($toDelete)) {
+                $rowModel->where('site_id', $this->site_id)->where('item_id', $itemId)->whereIn('id', $toDelete)->delete();
+            }
+        }
 
-        $this->refreshApiCache();
         return [
             'item_id' => $itemId,
+            'item_name' => $itemName,
             'rows' => count($parsed['rows']),
             'price_columns' => $parsed['price_columns'],
         ];
+    }
+
+    private function getTaskOrFail(int $taskId): array
+    {
+        $task = $this->model->where('site_id', $this->site_id)->where('id', $taskId)->findOrEmpty()->toArray();
+        if (empty($task)) {
+            throw new CommonException('导入任务不存在');
+        }
+        return $task;
+    }
+
+    private function normalizeMapping($mapping): array
+    {
+        if (is_string($mapping)) {
+            $mapping = json_decode($mapping, true) ?: [];
+        }
+        return is_array($mapping) ? $mapping : [];
     }
 
     private function refreshApiCache(): void

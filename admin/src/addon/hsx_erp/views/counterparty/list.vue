@@ -18,6 +18,7 @@
                         <el-option label="客户" value="customer" />
                         <el-option label="双向往来" value="both" />
                         <el-option label="代卖委托人" value="consignor" />
+                        <el-option label="维修供货商" value="repair" />
                     </el-select>
                 </el-form-item>
                 <el-form-item label="类型">
@@ -107,6 +108,7 @@
                             <el-option label="客户" value="customer" />
                             <el-option label="双向往来" value="both" />
                             <el-option label="代卖委托人" value="consignor" />
+                            <el-option label="维修供货商" value="repair" />
                         </el-select>
                     </el-form-item>
                     <el-form-item label="名称" required><el-input v-model.trim="dialog.form.name" /></el-form-item>
@@ -235,7 +237,7 @@ const memberLabel = (item: any) => {
     return `${name}（ID:${item.member_id}${item.mobile ? ` / ${item.mobile}` : ''}）`
 }
 const roleName = (role: string) => ({
-    supplier: '供应方', customer: '客户', both: '双向往来', consignor: '代卖委托人'
+    supplier: '供应方', customer: '客户', both: '双向往来', consignor: '代卖委托人', repair: '维修供货商'
 }[role] || role)
 const sourceName = (row: any) => {
     if (row.source_plugin === 'niucloud' && row.source_type === 'member') return '平台会员'

@@ -46,7 +46,7 @@ class Refurbishment extends BaseAdminController
     public function complete(int $id)
     {
         return success($this->service->complete($id, $this->request->params([
-            ['items', []], ['completion_remark', ''],
+            ['items', []], ['completion_remark', ''], ['counterparty_id', 0],
         ])));
     }
 

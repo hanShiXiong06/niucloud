@@ -66,6 +66,9 @@ class ErpCounterpartyAdminService extends BaseAdminService
             $keyword = trim((string)$where['keyword']);
             $query->whereLike('counterparty_no|name|mobile', '%' . $keyword . '%');
         }
+        if (($where['role_type'] ?? '') !== '') {
+            $query->where('role_type', '=', (string)$where['role_type']);
+        }
         return $query->field('id,counterparty_no,counterparty_type,role_type,name,mobile,contact_name')
             ->order('id desc')->limit(100)->select()->toArray();
     }
@@ -81,7 +84,7 @@ class ErpCounterpartyAdminService extends BaseAdminService
         if (!in_array($counterpartyType, ['individual', 'company'], true)) {
             throw new CommonException('往来单位类型不正确');
         }
-        if (!in_array($roleType, ['supplier', 'customer', 'both', 'consignor'], true)) {
+        if (!in_array($roleType, ['supplier', 'customer', 'both', 'consignor', 'repair'], true)) {
             throw new CommonException('往来角色不正确');
         }
         $mobile = trim((string)($data['mobile'] ?? ''));

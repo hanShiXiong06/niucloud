@@ -16,7 +16,7 @@
             <el-icon class="is-loading"><Loading /></el-icon>
             <span>正在加载该型号的质检模板...</span>
         </div>
-        <CheckSummaryFields v-else :fields="fields" v-model="localValues" />
+        <CheckSummaryFields v-else :fields="fields" v-model="localValues" :imei="imei" />
 
         <template #footer>
             <el-button @click="innerVisible = false">取消</el-button>
@@ -39,12 +39,14 @@ const props = withDefaults(defineProps<{
     values?: Record<string, any>
     templateName?: string
     deviceTitle?: string
+    imei?: string
     loading?: boolean
 }>(), {
     fields: () => [],
     values: () => ({}),
     templateName: '',
     deviceTitle: '',
+    imei: '',
     loading: false
 })
 

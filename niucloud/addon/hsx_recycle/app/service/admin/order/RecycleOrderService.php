@@ -376,6 +376,19 @@ class RecycleOrderService extends BaseAdminService
         }
 
         $info = $this->flowModeService->decorateOrder($info);
+
+        // 逐台注入质检级别(severity / abnormal_items / option_items),与单设备详情同口径(字典唯一事实源),
+        // 让设备列表(后台移动端订单详情)也能标出异常项;原先订单详情未注入,列表只显基础数据。
+        if (!empty($info['devices']) && is_array($info['devices'])) {
+            $deviceSvc = new RecycleDeviceService();
+            foreach ($info['devices'] as &$dev) {
+                if (is_array($dev)) {
+                    $dev = $deviceSvc->enrichDeviceCheckMeta($dev);
+                }
+            }
+            unset($dev);
+        }
+
         $info['device_payment_summary'] = $this->devicePaymentService->getPaymentSummary($id);
 
         return $info;

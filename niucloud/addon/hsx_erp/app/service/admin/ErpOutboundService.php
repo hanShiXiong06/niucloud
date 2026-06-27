@@ -70,6 +70,11 @@ class ErpOutboundService extends BaseAdminService
         if ($type !== ErpDict::OUTBOUND_TYPE_PEER_SALE) {
             $settleMode = ErpDict::SETTLE_MODE_NONE;
         }
+        // 现结开关门控:后台关闭现结后,出库只能挂账(收款归财务中心)。
+        if ($settleMode === ErpDict::SETTLE_MODE_NOW
+            && !\addon\hsx_erp\app\service\core\ErpConfigService::instantSettleAllowed($this->site_id)) {
+            throw new CommonException('现结已被关闭,请改用「挂账」出库,款项由财务中心收取');
+        }
         // 现结必须每台有价 + 必须选收款户头(出库即收款入账)
         if ($settleMode === ErpDict::SETTLE_MODE_NOW) {
             foreach ($items as $it) {
@@ -202,8 +207,10 @@ class ErpOutboundService extends BaseAdminService
                     'receivable_emitted' => 0,
                     'create_at'          => $now,
                 ]));
-                // 现结才在出库时立即生成应收；挂单等"处理挂单/回填价格"确认客户留下的设备后再入账。
-                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && $settleMode === ErpDict::SETTLE_MODE_NOW && $row['sale_price'] > 0) {
+                // 开单即建账:只要价格已知,当场就生成应收(现结→应收+立即结清;挂账→待结应收),
+                // 财务中心立刻可见,无需再去出库管理"处理挂单"。仅同行无价单(price=0)延后,
+                // 由订单管理回填价格时再生成待结应收。
+                if ($type === ErpDict::OUTBOUND_TYPE_PEER_SALE && $row['sale_price'] > 0) {
                     $emitItems[] = ['item_id' => (int)$item->id, 'price' => $row['sale_price'], 'device_id' => $row['source_device_id']];
                 }
             }
@@ -211,7 +218,7 @@ class ErpOutboundService extends BaseAdminService
 
         // 应收处理(故障隔离):
         //   现结(now): 生成应收并"立即结清", 钱进所选户头 → 应收明细见已结清记录 + 结算记录 + 资金流水, 对账完整
-        //   挂单(later): 此处无价(价格回填时再生成待结应收)
+        //   挂账(later)有价: 开单当场生成"待结应收"(财务中心可见, 由财务收款); 无价(price=0)不在此处入账,留待订单管理回填
         if (!empty($emitItems)) {
             // 销售渠道：mall=商城销售 / peer=同行销售（默认同行）。只影响应收的来源类型与备注，不动出库/库存逻辑。
             $saleChannel = (string)($p['sale_channel'] ?? 'peer');
@@ -1125,6 +1132,13 @@ class ErpOutboundService extends BaseAdminService
         }
         if (!empty($where['keyword'])) {
             $query->where('outbound_no|counterparty_name', 'like', '%' . $where['keyword'] . '%');
+        }
+        // IMEI 精确检索(独立条件):经出库明细按串号精确反查出库单
+        if (!empty($where['imei'])) {
+            $obIds = ErpOutboundItem::where([['site_id', '=', $this->site_id], ['imei', '=', trim((string)$where['imei'])]])
+                ->column('outbound_id');
+            $obIds = array_values(array_unique(array_map('intval', $obIds)));
+            $query->whereIn('id', !empty($obIds) ? $obIds : [-1]);
         }
         if (!empty($where['start_time'])) {
             $query->where('out_at', '>=', (int)$where['start_time']);

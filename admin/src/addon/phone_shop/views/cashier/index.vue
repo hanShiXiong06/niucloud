@@ -73,7 +73,7 @@
           <div class="cart-top__row">
             <span class="cart-top__lbl">结算</span>
             <el-radio-group v-model="paymentMode" size="small">
-              <el-radio-button label="offline_cash">现结</el-radio-button>
+              <el-radio-button v-if="allowCash" label="offline_cash">现结</el-radio-button>
               <el-radio-button label="offline_credit">挂账</el-radio-button>
             </el-radio-group>
             <el-radio-group v-if="paymentMode === 'offline_cash'" v-model="splitPay" size="small" @change="onSplitChange">
@@ -165,6 +165,7 @@ import { getMemberList } from '@/app/api/member'
 import { cashierGoods, cashierCheckout, cashierCategoryTree } from '@/addon/phone_shop/api/cashier'
 import { getSpecGroups, getGrades } from '@/addon/phone_shop/api/spec'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
+import { getErpConfig } from '@/addon/hsx_erp/api/config'
 import CheckResultPanel from '@/addon/hsx_recycle/views/recycle_order/components/CheckResultPanel.vue'
 
 const categories = ref<any[]>([])
@@ -209,6 +210,14 @@ const memberOptions = ref<any[]>([])
 const memberLoading = ref(false)
 const selectedMember = ref<any>(null)
 const paymentMode = ref('offline_cash')
+const allowCash = ref(true)   // 现结开关:后台「收款设置」关闭后,收银台只能挂账
+const loadSettleConfig = async () => {
+  try {
+    const res: any = await getErpConfig()
+    allowCash.value = Number(res.data?.allow_instant_settle ?? 1) === 1
+    if (!allowCash.value) paymentMode.value = 'offline_credit'
+  } catch (e) { /* ERP 未启用时默认允许现结 */ }
+}
 const capitalAccountId = ref<number | undefined>(undefined)
 const accountOptions = ref<any[]>([])
 // 分笔现结:多账户收款(账户本身已区分微信/支付宝),合计须=订单合计
@@ -368,7 +377,7 @@ const checkout = async () => {
   } finally { submitting.value = false }
 }
 
-onMounted(() => { loadCategories(); loadFilters(); loadGoods(true); loadAccounts() })
+onMounted(() => { loadCategories(); loadFilters(); loadGoods(true); loadAccounts(); loadSettleConfig() })
 </script>
 
 <style lang="scss" scoped>

@@ -40,13 +40,18 @@ class FinanceReceivableService extends BaseAdminService
         }
         $map = [];
         foreach (ErpAsset::where([['site_id', '=', $this->site_id]])->whereIn('source_device_id', $devIds)
-                     ->field('source_device_id,model,imei')->select()->toArray() as $a) {
+                     ->field('source_device_id,model,imei,capacity,color')->select()->toArray() as $a) {
             $map[(int)$a['source_device_id']] = $a;
         }
+        $identityMap = DeviceIdentityService::map($this->site_id, $devIds);
         foreach ($rows as &$r) {
-            $a = $map[(int)($r['source_device_id'] ?? 0)] ?? null;
+            $did = (int)($r['source_device_id'] ?? 0);
+            $a = $map[$did] ?? null;
             $r['device_model'] = (string)($a['model'] ?? '');
             $r['device_imei'] = (string)($a['imei'] ?? '');
+            $r['device_capacity'] = (string)($a['capacity'] ?? '');
+            $r['device_color'] = (string)($a['color'] ?? '');
+            DeviceIdentityService::attachToRow($r, $identityMap[$did] ?? null);
         }
         unset($r);
     }

@@ -408,10 +408,11 @@ class FinanceSettlementService extends BaseAdminService
         $deviceMap = [];
         if (!empty($deviceIds)) {
             foreach (\addon\hsx_erp\app\model\ErpAsset::where([['site_id', '=', $this->site_id]])
-                         ->whereIn('source_device_id', $deviceIds)->field('source_device_id,model,imei')->select()->toArray() as $a) {
+                         ->whereIn('source_device_id', $deviceIds)->field('source_device_id,model,imei,capacity,color')->select()->toArray() as $a) {
                 $deviceMap[(int)$a['source_device_id']] = $a;
             }
         }
+        $identityMap = DeviceIdentityService::map($this->site_id, $deviceIds);
         $bySettlement = [];
         foreach ($links as $l) {
             $key = (string)$l['target_type'] . '_' . (int)$l['target_id'];
@@ -419,14 +420,21 @@ class FinanceSettlementService extends BaseAdminService
             if (!$f) {
                 continue;
             }
-            $dev = $deviceMap[(int)($f['source_device_id'] ?? 0)] ?? null;
-            $bySettlement[(int)$l['settlement_id']][] = [
-                'model'     => (string)($dev['model'] ?? ''),
-                'imei'      => (string)($dev['imei'] ?? ''),
-                'source_no' => (string)($f['source_no'] ?? ''),
-                'amount'    => round((float)$l['applied_amount'], 2),
-                'device_id' => (int)($f['source_device_id'] ?? 0),
+            $did = (int)($f['source_device_id'] ?? 0);
+            $dev = $deviceMap[$did] ?? null;
+            $target = [
+                'model'      => (string)($dev['model'] ?? ''),
+                'imei'       => (string)($dev['imei'] ?? ''),
+                'source_no'  => (string)($f['source_no'] ?? ''),
+                'amount'     => round((float)$l['applied_amount'], 2),
+                'device_id'  => $did,
+                'device_model'    => (string)($dev['model'] ?? ''),
+                'device_imei'     => (string)($dev['imei'] ?? ''),
+                'device_capacity' => (string)($dev['capacity'] ?? ''),
+                'device_color'    => (string)($dev['color'] ?? ''),
             ];
+            DeviceIdentityService::attachToRow($target, $identityMap[$did] ?? null);
+            $bySettlement[(int)$l['settlement_id']][] = $target;
         }
         foreach ($rows as &$r) {
             $r['targets'] = $bySettlement[(int)($r['id'] ?? 0)] ?? [];
@@ -466,22 +474,26 @@ class FinanceSettlementService extends BaseAdminService
         $deviceIds = array_values(array_filter(array_merge(array_column($payMap, 'source_device_id'), array_column($recMap, 'source_device_id'))));
         $deviceMap = [];
         if (!empty($deviceIds)) {
-            foreach (\addon\hsx_erp\app\model\ErpAsset::where([['site_id', '=', $this->site_id]])->whereIn('source_device_id', $deviceIds)->field('source_device_id,model,imei,asset_no')->select()->toArray() as $a) {
+            foreach (\addon\hsx_erp\app\model\ErpAsset::where([['site_id', '=', $this->site_id]])->whereIn('source_device_id', $deviceIds)->field('source_device_id,model,imei,capacity,color,asset_no')->select()->toArray() as $a) {
                 $deviceMap[(int)$a['source_device_id']] = $a;
             }
         }
+        $identityMap = DeviceIdentityService::map($this->site_id, $deviceIds);
 
-        $mk = function (array $l, ?array $src) use ($memberMap, $deviceMap) {
+        $mk = function (array $l, ?array $src) use ($memberMap, $deviceMap, $identityMap) {
             if (!$src) { return null; }
             $m = $memberMap[(int)$src['counterparty_id']] ?? null;
-            $dev = $deviceMap[(int)($src['source_device_id'] ?? 0)] ?? null;
-            return [
+            $did = (int)($src['source_device_id'] ?? 0);
+            $dev = $deviceMap[$did] ?? null;
+            $row = [
                 'counterparty_name' => $m['name'] ?? (string)($src['counterparty_name'] ?? ''),
                 'counterparty_mobile' => $m['mobile'] ?? '',
                 'source_type_text'  => FinanceDict::sourceTypeText((string)($src['source_type'] ?? '')),
                 'source_no'         => (string)($src['source_no'] ?? ''),
                 'device_model'      => (string)($dev['model'] ?? ''),
                 'device_imei'       => (string)($dev['imei'] ?? ''),
+                'device_capacity'   => (string)($dev['capacity'] ?? ''),
+                'device_color'      => (string)($dev['color'] ?? ''),
                 'asset_no'          => (string)($dev['asset_no'] ?? ''),
                 'amount'            => round((float)($src['amount'] ?? 0), 2),
                 'applied_amount'    => round((float)($l['applied_amount'] ?? 0), 2),
@@ -489,6 +501,8 @@ class FinanceSettlementService extends BaseAdminService
                 'cash_part'         => round((float)($l['pay_part'] ?? 0), 2),
                 'remark'            => (string)($src['remark'] ?? ''),
             ];
+            DeviceIdentityService::attachToRow($row, $identityMap[$did] ?? null);
+            return $row;
         };
         $payables = [];
         $receivables = [];
