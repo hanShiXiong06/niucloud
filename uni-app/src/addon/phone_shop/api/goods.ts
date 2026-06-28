@@ -29,6 +29,13 @@ export function getGoodsPages(params: Record<string, any>) {
 }
 
 /**
+ * 仓库切换选项(本地仓/代理仓)
+ */
+export function getGoodsWarehouses() {
+    return request.get(`phone_shop/goods/warehouses`)
+}
+
+/**
  * 获取商品详情
  */
 export function getGoodsDetail(params: Record<string, any>) {

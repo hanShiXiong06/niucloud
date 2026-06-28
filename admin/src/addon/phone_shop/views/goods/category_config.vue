@@ -44,6 +44,10 @@
                     <el-switch v-model="formData.show_quality" />
                     <span class="text-[12px] text-[#999] ml-[10px]">二手机:开启后商品卡片显示成色等级、质检异常数(默认只显核心信息)</span>
                 </el-form-item>
+                <el-form-item v-if="formData.level===3" label="仓库切换">
+                    <el-switch v-model="formData.warehouse_switch" :active-value="1" :inactive-value="0" />
+                    <span class="text-[12px] text-[#999] ml-[10px]">代理子站:开启后分类页顶部显示「本地仓/代理仓」切换(默认关,关=显示全部)</span>
+                </el-form-item>
                 <template v-if="formData.level!=2||(formData.level===2&&formData.template != 'style-1')">
                     <!-- <el-form-item :label="t('sort')" prop="sort">
                         <el-select v-model="formData.sort" clearable :placeholder="t('sortPlaceholder')"

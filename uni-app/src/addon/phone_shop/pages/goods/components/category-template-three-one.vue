@@ -54,6 +54,12 @@
 						@refresherrestore="refreshing = false"
 						@scrolltolower="loadMoreGoods"
 					>
+						<!-- 仓库切换:本地仓/代理仓(后台分类配置开启 + 本站为有代理货的子站才显示) -->
+						<view class="warehouse-bar" v-if="showWarehouseSwitch">
+							<view class="wh-tab" :class="{ on: warehouse === '' }" @click="switchWarehouse('')">全部</view>
+							<view class="wh-tab" :class="{ on: warehouse === 'local' }" @click="switchWarehouse('local')">本地仓</view>
+							<view class="wh-tab" :class="{ on: warehouse === 'agent' }" @click="switchWarehouse('agent')">{{ warehouseAgentName }}</view>
+						</view>
 						<view class="third-row">
 								<scroll-view :scroll-x="true" :show-scrollbar="false" class="third-scroll" v-if="thirdLevelList.length">
 									<view class="third-list">
@@ -247,7 +253,7 @@
 import { computed, getCurrentInstance, onMounted, ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
 import { img, redirect, getToken } from '@/utils/common';
-import { getGoodsCategoryTree, getGoodsPages, getGoodsDetail } from '@/addon/phone_shop/api/goods';
+import { getGoodsCategoryTree, getGoodsPages, getGoodsDetail, getGoodsWarehouses } from '@/addon/phone_shop/api/goods';
 import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue';
 import addCartPopup from './add-cart-popup.vue';
 import bindMobile from '@/components/bind-mobile/bind-mobile.vue';
@@ -287,6 +293,10 @@ const showCategoryPopup = ref(false);
 const selectedCategoryId = ref<any>('');
 const sortField = ref('');
 const sortType = ref<'asc' | 'desc'>('desc');
+// 仓库切换(本地仓/代理仓)：''=全部 / 'local'=本地仓 / 'agent'=代理仓
+const warehouse = ref('');
+const warehouseAgentName = ref('代理仓');
+const showWarehouseSwitch = ref(false);
 // 内存/成色 筛选
 const showFilter = ref(false);
 const selectedMemory = ref<string[]>([]);
@@ -452,7 +462,24 @@ onMounted(() => {
 	initCustomHeader();
 	initDefaultSort();
 	getCategoryData();
+	initWarehouseSwitch();
 });
+
+// 仓库切换:仅当后台分类配置开启 warehouse_switch 且本站确为有代理货的子站时显示
+const initWarehouseSwitch = () => {
+	if (!config.warehouse_switch) return;
+	getGoodsWarehouses().then((res: any) => {
+		const d = res.data || {};
+		showWarehouseSwitch.value = Number(d.show) === 1;
+		if (d.agent_name) warehouseAgentName.value = d.agent_name;
+	}).catch(() => {});
+}
+
+const switchWarehouse = (val: string) => {
+	if (warehouse.value === val) return;
+	warehouse.value = val;
+	loadGoods(true);
+}
 
 const initCustomHeader = () => {
 	systemInfo.value = uni.getSystemInfoSync();
@@ -557,7 +584,8 @@ const loadGoods = (reset = false) => {
 		order: sortField.value,
 		sort: sortType.value,
 		memory_group: selectedMemory.value.join(','),
-		condition_grade: selectedGrade.value.join(',')
+		condition_grade: selectedGrade.value.join(','),
+		warehouse: warehouse.value
 	}).then((res: any) => {
 		const newArr = res.data.data || [];
 		mergeFilterOptions(newArr);
@@ -1149,6 +1177,27 @@ const qcAbnormal = (data: any) => {
 }
 
 /* 三级行:横滑分类 + 右侧筛选按钮(带左阴影分隔,体面些) */
+.warehouse-bar {
+	display: flex;
+	align-items: center;
+	gap: 16rpx;
+	padding: 12rpx 8rpx 0;
+
+	.wh-tab {
+		padding: 8rpx 28rpx;
+		font-size: 24rpx;
+		color: #5b6b7a;
+		background: #f4f4f4;
+		border-radius: 28rpx;
+		line-height: 1.4;
+
+		&.on {
+			color: #fff;
+			background: var(--primary-color, #1255e7);
+		}
+	}
+}
+
 .third-row {
 	position: sticky;
 	top: 0;

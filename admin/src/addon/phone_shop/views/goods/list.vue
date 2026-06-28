@@ -4,7 +4,10 @@
 
             <div class="flex justify-between items-center">
                 <span class="text-page-title">{{ pageName }}</span>
-                <el-button type="primary" @click="addEvent">{{ t('addGoods') }}</el-button>
+                <div class="flex items-center gap-[10px]">
+                    <el-button v-if="!isMasterSite" :loading="syncLoading" @click="syncMasterGoodsFn">一键同步主站商品</el-button>
+                    <el-button type="primary" @click="addEvent">{{ t('addGoods') }}</el-button>
+                </div>
             </div>
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
@@ -59,6 +62,13 @@
                     <el-form-item label="库龄(天)" prop="stock_age">
                         <el-select v-model="stockAgeRange" placeholder="全部库龄" clearable class="!w-[140px]" @change="onStockAgeChange">
                             <el-option v-for="r in stockAgeOptions" :key="r.value" :label="r.label" :value="r.value" />
+                        </el-select>
+                    </el-form-item>
+                    <!-- 归属:自营/代理筛选(仅子站显示,主站全部正常展示) -->
+                    <el-form-item v-if="!isMasterSite" label="归属" prop="proxy_type">
+                        <el-select v-model="goodsTable.searchParam.proxy_type" placeholder="全部" clearable class="!w-[140px]" @change="loadGoodsList()">
+                            <el-option label="自营" value="self" />
+                            <el-option label="代理" value="proxy" />
                         </el-select>
                     </el-form-item>
 
@@ -125,7 +135,9 @@
                                     <img v-else class="w-[70px] h-[70px]" src="@/addon/phone_shop/assets/goods_default.png" fit="contain" />
                                 </div>
                                 <div class="ml-2  flex flex-col items-start min-w-0">
-                                    <span :title="row.goods_name" class="multi-hidden">{{ row.goods_name }}</span>
+                                    <span :title="row.goods_name" class="multi-hidden">
+                                        <el-tag v-if="row.is_proxy_goods == 1" type="warning" size="small" effect="dark" class="mr-[4px]">代理</el-tag>{{ row.goods_name }}
+                                    </span>
                                     <span v-if="row.sub_title" :title="row.sub_title" class="text-[12px] text-[#94a3b8] ellipsis-1 max-w-[220px]">{{ row.sub_title }}</span>
                                     <span v-if="(row.goodsSku || {}).sku_no" class="text-[11px] text-[#64748b] font-mono" :title="row.goodsSku.sku_no">IMEI: {{ row.goodsSku.sku_no }}</span>
                                     <div class="flex items-center flex-wrap gap-[4px] mt-[2px]">
@@ -278,6 +290,7 @@ import goodsPriceEditPopup from '@/addon/phone_shop/views/goods/components/goods
 import goodsBatchSettingsPopup from '@/addon/phone_shop/views/goods/components/goods-batch-settings-popup.vue'
 import sellDialog from '@/addon/phone_shop/views/goods/components/sell-dialog.vue'
 import { getGoodsPageList, getCategoryTree, getGoodsType, getBrandList, getLabelList, editGoodsSort, editGoodsStatus, copyGoods, deleteGoods,editGoodssingleStatus, getMemberLevelNoList } from '@/addon/phone_shop/api/goods'
+import { syncAgentGoods } from '@/addon/phone_shop/api/agent'
 import { getSpecGroups, getGrades } from '@/addon/phone_shop/api/spec'
 import { getMemberLevelAll } from '@/app/api/member'
 import spreadPopup from '@/components/spread-popup/index.vue'
@@ -339,6 +352,7 @@ const goodsTable = reactive({
         start_price: '',
         end_price: '',
         status: route.query.status || '1',
+        proxy_type: '',
         memory_group: '',
         condition_grade: '',
         sale_status: '',
@@ -466,6 +480,23 @@ const tabHandleClick = (tab: any, event: Event) => {
     goodsTable.searchParam.status = tab.props.name
     isReset.value = true
     loadGoodsList()
+}
+
+// 当前站是否主站(主站隐藏 自营/代理 筛选与一键同步，全部正常展示)
+const isMasterSite = ref(true)
+// 一键同步主站商品(子站)
+const syncLoading = ref(false)
+const syncMasterGoodsFn = () => {
+    ElMessageBox.confirm('将把主站当前在售商品全量同步到本店(代理展示)，是否继续？', '一键同步主站商品', {
+        type: 'warning'
+    }).then(() => {
+        syncLoading.value = true
+        syncAgentGoods().then((res: any) => {
+            ElMessage.success(`已同步 ${res.data?.count ?? 0} 件主站商品`)
+            isReset.value = true
+            loadGoodsList()
+        }).finally(() => { syncLoading.value = false })
+    }).catch(() => {})
 }
 
 // 全选所有页时排除的 ID
@@ -803,6 +834,7 @@ const loadGoodsList = (page: number = 1) => {
         goodsTable.loading = false
         goodsTable.data = res.data.data
         goodsTable.total = res.data.total
+        isMasterSite.value = Number(res.data.is_master_site) === 1
         setTablePageStorage(goodsTable.page, goodsTable.limit, searchData)
         if (isReset.value) {
             isSelectAllPages.value = false
