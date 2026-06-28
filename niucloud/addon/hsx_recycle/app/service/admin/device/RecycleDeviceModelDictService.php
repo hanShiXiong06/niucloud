@@ -7,6 +7,7 @@ use addon\hsx_recycle\app\model\device\RecycleDeviceModelDict;
 use addon\hsx_recycle\app\service\core\device\CoreRecycleDeviceModelDictService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
+use think\facade\Cache;
 
 /**
  * 回收设备分类服务
@@ -18,6 +19,12 @@ class RecycleDeviceModelDictService extends BaseAdminService
 {
     protected $model;
     protected CoreRecycleDeviceModelDictService $coreService;
+
+    /** 型号字典缓存 tag 前缀(按站点隔离:CACHE_TAG . site_id);写操作后整体清空 */
+    const CACHE_TAG = 'recycle_device_model_dict_';
+
+    /** 缓存有效期(秒)。型号字典极少改,设长一点;改动时按 tag 主动失效 */
+    const CACHE_TTL = 86400;
 
     public function __construct()
     {
@@ -47,13 +54,20 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
     public function tree(): array
     {
-        $rows = $this->model->where([['site_id', '=', $this->site_id]])
-            ->field('id,pid,level,node_name,model_full_name,status,sort,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
-            ->order('level asc, is_hot desc, select_count desc, sort asc, id asc')
-            ->select()
-            ->toArray();
-
-        return $this->buildTree($rows);
+        // 整棵树缓存:命中直接返回,不查库;写操作会按 tag 失效
+        return cache_remember(
+            self::CACHE_TAG . 'tree_' . $this->site_id,
+            function () {
+                $rows = $this->model->where([['site_id', '=', $this->site_id]])
+                    ->field('id,pid,level,node_name,model_full_name,status,sort,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
+                    ->order('level asc, is_hot desc, select_count desc, sort asc, id asc')
+                    ->select()
+                    ->toArray();
+                return $this->buildTree($rows);
+            },
+            self::CACHE_TAG . $this->site_id,
+            ['expire' => self::CACHE_TTL]
+        );
     }
 
     public function options(array $where = []): array
@@ -68,29 +82,49 @@ class RecycleDeviceModelDictService extends BaseAdminService
         $keyword = trim((string)($where['keyword'] ?? ''));
         $limit = max(20, min(500, (int)($where['limit'] ?? 200)));
 
-        $query = $this->model->where([
-            ['site_id', '=', $this->site_id],
-            ['pid', '=', $pid],
-            ['status', '=', 1],
-        ]);
+        $fetch = function () use ($pid, $keyword, $limit) {
+            $query = $this->model->where([
+                ['site_id', '=', $this->site_id],
+                ['pid', '=', $pid],
+                ['status', '=', 1],
+            ]);
+            if ($keyword !== '') {
+                $this->coreService->applyKeywordFilter($query, $keyword);
+            }
+            $rows = $query->field('id,pid,level,node_name,model_full_name,status,sort,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
+                ->order('is_hot desc, select_count desc, sort asc, id asc')
+                ->limit($limit)
+                ->select()
+                ->toArray();
+            return $this->appendChildrenState($rows);
+        };
 
+        // 带关键字的是搜索,不缓存;纯按 pid 浏览某一层才缓存(懒加载热点路径,命中即不查库)
         if ($keyword !== '') {
-            $this->coreService->applyKeywordFilter($query, $keyword);
+            return $fetch();
         }
+        return cache_remember(
+            self::CACHE_TAG . 'children_' . $this->site_id . '_' . $pid . '_' . $limit,
+            $fetch,
+            self::CACHE_TAG . $this->site_id,
+            ['expire' => self::CACHE_TTL]
+        );
+    }
 
-        $rows = $query->field('id,pid,level,node_name,model_full_name,status,sort,is_hot,select_count,node_type,source,source_node_id,source_parent_id,category_source_id,brand_source_id,series_source_id,product_source_id,extra_json')
-            ->order('is_hot desc, select_count desc, sort asc, id asc')
-            ->limit($limit)
-            ->select()
-            ->toArray();
-
-        return $this->appendChildrenState($rows);
+    /**
+     * 清空本站点型号字典缓存(tree/未来可能的子级缓存)。
+     * 只在型号库发生变更(增删改/导入/排序)时调用 —— 这样读取才"除非数据变了否则不查库"。
+     */
+    private function clearTreeCache(): void
+    {
+        Cache::tag(self::CACHE_TAG . $this->site_id)->clear();
     }
 
     public function add(array $data): int
     {
         $path = $this->normalizePath($data);
         $id = $this->createPath($path, (int)($data['status'] ?? 1), (int)($data['sort'] ?? 0), false);
+        $this->clearTreeCache();
         return $id;
     }
 
@@ -112,6 +146,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
                 'update_at' => time(),
             ]);
         }
+        $this->clearTreeCache();
         return true;
     }
 
@@ -122,6 +157,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
             throw new CommonException('请先删除下级分类');
         }
         $this->model->where([['id', '=', $id], ['site_id', '=', $this->site_id]])->delete();
+        $this->clearTreeCache();
         return true;
     }
 
@@ -166,6 +202,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
         foreach ($paths as $parts) {
             $this->createPath($parts, 1, 0, true);
         }
+        $this->clearTreeCache();
         return [
             'created_count' => count($paths),
             'duplicates' => [],
@@ -201,6 +238,9 @@ class RecycleDeviceModelDictService extends BaseAdminService
             }
         }
 
+        if ($created > 0 || $updated > 0) {
+            $this->clearTreeCache();
+        }
         return [
             'created_count' => $created,
             'updated_count' => $updated,
@@ -249,6 +289,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
                 'update_at' => $now,
             ]);
         }
+        $this->clearTreeCache();
         return true;
     }
 

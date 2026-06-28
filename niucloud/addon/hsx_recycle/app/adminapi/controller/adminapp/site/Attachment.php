@@ -13,7 +13,11 @@ class Attachment extends BaseAdminController
 {
     public function getConfig()
     {
-        return success((new AttachmentService())->getConfig());
+        // 核心 AttachmentService 无 getConfig() 方法，此处直接返回前端所需字段
+        // is_cropper: 是否启用图片裁剪（0 关闭 / 1 开启）
+        return success([
+            'is_cropper' => 0
+        ]);
     }
 
     public function categoryLists()

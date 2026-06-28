@@ -103,6 +103,10 @@ class OrderSubmitConfigService
                 'content' => '如需议价或咨询订单进度，请联系客服处理',
             ],
             'allow_user_reject_sale' => 1,
+            'order_detail' => [
+                'show_inspection_result' => 1,
+                'show_inspection_images' => 1,
+            ],
             'consignment' => [
                 'enabled' => 0,
                 'user_entry_enabled' => 1,
@@ -130,6 +134,7 @@ class OrderSubmitConfigService
                         'webhook_url' => '',
                         'dedupe_minutes' => 10,
                         'daily_limit' => 5,
+                        'user_cooldown_hours' => 12,
                     ],
                     'return_order' => [
                         'enabled' => 0,
@@ -170,6 +175,7 @@ class OrderSubmitConfigService
         $followOfficialAccount = is_array($data['follow_official_account'] ?? null) ? $data['follow_official_account'] : [];
         $customerService = is_array($data['customer_service'] ?? null) ? $data['customer_service'] : [];
         $consignment = is_array($data['consignment'] ?? null) ? $data['consignment'] : [];
+        $orderDetail = is_array($data['order_detail'] ?? null) ? $data['order_detail'] : [];
         $workWechat = is_array($data['work_wechat'] ?? null) ? $data['work_wechat'] : [];
         $priceDetailTheme = is_array($data['price_detail_theme'] ?? null) ? $data['price_detail_theme'] : [];
         $platformDeliveryProviders = !empty($platformDeliveryProviders)
@@ -268,6 +274,14 @@ class OrderSubmitConfigService
             'allow_user_reject_sale' => array_key_exists('allow_user_reject_sale', $data)
                 ? (!empty($data['allow_user_reject_sale']) ? 1 : 0)
                 : $default['allow_user_reject_sale'],
+            'order_detail' => [
+                'show_inspection_result' => array_key_exists('show_inspection_result', $orderDetail)
+                    ? (!empty($orderDetail['show_inspection_result']) ? 1 : 0)
+                    : $default['order_detail']['show_inspection_result'],
+                'show_inspection_images' => array_key_exists('show_inspection_images', $orderDetail)
+                    ? (!empty($orderDetail['show_inspection_images']) ? 1 : 0)
+                    : $default['order_detail']['show_inspection_images'],
+            ],
             'consignment' => [
                 'enabled' => !empty($consignment['enabled']) ? 1 : 0,
                 'user_entry_enabled' => array_key_exists('user_entry_enabled', $consignment) ? (!empty($consignment['user_entry_enabled']) ? 1 : 0) : $default['consignment']['user_entry_enabled'],
@@ -360,6 +374,11 @@ class OrderSubmitConfigService
                 'dedupe_minutes' => $dedupeMinutes,
                 'daily_limit' => $dailyLimit,
             ];
+
+            // 订单催办群：额外保存用户端“催一下”冷却时间（小时），0 表示不限制
+            if (array_key_exists('user_cooldown_hours', $defaultChannel)) {
+                $config['channels'][$key]['user_cooldown_hours'] = max(0, min(720, (int)($channel['user_cooldown_hours'] ?? $defaultChannel['user_cooldown_hours'])));
+            }
 
             if ($strict && $config['enabled'] && $config['channels'][$key]['enabled'] && $config['channels'][$key]['webhook_url'] === '') {
                 throw new CommonException($config['channels'][$key]['name'] . '已启用，请填写企业微信群机器人 Webhook 地址');

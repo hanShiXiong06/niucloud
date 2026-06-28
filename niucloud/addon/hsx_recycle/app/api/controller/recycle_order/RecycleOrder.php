@@ -118,9 +118,10 @@ class RecycleOrder extends BaseApiController
             'delivery_type' => 'require|in:1,2',
 
             // 'devices' => 'require|array|min:1',
-            // 'devices.*.imei' => 'require|length:15',
             // 'devices.*.user_sn' => 'max:100',
             // 'devices.*.model' => 'require',
+            // IMEI 串号最长 15 位(客户填写,后端兜底校验;前端不限制)
+            'devices.*.imei' => 'max:15',
             'devices.*.initial_price' => 'float|min:0',
         ], [
             'delivery_type.require' => '请选择配送方式',
@@ -129,6 +130,7 @@ class RecycleOrder extends BaseApiController
             'devices.array' => '设备数据格式错误',
             'devices.min' => '至少添加一个设备',
             'devices.*.imei.require' => '请输入IMEI号',
+            'devices.*.imei.max' => 'IMEI不能超过15位',
             'devices.*.imei.length' => 'IMEI号必须是15位',
             'devices.*.model.require' => '请输入设备型号',
             'devices.*.initial_price.require' => '请输入预估价格',

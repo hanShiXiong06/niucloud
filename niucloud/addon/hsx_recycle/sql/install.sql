@@ -111,6 +111,7 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色（如深空黑色）',
   `battery` varchar(50) NOT NULL DEFAULT '' COMMENT '电池效率/健康（如85%）',
   `package_type` varchar(50) NOT NULL DEFAULT '' COMMENT '单机/全套等套装情况',
+  `condition_grade` varchar(20) NOT NULL DEFAULT '' COMMENT '成色等级（10新/99新…）',
   `price_at` int DEFAULT 0 COMMENT '定价时间',
   `final_price_at` int DEFAULT 0 COMMENT '最终价格时间',
   `price_uid` int NOT NULL DEFAULT 0 COMMENT '价格确认人ID',

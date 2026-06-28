@@ -360,14 +360,13 @@ const deviceSummaryFields = computed<CheckTemplateField[]>(() => {
   const configuredFields = visibleFields
     .filter(isSummaryField)
     .sort((a: any, b: any) => Number(a.sort || 0) - Number(b.sort || 0))
-    .slice(0, 5)
+  // 不再限制数量:摘要项显示多少,完全由后端勾选(isSummaryField)了几个决定
 
   if (configuredFields.length) return configuredFields
 
   return fallbackSummaryKeys
     .map(key => fieldConfigByKey.value[key])
     .filter(Boolean)
-    .slice(0, 5)
 })
 
 const checkDictOptions = computed<CheckOptionsGroup>(() => {

@@ -44,6 +44,7 @@
                 v-else-if="field.field_key === 'warranty_info'"
                 v-model="modelValue[field.field_key]"
                 :imei="imei"
+                :brand="brand"
                 :placeholder="field.placeholder || '保修日期 / 过保 / 未激活'"
                 class="summary-control"
             />
@@ -70,10 +71,13 @@ withDefaults(defineProps<{
     modelValue?: Record<string, any>
     /** 本机 IMEI/SN，供「查保修」按钮使用 */
     imei?: string
+    /** 设备品牌/型号文本，供「查保修」按品牌分发接口 */
+    brand?: string
 }>(), {
     fields: () => [],
     modelValue: () => ({}),
-    imei: ''
+    imei: '',
+    brand: ''
 })
 
 defineEmits<{ (e: 'update:modelValue', value: Record<string, any>): void }>()

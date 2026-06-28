@@ -831,6 +831,88 @@ class RecyclePrinterTemplateService extends BaseAdminService
     }
 
     /**
+     * 构建某质检模板「字段 → (存储值 → 中文标签)」映射,用于打印时把选项 ID 还原成文字。
+     * 选项型字段(radio/select/checkbox)在设备上存的是 option_value(ID),标签在 recycle_check_option。
+     * 字典即唯一事实源:capacity=2 → "512GB"、color/package_type/condition_grade 同理。
+     * @param int $templateId
+     * @return array<string,array<string,string>> field_key => [option_value => option_label]
+     */
+    private function buildTemplateOptionLabelMap(int $templateId): array
+    {
+        if ($templateId <= 0) {
+            return [];
+        }
+        $fields = \think\facade\Db::name('recycle_check_field')
+            ->where('site_id', $this->site_id)
+            ->where('template_id', $templateId)
+            ->field('id,field_key')
+            ->select()->toArray();
+        if (empty($fields)) {
+            return [];
+        }
+        $fieldKeyById = [];
+        foreach ($fields as $f) {
+            $fieldKeyById[(int)$f['id']] = (string)$f['field_key'];
+        }
+        $options = \think\facade\Db::name('recycle_check_option')
+            ->where('site_id', $this->site_id)
+            ->whereIn('field_id', array_keys($fieldKeyById))
+            ->field('field_id,option_value,option_label')
+            ->select()->toArray();
+        $map = [];
+        foreach ($options as $o) {
+            $fk = $fieldKeyById[(int)$o['field_id']] ?? '';
+            if ($fk === '') {
+                continue;
+            }
+            $map[$fk][(string)$o['option_value']] = (string)$o['option_label'];
+        }
+        return $map;
+    }
+
+    /**
+     * 用选项映射把字段原始值还原成中文标签:
+     * - 单值:命中选项→标签,否则原值;
+     * - 多值(JSON 数组 / 中英文逗号分隔):逐个还原,用「、」连接;
+     * - 该字段本就无选项(input/number/日期等):原样返回。
+     * 映射为空时一律回退原值,绝不影响既有可用字段。
+     * @param array $map buildTemplateOptionLabelMap 的结果
+     * @param string $fieldKey
+     * @param mixed $raw
+     * @return string
+     */
+    private function resolveOptionLabel(array $map, string $fieldKey, $raw): string
+    {
+        if ($raw === null || $raw === '' || $raw === []) {
+            return '';
+        }
+        $opt = $map[$fieldKey] ?? null;
+        $values = [];
+        if (is_array($raw)) {
+            $values = $raw;
+        } else {
+            $s = trim((string)$raw);
+            $decoded = json_decode($s, true);
+            if (is_array($decoded)) {
+                $values = $decoded;
+            } elseif (preg_match('/[,，]/u', $s)) {
+                $values = preg_split('/[,，]/u', $s);
+            } else {
+                $values = [$s];
+            }
+        }
+        $labels = [];
+        foreach ($values as $v) {
+            $key = trim((string)$v);
+            if ($key === '') {
+                continue;
+            }
+            $labels[] = ($opt !== null && array_key_exists($key, $opt)) ? $opt[$key] : $key;
+        }
+        return implode('、', $labels);
+    }
+
+    /**
      * 拼接省市区与详细地址。
      * @param array $prefixParts
      * @param string $detail
@@ -882,6 +964,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
 
         $deviceInfo = $this->normalizeDeviceInfo($device['info'] ?? []);
         $checkMeta = $this->getDeviceCheckMeta($device, $deviceInfo);
+        // 选项字段 ID→中文标签映射(capacity/color/package_type/condition_grade 等存的是 option_value)
+        $optLabelMap = $this->buildTemplateOptionLabelMap((int)($device['check_template_id'] ?? 0));
         $checkResult = (string)($device['check_result'] ?? '');
         $checkResultSeller = (string)($device['check_result_seller'] ?? '');
         $checkResultBuyer = (string)($device['check_result_buyer'] ?? '');
@@ -970,11 +1054,12 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'sn' => $device['sn'] ?? '',
             // 截取 25 个字符(必须用 mb_substr 按字符截，substr 按字节会把中文砍成半个 → 非法 UTF-8 → json_encode 报 Malformed UTF-8)
             'model' => mb_substr($device['model'] ?? '', 0, 25, 'UTF-8'),
-            'system_version' => $this->stringifyPrintValue($this->firstNotBlank($device['system_version'] ?? null, $deviceInfo['system_version'] ?? null)),
-            'warranty_info' => $this->stringifyPrintValue($this->firstNotBlank($device['warranty_info'] ?? null, $deviceInfo['warranty_info'] ?? null)),
-            'capacity' => $this->stringifyPrintValue($this->firstNotBlank($device['capacity'] ?? null, $deviceInfo['capacity'] ?? null)),
-            'color' => $this->stringifyPrintValue($this->firstNotBlank($device['color'] ?? null, $deviceInfo['color'] ?? null)),
-            'package_type' => $this->stringifyPrintValue($this->firstNotBlank($device['package_type'] ?? null, $deviceInfo['package_type'] ?? null)),
+            'system_version' => $this->resolveOptionLabel($optLabelMap, 'system_version', $this->firstNotBlank($device['system_version'] ?? null, $deviceInfo['system_version'] ?? null)),
+            'warranty_info' => $this->resolveOptionLabel($optLabelMap, 'warranty_info', $this->firstNotBlank($device['warranty_info'] ?? null, $deviceInfo['warranty_info'] ?? null)),
+            'capacity' => $this->resolveOptionLabel($optLabelMap, 'capacity', $this->firstNotBlank($device['capacity'] ?? null, $deviceInfo['capacity'] ?? null)),
+            'color' => $this->resolveOptionLabel($optLabelMap, 'color', $this->firstNotBlank($device['color'] ?? null, $deviceInfo['color'] ?? null)),
+            'package_type' => $this->resolveOptionLabel($optLabelMap, 'package_type', $this->firstNotBlank($device['package_type'] ?? null, $deviceInfo['package_type'] ?? null)),
+            'condition_grade' => $this->resolveOptionLabel($optLabelMap, 'condition_grade', $this->firstNotBlank($device['condition_grade'] ?? null, $deviceInfo['condition_grade'] ?? null)),
             'battery' => $this->isBlankPrintValue($battery) ? '-' : $this->stringifyPrintValue($battery),
             'battery_num' => $this->isBlankPrintValue($batteryNum) ? '-' : $this->stringifyPrintValue($batteryNum),
             'battery_cycle' => $this->isBlankPrintValue($batteryNum) ? '-' : $this->stringifyPrintValue($batteryNum),
@@ -1298,8 +1383,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'first_device_imei' => $firstDevice['imei'] ?? '',
             'first_device_model' => $firstDevice['model'] ?? '',
             'first_device_sn' => $firstDevice['sn'] ?? '',
-            'first_device_capacity' => $firstDevice['capacity'] ?? '',
-            'first_device_color' => $firstDevice['color'] ?? '',
+            'first_device_capacity' => $this->resolveOptionLabel($this->buildTemplateOptionLabelMap((int)($firstDevice['check_template_id'] ?? 0)), 'capacity', $firstDevice['capacity'] ?? ''),
+            'first_device_color' => $this->resolveOptionLabel($this->buildTemplateOptionLabelMap((int)($firstDevice['check_template_id'] ?? 0)), 'color', $firstDevice['color'] ?? ''),
             'first_device_final_price' => !empty($firstDevice['final_price']) ? number_format((float)$firstDevice['final_price'], 2) : '',
             'create_time' => $this->formatSafeTime($returnOrder['create_at'] ?? 0),
             'update_time' => $this->formatSafeTime($returnOrder['update_at'] ?? 0),
@@ -1394,8 +1479,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'device_model' => $deviceName,
             'model' => $deviceName,
             'device_summary' => $deviceSummary,
-            'capacity' => $sourceDevice['capacity'] ?? ($deviceInfo['capacity'] ?? ''),
-            'color' => $sourceDevice['color'] ?? ($deviceInfo['color'] ?? ''),
+            'capacity' => $this->resolveOptionLabel($this->buildTemplateOptionLabelMap((int)($sourceDevice['check_template_id'] ?? 0)), 'capacity', $sourceDevice['capacity'] ?? ($deviceInfo['capacity'] ?? '')),
+            'color' => $this->resolveOptionLabel($this->buildTemplateOptionLabelMap((int)($sourceDevice['check_template_id'] ?? 0)), 'color', $sourceDevice['color'] ?? ($deviceInfo['color'] ?? '')),
             'customer_name' => $memberName,
             'customer_phone' => $memberMobile,
             'member_name' => $memberName,

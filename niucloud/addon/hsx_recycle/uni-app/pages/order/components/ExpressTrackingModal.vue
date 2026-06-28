@@ -62,17 +62,20 @@
         </up-steps>
       </view>
 
-      <!-- 空状态 - 物流信息更新中 -->
+      <!-- 空状态 - 暂未查询到物流信息 -->
       <view v-else class="empty-tracking">
         <up-empty
           mode="data"
           icon="http://cdn.uviewui.com/uview/empty/data.png"
-          text="物流信息更新中"
+          text="暂未查询到物流信息"
           textColor="#999999"
           textSize="14"
         >
           <template #bottom>
-            <text class="text-xs text-gray-500 mt-2">请耐心等待快递员上门</text>
+            <view class="empty-tracking-tip">
+              <text class="text-xs text-gray-500">可能是手机号（后4位）不匹配，或快递尚未揽件。</text>
+              <text class="text-xs text-gray-500">如长时间查不到，请凭快递单号到快递官方渠道查询。</text>
+            </view>
           </template>
         </up-empty>
       </view>
@@ -374,5 +377,16 @@ const handleCallPhone = (phone: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.empty-tracking-tip {
+  margin-top: 12rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+  padding: 0 40rpx;
+  text-align: center;
+  line-height: 1.5;
 }
 </style>

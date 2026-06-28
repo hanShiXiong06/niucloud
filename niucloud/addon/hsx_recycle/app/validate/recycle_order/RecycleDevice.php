@@ -19,7 +19,7 @@ class RecycleDevice extends Validate
     protected $rule = [
         'site_id' => 'require|number',
         'order_id' => 'require|number',
-        'imei' => 'requireWithout:model|max:50',
+        'imei' => 'requireWithout:model|max:15',
         'model' => 'requireWithout:imei|max:100',
         'status' => 'number|in:1,2,3,4,5,6',
         'check_status' => 'number|in:0,1,2',
@@ -41,7 +41,7 @@ class RecycleDevice extends Validate
         'order_id.require' => '订单ID不能为空',
         'order_id.number' => '订单ID必须为数字',
         'imei.requireWithout' => 'IMEI号码和型号至少填写一个',
-        'imei.max' => 'IMEI号码最多50个字符',
+        'imei.max' => 'IMEI号码最多15个字符',
         'model.requireWithout' => 'IMEI号码和型号至少填写一个',
         'model.max' => '设备型号最多100个字符',
         'status.number' => '设备状态必须为数字',

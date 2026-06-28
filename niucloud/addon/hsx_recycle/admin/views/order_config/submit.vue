@@ -247,6 +247,11 @@
                                         <el-input-number v-model="form.work_wechat.channels[item.key].daily_limit" :min="0" :max="999" controls-position="right" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
                                         <em>0 为不限</em>
                                     </div>
+                                    <div v-if="item.key === 'order_urge'" class="rule-item">
+                                        <span>用户催办间隔</span>
+                                        <el-input-number v-model="form.work_wechat.channels[item.key].user_cooldown_hours" :min="0" :max="720" controls-position="right" :disabled="!form.work_wechat.enabled || !form.work_wechat.channels[item.key].enabled" />
+                                        <em>小时，0 为不限</em>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -408,6 +413,24 @@
                 </section>
 
                 <section class="config-section">
+                    <div class="section-title">订单详情页</div>
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">显示质检结果</div>
+                            <div class="setting-desc">控制验机报告里的“检测明细”（质检结论）。关闭后用户看不到检测结果，但仍可单独控制是否显示质检图片。</div>
+                        </div>
+                        <el-switch v-model="form.order_detail.show_inspection_result" :active-value="1" :inactive-value="0" />
+                    </div>
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-title">显示质检图片</div>
+                            <div class="setting-desc">控制验机报告里的“验机图片”。可与质检结果分开设置，例如只给用户看图片、不展示检测结论。</div>
+                        </div>
+                        <el-switch v-model="form.order_detail.show_inspection_images" :active-value="1" :inactive-value="0" />
+                    </div>
+                </section>
+
+                <section class="config-section">
                     <div class="section-title">前台主题配色</div>
                     <div class="section-tip">报价详情页、下单页和订单页统一使用框架“主题风格”中的 hsx_recycle 配色。这里不再单独维护颜色，避免前台出现两套主题不一致。</div>
                     <div class="theme-entry">
@@ -516,6 +539,10 @@ const form = reactive<OrderSubmitConfig>({
         content: '如需议价或咨询订单进度，请联系客服处理'
     },
     allow_user_reject_sale: 1,
+    order_detail: {
+        show_inspection_result: 1,
+        show_inspection_images: 1
+    },
     consignment: {
         enabled: 0,
         user_entry_enabled: 1,
@@ -531,7 +558,7 @@ const form = reactive<OrderSubmitConfig>({
         enabled: 0,
         channels: {
             order_notice: { enabled: 0, name: '订单通知群', webhook_url: '', dedupe_minutes: 10, daily_limit: 0 },
-            order_urge: { enabled: 1, name: '订单催办群', webhook_url: '', dedupe_minutes: 10, daily_limit: 5 },
+            order_urge: { enabled: 1, name: '订单催办群', webhook_url: '', dedupe_minutes: 10, daily_limit: 5, user_cooldown_hours: 12 },
             return_order: { enabled: 0, name: '退货处理群', webhook_url: '', dedupe_minutes: 10, daily_limit: 0 },
             finance: { enabled: 0, name: '财务打款群', webhook_url: '', dedupe_minutes: 10, daily_limit: 0 },
             exception: { enabled: 0, name: '异常预警群', webhook_url: '', dedupe_minutes: 30, daily_limit: 0 }
@@ -594,6 +621,8 @@ const normalize = (data: Partial<OrderSubmitConfig> = {}) => {
     form.customer_service.title = data.customer_service?.title || '联系客服'
     form.customer_service.content = data.customer_service?.content || '如需议价或咨询订单进度，请联系客服处理'
     form.allow_user_reject_sale = data.allow_user_reject_sale === 0 ? 0 : 1
+    form.order_detail.show_inspection_result = data.order_detail?.show_inspection_result === 0 ? 0 : 1
+    form.order_detail.show_inspection_images = data.order_detail?.show_inspection_images === 0 ? 0 : 1
     form.consignment.enabled = data.consignment?.enabled ? 1 : 0
     form.consignment.user_entry_enabled = data.consignment?.user_entry_enabled === 0 ? 0 : 1
     form.consignment.user_view_enabled = data.consignment?.user_view_enabled === 0 ? 0 : 1
@@ -622,6 +651,10 @@ const normalizeWorkWechat = (config: Partial<OrderSubmitConfig['work_wechat']> =
         current.webhook_url = saved.webhook_url || ''
         current.dedupe_minutes = Math.max(0, Math.min(1440, Number(saved.dedupe_minutes ?? current.dedupe_minutes)))
         current.daily_limit = Math.max(0, Math.min(999, Number(saved.daily_limit ?? current.daily_limit)))
+        // 订单催办群额外保存用户端“催一下”冷却时间（小时）
+        if (current.user_cooldown_hours !== undefined) {
+            current.user_cooldown_hours = Math.max(0, Math.min(720, Number(saved.user_cooldown_hours ?? current.user_cooldown_hours)))
+        }
     })
 }
 

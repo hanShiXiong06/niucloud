@@ -65,7 +65,7 @@
     </view>
 
     <!-- 验机报告入口 -->
-    <view v-if="hasInspectionReport" class="px-3 pb-2">
+    <view v-if="inspectionVisible" class="px-3 pb-2">
       <view class="inspection-entry" @tap.stop="$emit('view-report')">
         <view class="inspection-icon">
           <up-icon name="file-text" size="16" color="#2563eb"></up-icon>
@@ -73,7 +73,7 @@
         <view class="inspection-main">
           <view class="inspection-title-row">
             <text class="inspection-title">验机报告</text>
-            <text v-if="styledCount" class="inspection-warning">{{ styledCount }}项标识</text>
+            <text v-if="styledBadgeCount" class="inspection-warning">{{ styledBadgeCount }}项标识</text>
             <text v-else class="inspection-normal">已生成</text>
           </view>
           <text class="inspection-desc">{{ reportSummary }}</text>
@@ -186,6 +186,8 @@ interface Props {
   allowApplyConsignment?: boolean
   allowViewConsignment?: boolean
   useWechatContact?: boolean
+  showInspectionResult?: boolean
+  showInspectionImages?: boolean
 }
 
 const props = defineProps<Props>()
@@ -265,11 +267,18 @@ const styledCount = computed(() => {
 const hasInspectionReport = computed(() => {
   return !!checkResult.value || !!props.device.remark || !!props.device.price_remark || !!props.device.check_at || imageCount.value > 0
 })
+// 质检结果 / 质检图片 可分别控制，未传时默认显示
+const showResult = computed(() => props.showInspectionResult !== false)
+const showImages = computed(() => props.showInspectionImages !== false)
+// 两者都关闭时隐藏验机报告入口
+const inspectionVisible = computed(() => (showResult.value || showImages.value) && hasInspectionReport.value)
+// 入口右上角“N项标识”仅在显示质检结果时有意义
+const styledBadgeCount = computed(() => (showResult.value ? styledCount.value : 0))
 
 const reportSummary = computed(() => {
   const parts: string[] = []
-  if (reportSegments.value.length) parts.push(`${reportSegments.value.length}项检测`)
-  if (imageCount.value) parts.push(`${imageCount.value}张图片`)
+  if (showResult.value && reportSegments.value.length) parts.push(`${reportSegments.value.length}项检测`)
+  if (showImages.value && imageCount.value) parts.push(`${imageCount.value}张图片`)
   if (props.device.price_remark || props.device.remark) parts.push('含价格说明')
   return parts.length ? parts.join(' · ') : '查看检测明细'
 })

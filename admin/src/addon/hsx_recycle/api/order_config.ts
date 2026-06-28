@@ -62,6 +62,10 @@ export interface OrderSubmitConfig {
         content: string
     }
     allow_user_reject_sale: number
+    order_detail: {
+        show_inspection_result: number
+        show_inspection_images: number
+    }
     consignment: {
         enabled: number
         user_entry_enabled: number
@@ -81,6 +85,7 @@ export interface OrderSubmitConfig {
             webhook_url: string
             dedupe_minutes: number
             daily_limit: number
+            user_cooldown_hours?: number
         }>
     }
     price_detail_theme: {

@@ -787,8 +787,8 @@ class RecycleCheckTemplateService extends BaseAdminService
             }
         }
 
-        if ($count >= 5) {
-            throw new CommonException('设备摘要最多展示5个字段');
+        if ($count >= 10) {
+            throw new CommonException('设备摘要最多展示10个字段');
         }
     }
 

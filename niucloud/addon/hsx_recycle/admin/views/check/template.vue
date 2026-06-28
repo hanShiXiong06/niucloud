@@ -357,7 +357,7 @@
                     <div class="form-tip">
                         显示：控制质检弹窗是否出现这个字段；必填：提交质检时必须填写；
                         参与文案：会进入卖家/买家质检结果；API回填：允许第三方查询结果自动写入；
-                        设备摘要：显示在左侧设备摘要中，最多可配置 5 个。
+                        设备摘要：显示在左侧设备摘要中，最多可配置 10 个。
                     </div>
                 </el-form-item>
             </el-form>
@@ -776,9 +776,9 @@ const openFieldDialog = (row: any = null) => {
 
 const handleSummaryVisibleChange = (value: any) => {
     if (Number(value) !== 1) return
-    if (selectedSummaryFieldCount.value < 5) return
+    if (selectedSummaryFieldCount.value < 10) return
     fieldDialog.form.extra_config.summary_visible = 0
-    ElMessage.warning('设备摘要最多展示 5 个字段')
+    ElMessage.warning('设备摘要最多展示 10 个字段')
 }
 
 const submitField = async () => {

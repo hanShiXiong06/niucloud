@@ -221,8 +221,8 @@ class RecycleDevice extends BaseAdminController
             ['remark', '']
         ]);
 
-        // 参数验证
-        $this->validate->scene('create')->check($data);
+        // 参数验证(failException:校验失败抛异常拦截,而不是只返回 false)
+        $this->validate->scene('create')->failException()->check($data);
 
         return success($this->service->add($data));
     }
@@ -240,8 +240,11 @@ class RecycleDevice extends BaseAdminController
         $payload = (is_array($raw) && isset($raw['data']) && is_array($raw['data'])) ? $raw['data'] : (is_array($raw) ? $raw : []);
         unset($payload['id']);
 
-        // 参数验证
+        // 参数验证(update 场景历史规则较杂,不整场景强拦;仅对 IMEI 长度做精准强校验:>15 位抛异常拦截)
         $this->validate->scene('update')->check(array_merge(['id' => $id], $payload));
+        if (!empty($payload['imei'])) {
+            $this->validate->scene('imei')->failException()->check(['imei' => $payload['imei']]);
+        }
 
         // 检查是否是质检操作（包括完成质检和暂存质检）
         if (isset($payload['action']) && in_array($payload['action'], ['check', 'save_draft'])) {

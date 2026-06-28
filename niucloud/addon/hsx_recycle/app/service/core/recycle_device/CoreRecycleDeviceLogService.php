@@ -37,7 +37,8 @@ class CoreRecycleDeviceLogService extends BaseAdminService
             'old_status' => $data['old_status'] ?? 0,
             'new_status' => $data['new_status'] ?? 0,
             'create_at' => time(),
-            'remark' => $this->buildDetailedRemark($data)
+            // remark 列为 varchar(255):统一截断,避免质检结果整段塞进来导致"Data too long"。完整质检结果已存设备上,日志只留摘要。
+            'remark' => mb_substr((string)$this->buildDetailedRemark($data), 0, 250)
         ];
 
         return $this->model->insertGetId($logData);

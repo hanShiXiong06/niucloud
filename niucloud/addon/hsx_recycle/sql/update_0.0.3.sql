@@ -80,3 +80,7 @@ ALTER TABLE `{{prefix}}recycle_check_option`
 ALTER TABLE `{{prefix}}recycle_device`
   ADD COLUMN `battery` varchar(50) NOT NULL DEFAULT '' COMMENT '电池效率/健康（如85%）' AFTER `color`,
   ADD COLUMN `package_type` varchar(50) NOT NULL DEFAULT '' COMMENT '单机/全套等套装情况' AFTER `battery`;
+
+-- 设备加 成色等级 列(质检「成色等级」单选回写 + 打印 {condition_grade}；全新安装已在 install.sql 含)
+ALTER TABLE `{{prefix}}recycle_device`
+  ADD COLUMN `condition_grade` varchar(20) NOT NULL DEFAULT '' COMMENT '成色等级（10新/99新…）' AFTER `package_type`;

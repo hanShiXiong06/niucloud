@@ -61,7 +61,7 @@
         :deviceCount="orderInfo.devices.length"
         :totalPrice="totalPrice"
         :expressNo="orderInfo.express_no"
-        :mobile="orderInfo.member?.mobile"
+        :mobile="orderInfo.member?.mobile || orderInfo.customer_phone || ''"
       />
 
       <!-- 客服入口 -->
@@ -108,16 +108,16 @@
 
       <!-- 催办入口 -->
       <view v-if="urgeEnabled" class="mx-3 mb-3">
-        <button class="urge-card" :disabled="urging" @tap="handleUrgeOrder">
+        <button class="urge-card" :disabled="urging || urgeOnCooldown" @tap="handleUrgeOrder">
           <view class="urge-icon">
             <up-icon name="bell" size="18" color="#f97316"></up-icon>
           </view>
           <view class="urge-copy">
             <text class="urge-title">催一下</text>
-            <text class="urge-desc">提醒工作人员尽快处理当前订单</text>
+            <text class="urge-desc">{{ urgeOnCooldown ? urgeCooldownText : '提醒工作人员尽快处理当前订单' }}</text>
           </view>
           <view class="urge-action">
-            <text>{{ urging ? '发送中' : '发送提醒' }}</text>
+            <text>{{ urging ? '发送中' : (urgeOnCooldown ? '稍后再试' : '发送提醒') }}</text>
           </view>
         </button>
       </view>
@@ -173,6 +173,8 @@
           :device="device"
           :index="index"
           :isSelected="isDeviceSelected(device.id)"
+          :showInspectionResult="showInspectionResult"
+          :showInspectionImages="showInspectionImages"
           :allowRejectSale="submitConfig.allow_user_reject_sale !== 0"
           :allowApplyConsignment="canApplyConsignment(device)"
           :allowViewConsignment="canViewConsignment(device)"
@@ -212,6 +214,8 @@
       <InspectionReportPopup
         :visible="showInspectionReport"
         :device="currentReportDevice"
+        :showResult="showInspectionResult"
+        :showImages="showInspectionImages"
         @close="closeInspectionReport"
       />
     </view>
@@ -259,12 +263,41 @@ const consignmentEntryEnabled = computed(() => {
 const consignmentViewEnabled = computed(() => {
   return Number(consignmentConfig.value?.enabled || 0) === 1 && Number(consignmentConfig.value?.user_view_enabled || 0) === 1
 })
+// 质检结果（检测明细）与质检图片可分别控制，由后台「订单详情页」配置，缺省都显示
+const showInspectionResult = computed(() => Number(submitConfig.value?.order_detail?.show_inspection_result ?? 1) !== 0)
+const showInspectionImages = computed(() => Number(submitConfig.value?.order_detail?.show_inspection_images ?? 1) !== 0)
+// 两者都关闭时，验机报告入口整体隐藏
+const showInspectionEntry = computed(() => showInspectionResult.value || showInspectionImages.value)
 const workWechatConfig = computed(() => submitConfig.value?.work_wechat || {})
 const orderUrgeChannel = computed(() => workWechatConfig.value?.channels?.order_urge || {})
 const finishedOrderStatuses = [7, 8, 9, 10]
 const orderFinished = computed(() => finishedOrderStatuses.includes(Number(orderInfo.value?.status || 0)))
 const urgeEnabled = computed(() => {
   return !orderFinished.value && Number(workWechatConfig.value?.enabled || 0) === 1 && Number(orderUrgeChannel.value?.enabled || 0) === 1
+})
+
+// 催办冷却时间：由后台「企业微信群通知 / 订单催办群」配置（小时），缺省 12 小时；0 表示不限制
+const urgeCooldownHours = computed(() => {
+  const hours = Number(orderUrgeChannel.value?.user_cooldown_hours)
+  return Number.isFinite(hours) && hours >= 0 ? hours : 12
+})
+const urgeCooldownMs = computed(() => urgeCooldownHours.value * 60 * 60 * 1000)
+const lastUrgeAt = ref(0)
+const urgeStorageKey = (orderId: number | string) => `recycle_order_urge_at_${orderId}`
+const loadLastUrgeAt = (orderId: number | string) => {
+  lastUrgeAt.value = orderId ? Number(uni.getStorageSync(urgeStorageKey(orderId)) || 0) : 0
+}
+// 注意：仅依赖 lastUrgeAt 重新计算，时间流逝不会主动刷新，进入页面/点击时会重新核对
+const urgeCooldownRemaining = computed(() => {
+  if (!lastUrgeAt.value || urgeCooldownMs.value <= 0) return 0
+  const remaining = lastUrgeAt.value + urgeCooldownMs.value - Date.now()
+  return remaining > 0 ? remaining : 0
+})
+const urgeOnCooldown = computed(() => urgeCooldownRemaining.value > 0)
+const urgeCooldownText = computed(() => {
+  if (urgeCooldownRemaining.value <= 0) return ''
+  const hours = Math.ceil(urgeCooldownRemaining.value / (60 * 60 * 1000))
+  return `${hours}小时后可再次催办`
 })
 
 const {
@@ -335,6 +368,7 @@ const handleViewConsignment = (device: OrderDetailDevice) => {
 }
 
 const openInspectionReport = (device: OrderDetailDevice) => {
+  if (!showInspectionEntry.value) return
   currentReportDevice.value = device
   showInspectionReport.value = true
 }
@@ -353,9 +387,24 @@ const handleUrgeOrder = async () => {
     })
     return
   }
+  // 冷却时间内只能催办一次（以最近一次催办时间为准，实时核对）
+  const cooldownMs = urgeCooldownMs.value
+  const last = Number(uni.getStorageSync(urgeStorageKey(orderInfo.value.id)) || 0)
+  if (cooldownMs > 0 && last && Date.now() - last < cooldownMs) {
+    const hours = Math.ceil((last + cooldownMs - Date.now()) / (60 * 60 * 1000))
+    lastUrgeAt.value = last
+    uni.showToast({
+      title: `催办太频繁啦，请${hours}小时后再试`,
+      icon: 'none'
+    })
+    return
+  }
   urging.value = true
   try {
     const res = await urgeOrder(Number(orderInfo.value.id))
+    const stamp = Date.now()
+    uni.setStorageSync(urgeStorageKey(orderInfo.value.id), stamp)
+    lastUrgeAt.value = stamp
     uni.showToast({
       title: res?.data?.message || '已提醒工作人员',
       icon: 'none'
@@ -413,6 +462,7 @@ const goHome = () => {
 }
 
 watch(() => orderInfo.value.id, (newId) => {
+  loadLastUrgeAt(newId || 0)
   if (newId) loadReturnOrders(newId)
 })
 

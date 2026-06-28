@@ -680,8 +680,8 @@ class RecycleOrder extends BaseAdminController
             ['remark', '']
         ]);
 
-        // 参数验证
-        $this->validate->scene('addDevice')->check(array_merge(['id' => $id], $data));
+        // 参数验证(开启 failException:校验失败抛 ValidateException 拦截,而不是只返回 false)
+        $this->validate->scene('addDevice')->failException()->check(array_merge(['id' => $id], $data));
 
         // 使用专门的设备服务
         $deviceService = new \addon\hsx_recycle\app\service\admin\order\RecycleOrderDeviceService();
@@ -707,7 +707,7 @@ class RecycleOrder extends BaseAdminController
         }
 
         foreach ($data['devices'] as $device) {
-            $this->validate->scene('addDevice')->check(array_merge(['id' => $id], $device));
+            $this->validate->scene('addDevice')->failException()->check(array_merge(['id' => $id], $device));
         }
 
         // 使用专门的设备服务

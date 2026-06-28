@@ -44,7 +44,8 @@
                             v-model="row.model_path"
                             :options="modelTreeOptions"
                             :props="modelCascaderProps"
-                            :filter-method="filterModelNode"
+                            :before-filter="handleModelBeforeFilter"
+                            :filter-method="modelSearchFilterMethod"
                             :show-all-levels="false"
                             placeholder="选择/搜索型号"
                             filterable
@@ -52,6 +53,7 @@
                             size="small"
                             class="model-cascader"
                             :loading="modelLoading"
+                            @visible-change="onModelVisibleChange"
                             @change="value => handleModelPathChange(row, value)"
                         />
                         <el-input
@@ -122,16 +124,30 @@ const savedDeviceCount = computed(() => props.devices.filter(d => d.saved && d.i
 const modelLoading = ref(false)
 const modelTreeOptions = ref<any[]>([])
 const modelNodeMap = ref<Record<string, any>>({})
-// 非懒加载:一次性加载整棵型号树。el-cascader 的 filterable 搜索+选中 与 lazy 不兼容
-// (搜到未加载分支的末级点不中),改为整树后搜索/选中都正常。
-const modelCascaderProps = {
+const modelSearching = ref(false)
+// 懒加载:只按 pid 取一层(children 接口),避免一次性拉 3 万条整树。
+// 浏览(modelSearching=false)走 lazyLoad;搜索时切非懒加载、用扁平搜索结果(options,带完整 category_path)。
+// 关键:只改 props.lazy 不会重挂组件,输入框焦点不丢,下拉面板按新模式重建。
+const modelCascaderProps = computed(() => ({
     value: 'id',
     label: 'node_name',
     children: 'child_list',
     emitPath: true,
     checkStrictly: false,
     expandTrigger: 'hover' as const,
-}
+    lazy: !modelSearching.value,
+    lazyLoad: async (node: any, resolve: (nodes: any[]) => void) => {
+        const pid = node && node.level > 0 ? node.value : 0
+        try {
+            resolve(await loadModelChildren(pid))
+        } catch (e) {
+            console.error('懒加载型号子级失败:', e)
+            resolve([])
+        }
+    },
+}))
+// 搜索结果已由后端按关键字过滤,前端不再二次过滤(否则会把命中父级名的结果误删)
+const modelSearchFilterMethod = () => true
 
 // 递归归一化整棵树:建 child_list、登记 modelNodeMap、按有无子节点标 leaf。兼容 child_list / children 两种字段。
 const normalizeModelTree = (nodes: any[]): any[] => (nodes || []).map((item) => {
@@ -172,22 +188,35 @@ const normalizeModelSearchNodes = (nodes: any[]): any[] => (nodes || []).map((it
     return node
 })
 
-const handleModelBeforeFilter = async (keyword: string) => {
+// el-cascader 输入关键字时触发:空 → 回到懒加载浏览;有词 → 后端扁平搜索(结果带完整 category_path)并切非懒加载展示。
+// 返回 Promise<boolean>:resolve(true) 后级联用新 options(非懒)重建面板展示搜索结果。
+const handleModelBeforeFilter = (keyword: string) => {
     const value = String(keyword || '').trim()
-    modelLoading.value = true
-    try {
-        if (!value) {
-            modelTreeOptions.value = await loadModelChildren(0)
-            return true
-        }
-        const res = await getRecycleDeviceModelDictOptions({ keyword: value })
-        modelTreeOptions.value = normalizeModelSearchNodes(res.data || [])
-        return true
-    } catch (error) {
-        console.error('搜索型号字典失败:', error)
+    if (!value) {
+        modelSearching.value = false
         return false
-    } finally {
-        modelLoading.value = false
+    }
+    modelLoading.value = true
+    return getRecycleDeviceModelDictOptions({ keyword: value })
+        .then((res: any) => {
+            modelTreeOptions.value = normalizeModelSearchNodes(res.data || [])
+            modelSearching.value = true
+            return true
+        })
+        .catch((error: any) => {
+            console.error('搜索型号字典失败:', error)
+            return false
+        })
+        .finally(() => {
+            modelLoading.value = false
+        })
+}
+
+// 下拉关闭后复位:清掉搜索态,下次打开回到懒加载浏览
+const onModelVisibleChange = (visible: boolean) => {
+    if (!visible && modelSearching.value) {
+        modelSearching.value = false
+        modelTreeOptions.value = []
     }
 }
 
@@ -515,7 +544,8 @@ const initExistingRows = () => {
 }
 
 onMounted(() => {
-    loadModelOptions()
+    // 不再一次性拉整棵型号树(3万条);级联改为懒加载,打开时按 pid 取一层
+    modelNodeMap.value = {}
     initExistingRows()
 })
 

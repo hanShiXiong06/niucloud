@@ -168,6 +168,9 @@ class RecycleOrderService extends BaseApiService
                 'devices' => function($query) {
                     $query->field('id,order_id,site_id,imei,user_sn,model,initial_price,status,final_price,cost_adjust_amount,cost_adjust_count,last_cost_adjust_time,last_cost_adjust_no,check_images,check_images_seller')
                         ->append(['status_name', 'check_images_seller_thumb_small']);
+                },
+                'member' => function($query) {
+                    $query->field('member_id,nickname,mobile');
                 }
             ])
             ->order($order)

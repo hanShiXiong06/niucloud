@@ -54,6 +54,7 @@ class RecycleCheckCatalogService extends BaseAdminService
         }
         if ($offset === 0) {
             $this->clearImported();
+            $this->seedGrades();
         }
         $fh = fopen($path, 'r');
         if (!$fh) {
@@ -185,19 +186,21 @@ class RecycleCheckCatalogService extends BaseAdminService
                     }
                 }
             }
-            // 补「设备信息」组 + 保修信息字段(input，允许API回填)：拍机堂数据不含保修，留此字段供「查保修」回填。
-            $infoGid = (int)Db::name('recycle_check_group')->insertGetId([
-                'site_id' => $this->site_id, 'template_id' => $tplId, 'group_key' => 'g_1',
-                'group_name' => '基本信息', 'description' => '', 'sort' => 99, 'status' => 1,
-                'create_at' => $now, 'update_at' => $now,
-            ]);
+            // 固定字段(保修/包装/成色)直接并入「已建好的」基本信息分组，不再新建——
+            // 之前硬编码 group_key='g1' 会和第一步循环建的第一个分组(也是 g1)撞键，导致渲染只认一个、固定字段并不进去。
+            // 优先并入 CSV 分类里名字含「基本」的分组，没有就并入第一个分组(reset)。
+            $infoGid = 0;
+            foreach ($groupId as $gName => $gId) {
+                if (mb_strpos((string)$gName, '基本') !== false) { $infoGid = (int)$gId; break; }
+            }
+            if ($infoGid <= 0) { $infoGid = (int)reset($groupId); }
             Db::name('recycle_check_field')->insert([
                 'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $infoGid,
                 'field_key' => 'warranty_info', 'field_name' => '保修', 'component' => 'input',
                 'selection_mode' => '', 'placeholder' => '点「查保修」自动回填', 'is_required' => 0,
                 'is_show' => 1, 'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
                 'result_template' => '保修: {value}', 'api_fill_enabled' => 1, 'api_fill_policy' => 'overwrite',
-                'sort' => 1, 'create_at' => $now, 'update_at' => $now,
+                'sort' => ++$fi, 'create_at' => $now, 'update_at' => $now,
             ]);
             // 包装：单选(全套/单机/带配件)，写入设备 package_type 列、供打印 {package_type}
             $pkgFid = (int)Db::name('recycle_check_field')->insertGetId([
@@ -205,7 +208,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                 'field_key' => 'package_type', 'field_name' => '包装', 'component' => 'radio',
                 'selection_mode' => 'single', 'is_required' => 0, 'is_show' => 1,
                 'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
-                'result_template' => '', 'sort' => 2, 'create_at' => $now, 'update_at' => $now,
+                'result_template' => '', 'sort' => ++$fi, 'create_at' => $now, 'update_at' => $now,
             ]);
             $pkgOi = 0;
             foreach (['全套', '单机', '带配件'] as $po) {
@@ -214,6 +217,24 @@ class RecycleCheckCatalogService extends BaseAdminService
                     'site_id' => $this->site_id, 'field_id' => $pkgFid, 'option_label' => $po,
                     'option_value' => (string)$pkgOi, 'is_default' => 0,
                     'is_show' => 1, 'severity' => 'normal', 'sort' => $pkgOi,
+                    'create_at' => $now, 'update_at' => $now,
+                ]);
+            }
+            // 成色等级：单选(10新/99新…)，写入设备 condition_grade 列、供定价/打印 {condition_grade}
+            $gradeFid = (int)Db::name('recycle_check_field')->insertGetId([
+                'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $infoGid,
+                'field_key' => 'condition_grade', 'field_name' => '成色等级', 'component' => 'radio',
+                'selection_mode' => 'single', 'is_required' => 0, 'is_show' => 1,
+                'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
+                'result_template' => '', 'sort' => ++$fi, 'create_at' => $now, 'update_at' => $now,
+            ]);
+            $gradeOi = 0;
+            foreach (['10新', '99新', '98新', '95新', '9新', '85新'] as $go) {
+                $gradeOi++;
+                Db::name('recycle_check_option')->insert([
+                    'site_id' => $this->site_id, 'field_id' => $gradeFid, 'option_label' => $go,
+                    'option_value' => (string)$gradeOi, 'is_default' => 0,
+                    'is_show' => 1, 'severity' => 'normal', 'sort' => $gradeOi,
                     'create_at' => $now, 'update_at' => $now,
                 ]);
             }
@@ -315,6 +336,31 @@ class RecycleCheckCatalogService extends BaseAdminService
         Db::name('recycle_check_group')->where('site_id', $this->site_id)->whereIn('template_id', $tplIds)->delete();
         Db::name('recycle_template_binding')->where('site_id', $this->site_id)->whereIn('check_template_id', $tplIds)->delete();
         Db::name('recycle_check_template')->where('site_id', $this->site_id)->whereIn('id', $tplIds)->delete();
+    }
+
+    /**
+     * 成色等级字典(扁平),格式"码|名"。导入时确保存在,幂等;用户改过的(is_user_modified=1)不动。
+     * 存进 recycle_check_dict(dict_type=grade),供质检/定价给设备标成色等级,可往下游 condition_grade 流。
+     */
+    public function seedGrades(): int
+    {
+        $grades = ['10新|全套', '99新|单机', '98新|微瑕', '95新|小花', '9新|磕碰划痕', '85新|硬划磕伤'];
+        $now = time();
+        $added = 0;
+        foreach ($grades as $i => $text) {
+            $exists = Db::name('recycle_check_dict')
+                ->where('site_id', $this->site_id)->where('dict_type', 'grade')->where('text', $text)->find();
+            if ($exists) {
+                continue;
+            }
+            Db::name('recycle_check_dict')->insert([
+                'site_id' => $this->site_id, 'dict_type' => 'grade', 'text' => $text,
+                'severity' => 'normal', 'is_user_modified' => 0, 'sort' => $i,
+                'create_at' => $now, 'update_at' => $now,
+            ]);
+            $added++;
+        }
+        return $added;
     }
 
     /** 概览：拍机堂模板数 / 绑定型号数 / 选项字典数 */

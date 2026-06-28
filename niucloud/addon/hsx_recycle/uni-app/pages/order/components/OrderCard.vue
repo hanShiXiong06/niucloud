@@ -72,7 +72,7 @@
     <ExpressTrackingModal
       v-model:visible="showExpressModal"
       :expressNo="order.express_no || ''"
-      :mobile="order.customer_phone"
+      :mobile="expressMobile"
     />
   </view>
 </template>
@@ -113,6 +113,8 @@ const latestExpressMessage = ref('')
 const statusInfo = computed(() => getStatusInfo(props.order.status))
 const deliveryColor = computed(() => getDeliveryTypeColor(props.order.delivery_type))
 const isMailOrder = computed(() => String(props.order.delivery_type) === '1')
+// 快递查询手机号：优先用客户登录手机号（member.mobile），兜底下单填写的 customer_phone
+const expressMobile = computed(() => props.order.member?.mobile || props.order.customer_phone || '')
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null
@@ -153,7 +155,7 @@ const loadExpressSummary = async () => {
   }
 
   try {
-    const res = await getExpress(props.order.express_no, props.order.customer_phone || '')
+    const res = await getExpress(props.order.express_no, expressMobile.value)
     if (res.code !== 1) {
       latestExpressMessage.value = ''
       return

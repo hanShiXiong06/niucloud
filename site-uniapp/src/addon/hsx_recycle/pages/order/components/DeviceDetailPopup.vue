@@ -22,16 +22,22 @@
                 <template v-else>
                 <view class="section">
                     <view class="section-title">基础信息</view>
-                    <u-cell-group :border="false">
-                        <u-cell v-for="item in basicRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
-                    </u-cell-group>
+                    <view class="info-list">
+                        <view v-for="item in basicRows" :key="item.label" class="info-row">
+                            <text class="info-label">{{ item.label }}</text>
+                            <text class="info-value">{{ item.value }}</text>
+                        </view>
+                    </view>
                 </view>
 
                 <view class="section">
                     <view class="section-title">价格与状态</view>
-                    <u-cell-group :border="false">
-                        <u-cell v-for="item in statusRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
-                    </u-cell-group>
+                    <view class="info-list">
+                        <view v-for="item in statusRows" :key="item.label" class="info-row">
+                            <text class="info-label">{{ item.label }}</text>
+                            <text class="info-value">{{ item.value }}</text>
+                        </view>
+                    </view>
                 </view>
 
                 <view v-if="hasCostAdjustment || canAdjustCost" class="section">
@@ -42,17 +48,23 @@
                         </view>
                         <view v-if="canAdjustCost" class="small-action" @click="openCostAdjust">调整</view>
                     </view>
-                    <u-cell-group v-if="hasCostAdjustment" :border="false">
-                        <u-cell v-for="item in costAdjustRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
-                    </u-cell-group>
+                    <view v-if="hasCostAdjustment" class="info-list">
+                        <view v-for="item in costAdjustRows" :key="item.label" class="info-row">
+                            <text class="info-label">{{ item.label }}</text>
+                            <text class="info-value">{{ item.value }}</text>
+                        </view>
+                    </view>
                     <view v-else class="cost-tip">当前暂无成本调整记录。</view>
                 </view>
 
                 <view v-if="checkRows.length || checkMetaItems.length || device.remark" class="section">
                     <view class="section-title">质检信息</view>
-                    <u-cell-group v-if="checkRows.length" :border="false">
-                        <u-cell v-for="item in checkRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
-                    </u-cell-group>
+                    <view v-if="checkRows.length" class="info-list">
+                        <view v-for="item in checkRows" :key="item.label" class="info-row">
+                            <text class="info-label">{{ item.label }}</text>
+                            <text class="info-value">{{ item.value }}</text>
+                        </view>
+                    </view>
                     <RecycleCheckSummary
                         v-if="checkMetaItems.length || device.remark"
                         :meta="checkMeta"
@@ -80,9 +92,12 @@
 
                 <view v-if="consignmentRows.length" class="section">
                     <view class="section-title">代卖信息</view>
-                    <u-cell-group :border="false">
-                        <u-cell v-for="item in consignmentRows" :key="item.label" :title="item.label" :value="String(item.value)" :border="true"></u-cell>
-                    </u-cell-group>
+                    <view class="info-list">
+                        <view v-for="item in consignmentRows" :key="item.label" class="info-row">
+                            <text class="info-label">{{ item.label }}</text>
+                            <text class="info-value">{{ item.value }}</text>
+                        </view>
+                    </view>
                 </view>
 
                 <view
@@ -727,18 +742,18 @@ const handleClose = () => {
     flex: 1;
     height: 0;
     min-height: 0;
-    padding: 24rpx 30rpx 0;
+    padding: 20rpx 24rpx 0;
     box-sizing: border-box;
     overflow: hidden;
 }
 
 .section {
-    margin-bottom: 28rpx;
+    margin-bottom: 20rpx;
 }
 
 .section-title {
-    margin-bottom: 16rpx;
-    font-size: 28rpx;
+    margin-bottom: 12rpx;
+    font-size: 26rpx;
     font-weight: 600;
     color: #1f2937;
 }
@@ -789,14 +804,15 @@ const handleClose = () => {
 }
 
 .info-list {
-    padding: 6rpx 20rpx;
+    padding: 2rpx 20rpx;
+    border: 1rpx solid #eef2f7;
 }
 
 .info-row {
     display: flex;
     align-items: center;
     gap: 18rpx;
-    padding: 16rpx 0;
+    padding: 13rpx 0;
     border-bottom: 1rpx solid #edf2f7;
     font-size: 24rpx;
 }
