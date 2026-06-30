@@ -132,8 +132,11 @@ export function getRealInfo() {
 }
 
 // 查询快递单号
+// 注意：阿里快递查询接口的 mobile 需为收/寄件人手机号「后4位」（顺丰等必填），传完整手机号会查不到数据
 export function getExpress(express_code: string = '', mobile: string = '') {
-  return request.get('recycle/device_query_api/express',  { express_code, mobile })
+  const digits = String(mobile || '').replace(/\D/g, '')
+  const mobile_tail = digits.length > 4 ? digits.slice(-4) : digits
+  return request.get('recycle/device_query_api/express',  { express_code, mobile: mobile_tail })
 }
 
 // 检查用户是否关注公众号

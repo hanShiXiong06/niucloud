@@ -136,6 +136,10 @@ export interface OrderListItem {
   cancel_reason?: string
   customer_name?: string
   customer_phone?: string
+  member?: {
+    nickname?: string
+    mobile?: string
+  }
   // 收货地址信息（邮寄订单）
   sender_name?: string
   sender_mobile?: string
@@ -230,6 +234,7 @@ export interface OrderDetailInfo {
   // 用户信息
   send_username?: string
   telphone?: string
+  customer_phone?: string
   member?: {
     nickname?: string
     mobile?: string

@@ -44,7 +44,7 @@
           </view>
         </view>
 
-        <view class="section report-section" v-if="reportItems.length">
+        <view class="section report-section" v-if="resultVisible && reportItems.length">
           <view class="report-section-head">
             <text class="section-title">检测明细</text>
             <text class="report-count">{{ styledCount ? `${reportItems.length} 项 / ${styledCount} 项重点` : `${reportItems.length} 项` }}</text>
@@ -71,7 +71,7 @@
           </view>
         </view>
 
-        <view class="section" v-else>
+        <view class="section" v-else-if="resultVisible">
           <view class="empty-report">
             <up-icon name="info-circle" size="22" color="#94a3b8"></up-icon>
             <text>暂无结构化检测结果</text>
@@ -92,7 +92,7 @@
           </view>
         </view>
 
-        <view v-if="imageList.length" class="section last">
+        <view v-if="imagesVisible && imageList.length" class="section last">
           <view class="section-head">
             <text class="section-title">验机图片</text>
             <text class="section-count">{{ imageList.length }} 张</text>
@@ -121,7 +121,13 @@ import { img, timeStampTurnTime } from '@/utils/common'
 const props = defineProps<{
   visible: boolean
   device?: OrderDetailDevice | null
+  showResult?: boolean
+  showImages?: boolean
 }>()
+
+// 质检结果（检测明细）与质检图片可分别控制，未传时默认显示
+const resultVisible = computed(() => props.showResult !== false)
+const imagesVisible = computed(() => props.showImages !== false)
 
 const emit = defineEmits<{
   close: []
