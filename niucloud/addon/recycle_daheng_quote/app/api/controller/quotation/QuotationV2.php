@@ -41,4 +41,35 @@ class QuotationV2 extends BaseApiController
 
         return success((new QuotationV2Service())->getList($data));
     }
+
+    /**
+     * 报价单详情（生成报价单用，返回与 spider 一致的形状）
+     */
+    public function detail()
+    {
+        $data = $this->request->params([
+            ['dataset_id', ''],
+            ['quotation_id', ''],
+            ['price_date', ''],
+        ]);
+        return success((new QuotationV2Service())->getDetail($data));
+    }
+
+    /**
+     * 单行(容量)价格历史（趋势弹窗）
+     */
+    public function priceHistory()
+    {
+        $id = (int)$this->request->param('id', 0);
+        $days = (int)$this->request->param('days', 30);
+        return success((new QuotationV2Service())->getPriceHistory($id, $days));
+    }
+
+    /**
+     * 报价单生成会员权益校验
+     */
+    public function reportPermission()
+    {
+        return success((new QuotationV2Service())->reportPermission());
+    }
 }

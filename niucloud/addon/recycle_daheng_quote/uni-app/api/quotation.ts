@@ -15,6 +15,27 @@ export function getQuotationV2PriceList(params: any) {
 }
 
 /**
+ * 报价单详情（生成报价单用，返回与 spider 一致的形状：columns[] + rows[].final_prices[]）
+ */
+export function getQuotationV2Detail(params: any = {}) {
+  return request.get("recycle_daheng_quote/quotation_v2/detail", params);
+}
+
+/**
+ * 单行(容量)价格历史序列（趋势弹窗）
+ */
+export function getQuotationV2PriceHistory(id: number | string, days = 30) {
+  return request.get("recycle_daheng_quote/quotation_v2/price-history", { id, days });
+}
+
+/**
+ * 生成报价单会员权益校验（daheng_quote_report）
+ */
+export function getQuotationV2ReportPermission() {
+  return request.get("recycle_daheng_quote/quotation_v2/report/permission");
+}
+
+/**
  * 报价数据接口类型定义
  */
 export interface QuotationPriceData {

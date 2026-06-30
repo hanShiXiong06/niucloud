@@ -162,7 +162,7 @@
 												class="price-cell price-body-cell"
 												:style="getPriceColumnStyle(column)"
 											>
-												<text v-if="hasPriceValue(row.prices?.[column.name])" class="price-value">{{ formatPrice(row.prices?.[column.name]) }}</text>
+												<text v-if="hasPriceValue(row.prices?.[column.name])" class="price-value" @click="openTrend(row, column.name)">{{ formatPrice(row.prices?.[column.name]) }}</text>
 												<text v-else class="empty-cell">--</text>
 											</view>
 										</view>
@@ -214,7 +214,10 @@
 
 		<view v-if="!loading" class="action-bar">
 			<view class="action-bar-inner">
-				<text class="action-tip">数据仅供参考，实际价格以最终评估为准</text>
+				<view class="report-btn" @click="goReport">
+					生成报价单
+					<text class="report-badge">会员免费</text>
+				</view>
 				<view class="order-btn" @click="goToOrder">去下单</view>
 			</view>
 		</view>
@@ -251,16 +254,18 @@
 			@update:only-hot="onlyHotModels = $event"
 			@close="showModelFilter = false"
 		/>
+		<PriceTrendPopup v-model:visible="trendVisible" :row-id="trendRowId" :title="trendTitle" :active-column="trendColumn" :theme="priceTheme" />
 	</view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onLoad, onPageScroll } from '@dcloudio/uni-app'
-import { getQuotationV2PriceList, getQuotationV2Types, type QuotationPriceData, type QuotationV2Type } from '@/addon/recycle_daheng_quote/api/quotation'
+import { getQuotationV2PriceList, getQuotationV2Types, getQuotationV2ReportPermission, type QuotationPriceData, type QuotationV2Type } from '@/addon/recycle_daheng_quote/api/quotation'
 import { getOrderSubmitConfig } from '@/addon/hsx_recycle/api/order'
 import { img } from '@/utils/common'
 import ModelFilterPopup from './components/ModelFilterPopup.vue'
+import PriceTrendPopup from './components/PriceTrendPopup.vue'
 
 const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准'
 
@@ -1136,6 +1141,50 @@ function goToOrder() {
 	if (spiderItemId.value) queryParts.push(`quote_spider_item_id=${encodeURIComponent(spiderItemId.value)}`)
 	const query = queryParts.length ? `?${queryParts.join('&')}` : ''
 	uni.navigateTo({ url: `${ORDER_PAGE_URL}${query}` })
+}
+
+/* ---------------- 价格走势弹窗 ---------------- */
+const trendVisible = ref(false)
+const trendRowId = ref<number | string>(0)
+const trendTitle = ref('')
+const trendColumn = ref('')
+
+function openTrend(row: Record<string, any>, columnName = '') {
+	if (!row || !row.id) return
+	trendRowId.value = row.id
+	trendColumn.value = columnName
+	trendTitle.value = [row.goods_name, row.capacity, columnName].filter(Boolean).join(' · ')
+	trendVisible.value = true
+}
+
+/* ---------------- 生成报价单(会员专享) ---------------- */
+async function goReport() {
+	if (!datasetId.value) {
+		uni.showToast({ title: '当前报价不支持生成', icon: 'none' })
+		return
+	}
+	let allowed = false
+	try {
+		const res = (await getQuotationV2ReportPermission()) as any
+		allowed = res?.code === 1 && Number(res?.data?.allowed || 0) === 1
+	} catch (e) {
+		allowed = false
+	}
+	if (!allowed) {
+		uni.showModal({
+			title: '会员专享',
+			content: '「生成报价单」为会员专享功能，开通会员后即可使用',
+			confirmText: '去开通',
+			cancelText: '取消',
+			success: r => {
+				if (r.confirm) uni.navigateTo({ url: '/app/pages/member/level' })
+			}
+		})
+		return
+	}
+	uni.navigateTo({
+		url: `/addon/recycle_daheng_quote/pages/report/config?id=${encodeURIComponent(datasetId.value)}&source=daheng`
+	})
 }
 
 function goBack() {
@@ -2346,6 +2395,33 @@ onPageScroll((event) => {
 	border-radius: 999rpx;
 	background: var(--button-bg);
 	box-shadow: 0 8rpx 18rpx rgba(59, 130, 246, 0.32);
+}
+.report-btn {
+	position: relative;
+	flex: 1;
+	height: 72rpx;
+	line-height: 72rpx;
+	text-align: center;
+	font-size: 28rpx;
+	font-weight: 700;
+	color: var(--brand, #3b82f6);
+	border-radius: 999rpx;
+	background: var(--bg-soft, #eef3ff);
+	border: 1rpx solid var(--brand, #3b82f6);
+	box-sizing: border-box;
+}
+.report-badge {
+	position: absolute;
+	top: -14rpx;
+	right: -8rpx;
+	padding: 0 10rpx;
+	height: 30rpx;
+	line-height: 30rpx;
+	font-size: 18rpx;
+	font-weight: 600;
+	color: #fff;
+	background: #ff5b4a;
+	border-radius: 999rpx 999rpx 999rpx 0;
 }
 
 @keyframes skeleton-shimmer {

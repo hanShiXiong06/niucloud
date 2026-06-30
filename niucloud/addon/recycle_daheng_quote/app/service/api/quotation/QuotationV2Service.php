@@ -5,10 +5,12 @@ namespace addon\recycle_daheng_quote\app\service\api\quotation;
 
 use addon\recycle_daheng_quote\app\dict\quotation\QuotationV2Dict;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationDataset;
+use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationField;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationNote;
 use addon\recycle_daheng_quote\app\model\quotation_v2\QuotationPrice;
 use addon\recycle_daheng_quote\app\service\core\quotation\QuotationDisplayConfigService;
 use addon\recycle_daheng_quote\app\service\core\quotation\QuotationV2CacheService;
+use app\model\member\Member;
 use core\base\BaseApiService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -27,6 +29,10 @@ class QuotationV2Service extends BaseApiService
 
     public function getList(array $where = []): array
     {
+        // 浏览量埋点:查看某数据集报价即 +1(在缓存外,确保每次访问都计)
+        if ((int)($where['dataset_id'] ?? 0) > 0) {
+            $this->incrementDatasetView((int)$where['dataset_id']);
+        }
         return (new QuotationV2CacheService())->rememberList($this->site_id, $this->normalizeCacheWhere($where), function () use ($where) {
             return $this->buildList($where);
         });
@@ -95,7 +101,11 @@ class QuotationV2Service extends BaseApiService
     {
         $dataset = $this->resolveDataset($where);
         $priceDate = $this->resolvePriceDate((int)$dataset['id'], (string)($where['price_date'] ?? ''));
+        return $this->queryRows($dataset, $priceDate, $where);
+    }
 
+    private function queryRows(array $dataset, string $priceDate, array $where = []): array
+    {
         $query = (new QuotationPrice())->alias('p')
             ->leftJoin('recycle_quotation_v2_model m', 'p.model_id = m.id AND p.site_id = m.site_id')
             ->leftJoin('recycle_quotation_v2_capacity c', 'p.capacity_id = c.id AND p.site_id = c.site_id')
@@ -170,6 +180,212 @@ class QuotationV2Service extends BaseApiService
         }
 
         return array_values($rows);
+    }
+
+    /**
+     * 报价单生成用：把某数据集转成与 spider 一致的「报价单详情」形状
+     * { id, name, brand, columns[], notice_text, price_date, rows[ {id, model_name, capacity, columns[], final_prices[], prev_final_prices[], remark} ] }
+     */
+    public function getDetail(array $where = []): array
+    {
+        $dataset = $this->resolveDataset($where);
+        $datasetId = (int)$dataset['id'];
+        $this->incrementDatasetView($datasetId);
+        $priceDate = $this->resolvePriceDate($datasetId, (string)($where['price_date'] ?? ''));
+        $columns = $this->datasetPriceColumns($datasetId);
+        $rows = $this->queryRows($dataset, $priceDate, []);
+
+        // 上一日价格（今天 vs 昨天涨跌）
+        $prevDate = $this->previousPriceDate($datasetId, $priceDate);
+        $prevByCap = [];
+        if ($prevDate !== '') {
+            foreach ($this->queryRows($dataset, $prevDate, []) as $pr) {
+                $prevByCap[(int)$pr['id']] = $pr['prices'] ?? [];
+            }
+        }
+
+        $outRows = [];
+        foreach ($rows as $r) {
+            $finalArr = [];
+            foreach ($columns as $col) {
+                $p = $r['prices'][$col] ?? null;
+                $finalArr[] = $p ? $this->priceToDisplay($p['final']) : '';
+            }
+            $prevArr = [];
+            if (isset($prevByCap[(int)$r['id']])) {
+                foreach ($columns as $col) {
+                    $p = $prevByCap[(int)$r['id']][$col] ?? null;
+                    $prevArr[] = $p ? $this->priceToDisplay($p['final']) : '';
+                }
+            }
+            $outRows[] = [
+                'id' => (int)$r['id'],
+                'item_id' => $datasetId,
+                'model_name' => (string)$r['goods_name'],
+                'tab' => (string)$r['series_name'],
+                'capacity_name' => (string)$r['capacity'],
+                'capacity' => (string)$r['capacity'],
+                'columns' => $columns,
+                'final_prices' => $finalArr,
+                'prev_final_prices' => $prevArr,
+                'remark' => (string)($r['value_info'] ?? ''),
+                'is_hot' => (int)($r['is_hot'] ?? 0),
+                'price_date' => (string)($r['price_date'] ?? $priceDate),
+            ];
+        }
+
+        return [
+            'id' => $datasetId,
+            'name' => $this->datasetTitle($dataset),
+            'brand' => '',
+            'columns' => $columns,
+            'notice_text' => $this->resolveDetailNotice($dataset),
+            'price_date' => $priceDate,
+            'update_at_text' => $this->formatTime((int)($dataset['last_sync_at'] ?? 0)),
+            'rows' => $outRows,
+        ];
+    }
+
+    /**
+     * 单个容量(=报价单里一行)近 N 天价格序列（趋势弹窗）
+     * @return array{columns: array, points: array<int, array{date:string, prices:array}>}
+     */
+    public function getPriceHistory(int $capacityId, int $days): array
+    {
+        $days = max(1, min(365, $days));
+        $empty = ['columns' => [], 'points' => []];
+        if ($this->site_id <= 0 || $capacityId <= 0) {
+            return $empty;
+        }
+        try {
+            $start = date('Y-m-d', time() - ($days - 1) * 86400);
+            $list = (new QuotationPrice())->alias('p')
+                ->leftJoin('recycle_quotation_v2_field f', 'p.field_id = f.id AND p.site_id = f.site_id')
+                ->where([
+                    ['p.site_id', '=', $this->site_id],
+                    ['p.capacity_id', '=', $capacityId],
+                    ['p.price_date', '>=', $start],
+                    ['f.field_type', '=', QuotationV2Dict::FIELD_TYPE_PRICE],
+                ])
+                ->field('p.price_date,p.field_name,p.final_price,f.sort as field_sort,f.id as field_id')
+                ->order('p.price_date asc,f.sort asc,f.id asc')
+                ->select()
+                ->toArray();
+            if (empty($list)) {
+                return $empty;
+            }
+            $columns = [];
+            foreach ($list as $it) {
+                $name = (string)$it['field_name'];
+                if ($name !== '' && !in_array($name, $columns, true)) {
+                    $columns[] = $name;
+                }
+            }
+            $byDate = [];
+            foreach ($list as $it) {
+                $d = (string)$it['price_date'];
+                if (!isset($byDate[$d])) {
+                    $byDate[$d] = array_fill(0, count($columns), null);
+                }
+                $idx = array_search((string)$it['field_name'], $columns, true);
+                if ($idx !== false) {
+                    $byDate[$d][$idx] = $this->priceToDisplay($it['final_price']);
+                }
+            }
+            ksort($byDate);
+            $points = [];
+            foreach ($byDate as $d => $prices) {
+                $points[] = ['date' => $d, 'prices' => $prices];
+            }
+            return ['columns' => $columns, 'points' => $points];
+        } catch (\Throwable $e) {
+            return $empty;
+        }
+    }
+
+    /**
+     * 会员是否有「报价单生成」权益（daheng_quote_report）
+     */
+    public function reportPermission(): array
+    {
+        try {
+            if (empty($this->member_id)) {
+                return ['allowed' => 0];
+            }
+            $member = (new Member())
+                ->where([['site_id', '=', $this->site_id], ['member_id', '=', $this->member_id]])
+                ->field('member_level')
+                ->with([
+                    'memberLevelData' => function ($query) {
+                        $query->field('level_id, site_id, level_name, status, level_benefits, level_gifts');
+                    }
+                ])
+                ->findOrEmpty()
+                ->toArray();
+            $allowed = !empty($member['memberLevelData']['level_benefits']['daheng_quote_report']['is_use']) ? 1 : 0;
+            return ['allowed' => $allowed];
+        } catch (\Throwable $e) {
+            return ['allowed' => 0];
+        }
+    }
+
+    private function datasetPriceColumns(int $datasetId): array
+    {
+        $names = (new QuotationField())->where([
+            ['site_id', '=', $this->site_id],
+            ['dataset_id', '=', $datasetId],
+            ['status', '=', QuotationV2Dict::STATUS_ENABLED],
+            ['field_type', '=', QuotationV2Dict::FIELD_TYPE_PRICE],
+        ])->order('sort asc,id asc')->column('field_name');
+
+        $columns = [];
+        foreach ($names as $name) {
+            $name = trim((string)$name);
+            if ($name !== '' && !in_array($name, $columns, true)) {
+                $columns[] = $name;
+            }
+        }
+        return $columns;
+    }
+
+    private function previousPriceDate(int $datasetId, string $priceDate): string
+    {
+        $prev = (new QuotationPrice())->where([
+            ['site_id', '=', $this->site_id],
+            ['dataset_id', '=', $datasetId],
+            ['price_date', '<', $priceDate],
+        ])->order('price_date desc')->value('price_date');
+        return $prev ? (string)$prev : '';
+    }
+
+    private function priceToDisplay($value): string
+    {
+        $v = (float)$value;
+        if ($v == (int)$v) {
+            return (string)(int)$v;
+        }
+        return rtrim(rtrim(sprintf('%.2f', $v), '0'), '.');
+    }
+
+    private function resolveDetailNotice(array $dataset): string
+    {
+        $remark = trim((string)($dataset['remark'] ?? ''));
+        return $remark !== '' ? $remark : '温馨提示：报价仅供参考，最终价格以质检结果为准';
+    }
+
+    private function incrementDatasetView(int $datasetId): void
+    {
+        if ($datasetId <= 0) {
+            return;
+        }
+        try {
+            Db::name('recycle_quotation_v2_dataset')
+                ->where([['site_id', '=', $this->site_id], ['id', '=', $datasetId]])
+                ->inc('view_count')
+                ->update();
+        } catch (\Throwable $e) {
+            // 浏览量失败不影响主流程（字段可能尚未升级）
+        }
     }
 
     private function normalizeCacheWhere(array $where): array

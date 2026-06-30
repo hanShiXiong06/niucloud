@@ -45,6 +45,10 @@ class Addon
         if (!$this->columnExists($table, 'sync_interval')) {
             Db::execute("ALTER TABLE `{$table}` ADD COLUMN `sync_interval` int NOT NULL DEFAULT 86400 COMMENT '自动同步间隔秒' AFTER `sync_enabled`");
         }
+        // 浏览量埋点字段(幂等):查看报价数据集 +1
+        if (!$this->columnExists($table, 'view_count')) {
+            Db::execute("ALTER TABLE `{$table}` ADD COLUMN `view_count` int NOT NULL DEFAULT 0 COMMENT '浏览量' AFTER `sort`");
+        }
     }
 
     private function tableExists(string $table): bool
