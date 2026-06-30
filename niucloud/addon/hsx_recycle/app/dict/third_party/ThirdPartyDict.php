@@ -31,6 +31,7 @@ class ThirdPartyDict
     const PROVIDER_YISU = 'yisu';                    // 亿速快递
     const PROVIDER_ANGUO = 'anguo';                  // 安果ERP快递
     const PROVIDER_ALI_EXPRESS = 'ali_express';      // 阿里快递查询
+    const PROVIDER_KUAIDI100 = 'kuaidi100';          // 快递100（发件+查询）
     const PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS = 'tencent_cloud_market_address'; // 腾讯云市场地址解析
     const PROVIDER_ALIYUN_SMS = 'aliyun_sms';        // 阿里云短信
 
@@ -62,6 +63,7 @@ class ThirdPartyDict
         self::PROVIDER_YISU => '亿速快递',
         self::PROVIDER_ANGUO => '安果ERP快递',
         self::PROVIDER_ALI_EXPRESS => '阿里快递查询',
+        self::PROVIDER_KUAIDI100 => '快递100',
         self::PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS => '腾讯云市场地址解析',
         self::PROVIDER_ALIYUN_SMS => '阿里云短信',
     ];
@@ -145,11 +147,13 @@ class ThirdPartyDict
             case self::SERVICE_TYPE_EXPRESS_ORDER:
                 $providers = [
                     self::PROVIDER_YISU => self::PROVIDER_TEXT[self::PROVIDER_YISU],
+                    self::PROVIDER_KUAIDI100 => self::PROVIDER_TEXT[self::PROVIDER_KUAIDI100],
                 ];
                 break;
             case self::SERVICE_TYPE_EXPRESS_QUERY:
                 $providers = [
                     self::PROVIDER_ALI_EXPRESS => self::PROVIDER_TEXT[self::PROVIDER_ALI_EXPRESS],
+                    self::PROVIDER_KUAIDI100 => self::PROVIDER_TEXT[self::PROVIDER_KUAIDI100],
                 ];
                 break;
             case self::SERVICE_TYPE_ADDRESS_PARSE:

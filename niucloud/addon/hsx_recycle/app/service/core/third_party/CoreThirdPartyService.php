@@ -27,6 +27,52 @@ class CoreThirdPartyService extends BaseCoreService
      * @return array
      * @throws CommonException
      */
+    /**
+     * 测试某能力「当前指定服务商」的就绪状态。
+     * 校验：能力已启用 + 指定服务商已配置完整 + Provider 类可加载并通过自身健康检查。
+     * 严格手动：只测指定的那一家，不尝试别家。
+     * @param int $siteId
+     * @param string $serviceType
+     * @return array { success, provider, provider_name, message }
+     */
+    public function testConnection(int $siteId, string $serviceType): array
+    {
+        if (!ThirdPartyDict::isValidServiceType($serviceType)) {
+            return ['success' => false, 'message' => "无效的服务类型: {$serviceType}"];
+        }
+        try {
+            $provider = $this->getProvider($serviceType, $siteId);
+            if (!$provider) {
+                return ['success' => false, 'message' => '未配置或当前指定的服务商不可用'];
+            }
+            if (!$provider->healthCheck()) {
+                return [
+                    'success' => false,
+                    'provider' => $provider->getProviderName(),
+                    'provider_name' => $provider->getName(),
+                    'message' => '配置不完整，请补全必填项后重试',
+                ];
+            }
+            return [
+                'success' => true,
+                'provider' => $provider->getProviderName(),
+                'provider_name' => $provider->getName(),
+                'message' => $provider->getName() . ' 配置就绪，可使用',
+            ];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * 调用第三方服务
+     * @param string $serviceType 服务类型
+     * @param string $method 方法名
+     * @param array $params 参数
+     * @param int $siteId 站点ID
+     * @return array
+     * @throws CommonException
+     */
     public function call(string $serviceType, string $method, array $params, int $siteId): array
     {
         // 1. 验证服务类型
@@ -211,7 +257,11 @@ class CoreThirdPartyService extends BaseCoreService
             return null;
         }
 
-        $providerName = $map[$serviceType]['provider'];
+        // 用配置中"当前生效服务商"，支持每个能力挂多个服务商并自由切换（严格手动，不做故障转移）
+        $providerName = $configService->getActiveProvider($siteId, $serviceType);
+        if ($providerName === '') {
+            $providerName = $map[$serviceType]['provider'];
+        }
         if (!empty($excludeProvider) && $providerName === $excludeProvider) {
             return null;
         }

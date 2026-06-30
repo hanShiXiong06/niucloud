@@ -1206,3 +1206,68 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_import_batch` (
   PRIMARY KEY (`id`),
   KEY `idx_site` (`site_id`,`create_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='回收质检导入批次';
+
+
+-- ----------------------------
+-- 任务驱动工单 · 实时态计数(看板/待办读它)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_stat_current` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `metric_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '指标键:stage_check/stage_price/stage_confirm/stage_pay 等',
+  `uid` int NOT NULL DEFAULT 0 COMMENT '维度:0=全站汇总,>0=经手人',
+  `value` int NOT NULL DEFAULT 0 COMMENT '当前数量',
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_site_metric_uid` (`site_id`,`metric_key`,`uid`) USING BTREE,
+  KEY `site_id` (`site_id`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收实时态计数(看板/待办读它)';
+
+-- ----------------------------
+-- 任务驱动工单 · 按日流水汇总(趋势/绩效读它)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_stat_daily` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `stat_date` int NOT NULL DEFAULT 0 COMMENT '统计日 YYYYMMDD',
+  `metric_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '指标键:enter_check/done_check/recycled/paid 等',
+  `uid` int NOT NULL DEFAULT 0 COMMENT '维度:0=全站,>0=经手人',
+  `value` int NOT NULL DEFAULT 0 COMMENT '台数',
+  `amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '金额',
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_site_date_metric_uid` (`site_id`,`stat_date`,`metric_key`,`uid`) USING BTREE,
+  KEY `site_date` (`site_id`,`stat_date`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收按日流水汇总(趋势/绩效读它)';
+
+-- ----------------------------
+-- 任务驱动工单 · 认领表(责任到人)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_task_claim` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `device_id` int NOT NULL DEFAULT 0 COMMENT '设备ID',
+  `stage_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '环节标识',
+  `assignee_uid` int NOT NULL DEFAULT 0 COMMENT '认领人UID',
+  `assignee_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '认领人名称快照',
+  `claimed_at` int NOT NULL DEFAULT 0 COMMENT '认领时间',
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_site_device_stage` (`site_id`,`device_id`,`stage_key`) USING BTREE,
+  KEY `assignee` (`site_id`,`assignee_uid`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收任务认领(责任到人)';
+
+-- 0.0.7 每日维度汇总(型号/分类/成色/来源),分析页读它，抗千万级
+CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_stat_daily_dim` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `stat_date` int NOT NULL DEFAULT 0 COMMENT '统计日 YYYYMMDD',
+  `dim_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '维度类型:category/model/grade/source',
+  `dim_value` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '维度值',
+  `cnt` int NOT NULL DEFAULT 0 COMMENT '当日该维度设备数',
+  `amount` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '当日该维度金额',
+  `update_time` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_dim` (`site_id`,`stat_date`,`dim_type`,`dim_value`) USING BTREE,
+  KEY `idx_site_type_date` (`site_id`,`dim_type`,`stat_date`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='回收每日维度汇总(型号/分类/成色/来源)';

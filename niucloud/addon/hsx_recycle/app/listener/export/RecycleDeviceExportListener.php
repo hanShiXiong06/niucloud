@@ -4,6 +4,7 @@ namespace addon\hsx_recycle\app\listener\export;
 
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 
 /**
  * 回收设备导出监听器
@@ -25,7 +26,7 @@ class RecycleDeviceExportListener
         $data = [];
         if (isset($param['type']) && $param['type'] == 'recycle_device') {
             $model = new RecycleDevice();
-            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, color,capacity,warranty_info, status, final_price, sell_price, update_at, order_id, price_uid, dispose_type, dispose_status, settlement_mode, consignment_order_id';
+            $field = 'id, imei,imei2,sn,member_id, model, check_result, category_id, color,capacity,warranty_info,system_version,check_template_id, status, final_price, sell_price, update_at, order_id, price_uid, dispose_type, dispose_status, settlement_mode, consignment_order_id';
 
             $where = $param['where'] ?? [];
 
@@ -72,7 +73,23 @@ class RecycleDeviceExportListener
             if (!empty($deviceIds)) {
                 (new RecycleDevice())->whereIn('id', $deviceIds)->update(['export_time' => time()]);
             }
+
+            // 质检模板保留列(颜色/内存等)存的是选项值(数字 id),按各设备所属模板回译成文案,避免导出偏差
+            $reservedKeys = ['color', 'capacity', 'system_version', 'warranty_info'];
+            $templateIds = array_column($data, 'check_template_id');
+            $optionLabelMap = DeviceSummaryHelper::buildOptionLabelMap($templateIds, $reservedKeys, (int)($param['site_id'] ?? 0));
+
             foreach ($data as $key => $value) {
+                // 选项值 → 文案回译(input/number 等自由输入字段不命中映射,原样保留)
+                $templateId = (int)($value['check_template_id'] ?? 0);
+                if ($templateId > 0 && !empty($optionLabelMap[$templateId])) {
+                    foreach ($reservedKeys as $rk) {
+                        if (isset($optionLabelMap[$templateId][$rk]) && isset($data[$key][$rk]) && $data[$key][$rk] !== '') {
+                            $data[$key][$rk] = DeviceSummaryHelper::resolveReservedValue((string)$data[$key][$rk], $optionLabelMap[$templateId][$rk]);
+                        }
+                    }
+                }
+
                 $data[$key]['order_no'] = $value['order']['order_no'] ?? '';
                 $data[$key]['create_at'] = !empty($value['update_at']) ? $value['update_at'] : '';
                 $isConsign = ($value['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN
@@ -120,7 +137,7 @@ class RecycleDeviceExportListener
                     $data[$key]['code'] = "\t" . $value['code'];
                 }
 
-                unset($data[$key]['order'], $data[$key]['price_user'], $data[$key]['priceUser'], $data[$key]['consignment_order'], $data[$key]['consignmentOrder'], $data[$key]['id'], $data[$key]['category_id'], $data[$key]['status'], $data[$key]['order_id'], $data[$key]['update_at'], $data[$key]['price_uid'], $data[$key]['dispose_type'], $data[$key]['dispose_status'], $data[$key]['settlement_mode'], $data[$key]['consignment_order_id']);
+                unset($data[$key]['order'], $data[$key]['price_user'], $data[$key]['priceUser'], $data[$key]['consignment_order'], $data[$key]['consignmentOrder'], $data[$key]['id'], $data[$key]['category_id'], $data[$key]['status'], $data[$key]['order_id'], $data[$key]['update_at'], $data[$key]['price_uid'], $data[$key]['dispose_type'], $data[$key]['dispose_status'], $data[$key]['settlement_mode'], $data[$key]['consignment_order_id'], $data[$key]['check_template_id'], $data[$key]['system_version']);
             }
         }
         return $data;

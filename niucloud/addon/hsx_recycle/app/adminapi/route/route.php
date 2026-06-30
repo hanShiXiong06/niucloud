@@ -593,6 +593,7 @@ Route::group('recycle', function () {
     Route::get('third_party_config', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@getConfig');
     Route::post('third_party_config', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@setConfig');
     Route::get('third_party_config/default', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@getDefaultConfig');
+    Route::post('third_party_config/test', 'addon\hsx_recycle\app\adminapi\controller\third_party\ThirdPartyConfig@testConnection');
     Route::post('third_party/address_parse', 'addon\hsx_recycle\app\adminapi\controller\third_party\AddressParse@parse');
 
     // 第三方服务配置管理
@@ -761,3 +762,50 @@ Route::group('recycle', function () {
 // USER_CODE_END -- recycle_order_reward
 
 // yisu
+
+// 任务驱动工单 · 环节-角色配置
+Route::group('recycle', function () {
+    Route::post('stat/rebuild', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@rebuild');
+    Route::get('stat/board', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@board');
+    Route::get('stat/dim', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@dim');
+    Route::get('stat/task/my_stages', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@myStages');
+    Route::get('stat/task/list', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@lists');
+    Route::put('stat/task/claim', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@claim');
+    Route::put('stat/task/release', 'addon\hsx_recycle\app\adminapi\controller\stat\Task@release');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+
+// 统一发件 · 快递公司管理
+Route::group('recycle', function () {
+    Route::get('delivery/company', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@pages');
+    Route::get('delivery/company/list', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@lists');
+    Route::post('delivery/company/import_presets', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@importPresets');
+    Route::get('delivery/company/provider_companies', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@providerCompanies');
+    Route::get('delivery/company/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@info');
+    Route::post('delivery/company', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@add');
+    Route::put('delivery/company/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@edit');
+    Route::delete('delivery/company/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@del');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);
+
+// 统一发件 · 电子面单模板
+Route::group('recycle', function () {
+    Route::get('express_sheet', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@pages');
+    Route::get('express_sheet/list', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@lists');
+    Route::get('express_sheet/paytype', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@payType');
+    Route::get('express_sheet/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@info');
+    Route::post('express_sheet', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@add');
+    Route::put('express_sheet/setDefault/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@setDefault');
+    Route::put('express_sheet/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@edit');
+    Route::delete('express_sheet/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@del');
+})->middleware([
+    AdminCheckToken::class,
+    AdminCheckRole::class,
+    AdminLog::class
+]);

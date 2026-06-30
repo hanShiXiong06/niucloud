@@ -145,6 +145,13 @@ class RecycleDevicePaymentService extends BaseAdminService
 
                 $paidAmount += $amount;
                 $paidCount++;
+
+                // 埋点：打款 = 离开"待打款"、入库 ERP 离场（回收系统终点），累计当日打款台数+金额（旁路，失败不阻断）
+                try {
+                    (new \addon\hsx_recycle\app\service\core\stat\CoreRecycleStatService())
+                        ->recordStageChange($this->site_id, 'pay', '', (int)$this->uid, $amount);
+                } catch (\Throwable $e) {
+                }
             }
 
             $summary = $this->syncOrderPayStatus($orderId, [

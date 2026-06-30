@@ -12,6 +12,17 @@ return [
     //     'icon' => '/addon/hsx_recycle/site-tabbar/icon_01.png'
     // ],
     [
+        'name' => '我的任务',
+        'key' => 'hsx_recycle_my_task',
+        'group' => 'hsx_recycle',
+        // menu_key 留空=所有人可见；页面内已按"我的角色→负责环节"过滤，无负责环节者看到空列表。
+        // 如需菜单级按角色控制，把 menu_key 设为一个已分配给角色的权限key即可。
+        'menu_key' => '',
+        'sort' => 0,
+        'page' => '/addon/hsx_recycle/pages/task/index',
+        'icon' => '/addon/hsx_recycle/site-tabbar/icon_02.png'
+    ],
+    [
         'name' => '数据统计',
         'key' => 'hsx_recycle_stats',
         'group' => 'hsx_recycle',

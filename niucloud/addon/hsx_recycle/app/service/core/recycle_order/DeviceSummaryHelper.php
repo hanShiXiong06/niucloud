@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core\recycle_order;
 
+use think\facade\Db;
+
 /**
  * 设备摘要(签收/代下单一次录入的质检摘要)统一处理助手。
  *
@@ -139,5 +141,88 @@ class DeviceSummaryHelper
             $cols[$key] = (string)$val;
         }
         return $cols;
+    }
+
+    /**
+     * 批量构建质检模板字段「选项值 → 选项文案」映射。
+     *
+     * 背景：select/radio/checkbox 类字段提交的是 option_value(数字 id)，
+     * 写入设备保留列(capacity/color 等)后导出会显示成数字，需按模板回译成 label。
+     * input/number 等自由输入字段不存在选项，自然不会命中映射，原样保留。
+     *
+     * @param array $templateIds 设备的 check_template_id 集合
+     * @param array $fieldKeys   需要回译的字段 key,如 ['color','capacity','system_version','warranty_info']
+     * @param int   $siteId      站点 id(可选,>0 时附加过滤)
+     * @return array [templateId][fieldKey][optionValue] => optionLabel
+     */
+    public static function buildOptionLabelMap(array $templateIds, array $fieldKeys, int $siteId = 0): array
+    {
+        $templateIds = array_values(array_unique(array_filter(array_map('intval', $templateIds), static fn($v) => $v > 0)));
+        $fieldKeys = array_values(array_filter(array_map('strval', $fieldKeys), static fn($v) => $v !== ''));
+        if (empty($templateIds) || empty($fieldKeys)) {
+            return [];
+        }
+
+        // 1) 取目标模板下、指定 key 的字段
+        $fieldQuery = Db::name('recycle_check_field')
+            ->whereIn('template_id', $templateIds)
+            ->whereIn('field_key', $fieldKeys);
+        if ($siteId > 0) {
+            $fieldQuery->where('site_id', '=', $siteId);
+        }
+        $fields = $fieldQuery->field('id,template_id,field_key')->select()->toArray();
+        if (empty($fields)) {
+            return [];
+        }
+
+        // field_id => [template_id, field_key]
+        $fieldMeta = [];
+        foreach ($fields as $f) {
+            $fieldMeta[(int)$f['id']] = ['template_id' => (int)$f['template_id'], 'field_key' => (string)$f['field_key']];
+        }
+
+        // 2) 取这些字段的全部选项
+        $options = Db::name('recycle_check_option')
+            ->whereIn('field_id', array_keys($fieldMeta))
+            ->field('field_id,option_value,option_label')
+            ->select()->toArray();
+
+        // 3) 组装 [templateId][fieldKey][optionValue] => label
+        $map = [];
+        foreach ($options as $opt) {
+            $meta = $fieldMeta[(int)$opt['field_id']] ?? null;
+            if ($meta === null) {
+                continue;
+            }
+            $value = (string)($opt['option_value'] ?? '');
+            $label = (string)($opt['option_label'] ?? '');
+            if ($value === '' || $label === '') {
+                continue;
+            }
+            $map[$meta['template_id']][$meta['field_key']][$value] = $label;
+        }
+        return $map;
+    }
+
+    /**
+     * 用映射把单个保留列的存储值回译成展示文案。
+     * 多值(逗号分隔)逐个回译;命中映射则换 label,否则原样保留。
+     *
+     * @param string $rawValue   存储值
+     * @param array  $valueLabel option_value => option_label
+     * @return string
+     */
+    public static function resolveReservedValue(string $rawValue, array $valueLabel): string
+    {
+        if ($rawValue === '' || empty($valueLabel)) {
+            return $rawValue;
+        }
+        // 去掉防科学计数法的制表符前缀再判断,回填后保持原样
+        $parts = explode(',', $rawValue);
+        $resolved = array_map(static function ($part) use ($valueLabel) {
+            $key = trim($part);
+            return $valueLabel[$key] ?? $part;
+        }, $parts);
+        return implode(',', $resolved);
     }
 }

@@ -36,7 +36,7 @@ class RecycleDashboard extends BaseAdminController
             ['high_cost_amount', RecycleDashboardFilterService::DEFAULT_HIGH_COST_AMOUNT],
         ]);
 
-        return success($this->metricService->getOverview($params));
+        return success($this->cached('overview', $params, fn() => $this->metricService->getOverview($params)));
     }
 
     public function trend(): Response
@@ -50,7 +50,22 @@ class RecycleDashboard extends BaseAdminController
             ['high_cost_amount', RecycleDashboardFilterService::DEFAULT_HIGH_COST_AMOUNT],
         ]);
 
-        return success($this->metricService->getTrend($params));
+        return success($this->cached('trend', $params, fn() => $this->metricService->getTrend($params)));
+    }
+
+    /**
+     * 看板数据缓存层：避免每次打开都实时扫大表。
+     * TTL 按时间段定：含今天的区间数据还在变 → 短缓存(60秒，兼顾新增数据及时可见与挡住高频扫表)；
+     * 纯历史区间不变 → 长缓存(1天)。
+     */
+    protected function cached(string $type, array $params, \Closure $builder): array
+    {
+        $siteId = $this->request->siteId();
+        $endDate = (string)($params['end_time'] ?? date('Y-m-d'));
+        $includesToday = substr($endDate, 0, 10) >= date('Y-m-d');
+        $ttl = $includesToday ? 60 : 86400;
+        $key = 'recycle_dash_' . $type . '_' . $siteId . '_' . md5(json_encode($params));
+        return cache_remember($key, $builder, 'recycle_dashboard', ['expire' => $ttl]);
     }
 
     public function metrics(): Response

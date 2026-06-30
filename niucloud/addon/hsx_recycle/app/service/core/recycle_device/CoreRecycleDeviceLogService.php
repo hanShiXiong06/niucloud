@@ -41,7 +41,21 @@ class CoreRecycleDeviceLogService extends BaseAdminService
             'remark' => mb_substr((string)$this->buildDetailedRemark($data), 0, 250)
         ];
 
-        return $this->model->insertGetId($logData);
+        $logId = $this->model->insertGetId($logData);
+
+        // 埋点：设备环节流转 → 更新统计汇总（旁路，失败不影响主业务流程）
+        try {
+            $fromStage = \addon\hsx_recycle\app\dict\stat\RecycleStageDict::stageOfStatus((int)($data['old_status'] ?? 0));
+            $toStage   = \addon\hsx_recycle\app\dict\stat\RecycleStageDict::stageOfStatus((int)($data['new_status'] ?? 0));
+            if ($fromStage !== $toStage) {
+                (new \addon\hsx_recycle\app\service\core\stat\CoreRecycleStatService())
+                    ->recordStageChange((int)$this->site_id, $fromStage, $toStage, (int)$this->uid);
+            }
+        } catch (\Throwable $e) {
+            // 统计为旁路，忽略其异常，绝不阻断业务
+        }
+
+        return $logId;
     }
 
     /**

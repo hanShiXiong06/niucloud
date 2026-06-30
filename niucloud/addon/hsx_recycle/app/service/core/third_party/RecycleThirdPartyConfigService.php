@@ -87,10 +87,9 @@ class RecycleThirdPartyConfigService extends BaseCoreService
             return [];
         }
 
+        // 取调用方指定的服务商；未指定则用配置里的当前默认服务商，再退回服务映射的兜底默认。
+        // 此处不再限制"只能是兜底默认服务商"，从而支持每个能力挂多个服务商并自由切换。
         $provider = $provider !== '' ? $provider : (string)($section['provider'] ?? $defaultProvider);
-        if ($provider !== $defaultProvider) {
-            return [];
-        }
 
         $providerConfig = $section[$provider] ?? [];
         if (!is_array($providerConfig)) {
@@ -98,6 +97,24 @@ class RecycleThirdPartyConfigService extends BaseCoreService
         }
 
         return $providerConfig;
+    }
+
+    /**
+     * 取某能力当前生效（被指定）的服务商 key。
+     * 严格手动：只认配置里指定的那一家，不做故障转移。
+     * @param int $siteId
+     * @param string $serviceType
+     * @return string
+     */
+    public function getActiveProvider(int $siteId, string $serviceType): string
+    {
+        $map = $this->getServiceMap();
+        if (!isset($map[$serviceType])) {
+            return '';
+        }
+        $section = $this->getConfig($siteId, false)[$map[$serviceType]['section']] ?? [];
+        $provider = (string)($section['provider'] ?? '');
+        return $provider !== '' ? $provider : (string)$map[$serviceType]['provider'];
     }
 
     public function isProviderConfigComplete(int $siteId, string $serviceType, string $provider = ''): bool
@@ -112,8 +129,8 @@ class RecycleThirdPartyConfigService extends BaseCoreService
             return false;
         }
 
-        $map = $this->getServiceMap();
-        $provider = $provider !== '' ? $provider : (string)($map[$serviceType]['provider'] ?? '');
+        // 未指定时按"当前生效服务商"校验必填，保证切换服务商后完整性判断跟着走
+        $provider = $provider !== '' ? $provider : $this->getActiveProvider($siteId, $serviceType);
         $requiredFields = $this->getRequiredFields($serviceType, $provider);
 
         foreach ($requiredFields as $field) {
@@ -176,6 +193,17 @@ class RecycleThirdPartyConfigService extends BaseCoreService
                         'fund' => '/openApi/fund',
                     ],
                 ],
+                ThirdPartyDict::PROVIDER_KUAIDI100 => [
+                    'base_url' => 'https://api.kuaidi100.com',
+                    'api_key' => '',
+                    'secret' => '',
+                    'default_kuaidicom' => '',
+                    'tempId' => '',
+                    'printType' => 'IMAGE',
+                    'siid' => '',
+                    'pay_type' => 'SHIPPER',
+                    'timeout' => 30,
+                ],
             ],
             'express_query' => [
                 'enabled' => 1,
@@ -184,6 +212,15 @@ class RecycleThirdPartyConfigService extends BaseCoreService
                     'base_url' => 'https://kzexpress.market.alicloudapi.com',
                     'api_key' => '',
                     'api_path' => '/api-mall/api/express/query',
+                    'timeout' => 30,
+                ],
+                ThirdPartyDict::PROVIDER_KUAIDI100 => [
+                    'base_url' => 'https://poll.kuaidi100.com',
+                    'customer' => '',
+                    'api_key' => '',
+                    'sign_type' => 'MD5',
+                    'resultv2' => '4',
+                    'default_com' => '',
                     'timeout' => 30,
                 ],
             ],
@@ -350,6 +387,16 @@ class RecycleThirdPartyConfigService extends BaseCoreService
                 'base_url',
                 'api_key',
                 'api_path',
+            ],
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER . ':' . ThirdPartyDict::PROVIDER_KUAIDI100 => [
+                'base_url',
+                'api_key',
+                'secret',
+            ],
+            ThirdPartyDict::SERVICE_TYPE_EXPRESS_QUERY . ':' . ThirdPartyDict::PROVIDER_KUAIDI100 => [
+                'base_url',
+                'customer',
+                'api_key',
             ],
             ThirdPartyDict::SERVICE_TYPE_ADDRESS_PARSE . ':' . ThirdPartyDict::PROVIDER_TENCENT_CLOUD_MARKET_ADDRESS => [
                 'base_url',

@@ -99,58 +99,119 @@
                                         </el-col>
                                         <el-col :span="6">
                                             <el-form-item label="服务商">
-                                                <el-select v-model="form.express_order.provider" disabled>
+                                                <el-select v-model="form.express_order.provider">
                                                     <el-option label="亿速快递" value="yisu" />
+                                                    <el-option label="快递100" value="kuaidi100" />
                                                 </el-select>
                                             </el-form-item>
                                         </el-col>
                                         <el-col :span="12">
-                                            <el-form-item label="接口地址">
-                                                <el-input v-model="form.express_order.yisu.base_url" placeholder="http://open.yisuopen.com" />
+                                            <el-form-item label="当前生效">
+                                                <span class="text-[13px] text-gray-500">指定谁就用谁，不会自动切换到别家</span>
                                             </el-form-item>
                                         </el-col>
                                     </el-row>
-                                    <el-form-item label="回调地址">
-                                        <el-input v-model="form.express_order.yisu.callback_url" placeholder="https://gl.hsxbk.top/api/tk_jhkd/yisunotice" />
-                                    </el-form-item>
-                                    <el-row :gutter="12">
-                                        <el-col :span="8">
-                                            <el-form-item label="AppID">
-                                                <el-input v-model="form.express_order.yisu.appid" />
-                                            </el-form-item>
-                                        </el-col>
-                                        <el-col :span="8">
-                                            <el-form-item label="AppSecret">
-                                                <el-input v-model="form.express_order.yisu.app_secret" type="password" show-password />
-                                            </el-form-item>
-                                        </el-col>
-                                        <el-col :span="4">
-                                            <el-form-item label="版本号">
-                                                <el-input v-model="form.express_order.yisu.version" />
-                                            </el-form-item>
-                                        </el-col>
-                                        <el-col :span="4">
-                                            <el-form-item label="超时">
-                                                <el-input-number v-model="form.express_order.yisu.timeout" :min="1" :max="120" />
-                                            </el-form-item>
-                                        </el-col>
-                                    </el-row>
-                                    <el-collapse>
-                                        <el-collapse-item title="接口路径配置" name="api-paths">
-                                            <el-row :gutter="12">
-                                                <el-col v-for="item in expressApiPathFields" :key="item.key" :span="8">
-                                                    <el-form-item :label="item.label">
-                                                        <el-input v-model="form.express_order.yisu.api_paths[item.key]" />
-                                                    </el-form-item>
-                                                </el-col>
-                                            </el-row>
-                                        </el-collapse-item>
-                                    </el-collapse>
+
+                                    <template v-if="form.express_order.provider === 'yisu'">
+                                        <el-form-item label="接口地址">
+                                            <el-input v-model="form.express_order.yisu.base_url" placeholder="http://open.yisuopen.com" />
+                                        </el-form-item>
+                                        <el-form-item label="回调地址">
+                                            <el-input v-model="form.express_order.yisu.callback_url" placeholder="https://gl.hsxbk.top/api/tk_jhkd/yisunotice" />
+                                        </el-form-item>
+                                        <el-row :gutter="12">
+                                            <el-col :span="8">
+                                                <el-form-item label="AppID">
+                                                    <el-input v-model="form.express_order.yisu.appid" />
+                                                </el-form-item>
+                                            </el-col>
+                                            <el-col :span="8">
+                                                <el-form-item label="AppSecret">
+                                                    <el-input v-model="form.express_order.yisu.app_secret" type="password" show-password placeholder="已配置则留空不改" />
+                                                </el-form-item>
+                                            </el-col>
+                                            <el-col :span="4">
+                                                <el-form-item label="版本号">
+                                                    <el-input v-model="form.express_order.yisu.version" />
+                                                </el-form-item>
+                                            </el-col>
+                                            <el-col :span="4">
+                                                <el-form-item label="超时">
+                                                    <el-input-number v-model="form.express_order.yisu.timeout" :min="1" :max="120" />
+                                                </el-form-item>
+                                            </el-col>
+                                        </el-row>
+                                        <el-collapse>
+                                            <el-collapse-item title="接口路径配置" name="api-paths">
+                                                <el-row :gutter="12">
+                                                    <el-col v-for="item in expressApiPathFields" :key="item.key" :span="8">
+                                                        <el-form-item :label="item.label">
+                                                            <el-input v-model="form.express_order.yisu.api_paths[item.key]" />
+                                                        </el-form-item>
+                                                    </el-col>
+                                                </el-row>
+                                            </el-collapse-item>
+                                        </el-collapse>
+                                    </template>
+
+                                    <template v-else-if="form.express_order.provider === 'kuaidi100'">
+                                        <el-form-item label="接口地址">
+                                            <el-input v-model="form.express_order.kuaidi100.base_url" placeholder="https://api.kuaidi100.com" />
+                                        </el-form-item>
+                                        <el-row :gutter="12">
+                                            <el-col :span="8">
+                                                <el-form-item label="API Key">
+                                                    <el-input v-model="form.express_order.kuaidi100.api_key" type="password" show-password placeholder="已配置则留空不改" />
+                                                </el-form-item>
+                                            </el-col>
+                                            <el-col :span="8">
+                                                <el-form-item label="Secret">
+                                                    <el-input v-model="form.express_order.kuaidi100.secret" type="password" show-password placeholder="已配置则留空不改" />
+                                                </el-form-item>
+                                            </el-col>
+                                            <el-col :span="8">
+                                                <el-form-item label="默认快递公司">
+                                                    <el-input v-model="form.express_order.kuaidi100.default_kuaidicom" placeholder="如 shunfeng / yuantong" />
+                                                </el-form-item>
+                                            </el-col>
+                                        </el-row>
+                                        <el-row :gutter="12">
+                                            <el-col :span="8">
+                                                <el-form-item label="面单模板ID">
+                                                    <el-input v-model="form.express_order.kuaidi100.tempId" />
+                                                </el-form-item>
+                                            </el-col>
+                                            <el-col :span="6">
+                                                <el-form-item label="打印方式">
+                                                    <el-select v-model="form.express_order.kuaidi100.printType">
+                                                        <el-option label="图片(IMAGE)" value="IMAGE" />
+                                                        <el-option label="HTML" value="HTML" />
+                                                        <el-option label="云打印(CLOUD)" value="CLOUD" />
+                                                    </el-select>
+                                                </el-form-item>
+                                            </el-col>
+                                            <el-col :span="6">
+                                                <el-form-item label="云打印机码">
+                                                    <el-input v-model="form.express_order.kuaidi100.siid" placeholder="printType=CLOUD 时必填" />
+                                                </el-form-item>
+                                            </el-col>
+                                            <el-col :span="4">
+                                                <el-form-item label="超时">
+                                                    <el-input-number v-model="form.express_order.kuaidi100.timeout" :min="1" :max="120" />
+                                                </el-form-item>
+                                            </el-col>
+                                        </el-row>
+                                        <div class="text-[12px] text-gray-500 leading-relaxed">快递100 当前支持下单、取消；轨迹查询请在「快递查询」能力里使用。</div>
+                                    </template>
                                 </el-form>
+                                <div class="flex items-center gap-[8px] mt-[12px]">
+                                    <el-button :loading="testing.express_order" @click="testConnection('express_order')">测试连接</el-button>
+                                    <span class="text-[12px] text-gray-400">检测当前服务商是否就绪（基于已保存配置，请先点上方“保存配置”）</span>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="flow-step">
+                        <div class="flow-step" v-if="form.express_order.provider === 'yisu'">
                             <div class="step-index">2</div>
                             <div class="step-body">
                                 <div class="step-head">
@@ -182,7 +243,7 @@
                             </div>
                         </div>
 
-                        <div class="flow-step">
+                        <div class="flow-step" v-if="form.express_order.provider === 'yisu'">
                             <div class="step-index">3</div>
                             <div class="step-body">
                                 <div class="step-head">
@@ -216,23 +277,55 @@
                             <el-switch v-model="form.express_query.enabled" :active-value="1" :inactive-value="0" />
                         </el-form-item>
                         <el-form-item label="服务商">
-                            <el-select v-model="form.express_query.provider" disabled>
+                            <el-select v-model="form.express_query.provider">
                                 <el-option label="阿里云市场快递查询" value="ali_express" />
+                                <el-option label="快递100" value="kuaidi100" />
                             </el-select>
                         </el-form-item>
-                        <el-form-item label="接口域名">
-                            <el-input v-model="form.express_query.ali_express.base_url" placeholder="https://kzexpress.market.alicloudapi.com" />
-                        </el-form-item>
-                        <el-form-item label="接口路径">
-                            <el-input v-model="form.express_query.ali_express.api_path" placeholder="/api-mall/api/express/query" />
-                        </el-form-item>
-                        <el-form-item label="AppCode">
-                            <el-input v-model="form.express_query.ali_express.api_key" type="password" show-password />
-                        </el-form-item>
-                        <el-form-item label="超时时间">
-                            <el-input-number v-model="form.express_query.ali_express.timeout" :min="1" :max="120" />
-                        </el-form-item>
+
+                        <template v-if="form.express_query.provider === 'ali_express'">
+                            <el-form-item label="接口域名">
+                                <el-input v-model="form.express_query.ali_express.base_url" placeholder="https://kzexpress.market.alicloudapi.com" />
+                            </el-form-item>
+                            <el-form-item label="接口路径">
+                                <el-input v-model="form.express_query.ali_express.api_path" placeholder="/api-mall/api/express/query" />
+                            </el-form-item>
+                            <el-form-item label="AppCode">
+                                <el-input v-model="form.express_query.ali_express.api_key" type="password" show-password placeholder="已配置则留空不改" />
+                            </el-form-item>
+                            <el-form-item label="超时时间">
+                                <el-input-number v-model="form.express_query.ali_express.timeout" :min="1" :max="120" />
+                            </el-form-item>
+                        </template>
+
+                        <template v-else-if="form.express_query.provider === 'kuaidi100'">
+                            <el-form-item label="接口域名">
+                                <el-input v-model="form.express_query.kuaidi100.base_url" placeholder="https://poll.kuaidi100.com" />
+                            </el-form-item>
+                            <el-form-item label="授权码 customer">
+                                <el-input v-model="form.express_query.kuaidi100.customer" placeholder="企业版授权码" />
+                            </el-form-item>
+                            <el-form-item label="授权 Key">
+                                <el-input v-model="form.express_query.kuaidi100.api_key" type="password" show-password placeholder="已配置则留空不改" />
+                            </el-form-item>
+                            <el-form-item label="签名算法">
+                                <el-select v-model="form.express_query.kuaidi100.sign_type">
+                                    <el-option label="MD5" value="MD5" />
+                                    <el-option label="SHA256" value="SHA256" />
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="默认快递公司">
+                                <el-input v-model="form.express_query.kuaidi100.default_com" placeholder="未传 com 时使用，如 yuantong" />
+                            </el-form-item>
+                            <el-form-item label="超时时间">
+                                <el-input-number v-model="form.express_query.kuaidi100.timeout" :min="1" :max="120" />
+                            </el-form-item>
+                        </template>
                     </el-form>
+                    <div class="flex items-center gap-[8px] mt-[12px] max-w-[760px]">
+                        <el-button :loading="testing.express_query" @click="testConnection('express_query')">测试连接</el-button>
+                        <span class="text-[12px] text-gray-400">检测当前服务商是否就绪（基于已保存配置，请先点上方“保存配置”）</span>
+                    </div>
                 </el-tab-pane>
 
                 <el-tab-pane label="地址解析" name="address_parse">
@@ -329,7 +422,7 @@ import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { apiThirdPartyConfig, apiThirdPartyConfigDefault, apiThirdPartyConfigOverview, apiThirdPartyConfigSave } from '@/addon/hsx_recycle/api/third_party'
+import { apiThirdPartyConfig, apiThirdPartyConfigDefault, apiThirdPartyConfigOverview, apiThirdPartyConfigSave, apiThirdPartyConfigTest } from '@/addon/hsx_recycle/api/third_party'
 import { batchUpdateYisuProduct, getYisuProductList } from '@/addon/hsx_recycle/api/yisu'
 import { getExpressFund } from '@/addon/hsx_recycle/api/express'
 
@@ -367,6 +460,17 @@ const defaultForm = {
                 waybillPdf: '/openApi/getWaybillPdf',
                 fund: '/openApi/fund'
             }
+        },
+        kuaidi100: {
+            base_url: 'https://api.kuaidi100.com',
+            api_key: '',
+            secret: '',
+            default_kuaidicom: '',
+            tempId: '',
+            printType: 'IMAGE',
+            siid: '',
+            pay_type: 'SHIPPER',
+            timeout: 30
         }
     },
     express_query: {
@@ -376,6 +480,15 @@ const defaultForm = {
             base_url: 'https://kzexpress.market.alicloudapi.com',
             api_key: '',
             api_path: '/api-mall/api/express/query',
+            timeout: 30
+        },
+        kuaidi100: {
+            base_url: 'https://poll.kuaidi100.com',
+            customer: '',
+            api_key: '',
+            sign_type: 'MD5',
+            resultv2: '4',
+            default_com: '',
             timeout: 30
         }
     },
@@ -496,6 +609,25 @@ const saveConfig = async () => {
         await loadOverview()
     } finally {
         saving.value = false
+    }
+}
+
+const testing = reactive<Record<string, boolean>>({})
+const testConnection = async (capability: string) => {
+    testing[capability] = true
+    try {
+        const res = await apiThirdPartyConfigTest(capability)
+        const data = res.data || {}
+        if (data.success) {
+            ElMessage.success(data.message || '配置就绪，可使用')
+        } else {
+            ElMessage.warning(data.message || '当前服务商未就绪')
+        }
+        await loadOverview()
+    } catch (e: any) {
+        ElMessage.error(e?.message || '测试失败')
+    } finally {
+        testing[capability] = false
     }
 }
 

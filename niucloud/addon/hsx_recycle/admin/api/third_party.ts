@@ -22,6 +22,10 @@ export function apiThirdPartyConfigDefault() {
     return request.get('recycle/third_party_config/default')
 }
 
+export function apiThirdPartyConfigTest(capability: string) {
+    return request.post('recycle/third_party_config/test', { capability }, { showErrorMessage: false })
+}
+
 // ==================== 第三方服务配置 ====================
 
 /**

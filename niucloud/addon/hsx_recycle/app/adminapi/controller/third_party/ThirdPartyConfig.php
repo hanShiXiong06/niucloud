@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\adminapi\controller\third_party;
 
 use addon\hsx_recycle\app\service\admin\third_party\RecycleThirdPartyConfigService;
 use addon\hsx_recycle\app\service\admin\third_party\ThirdPartyCapabilityService;
+use addon\hsx_recycle\app\service\core\third_party\CoreThirdPartyService;
 use core\base\BaseAdminController;
 
 /**
@@ -31,5 +32,17 @@ class ThirdPartyConfig extends BaseAdminController
     public function overview()
     {
         return success((new ThirdPartyCapabilityService())->overview());
+    }
+
+    /**
+     * 测试某能力当前指定服务商的连通就绪状态
+     */
+    public function testConnection()
+    {
+        $serviceType = (string)$this->request->param('capability', '');
+        if ($serviceType === '') {
+            return fail('请指定要测试的能力');
+        }
+        return success((new CoreThirdPartyService())->testConnection($this->site_id, $serviceType));
     }
 }
