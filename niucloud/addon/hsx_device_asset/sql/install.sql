@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}device_asset_item` (
   `source_status` int NOT NULL DEFAULT '0' COMMENT '导入时回收设备状态',
   `recycle_final_price` decimal(12,2) NOT NULL DEFAULT '0.00' COMMENT '回收最终价',
   `check_summary` text COMMENT '质检摘要',
+  `hidden_check_keys` text COMMENT '定价员隐藏的质检项字段名(json数组);仅商城买家版 qc_report 不展示,原始质检报告不动',
   `status` varchar(32) NOT NULL DEFAULT 'wait_photo' COMMENT '资产状态',
   `photo_status` varchar(32) NOT NULL DEFAULT 'wait_photo' COMMENT '拍照状态',
   `price_status` varchar(32) NOT NULL DEFAULT 'wait_price' COMMENT '定价状态',

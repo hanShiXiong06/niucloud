@@ -167,6 +167,7 @@ class DeviceAsset extends BaseAdminController
             ['peer_price', 0],
             ['min_price', 0],
             ['remark', ''],
+            ['hidden_check_keys', []],   // 定价员隐藏的质检项(买家版不展示)
         ]);
 
         return success($this->service->completePrice((int)$id, $data));

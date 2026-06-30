@@ -888,6 +888,10 @@ class DeviceAssetService extends BaseAdminService
                 'price_status' => DeviceAssetDict::PRICE_STATUS_COMPLETED,
                 'status' => DeviceAssetDict::STATUS_READY_EXPORT,
             ];
+            // 定价员隐藏的质检项(买家版不展示);仅当本次提交携带时才更新,避免重新定价误清空
+            if (array_key_exists('hidden_check_keys', $data)) {
+                $priceData['hidden_check_keys'] = json_encode($this->normalizeHiddenCheckKeys($data['hidden_check_keys']), JSON_UNESCAPED_UNICODE);
+            }
             $asset->save($priceData);
 
             $order = (new DeviceAssetPriceOrder())->where([
@@ -936,12 +940,18 @@ class DeviceAssetService extends BaseAdminService
     private function buildPriceCompletedEvent(DeviceAssetItem $asset, int $assetId): array
     {
         // 本资产可用图片：与中台导出口径一致——排除已退回(rejected)，待复检(pending)与已通过(approved)都带
-        $images = (new DeviceAssetMedia())->where([
+        $mediaRows = (new DeviceAssetMedia())->where([
             ['site_id', '=', $this->site_id],
             ['asset_id', '=', $assetId],
             ['media_type', '=', 'image'],
             ['status', '<>', DeviceAssetDict::MEDIA_STATUS_REJECTED],
-        ])->order('sort asc, id asc')->column('url');
+        ])->order('sort asc, id asc')->field('url,scene')->select()->toArray();
+        // images: 平铺 url(封面/列表用,兼容旧逻辑); media: 带分类(scene)的结构,供商品详情按 正面/反面/侧面/瑕疵 分组
+        $images = array_values(array_filter(array_map(static fn($m) => (string)($m['url'] ?? ''), $mediaRows)));
+        $media = array_map(static fn($m) => [
+            'url'   => (string)($m['url'] ?? ''),
+            'scene' => (string)($m['scene'] ?? ''),
+        ], array_values(array_filter($mediaRows, static fn($m) => (string)($m['url'] ?? '') !== '')));
 
         return [
             'event_name' => 'device_asset.price.completed.v1',
@@ -959,8 +969,10 @@ class DeviceAssetService extends BaseAdminService
                 'remark'          => (string)$asset->price_remark,
                 'model_name'      => (string)$asset->model,
                 'imei'            => (string)$asset->imei,
-                'qc_info'         => $asset->check_summary, // json 字段(模型已转对象/数组)，原样传，勿强转字符串
+                'qc_info'         => $this->buyerFacingCheckSummary($asset), // 买家版:剔除定价员隐藏项(原始 check_summary 不动)
+                'hidden_check_keys' => $this->normalizeHiddenCheckKeys($asset->hidden_check_keys ?? null), // 定价员隐藏的质检字段名,商城据此过滤 qc_report
                 'images'          => $images,
+                'media'           => $media, // 带分类(scene=正面/反面/侧面/瑕疵)的图片,供商品详情分组展示
             ],
         ];
     }
@@ -1192,6 +1204,59 @@ class DeviceAssetService extends BaseAdminService
             return is_array($json) ? $json : ['raw' => $value];
         }
         return [];
+    }
+
+    /** 归一化"隐藏质检项"为字段名字符串数组 */
+    protected function normalizeHiddenCheckKeys($value): array
+    {
+        if (is_string($value) && $value !== '') {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($value)) {
+            return [];
+        }
+        $keys = [];
+        foreach ($value as $k) {
+            $k = trim((string)$k);
+            if ($k !== '') {
+                $keys[$k] = true;
+            }
+        }
+        return array_keys($keys);
+    }
+
+    /**
+     * 买家版质检报告:在原始 check_summary 基础上剔除定价员隐藏的字段项。
+     * 原始 check_summary 不改动(中台/回收/质检员仍看完整);仅上架给商城的 qc_info 用这份精简版。
+     * @param object $asset 设备资产模型
+     * @return array 过滤后的质检摘要(字段名→值)
+     */
+    protected function buyerFacingCheckSummary($asset): array
+    {
+        $summary = $this->daToArr($asset->check_summary ?? null);
+        $hidden = $this->normalizeHiddenCheckKeys($asset->hidden_check_keys ?? null);
+        if (empty($hidden) || empty($summary)) {
+            return $summary;
+        }
+        $hiddenSet = array_flip($hidden);
+        $out = [];
+        foreach ($summary as $key => $val) {
+            // check_summary 既可能是 {字段名:值} 关联数组, 也可能是 [{label/field_name,...}] 列表; 两种都按字段名剔除
+            if (is_array($val)) {
+                $label = (string)($val['label'] ?? $val['field_name'] ?? $val['name'] ?? $key);
+                if (isset($hiddenSet[$label])) {
+                    continue;
+                }
+                $out[$key] = $val;
+            } else {
+                if (isset($hiddenSet[(string)$key])) {
+                    continue;
+                }
+                $out[$key] = $val;
+            }
+        }
+        return $out;
     }
 
     protected function buildCheckSummary(array $device): array

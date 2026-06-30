@@ -42,8 +42,11 @@
             <AssetCheckSummary
                 :text="checkText"
                 :items="checkText ? undefined : checkItems"
+                :editable="canEdit"
+                v-model:hiddenKeys="hiddenKeys"
                 empty-text="暂无质检摘要"
             ></AssetCheckSummary>
+            <view v-if="canEdit" class="check-trim-tip">点项目右侧 × 可把不想给买家看的质检项删掉(只影响商城展示,原始质检报告不变,可恢复)</view>
             <!-- 质检员手填备注：模板覆盖不到的补充信息，重要，单独突出 -->
             <view v-if="checkRemark" class="check-remark">
                 <view class="check-remark__head">
@@ -80,6 +83,7 @@
                             type="digit"
                             placeholder="请输入销售价"
                             border="none"
+                            :disabled="!canEdit"
                             :customStyle="fieldInputStyle"
                         ></u-input>
                     </view>
@@ -94,6 +98,7 @@
                             type="digit"
                             placeholder="选填"
                             border="none"
+                            :disabled="!canEdit"
                             :customStyle="fieldInputStyle"
                         ></u-input>
                     </view>
@@ -111,6 +116,7 @@
                         placeholder="成色、渠道、底价说明等（选填）"
                         :height="110"
                         :maxlength="300"
+                        :disabled="!canEdit"
                         count
                     ></u-textarea>
                 </view>
@@ -129,7 +135,7 @@
                 type="primary"
                 :loading="submitting"
                 :custom-style="{ flex: 1, height: '88rpx', marginLeft: '24rpx' }"
-                @click="handleConfirm"
+                @click="canEdit ? handleConfirm() : unlockEdit()"
             >{{ pricePrimaryText }}</u-button>
         </view>
     </view>
@@ -150,6 +156,13 @@ const activeImageIndex = ref(0)
 const fieldInputStyle = { padding: '0', background: 'transparent', fontSize: '32rpx', fontWeight: '700' }
 
 const form = reactive({ sale_price: '', peer_price: '', remark: '' })
+// 定价员隐藏的质检项(买家版不展示);初始化自资产,提交时一并保存
+const hiddenKeys = ref<string[]>([])
+const parseHiddenKeys = (v: any): string[] => {
+    if (Array.isArray(v)) return v.map((x: any) => String(x))
+    if (typeof v === 'string' && v) { try { const p = JSON.parse(v); return Array.isArray(p) ? p.map((x: any) => String(x)) : [] } catch { return [] } }
+    return []
+}
 
 onLoad((options: any) => {
     assetId.value = String(options?.id || '')
@@ -169,6 +182,7 @@ const loadInfo = async () => {
         form.sale_price = asset.value.sale_price && Number(asset.value.sale_price) > 0 ? String(asset.value.sale_price) : ''
         form.peer_price = asset.value.peer_price && Number(asset.value.peer_price) > 0 ? String(asset.value.peer_price) : ''
         form.remark = asset.value.price_remark || ''
+        hiddenKeys.value = parseHiddenKeys(asset.value.hidden_check_keys)
         activeImageIndex.value = 0
     } finally {
         loading.value = false
@@ -205,10 +219,22 @@ const allImages = computed(() => {
 
 const mainImage = computed(() => allImages.value[activeImageIndex.value] || allImages.value[0] || '')
 const isPriceCompleted = computed(() => asset.value?.price_status === 'completed' || Number(asset.value?.priced_at || 0) > 0)
+// 已完成默认只读(工作已交付下游);点"重新定价"显式解锁后才可改价/删减质检
+const editMode = ref(false)
+const canEdit = computed(() => !isPriceCompleted.value || editMode.value)
 const pricePrimaryText = computed(() => {
-    if (isPriceCompleted.value) return '重新定价'
+    if (isPriceCompleted.value && !editMode.value) return '重新定价'
     return form.sale_price ? '确认定价' : '填写销售价'
 })
+// 解锁:已完成 → 提示确认 → 进入编辑态
+const unlockEdit = () => {
+    uni.showModal({
+        title: '重新定价',
+        content: '该机器已定价完成并推送下游。重新定价会再次推送覆盖。确定继续吗？',
+        confirmText: '继续修改',
+        success: (r) => { if (r.confirm) editMode.value = true }
+    })
+}
 const grossProfit = computed(() => Number(form.sale_price || 0) - Number(asset.value?.recycle_final_price || 0))
 const priceWarnings = computed(() => {
     const warnings: string[] = []
@@ -230,7 +256,8 @@ const handleConfirm = async () => {
             sale_price: Number(form.sale_price || 0),
             peer_price: Number(form.peer_price || 0),
             min_price: 0,
-            remark: form.remark || ''
+            remark: form.remark || '',
+            hidden_check_keys: hiddenKeys.value
         })
         uni.showToast({ title: '定价已保存，继续下一台', icon: 'none' })
         const pages = getCurrentPages()
@@ -348,6 +375,13 @@ const toObject = (value: any): Record<string, any> => {
     font-size: 22rpx;
 }
 
+/* 删减质检项的提示 */
+.check-trim-tip {
+    margin-top: 12rpx;
+    font-size: 21rpx;
+    color: #909399;
+    line-height: 1.5;
+}
 /* 质检员补充备注：橙色弱底，强调它是人工补充的关键信息 */
 .check-remark {
     margin-top: 18rpx;

@@ -23,6 +23,9 @@
                 >
                     <text class="acs__label">{{ it.label }}</text>
                     <text class="acs__value">{{ it.value }}</text>
+                    <view v-if="editable" class="acs__del" @click.stop="hide(it.label)">
+                        <u-icon name="close" color="#bbb" size="13"></u-icon>
+                    </view>
                 </view>
             </view>
         </view>
@@ -32,7 +35,18 @@
             <u-icon :name="expanded ? 'arrow-up' : 'arrow-down'" color="#3c9cff" size="13"></u-icon>
         </view>
 
-        <text v-if="!abnormalRows.length && !normalRows.length" class="acs__empty">{{ emptyText }}</text>
+        <!-- 删减模式:已隐藏项(买家看不到),可点击恢复 -->
+        <view v-if="editable && hiddenRows.length" class="acs__hidden">
+            <text class="acs__hidden-tip">已隐藏 {{ hiddenRows.length }} 项(买家不可见),点可恢复：</text>
+            <view class="acs__hidden-tags">
+                <view v-for="(it, i) in hiddenRows" :key="'h' + i" class="acs__hidden-tag" @click="unhide(it.label)">
+                    <text>{{ it.label }}</text>
+                    <u-icon name="reload" color="#3c9cff" size="11"></u-icon>
+                </view>
+            </view>
+        </view>
+
+        <text v-if="!abnormalRows.length && !normalRows.length && !hiddenRows.length" class="acs__empty">{{ emptyText }}</text>
     </view>
 </template>
 
@@ -51,14 +65,31 @@ const props = withDefaults(defineProps<{
     items?: Array<{ label: string, value: any, abnormal?: boolean }>
     text?: string
     emptyText?: string
+    // 定价员删减模式:开启后每项可×隐藏(只影响买家版,不动原始报告)
+    editable?: boolean
+    // 已隐藏的字段名(v-model:hiddenKeys)
+    hiddenKeys?: string[]
 }>(), {
     title: '质检结论',
     items: undefined,
     text: '',
-    emptyText: '暂无质检信息'
+    emptyText: '暂无质检信息',
+    editable: false,
+    hiddenKeys: () => []
 })
 
+const emit = defineEmits<{ (e: 'update:hiddenKeys', v: string[]): void }>()
+
 const expanded = ref(false)
+const hiddenSet = computed(() => new Set((props.hiddenKeys || []).map(k => String(k))))
+const hide = (label: string) => {
+    if (!label) return
+    const next = Array.from(new Set([...(props.hiddenKeys || []).map(String), label]))
+    emit('update:hiddenKeys', next)
+}
+const unhide = (label: string) => {
+    emit('update:hiddenKeys', (props.hiddenKeys || []).map(String).filter(k => k !== label))
+}
 
 // 异常判定：保守关键词，避免「无维修 / 未拆」等被误判
 const GOOD_RE = /正常|完美|无维修|无进水|无拆|未拆|健康|已激活|可还原|已注销|可注销|完好|无明显|100\s*%|^无|^未/
@@ -117,8 +148,12 @@ const rows = computed<Array<{ label: string, value: string, abnormal: boolean }>
         .map(it => ({ label: it.label, value: it.value, abnormal: detectAbnormal(it.value, it.abnormal) }))
 })
 
-const abnormalRows = computed(() => rows.value.filter(r => r.abnormal))
-const normalRows = computed(() => rows.value.filter(r => !r.abnormal))
+// 可见行 = 全部行剔除已隐藏(隐藏只影响展示与买家版)
+const visibleRows = computed(() => rows.value.filter(r => !hiddenSet.value.has(r.label)))
+// 已隐藏行(供恢复)
+const hiddenRows = computed(() => rows.value.filter(r => hiddenSet.value.has(r.label)))
+const abnormalRows = computed(() => visibleRows.value.filter(r => r.abnormal))
+const normalRows = computed(() => visibleRows.value.filter(r => !r.abnormal))
 // 异常常驻在前；展开后再接上正常项，合并到同一个块内渲染
 const displayRows = computed(() => expanded.value ? [...abnormalRows.value, ...normalRows.value] : abnormalRows.value)
 </script>
@@ -204,5 +239,43 @@ const displayRows = computed(() => expanded.value ? [...abnormalRows.value, ...n
 .acs__empty {
     font-size: 24rpx;
     color: #b0b3b8;
+}
+/* 删减模式:每项右侧的 × */
+.acs__del {
+    flex: 0 0 auto;
+    margin-left: 8rpx;
+    width: 34rpx;
+    height: 34rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #f2f3f5;
+}
+/* 已隐藏项区域 */
+.acs__hidden {
+    margin-top: 16rpx;
+    padding-top: 12rpx;
+    border-top: 1rpx dashed #e2e8f0;
+}
+.acs__hidden-tip {
+    font-size: 22rpx;
+    color: #909399;
+}
+.acs__hidden-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10rpx;
+    margin-top: 10rpx;
+}
+.acs__hidden-tag {
+    display: flex;
+    align-items: center;
+    gap: 4rpx;
+    padding: 4rpx 14rpx;
+    border-radius: 24rpx;
+    background: #eef5ff;
+    color: #3c9cff;
+    font-size: 22rpx;
 }
 </style>

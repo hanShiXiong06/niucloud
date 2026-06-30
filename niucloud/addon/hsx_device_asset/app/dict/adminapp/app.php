@@ -7,7 +7,7 @@ return [
         'menu_key' => '',
         'sort' => 1,
         'page' => '/addon/hsx_device_asset/pages/task/list?tab=photo',
-        'icon' => '/addon/hsx_recycle/site-tabbar/icon_02.png',
+        'icon' => '/addon/hsx_device_asset/site-app/icon_01.png',
     ],
     [
         'name' => '定价任务',
@@ -16,6 +16,6 @@ return [
         'menu_key' => '',
         'sort' => 2,
         'page' => '/addon/hsx_device_asset/pages/task/list?tab=price',
-        'icon' => '/addon/hsx_recycle/site-tabbar/icon_07.png',
+        'icon' => '/addon/hsx_device_asset/site-app/icon_02.png',
     ],
 ];
