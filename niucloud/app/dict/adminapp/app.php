@@ -145,7 +145,7 @@ return [
         'group' => 'site',
         'menu_key' => 'attachment',
         'sort' => 4,
-        'page' => '/addon/mall/pages/goods/album?att_type=image',
+        'page' => '/app/pages/sys/album?att_type=image',
         'icon' => '/addon/home_service/admin/link_icon-2.png'
     ],
     [
@@ -154,18 +154,18 @@ return [
         'group' => 'site',
         'menu_key' => 'attachment',
         'sort' => 5,
-        'page' => '/addon/mall/pages/goods/album?att_type=video',
+        'page' => '/app/pages/sys/album?att_type=video',
         'icon' => '/addon/home_service/admin/link_icon-3.png'
     ],
-    [
-        'name' => '新闻资讯',
-        'key' => 'article',
-        'group' => 'site',
-        'menu_key' => '',
-        'sort' => 49,
-        // 'page' => '/app/pages/article/list',
-        'page' => '/addon/mall/pages/goods/album?att_type=image',
-        'icon' => '/addon/home_service/admin/link_icon-4.png'
-        // 'icon' => '/addon/mall/site/menu/article.png'
-    ]
+    // [
+    //     'name' => '新闻资讯',
+    //     'key' => 'article',
+    //     'group' => 'site',
+    //     'menu_key' => '',
+    //     'sort' => 49,
+    //     // 'page' => '/app/pages/article/list',
+    //     'page' => '/addon/mall/pages/goods/album?att_type=image',
+    //     'icon' => '/addon/home_service/admin/link_icon-4.png'
+    //     // 'icon' => '/addon/mall/site/menu/article.png'
+    // ]
 ];

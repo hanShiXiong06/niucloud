@@ -48,8 +48,8 @@ class BottomNavigationListener
                             "title" => "首页",
                             "url" => "/app/pages/index/index"
                         ],
-                        "iconPath" => "static/resource/images/tabbar/index.png",
-                        "iconSelectPath" => "static/resource/images/tabbar/index-selected.png"
+                        "iconPath" => "/app/tabbar/index.png",
+                        "iconSelectPath" => "/app/tabbar/index-selected.png"
                     ],
                     [
                         "text" => "我的",
