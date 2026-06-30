@@ -9,7 +9,7 @@
 
             <el-table class="mt-4" :data="groups" v-loading="loading" size="large" empty-text="暂无规格分组，点右上角新增">
                 <el-table-column label="绑定分类" min-width="160">
-                    <template #default="{ row }">{{ categoryName(row.category_id) }}</template>
+                    <template #default="{ row }">{{ categoryNames(row) }}</template>
                 </el-table-column>
                 <el-table-column label="规格标签" width="120">
                     <template #default="{ row }"><el-tag effect="plain">{{ row.label }}</el-tag></template>
@@ -35,8 +35,8 @@
         <el-dialog v-model="groupDialog.visible" :title="groupDialog.form.group_id ? '编辑规格分组' : '新增规格分组'" width="460px">
             <el-form label-width="90px">
                 <el-form-item label="绑定分类" required>
-                    <el-cascader v-model="groupDialog.catPath" :options="catOptions" :props="cascaderProps" clearable
-                        class="w-full" placeholder="选择该规格适用的商品分类" @change="onCatChange" />
+                    <el-cascader v-model="groupDialog.catVals" :options="catOptions" :props="cascaderProps" clearable
+                        collapse-tags collapse-tags-tooltip class="w-full" placeholder="选择该规格适用的一个或多个分类（品牌）" />
                 </el-form-item>
                 <el-form-item label="规格标签" required>
                     <el-input v-model.trim="groupDialog.form.label" placeholder="手机填「内存」，手表填「表盘尺寸」，也可填「规格」" />
@@ -81,9 +81,15 @@ const loading = ref(false)
 const groups = ref<any[]>([])
 const catOptions = ref<any[]>([])
 const catMap = ref<Record<number, string>>({})
-const cascaderProps = { value: 'category_id', label: 'category_name', children: 'child_list', checkStrictly: true, emitPath: true }
+const cascaderProps = { value: 'category_id', label: 'category_name', children: 'child_list', checkStrictly: true, multiple: true, emitPath: false }
 
 const categoryName = (id: number) => catMap.value[id] || ('分类#' + id)
+const categoryNames = (row: any) => {
+    const ids = row.category_ids
+        ? String(row.category_ids).split(',')
+        : (row.category_id ? [String(row.category_id)] : [])
+    return ids.map((id: any) => catMap.value[Number(id)] || ('分类#' + id)).join('、') || '—'
+}
 
 const buildCatMap = (list: any[], prefix = '') => {
     list.forEach((c: any) => {
@@ -111,25 +117,31 @@ const loadGroups = async () => {
 }
 
 // 分组增改
-const groupDialog = reactive<any>({ visible: false, saving: false, catPath: [], form: { group_id: 0, category_id: 0, label: '内存', sort: 0 } })
-const onCatChange = (path: any) => { groupDialog.form.category_id = Array.isArray(path) && path.length ? Number(path[path.length - 1]) : 0 }
+const groupDialog = reactive<any>({ visible: false, saving: false, catVals: [] as number[], form: { group_id: 0, label: '内存', sort: 0 } })
 const openGroup = (row: any = null) => {
     if (row) {
-        groupDialog.form = { group_id: row.group_id, category_id: row.category_id, label: row.label, sort: row.sort }
-        groupDialog.catPath = row.category_id ? [row.category_id] : []
+        groupDialog.form = { group_id: row.group_id, label: row.label, sort: row.sort }
+        groupDialog.catVals = row.category_ids
+            ? String(row.category_ids).split(',').map((x: any) => Number(x)).filter(Boolean)
+            : (row.category_id ? [Number(row.category_id)] : [])
     } else {
-        groupDialog.form = { group_id: 0, category_id: 0, label: '内存', sort: 0 }
-        groupDialog.catPath = []
+        groupDialog.form = { group_id: 0, label: '内存', sort: 0 }
+        groupDialog.catVals = []
     }
     groupDialog.visible = true
 }
 const saveGroup = async () => {
-    if (!groupDialog.form.category_id) return ElMessage.warning('请选择绑定分类')
+    if (!groupDialog.catVals.length) return ElMessage.warning('请选择绑定分类')
     if (!groupDialog.form.label) return ElMessage.warning('请填写规格标签')
+    const payload = {
+        ...groupDialog.form,
+        category_ids: groupDialog.catVals.join(','),
+        category_id: groupDialog.catVals[0]
+    }
     groupDialog.saving = true
     try {
-        if (groupDialog.form.group_id) await editSpecGroup(groupDialog.form.group_id, groupDialog.form)
-        else await addSpecGroup(groupDialog.form)
+        if (groupDialog.form.group_id) await editSpecGroup(groupDialog.form.group_id, payload)
+        else await addSpecGroup(payload)
         groupDialog.visible = false
         loadGroups()
     } finally {

@@ -492,7 +492,13 @@ const syncMasterGoodsFn = () => {
     }).then(() => {
         syncLoading.value = true
         syncAgentGoods().then((res: any) => {
-            ElMessage.success(`已同步 ${res.data?.count ?? 0} 件主站商品`)
+            const d = res.data || {}
+            const r = d.refs || {}
+            ElMessageBox.alert(
+                `商品：${d.count ?? 0} 件\n分类：${r.category ?? 0}　品牌：${r.brand ?? 0}　参数：${r.attr ?? 0}\n规格组：${r.spec_group ?? 0}　规格项：${r.spec_item ?? 0}　等级：${r.grade ?? 0}` +
+                (r.error ? `\n错误：${r.error}` : ''),
+                '同步完成', { type: 'success', customClass: 'whitespace-pre-line' }
+            )
             isReset.value = true
             loadGoodsList()
         }).finally(() => { syncLoading.value = false })
