@@ -50,7 +50,7 @@
 			<view class="sheet-head" @click="sheet.selected = !sheet.selected">
 				<view class="sheet-check" :class="{ on: sheet.selected }">{{ sheet.selected ? '✓' : '' }}</view>
 				<view class="sheet-head-info">
-					<text class="sheet-title">{{ sheet.name }}</text>
+					<text class="sheet-title">{{ sheet.brand && !sheet.name.includes(sheet.brand) ? sheet.brand + ' · ' + sheet.name : sheet.name }}</text>
 					<text class="sheet-sub">{{ sheetMeta(sheet) }}</text>
 				</view>
 			</view>

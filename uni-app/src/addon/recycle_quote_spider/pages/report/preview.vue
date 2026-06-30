@@ -81,6 +81,9 @@ function hexToRgba(hex: string, a: number) {
 }
 
 const PAGE_W = 1100
+// 双列模式:每列宽 + 列间距(整图宽 = COL_W*2 + COL_GAP ≈ 2024)
+const COL_W = 1000
+const COL_GAP = 24
 const MODEL_W = 200
 const CAP_W = 130
 const LH = 26
@@ -151,9 +154,12 @@ interface Ctx {
 	hasRemark: boolean
 	remarkW: number
 	gw: number
+	colW: number // 单列内容宽(单列模式=PAGE_W,双列模式=COL_W)
+	pageW: number // 整图宽
+	ncol: number // 1 或 2
 }
 
-function makeCtx(sheet: any): Ctx {
+function makeCtx(sheet: any, ncol = 1): Ctx {
 	const detail = sheet.detail || {}
 	const cols = sheetColumns(detail)
 	let rows = sheetRows(detail, sheet.adjustType, sheet.adjustValue, sheet.overrides, sheet.marks)
@@ -162,18 +168,23 @@ function makeCtx(sheet: any): Ctx {
 		const set = new Set(sheet.selectedModels)
 		rows = rows.filter((r: any) => set.has(r.model))
 	}
+	const colW = ncol === 2 ? COL_W : PAGE_W
+	const pageW = ncol === 2 ? COL_W * 2 + COL_GAP : PAGE_W
 	const hasRemark = rows.some((r: any) => String(r.remark || '').trim())
 	const remarkW = hasRemark ? 200 : 0
-	const gw = Math.floor((PAGE_W - MODEL_W - CAP_W - remarkW) / Math.max(1, cols.length))
+	const gw = Math.floor((colW - MODEL_W - CAP_W - remarkW) / Math.max(1, cols.length))
 	return {
 		cols,
 		rows,
-		title: sheetTitle(sheet.name),
+		title: sheetTitle(sheet.name, sheet.brand),
 		notice: sheetNoticeLines(detail),
 		priceDate: sheetPriceDate(detail),
 		hasRemark,
 		remarkW,
-		gw
+		gw,
+		colW,
+		pageW,
+		ncol
 	}
 }
 
@@ -224,35 +235,15 @@ function buildGroups(ctx: Ctx) {
 	return groups
 }
 
-function buildPageBoard(groups: any[], pageIndex: number, totalPages: number, ctx: Ctx) {
+// 单列(表头 + 数据)的视图栈,宽度 = ctx.colW;单列/双列模式复用
+function buildColumnStack(groups: any[], ctx: Ctx): { views: any[]; height: number } {
 	const t = theme.value
 	const gw = ctx.gw
 	const rw = ctx.remarkW
-	const rightW = PAGE_W - MODEL_W
+	const colW = ctx.colW
+	const rightW = colW - MODEL_W
 	const hh = headerHeight(ctx)
 	const views: any[] = []
-
-	// 标题横幅（居中）
-	const bannerViews: any[] = [
-		{ type: 'text', text: ctx.title, css: { width: PAGE_W - 56 + 'rpx', color: t.bannerText, fontSize: '40rpx', fontWeight: 'bold', textAlign: 'center' } }
-	]
-	if (ctx.priceDate) {
-		bannerViews.push({ type: 'text', text: ctx.priceDate, css: { width: PAGE_W - 56 + 'rpx', color: t.bannerText, fontSize: '22rpx', textAlign: 'center', marginTop: '8rpx' } })
-	}
-	views.push({
-		type: 'view',
-		css: { width: PAGE_W + 'rpx', background: bannerBgCss(t), padding: '32rpx 28rpx', boxSizing: 'border-box' },
-		views: bannerViews
-	})
-
-	// 温馨提示
-	if (ctx.notice.length) {
-		views.push({
-			type: 'view',
-			css: { width: PAGE_W + 'rpx', background: t.bodyBg, padding: '16rpx 28rpx', boxSizing: 'border-box' },
-			views: ctx.notice.map(line => ({ type: 'text', text: line, css: { color: t.noticeText, fontSize: '22rpx', lineHeight: '34rpx' } }))
-		})
-	}
 
 	// 表头
 	const headCells = [
@@ -263,7 +254,7 @@ function buildPageBoard(groups: any[], pageIndex: number, totalPages: number, ct
 	if (rw) headCells.push(txt('备注', rw, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx' }))
 	views.push({
 		type: 'view',
-		css: { width: PAGE_W + 'rpx', height: hh + 'rpx', background: t.headBg, display: 'flex', flexDirection: 'row', alignItems: 'center', boxSizing: 'border-box' },
+		css: { width: colW + 'rpx', height: hh + 'rpx', background: t.headBg, display: 'flex', flexDirection: 'row', alignItems: 'center', boxSizing: 'border-box' },
 		views: headCells
 	})
 
@@ -285,7 +276,7 @@ function buildPageBoard(groups: any[], pageIndex: number, totalPages: number, ct
 		})
 		views.push({
 			type: 'view',
-			css: { width: PAGE_W + 'rpx', height: group.height + 'rpx', display: 'flex', flexDirection: 'row', borderBottom: `2rpx solid ${t.lineColor}`, boxSizing: 'border-box' },
+			css: { width: colW + 'rpx', height: group.height + 'rpx', display: 'flex', flexDirection: 'row', borderBottom: `2rpx solid ${t.lineColor}`, boxSizing: 'border-box' },
 			views: [
 				{
 					type: 'view',
@@ -297,18 +288,63 @@ function buildPageBoard(groups: any[], pageIndex: number, totalPages: number, ct
 		})
 	})
 
+	const dataH = groups.reduce((a: number, g: any) => a + g.height, 0)
+	return { views, height: hh + dataH }
+}
+
+// columns: 本页的列(单列模式 1 个、双列模式最多 2 个 group 数组)
+function buildPageBoard(columns: any[][], pageIndex: number, totalPages: number, ctx: Ctx) {
+	const t = theme.value
+	const pageW = ctx.pageW
+	const views: any[] = []
+
+	// 标题横幅（居中，整图宽,标头含一级分类品牌名）
+	const bannerViews: any[] = [
+		{ type: 'text', text: ctx.title, css: { width: pageW - 56 + 'rpx', color: t.bannerText, fontSize: '40rpx', fontWeight: 'bold', textAlign: 'center' } }
+	]
+	if (ctx.priceDate) {
+		bannerViews.push({ type: 'text', text: ctx.priceDate, css: { width: pageW - 56 + 'rpx', color: t.bannerText, fontSize: '22rpx', textAlign: 'center', marginTop: '8rpx' } })
+	}
+	views.push({
+		type: 'view',
+		css: { width: pageW + 'rpx', background: bannerBgCss(t), padding: '32rpx 28rpx', boxSizing: 'border-box' },
+		views: bannerViews
+	})
+
+	// 温馨提示
+	if (ctx.notice.length) {
+		views.push({
+			type: 'view',
+			css: { width: pageW + 'rpx', background: t.bodyBg, padding: '16rpx 28rpx', boxSizing: 'border-box' },
+			views: ctx.notice.map(line => ({ type: 'text', text: line, css: { color: t.noticeText, fontSize: '22rpx', lineHeight: '34rpx' } }))
+		})
+	}
+
+	// 列横向排布(单列=1 列,双列=2 列中间留间距)
+	const stacks = columns.map(g => buildColumnStack(g, ctx))
+	const rowViews: any[] = []
+	stacks.forEach((cs, i) => {
+		rowViews.push({ type: 'view', css: { width: ctx.colW + 'rpx', display: 'flex', flexDirection: 'column' }, views: cs.views })
+		if (i < stacks.length - 1) rowViews.push({ type: 'view', css: { width: COL_GAP + 'rpx' } })
+	})
+	views.push({
+		type: 'view',
+		css: { width: pageW + 'rpx', display: 'flex', flexDirection: 'row', alignItems: 'flex-start', background: t.bodyBg, boxSizing: 'border-box' },
+		views: rowViews
+	})
+
 	// 页脚
 	const footText = totalPages > 1 ? `${ctx.title} 第 ${pageIndex + 1}/${totalPages} 页` : ctx.title
 	views.push({
 		type: 'view',
-		css: { width: PAGE_W + 'rpx', height: FOOTER_H + 'rpx', background: bannerBgCss(t), display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' },
-		views: [{ type: 'text', text: footText, css: { width: PAGE_W - 40 + 'rpx', color: t.bannerText, fontSize: '20rpx', textAlign: 'center' } }]
+		css: { width: pageW + 'rpx', height: FOOTER_H + 'rpx', background: bannerBgCss(t), display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' },
+		views: [{ type: 'text', text: footText, css: { width: pageW - 40 + 'rpx', color: t.bannerText, fontSize: '20rpx', textAlign: 'center' } }]
 	})
 
 	// 水印：斜向错位平铺(lime-painter 不支持真旋转，用错位近似角度)
 	if (watermark.value) {
-		const sumGroups = groups.reduce((a: number, g: any) => a + g.height, 0)
-		const totalH = bannerHeightRpx(ctx) + noticeHeightRpx(ctx) + hh + sumGroups + FOOTER_H
+		const colMax = stacks.reduce((a, s) => Math.max(a, s.height), 0)
+		const totalH = bannerHeightRpx(ctx) + noticeHeightRpx(ctx) + colMax + FOOTER_H
 		const color = hexToRgba(wm.color, Math.max(0, Math.min(30, Number(wm.opacity))) / 100)
 		const fontSize = Math.max(18, Number(wm.size) || 34)
 		const wmWordW = Math.max(160, Math.ceil(watermark.value.length * fontSize * 1.1))
@@ -318,7 +354,7 @@ function buildPageBoard(groups: any[], pageIndex: number, totalPages: number, ct
 		let r = 0
 		for (let y = 60; y < totalH; y += stepY, r++) {
 			const off = ((r * slant) % stepX) - stepX
-			for (let x = off; x < PAGE_W; x += stepX) {
+			for (let x = off; x < pageW; x += stepX) {
 				views.push({
 					type: 'text',
 					text: watermark.value,
@@ -328,7 +364,7 @@ function buildPageBoard(groups: any[], pageIndex: number, totalPages: number, ct
 		}
 	}
 
-	return { css: { width: PAGE_W + 'rpx', background: t.bodyBg, position: 'relative' }, views }
+	return { css: { width: pageW + 'rpx', background: t.bodyBg, position: 'relative' }, views }
 }
 
 function pageBudgetRpx(ctx: Ctx) {
@@ -347,33 +383,76 @@ function pageBudgetRpx(ctx: Ctx) {
 	return Math.max(600, budgetRpx - chromeRpx)
 }
 
-// 一个报价单 -> 若干页 board
+// 一个报价单 -> 若干页 board（按高度预算切「列」,每 ncol 列拼成一页）
 function buildSheetBoards(ctx: Ctx) {
 	const groups = buildGroups(ctx)
 	const dataBudget = pageBudgetRpx(ctx)
-	const pages: any[][] = []
+	const ncol = ctx.ncol === 2 ? 2 : 1
+	// 先按高度预算把 groups 切成若干「列」
+	const colsArr: any[][] = []
 	let cur: any[] = []
 	let h = 0
 	groups.forEach(g => {
 		if (cur.length && h + g.height > dataBudget) {
-			pages.push(cur)
+			colsArr.push(cur)
 			cur = []
 			h = 0
 		}
 		cur.push(g)
 		h += g.height
 	})
-	if (cur.length) pages.push(cur)
-	if (!pages.length) pages.push([])
-	return pages.map((g, idx) => buildPageBoard(g, idx, pages.length, ctx))
+	if (cur.length) colsArr.push(cur)
+	if (!colsArr.length) colsArr.push([])
+	// 每 ncol 列拼成一页
+	const pages: any[][][] = []
+	for (let i = 0; i < colsArr.length; i += ncol) {
+		pages.push(colsArr.slice(i, i + ncol))
+	}
+	return pages.map((cols, idx) => buildPageBoard(cols, idx, pages.length, ctx))
 }
 
 /* ---------------- 出图流程 ---------------- */
+// lime-painter 出图会把图片写进小程序本地文件存储(上限约 10MB),旧图不清理会越攒越多,
+// 生成几次后 writeFile 报 1300202「storage limit exceeded」。这里记录所有生成过的文件,
+// 每次开始新一轮出图前先删掉上一轮的(保存到相册是另存,删临时文件不影响已存的)。
+const GEN_FILES_KEY = 'qr_gen_files'
+
+function purgeOldFiles() {
+	try {
+		const list: string[] = uni.getStorageSync(GEN_FILES_KEY) || []
+		if (list.length && typeof uni.getFileSystemManager === 'function') {
+			const fs = uni.getFileSystemManager()
+			list.forEach(p => {
+				try {
+					fs.unlinkSync(p)
+				} catch (e) {
+					/* 文件可能已被系统回收,忽略 */
+				}
+			})
+		}
+	} catch (e) {
+		/* 非小程序端无此能力,忽略 */
+	}
+	try {
+		uni.setStorageSync(GEN_FILES_KEY, [])
+	} catch (e) {}
+}
+
+function trackFile(p: string) {
+	if (!p) return
+	try {
+		const list: string[] = uni.getStorageSync(GEN_FILES_KEY) || []
+		list.push(p)
+		uni.setStorageSync(GEN_FILES_KEY, list)
+	} catch (e) {}
+}
+
 function onSuccess(e: any) {
 	const path = typeof e === 'string' ? e : (e?.tempFilePath || e?.detail?.tempFilePath || e?.path || '')
 	if (!path) return
 	if (imgPaths.value.length > curRender.value) return
 	imgPaths.value.push(path)
+	trackFile(path)
 	if (curRender.value < boards.value.length - 1) curRender.value++
 }
 function onFail(e: any) {
@@ -438,6 +517,8 @@ async function saveAll() {
 }
 
 async function init() {
+	// 先清掉上一轮生成的图片文件,避免本地存储被撑爆(1300202)
+	purgeOldFiles()
 	const selected = sheets.value.filter((s: any) => s.selected)
 	if (!selected.length) {
 		uni.showToast({ title: '没有选择报价单', icon: 'none' })
@@ -450,12 +531,22 @@ async function init() {
 	}
 	const all: any[] = []
 	selected.forEach((sheet: any) => {
-		const ctx = makeCtx(sheet)
+		const ncol = decideNcol(sheet)
+		const ctx = makeCtx(sheet, ncol)
 		if (!ctx.rows.length) return
 		buildSheetBoards(ctx).forEach(b => all.push(b))
 	})
 	boards.value = all
 	curRender.value = 0
+}
+
+// 自动判断列数:单列若一张纸放得下就单列,放不下才用双列(最多双列)
+function decideNcol(sheet: any): number {
+	const ctx1 = makeCtx(sheet, 1)
+	if (!ctx1.rows.length) return 1
+	const groups = buildGroups(ctx1)
+	const total = groups.reduce((a: number, g: any) => a + g.height, 0)
+	return total <= pageBudgetRpx(ctx1) ? 1 : 2
 }
 
 onLoad(() => {

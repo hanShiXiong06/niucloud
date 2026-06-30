@@ -58,6 +58,7 @@ const DEFAULT_NOTICE = '温馨提示：报价仅供参考，最终价格以质�
 export interface ReportSheet {
 	id: number | string
 	name: string
+	brand: string // 一级分类(品牌)名,出图标头用
 	selected: boolean
 	adjustType: 'none' | 'down' | 'up' | 'ratioDown' | 'ratioUp'
 	adjustValue: number
@@ -148,8 +149,11 @@ export function sheetRows(
 	})
 }
 
-export function sheetTitle(name: string) {
-	return String(name || '回收报价') + '回收报价'
+export function sheetTitle(name: string, brand = '') {
+	const n = String(name || '回收报价')
+	const b = String(brand || '').trim()
+	const head = b && !n.includes(b) ? `${b} ${n}` : n
+	return head + '回收报价'
 }
 
 export function sheetNoticeLines(detail: any): string[] {
@@ -180,6 +184,16 @@ function topAncestorId(tree: any[], catId: number): number {
 	}
 	return cur || Number(catId || 0)
 }
+function findNodeName(tree: any[], id: number): string {
+	for (const n of tree || []) {
+		if (Number(n.id) === Number(id)) return String(n.name || n.title || '')
+		if (Array.isArray(n.children)) {
+			const r = findNodeName(n.children, id)
+			if (r) return r
+		}
+	}
+	return ''
+}
 
 /* ---------------- 载入 ---------------- */
 
@@ -195,23 +209,26 @@ async function load(id: number | string, src = 'spider') {
 
 		// 找一级分类，列出其下所有报价项
 		let list: any[] = []
+		let brandName = ''
 		try {
 			const treeRes: any = await getQuoteSpiderCategoryTree({ source_id: sourceId })
 			const tree = Array.isArray(treeRes?.data) ? treeRes.data : []
 			const rootId = topAncestorId(tree, catId)
+			brandName = findNodeName(tree, rootId)
 			const itemsRes: any = await getQuoteSpiderItems({ source_id: sourceId, category_id: rootId })
 			list = itemsRes?.data?.data || itemsRes?.data || []
 		} catch (e) {
 			list = []
 		}
 		if (!Array.isArray(list) || !list.length) {
-			list = [{ id, name: detail?.name || '报价单' }]
+			list = [{ id, name: detail?.name || '报价单', brand: detail?.brand || brandName }]
 		}
 
 		sheets.value = list.map((it: any) =>
 			reactive({
 				id: it.id,
 				name: String(it.name || it.title || '报价单'),
+				brand: String(it.brand || brandName || ''),
 				selected: true,
 				adjustType: 'none' as const,
 				adjustValue: 0,
