@@ -42,7 +42,7 @@ class Request {
         try {
             getToken() && (this.config.header[import.meta.env.VITE_REQUEST_HEADER_TOKEN_KEY] = getToken())
             this.config.header[import.meta.env.VITE_REQUEST_HEADER_CHANNEL_KEY] = getAppChannel()
-            this.config.header[import.meta.env.VITE_REQUEST_HEADER_SITEID_KEY] = import.meta.env.VITE_REQUEST_HEADER_SITEID  // uni.getStorageSync('siteId') || 0
+            this.config.header[import.meta.env.VITE_REQUEST_HEADER_SITEID_KEY] = uni.getStorageSync('siteId') || import.meta.env.VITE_REQUEST_HEADER_SITEID || 0  // 优先用登录账号存下的 siteId（按账号查站点），env 仅兜底
         } catch (e) {
         }
     }

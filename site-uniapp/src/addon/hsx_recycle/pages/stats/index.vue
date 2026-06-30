@@ -49,6 +49,30 @@
         </view>
 
         <template v-else>
+            <view class="section" v-if="stageBoard.stages && stageBoard.stages.length">
+                <view class="section-head">
+                    <view class="section-title-row">
+                        <u-icon name="list" color="#7c3aed" size="15"></u-icon>
+                        <text class="section-title">各环节在途</text>
+                    </view>
+                    <text class="section-desc">实时 · 点击查看任务</text>
+                </view>
+                <view class="metric-grid">
+                    <view
+                        v-for="s in stageBoard.stages"
+                        :key="s.stage_key"
+                        class="metric-card metric-card--link"
+                        @click="toStageTask(s.stage_key)"
+                    >
+                        <view class="metric-main">
+                            <text class="metric-value" :style="{ color: stageColor(s.stage_key) }">{{ s.count }}</text>
+                            <text class="metric-unit">{{ s.stage_key === 'sign' ? '单' : '台' }}</text>
+                        </view>
+                        <text class="metric-label">{{ s.name }}</text>
+                    </view>
+                </view>
+            </view>
+
             <view class="section">
                 <view class="section-head">
                     <view class="section-title-row">
@@ -240,6 +264,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getDashboardOverview, getDashboardTrend } from '@/addon/hsx_recycle/api/stats'
+import { getStatBoard } from '@/addon/hsx_recycle/api/task'
 import { redirect } from '@/utils/common'
 import qiunDataCharts from '@/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
 import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
@@ -280,6 +305,13 @@ const refreshing = ref(false)
 const currentDate = ref('week')
 const statsData = ref<Record<string, any>>({})
 const trendData = ref<Record<string, any>>({})
+// 各环节在途（任务流转埋点，实时；与时间筛选无关）
+const stageBoard = ref<any>({ stages: [] })
+const stageColors: Record<string, string> = {
+    sign: '#5b6b7a', check: '#3c9cff', price: '#10b981', confirm: '#f97316', pay: '#7c3aed', abnormal: '#dc2626'
+}
+const stageColor = (k: string) => stageColors[k] || '#334155'
+const toStageTask = (stage: string) => redirect({ url: `/addon/hsx_recycle/pages/task/index?stage=${ stage }` })
 const dateOptions = [
     { label: '今日', value: 'today' },
     { label: '昨日', value: 'yesterday' },
@@ -625,12 +657,14 @@ const loadStats = async () => {
     loading.value = true
     try {
         const params = getDateRange(currentDate.value)
-        const [overviewRes, trendRes]: any[] = await Promise.all([
+        const [overviewRes, trendRes, boardRes]: any[] = await Promise.all([
             getDashboardOverview(params),
-            getDashboardTrend(params)
+            getDashboardTrend(params),
+            getStatBoard({ days: 7 })
         ])
         statsData.value = overviewRes?.data || {}
         trendData.value = trendRes?.data || {}
+        stageBoard.value = boardRes?.data || { stages: [] }
     } catch (e: any) {
         statsData.value = {}
         trendData.value = {}

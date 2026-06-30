@@ -4,52 +4,53 @@
              <!-- #ifdef MP-WEIXIN -->
             <top-tabbar :data="topTabbarData" :scrollBool="topTabarObj.getScrollBool()" />
             <!-- #endif -->
-            <view class="box-border p-[30rpx] flex">
+            <view class="box-border p-[30rpx] flex items-center">
                 <up-image  width="88rpx" height="88rpx" radius="16rpx" :src="img(siteInfo.front_end_logo)" model="aspectFill">
                     <template #error>
-                        <image class="w-[88rpx] h-[88rpx] align-middle rounded-[16rpx]" :src="img('addon/wuxinggou/default_shop.png')" mode="aspectFill" />
+                        <image class="w-[88rpx] h-[88rpx] align-middle rounded-[16rpx]" :src="img('app/site-app/store.png')" mode="aspectFill" />
                     </template>
                 </up-image>
-                <view class="flex-1 ml-[16rpx] flex flex-col justify-between box-border">
-                    <view class="flex items-center justify-between leading-normal">
-                        <view class="flex  items-center mb-[10rpx]">
-                            <text class="text-[28rpx] text-[#333] mr-[12rpx]">{{ siteInfo.site_name }}</text>
-                        </view>
-                        <text class="iconfont iconsaoma text-[36rpx]" @click="openCamera"></text>
-                    </view>
-                    <view class="flex items-center">
-                        <view class="flex items-center bg-primary text-[#fff] px-[8rpx] h-[34rpx] rounded-[6rpx]" v-if="siteInfo.business_status"  @click="changeBusinessStatus">
-                            <text class="text-[20rpx]">营业中</text>
-                            <text class="nc-iconfont nc-icon-qiehuanV6xx text-[20rpx] ml-[8rpx]"></text>
-                        </view>
-                        <view class="flex items-center bg-[#9098A3] text-[#fff] px-[8rpx] h-[34rpx] rounded-[6rpx]" v-else  @click="changeBusinessStatus">
-                            <text class="text-[20rpx]">已打烊</text>
-                            <text class="nc-iconfont nc-icon-qiehuanV6xx text-[#fff] text-[20rpx] ml-[8rpx]"></text>
-                        </view>
-                    </view>
-                </view>
-            </view>   
-        </view>  
-        <view class="card-template bg-transparent sidebar-margin -mt-[530rpx]  mb-[20rpx]">
-            <view class="grid grid-cols-3 gap-x-[10rpx] gap-y-[40rpx]">
-                <view class="flex flex-col items-center" v-for="(item, key) in  statTotal">
-                    <text class="price-font text-[42rpx] fnt-500 mb-[18rpx]">{{ item.num || 0 }}</text>
-                    <view class="text-[26rpx] text-[#444]">{{ item.name }}</view>
+                <view class="flex-1 ml-[16rpx] flex items-center justify-between box-border">
+                    <text class="text-[30rpx] font-600 text-[#333] truncate max-w-[420rpx]">{{ siteInfo.site_name }}</text>
+                    <text class="iconfont iconsaoma text-[40rpx] text-[#333]" @click="openCamera"></text>
                 </view>
             </view>
         </view>
-        <view class="card-template sidebar-margin  mb-[20rpx]">
-             <view class="grid grid-cols-4" >
-                <view class="flex flex-col items-center py-[10rpx]" v-for="(item,index) in statTodo" @click="redirect({url: item.page})">
-                    <text class="price-font text-[42rpx] fnt-500 mb-[18rpx]">{{ item.num || 0 }}</text>
-                    <view class="text-[24rpx] text-[#444]">{{ item.name }}</view>
+
+        <!-- 内容区：整体上移叠压在头图上 -->
+        <view class="-mt-[530rpx]">
+            <!-- 数据统计 -->
+            <view class="card-template sidebar-margin mb-[20rpx]" v-if="Object.keys(statTotal).length">
+                <view class="grid grid-cols-3 gap-x-[10rpx] gap-y-[40rpx]">
+                    <view class="flex flex-col items-center" v-for="(item, key) in statTotal" :key="key">
+                        <text class="price-font text-[42rpx] fnt-500 mb-[18rpx]">{{ item.num || 0 }}</text>
+                        <view class="text-[26rpx] text-[#444]">{{ item.name }}</view>
+                    </view>
                 </view>
-             </view>
-        </view>
-        <view class="card-template sidebar-margin grid grid-cols-5 gap-x-[10rpx] gap-y-[40rpx] mb-[20rpx]">
-            <view class="flex flex-col items-center" v-for="(item,index) in appList" :key="index"  @click="redirect({url: item.page})">
-                <image class="w-[48rpx] h-[48rpx] overflow-hidden" :src="img(item.icon)" mode="aspectFill"></image>
-                <view class="text-[24rpx] mt-[22rpx] text-[#444]">{{ item.name }}</view>
+            </view>
+
+            <!-- 待办 -->
+            <view class="card-template sidebar-margin mb-[20rpx]" v-if="Object.keys(statTodo).length">
+                <view class="grid grid-cols-4">
+                    <view class="flex flex-col items-center py-[10rpx]" v-for="(item,index) in statTodo" :key="index" @click="redirect({url: item.page})">
+                        <text class="price-font text-[42rpx] fnt-500 mb-[18rpx]">{{ item.num || 0 }}</text>
+                        <view class="text-[24rpx] text-[#444]">{{ item.name }}</view>
+                    </view>
+                </view>
+            </view>
+
+            <!-- 应用 -->
+            <view class="card-template sidebar-margin mb-[20rpx]">
+                <view class="title">应用</view>
+                <view class="grid grid-cols-5 gap-x-[10rpx] gap-y-[36rpx] mt-[20rpx]">
+                    <view class="flex flex-col items-center" v-for="(item,index) in appList" :key="index" @click="redirect({url: item.page})">
+                        <view class="app-tile">
+                            <u-icon v-if="item.page == '/app/pages/index/menu'" name="grid-fill" color="var(--primary-color)" size="52rpx"></u-icon>
+                            <image v-else class="w-[82rpx] h-[82rpx]" :src="img(item.icon)" mode="aspectFit"></image>
+                        </view>
+                        <view class="text-[24rpx] mt-[16rpx] text-[#444] truncate max-w-[120rpx]">{{ item.name }}</view>
+                    </view>
+                </view>
             </view>
         </view>
         <!-- <view class="card-template sidebar-margin" v-if="articleList.length">
@@ -213,7 +214,7 @@ const getAppOfIndexFn = () => {
         appList.value = res.data
         appList.value.push({
             name: '全部',
-            icon: '/addon/mall/site/menu/more.png',
+            icon: '/app/site-app/more.png',
             page: '/app/pages/index/menu'
         })
     })
@@ -230,6 +231,15 @@ const openCamera = () => {
 }
  </script>
 <style lang="scss" scoped>
+.app-tile {
+    width: 96rpx;
+    height: 96rpx;
+    border-radius: 24rpx;
+    background: #F5F7FA;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 swiper {
     height: 28rpx;
 }

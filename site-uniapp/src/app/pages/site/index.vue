@@ -1,59 +1,91 @@
 <template>
-    <view  class="min-h-[100vh] bg-[var(--page-bg-color)] overflow-hidden" :style="themeColor()" v-if="siteInfo">
-        <view class="px-[20rpx] bg-[#fff] mb-[20rpx]">
-            <view class="py-[20rpx] flex" @click="redirect({ url: '/app/pages/site/store'})">
-                <up-image  width="88rpx" height="88rpx" radius="16rpx" :src="img(siteInfo.front_end_logo)" model="aspectFill">
+    <view class="min-h-[100vh] bg-[var(--page-bg-color)] overflow-hidden" :style="themeColor()" v-if="siteInfo">
+
+        <!-- 站点头部卡片 -->
+        <view class="site-header px-[32rpx] pt-[48rpx] pb-[72rpx]">
+            <view class="flex items-center" @click="redirect({ url: '/app/pages/site/store'})">
+                <up-image width="120rpx" height="120rpx" radius="24rpx" :src="img(siteInfo.front_end_logo)" model="aspectFill">
                     <template #error>
-                        <image class="w-[88rpx] h-[88rpx] align-middle rounded-[16rpx]" :src="img('addon/wuxinggou/default_shop.png')" mode="aspectFill" />
+                        <image class="w-[120rpx] h-[120rpx] rounded-[24rpx]" :src="img('addon/wuxinggou/default_shop.png')" mode="aspectFill" />
                     </template>
                 </up-image>
-                <view class="flex-1 ml-[16rpx] flex flex-col justify-between box-border box-border">
-                    <view class="text-[28rpx] text-[#333]">{{ siteInfo.site_name }}</view>
-                    <view class="flex">
-                        <text class="flex-center text-[20rpx] bg-primary text-[#fff] px-[8rpx] h-[34rpx] rounded-[6rpx]" v-if="siteInfo.business_status">营业中</text>
-                        <text class="flex-center text-[20rpx] bg-[#9098A3] text-[#fff] px-[8rpx] h-[34rpx] rounded-[6rpx]" v-else>已打烊</text>
-                    </view>
+                <view class="flex-1 ml-[24rpx] overflow-hidden">
+                    <text class="block text-[36rpx] font-600 text-[#fff] truncate">{{ siteInfo.site_name }}</text>
                 </view>
-                <view>
-                    <text class="nc-iconfont nc-icon-youV6xx text-[30rpx] text-[#c4c4c4] font-500"></text>
+                <view class="flex items-center flex-shrink-0">
+                    <text class="text-[24rpx] text-[#fff] opacity-90 mr-[6rpx]">切换站点</text>
+                    <text class="nc-iconfont nc-icon-youV6xx text-[28rpx] text-[#fff] opacity-90"></text>
                 </view>
-            </view> 
-            <view class="h-[100rpx] box-border border-0 border-t-[1rpx] border-solid border-[#ebebeb] flex items-center justify-between" @click="redirect({url: '/app/pages/site/account'})">
-                <text>登录账号</text>
-                <text class="flex-1 text-right" v-if="userInfo">{{ userInfo.username }}</text>
-                <text class="nc-iconfont nc-icon-youV6xx text-[30rpx] text-[#c4c4c4] font-500 relative top-[2rpx]"></text>
-            </view>   
-        </view>  
-        <view class="px-[20rpx] bg-[#fff] mb-[20rpx]">
-            <view :class="getCenterItemClass(index)" v-for="(item,index) in centerList" :key="index" @click="redirect({url: item.page})">
-                <text>{{ item.name }}</text>
-                <text class="nc-iconfont nc-icon-youV6xx text-[30rpx] text-[#c4c4c4] font-500"></text>
             </view>
         </view>
-        <view class="px-[20rpx] bg-[#fff] mb-[20rpx]">
-            <view class="h-[100rpx] box-border flex items-center justify-between" @click="redirect({url: '/app/pages/site/about'})">
-                <text>关于</text>
-                <text class="nc-iconfont nc-icon-youV6xx text-[30rpx] text-[#c4c4c4] font-500"></text>
+
+        <!-- 内容区（上移与头部叠压） -->
+        <view class="content-pull px-[24rpx]">
+
+            <!-- 账号信息 -->
+            <view class="card">
+                <u-cell
+                    title="登录账号"
+                    :value="userInfo ? userInfo.username : ''"
+                    :isLink="true" :border="false"
+                    @click="redirect({url: '/app/pages/site/account'})">
+                    <template #icon>
+                        <view class="cell-icon bg-style"><text class="nc-iconfont nc-icon-yonghuV6xx text-primary text-[32rpx]"></text></view>
+                    </template>
+                </u-cell>
+            </view>
+
+            <!-- 功能列表 -->
+            <view class="card mt-[24rpx]" v-if="centerList.length">
+                <u-cell-group :border="false">
+                    <u-cell
+                        v-for="(item,index) in centerList" :key="index"
+                        :title="item.name"
+                        :isLink="true"
+                        :border="index !== 0"
+                        @click="redirect({url: item.page})"></u-cell>
+                </u-cell-group>
+            </view>
+
+            <!-- 关于 -->
+            <view class="card mt-[24rpx]">
+                <u-cell
+                    title="关于"
+                    :isLink="true" :border="false"
+                    @click="redirect({url: '/app/pages/site/about'})">
+                    <template #icon>
+                        <view class="cell-icon bg-style"><text class="nc-iconfont nc-icon-xinxiV6xx text-primary text-[32rpx]"></text></view>
+                    </template>
+                </u-cell>
+            </view>
+
+            <!-- 退出登录 -->
+            <view class="mt-[48rpx]">
+                <u-button
+                    text="退出登录"
+                    color="#fff"
+                    :customStyle="{ height: '92rpx', color: '#FF4D4F', fontSize: '30rpx', fontWeight: 500, borderRadius: '24rpx' }"
+                    @click="popupShow = true"></u-button>
             </view>
         </view>
-       <view class="mt-[30rpx] h-[100rpx] bg-[#fff] flex-center text-[26rpx] font-500 text-[#666]" @click="popupShow = true">退出登录</view>
+
         <tabbar />
-        <!-- 退出登录弹窗 -->
-        <u-popup  :show="popupShow" mode="center" round="8" :safeAreaInsetBottom="false">
-            <view class="bg-[#fff] flex flex-col justify-between w-[600rpx] min-h-[240rpx] rounded-[var(--rounded-big)] box-border p-[35rpx] relative">
-                <view class="text-[28rpx] text-center">是否退出登录?</view>
-                <view class="flex items-center">
-                    <view class="flex-1 mr-[30rpx] flex justify-center bg-[var(--primary-color-light)]  h-[70rpx] leading-[70rpx] text-[var(--primary-color)] text-[24rpx] font-500 rounded-[16rpx]" @click="popupShow = false">取消</view>
-                    <view class="flex-1 flex justify-center bg-[var(--primary-color)] h-[70rpx] leading-[70rpx] text-[#fff] text-[26rpx]  font-500 rounded-[16rpx]" @click="logout">确认</view>
-                    
-                </view>
-            </view>
-        </u-popup>
+
+        <!-- 退出登录确认 -->
+        <u-modal
+            :show="popupShow"
+            title="提示"
+            content="是否退出登录?"
+            :showCancelButton="true"
+            confirmText="确认退出"
+            cancelText="取消"
+            @confirm="confirmLogout"
+            @cancel="popupShow = false"></u-modal>
     </view>
 </template>
 
 <script setup lang="ts">
-import { ref,computed } from 'vue';
+import { ref, computed } from 'vue';
 import { redirect, img } from '@/utils/common';
 import { getSiteCenter } from '@/app/api/site'
 import useUserStore from '@/stores/user'
@@ -63,11 +95,6 @@ const siteInfo = computed(() => userStore.siteInfo)
 const userInfo = computed(() => userStore.userInfo)
 
 const centerList = ref([])
-const getCenterItemClass = (index: number) => {
-    const base = 'h-[100rpx] box-border flex items-center justify-between border-0'
-    return index ? `${ base } border-t-[1rpx] border-solid border-[#ebebeb]` : base
-}
-
 const getSiteCenterFn = () => {
     getSiteCenter().then((res:any) => {
         centerList.value = res.data
@@ -80,19 +107,33 @@ const popupShow = ref(false)
 const logout = ()=>{
     userStore.logout()
 }
-
-
+const confirmLogout = () => {
+    popupShow.value = false
+    logout()
+}
 </script>
 <style lang="scss" scoped>
-.icon-style{
-    background: linear-gradient( 90deg, #D7FBEC 0%, #A8F8D6 100%);
+.site-header {
+    background: var(--primary-color);
 }
-.bg-style{
-	background: linear-gradient( 90deg, #E6FFF5 0%, #CEFFEA 100%);
+.content-pull {
+    margin-top: -48rpx;
 }
-.rate-wrap{
-    width: 480rpx;
-    white-space: nowrap;
-    box-sizing: border-box;
+.card {
+    background: #fff;
+    border-radius: 24rpx;
+    overflow: hidden;
+}
+.cell-icon {
+    width: 60rpx;
+    height: 60rpx;
+    border-radius: 14rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 20rpx;
+}
+.bg-style {
+    background: linear-gradient(90deg, #E6FFF5 0%, #CEFFEA 100%);
 }
 </style>

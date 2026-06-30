@@ -85,9 +85,10 @@ const setValue = () => {
 }
 
 watch(() => value.value, () => {
-    images.data = [
-        ...value.value.split(',').filter((item: string) => { return item })
-    ]
+    images.data = String(value.value || '')
+        .split(',')
+        .map((item: string) => item.trim()) // 去掉每个 url 的首尾空格，避免 " https://..." 被当相对路径导致 404
+        .filter((item: string) => item)
     setValue()
 }, { immediate: true })
 

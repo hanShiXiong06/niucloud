@@ -170,10 +170,43 @@
 			},
 			"needLogin": true
 
+		},
+		{
+			"path": "app/pages/sys/album",
+			"style": {
+				"navigationBarTitleText": "图片空间"
+			},
+			"needLogin": true
 		}
 
 	],
 	"subPackages": [
+		{
+			"root": "addon/phone_shop",
+			"pages": [
+				{
+					"path": "pages/goods/list",
+					"style": {
+						"navigationBarTitleText": "商品管理"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/goods/add",
+					"style": {
+						"navigationBarTitleText": "发布商品"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/goods/category",
+					"style": {
+						"navigationBarTitleText": "分类管理"
+					},
+					"needLogin": true
+				}
+			]
+		},
 		// {{ PAGE_BEGAIN }}
         // MALL_PAGE_BEGIN
 		// {
@@ -282,6 +315,13 @@
 		{
 			"root": "addon/hsx_recycle",
 			"pages": [
+				{
+					"path": "pages/task/index",
+					"style": {
+						"navigationBarTitleText": "我的任务"
+					},
+					"needLogin": true
+				},
 				// *********************************** 商城 ***********************************
 				{
 					"path": "pages/index",
