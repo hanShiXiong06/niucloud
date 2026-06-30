@@ -59,9 +59,10 @@ class RolePresetDict
                     'hsx_erp_manage', 'hsx_erp_dashboard',
                     'hsx_erp_asset_list', 'hsx_erp_asset_info', 'hsx_erp_asset_manual_inbound',
                     'hsx_erp_device_trace', 'hsx_erp_device_trace_detail',
-                    // 回收侧：下单、验机、确认价、机型字典、打印标签
-                    'recycle_order_list', 'recycle_order_add', 'recycle_order_detail', 'recycle_order_status', 'recycle_order_business_stage_options',
-                    'recycle_device_info', 'recycle_device_confirm_price', 'recycle_device_re_confirm_price', 'recycle_device_update', 'recycle_device_batch_recycle',
+                    // 回收侧：代下单、签收(edit/order_sign)、验机、确认价、机型字典、打印标签
+                    'recycle_order_list', 'recycle_order_add', 'recycle_order_edit', 'recycle_order_detail', 'recycle_order_status', 'recycle_order_business_stage_options',
+                    'recycle_my_task',
+                    'recycle_device_check', 'recycle_device_info', 'recycle_device_confirm_price', 'recycle_device_re_confirm_price', 'recycle_device_update', 'recycle_device_batch_recycle',
                     'recycle_device_model_dict_list', 'recycle_device_model_dict_options', 'recycle_device_model_dict_tree',
                     'recycle_printer_device_label', 'recycle_printer_device_label_plan',
                 ],
@@ -80,7 +81,7 @@ class RolePresetDict
                     'hsx_erp_device_trace', 'hsx_erp_device_trace_detail',
                     'hsx_erp_ai', 'hsx_erp_ai_chat', 'hsx_erp_ai_chat_send', 'hsx_erp_ai_scenes', 'hsx_erp_ai_run', 'hsx_erp_ai_stream', 'hsx_erp_ai_finance', 'hsx_erp_ai_report', 'hsx_erp_ai_summary', 'hsx_erp_ai_conv_list', 'hsx_erp_ai_conv_detail', 'hsx_erp_ai_conv_save', 'hsx_erp_ai_conv_delete',
                     // 回收侧：打款确认
-                    'recycle_order_payment_confirm', 'recycle_order_merchant_pay_info',
+                    'recycle_my_task', 'recycle_order_payment_confirm', 'recycle_order_merchant_pay_info',
                 ],
             ],
         ];
@@ -90,8 +91,10 @@ class RolePresetDict
     private static function recycleManage(): array
     {
         return [
+            'recycle_my_task',
             'recycle_order_list', 'recycle_order_add', 'recycle_order_detail', 'recycle_order_edit', 'recycle_order_delete', 'recycle_order_status', 'recycle_order_payment_confirm', 'recycle_order_merchant_pay_info',
-            'recycle_device_info', 'recycle_device_confirm_price', 'recycle_device_re_confirm_price', 'recycle_device_cost_adjust', 'recycle_device_cost_adjust_ability', 'recycle_device_cost_adjust_logs', 'recycle_device_batch_return', 'recycle_device_update',
+            'recycle_device_check',
+            'recycle_device_info', 'recycle_device_confirm_price', 'recycle_device_re_confirm_price', 'recycle_device_cost_adjust', 'recycle_device_cost_adjust_ability', 'recycle_device_cost_adjust_logs', 'recycle_device_batch_recycle', 'recycle_device_batch_return', 'recycle_device_update',
             'recycle_return_order_list', 'recycle_return_order_create', 'recycle_return_order_detail', 'recycle_return_order_status', 'recycle_return_order_update_status', 'recycle_return_order_cancel',
         ];
     }
