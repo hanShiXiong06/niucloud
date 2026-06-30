@@ -780,14 +780,6 @@ Route::group('recycle', function () {
 
 // 统一发件 · 快递公司管理
 Route::group('recycle', function () {
-    Route::get('delivery/company', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@pages');
-    Route::get('delivery/company/list', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@lists');
-    Route::post('delivery/company/import_presets', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@importPresets');
-    Route::get('delivery/company/provider_companies', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@providerCompanies');
-    Route::get('delivery/company/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@info');
-    Route::post('delivery/company', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@add');
-    Route::put('delivery/company/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@edit');
-    Route::delete('delivery/company/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\Company@del');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,
@@ -796,14 +788,6 @@ Route::group('recycle', function () {
 
 // 统一发件 · 电子面单模板
 Route::group('recycle', function () {
-    Route::get('express_sheet', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@pages');
-    Route::get('express_sheet/list', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@lists');
-    Route::get('express_sheet/paytype', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@payType');
-    Route::get('express_sheet/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@info');
-    Route::post('express_sheet', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@add');
-    Route::put('express_sheet/setDefault/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@setDefault');
-    Route::put('express_sheet/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@edit');
-    Route::delete('express_sheet/:id', 'addon\hsx_recycle\app\adminapi\controller\delivery\ExpressSheet@del');
 })->middleware([
     AdminCheckToken::class,
     AdminCheckRole::class,
