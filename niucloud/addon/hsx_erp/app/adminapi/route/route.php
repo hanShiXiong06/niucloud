@@ -128,4 +128,4 @@ Route::group('erp', function () {
     AdminCheckToken::class,
     AdminCheckRole::class,
     AdminLog::class,
-]);
+])->mergeRuleRegex(false); // erp 组规则多，关闭合并正则改逐条匹配，规避超大正则编译失败(route pattern error)，并修复 asset/:id 等变量路由

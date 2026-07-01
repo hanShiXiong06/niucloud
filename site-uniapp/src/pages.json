@@ -456,6 +456,28 @@
 			]
 		}
 		// DEVICE_ASSET_PAGE_END
+		,
+		// ERP_PAGE_BEGIN
+		{
+			"root": "addon/hsx_erp",
+			"pages": [
+				{
+					"path": "pages/cost_adjust/list",
+					"style": {
+						"navigationBarTitleText": "成本调整"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/cost_adjust/detail",
+					"style": {
+						"navigationBarTitleText": "成本调整"
+					},
+					"needLogin": true
+				}
+			]
+		}
+		// ERP_PAGE_END
 		// RECYCLE_PAGE_END
 	],
 	"globalStyle": {

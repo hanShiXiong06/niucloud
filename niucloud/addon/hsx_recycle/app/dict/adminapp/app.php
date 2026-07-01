@@ -20,7 +20,7 @@ return [
         'menu_key' => '',
         'sort' => 0,
         'page' => '/addon/hsx_recycle/pages/task/index',
-        'icon' => '/addon/hsx_recycle/site-tabbar/icon_02.png'
+        'icon' => '/addon/hsx_recycle/site-tabbar/icon_01.png'
     ],
     [
         'name' => '数据统计',
