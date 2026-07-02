@@ -10,5 +10,4 @@ class ErpAsset extends BaseModel
     protected $pk = 'id';
     protected $name = 'erp_asset';
     protected $autoWriteTimestamp = false;
-    protected $json = ['check_snapshot', 'source_snapshot'];
 }

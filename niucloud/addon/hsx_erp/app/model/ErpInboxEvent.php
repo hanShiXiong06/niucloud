@@ -10,5 +10,4 @@ class ErpInboxEvent extends BaseModel
     protected $pk = 'id';
     protected $name = 'erp_inbox_event';
     protected $autoWriteTimestamp = false;
-    protected $json = ['payload'];
 }

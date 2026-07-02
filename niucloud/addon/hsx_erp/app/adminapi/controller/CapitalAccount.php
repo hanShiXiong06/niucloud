@@ -17,46 +17,60 @@ class CapitalAccount extends BaseAdminController
         $this->service = new ErpCapitalAccountService();
     }
 
-    /** 账户列表 */
     public function lists()
     {
         return success([
-            'list' => $this->service->getAll(),
-            'type_map' => $this->service->accountTypeMap(),
+            'list' => $this->service->lists(),
+            'type_map' => $this->service->typeMap(),
         ]);
     }
 
-    /** 新建/编辑账户 */
-    public function save(int $id = 0)
+    public function save(int $id)
     {
-        return success($this->service->save($this->request->params([
-            ['account_name', ''], ['account_type', 'bank'], ['bank_name', ''], ['account_no', ''],
-            ['holder', ''], ['currency', 'CNY'], ['balance', 0], ['is_default', 0],
-            ['status', 1], ['sort', 0], ['remark', ''],
-        ]), $id));
+        $params = $this->request->params([
+            ['account_name', ''],
+            ['account_type', 'bank'],
+            ['bank_name', ''],
+            ['account_no', ''],
+            ['holder', ''],
+            ['balance', 0],
+            ['is_default', 0],
+            ['status', 1],
+            ['sort', 0],
+            ['remark', ''],
+        ]);
+        return success(['id' => $this->service->save($params, $id)]);
     }
 
-    /** 删除账户 */
     public function delete(int $id)
     {
         return success($this->service->delete($id));
     }
 
-    /** 手工记一笔收/付 */
     public function entry()
     {
-        return success($this->service->recordEntry($this->request->params([
-            ['account_id', 0], ['direction', 'in'], ['amount', 0], ['biz_type', 'manual'],
-            ['counterparty_id', 0], ['counterparty_name', ''], ['source_no', ''], ['remark', ''],
-        ])));
+        $params = $this->request->params([
+            ['account_id', 0],
+            ['direction', 'in'],
+            ['amount', 0],
+            ['party_id', 0],
+            ['counterparty_name', ''],
+            ['remark', ''],
+        ]);
+        return success(['id' => $this->service->entry($params)]);
     }
 
-    /** 账目往来流水 */
     public function ledger()
     {
-        return success($this->service->ledgerPage($this->request->params([
-            ['account_id', 0], ['direction', ''], ['biz_type', ''], ['keyword', ''],
-            ['start_time', 0], ['end_time', 0], ['page', 1], ['limit', 15],
-        ])));
+        $params = $this->request->params([
+            ['account_id', 0],
+            ['direction', ''],
+            ['keyword', ''],
+            ['start_time', 0],
+            ['end_time', 0],
+            ['page', 1],
+            ['limit', 15],
+        ]);
+        return success($this->service->ledger($params));
     }
 }

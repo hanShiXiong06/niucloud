@@ -12,12 +12,19 @@ use think\facade\Db;
 
 class ErpWarehouseService extends BaseAdminService
 {
+    private static bool $schemaEnsured = false;
+
     public function getAll(): array
     {
+        $this->ensureSchema();
         $warehouses = ErpWarehouse::where([['site_id', '=', $this->site_id]])
-            ->order('is_default desc,sort asc,id asc')->select()->toArray();
+            ->order('is_default desc,sort asc,id asc')
+            ->select()
+            ->toArray();
         $locations = ErpWarehouseLocation::where([['site_id', '=', $this->site_id]])
-            ->order('sort asc,id asc')->select()->toArray();
+            ->order('sort asc,id asc')
+            ->select()
+            ->toArray();
         $locationMap = [];
         foreach ($locations as $location) {
             $locationMap[(int)$location['warehouse_id']][] = $location;
@@ -29,6 +36,11 @@ class ErpWarehouseService extends BaseAdminService
         return $warehouses;
     }
 
+    public function ensureReady(): void
+    {
+        $this->ensureSchema();
+    }
+
     public function getOptions(): array
     {
         return array_values(array_filter(array_map(function (array $warehouse) {
@@ -36,7 +48,7 @@ class ErpWarehouseService extends BaseAdminService
                 return null;
             }
             $warehouse['locations'] = array_values(array_filter(
-                $warehouse['locations'],
+                $warehouse['locations'] ?? [],
                 fn(array $location) => (int)$location['status'] === 1
             ));
             return $warehouse;
@@ -45,6 +57,7 @@ class ErpWarehouseService extends BaseAdminService
 
     public function saveWarehouse(array $data, int $id = 0): int
     {
+        $this->ensureSchema();
         $name = trim((string)($data['warehouse_name'] ?? ''));
         if ($name === '') {
             throw new CommonException('请填写仓库名称');
@@ -60,19 +73,8 @@ class ErpWarehouseService extends BaseAdminService
 
         $now = time();
         $isDefault = (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
-        // 业务类型(=销售流向)：商城/同行/代卖/报废/暂存，缺省商城
-        $allowedTypes = ['mall', 'peer', 'consignment', 'scrap', 'hold'];
-        $businessType = in_array((string)($data['business_type'] ?? ''), $allowedTypes, true)
-            ? (string)$data['business_type']
-            : 'mall';
-        // 允许调入：未显式传时，代卖仓默认不允许、其它仓默认允许
-        $allowInbound = array_key_exists('allow_inbound', $data)
-            ? ((int)$data['allow_inbound'] === 1 ? 1 : 0)
-            : ($businessType === 'consignment' ? 0 : 1);
-        // 进仓是否必须拍照：开启则进此仓走拍照→定价→上架流水线
-        $requirePhoto = (int)($data['require_photo'] ?? 0) === 1 ? 1 : 0;
         $warehouseId = 0;
-        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $businessType, $allowInbound, $requirePhoto, &$warehouseId) {
+        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, &$warehouseId) {
             if ($isDefault === 1) {
                 ErpWarehouse::where([['site_id', '=', $this->site_id]])->update([
                     'is_default' => 0,
@@ -82,9 +84,6 @@ class ErpWarehouseService extends BaseAdminService
             $values = [
                 'warehouse_name' => $name,
                 'warehouse_code' => trim((string)($data['warehouse_code'] ?? '')),
-                'business_type' => $businessType,
-                'allow_inbound' => $allowInbound,
-                'require_photo' => $requirePhoto,
                 'status' => (int)($data['status'] ?? 1) === 1 ? 1 : 0,
                 'is_default' => $isDefault,
                 'sort' => (int)($data['sort'] ?? 0),
@@ -95,19 +94,20 @@ class ErpWarehouseService extends BaseAdminService
                 $warehouse = $this->findWarehouse($id);
                 $warehouse->save($values);
                 $warehouseId = $id;
-            } else {
-                $warehouse = ErpWarehouse::create(array_merge($values, [
-                    'site_id' => $this->site_id,
-                    'create_at' => $now,
-                ]));
-                $warehouseId = (int)$warehouse->id;
+                return;
             }
+            $warehouse = ErpWarehouse::create(array_merge($values, [
+                'site_id' => $this->site_id,
+                'create_at' => $now,
+            ]));
+            $warehouseId = (int)$warehouse->id;
         });
         return $warehouseId;
     }
 
     public function saveLocation(int $warehouseId, array $data, int $id = 0): int
     {
+        $this->ensureSchema();
         $this->findWarehouse($warehouseId);
         $name = trim((string)($data['location_name'] ?? ''));
         if ($name === '') {
@@ -149,6 +149,7 @@ class ErpWarehouseService extends BaseAdminService
 
     public function deleteWarehouse(int $id): bool
     {
+        $this->ensureSchema();
         $this->findWarehouse($id);
         if (ErpAsset::where([['site_id', '=', $this->site_id], ['warehouse_id', '=', $id]])->count() > 0) {
             throw new CommonException('仓库已有库存，不能删除，可改为停用');
@@ -162,6 +163,7 @@ class ErpWarehouseService extends BaseAdminService
 
     public function deleteLocation(int $id): bool
     {
+        $this->ensureSchema();
         $this->findLocation($id);
         if (ErpAsset::where([['site_id', '=', $this->site_id], ['location_id', '=', $id]])->count() > 0) {
             throw new CommonException('库位已有库存，不能删除，可改为停用');
@@ -170,24 +172,11 @@ class ErpWarehouseService extends BaseAdminService
         return true;
     }
 
-    /** 该仓是否要求进仓必须拍照 */
-    public function requiresPhoto(int $warehouseId): bool
-    {
-        if ($warehouseId <= 0) {
-            return false;
-        }
-        try {
-            return (int)(ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId]])->value('require_photo') ?: 0) === 1;
-        } catch (\Throwable $e) {
-            // require_photo 列缺失(未补迁移)等异常 → 降级为"不强制拍照",避免整条入库/整备流程被带崩
-            return false;
-        }
-    }
-
     public function validateInboundLocation(int $warehouseId, int $locationId): array
     {
+        $this->ensureSchema();
         if ($warehouseId <= 0 || $locationId <= 0) {
-            throw new CommonException('确认入库前必须选择仓库和库位');
+            throw new CommonException('入库必须选择仓库和库位');
         }
         $warehouse = $this->findWarehouse($warehouseId);
         $location = $this->findLocation($locationId);
@@ -198,6 +187,61 @@ class ErpWarehouseService extends BaseAdminService
             throw new CommonException('所选库位不属于当前仓库');
         }
         return [$warehouse, $location];
+    }
+
+    private function ensureSchema(): void
+    {
+        if (self::$schemaEnsured) {
+            return;
+        }
+        self::$schemaEnsured = true;
+        $warehouseTable = (new ErpWarehouse())->getTable();
+        $locationTable = (new ErpWarehouseLocation())->getTable();
+        $assetTable = (new ErpAsset())->getTable();
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$warehouseTable}` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT,
+            `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+            `warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '仓库名称',
+            `warehouse_code` varchar(60) NOT NULL DEFAULT '' COMMENT '仓库编码',
+            `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1启用/0停用',
+            `is_default` tinyint(1) NOT NULL DEFAULT 0 COMMENT '默认入库仓',
+            `sort` int NOT NULL DEFAULT 0,
+            `remark` varchar(255) NOT NULL DEFAULT '',
+            `create_at` int NOT NULL DEFAULT 0,
+            `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_site_name` (`site_id`,`warehouse_name`),
+            KEY `idx_site_status` (`site_id`,`status`,`sort`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-仓库'");
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$locationTable}` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT,
+            `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+            `warehouse_id` int NOT NULL DEFAULT 0 COMMENT '仓库ID',
+            `location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '库位名称',
+            `location_code` varchar(60) NOT NULL DEFAULT '' COMMENT '库位编码',
+            `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1启用/0停用',
+            `sort` int NOT NULL DEFAULT 0,
+            `remark` varchar(255) NOT NULL DEFAULT '',
+            `create_at` int NOT NULL DEFAULT 0,
+            `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_warehouse_name` (`site_id`,`warehouse_id`,`location_name`),
+            KEY `idx_site_warehouse` (`site_id`,`warehouse_id`,`status`,`sort`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-仓库库位'");
+        $this->ensureColumn($assetTable, 'location_id', "`location_id` int NOT NULL DEFAULT 0 COMMENT '库位ID' AFTER `warehouse_name`");
+        $this->ensureColumn($assetTable, 'location_name', "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '库位名称快照' AFTER `location_id`");
+        $purchaseTable = (new \addon\hsx_erp\app\model\ErpPurchaseOrder())->getTable();
+        $this->ensureColumn($purchaseTable, 'location_id', "`location_id` int NOT NULL DEFAULT 0 AFTER `warehouse_name`");
+        $this->ensureColumn($purchaseTable, 'location_name', "`location_name` varchar(100) NOT NULL DEFAULT '' AFTER `location_id`");
+    }
+
+    private function ensureColumn(string $table, string $column, string $definition): void
+    {
+        $rows = Db::query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
+        if (!empty($rows)) {
+            return;
+        }
+        Db::execute("ALTER TABLE `{$table}` ADD COLUMN {$definition}");
     }
 
     private function findWarehouse(int $id): ErpWarehouse
