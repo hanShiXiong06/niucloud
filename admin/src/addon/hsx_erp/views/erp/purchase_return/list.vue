@@ -229,6 +229,7 @@ import {
     cancelErpPurchaseReturn,
 } from '@/addon/hsx_erp/api/erp'
 import { getErpPurchaseList, getErpPurchaseInfo } from '@/addon/hsx_erp/api/erp'
+import { useRoute } from 'vue-router'
 
 // ── 状态 ──────────────────────────────────────────────────────────────────────
 const statusTabs = [
@@ -434,8 +435,16 @@ function refundModeLabel(mode: string) {
     return map[mode] || mode
 }
 
+const route = useRoute()
+
 // 初始化
 loadList()
+// 如果从采购页带着 purchase_order_id 过来，自动打开新建并预选采购单
+if (route.query.purchase_order_id) {
+    openCreate()
+    form.purchase_order_id = Number(route.query.purchase_order_id)
+    onPurchaseOrderChange(Number(route.query.purchase_order_id))
+}
 </script>
 
 <style scoped>

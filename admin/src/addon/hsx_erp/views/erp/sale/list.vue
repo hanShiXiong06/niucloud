@@ -86,9 +86,10 @@
                 <el-table-column label="单据" width="110">
                     <template #default="{ row }"><el-tag :type="orderStatusMeta(row.order_status).type" effect="plain">{{ orderStatusMeta(row.order_status).label }}</el-tag></template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="150" align="center">
+                <el-table-column label="操作" fixed="right" width="190" align="center">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openDetail(row)">批次</el-button>
+                        <el-button v-if="canReturnSale(row)" type="warning" link @click="goSaleReturn(row)">退货</el-button>
                         <el-button v-if="canCancelSale(row)" type="danger" link @click="cancelSale(row)">撤销</el-button>
                     </template>
                 </el-table-column>
@@ -213,6 +214,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
@@ -221,6 +223,7 @@ import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/i
 
 const search = reactive({ keyword: '', finance_status: '', status: '' })
 const activeTab = ref('')
+const router = useRouter()
 
 function onTabChange(tab: string) {
     if (tab === 'void') {
@@ -392,6 +395,18 @@ function handleReset() {
 
 function canCancelSale(row: any) {
     return row.order_status === 'completed' && row.finance_status === 'pending'
+}
+
+/** 设备已售出且销售单未撤销，才能发起退货 */
+function canReturnSale(row: any) {
+    return row.status === 'sold' && row.order_status !== 'void'
+}
+
+function goSaleReturn(row: any) {
+    router.push({
+        path: '/site/hsx_erp/sale_return',
+        query: { sale_order_id: row.sale_order_id },
+    })
 }
 
 async function cancelSale(row: any) {

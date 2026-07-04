@@ -93,10 +93,11 @@
                 <el-table-column label="状态" width="110">
                     <template #default="{ row }"><el-tag effect="plain">{{ assetStatusLabel(row.status) }}</el-tag></template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="190" align="center">
+                <el-table-column label="操作" fixed="right" width="230" align="center">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openDetail(row)">批次</el-button>
                         <el-button v-if="row.order_status !== 'void'" type="primary" link @click="openAdjust(row)">调成本</el-button>
+                        <el-button v-if="canReturnPurchase(row)" type="warning" link @click="goReturn(row)">退货</el-button>
                         <el-button v-if="canCancelPurchase(row)" type="danger" link @click="cancelPurchase(row)">撤销</el-button>
                     </template>
                 </el-table-column>
@@ -318,6 +319,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
@@ -327,6 +329,7 @@ import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/i
 
 const search = reactive({ keyword: '', finance_status: '', status: '' })
 const activeTab = ref('')
+const router = useRouter()
 
 function onTabChange(tab: string) {
     // Tab 映射：void 用 status 字段，其余用 finance_status
@@ -547,6 +550,18 @@ function openAdjust(row: any) {
 
 function canCancelPurchase(row: any) {
     return row.order_status === 'completed' && row.finance_status === 'pending' && row.status === 'in_stock'
+}
+
+/** 设备仍在库（未被销售/退货/作废）且采购单未撤销，才能发起退货 */
+function canReturnPurchase(row: any) {
+    return row.status === 'in_stock' && row.order_status !== 'void'
+}
+
+function goReturn(row: any) {
+    router.push({
+        path: '/site/hsx_erp/purchase_return',
+        query: { purchase_order_id: row.purchase_order_id },
+    })
 }
 
 async function cancelPurchase(row: any) {

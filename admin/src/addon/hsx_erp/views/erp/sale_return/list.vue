@@ -236,6 +236,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
+import { useRoute } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -465,7 +466,14 @@ function refundModeLabel(mode: string) {
     return map[mode] || mode
 }
 
+const route = useRoute()
 loadList()
+// 如果从销售页带着 sale_order_id 过来，自动打开新建并预选销售单
+if (route.query.sale_order_id) {
+    openCreate()
+    form.sale_order_id = Number(route.query.sale_order_id)
+    onSaleOrderChange(Number(route.query.sale_order_id))
+}
 </script>
 
 <style scoped>
