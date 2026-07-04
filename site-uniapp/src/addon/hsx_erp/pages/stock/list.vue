@@ -11,7 +11,7 @@
             :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无库存设备" /></template>
             <view class="list-wrap">
-                <view v-for="row in list" :key="row.id" class="erp-card">
+                <view v-for="row in list" :key="row.id" class="erp-card" @click="goDetail(row)">
                     <!-- 型号 + 库存状态 -->
                     <view class="erp-card__head">
                         <text class="card-title">{{ row.model || '-' }}</text>
@@ -92,6 +92,10 @@ const queryList = async (pageNo: number, pageSize: number) => {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+
+const goDetail = (row: any) => uni.navigateTo({
+    url: `/addon/hsx_erp/pages/stock/detail?id=${row.id}`
+})
 const ageDays = (ts: number) => ts ? Math.floor((Date.now() / 1000 - ts) / 86400) : 0
 const ageClass = (ts: number, status: string) => {
     if (status !== 'in_stock') return ''

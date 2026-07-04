@@ -11,7 +11,11 @@
             :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无采购记录" /></template>
             <view class="list-wrap">
-                <view v-for="row in list" :key="row.id" class="erp-card">
+                <!-- 新建按钮 -->
+                <view class="action-top">
+                    <u-button type="primary" size="small" @click="goCreate">+ 采购开单</u-button>
+                </view>
+                <view v-for="row in list" :key="row.id" class="erp-card" @click="goDetail(row)">
                     <!-- 第一行：型号 + 付款状态 -->
                     <view class="erp-card__head">
                         <text class="card-title">{{ row.model || '-' }}</text>
@@ -85,6 +89,11 @@ const queryList = async (pageNo: number, pageSize: number) => {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+
+const goDetail = (row: any) => uni.navigateTo({
+    url: `/addon/hsx_erp/pages/purchase/detail?purchase_order_id=${row.purchase_order_id}&purchase_no=${encodeURIComponent(row.purchase_no || '')}`
+})
+const goCreate = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/purchase/create' })
 const financeLabel = (s: string) => ({ pending: '待付款', partial: '部分付款', settled: '已结清', void: '已作废' }[s] || s || '-')
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
 const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')

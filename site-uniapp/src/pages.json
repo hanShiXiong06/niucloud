@@ -505,6 +505,31 @@
 					"path": "pages/sale_return/list",
 					"style": { "navigationBarTitleText": "销售退货" },
 					"needLogin": true
+				},
+				{
+					"path": "pages/purchase/detail",
+					"style": { "navigationBarTitleText": "采购单详情" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/purchase/create",
+					"style": { "navigationBarTitleText": "采购开单" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale/detail",
+					"style": { "navigationBarTitleText": "销售单详情" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale/create",
+					"style": { "navigationBarTitleText": "销售出库" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/stock/detail",
+					"style": { "navigationBarTitleText": "设备档案" },
+					"needLogin": true
 				}
 			]
 		}
