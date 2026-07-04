@@ -11,7 +11,7 @@
                 </div>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-5">
+            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-6">
                 <div class="summary-tile">
                     <div class="summary-label">当前页台数</div>
                     <div class="summary-value">{{ summary.count }}</div>
@@ -19,6 +19,10 @@
                 <div class="summary-tile">
                     <div class="summary-label">库存成本</div>
                     <div class="summary-value">{{ money(summary.cost) }}</div>
+                </div>
+                <div class="summary-tile">
+                    <div class="summary-label">均台成本</div>
+                    <div class="summary-value">{{ summary.inStockCount > 0 ? money(summary.cost / summary.inStockCount) : '-' }}</div>
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">待整备</div>
@@ -78,6 +82,14 @@
                     <template #default="{ row }">
                         <div>{{ row.party_name || '-' }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</div>
+                    </template>
+                </el-table-column>
+                <el-table-column label="库龄" width="90" align="center">
+                    <template #default="{ row }">
+                        <span v-if="row.stock_in_at && row.status === 'in_stock'" :class="stockAgeDaysClass(row.stock_in_at)">
+                            {{ stockAgeDays(row.stock_in_at) }}天
+                        </span>
+                        <span v-else class="text-gray-300">-</span>
                     </template>
                 </el-table-column>
                 <el-table-column label="成本 / 预计" min-width="170" align="right">
@@ -159,12 +171,21 @@
                     <el-form-item label="预计卖价">
                         <el-input-number v-model="flow.form.estimate_sale_price" :min="0" :precision="2" :controls="false" class="!w-full" />
                     </el-form-item>
+                    <el-form-item label="零售价">
+                        <el-input-number v-model="flow.form.retail_price" :min="0" :precision="2" :controls="false" class="!w-full" placeholder="上架商城定价" />
+                    </el-form-item>
                 </div>
                 <el-form-item label="图片">
                     <el-input v-model.trim="flow.form.image_urls" placeholder="图片地址，多张用逗号分隔" />
                 </el-form-item>
-                <el-form-item label="备注">
-                    <el-input v-model.trim="flow.form.quality_remark" type="textarea" :rows="3" placeholder="质检、外观、整备说明" />
+                <el-form-item label="质检备注">
+                    <el-input v-model.trim="flow.form.quality_remark" type="textarea" :rows="2" placeholder="质检、外观说明（内部使用）" />
+                </el-form-item>
+                <el-form-item label="对外说明">
+                    <el-input v-model.trim="flow.form.remark_public" type="textarea" :rows="2" placeholder="展示给客户/商城的描述" />
+                </el-form-item>
+                <el-form-item label="对内备注">
+                    <el-input v-model.trim="flow.form.remark_internal" placeholder="员工内部备注，不对外展示" />
                 </el-form-item>
             </el-form>
             <template #footer>
@@ -298,16 +319,39 @@ const flow = reactive({ visible: false, saving: false, row: null as any, form: d
 const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.count += 1
     if (row.status === 'in_stock') acc.cost += Number(row.total_cost || 0)
+    if (row.status === 'in_stock') acc.inStockCount += 1
     if (['pending', 'processing'].includes(row.refurbish_status || '')) acc.needRefurbish += 1
     if (row.status === 'in_stock' && !['pending', 'processing'].includes(row.refurbish_status || '')) acc.saleable += 1
     if (row.status === 'sold') acc.sold += 1
     return acc
-}, { count: 0, cost: 0, needRefurbish: 0, saleable: 0, sold: 0 }))
+}, { count: 0, cost: 0, inStockCount: 0, needRefurbish: 0, saleable: 0, sold: 0 }))
 
 onMounted(loadList)
 
+function stockAgeDays(stockInAt: number): number {
+    if (!stockInAt) return 0
+    return Math.floor((Date.now() / 1000 - stockInAt) / 86400)
+}
+
+function stockAgeDaysClass(stockInAt: number): string {
+    const days = stockAgeDays(stockInAt)
+    if (days >= 90) return 'text-red-600 font-medium'
+    if (days >= 30) return 'text-orange-500'
+    return 'text-gray-600'
+}
+
 function defaultFlowForm() {
-    return { refurbish_status: 'none', sale_target: 'unset', listing_status: 'none', estimate_sale_price: 0, image_urls: '', quality_remark: '' }
+    return {
+        refurbish_status: 'none',
+        sale_target: 'unset',
+        listing_status: 'none',
+        estimate_sale_price: 0,
+        retail_price: 0,
+        image_urls: '',
+        quality_remark: '',
+        remark_public: '',
+        remark_internal: '',
+    }
 }
 
 async function loadList() {
@@ -352,8 +396,11 @@ function openFlow(row: any) {
         sale_target: row.sale_target || 'unset',
         listing_status: row.listing_status || 'none',
         estimate_sale_price: Number(row.estimate_sale_price || 0),
+        retail_price: Number(row.retail_price || 0),
         image_urls: row.image_urls || '',
-        quality_remark: row.quality_remark || ''
+        quality_remark: row.quality_remark || '',
+        remark_public: row.remark_public || '',
+        remark_internal: row.remark_internal || '',
     }
     flow.visible = true
 }
