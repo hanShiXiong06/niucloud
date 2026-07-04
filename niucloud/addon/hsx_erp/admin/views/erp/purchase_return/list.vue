@@ -119,6 +119,7 @@
                             v-loading="assetsLoading"
                             size="small"
                             border
+                            @selection-change="onAssetSelectionChange"
                         >
                             <el-table-column type="selection" width="45" />
                             <el-table-column prop="imei" label="IMEI/序列号" min-width="130" />
@@ -144,8 +145,6 @@
                                 </template>
                             </el-table-column>
                         </el-table>
-
-                        <div ref="tableRef" @selection-change="onAssetSelectionChange" />
 
                         <div class="mt-2 flex items-center gap-4 text-sm">
                             <span>已选 <b class="text-primary">{{ form.items.length }}</b> 台</span>
