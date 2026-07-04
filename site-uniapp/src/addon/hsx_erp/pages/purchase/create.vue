@@ -1,7 +1,7 @@
 <template>
     <view class="erp-page">
         <RecyclePageHeader title="采购开单" />
-        <scroll-view scroll-y style="height:calc(100vh - 200rpx)">
+        <scroll-view scroll-y style="height:calc(100vh - 100rpx)">
             <view class="form-wrap">
 
                 <!-- 供应商 -->
@@ -38,7 +38,9 @@
                 <view class="form-section">
                     <view class="form-section__head">
                         <text class="form-section__title">设备明细（{{ form.items.length }} 台）</text>
-                        <u-button size="mini" type="primary" @click="addDevice">+ 添加设备</u-button>
+                        <view>
+                         <u-button size="mini" type="primary" @click="addDevice">+ 添加设备</u-button>
+                        </view>
                     </view>
                     <view v-for="(item, idx) in form.items" :key="idx" class="device-form-card">
                         <view class="device-form__head">
@@ -157,7 +159,7 @@ const canSubmit = computed(() =>
 onMounted(async () => {
     try {
         const res: any = await getMobileCapitalAccounts()
-        accounts.value = res?.data?.data || []
+        accounts.value = res?.data?.list || []
     } catch {}
 })
 
@@ -205,7 +207,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .form-section__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16rpx; }
 .form-section__title { font-size:28rpx; font-weight:600; color:#374151; }
 .form-row { display:flex; align-items:center; gap:16rpx; margin-bottom:16rpx; &:last-child { margin-bottom:0; } }
-.form-label { font-size:26rpx; color:#374151; width:120rpx; flex-shrink:0; }
+.form-label { font-size:26rpx; color:#374151; width:150rpx; flex-shrink:0; }
 .form-label.required::before { content:'*'; color:#dc2626; margin-right:4rpx; }
 .form-input { flex:1; display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border-radius:8rpx; padding:12rpx 16rpx; }
 .input-text { font-size:26rpx; color:#0f172a; }

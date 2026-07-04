@@ -135,7 +135,7 @@ const canSubmit = computed(() =>
 onMounted(async () => {
     try {
         const res: any = await getMobileCapitalAccounts()
-        accounts.value = res?.data?.data || []
+        accounts.value = res?.data?.list || []
     } catch {}
 })
 

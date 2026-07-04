@@ -126,7 +126,7 @@ const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '12rp
 onMounted(async () => {
     try {
         const res: any = await getMobileCapitalAccounts()
-        accounts.value = res?.data?.data || []
+        accounts.value = res?.data?.list || []
     } catch {}
 })
 
