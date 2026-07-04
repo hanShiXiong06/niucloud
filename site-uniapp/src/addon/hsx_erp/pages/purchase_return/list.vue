@@ -1,13 +1,13 @@
 <template>
     <view class="erp-page">
-        <RecyclePageHeader title="采购退货" />
-        <view class="page-search">
-            <u-tabs :list="tabs" :current="tabIndex" lineColor="#3b6ef5"
-                :activeStyle="{color:'#0f172a',fontWeight:'600'}" :inactiveStyle="{color:'#64748b'}"
-                lineWidth="40" @click="onTab" />
-        </view>
+        <ErpListHeader
+            v-model:activeTab="activeTab"
+            :tabs="tabs"
+            :showSearch="false"
+            @tab-change="onTab"
+        />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15" :paging-style="pagingStyle">
+            :default-page-size="15">
             <template #empty><u-empty mode="list" text="暂无退货记录" /></template>
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card">
@@ -30,29 +30,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+
 import { getMobilePurchaseReturnList, confirmMobilePurchaseReturn, cancelMobilePurchaseReturn } from '@/addon/hsx_erp/api/erp'
-import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
-const { pagingStyle } = useListHeader(64)
 const confirming = ref(0)
 
 const tabs = [
-    { name: '待确认', value: 'pending' },
-    { name: '已确认', value: 'confirmed' },
-    { name: '已撤销', value: 'cancelled' },
-    { name: '全部', value: '' },
+    { label: '待确认', value: 'pending' },
+    { label: '已确认', value: 'confirmed' },
+    { label: '已撤销', value: 'cancelled' },
+    { label: '全部', value: '' },
 ]
-const tabIndex = ref(0)
-const curStatus = computed(() => tabs[tabIndex.value].value)
+const activeTab = ref('pending')
 const reload = () => pagingRef.value?.reload()
-const onTab = (item: any) => { if (tabIndex.value === item.index) return; tabIndex.value = item.index; reload() }
+const onTab = (val: string) => { activeTab.value = val; reload() }
+
+onShow(() => reload())
 
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
-        const res: any = await getMobilePurchaseReturnList({ status: curStatus.value, page: pageNo, limit: pageSize })
+        const res: any = await getMobilePurchaseReturnList({ status: activeTab.value, page: pageNo, limit: pageSize })
         pagingRef.value?.complete(res?.data?.data || [])
     } catch { pagingRef.value?.complete(false) }
 }

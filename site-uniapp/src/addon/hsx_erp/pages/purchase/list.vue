@@ -1,20 +1,18 @@
 <template>
     <view class="erp-page">
-        <RecyclePageHeader title="采购管理" />
-        <view class="page-search">
-            <u-search v-model="keyword" placeholder="型号/IMEI/采购单号/供应商" :showAction="false" bgColor="#f1f5f9" height="34" @search="reload" @clear="reload" />
-            <u-tabs :list="tabs" :current="tabIndex" lineColor="#3b6ef5"
-                :activeStyle="{color:'#0f172a',fontWeight:'600'}" :inactiveStyle="{color:'#64748b'}"
-                lineWidth="40" @click="onTab" />
-        </view>
+        <ErpListHeader
+            v-model="keyword"
+            v-model:activeTab="activeTab"
+            placeholder="型号/IMEI/采购单号/供应商"
+            :tabs="tabs"
+            @search="handleSearch"
+            @tab-change="onTab"
+        />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15" :paging-style="pagingStyle">
+            :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无采购记录" /></template>
             <view class="list-wrap">
-                <!-- 新建按钮 -->
-                <view class="action-top">
-                    <u-button type="primary" size="small" @click="goCreate">+ 采购开单</u-button>
-                </view>
+
                 <view v-for="row in list" :key="row.id" class="erp-card" @click="goDetail(row)">
                     <!-- 第一行：型号 + 付款状态 -->
                     <view class="erp-card__head">
@@ -54,34 +52,44 @@
                 </view>
             </view>
         </z-paging>
+
+        <view class="fab" @click="goCreate" ><u-icon name="plus" color="#fff" size="26"></u-icon></view>
+
     </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+
 import { getMobilePurchaseList } from '@/addon/hsx_erp/api/erp'
+import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
+// useListHeader hook
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 
 const keyword = ref('')
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
-const { pagingStyle } = useListHeader(96)
 
 const tabs = [
-    { name: '全部', value: '' },
-    { name: '待付款', value: 'pending' },
-    { name: '部分付款', value: 'partial' },
-    { name: '已结清', value: 'settled' },
+    { label: '全部', value: '' },
+    { label: '待付款', value: 'pending' },
+    { label: '部分付款', value: 'partial' },
+    { label: '已结清', value: 'settled' },
 ]
-const tabIndex = ref(0)
-const curStatus = computed(() => tabs[tabIndex.value].value)
+const activeTab = ref('')
 const reload = () => pagingRef.value?.reload()
-const onTab = (item: any) => { if (tabIndex.value === item.index) return; tabIndex.value = item.index; reload() }
+const handleSearch = () => reload()
+const onTab = (val: string) => { activeTab.value = val; reload() }
+const { pagingStyle } = useListHeader(126)
+onShow(() => reload())
+
+
 
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
         const res: any = await getMobilePurchaseList({
-            keyword: keyword.value, finance_status: curStatus.value,
+            keyword: keyword.value, finance_status: activeTab.value,
             page: pageNo, limit: pageSize
         })
         pagingRef.value?.complete(res?.data?.data || [])
@@ -102,4 +110,5 @@ const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', return
 
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
+
 </style>
