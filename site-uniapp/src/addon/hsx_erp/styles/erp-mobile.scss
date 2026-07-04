@@ -1,0 +1,106 @@
+// 移动端 ERP 共享样式
+.erp-page {
+    min-height: 100vh;
+    background: #f8fafc;
+}
+
+.page-search {
+    background: #fff;
+    padding: 0 24rpx 16rpx;
+    box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+
+.list-wrap {
+    padding: 16rpx 24rpx;
+}
+
+// 通用卡片
+.erp-card {
+    background: #fff;
+    border-radius: 16rpx;
+    padding: 24rpx;
+    margin-bottom: 20rpx;
+    box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.05);
+
+    &__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12rpx;
+    }
+
+    &__foot {
+        display: flex;
+        align-items: center;
+        gap: 24rpx;
+        margin-top: 16rpx;
+        padding-top: 16rpx;
+        border-top: 1rpx solid #f1f5f9;
+    }
+}
+
+.card-title {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.card-meta {
+    font-size: 24rpx;
+    color: #64748b;
+    margin-top: 6rpx;
+    line-height: 1.5;
+}
+
+.amount-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+}
+
+.amt-label {
+    font-size: 22rpx;
+    color: #94a3b8;
+}
+
+.amt-value {
+    font-size: 28rpx;
+    font-weight: 600;
+    color: #0f172a;
+
+    &.green { color: #16a34a; }
+    &.orange { color: #ea580c; }
+    &.red { color: #dc2626; }
+    &.blue { color: #2563eb; }
+}
+
+// 操作栏
+.action-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 24rpx 32rpx;
+    padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+    background: #fff;
+    box-shadow: 0 -2rpx 16rpx rgba(0,0,0,0.08);
+    display: flex;
+    gap: 20rpx;
+}
+
+// 状态标签行
+.status-row {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    flex-wrap: wrap;
+    margin-top: 12rpx;
+}
+
+// section 标题
+.section-title {
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #374151;
+    margin: 24rpx 0 12rpx;
+}
