@@ -44,6 +44,7 @@
                 <el-tab-pane label="库存中" name="in_stock" />
                 <el-tab-pane label="已售" name="sold" />
                 <el-tab-pane label="已退" name="returned" />
+                <el-tab-pane label="作废" name="void" />
             </el-tabs>
 
             <el-form :inline="true" class="mt-2" @submit.prevent>
