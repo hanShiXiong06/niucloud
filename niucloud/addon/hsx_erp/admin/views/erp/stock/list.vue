@@ -38,16 +38,17 @@
                 </div>
             </div>
 
-            <el-form :inline="true" class="mt-5" @submit.prevent>
+            <!-- 状态快筛 Tab -->
+            <el-tabs v-model="activeTab" class="mt-4 erp-status-tabs" @tab-change="onTabChange">
+                <el-tab-pane label="全部" name="" />
+                <el-tab-pane label="库存中" name="in_stock" />
+                <el-tab-pane label="已售" name="sold" />
+                <el-tab-pane label="已退" name="returned" />
+            </el-tabs>
+
+            <el-form :inline="true" class="mt-2" @submit.prevent>
                 <el-form-item label="关键词">
                     <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 来源 / 仓库" @keyup.enter="handleSearch" />
-                </el-form-item>
-                <el-form-item label="库存状态">
-                    <el-select v-model="search.status" clearable class="!w-[140px]" placeholder="全部">
-                        <el-option label="库存中" value="in_stock" />
-                        <el-option label="已售" value="sold" />
-                        <el-option label="已退" value="returned" />
-                    </el-select>
                 </el-form-item>
                 <el-form-item label="整备">
                     <el-select v-model="search.refurbish_status" clearable class="!w-[140px]" placeholder="全部">
@@ -312,6 +313,13 @@ import { Refresh, Search } from '@element-plus/icons-vue'
 import { getErpStockInfo, getErpStockList, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 
 const search = reactive({ keyword: '', status: '', refurbish_status: '', sale_target: '' })
+const activeTab = ref('')
+
+function onTabChange(tab: string) {
+    search.status = tab
+    table.page = 1
+    loadList()
+}
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const flow = reactive({ visible: false, saving: false, row: null as any, form: defaultFlowForm() })
@@ -375,6 +383,7 @@ function handleReset() {
     search.status = ''
     search.refurbish_status = ''
     search.sale_target = ''
+    activeTab.value = ''
     handleSearch()
 }
 

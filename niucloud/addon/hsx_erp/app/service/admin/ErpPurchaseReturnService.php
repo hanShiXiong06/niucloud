@@ -230,6 +230,9 @@ class ErpPurchaseReturnService extends BaseAdminService
                 ]);
             }
 
+            // ── 刷新采购单财务状态（排除已作废的应付）────────────────────
+            $this->refreshPurchaseOrderAfterReturn((int)$return->purchase_order_id);
+
             // ── 更新退货单状态 ────────────────────────────────────────────
             $return->save([
                 'status'    => 'confirmed',
@@ -415,6 +418,70 @@ class ErpPurchaseReturnService extends BaseAdminService
             'remark'         => $remark ?: '采购退货应收',
             'create_at'      => $now,
             'update_at'      => $now,
+        ]);
+    }
+
+    /**
+     * 退货确认后刷新采购单财务状态。
+     *
+     * 核心逻辑：排除已作废(void)的应付，只汇总仍生效的应付金额，
+     * 从而正确反映"退货后剩余欠款"。
+     * 解决：未付款退货后采购单仍显示"待付款"的问题。
+     */
+    private function refreshPurchaseOrderAfterReturn(int $purchaseOrderId): void
+    {
+        if ($purchaseOrderId <= 0) {
+            return;
+        }
+        $order = ErpPurchaseOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['id',      '=', $purchaseOrderId],
+        ])->findOrEmpty();
+        if ($order->isEmpty()) {
+            return;
+        }
+
+        // 只看该采购单下所有非作废应付的汇总
+        $assetIds = ErpAsset::where([
+            ['site_id',           '=', $this->site_id],
+            ['purchase_order_id', '=', $purchaseOrderId],
+        ])->column('id');
+
+        // 汇总仍生效的应付（排除 void）
+        $activePayables = ErpPayable::where([['site_id', '=', $this->site_id]])
+            ->where(function ($q) use ($purchaseOrderId, $assetIds) {
+                $q->where(function ($qq) use ($purchaseOrderId) {
+                    $qq->where('source_type', '=', 'purchase')
+                       ->where('source_id',   '=', $purchaseOrderId);
+                })->whereOr(function ($qq) use ($assetIds) {
+                    if (!empty($assetIds)) {
+                        $qq->where('source_type', '=', 'purchase_asset')
+                           ->whereIn('source_id', $assetIds);
+                    }
+                });
+            })
+            ->whereNotIn('status', [ErpDict::STATUS_VOID])
+            ->field('amount, settled_amount')
+            ->select()
+            ->toArray();
+
+        $effectiveTotal  = 0.0;
+        $effectivePaid   = 0.0;
+        foreach ($activePayables as $row) {
+            $effectiveTotal = round($effectiveTotal + (float)$row['amount'], 2);
+            $effectivePaid  = round($effectivePaid  + (float)$row['settled_amount'], 2);
+        }
+
+        // 如果所有应付都已作废（全额未付退货），有效总额为 0 → 视为已结清
+        $financeStatus = $effectiveTotal <= 0
+            ? ErpDict::STATUS_SETTLED
+            : ErpDict::financeStatus($effectiveTotal, $effectivePaid);
+
+        $order->save([
+            'payable_amount' => max(0, round($effectiveTotal - $effectivePaid, 2)),
+            'paid_amount'    => round($effectivePaid, 2),
+            'finance_status' => $financeStatus,
+            'update_at'      => time(),
         ]);
     }
 }
