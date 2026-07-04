@@ -34,8 +34,9 @@
                             <text class="amt-value orange">¥{{ money(row.remain_amount) }}</text>
                         </view>
                     </view>
-                    <view v-if="row.status !== 'settled' && row.status !== 'void' && Number(row.remain_amount) > 0" style="margin-top:16rpx">
-                        <u-button type="primary" size="small" @click="openReceipt(row)">确认收款</u-button>
+                    <view v-if="row.status !== 'settled' && row.status !== 'void' && Number(row.remain_amount) > 0" style="margin-top:16rpx;display:flex;gap:12rpx">
+                        <u-button type="primary" size="small" @click="openDetailReceipt(row)">逐台收款</u-button>
+                        <u-button type="success" size="small" plain @click="openReceipt(row)">整体收款</u-button>
                     </view>
                 </view>
             </view>
@@ -70,6 +71,16 @@
                 </view>
             </view>
         </u-popup>
+
+        <!-- 逐台收款弹窗（对齐PC端，含可调售价） -->
+        <ErpReceiptConfirmModal
+            v-if="detailReceiptRow"
+            v-model:show="detailReceiptVisible"
+            :receivable-id="detailReceiptRow?.id"
+            :party-name="detailReceiptRow?.party_name"
+            :accounts="accounts"
+            @success="() => { reload(); detailReceiptRow = null }"
+        />
     </view>
 </template>
 
@@ -77,6 +88,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getMobileReceivableList, confirmMobileSaleReceipt, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import ErpReceiptConfirmModal from '@/addon/hsx_erp/components/ErpReceiptConfirmModal.vue'
 
 const keyword = ref('')
 const list = ref<any[]>([])
@@ -100,6 +112,8 @@ const receiptVisible = ref(false)
 const receipting = ref(false)
 const receiptRow = ref<any>(null)
 const receiptForm = ref({ amount: 0, capital_account_id: 0, remark: '' })
+const detailReceiptVisible = ref(false)
+const detailReceiptRow = ref<any>(null)
 const canReceipt = computed(() =>
     Number(receiptForm.value.amount) > 0 &&
     Number(receiptForm.value.amount) <= Number(receiptRow.value?.remain_amount || 0) + 0.001 &&
@@ -135,6 +149,11 @@ function openReceipt(row: any) {
         remark: ''
     }
     receiptVisible.value = true
+}
+
+function openDetailReceipt(row: any) {
+    detailReceiptRow.value = row
+    detailReceiptVisible.value = true
 }
 
 async function submitReceipt() {

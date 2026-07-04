@@ -34,8 +34,9 @@
                             <text class="amt-value orange">¥{{ money(row.remain_amount) }}</text>
                         </view>
                     </view>
-                    <view v-if="row.finance_status !== 'settled' && Number(row.remain_amount) > 0" style="margin-top:16rpx">
-                        <u-button type="primary" size="small" @click="openPay(row)">确认付款</u-button>
+                    <view v-if="row.finance_status !== 'settled' && Number(row.remain_amount) > 0" style="margin-top:16rpx;display:flex;gap:12rpx">
+                        <u-button type="primary" size="small" @click="openDetailPay(row)">逐台付款</u-button>
+                        <u-button type="success" size="small" plain @click="openPay(row)">整体付款</u-button>
                     </view>
                 </view>
             </view>
@@ -70,6 +71,17 @@
                 </view>
             </view>
         </u-popup>
+
+        <!-- 逐台付款弹窗（对齐PC端） -->
+        <ErpPayConfirmModal
+            v-if="detailPayRow"
+            v-model:show="detailPayVisible"
+            :party-id="detailPayRow?.party_id"
+            :party-name="detailPayRow?.party_name"
+            :purchase-order-id="detailPayRow?.purchase_order_id"
+            :accounts="accounts"
+            @success="() => { reload(); detailPayRow = null }"
+        />
     </view>
 </template>
 
@@ -77,6 +89,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getMobilePayableList, confirmMobilePurchasePayment, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import ErpPayConfirmModal from '@/addon/hsx_erp/components/ErpPayConfirmModal.vue'
 
 const keyword = ref('')
 const list = ref<any[]>([])
@@ -100,6 +113,9 @@ const payVisible = ref(false)
 const paying = ref(false)
 const payRow = ref<any>(null)
 const payForm = ref({ amount: 0, capital_account_id: 0, remark: '' })
+// 逐台付款modal
+const detailPayVisible = ref(false)
+const detailPayRow = ref<any>(null)
 const canPay = computed(() =>
     Number(payForm.value.amount) > 0 &&
     Number(payForm.value.amount) <= Number(payRow.value?.remain_amount || 0) + 0.001 &&
@@ -135,6 +151,11 @@ function openPay(row: any) {
         remark: ''
     }
     payVisible.value = true
+}
+
+function openDetailPay(row: any) {
+    detailPayRow.value = row
+    detailPayVisible.value = true
 }
 
 async function submitPay() {

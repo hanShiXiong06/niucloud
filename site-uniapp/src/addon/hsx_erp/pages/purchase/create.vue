@@ -3,12 +3,12 @@
         <RecyclePageHeader title="采购开单" />
         <scroll-view scroll-y style="height:calc(100vh - 200rpx)">
             <view class="form-wrap">
-                <!-- 基本信息 -->
+
+                <!-- 供应商 -->
                 <view class="form-section">
-                    <view class="form-section__title">基本信息</view>
-                    <view class="form-row">
+                    <view class="form-row" @click="showPartyPicker = true">
                         <text class="form-label required">供应商</text>
-                        <view class="form-input" @click="openPartyPicker">
+                        <view class="form-input">
                             <text :class="form.party_name ? 'input-text' : 'input-placeholder'">
                                 {{ form.party_name || '点击选择供应商' }}
                             </text>
@@ -16,26 +16,21 @@
                         </view>
                     </view>
                     <view class="form-row">
+                        <text class="form-label">M号</text>
+                        <u-input v-model="form.m_no" placeholder="选填：业务编号/M号" :customStyle="inputStyle" />
+                    </view>
+                </view>
+
+                <!-- 仓库库位 -->
+                <view class="form-section">
+                    <view class="form-row" @click="showWhPicker = true">
                         <text class="form-label required">入库仓库</text>
-                        <view class="form-input" @click="openWarehousePicker">
+                        <view class="form-input">
                             <text :class="form.warehouse_name ? 'input-text' : 'input-placeholder'">
-                                {{ form.warehouse_name || '点击选择仓库' }}
+                                {{ whDisplayText || '点击选择仓库' }}
                             </text>
                             <text class="input-arrow">›</text>
                         </view>
-                    </view>
-                    <view class="form-row" v-if="locations.length">
-                        <text class="form-label">库位</text>
-                        <view class="form-input" @click="openLocationPicker">
-                            <text :class="form.location_name ? 'input-text' : 'input-placeholder'">
-                                {{ form.location_name || '可选' }}
-                            </text>
-                            <text class="input-arrow">›</text>
-                        </view>
-                    </view>
-                    <view class="form-row">
-                        <text class="form-label">备注</text>
-                        <u-input v-model="form.remark" placeholder="可选备注" :customStyle="inputStyle" />
                     </view>
                 </view>
 
@@ -51,7 +46,7 @@
                             <u-icon name="close-circle" color="#94a3b8" size="20" @click="removeDevice(idx)" />
                         </view>
                         <view class="form-row">
-                            <text class="form-label required">IMEI/序列号</text>
+                            <text class="form-label required">IMEI</text>
                             <u-input v-model="item.imei" placeholder="扫描或手输 IMEI" :customStyle="inputStyle" />
                         </view>
                         <view class="form-row">
@@ -59,167 +54,138 @@
                             <u-input v-model="item.model" placeholder="如：iPhone 15 128G 黑色" :customStyle="inputStyle" />
                         </view>
                         <view class="form-row">
-                            <text class="form-label">规格</text>
-                            <u-input v-model="item.spec" placeholder="成色/内存/颜色" :customStyle="inputStyle" />
+                            <text class="form-label">规格/成色</text>
+                            <u-input v-model="item.spec" placeholder="如：9成新 黑色 128G" :customStyle="inputStyle" />
                         </view>
                         <view class="form-row">
                             <text class="form-label required">采购成本</text>
                             <u-input v-model="item.purchase_cost" type="number" placeholder="0.00" :customStyle="inputStyle" />
                         </view>
+                        <view class="form-row">
+                            <text class="form-label">预估售价</text>
+                            <u-input v-model="item.estimate_sale_price" type="number" placeholder="0.00（选填）" :customStyle="inputStyle" />
+                        </view>
                     </view>
                     <view class="add-hint" v-if="!form.items.length">点击「添加设备」开始录入</view>
                 </view>
 
-                <!-- 付款设置 -->
+                <!-- 备注 -->
                 <view class="form-section">
-                    <view class="form-section__title">付款设置（可选）</view>
                     <view class="form-row">
-                        <text class="form-label">本次付款</text>
-                        <u-input v-model="form.paid_amount" type="number" placeholder="0 = 全部挂账" :customStyle="inputStyle" />
-                    </view>
-                    <view class="form-row" v-if="Number(form.paid_amount) > 0">
-                        <text class="form-label required">付款账户</text>
-                        <u-select v-model="form.capital_account_id" :list="accountOptions" />
-                    </view>
-                    <view class="summary-row">
-                        <text class="summary-label">合计成本：</text>
-                        <text class="summary-value">¥{{ money(totalCost) }}</text>
+                        <text class="form-label">备注</text>
+                        <u-input v-model="form.remark" placeholder="可选备注" :customStyle="inputStyle" />
                     </view>
                 </view>
+
+                <!-- 结算区域（ErpSettleBar 组件） -->
+                <ErpSettleBar
+                    v-model:settle-mode="form.settle_mode"
+                    v-model:amount="form.paid_amount"
+                    v-model:account-id="form.capital_account_id"
+                    :total="totalCost"
+                    :accounts="accounts"
+                    label-cash="本次付款"
+                />
+
             </view>
         </scroll-view>
 
         <!-- 底部提交 -->
         <view class="bottom-bar">
             <u-button @click="uni.navigateBack()" :customStyle="{flex:'1'}">取消</u-button>
-            <u-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit" :customStyle="{flex:'2'}">确认开单</u-button>
+            <u-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit" :customStyle="{flex:'2'}">
+                确认开单 ¥{{ money(totalCost) }}
+            </u-button>
         </view>
 
-        <!-- 供应商选择弹窗 -->
-        <u-popup v-model="partyPickerVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24">
-            <view class="picker-wrap">
-                <view class="picker-title">选择供应商</view>
-                <u-search v-model="partyKeyword" placeholder="搜索名称/手机" :showAction="false" @search="searchParties" @clear="searchParties" />
-                <scroll-view scroll-y style="max-height:600rpx;margin-top:16rpx">
-                    <view v-for="p in parties" :key="p.id" class="picker-item" @click="selectParty(p)">
-                        <text class="picker-item__name">{{ p.party_name }}</text>
-                        <text class="picker-item__sub" v-if="p.contact_mobile">{{ p.contact_mobile }}</text>
-                    </view>
-                    <view class="picker-empty" v-if="!parties.length">暂无结果</view>
-                </scroll-view>
-            </view>
-        </u-popup>
+        <!-- 组件弹窗 -->
+        <ErpPartyPopup
+            v-model:show="showPartyPicker"
+            role-type="supplier"
+            v-model:party-id="form.party_id"
+            v-model:party-name="form.party_name"
+        />
 
-        <!-- 仓库选择 -->
-        <u-popup v-model="warehousePickerVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24">
-            <view class="picker-wrap">
-                <view class="picker-title">选择仓库</view>
-                <view v-for="w in warehouses" :key="w.id" class="picker-item" @click="selectWarehouse(w)">
-                    <text class="picker-item__name">{{ w.warehouse_name }}</text>
-                    <text class="picker-item__sub">{{ warehouseTypeLabel(w.warehouse_type) }}</text>
-                </view>
-            </view>
-        </u-popup>
-
-        <!-- 库位选择 -->
-        <u-popup v-model="locationPickerVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24">
-            <view class="picker-wrap">
-                <view class="picker-title">选择库位</view>
-                <view v-for="l in locations" :key="l.id" class="picker-item" @click="selectLocation(l)">
-                    <text class="picker-item__name">{{ l.location_name }}</text>
-                </view>
-            </view>
-        </u-popup>
+        <ErpWarehousePopup
+            v-model:show="showWhPicker"
+            v-model:warehouse-id="form.warehouse_id"
+            v-model:warehouse-name="form.warehouse_name"
+            v-model:location-id="form.location_id"
+            v-model:location-name="form.location_name"
+        />
     </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
+import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
+import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
+import ErpSettleBar from '@/addon/hsx_erp/components/ErpSettleBar.vue'
 import request from '@/utils/request'
 
 const submitting = ref(false)
 const accounts = ref<any[]>([])
-const warehouses = ref<any[]>([])
-const locations = ref<any[]>([])
-const parties = ref<any[]>([])
-const partyKeyword = ref('')
-const partyPickerVisible = ref(false)
-const warehousePickerVisible = ref(false)
-const locationPickerVisible = ref(false)
+const showPartyPicker = ref(false)
+const showWhPicker = ref(false)
 
 const form = ref({
-    party_id: 0, party_name: '',
+    party_id: 0, party_name: '', m_no: '',
     warehouse_id: 0, warehouse_name: '',
     location_id: 0, location_name: '',
+    settle_mode: 'credit' as 'credit' | 'cash',
     paid_amount: 0, capital_account_id: 0,
     remark: '',
     items: [] as any[],
 })
 
-const accountOptions = computed(() => accounts.value.map(a => ({ value: a.id, label: `${a.account_name}（¥${money(a.balance)}）` })))
-const totalCost = computed(() => form.value.items.reduce((s, i) => s + Number(i.purchase_cost || 0), 0))
-const canSubmit = computed(() => form.value.party_id > 0 && form.value.warehouse_id > 0 && form.value.items.length > 0 && form.value.items.every(i => i.imei && i.model && Number(i.purchase_cost) > 0))
-
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx 16rpx' }
+const whDisplayText = computed(() => {
+    if (!form.value.warehouse_name) return ''
+    return form.value.location_name
+        ? `${form.value.warehouse_name} / ${form.value.location_name}`
+        : form.value.warehouse_name
+})
+const totalCost = computed(() => form.value.items.reduce((s, i) => s + Number(i.purchase_cost || 0), 0))
+const canSubmit = computed(() =>
+    form.value.party_id > 0 &&
+    form.value.warehouse_id > 0 &&
+    form.value.items.length > 0 &&
+    form.value.items.every(i => i.imei && i.model && Number(i.purchase_cost) > 0)
+)
 
 onMounted(async () => {
     try {
-        const [acRes, whRes]: any[] = await Promise.all([
-            getMobileCapitalAccounts(),
-            request.get('erp/warehouse/options')
-        ])
-        accounts.value = acRes?.data?.data || []
-        // warehouse/options 直接返回数组
-        warehouses.value = Array.isArray(whRes?.data) ? whRes.data : (whRes?.data?.data || [])
-    } catch (e) {
-        uni.showToast({ title: '数据加载失败，请返回重试', icon: 'none' })
-    }
+        const res: any = await getMobileCapitalAccounts()
+        accounts.value = res?.data?.data || []
+    } catch {}
 })
 
 function addDevice() {
-    form.value.items.push({ imei: '', model: '', spec: '', purchase_cost: 0 })
+    form.value.items.push({ imei: '', model: '', spec: '', purchase_cost: 0, estimate_sale_price: 0 })
 }
-function removeDevice(idx: number) {
-    form.value.items.splice(idx, 1)
-}
-
-function openPartyPicker() { partyPickerVisible.value = true; searchParties() }
-function openWarehousePicker() { warehousePickerVisible.value = true }
-function openLocationPicker() { if (locations.value.length) locationPickerVisible.value = true }
-
-async function searchParties() {
-    try {
-        const res: any = await request.get('erp/counterparty/options', { keyword: partyKeyword.value, role_type: 'supplier', limit: 30 })
-        // 接口直接返回数组，不是分页结构
-        parties.value = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
-    } catch (e) {
-        uni.showToast({ title: '加载供应商失败', icon: 'none' })
-    }
-}
-function selectParty(p: any) { form.value.party_id = p.id; form.value.party_name = p.party_name; partyPickerVisible.value = false }
-function selectWarehouse(w: any) {
-    form.value.warehouse_id = w.id; form.value.warehouse_name = w.warehouse_name
-    form.value.location_id = 0; form.value.location_name = ''
-    locations.value = w.locations?.filter((l: any) => l.status === 1) || []
-    warehousePickerVisible.value = false
-}
-function selectLocation(l: any) { form.value.location_id = l.id; form.value.location_name = l.location_name; locationPickerVisible.value = false }
+function removeDevice(idx: number) { form.value.items.splice(idx, 1) }
 
 async function submit() {
+    if (!canSubmit.value) return
     submitting.value = true
     try {
         await request.post('erp/purchase/create', {
             party_id: form.value.party_id,
             party_name: form.value.party_name,
+            m_no: form.value.m_no,
             warehouse_id: form.value.warehouse_id,
+            warehouse_name: form.value.warehouse_name,
             location_id: form.value.location_id || 0,
-            paid_amount: Number(form.value.paid_amount) || 0,
-            capital_account_id: form.value.capital_account_id || 0,
+            location_name: form.value.location_name,
+            settle_mode: form.value.settle_mode,
+            paid_amount: form.value.settle_mode === 'cash' ? Number(form.value.paid_amount) : 0,
+            capital_account_id: form.value.settle_mode === 'cash' ? form.value.capital_account_id : 0,
             remark: form.value.remark,
             items: form.value.items.map(i => ({
                 imei: i.imei, model: i.model, spec: i.spec,
                 purchase_cost: Number(i.purchase_cost),
+                estimate_sale_price: Number(i.estimate_sale_price || 0),
             }))
         })
         uni.showToast({ title: '采购开单成功', icon: 'success' })
@@ -230,17 +196,16 @@ async function submit() {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
-const warehouseTypeLabel = (t: string) => ({ second_hand: '二手仓', peer: '同行仓', consignment: '代卖仓', abnormal: '异常仓' }[t] || t || '')
 </script>
 
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
-.form-wrap { padding: 24rpx 24rpx 32rpx; }
-.form-section { background:#fff; border-radius:16rpx; padding:24rpx; margin-bottom:20rpx; }
+.form-wrap { padding: 24rpx 24rpx 120rpx; display: flex; flex-direction: column; gap: 20rpx; }
+.form-section { background:#fff; border-radius:16rpx; padding:24rpx; }
 .form-section__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16rpx; }
-.form-section__title { font-size:28rpx; font-weight:600; color:#374151; margin-bottom:16rpx; }
-.form-row { display:flex; align-items:center; gap:16rpx; margin-bottom:16rpx; }
-.form-label { font-size:26rpx; color:#374151; width:140rpx; flex-shrink:0; }
+.form-section__title { font-size:28rpx; font-weight:600; color:#374151; }
+.form-row { display:flex; align-items:center; gap:16rpx; margin-bottom:16rpx; &:last-child { margin-bottom:0; } }
+.form-label { font-size:26rpx; color:#374151; width:120rpx; flex-shrink:0; }
 .form-label.required::before { content:'*'; color:#dc2626; margin-right:4rpx; }
 .form-input { flex:1; display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border-radius:8rpx; padding:12rpx 16rpx; }
 .input-text { font-size:26rpx; color:#0f172a; }
@@ -250,14 +215,5 @@ const warehouseTypeLabel = (t: string) => ({ second_hand: '二手仓', peer: '�
 .device-form__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12rpx; }
 .device-form__index { font-size:26rpx; font-weight:600; color:#374151; }
 .add-hint { text-align:center; color:#94a3b8; font-size:26rpx; padding:32rpx 0; }
-.summary-row { display:flex; justify-content:space-between; padding-top:12rpx; border-top:1rpx solid #f1f5f9; margin-top:8rpx; }
-.summary-label { font-size:26rpx; color:#374151; }
-.summary-value { font-size:28rpx; font-weight:700; color:#0f172a; }
 .bottom-bar { position:fixed; bottom:0; left:0; right:0; padding:20rpx 32rpx; padding-bottom:calc(20rpx + env(safe-area-inset-bottom)); background:#fff; box-shadow:0 -2rpx 16rpx rgba(0,0,0,.08); display:flex; gap:16rpx; }
-.picker-wrap { padding:32rpx; }
-.picker-title { font-size:30rpx; font-weight:600; color:#0f172a; margin-bottom:20rpx; }
-.picker-item { padding:20rpx 0; border-bottom:1rpx solid #f1f5f9; }
-.picker-item__name { font-size:28rpx; color:#0f172a; display:block; }
-.picker-item__sub { font-size:24rpx; color:#64748b; margin-top:4rpx; display:block; }
-.picker-empty { text-align:center; color:#94a3b8; padding:32rpx; }
 </style>
