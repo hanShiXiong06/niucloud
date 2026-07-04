@@ -502,8 +502,18 @@
 					"needLogin": true
 				},
 				{
+					"path": "pages/purchase_return/create",
+					"style": { "navigationBarTitleText": "发起采购退货" },
+					"needLogin": true
+				},
+				{
 					"path": "pages/sale_return/list",
 					"style": { "navigationBarTitleText": "销售退货" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale_return/create",
+					"style": { "navigationBarTitleText": "发起销售退货" },
 					"needLogin": true
 				},
 				{

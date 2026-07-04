@@ -100,7 +100,9 @@ async function loadDetail() {
     } finally { loading.value = false }
 }
 
-const goReturn = () => uni.navigateTo({ url: `/addon/hsx_erp/pages/sale_return/list?sale_order_id=${saleOrderId.value}` })
+const goReturn = () => uni.navigateTo({
+    url: `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${saleOrderId.value}&sale_no=${encodeURIComponent(saleNo.value)}&party_name=${encodeURIComponent(order.value?.party_name || '')}`
+})
 const money = (v: any) => Number(v || 0).toFixed(2)
 const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s)
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')

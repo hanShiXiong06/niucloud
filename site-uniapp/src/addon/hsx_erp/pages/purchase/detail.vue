@@ -110,7 +110,9 @@ const goAdjustCost = (item: any) => {
     uni.navigateTo({ url: `/addon/hsx_erp/pages/cost_adjust/detail?${q}` })
 }
 const goReturn = (item: any) => {
-    uni.navigateTo({ url: `/addon/hsx_erp/pages/purchase_return/list?purchase_order_id=${purchaseOrderId.value}` })
+    uni.navigateTo({
+        url: `/addon/hsx_erp/pages/purchase_return/create?purchase_order_id=${purchaseOrderId.value}&purchase_no=${encodeURIComponent(purchaseNo.value)}&party_name=${encodeURIComponent(asset.value?.party_name || '')}`
+    })
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
