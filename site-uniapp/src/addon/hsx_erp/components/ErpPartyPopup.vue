@@ -1,27 +1,23 @@
 <!--
-  ErpPartyPopup - 往来单位选择弹窗
+  ErpPartyPopup - 往来单位选择弹窗（对齐PC端 CounterpartySelect 逻辑）
 
-  用法：
-    <ErpPartyPopup
-      v-model:show="showPartyPicker"
-      role-type="supplier"          // supplier | customer | all
-      v-model:party-id="form.party_id"
-      v-model:party-name="form.party_name"
-      @select="onPartySelected"     // { id, party_name, contact_mobile, m_no }
-    />
+  正确流程：
+  1. 搜索会员列表（erp/counterparty/member_options）
+  2. 用户选中会员
+  3. 调用 resolve_contact(member_id, role_type) 获取或创建往来主体
+  4. 返回 party_id + party_name
 -->
 <template>
     <u-popup :show="show" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="close">
         <view class="popup-wrap">
             <view class="popup-header">
-                <text class="popup-title">{{ title }}</text>
+                <text class="popup-title">{{ roleType === 'supplier' ? '选择供应商' : '选择客户' }}</text>
                 <u-icon name="close" size="20" color="#94a3b8" @click="close" />
             </view>
-
             <view class="popup-search">
                 <u-search
                     v-model="keyword"
-                    :placeholder="'搜索' + typeLabel + '名称/手机'"
+                    placeholder="搜索姓名 / 手机号 / 会员号"
                     :showAction="false"
                     bgColor="#f1f5f9"
                     height="34"
@@ -29,47 +25,62 @@
                     @clear="search"
                 />
             </view>
-
             <scroll-view scroll-y class="popup-list">
-                <view v-if="loading" class="popup-loading">
-                    <u-loading-icon size="24" />
-                </view>
+                <view v-if="loading" class="popup-loading"><u-loading-icon size="24" /></view>
                 <template v-else>
                     <view
                         v-for="item in list"
-                        :key="item.id"
+                        :key="item.member_id"
                         class="party-item"
-                        :class="{ selected: item.id === partyId }"
-                        @click="select(item)"
+                        :class="{ selected: item.party_id === partyId }"
+                        @click="selectMember(item)"
                     >
                         <view class="party-item__main">
-                            <text class="party-item__name">{{ item.party_name }}</text>
-                            <u-icon v-if="item.id === partyId" name="checkmark-circle-fill" color="#3b6ef5" size="20" />
+                            <view class="party-item__left">
+                                <text class="party-item__name">
+                                    {{ item.party_name || item.counterparty_name || item.nickname || item.username || '未命名' }}
+                                </text>
+                                <text v-if="item.party_name" class="party-item__member">
+                                    会员：{{ item.nickname || item.username }}
+                                </text>
+                            </view>
+                            <view class="party-item__right">
+                                <text class="party-item__mobile">{{ item.mobile }}</text>
+                                <text v-if="item.m_no" class="party-item__mno">M号 {{ item.m_no }}</text>
+                            </view>
                         </view>
-                        <text class="party-item__sub" v-if="item.contact_mobile">{{ item.contact_mobile }}</text>
-                        <text class="party-item__sub" v-if="item.m_no"> · M号 {{ item.m_no }}</text>
+                        <view v-if="item.party_id" class="party-item__badge">
+                            <u-tag text="已有往来主体" type="success" plain plainFill size="mini" />
+                        </view>
                     </view>
                     <view class="popup-empty" v-if="!list.length && !loading">
-                        <u-empty mode="search" text="暂无结果" :image-size="60" />
+                        <u-empty mode="search" text="未找到匹配的会员" :image-size="60" />
+                        <text class="popup-empty__hint">请先在会员模块添加该用户</text>
                     </view>
                 </template>
             </scroll-view>
         </view>
+        <u-overlay :show="resolving">
+            <view class="resolving-wrap">
+                <u-loading-icon size="32" color="#fff" />
+                <text class="resolving-text">正在处理往来主体...</text>
+            </view>
+        </u-overlay>
     </u-popup>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import request from '@/utils/request'
 
 const props = withDefaults(defineProps<{
     show: boolean
-    roleType?: 'supplier' | 'customer' | 'all'
+    roleType?: 'supplier' | 'customer'
     partyId?: number
     partyName?: string
 }>(), {
     show: false,
-    roleType: 'all',
+    roleType: 'customer',
     partyId: 0,
     partyName: '',
 })
@@ -84,63 +95,66 @@ const emit = defineEmits<{
 const keyword = ref('')
 const list = ref<any[]>([])
 const loading = ref(false)
+const resolving = ref(false)
 
-const typeLabel = computed(() => ({ supplier: '供应商', customer: '客户', all: '往来单位' }[props.roleType] || '往来单位'))
-const title = computed(() => `选择${typeLabel.value}`)
-
-// 打开时自动搜索
 watch(() => props.show, (v) => { if (v) { keyword.value = ''; search() } })
 
 async function search() {
     loading.value = true
     try {
-        const params: any = { keyword: keyword.value, limit: 30 }
-        if (props.roleType !== 'all') params.role_type = props.roleType
-        const res: any = await request.get('erp/counterparty/options', params)
+        // 第一步：搜索会员（包含已绑定往来主体信息）
+        const res: any = await request.get('erp/counterparty/member_options', { keyword: keyword.value, limit: 30 })
         list.value = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
-    } catch {
-        list.value = []
-    } finally {
-        loading.value = false
-    }
+    } catch { list.value = [] }
+    finally { loading.value = false }
 }
 
-function select(item: any) {
-    emit('update:partyId', item.id)
-    emit('update:partyName', item.party_name)
-    emit('select', item)
-    close()
+async function selectMember(member: any) {
+    resolving.value = true
+    try {
+        // 第二步：获取已有主体 or 自动创建并绑定
+        const res: any = await request.post('erp/counterparty/resolve_contact', {
+            member_id: member.member_id,
+            name: member.party_name || member.counterparty_name || member.nickname || member.username,
+            mobile: member.mobile,
+            role_type: props.roleType,
+        })
+        const party = res?.data || {}
+        if (!party.party_id) { uni.showToast({ title: '获取往来主体失败', icon: 'none' }); return }
+        emit('update:partyId', party.party_id)
+        emit('update:partyName', party.party_name || party.counterparty_name)
+        emit('select', party)
+        close()
+    } catch (e: any) {
+        uni.showToast({ title: e?.message || '操作失败', icon: 'none' })
+    } finally { resolving.value = false }
 }
 
-function close() {
-    emit('update:show', false)
-}
+function close() { emit('update:show', false) }
 </script>
 
 <style scoped lang="scss">
-.popup-wrap {
-    height: 75vh;
-    display: flex;
-    flex-direction: column;
-    padding: 0 0 env(safe-area-inset-bottom);
-}
-.popup-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 28rpx 32rpx 16rpx;
-}
+.popup-wrap { height: 78vh; display: flex; flex-direction: column; }
+.popup-header { display: flex; align-items: center; justify-content: space-between; padding: 28rpx 32rpx 16rpx; }
 .popup-title { font-size: 32rpx; font-weight: 700; color: #0f172a; }
 .popup-search { padding: 0 24rpx 16rpx; }
-.popup-list { flex: 1; overflow-y: auto; padding: 0 24rpx; }
+.popup-list { flex: 1; overflow-y: auto; padding: 0 24rpx; gap: 16rpx; box-sizing: border-box; }
 .popup-loading { display: flex; justify-content: center; padding: 48rpx; }
-.popup-empty { padding: 32rpx 0; }
+.popup-empty { padding: 32rpx 0; text-align: center; }
+.popup-empty__hint { font-size: 24rpx; color: #94a3b8; display: block; margin-top: 12rpx; }
 .party-item {
-    padding: 20rpx 0;
-    border-bottom: 1rpx solid #f1f5f9;
-    &.selected { background: #eff6ff; border-radius: 8rpx; padding: 20rpx 12rpx; }
+    padding: 20rpx 12rpx; border-radius: 8rpx; border-bottom: 1rpx solid #f1f5f9;
+    &.selected { background: #eff6ff; }
+    &:active { background: #f8fafc; }
 }
-.party-item__main { display: flex; align-items: center; justify-content: space-between; }
-.party-item__name { font-size: 28rpx; color: #0f172a; }
-.party-item__sub { font-size: 24rpx; color: #64748b; display: block; margin-top: 4rpx; }
+.party-item__main { display: flex; align-items: flex-start; justify-content: space-between; }
+.party-item__left { flex: 1; }
+.party-item__right { text-align: right; flex-shrink: 0; }
+.party-item__name { font-size: 28rpx; font-weight: 600; color: #0f172a; display: block; }
+.party-item__member { font-size: 22rpx; color: #94a3b8; display: block; margin-top: 4rpx; }
+.party-item__mobile { font-size: 26rpx; color: #64748b; display: block; }
+.party-item__mno { font-size: 22rpx; color: #94a3b8; display: block; margin-top: 4rpx; }
+.party-item__badge { margin-top: 8rpx; }
+.resolving-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16rpx; }
+.resolving-text { font-size: 28rpx; color: #fff; }
 </style>
