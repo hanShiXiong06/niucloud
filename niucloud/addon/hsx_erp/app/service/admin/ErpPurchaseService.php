@@ -10,8 +10,7 @@ use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpPurchaseItem;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
-use app\model\sys\SysUser;
-use app\model\sys\SysUserRole;
+use addon\hsx_erp\app\model\ErpWarehouse;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -35,6 +34,9 @@ class ErpPurchaseService extends BaseAdminService
         if (!empty($where['finance_status'])) {
             $query->where('o.finance_status', '=', (string)$where['finance_status']);
         }
+        if (!empty($where['status'])) {
+            $query->where('o.status', '=', (string)$where['status']);
+        }
         return $query->field([
             'a.id',
             'a.asset_no',
@@ -50,12 +52,18 @@ class ErpPurchaseService extends BaseAdminService
             'a.sn',
             'a.model',
             'a.spec',
+            'a.inspector_uid',
+            'a.inspector_name',
+            'a.estimate_sale_price',
+            'a.image_urls',
+            'a.quality_remark',
             'a.purchase_cost',
             'a.adjust_cost',
             'a.refurbish_cost',
             'a.total_cost',
             'a.status',
             'a.create_at',
+            'o.status as order_status',
             'o.purchase_no',
             'o.m_no',
             'o.total_cost as order_total_cost',
@@ -63,7 +71,6 @@ class ErpPurchaseService extends BaseAdminService
             'o.payable_amount',
             'o.finance_status',
             'o.purchaser_name',
-            'o.inspector_name',
             'o.purchase_at',
             'o.capital_account_name',
         ])->order('a.id desc')->paginate([
@@ -101,6 +108,7 @@ class ErpPurchaseService extends BaseAdminService
     public function create(array $data): int
     {
         $this->ensureSchema();
+        (new ErpStockService())->ensureSchema();
         $items = (array)($data['items'] ?? []);
         if (empty($items)) {
             throw new CommonException('请至少录入一台机器');
@@ -142,11 +150,15 @@ class ErpPurchaseService extends BaseAdminService
                 (int)($data['warehouse_id'] ?? 0),
                 (int)($data['location_id'] ?? 0)
             );
-            $purchaser = $this->resolveStaff((int)($data['purchaser_uid'] ?? 0));
+            if ((string)$warehouse->warehouse_type === 'consignment') {
+                throw new CommonException('代卖仓不能走采购开单，请使用代卖登记流程');
+            }
+            $purchaser = (new ErpStaffService())->resolve((int)($data['purchaser_uid'] ?? 0), '采购员');
             $warehouseId = (int)$warehouse->id;
             $warehouseName = (string)$warehouse->warehouse_name;
             $locationId = (int)$location->id;
             $locationName = (string)$location->location_name;
+            $assetFlow = $this->warehouseAssetFlow($warehouse);
             $order = ErpPurchaseOrder::create([
                 'site_id' => $this->site_id,
                 'purchase_no' => $purchaseNo,
@@ -163,8 +175,8 @@ class ErpPurchaseService extends BaseAdminService
                 'location_name' => $locationName,
                 'purchaser_uid' => (int)$purchaser['uid'],
                 'purchaser_name' => (string)$purchaser['name'],
-                'inspector_uid' => (int)$this->uid,
-                'inspector_name' => (string)$this->username,
+                'inspector_uid' => 0,
+                'inspector_name' => '',
                 'total_cost' => $totalCost,
                 'paid_amount' => 0,
                 'payable_amount' => $totalCost,
@@ -187,6 +199,12 @@ class ErpPurchaseService extends BaseAdminService
                 if ($cost <= 0) {
                     throw new CommonException('机器采购成本必须大于0');
                 }
+                $inspectorUid = (int)($item['inspector_uid'] ?? 0);
+                $inspector = $inspectorUid > 0 ? (new ErpStaffService())->resolve($inspectorUid, '质检员') : ['uid' => 0, 'name' => ''];
+                $estimateSalePrice = round((float)($item['estimate_sale_price'] ?? 0), 2);
+                if ($estimateSalePrice < 0) {
+                    throw new CommonException('预计卖价不能小于0');
+                }
                 $purchaseItem = ErpPurchaseItem::create([
                     'site_id' => $this->site_id,
                     'purchase_order_id' => $orderId,
@@ -194,6 +212,11 @@ class ErpPurchaseService extends BaseAdminService
                     'sn' => trim((string)($item['sn'] ?? '')),
                     'model' => trim((string)($item['model'] ?? '')),
                     'spec' => trim((string)($item['spec'] ?? '')),
+                    'inspector_uid' => (int)$inspector['uid'],
+                    'inspector_name' => (string)$inspector['name'],
+                    'estimate_sale_price' => $estimateSalePrice,
+                    'image_urls' => trim((string)($item['image_urls'] ?? '')),
+                    'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
                     'purchase_cost' => $cost,
                     'adjust_cost' => 0,
                     'total_cost' => $cost,
@@ -217,13 +240,25 @@ class ErpPurchaseService extends BaseAdminService
                     'sn' => trim((string)($item['sn'] ?? '')),
                     'model' => trim((string)($item['model'] ?? '')),
                     'spec' => trim((string)($item['spec'] ?? '')),
+                    'inspector_uid' => (int)$inspector['uid'],
+                    'inspector_name' => (string)$inspector['name'],
+                    'estimate_sale_price' => $estimateSalePrice,
+                    'retail_price' => round((float)($item['retail_price'] ?? 0), 2),
+                    'image_urls' => trim((string)($item['image_urls'] ?? '')),
+                    'quality_remark' => trim((string)($item['quality_remark'] ?? '')),
+                    'remark_public' => trim((string)($item['remark_public'] ?? '')),
+                    'remark_internal' => trim((string)($item['remark_internal'] ?? '')),
                     'purchase_cost' => $cost,
                     'total_cost' => $cost,
+                    'refurbish_status' => $assetFlow['refurbish_status'],
+                    'sale_target' => $assetFlow['sale_target'],
+                    'listing_status' => $this->listingStatusByWarehouse($warehouse, $assetFlow['sale_target'], trim((string)($item['image_urls'] ?? '')), $estimateSalePrice),
                     'status' => ErpDict::ASSET_IN_STOCK,
                     'source_plugin' => (string)($data['source_plugin'] ?? 'erp'),
                     'source_type' => (string)($data['source_type'] ?? 'manual'),
                     'source_id' => (string)($data['source_id'] ?? ''),
                     'remark' => trim((string)($item['remark'] ?? '')),
+                    'stock_in_at' => (int)($data['purchase_at'] ?? $now),
                     'create_at' => $now,
                     'update_at' => $now,
                 ]);
@@ -234,6 +269,11 @@ class ErpPurchaseService extends BaseAdminService
                     'after_status' => ErpDict::ASSET_IN_STOCK,
                     'source_type' => 'purchase',
                     'source_id' => $orderId,
+                    'source_no' => $purchaseNo,
+                    'after_total_cost' => $cost,
+                    'party_id' => (int)$party->id,
+                    'party_name' => $partyName,
+                    'occurred_at' => (int)($data['purchase_at'] ?? $now),
                     'remark' => '采购入库',
                 ]);
                 (new ErpLedgerService())->account([
@@ -293,6 +333,103 @@ class ErpPurchaseService extends BaseAdminService
         return $orderId;
     }
 
+    public function cancel(int $id, string $remark = ''): bool
+    {
+        Db::transaction(function () use ($id, $remark) {
+            $now = time();
+            $order = $this->findOrder($id);
+            if ((string)$order->status !== ErpDict::STATUS_COMPLETED) {
+                throw new CommonException('只有已完成且未撤销的采购单可以撤销');
+            }
+            if ((float)$order->paid_amount > 0 || (string)$order->finance_status !== ErpDict::STATUS_PENDING) {
+                throw new CommonException('该采购单已经形成财务事实，请走退货或成本调整');
+            }
+
+            $payables = ErpPayable::alias('p')
+                ->leftJoin((new ErpAsset())->getTable() . ' a', "p.source_type = 'purchase_asset' AND a.id = p.source_id AND a.site_id = p.site_id")
+                ->where([['p.site_id', '=', $this->site_id]])
+                ->where(function ($query) use ($id) {
+                    $query->where([['p.source_type', '=', 'purchase'], ['p.source_id', '=', $id]])
+                        ->whereOr(function ($q) use ($id) {
+                            $q->where('p.source_type', '=', 'purchase_asset')->where('a.purchase_order_id', '=', $id);
+                        });
+                })
+                ->field('p.*')
+                ->select()
+                ->toArray();
+            foreach ($payables as $payable) {
+                if ((float)$payable['settled_amount'] > 0) {
+                    throw new CommonException('该采购单已有付款或折账记录，不能直接撤销');
+                }
+            }
+
+            $assets = ErpAsset::where([['site_id', '=', $this->site_id], ['purchase_order_id', '=', $id]])->select();
+            foreach ($assets as $asset) {
+                if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) {
+                    throw new CommonException('采购单内已有设备不在库存中，不能直接撤销');
+                }
+            }
+
+            $order->save([
+                'status' => ErpDict::STATUS_VOID,
+                'payable_amount' => 0,
+                'finance_status' => ErpDict::STATUS_VOID,
+                'update_at' => $now,
+            ]);
+            ErpPurchaseItem::where([['site_id', '=', $this->site_id], ['purchase_order_id', '=', $id]])->update([
+                'status' => ErpDict::STATUS_VOID,
+                'update_at' => $now,
+            ]);
+            $payableIds = array_values(array_filter(array_map(static fn($row) => (int)($row['id'] ?? 0), $payables)));
+            if (!empty($payableIds)) {
+                ErpPayable::where([['site_id', '=', $this->site_id]])->whereIn('id', $payableIds)->update([
+                    'status' => ErpDict::STATUS_VOID,
+                    'update_at' => $now,
+                ]);
+            }
+
+            foreach ($assets as $asset) {
+                $asset->save([
+                    'status' => ErpDict::STATUS_VOID,
+                    'update_at' => $now,
+                ]);
+                (new ErpLedgerService())->asset([
+                    'asset_id' => (int)$asset->id,
+                    'action' => 'purchase_cancel',
+                    'before_status' => ErpDict::ASSET_IN_STOCK,
+                    'after_status' => ErpDict::STATUS_VOID,
+                    'before_total_cost' => (float)$asset->total_cost,
+                    'after_total_cost' => (float)$asset->total_cost,
+                    'party_id' => (int)$order->party_id,
+                    'party_name' => (string)$order->party_name,
+                    'source_type' => 'purchase_cancel',
+                    'source_id' => $id,
+                    'source_no' => (string)$order->purchase_no,
+                    'remark' => $remark !== '' ? $remark : '采购单撤销',
+                ]);
+                (new ErpLedgerService())->account([
+                    'biz_type' => 'purchase_cancel',
+                    'direction' => 'decrease',
+                    'amount' => (float)$asset->total_cost,
+                    'party_id' => (int)$order->party_id,
+                    'party_name' => (string)$order->party_name,
+                    'asset_id' => (int)$asset->id,
+                    'source_type' => 'purchase_cancel',
+                    'source_id' => $id,
+                    'source_no' => (string)$order->purchase_no,
+                    'remark' => $remark !== '' ? $remark : '撤销采购应付',
+                ]);
+            }
+
+            (new ErpOperationLogService())->record('purchase_cancel', 'purchase', $id, (string)$order->purchase_no, $remark, [
+                'party_name' => (string)$order->party_name,
+                'asset_count' => count($assets),
+                'amount' => (float)$order->total_cost,
+            ]);
+        });
+        return true;
+    }
+
     public function adjustCost(int $itemId, float $amount, string $remark = ''): bool
     {
         if (abs($amount) <= 0) {
@@ -313,10 +450,26 @@ class ErpPurchaseService extends BaseAdminService
             }
             $item->save(['adjust_cost' => $newAdjust, 'total_cost' => $newTotal, 'update_at' => $now]);
             if (!$asset->isEmpty()) {
+                $beforeTotalCost = round((float)$asset->total_cost, 2);
                 $asset->save([
                     'adjust_cost' => round((float)$asset->adjust_cost + $amount, 2),
                     'total_cost' => round((float)$asset->total_cost + $amount, 2),
                     'update_at' => $now,
+                ]);
+                (new ErpLedgerService())->asset([
+                    'asset_id' => (int)$asset->id,
+                    'action' => 'cost_adjust',
+                    'before_status' => (string)$asset->status,
+                    'after_status' => (string)$asset->status,
+                    'before_total_cost' => $beforeTotalCost,
+                    'after_total_cost' => round($beforeTotalCost + $amount, 2),
+                    'cost_delta' => round($amount, 2),
+                    'party_id' => (int)$order->party_id,
+                    'party_name' => (string)$order->party_name,
+                    'source_type' => 'purchase_adjust',
+                    'source_id' => $itemId,
+                    'source_no' => (string)$order->purchase_no,
+                    'remark' => $remark !== '' ? $remark : '采购成本调整',
                 ]);
             }
             $newOrderCost = round((float)$order->total_cost + $amount, 2);
@@ -420,30 +573,6 @@ class ErpPurchaseService extends BaseAdminService
         };
     }
 
-    private function resolveStaff(int $uid): array
-    {
-        $uid = $uid > 0 ? $uid : (int)$this->uid;
-        $relation = SysUserRole::where([
-            ['site_id', '=', $this->site_id],
-            ['uid', '=', $uid],
-            ['delete_time', '=', 0],
-        ])->findOrEmpty();
-        if ($relation->isEmpty() && $uid !== (int)$this->uid) {
-            throw new CommonException('采购员不属于当前站点');
-        }
-        $user = SysUser::where([
-            ['uid', '=', $uid],
-            ['delete_time', '=', 0],
-        ])->field('uid,username,real_name')->findOrEmpty();
-        if ($user->isEmpty()) {
-            throw new CommonException('采购员不存在或已停用');
-        }
-        return [
-            'uid' => (int)$user->uid,
-            'name' => (string)($user->real_name ?: $user->username ?: ('员工#' . $user->uid)),
-        ];
-    }
-
     private function ensureSchema(): void
     {
         if (self::$schemaEnsured) {
@@ -453,6 +582,43 @@ class ErpPurchaseService extends BaseAdminService
         $purchaseTable = (new ErpPurchaseOrder())->getTable();
         $this->ensureColumn($purchaseTable, 'capital_account_id', "`capital_account_id` int NOT NULL DEFAULT 0 COMMENT '本次付款账户' AFTER `settle_method`");
         $this->ensureColumn($purchaseTable, 'capital_account_name', "`capital_account_name` varchar(100) NOT NULL DEFAULT '' COMMENT '本次付款账户名称' AFTER `capital_account_id`");
+        $assetTable = (new ErpAsset())->getTable();
+        $itemTable = (new ErpPurchaseItem())->getTable();
+        foreach ([$assetTable, $itemTable] as $table) {
+            $this->ensureColumn($table, 'inspector_uid', "`inspector_uid` int NOT NULL DEFAULT 0 COMMENT '质检员UID' AFTER `spec`");
+            $this->ensureColumn($table, 'inspector_name', "`inspector_name` varchar(60) NOT NULL DEFAULT '' COMMENT '质检员名称快照' AFTER `inspector_uid`");
+            $this->ensureColumn($table, 'estimate_sale_price', "`estimate_sale_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '入库预估售价' AFTER `inspector_name`");
+            $this->ensureColumn($table, 'image_urls', "`image_urls` text COMMENT '入库图片JSON/逗号分隔' AFTER `estimate_sale_price`");
+            $this->ensureColumn($table, 'quality_remark', "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `image_urls`");
+        }
+    }
+
+    private function warehouseAssetFlow(ErpWarehouse $warehouse): array
+    {
+        $rules = (new ErpConfigService())->getRules();
+        $refurbishStatus = ((int)($rules['refurbish']['enabled'] ?? 0) === 1 && (int)($rules['refurbish']['default_required'] ?? 0) === 1) ? 'pending' : 'none';
+        $saleTarget = (string)($warehouse->default_sale_target ?: 'unset');
+        if (!in_array($saleTarget, ['unset', 'peer', 'mall'], true)) {
+            $saleTarget = 'unset';
+        }
+        return [
+            'refurbish_status' => $refurbishStatus,
+            'sale_target' => $saleTarget,
+        ];
+    }
+
+    private function listingStatusByWarehouse(ErpWarehouse $warehouse, string $saleTarget, string $imageUrls, float $estimateSalePrice): string
+    {
+        if ($saleTarget !== 'mall') {
+            return 'none';
+        }
+        if ((int)$warehouse->need_photo === 1 && $imageUrls === '') {
+            return 'need_photo';
+        }
+        if ((int)$warehouse->need_pricing === 1 && $estimateSalePrice <= 0) {
+            return 'need_price';
+        }
+        return 'ready';
     }
 
     private function ensureColumn(string $table, string $column, string $definition): void
