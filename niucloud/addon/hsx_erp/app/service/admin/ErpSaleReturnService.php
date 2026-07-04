@@ -457,8 +457,14 @@ class ErpSaleReturnService extends BaseAdminService
         $newAmount = max(0, round((float)$receivable->amount - $amount, 2));
         $settled   = round((float)$receivable->settled_amount, 2);
         if ($newAmount < $settled - 0.0001) {
-            // 已收金额超过退后金额，需要先把超收的金额处理掉，这里保守处理：设置为settled
-            $newAmount = $settled;
+            // 退货金额超过了"未收部分"，不能静默把应收往上调，必须拒绝
+            throw new CommonException(
+                sprintf(
+                    '退货金额(¥%s)超过该销售单剩余未收部分(¥%s)，请先处理收款再退货，或调整退货价格',
+                    number_format($amount, 2),
+                    number_format(max(0, (float)$receivable->amount - $settled), 2)
+                )
+            );
         }
         $receivable->save([
             'amount'    => $newAmount,
