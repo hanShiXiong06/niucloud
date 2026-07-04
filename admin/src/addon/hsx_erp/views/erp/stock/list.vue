@@ -307,7 +307,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { getErpStockInfo, getErpStockList, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
