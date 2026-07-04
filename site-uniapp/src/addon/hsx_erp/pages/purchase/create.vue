@@ -164,12 +164,17 @@ const canSubmit = computed(() => form.value.party_id > 0 && form.value.warehouse
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx 16rpx' }
 
 onMounted(async () => {
-    const [acRes, whRes]: any[] = await Promise.all([
-        getMobileCapitalAccounts(),
-        request.get('erp/warehouse/options')
-    ])
-    accounts.value = acRes?.data?.data || []
-    warehouses.value = whRes?.data || []
+    try {
+        const [acRes, whRes]: any[] = await Promise.all([
+            getMobileCapitalAccounts(),
+            request.get('erp/warehouse/options')
+        ])
+        accounts.value = acRes?.data?.data || []
+        // warehouse/options 直接返回数组
+        warehouses.value = Array.isArray(whRes?.data) ? whRes.data : (whRes?.data?.data || [])
+    } catch (e) {
+        uni.showToast({ title: '数据加载失败，请返回重试', icon: 'none' })
+    }
 })
 
 function addDevice() {
@@ -184,8 +189,13 @@ function openWarehousePicker() { warehousePickerVisible.value = true }
 function openLocationPicker() { if (locations.value.length) locationPickerVisible.value = true }
 
 async function searchParties() {
-    const res: any = await request.get('erp/counterparty/options', { keyword: partyKeyword.value, party_type: 'supplier', limit: 30 })
-    parties.value = res?.data?.data || res?.data || []
+    try {
+        const res: any = await request.get('erp/counterparty/options', { keyword: partyKeyword.value, role_type: 'supplier', limit: 30 })
+        // 接口直接返回数组，不是分页结构
+        parties.value = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
+    } catch (e) {
+        uni.showToast({ title: '加载供应商失败', icon: 'none' })
+    }
 }
 function selectParty(p: any) { form.value.party_id = p.id; form.value.party_name = p.party_name; partyPickerVisible.value = false }
 function selectWarehouse(w: any) {

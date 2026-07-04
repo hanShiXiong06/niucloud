@@ -152,8 +152,10 @@ function openPartyPicker() { partyPickerVisible.value = true; searchParties() }
 function openStockPicker() { stockPickerVisible.value = true; searchStock() }
 
 async function searchParties() {
-    const res: any = await request.get('erp/counterparty/options', { keyword: partyKeyword.value, limit: 30 })
-    parties.value = res?.data?.data || res?.data || []
+    try {
+        const res: any = await request.get('erp/counterparty/options', { keyword: partyKeyword.value, role_type: 'customer', limit: 30 })
+        parties.value = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
+    } catch { uni.showToast({ title: '加载客户失败', icon: 'none' }) }
 }
 async function searchStock() {
     const res: any = await getMobileStockList({ keyword: stockKeyword.value, status: 'in_stock', page: 1, limit: 30 })
