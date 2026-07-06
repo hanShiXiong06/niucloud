@@ -3,7 +3,6 @@
         <ErpListHeader
             v-model="keyword"
             v-model:activeTab="activeTab"
-            title="应付款"
             placeholder="供应商/采购单号"
             :tabs="tabs"
             @search="handleSearch"
@@ -11,7 +10,7 @@
         />
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15">
+            :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无应付记录" /></template>
             <view class="list-wrap">
                 <view v-for="row in list" :key="String(row.party_id)+'_'+String(row.purchase_order_id)" class="erp-card">
@@ -22,6 +21,7 @@
                     <view class="card-meta">采购批次：{{ row.batch_no || row.purchase_no || '-' }}</view>
                     <view class="card-meta" v-if="row.purchaser_name">采购员：{{ row.purchaser_name }}</view>
                     <view class="card-meta" v-if="row.warehouse_name">仓库：{{ row.warehouse_name }}</view>
+                    <view class="card-time">{{ erpTimeLine(row, ['paid_at', 'pay_at', 'stock_in_at']) }}</view>
                     <view class="erp-card__foot">
                         <view class="amount-box">
                             <text class="amt-label">应付合计</text>
@@ -45,7 +45,7 @@
         </z-paging>
 
         <!-- 付款弹窗 -->
-        <u-popup v-model="payVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24">
+        <u-popup :show="payVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24" @close="payVisible = false">
             <view v-if="payRow" class="pay-popup">
                 <view class="pay-popup__title">确认付款</view>
                 <view class="pay-info">
@@ -58,9 +58,14 @@
                         <text class="pay-label">本次付款金额</text>
                         <u-input v-model="payForm.amount" type="number" :placeholder="'最多 ¥'+money(payRow.remain_amount)" :customStyle="inputStyle" />
                     </view>
-                    <view class="pay-form__item">
+                    <view class="pay-form__item" @click="payAccountPickerVisible = true">
                         <text class="pay-label">付款账户</text>
-                        <u-select v-model="payForm.capital_account_id" :list="accountOptions" />
+                        <view class="account-select">
+                            <text :class="payForm.capital_account_id ? 'account-text' : 'account-placeholder'">
+                                {{ selectedPayAccountLabel || '点击选择账户' }}
+                            </text>
+                            <text class="account-arrow">›</text>
+                        </view>
                     </view>
                     <view class="pay-form__item">
                         <text class="pay-label">备注</text>
@@ -71,6 +76,23 @@
                     <u-button @click="payVisible = false" :customStyle="{flex:'1'}">取消</u-button>
                     <u-button type="primary" :loading="paying" :disabled="!canPay" @click="submitPay" :customStyle="{flex:'2'}">确认付款并记账</u-button>
                 </view>
+            </view>
+        </u-popup>
+
+        <u-popup :show="payAccountPickerVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24" @close="payAccountPickerVisible = false">
+            <view class="account-popup">
+                <view class="account-popup__title">选择付款账户</view>
+                <view
+                    v-for="a in accounts"
+                    :key="a.id"
+                    class="account-item"
+                    :class="{ selected: a.id === payForm.capital_account_id }"
+                    @click="selectPayAccount(a)"
+                >
+                    <text class="account-item__name">{{ a.account_name }}</text>
+                    <text class="account-item__balance">余额 ¥{{ money(a.balance) }}</text>
+                </view>
+                <view v-if="!accounts.length" class="account-empty">暂无可用资金账户</view>
             </view>
         </u-popup>
 
@@ -94,6 +116,10 @@ import { onShow } from '@dcloudio/uni-app'
 import { getMobilePayableList, confirmMobilePurchasePayment, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpPayConfirmModal from '@/addon/hsx_erp/components/ErpPayConfirmModal.vue'
+import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+
+const { pagingStyle } = useListHeader(126)
 
 const keyword = ref('')
 const list = ref<any[]>([])
@@ -112,6 +138,7 @@ const accountOptions = computed(() =>
 )
 
 const payVisible = ref(false)
+const payAccountPickerVisible = ref(false)
 const paying = ref(false)
 const payRow = ref<any>(null)
 const payForm = ref({ amount: 0, capital_account_id: 0, remark: '' })
@@ -123,6 +150,10 @@ const canPay = computed(() =>
     Number(payForm.value.amount) <= Number(payRow.value?.remain_amount || 0) + 0.001 &&
     payForm.value.capital_account_id > 0
 )
+const selectedPayAccountLabel = computed(() => {
+    const a = accounts.value.find(a => Number(a.id) === Number(payForm.value.capital_account_id))
+    return a ? `${a.account_name}（余额 ¥${money(a.balance)}）` : ''
+})
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '12rpx 16rpx' }
 
 onMounted(async () => {
@@ -163,6 +194,11 @@ function openDetailPay(row: any) {
     detailPayVisible.value = true
 }
 
+function selectPayAccount(account: any) {
+    payForm.value.capital_account_id = Number(account.id || 0)
+    payAccountPickerVisible.value = false
+}
+
 async function submitPay() {
     if (!canPay.value || !payRow.value) return
     paying.value = true
@@ -175,6 +211,7 @@ async function submitPay() {
         })
         uni.showToast({ title: '付款已确认', icon: 'success' })
         payVisible.value = false
+        payAccountPickerVisible.value = false
         reload()
     } catch (e: any) {
         uni.showToast({ title: e?.message || '付款失败，请重试', icon: 'none' })
@@ -196,4 +233,15 @@ const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', set
 .pay-info__remain { font-size: 28rpx; color: #ea580c; font-weight: 600; margin-top: 8rpx; display: block; }
 .pay-form__item { margin-bottom: 20rpx; }
 .pay-label { font-size: 26rpx; color: #374151; display: block; margin-bottom: 8rpx; }
+.account-select { display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border-radius:8rpx; padding:16rpx; min-height:72rpx; box-sizing:border-box; }
+.account-text { font-size:26rpx; color:#0f172a; }
+.account-placeholder { font-size:26rpx; color:#94a3b8; }
+.account-arrow { font-size:32rpx; color:#94a3b8; }
+.account-popup { padding:32rpx; }
+.account-popup__title { font-size:30rpx; font-weight:700; color:#0f172a; margin-bottom:20rpx; }
+.account-item { display:flex; justify-content:space-between; gap:20rpx; padding:22rpx 0; border-bottom:1rpx solid #f1f5f9; }
+.account-item.selected { color:#3b6ef5; }
+.account-item__name { font-size:28rpx; }
+.account-item__balance { font-size:24rpx; color:#64748b; }
+.account-empty { text-align:center; color:#94a3b8; font-size:26rpx; padding:40rpx 0; }
 </style>

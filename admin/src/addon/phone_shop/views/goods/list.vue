@@ -64,11 +64,11 @@
                             <el-option v-for="r in stockAgeOptions" :key="r.value" :label="r.label" :value="r.value" />
                         </el-select>
                     </el-form-item>
-                    <!-- 归属:自营/代理筛选(仅子站显示,主站全部正常展示) -->
-                    <el-form-item v-if="!isMasterSite" label="归属" prop="proxy_type">
-                        <el-select v-model="goodsTable.searchParam.proxy_type" placeholder="全部" clearable class="!w-[140px]" @change="loadGoodsList()">
-                            <el-option label="自营" value="self" />
-                            <el-option label="代理" value="proxy" />
+                    <el-form-item v-if="showSourceFilter" label="归属" prop="source">
+                        <el-select v-model="goodsTable.searchParam.source" placeholder="全部" clearable class="!w-[140px]" @change="loadGoodsList()">
+                            <el-option label="全部" value="" />
+                            <el-option label="自营" :value="SELF_SOURCE" />
+                            <el-option label="代理" :value="AGENT_SOURCE" />
                         </el-select>
                     </el-form-item>
 
@@ -281,6 +281,7 @@
 import { reactive, ref, nextTick, computed } from 'vue'
 import { t } from '@/lang'
 import { debounce, img, filterDigit, setTablePageStorage, getTablePageStorage } from '@/utils/common'
+import storage from '@/utils/storage'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { cloneDeep } from 'lodash-es'
@@ -299,6 +300,12 @@ const router = useRouter()
 const route = useRoute()
 const pageName = route.meta.title
 const repeat = ref(false)
+const SELF_SOURCE = '100024'
+const AGENT_SOURCE = '100005'
+const routeSource = Array.isArray(route.query.source) ? route.query.source[0] : route.query.source
+const currentSiteSource = computed(() => String(storage.get('siteId') || routeSource || ''))
+const showSourceFilter = computed(() => currentSiteSource.value === SELF_SOURCE)
+const defaultSourceFilter = () => showSourceFilter.value ? SELF_SOURCE : ''
 
 // 库龄区间(天)下拉:value = "min-max"(max 空表示无上限),选中后联动 start/end_stock_age
 const stockAgeRange = ref('')
@@ -352,7 +359,7 @@ const goodsTable = reactive({
         start_price: '',
         end_price: '',
         status: route.query.status || '1',
-        proxy_type: '',
+        source: defaultSourceFilter(),
         memory_group: '',
         condition_grade: '',
         sale_status: '',
@@ -830,7 +837,8 @@ const loadGoodsList = (page: number = 1) => {
     goodsTable.loading = true
     goodsTable.page = page
 
-    const searchData = cloneDeep(goodsTable.searchParam)
+    const searchData: any = cloneDeep(goodsTable.searchParam)
+    if (!showSourceFilter.value || !searchData.source) delete searchData.source
 
     getGoodsPageList({
         page: goodsTable.page,
@@ -1015,6 +1023,7 @@ const resetForm = (formEl: FormInstance | undefined) => {
     stockAgeRange.value = ''
     goodsTable.searchParam.start_stock_age = ''
     goodsTable.searchParam.end_stock_age = ''
+    goodsTable.searchParam.source = defaultSourceFilter()
     isReset.value = true
     loadGoodsList()
 }

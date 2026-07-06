@@ -59,16 +59,16 @@
                 <view v-for="item in items" :key="item.id" class="device-row">
                     <view class="device-row__check">
                         <u-checkbox
-                            v-model="item.checked"
+                            :checked="item.checked"
                             :disabled="Number(item.allocated_remain || 0) <= 0"
-                            @change="onCheck(item)"
+                            @change="onCheck(item, $event)"
                         />
                     </view>
                     <view class="device-row__info">
                         <text class="device-row__model">{{ item.model }}</text>
                         <text class="device-row__sub">{{ item.spec || '-' }} · {{ item.imei }}</text>
                         <!-- 对齐PC端：售价可调 -->
-                        <view class="price-edit-row">
+                        <!-- <view class="price-edit-row">
                             <text class="price-edit-label">售价</text>
                             <u-input
                                 v-model="item.sale_price"
@@ -76,19 +76,27 @@
                                 :customStyle="priceInputStyle"
                                 @blur="onPriceChange(item)"
                             />
-                        </view>
+                        </view> -->
                         <view class="device-row__amounts">
                             <text class="amt-tiny">已收 ¥{{ money(item.allocated_settled) }}</text>
                             <text class="amt-tiny blue">余 ¥{{ money(itemRemain(item)) }}</text>
                         </view>
                     </view>
                     <view class="device-row__input">
+                        <text class="price-edit-label">售价</text>
+                        <u-input
+                            v-model="item.sale_price"
+                            type="number"
+                            :customStyle="priceInputStyle"
+                            @blur="onPriceChange(item)"
+                        />
+                        <text class="price-edit-label mt">本次收款</text>
                         <u-input
                             v-model="item.receipt_amount"
                             type="number"
                             :disabled="!item.checked"
                             :placeholder="money(itemRemain(item))"
-                            :customStyle="{ width: '140rpx', background: '#f8fafc', borderRadius: '8rpx', padding: '6rpx 12rpx' }"
+                            :customStyle="priceInputStyle"
                             @blur="capReceiptAmount(item)"
                         />
                     </view>
@@ -166,17 +174,34 @@ const selectedAccountLabel = computed(() => {
     return a ? `${a.account_name}（¥${money(a.balance)}）` : ''
 })
 
-watch(() => props.show, (v) => {
-    if (v && props.receivableId > 0) {
-        form.value = { capital_account_id: props.accounts[0]?.id || 0, remark: '' }
-        loadItems()
+let loadToken = 0
+
+watch(
+    () => [props.show, props.receivableId],
+    () => {
+        if (props.show && props.receivableId > 0) openModal()
+    },
+    { immediate: true }
+)
+
+watch(() => props.accounts, () => {
+    if (props.show && !form.value.capital_account_id) {
+        form.value.capital_account_id = props.accounts[0]?.id || 0
     }
 })
 
+function openModal() {
+    form.value = { capital_account_id: props.accounts[0]?.id || 0, remark: '' }
+    items.value = []
+    loadItems()
+}
+
 async function loadItems() {
+    const token = ++loadToken
     loadingItems.value = true
     try {
         const res: any = await getMobileReceivableItems(props.receivableId)
+        if (token !== loadToken) return
         const data = res?.data || {}
         items.value = (data.items || []).map((row: any) => ({
             ...row,
@@ -184,10 +209,13 @@ async function loadItems() {
             checked: Number(row.allocated_remain) > 0,
             receipt_amount: Number(Number(row.allocated_remain || 0).toFixed(2)),
         }))
-    } finally { loadingItems.value = false }
+    } finally {
+        if (token === loadToken) loadingItems.value = false
+    }
 }
 
-function onCheck(item: any) {
+function onCheck(item: any, checked: any) {
+    item.checked = normalizeChecked(checked)
     if (item.checked) {
         item.receipt_amount = Number(Number(itemRemain(item)).toFixed(2))
     } else {
@@ -195,10 +223,19 @@ function onCheck(item: any) {
     }
 }
 
+function normalizeChecked(checked: any) {
+    if (typeof checked === 'boolean') return checked
+    if (checked && typeof checked === 'object' && 'value' in checked) return !!checked.value
+    if (checked && typeof checked === 'object' && 'detail' in checked) return !!checked.detail?.value
+    return !!checked
+}
+
 function onPriceChange(item: any) {
     // 售价变化后重新计算本次收款上限
     const remain = itemRemain(item)
-    if (Number(item.receipt_amount) > remain) {
+    if (item.checked) {
+        item.receipt_amount = Number(remain.toFixed(2))
+    } else if (Number(item.receipt_amount) > remain) {
         item.receipt_amount = Number(remain.toFixed(2))
     }
 }
@@ -256,21 +293,22 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .summary-value.blue { color: #2563eb; }
 .summary-value.orange { color: #ea580c; }
 .account-row { display: flex; align-items: center; gap: 16rpx; padding: 0 32rpx 16rpx; }
-.account-label { font-size: 26rpx; color: #374151; width: 100rpx; flex-shrink: 0; }
+.account-label { font-size: 26rpx; color: #374151; width: 150rpx; flex-shrink: 0; }
 .account-label.required::before { content: '*'; color: #dc2626; margin-right: 4rpx; }
 .account-select { flex: 1; display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border-radius: 8rpx; padding: 10rpx 16rpx; }
 .account-text { font-size: 26rpx; color: #0f172a; }
 .account-placeholder { font-size: 26rpx; color: #94a3b8; }
 .account-arrow { font-size: 32rpx; color: #94a3b8; }
 .items-loading { display: flex; justify-content: center; padding: 32rpx; }
-.items-list { flex: 1; max-height: 420rpx; padding: 0 32rpx; }
-.device-row { display: flex; align-items: flex-start; gap: 12rpx; padding: 16rpx 0; border-bottom: 1rpx solid #f1f5f9; }
+.items-list { flex: 1; max-height: 420rpx; padding: 0 32rpx; box-sizing: border-box; }
+.device-row { display: flex; align-items: flex-start; gap: 12rpx; padding: 16rpx 0; border-bottom: 1rpx solid #f1f5f9; box-sizing: border-box; }
 .device-row__check { padding-top: 4rpx; }
 .device-row__info { flex: 1; }
 .device-row__model { font-size: 26rpx; font-weight: 600; color: #0f172a; }
 .device-row__sub { font-size: 22rpx; color: #64748b; display: block; margin-top: 4rpx; }
 .price-edit-row { display: flex; align-items: center; gap: 8rpx; margin-top: 8rpx; }
 .price-edit-label { font-size: 22rpx; color: #94a3b8; }
+.price-edit-label.mt { display: block; margin-top: 8rpx; }
 .device-row__amounts { display: flex; gap: 16rpx; margin-top: 6rpx; }
 .amt-tiny { font-size: 22rpx; color: #94a3b8; }
 .amt-tiny.blue { color: #2563eb; }

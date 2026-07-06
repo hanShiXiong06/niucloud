@@ -3,14 +3,44 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\adminapi\controller;
 
+use addon\hsx_erp\app\dict\ErpDict;
+use addon\hsx_erp\app\service\admin\ErpConfigService;
 use core\base\BaseAdminController;
 
 class ErpConfig extends BaseAdminController
 {
+    public function dicts()
+    {
+        return success(ErpDict::lists());
+    }
+
     public function info()
     {
-        return success([
-            'allow_instant_settle' => 1,
+        return success((new ErpConfigService())->getRules());
+    }
+
+    public function save()
+    {
+        $params = $this->request->params([
+            ['finance', []],
+            ['purchase', []],
+            ['sale', []],
+            ['refurbish', []],
+            ['consignment', []],
         ]);
+        return success((new ErpConfigService())->saveRules($params));
+    }
+
+    public function saleChannels()
+    {
+        return success((new ErpConfigService())->getSaleChannels());
+    }
+
+    public function saveSaleChannels()
+    {
+        $params = $this->request->params([
+            ['channels', []],
+        ]);
+        return success((new ErpConfigService())->saveSaleChannels((array)$params['channels']));
     }
 }

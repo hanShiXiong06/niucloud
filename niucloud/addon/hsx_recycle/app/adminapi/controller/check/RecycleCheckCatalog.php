@@ -27,7 +27,7 @@ class RecycleCheckCatalog extends BaseAdminController
         ]);
     }
 
-    /** 上传原始拍机堂 CSV(型号,产品ID,检测项,分类,默认选项,全部选项)，返回批次+token */
+    /** 上传原始拍机堂 Excel/CSV(型号,产品ID,检测项,分类,默认选项,全部选项)，返回批次+token */
     public function importUpload()
     {
         $file = $this->request->file('file');
@@ -35,14 +35,14 @@ class RecycleCheckCatalog extends BaseAdminController
             return fail('文件上传失败，请重试');
         }
         $ext = strtolower($file->getOriginalExtension());
-        if (!in_array($ext, ['csv', 'txt'], true)) {
-            return fail('请上传 CSV 文件（拍机堂原始表另存为 CSV UTF-8 即可）');
+        if (!in_array($ext, ['csv', 'txt', 'xls', 'xlsx'], true)) {
+            return fail('请上传 Excel 或 CSV 文件');
         }
         $dir = public_path() . 'upload/check_import/';
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
-        $token = 'pjt_' . date('YmdHis') . '_' . mt_rand(1000, 9999) . '.csv';
+        $token = 'pjt_' . date('YmdHis') . '_' . mt_rand(1000, 9999) . '.' . $ext;
         $file->move($dir, $token);
         return success('上传成功，开始导入', $this->service->importInit($dir . $token, $token, $file->getOriginalName()));
     }

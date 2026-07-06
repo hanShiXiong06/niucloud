@@ -27,6 +27,11 @@ class ErpFinance extends BaseAdminController
         return success($this->service->receivablePage($this->listParams()));
     }
 
+    public function receivableItems(int $id)
+    {
+        return success($this->service->receivableItems($id));
+    }
+
     public function confirmPayment(int $id)
     {
         $params = $this->request->params([
@@ -73,6 +78,7 @@ class ErpFinance extends BaseAdminController
     {
         $params = $this->request->params([
             ['amount', 0],
+            ['items', []],
             ['capital_account_id', 0],
             ['confirmed_at', 0],
             ['remark', ''],
@@ -86,13 +92,16 @@ class ErpFinance extends BaseAdminController
             ['payable_ids', []],
             ['receivable_ids', []],
             ['amount', 0],
+            ['settle_diff', false],
+            ['capital_account_id', 0],
             ['remark', ''],
         ]);
         return success(['id' => $this->service->confirmOffset(
             (array)$params['payable_ids'],
             (array)$params['receivable_ids'],
             (float)$params['amount'],
-            (string)$params['remark']
+            (string)$params['remark'],
+            $params
         )]);
     }
 
@@ -106,12 +115,29 @@ class ErpFinance extends BaseAdminController
         return success($this->service->moneyLedgerPage($this->listParams()));
     }
 
+    public function settlementLists()
+    {
+        $params = $this->request->params([
+            ['keyword', ''],
+            ['party_id', 0],
+            ['settlement_type', ''],
+            ['capital_account_id', 0],
+            ['asset_id', 0],
+            ['start_at', 0],
+            ['end_at', 0],
+            ['page', 1],
+            ['limit', 15],
+        ]);
+        return success($this->service->settlementPage($params));
+    }
+
     private function listParams(): array
     {
         return $this->request->params([
             ['keyword', ''],
             ['status', ''],
             ['party_id', 0],
+            ['purchase_order_id', 0],
             ['start_at', 0],
             ['end_at', 0],
             ['page', 1],

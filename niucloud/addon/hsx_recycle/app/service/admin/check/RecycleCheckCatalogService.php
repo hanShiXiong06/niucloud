@@ -6,44 +6,49 @@ namespace addon\hsx_recycle\app\service\admin\check;
 use addon\hsx_recycle\app\model\check\RecycleCheckImportBatch;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
+use PhpOffice\PhpSpreadsheet\Reader\IReadFilter;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Settings;
 use think\facade\Db;
+use XMLReader;
 
 /**
- * 拍机堂检测表导入：网页上传一份 CSV → 后端分批(按型号)慢慢跑，
- * 直接生成「质检模板」(recycle_check_template/group/field/option) 并按型号绑定(recycle_template_binding)，
- * 验机组件、模板编辑器都不动。参考表(recycle_check_dict)只用于选项去重+级别。
+ * 拍机堂检测表导入：网页上传 Excel/CSV → 后端分批(按型号)慢慢跑，
+ * 直接生成「质检模板」并按型号绑定(recycle_template_binding)。
+ * 拍机堂导入模板使用 schema_json 紧凑存储，验机时按需展开，避免把大量一次性字段/选项写入明细表。
+ * 手工模板仍使用 recycle_check_group/field/option，模板编辑器不受影响。
  *
- * CSV 列：型号, 产品ID, 检测项, 分类, 默认选项, 全部选项(用 | 分隔)。文件按型号聚集(同型号相邻)。
+ * 表格列：型号, 产品ID, 检测项, 分类, 默认选项, 全部选项(用 | 分隔)。文件按型号聚集(同型号相邻)。
  */
 class RecycleCheckCatalogService extends BaseAdminService
 {
     private const IMPORT_DIR = 'upload/check_import/';
     private const TPL_PREFIX = 'pjt_';                 // 拍机堂来源模板的 template_key 前缀
     private const BIND_SCENE = 'manual_device_label';  // 验机侧解析绑定用的场景
+    private const EXCEL_CHUNK_ROWS = 20000;
 
     /** 上传初始化：估算型号数(用行数粗估)，建批次，返回 token */
     public function importInit(string $absPath, string $token, string $fileName): array
     {
+        $this->ensureCompactColumns();
         if (!is_file($absPath)) {
             throw new CommonException('上传文件不存在');
         }
-        $rows = 0;
-        $fh = fopen($absPath, 'r');
-        while (fgets($fh) !== false) { $rows++; }
-        fclose($fh);
+        $rows = $this->countDataRows($absPath);
         $now = time();
         $batch = RecycleCheckImportBatch::create([
             'site_id' => $this->site_id, 'source' => 'paijitang',
-            'file_name' => $fileName . '|' . $token, 'total_rows' => max($rows - 1, 0),
+            'file_name' => $fileName . '|' . $token, 'total_rows' => $rows,
             'status' => 'processing', 'operator_uid' => (int)$this->uid,
             'operator_name' => (string)$this->username, 'create_at' => $now, 'update_at' => $now,
         ]);
-        return ['batch_id' => (int)$batch->id, 'token' => $token, 'total_rows' => max($rows - 1, 0)];
+        return ['batch_id' => (int)$batch->id, 'token' => $token, 'total_rows' => $rows];
     }
 
     /** 处理一片(按型号，最多 limit 个型号)。前端循环调用直到 done。offset=0 时先清旧拍机堂模板 */
     public function importChunk(int $batchId, string $token, int $offset, int $limit = 80): array
     {
+        $this->ensureCompactColumns();
         $path = public_path() . self::IMPORT_DIR . basename($token);
         if (!is_file($path)) {
             throw new CommonException('导入文件已失效，请重新上传');
@@ -56,46 +61,235 @@ class RecycleCheckCatalogService extends BaseAdminService
             $this->clearImported();
             $this->seedGrades();
         }
-        $fh = fopen($path, 'r');
-        if (!$fh) {
-            throw new CommonException('无法读取导入文件');
-        }
-        if ($offset > 0) {
-            fseek($fh, $offset);
-        }
         $now = time();
         $optCache = []; $nodeCache = [];
         $newTpl = (int)$batch->inserted;   // 复用字段：新建模板数
         $bound = (int)$batch->updated;     // 复用字段：绑定型号数
         $rowsDone = (int)$batch->skipped_same; // 复用字段：已处理行数(进度)
-        $buffer = []; $curModel = null; $modelsThis = 0; $done = false;
-        $nextOffset = $offset;
-        while (true) {
-            $posBefore = ftell($fh);
-            $row = fgetcsv($fh);
-            if ($row === false) {
-                if ($buffer) { $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound); }
-                $done = true; $nextOffset = ftell($fh); break;
-            }
-            if ($offset === 0 && $posBefore === 0) {
-                $j = implode('', array_map('strval', $row));
-                if (mb_strpos($j, '型号') !== false || mb_strpos($j, '检测项') !== false) { continue; }
-            }
-            $model = trim((string)($row[0] ?? ''));
-            if ($model === '') { continue; }
-            if ($curModel !== null && $model !== $curModel) {
-                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
-                $buffer = []; $modelsThis++;
-                if ($modelsThis >= $limit) { $nextOffset = $posBefore; break; }
-            }
-            $curModel = $model; $buffer[] = $row;
-        }
-        fclose($fh);
+        $totalRows = (int)$batch->total_rows;
+        $result = $this->isSpreadsheetFile($path)
+            ? $this->processSpreadsheetChunk($path, $offset, $limit, $totalRows, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone)
+            : $this->processCsvChunk($path, $offset, $limit, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone);
+        $done = $result['done'];
+        $nextOffset = $result['next_offset'];
+
         $save = ['inserted' => $newTpl, 'updated' => $bound, 'skipped_same' => $rowsDone, 'update_at' => time()];
         if ($done) { $save['status'] = 'completed'; @unlink($path); }
         $batch->save($save);
         return ['batch_id' => $batchId, 'next_offset' => $nextOffset, 'done' => $done,
                 'templates' => $newTpl, 'bindings' => $bound, 'rows_done' => $rowsDone];
+    }
+
+    private function processSpreadsheetChunk(
+        string $path,
+        int $offset,
+        int $limit,
+        int $totalRows,
+        int $now,
+        array &$optCache,
+        array &$nodeCache,
+        int &$newTpl,
+        int &$bound,
+        int &$rowsDone
+    ): array {
+        if ($this->isXlsxFile($path)) {
+            return $this->processXlsxStreamChunk($path, $offset, $limit, $totalRows, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone);
+        }
+
+        $startRow = $offset > 1 ? $offset : 2;
+        $endRow = $startRow + self::EXCEL_CHUNK_ROWS - 1;
+
+        $reader = IOFactory::createReaderForFile($path);
+        if (method_exists($reader, 'setReadDataOnly')) {
+            $reader->setReadDataOnly(true);
+        }
+        if (method_exists($reader, 'setReadFilter')) {
+            $reader->setReadFilter(new class($startRow, $endRow) implements IReadFilter {
+                private int $startRow;
+                private int $endRow;
+
+                public function __construct(int $startRow, int $endRow)
+                {
+                    $this->startRow = $startRow;
+                    $this->endRow = $endRow;
+                }
+
+                public function readCell($columnAddress, $row, $worksheetName = ''): bool
+                {
+                    return $row >= $this->startRow && $row <= $this->endRow && in_array($columnAddress, ['A', 'B', 'C', 'D', 'E', 'F'], true);
+                }
+            });
+        }
+        Settings::setLibXmlLoaderOptions(LIBXML_COMPACT);
+        $spreadsheet = $reader->load($path);
+        $sheet = $spreadsheet->getSheet(0);
+        $sourceHighestRow = max(1, $totalRows + 1);
+
+        $buffer = [];
+        $curModel = null;
+        $modelsThis = 0;
+        $lastReadRow = $startRow - 1;
+        $done = false;
+        $nextOffset = $startRow;
+
+        for ($rowNo = $startRow; $rowNo <= min($endRow, $sourceHighestRow); $rowNo++) {
+            $row = [];
+            for ($col = 1; $col <= 6; $col++) {
+                $row[] = trim((string)$sheet->getCell([$col, $rowNo])->getFormattedValue());
+            }
+            $lastReadRow = $rowNo;
+            if (implode('', $row) === '') {
+                continue;
+            }
+            if ($this->isHeaderRow($row)) {
+                continue;
+            }
+            $model = trim((string)($row[0] ?? ''));
+            if ($model === '') {
+                continue;
+            }
+            if ($curModel !== null && $model !== $curModel) {
+                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+                $buffer = [];
+                $modelsThis++;
+                if ($modelsThis >= $limit) {
+                    $nextOffset = $rowNo;
+                    $spreadsheet->disconnectWorksheets();
+                    return ['next_offset' => $nextOffset, 'done' => false];
+                }
+            }
+            $curModel = $model;
+            $buffer[] = $row;
+        }
+
+        if ($buffer) {
+            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+        }
+        $done = $lastReadRow >= $sourceHighestRow;
+        $nextOffset = $done ? $sourceHighestRow + 1 : $lastReadRow + 1;
+        $spreadsheet->disconnectWorksheets();
+        return ['next_offset' => $nextOffset, 'done' => $done];
+    }
+
+    private function processXlsxStreamChunk(
+        string $path,
+        int $offset,
+        int $limit,
+        int $totalRows,
+        int $now,
+        array &$optCache,
+        array &$nodeCache,
+        int &$newTpl,
+        int &$bound,
+        int &$rowsDone
+    ): array {
+        $startRow = $offset > 1 ? $offset : 2;
+        $endRow = $startRow + self::EXCEL_CHUNK_ROWS - 1;
+        $sourceHighestRow = max(1, $totalRows + 1);
+        $sharedStrings = $this->readXlsxSharedStrings($path);
+        $reader = $this->openXlsxXmlReader($path, 'xl/worksheets/sheet1.xml');
+
+        $buffer = [];
+        $curModel = null;
+        $modelsThis = 0;
+        $lastReadRow = $startRow - 1;
+
+        while ($reader->read()) {
+            if ($reader->nodeType !== XMLReader::ELEMENT || $reader->localName !== 'row') {
+                continue;
+            }
+            $rowNo = (int)$reader->getAttribute('r');
+            if ($rowNo <= 0) {
+                $rowNo = $lastReadRow + 1;
+            }
+            if ($rowNo < $startRow) {
+                continue;
+            }
+            if ($rowNo > min($endRow, $sourceHighestRow)) {
+                break;
+            }
+
+            $row = $this->parseXlsxRow($reader->readOuterXml(), $sharedStrings);
+            $lastReadRow = $rowNo;
+            if (implode('', $row) === '' || $this->isHeaderRow($row)) {
+                continue;
+            }
+            $model = trim((string)($row[0] ?? ''));
+            if ($model === '') {
+                continue;
+            }
+            if ($curModel !== null && $model !== $curModel) {
+                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+                $buffer = [];
+                $modelsThis++;
+                if ($modelsThis >= $limit) {
+                    $reader->close();
+                    return ['next_offset' => $rowNo, 'done' => false];
+                }
+            }
+            $curModel = $model;
+            $buffer[] = $row;
+        }
+
+        if ($buffer) {
+            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+        }
+        $reader->close();
+        $done = $lastReadRow >= $sourceHighestRow;
+        return ['next_offset' => $done ? $sourceHighestRow + 1 : $lastReadRow + 1, 'done' => $done];
+    }
+
+    private function processCsvChunk(
+        string $path,
+        int $offset,
+        int $limit,
+        int $now,
+        array &$optCache,
+        array &$nodeCache,
+        int &$newTpl,
+        int &$bound,
+        int &$rowsDone
+    ): array {
+        $startRow = $offset > 1 ? $offset : 1;
+        $fh = fopen($path, 'r');
+        if (!$fh) {
+            throw new CommonException('无法读取导入文件');
+        }
+        $buffer = [];
+        $curModel = null;
+        $modelsThis = 0;
+        $rowNo = 0;
+        $nextOffset = $startRow;
+        while (($row = fgetcsv($fh)) !== false) {
+            $rowNo++;
+            if ($rowNo < $startRow) {
+                continue;
+            }
+            if ($this->isHeaderRow($row)) {
+                continue;
+            }
+            $model = trim((string)($row[0] ?? ''));
+            if ($model === '') {
+                continue;
+            }
+            if ($curModel !== null && $model !== $curModel) {
+                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+                $buffer = [];
+                $modelsThis++;
+                if ($modelsThis >= $limit) {
+                    $nextOffset = $rowNo;
+                    fclose($fh);
+                    return ['next_offset' => $nextOffset, 'done' => false];
+                }
+            }
+            $curModel = $model;
+            $buffer[] = $row;
+        }
+        if ($buffer) {
+            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+        }
+        fclose($fh);
+        return ['next_offset' => $rowNo + 1, 'done' => true];
     }
 
     /** 处理一个型号的所有行：去重成模板(共享)→ 建/复用模板 → 绑定型号节点。返回处理行数 */
@@ -115,10 +309,9 @@ class RecycleCheckCatalogService extends BaseAdminService
         $count = count($rows);
         if (empty($items)) { return $count; }
 
-        $sig = md5(json_encode(array_map(
-            fn($it) => $it['group'] . '#' . $it['field'] . '#' . $it['default'] . '#' . implode('|', $it['opts']),
-            $items
-        ), JSON_UNESCAPED_UNICODE));
+        $schema = $this->buildCompactSchema($items, $optCache, $now);
+        $schemaJson = $this->encodeJson($schema);
+        $sig = md5($schemaJson);
         $templateKey = self::TPL_PREFIX . $sig;
         $tplId = (int)Db::name('recycle_check_template')
             ->where('site_id', $this->site_id)->where('template_key', $templateKey)->value('id');
@@ -127,117 +320,10 @@ class RecycleCheckCatalogService extends BaseAdminService
                 'site_id' => $this->site_id, 'template_key' => $templateKey,
                 'template_name' => '拍机堂·' . mb_substr($model, 0, 80), 'scene' => 'pjt',
                 'is_default' => 0, 'status' => 1, 'sort' => 0, 'version' => 1,
+                'schema_hash' => $sig, 'schema_json' => $schemaJson,
                 'create_at' => $now, 'update_at' => $now,
             ]);
             $newTpl++;
-            $groupId = []; $gi = 0;
-            foreach ($items as $it) {
-                $g = $it['group'] !== '' ? $it['group'] : '检测项';
-                if (!isset($groupId[$g])) {
-                    $gi++;
-                    $groupId[$g] = (int)Db::name('recycle_check_group')->insertGetId([
-                        'site_id' => $this->site_id, 'template_id' => $tplId, 'group_key' => 'g' . $gi,
-                        'group_name' => $g, 'description' => '', 'sort' => $gi, 'status' => 1,
-                        'create_at' => $now, 'update_at' => $now,
-                    ]);
-                }
-            }
-            $fi = 0;
-            $usedStable = [];
-            foreach ($items as $it) {
-                $fi++;
-                $g = $it['group'] !== '' ? $it['group'] : '检测项';
-                // 检测项语义匹配到设备稳定字段(内存→capacity、颜色→color…)就用稳定 key，
-                // 这样勾选的值会写进设备同名列、打印模板的 {capacity} 等变量直接取到；匹配不上才排号 f{N}。
-                $stable = $this->mapFieldKey($it['field']);
-                $fieldKey = ($stable !== '' && !isset($usedStable[$stable])) ? $stable : ('f' . $fi);
-                if ($stable !== '') {
-                    $usedStable[$stable] = true;
-                }
-                // 电池健康度建成"数值字段":存真实百分比、可由「查电池」API 回填。
-                // 不建 radio 序号选项——从根上杜绝"电池健康度1%"(序号)与"电池健康度: 电池健康度100%"(区间标签重复前缀)。
-                $isBatteryHealth = ($fieldKey === 'battery');
-                $fieldRow = [
-                    'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $groupId[$g],
-                    'field_key' => $fieldKey, 'field_name' => $it['field'],
-                    'component' => $isBatteryHealth ? 'number' : 'radio',
-                    'selection_mode' => $isBatteryHealth ? '' : 'single',
-                    'is_required' => 0, 'is_show' => 1,
-                    'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
-                    'sort' => $fi, 'create_at' => $now, 'update_at' => $now,
-                ];
-                if ($isBatteryHealth) {
-                    $fieldRow['unit'] = '%';
-                    // $fieldRow['result_template'] = '电池健康度{value}%';
-                    $fieldRow['api_fill_enabled'] = 1;
-                    $fieldRow['api_fill_policy'] = 'overwrite';
-                }
-                $fid = (int)Db::name('recycle_check_field')->insertGetId($fieldRow);
-                if (!$isBatteryHealth) {
-                    $oi = 0;
-                    foreach ($it['opts'] as $o) {
-                        $oi++;
-                        Db::name('recycle_check_option')->insert([
-                            'site_id' => $this->site_id, 'field_id' => $fid, 'option_label' => $o,
-                            'option_value' => (string)$oi, 'is_default' => ($o === $it['default'] ? 1 : 0),
-                            'is_show' => 1, 'severity' => $this->resolveOptionSeverity($optCache, $o, $now),
-                            'sort' => $oi, 'create_at' => $now, 'update_at' => $now,
-                        ]);
-                    }
-                }
-            }
-            // 固定字段(保修/包装/成色)直接并入「已建好的」基本信息分组，不再新建——
-            // 之前硬编码 group_key='g1' 会和第一步循环建的第一个分组(也是 g1)撞键，导致渲染只认一个、固定字段并不进去。
-            // 优先并入 CSV 分类里名字含「基本」的分组，没有就并入第一个分组(reset)。
-            $infoGid = 0;
-            foreach ($groupId as $gName => $gId) {
-                if (mb_strpos((string)$gName, '基本') !== false) { $infoGid = (int)$gId; break; }
-            }
-            if ($infoGid <= 0) { $infoGid = (int)reset($groupId); }
-            Db::name('recycle_check_field')->insert([
-                'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $infoGid,
-                'field_key' => 'warranty_info', 'field_name' => '保修', 'component' => 'input',
-                'selection_mode' => '', 'placeholder' => '点「查保修」自动回填', 'is_required' => 0,
-                'is_show' => 1, 'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
-                'result_template' => '保修: {value}', 'api_fill_enabled' => 1, 'api_fill_policy' => 'overwrite',
-                'sort' => ++$fi, 'create_at' => $now, 'update_at' => $now,
-            ]);
-            // 包装：单选(全套/单机/带配件)，写入设备 package_type 列、供打印 {package_type}
-            $pkgFid = (int)Db::name('recycle_check_field')->insertGetId([
-                'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $infoGid,
-                'field_key' => 'package_type', 'field_name' => '包装', 'component' => 'radio',
-                'selection_mode' => 'single', 'is_required' => 0, 'is_show' => 1,
-                'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
-                'result_template' => '', 'sort' => ++$fi, 'create_at' => $now, 'update_at' => $now,
-            ]);
-            $pkgOi = 0;
-            foreach (['全套', '单机', '带配件'] as $po) {
-                $pkgOi++;
-                Db::name('recycle_check_option')->insert([
-                    'site_id' => $this->site_id, 'field_id' => $pkgFid, 'option_label' => $po,
-                    'option_value' => (string)$pkgOi, 'is_default' => 0,
-                    'is_show' => 1, 'severity' => 'normal', 'sort' => $pkgOi,
-                    'create_at' => $now, 'update_at' => $now,
-                ]);
-            }
-            // 成色等级：单选(10新/99新…)，写入设备 condition_grade 列、供定价/打印 {condition_grade}
-            $gradeFid = (int)Db::name('recycle_check_field')->insertGetId([
-                'site_id' => $this->site_id, 'template_id' => $tplId, 'group_id' => $infoGid,
-                'field_key' => 'condition_grade', 'field_name' => '成色等级', 'component' => 'radio',
-                'selection_mode' => 'single', 'is_required' => 0, 'is_show' => 1,
-                'seller_visible' => 1, 'buyer_visible' => 0, 'result_visible' => 1,
-                'result_template' => '', 'sort' => ++$fi, 'create_at' => $now, 'update_at' => $now,
-            ]);
-            $gradeOi = 0;
-            foreach (['10新', '99新', '98新', '95新', '9新', '85新'] as $go) {
-                $gradeOi++;
-                Db::name('recycle_check_option')->insert([
-                    'site_id' => $this->site_id, 'field_id' => $gradeFid, 'option_label' => $go,
-                    'option_value' => (string)$gradeOi, 'is_default' => 0,
-                    'is_show' => 1, 'severity' => 'normal', 'sort' => $gradeOi,
-                    'create_at' => $now, 'update_at' => $now,
-                ]);
-            }
         }
 
         $nodeId = $this->resolveModelNode($nodeCache, $pid, $model);
@@ -284,6 +370,134 @@ class RecycleCheckCatalogService extends BaseAdminService
             }
         }
         return '';
+    }
+
+    private function buildCompactSchema(array $items, array &$optCache, int $now): array
+    {
+        $groups = [];
+        $groupIndex = [];
+        $fi = 0;
+        $usedStable = [];
+
+        foreach ($items as $it) {
+            $fi++;
+            $g = $it['group'] !== '' ? $it['group'] : '检测项';
+            if (!isset($groupIndex[$g])) {
+                $nextGroupSort = count($groups) + 1;
+                $groupIndex[$g] = count($groups);
+                $groups[] = [
+                    'id' => 0,
+                    'group_key' => 'g' . $nextGroupSort,
+                    'group_name' => $g,
+                    'description' => '',
+                    'sort' => $nextGroupSort,
+                    'status' => 1,
+                    'fields' => [],
+                ];
+            }
+
+            $stable = $this->mapFieldKey($it['field']);
+            $fieldKey = ($stable !== '' && !isset($usedStable[$stable])) ? $stable : ('f' . $fi);
+            if ($stable !== '') {
+                $usedStable[$stable] = true;
+            }
+            $isBatteryHealth = ($fieldKey === 'battery');
+            $field = [
+                'id' => 0,
+                'field_key' => $fieldKey,
+                'field_name' => $it['field'],
+                'component' => $isBatteryHealth ? 'number' : 'radio',
+                'selection_mode' => $isBatteryHealth ? '' : 'single',
+                'unit' => $isBatteryHealth ? '%' : '',
+                'placeholder' => '',
+                'default_value' => '',
+                'is_required' => 0,
+                'is_show' => 1,
+                'seller_visible' => 1,
+                'buyer_visible' => 0,
+                'result_visible' => 1,
+                'result_template' => '',
+                'api_fill_enabled' => $isBatteryHealth ? 1 : 0,
+                'api_fill_policy' => $isBatteryHealth ? 'overwrite' : 'empty_only',
+                'sort' => $fi,
+                'extra_config' => [],
+                'options' => [],
+            ];
+            if (!$isBatteryHealth) {
+                $oi = 0;
+                foreach ($it['opts'] as $o) {
+                    $oi++;
+                    $field['options'][] = [
+                        'id' => 0,
+                        'name' => $o,
+                        'label' => $o,
+                        'value' => (string)$oi,
+                        'is_default' => ($o === $it['default'] ? 1 : 0),
+                        'severity' => $this->resolveOptionSeverity($optCache, $o, $now),
+                        'sort' => $oi,
+                        'extra_config' => [],
+                    ];
+                }
+            }
+            $groups[$groupIndex[$g]]['fields'][] = $field;
+        }
+
+        $infoIndex = 0;
+        foreach ($groups as $index => $group) {
+            if (mb_strpos((string)$group['group_name'], '基本') !== false) {
+                $infoIndex = $index;
+                break;
+            }
+        }
+        $sort = count($items);
+        $groups[$infoIndex]['fields'][] = $this->compactInputField('warranty_info', '保修', ++$sort, '点「查保修」自动回填', '保修: {value}', 1);
+        $groups[$infoIndex]['fields'][] = $this->compactRadioField('package_type', '包装', ++$sort, ['全套', '单机', '带配件']);
+        $groups[$infoIndex]['fields'][] = $this->compactRadioField('condition_grade', '成色等级', ++$sort, ['10新', '99新', '98新', '95新', '9新', '85新']);
+
+        foreach ($groups as $gIndex => &$group) {
+            $group['id'] = -($gIndex + 1);
+            foreach ($group['fields'] as $fIndex => &$field) {
+                $field['id'] = -(($gIndex + 1) * 10000 + $fIndex + 1);
+                foreach ($field['options'] as $oIndex => &$option) {
+                    $option['id'] = -(($gIndex + 1) * 1000000 + ($fIndex + 1) * 1000 + $oIndex + 1);
+                }
+                unset($option);
+            }
+            unset($field);
+        }
+        unset($group);
+
+        return ['version' => 1, 'storage' => 'compact', 'groups' => $groups];
+    }
+
+    private function compactInputField(string $key, string $name, int $sort, string $placeholder = '', string $resultTemplate = '', int $apiFill = 0): array
+    {
+        return [
+            'id' => 0, 'field_key' => $key, 'field_name' => $name, 'component' => 'input',
+            'selection_mode' => '', 'unit' => '', 'placeholder' => $placeholder, 'default_value' => '',
+            'is_required' => 0, 'is_show' => 1, 'seller_visible' => 1, 'buyer_visible' => 0,
+            'result_visible' => 1, 'result_template' => $resultTemplate,
+            'api_fill_enabled' => $apiFill, 'api_fill_policy' => $apiFill ? 'overwrite' : 'empty_only',
+            'sort' => $sort, 'extra_config' => [], 'options' => [],
+        ];
+    }
+
+    private function compactRadioField(string $key, string $name, int $sort, array $labels): array
+    {
+        $field = [
+            'id' => 0, 'field_key' => $key, 'field_name' => $name, 'component' => 'radio',
+            'selection_mode' => 'single', 'unit' => '', 'placeholder' => '', 'default_value' => '',
+            'is_required' => 0, 'is_show' => 1, 'seller_visible' => 1, 'buyer_visible' => 0,
+            'result_visible' => 1, 'result_template' => '', 'api_fill_enabled' => 0,
+            'api_fill_policy' => 'empty_only', 'sort' => $sort, 'extra_config' => [], 'options' => [],
+        ];
+        foreach ($labels as $index => $label) {
+            $field['options'][] = [
+                'id' => 0, 'name' => $label, 'label' => $label, 'value' => (string)($index + 1),
+                'is_default' => 0, 'severity' => 'normal', 'sort' => $index + 1, 'extra_config' => [],
+            ];
+        }
+        return $field;
     }
 
     /** 选项级别：dict 里有就用其级别，没有就建(默认normal)。保住用户改过的级别 */
@@ -336,6 +550,168 @@ class RecycleCheckCatalogService extends BaseAdminService
         Db::name('recycle_check_group')->where('site_id', $this->site_id)->whereIn('template_id', $tplIds)->delete();
         Db::name('recycle_template_binding')->where('site_id', $this->site_id)->whereIn('check_template_id', $tplIds)->delete();
         Db::name('recycle_check_template')->where('site_id', $this->site_id)->whereIn('id', $tplIds)->delete();
+    }
+
+    private function encodeJson(array $data): string
+    {
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return is_string($json) ? $json : '{}';
+    }
+
+    private function ensureCompactColumns(): void
+    {
+        $prefix = (string)config('database.connections.mysql.prefix');
+        $table = $prefix . 'recycle_check_template';
+        if (!$this->hasColumn($table, 'schema_hash')) {
+            Db::execute("ALTER TABLE `{$table}` ADD COLUMN `schema_hash` varchar(32) NOT NULL DEFAULT '' COMMENT '紧凑模板结构hash' AFTER `version`");
+        }
+        if (!$this->hasColumn($table, 'schema_json')) {
+            Db::execute("ALTER TABLE `{$table}` ADD COLUMN `schema_json` longtext NULL COMMENT '导入模板紧凑结构JSON' AFTER `schema_hash`");
+        }
+    }
+
+    private function hasColumn(string $table, string $column): bool
+    {
+        return !empty(Db::query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'"));
+    }
+
+    private function countDataRows(string $path): int
+    {
+        if ($this->isXlsxFile($path)) {
+            $reader = $this->openXlsxXmlReader($path, 'xl/worksheets/sheet1.xml');
+            $rows = 0;
+            while ($reader->read()) {
+                if ($reader->nodeType === XMLReader::ELEMENT && $reader->localName === 'row') {
+                    $rows++;
+                }
+            }
+            $reader->close();
+            return max($rows - 1, 0);
+        }
+
+        if ($this->isSpreadsheetFile($path)) {
+            $reader = IOFactory::createReaderForFile($path);
+            if (method_exists($reader, 'setReadDataOnly')) {
+                $reader->setReadDataOnly(true);
+            }
+            $spreadsheet = $reader->load($path);
+            $rows = max(0, (int)$spreadsheet->getSheet(0)->getHighestDataRow() - 1);
+            $spreadsheet->disconnectWorksheets();
+            return $rows;
+        }
+
+        $rows = 0;
+        $fh = fopen($path, 'r');
+        if (!$fh) {
+            return 0;
+        }
+        while (fgets($fh) !== false) {
+            $rows++;
+        }
+        fclose($fh);
+        return max($rows - 1, 0);
+    }
+
+    private function isSpreadsheetFile(string $path): bool
+    {
+        return in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['xls', 'xlsx'], true);
+    }
+
+    private function isXlsxFile(string $path): bool
+    {
+        return strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'xlsx';
+    }
+
+    private function isHeaderRow(array $row): bool
+    {
+        $joined = implode('', array_map('strval', $row));
+        return mb_strpos($joined, '型号') !== false && mb_strpos($joined, '检测项') !== false;
+    }
+
+    private function openXlsxXmlReader(string $path, string $innerPath): XMLReader
+    {
+        $reader = new XMLReader();
+        $uri = 'zip://' . $path . '#' . $innerPath;
+        if (!$reader->open($uri, null, LIBXML_COMPACT | LIBXML_NONET)) {
+            throw new CommonException('无法读取 Excel 文件内容：' . $innerPath);
+        }
+        return $reader;
+    }
+
+    private function readXlsxSharedStrings(string $path): array
+    {
+        $strings = [];
+        $reader = new XMLReader();
+        $uri = 'zip://' . $path . '#xl/sharedStrings.xml';
+        if (!$reader->open($uri, null, LIBXML_COMPACT | LIBXML_NONET)) {
+            return $strings;
+        }
+        while ($reader->read()) {
+            if ($reader->nodeType !== XMLReader::ELEMENT || $reader->localName !== 'si') {
+                continue;
+            }
+            $xml = $reader->readOuterXml();
+            $node = simplexml_load_string($xml);
+            if (!$node) {
+                $strings[] = '';
+                continue;
+            }
+            $texts = $node->xpath('.//*[local-name()="t"]') ?: [];
+            $value = '';
+            foreach ($texts as $text) {
+                $value .= (string)$text;
+            }
+            $strings[] = $value;
+        }
+        $reader->close();
+        return $strings;
+    }
+
+    private function parseXlsxRow(string $rowXml, array $sharedStrings): array
+    {
+        $row = array_fill(0, 6, '');
+        $xml = simplexml_load_string($rowXml);
+        if (!$xml) {
+            return $row;
+        }
+        foreach ($xml->children() as $cell) {
+            if ($cell->getName() !== 'c') {
+                continue;
+            }
+            $ref = (string)($cell['r'] ?? '');
+            $col = $this->xlsxColumnIndex($ref);
+            if ($col < 1 || $col > 6) {
+                continue;
+            }
+            $type = (string)($cell['t'] ?? '');
+            $value = '';
+            if ($type === 's') {
+                $idx = (int)($cell->v ?? -1);
+                $value = (string)($sharedStrings[$idx] ?? '');
+            } elseif ($type === 'inlineStr') {
+                $texts = $cell->xpath('.//*[local-name()="t"]') ?: [];
+                foreach ($texts as $text) {
+                    $value .= (string)$text;
+                }
+            } else {
+                $value = (string)($cell->v ?? '');
+            }
+            $row[$col - 1] = trim($value);
+        }
+        return $row;
+    }
+
+    private function xlsxColumnIndex(string $cellRef): int
+    {
+        if (!preg_match('/^([A-Z]+)/i', $cellRef, $match)) {
+            return 0;
+        }
+        $letters = strtoupper($match[1]);
+        $index = 0;
+        for ($i = 0; $i < strlen($letters); $i++) {
+            $index = $index * 26 + (ord($letters[$i]) - 64);
+        }
+        return $index;
     }
 
     /**

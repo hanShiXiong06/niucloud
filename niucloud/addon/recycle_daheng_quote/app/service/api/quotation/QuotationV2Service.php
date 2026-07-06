@@ -206,6 +206,7 @@ class QuotationV2Service extends BaseApiService
 
         $outRows = [];
         foreach ($rows as $r) {
+            $remarkData = $this->buildReportRemarkData($r['adjustment_items'] ?? []);
             $finalArr = [];
             foreach ($columns as $col) {
                 $p = $r['prices'][$col] ?? null;
@@ -229,10 +230,13 @@ class QuotationV2Service extends BaseApiService
                 'final_prices' => $finalArr,
                 'prev_final_prices' => $prevArr,
                 'remark' => (string)($r['value_info'] ?? ''),
+                'remark_columns' => $remarkData['columns'],
+                'remark_values' => $remarkData['values'],
                 'is_hot' => (int)($r['is_hot'] ?? 0),
                 'price_date' => (string)($r['price_date'] ?? $priceDate),
             ];
         }
+        [$columns, $outRows] = $this->normalizeReportRows($columns, $outRows);
 
         return [
             'id' => $datasetId,
@@ -244,6 +248,129 @@ class QuotationV2Service extends BaseApiService
             'update_at_text' => $this->formatTime((int)($dataset['last_sync_at'] ?? 0)),
             'rows' => $outRows,
         ];
+    }
+
+    /**
+     * 报价单出图前规整：去掉整列无价格的等级列，并给连续相同备注加合并标记。
+     */
+    private function normalizeReportRows(array $columns, array $rows): array
+    {
+        $activeIndexMap = [];
+        $normalizedRows = [];
+        foreach ($rows as $row) {
+            $activeIndexes = $this->activePriceIndexes($row['final_prices'] ?? []);
+            if (empty($activeIndexes)) {
+                continue;
+            }
+            foreach ($activeIndexes as $index) {
+                $activeIndexMap[$index] = $index;
+            }
+            $activeColumns = $this->filterIndexedValues($columns, $activeIndexes);
+            $row['columns'] = $activeColumns;
+            $row['final_prices'] = $this->filterIndexedValues($row['final_prices'] ?? [], $activeIndexes);
+            $row['prev_final_prices'] = $this->filterIndexedValues($row['prev_final_prices'] ?? [], $activeIndexes);
+            $row['remark_rowspan'] = 1;
+            $row['remark_hidden'] = 0;
+            $normalizedRows[] = $row;
+        }
+
+        $this->markMergedRemarks($normalizedRows);
+
+        ksort($activeIndexMap);
+        return [$this->filterIndexedValues($columns, array_values($activeIndexMap)), $normalizedRows];
+    }
+
+    private function buildReportRemarkData(array $items): array
+    {
+        $map = [];
+        foreach ($items as $item) {
+            $content = trim((string)($item['content_text'] ?? ''));
+            if ($content === '') {
+                continue;
+            }
+            $fieldName = trim((string)($item['field_name'] ?? ''));
+            if ($fieldName === '') {
+                $fieldName = '备注';
+            }
+            if (!isset($map[$fieldName])) {
+                $map[$fieldName] = [];
+            }
+            if (!in_array($content, $map[$fieldName], true)) {
+                $map[$fieldName][] = $content;
+            }
+        }
+
+        $columns = [];
+        $values = [];
+        foreach ($map as $fieldName => $contents) {
+            $columns[] = $fieldName;
+            $values[] = implode("\n", $contents);
+        }
+
+        return ['columns' => $columns, 'values' => $values];
+    }
+
+    private function activePriceIndexes(array $prices): array
+    {
+        $indexes = [];
+        foreach ($prices as $index => $price) {
+            if ($this->hasReportPrice($price)) {
+                $indexes[] = (int)$index;
+            }
+        }
+        return $indexes;
+    }
+
+    private function hasReportPrice($value): bool
+    {
+        return $value !== null && trim((string)$value) !== '';
+    }
+
+    private function filterIndexedValues(array $values, array $indexes): array
+    {
+        $result = [];
+        foreach ($indexes as $index) {
+            $result[] = $values[$index] ?? '';
+        }
+        return $result;
+    }
+
+    private function markMergedRemarks(array &$rows): void
+    {
+        $count = count($rows);
+        for ($start = 0; $start < $count;) {
+            $remark = $this->normalizeRemarkForMerge((string)($rows[$start]['remark'] ?? ''));
+            $modelName = (string)($rows[$start]['model_name'] ?? '');
+            if ($remark === '') {
+                $start++;
+                continue;
+            }
+
+            $end = $start + 1;
+            while (
+                $end < $count
+                && $this->normalizeRemarkForMerge((string)($rows[$end]['remark'] ?? '')) === $remark
+                && (string)($rows[$end]['model_name'] ?? '') === $modelName
+            ) {
+                $end++;
+            }
+
+            $span = $end - $start;
+            if ($span > 1) {
+                $rows[$start]['remark_rowspan'] = $span;
+                for ($i = $start + 1; $i < $end; $i++) {
+                    $rows[$i]['remark_hidden'] = 1;
+                }
+            }
+            $start = $end;
+        }
+    }
+
+    private function normalizeRemarkForMerge(string $remark): string
+    {
+        $remark = str_replace(["\xc2\xa0", '　'], ' ', $remark);
+        $remark = preg_replace('/\s+/u', ' ', $remark) ?: $remark;
+        return trim($remark);
     }
 
     /**

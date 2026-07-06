@@ -149,7 +149,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="支持 CSV、TSV 或 JSON。表头请包含：品类、品类ID、品牌、品牌ID、系列、型号、产品ID、热门。"
+        title="支持 Excel、CSV、TSV 或 JSON。表头请包含：品类、品类ID、品牌、品牌ID、系列、型号、产品ID、热门。"
       />
       <el-form label-width="90px" class="import-form">
         <el-form-item label="数据来源">
@@ -159,7 +159,7 @@
           <el-upload
             drag
             action="#"
-            accept=".csv,.tsv,.json,application/json,text/csv,text/tab-separated-values"
+            accept=".xlsx,.xls,.csv,.tsv,.json,application/json,text/csv,text/tab-separated-values"
             :auto-upload="false"
             :show-file-list="false"
             :on-change="handleImportFileChange"
@@ -167,7 +167,7 @@
           >
             <div class="import-upload__main">
               <div class="import-upload__title">{{ importFileName || '点击或拖拽文件到这里' }}</div>
-              <div class="import-upload__tip">CSV/TSV 使用首行作为表头；JSON 支持数组或 { rows: [] }</div>
+              <div class="import-upload__tip">Excel/CSV/TSV 使用首行作为表头；JSON 支持数组或 { rows: [] }</div>
             </div>
           </el-upload>
         </el-form-item>
@@ -277,6 +277,7 @@ import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import * as XLSX from 'xlsx'
 import {
   addRecycleDeviceModelDict,
   deleteRecycleDeviceModelDict,
@@ -577,8 +578,7 @@ const handleImportFileChange = async (file: any) => {
   if (!raw) return
   importFileName.value = raw.name || ''
   try {
-    const text = await readFileText(raw)
-    importRows.value = parseImportRows(text, raw.name || '')
+    importRows.value = await parseImportFile(raw)
     if (!importRows.value.length) {
       ElMessage.warning('没有识别到可导入的数据')
       return
@@ -627,6 +627,34 @@ const readFileText = (file: File): Promise<string> => {
     reader.onerror = () => reject(new Error('读取文件失败'))
     reader.readAsText(file, 'utf-8')
   })
+}
+
+const readFileArrayBuffer = (file: File): Promise<ArrayBuffer> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as ArrayBuffer)
+    reader.onerror = () => reject(new Error('读取文件失败'))
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+const parseImportFile = async (file: File): Promise<any[]> => {
+  const fileName = file.name || ''
+  if (/\.(xlsx|xls)$/i.test(fileName)) {
+    const buffer = await readFileArrayBuffer(file)
+    const workbook = XLSX.read(buffer, { type: 'array' })
+    const sheetName = workbook.SheetNames[0]
+    if (!sheetName) return []
+    const sheet = workbook.Sheets[sheetName]
+    return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
+      .map((row: any) => Object.keys(row).reduce((result: Record<string, string>, key) => {
+        result[String(key).trim()] = String(row[key] ?? '').trim()
+        return result
+      }, {}))
+      .filter((row: any) => Object.values(row).some(value => String(value || '').trim() !== ''))
+  }
+  const text = await readFileText(file)
+  return parseImportRows(text, fileName)
 }
 
 const parseImportRows = (text: string, fileName: string): any[] => {

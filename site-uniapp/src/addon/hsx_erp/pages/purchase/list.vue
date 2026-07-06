@@ -29,6 +29,7 @@
                         {{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}
                         <text v-if="row.purchaser_name"> · {{ row.purchaser_name }}</text>
                     </view>
+                    <view class="card-time">{{ erpTimeLine(row, ['stock_in_at', 'purchase_at', 'paid_at']) }}</view>
                     <!-- 资产状态 -->
                     <view class="status-row">
                         <u-tag :text="assetLabel(row.status)" :type="assetType(row.status)" plain plainFill size="mini" />
@@ -66,6 +67,7 @@ import { getMobilePurchaseList } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 // useListHeader hook
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 
 const keyword = ref('')
 const list = ref<any[]>([])

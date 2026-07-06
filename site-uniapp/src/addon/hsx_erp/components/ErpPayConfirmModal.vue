@@ -58,9 +58,9 @@
                 <view v-for="item in items" :key="item.id" class="device-row">
                     <view class="device-row__check">
                         <u-checkbox
-                            v-model="item.checked"
+                            :checked="item.checked"
                             :disabled="Number(item.allocated_remain || 0) <= 0"
-                            @change="onCheck(item)"
+                            @change="onCheck(item, $event)"
                         />
                     </view>
                     <view class="device-row__info">
@@ -155,33 +155,60 @@ const selectedAccountLabel = computed(() => {
     return a ? `${a.account_name}（¥${money(a.balance)}）` : ''
 })
 
-watch(() => props.show, (v) => {
-    if (v && props.partyId > 0) {
-        form.value = { capital_account_id: props.accounts[0]?.id || 0, remark: '' }
-        loadItems()
+let loadToken = 0
+
+watch(
+    () => [props.show, props.partyId, props.purchaseOrderId],
+    () => {
+        if (props.show && props.partyId > 0) openModal()
+    },
+    { immediate: true }
+)
+
+watch(() => props.accounts, () => {
+    if (props.show && !form.value.capital_account_id) {
+        form.value.capital_account_id = props.accounts[0]?.id || 0
     }
 })
 
+function openModal() {
+    form.value = { capital_account_id: props.accounts[0]?.id || 0, remark: '' }
+    items.value = []
+    loadItems()
+}
+
 async function loadItems() {
+    const token = ++loadToken
     loadingItems.value = true
     try {
         const params: any = { limit: 50 }
         if (props.purchaseOrderId) params.purchase_order_id = props.purchaseOrderId
         const res: any = await getMobilePayablePartyItems(props.partyId, params)
+        if (token !== loadToken) return
         items.value = (res?.data?.data || []).map((row: any) => ({
             ...row,
             checked: Number(row.allocated_remain || 0) > 0,
             pay_amount: Number(Number(row.allocated_remain || 0).toFixed(2)),
         }))
-    } finally { loadingItems.value = false }
+    } finally {
+        if (token === loadToken) loadingItems.value = false
+    }
 }
 
-function onCheck(item: any) {
+function onCheck(item: any, checked: any) {
+    item.checked = normalizeChecked(checked)
     if (item.checked) {
         item.pay_amount = Number(Number(item.allocated_remain || 0).toFixed(2))
     } else {
         item.pay_amount = 0
     }
+}
+
+function normalizeChecked(checked: any) {
+    if (typeof checked === 'boolean') return checked
+    if (checked && typeof checked === 'object' && 'value' in checked) return !!checked.value
+    if (checked && typeof checked === 'object' && 'detail' in checked) return !!checked.detail?.value
+    return !!checked
 }
 
 function capPayAmount(item: any) {
@@ -236,14 +263,14 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .summary-value.red { color: #dc2626; }
 .summary-value.orange { color: #ea580c; }
 .account-row { display: flex; align-items: center; gap: 16rpx; padding: 0 32rpx 16rpx; }
-.account-label { font-size: 26rpx; color: #374151; width: 100rpx; flex-shrink: 0; }
+.account-label { font-size: 26rpx; color: #374151; width: 150rpx; flex-shrink: 0; }
 .account-label.required::before { content: '*'; color: #dc2626; margin-right: 4rpx; }
 .account-select { flex: 1; display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border-radius: 8rpx; padding: 10rpx 16rpx; }
 .account-text { font-size: 26rpx; color: #0f172a; }
 .account-placeholder { font-size: 26rpx; color: #94a3b8; }
 .account-arrow { font-size: 32rpx; color: #94a3b8; }
 .items-loading { display: flex; justify-content: center; padding: 32rpx; }
-.items-list { flex: 1; max-height: 420rpx; padding: 0 32rpx; }
+.items-list { flex: 1; max-height: 420rpx; padding: 0 32rpx; box-sizing: border-box; }
 .device-row { display: flex; align-items: flex-start; gap: 12rpx; padding: 16rpx 0; border-bottom: 1rpx solid #f1f5f9; }
 .device-row__check { padding-top: 4rpx; }
 .device-row__info { flex: 1; }

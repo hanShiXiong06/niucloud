@@ -929,6 +929,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_check_template` (
   `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态',
   `sort` int NOT NULL DEFAULT '0' COMMENT '排序',
   `version` int NOT NULL DEFAULT '1' COMMENT '模板版本',
+  `schema_hash` varchar(32) NOT NULL DEFAULT '' COMMENT '紧凑模板结构hash',
+  `schema_json` longtext NULL COMMENT '导入模板紧凑结构JSON',
   `create_at` int NOT NULL DEFAULT '0',
   `update_at` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),

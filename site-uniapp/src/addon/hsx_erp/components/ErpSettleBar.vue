@@ -200,7 +200,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .settle-label {
     font-size: 26rpx;
     color: #374151;
-    width: 120rpx;
+    width: 150rpx;
     flex-shrink: 0;
     &.required::before { content: '*'; color: #dc2626; margin-right: 4rpx; }
 }

@@ -73,8 +73,14 @@ class ErpWarehouseService extends BaseAdminService
 
         $now = time();
         $isDefault = (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
+        $warehouseType = $this->normalizeWarehouseType((string)($data['warehouse_type'] ?? 'owned'));
+        $defaultSaleTarget = $this->normalizeDefaultSaleTarget((string)($data['default_sale_target'] ?? 'unset'));
+        $ownershipType = $warehouseType === 'consignment' ? 'consigned' : 'owned';
+        if ($warehouseType === 'exception') {
+            $ownershipType = 'pending';
+        }
         $warehouseId = 0;
-        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, &$warehouseId) {
+        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $warehouseType, $ownershipType, $defaultSaleTarget, &$warehouseId) {
             if ($isDefault === 1) {
                 ErpWarehouse::where([['site_id', '=', $this->site_id]])->update([
                     'is_default' => 0,
@@ -84,6 +90,13 @@ class ErpWarehouseService extends BaseAdminService
             $values = [
                 'warehouse_name' => $name,
                 'warehouse_code' => trim((string)($data['warehouse_code'] ?? '')),
+                'warehouse_type' => $warehouseType,
+                'ownership_type' => $ownershipType,
+                'need_photo' => (int)($data['need_photo'] ?? 0) === 1 ? 1 : 0,
+                'need_pricing' => (int)($data['need_pricing'] ?? 0) === 1 ? 1 : 0,
+                'allow_direct_sale' => (int)($data['allow_direct_sale'] ?? 1) === 1 ? 1 : 0,
+                'allow_transfer' => $warehouseType === 'consignment' ? 0 : ((int)($data['allow_transfer'] ?? 1) === 1 ? 1 : 0),
+                'default_sale_target' => $defaultSaleTarget,
                 'status' => (int)($data['status'] ?? 1) === 1 ? 1 : 0,
                 'is_default' => $isDefault,
                 'sort' => (int)($data['sort'] ?? 0),
@@ -203,6 +216,13 @@ class ErpWarehouseService extends BaseAdminService
             `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
             `warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '仓库名称',
             `warehouse_code` varchar(60) NOT NULL DEFAULT '' COMMENT '仓库编码',
+            `warehouse_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned二手机/peer同行/consignment代卖/exception异常',
+            `ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖/pending待定',
+            `need_photo` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要拍照',
+            `need_pricing` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要定价',
+            `allow_direct_sale` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许直接销售',
+            `allow_transfer` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许调拨',
+            `default_sale_target` varchar(20) NOT NULL DEFAULT 'unset' COMMENT 'unset未定/peer同行/mall商城',
             `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1启用/0停用',
             `is_default` tinyint(1) NOT NULL DEFAULT 0 COMMENT '默认入库仓',
             `sort` int NOT NULL DEFAULT 0,
@@ -228,6 +248,13 @@ class ErpWarehouseService extends BaseAdminService
             UNIQUE KEY `uk_warehouse_name` (`site_id`,`warehouse_id`,`location_name`),
             KEY `idx_site_warehouse` (`site_id`,`warehouse_id`,`status`,`sort`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-仓库库位'");
+        $this->ensureColumn($warehouseTable, 'warehouse_type', "`warehouse_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned二手机/peer同行/consignment代卖/exception异常' AFTER `warehouse_code`");
+        $this->ensureColumn($warehouseTable, 'ownership_type', "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖/pending待定' AFTER `warehouse_type`");
+        $this->ensureColumn($warehouseTable, 'need_photo', "`need_photo` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要拍照' AFTER `ownership_type`");
+        $this->ensureColumn($warehouseTable, 'need_pricing', "`need_pricing` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要定价' AFTER `need_photo`");
+        $this->ensureColumn($warehouseTable, 'allow_direct_sale', "`allow_direct_sale` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许直接销售' AFTER `need_pricing`");
+        $this->ensureColumn($warehouseTable, 'allow_transfer', "`allow_transfer` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许调拨' AFTER `allow_direct_sale`");
+        $this->ensureColumn($warehouseTable, 'default_sale_target', "`default_sale_target` varchar(20) NOT NULL DEFAULT 'unset' COMMENT 'unset未定/peer同行/mall商城' AFTER `allow_transfer`");
         $this->ensureColumn($assetTable, 'location_id', "`location_id` int NOT NULL DEFAULT 0 COMMENT '库位ID' AFTER `warehouse_name`");
         $this->ensureColumn($assetTable, 'location_name', "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '库位名称快照' AFTER `location_id`");
         $purchaseTable = (new \addon\hsx_erp\app\model\ErpPurchaseOrder())->getTable();
@@ -260,5 +287,15 @@ class ErpWarehouseService extends BaseAdminService
             throw new CommonException('库位不存在');
         }
         return $model;
+    }
+
+    private function normalizeWarehouseType(string $type): string
+    {
+        return in_array($type, ['owned', 'peer', 'consignment', 'exception'], true) ? $type : 'owned';
+    }
+
+    private function normalizeDefaultSaleTarget(string $target): string
+    {
+        return in_array($target, ['unset', 'peer', 'mall'], true) ? $target : 'unset';
     }
 }

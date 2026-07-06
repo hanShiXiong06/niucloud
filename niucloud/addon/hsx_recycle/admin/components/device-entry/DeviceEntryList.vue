@@ -279,7 +279,7 @@ const loadCheckTemplate = async (row: DeviceEntryRow) => {
         const summaryFields: CheckSummaryField[] = []
         groups.forEach((group: any) => {
             (group.fields || []).forEach((field: any) => {
-                if (Number(field?.extra_config?.summary_visible || 0) === 1 ) {
+                if (Number(field?.extra_config?.summary_visible || 0) === 1 && summaryFields.length < 5) {
                     summaryFields.push({
                         id: Number(field.id),
                         field_key: String(field.field_key),

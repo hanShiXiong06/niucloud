@@ -1,6 +1,6 @@
 <template>
     <view class="cost-list-page">
-        <RecyclePageHeader title="成本调整" />
+        <RecyclePageHeader  />
         <view class="page-header">
                     
                     <u-search
@@ -63,6 +63,7 @@
                     <view class="asset-meta" v-if="row.warehouse_name">
                         仓库 {{ row.warehouse_name }}<text v-if="row.location_name"> / {{ row.location_name }}</text>
                     </view>
+                    <view class="asset-time">{{ erpTimeLine(row, ['stock_in_at', 'occurred_at']) }}</view>
                     <view class="asset-card__foot">
                         <view class="cost-box">
                             <text class="cost-label">当前成本</text>
@@ -80,31 +81,26 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
-import { INVENTORY_STATUS_MAP } from '@/addon/hsx_erp/api/dict'
+import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+
+
 const keyword = ref('')
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
+const erpDicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
 // 胶囊筛选行高度上调，让设备列表落在胶囊按钮下方、留出间距
 const { pageHeaderStyle, pagingStyle } = useListHeader(104)
 // 详情页调整成本后返回需要刷新
 const dirty = ref(false)
 
-const statusTabs = [
-    { name: '在库可调', value: 'onhand' },
-    { name: '已售订正', value: 'sold' },
-    { name: '全部', value: '' }
-]
+const statusTabs = computed(() => dictTabs(erpDicts.value, 'asset_status', true))
 const currentIndex = ref(0)
-const status = computed(() => statusTabs[currentIndex.value].value)
+const status = computed(() => statusTabs.value[currentIndex.value]?.value || '')
 
-const statusLabel = (s: string) => INVENTORY_STATUS_MAP[s] || s || '-'
-const statusType = (s: string) => {
-    if (s === 'in_stock' || s === 'available_for_sale') return 'success'
-    if (s === 'outbound' || s === 'locked') return 'primary'
-    if (s === 'lost' || s === 'inbound_rejected') return 'error'
-    return 'warning'
-}
+const statusLabel = (s: string) => dictLabel(erpDicts.value, 'asset_status', s)
+const statusType = (s: string) => dictType(erpDicts.value, 'asset_status', s)
 const formatMoney = (v: any) => Number(v || 0).toFixed(2)
 
 const reload = () => pagingRef.value?.reload()
@@ -148,6 +144,10 @@ const goAdjust = (row: any) => {
 }
 
 onShow(() => {
+    loadErpDicts().then((dicts) => {
+        erpDicts.value = dicts
+        if (currentIndex.value >= statusTabs.value.length) currentIndex.value = 0
+    })
     if (dirty.value) {
         dirty.value = false
         reload()
@@ -210,6 +210,12 @@ onShow(() => {
     margin-top: 10rpx;
     font-size: 24rpx;
     color: #94a3b8;
+}
+.asset-time {
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: #94a3b8;
+    line-height: 1.45;
 }
 
 .cost-box {

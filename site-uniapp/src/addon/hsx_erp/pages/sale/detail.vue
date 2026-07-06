@@ -38,15 +38,35 @@
                         <text class="info-label">未收</text>
                         <text class="info-value orange">¥{{ money(order.receivable_amount) }}</text>
                     </view>
+                    <view class="info-row">
+                        <text class="info-label">创建时间</text>
+                        <text class="info-value">{{ formatErpTime(order.create_at) }}</text>
+                    </view>
+                    <view class="info-row">
+                        <text class="info-label">更新时间</text>
+                        <text class="info-value">{{ formatErpTime(order.update_at) }}</text>
+                    </view>
+                    <view class="order-actions" v-if="canCancelSale">
+                        <u-button
+                            type="warning"
+                            plain
+                            size="small"
+                            :loading="cancelling"
+                            @click="cancelSale"
+                        >
+                            撤销销售，退回库存
+                        </u-button>
+                    </view>
                 </view>
 
                 <view class="section-title">销售设备（{{ items.length }} 台）</view>
                 <view v-for="item in items" :key="item.id" class="device-card">
                     <view class="device-card__head">
                         <text class="device-name">{{ item.model || '-' }}</text>
-                        <u-tag :text="item.status === 'sold' ? '已售' : item.status" type="primary" plain plainFill size="mini" />
+                        <u-tag :text="assetLabel(item.status)" :type="assetType(item.status)" plain plainFill size="mini" />
                     </view>
                     <view class="card-meta">{{ item.spec || '-' }} · IMEI {{ item.imei || '-' }}</view>
+                    <view class="card-time">{{ erpTimeLine(item, ['sale_at', 'sold_at']) }}</view>
                     <view class="device-costs">
                         <view class="cost-item">
                             <text class="cost-label">售价</text>
@@ -61,7 +81,7 @@
                             <text class="cost-value" :class="Number(item.profit)>=0?'green':'red'">¥{{ money(item.profit) }}</text>
                         </view>
                     </view>
-                    <view class="device-actions" v-if="item.status === 'sold'">
+                    <view class="device-actions" v-if="item.status === 'sold' && !canCancelSale">
                         <u-button size="mini" plain type="warning" @click.stop="goReturn()">退货</u-button>
                     </view>
                 </view>
@@ -72,21 +92,34 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
-import { getMobileSaleInfo } from '@/addon/hsx_erp/api/erp'
+import { onLoad, onShow } from '@dcloudio/uni-app'
+import { cancelMobileSale, getMobileSaleInfo } from '@/addon/hsx_erp/api/erp'
+import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 
 const order = ref<any>(null)
 const items = ref<any[]>([])
 const loading = ref(true)
 const saleOrderId = ref(0)
 const saleNo = ref('')
+const detailLoaded = ref(false)
+const cancelling = ref(false)
 
 const pageTitle = computed(() => saleNo.value ? `销售单 ${saleNo.value}` : '销售单详情')
+const canCancelSale = computed(() =>
+    order.value &&
+    order.value.status === 'completed' &&
+    order.value.finance_status === 'pending' &&
+    Number(order.value.received_amount || 0) <= 0
+)
 
 onLoad((query: any) => {
     saleOrderId.value = Number(query?.sale_order_id || 0)
     saleNo.value = decodeURIComponent(query?.sale_no || '')
     loadDetail()
+})
+
+onShow(() => {
+    if (detailLoaded.value) loadDetail()
 })
 
 async function loadDetail() {
@@ -97,15 +130,44 @@ async function loadDetail() {
         const data = res?.data || {}
         order.value = data
         items.value = data.items || []
-    } finally { loading.value = false }
+    } finally {
+        loading.value = false
+        detailLoaded.value = true
+    }
 }
 
 const goReturn = () => uni.navigateTo({
     url: `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${saleOrderId.value}&sale_no=${encodeURIComponent(saleNo.value)}&party_name=${encodeURIComponent(order.value?.party_name || '')}`
 })
+
+const cancelSale = () => {
+    if (!canCancelSale.value || cancelling.value) return
+    uni.showModal({
+        title: '撤销销售',
+        content: '确认撤销后，该销售单应收会作废，设备会退回原仓库并重新进入库存。',
+        confirmText: '确认撤销',
+        cancelText: '取消',
+        success: async (res) => {
+            if (!res.confirm) return
+            cancelling.value = true
+            try {
+                await cancelMobileSale(saleOrderId.value, { remark: '手机端撤销未收款销售单' })
+                uni.showToast({ title: '已退回库存', icon: 'success' })
+                await loadDetail()
+            } catch (e: any) {
+                uni.showToast({ title: e?.message || '撤销失败', icon: 'none' })
+            } finally {
+                cancelling.value = false
+            }
+        }
+    })
+}
+
 const money = (v: any) => Number(v || 0).toFixed(2)
 const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s)
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
+const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
+const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' }[s] || 'info')
 </script>
 
 <style scoped lang="scss">
@@ -119,6 +181,7 @@ const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', se
 .info-value.blue { color:#2563eb; }
 .info-value.green { color:#16a34a; }
 .info-value.orange { color:#ea580c; }
+.order-actions { margin-top:18rpx; padding-top:18rpx; border-top:1rpx solid #f1f5f9; }
 .section-title { font-size:28rpx; font-weight:600; color:#374151; margin:8rpx 0 16rpx; }
 .device-card { background:#fff; border-radius:12rpx; padding:20rpx; margin-bottom:16rpx; }
 .device-card__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8rpx; }

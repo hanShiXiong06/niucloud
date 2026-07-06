@@ -32,6 +32,13 @@ class ErpWarehouse extends BaseAdminController
         return success($this->service->saveWarehouse($this->request->params([
             ['warehouse_name', ''],
             ['warehouse_code', ''],
+            ['warehouse_type', 'owned'],
+            ['ownership_type', 'owned'],
+            ['need_photo', 0],
+            ['need_pricing', 0],
+            ['allow_direct_sale', 1],
+            ['allow_transfer', 1],
+            ['default_sale_target', 'unset'],
             ['status', 1],
             ['is_default', 0],
             ['sort', 0],

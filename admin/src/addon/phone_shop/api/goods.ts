@@ -2,7 +2,7 @@ import request from '@/utils/request'
 
 // 会员等级"站内序号"映射(来自 hsx_erp;用于会员价 JSON 统一按 level_no 存取)
 export function getMemberLevelNoList() {
-    return request.get('erp/member_level/no_lists')
+    return request.get('phone_shop/member_level/no_lists')
 }
 
 /**

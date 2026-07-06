@@ -146,19 +146,48 @@ class ErpPurchaseService extends BaseAdminService
                 $capitalAccountName = (string)$account->account_name;
                 $settleMethod = $this->accountTypeLabel((string)$account->account_type);
             }
-            [$warehouse, $location] = (new ErpWarehouseService())->validateInboundLocation(
-                (int)($data['warehouse_id'] ?? 0),
-                (int)($data['location_id'] ?? 0)
-            );
-            if ((string)$warehouse->warehouse_type === 'consignment') {
-                throw new CommonException('代卖仓不能走采购开单，请使用代卖登记流程');
+            $warehouseService = new ErpWarehouseService();
+            $resolvedItems = [];
+            foreach ($items as $item) {
+                $itemWarehouseId = (int)($item['warehouse_id'] ?? 0);
+                $itemLocationId = (int)($item['location_id'] ?? 0);
+                if ($itemWarehouseId <= 0) {
+                    $itemWarehouseId = (int)($data['warehouse_id'] ?? 0);
+                    $itemLocationId = (int)($data['location_id'] ?? 0);
+                }
+                [$itemWarehouse, $itemLocation] = $warehouseService->validateInboundLocation(
+                    $itemWarehouseId,
+                    $itemLocationId
+                );
+                if ((string)$itemWarehouse->warehouse_type === 'consignment') {
+                    throw new CommonException('代卖仓不能走采购开单，请使用代卖登记流程');
+                }
+                $resolvedItems[] = [
+                    'item' => $item,
+                    'warehouse' => $itemWarehouse,
+                    'location' => $itemLocation,
+                    'asset_flow' => $this->warehouseAssetFlow($itemWarehouse),
+                ];
+            }
+            $firstWarehouse = $resolvedItems[0]['warehouse'];
+            $firstLocation = $resolvedItems[0]['location'];
+            $sameWarehouse = true;
+            $sameLocation = true;
+            foreach ($resolvedItems as $resolved) {
+                if ((int)$resolved['warehouse']->id !== (int)$firstWarehouse->id) {
+                    $sameWarehouse = false;
+                    $sameLocation = false;
+                    break;
+                }
+                if ((int)$resolved['location']->id !== (int)$firstLocation->id) {
+                    $sameLocation = false;
+                }
             }
             $purchaser = (new ErpStaffService())->resolve((int)($data['purchaser_uid'] ?? 0), '采购员');
-            $warehouseId = (int)$warehouse->id;
-            $warehouseName = (string)$warehouse->warehouse_name;
-            $locationId = (int)$location->id;
-            $locationName = (string)$location->location_name;
-            $assetFlow = $this->warehouseAssetFlow($warehouse);
+            $warehouseId = $sameWarehouse ? (int)$firstWarehouse->id : 0;
+            $warehouseName = $sameWarehouse ? (string)$firstWarehouse->warehouse_name : '多仓库';
+            $locationId = ($sameWarehouse && $sameLocation) ? (int)$firstLocation->id : 0;
+            $locationName = ($sameWarehouse && $sameLocation) ? (string)$firstLocation->location_name : ($sameWarehouse ? '多库位' : '');
             $order = ErpPurchaseOrder::create([
                 'site_id' => $this->site_id,
                 'purchase_no' => $purchaseNo,
@@ -194,7 +223,15 @@ class ErpPurchaseService extends BaseAdminService
             ]);
             $orderId = (int)$order->id;
             $payableItems = [];
-            foreach ($items as $item) {
+            foreach ($resolvedItems as $resolved) {
+                $item = $resolved['item'];
+                $warehouse = $resolved['warehouse'];
+                $location = $resolved['location'];
+                $assetFlow = $resolved['asset_flow'];
+                $itemWarehouseId = (int)$warehouse->id;
+                $itemWarehouseName = (string)$warehouse->warehouse_name;
+                $itemLocationId = (int)$location->id;
+                $itemLocationName = (string)$location->location_name;
                 $cost = round((float)($item['purchase_cost'] ?? 0), 2);
                 if ($cost <= 0) {
                     throw new CommonException('机器采购成本必须大于0');
@@ -208,10 +245,17 @@ class ErpPurchaseService extends BaseAdminService
                 $purchaseItem = ErpPurchaseItem::create([
                     'site_id' => $this->site_id,
                     'purchase_order_id' => $orderId,
+                    'warehouse_id' => $itemWarehouseId,
+                    'warehouse_name' => $itemWarehouseName,
+                    'location_id' => $itemLocationId,
+                    'location_name' => $itemLocationName,
                     'imei' => trim((string)($item['imei'] ?? '')),
                     'sn' => trim((string)($item['sn'] ?? '')),
                     'model' => trim((string)($item['model'] ?? '')),
                     'spec' => trim((string)($item['spec'] ?? '')),
+                    'category_id' => (int)($item['category_id'] ?? 0),
+                    'category_name' => trim((string)($item['category_name'] ?? '')),
+                    'category_path' => $this->normalizeCategoryPath($item['category_path'] ?? []),
                     'inspector_uid' => (int)$inspector['uid'],
                     'inspector_name' => (string)$inspector['name'],
                     'estimate_sale_price' => $estimateSalePrice,
@@ -232,14 +276,17 @@ class ErpPurchaseService extends BaseAdminService
                     'purchase_item_id' => (int)$purchaseItem->id,
                     'party_id' => (int)$party->id,
                     'party_name' => $partyName,
-                    'warehouse_id' => $warehouseId,
-                    'warehouse_name' => $warehouseName,
-                    'location_id' => $locationId,
-                    'location_name' => $locationName,
+                    'warehouse_id' => $itemWarehouseId,
+                    'warehouse_name' => $itemWarehouseName,
+                    'location_id' => $itemLocationId,
+                    'location_name' => $itemLocationName,
                     'imei' => trim((string)($item['imei'] ?? '')),
                     'sn' => trim((string)($item['sn'] ?? '')),
                     'model' => trim((string)($item['model'] ?? '')),
                     'spec' => trim((string)($item['spec'] ?? '')),
+                    'category_id' => (int)($item['category_id'] ?? 0),
+                    'category_name' => trim((string)($item['category_name'] ?? '')),
+                    'category_path' => $this->normalizeCategoryPath($item['category_path'] ?? []),
                     'inspector_uid' => (int)$inspector['uid'],
                     'inspector_name' => (string)$inspector['name'],
                     'estimate_sale_price' => $estimateSalePrice,
@@ -270,6 +317,10 @@ class ErpPurchaseService extends BaseAdminService
                     'source_type' => 'purchase',
                     'source_id' => $orderId,
                     'source_no' => $purchaseNo,
+                    'after_warehouse_id' => $itemWarehouseId,
+                    'after_warehouse_name' => $itemWarehouseName,
+                    'after_location_id' => $itemLocationId,
+                    'after_location_name' => $itemLocationName,
                     'after_total_cost' => $cost,
                     'party_id' => (int)$party->id,
                     'party_name' => $partyName,
@@ -584,13 +635,31 @@ class ErpPurchaseService extends BaseAdminService
         $this->ensureColumn($purchaseTable, 'capital_account_name', "`capital_account_name` varchar(100) NOT NULL DEFAULT '' COMMENT '本次付款账户名称' AFTER `capital_account_id`");
         $assetTable = (new ErpAsset())->getTable();
         $itemTable = (new ErpPurchaseItem())->getTable();
+        $this->ensureColumn($itemTable, 'warehouse_id', "`warehouse_id` int NOT NULL DEFAULT 0 COMMENT '明细入库仓库ID' AFTER `asset_id`");
+        $this->ensureColumn($itemTable, 'warehouse_name', "`warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '明细入库仓库名称快照' AFTER `warehouse_id`");
+        $this->ensureColumn($itemTable, 'location_id', "`location_id` int NOT NULL DEFAULT 0 COMMENT '明细入库库位ID' AFTER `warehouse_name`");
+        $this->ensureColumn($itemTable, 'location_name', "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '明细入库库位名称快照' AFTER `location_id`");
         foreach ([$assetTable, $itemTable] as $table) {
+            $this->ensureColumn($table, 'category_id', "`category_id` int NOT NULL DEFAULT 0 COMMENT '商品分类ID' AFTER `spec`");
+            $this->ensureColumn($table, 'category_name', "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '商品分类名称快照' AFTER `category_id`");
+            $this->ensureColumn($table, 'category_path', "`category_path` varchar(255) NOT NULL DEFAULT '' COMMENT '商品分类路径' AFTER `category_name`");
             $this->ensureColumn($table, 'inspector_uid', "`inspector_uid` int NOT NULL DEFAULT 0 COMMENT '质检员UID' AFTER `spec`");
             $this->ensureColumn($table, 'inspector_name', "`inspector_name` varchar(60) NOT NULL DEFAULT '' COMMENT '质检员名称快照' AFTER `inspector_uid`");
             $this->ensureColumn($table, 'estimate_sale_price', "`estimate_sale_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '入库预估售价' AFTER `inspector_name`");
             $this->ensureColumn($table, 'image_urls', "`image_urls` text COMMENT '入库图片JSON/逗号分隔' AFTER `estimate_sale_price`");
             $this->ensureColumn($table, 'quality_remark', "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `image_urls`");
         }
+    }
+
+    private function normalizeCategoryPath(mixed $path): string
+    {
+        if (is_string($path)) {
+            return trim($path);
+        }
+        if (!is_array($path)) {
+            return '';
+        }
+        return implode(',', array_values(array_filter(array_map(static fn($id) => (string)(int)$id, $path))));
     }
 
     private function warehouseAssetFlow(ErpWarehouse $warehouse): array

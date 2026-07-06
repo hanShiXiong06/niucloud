@@ -7,8 +7,11 @@ use app\adminapi\middleware\AdminLog;
 use think\facade\Route;
 
 Route::group('erp', function () {
+    Route::get('dicts', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dicts');
     Route::get('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@info');
     Route::post('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@save');
+    Route::get('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saleChannels');
+    Route::post('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saveSaleChannels');
     Route::get('counterparty/options', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@options');
     Route::get('counterparty/member_options', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@memberOptions');
     Route::post('counterparty/quick_contact', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@quickContact');
@@ -23,6 +26,7 @@ Route::group('erp', function () {
 
     Route::get('stock/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStock@lists');
     Route::get('stock/ledger', 'addon\hsx_erp\app\adminapi\controller\ErpStock@ledger');
+    Route::post('stock/:id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\ErpStock@adjustCost');
     Route::get('stock/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@info');
     Route::post('stock/:id/flow', 'addon\hsx_erp\app\adminapi\controller\ErpStock@flow');
 

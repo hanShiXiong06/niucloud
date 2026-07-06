@@ -30,6 +30,9 @@
             />
             <u-icon v-if="localKeyword" name="close-circle-fill" color="#c4c4c4" size="18"
                 @click="localKeyword = ''; onSearch()" />
+            <view v-if="showScan" class="scan-btn" @click="onScan">
+                <u-icon name="scan" color="#3b6ef5" size="20" />
+            </view>
         </view>
 
         <!-- 状态 Tab（胶囊式，对齐 phone_shop .tab） -->
@@ -52,6 +55,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 
 const props = withDefaults(defineProps<{
     modelValue?: string        // keyword v-model
@@ -60,6 +64,7 @@ const props = withDefaults(defineProps<{
     tabs?: { label: string; value: string }[]
     title?: string
     showSearch?: boolean
+    showScan?: boolean
 }>(), {
     modelValue: '',
     activeTab: '',
@@ -67,6 +72,7 @@ const props = withDefaults(defineProps<{
     tabs: () => [],
     title: '',
     showSearch: true,
+    showScan: true,
 })
 
 const emit = defineEmits<{
@@ -74,6 +80,7 @@ const emit = defineEmits<{
     (e: 'update:activeTab', v: string): void
     (e: 'search'): void
     (e: 'tab-change', v: string): void
+    (e: 'scan', v: string): void
 }>()
 
 const { pageHeaderStyle } = useListHeader(0)
@@ -104,6 +111,18 @@ watch(localKeyword, v => emit('update:modelValue', v))
 function onSearch() {
     emit('update:modelValue', localKeyword.value)
     emit('search')
+}
+
+async function onScan() {
+    try {
+        localKeyword.value = await scanErpCode()
+        emit('update:modelValue', localKeyword.value)
+        emit('scan', localKeyword.value)
+        emit('search')
+    } catch (e: any) {
+        if (e?.errMsg?.includes('cancel')) return
+        uni.showToast({ title: e?.message || '扫码失败', icon: 'none' })
+    }
 }
 
 function onTab(val: string) {
@@ -150,6 +169,16 @@ function onTab(val: string) {
     font-size: 28rpx;
     color: #0f172a;
     background: transparent;
+}
+.scan-btn {
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 50%;
+    background: #eff3ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 .search-ph { color: #c4c8cf; font-size: 28rpx; }
 

@@ -37,6 +37,14 @@
                         <text class="info-label">未付</text>
                         <text class="info-value orange">¥{{ money(order.payable_amount) }}</text>
                     </view>
+                    <view class="info-row">
+                        <text class="info-label">创建时间</text>
+                        <text class="info-value">{{ formatErpTime(order.create_at) }}</text>
+                    </view>
+                    <view class="info-row">
+                        <text class="info-label">更新时间</text>
+                        <text class="info-value">{{ formatErpTime(order.update_at) }}</text>
+                    </view>
                 </view>
 
                 <!-- 设备列表 -->
@@ -50,6 +58,7 @@
                     <view class="card-meta" v-if="item.warehouse_name">
                         仓库：{{ item.warehouse_name }}{{ item.location_name ? ' / '+item.location_name : '' }}
                     </view>
+                    <view class="card-time">{{ erpTimeLine(item, ['stock_in_at']) }}</view>
                     <view class="device-costs">
                         <view class="cost-item">
                             <text class="cost-label">采购成本</text>
@@ -66,8 +75,21 @@
                     </view>
                     <!-- 行内操作 -->
                     <view class="device-actions" v-if="item.status === 'in_stock'">
-                        <u-button size="mini" plain @click.stop="goAdjustCost(item)">调成本</u-button>
-                        <u-button size="mini" plain type="warning" @click.stop="goReturn(item)">退货</u-button>
+                        <u-button
+                            size="small"
+                            plain
+                            text="调成本"
+                            :customStyle="actionButtonStyle"
+                            @click.stop="goAdjustCost(item)"
+                        />
+                        <u-button
+                            size="small"
+                            plain
+                            type="warning"
+                            text="退货"
+                            :customStyle="actionButtonStyle"
+                            @click.stop="goReturn(item)"
+                        />
                     </view>
                 </view>
             </view>
@@ -76,15 +98,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { ref, computed } from 'vue'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getMobilePurchaseInfo } from '@/addon/hsx_erp/api/erp'
+import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 
 const order = ref<any>(null)
 const items = ref<any[]>([])
 const loading = ref(true)
 const purchaseOrderId = ref(0)
 const purchaseNo = ref('')
+const detailLoaded = ref(false)
+const actionButtonStyle = { width: '132rpx', height: '56rpx', margin: '0' }
 
 const pageTitle = computed(() => purchaseNo.value ? `采购单 ${purchaseNo.value}` : '采购单详情')
 
@@ -92,6 +117,10 @@ onLoad((query: any) => {
     purchaseOrderId.value = Number(query?.purchase_order_id || 0)
     purchaseNo.value = decodeURIComponent(query?.purchase_no || '')
     loadDetail()
+})
+
+onShow(() => {
+    if (detailLoaded.value) loadDetail()
 })
 
 async function loadDetail() {
@@ -102,16 +131,19 @@ async function loadDetail() {
         const data = res?.data || {}
         order.value = data
         items.value = data.items || []
-    } finally { loading.value = false }
+    } finally {
+        loading.value = false
+        detailLoaded.value = true
+    }
 }
 
 const goAdjustCost = (item: any) => {
-    const q = `id=${item.asset_id}&model=${encodeURIComponent(item.model||'')}&asset_no=${encodeURIComponent(item.asset_no||'')}&current_cost=${item.total_cost}`
+    const q = `id=${item.asset_id}&model=${encodeURIComponent(item.model || '')}&asset_no=${encodeURIComponent(item.asset_no || '')}&imei=${encodeURIComponent(item.imei || '')}&status=${encodeURIComponent(item.status || '')}&cost=${item.total_cost || item.purchase_cost || 0}&wh=${encodeURIComponent(item.warehouse_name || '')}&loc=${encodeURIComponent(item.location_name || '')}`
     uni.navigateTo({ url: `/addon/hsx_erp/pages/cost_adjust/detail?${q}` })
 }
 const goReturn = (item: any) => {
     uni.navigateTo({
-        url: `/addon/hsx_erp/pages/purchase_return/create?purchase_order_id=${purchaseOrderId.value}&purchase_no=${encodeURIComponent(purchaseNo.value)}&party_name=${encodeURIComponent(asset.value?.party_name || '')}`
+        url: `/addon/hsx_erp/pages/purchase_return/create?purchase_order_id=${purchaseOrderId.value}&purchase_no=${encodeURIComponent(purchaseNo.value)}&party_name=${encodeURIComponent(order.value?.party_name || '')}&asset_id=${item.asset_id || item.id || ''}`
     })
 }
 

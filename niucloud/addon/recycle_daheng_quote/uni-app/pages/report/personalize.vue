@@ -40,7 +40,7 @@
 				<!-- 每个内存一卡 -->
 				<view v-for="row in group.rows" :key="row.rowId" class="cap-card">
 					<view class="cap-title">{{ row.capacity || '默认' }}</view>
-					<view v-for="(col, c) in cols" :key="c" class="grade-line">
+					<view v-for="(col, c) in row.columns" :key="c" class="grade-line">
 						<text class="grade-desc">{{ col }}</text>
 						<input class="grade-input" type="number" :value="row.prices[c] === '-' ? '' : row.prices[c]" @input="onInput(row, c, $event)" />
 						<text class="grade-mark" :class="{ on: row.marks[c] }" @click="toggleMark(row, c)">{{ row.marks[c] ? '已标优势' : '标记优势' }}</text>
@@ -86,7 +86,7 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useQuoteReport } from '@/addon/recycle_daheng_quote/composables/useQuoteReport'
 
-const { sheets, ensureDetail, sheetColumns, sheetRows } = useQuoteReport()
+const { sheets, ensureDetail, sheetRows } = useQuoteReport()
 
 const activeIdx = ref(0)
 const loadingDetail = ref(false)
@@ -96,7 +96,6 @@ const draft = ref<string[]>([])
 
 const selectedSheets = computed(() => sheets.value.filter((s: any) => s.selected))
 const activeSheet = computed(() => selectedSheets.value[activeIdx.value] || null)
-const cols = computed(() => (activeSheet.value?.detail ? sheetColumns(activeSheet.value.detail) : []))
 // 选中型号持久化在 sheet 上（空=全部），出图按它过滤
 const selectedModels = computed<string[]>(() => activeSheet.value?.selectedModels || [])
 
@@ -155,11 +154,11 @@ function setOverride(rowId: string, col: string, val: any) {
 	else s.overrides[rowId][col] = val
 }
 function onInput(row: any, c: number, e: any) {
-	setOverride(row.rowId, cols.value[c], e.detail.value)
+	setOverride(row.rowId, row.columns[c], e.detail.value)
 }
 function bumpModel(group: any, delta: number) {
 	group.rows.forEach((r: any) => {
-		cols.value.forEach((col, c) => {
+		r.columns.forEach((col: string, c: number) => {
 			if (r.prices[c] === '-') return
 			const cur = Number(r.prices[c]) || 0
 			setOverride(r.rowId, col, Math.max(0, cur + delta))
@@ -169,7 +168,7 @@ function bumpModel(group: any, delta: number) {
 function toggleMark(row: any, c: number) {
 	const s = activeSheet.value
 	if (!s) return
-	const col = cols.value[c]
+	const col = row.columns[c]
 	if (!s.marks[row.rowId]) s.marks[row.rowId] = {}
 	s.marks[row.rowId][col] = !s.marks[row.rowId][col]
 }

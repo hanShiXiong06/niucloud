@@ -22,6 +22,7 @@ class ErpSale extends BaseAdminController
         $params = $this->request->params([
             ['keyword', ''],
             ['finance_status', ''],
+            ['status', ''],
             ['page', 1],
             ['limit', 15],
         ]);
@@ -32,6 +33,9 @@ class ErpSale extends BaseAdminController
     {
         $params = $this->request->params([
             ['keyword', ''],
+            ['warehouse_id', 0],
+            ['location_id', 0],
+            ['category_id', 0],
             ['page', 1],
             ['limit', 15],
         ]);
@@ -49,11 +53,20 @@ class ErpSale extends BaseAdminController
             ['party_name', ''],
             ['party_id', 0],
             ['sale_channel', ''],
+            ['salesman_uid', 0],
             ['settle_method', ''],
             ['sale_at', 0],
             ['remark', ''],
             ['items', []],
         ]);
         return success(['id' => $this->service->create($params)]);
+    }
+
+    public function cancel(int $id)
+    {
+        $params = $this->request->params([
+            ['remark', ''],
+        ]);
+        return success($this->service->cancel($id, (string)$params['remark']));
     }
 }

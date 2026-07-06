@@ -64,8 +64,6 @@ return [
                 ],
             ],
             [
-                // 任务驱动工单系统 · 店员「我的任务」（按角色权限自动分发环节）
-                // api_url 留空：任务/看板接口不走菜单权限管控，保持对所有店员开放；本菜单仅控制侧边栏可见与路由。
                 'menu_name' => '我的任务',
                 'menu_key' => 'recycle_my_task',
                 'menu_short_name' => '我的任务',
@@ -143,6 +141,21 @@ return [
                         'is_show' => '1',
                         'children' => [
                             [
+                                'menu_name' => '执行质检',
+                                'menu_key' => 'recycle_device_check',
+                                'menu_short_name' => '执行质检',
+                                'parent_select_key' => '',
+                                'menu_type' => '2',
+                                'icon' => '',
+                                'api_url' => 'recycle_device/<id>/complete_check',
+                                'router_path' => '',
+                                'view_path' => '',
+                                'methods' => 'put',
+                                'sort' => '4',
+                                'status' => '1',
+                                'is_show' => '0',
+                            ],
+                            [
                                 'menu_name' => '删除订单',
                                 'menu_key' => 'recycle_order_delete',
                                 'menu_short_name' => '删除订单',
@@ -169,21 +182,6 @@ return [
                                 'view_path' => '',
                                 'methods' => 'put',
                                 'sort' => '3',
-                                'status' => '1',
-                                'is_show' => '0',
-                            ],
-                            [
-                                'menu_name' => '执行质检',
-                                'menu_key' => 'recycle_device_check',
-                                'menu_short_name' => '执行质检',
-                                'parent_select_key' => '',
-                                'menu_type' => '2',
-                                'icon' => '',
-                                'api_url' => 'recycle_device/<id>/complete_check',
-                                'router_path' => '',
-                                'view_path' => '',
-                                'methods' => 'put',
-                                'sort' => '4',
                                 'status' => '1',
                                 'is_show' => '0',
                             ],

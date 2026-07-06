@@ -22,6 +22,7 @@ class ErpPurchase extends BaseAdminController
         $params = $this->request->params([
             ['keyword', ''],
             ['finance_status', ''],
+            ['status', ''],
             ['page', 1],
             ['limit', 15],
         ]);
@@ -66,5 +67,13 @@ class ErpPurchase extends BaseAdminController
             ['remark', ''],
         ]);
         return success($this->service->adjustCost($item_id, (float)$params['amount'], (string)$params['remark']));
+    }
+
+    public function cancel(int $id)
+    {
+        $params = $this->request->params([
+            ['remark', ''],
+        ]);
+        return success($this->service->cancel($id, (string)$params['remark']));
     }
 }

@@ -15,9 +15,14 @@
                             <text class="input-arrow">›</text>
                         </view>
                     </view>
-                    <view class="form-row">
+                    <view class="form-row" @click="showChannelPicker = true">
                         <text class="form-label">销售渠道</text>
-                        <u-input v-model="form.sale_channel" placeholder="如：门店/同行/小程序" :customStyle="inputStyle" />
+                        <view class="form-input">
+                            <text :class="form.sale_channel ? 'input-text' : 'input-placeholder'">
+                                {{ form.sale_channel || '点击选择或维护渠道' }}
+                            </text>
+                            <text class="input-arrow">›</text>
+                        </view>
                     </view>
                     <view class="form-row">
                         <text class="form-label">备注</text>
@@ -29,7 +34,10 @@
                 <view class="form-section">
                     <view class="form-section__head">
                         <text class="form-section__title">已选设备（{{ selectedAssets.length }} 台）</text>
-                        <u-button size="mini" type="primary" @click="showStockPicker = true">+ 选设备</u-button>
+                        <view class="form-section__actions">
+                            <u-button size="mini" plain type="primary" @click="openScanStockPicker">扫码选设备</u-button>
+                            <u-button size="mini" type="primary" @click="showStockPicker = true">+ 选设备</u-button>
+                        </view>
                     </view>
 
                     <view v-for="(asset, idx) in selectedAssets" :key="asset.id" class="device-form-card">
@@ -95,7 +103,12 @@
         <ErpStockPickerPopup
             v-model:show="showStockPicker"
             :excludeIds="selectedAssets.map(a => a.id)"
+            :scanTrigger="stockPickerScanTrigger"
             @select="onAssetSelected"
+        />
+        <ErpSaleChannelPopup
+            v-model:show="showChannelPicker"
+            v-model="form.sale_channel"
         />
     </view>
 </template>
@@ -105,6 +118,7 @@ import { ref, computed, onMounted } from 'vue'
 import { getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpStockPickerPopup from '@/addon/hsx_erp/components/ErpStockPickerPopup.vue'
+import ErpSaleChannelPopup from '@/addon/hsx_erp/components/ErpSaleChannelPopup.vue'
 import ErpSettleBar from '@/addon/hsx_erp/components/ErpSettleBar.vue'
 import request from '@/utils/request'
 
@@ -113,6 +127,8 @@ const accounts = ref<any[]>([])
 const selectedAssets = ref<any[]>([])
 const showPartyPicker = ref(false)
 const showStockPicker = ref(false)
+const stockPickerScanTrigger = ref(0)
+const showChannelPicker = ref(false)
 
 const form = ref({
     party_id: 0, party_name: '',
@@ -147,6 +163,11 @@ function onAssetSelected(asset: any) {
 }
 
 function removeAsset(idx: number) { selectedAssets.value.splice(idx, 1) }
+
+function openScanStockPicker() {
+    showStockPicker.value = true
+    setTimeout(() => { stockPickerScanTrigger.value++ }, 80)
+}
 
 const profitClass = (a: any) => Number(a._sale_price) - Number(a.total_cost) >= 0 ? 'green' : 'red'
 
@@ -193,6 +214,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .form-wrap { padding: 24rpx 24rpx 120rpx; display: flex; flex-direction: column; gap: 20rpx; }
 .form-section { background:#fff; border-radius:16rpx; padding:24rpx; }
 .form-section__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16rpx; }
+.form-section__actions { display:flex; align-items:center; gap:12rpx; }
 .form-section__title { font-size:28rpx; font-weight:600; color:#374151; }
 .form-row { display:flex; align-items:center; gap:16rpx; margin-bottom:16rpx; &:last-child { margin-bottom:0; } }
 .form-label { font-size:26rpx; color:#374151; width:120rpx; flex-shrink:0; }

@@ -9,6 +9,7 @@ use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpReceivable;
 use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
+use addon\hsx_erp\app\model\ErpWarehouse;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -17,15 +18,38 @@ class ErpSaleService extends BaseAdminService
 {
     public function stockPage(array $where): array
     {
-        $query = ErpAsset::where([
-            ['site_id', '=', $this->site_id],
-            ['status', '=', ErpDict::ASSET_IN_STOCK],
-        ]);
+        (new ErpStockService())->ensureSchema();
+        (new ErpWarehouseService())->ensureReady();
+        $warehouseTable = (new ErpWarehouse())->getTable();
+        $query = ErpAsset::alias('a')
+            ->leftJoin($warehouseTable . ' w', 'w.id = a.warehouse_id AND w.site_id = a.site_id')
+            ->where([
+                ['a.site_id', '=', $this->site_id],
+                ['a.status', '=', ErpDict::ASSET_IN_STOCK],
+            ])
+            ->whereNotIn('a.refurbish_status', ['pending', 'processing'])
+            ->where('w.allow_direct_sale', '=', 1);
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('asset_no|imei|sn|model|spec|party_name|warehouse_name|location_name', '%' . $kw . '%');
+            $query->whereLike('a.asset_no|a.imei|a.sn|a.model|a.spec|a.category_name|a.party_name|a.warehouse_name|a.location_name', '%' . $kw . '%');
         }
-        return $query->order('id desc')->paginate([
+        if (!empty($where['warehouse_id'])) {
+            $query->where('a.warehouse_id', '=', (int)$where['warehouse_id']);
+        }
+        if (!empty($where['location_id'])) {
+            $query->where('a.location_id', '=', (int)$where['location_id']);
+        }
+        if (!empty($where['category_id'])) {
+            $categoryId = (int)$where['category_id'];
+            $query->where(function ($q) use ($categoryId) {
+                $q->where('a.category_id', '=', $categoryId)
+                    ->whereOr('a.category_path', 'like', '%,' . $categoryId . ',%')
+                    ->whereOr('a.category_path', 'like', $categoryId . ',%')
+                    ->whereOr('a.category_path', 'like', '%,' . $categoryId)
+                    ->whereOr('a.category_path', '=', (string)$categoryId);
+            });
+        }
+        return $query->field('a.*')->order('a.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
@@ -33,15 +57,60 @@ class ErpSaleService extends BaseAdminService
 
     public function getPage(array $where): array
     {
-        $query = ErpSaleOrder::where([['site_id', '=', $this->site_id]]);
+        $orderTable = (new ErpSaleOrder())->getTable();
+        $assetTable = (new ErpAsset())->getTable();
+        $query = ErpSaleItem::alias('i')
+            ->leftJoin($orderTable . ' o', 'o.id = i.sale_order_id AND o.site_id = i.site_id')
+            ->leftJoin($assetTable . ' a', 'a.id = i.asset_id AND a.site_id = i.site_id')
+            ->where([['i.site_id', '=', $this->site_id]]);
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('sale_no|party_name|sale_channel', '%' . $kw . '%');
+            $query->whereLike('o.sale_no|o.party_name|o.sale_channel|i.model|i.imei|a.asset_no|a.sn|a.spec', '%' . $kw . '%');
         }
         if (!empty($where['finance_status'])) {
-            $query->where('finance_status', '=', (string)$where['finance_status']);
+            $query->where('o.finance_status', '=', (string)$where['finance_status']);
         }
-        return $query->order('id desc')->paginate([
+        if (!empty($where['status'])) {
+            $query->where('o.status', '=', (string)$where['status']);
+        }
+        return $query->field([
+            'i.id',
+            'i.sale_order_id',
+            'i.asset_id',
+            'i.imei',
+            'i.model',
+            'i.cost',
+            'i.sale_price',
+            'i.profit',
+            'i.status',
+            'i.remark',
+            'i.create_at',
+            'a.asset_no',
+            'a.sn',
+            'a.spec',
+            'a.category_id',
+            'a.category_name',
+            'a.category_path',
+            'a.warehouse_name',
+            'a.location_name',
+            'o.sale_no',
+            'o.status as order_status',
+            'o.party_id',
+            'o.party_name',
+            'o.sale_channel',
+            'o.settle_method',
+            'o.salesman_uid',
+            'o.salesman_name',
+            'o.total_amount as order_total_amount',
+            'o.total_cost as order_total_cost',
+            'o.profit as order_profit',
+            'o.received_amount',
+            'o.receivable_amount',
+            'o.finance_status',
+            'o.operator_uid',
+            'o.operator_name',
+            'o.sale_at',
+        ])->order('i.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
@@ -78,6 +147,7 @@ class ErpSaleService extends BaseAdminService
             $party = $this->ensureParty((int)($data['party_id'] ?? 0), $partyName);
             $partyName = (string)$party->party_name;
             $saleNo = ErpLedgerService::makeNo('SO');
+            $salesman = (new ErpStaffService())->resolve((int)($data['salesman_uid'] ?? 0), '制单员');
             $totalAmount = 0.0;
             $totalCost = 0.0;
             $resolved = [];
@@ -87,9 +157,13 @@ class ErpSaleService extends BaseAdminService
                     ['site_id', '=', $this->site_id],
                     ['id', '=', $assetId],
                     ['status', '=', ErpDict::ASSET_IN_STOCK],
-                ])->findOrEmpty();
+                ])->whereNotIn('refurbish_status', ['pending', 'processing'])->findOrEmpty();
                 if ($asset->isEmpty()) {
                     throw new CommonException('库存机器不存在或不可销售');
+                }
+                $warehouse = ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', (int)$asset->warehouse_id]])->findOrEmpty();
+                if ($warehouse->isEmpty() || (int)$warehouse->allow_direct_sale !== 1) {
+                    throw new CommonException('该设备所在仓库不允许直接销售');
                 }
                 $price = round((float)($item['sale_price'] ?? 0), 2);
                 if ($price <= 0) {
@@ -108,8 +182,8 @@ class ErpSaleService extends BaseAdminService
                 'party_name' => $partyName,
                 'sale_channel' => trim((string)($data['sale_channel'] ?? '')),
                 'settle_method' => trim((string)($data['settle_method'] ?? '')),
-                'salesman_uid' => (int)$this->uid,
-                'salesman_name' => (string)$this->username,
+                'salesman_uid' => (int)$salesman['uid'],
+                'salesman_name' => (string)$salesman['name'],
                 'total_amount' => $totalAmount,
                 'total_cost' => $totalCost,
                 'profit' => $profit,
@@ -154,8 +228,14 @@ class ErpSaleService extends BaseAdminService
                     'action' => 'sold',
                     'before_status' => ErpDict::ASSET_IN_STOCK,
                     'after_status' => ErpDict::ASSET_SOLD,
+                    'before_total_cost' => $cost,
+                    'after_total_cost' => $cost,
+                    'party_id' => (int)$party->id,
+                    'party_name' => $partyName,
                     'source_type' => 'sale',
                     'source_id' => $orderId,
+                    'source_no' => $saleNo,
+                    'occurred_at' => (int)($data['sale_at'] ?? $now),
                     'remark' => '销售出库',
                 ]);
                 (new ErpLedgerService())->account([
@@ -189,6 +269,102 @@ class ErpSaleService extends BaseAdminService
             ]);
         });
         return $orderId;
+    }
+
+    public function cancel(int $id, string $remark = ''): bool
+    {
+        Db::transaction(function () use ($id, $remark) {
+            $now = time();
+            $order = $this->findOrder($id);
+            if ((string)$order->status !== ErpDict::STATUS_COMPLETED) {
+                throw new CommonException('只有已完成且未撤销的销售单可以撤销');
+            }
+            if ((float)$order->received_amount > 0 || (string)$order->finance_status !== ErpDict::STATUS_PENDING) {
+                throw new CommonException('该销售单已经形成财务事实，请走退货流程');
+            }
+
+            $receivables = ErpReceivable::where([
+                ['site_id', '=', $this->site_id],
+                ['source_type', '=', 'sale'],
+                ['source_id', '=', $id],
+            ])->select();
+            foreach ($receivables as $receivable) {
+                if ((float)$receivable->settled_amount > 0) {
+                    throw new CommonException('该销售单已有收款或折账记录，不能直接撤销');
+                }
+            }
+
+            $items = ErpSaleItem::where([['site_id', '=', $this->site_id], ['sale_order_id', '=', $id]])->select();
+            foreach ($items as $item) {
+                $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->asset_id]])->findOrEmpty();
+                if ($asset->isEmpty() || (int)$asset->sale_order_id !== $id || (string)$asset->status !== ErpDict::ASSET_SOLD) {
+                    throw new CommonException('销售单内设备状态异常，不能直接撤销');
+                }
+            }
+
+            $order->save([
+                'status' => ErpDict::STATUS_VOID,
+                'receivable_amount' => 0,
+                'finance_status' => ErpDict::STATUS_VOID,
+                'update_at' => $now,
+            ]);
+            ErpReceivable::where([['site_id', '=', $this->site_id], ['source_type', '=', 'sale'], ['source_id', '=', $id]])->update([
+                'status' => ErpDict::STATUS_VOID,
+                'update_at' => $now,
+            ]);
+            ErpSaleItem::where([['site_id', '=', $this->site_id], ['sale_order_id', '=', $id]])->update([
+                'status' => ErpDict::STATUS_VOID,
+                'update_at' => $now,
+            ]);
+
+            foreach ($items as $item) {
+                $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', (int)$item->asset_id]])->findOrEmpty();
+                if ($asset->isEmpty()) {
+                    continue;
+                }
+                $asset->save([
+                    'sale_order_id' => 0,
+                    'sale_item_id' => 0,
+                    'sale_price' => 0,
+                    'profit' => 0,
+                    'status' => ErpDict::ASSET_IN_STOCK,
+                    'update_at' => $now,
+                ]);
+                (new ErpLedgerService())->asset([
+                    'asset_id' => (int)$asset->id,
+                    'action' => 'sale_cancel',
+                    'before_status' => ErpDict::ASSET_SOLD,
+                    'after_status' => ErpDict::ASSET_IN_STOCK,
+                    'before_total_cost' => (float)$asset->total_cost,
+                    'after_total_cost' => (float)$asset->total_cost,
+                    'party_id' => (int)$order->party_id,
+                    'party_name' => (string)$order->party_name,
+                    'source_type' => 'sale_cancel',
+                    'source_id' => $id,
+                    'source_no' => (string)$order->sale_no,
+                    'remark' => $remark !== '' ? $remark : '销售单撤销，设备回到原仓库',
+                ]);
+                (new ErpLedgerService())->account([
+                    'biz_type' => 'sale_cancel',
+                    'direction' => 'decrease',
+                    'amount' => (float)$item->sale_price,
+                    'party_id' => (int)$order->party_id,
+                    'party_name' => (string)$order->party_name,
+                    'asset_id' => (int)$asset->id,
+                    'source_type' => 'sale_cancel',
+                    'source_id' => $id,
+                    'source_no' => (string)$order->sale_no,
+                    'remark' => $remark !== '' ? $remark : '撤销销售应收',
+                ]);
+            }
+
+            (new ErpOperationLogService())->record('sale_cancel', 'sale', $id, (string)$order->sale_no, $remark, [
+                'party_name' => (string)$order->party_name,
+                'asset_count' => count($items),
+                'amount' => (float)$order->total_amount,
+            ]);
+        });
+        return true;
     }
 
     private function ensureParty(int $id, string $name): ErpParty

@@ -5,6 +5,7 @@
     <ErpStockPickerPopup
       v-model:show="showStockPicker"
       :excludeIds="selectedAssets.map(a => a.id)"
+      :scanTrigger="stockPickerScanTrigger"
       @select="onAssetSelected"   // 返回单台设备 { id, model, imei, ... }
     />
 -->
@@ -26,6 +27,20 @@
                     @search="search"
                     @clear="search"
                 />
+                <view class="popup-scan" @click="scanAndSearch">
+                    <u-icon name="scan" color="#3b6ef5" size="21" />
+                </view>
+            </view>
+
+            <view class="filter-row">
+                <view class="filter-chip" :class="{ active: filterWarehouseName }" @click="showWarehouseFilter = true">
+                    <u-icon name="home" size="14" :color="filterWarehouseName ? '#3b6ef5' : '#64748b'" />
+                    <text>{{ warehouseFilterText || '仓库' }}</text>
+                </view>
+                <view class="filter-chip" :class="{ active: categoryId }">
+                    <CategoryPopup v-model="categoryId" @change="onCategoryChange" />
+                </view>
+                <view v-if="hasFilter" class="filter-clear" @click="clearFilters">清空</view>
             </view>
 
             <!-- 扫码提示 -->
@@ -49,6 +64,7 @@
                             <text class="stock-item__cost">成本 ¥{{ money(row.total_cost) }}</text>
                         </view>
                         <text class="stock-item__sub">{{ row.spec || '-' }} · IMEI {{ row.imei || '-' }}</text>
+                        <text class="stock-item__sub" v-if="row.category_name">分类：{{ row.category_name }}</text>
                         <text class="stock-item__sub">{{ row.warehouse_name }}{{ row.location_name ? ' / '+row.location_name : '' }}</text>
                         <text class="stock-item__sub" v-if="row.party_name">来源：{{ row.party_name }}</text>
                     </view>
@@ -61,19 +77,32 @@
                 </template>
             </scroll-view>
         </view>
+        <ErpWarehousePopup
+            v-model:show="showWarehouseFilter"
+            v-model:warehouse-id="filterWarehouseId"
+            v-model:warehouse-name="filterWarehouseName"
+            v-model:location-id="filterLocationId"
+            v-model:location-name="filterLocationName"
+            @change="search"
+        />
     </u-popup>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import request from '@/utils/request'
+import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
+import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
+import CategoryPopup from '@/addon/phone_shop/components/category-popup.vue'
 
 const props = withDefaults(defineProps<{
     show: boolean
     excludeIds?: number[]
+    scanTrigger?: number
 }>(), {
     show: false,
     excludeIds: () => [],
+    scanTrigger: 0,
 })
 
 const emit = defineEmits<{
@@ -86,9 +115,24 @@ const list = ref<any[]>([])
 const loading = ref(false)
 const page = ref(1)
 const hasMore = ref(true)
+const showWarehouseFilter = ref(false)
+const filterWarehouseId = ref(0)
+const filterWarehouseName = ref('')
+const filterLocationId = ref(0)
+const filterLocationName = ref('')
+const categoryId = ref<any>('')
+const categoryPath = ref<any[]>([])
+const hasFilter = computed(() => Number(filterWarehouseId.value || 0) > 0 || Number(categoryId.value || 0) > 0)
+const warehouseFilterText = computed(() => {
+    if (!filterWarehouseName.value) return ''
+    return filterLocationName.value ? `${filterWarehouseName.value} / ${filterLocationName.value}` : filterWarehouseName.value
+})
 
 watch(() => props.show, (v) => {
     if (v) { keyword.value = ''; page.value = 1; list.value = []; hasMore.value = true; search() }
+})
+watch(() => props.scanTrigger, async () => {
+    if (props.show) await scanAndSearch()
 })
 
 async function search() {
@@ -110,6 +154,9 @@ async function loadPage() {
         // 使用 PC 端同款接口：erp/sale/stock（只返回整备完成的在库设备）
         const res: any = await request.get('erp/sale/stock', {
             keyword: keyword.value,
+            warehouse_id: filterWarehouseId.value || 0,
+            location_id: filterLocationId.value || 0,
+            category_id: categoryId.value || 0,
             page: page.value,
             limit: 15,
         })
@@ -128,6 +175,45 @@ async function loadPage() {
     } finally { loading.value = false }
 }
 
+function onCategoryChange(payload: any) {
+    categoryId.value = payload?.category_id || ''
+    categoryPath.value = payload?.category_path || []
+    search()
+}
+
+function clearFilters() {
+    filterWarehouseId.value = 0
+    filterWarehouseName.value = ''
+    filterLocationId.value = 0
+    filterLocationName.value = ''
+    categoryId.value = ''
+    categoryPath.value = []
+    search()
+}
+
+async function scanAndSearch() {
+    try {
+        keyword.value = await scanErpCode()
+        await search()
+        const exact = list.value.find((row: any) => isScanMatch(row, keyword.value))
+        if (exact) {
+            select(exact)
+        } else if (list.value.length === 1) {
+            select(list.value[0])
+        } else if (!list.value.length) {
+            uni.showToast({ title: '未找到可销售设备', icon: 'none' })
+        }
+    } catch (e: any) {
+        if (e?.errMsg?.includes('cancel')) return
+        uni.showToast({ title: e?.message || '扫码失败', icon: 'none' })
+    }
+}
+
+function isScanMatch(row: any, code: string) {
+    const value = String(code || '').trim()
+    return ['imei', 'sn', 'asset_no'].some(key => String(row?.[key] || '').trim() === value)
+}
+
 function select(row: any) {
     emit('select', row)
     close()
@@ -144,10 +230,21 @@ const money = (v: any) => Number(v || 0).toFixed(2)
     padding: 28rpx 32rpx 16rpx;
 }
 .popup-title { font-size: 32rpx; font-weight: 700; color: #0f172a; }
-.popup-search { padding: 0 24rpx 12rpx; }
+.popup-search { padding: 0 24rpx 12rpx; display: flex; align-items: center; gap: 12rpx; }
+.popup-search :deep(.u-search) { flex: 1; }
+.popup-scan { width: 68rpx; height: 68rpx; border-radius: 50%; background: #eff3ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.filter-row { display:flex; align-items:center; gap:12rpx; padding:0 24rpx 12rpx; overflow-x:auto; white-space:nowrap; }
+.filter-row::-webkit-scrollbar { display:none; }
+.filter-chip { min-height:56rpx; display:flex; align-items:center; gap:8rpx; padding:0 18rpx; border-radius:28rpx; background:#f8fafc; border:1rpx solid #e2e8f0; color:#64748b; font-size:24rpx; flex-shrink:0; }
+.filter-chip.active { color:#3b6ef5; background:#eff6ff; border-color:#bfdbfe; }
+.filter-chip :deep(.field) { min-height:54rpx; }
+.filter-chip :deep(.label) { display:none; }
+.filter-chip :deep(.value) { justify-content:center; font-size:24rpx; color:inherit; }
+.filter-chip :deep(.value--ph) { color:#64748b; }
+.filter-clear { font-size:24rpx; color:#ef4444; padding:0 8rpx; flex-shrink:0; }
 .scan-hint { padding: 0 32rpx 12rpx; }
 .scan-hint__text { font-size: 24rpx; color: #94a3b8; }
-.popup-list { flex: 1; overflow-y: auto; padding: 0 24rpx; }
+.popup-list { flex: 1; overflow-y: auto; padding: 0 24rpx; box-sizing: border-box; }
 .popup-loading { display: flex; justify-content: center; padding: 48rpx; }
 .popup-loading-more { display: flex; justify-content: center; padding: 20rpx; }
 .popup-empty { padding: 32rpx 0; }

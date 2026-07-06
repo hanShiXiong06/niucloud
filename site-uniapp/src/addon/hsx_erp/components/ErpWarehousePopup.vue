@@ -15,64 +15,58 @@
     <u-popup :show="show" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="close">
         <view class="popup-wrap">
             <view class="popup-header">
-                <text class="popup-title">{{ step === 'warehouse' ? '选择仓库' : '选择库位' }}</text>
-                <view class="popup-header__right">
-                    <text v-if="step === 'location'" class="back-btn" @click="step = 'warehouse'">← 返回</text>
-                    <u-icon name="close" size="20" color="#94a3b8" @click="close" />
+                <view>
+                    <text class="popup-title">选择仓库</text>
+                    <text class="popup-subtitle">先选仓库，再选库位</text>
                 </view>
+                <u-icon name="close" size="20" color="#94a3b8" @click="close" />
             </view>
 
-            <!-- 第一步：选仓库 -->
-            <scroll-view v-if="step === 'warehouse'" scroll-y class="popup-list">
-                <view v-if="loading" class="popup-loading"><u-loading-icon size="24" /></view>
-                <template v-else>
+            <view v-if="loading" class="popup-loading"><u-loading-icon size="24" /></view>
+            <view v-else-if="!warehouses.length" class="popup-empty">暂无仓库，请先在基础设置中创建</view>
+            <view v-else class="warehouse-tree">
+                <scroll-view scroll-y class="warehouse-pane">
                     <view
                         v-for="wh in warehouses"
                         :key="wh.id"
-                        class="wh-item"
-                        :class="{ selected: wh.id === warehouseId }"
+                        class="warehouse-row"
+                        :class="{ active: wh.id === activeWarehouseId }"
                         @click="selectWarehouse(wh)"
                     >
-                        <view class="wh-item__main">
-                            <view>
-                                <text class="wh-item__name">{{ wh.warehouse_name }}</text>
-                                <text class="wh-item__type">{{ typeLabel(wh.warehouse_type) }}</text>
-                            </view>
-                            <view class="wh-item__right">
-                                <text class="wh-item__loc-count" v-if="wh.locations?.length">
-                                    {{ wh.locations.length }} 个库位
-                                </text>
-                                <u-icon name="arrow-right" size="16" color="#94a3b8" />
-                            </view>
+                        <view class="warehouse-row__main">
+                            <text class="warehouse-row__name">{{ wh.warehouse_name }}</text>
+                            <text class="warehouse-row__meta">
+                                {{ typeLabel(wh.warehouse_type) || '仓库' }}
+                                <text v-if="wh.locations?.length"> · {{ wh.locations.length }} 个库位</text>
+                            </text>
                         </view>
+                        <u-icon v-if="wh.id === activeWarehouseId" name="arrow-right" size="15" color="#3b6ef5" />
                     </view>
-                    <view class="popup-empty" v-if="!warehouses.length">暂无仓库，请先在基础设置中创建</view>
-                </template>
-            </scroll-view>
+                </scroll-view>
 
-            <!-- 第二步：选库位 -->
-            <scroll-view v-else scroll-y class="popup-list">
-                <view class="wh-banner">
-                    <text class="wh-banner__name">{{ currentWarehouse?.warehouse_name }}</text>
-                </view>
-                <view
-                    v-for="loc in currentLocations"
-                    :key="loc.id"
-                    class="wh-item"
-                    :class="{ selected: loc.id === locationId }"
-                    @click="selectLocation(loc)"
-                >
-                    <view class="wh-item__main">
-                        <text class="wh-item__name">{{ loc.location_name }}</text>
+                <scroll-view scroll-y class="location-pane">
+                    <view v-if="currentWarehouse" class="location-head">
+                        <text class="location-head__title">{{ currentWarehouse.warehouse_name }}</text>
+                        <text class="location-head__sub">{{ currentLocations.length ? '请选择库位' : '该仓库暂无库位' }}</text>
+                    </view>
+
+                    <view
+                        v-for="loc in currentLocations"
+                        :key="loc.id"
+                        class="location-row"
+                        :class="{ active: loc.id === locationId }"
+                        @click="selectLocation(loc)"
+                    >
+                        <text class="location-row__name">{{ loc.location_name }}</text>
                         <u-icon v-if="loc.id === locationId" name="checkmark-circle-fill" color="#3b6ef5" size="20" />
                     </view>
-                </view>
-                <!-- 无库位时直接确认仓库 -->
-                <view v-if="!currentLocations.length" class="popup-empty">
-                    <text>该仓库暂无库位</text>
-                    <u-button type="primary" size="small" style="margin-top:24rpx" @click="confirmNoLocation">直接使用该仓库</u-button>
-                </view>
-            </scroll-view>
+
+                    <view v-if="currentWarehouse && !currentLocations.length" class="location-empty">
+                        <u-empty mode="data" text="暂无库位" :image-size="56" />
+                        <text class="location-empty__tip">请先给该仓库维护库位</text>
+                    </view>
+                </scroll-view>
+            </view>
         </view>
     </u-popup>
 </template>
@@ -104,22 +98,27 @@ const emit = defineEmits<{
     (e: 'change', warehouse: any, location: any): void
 }>()
 
-const step = ref<'warehouse' | 'location'>('warehouse')
 const warehouses = ref<any[]>([])
 const loading = ref(false)
-const currentWarehouse = ref<any>(null)
+const activeWarehouseId = ref(0)
 
-const currentLocations = computed(() =>
-    (currentWarehouse.value?.locations || []).filter((l: any) => l.status === 1)
+const currentWarehouse = computed(() =>
+    warehouses.value.find((item: any) => Number(item.id) === Number(activeWarehouseId.value)) || null
 )
 
-watch(() => props.show, (v) => { if (v) { step.value = 'warehouse'; loadWarehouses() } })
+const currentLocations = computed(() =>
+    (currentWarehouse.value?.locations || []).filter((l: any) => Number(l.status) === 1)
+)
+
+watch(() => props.show, (v) => { if (v) loadWarehouses() })
 
 async function loadWarehouses() {
     loading.value = true
     try {
         const res: any = await request.get('erp/warehouse/options')
         warehouses.value = Array.isArray(res?.data) ? res.data : (res?.data?.data || [])
+        const current = warehouses.value.find((item: any) => Number(item.id) === Number(props.warehouseId))
+        activeWarehouseId.value = Number(current?.id || warehouses.value[0]?.id || 0)
     } catch {
         warehouses.value = []
     } finally {
@@ -127,63 +126,115 @@ async function loadWarehouses() {
 }
 
 function selectWarehouse(wh: any) {
-    currentWarehouse.value = wh
-    emit('update:warehouseId', wh.id)
-    emit('update:warehouseName', wh.warehouse_name)
-    // 如果有库位，进入第二步；否则直接确认
-    if (currentLocations.value.length > 0) {
-        step.value = 'location'
-        // 自动选第一个库位
-        const first = currentLocations.value[0]
-        emit('update:locationId', first.id)
-        emit('update:locationName', first.location_name)
-    } else {
-        emit('update:locationId', 0)
-        emit('update:locationName', '')
-        emit('change', wh, null)
-        close()
-    }
+    activeWarehouseId.value = Number(wh.id || 0)
 }
 
 function selectLocation(loc: any) {
+    const wh = currentWarehouse.value
+    if (!wh) return
+    emit('update:warehouseId', wh.id)
+    emit('update:warehouseName', wh.warehouse_name)
     emit('update:locationId', loc.id)
     emit('update:locationName', loc.location_name)
-    emit('change', currentWarehouse.value, loc)
-    close()
-}
-
-function confirmNoLocation() {
-    emit('change', currentWarehouse.value, null)
+    emit('change', wh, loc)
     close()
 }
 
 function close() { emit('update:show', false) }
 
-const typeLabel = (t: string) => ({ second_hand: '二手仓', peer: '同行仓', consignment: '代卖仓', abnormal: '异常仓' }[t] || t || '')
+const typeLabel = (t: string) => ({
+    owned: '自有仓',
+    second_hand: '二手仓',
+    peer: '同行仓',
+    consignment: '代卖仓',
+    exception: '异常仓',
+    abnormal: '异常仓'
+}[t] || t || '')
 </script>
 
 <style scoped lang="scss">
 .popup-wrap { height: 65vh; display: flex; flex-direction: column; }
 .popup-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 28rpx 32rpx 16rpx;
+    padding: 28rpx 32rpx 20rpx;
+    border-bottom: 1rpx solid #f1f5f9;
 }
-.popup-header__right { display: flex; align-items: center; gap: 24rpx; }
-.popup-title { font-size: 32rpx; font-weight: 700; color: #0f172a; }
-.back-btn { font-size: 26rpx; color: #3b6ef5; }
-.popup-list { flex: 1; overflow-y: auto; padding: 0 24rpx; }
+.popup-title { font-size: 32rpx; font-weight: 700; color: #0f172a; display:block; }
+.popup-subtitle { display:block; font-size:24rpx; color:#94a3b8; margin-top:4rpx; }
 .popup-loading { display: flex; justify-content: center; padding: 48rpx; }
 .popup-empty { text-align: center; padding: 48rpx 0; color: #94a3b8; font-size: 26rpx; }
-.wh-banner { background: #eff6ff; border-radius: 8rpx; padding: 12rpx 16rpx; margin-bottom: 16rpx; }
-.wh-banner__name { font-size: 26rpx; color: #3b6ef5; font-weight: 600; }
-.wh-item {
-    padding: 20rpx 0;
-    border-bottom: 1rpx solid #f1f5f9;
-    &.selected { background: #eff6ff; border-radius: 8rpx; padding: 20rpx 12rpx; }
+.warehouse-tree {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 260rpx minmax(0, 1fr);
+    background: #fff;
 }
-.wh-item__main { display: flex; align-items: center; justify-content: space-between; }
-.wh-item__name { font-size: 28rpx; color: #0f172a; }
-.wh-item__type { font-size: 22rpx; color: #94a3b8; margin-left: 8rpx; }
-.wh-item__right { display: flex; align-items: center; gap: 8rpx; }
-.wh-item__loc-count { font-size: 24rpx; color: #64748b; }
+.warehouse-pane {
+    height: 100%;
+    background: #f8fafc;
+    border-right: 1rpx solid #eef2f7;
+}
+.location-pane {
+    height: 100%;
+    background: #fff;
+    padding: 0 24rpx 32rpx;
+    box-sizing: border-box;
+}
+.warehouse-row {
+    min-height: 108rpx;
+    padding: 18rpx 18rpx 18rpx 24rpx;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8rpx;
+    color: #64748b;
+    border-left: 6rpx solid transparent;
+}
+.warehouse-row.active {
+    background: #fff;
+    color: #0f172a;
+    border-left-color: #3b6ef5;
+}
+.warehouse-row__main { min-width:0; flex:1; }
+.warehouse-row__name {
+    display:block;
+    font-size: 27rpx;
+    font-weight: 600;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+.warehouse-row__meta {
+    display:block;
+    margin-top:6rpx;
+    font-size: 22rpx;
+    color: #94a3b8;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+.location-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #fff;
+    padding: 22rpx 0 14rpx;
+    border-bottom: 1rpx solid #f1f5f9;
+}
+.location-head__title { display:block; font-size:29rpx; font-weight:700; color:#0f172a; }
+.location-head__sub { display:block; margin-top:4rpx; font-size:23rpx; color:#94a3b8; }
+.location-row {
+    min-height: 88rpx;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16rpx;
+    border-bottom:1rpx solid #f1f5f9;
+}
+.location-row.active .location-row__name { color:#3b6ef5; font-weight:600; }
+.location-row__name { font-size:28rpx; color:#0f172a; }
+.location-empty { padding: 48rpx 0; text-align:center; }
+.location-empty__tip { display:block; margin-top:18rpx; font-size:24rpx; color:#94a3b8; }
 </style>

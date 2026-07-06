@@ -118,7 +118,7 @@
                         <div class="panel-title">分组</div>
                         <div class="panel-subtitle">{{ currentTemplate?.template_name || '请选择模板' }}</div>
                     </div>
-                    <el-button type="primary" :disabled="!currentTemplate" @click="openGroupDialog()">新增分组</el-button>
+                    <el-button type="primary" :disabled="!currentTemplate || isImportedTemplate" @click="openGroupDialog()">新增分组</el-button>
                 </div>
                 <el-table
                     v-loading="groupLoading"
@@ -136,13 +136,13 @@
                     </el-table-column>
                     <el-table-column label="状态" width="70">
                         <template #default="{ row }">
-                            <el-switch v-model="row.status" :active-value="1" :inactive-value="0" @change="saveGroupInline(row)" />
+                            <el-switch v-model="row.status" :disabled="isImportedTemplate" :active-value="1" :inactive-value="0" @change="saveGroupInline(row)" />
                         </template>
                     </el-table-column>
                     <el-table-column label="操作" width="96" fixed="right">
                         <template #default="{ row }">
-                            <el-button link type="primary" @click.stop="openGroupDialog(row)">编辑</el-button>
-                            <el-button link type="danger" @click.stop="removeGroup(row)">删</el-button>
+                            <el-button link type="primary" :disabled="isImportedTemplate" @click.stop="openGroupDialog(row)">编辑</el-button>
+                            <el-button link type="danger" :disabled="isImportedTemplate" @click.stop="removeGroup(row)">删</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
@@ -154,7 +154,7 @@
                         <div class="panel-title">字段</div>
                         <div class="panel-subtitle">{{ currentGroup?.group_name || '请选择分组' }}</div>
                     </div>
-                    <el-button type="primary" :disabled="!currentGroup" @click="openFieldDialog()">新增字段</el-button>
+                    <el-button type="primary" :disabled="!currentGroup || isImportedTemplate" @click="openFieldDialog()">新增字段</el-button>
                 </div>
                 <el-table
                     v-loading="fieldLoading"
@@ -175,7 +175,7 @@
                     <el-table-column label="文案" min-width="150" show-overflow-tooltip>
                         <template #default="{ row }">{{ row.result_template || '-' }}</template>
                     </el-table-column>
-                    <el-table-column label="控制" width="130">
+                    <el-table-column label="控制" width="150">
                         <template #default="{ row }">
                             <div class="switch-line">
                                 <span>显示</span>
@@ -185,12 +185,21 @@
                                 <span>结果</span>
                                 <el-switch v-model="row.result_visible" :active-value="1" :inactive-value="0" @change="saveFieldInline(row)" />
                             </div>
+                            <div class="switch-line">
+                                <span>摘要</span>
+                                <el-switch
+                                    v-model="row.extra_config.summary_visible"
+                                    :active-value="1"
+                                    :inactive-value="0"
+                                    @change="saveFieldInline(row)"
+                                />
+                            </div>
                         </template>
                     </el-table-column>
                     <el-table-column label="操作" width="100" fixed="right">
                         <template #default="{ row }">
                             <el-button link type="primary" @click.stop="openFieldDialog(row)">编辑</el-button>
-                            <el-button link type="danger" @click.stop="removeField(row)">删</el-button>
+                            <el-button link type="danger" :disabled="isImportedTemplate" @click.stop="removeField(row)">删</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
@@ -200,7 +209,7 @@
                         <div class="panel-title">选项</div>
                         <div class="panel-subtitle">{{ currentField?.field_name || '选择 radio / checkbox / select 字段维护选项' }}</div>
                     </div>
-                    <el-button type="primary" :disabled="!currentField || !fieldNeedsOptions(currentField)" @click="openOptionDialog()">新增选项</el-button>
+                    <el-button type="primary" :disabled="!currentField || !fieldNeedsOptions(currentField) || isImportedTemplate" @click="openOptionDialog()">新增选项</el-button>
                 </div>
                 <el-table :data="currentFieldOptions" height="260" border>
                     <el-table-column label="选项名称" min-width="150">
@@ -214,6 +223,7 @@
                         <template #default="{ row }">
                             <el-switch
                                 :model-value="Number(row.is_default) === 1"
+                                :disabled="isImportedTemplate"
                                 @change="(val: boolean) => setOptionDefault(row, val)"
                             />
                         </template>
@@ -231,13 +241,13 @@
                     <el-table-column prop="sort" label="排序" width="80" />
                     <el-table-column label="状态" width="86">
                         <template #default="{ row }">
-                            <el-switch v-model="row.is_show" :active-value="1" :inactive-value="0" @change="saveOptionInline(row)" />
+                            <el-switch v-model="row.is_show" :disabled="isImportedTemplate" :active-value="1" :inactive-value="0" @change="saveOptionInline(row)" />
                         </template>
                     </el-table-column>
                     <el-table-column label="操作" width="100" fixed="right">
                         <template #default="{ row }">
-                            <el-button link type="primary" @click="openOptionDialog(row)">编辑</el-button>
-                            <el-button link type="danger" @click="removeOption(row)">删除</el-button>
+                            <el-button link type="primary" :disabled="isImportedTemplate" @click="openOptionDialog(row)">编辑</el-button>
+                            <el-button link type="danger" :disabled="isImportedTemplate" @click="removeOption(row)">删除</el-button>
                         </template>
                     </el-table-column>
                 </el-table>
@@ -276,33 +286,41 @@
 
         <el-dialog v-model="fieldDialog.visible" :title="fieldDialog.form.id ? '编辑字段' : '新增字段'" width="720px">
             <el-form label-width="108px" :model="fieldDialog.form" class="field-form">
+                <el-alert
+                    v-if="isImportedTemplate"
+                    class="mb-3"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                    title="导入模板仅允许修改展示配置；字段名称、标识、组件和选项仍以导入数据为准。"
+                />
                 <el-form-item label="字段名称">
-                    <el-input v-model="fieldDialog.form.field_name" placeholder="例如：外屏规格、电池健康度" />
+                    <el-input v-model="fieldDialog.form.field_name" :disabled="isImportedTemplate" placeholder="例如：外屏规格、电池健康度" />
                     <div class="form-tip">显示在质检弹窗中间的字段标题；勾选设备摘要后，也会作为左侧摘要标题展示。</div>
                 </el-form-item>
                 <el-form-item label="字段标识">
-                    <el-input v-model="fieldDialog.form.field_key" placeholder="例如：screen_id、battery" />
+                    <el-input v-model="fieldDialog.form.field_key" :disabled="isImportedTemplate" placeholder="例如：screen_id、battery" />
                     <div class="form-tip">用于保存数据、恢复草稿和 API 回填的唯一标识。已上线字段不要随意改，否则历史质检数据无法自动对应。</div>
                 </el-form-item>
                 <el-form-item label="组件类型">
-                    <el-select v-model="fieldDialog.form.component" class="w-full">
+                    <el-select v-model="fieldDialog.form.component" :disabled="isImportedTemplate" class="w-full">
                         <el-option v-for="item in componentOptions" :key="item.value" :label="item.label" :value="item.value" />
                     </el-select>
                     <div class="form-tip">决定质检时的填写方式：输入框适合文本，数字输入适合电池/次数，单选/多选/下拉需要维护下方选项。</div>
                 </el-form-item>
                 <el-form-item label="选择模式">
-                    <el-select v-model="fieldDialog.form.selection_mode" clearable class="w-full">
+                    <el-select v-model="fieldDialog.form.selection_mode" :disabled="isImportedTemplate" clearable class="w-full">
                         <el-option label="单选" value="single" />
                         <el-option label="多选" value="multiple" />
                     </el-select>
                     <div class="form-tip">用于表达业务含义。单选表示只能取一个结果，多选表示可以同时记录多个问题或状态。</div>
                 </el-form-item>
                 <el-form-item label="单位">
-                    <el-input v-model="fieldDialog.form.unit" placeholder="例如：%、次、GB" />
+                    <el-input v-model="fieldDialog.form.unit" :disabled="isImportedTemplate" placeholder="例如：%、次、GB" />
                     <div class="form-tip">显示在字段旁边，也会参与质检结果表达；没有单位可以留空。</div>
                 </el-form-item>
                 <el-form-item label="提示语">
-                    <el-input v-model="fieldDialog.form.placeholder" placeholder="例如：请输入电池健康度" />
+                    <el-input v-model="fieldDialog.form.placeholder" :disabled="isImportedTemplate" placeholder="例如：请输入电池健康度" />
                     <div class="form-tip">显示在输入框或选择框内部，引导质检人员填写正确内容。</div>
                 </el-form-item>
                 <el-form-item label="默认值">
@@ -312,6 +330,7 @@
                     <el-switch
                         v-else-if="fieldDialog.form.component === 'switch'"
                         v-model="fieldDialog.form.default_value"
+                        :disabled="isImportedTemplate"
                         active-value="1"
                         inactive-value=""
                         active-text="默认开启"
@@ -321,6 +340,7 @@
                     <el-input-number
                         v-else-if="fieldDialog.form.component === 'number'"
                         v-model="fieldDialog.form.default_value"
+                        :disabled="isImportedTemplate"
                         :controls="false"
                         placeholder="留空表示无默认"
                         class="w-full"
@@ -328,6 +348,7 @@
                     <el-input
                         v-else
                         v-model="fieldDialog.form.default_value"
+                        :disabled="isImportedTemplate"
                         :type="fieldDialog.form.component === 'textarea' ? 'textarea' : 'text'"
                         placeholder="留空表示无默认值"
                     />
@@ -443,6 +464,7 @@ const currentTemplate = ref<any>(null)
 const editorDrawerVisible = ref(false)
 const currentGroup = ref<any>(null)
 const currentField = ref<any>(null)
+const isImportedTemplate = computed(() => currentTemplate.value?.scene === 'pjt')
 // source 默认 manual:进入先看手工模板,避免一次拉上万条导入模板
 const templateQuery = reactive({ keyword: '', source: 'manual' })
 const templatePage = reactive({ page: 1, limit: 50, total: 0 })
@@ -535,6 +557,7 @@ const fieldDefaultText = (field: any) => {
 }
 
 const setOptionDefault = async (row: any, val: boolean) => {
+    if (isImportedTemplate.value) return
     const fieldId = currentField.value?.id || 0
     await setCheckOptionDefault(row.id, val ? 1 : 0)
     await loadFields(fieldId)
@@ -728,6 +751,10 @@ const handleTemplateCommand = async (cmd: string, row: any) => {
 
 const openGroupDialog = (row: any = null) => {
     if (!currentTemplate.value) return
+    if (isImportedTemplate.value) {
+        ElMessage.warning('导入模板使用紧凑结构存储，仅支持查看；如需修改请新建手工模板')
+        return
+    }
     groupDialog.form = row ? { ...row } : { template_id: currentTemplate.value.id, group_name: '', group_key: '', description: '', sort: 0, status: 1 }
     groupDialog.visible = true
 }
@@ -739,10 +766,12 @@ const submitGroup = async () => {
 }
 
 const saveGroupInline = async (row: any) => {
+    if (isImportedTemplate.value) return
     await saveCheckGroup(row)
 }
 
 const removeGroup = async (row: any) => {
+    if (isImportedTemplate.value) return
     await ElMessageBox.confirm(`确认删除分组「${row.group_name}」？字段和选项会一起删除。`, '删除确认', { type: 'warning' })
     await deleteCheckGroup(row.id)
     await loadGroups()
@@ -789,11 +818,15 @@ const submitField = async () => {
 
 const saveFieldInline = async (row: any) => {
     const fieldId = row.id
-    await saveCheckField(row)
-    await loadFields(fieldId)
+    try {
+        await saveCheckField(row)
+    } finally {
+        await loadFields(fieldId)
+    }
 }
 
 const removeField = async (row: any) => {
+    if (isImportedTemplate.value) return
     await ElMessageBox.confirm(`确认删除字段「${row.field_name}」？`, '删除确认', { type: 'warning' })
     await deleteCheckField(row.id)
     await loadFields()
@@ -803,6 +836,10 @@ const fieldNeedsOptions = (field: any) => ['radio', 'checkbox', 'select'].includ
 
 const openOptionDialog = (row: any = null) => {
     if (!currentField.value) return
+    if (isImportedTemplate.value) {
+        ElMessage.warning('导入模板使用紧凑结构存储，仅支持查看；如需修改请新建手工模板')
+        return
+    }
     optionDialog.form = row
         ? normalizeOptionForm(row)
         : normalizeOptionForm({ field_id: currentField.value.id, option_label: '', option_value: '', sort: 0, is_show: 1, is_default: 0, extra_config: {} })
@@ -847,12 +884,14 @@ const submitOption = async () => {
 }
 
 const saveOptionInline = async (row: any) => {
+    if (isImportedTemplate.value) return
     const fieldId = currentField.value?.id || 0
     await saveCheckOption(row)
     await loadFields(fieldId)
 }
 
 const removeOption = async (row: any) => {
+    if (isImportedTemplate.value) return
     const fieldId = currentField.value?.id || 0
     await ElMessageBox.confirm(`确认删除选项「${row.option_label}」？`, '删除确认', { type: 'warning' })
     await deleteCheckOption(row.id)

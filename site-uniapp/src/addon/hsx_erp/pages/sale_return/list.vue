@@ -7,7 +7,7 @@
             @tab-change="onTab"
         />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15">
+            :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无退货记录" /></template>
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card">
@@ -19,6 +19,7 @@
                     <view class="card-meta">原销售单：{{ row.sale_no || '-' }}</view>
                     <view class="card-meta">退款金额：¥{{ money(row.total_amount) }} · {{ refundLabel(row.refund_mode) }}</view>
                     <view class="card-meta" v-if="row.remark">备注：{{ row.remark }}</view>
+                    <view class="card-time">{{ erpTimeLine(row, ['returned_at', 'return_at', 'confirmed_at']) }}</view>
                     <view v-if="row.status === 'pending'" class="status-row" style="margin-top:16rpx">
                         <u-button type="primary" size="small" :loading="confirming === row.id" @click="doConfirm(row)">财务确认退货</u-button>
                         <u-button type="error" size="small" plain @click="doCancel(row)">撤销</u-button>
@@ -35,6 +36,11 @@ import { onShow } from '@dcloudio/uni-app'
 
 import { getMobileSaleReturnList, confirmMobileSaleReturn, cancelMobileSaleReturn } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
+import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+
+const { pagingStyle } = useListHeader(126)
+
 
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)

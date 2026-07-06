@@ -18,7 +18,10 @@
                 </view>
 
                 <!-- 退货设备 -->
-                <view class="section-title">选择退货设备</view>
+                <view class="section-head">
+                    <text class="section-title">选择退货设备</text>
+                    <u-button size="mini" plain type="primary" @click="scanSelectAsset">扫码定位</u-button>
+                </view>
                 <view v-if="loadingAssets" class="loading-center"><u-loading-icon size="28" /></view>
                 <template v-else>
                     <view
@@ -104,6 +107,7 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { createErpSaleReturn } from '@/addon/hsx_erp/api/erp'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
+import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import request from '@/utils/request'
 
 const saleOrderId = ref(0)
@@ -145,6 +149,24 @@ function toggleSelect(item: any) {
     else { selectedItems.value.push({ asset_id: item.id, sale_item_id: item.sale_item_id, return_price: Number(item.sale_price || 0), reason: '' }) }
 }
 
+async function scanSelectAsset() {
+    try {
+        const code = await scanErpCode()
+        const item = availableAssets.value.find(i => scanMatch(i, code))
+        if (!item) {
+            uni.showToast({ title: '当前销售单未找到该设备', icon: 'none' })
+            return
+        }
+        if (!isSelected(item.id)) toggleSelect(item)
+        uni.showToast({ title: '已选中设备', icon: 'success' })
+    } catch (e: any) {
+        if (e?.errMsg?.includes('cancel')) return
+        uni.showToast({ title: e?.message || '扫码失败', icon: 'none' })
+    }
+}
+
+const scanMatch = (item: any, code: string) => ['imei', 'sn', 'asset_no'].some(key => String(item?.[key] || '').trim() === code)
+
 const totalReturn = computed(() => selectedItems.value.reduce((s, i) => s + Number(i.return_price || 0), 0))
 const canSubmit = computed(() => selectedItems.value.length > 0 && saleOrderId.value > 0)
 
@@ -172,6 +194,8 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
 .device-selected { border: 2rpx solid var(--primary-color, #3b6ef5); background: #f0f5ff; }
+.section-head { display:flex; align-items:center; justify-content:space-between; padding:16rpx 28rpx 8rpx; }
+.section-head .section-title { padding:0; }
 .device-check-row { display: flex; align-items: center; gap: 12rpx; }
 .loading-center { display: flex; justify-content: center; padding: 48rpx; }
 .empty-tip { text-align: center; color: #94a3b8; font-size: 26rpx; padding: 48rpx 0; }

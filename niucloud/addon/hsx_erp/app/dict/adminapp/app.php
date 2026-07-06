@@ -1,2 +1,76 @@
 <?php
-return [];
+return [
+     // ── ERP 管理 ────────────────────────────────────────────────────────────
+    [
+        'name' => '采购管理',
+        'key' => 'hsx_erp_purchase',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_purchase',
+        'sort' => 10,
+        'page' => '/addon/hsx_erp/pages/purchase/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_01.png'
+    ],
+    [
+        'name' => '销售出库',
+        'key' => 'hsx_erp_sale',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_sale',
+        'sort' => 11,
+        'page' => '/addon/hsx_erp/pages/sale/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_03.png'
+    ],
+    [
+        'name' => '应付款',
+        'key' => 'hsx_erp_payable',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_payable',
+        'sort' => 12,
+        'page' => '/addon/hsx_erp/pages/payable/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_05.png'
+    ],
+    [
+        'name' => '应收款',
+        'key' => 'hsx_erp_receivable',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_receivable',
+        'sort' => 13,
+        'page' => '/addon/hsx_erp/pages/receivable/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_06.png'
+    ],
+    [
+        'name' => '库存设备',
+        'key' => 'hsx_erp_stock',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_stock',
+        'sort' => 14,
+        'page' => '/addon/hsx_erp/pages/stock/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_07.png'
+    ],
+    [
+        'name' => '采购退货',
+        'key' => 'hsx_erp_purchase_return',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_purchase_return',
+        'sort' => 15,
+        'page' => '/addon/hsx_erp/pages/purchase_return/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_02.png'
+    ],
+    [
+        'name' => '销售退货',
+        'key' => 'hsx_erp_sale_return',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_sale_return',
+        'sort' => 16,
+        'page' => '/addon/hsx_erp/pages/sale_return/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_04.png'
+    ],
+    [
+        'name' => '成本调整',
+        'key' => 'hsx_erp_cost_adjust',
+        'group' => 'hsx_erp',
+        'menu_key' => '',
+        'sort' => 17,
+        'page' => '/addon/hsx_erp/pages/cost_adjust/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_08.png'
+    ]
+];

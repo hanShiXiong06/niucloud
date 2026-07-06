@@ -10,7 +10,7 @@
         />
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15">
+            :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无应收记录" /></template>
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card">
@@ -21,6 +21,7 @@
                     <view class="card-meta">单据：{{ row.batch_no || row.sale_no || row.source_no || '-' }}</view>
                     <view class="card-meta" v-if="row.salesman_name">销售员：{{ row.salesman_name }}</view>
                     <view class="card-meta" v-if="row.item_count">共 {{ row.item_count }} 台设备</view>
+                    <view class="card-time">{{ erpTimeLine(row, ['received_at', 'receipt_at', 'sale_at']) }}</view>
                     <view class="erp-card__foot">
                         <view class="amount-box">
                             <text class="amt-label">应收合计</text>
@@ -44,7 +45,7 @@
         </z-paging>
 
         <!-- 收款弹窗 -->
-        <u-popup v-model="receiptVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24">
+        <u-popup :show="receiptVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24" @close="receiptVisible = false">
             <view v-if="receiptRow" class="pay-popup">
                 <view class="pay-popup__title">确认收款</view>
                 <view class="pay-info">
@@ -57,9 +58,14 @@
                         <text class="pay-label">本次收款金额</text>
                         <u-input v-model="receiptForm.amount" type="number" :placeholder="'最多 ¥'+money(receiptRow.remain_amount)" :customStyle="inputStyle" />
                     </view>
-                    <view class="pay-form__item">
+                    <view class="pay-form__item" @click="receiptAccountPickerVisible = true">
                         <text class="pay-label">收款账户</text>
-                        <u-select v-model="receiptForm.capital_account_id" :list="accountOptions" />
+                        <view class="account-select">
+                            <text :class="receiptForm.capital_account_id ? 'account-text' : 'account-placeholder'">
+                                {{ selectedReceiptAccountLabel || '点击选择账户' }}
+                            </text>
+                            <text class="account-arrow">›</text>
+                        </view>
                     </view>
                     <view class="pay-form__item">
                         <text class="pay-label">备注</text>
@@ -68,8 +74,27 @@
                 </view>
                 <view class="action-bar">
                     <u-button @click="receiptVisible = false" :customStyle="{flex:'1'}">取消</u-button>
-                    <u-button type="primary" :loading="receipting" :disabled="!canReceipt" @click="submitReceipt" :customStyle="{flex:'2'}">确认收款并记账</u-button>
+                    <u-button type="primary" :loading="receipting" :disabled="!canReceipt" @click="submitReceipt" :customStyle="{flex:'2'}">
+                        确认收款 ¥{{ money(receiptForm.amount) }}
+                    </u-button>
                 </view>
+            </view>
+        </u-popup>
+
+        <u-popup :show="receiptAccountPickerVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24" @close="receiptAccountPickerVisible = false">
+            <view class="account-popup">
+                <view class="account-popup__title">选择收款账户</view>
+                <view
+                    v-for="a in accounts"
+                    :key="a.id"
+                    class="account-item"
+                    :class="{ selected: a.id === receiptForm.capital_account_id }"
+                    @click="selectReceiptAccount(a)"
+                >
+                    <text class="account-item__name">{{ a.account_name }}</text>
+                    <text class="account-item__balance">余额 ¥{{ money(a.balance) }}</text>
+                </view>
+                <view v-if="!accounts.length" class="account-empty">暂无可用资金账户</view>
             </view>
         </u-popup>
 
@@ -93,6 +118,11 @@ import { getMobileReceivableList, confirmMobileSaleReceipt, getMobileCapitalAcco
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpReceiptConfirmModal from '@/addon/hsx_erp/components/ErpReceiptConfirmModal.vue'
 
+import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+
+const { pagingStyle } = useListHeader(126)
+
 const keyword = ref('')
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
@@ -110,6 +140,7 @@ const accountOptions = computed(() =>
 )
 
 const receiptVisible = ref(false)
+const receiptAccountPickerVisible = ref(false)
 const receipting = ref(false)
 const receiptRow = ref<any>(null)
 const receiptForm = ref({ amount: 0, capital_account_id: 0, remark: '' })
@@ -120,6 +151,10 @@ const canReceipt = computed(() =>
     Number(receiptForm.value.amount) <= Number(receiptRow.value?.remain_amount || 0) + 0.001 &&
     receiptForm.value.capital_account_id > 0
 )
+const selectedReceiptAccountLabel = computed(() => {
+    const a = accounts.value.find(a => Number(a.id) === Number(receiptForm.value.capital_account_id))
+    return a ? `${a.account_name}（余额 ¥${money(a.balance)}）` : ''
+})
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '12rpx 16rpx' }
 
 onMounted(async () => {
@@ -155,6 +190,11 @@ function openReceipt(row: any) {
     receiptVisible.value = true
 }
 
+function selectReceiptAccount(account: any) {
+    receiptForm.value.capital_account_id = Number(account.id || 0)
+    receiptAccountPickerVisible.value = false
+}
+
 function openDetailReceipt(row: any) {
     detailReceiptRow.value = row
     detailReceiptVisible.value = true
@@ -171,6 +211,7 @@ async function submitReceipt() {
         })
         uni.showToast({ title: '收款已确认', icon: 'success' })
         receiptVisible.value = false
+        receiptAccountPickerVisible.value = false
         reload()
     } catch (e: any) {
         uni.showToast({ title: e?.message || '收款失败，请重试', icon: 'none' })
@@ -192,4 +233,15 @@ const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', set
 .pay-info__remain { font-size: 28rpx; color: #2563eb; font-weight: 600; margin-top: 8rpx; display: block; }
 .pay-form__item { margin-bottom: 20rpx; }
 .pay-label { font-size: 26rpx; color: #374151; display: block; margin-bottom: 8rpx; }
+.account-select { display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border-radius:8rpx; padding:16rpx; min-height:72rpx; box-sizing:border-box; }
+.account-text { font-size:26rpx; color:#0f172a; }
+.account-placeholder { font-size:26rpx; color:#94a3b8; }
+.account-arrow { font-size:32rpx; color:#94a3b8; }
+.account-popup { padding:32rpx; }
+.account-popup__title { font-size:30rpx; font-weight:700; color:#0f172a; margin-bottom:20rpx; }
+.account-item { display:flex; justify-content:space-between; gap:20rpx; padding:22rpx 0; border-bottom:1rpx solid #f1f5f9; }
+.account-item.selected { color:#3b6ef5; }
+.account-item__name { font-size:28rpx; }
+.account-item__balance { font-size:24rpx; color:#64748b; }
+.account-empty { text-align:center; color:#94a3b8; font-size:26rpx; padding:40rpx 0; }
 </style>

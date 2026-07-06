@@ -24,6 +24,9 @@ class ErpStock extends BaseAdminController
             ['status', ''],
             ['refurbish_status', ''],
             ['sale_target', ''],
+            ['warehouse_id', 0],
+            ['location_id', 0],
+            ['category_id', 0],
             ['page', 1],
             ['limit', 15],
         ]);
@@ -48,6 +51,16 @@ class ErpStock extends BaseAdminController
     public function info(int $id)
     {
         return success($this->service->info($id));
+    }
+
+    public function adjustCost(int $id)
+    {
+        $params = $this->request->params([
+            ['cost', 0],
+            ['reason', ''],
+            ['sync_payable', 1],
+        ]);
+        return success($this->service->adjustCost($id, (float)$params['cost'], (string)$params['reason'], (bool)$params['sync_payable']));
     }
 
     public function flow(int $id)

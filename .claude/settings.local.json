@@ -16,7 +16,28 @@
       "Bash(grep -oE 'CREATE TABLE `\\\\{\\\\{prefix\\\\}\\\\}phone_shop_[a-z_]+`' sql/install.sql)",
       "Bash(grep -oE '`shop_[a-z_]+`' sql/install.sql)",
       "Bash(grep -nE '`\\\\{\\\\{prefix\\\\}\\\\}phone_shop_[a-z]+`[^_]' sql/install.sql)",
-      "Bash(grep -nE '`shop_name`|`shop_no`' sql/install.sql)"
+      "Bash(grep -nE '`shop_name`|`shop_no`' sql/install.sql)",
+      "Bash(git commit -m 'feat\\(hsx_erp\\): 封装通用前端组件和 Composables *)",
+      "Bash(git commit -m 'feat\\(hsx_erp\\): P0-0 前端补全 + P0-2 库存页增强 *)",
+      "Bash(git commit -m 'fix\\(hsx_erp\\): stock/list.vue 补「作废」Tab *)",
+      "Bash(git commit -m 'fix\\(hsx_erp\\): ErpSaleReturnService::reduceReceivable 修复应收金额错误 *)",
+      "Bash(git commit -m 'feat\\(hsx_erp\\): 采购/销售列表页加退货入口按钮 *)",
+      "Bash(git commit -m 'feat\\(hsx_erp\\): site.php 注册采购退货/销售退货菜单 *)",
+      "Bash(git commit -m 'fix\\(hsx_erp\\): purchase_return 选择事件绑定错位修复 *)",
+      "Bash(git commit -m 'feat\\(hsx_erp\\): 移动端核心 ERP 页面全套 *)",
+      "Bash(git commit -m 'feat\\(hsx_recycle\\): adminapp 注册 ERP 移动端菜单 *)",
+      "Bash(find /Users/a123/Documents/1-work/niucloud -type f -name \"*.java\" | grep -i \"service\" | grep -i \"erp\")",
+      "Bash(grep -A 40 'return $query->field' niucloud/addon/hsx_erp/app/service/admin/ErpPurchaseService.php)",
+      "Bash(grep -A 30 'return $query->field\\\\|->field\\\\\\(\\\\[' niucloud/addon/hsx_erp/app/service/admin/ErpSaleService.php)",
+      "Bash(git commit -m 'fix\\(hsx_erp\\): 移动端 ERP 页面全面修正 *)",
+      "Bash(git commit -m 'feat\\(hsx_erp\\): 移动端 ERP 二级页面与操作页面 *)",
+      "Bash(git commit -m 'fix\\(hsx_erp\\): 修复开单页供应商/仓库选不了的问题 *)",
+      "Bash(grep -n \"u-popup\\\\|</u-popup>\\\\|</view>\\\\s*$\\\\|^</template>\" /Users/a123/Documents/1-work/niucloud/niucloud/site-uniapp/src/addon/hsx_erp/pages/payable/list.vue)",
+      "Bash(grep -n \"function openReceipt\\\\|</u-popup>\\\\|</view>\\\\s*$\\\\|^</template>\" /Users/a123/Documents/1-work/niucloud/niucloud/site-uniapp/src/addon/hsx_erp/pages/receivable/list.vue)",
+      "Bash(git commit -m 'feat\\(hsx_erp\\): 移动端 ERP 组件封装（对齐PC端流程） *)",
+      "Bash(git commit -m 'fix\\(hsx_erp\\): 账户列表解析 data.data → data.list *)",
+      "Bash(git commit -m 'fix\\(hsx_erp\\): ErpPartyPopup 改用正确的 member 两步流程 *)",
+      "Bash(git commit -m 'feat\\(hsx_erp\\): 移动端完整退货闭环 + UI规范统一（对齐phone_shop） *)"
     ]
   }
 }

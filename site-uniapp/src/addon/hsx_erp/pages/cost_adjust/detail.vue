@@ -151,7 +151,9 @@ const reasonPresets = ['录入有误', '退补差价', '复检改判', '议价�
 const statusLabel = (s: string) => INVENTORY_STATUS_MAP[s] || s || '-'
 const statusType = (s: string) => {
     if (s === 'in_stock' || s === 'available_for_sale') return 'success'
-    if (s === 'outbound' || s === 'locked') return 'primary'
+    if (s === 'sold' || s === 'outbound' || s === 'locked') return 'primary'
+    if (s === 'returned') return 'warning'
+    if (s === 'void') return 'info'
     if (s === 'lost' || s === 'inbound_rejected') return 'error'
     return 'warning'
 }

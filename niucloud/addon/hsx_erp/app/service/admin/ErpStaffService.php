@@ -6,6 +6,7 @@ namespace addon\hsx_erp\app\service\admin;
 use app\model\sys\SysUser;
 use app\model\sys\SysUserRole;
 use core\base\BaseAdminService;
+use core\exception\CommonException;
 
 class ErpStaffService extends BaseAdminService
 {
@@ -42,6 +43,30 @@ class ErpStaffService extends BaseAdminService
                     'name' => $name,
                 ];
             }, $users),
+        ];
+    }
+
+    public function resolve(int $uid, string $label = '员工'): array
+    {
+        $uid = $uid > 0 ? $uid : (int)$this->uid;
+        $relation = SysUserRole::where([
+            ['site_id', '=', $this->site_id],
+            ['uid', '=', $uid],
+            ['delete_time', '=', 0],
+        ])->findOrEmpty();
+        if ($relation->isEmpty() && $uid !== (int)$this->uid) {
+            throw new CommonException($label . '不属于当前站点');
+        }
+        $user = SysUser::where([
+            ['uid', '=', $uid],
+            ['delete_time', '=', 0],
+        ])->field('uid,username,real_name')->findOrEmpty();
+        if ($user->isEmpty()) {
+            throw new CommonException($label . '不存在或已停用');
+        }
+        return [
+            'uid' => (int)$user->uid,
+            'name' => (string)($user->real_name ?: $user->username ?: ('员工#' . $user->uid)),
         ];
     }
 }

@@ -9,7 +9,7 @@
             @tab-change="onTab"
         />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15">
+            :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无库存设备" /></template>
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card" @click="goDetail(row)">
@@ -26,6 +26,10 @@
                     <view class="card-meta">
                         {{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}
                         <text v-if="row.party_name"> · {{ row.party_name }}</text>
+                    </view>
+                    <view class="card-meta">
+                        {{ timeLabel(row) }}：{{ formatTime(primaryTime(row)) }}
+                        <text v-if="Number(row.update_at || 0)"> · 更新 {{ formatTime(row.update_at) }}</text>
                     </view>
                     <!-- 状态标签行：整备 + 去向 + 上架 -->
                     <view class="status-row">
@@ -45,13 +49,13 @@
                             <text class="amt-value">¥{{ money(row.total_cost) }}</text>
                         </view>
                         <view class="amount-box">
-                            <text class="amt-label">零售价</text>
-                            <text class="amt-value blue">{{ Number(row.retail_price) > 0 ? '¥'+money(row.retail_price) : '-' }}</text>
+                            <text class="amt-label">{{ priceLabel(row) }}</text>
+                            <text class="amt-value blue">{{ displayPrice(row) }}</text>
                         </view>
                         <view class="amount-box">
-                            <text class="amt-label">库龄</text>
-                            <text class="amt-value" :class="ageClass(row.stock_in_at, row.status)">
-                                {{ row.stock_in_at ? ageDays(row.stock_in_at)+'天' : '-' }}
+                            <text class="amt-label">{{ row.status === 'sold' ? '毛利' : '库龄' }}</text>
+                            <text class="amt-value" :class="row.status === 'sold' ? profitClass(row.profit) : ageClass(row.stock_in_at || row.create_at, row.status)">
+                                {{ row.status === 'sold' ? profitText(row.profit) : ageText(row) }}
                             </text>
                         </view>
                     </view>
@@ -62,28 +66,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 
 import { getMobileStockList } from '@/addon/hsx_erp/api/erp'
+import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
+import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+
+
+
+const { pagingStyle } = useListHeader(126)
+
+
 
 const keyword = ref('')
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
+const erpDicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
 
-const tabs = [
-    { label: '在库', value: 'in_stock' },
-    { label: '已售', value: 'sold' },
-    { label: '已退', value: 'returned' },
-    { label: '作废', value: 'void' },
-]
-const activeTab = ref('in_stock')
+const tabs = computed(() => dictTabs(erpDicts.value, 'asset_status', true))
+const activeTab = ref('')
 const reload = () => pagingRef.value?.reload()
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
 
-onShow(() => reload())
+onShow(async () => {
+    erpDicts.value = await loadErpDicts()
+    reload()
+})
 
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
@@ -96,6 +107,13 @@ const queryList = async (pageNo: number, pageSize: number) => {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+const formatTime = (ts: any) => {
+    const n = Number(ts || 0)
+    if (!n) return '-'
+    const d = new Date(n * 1000)
+    const p = (x: number) => String(x).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 const goDetail = (row: any) => uni.navigateTo({
     url: `/addon/hsx_erp/pages/stock/detail?id=${row.id}`
@@ -106,14 +124,27 @@ const ageClass = (ts: number, status: string) => {
     const d = ageDays(ts)
     return d >= 90 ? 'red' : d >= 30 ? 'orange' : ''
 }
+const primaryTime = (row: any) => Number(row.stock_in_at || 0) || Number(row.create_at || 0)
+const timeLabel = (row: any) => Number(row.stock_in_at || 0) ? '入库时间' : '创建时间'
+const ageText = (row: any) => {
+    const ts = Number(row.stock_in_at || row.create_at || 0)
+    return ts ? `${ageDays(ts)}天` : '-'
+}
+const priceLabel = (row: any) => row.status === 'sold' ? '售价' : '标价'
+const displayPrice = (row: any) => {
+    const price = row.status === 'sold' ? row.sale_price : (row.retail_price || row.estimate_sale_price)
+    return Number(price || 0) > 0 ? `¥${money(price)}` : '-'
+}
+const profitText = (v: any) => Number(v || 0) ? `¥${money(v)}` : '-'
+const profitClass = (v: any) => Number(v || 0) < 0 ? 'red' : 'green'
 
-const statusLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
-const statusType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' }[s] || 'info')
-const refurbishLabel = (s: string) => ({ none: '无需整备', pending: '待整备', processing: '整备中', done: '整备完成' }[s] || s)
-const refurbishType = (s: string) => ({ none: 'info', pending: 'warning', processing: 'primary', done: 'success' }[s] || 'info')
-const targetLabel = (s: string) => ({ unset: '去向未定', peer: '卖同行', mall: '上商城' }[s] || s)
-const listingLabel = (s: string) => ({ none: '无需上架', need_photo: '待拍照', need_price: '待定价', ready: '可上架', listed: '已上架' }[s] || s)
-const listingType = (s: string) => ({ none: 'info', need_photo: 'warning', need_price: 'warning', ready: 'primary', listed: 'success' }[s] || 'info')
+const statusLabel = (s: string) => dictLabel(erpDicts.value, 'asset_status', s)
+const statusType = (s: string) => dictType(erpDicts.value, 'asset_status', s)
+const refurbishLabel = (s: string) => dictLabel(erpDicts.value, 'refurbish_status', s)
+const refurbishType = (s: string) => dictType(erpDicts.value, 'refurbish_status', s)
+const targetLabel = (s: string) => dictLabel(erpDicts.value, 'sale_target', s)
+const listingLabel = (s: string) => dictLabel(erpDicts.value, 'listing_status', s)
+const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
 </script>
 
 <style scoped lang="scss">

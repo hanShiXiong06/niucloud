@@ -249,7 +249,15 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function groups(int $templateId): array
     {
-        $this->info($templateId);
+        $template = $this->info($templateId);
+        $compactGroups = $this->compactSchemaGroups($template);
+        if (!empty($compactGroups)) {
+            return array_map(static function (array $group) {
+                unset($group['fields']);
+                $group['readonly'] = 1;
+                return $group;
+            }, $compactGroups);
+        }
         return $this->groupModel->where([
             ['site_id', '=', $this->site_id],
             ['template_id', '=', $templateId],
@@ -301,7 +309,11 @@ class RecycleCheckTemplateService extends BaseAdminService
 
     public function fields(int $templateId, int $groupId = 0): array
     {
-        $this->info($templateId);
+        $template = $this->info($templateId);
+        $compactGroups = $this->compactSchemaGroups($template);
+        if (!empty($compactGroups)) {
+            return $this->compactFieldsForEditor($compactGroups, $templateId, $groupId);
+        }
         $query = $this->fieldModel->where([
             ['site_id', '=', $this->site_id],
             ['template_id', '=', $templateId],
@@ -326,11 +338,61 @@ class RecycleCheckTemplateService extends BaseAdminService
         return $fields;
     }
 
+    private function compactFieldsForEditor(array $groups, int $templateId, int $groupId = 0): array
+    {
+        $fields = [];
+        foreach ($groups as $group) {
+            if ($groupId !== 0 && (int)$group['id'] !== $groupId) {
+                continue;
+            }
+            foreach (($group['fields'] ?? []) as $field) {
+                if (!is_array($field)) {
+                    continue;
+                }
+                $options = [];
+                foreach (($field['options'] ?? []) as $option) {
+                    if (!is_array($option)) {
+                        continue;
+                    }
+                    $options[] = [
+                        'id' => (int)($option['id'] ?? 0),
+                        'site_id' => $this->site_id,
+                        'field_id' => (int)($field['id'] ?? 0),
+                        'option_label' => (string)($option['label'] ?? ($option['name'] ?? '')),
+                        'option_value' => (string)($option['value'] ?? ''),
+                        'is_default' => (int)($option['is_default'] ?? 0),
+                        'severity' => (string)($option['severity'] ?? 'normal'),
+                        'is_show' => 1,
+                        'sort' => (int)($option['sort'] ?? 0),
+                        'extra_config' => is_array($option['extra_config'] ?? null) ? $option['extra_config'] : [],
+                        'readonly' => 1,
+                    ];
+                }
+                $field['site_id'] = $this->site_id;
+                $field['template_id'] = $templateId;
+                $field['group_id'] = (int)$group['id'];
+                $field['is_show'] = (int)($field['is_show'] ?? 1);
+                $field['is_required'] = (int)($field['is_required'] ?? 0);
+                $field['seller_visible'] = (int)($field['seller_visible'] ?? 1);
+                $field['buyer_visible'] = (int)($field['buyer_visible'] ?? 0);
+                $field['result_visible'] = (int)($field['result_visible'] ?? 1);
+                $field['extra_config'] = is_array($field['extra_config'] ?? null) ? $field['extra_config'] : [];
+                $field['options'] = $options;
+                $field['readonly'] = 1;
+                $fields[] = $field;
+            }
+        }
+        return $fields;
+    }
+
     public function saveField(array $data): int
     {
         $templateId = (int)($data['template_id'] ?? 0);
-        $this->info($templateId);
+        $template = $this->info($templateId);
         $id = (int)($data['id'] ?? 0);
+        if ((string)($template['schema_json'] ?? '') !== '') {
+            return $this->saveCompactFieldConfig($template, $data);
+        }
         $save = [
             'site_id' => $this->site_id,
             'template_id' => $templateId,
@@ -365,6 +427,70 @@ class RecycleCheckTemplateService extends BaseAdminService
         $record = $this->fieldModel->create($save);
         $this->touchTemplate($templateId);
         return (int)$record->id;
+    }
+
+    private function saveCompactFieldConfig(array $template, array $data): int
+    {
+        $fieldId = (int)($data['id'] ?? 0);
+        if ($fieldId === 0) {
+            throw new CommonException('导入模板字段不存在');
+        }
+
+        $schema = json_decode((string)($template['schema_json'] ?? ''), true);
+        if (!is_array($schema) || !is_array($schema['groups'] ?? null)) {
+            throw new CommonException('导入模板结构异常，无法保存字段配置');
+        }
+
+        $extraConfig = $this->normalizeJsonConfig($data['extra_config'] ?? []);
+        $matched = false;
+        foreach ($schema['groups'] as $groupIndex => &$group) {
+            if (!is_array($group) || !is_array($group['fields'] ?? null)) {
+                continue;
+            }
+            foreach ($group['fields'] as $fieldIndex => &$field) {
+                if (!is_array($field)) {
+                    continue;
+                }
+                $currentId = $this->compactFieldId($field, $groupIndex, $fieldIndex);
+                if ($currentId !== $fieldId) {
+                    continue;
+                }
+                $field['id'] = $currentId;
+                $field['is_show'] = (int)($data['is_show'] ?? ($field['is_show'] ?? 1));
+                $field['is_required'] = (int)($data['is_required'] ?? ($field['is_required'] ?? 0));
+                $field['seller_visible'] = (int)($data['seller_visible'] ?? ($field['seller_visible'] ?? 1));
+                $field['buyer_visible'] = (int)($data['buyer_visible'] ?? ($field['buyer_visible'] ?? 0));
+                $field['result_visible'] = (int)($data['result_visible'] ?? ($field['result_visible'] ?? 1));
+                $field['result_template'] = (string)($data['result_template'] ?? ($field['result_template'] ?? ''));
+                $field['api_fill_enabled'] = (int)($data['api_fill_enabled'] ?? ($field['api_fill_enabled'] ?? 0));
+                $field['api_fill_policy'] = (string)($data['api_fill_policy'] ?? ($field['api_fill_policy'] ?? 'empty_only'));
+                $field['sort'] = (int)($data['sort'] ?? ($field['sort'] ?? ($fieldIndex + 1)));
+                $field['extra_config'] = $extraConfig;
+                $matched = true;
+                break 2;
+            }
+            unset($field);
+        }
+        unset($group);
+
+        if (!$matched) {
+            throw new CommonException('导入模板字段不存在');
+        }
+        $this->assertCompactSummaryFieldLimit($schema);
+
+        $json = json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json)) {
+            throw new CommonException('导入模板结构保存失败');
+        }
+        $this->templateModel->where([
+            ['id', '=', (int)$template['id']],
+            ['site_id', '=', $this->site_id],
+        ])->update([
+            'schema_json' => $json,
+            'version' => Db::raw('version + 1'),
+            'update_at' => time(),
+        ]);
+        return $fieldId;
     }
 
     public function deleteField(int $id): bool
@@ -514,6 +640,21 @@ class RecycleCheckTemplateService extends BaseAdminService
             return ['template' => null, 'groups' => []];
         }
 
+        $compactGroups = $this->compactSchemaGroups($template);
+        if (!empty($compactGroups)) {
+            return [
+                'template' => $template,
+                'groups' => $compactGroups,
+                'resolve' => [
+                    'matched' => !empty($resolve['matched']),
+                    'source_type' => (string)($resolve['source_type'] ?? ''),
+                    'source_name' => (string)($resolve['source_name'] ?? ''),
+                    'template_id' => (int)$template['id'],
+                    'template_name' => (string)($template['template_name'] ?? ''),
+                ],
+            ];
+        }
+
         $groups = $this->groupModel->where([
             ['site_id', '=', $this->site_id],
             ['template_id', '=', $template['id']],
@@ -554,6 +695,122 @@ class RecycleCheckTemplateService extends BaseAdminService
                 'template_name' => (string)($template['template_name'] ?? ''),
             ],
         ];
+    }
+
+    private function compactSchemaGroups(array $template): array
+    {
+        $schemaJson = (string)($template['schema_json'] ?? '');
+        if ($schemaJson === '') {
+            return [];
+        }
+        $schema = json_decode($schemaJson, true);
+        if (!is_array($schema) || !is_array($schema['groups'] ?? null)) {
+            return [];
+        }
+        $sevMap = $this->optionSeverityMap();
+        $groups = [];
+        foreach ($schema['groups'] as $groupIndex => $group) {
+            if (!is_array($group) || (int)($group['status'] ?? 1) !== 1) {
+                continue;
+            }
+            $fields = [];
+            foreach (($group['fields'] ?? []) as $fieldIndex => $field) {
+                if (!is_array($field) || (int)($field['is_show'] ?? 1) !== 1) {
+                    continue;
+                }
+                $options = [];
+                foreach (($field['options'] ?? []) as $optionIndex => $option) {
+                    if (!is_array($option)) {
+                        continue;
+                    }
+                    $label = (string)($option['label'] ?? ($option['name'] ?? ''));
+                    $key = mb_strtolower(trim($label));
+                    $severity = $sevMap[$key] ?? (string)($option['severity'] ?? 'normal');
+                    if (!in_array($severity, ['normal', 'general', 'abnormal'], true)) {
+                        $severity = 'normal';
+                    }
+                    $optionId = (int)($option['id'] ?? 0);
+                    if ($optionId === 0) {
+                        $optionId = -(($groupIndex + 1) * 1000000 + ($fieldIndex + 1) * 1000 + $optionIndex + 1);
+                    }
+                    $options[] = [
+                        'id' => $optionId,
+                        'name' => $label,
+                        'label' => $label,
+                        'value' => (string)($option['value'] ?? ($optionIndex + 1)),
+                        'is_default' => (int)($option['is_default'] ?? 0),
+                        'severity' => $severity,
+                        'sort' => (int)($option['sort'] ?? ($optionIndex + 1)),
+                        'extra_config' => is_array($option['extra_config'] ?? null) ? $option['extra_config'] : [],
+                    ];
+                }
+                $fields[] = [
+                    'id' => $this->compactFieldId($field, $groupIndex, $fieldIndex),
+                    'field_key' => (string)($field['field_key'] ?? ''),
+                    'field_name' => (string)($field['field_name'] ?? ''),
+                    'component' => (string)($field['component'] ?? 'input'),
+                    'selection_mode' => (string)($field['selection_mode'] ?? ''),
+                    'unit' => (string)($field['unit'] ?? ''),
+                    'placeholder' => (string)($field['placeholder'] ?? ''),
+                    'default_value' => (string)($field['default_value'] ?? ''),
+                    'is_required' => (int)($field['is_required'] ?? 0),
+                    'seller_visible' => (int)($field['seller_visible'] ?? 1),
+                    'buyer_visible' => (int)($field['buyer_visible'] ?? 0),
+                    'result_visible' => (int)($field['result_visible'] ?? 1),
+                    'result_template' => (string)($field['result_template'] ?? ''),
+                    'api_fill_enabled' => (int)($field['api_fill_enabled'] ?? 0),
+                    'api_fill_policy' => (string)($field['api_fill_policy'] ?? 'empty_only'),
+                    'sort' => (int)($field['sort'] ?? ($fieldIndex + 1)),
+                    'extra_config' => is_array($field['extra_config'] ?? null) ? $field['extra_config'] : [],
+                    'options' => $options,
+                ];
+            }
+            if (empty($fields)) {
+                continue;
+            }
+            $groupId = (int)($group['id'] ?? 0);
+            if ($groupId === 0) {
+                $groupId = -($groupIndex + 1);
+            }
+            $groups[] = [
+                'id' => $groupId,
+                'group_key' => (string)($group['group_key'] ?? ('g' . ($groupIndex + 1))),
+                'group_name' => (string)($group['group_name'] ?? '检测项'),
+                'description' => (string)($group['description'] ?? ''),
+                'sort' => (int)($group['sort'] ?? ($groupIndex + 1)),
+                'status' => 1,
+                'fields' => $fields,
+            ];
+        }
+        return $groups;
+    }
+
+    private function compactFieldId(array $field, int $groupIndex, int $fieldIndex): int
+    {
+        $fieldId = (int)($field['id'] ?? 0);
+        return $fieldId !== 0 ? $fieldId : -(($groupIndex + 1) * 10000 + $fieldIndex + 1);
+    }
+
+    private function assertCompactSummaryFieldLimit(array $schema): void
+    {
+        $count = 0;
+        foreach (($schema['groups'] ?? []) as $group) {
+            if (!is_array($group)) {
+                continue;
+            }
+            foreach (($group['fields'] ?? []) as $field) {
+                if (!is_array($field)) {
+                    continue;
+                }
+                $config = $this->normalizeJsonConfig($field['extra_config'] ?? []);
+                if ((int)($config['summary_visible'] ?? 0) === 1) {
+                    $count++;
+                }
+            }
+        }
+        if ($count > 10) {
+            throw new CommonException('设备摘要最多展示10个字段');
+        }
     }
 
     public function initDefault(): array

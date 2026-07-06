@@ -85,17 +85,22 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getMobileStockInfo } from '@/addon/hsx_erp/api/erp'
 
 const asset = ref<any>(null)
 const ledger = ref<any[]>([])
 const loading = ref(true)
 const assetId = ref(0)
+const detailLoaded = ref(false)
 
 onLoad((query: any) => {
     assetId.value = Number(query?.id || 0)
     loadDetail()
+})
+
+onShow(() => {
+    if (detailLoaded.value) loadDetail()
 })
 
 async function loadDetail() {
@@ -106,13 +111,16 @@ async function loadDetail() {
         const data = res?.data || {}
         asset.value = data
         ledger.value = data.ledger || data.asset_ledger || []
-    } finally { loading.value = false }
+    } finally {
+        loading.value = false
+        detailLoaded.value = true
+    }
 }
 
 const goAdjust = () => {
     if (!asset.value) return
     const a = asset.value
-    const q = `id=${a.id}&model=${encodeURIComponent(a.model||'')}&asset_no=${encodeURIComponent(a.asset_no||'')}&current_cost=${a.total_cost}`
+    const q = `id=${a.id}&model=${encodeURIComponent(a.model || '')}&asset_no=${encodeURIComponent(a.asset_no || '')}&imei=${encodeURIComponent(a.imei || '')}&status=${encodeURIComponent(a.status || '')}&cost=${a.total_cost || 0}&wh=${encodeURIComponent(a.warehouse_name || '')}&loc=${encodeURIComponent(a.location_name || '')}`
     uni.navigateTo({ url: `/addon/hsx_erp/pages/cost_adjust/detail?${q}` })
 }
 

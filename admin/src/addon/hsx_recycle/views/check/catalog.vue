@@ -2,11 +2,11 @@
     <PremiumTheme class="check-catalog-page">
         <el-card class="box-card" shadow="never">
             <template #header>
-                <PageHeader title="导入检测表" description="上传一份拍机堂 CSV，后端自动去重生成质检模板并按型号绑定。验机时直接读这些模板，无需逐型号建表。">
+                <PageHeader title="导入检测表" description="上传拍机堂 Excel/CSV，后端自动去重生成紧凑质检模板并按型号绑定。验机时按需展开，无需逐型号建表。">
                     <template #actions>
-                        <el-button type="primary" @click="triggerUpload">导入 CSV</el-button>
+                        <el-button type="primary" @click="triggerUpload">导入 Excel</el-button>
                         <el-button :loading="loading" @click="loadSummary">刷新</el-button>
-                        <input ref="fileInput" type="file" accept=".csv,.txt" style="display:none" @change="onFileChange" />
+                        <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv,.txt" style="display:none" @change="onFileChange" />
                     </template>
                 </PageHeader>
             </template>
@@ -107,7 +107,7 @@ async function onFileChange(e: Event) {
         let offset = 0
         // eslint-disable-next-line no-constant-condition
         while (true) {
-            const res: any = await importChunkCheckCatalog({ batch_id: imp.batch_id, token: imp.token, offset, limit: 80 })
+            const res: any = await importChunkCheckCatalog({ batch_id: imp.batch_id, token: imp.token, offset, limit: 1000 })
             const d = res.data
             imp.templates = d.templates
             imp.bindings = d.bindings

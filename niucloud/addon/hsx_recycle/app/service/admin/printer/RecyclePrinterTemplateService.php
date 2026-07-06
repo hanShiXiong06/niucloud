@@ -913,6 +913,89 @@ class RecyclePrinterTemplateService extends BaseAdminService
     }
 
     /**
+     * 从质检模板结果项中提取字段值。数字/输入型字段常只存在于 info.check_meta.result_items,
+     * 不一定会同步到设备列或 check_meta 顶层。
+     * @param array $checkMeta
+     * @param string $fieldKey
+     * @param array $fieldNameKeywords
+     * @return string
+     */
+    private function extractCheckMetaResultValue(array $checkMeta, string $fieldKey, array $fieldNameKeywords = []): string
+    {
+        $resultItems = $checkMeta['result_items'] ?? [];
+        if (!is_array($resultItems)) {
+            return '';
+        }
+
+        foreach ($resultItems as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $itemFieldKey = (string)($item['field_key'] ?? '');
+            $itemFieldName = (string)($item['field_name'] ?? '');
+            $matched = $itemFieldKey === $fieldKey;
+            if (!$matched) {
+                foreach ($fieldNameKeywords as $keyword) {
+                    if ($keyword !== '' && mb_strpos($itemFieldName, $keyword) !== false) {
+                        $matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!$matched) {
+                continue;
+            }
+
+            $value = $this->extractResultItemDisplayValue($item);
+            if ($value === '') {
+                continue;
+            }
+
+            if ($fieldKey === 'battery' && preg_match('/(\d{1,3})\s*%?/u', $value, $matches)) {
+                return (string)$matches[1];
+            }
+            if (in_array($fieldKey, ['battery_num', 'battery_cycle'], true) && preg_match('/(\d+)/u', $value, $matches)) {
+                return (string)$matches[1];
+            }
+
+            return $value;
+        }
+
+        return '';
+    }
+
+    /**
+     * 归一化单个质检结果项的展示值。
+     * @param array $item
+     * @return string
+     */
+    private function extractResultItemDisplayValue(array $item): string
+    {
+        $candidates = [
+            $item['labels'] ?? null,
+            $item['label'] ?? null,
+            $item['values'] ?? null,
+            $item['value'] ?? null,
+            $item['text'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_array($candidate)) {
+                $candidate = implode('、', array_values(array_filter(array_map('strval', $candidate), static function ($value) {
+                    return trim($value) !== '';
+                })));
+            }
+            $value = trim((string)$candidate);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * 拼接省市区与详细地址。
      * @param array $prefixParts
      * @param string $detail
@@ -974,13 +1057,21 @@ class RecyclePrinterTemplateService extends BaseAdminService
         $refurbishmentItemsText = $this->formatRefurbishmentItemsText($device['refurbishment_items'] ?? []);
         $battery = $this->firstNotBlank(
             $device['battery'] ?? null,
+            $device['battery_health'] ?? null,
             $checkMeta['battery'] ?? null,
             $deviceInfo['battery'] ?? null,
+            $deviceInfo['battery_health'] ?? null,
+            $this->extractCheckMetaResultValue($checkMeta, 'battery', ['电池健康度', '电池健康']),
             $this->extractValueFromCheckText($mainCheckResult, '/电池健康度\s*(\d{1,3})\s*%/u')
         );
         $batteryNum = $this->firstNotBlank(
+            $device['battery_cycle'] ?? null,
             $checkMeta['battery_num'] ?? $checkMeta['batteryNum'] ?? null,
+            $checkMeta['battery_cycle'] ?? null,
             $deviceInfo['battery_num'] ?? $deviceInfo['batteryNum'] ?? null,
+            $deviceInfo['battery_cycle'] ?? null,
+            $this->extractCheckMetaResultValue($checkMeta, 'battery_num', ['循环次数', '电池循环']),
+            $this->extractCheckMetaResultValue($checkMeta, 'battery_cycle', ['循环次数', '电池循环']),
             $this->extractValueFromCheckText($mainCheckResult, '/循环\s*(\d+)\s*次/u')
         );
 
@@ -1043,6 +1134,8 @@ class RecyclePrinterTemplateService extends BaseAdminService
             1 => '质检中',
             2 => '已质检'
         ];
+        $batteryValue = $this->isBlankPrintValue($battery) ? '-' : $this->resolveOptionLabel($optLabelMap, 'battery', $battery);
+        $batteryNumValue = $this->isBlankPrintValue($batteryNum) ? '-' : $this->resolveOptionLabel($optLabelMap, 'battery_num', $batteryNum);
 
         // 组装打印数据
         return [
@@ -1060,9 +1153,9 @@ class RecyclePrinterTemplateService extends BaseAdminService
             'color' => $this->resolveOptionLabel($optLabelMap, 'color', $this->firstNotBlank($device['color'] ?? null, $deviceInfo['color'] ?? null)),
             'package_type' => $this->resolveOptionLabel($optLabelMap, 'package_type', $this->firstNotBlank($device['package_type'] ?? null, $deviceInfo['package_type'] ?? null)),
             'condition_grade' => $this->resolveOptionLabel($optLabelMap, 'condition_grade', $this->firstNotBlank($device['condition_grade'] ?? null, $deviceInfo['condition_grade'] ?? null)),
-            'battery' => $this->isBlankPrintValue($battery) ? '-' : $this->stringifyPrintValue($battery),
-            'battery_num' => $this->isBlankPrintValue($batteryNum) ? '-' : $this->stringifyPrintValue($batteryNum),
-            'battery_cycle' => $this->isBlankPrintValue($batteryNum) ? '-' : $this->stringifyPrintValue($batteryNum),
+            'battery' => $batteryValue,
+            'battery_num' => $batteryNumValue,
+            'battery_cycle' => $batteryNumValue,
             
             // 设备序号信息
             'device_index' => (string)$device_index,

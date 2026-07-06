@@ -9,7 +9,7 @@
             @tab-change="onTab"
         />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15">
+            :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无销售记录" /></template>
             <view class="list-wrap">
 
@@ -25,6 +25,7 @@
                         {{ row.warehouse_name || '-' }}
                         <text v-if="row.salesman_name"> · {{ row.salesman_name }}</text>
                     </view>
+                    <view class="card-time">{{ erpTimeLine(row, ['sale_at', 'sold_at', 'received_at']) }}</view>
                     <view class="status-row">
                         <u-tag :text="assetLabel(row.status)" :type="assetType(row.status)" plain plainFill size="mini" />
                         <u-tag v-if="row.sale_channel" :text="row.sale_channel" type="primary" plain plainFill size="mini" />
@@ -61,6 +62,11 @@ import { onShow } from '@dcloudio/uni-app'
 
 import { getMobileSaleList } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
+import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+
+const { pagingStyle } = useListHeader(126)
+
 
 const keyword = ref('')
 const list = ref<any[]>([])

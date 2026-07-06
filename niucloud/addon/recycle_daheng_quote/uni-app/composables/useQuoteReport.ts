@@ -118,13 +118,13 @@ export function sheetRows(
 	overrides: Record<string, Record<string, any>> = {},
 	marks: Record<string, Record<string, boolean>> = {}
 ) {
-	const cols = sheetColumns(detail)
 	const list = Array.isArray(detail?.rows) ? detail.rows : []
 	return list.map((row: any) => {
 		const rowId = String(row.id)
 		const ov = overrides[rowId] || {}
 		const mk = marks[rowId] || {}
 		const rowCols = Array.isArray(row.columns) ? row.columns.map((c: any) => String(c || '').trim()) : []
+		const cols = rowCols.length ? rowCols : sheetColumns(detail)
 		const finals = Array.isArray(row.final_prices) ? row.final_prices : []
 		const priceMap: Record<string, string> = {}
 		rowCols.forEach((name: string, idx: number) => {
@@ -138,13 +138,31 @@ export function sheetRows(
 			return String(applyAdjust(raw, adjustType, adjustValue))
 		})
 		const markArr = cols.map(name => !!mk[name])
+		const remarkColumns = Array.isArray(row.remark_columns) ? row.remark_columns.map((c: any) => String(c || '').trim()).filter(Boolean) : []
+		const rawRemarkValues = Array.isArray(row.remark_values) ? row.remark_values : []
+		const remarkValues = remarkColumns.map((name: string, idx: number) => String(rawRemarkValues[idx] || ''))
+		const remarkText = String(row.remark || '')
+		if (!remarkColumns.length && remarkText.trim()) {
+			remarkColumns.push('备注')
+			remarkValues.push(remarkText)
+		}
+		const remarkMap: Record<string, string> = {}
+		remarkColumns.forEach((name: string, idx: number) => {
+			remarkMap[name] = remarkValues[idx] || ''
+		})
 		return {
 			rowId,
 			model: String(row.model_name || row.tab || '-'),
 			capacity: String(row.capacity_name || row.capacity || ''),
+			columns: cols,
 			prices,
 			marks: markArr,
-			remark: String(row.remark || '')
+			remark: remarkText,
+			remarkColumns,
+			remarkValues,
+			remarkMap,
+			remarkRowspan: Math.max(1, Number(row.remark_rowspan || row.remarkRowspan || 1)),
+			remarkHidden: Number(row.remark_hidden || row.remarkHidden || 0) === 1
 		}
 	})
 }
