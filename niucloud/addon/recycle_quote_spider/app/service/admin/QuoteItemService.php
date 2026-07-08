@@ -153,6 +153,7 @@ class QuoteItemService extends BaseAdminService
         // 一个报价项下的型号行需要整张矩阵展示，返回全量 list 而非分页
         $list = $search->select()->toArray();
         $list = array_map(fn($row) => $this->appendRowDisplayFields($row), $list);
+        $this->appendRowMergeFields($list);
         // 附带「今天之前最近一次」的价格，供前端做今天 vs 昨天涨跌对比
         $prevMap = (new QuotePriceHistoryService())->previousMap($this->site_id, array_column($list, 'id'));
         foreach ($list as &$row) {
@@ -338,6 +339,50 @@ class QuoteItemService extends BaseAdminService
         return $row;
     }
 
+    private function appendRowMergeFields(array &$rows): void
+    {
+        $count = count($rows);
+        for ($index = 0; $index < $count; $index++) {
+            $rows[$index]['remark_columns'] = [];
+            $rows[$index]['remark_values'] = [];
+            $rows[$index]['remark_rowspan'] = 1;
+            $rows[$index]['remark_hidden'] = 0;
+        }
+
+        $index = 0;
+        while ($index < $count) {
+            $modelName = trim((string)($rows[$index]['model_name'] ?? ''));
+            $end = $index + 1;
+            while ($end < $count && trim((string)($rows[$end]['model_name'] ?? '')) === $modelName) {
+                $end++;
+            }
+
+            $remark = '';
+            for ($cursor = $index; $cursor < $end; $cursor++) {
+                $candidate = trim((string)($rows[$cursor]['remark'] ?? ''));
+                if ($candidate !== '') {
+                    $remark = $candidate;
+                    break;
+                }
+            }
+
+            if ($remark !== '') {
+                $span = $end - $index;
+                for ($cursor = $index; $cursor < $end; $cursor++) {
+                    if (trim((string)($rows[$cursor]['remark'] ?? '')) === '') {
+                        $rows[$cursor]['remark'] = $remark;
+                    }
+                    $rows[$cursor]['remark_columns'] = ['备注'];
+                    $rows[$cursor]['remark_values'] = [$remark];
+                    $rows[$cursor]['remark_rowspan'] = $cursor === $index ? $span : 0;
+                    $rows[$cursor]['remark_hidden'] = $cursor === $index ? 0 : 1;
+                }
+            }
+
+            $index = $end;
+        }
+    }
+
     private function extractRemarkText($rawData): string
     {
         $raw = is_array($rawData) ? $rawData : [];
@@ -357,12 +402,18 @@ class QuoteItemService extends BaseAdminService
             $raw['内存'] ?? null,
             $raw['容量'] ?? null,
             $raw['规格'] ?? null,
+            $raw['尺寸'] ?? null,
+            $raw['表径'] ?? null,
+            $raw['表壳'] ?? null,
+            $raw['尺码'] ?? null,
             $raw['存储'] ?? null,
             $raw['capacity_name'] ?? null,
             $raw['capacity'] ?? null,
             $raw['memory'] ?? null,
             $raw['storage'] ?? null,
             $raw['rom'] ?? null,
+            $raw['size'] ?? null,
+            $raw['case_size'] ?? null,
         ];
         foreach ($candidates as $candidate) {
             $value = trim((string)$candidate);

@@ -1245,22 +1245,25 @@ function getDisplayRows(rows: EnhancedPriceRow[], adjustmentColumns: AdjustmentC
 	}
 
 	for (const column of adjustmentColumns) {
-		const uniqueNonEmptyTexts = Array.from(new Set(
-			displayRows
-				.map(row => row.displayAdjustmentCells?.[column.key]?.text || '')
-				.filter(Boolean)
-		))
+		const textEntries = displayRows.map(row => {
+			const text = row.displayAdjustmentCells?.[column.key]?.text || ''
+			return {
+				text,
+				normalized: normalizeAdjustmentMergeText(text)
+			}
+		})
+		const uniqueNonEmptyTexts = Array.from(new Set(textEntries.map(item => item.normalized).filter(Boolean)))
 
 		if (uniqueNonEmptyTexts.length === 1) {
-			const sourceCell = displayRows
-				.map(row => row.displayAdjustmentCells?.[column.key])
-				.find(cell => cell && cell.text === uniqueNonEmptyTexts[0])
+			const sourceIndex = textEntries.findIndex(item => item.normalized === uniqueNonEmptyTexts[0])
+			const sourceText = sourceIndex >= 0 ? textEntries[sourceIndex].text : uniqueNonEmptyTexts[0]
+			const sourceCell = sourceIndex >= 0 ? displayRows[sourceIndex].displayAdjustmentCells?.[column.key] : null
 			const firstCell = displayRows[0].displayAdjustmentCells?.[column.key]
 			if (firstCell) {
 				firstCell.show = true
 				firstCell.rowspan = displayRows.length
-				firstCell.parts = sourceCell?.parts || splitAdjustmentText(uniqueNonEmptyTexts[0])
-				firstCell.text = uniqueNonEmptyTexts[0]
+				firstCell.parts = sourceCell?.parts || splitAdjustmentText(sourceText)
+				firstCell.text = sourceText
 			}
 			for (let index = 1; index < displayRows.length; index++) {
 				const cell = displayRows[index].displayAdjustmentCells?.[column.key]
@@ -1274,10 +1277,10 @@ function getDisplayRows(rows: EnhancedPriceRow[], adjustmentColumns: AdjustmentC
 		}
 
 		let startIndex = 0
-		let currentText = displayRows[0]?.displayAdjustmentCells?.[column.key]?.text || ''
+		let currentText = textEntries[0]?.normalized || ''
 
 		for (let index = 1; index <= displayRows.length; index++) {
-			const text = displayRows[index]?.displayAdjustmentCells?.[column.key]?.text || ''
+			const text = textEntries[index]?.normalized || ''
 			if (index === displayRows.length || text !== currentText) {
 				const span = index - startIndex
 				const startCell = displayRows[startIndex].displayAdjustmentCells?.[column.key]
@@ -1302,6 +1305,10 @@ function getDisplayRows(rows: EnhancedPriceRow[], adjustmentColumns: AdjustmentC
 	applyDisplayRowHeights(displayRows)
 
 	return displayRows
+}
+
+function normalizeAdjustmentMergeText(value: unknown): string {
+	return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 function collectAdjustmentColumns(rows: EnhancedPriceRow[]): AdjustmentColumn[] {
@@ -2505,6 +2512,7 @@ onPageScroll((event) => {
 	color: #fff;
 	background: #ff5b4a;
 	border-radius: 999rpx 999rpx 999rpx 0;
+	z-index: 1000;
 }
 
 @keyframes skeleton-shimmer {
@@ -2964,6 +2972,10 @@ onPageScroll((event) => {
 	border-radius: 0;
 	overflow: hidden;
 	box-shadow: none;
+}
+
+.model-card + .model-card {
+	border-top: 8rpx solid rgba(15, 23, 42, 0.18);
 }
 
 .model-head {

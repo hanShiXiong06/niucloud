@@ -88,12 +88,13 @@ class QuoteImportService extends BaseAdminService
         $highestRow = $sheet->getHighestRow();
         $highestColumn = $sheet->getHighestColumn();
         [$headerRow, $noticeText] = $this->resolveHeaderRowAndNotice($sheet, $headerRow, $highestRow);
+        $mergeCellMap = $this->buildMergeCellMap($sheet);
         $headers = [];
         $headerColumns = [];
         $highestColumnIndex = Coordinate::columnIndexFromString($highestColumn);
         for ($colIndex = 1; $colIndex <= $highestColumnIndex; $colIndex++) {
             $col = Coordinate::stringFromColumnIndex($colIndex);
-            $value = trim((string)$sheet->getCell($col . $headerRow)->getFormattedValue());
+            $value = trim($this->getMergedCellValue($sheet, $col, $headerRow, $mergeCellMap));
             if ($value !== '') {
                 $headers[$col] = $value;
                 $headerColumns[] = [
@@ -107,7 +108,7 @@ class QuoteImportService extends BaseAdminService
         for ($row = $headerRow + 1; $row <= min($highestRow, $headerRow + $previewCount); $row++) {
             $rowData = [];
             foreach ($headerColumns as $header) {
-                $rowData[$header['label']] = $sheet->getCell($header['col'] . $row)->getFormattedValue();
+                $rowData[$header['label']] = $this->getMergedCellValue($sheet, $header['col'], $row, $mergeCellMap);
             }
             if (!empty(array_filter($rowData, fn($value) => $value !== null && $value !== ''))) {
                 $rows[] = ['row_number' => $row, 'data' => $rowData];
@@ -378,7 +379,7 @@ class QuoteImportService extends BaseAdminService
                 'brand' => $row['brand'] ?: $importBrand,
                 'tab' => $row['tab'] ?: $tab,
                 'model_name' => $row['model_name'],
-                'columns' => $parsed['price_columns'],
+                'columns' => $row['columns'] ?: $parsed['price_columns'],
                 'source_prices' => $prices,
                 'manual_prices' => $prices,
                 'final_prices' => $prices,
@@ -417,7 +418,7 @@ class QuoteImportService extends BaseAdminService
                 'item_id' => $itemId,
                 'source_id' => $sourceId,
                 'model_name' => $row['model_name'],
-                'columns' => $parsed['price_columns'],
+                'columns' => $row['columns'] ?: $parsed['price_columns'],
                 'final_prices' => $prices,
             ]);
         }
@@ -500,61 +501,45 @@ class QuoteImportService extends BaseAdminService
         $highestRow = $sheet->getHighestRow();
         $highestColumn = $sheet->getHighestColumn();
         [$headerRow, $firstRowNoticeText] = $this->resolveHeaderRowAndNotice($sheet, $headerRow, $highestRow);
-        $headers = [];
-        $headerColumns = [];
+        $mergeCellMap = $this->buildMergeCellMap($sheet);
         $highestColumnIndex = Coordinate::columnIndexFromString($highestColumn);
-        for ($colIndex = 1; $colIndex <= $highestColumnIndex; $colIndex++) {
-            $col = Coordinate::stringFromColumnIndex($colIndex);
-            $value = trim((string)$sheet->getCell($col . $headerRow)->getFormattedValue());
-            if ($value !== '') {
-                $headers[$col] = $value;
-                $headerColumns[] = [
-                    'col' => $col,
-                    'label' => $value,
-                    'field' => $this->resolveMappingField($mapping, count($headerColumns), $value),
-                ];
-            }
-        }
-
-        // 兜底:未识别且非元信息(型号/容量/备注等)的列,若整列大多为数字则当作价格列,
-        // 避免「充新/大花」之外的新等级词漏掉(图片转表格、自定义表头都适用)
-        foreach ($headerColumns as &$header) {
-            if (($header['field'] ?? '') !== '') {
-                continue;
-            }
-            if ($this->isMetaOnlyHeader($header['label'])) {
-                continue;
-            }
-            if ($this->columnLooksNumeric($sheet, $header['col'], $headerRow, $highestRow)) {
-                $header['field'] = 'price:' . $header['label'];
-            }
-        }
-        unset($header);
-
-        $priceColumns = [];
-        foreach ($headerColumns as $header) {
-            $field = $header['field'];
-            if (is_string($field) && str_starts_with($field, 'price:')) {
-                $priceColumns[] = substr($field, 6) ?: $header['label'];
-            }
-        }
+        $headerColumns = $this->buildHeaderColumns($sheet, $headerRow, $highestColumnIndex, $highestRow, $mergeCellMap, $mapping);
+        $priceColumns = $this->extractPriceColumns($headerColumns);
         if (empty($priceColumns)) {
             throw new CommonException('没有识别到价格列');
         }
 
         $rows = [];
+        $activeHeaderColumns = $headerColumns;
+        $activePriceColumns = $priceColumns;
+        $lastModelName = '';
+        $lastRemark = '';
+        $lastBrand = '';
+        $lastTab = '';
         for ($rowNumber = $headerRow + 1; $rowNumber <= $highestRow; $rowNumber++) {
+            $candidateHeaderColumns = $this->buildHeaderColumns($sheet, $rowNumber, $highestColumnIndex, $highestRow, $mergeCellMap, []);
+            if ($this->isSegmentHeaderRow($candidateHeaderColumns)) {
+                $activeHeaderColumns = $candidateHeaderColumns;
+                $activePriceColumns = $this->extractPriceColumns($activeHeaderColumns);
+                $priceColumns = $this->mergePriceColumns($priceColumns, $activePriceColumns);
+                $lastModelName = '';
+                $lastRemark = '';
+                $lastBrand = '';
+                $lastTab = '';
+                continue;
+            }
+
             $raw = [];
-            foreach ($headerColumns as $header) {
-                $raw[$header['label']] = trim((string)$sheet->getCell($header['col'] . $rowNumber)->getFormattedValue());
+            foreach ($activeHeaderColumns as $header) {
+                $raw[$header['label']] = trim($this->getMergedCellValue($sheet, $header['col'], $rowNumber, $mergeCellMap));
             }
             if (empty(array_filter($raw, fn($value) => $value !== ''))) {
                 continue;
             }
 
-            $row = ['model_name' => '', 'brand' => '', 'tab' => '', 'remark' => '', 'notice_text' => '', 'prices' => [], 'raw' => $raw];
-            foreach ($headerColumns as $header) {
-                $value = trim((string)$sheet->getCell($header['col'] . $rowNumber)->getFormattedValue());
+            $row = ['model_name' => '', 'brand' => '', 'tab' => '', 'remark' => '', 'notice_text' => '', 'prices' => [], 'columns' => $activePriceColumns, 'raw' => $raw];
+            foreach ($activeHeaderColumns as $header) {
+                $value = trim($this->getMergedCellValue($sheet, $header['col'], $rowNumber, $mergeCellMap));
                 $field = $header['field'] ?? '';
                 if ($field === 'model_name') {
                     $row['model_name'] = $value;
@@ -573,8 +558,35 @@ class QuoteImportService extends BaseAdminService
                     $row['prices'][] = $value;
                 }
             }
+            if ($row['model_name'] === '' && $lastModelName !== '') {
+                $row['model_name'] = $lastModelName;
+                $row['raw']['model_name'] = $lastModelName;
+            }
+            if ($row['brand'] === '' && $lastBrand !== '') {
+                $row['brand'] = $lastBrand;
+            }
+            if ($row['tab'] === '' && $lastTab !== '') {
+                $row['tab'] = $lastTab;
+            }
+            if ($row['remark'] === '' && $row['model_name'] !== '' && $row['model_name'] === $lastModelName && $lastRemark !== '') {
+                $row['remark'] = $lastRemark;
+                $row['raw']['remark'] = $lastRemark;
+            }
             if ($row['model_name'] === '') {
                 continue;
+            }
+            if ($row['model_name'] !== $lastModelName) {
+                $lastRemark = '';
+            }
+            $lastModelName = $row['model_name'];
+            if ($row['brand'] !== '') {
+                $lastBrand = $row['brand'];
+            }
+            if ($row['tab'] !== '') {
+                $lastTab = $row['tab'];
+            }
+            if ($row['remark'] !== '') {
+                $lastRemark = $row['remark'];
             }
             $rows[] = $row;
         }
@@ -593,6 +605,74 @@ class QuoteImportService extends BaseAdminService
         return ['price_columns' => $priceColumns, 'rows' => $rows, 'notice_text' => $noticeText];
     }
 
+    private function buildHeaderColumns($sheet, int $headerRow, int $highestColumnIndex, int $highestRow, array $mergeCellMap, array $mapping): array
+    {
+        $headerColumns = [];
+        for ($colIndex = 1; $colIndex <= $highestColumnIndex; $colIndex++) {
+            $col = Coordinate::stringFromColumnIndex($colIndex);
+            $value = trim($this->getMergedCellValue($sheet, $col, $headerRow, $mergeCellMap));
+            if ($value !== '') {
+                $headerColumns[] = [
+                    'col' => $col,
+                    'label' => $value,
+                    'field' => $this->resolveMappingField($mapping, count($headerColumns), $value),
+                ];
+            }
+        }
+
+        foreach ($headerColumns as &$header) {
+            if (($header['field'] ?? '') !== '') {
+                continue;
+            }
+            if ($this->isMetaOnlyHeader($header['label'])) {
+                continue;
+            }
+            if ($this->columnLooksNumeric($sheet, $header['col'], $headerRow, $highestRow)) {
+                $header['field'] = 'price:' . $header['label'];
+            }
+        }
+        unset($header);
+
+        return $headerColumns;
+    }
+
+    private function extractPriceColumns(array $headerColumns): array
+    {
+        $priceColumns = [];
+        foreach ($headerColumns as $header) {
+            $field = $header['field'] ?? '';
+            if (is_string($field) && str_starts_with($field, 'price:')) {
+                $priceColumns[] = substr($field, 6) ?: $header['label'];
+            }
+        }
+        return $priceColumns;
+    }
+
+    private function isSegmentHeaderRow(array $headerColumns): bool
+    {
+        if (empty($headerColumns)) {
+            return false;
+        }
+
+        $fields = array_map(static fn($header) => (string)($header['field'] ?? ''), $headerColumns);
+        $labels = array_map(static fn($header) => trim((string)($header['label'] ?? '')), $headerColumns);
+        $hasModel = in_array('model_name', $fields, true) || in_array('型号', $labels, true) || in_array('机型', $labels, true);
+        $hasCapacity = in_array('capacity_name', $fields, true) || count(array_filter($labels, fn($label) => $this->isMetaOnlyHeader($label))) > 0;
+        $priceCount = count($this->extractPriceColumns($headerColumns));
+
+        return $hasModel && $hasCapacity && $priceCount > 0;
+    }
+
+    private function mergePriceColumns(array $baseColumns, array $newColumns): array
+    {
+        foreach ($newColumns as $column) {
+            if ($column !== '' && !in_array($column, $baseColumns, true)) {
+                $baseColumns[] = $column;
+            }
+        }
+        return $baseColumns;
+    }
+
     private function resolveMappingField(array $mapping, int $index, string $header): string
     {
         $inferredField = $this->inferHeaderField($header);
@@ -609,6 +689,31 @@ class QuoteImportService extends BaseAdminService
         }
 
         return '';
+    }
+
+    private function buildMergeCellMap($sheet): array
+    {
+        $map = [];
+        foreach ($sheet->getMergeCells() as $range) {
+            [$start, $end] = Coordinate::rangeBoundaries($range);
+            [$startCol, $startRow] = $start;
+            [$endCol, $endRow] = $end;
+            $master = Coordinate::stringFromColumnIndex($startCol) . $startRow;
+            for ($row = $startRow; $row <= $endRow; $row++) {
+                for ($col = $startCol; $col <= $endCol; $col++) {
+                    $coordinate = Coordinate::stringFromColumnIndex($col) . $row;
+                    $map[$coordinate] = $master;
+                }
+            }
+        }
+        return $map;
+    }
+
+    private function getMergedCellValue($sheet, string $col, int $row, array $mergeCellMap): string
+    {
+        $coordinate = $col . $row;
+        $readCoordinate = $mergeCellMap[$coordinate] ?? $coordinate;
+        return trim((string)$sheet->getCell($readCoordinate)->getFormattedValue());
     }
 
     private function suggestMapping(array $headers): array
@@ -679,7 +784,7 @@ class QuoteImportService extends BaseAdminService
 
     private function isMetaOnlyHeader(string $header): bool
     {
-        return preg_match('/内存|容量|规格|存储|memory|capacity|storage|rom/i', trim($header)) === 1;
+        return preg_match('/内存|容量|规格|尺寸|表径|表壳|尺码|存储|memory|capacity|storage|rom|size|case\s*size|watch\s*size/i', trim($header)) === 1;
     }
 
     private function normalizeImportFallback(string $value, array $blockedKeywords): string

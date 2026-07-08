@@ -125,28 +125,56 @@ export function sheetRows(
 		const ov = overrides[rowId] || {}
 		const mk = marks[rowId] || {}
 		const rowCols = Array.isArray(row.columns) ? row.columns.map((c: any) => String(c || '').trim()) : []
+		const displayCols = rowCols.length ? rowCols : cols
 		const finals = Array.isArray(row.final_prices) ? row.final_prices : []
 		const priceMap: Record<string, string> = {}
 		rowCols.forEach((name: string, idx: number) => {
 			priceMap[name] = String(finals[idx] ?? '')
 		})
-		const prices = cols.map(name => {
+		const prices = displayCols.map(name => {
 			// 个性化改价优先
 			if (ov[name] !== undefined && ov[name] !== '' && ov[name] !== null) return String(ov[name])
 			const raw = Number(priceMap[name])
 			if (!priceMap[name] || !Number.isFinite(raw)) return '-'
 			return String(applyAdjust(raw, adjustType, adjustValue))
 		})
-		const markArr = cols.map(name => !!mk[name])
+		const markArr = displayCols.map(name => !!mk[name])
+		const remarkColumns = Array.isArray(row.remark_columns) ? row.remark_columns.map((c: any) => String(c || '').trim()).filter(Boolean) : []
+		const rawRemarkValues = Array.isArray(row.remark_values) ? row.remark_values : []
+		const remarkValues = remarkColumns.map((name: string, idx: number) => String(rawRemarkValues[idx] || ''))
+		const remarkText = String(row.remark || '')
+		if (!remarkColumns.length && remarkText.trim()) {
+			remarkColumns.push('备注')
+			remarkValues.push(remarkText)
+		}
+		const remarkMap: Record<string, string> = {}
+		remarkColumns.forEach((name: string, idx: number) => {
+			remarkMap[name] = remarkValues[idx] || ''
+		})
 		return {
 			rowId,
 			model: String(row.model_name || row.tab || '-'),
 			capacity: String(row.capacity_name || row.capacity || ''),
+			capacityLabel: inferCapacityLabel(row),
+			columns: displayCols,
 			prices,
 			marks: markArr,
-			remark: String(row.remark || '')
+			remark: remarkText,
+			remarkColumns,
+			remarkValues,
+			remarkMap,
+			remarkRowspan: Math.max(1, Number(row.remark_rowspan || row.remarkRowspan || 1)),
+			remarkHidden: Number(row.remark_hidden || row.remarkHidden || 0) === 1
 		}
 	})
+}
+
+function inferCapacityLabel(row: any) {
+	const raw = row?.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {}
+	const keys = Object.keys(raw)
+	if (keys.some(key => /尺寸|表径|表壳|尺码|尺寸规格|size|case\s*size|watch\s*size|mm/i.test(key))) return '尺寸'
+	if (keys.some(key => /规格|spec/i.test(key))) return '规格'
+	return '内存'
 }
 
 export function sheetTitle(name: string, brand = '') {

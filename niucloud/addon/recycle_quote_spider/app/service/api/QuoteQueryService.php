@@ -131,7 +131,7 @@ class QuoteQueryService extends BaseApiService
     {
         // 浏览量埋点：每次访问 +1，放在缓存外，避免被详情缓存挡掉
         $this->incrementViewCount($id);
-        return (new QuoteApiCacheService())->remember($this->site_id, 'detail', ['id' => $id], function () use ($id) {
+        return (new QuoteApiCacheService())->remember($this->site_id, 'detail', ['id' => $id, 'row_merge' => 1], function () use ($id) {
             return $this->buildDetail($id);
         });
     }
@@ -210,6 +210,7 @@ class QuoteQueryService extends BaseApiService
             $row['price_date'] = $rowUpdated ? date('Y-m-d', $rowUpdated) : '';
         }
         unset($row);
+        $this->appendRowMergeFields($rows);
         $item['rows'] = $rows;
         return $item;
     }
@@ -256,6 +257,68 @@ class QuoteQueryService extends BaseApiService
         $capacityName = $this->extractCapacityName($row['raw_data'] ?? [], (string)($row['tab'] ?? ''));
         $row['capacity_name'] = $capacityName;
         $row['capacity'] = $capacityName;
+        if (trim((string)($row['remark'] ?? '')) === '') {
+            $remark = $this->extractRemarkText($row['raw_data'] ?? []);
+            if ($remark !== '') {
+                $row['remark'] = $remark;
+            }
+        }
+    }
+
+    private function appendRowMergeFields(array &$rows): void
+    {
+        $count = count($rows);
+        for ($index = 0; $index < $count; $index++) {
+            $rows[$index]['remark_columns'] = [];
+            $rows[$index]['remark_values'] = [];
+            $rows[$index]['remark_rowspan'] = 1;
+            $rows[$index]['remark_hidden'] = 0;
+        }
+
+        $index = 0;
+        while ($index < $count) {
+            $modelName = trim((string)($rows[$index]['model_name'] ?? ''));
+            $end = $index + 1;
+            while ($end < $count && trim((string)($rows[$end]['model_name'] ?? '')) === $modelName) {
+                $end++;
+            }
+
+            $remark = '';
+            for ($cursor = $index; $cursor < $end; $cursor++) {
+                $candidate = trim((string)($rows[$cursor]['remark'] ?? ''));
+                if ($candidate !== '') {
+                    $remark = $candidate;
+                    break;
+                }
+            }
+
+            if ($remark !== '') {
+                $span = $end - $index;
+                for ($cursor = $index; $cursor < $end; $cursor++) {
+                    if (trim((string)($rows[$cursor]['remark'] ?? '')) === '') {
+                        $rows[$cursor]['remark'] = $remark;
+                    }
+                    $rows[$cursor]['remark_columns'] = ['备注'];
+                    $rows[$cursor]['remark_values'] = [$remark];
+                    $rows[$cursor]['remark_rowspan'] = $cursor === $index ? $span : 0;
+                    $rows[$cursor]['remark_hidden'] = $cursor === $index ? 0 : 1;
+                }
+            }
+
+            $index = $end;
+        }
+    }
+
+    private function extractRemarkText($rawData): string
+    {
+        $raw = is_array($rawData) ? $rawData : [];
+        foreach (['备注', '说明', '描述', 'remark', 'remark_text', 'note', 'notes', 'content_text', 'text'] as $field) {
+            $value = trim((string)($raw[$field] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+        return '';
     }
 
     private function extractCapacityName($rawData, string $tab = ''): string
@@ -265,12 +328,18 @@ class QuoteQueryService extends BaseApiService
             $raw['内存'] ?? null,
             $raw['容量'] ?? null,
             $raw['规格'] ?? null,
+            $raw['尺寸'] ?? null,
+            $raw['表径'] ?? null,
+            $raw['表壳'] ?? null,
+            $raw['尺码'] ?? null,
             $raw['存储'] ?? null,
             $raw['capacity_name'] ?? null,
             $raw['capacity'] ?? null,
             $raw['memory'] ?? null,
             $raw['storage'] ?? null,
             $raw['rom'] ?? null,
+            $raw['size'] ?? null,
+            $raw['case_size'] ?? null,
         ];
         foreach ($candidates as $candidate) {
             $value = trim((string)$candidate);

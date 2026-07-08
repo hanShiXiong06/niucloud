@@ -89,12 +89,14 @@ const CAP_W = 130
 const LH = 26
 const HEAD_LH = 28
 const MODEL_LH = 30
+const REMARK_LH = 26
 const VPAD = 14
 const FONT_BODY = 20
 const FONT_HEAD = 22
 const FONT_MODEL = 22
 const FONT_REMARK = 18
 const FOOTER_H = 56
+const REMARK_W = 220
 
 const boards = ref<any[]>([])
 const imgPaths = ref<string[]>([])
@@ -170,8 +172,11 @@ function makeCtx(sheet: any, ncol = 1): Ctx {
 	}
 	const colW = ncol === 2 ? COL_W : PAGE_W
 	const pageW = ncol === 2 ? COL_W * 2 + COL_GAP : PAGE_W
-	const hasRemark = rows.some((r: any) => String(r.remark || '').trim())
-	const remarkW = hasRemark ? 200 : 0
+	const hasRemark = rows.some((r: any) => {
+		if (Array.isArray(r.remarkValues) && r.remarkValues.some((v: any) => String(v || '').trim())) return true
+		return String(r.remark || '').trim()
+	})
+	const remarkW = hasRemark ? REMARK_W : 0
 	const gw = Math.floor((colW - MODEL_W - CAP_W - remarkW) / Math.max(1, cols.length))
 	return {
 		cols,
@@ -190,19 +195,29 @@ function makeCtx(sheet: any, ncol = 1): Ctx {
 
 function rowHeight(item: any, ctx: Ctx) {
 	let lines = estLines(item.capacity || '-', CAP_W, FONT_BODY)
+	const gw = Number(item.gw || ctx.gw)
 	item.prices.forEach((p: any) => {
-		lines = Math.max(lines, estLines(p, ctx.gw, FONT_BODY))
+		lines = Math.max(lines, estLines(p, gw, FONT_BODY))
 	})
-	if (ctx.remarkW) lines = Math.max(lines, estLines(item.remark || '', ctx.remarkW, FONT_REMARK))
 	return Math.max(44, lines * LH + VPAD)
 }
 function modelHeight(model: string) {
 	return Math.max(44, estLines(model, MODEL_W, FONT_MODEL) * MODEL_LH + VPAD)
 }
-function headerHeight(ctx: Ctx) {
+function headerHeightFor(cols: string[], gw: number) {
 	let lines = 1
-	ctx.cols.forEach(name => {
-		lines = Math.max(lines, estLines(wrapName(name), ctx.gw, FONT_HEAD))
+	cols.forEach(name => {
+		lines = Math.max(lines, estLines(wrapName(name), gw, FONT_HEAD))
+	})
+	return lines * HEAD_LH + VPAD
+}
+function headerHeightForGroup(priceCols: string[], priceW: number, remarkCols: string[], remarkW: number) {
+	let lines = 1
+	priceCols.forEach(name => {
+		lines = Math.max(lines, estLines(wrapName(name), priceW, FONT_HEAD))
+	})
+	remarkCols.forEach(name => {
+		lines = Math.max(lines, estLines(name, remarkW, FONT_HEAD))
 	})
 	return lines * HEAD_LH + VPAD
 }
@@ -217,16 +232,28 @@ function buildGroups(ctx: Ctx) {
 	const groups: any[] = []
 	const m = new Map<string, any>()
 	ctx.rows.forEach((r: any) => {
-		let g = m.get(r.model)
+		const cols = Array.isArray(r.columns) && r.columns.length ? r.columns : ctx.cols
+		const signature = cols.join('\u0001')
+		const key = `${r.model}\u0002${signature}`
+		let g = m.get(key)
 		if (!g) {
-			g = { model: r.model, items: [] }
-			m.set(r.model, g)
+			const gw = Math.floor((ctx.colW - MODEL_W - CAP_W - ctx.remarkW) / Math.max(1, cols.length))
+			g = { model: r.model, cols, signature, gw, headerH: headerHeightFor(cols, gw), capacityLabel: r.capacityLabel || '内存', items: [] }
+			m.set(key, g)
 			groups.push(g)
 		}
 		g.items.push(r)
 	})
 	groups.forEach(g => {
-		g.capH = g.items.map((it: any) => rowHeight(it, ctx))
+		g.capacityLabel = collectCapacityLabel(g.items)
+		g.remarkCols = collectRemarkColumns(g.items)
+		g.remarkW = g.remarkCols.length ? REMARK_W : 0
+		const remarkTotalW = g.remarkCols.length * g.remarkW
+		g.gw = Math.floor((ctx.colW - MODEL_W - CAP_W - remarkTotalW) / Math.max(1, g.cols.length))
+		g.headerH = headerHeightForGroup(g.cols, g.gw, g.remarkCols, g.remarkW)
+		g.layoutSignature = `${g.signature}\u0002${g.capacityLabel}\u0002${g.remarkCols.join('\u0001')}`
+		g.capH = g.items.map((it: any) => rowHeight(Object.assign({}, it, { gw: g.gw }), ctx))
+		balanceMergedRemarkHeights(g)
 		const sum = g.capH.reduce((a: number, b: number) => a + b, 0)
 		const mh = modelHeight(g.model)
 		g.height = Math.max(mh, sum)
@@ -235,31 +262,109 @@ function buildGroups(ctx: Ctx) {
 	return groups
 }
 
+function collectCapacityLabel(items: any[]) {
+	for (const item of items) {
+		const label = String(item?.capacityLabel || '').trim()
+		if (label) return label
+	}
+	return '内存'
+}
+
+function collectRemarkColumns(items: any[]) {
+	const cols: string[] = []
+	items.forEach((item: any) => {
+		const list = Array.isArray(item.remarkColumns) ? item.remarkColumns : []
+		list.forEach((name: string) => {
+			const n = String(name || '').trim()
+			if (n && !cols.includes(n)) cols.push(n)
+		})
+	})
+	return cols.filter(col => items.some(item => !item?.remarkHidden && normalizeRemarkText(remarkValue(item, col))))
+}
+
+function remarkValue(item: any, col: string) {
+	if (item?.remarkMap && item.remarkMap[col] !== undefined) return String(item.remarkMap[col] || '')
+	const idx = Array.isArray(item?.remarkColumns) ? item.remarkColumns.indexOf(col) : -1
+	return idx >= 0 && Array.isArray(item?.remarkValues) ? String(item.remarkValues[idx] || '') : ''
+}
+
+function normalizeRemarkText(value: any) {
+	return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function remarkSpanAt(group: any, col: string, index: number) {
+	const item = group.items[index] || {}
+	const value = remarkValue(item, col)
+	const normalized = normalizeRemarkText(value)
+	if (!normalized) return { value: '', span: 1 }
+
+	const metaSpan = Math.max(0, Number(item.remarkRowspan || 0))
+	if (!item.remarkHidden && metaSpan > 1) {
+		return { value, span: Math.min(metaSpan, group.items.length - index) }
+	}
+	if (item.remarkHidden) return { value: '', span: 1 }
+
+	let span = 1
+	while (index + span < group.items.length && normalizeRemarkText(remarkValue(group.items[index + span], col)) === normalized) {
+		span++
+	}
+	return { value, span }
+}
+
+function balanceMergedRemarkHeights(group: any) {
+	if (!group.remarkCols?.length) return
+	group.remarkCols.forEach((col: string) => {
+		for (let i = 0; i < group.items.length; i++) {
+			const { value, span } = remarkSpanAt(group, col, i)
+			if (!normalizeRemarkText(value)) continue
+			const required = Math.max(44, estLines(value, group.remarkW, FONT_REMARK) * REMARK_LH + VPAD + 8)
+			let current = 0
+			for (let j = 0; j < span; j++) current += group.capH[i + j] || 0
+			const extra = Math.max(0, required - current)
+			if (extra > 0) {
+				const each = Math.floor(extra / span)
+				let rest = extra - each * span
+				for (let j = 0; j < span; j++) {
+					group.capH[i + j] += each + (rest > 0 ? 1 : 0)
+					if (rest > 0) rest--
+				}
+			}
+			i += span - 1
+		}
+	})
+}
+
 // 单列(表头 + 数据)的视图栈,宽度 = ctx.colW;单列/双列模式复用
 function buildColumnStack(groups: any[], ctx: Ctx): { views: any[]; height: number } {
 	const t = theme.value
-	const gw = ctx.gw
-	const rw = ctx.remarkW
 	const colW = ctx.colW
 	const rightW = colW - MODEL_W
-	const hh = headerHeight(ctx)
 	const views: any[] = []
+	let totalH = 0
+	let prevSignature = ''
 
-	// 表头
-	const headCells = [
-		txt('机型', MODEL_W, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx' }),
-		txt('内存', CAP_W, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx' })
-	]
-	ctx.cols.forEach(name => headCells.push(txt(wrapName(name), gw, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx', lineHeight: HEAD_LH + 'rpx' })))
-	if (rw) headCells.push(txt('备注', rw, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx' }))
-	views.push({
-		type: 'view',
-		css: { width: colW + 'rpx', height: hh + 'rpx', background: t.headBg, display: 'flex', flexDirection: 'row', alignItems: 'center', boxSizing: 'border-box' },
-		views: headCells
-	})
+	function pushHeader(group: any) {
+		const headCells = [
+			txt('机型', MODEL_W, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx' }),
+			txt(group.capacityLabel || '内存', CAP_W, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx' })
+		]
+		group.cols.forEach((name: string) => headCells.push(txt(wrapName(name), group.gw, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx', lineHeight: HEAD_LH + 'rpx' })))
+		group.remarkCols.forEach((name: string) => headCells.push(txt(name, group.remarkW, { color: t.headText, fontWeight: 'bold', fontSize: FONT_HEAD + 'rpx', lineHeight: HEAD_LH + 'rpx' })))
+		views.push({
+			type: 'view',
+			css: { width: colW + 'rpx', height: group.headerH + 'rpx', background: t.headBg, display: 'flex', flexDirection: 'row', alignItems: 'center', boxSizing: 'border-box' },
+			views: headCells
+		})
+		totalH += group.headerH
+		prevSignature = group.layoutSignature
+	}
 
 	// 数据
 	groups.forEach((group, gi) => {
+		if (group.layoutSignature !== prevSignature) pushHeader(group)
+		const gw = group.gw
+		const remarkTotalW = group.remarkCols.length * group.remarkW
+		const dataW = rightW - remarkTotalW
 		const capRows = group.items.map((it: any, ri: number) => {
 			const bg = (gi + ri) % 2 === 0 ? t.bodyBg : t.lineColor
 			const h = group.capH[ri]
@@ -267,35 +372,53 @@ function buildColumnStack(groups: any[], ctx: Ctx): { views: any[]; height: numb
 			it.prices.forEach((p: any, ci: number) =>
 				capCells.push(txt(p, gw, it.marks && it.marks[ci] ? { color: '#e6402d', fontWeight: 'bold' } : { color: t.priceText, fontWeight: 'bold' }))
 			)
-			if (rw) capCells.push(txt(it.remark || '', rw, { color: t.subText, fontSize: FONT_REMARK + 'rpx', lineHeight: '26rpx' }))
 			return {
 				type: 'view',
-				css: { width: rightW + 'rpx', height: h + 'rpx', display: 'flex', flexDirection: 'row', alignItems: 'center', background: bg, boxSizing: 'border-box' },
+				css: { width: dataW + 'rpx', height: h + 'rpx', display: 'flex', flexDirection: 'row', alignItems: 'center', background: bg, boxSizing: 'border-box' },
 				views: capCells
 			}
 		})
+		const rightViews: any[] = [
+			{ type: 'view', css: { width: dataW + 'rpx', display: 'flex', flexDirection: 'column' }, views: capRows }
+		]
+		group.remarkCols.forEach((col: string) => {
+			const remarkRows: any[] = []
+			for (let ri = 0; ri < group.items.length; ri++) {
+				const { value, span } = remarkSpanAt(group, col, ri)
+				let h = 0
+				for (let si = 0; si < span; si++) h += group.capH[ri + si] || 0
+				const bg = (gi + ri) % 2 === 0 ? t.bodyBg : t.lineColor
+				remarkRows.push({
+					type: 'view',
+					css: { width: group.remarkW + 'rpx', height: h + 'rpx', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg, boxSizing: 'border-box', borderLeft: `1rpx solid ${t.lineColor}`, padding: '0 4rpx' },
+					views: [txt(value || '', group.remarkW - 8, { color: t.subText, fontSize: FONT_REMARK + 'rpx', lineHeight: REMARK_LH + 'rpx' })]
+				})
+				ri += span - 1
+			}
+			rightViews.push({ type: 'view', css: { width: group.remarkW + 'rpx', display: 'flex', flexDirection: 'column' }, views: remarkRows })
+		})
 		views.push({
 			type: 'view',
-			css: { width: colW + 'rpx', height: group.height + 'rpx', display: 'flex', flexDirection: 'row', borderBottom: `2rpx solid ${t.lineColor}`, boxSizing: 'border-box' },
+			css: { width: colW + 'rpx', height: group.height + 'rpx', display: 'flex', flexDirection: 'row', borderBottom: `2rpx solid ${hexToRgba(t.headBg, 0.58)}`, boxSizing: 'border-box' },
 			views: [
 				{
 					type: 'view',
-					css: { width: MODEL_W + 'rpx', height: group.height + 'rpx', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: `1rpx solid ${t.lineColor}`, background: t.bodyBg, boxSizing: 'border-box' },
+					css: { width: MODEL_W + 'rpx', height: group.height + 'rpx', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: `6rpx solid ${t.headBg}`, borderRight: `1rpx solid ${t.lineColor}`, background: t.bodyBg, boxSizing: 'border-box' },
 					views: [{ type: 'text', text: group.model, css: { width: MODEL_W - 16 + 'rpx', textAlign: 'center', fontSize: FONT_MODEL + 'rpx', fontWeight: 'bold', color: t.bodyText, lineHeight: MODEL_LH + 'rpx' } }]
 				},
-				{ type: 'view', css: { width: rightW + 'rpx', display: 'flex', flexDirection: 'column' }, views: capRows }
+				{ type: 'view', css: { width: rightW + 'rpx', display: 'flex', flexDirection: 'row' }, views: rightViews }
 			]
 		})
+		totalH += group.height
 	})
 
-	const dataH = groups.reduce((a: number, g: any) => a + g.height, 0)
-	return { views, height: hh + dataH }
+	return { views, height: totalH }
 }
 
 // columns: 本页的列(单列模式 1 个、双列模式最多 2 个 group 数组)
 function buildPageBoard(columns: any[][], pageIndex: number, totalPages: number, ctx: Ctx) {
 	const t = theme.value
-	const pageW = ctx.pageW
+	const pageW = columns.length <= 1 ? ctx.colW : ctx.pageW
 	const views: any[] = []
 
 	// 标题横幅（居中，整图宽,标头含一级分类品牌名）
@@ -379,35 +502,85 @@ function pageBudgetRpx(ctx: Ctx) {
 	}
 	const factor = (screenW / 750) * dpr
 	const budgetRpx = Math.floor(15000 / factor)
-	const chromeRpx = bannerHeightRpx(ctx) + noticeHeightRpx(ctx) + headerHeight(ctx) + FOOTER_H + 40
+	const chromeRpx = bannerHeightRpx(ctx) + noticeHeightRpx(ctx) + FOOTER_H + 40
 	return Math.max(600, budgetRpx - chromeRpx)
 }
 
-// 一个报价单 -> 若干页 board（按高度预算切「列」,每 ncol 列拼成一页）
+function groupBlockHeight(prevSignature: string, group: any, isFirst = false) {
+	return (isFirst || prevSignature !== group.layoutSignature ? group.headerH : 0) + group.height
+}
+
+function columnHeight(groups: any[]) {
+	let h = 0
+	let prev = ''
+	groups.forEach((group, index) => {
+		h += groupBlockHeight(prev, group, index === 0)
+		prev = group.layoutSignature
+	})
+	return h
+}
+
+function splitBalancedColumns(groups: any[], dataBudget: number) {
+	if (groups.length <= 1) return [groups]
+	let bestIndex = 1
+	let bestScore = Number.MAX_SAFE_INTEGER
+	for (let i = 1; i < groups.length; i++) {
+		const leftH = columnHeight(groups.slice(0, i))
+		const rightH = columnHeight(groups.slice(i))
+		const overflow = Math.max(0, leftH - dataBudget) + Math.max(0, rightH - dataBudget)
+		const score = overflow * 100000 + Math.abs(leftH - rightH)
+		if (score < bestScore) {
+			bestScore = score
+			bestIndex = i
+		}
+	}
+	return [groups.slice(0, bestIndex), groups.slice(bestIndex)]
+}
+
+// 一个报价单 -> 若干页 board（双列按页内高度均衡分布，避免右侧大面积空白）
 function buildSheetBoards(ctx: Ctx) {
 	const groups = buildGroups(ctx)
 	const dataBudget = pageBudgetRpx(ctx)
 	const ncol = ctx.ncol === 2 ? 2 : 1
-	// 先按高度预算把 groups 切成若干「列」
-	const colsArr: any[][] = []
+
+	if (ncol === 1) {
+		const colsArr: any[][] = []
+		let cur: any[] = []
+		let h = 0
+		groups.forEach(group => {
+			const prev = cur.length ? cur[cur.length - 1].layoutSignature : ''
+			const blockH = groupBlockHeight(prev, group, cur.length === 0)
+			if (cur.length && h + blockH > dataBudget) {
+				colsArr.push(cur)
+				cur = []
+				h = 0
+			}
+			cur.push(group)
+			h += groupBlockHeight(prev, group, cur.length === 1)
+		})
+		if (cur.length) colsArr.push(cur)
+		if (!colsArr.length) colsArr.push([])
+		return colsArr.map((col, idx) => buildPageBoard([col], idx, colsArr.length, ctx))
+	}
+
+	const pageGroups: any[][] = []
 	let cur: any[] = []
 	let h = 0
-	groups.forEach(g => {
-		if (cur.length && h + g.height > dataBudget) {
-			colsArr.push(cur)
+	groups.forEach(group => {
+		const prev = cur.length ? cur[cur.length - 1].layoutSignature : ''
+		const blockH = groupBlockHeight(prev, group, cur.length === 0)
+		if (cur.length && h + blockH > dataBudget * 2) {
+			pageGroups.push(cur)
 			cur = []
 			h = 0
 		}
-		cur.push(g)
-		h += g.height
+		cur.push(group)
+		h += groupBlockHeight(prev, group, cur.length === 1)
 	})
-	if (cur.length) colsArr.push(cur)
-	if (!colsArr.length) colsArr.push([])
-	// 每 ncol 列拼成一页
-	const pages: any[][][] = []
-	for (let i = 0; i < colsArr.length; i += ncol) {
-		pages.push(colsArr.slice(i, i + ncol))
-	}
+	if (cur.length) pageGroups.push(cur)
+	if (!pageGroups.length) pageGroups.push([])
+
+	const pages = pageGroups.map(list => splitBalancedColumns(list, dataBudget))
 	return pages.map((cols, idx) => buildPageBoard(cols, idx, pages.length, ctx))
 }
 
