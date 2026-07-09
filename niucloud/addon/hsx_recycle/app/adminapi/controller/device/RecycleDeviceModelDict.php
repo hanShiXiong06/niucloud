@@ -46,6 +46,7 @@ class RecycleDeviceModelDict extends BaseAdminController
         $data = $this->request->params([
             ['pid', 0],
             ['keyword', ''],
+            ['status', ''],
             ['limit', 200],
         ]);
 

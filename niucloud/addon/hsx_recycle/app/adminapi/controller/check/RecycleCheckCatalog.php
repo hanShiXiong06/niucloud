@@ -44,14 +44,15 @@ class RecycleCheckCatalog extends BaseAdminController
         }
         $token = 'pjt_' . date('YmdHis') . '_' . mt_rand(1000, 9999) . '.' . $ext;
         $file->move($dir, $token);
-        return success('上传成功，开始导入', $this->service->importInit($dir . $token, $token, $file->getOriginalName()));
+        $mode = (string)$this->request->param('mode', 'append');
+        return success('上传成功，开始导入', $this->service->importInit($dir . $token, $token, $file->getOriginalName(), $mode));
     }
 
     /** 处理一片(前端循环调用直到 done) */
     public function importChunk()
     {
-        $p = $this->request->params([['batch_id', 0], ['token', ''], ['offset', 0], ['limit', 80]]);
-        return success($this->service->importChunk((int)$p['batch_id'], (string)$p['token'], (int)$p['offset'], (int)$p['limit']));
+        $p = $this->request->params([['batch_id', 0], ['token', ''], ['offset', 0], ['limit', 80], ['mode', '']]);
+        return success($this->service->importChunk((int)$p['batch_id'], (string)$p['token'], (int)$p['offset'], (int)$p['limit'], (string)$p['mode']));
     }
 
     /** 级别字典列表 + 统计 */

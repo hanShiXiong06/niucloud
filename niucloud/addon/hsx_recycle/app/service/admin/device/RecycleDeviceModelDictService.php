@@ -80,14 +80,19 @@ class RecycleDeviceModelDictService extends BaseAdminService
     {
         $pid = (int)($where['pid'] ?? 0);
         $keyword = trim((string)($where['keyword'] ?? ''));
+        $status = $where['status'] ?? '';
         $limit = max(20, min(500, (int)($where['limit'] ?? 200)));
 
-        $fetch = function () use ($pid, $keyword, $limit) {
+        $fetch = function () use ($pid, $keyword, $status, $limit) {
             $query = $this->model->where([
                 ['site_id', '=', $this->site_id],
-                ['pid', '=', $pid],
-                ['status', '=', 1],
             ]);
+            if ($keyword === '') {
+                $query->where('pid', '=', $pid);
+            }
+            if ($status !== '' && $status !== null) {
+                $query->where('status', '=', (int)$status);
+            }
             if ($keyword !== '') {
                 $this->coreService->applyKeywordFilter($query, $keyword);
             }
@@ -100,7 +105,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
         };
 
         // 带关键字的是搜索,不缓存;纯按 pid 浏览某一层才缓存(懒加载热点路径,命中即不查库)
-        if ($keyword !== '') {
+        if ($keyword !== '' || ($status !== '' && $status !== null)) {
             return $fetch();
         }
         return cache_remember(
@@ -213,8 +218,8 @@ class RecycleDeviceModelDictService extends BaseAdminService
     {
         $source = trim($source) !== '' ? trim($source) : 'recycle_spider';
         $created = 0;
-        $updated = 0;
         $skipped = [];
+        $seenPaths = [];
 
         foreach ($rows as $index => $row) {
             if (!is_array($row)) {
@@ -227,9 +232,24 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
             try {
                 $payload = $this->normalizeExternalRow($row, $source);
-                $beforeExists = $this->pathExists($payload['parts']);
+                $pathText = implode('/', $payload['parts']);
+                if (isset($seenPaths[$pathText])) {
+                    $skipped[] = [
+                        'line' => $index + 1,
+                        'reason' => '导入文件内重复：' . $pathText,
+                    ];
+                    continue;
+                }
+                $seenPaths[$pathText] = true;
+                if ($this->pathExists($payload['parts'])) {
+                    $skipped[] = [
+                        'line' => $index + 1,
+                        'reason' => '同一站点已存在，已跳过：' . $pathText,
+                    ];
+                    continue;
+                }
                 $this->createPath($payload['parts'], 1, 0, true, $payload['node_metas']);
-                $beforeExists ? $updated++ : $created++;
+                $created++;
             } catch (\Throwable $e) {
                 $skipped[] = [
                     'line' => $index + 1,
@@ -238,12 +258,12 @@ class RecycleDeviceModelDictService extends BaseAdminService
             }
         }
 
-        if ($created > 0 || $updated > 0) {
+        if ($created > 0) {
             $this->clearTreeCache();
         }
         return [
             'created_count' => $created,
-            'updated_count' => $updated,
+            'updated_count' => 0,
             'skipped_count' => count($skipped),
             'skipped' => $skipped,
         ];
@@ -696,6 +716,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
 
         return array_map(function ($row) use ($parentMap) {
             $row['has_children'] = isset($parentMap[(int)$row['id']]) ? 1 : 0;
+            $row['is_leaf'] = isset($parentMap[(int)$row['id']]) ? 0 : 1;
             $row['child_list'] = [];
             return $this->formatNode($row);
         }, $rows);

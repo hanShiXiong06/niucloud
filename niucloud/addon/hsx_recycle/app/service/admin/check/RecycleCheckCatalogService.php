@@ -28,9 +28,10 @@ class RecycleCheckCatalogService extends BaseAdminService
     private const EXCEL_CHUNK_ROWS = 20000;
 
     /** 上传初始化：估算型号数(用行数粗估)，建批次，返回 token */
-    public function importInit(string $absPath, string $token, string $fileName): array
+    public function importInit(string $absPath, string $token, string $fileName, string $mode = 'append'): array
     {
         $this->ensureCompactColumns();
+        $mode = $this->normalizeImportMode($mode);
         if (!is_file($absPath)) {
             throw new CommonException('上传文件不存在');
         }
@@ -38,15 +39,15 @@ class RecycleCheckCatalogService extends BaseAdminService
         $now = time();
         $batch = RecycleCheckImportBatch::create([
             'site_id' => $this->site_id, 'source' => 'paijitang',
-            'file_name' => $fileName . '|' . $token, 'total_rows' => $rows,
+            'file_name' => $fileName . '|' . $token . '|' . $mode, 'total_rows' => $rows,
             'status' => 'processing', 'operator_uid' => (int)$this->uid,
             'operator_name' => (string)$this->username, 'create_at' => $now, 'update_at' => $now,
         ]);
-        return ['batch_id' => (int)$batch->id, 'token' => $token, 'total_rows' => $rows];
+        return ['batch_id' => (int)$batch->id, 'token' => $token, 'total_rows' => $rows, 'mode' => $mode];
     }
 
-    /** 处理一片(按型号，最多 limit 个型号)。前端循环调用直到 done。offset=0 时先清旧拍机堂模板 */
-    public function importChunk(int $batchId, string $token, int $offset, int $limit = 80): array
+    /** 处理一片(按型号，最多 limit 个型号)。前端循环调用直到 done。覆盖模式 offset=0 时先清旧拍机堂模板 */
+    public function importChunk(int $batchId, string $token, int $offset, int $limit = 80, string $mode = ''): array
     {
         $this->ensureCompactColumns();
         $path = public_path() . self::IMPORT_DIR . basename($token);
@@ -57,8 +58,11 @@ class RecycleCheckCatalogService extends BaseAdminService
         if ($batch->isEmpty()) {
             throw new CommonException('导入批次不存在');
         }
+        $mode = $mode !== '' ? $this->normalizeImportMode($mode) : $this->resolveImportModeFromBatch((string)$batch->file_name);
         if ($offset === 0) {
-            $this->clearImported();
+            if ($mode === 'overwrite') {
+                $this->clearImported();
+            }
             $this->seedGrades();
         }
         $now = time();
@@ -66,18 +70,20 @@ class RecycleCheckCatalogService extends BaseAdminService
         $newTpl = (int)$batch->inserted;   // 复用字段：新建模板数
         $bound = (int)$batch->updated;     // 复用字段：绑定型号数
         $rowsDone = (int)$batch->skipped_same; // 复用字段：已处理行数(进度)
+        $skippedExists = (int)$batch->skipped_user; // 复用字段：追加模式下已有模板的型号数
         $totalRows = (int)$batch->total_rows;
         $result = $this->isSpreadsheetFile($path)
-            ? $this->processSpreadsheetChunk($path, $offset, $limit, $totalRows, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone)
-            : $this->processCsvChunk($path, $offset, $limit, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone);
+            ? $this->processSpreadsheetChunk($path, $offset, $limit, $totalRows, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone, $skippedExists, $mode)
+            : $this->processCsvChunk($path, $offset, $limit, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone, $skippedExists, $mode);
         $done = $result['done'];
         $nextOffset = $result['next_offset'];
 
-        $save = ['inserted' => $newTpl, 'updated' => $bound, 'skipped_same' => $rowsDone, 'update_at' => time()];
+        $save = ['inserted' => $newTpl, 'updated' => $bound, 'skipped_same' => $rowsDone, 'skipped_user' => $skippedExists, 'update_at' => time()];
         if ($done) { $save['status'] = 'completed'; @unlink($path); }
         $batch->save($save);
         return ['batch_id' => $batchId, 'next_offset' => $nextOffset, 'done' => $done,
-                'templates' => $newTpl, 'bindings' => $bound, 'rows_done' => $rowsDone];
+                'templates' => $newTpl, 'bindings' => $bound, 'rows_done' => $rowsDone,
+                'skipped_exists' => $skippedExists, 'mode' => $mode];
     }
 
     private function processSpreadsheetChunk(
@@ -90,10 +96,12 @@ class RecycleCheckCatalogService extends BaseAdminService
         array &$nodeCache,
         int &$newTpl,
         int &$bound,
-        int &$rowsDone
+        int &$rowsDone,
+        int &$skippedExists,
+        string $mode
     ): array {
         if ($this->isXlsxFile($path)) {
-            return $this->processXlsxStreamChunk($path, $offset, $limit, $totalRows, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone);
+            return $this->processXlsxStreamChunk($path, $offset, $limit, $totalRows, $now, $optCache, $nodeCache, $newTpl, $bound, $rowsDone, $skippedExists, $mode);
         }
 
         $startRow = $offset > 1 ? $offset : 2;
@@ -149,7 +157,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                 continue;
             }
             if ($curModel !== null && $model !== $curModel) {
-                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound, $skippedExists, $mode);
                 $buffer = [];
                 $modelsThis++;
                 if ($modelsThis >= $limit) {
@@ -163,7 +171,7 @@ class RecycleCheckCatalogService extends BaseAdminService
         }
 
         if ($buffer) {
-            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound, $skippedExists, $mode);
         }
         $done = $lastReadRow >= $sourceHighestRow;
         $nextOffset = $done ? $sourceHighestRow + 1 : $lastReadRow + 1;
@@ -181,7 +189,9 @@ class RecycleCheckCatalogService extends BaseAdminService
         array &$nodeCache,
         int &$newTpl,
         int &$bound,
-        int &$rowsDone
+        int &$rowsDone,
+        int &$skippedExists,
+        string $mode
     ): array {
         $startRow = $offset > 1 ? $offset : 2;
         $endRow = $startRow + self::EXCEL_CHUNK_ROWS - 1;
@@ -219,7 +229,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                 continue;
             }
             if ($curModel !== null && $model !== $curModel) {
-                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound, $skippedExists, $mode);
                 $buffer = [];
                 $modelsThis++;
                 if ($modelsThis >= $limit) {
@@ -232,7 +242,7 @@ class RecycleCheckCatalogService extends BaseAdminService
         }
 
         if ($buffer) {
-            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound, $skippedExists, $mode);
         }
         $reader->close();
         $done = $lastReadRow >= $sourceHighestRow;
@@ -248,7 +258,9 @@ class RecycleCheckCatalogService extends BaseAdminService
         array &$nodeCache,
         int &$newTpl,
         int &$bound,
-        int &$rowsDone
+        int &$rowsDone,
+        int &$skippedExists,
+        string $mode
     ): array {
         $startRow = $offset > 1 ? $offset : 1;
         $fh = fopen($path, 'r');
@@ -273,7 +285,7 @@ class RecycleCheckCatalogService extends BaseAdminService
                 continue;
             }
             if ($curModel !== null && $model !== $curModel) {
-                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+                $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound, $skippedExists, $mode);
                 $buffer = [];
                 $modelsThis++;
                 if ($modelsThis >= $limit) {
@@ -286,17 +298,32 @@ class RecycleCheckCatalogService extends BaseAdminService
             $buffer[] = $row;
         }
         if ($buffer) {
-            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound);
+            $rowsDone += $this->processModel($buffer, $now, $optCache, $nodeCache, $newTpl, $bound, $skippedExists, $mode);
         }
         fclose($fh);
         return ['next_offset' => $rowNo + 1, 'done' => true];
     }
 
     /** 处理一个型号的所有行：去重成模板(共享)→ 建/复用模板 → 绑定型号节点。返回处理行数 */
-    private function processModel(array $rows, int $now, array &$optCache, array &$nodeCache, int &$newTpl, int &$bound): int
+    private function processModel(
+        array $rows,
+        int $now,
+        array &$optCache,
+        array &$nodeCache,
+        int &$newTpl,
+        int &$bound,
+        int &$skippedExists,
+        string $mode
+    ): int
     {
         if (empty($rows)) { return 0; }
         $model = trim((string)($rows[0][0] ?? '')); $pid = (int)($rows[0][1] ?? 0);
+        $count = count($rows);
+        $nodeId = $this->resolveModelNode($nodeCache, $pid, $model);
+        if ($mode === 'append' && $nodeId > 0 && $this->modelHasTemplateBinding($nodeId)) {
+            $skippedExists++;
+            return $count;
+        }
         $items = [];
         foreach ($rows as $r) {
             $field = trim((string)($r[2] ?? ''));
@@ -306,7 +333,6 @@ class RecycleCheckCatalogService extends BaseAdminService
             if ($dft !== '' && !in_array($dft, $opts, true)) { array_unshift($opts, $dft); }
             $items[] = ['group' => $group, 'field' => $field, 'default' => $dft, 'opts' => $opts];
         }
-        $count = count($rows);
         if (empty($items)) { return $count; }
 
         $schema = $this->buildCompactSchema($items, $optCache, $now);
@@ -326,7 +352,6 @@ class RecycleCheckCatalogService extends BaseAdminService
             $newTpl++;
         }
 
-        $nodeId = $this->resolveModelNode($nodeCache, $pid, $model);
         if ($nodeId > 0) {
             $existBind = (int)Db::name('recycle_template_binding')
                 ->where('site_id', $this->site_id)->where('target_type', 'model_dict')
@@ -535,6 +560,29 @@ class RecycleCheckCatalogService extends BaseAdminService
         return $id;
     }
 
+    private function modelHasTemplateBinding(int $nodeId): bool
+    {
+        return (int)Db::name('recycle_template_binding')
+            ->where('site_id', $this->site_id)
+            ->where('target_type', 'model_dict')
+            ->where('target_id', $nodeId)
+            ->where('scene_key', self::BIND_SCENE)
+            ->where('check_template_id', '>', 0)
+            ->where('status', 1)
+            ->value('id') > 0;
+    }
+
+    private function normalizeImportMode(string $mode): string
+    {
+        return $mode === 'overwrite' ? 'overwrite' : 'append';
+    }
+
+    private function resolveImportModeFromBatch(string $fileName): string
+    {
+        $parts = explode('|', $fileName);
+        return $this->normalizeImportMode((string)($parts[2] ?? 'append'));
+    }
+
     /** 清掉旧的拍机堂来源模板(template_key 前缀 pjt_)及其分组/字段/选项/绑定。自定义模板不碰 */
     private function clearImported(): void
     {
@@ -567,6 +615,11 @@ class RecycleCheckCatalogService extends BaseAdminService
         }
         if (!$this->hasColumn($table, 'schema_json')) {
             Db::execute("ALTER TABLE `{$table}` ADD COLUMN `schema_json` longtext NULL COMMENT '导入模板紧凑结构JSON' AFTER `schema_hash`");
+        }
+
+        $batchTable = $prefix . 'recycle_check_import_batch';
+        if (!$this->hasColumn($batchTable, 'skipped_user')) {
+            Db::execute("ALTER TABLE `{$batchTable}` ADD COLUMN `skipped_user` int NOT NULL DEFAULT 0 COMMENT '跳过用户已有配置' AFTER `skipped_same`");
         }
     }
 

@@ -18,12 +18,14 @@
           placeholder="搜索分类、路径或外部ID"
           clearable
           class="toolbar-keyword"
+          @keyup.enter="reloadTree"
+          @clear="reloadTree"
         />
-        <el-select v-model="query.status" placeholder="状态" clearable class="toolbar-status">
+        <el-select v-model="query.status" placeholder="状态" clearable class="toolbar-status" @change="reloadTree" @clear="reloadTree">
           <el-option label="启用" :value="1" />
           <el-option label="停用" :value="0" />
         </el-select>
-        <el-button type="primary" @click="loadTree">刷新</el-button>
+        <el-button type="primary" @click="reloadTree">刷新</el-button>
       </div>
 
       <div v-loading="loading" class="virtual-tree-panel">
@@ -35,15 +37,19 @@
           <span>状态</span>
           <span class="tree-head__action">操作</span>
         </div>
-        <el-empty v-if="!loading && !filteredTree.length" description="暂无分类，请先快速录入" />
-        <el-tree-v2
+        <el-empty v-if="!loading && treeEmpty" description="暂无分类，请先快速录入" />
+        <el-tree
           v-else
-          :data="filteredTree"
+          ref="treeRef"
+          :key="treeKey"
+          :data="tree"
           :props="treeProps"
-          :height="treeHeight"
-          :item-size="54"
+          node-key="id"
           :expand-on-click-node="false"
+          :default-expanded-keys="defaultExpandedKeys"
           class="model-virtual-tree"
+          @node-expand="handleNodeExpand"
+          @node-collapse="handleNodeCollapse"
         >
           <template #default="{ data }">
             <div class="tree-row">
@@ -51,6 +57,7 @@
                 <el-tag size="small" :type="levelTagType(data.level)" effect="plain">{{ levelName(data.level) }}</el-tag>
                 <span class="tree-node-name">{{ data.node_name }}</span>
                 <el-tag v-if="isLeaf(data) && Number(data.is_hot || 0) === 1" size="small" type="danger" effect="plain">热门</el-tag>
+                <el-tag v-if="Number(data.has_children || 0) === 1 && !data.__children_loaded" size="small" type="info" effect="plain">按需加载</el-tag>
               </div>
               <div class="tree-cell tree-cell--path">{{ data.model_full_name || data.node_name }}</div>
               <div class="tree-cell tree-cell--center">
@@ -76,17 +83,33 @@
               </div>
             </div>
           </template>
-        </el-tree-v2>
+        </el-tree>
       </div>
     </el-card>
 
     <el-dialog v-model="editDialogVisible" :title="dialogTitle" width="560px">
       <el-form :model="editForm" label-width="90px">
-        <el-form-item label="分类路径" required>
+        <el-form-item v-if="parentPathText" label="父级分类">
+          <div class="parent-path-box">{{ parentPathText }}</div>
+        </el-form-item>
+        <el-form-item :label="rootCreateMode ? '一级分类' : '分类名称'" required>
           <el-input
-            v-model="editForm.path_text"
-            placeholder="如：智能数码/智能手表/苹果/Ultra 系列/Apple Watch Ultra 2"
+            v-model="editForm.node_name"
+            maxlength="80"
+            show-word-limit
+            :placeholder="rootCreateMode ? '请输入一级分类，如 手机' : '请输入当前分类名称，如 iPhone 16 Pro Max'"
           />
+        </el-form-item>
+        <el-form-item v-if="rootCreateMode" label="下级分类" required>
+          <el-input
+            v-model="editForm.child_name"
+            maxlength="80"
+            show-word-limit
+            placeholder="请输入下级分类，如 苹果"
+          />
+        </el-form-item>
+        <el-form-item label="完整路径">
+          <div class="path-preview">{{ editPathPreview || '填写名称后自动生成' }}</div>
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="editForm.sort" :min="0" :controls="false" />
@@ -282,7 +305,7 @@ import {
   addRecycleDeviceModelDict,
   deleteRecycleDeviceModelDict,
   editRecycleDeviceModelDict,
-  getRecycleDeviceModelDictTree,
+  getRecycleDeviceModelDictChildren,
   getTemplateBindingInfo,
   importExternalRecycleDeviceModelDict,
   quickAddRecycleDeviceModelDict,
@@ -294,12 +317,18 @@ import {
 const loading = ref(false)
 const saving = ref(false)
 const tree = ref<any[]>([])
-const treeHeight = 620
+const treeRef = ref<any>(null)
+const treeKey = ref(0)
+const treeEmpty = ref(false)
+const defaultExpandedKeys = ref<number[]>([])
+const childrenCache = new Map<string, any[]>()
+const expandedNodeIds = ref<number[]>([])
 const maxLevel = 8
 const treeProps = {
   value: 'id',
   label: 'node_name',
   children: 'child_list',
+  isLeaf: 'is_leaf',
 }
 const query = reactive({
   keyword: '',
@@ -329,7 +358,9 @@ const templateBindingInfo = ref<any>({
 })
 const editForm = reactive<any>({
   id: 0,
-  path_text: '',
+  node_name: '',
+  child_name: '',
+  __raw: null,
   status: 1,
   sort: 0,
 })
@@ -353,30 +384,30 @@ const templateForm = reactive<any>({
 const dialogTitle = computed(() => {
   if (editForm.id) return '编辑分类'
   if (parentContext.value) return '添加下级分类'
-  return '新增分类'
+  return '新增一级分类'
 })
 
-const filteredTree = computed(() => {
-  const keyword = query.keyword.trim().toLowerCase()
-  const status = query.status
-  const filterNodes = (nodes: any[]): any[] => {
-    return nodes.reduce((result: any[], node: any) => {
-      const children = filterNodes(Array.isArray(node.child_list) ? node.child_list : [])
-      const matchedKeyword = !keyword
-        || String(node.node_name || '').toLowerCase().includes(keyword)
-        || String(node.model_full_name || '').toLowerCase().includes(keyword)
-        || String(node.source_node_id || '').toLowerCase().includes(keyword)
-      const matchedStatus = status === '' || status === null || Number(node.status) === Number(status)
-      if ((matchedKeyword && matchedStatus) || children.length) {
-        result.push({ ...node, child_list: children })
-      }
-      return result
-    }, [])
+const rootCreateMode = computed(() => !editForm.id && !parentContext.value)
+
+const parentPathText = computed(() => {
+  if (editForm.id) {
+    const parts = splitPath(editForm.__raw || {})
+    return parts.slice(0, -1).join(' / ')
   }
-  return filterNodes(tree.value)
+  return parentContext.value ? (parentContext.value.model_full_name || parentContext.value.node_name || '') : ''
 })
 
-const isLeaf = (row: any) => !Array.isArray(row.child_list) || row.child_list.length === 0
+const editPathPreview = computed(() => {
+  const name = String(editForm.node_name || '').trim()
+  if (!name) return ''
+  if (rootCreateMode.value) {
+    const childName = String(editForm.child_name || '').trim()
+    return childName ? `${name}/${childName}` : name
+  }
+  return parentPathText.value ? `${parentPathText.value.replace(/\s*\/\s*/g, '/')}/${name}` : name
+})
+
+const isLeaf = (row: any) => Number(row.is_leaf ?? (Number(row.has_children || 0) ? 0 : 1)) === 1
 
 const templateTargetName = computed(() => {
   if (!templateTarget.value) return '通用兜底'
@@ -426,20 +457,123 @@ const printTemplateLabel = (item: any) => {
 const resetEditForm = () => {
   Object.assign(editForm, {
     id: 0,
-    path_text: '',
+    node_name: '',
+    child_name: '',
+    __raw: null,
     status: 1,
     sort: 0,
   })
 }
 
+const cacheKey = (pid = 0) => [
+  pid,
+  String(query.keyword || '').trim(),
+  query.status === '' || query.status === null ? '' : String(query.status),
+].join('|')
+
+const makeLazyPlaceholder = (row: any) => ({
+  id: `placeholder-${row.id}`,
+  pid: row.id,
+  level: Number(row.level || 0) + 1,
+  node_name: '加载中...',
+  model_full_name: '',
+  status: row.status,
+  sort: 0,
+  is_leaf: true,
+  has_children: 0,
+  __placeholder: true,
+})
+
+const normalizeTreeRows = (rows: any[], searchMode = false) => rows.map((row: any) => {
+  const hasChildren = Number(row.has_children || 0) === 1
+  return {
+    ...row,
+    __children_loaded: searchMode || !hasChildren,
+    is_leaf: searchMode || Number(row.is_leaf ?? (hasChildren ? 0 : 1)) === 1,
+    child_list: hasChildren && !searchMode ? [makeLazyPlaceholder(row)] : [],
+  }
+})
+
+const fetchChildren = async (pid = 0) => {
+  const searchMode = query.keyword.trim() !== ''
+  const key = cacheKey(pid)
+  if (childrenCache.has(key)) {
+    return childrenCache.get(key) || []
+  }
+  const res = await getRecycleDeviceModelDictChildren({
+    pid,
+    keyword: query.keyword,
+    status: query.status,
+    limit: 500,
+  })
+  const rows = normalizeTreeRows(res.data || [], searchMode)
+  childrenCache.set(key, rows)
+  return rows
+}
+
+const rememberExpanded = (id: number) => {
+  if (id > 0 && !expandedNodeIds.value.includes(id)) expandedNodeIds.value.push(id)
+}
+
+const forgetExpanded = (id: number) => {
+  expandedNodeIds.value = expandedNodeIds.value.filter(item => item !== id)
+}
+
 const loadTree = async () => {
   loading.value = true
   try {
-    const res = await getRecycleDeviceModelDictTree()
-    tree.value = res.data || []
+    tree.value = await fetchChildren(0)
+    treeEmpty.value = tree.value.length === 0
+    defaultExpandedKeys.value = query.keyword ? tree.value.map((row: any) => Number(row.id)) : expandedNodeIds.value
   } finally {
     loading.value = false
   }
+}
+
+const restoreExpandedNodes = async (ids: number[]) => {
+  for (const id of ids) {
+    const node = treeRef.value?.getNode?.(id)
+    if (!node?.data) continue
+    if (Number(node.data.has_children || 0) === 1 && !node.data.__children_loaded) {
+      await handleNodeExpand(node.data)
+    }
+    node.expanded = true
+  }
+}
+
+const reloadTree = async (options: { keepExpanded?: boolean } = {}) => {
+  const keepIds = options.keepExpanded === false ? [] : [...expandedNodeIds.value]
+  childrenCache.clear()
+  treeKey.value += 1
+  tree.value = []
+  await loadTree()
+  if (keepIds.length) {
+    setTimeout(() => restoreExpandedNodes(keepIds), 0)
+  }
+}
+
+const clearParentCache = (pid = 0) => {
+  childrenCache.delete(cacheKey(pid))
+}
+
+const handleNodeExpand = async (row: any) => {
+  rememberExpanded(Number(row?.id || 0))
+  if (!row || row.__placeholder || row.__children_loaded || Number(row.has_children || 0) !== 1) {
+    return
+  }
+  row.child_list = [makeLazyPlaceholder(row)]
+  try {
+    row.child_list = await fetchChildren(Number(row.id || 0))
+  } catch (error) {
+    row.child_list = []
+    ElMessage.error('子分类加载失败，请重试')
+  } finally {
+    row.__children_loaded = true
+  }
+}
+
+const handleNodeCollapse = (row: any) => {
+  forgetExpanded(Number(row?.id || 0))
 }
 
 const openCreateRoot = () => {
@@ -451,7 +585,6 @@ const openCreateRoot = () => {
 const openCreateChild = (row: any) => {
   parentContext.value = row
   resetEditForm()
-  editForm.path_text = `${row.model_full_name || row.node_name}/`
   editDialogVisible.value = true
 }
 
@@ -465,15 +598,42 @@ const openEdit = (row: any) => {
   const parts = splitPath(row)
   Object.assign(editForm, {
     id: row.id,
-    path_text: parts.join('/'),
+    node_name: parts[parts.length - 1] || row.node_name || '',
+    __raw: row,
     status: Number(row.status ?? 1),
     sort: Number(row.sort || 0),
   })
   editDialogVisible.value = true
 }
 
+const updateEditedRowLocally = (path: string[]) => {
+  const row = editForm.__raw
+  if (!row) return false
+  const oldParts = splitPath(row)
+  const oldName = oldParts[oldParts.length - 1] || ''
+  const newName = path[path.length - 1] || ''
+  row.node_name = newName
+  row.model_full_name = path.join('/')
+  row.status = Number(editForm.status ?? row.status)
+  row.sort = Number(editForm.sort || 0)
+  if (oldName !== newName) {
+    row.__children_loaded = true
+  }
+  return true
+}
+
 const saveEdit = async () => {
-  const path = String(editForm.path_text || '').split('/').map(item => item.trim()).filter(Boolean)
+  const name = String(editForm.node_name || '').trim()
+  if (!name) {
+    ElMessage.warning('请输入分类名称')
+    return
+  }
+  const parentPath = parentPathText.value
+    ? parentPathText.value.split('/').map(item => item.trim()).filter(Boolean)
+    : []
+  const path = rootCreateMode.value
+    ? [name, String(editForm.child_name || '').trim()].filter(Boolean)
+    : [...parentPath, name]
   if (path.length < 2) {
     ElMessage.warning('请至少填写两级分类路径')
     return
@@ -487,11 +647,14 @@ const saveEdit = async () => {
     }
     if (editForm.id) {
       await editRecycleDeviceModelDict(editForm.id, payload)
+      updateEditedRowLocally(path)
     } else {
       await addRecycleDeviceModelDict(payload)
+      if (parentContext.value?.id) rememberExpanded(Number(parentContext.value.id))
+      clearParentCache(Number(parentContext.value?.id || 0))
+      await reloadTree()
     }
     editDialogVisible.value = false
-    await loadTree()
   } finally {
     saving.value = false
   }
@@ -506,7 +669,8 @@ const handleDelete = async (row: any) => {
     type: 'warning',
   })
   await deleteRecycleDeviceModelDict(row.id)
-  await loadTree()
+  forgetExpanded(Number(row.id || 0))
+  await reloadTree()
 }
 
 const openSortDialog = (row: any) => {
@@ -534,7 +698,7 @@ const saveSort = async () => {
     })
     ElMessage.success('排序已更新')
     sortDialogVisible.value = false
-    await loadTree()
+    await reloadTree()
   } finally {
     sortSaving.value = false
   }
@@ -563,7 +727,7 @@ const submitQuickAdd = async () => {
     ElMessage.success(`已创建 ${data.created_count || 0} 个分类节点`)
     quickContent.value = ''
     quickDialogVisible.value = false
-    await loadTree()
+    await reloadTree()
   } finally {
     saving.value = false
   }
@@ -602,7 +766,7 @@ const submitImport = async () => {
       rows: importRows.value,
     })
     const data = res.data || {}
-    const message = `新增 ${data.created_count || 0} 行，更新 ${data.updated_count || 0} 行，跳过 ${data.skipped_count || 0} 行`
+    const message = `新增 ${data.created_count || 0} 行，跳过 ${data.skipped_count || 0} 行`
     if (data.skipped?.length) {
       await ElMessageBox.alert(data.skipped.slice(0, 30).map((item: any) => `第${item.line}行：${item.reason}`).join('\n'), message, {
         confirmButtonText: '我知道了',
@@ -614,7 +778,7 @@ const submitImport = async () => {
     importDialogVisible.value = false
     importRows.value = []
     importFileName.value = ''
-    await loadTree()
+    await reloadTree()
   } finally {
     importing.value = false
   }
@@ -921,6 +1085,7 @@ onMounted(() => loadTree())
 
 .model-virtual-tree {
   width: 100%;
+  min-width: 1000px;
 }
 
 :deep(.model-virtual-tree .el-tree-node__content) {
@@ -1032,5 +1197,23 @@ onMounted(() => loadTree())
 
 .sort-alert {
   margin-bottom: 14px;
+}
+
+.parent-path-box,
+.path-preview {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  color: #475569;
+  line-height: 20px;
+  word-break: break-all;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.path-preview {
+  color: #0f172a;
+  font-weight: 600;
 }
 </style>

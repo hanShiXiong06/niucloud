@@ -17,7 +17,7 @@ export function uploadCheckCatalog(data: FormData) {
     return request.post('recycle/check_catalog/import_upload', data, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 // 处理一片，前端循环调用直到 done
-export function importChunkCheckCatalog(params: { batch_id: number; token: string; offset: number; limit?: number }) {
+export function importChunkCheckCatalog(params: { batch_id: number; token: string; offset: number; limit?: number; mode?: string }) {
     return request.post('recycle/check_catalog/import_chunk', params)
 }
 // 选项级别列表 + 统计
