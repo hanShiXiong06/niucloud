@@ -4,7 +4,10 @@
         <div class="erp-list-panel">
             <div class="panel-header">
                 <span class="panel-title">采购退货</span>
-                <el-button type="primary" size="small" :icon="Plus" @click="openCreate">新建退货</el-button>
+                <div class="flex gap-2">
+                    <el-button size="small" :icon="Refresh" :loading="listLoading" @click="loadList">刷新</el-button>
+                    <el-button type="primary" size="small" :icon="Plus" @click="openCreate">新建退货</el-button>
+                </div>
             </div>
 
             <!-- 状态 Tab -->
@@ -25,6 +28,19 @@
                     clearable size="small"
                     @change="loadList"
                 />
+                <el-date-picker
+                    v-model="listWhere.dateRange"
+                    type="daterange"
+                    value-format="X"
+                    start-placeholder="开始"
+                    end-placeholder="结束"
+                    size="small"
+                    class="mt-2 !w-full"
+                    @change="loadList"
+                />
+                <div class="mt-2 flex justify-end">
+                    <el-button size="small" @click="resetListWhere">重置筛选</el-button>
+                </div>
             </div>
 
             <!-- 列表 -->
@@ -41,7 +57,10 @@
                         <el-tag :type="statusTagType(item.status)" size="small">{{ statusLabel(item.status) }}</el-tag>
                     </div>
                     <div class="text-xs text-gray-500 mt-1">{{ item.party_name }} · {{ item.purchase_no }}</div>
-                    <div class="text-xs text-gray-400 mt-0.5">退货金额 ¥{{ item.total_amount }}</div>
+                    <div class="mt-2 flex items-center justify-between text-xs">
+                        <span class="text-gray-400">{{ refundModeLabel(item.refund_mode) }}</span>
+                        <span class="font-medium text-orange-600">¥{{ item.total_amount }}</span>
+                    </div>
                 </div>
                 <el-empty v-if="!listLoading && listData.length === 0" description="暂无退货单" :image-size="60" />
             </div>
@@ -180,6 +199,20 @@
                 </div>
 
                 <div class="detail-body">
+                    <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <div class="return-metric">
+                            <div class="metric-label">退货金额</div>
+                            <div class="metric-value text-orange-600">¥{{ selected.total_amount }}</div>
+                        </div>
+                        <div class="return-metric">
+                            <div class="metric-label">退货台数</div>
+                            <div class="metric-value">{{ selectedDetail?.items?.length || 0 }}</div>
+                        </div>
+                        <div class="return-metric">
+                            <div class="metric-label">退款方式</div>
+                            <div class="metric-value">{{ refundModeLabel(selected.refund_mode) }}</div>
+                        </div>
+                    </div>
                     <el-descriptions :column="3" border size="small" class="mb-4">
                         <el-descriptions-item label="供应商">{{ selected.party_name }}</el-descriptions-item>
                         <el-descriptions-item label="原采购单">{{ selected.purchase_no }}</el-descriptions-item>
@@ -190,7 +223,10 @@
                     </el-descriptions>
                     <el-alert class="mb-4" :title="purchaseRefundModeTip(selected.refund_mode)" type="info" :closable="false" show-icon />
 
-                    <div class="text-sm font-medium mb-2">退货明细</div>
+                    <div class="mb-2 flex items-center justify-between">
+                        <span class="text-sm font-medium">退货明细</span>
+                        <span class="text-xs text-gray-500">已付款才需要真实退款，未付款部分会冲销原应付。</span>
+                    </div>
                     <el-table :data="selectedDetail?.items || []" size="small" border>
                         <el-table-column prop="imei" label="IMEI" min-width="130" />
                         <el-table-column prop="model" label="型号" min-width="110" />
@@ -250,7 +286,7 @@ const listData = ref<any[]>([])
 const selected = ref<any>(null)
 const selectedDetail = ref<any>(null)
 const pagination = reactive({ page: 1, limit: 15, total: 0 })
-const listWhere = reactive({ keyword: '', status: '' })
+const listWhere = reactive({ keyword: '', status: '', dateRange: [] as any[] })
 
 // 新建表单
 const formRef = ref()
@@ -276,8 +312,12 @@ const totalReturnAmount = computed(() =>
 async function loadList() {
     listLoading.value = true
     try {
+        const [startAt, endAt] = listWhere.dateRange || []
         const res = await getErpPurchaseReturnList({
             ...listWhere,
+            start_at: Number(startAt || 0),
+            end_at: Number(endAt || 0) ? Number(endAt) + 86399 : 0,
+            dateRange: undefined,
             page: pagination.page,
             limit: pagination.limit,
         })
@@ -290,6 +330,14 @@ async function loadList() {
 
 function switchStatus(status: string) {
     listWhere.status = status
+    pagination.page = 1
+    loadList()
+}
+
+function resetListWhere() {
+    listWhere.keyword = ''
+    listWhere.status = ''
+    listWhere.dateRange = []
     pagination.page = 1
     loadList()
 }
@@ -521,4 +569,19 @@ if (route.query.purchase_order_id) {
 .form-title { font-size: 16px; font-weight: 600; }
 .form-body { padding: 0 4px; }
 .detail-body { padding: 0 4px; }
+.return-metric {
+    border-radius: 8px;
+    background: #f8fafc;
+    padding: 12px 14px;
+}
+.metric-label {
+    color: #64748b;
+    font-size: 12px;
+}
+.metric-value {
+    margin-top: 4px;
+    color: #111827;
+    font-size: 18px;
+    font-weight: 600;
+}
 </style>
