@@ -343,8 +343,11 @@
                                 <el-input-number v-model="itemExtra.item.estimate_sale_price" :min="0" :precision="2" :controls="false" placeholder="选填" class="!w-full" />
                             </el-form-item>
                         </div>
-                        <el-form-item label="图片">
-                            <el-input v-model.trim="itemExtra.item.image_urls" clearable placeholder="图片地址，多张用逗号分隔" />
+                        <el-form-item label="设备图片">
+                            <div class="erp-image-upload">
+                                <upload-image v-model="itemExtra.item.image_urls" :limit="9" width="72px" height="72px" image-text="上传/选择" />
+                                <div class="erp-image-upload__tips">支持本地上传或从素材库选择，多图可拖动排序。</div>
+                            </div>
                         </el-form-item>
                         <el-form-item label="质检备注">
                             <el-input v-model.trim="itemExtra.item.quality_remark" type="textarea" :rows="3" placeholder="如：屏幕划痕、电池效率等" />
@@ -1063,6 +1066,15 @@ function staffName(user: any) {
     color: #475569;
     font-size: 13px;
     font-weight: 600;
+}
+.erp-image-upload {
+    width: 100%;
+}
+.erp-image-upload__tips {
+    margin-top: 6px;
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 18px;
 }
 @media (max-width: 768px) {
     .item-extra-head,
