@@ -24,6 +24,7 @@ class ErpConfig extends BaseAdminController
         $params = $this->request->params([
             ['finance', []],
             ['purchase', []],
+            ['product_title', []],
             ['sale', []],
             ['refurbish', []],
             ['consignment', []],
