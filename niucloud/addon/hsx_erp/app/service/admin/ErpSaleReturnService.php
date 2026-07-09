@@ -90,8 +90,11 @@ class ErpSaleReturnService extends BaseAdminService
             }
 
             $returnNo   = ErpLedgerService::makeNo('SR');
-            $warehouseId   = (int)($data['return_to_warehouse_id'] ?? (int)$order->warehouse_id);
-            $locationId    = (int)($data['return_to_location_id'] ?? (int)$order->location_id);
+            $warehouseId   = (int)($data['return_to_warehouse_id'] ?? 0);
+            $locationId    = (int)($data['return_to_location_id'] ?? 0);
+            if ($warehouseId <= 0 || $locationId <= 0) {
+                throw new CommonException('请选择退回仓库和库位');
+            }
             [$warehouse, $location] = (new ErpWarehouseService())->validateInboundLocation($warehouseId, $locationId);
 
             $return = ErpSaleReturnOrder::create([
@@ -222,7 +225,7 @@ class ErpSaleReturnService extends BaseAdminService
                 $totalCost          = round((float)$asset->total_cost, 2);
 
                 $asset->save([
-                    'status'         => ErpDict::ASSET_RETURNED,
+                    'status'         => ErpDict::ASSET_IN_STOCK,
                     'warehouse_id'   => (int)$retWarehouse->id,
                     'warehouse_name' => $retWarehouseName,
                     'location_id'    => (int)$retLocation->id,
@@ -233,13 +236,20 @@ class ErpSaleReturnService extends BaseAdminService
                     'profit'         => 0,
                     'update_at'      => $now,
                 ]);
+                ErpSaleItem::where([
+                    ['site_id', '=', $this->site_id],
+                    ['id', '=', (int)$item->sale_item_id],
+                ])->update([
+                    'status' => ErpDict::ASSET_RETURNED,
+                    'update_at' => $now,
+                ]);
 
                 // ── 库存流水 ──────────────────────────────────────────────
                 $ledger->asset([
                     'asset_id'              => (int)$asset->id,
                     'action'                => 'sale_return',
                     'before_status'         => $beforeStatus,
-                    'after_status'          => ErpDict::ASSET_RETURNED,
+                    'after_status'          => ErpDict::ASSET_IN_STOCK,
                     'before_warehouse_id'   => $beforeWarehouseId,
                     'before_warehouse_name' => $beforeWarehouseName,
                     'before_location_id'    => $beforeLocationId,
@@ -272,6 +282,21 @@ class ErpSaleReturnService extends BaseAdminService
                     'source_no'   => (string)$return->return_no,
                     'remark'      => $remark,
                 ]);
+
+                $activeSaleItemCount = (int)ErpSaleItem::where([
+                    ['site_id', '=', $this->site_id],
+                    ['sale_order_id', '=', $saleOrderId],
+                    ['status', '=', ErpDict::ASSET_SOLD],
+                ])->count();
+                if ($activeSaleItemCount <= 0) {
+                    ErpSaleOrder::where([
+                        ['site_id', '=', $this->site_id],
+                        ['id', '=', $saleOrderId],
+                    ])->update([
+                        'status' => ErpDict::ASSET_RETURNED,
+                        'update_at' => $now,
+                    ]);
+                }
 
                 // 刷新销售单财务状态
                 $this->refreshSaleFinance($saleOrderId);

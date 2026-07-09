@@ -37,7 +37,7 @@ class ErpSaleService extends BaseAdminService
             $query->where('a.warehouse_id', '=', (int)$where['warehouse_id']);
         }
         if (!empty($where['party_id'])) {
-            $query->where('o.party_id', '=', (int)$where['party_id']);
+            $query->where('a.party_id', '=', (int)$where['party_id']);
         }
         if (!empty($where['location_id'])) {
             $query->where('a.location_id', '=', (int)$where['location_id']);

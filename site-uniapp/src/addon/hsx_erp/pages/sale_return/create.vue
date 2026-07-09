@@ -168,9 +168,18 @@ async function scanSelectAsset() {
 const scanMatch = (item: any, code: string) => ['imei', 'sn', 'asset_no'].some(key => String(item?.[key] || '').trim() === code)
 
 const totalReturn = computed(() => selectedItems.value.reduce((s, i) => s + Number(i.return_price || 0), 0))
-const canSubmit = computed(() => selectedItems.value.length > 0 && saleOrderId.value > 0)
+const canSubmit = computed(() =>
+    selectedItems.value.length > 0 &&
+    saleOrderId.value > 0 &&
+    Number(form.value.warehouse_id || 0) > 0 &&
+    Number(form.value.location_id || 0) > 0
+)
 
 async function submit() {
+    if (!canSubmit.value) {
+        uni.showToast({ title: '请选择退货设备和退回仓库', icon: 'none' })
+        return
+    }
     submitting.value = true
     try {
         await createErpSaleReturn({

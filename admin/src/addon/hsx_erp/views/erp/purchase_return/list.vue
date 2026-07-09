@@ -435,7 +435,7 @@ async function submitCreate() {
             remark: form.remark,
             items: form.items,
         })
-        ElMessage.success('退货单已创建，等待财务确认')
+        ElMessage.success('采购退货已完成')
         mode.value = 'idle'
         loadList()
     } finally {

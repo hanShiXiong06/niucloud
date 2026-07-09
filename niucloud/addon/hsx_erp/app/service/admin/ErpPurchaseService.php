@@ -643,12 +643,12 @@ class ErpPurchaseService extends BaseAdminService
         return true;
     }
 
-    public function adjustCost(int $itemId, float $amount, string $remark = ''): bool
+    public function adjustCost(int $itemId, float $amount, string $remark = '', bool $syncPayable = true): bool
     {
         if (abs($amount) <= 0) {
             throw new CommonException('调整金额不能为0');
         }
-        Db::transaction(function () use ($itemId, $amount, $remark) {
+        Db::transaction(function () use ($itemId, $amount, $remark, $syncPayable) {
             $now = time();
             $item = ErpPurchaseItem::where([['site_id', '=', $this->site_id], ['id', '=', $itemId]])->findOrEmpty();
             if ($item->isEmpty()) {
@@ -685,33 +685,35 @@ class ErpPurchaseService extends BaseAdminService
                     'remark' => $remark !== '' ? $remark : '采购成本调整',
                 ]);
             }
-            $newOrderCost = round((float)$order->total_cost + $amount, 2);
-            $newPayableAmount = round($newOrderCost - (float)$order->paid_amount, 2);
-            $order->save([
-                'total_cost' => $newOrderCost,
-                'payable_amount' => max(0, $newPayableAmount),
-                'finance_status' => ErpDict::financeStatus($newOrderCost, (float)$order->paid_amount),
-                'update_at' => $now,
-            ]);
-            $payable = ErpPayable::where([
-                ['site_id', '=', $this->site_id],
-                ['source_type', '=', 'purchase_asset'],
-                ['source_id', '=', (int)$item->asset_id],
-            ])->findOrEmpty();
-            if ($payable->isEmpty()) {
-                $payable = ErpPayable::where([
-                    ['site_id', '=', $this->site_id],
-                    ['source_type', '=', 'purchase'],
-                    ['source_id', '=', (int)$order->id],
-                ])->findOrEmpty();
-            }
-            if (!$payable->isEmpty()) {
-                $newAmount = round((float)$payable->amount + $amount, 2);
-                $payable->save([
-                    'amount' => max(0, $newAmount),
-                    'status' => ErpDict::financeStatus(max(0, $newAmount), (float)$payable->settled_amount),
+            if ($syncPayable) {
+                $newOrderCost = round((float)$order->total_cost + $amount, 2);
+                $newPayableAmount = round($newOrderCost - (float)$order->paid_amount, 2);
+                $order->save([
+                    'total_cost' => $newOrderCost,
+                    'payable_amount' => max(0, $newPayableAmount),
+                    'finance_status' => ErpDict::financeStatus($newOrderCost, (float)$order->paid_amount),
                     'update_at' => $now,
                 ]);
+                $payable = ErpPayable::where([
+                    ['site_id', '=', $this->site_id],
+                    ['source_type', '=', 'purchase_asset'],
+                    ['source_id', '=', (int)$item->asset_id],
+                ])->findOrEmpty();
+                if ($payable->isEmpty()) {
+                    $payable = ErpPayable::where([
+                        ['site_id', '=', $this->site_id],
+                        ['source_type', '=', 'purchase'],
+                        ['source_id', '=', (int)$order->id],
+                    ])->findOrEmpty();
+                }
+                if (!$payable->isEmpty()) {
+                    $newAmount = round((float)$payable->amount + $amount, 2);
+                    $payable->save([
+                        'amount' => max(0, $newAmount),
+                        'status' => ErpDict::financeStatus(max(0, $newAmount), (float)$payable->settled_amount),
+                        'update_at' => $now,
+                    ]);
+                }
             }
             (new ErpLedgerService())->account([
                 'biz_type' => 'adjust',

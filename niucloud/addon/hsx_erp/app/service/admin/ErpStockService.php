@@ -291,7 +291,8 @@ class ErpStockService extends BaseAdminService
         return (new ErpPurchaseService())->adjustCost(
             $purchaseItemId,
             $delta,
-            $reason !== '' ? $reason : '移动端成本调整'
+            $reason !== '' ? $reason : '移动端成本调整',
+            $syncPayable
         );
     }
 

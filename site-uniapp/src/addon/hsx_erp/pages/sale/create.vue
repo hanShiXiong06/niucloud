@@ -145,7 +145,15 @@ const totalProfit = computed(() => totalSale.value - totalCost.value)
 const canSubmit = computed(() =>
     form.value.party_id > 0 &&
     selectedAssets.value.length > 0 &&
-    selectedAssets.value.every(a => Number(a._sale_price) > 0)
+    selectedAssets.value.every(a => Number(a._sale_price) > 0) &&
+    (
+        form.value.settle_mode !== 'cash' ||
+        (
+            Number(form.value.received_amount || 0) > 0 &&
+            Number(form.value.received_amount || 0) <= totalSale.value &&
+            Number(form.value.capital_account_id || 0) > 0
+        )
+    )
 )
 
 onMounted(async () => {
@@ -172,6 +180,10 @@ function openScanStockPicker() {
 const profitClass = (a: any) => Number(a._sale_price) - Number(a.total_cost) >= 0 ? 'green' : 'red'
 
 async function submit() {
+    if (!canSubmit.value) {
+        uni.showToast({ title: '请完善客户、设备和收款信息', icon: 'none' })
+        return
+    }
     submitting.value = true
     try {
         const res: any = await request.post('erp/sale/create', {

@@ -225,7 +225,15 @@ const goodsMetaTip = computed(() => {
 const canSubmit = computed(() =>
     form.value.party_id > 0 &&
     form.value.items.length > 0 &&
-    form.value.items.every(i => i.imei && i.model && i.category_id && i.warehouse_id && Number(i.purchase_cost) > 0)
+    form.value.items.every(i => i.imei && i.model && i.category_id && i.warehouse_id && Number(i.purchase_cost) > 0) &&
+    (
+        form.value.settle_mode !== 'cash' ||
+        (
+            Number(form.value.paid_amount || 0) > 0 &&
+            Number(form.value.paid_amount || 0) <= totalCost.value &&
+            Number(form.value.capital_account_id || 0) > 0
+        )
+    )
 )
 
 onMounted(async () => {
@@ -574,7 +582,10 @@ async function scanDeviceImei(idx: number) {
 }
 
 async function submit() {
-    if (!canSubmit.value) return
+    if (!canSubmit.value) {
+        uni.showToast({ title: '请完善供应商、设备和付款信息', icon: 'none' })
+        return
+    }
     submitting.value = true
     try {
         await request.post('erp/purchase/create', {
