@@ -23,6 +23,29 @@ class ErpSale extends BaseAdminController
             ['keyword', ''],
             ['finance_status', ''],
             ['status', ''],
+            ['asset_no', ''],
+            ['imei', ''],
+            ['sn', ''],
+            ['model', ''],
+            ['spec', ''],
+            ['party_id', 0],
+            ['party_name', ''],
+            ['sale_no', ''],
+            ['sale_channel', ''],
+            ['warehouse_id', 0],
+            ['warehouse_name', ''],
+            ['location_id', 0],
+            ['category_id', 0],
+            ['salesman_uid', 0],
+            ['salesman_name', ''],
+            ['operator_uid', 0],
+            ['operator_name', ''],
+            ['min_amount', ''],
+            ['max_amount', ''],
+            ['min_profit', ''],
+            ['max_profit', ''],
+            ['start_at', 0],
+            ['end_at', 0],
             ['page', 1],
             ['limit', 15],
         ]);
@@ -36,6 +59,14 @@ class ErpSale extends BaseAdminController
             ['warehouse_id', 0],
             ['location_id', 0],
             ['category_id', 0],
+            ['asset_no', ''],
+            ['imei', ''],
+            ['sn', ''],
+            ['model', ''],
+            ['spec', ''],
+            ['party_name', ''],
+            ['warehouse_name', ''],
+            ['location_name', ''],
             ['page', 1],
             ['limit', 15],
         ]);
@@ -68,5 +99,13 @@ class ErpSale extends BaseAdminController
             ['remark', ''],
         ]);
         return success($this->service->cancel($id, (string)$params['remark']));
+    }
+
+    public function cancelItem(int $item_id)
+    {
+        $params = $this->request->params([
+            ['remark', ''],
+        ]);
+        return success($this->service->cancelItem($item_id, (string)$params['remark']));
     }
 }

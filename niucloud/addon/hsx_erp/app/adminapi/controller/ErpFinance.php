@@ -22,9 +22,24 @@ class ErpFinance extends BaseAdminController
         return success($this->service->payablePage($this->listParams()));
     }
 
+    public function dashboard()
+    {
+        $params = $this->request->params([
+            ['period', 'month'],
+            ['start_at', 0],
+            ['end_at', 0],
+        ]);
+        return success($this->service->dashboard($params));
+    }
+
     public function receivableLists()
     {
         return success($this->service->receivablePage($this->listParams()));
+    }
+
+    public function receivableInfo(int $id)
+    {
+        return success($this->service->receivableInfo($id));
     }
 
     public function receivableItems(int $id)
@@ -137,7 +152,18 @@ class ErpFinance extends BaseAdminController
             ['keyword', ''],
             ['status', ''],
             ['party_id', 0],
+            ['party_name', ''],
             ['purchase_order_id', 0],
+            ['source_no', ''],
+            ['m_no', ''],
+            ['contact_mobile', ''],
+            ['salesman_uid', 0],
+            ['salesman_name', ''],
+            ['min_amount', ''],
+            ['max_amount', ''],
+            ['min_remain', ''],
+            ['max_remain', ''],
+            ['can_offset', ''],
             ['start_at', 0],
             ['end_at', 0],
             ['page', 1],

@@ -21,37 +21,98 @@ class ErpStockService extends BaseAdminService
     public function getPage(array $where): array
     {
         $this->ensureSchema();
-        $query = ErpAsset::where([['site_id', '=', $this->site_id]]);
+        $saleTable = (new ErpSaleOrder())->getTable();
+        $query = ErpAsset::alias('a')
+            ->leftJoin($saleTable . ' s', 's.id = a.sale_order_id AND s.site_id = a.site_id')
+            ->where([['a.site_id', '=', $this->site_id]]);
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('asset_no|imei|sn|model|spec|category_name|party_name|warehouse_name|location_name', '%' . $kw . '%');
+            $query->whereLike('a.asset_no|a.imei|a.sn|a.model|a.spec|a.category_name|a.party_name|a.warehouse_name|a.location_name|s.sale_no|s.party_name', '%' . $kw . '%');
         }
         if (!empty($where['status'])) {
-            $query->where('status', '=', (string)$where['status']);
+            $query->where('a.status', '=', (string)$where['status']);
         }
         if (!empty($where['refurbish_status'])) {
-            $query->where('refurbish_status', '=', (string)$where['refurbish_status']);
+            $query->where('a.refurbish_status', '=', (string)$where['refurbish_status']);
         }
         if (!empty($where['sale_target'])) {
-            $query->where('sale_target', '=', (string)$where['sale_target']);
+            $query->where('a.sale_target', '=', (string)$where['sale_target']);
+        }
+        if (!empty($where['listing_status'])) {
+            $query->where('a.listing_status', '=', (string)$where['listing_status']);
         }
         if (!empty($where['warehouse_id'])) {
-            $query->where('warehouse_id', '=', (int)$where['warehouse_id']);
+            $query->where('a.warehouse_id', '=', (int)$where['warehouse_id']);
         }
         if (!empty($where['location_id'])) {
-            $query->where('location_id', '=', (int)$where['location_id']);
+            $query->where('a.location_id', '=', (int)$where['location_id']);
+        }
+        if (!empty($where['party_id'])) {
+            $query->where('a.party_id', '=', (int)$where['party_id']);
         }
         if (!empty($where['category_id'])) {
             $categoryId = (int)$where['category_id'];
             $query->where(function ($q) use ($categoryId) {
-                $q->where('category_id', '=', $categoryId)
-                    ->whereOr('category_path', 'like', '%,' . $categoryId . ',%')
-                    ->whereOr('category_path', 'like', $categoryId . ',%')
-                    ->whereOr('category_path', 'like', '%,' . $categoryId)
-                    ->whereOr('category_path', '=', (string)$categoryId);
+                $q->where('a.category_id', '=', $categoryId)
+                    ->whereOr('a.category_path', 'like', '%,' . $categoryId . ',%')
+                    ->whereOr('a.category_path', 'like', $categoryId . ',%')
+                    ->whereOr('a.category_path', 'like', '%,' . $categoryId)
+                    ->whereOr('a.category_path', '=', (string)$categoryId);
             });
         }
-        return $query->order('id desc')->paginate([
+        foreach ([
+            'asset_no' => 'a.asset_no',
+            'imei' => 'a.imei',
+            'sn' => 'a.sn',
+            'model' => 'a.model',
+            'spec' => 'a.spec',
+            'party_name' => 'a.party_name',
+            'warehouse_name' => 'a.warehouse_name',
+            'location_name' => 'a.location_name',
+            'category_name' => 'a.category_name',
+        ] as $key => $column) {
+            if (!empty($where[$key])) {
+                $query->whereLike($column, '%' . trim((string)$where[$key]) . '%');
+            }
+        }
+        if (($where['min_cost'] ?? '') !== '') {
+            $query->where('a.total_cost', '>=', (float)$where['min_cost']);
+        }
+        if (($where['max_cost'] ?? '') !== '') {
+            $query->where('a.total_cost', '<=', (float)$where['max_cost']);
+        }
+        if (($where['min_price'] ?? '') !== '') {
+            $minPrice = (float)$where['min_price'];
+            $query->where(function ($q) use ($minPrice) {
+                $q->where('a.retail_price', '>=', $minPrice)->whereOr('a.estimate_sale_price', '>=', $minPrice);
+            });
+        }
+        if (($where['max_price'] ?? '') !== '') {
+            $maxPrice = (float)$where['max_price'];
+            $query->where(function ($q) use ($maxPrice) {
+                $q->where('a.retail_price', '<=', $maxPrice)->whereOr('a.estimate_sale_price', '<=', $maxPrice);
+            });
+        }
+        if (($where['stock_age_min'] ?? '') !== '') {
+            $query->where('a.stock_in_at', '<=', time() - max(0, (int)$where['stock_age_min']) * 86400);
+        }
+        if (($where['stock_age_max'] ?? '') !== '') {
+            $query->where('a.stock_in_at', '>=', time() - max(0, (int)$where['stock_age_max']) * 86400);
+        }
+        if (!empty($where['start_at'])) {
+            $query->where('a.stock_in_at', '>=', (int)$where['start_at']);
+        }
+        if (!empty($where['end_at'])) {
+            $query->where('a.stock_in_at', '<=', (int)$where['end_at']);
+        }
+        return $query->field([
+            'a.*',
+            's.sale_no',
+            's.party_name as sale_party_name',
+            's.sale_channel',
+            's.sale_at',
+            's.finance_status as sale_finance_status',
+        ])->order('a.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
@@ -209,6 +270,10 @@ class ErpStockService extends BaseAdminService
             throw new CommonException('调整后成本不能小于0');
         }
         $asset = $this->findAsset($id);
+        $allowedStatuses = [ErpDict::ASSET_IN_STOCK, ErpDict::ASSET_SOLD, 'available_for_sale'];
+        if (!in_array((string)$asset->status, $allowedStatuses, true)) {
+            throw new CommonException('当前设备状态不可调整成本');
+        }
         $beforeCost = round((float)$asset->total_cost, 2);
         $delta = round($afterCost - $beforeCost, 2);
         if (abs($delta) <= 0) {

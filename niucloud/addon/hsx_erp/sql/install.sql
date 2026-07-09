@@ -96,6 +96,65 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_party_member` (
   KEY `idx_party` (`site_id`,`party_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-往来主体对接人';
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_goods_category` (
+  `category_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '分类ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '分类名称',
+  `pid` int NOT NULL DEFAULT 0 COMMENT '上级分类ID',
+  `level` tinyint NOT NULL DEFAULT 1 COMMENT '层级，最多三级',
+  `category_full_name` varchar(255) NOT NULL DEFAULT '' COMMENT '分类完整名称',
+  `is_show` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否显示',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `source_plugin` varchar(40) NOT NULL DEFAULT 'erp' COMMENT '来源插件 erp/phone_shop',
+  `source_id` varchar(64) NOT NULL DEFAULT '' COMMENT '来源分类ID',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`category_id`),
+  UNIQUE KEY `uk_site_pid_name` (`site_id`,`pid`,`category_name`),
+  KEY `idx_site_pid` (`site_id`,`pid`,`sort`),
+  KEY `idx_site_level` (`site_id`,`level`,`sort`),
+  KEY `idx_source` (`site_id`,`source_plugin`,`source_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品分类';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_goods_spec_group` (
+  `group_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '规格分组ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `label` varchar(80) NOT NULL DEFAULT '' COMMENT '规格名称，如内存/容量',
+  `title_part` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否参与型号标题',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`group_id`),
+  UNIQUE KEY `uk_site_label` (`site_id`,`label`),
+  KEY `idx_site_sort` (`site_id`,`sort`,`group_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品规格分组';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_goods_spec_item` (
+  `item_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '规格项ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `group_id` int NOT NULL DEFAULT 0 COMMENT '规格分组ID',
+  `item_value` varchar(100) NOT NULL DEFAULT '' COMMENT '规格值',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`item_id`),
+  UNIQUE KEY `uk_site_group_value` (`site_id`,`group_id`,`item_value`),
+  KEY `idx_site_group` (`site_id`,`group_id`,`sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品规格项';
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}erp_goods_grade` (
+  `grade_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '成色ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `grade_name` varchar(100) NOT NULL DEFAULT '' COMMENT '成色名称',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1启用/0禁用',
+  `create_at` int NOT NULL DEFAULT 0,
+  `update_at` int NOT NULL DEFAULT 0,
+  PRIMARY KEY (`grade_id`),
+  UNIQUE KEY `uk_site_grade` (`site_id`,`grade_name`),
+  KEY `idx_site_sort` (`site_id`,`status`,`sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品成色';
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
@@ -114,6 +173,10 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset` (
   `sn` varchar(64) NOT NULL DEFAULT '',
   `model` varchar(255) NOT NULL DEFAULT '',
   `spec` varchar(255) NOT NULL DEFAULT '' COMMENT '容量/颜色/成色等',
+  `spec_json` longtext COMMENT '结构化规格JSON',
+  `color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色',
+  `battery` tinyint NOT NULL DEFAULT 0 COMMENT '电池效率百分比',
+  `warranty` int NOT NULL DEFAULT 0 COMMENT '保修截止时间',
   `category_id` int NOT NULL DEFAULT 0 COMMENT '商品分类ID',
   `category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '商品分类名称快照',
   `category_path` varchar(255) NOT NULL DEFAULT '' COMMENT '商品分类路径',
@@ -146,6 +209,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset` (
   UNIQUE KEY `uk_site_no` (`site_id`,`asset_no`),
   KEY `idx_site_status` (`site_id`,`status`),
   KEY `idx_site_imei` (`site_id`,`imei`),
+  KEY `idx_site_attr` (`site_id`,`color`,`battery`,`warranty`),
   KEY `idx_purchase` (`purchase_order_id`,`purchase_item_id`),
   KEY `idx_sale` (`sale_order_id`,`sale_item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-库存资产';
@@ -243,6 +307,10 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_purchase_item` (
   `sn` varchar(64) NOT NULL DEFAULT '',
   `model` varchar(255) NOT NULL DEFAULT '',
   `spec` varchar(255) NOT NULL DEFAULT '',
+  `spec_json` longtext COMMENT '结构化规格JSON',
+  `color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色',
+  `battery` tinyint NOT NULL DEFAULT 0 COMMENT '电池效率百分比',
+  `warranty` int NOT NULL DEFAULT 0 COMMENT '保修截止时间',
   `category_id` int NOT NULL DEFAULT 0 COMMENT '商品分类ID',
   `category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '商品分类名称快照',
   `category_path` varchar(255) NOT NULL DEFAULT '' COMMENT '商品分类路径',
@@ -261,7 +329,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_purchase_item` (
   PRIMARY KEY (`id`),
   KEY `idx_order` (`purchase_order_id`),
   KEY `idx_asset` (`asset_id`),
-  KEY `idx_imei` (`site_id`,`imei`)
+  KEY `idx_imei` (`site_id`,`imei`),
+  KEY `idx_site_attr` (`site_id`,`color`,`battery`,`warranty`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-采购明细';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_sale_order` (

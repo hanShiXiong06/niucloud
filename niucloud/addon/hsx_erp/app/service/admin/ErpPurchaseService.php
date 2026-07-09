@@ -10,6 +10,8 @@ use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpPurchaseItem;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
+use addon\hsx_erp\app\model\ErpPurchaseReturnItem;
+use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
@@ -37,7 +39,58 @@ class ErpPurchaseService extends BaseAdminService
         if (!empty($where['status'])) {
             $query->where('o.status', '=', (string)$where['status']);
         }
-        return $query->field([
+        foreach ([
+            'asset_no' => 'a.asset_no',
+            'imei' => 'a.imei',
+            'sn' => 'a.sn',
+            'model' => 'a.model',
+            'spec' => 'a.spec',
+            'party_name' => 'a.party_name',
+            'purchase_no' => 'o.purchase_no',
+            'm_no' => 'o.m_no',
+            'warehouse_name' => 'a.warehouse_name',
+            'purchaser_name' => 'o.purchaser_name',
+        ] as $key => $column) {
+            if (!empty($where[$key])) {
+                $query->whereLike($column, '%' . trim((string)$where[$key]) . '%');
+            }
+        }
+        if (!empty($where['warehouse_id'])) {
+            $query->where('a.warehouse_id', '=', (int)$where['warehouse_id']);
+        }
+        if (!empty($where['party_id'])) {
+            $query->where('a.party_id', '=', (int)$where['party_id']);
+        }
+        if (!empty($where['location_id'])) {
+            $query->where('a.location_id', '=', (int)$where['location_id']);
+        }
+        if (!empty($where['category_id'])) {
+            $categoryId = (int)$where['category_id'];
+            $query->where(function ($q) use ($categoryId) {
+                $q->where('a.category_id', '=', $categoryId)
+                    ->whereOr('a.category_path', 'like', '%,' . $categoryId . ',%')
+                    ->whereOr('a.category_path', 'like', $categoryId . ',%')
+                    ->whereOr('a.category_path', 'like', '%,' . $categoryId)
+                    ->whereOr('a.category_path', '=', (string)$categoryId);
+            });
+        }
+        if (!empty($where['purchaser_uid'])) {
+            $query->where('o.purchaser_uid', '=', (int)$where['purchaser_uid']);
+        }
+        if (($where['min_amount'] ?? '') !== '') {
+            $query->where('a.total_cost', '>=', (float)$where['min_amount']);
+        }
+        if (($where['max_amount'] ?? '') !== '') {
+            $query->where('a.total_cost', '<=', (float)$where['max_amount']);
+        }
+        $purchaseTimeExpr = 'COALESCE(NULLIF(o.purchase_at, 0), NULLIF(a.stock_in_at, 0), NULLIF(o.create_at, 0), a.create_at)';
+        if (!empty($where['start_at'])) {
+            $query->whereRaw($purchaseTimeExpr . ' >= ' . (int)$where['start_at']);
+        }
+        if (!empty($where['end_at'])) {
+            $query->whereRaw($purchaseTimeExpr . ' <= ' . (int)$where['end_at']);
+        }
+        $page = $query->field([
             'a.id',
             'a.asset_no',
             'a.purchase_order_id',
@@ -62,6 +115,7 @@ class ErpPurchaseService extends BaseAdminService
             'a.refurbish_cost',
             'a.total_cost',
             'a.status',
+            'a.stock_in_at',
             'a.create_at',
             'o.status as order_status',
             'o.purchase_no',
@@ -77,15 +131,107 @@ class ErpPurchaseService extends BaseAdminService
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
+        $this->appendPurchaseReturnSummary($page['data']);
+        return $page;
+    }
+
+    private function appendPurchaseReturnSummary(array &$rows): void
+    {
+        $assetIds = array_values(array_filter(array_map(static fn($row) => (int)($row['id'] ?? 0), $rows)));
+        if (empty($assetIds)) {
+            return;
+        }
+        $returnTable = (new ErpPurchaseReturnOrder())->getTable();
+        $returnRows = ErpPurchaseReturnItem::alias('i')
+            ->leftJoin($returnTable . ' r', 'r.id = i.return_id AND r.site_id = i.site_id')
+            ->where([['i.site_id', '=', $this->site_id]])
+            ->whereIn('i.asset_id', $assetIds)
+            ->field([
+                'i.asset_id',
+                'i.return_cost',
+                'i.paid_amount',
+                'r.id as return_id',
+                'r.return_no',
+                'r.status as return_status',
+                'r.refund_mode',
+                'r.total_amount as return_total_amount',
+                'r.settled_amount as return_settled_amount',
+                'r.occurred_at as return_at',
+            ])
+            ->order('r.id desc')
+            ->select()
+            ->toArray();
+        $map = [];
+        foreach ($returnRows as $row) {
+            $assetId = (int)($row['asset_id'] ?? 0);
+            if ($assetId > 0 && !isset($map[$assetId])) {
+                $map[$assetId] = $row;
+            }
+        }
+        foreach ($rows as &$row) {
+            $summary = $map[(int)($row['id'] ?? 0)] ?? null;
+            if (!$summary) {
+                $row['is_returned'] = (string)($row['status'] ?? '') === ErpDict::ASSET_RETURNED;
+                continue;
+            }
+            $row['is_returned'] = true;
+            $row['return_id'] = (int)($summary['return_id'] ?? 0);
+            $row['return_no'] = (string)($summary['return_no'] ?? '');
+            $row['return_status'] = (string)($summary['return_status'] ?? '');
+            $row['refund_mode'] = (string)($summary['refund_mode'] ?? '');
+            $row['return_cost'] = (float)($summary['return_cost'] ?? 0);
+            $row['return_paid_amount'] = (float)($summary['paid_amount'] ?? 0);
+            $row['return_settled_amount'] = (float)($summary['return_settled_amount'] ?? 0);
+            $row['return_at'] = (int)($summary['return_at'] ?? 0);
+        }
+        unset($row);
     }
 
     public function info(int $id): array
     {
         $order = $this->findOrder($id)->toArray();
-        $order['items'] = ErpPurchaseItem::where([
-            ['site_id', '=', $this->site_id],
-            ['purchase_order_id', '=', $id],
-        ])->order('id asc')->select()->toArray();
+        $assetTable = (new ErpAsset())->getTable();
+        $order['items'] = ErpPurchaseItem::alias('i')
+            ->leftJoin($assetTable . ' a', 'a.id = i.asset_id AND a.site_id = i.site_id')
+            ->where([
+                ['i.site_id', '=', $this->site_id],
+                ['i.purchase_order_id', '=', $id],
+            ])
+            ->field([
+                'i.*',
+                'a.asset_no',
+                'a.status as asset_status',
+                'a.warehouse_id as asset_warehouse_id',
+                'a.warehouse_name as asset_warehouse_name',
+                'a.location_id as asset_location_id',
+                'a.location_name as asset_location_name',
+                'a.adjust_cost as asset_adjust_cost',
+                'a.refurbish_cost',
+                'a.total_cost as asset_total_cost',
+                'a.stock_in_at',
+                'a.update_at as asset_update_at',
+            ])
+            ->order('i.id asc')
+            ->select()
+            ->toArray();
+        foreach ($order['items'] as &$item) {
+            if (!empty($item['asset_status'])) {
+                $item['status'] = $item['asset_status'];
+            }
+            if (!empty($item['asset_warehouse_name'])) {
+                $item['warehouse_id'] = (int)($item['asset_warehouse_id'] ?? 0);
+                $item['warehouse_name'] = (string)$item['asset_warehouse_name'];
+                $item['location_id'] = (int)($item['asset_location_id'] ?? 0);
+                $item['location_name'] = (string)($item['asset_location_name'] ?? '');
+            }
+            if (isset($item['asset_adjust_cost'])) {
+                $item['adjust_cost'] = $item['asset_adjust_cost'];
+            }
+            if (isset($item['asset_total_cost'])) {
+                $item['total_cost'] = $item['asset_total_cost'];
+            }
+        }
+        unset($item);
         $assetIds = ErpAsset::where([
             ['site_id', '=', $this->site_id],
             ['purchase_order_id', '=', $id],
@@ -188,6 +334,10 @@ class ErpPurchaseService extends BaseAdminService
             $warehouseName = $sameWarehouse ? (string)$firstWarehouse->warehouse_name : '多仓库';
             $locationId = ($sameWarehouse && $sameLocation) ? (int)$firstLocation->id : 0;
             $locationName = ($sameWarehouse && $sameLocation) ? (string)$firstLocation->location_name : ($sameWarehouse ? '多库位' : '');
+            $purchaseAt = (int)($data['purchase_at'] ?? 0);
+            if ($purchaseAt <= 0) {
+                $purchaseAt = $now;
+            }
             $order = ErpPurchaseOrder::create([
                 'site_id' => $this->site_id,
                 'purchase_no' => $purchaseNo,
@@ -216,7 +366,7 @@ class ErpPurchaseService extends BaseAdminService
                 'source_id' => (string)($data['source_id'] ?? ''),
                 'operator_uid' => (int)$this->uid,
                 'operator_name' => (string)$this->username,
-                'purchase_at' => (int)($data['purchase_at'] ?? $now),
+                'purchase_at' => $purchaseAt,
                 'remark' => trim((string)($data['remark'] ?? '')),
                 'create_at' => $now,
                 'update_at' => $now,
@@ -242,6 +392,10 @@ class ErpPurchaseService extends BaseAdminService
                 if ($estimateSalePrice < 0) {
                     throw new CommonException('预计卖价不能小于0');
                 }
+                $color = trim((string)($item['color'] ?? ''));
+                $battery = max(0, min(100, (int)($item['battery'] ?? 0)));
+                $warranty = max(0, (int)($item['warranty'] ?? 0));
+                $specJson = $this->normalizeSpecJson($item['spec_json'] ?? []);
                 $purchaseItem = ErpPurchaseItem::create([
                     'site_id' => $this->site_id,
                     'purchase_order_id' => $orderId,
@@ -253,6 +407,10 @@ class ErpPurchaseService extends BaseAdminService
                     'sn' => trim((string)($item['sn'] ?? '')),
                     'model' => trim((string)($item['model'] ?? '')),
                     'spec' => trim((string)($item['spec'] ?? '')),
+                    'spec_json' => $specJson,
+                    'color' => $color,
+                    'battery' => $battery,
+                    'warranty' => $warranty,
                     'category_id' => (int)($item['category_id'] ?? 0),
                     'category_name' => trim((string)($item['category_name'] ?? '')),
                     'category_path' => $this->normalizeCategoryPath($item['category_path'] ?? []),
@@ -284,6 +442,10 @@ class ErpPurchaseService extends BaseAdminService
                     'sn' => trim((string)($item['sn'] ?? '')),
                     'model' => trim((string)($item['model'] ?? '')),
                     'spec' => trim((string)($item['spec'] ?? '')),
+                    'spec_json' => $specJson,
+                    'color' => $color,
+                    'battery' => $battery,
+                    'warranty' => $warranty,
                     'category_id' => (int)($item['category_id'] ?? 0),
                     'category_name' => trim((string)($item['category_name'] ?? '')),
                     'category_path' => $this->normalizeCategoryPath($item['category_path'] ?? []),
@@ -305,7 +467,7 @@ class ErpPurchaseService extends BaseAdminService
                     'source_type' => (string)($data['source_type'] ?? 'manual'),
                     'source_id' => (string)($data['source_id'] ?? ''),
                     'remark' => trim((string)($item['remark'] ?? '')),
-                    'stock_in_at' => (int)($data['purchase_at'] ?? $now),
+                    'stock_in_at' => $purchaseAt,
                     'create_at' => $now,
                     'update_at' => $now,
                 ]);
@@ -324,7 +486,7 @@ class ErpPurchaseService extends BaseAdminService
                     'after_total_cost' => $cost,
                     'party_id' => (int)$party->id,
                     'party_name' => $partyName,
-                    'occurred_at' => (int)($data['purchase_at'] ?? $now),
+                    'occurred_at' => $purchaseAt,
                     'remark' => '采购入库',
                 ]);
                 (new ErpLedgerService())->account([
@@ -350,7 +512,7 @@ class ErpPurchaseService extends BaseAdminService
                     'amount' => $cost,
                     'settled_amount' => 0,
                     'status' => ErpDict::STATUS_PENDING,
-                    'occurred_at' => (int)($data['purchase_at'] ?? $now),
+                    'occurred_at' => $purchaseAt,
                     'remark' => '设备采购应付',
                     'create_at' => $now,
                     'update_at' => $now,
@@ -376,7 +538,7 @@ class ErpPurchaseService extends BaseAdminService
                 }
                 (new ErpFinanceService())->confirmPayableItemsInTransaction((int)$party->id, $paymentItems, [
                     'capital_account_id' => $capitalAccountId,
-                    'confirmed_at' => (int)($data['purchase_at'] ?? $now),
+                    'confirmed_at' => $purchaseAt,
                     'remark' => '采购开单付款',
                 ]);
             }
@@ -640,6 +802,10 @@ class ErpPurchaseService extends BaseAdminService
         $this->ensureColumn($itemTable, 'location_id', "`location_id` int NOT NULL DEFAULT 0 COMMENT '明细入库库位ID' AFTER `warehouse_name`");
         $this->ensureColumn($itemTable, 'location_name', "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '明细入库库位名称快照' AFTER `location_id`");
         foreach ([$assetTable, $itemTable] as $table) {
+            $this->ensureColumn($table, 'spec_json', "`spec_json` longtext COMMENT '结构化规格JSON' AFTER `spec`");
+            $this->ensureColumn($table, 'color', "`color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色' AFTER `spec_json`");
+            $this->ensureColumn($table, 'battery', "`battery` tinyint NOT NULL DEFAULT 0 COMMENT '电池效率百分比' AFTER `color`");
+            $this->ensureColumn($table, 'warranty', "`warranty` int NOT NULL DEFAULT 0 COMMENT '保修截止时间' AFTER `battery`");
             $this->ensureColumn($table, 'category_id', "`category_id` int NOT NULL DEFAULT 0 COMMENT '商品分类ID' AFTER `spec`");
             $this->ensureColumn($table, 'category_name', "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '商品分类名称快照' AFTER `category_id`");
             $this->ensureColumn($table, 'category_path', "`category_path` varchar(255) NOT NULL DEFAULT '' COMMENT '商品分类路径' AFTER `category_name`");
@@ -649,6 +815,17 @@ class ErpPurchaseService extends BaseAdminService
             $this->ensureColumn($table, 'image_urls', "`image_urls` text COMMENT '入库图片JSON/逗号分隔' AFTER `estimate_sale_price`");
             $this->ensureColumn($table, 'quality_remark', "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `image_urls`");
         }
+    }
+
+    private function normalizeSpecJson($value): string
+    {
+        if (is_string($value)) {
+            return trim($value);
+        }
+        if (!is_array($value)) {
+            return '';
+        }
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
     }
 
     private function normalizeCategoryPath(mixed $path): string

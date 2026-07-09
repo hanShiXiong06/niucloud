@@ -7,6 +7,22 @@ use app\adminapi\middleware\AdminLog;
 use think\facade\Route;
 
 Route::group('erp', function () {
+    Route::get('dashboard', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@dashboard');
+    Route::get('goods/meta', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsMeta@meta');
+    Route::get('goods/category/tree', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@tree');
+    Route::get('goods/category/export', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@export');
+    Route::post('goods/category/import', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@import');
+    Route::get('goods/category/lists', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@lists');
+    Route::get('goods/category/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@info');
+    Route::post('goods/category/save/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@save');
+    Route::delete('goods/category/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@delete');
+    Route::get('goods/spec/meta', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsSpec@meta');
+    Route::post('goods/spec/group/save/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsSpec@saveGroup');
+    Route::delete('goods/spec/group/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsSpec@deleteGroup');
+    Route::post('goods/spec/item/save/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsSpec@saveItem');
+    Route::delete('goods/spec/item/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsSpec@deleteItem');
+    Route::post('goods/grade/save/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsSpec@saveGrade');
+    Route::delete('goods/grade/:id', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsSpec@deleteGrade');
     Route::get('dicts', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dicts');
     Route::get('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@info');
     Route::post('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@save');
@@ -40,12 +56,14 @@ Route::group('erp', function () {
     Route::get('sale/lists', 'addon\hsx_erp\app\adminapi\controller\ErpSale@lists');
     Route::get('sale/stock', 'addon\hsx_erp\app\adminapi\controller\ErpSale@stock');
     Route::post('sale/create', 'addon\hsx_erp\app\adminapi\controller\ErpSale@create');
+    Route::post('sale/item/:item_id/cancel', 'addon\hsx_erp\app\adminapi\controller\ErpSale@cancelItem');
     Route::post('sale/:id/cancel', 'addon\hsx_erp\app\adminapi\controller\ErpSale@cancel');
     Route::get('sale/:id', 'addon\hsx_erp\app\adminapi\controller\ErpSale@info');
 
     Route::get('finance/payable/lists', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@payableLists');
     Route::get('finance/payable/party/:party_id/items', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@payablePartyItems');
     Route::get('finance/receivable/lists', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@receivableLists');
+    Route::get('finance/receivable/:id', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@receivableInfo');
     Route::get('finance/receivable/:id/items', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@receivableItems');
     Route::post('finance/payable/:id/confirm_payment', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@confirmPayment');
     Route::post('finance/payable/party/:party_id/confirm_payment', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@confirmPartyPayment');

@@ -2,6 +2,15 @@
 return [
      // ── ERP 管理 ────────────────────────────────────────────────────────────
     [
+        'name' => '经营看板',
+        'key' => 'hsx_erp_dashboard',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_workbench',
+        'sort' => 9,
+        'page' => '/addon/hsx_erp/pages/dashboard/index',
+        'icon' => '/addon/hsx_erp/site-app/2_07.png'
+    ],
+    [
         'name' => '采购管理',
         'key' => 'hsx_erp_purchase',
         'group' => 'hsx_erp',
