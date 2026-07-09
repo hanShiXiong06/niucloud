@@ -152,8 +152,8 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="create.visible" title="采购开单" width="980px" destroy-on-close>
-            <el-form label-width="96px">
+        <el-dialog v-model="create.visible" title="采购开单" width="980px" destroy-on-close class="create-purchase-dialog">
+            <el-form label-width="96px" class="create-purchase-form">
                 <div class="section-title">1. 用户</div>
                 <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
                     <el-form-item label="采购用户" required>
@@ -178,56 +178,60 @@
                     </el-form-item>
                 </div>
 
-                <div class="mt-1 flex items-center justify-between">
-                    <div class="font-medium">机器明细</div>
-                    <div class="flex items-center gap-2">
-                        <el-button @click="openGoodsMeta('category')">管理商品资料</el-button>
-                        <el-button :icon="Plus" @click="addItem">加一台</el-button>
-                    </div>
-                </div>
-                <el-alert
-                    class="mt-3"
-                    type="info"
-                    :closable="false"
-                    show-icon
-                    title="分类和规格会影响设备名称，规则可在「业务规则 - 设备命名规则」中调整。"
-                />
-                <div class="purchase-device-grid mt-3">
-                    <div v-for="(row, index) in create.form.items" :key="index" class="purchase-device-card">
-                        <div class="purchase-device-card__head">
-                            <div>
-                                <div class="purchase-device-card__index">{{ row.model || `设备 ${index + 1}` }}</div>
-                                <div class="purchase-device-card__hint">{{ itemCoreSummary(row) }}</div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <el-tag v-if="row.category_id" size="small" effect="plain">已选分类</el-tag>
-                                <el-tag v-if="row.spec" size="small" type="success" effect="plain">已完善规格</el-tag>
-                            </div>
-                        </div>
-                        <div class="purchase-device-card__body">
-                            <div class="purchase-device-meta">
-                                <span>IMEI</span>
-                                <strong>{{ row.imei || '-' }}</strong>
-                            </div>
-                            <div class="purchase-device-meta">
-                                <span>采购成本</span>
-                                <strong>{{ money(row.purchase_cost) }}</strong>
-                            </div>
-                            <div class="purchase-device-meta">
-                                <span>备注</span>
-                                <strong>{{ row.remark || '-' }}</strong>
-                            </div>
-                        </div>
-                        <div class="purchase-device-card__footer">
-                            <span class="text-xs text-gray-400">基础信息、分类、规格、图片、质检都在右侧抽屉里处理。</span>
-                            <div>
-                                <el-button type="primary" @click="openItemExtra(row, index)">编辑设备</el-button>
-                                <el-button type="danger" plain @click="removeItem(index)">删除</el-button>
-                            </div>
+                <div class="purchase-device-section">
+                    <div class="mt-1 flex items-center justify-between">
+                        <div class="font-medium">机器明细</div>
+                        <div class="flex items-center gap-2">
+                            <el-button @click="openGoodsMeta('category')">管理商品资料</el-button>
+                            <el-button :icon="Plus" @click="addItem">加一台</el-button>
                         </div>
                     </div>
+                    <el-alert
+                        class="mt-3"
+                        type="info"
+                        :closable="false"
+                        show-icon
+                        title="分类和规格会影响设备名称，规则可在「业务规则 - 设备命名规则」中调整。"
+                    />
+                    <div class="purchase-device-scroll">
+                        <div class="purchase-device-grid">
+                            <div v-for="(row, index) in create.form.items" :key="index" class="purchase-device-card">
+                                <div class="purchase-device-card__head">
+                                    <div>
+                                        <div class="purchase-device-card__index">{{ row.model || `设备 ${index + 1}` }}</div>
+                                        <div class="purchase-device-card__hint">{{ itemCoreSummary(row) }}</div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <el-tag v-if="row.category_id" size="small" effect="plain">已选分类</el-tag>
+                                        <el-tag v-if="row.spec" size="small" type="success" effect="plain">已完善规格</el-tag>
+                                    </div>
+                                </div>
+                                <div class="purchase-device-card__body">
+                                    <div class="purchase-device-meta">
+                                        <span>IMEI</span>
+                                        <strong>{{ row.imei || '-' }}</strong>
+                                    </div>
+                                    <div class="purchase-device-meta">
+                                        <span>采购成本</span>
+                                        <strong>{{ money(row.purchase_cost) }}</strong>
+                                    </div>
+                                    <div class="purchase-device-meta">
+                                        <span>备注</span>
+                                        <strong>{{ row.remark || '-' }}</strong>
+                                    </div>
+                                </div>
+                                <div class="purchase-device-card__footer">
+                                    <span class="purchase-device-footer-tip">基础信息、分类、规格、图片、质检都在右侧抽屉里处理。</span>
+                                    <div class="purchase-device-actions">
+                                        <el-button type="primary" @click="openItemExtra(row, index)">编辑设备</el-button>
+                                        <el-button type="danger" plain @click="removeItem(index)">删除</el-button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-right text-sm text-gray-500">本单采购成本合计：<span class="font-semibold text-gray-800">{{ money(createTotal) }}</span></div>
                 </div>
-                <div class="mt-3 text-right text-sm text-gray-500">本单采购成本合计：<span class="font-semibold text-gray-800">{{ money(createTotal) }}</span></div>
 
                 <div class="section-title">3. 账目</div>
                 <div class="grid grid-cols-1 gap-x-4 md:grid-cols-3">
@@ -1118,6 +1122,29 @@ function staffName(user: any) {
     font-size: 15px;
     font-weight: 650;
 }
+.create-purchase-dialog :deep(.el-dialog__body) {
+    padding-top: 10px;
+}
+.create-purchase-form {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 190px);
+    min-height: 0;
+}
+.purchase-device-section {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 220px;
+    overflow: hidden;
+}
+.purchase-device-scroll {
+    flex: 1;
+    min-height: 0;
+    margin-top: 12px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
 .purchase-device-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1176,6 +1203,22 @@ function staffName(user: any) {
     align-items: center;
     border-top: 1px solid #f1f5f9;
     padding-top: 12px;
+}
+.purchase-device-footer-tip {
+    max-width: 230px;
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 18px;
+}
+.purchase-device-actions {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+}
+.purchase-device-actions :deep(.el-button + .el-button) {
+    margin-left: 0;
 }
 .item-extra-head {
     display: flex;
@@ -1287,6 +1330,10 @@ function staffName(user: any) {
     .purchase-device-card__head,
     .purchase-device-card__footer {
         flex-direction: column;
+        align-items: stretch;
+    }
+    .purchase-device-actions {
+        justify-content: flex-end;
     }
 }
 </style>
