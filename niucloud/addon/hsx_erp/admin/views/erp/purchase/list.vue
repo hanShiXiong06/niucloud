@@ -632,6 +632,7 @@ function blankItem() {
         warranty: undefined,
         category_id: 0,
         category_name: '',
+        category_names: [],
         category_path: '',
         purchase_cost: 0,
         inspector_uid: null,
@@ -771,6 +772,7 @@ function onItemCategoryChange(item: any, value: any) {
     const node = findCategoryNode(categoryTree.value, Number(value || 0))
     item.category_name = node?.category_full_name || node?.category_name || ''
     item.category_path = node ? categoryPathIds(node).join(',') : ''
+    item.category_names = node ? categoryPathNames(node) : []
     item.selected_specs = {}
     item.selected_grade = null
     item.spec = ''
@@ -791,6 +793,12 @@ function findCategoryNode(rows: any[], id: number, parents: any[] = []): any {
 
 function categoryPathIds(node: any) {
     return [...(node?._parents || []), node].map((row: any) => Number(row.category_id || 0)).filter(Boolean)
+}
+
+function categoryPathNames(node: any) {
+    return [...(node?._parents || []), node]
+        .map((row: any) => String(row?.category_name || '').trim())
+        .filter(Boolean)
 }
 
 function normalizeOptions(list: any): any[] {
@@ -886,7 +894,10 @@ function rebuildItemSpec(item: any) {
 }
 
 function categoryNames(item: any): string[] {
-    return String(item?.category_name || '').split(/[>\-/\\｜|,，\s]+/).map((name: string) => name.trim()).filter(Boolean)
+    if (Array.isArray(item?.category_names) && item.category_names.length) {
+        return item.category_names.map((name: string) => String(name || '').trim()).filter(Boolean)
+    }
+    return String(item?.category_name || '').split(/[>\-/\\｜|,，]+/).map((name: string) => name.trim()).filter(Boolean)
 }
 
 function categoryTitleByRule(item: any) {
