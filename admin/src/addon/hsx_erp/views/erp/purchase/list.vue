@@ -1010,12 +1010,16 @@ function openAdjust(row: any) {
 }
 
 function canCancelPurchase(row: any) {
-    return row.order_status === 'completed' && row.finance_status === 'pending' && row.status === 'in_stock'
+    return row.order_status === 'completed' && row.status === 'in_stock' && !hasPurchasePaidFact(row)
 }
 
-/** 设备仍在库（未被销售/退货/作废）且采购单未撤销，才能发起退货 */
+/** 只有已形成付款/折账事实的在库采购，才需要走退货退款链路。未付款直接撤销闭环。 */
 function canReturnPurchase(row: any) {
-    return row.status === 'in_stock' && row.order_status !== 'void'
+    return row.status === 'in_stock' && row.order_status === 'completed' && hasPurchasePaidFact(row)
+}
+
+function hasPurchasePaidFact(row: any) {
+    return allocatedPaid(row) > 0 || ['partial', 'settled'].includes(String(row.finance_status || ''))
 }
 
 function goReturn(row: any) {
@@ -1028,7 +1032,7 @@ function goReturn(row: any) {
 async function cancelPurchase(row: any) {
     try {
         const result: any = await ElMessageBox.prompt(
-            '撤销后设备会从库存移出，应付款作废。已有付款或折账的单据不能撤销，需要走退货/调整。',
+            '适用于未付款采购：撤销后设备会从库存移出，应付款作废，业务直接闭环。已有付款或折账的单据不能撤销，需要走退货。',
             '撤销采购单',
             {
                 confirmButtonText: '确认撤销',
