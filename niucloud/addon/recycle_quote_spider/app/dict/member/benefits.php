@@ -14,7 +14,7 @@ return [
                 return [
                     'title' => 'VIP报价单生成',
                     'desc' => '生成回收报价单图片',
-                    'icon' => '/addon/hsx_recycle/VIP.png'
+                    'icon' => '/addon/recycle_quote_spider/VIP.png'
                 ];
             }
         ]
