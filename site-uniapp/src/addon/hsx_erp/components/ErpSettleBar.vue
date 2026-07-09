@@ -54,11 +54,11 @@
             </view>
             <view class="settle-account-row">
                 <text class="settle-label required">付款账户</text>
-                <view class="settle-account-select" @click="showAccountPicker = true">
+                <view class="settle-account-select" :class="{ 'settle-account-select--on': accountId }" @click="showAccountPicker = true">
                     <text :class="accountId ? 'settle-account-text' : 'settle-placeholder'">
                         {{ selectedAccountLabel || '点击选择账户' }}
                     </text>
-                    <text class="settle-arrow">›</text>
+                    <u-icon name="arrow-right" color="#cbd5e1" size="16" />
                 </view>
             </view>
         </template>
@@ -87,18 +87,25 @@
         <!-- 账户选择弹窗 -->
         <u-popup :show="showAccountPicker" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="showAccountPicker = false">
             <view class="account-popup">
-                <view class="account-popup__title">选择账户</view>
-                <view
-                    v-for="a in accounts"
-                    :key="a.id"
-                    class="account-item"
-                    :class="{ selected: a.id === accountId }"
-                    @click="selectAccount(a)"
-                >
-                    <text class="account-item__name">{{ a.account_name }}</text>
-                    <text class="account-item__balance">余额 ¥{{ money(a.balance) }}</text>
+                <view class="account-popup__head">
+                    <text class="account-popup__title">选择账户</text>
+                    <view class="account-popup__close" @click="showAccountPicker = false">
+                        <u-icon name="close" color="#64748b" size="20" />
+                    </view>
                 </view>
-                <view class="popup-empty" v-if="!accounts.length">暂无账户</view>
+                <u-cell-group v-if="accounts.length" :border="false">
+                    <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectAccount(a)">
+                        <template #value>
+                            <u-icon
+                                v-if="Number(a.id) === Number(accountId)"
+                                name="checkmark-circle-fill"
+                                color="#3b6ef5"
+                                size="20"
+                            />
+                        </template>
+                    </u-cell>
+                </u-cell-group>
+                <u-empty v-else mode="data" text="暂无账户" />
             </view>
         </u-popup>
     </view>
@@ -188,8 +195,9 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 <style scoped lang="scss">
 .settle-bar {
     background: #fff;
-    border-radius: 16rpx;
+    border-radius: 28rpx;
     padding: 20rpx 24rpx;
+    box-shadow: 0 2rpx 12rpx rgba(0,0,0,.04);
 }
 .settle-mode-row, .settle-amount-row, .settle-account-row {
     display: flex;
@@ -218,13 +226,17 @@ const money = (v: any) => Number(v || 0).toFixed(2)
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 16rpx;
     background: #f8fafc;
-    border-radius: 8rpx;
-    padding: 10rpx 16rpx;
+    border: 2rpx solid transparent;
+    border-radius: 12rpx;
+    min-height: 72rpx;
+    padding: 0 18rpx;
+    box-sizing: border-box;
 }
-.settle-account-text { font-size: 26rpx; color: #0f172a; }
-.settle-placeholder { font-size: 26rpx; color: #94a3b8; }
-.settle-arrow { font-size: 32rpx; color: #94a3b8; }
+.settle-account-select--on { background: #f8fbff; border-color: #3b6ef5; }
+.settle-account-text { flex: 1; min-width: 0; font-size: 26rpx; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settle-placeholder { flex: 1; min-width: 0; font-size: 26rpx; color: #94a3b8; }
 .settle-credit-hint {
     background: #f0fdf4;
     border-radius: 8rpx;
@@ -244,17 +256,28 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .settle-summary-value { font-size: 28rpx; font-weight: 600; color: #0f172a; }
 .settle-summary-value.green { color: #16a34a; }
 .settle-summary-value.orange { color: #ea580c; }
-.account-popup { padding: 32rpx; }
-.account-popup__title { font-size: 30rpx; font-weight: 700; color: #0f172a; margin-bottom: 20rpx; }
-.account-item {
+.account-popup {
+    min-height: 36vh;
+    max-height: 74vh;
+    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+    background: #fff;
+}
+.account-popup__head {
+    min-height: 96rpx;
+    padding: 0 28rpx;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20rpx 0;
-    border-bottom: 1rpx solid #f1f5f9;
-    &.selected { color: #3b6ef5; }
+    gap: 20rpx;
 }
-.account-item__name { font-size: 28rpx; color: #0f172a; }
-.account-item__balance { font-size: 24rpx; color: #64748b; }
-.popup-empty { text-align: center; padding: 32rpx; color: #94a3b8; font-size: 26rpx; }
+.account-popup__title { font-size: 30rpx; font-weight: 700; color: #0f172a; }
+.account-popup__close {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 </style>

@@ -33,6 +33,10 @@
             <view v-if="showScan" class="scan-btn" @click="onScan">
                 <u-icon name="scan" color="#3b6ef5" size="20" />
             </view>
+            <view v-if="showFilter" class="filter-btn" :class="{ 'filter-btn--on': filterCount > 0 }" @click="emit('filter')">
+                <u-icon name="list" :color="filterCount > 0 ? '#3b6ef5' : '#64748b'" size="20" />
+                <text v-if="filterCount > 0" class="filter-badge">{{ filterCount > 9 ? '9+' : filterCount }}</text>
+            </view>
         </view>
 
         <!-- 状态 Tab（胶囊式，对齐 phone_shop .tab） -->
@@ -65,6 +69,8 @@ const props = withDefaults(defineProps<{
     title?: string
     showSearch?: boolean
     showScan?: boolean
+    showFilter?: boolean
+    filterCount?: number
 }>(), {
     modelValue: '',
     activeTab: '',
@@ -73,6 +79,8 @@ const props = withDefaults(defineProps<{
     title: '',
     showSearch: true,
     showScan: true,
+    showFilter: false,
+    filterCount: 0,
 })
 
 const emit = defineEmits<{
@@ -81,6 +89,7 @@ const emit = defineEmits<{
     (e: 'search'): void
     (e: 'tab-change', v: string): void
     (e: 'scan', v: string): void
+    (e: 'filter'): void
 }>()
 
 const { pageHeaderStyle } = useListHeader(0)
@@ -179,6 +188,35 @@ function onTab(val: string) {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+}
+.filter-btn {
+    position: relative;
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 50%;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.filter-btn--on {
+    background: #eff3ff;
+}
+.filter-badge {
+    position: absolute;
+    top: -8rpx;
+    right: -8rpx;
+    min-width: 28rpx;
+    height: 28rpx;
+    padding: 0 6rpx;
+    border-radius: 14rpx;
+    background: #ef4444;
+    color: #fff;
+    font-size: 18rpx;
+    line-height: 28rpx;
+    text-align: center;
+    box-sizing: border-box;
 }
 .search-ph { color: #c4c8cf; font-size: 28rpx; }
 

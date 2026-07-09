@@ -45,11 +45,11 @@
             <!-- 账户选择 -->
             <view class="account-row" @click="showAccountPicker = true">
                 <text class="account-label required">收款账户</text>
-                <view class="account-select">
+                <view class="account-select" :class="{ 'account-select--on': form.capital_account_id }">
                     <text :class="form.capital_account_id ? 'account-text' : 'account-placeholder'">
                         {{ selectedAccountLabel || '点击选择账户' }}
                     </text>
-                    <text class="account-arrow">›</text>
+                    <u-icon name="arrow-right" color="#cbd5e1" size="16" />
                 </view>
             </view>
 
@@ -67,26 +67,21 @@
                     <view class="device-row__info">
                         <text class="device-row__model">{{ item.model }}</text>
                         <text class="device-row__sub">{{ item.spec || '-' }} · {{ item.imei }}</text>
-                        <!-- 对齐PC端：售价可调 -->
-                        <!-- <view class="price-edit-row">
-                            <text class="price-edit-label">售价</text>
-                            <u-input
-                                v-model="item.sale_price"
-                                type="number"
-                                :customStyle="priceInputStyle"
-                                @blur="onPriceChange(item)"
-                            />
-                        </view> -->
+                        <text v-if="sourceType === 'purchase_return'" class="device-row__sub">
+                            退货金额 ¥{{ money(item.return_cost) }} · 已付 ¥{{ money(item.paid_amount) }}
+                        </text>
+                        <text v-if="item.reason" class="device-row__reason">原因：{{ item.reason }}</text>
                         <view class="device-row__amounts">
                             <text class="amt-tiny">已收 ¥{{ money(item.allocated_settled) }}</text>
                             <text class="amt-tiny blue">余 ¥{{ money(itemRemain(item)) }}</text>
                         </view>
                     </view>
                     <view class="device-row__input">
-                        <text class="price-edit-label">售价</text>
+                        <text class="price-edit-label">{{ amountLabel }}</text>
                         <u-input
                             v-model="item.sale_price"
                             type="number"
+                            :disabled="sourceType !== 'sale'"
                             :customStyle="priceInputStyle"
                             @blur="onPriceChange(item)"
                         />
@@ -110,21 +105,39 @@
 
             <!-- 底部按钮 -->
             <view class="modal-actions">
-                <u-button @click="close" :customStyle="{flex:'1'}">取消</u-button>
-                <u-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit" :customStyle="{flex:'2'}">
-                    确认收款 ¥{{ money(totalReceipt) }}
-                </u-button>
+                <view class="action-btn action-btn--minor">
+                    <u-button @click="close">取消</u-button>
+                </view>
+                <view class="action-btn action-btn--major">
+                    <u-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
+                        确认收款 ¥{{ money(totalReceipt) }}
+                    </u-button>
+                </view>
             </view>
         </view>
 
         <!-- 账户弹窗 -->
         <u-popup :show="showAccountPicker" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="showAccountPicker = false">
             <view class="account-popup">
-                <view class="account-popup__title">选择账户</view>
-                <view v-for="a in accounts" :key="a.id" class="account-item" :class="{ selected: a.id === form.capital_account_id }" @click="selectAccount(a)">
-                    <text class="account-item__name">{{ a.account_name }}</text>
-                    <text class="account-item__balance">余额 ¥{{ money(a.balance) }}</text>
+                <view class="account-popup__head">
+                    <text class="account-popup__title">选择账户</text>
+                    <view class="account-popup__close" @click="showAccountPicker = false">
+                        <u-icon name="close" color="#64748b" size="20" />
+                    </view>
                 </view>
+                <u-cell-group v-if="accounts.length" :border="false">
+                    <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectAccount(a)">
+                        <template #value>
+                            <u-icon
+                                v-if="Number(a.id) === Number(form.capital_account_id)"
+                                name="checkmark-circle-fill"
+                                color="#3b6ef5"
+                                size="20"
+                            />
+                        </template>
+                    </u-cell>
+                </u-cell-group>
+                <u-empty v-else mode="data" text="暂无可用资金账户" />
             </view>
         </u-popup>
     </u-popup>
@@ -152,6 +165,7 @@ const emit = defineEmits<{
 }>()
 
 const items = ref<any[]>([])
+const sourceType = ref('')
 const loadingItems = ref(false)
 const submitting = ref(false)
 const showAccountPicker = ref(false)
@@ -173,6 +187,7 @@ const selectedAccountLabel = computed(() => {
     const a = props.accounts.find(a => a.id === form.value.capital_account_id)
     return a ? `${a.account_name}（¥${money(a.balance)}）` : ''
 })
+const amountLabel = computed(() => sourceType.value === 'purchase_return' ? '应退金额' : '售价')
 
 let loadToken = 0
 
@@ -193,6 +208,7 @@ watch(() => props.accounts, () => {
 function openModal() {
     form.value = { capital_account_id: props.accounts[0]?.id || 0, remark: '' }
     items.value = []
+    sourceType.value = ''
     loadItems()
 }
 
@@ -203,6 +219,7 @@ async function loadItems() {
         const res: any = await getMobileReceivableItems(props.receivableId)
         if (token !== loadToken) return
         const data = res?.data || {}
+        sourceType.value = data.source_type || ''
         items.value = (data.items || []).map((row: any) => ({
             ...row,
             sale_price: Number(row.sale_price || 0),
@@ -231,6 +248,7 @@ function normalizeChecked(checked: any) {
 }
 
 function onPriceChange(item: any) {
+    if (sourceType.value !== 'sale') return
     // 售价变化后重新计算本次收款上限
     const remain = itemRemain(item)
     if (item.checked) {
@@ -242,7 +260,10 @@ function onPriceChange(item: any) {
 
 function capReceiptAmount(item: any) {
     const max = itemRemain(item)
-    if (Number(item.receipt_amount) > max) item.receipt_amount = Number(max.toFixed(2))
+    if (Number(item.receipt_amount) > max) {
+        item.receipt_amount = Number(max.toFixed(2))
+        uni.showToast({ title: `不能超过剩余应收 ¥${money(max)}`, icon: 'none' })
+    }
     if (Number(item.receipt_amount) < 0) item.receipt_amount = 0
 }
 
@@ -252,13 +273,19 @@ function selectAccount(a: any) {
 }
 
 async function submit() {
+    const overItem = items.value.find(i => i.checked && Number(i.receipt_amount || 0) > itemRemain(i) + 0.0001)
+    if (overItem) {
+        capReceiptAmount(overItem)
+        return
+    }
     submitting.value = true
     try {
         const receiptItems = items.value
             .filter(i => i.checked && Number(i.receipt_amount || 0) > 0)
             .map(i => ({
                 id: i.id,
-                sale_item_id: i.id,
+                sale_item_id: sourceType.value === 'sale' ? i.id : 0,
+                asset_id: i.asset_id || i.id,
                 sale_price: Number(i.sale_price),
                 amount: Number(i.receipt_amount),
             }))
@@ -295,10 +322,10 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .account-row { display: flex; align-items: center; gap: 16rpx; padding: 0 32rpx 16rpx; }
 .account-label { font-size: 26rpx; color: #374151; width: 150rpx; flex-shrink: 0; }
 .account-label.required::before { content: '*'; color: #dc2626; margin-right: 4rpx; }
-.account-select { flex: 1; display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border-radius: 8rpx; padding: 10rpx 16rpx; }
-.account-text { font-size: 26rpx; color: #0f172a; }
-.account-placeholder { font-size: 26rpx; color: #94a3b8; }
-.account-arrow { font-size: 32rpx; color: #94a3b8; }
+.account-select { flex: 1; min-height: 72rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; background: #f8fafc; border: 2rpx solid transparent; border-radius: 12rpx; padding: 0 18rpx; box-sizing: border-box; }
+.account-select--on { background: #f8fbff; border-color: #3b6ef5; }
+.account-text { flex: 1; min-width: 0; font-size: 26rpx; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-placeholder { flex: 1; min-width: 0; font-size: 26rpx; color: #94a3b8; }
 .items-loading { display: flex; justify-content: center; padding: 32rpx; }
 .items-list { flex: 1; max-height: 420rpx; padding: 0 32rpx; box-sizing: border-box; }
 .device-row { display: flex; align-items: flex-start; gap: 12rpx; padding: 16rpx 0; border-bottom: 1rpx solid #f1f5f9; box-sizing: border-box; }
@@ -306,6 +333,7 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .device-row__info { flex: 1; }
 .device-row__model { font-size: 26rpx; font-weight: 600; color: #0f172a; }
 .device-row__sub { font-size: 22rpx; color: #64748b; display: block; margin-top: 4rpx; }
+.device-row__reason { font-size: 22rpx; color: #ea580c; display: block; margin-top: 4rpx; }
 .price-edit-row { display: flex; align-items: center; gap: 8rpx; margin-top: 8rpx; }
 .price-edit-label { font-size: 22rpx; color: #94a3b8; }
 .price-edit-label.mt { display: block; margin-top: 8rpx; }
@@ -315,9 +343,31 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .device-row__input { flex-shrink: 0; }
 .remark-row { padding: 0 32rpx 12rpx; }
 .modal-actions { display: flex; gap: 16rpx; padding: 16rpx 32rpx; border-top: 1rpx solid #f1f5f9; }
-.account-popup { padding: 32rpx; }
-.account-popup__title { font-size: 30rpx; font-weight: 700; margin-bottom: 20rpx; }
-.account-item { display: flex; justify-content: space-between; padding: 20rpx 0; border-bottom: 1rpx solid #f1f5f9; &.selected { color: #3b6ef5; } }
-.account-item__name { font-size: 28rpx; }
-.account-item__balance { font-size: 24rpx; color: #64748b; }
+.action-btn { min-width: 0; }
+.action-btn--minor { flex: 1; }
+.action-btn--major { flex: 2; }
+.account-popup {
+    min-height: 36vh;
+    max-height: 74vh;
+    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+    background: #fff;
+}
+.account-popup__head {
+    min-height: 96rpx;
+    padding: 0 28rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+}
+.account-popup__title { font-size: 30rpx; font-weight: 700; color: #0f172a; }
+.account-popup__close {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 </style>

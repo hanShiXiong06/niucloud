@@ -21,7 +21,7 @@
                     <view class="card-meta" v-if="row.remark">备注：{{ row.remark }}</view>
                     <view class="card-time">{{ erpTimeLine(row, ['returned_at', 'return_at', 'confirmed_at']) }}</view>
                     <view v-if="row.status === 'pending'" class="status-row" style="margin-top:16rpx">
-                        <u-button type="primary" size="small" :loading="confirming === row.id" @click="doConfirm(row)">财务确认退货</u-button>
+                        <u-button type="primary" size="small" plain :loading="confirming === row.id" @click="doConfirm(row)">处理旧待确认单</u-button>
                         <u-button type="error" size="small" plain @click="doCancel(row)">撤销</u-button>
                     </view>
                 </view>
@@ -46,12 +46,12 @@ const pagingRef = ref<any>(null)
 const confirming = ref(0)
 
 const tabs = [
-    { label: '待确认', value: 'pending' },
-    { label: '已确认', value: 'confirmed' },
+    { label: '已完成', value: 'confirmed' },
+    { label: '旧待确认', value: 'pending' },
     { label: '已撤销', value: 'cancelled' },
     { label: '全部', value: '' },
 ]
-const activeTab = ref('pending')
+const activeTab = ref('confirmed')
 const reload = () => pagingRef.value?.reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
 
@@ -66,8 +66,8 @@ const queryList = async (pageNo: number, pageSize: number) => {
 
 async function doConfirm(row: any) {
     uni.showModal({
-        title: '财务确认退货',
-        content: `确认后设备将从库存退出，应付账款同步处理。\n金额：¥${money(row.total_amount)}`,
+        title: '处理旧待确认退货',
+        content: `这是旧流程遗留的待确认单。确认后设备将从库存退出，应付/应收同步处理。\n金额：¥${money(row.total_amount)}`,
         confirmText: '确认', cancelText: '取消',
         success: async (res) => {
             if (!res.confirm) return
@@ -100,7 +100,7 @@ async function doCancel(row: any) {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
-const statusLabel = (s: string) => ({ pending: '待财务确认', confirmed: '已确认', cancelled: '已撤销' }[s] || s || '-')
+const statusLabel = (s: string) => ({ pending: '旧待确认', confirmed: '已完成', cancelled: '已撤销' }[s] || s || '-')
 const statusType = (s: string) => ({ pending: 'warning', confirmed: 'success', cancelled: 'info' }[s] || 'info')
 const refundLabel = (s: string) => ({ cash: '现金退回', offset: '应收冲减' }[s] || s || '-')
 </script>

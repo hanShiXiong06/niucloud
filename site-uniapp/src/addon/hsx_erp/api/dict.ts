@@ -85,12 +85,14 @@ export function dictTabs(dicts: ErpDictMap | null | undefined, group: string, wi
     return withAll ? [{ label: '全部', name: '全部', value: '' }, ...tabs] : tabs
 }
 
-// 不允许调整成本的状态（与后端 adjustCost 的 blocked 一致）
-export const COST_ADJUST_BLOCKED: string[] = [
-    'lost',
-    'pending_in',
-    'inbound_rejected'
+// 成本调整允许在库、已售/在售设备，退货、作废等终态不再改动账务口径。
+export const COST_ADJUST_ALLOWED: string[] = [
+    'in_stock',
+    'sold',
+    'available_for_sale'
 ]
+
+export const isCostAdjustAllowed = (status: any) => COST_ADJUST_ALLOWED.includes(String(status || ''))
 
 // 已出库状态：可订正成本，但不联动应付/应收
 export const INVENTORY_OUTBOUND = 'outbound'

@@ -35,8 +35,8 @@
                     <view class="form-section__head">
                         <text class="form-section__title">已选设备（{{ selectedAssets.length }} 台）</text>
                         <view class="form-section__actions">
-                            <u-button size="mini" plain type="primary" @click="openScanStockPicker">扫码选设备</u-button>
-                            <u-button size="mini" type="primary" @click="showStockPicker = true">+ 选设备</u-button>
+                            <u-button size="small" plain type="primary" @click="openScanStockPicker">扫码选设备</u-button>
+                            <u-button size="small" type="primary" @click="showStockPicker = true">+ 选设备</u-button>
                         </view>
                     </view>
 

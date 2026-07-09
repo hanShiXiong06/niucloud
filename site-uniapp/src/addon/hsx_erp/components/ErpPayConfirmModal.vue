@@ -92,21 +92,39 @@
 
             <!-- 底部按钮 -->
             <view class="modal-actions">
-                <u-button @click="close" :customStyle="{flex:'1'}">取消</u-button>
-                <u-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit" :customStyle="{flex:'2'}">
-                    确认付款 ¥{{ money(totalPaying) }}
-                </u-button>
+                <view class="action-btn action-btn--minor">
+                    <u-button @click="close">取消</u-button>
+                </view>
+                <view class="action-btn action-btn--major">
+                    <u-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
+                        确认付款 ¥{{ money(totalPaying) }}
+                    </u-button>
+                </view>
             </view>
         </view>
 
         <!-- 账户弹窗 -->
         <u-popup :show="showAccountPicker" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="showAccountPicker = false">
             <view class="account-popup">
-                <view class="account-popup__title">选择账户</view>
-                <view v-for="a in accounts" :key="a.id" class="account-item" :class="{ selected: a.id === form.capital_account_id }" @click="selectAccount(a)">
-                    <text class="account-item__name">{{ a.account_name }}</text>
-                    <text class="account-item__balance">余额 ¥{{ money(a.balance) }}</text>
+                <view class="account-popup__head">
+                    <text class="account-popup__title">选择账户</text>
+                    <view class="account-popup__close" @click="showAccountPicker = false">
+                        <u-icon name="close" color="#64748b" size="20" />
+                    </view>
                 </view>
+                <u-cell-group v-if="accounts.length" :border="false">
+                    <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectAccount(a)">
+                        <template #value>
+                            <u-icon
+                                v-if="Number(a.id) === Number(form.capital_account_id)"
+                                name="checkmark-circle-fill"
+                                color="#3b6ef5"
+                                size="20"
+                            />
+                        </template>
+                    </u-cell>
+                </u-cell-group>
+                <u-empty v-else mode="data" text="暂无可用资金账户" />
             </view>
         </u-popup>
     </u-popup>
@@ -282,9 +300,35 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .device-row__input { flex-shrink: 0; }
 .remark-row { padding: 0 32rpx 12rpx; }
 .modal-actions { display: flex; gap: 16rpx; padding: 16rpx 32rpx; border-top: 1rpx solid #f1f5f9; }
-.account-popup { padding: 32rpx; }
-.account-popup__title { font-size: 30rpx; font-weight: 700; margin-bottom: 20rpx; }
-.account-item { display: flex; justify-content: space-between; padding: 20rpx 0; border-bottom: 1rpx solid #f1f5f9; &.selected { color: #3b6ef5; } }
-.account-item__name { font-size: 28rpx; }
-.account-item__balance { font-size: 24rpx; color: #64748b; }
+.action-btn { min-width: 0; }
+.action-btn--minor { flex: 1; }
+.action-btn--major { flex: 2; }
+.account-popup {
+    min-height: 36vh;
+    max-height: 74vh;
+    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+    background: #fff;
+}
+.account-popup__head {
+    min-height: 96rpx;
+    padding: 0 28rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+}
+.account-popup__title {
+    font-size: 30rpx;
+    font-weight: 700;
+    color: #0f172a;
+}
+.account-popup__close {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 </style>

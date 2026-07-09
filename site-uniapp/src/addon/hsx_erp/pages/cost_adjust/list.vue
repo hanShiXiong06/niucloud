@@ -47,6 +47,7 @@
                     v-for="row in list"
                     :key="row.id"
                     class="asset-card"
+                    :class="{ 'asset-card--disabled': !canAdjust(row) }"
                     @click="goAdjust(row)"
                 >
                     <view class="asset-card__head">
@@ -69,7 +70,8 @@
                             <text class="cost-label">当前成本</text>
                             <text class="cost-value">¥{{ formatMoney(row.current_cost) }}</text>
                         </view>
-                        <view class="adjust-entry">调整<text class="adjust-arrow">›</text></view>
+                        <view v-if="canAdjust(row)" class="adjust-entry">调整<text class="adjust-arrow">›</text></view>
+                        <view v-else class="adjust-entry adjust-entry--disabled">不可调整</view>
                     </view>
                 </view>
             </view>
@@ -81,7 +83,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
-import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
+import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, isCostAdjustAllowed, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 
@@ -102,6 +104,7 @@ const status = computed(() => statusTabs.value[currentIndex.value]?.value || '')
 const statusLabel = (s: string) => dictLabel(erpDicts.value, 'asset_status', s)
 const statusType = (s: string) => dictType(erpDicts.value, 'asset_status', s)
 const formatMoney = (v: any) => Number(v || 0).toFixed(2)
+const canAdjust = (row: any) => isCostAdjustAllowed(row?.inventory_status)
 
 const reload = () => pagingRef.value?.reload()
 
@@ -128,6 +131,10 @@ const queryList = async (pageNo: number, pageSize: number) => {
 }
 
 const goAdjust = (row: any) => {
+    if (!canAdjust(row)) {
+        uni.showToast({ title: `当前状态「${statusLabel(row?.inventory_status)}」不可调整成本`, icon: 'none' })
+        return
+    }
     dirty.value = true
     // 直接把行数据带到详情页：秒开、无需再请求详情接口
     const q = [
@@ -200,6 +207,10 @@ onShow(() => {
     }
 }
 
+.asset-card--disabled {
+    opacity: 0.78;
+}
+
 .asset-title {
     font-size: 32rpx;
     font-weight: 600;
@@ -238,5 +249,8 @@ onShow(() => {
     align-items: center;
 
     .adjust-arrow { font-size: 32rpx; margin-left: 6rpx; }
+}
+.adjust-entry--disabled {
+    color: #94a3b8;
 }
 </style>

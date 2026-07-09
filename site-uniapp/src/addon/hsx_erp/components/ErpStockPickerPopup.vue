@@ -38,7 +38,7 @@
                     <text>{{ warehouseFilterText || '仓库' }}</text>
                 </view>
                 <view class="filter-chip" :class="{ active: categoryId }">
-                    <CategoryPopup v-model="categoryId" @change="onCategoryChange" />
+                    <ErpCategoryPopup v-model="categoryId" @change="onCategoryChange" />
                 </view>
                 <view v-if="hasFilter" class="filter-clear" @click="clearFilters">清空</view>
             </view>
@@ -60,13 +60,46 @@
                         @click="select(row)"
                     >
                         <view class="stock-item__head">
-                            <text class="stock-item__model">{{ row.model || '-' }}</text>
-                            <text class="stock-item__cost">成本 ¥{{ money(row.total_cost) }}</text>
+                            <view class="stock-title">
+                                <text class="stock-item__model">{{ row.model || '-' }}</text>
+                                <text class="stock-item__spec">{{ row.spec || '无规格' }}</text>
+                            </view>
+                            <view class="stock-pick">
+                                <text>选择</text>
+                                <u-icon name="arrow-right" color="#3b6ef5" size="15" />
+                            </view>
                         </view>
-                        <text class="stock-item__sub">{{ row.spec || '-' }} · IMEI {{ row.imei || '-' }}</text>
-                        <text class="stock-item__sub" v-if="row.category_name">分类：{{ row.category_name }}</text>
-                        <text class="stock-item__sub">{{ row.warehouse_name }}{{ row.location_name ? ' / '+row.location_name : '' }}</text>
-                        <text class="stock-item__sub" v-if="row.party_name">来源：{{ row.party_name }}</text>
+                        <view class="stock-ident">
+                            <text class="ident-label">IMEI</text>
+                            <text class="ident-value">{{ row.imei || '-' }}</text>
+                        </view>
+                        <view class="stock-tags">
+                            <view class="stock-tag">
+                                <u-icon name="home" color="#64748b" size="12" />
+                                <text>{{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}</text>
+                            </view>
+                            <view v-if="row.category_name" class="stock-tag">
+                                <u-icon name="grid" color="#64748b" size="12" />
+                                <text>{{ row.category_name }}</text>
+                            </view>
+                            <view v-if="row.party_name" class="stock-tag muted">
+                                <text>来源 {{ row.party_name }}</text>
+                            </view>
+                        </view>
+                        <view class="stock-money">
+                            <view class="money-box">
+                                <text class="money-label">成本</text>
+                                <text class="money-value">¥{{ money(row.total_cost) }}</text>
+                            </view>
+                            <view class="money-box">
+                                <text class="money-label">建议售价</text>
+                                <text class="money-value blue">¥{{ money(suggestPrice(row)) }}</text>
+                            </view>
+                            <view class="money-box">
+                                <text class="money-label">预估毛利</text>
+                                <text class="money-value" :class="suggestProfit(row) >= 0 ? 'green' : 'red'">¥{{ money(suggestProfit(row)) }}</text>
+                            </view>
+                        </view>
                     </view>
                     <view v-if="!list.length && !loading" class="popup-empty">
                         <u-empty mode="search" text="暂无待售设备" :image-size="60" />
@@ -93,7 +126,7 @@ import { computed, ref, watch } from 'vue'
 import request from '@/utils/request'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
-import CategoryPopup from '@/addon/phone_shop/components/category-popup.vue'
+import ErpCategoryPopup from '@/addon/hsx_erp/components/ErpCategoryPopup.vue'
 
 const props = withDefaults(defineProps<{
     show: boolean
@@ -221,6 +254,12 @@ function select(row: any) {
 
 function close() { emit('update:show', false) }
 const money = (v: any) => Number(v || 0).toFixed(2)
+function suggestPrice(row: any) {
+    return Number(row.retail_price || row.estimate_sale_price || row.sale_price || row.total_cost || 0)
+}
+function suggestProfit(row: any) {
+    return suggestPrice(row) - Number(row.total_cost || 0)
+}
 </script>
 
 <style scoped lang="scss">
@@ -248,13 +287,24 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .popup-loading { display: flex; justify-content: center; padding: 48rpx; }
 .popup-loading-more { display: flex; justify-content: center; padding: 20rpx; }
 .popup-empty { padding: 32rpx 0; }
-.stock-item {
-    padding: 20rpx 0;
-    border-bottom: 1rpx solid #f1f5f9;
-    &:active { background: #f8fafc; }
-}
-.stock-item__head { display: flex; justify-content: space-between; margin-bottom: 6rpx; }
-.stock-item__model { font-size: 28rpx; font-weight: 600; color: #0f172a; }
-.stock-item__cost { font-size: 26rpx; color: #2563eb; }
-.stock-item__sub { font-size: 24rpx; color: #64748b; display: block; margin-top: 4rpx; }
+.stock-item { padding: 18rpx 20rpx; margin-bottom: 14rpx; border-radius: 16rpx; background: #fff; border: 2rpx solid #eef2f7; box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, .035); &:active { background: #f8fbff; border-color: #bfdbfe; } }
+.stock-item__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14rpx; }
+.stock-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4rpx; }
+.stock-item__model { font-size: 28rpx; font-weight: 700; color: #0f172a; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-item__spec { font-size: 22rpx; color: #64748b; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-pick { height: 44rpx; padding: 0 14rpx; border-radius: 22rpx; background: #eff6ff; color: #3b6ef5; display: flex; align-items: center; gap: 4rpx; font-size: 22rpx; font-weight: 600; flex-shrink: 0; }
+.stock-ident { margin-top: 10rpx; display: flex; align-items: center; gap: 8rpx; min-width: 0; }
+.ident-label { font-size: 20rpx; color: #94a3b8; flex-shrink: 0; }
+.ident-value { font-size: 23rpx; color: #334155; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-tags { display: flex; flex-wrap: wrap; gap: 8rpx; margin-top: 10rpx; }
+.stock-tag { max-width: 100%; min-height: 38rpx; padding: 0 10rpx; border-radius: 19rpx; background: #f8fafc; color: #64748b; display: flex; align-items: center; gap: 6rpx; font-size: 21rpx; box-sizing: border-box; }
+.stock-tag text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-tag.muted { background: #f1f5f9; color: #94a3b8; }
+.stock-money { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8rpx; margin-top: 12rpx; padding-top: 10rpx; border-top: 2rpx solid #f1f5f9; }
+.money-box { min-width: 0; display: flex; flex-direction: column; gap: 4rpx; }
+.money-label { font-size: 20rpx; color: #94a3b8; }
+.money-value { font-size: 24rpx; font-weight: 700; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.money-value.blue { color: #2563eb; }
+.money-value.green { color: #16a34a; }
+.money-value.red { color: #dc2626; }
 </style>

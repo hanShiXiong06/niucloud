@@ -1,5 +1,46 @@
 import request from '@/utils/request'
 
+// ─── 经营看板 ────────────────────────────────────────────────────────────────
+export function getMobileErpDashboard(params: Record<string, any> = {}) {
+    return request.get('erp/dashboard', params)
+}
+
+export function getMobileCounterpartyOptions(params: Record<string, any> = {}) {
+    return request.get('erp/counterparty/options', params)
+}
+
+export function getMobileStaffOptions(params: Record<string, any> = {}) {
+    return request.get('erp/staff/options', params)
+}
+
+export function getMobileErpGoodsMeta(params: Record<string, any> = {}) {
+    return request.get('erp/goods/meta', params)
+}
+
+export function getMobileErpCategoryTree(params: Record<string, any> = {}) {
+    return request.get('erp/goods/category/tree', params)
+}
+
+export function getMobileErpCategoryList(params: Record<string, any> = {}) {
+    return request.get('erp/goods/category/lists', params)
+}
+
+export function saveMobileErpCategory(id: number | string = 0, data: Record<string, any>) {
+    return request.post(`erp/goods/category/save/${id || 0}`, data)
+}
+
+export function deleteMobileErpCategory(id: number | string) {
+    return request.delete(`erp/goods/category/${id}`)
+}
+
+export function exportMobileErpCategory() {
+    return request.get('erp/goods/category/export')
+}
+
+export function importMobileErpCategory(rows: any[]) {
+    return request.post('erp/goods/category/import', { rows })
+}
+
 // ─── 采购 ────────────────────────────────────────────────────────────────────
 export function getMobilePurchaseList(params: Record<string, any>) {
     return request.get('erp/purchase/lists', params)
@@ -20,6 +61,9 @@ export function getMobileSaleInfo(id: number) {
 }
 export function cancelMobileSale(id: number, data: Record<string, any> = {}) {
     return request.post(`erp/sale/${id}/cancel`, data)
+}
+export function cancelMobileSaleItem(itemId: number, data: Record<string, any> = {}) {
+    return request.post(`erp/sale/item/${itemId}/cancel`, data)
 }
 export function confirmMobileSaleReceipt(id: number, data: Record<string, any>) {
     return request.post(`erp/finance/receivable/${id}/confirm_receipt`, data)
@@ -49,10 +93,16 @@ export function getMobilePayablePartyItems(partyId: number, params: Record<strin
 export function confirmMobilePayableItems(partyId: number, data: Record<string, any>) {
     return request.post(`erp/finance/payable/party/${partyId}/confirm_items_payment`, data)
 }
+export function confirmMobileOffset(data: Record<string, any>) {
+    return request.post('erp/finance/offset', data)
+}
 
 // ─── 应收款 ──────────────────────────────────────────────────────────────────
 export function getMobileReceivableList(params: Record<string, any>) {
     return request.get('erp/finance/receivable/lists', params)
+}
+export function getMobileReceivableInfo(id: number) {
+    return request.get(`erp/finance/receivable/${id}`)
 }
 export function getMobileReceivableItems(id: number) {
     return request.get(`erp/finance/receivable/${id}/items`)

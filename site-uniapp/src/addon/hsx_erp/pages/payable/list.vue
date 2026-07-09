@@ -5,24 +5,40 @@
             v-model:activeTab="activeTab"
             placeholder="供应商/采购单号"
             :tabs="tabs"
+            :show-filter="true"
+            :filter-count="filterCount"
             @search="handleSearch"
             @tab-change="onTab"
+            @filter="filterVisible = true"
         />
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无应付记录" /></template>
             <view class="list-wrap">
-                <view v-for="row in list" :key="String(row.party_id)+'_'+String(row.purchase_order_id)" class="erp-card">
-                    <view class="erp-card__head">
-                        <text class="card-title">{{ row.party_name }}</text>
+                <view v-for="row in list" :key="String(row.party_id)+'_'+String(row.purchase_order_id)" class="erp-card payable-card">
+                    <view class="payable-card__head">
+                        <view class="payable-title">
+                            <text class="card-title payable-title__name">{{ row.party_name || '-' }}</text>
+                            <text class="payable-title__sub">剩余应付 ¥{{ money(row.remain_amount) }}</text>
+                        </view>
                         <u-tag :text="statusLabel(row.finance_status)" :type="statusType(row.finance_status)" plain plainFill size="mini" />
                     </view>
-                    <view class="card-meta">采购批次：{{ row.batch_no || row.purchase_no || '-' }}</view>
-                    <view class="card-meta" v-if="row.purchaser_name">采购员：{{ row.purchaser_name }}</view>
-                    <view class="card-meta" v-if="row.warehouse_name">仓库：{{ row.warehouse_name }}</view>
-                    <view class="card-time">{{ erpTimeLine(row, ['paid_at', 'pay_at', 'stock_in_at']) }}</view>
-                    <view class="erp-card__foot">
+
+                    <view class="payable-line">
+                        <text class="payable-line__label">采购批次</text>
+                        <text class="payable-line__value">{{ row.batch_no || row.purchase_no || '-' }}</text>
+                    </view>
+
+                    <view class="payable-chips">
+                        <view v-if="row.purchaser_name" class="payable-chip">采购员 {{ row.purchaser_name }}</view>
+                        <view v-if="row.warehouse_name" class="payable-chip">{{ row.warehouse_name }}</view>
+                        <view v-if="row.payable_count" class="payable-chip muted">{{ row.payable_count }} 笔应付</view>
+                    </view>
+
+                    <view class="payable-time">{{ erpTimeLine(row, ['paid_at', 'pay_at', 'stock_in_at']) }}</view>
+
+                    <view class="erp-card__foot payable-money">
                         <view class="amount-box">
                             <text class="amt-label">应付合计</text>
                             <text class="amt-value">¥{{ money(row.amount) }}</text>
@@ -36,9 +52,20 @@
                             <text class="amt-value orange">¥{{ money(row.remain_amount) }}</text>
                         </view>
                     </view>
-                    <view v-if="row.finance_status !== 'settled' && Number(row.remain_amount) > 0" style="margin-top:16rpx;display:flex;gap:12rpx">
-                        <u-button type="primary" size="small" @click="openDetailPay(row)">逐台付款</u-button>
-                        <u-button type="success" size="small" plain @click="openPay(row)">整体付款</u-button>
+                    <view v-if="row.finance_status !== 'settled' && Number(row.remain_amount) > 0" class="card-actions">
+                        <view class="card-action-btn main">
+                            <u-button type="primary" size="small" text="逐台付款" @click="openDetailPay(row)" />
+                        </view>
+                        <view class="card-action-btn">
+                            <u-button type="success" size="small" plain text="整体付款" @click="openPay(row)" />
+                        </view>
+                        <view v-if="row.can_offset" class="card-action-btn">
+                            <u-button type="warning" size="small" plain text="折账" @click="openOffset(row)" />
+                        </view>
+                    </view>
+                    <view v-if="row.can_offset" class="offset-tip">
+                        <text>可折账</text>
+                        <text>应付 ¥{{ money(row.offset_payable_remain) }} / 应收 ¥{{ money(row.offset_receivable_remain) }}</text>
                     </view>
                 </view>
             </view>
@@ -47,24 +74,46 @@
         <!-- 付款弹窗 -->
         <u-popup :show="payVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24" @close="payVisible = false">
             <view v-if="payRow" class="pay-popup">
-                <view class="pay-popup__title">确认付款</view>
-                <view class="pay-info">
-                    <text class="pay-info__name">{{ payRow.party_name }}</text>
-                    <text class="pay-info__sub">{{ payRow.batch_no || payRow.purchase_no }}</text>
-                    <text class="pay-info__remain">剩余应付：¥{{ money(payRow.remain_amount) }}</text>
+                <view class="popup-head">
+                    <view>
+                        <text class="popup-title">确认付款</text>
+                        <text class="popup-subtitle">{{ payRow.party_name }}</text>
+                    </view>
+                    <view class="popup-close" @click="payVisible = false">
+                        <u-icon name="close" color="#64748b" size="20" />
+                    </view>
                 </view>
+
+                <view class="pay-summary">
+                    <view class="summary-main">
+                        <text class="summary-label">剩余应付</text>
+                        <text class="summary-amount">¥{{ money(payRow.remain_amount) }}</text>
+                    </view>
+                    <u-tag :text="statusLabel(payRow.finance_status)" :type="statusType(payRow.finance_status)" plain plainFill size="mini" />
+                    <text class="summary-sub">{{ payRow.batch_no || payRow.purchase_no || '无单据号' }}</text>
+                </view>
+
                 <view class="pay-form">
                     <view class="pay-form__item">
-                        <text class="pay-label">本次付款金额</text>
-                        <u-input v-model="payForm.amount" type="number" :placeholder="'最多 ¥'+money(payRow.remain_amount)" :customStyle="inputStyle" />
+                        <view class="form-label-row">
+                            <text class="pay-label required">本次付款金额</text>
+                            <text class="fill-max" @click="fillPayMax">全额</text>
+                        </view>
+                        <u-input
+                            v-model="payForm.amount"
+                            type="number"
+                            :placeholder="'最多 ¥'+money(payRow.remain_amount)"
+                            :customStyle="inputStyle"
+                            @blur="capPayAmount"
+                        />
                     </view>
                     <view class="pay-form__item" @click="payAccountPickerVisible = true">
-                        <text class="pay-label">付款账户</text>
-                        <view class="account-select">
+                        <text class="pay-label required">付款账户</text>
+                        <view class="account-select" :class="{ 'account-select--on': payForm.capital_account_id }">
                             <text :class="payForm.capital_account_id ? 'account-text' : 'account-placeholder'">
                                 {{ selectedPayAccountLabel || '点击选择账户' }}
                             </text>
-                            <text class="account-arrow">›</text>
+                            <u-icon name="arrow-right" color="#cbd5e1" size="16" />
                         </view>
                     </view>
                     <view class="pay-form__item">
@@ -73,26 +122,37 @@
                     </view>
                 </view>
                 <view class="action-bar">
-                    <u-button @click="payVisible = false" :customStyle="{flex:'1'}">取消</u-button>
-                    <u-button type="primary" :loading="paying" :disabled="!canPay" @click="submitPay" :customStyle="{flex:'2'}">确认付款并记账</u-button>
+                    <view class="action-btn action-btn--minor">
+                        <u-button @click="payVisible = false">取消</u-button>
+                    </view>
+                    <view class="action-btn action-btn--major">
+                        <u-button type="primary" :loading="paying" :disabled="!canPay" @click="submitPay">确认付款并记账</u-button>
+                    </view>
                 </view>
             </view>
         </u-popup>
 
         <u-popup :show="payAccountPickerVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="24" @close="payAccountPickerVisible = false">
             <view class="account-popup">
-                <view class="account-popup__title">选择付款账户</view>
-                <view
-                    v-for="a in accounts"
-                    :key="a.id"
-                    class="account-item"
-                    :class="{ selected: a.id === payForm.capital_account_id }"
-                    @click="selectPayAccount(a)"
-                >
-                    <text class="account-item__name">{{ a.account_name }}</text>
-                    <text class="account-item__balance">余额 ¥{{ money(a.balance) }}</text>
+                <view class="popup-head compact">
+                    <text class="popup-title">选择付款账户</text>
+                    <view class="popup-close" @click="payAccountPickerVisible = false">
+                        <u-icon name="close" color="#64748b" size="20" />
+                    </view>
                 </view>
-                <view v-if="!accounts.length" class="account-empty">暂无可用资金账户</view>
+                <u-cell-group v-if="accounts.length" :border="false">
+                    <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectPayAccount(a)">
+                        <template #value>
+                            <u-icon
+                                v-if="Number(a.id) === Number(payForm.capital_account_id)"
+                                name="checkmark-circle-fill"
+                                color="#3b6ef5"
+                                size="20"
+                            />
+                        </template>
+                    </u-cell>
+                </u-cell-group>
+                <u-empty v-else mode="data" text="暂无可用资金账户" />
             </view>
         </u-popup>
 
@@ -106,6 +166,24 @@
             :accounts="accounts"
             @success="() => { reload(); detailPayRow = null }"
         />
+
+        <ErpOffsetConfirmModal
+            v-if="offsetRow"
+            v-model:show="offsetVisible"
+            :party-id="offsetRow?.party_id"
+            :party-name="offsetRow?.party_name"
+            :accounts="accounts"
+            @success="() => { reload(); offsetRow = null }"
+        />
+
+        <ErpFilterPopup
+            v-model:show="filterVisible"
+            v-model="filters"
+            title="筛选应付款"
+            :fields="filterFields"
+            @confirm="applyFilter"
+            @reset="resetFilter"
+        />
     </view>
 </template>
 
@@ -116,6 +194,8 @@ import { onShow } from '@dcloudio/uni-app'
 import { getMobilePayableList, confirmMobilePurchasePayment, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpPayConfirmModal from '@/addon/hsx_erp/components/ErpPayConfirmModal.vue'
+import ErpOffsetConfirmModal from '@/addon/hsx_erp/components/ErpOffsetConfirmModal.vue'
+import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 
@@ -131,11 +211,24 @@ const tabs = [
     { label: '全部', value: '' },
 ]
 const activeTab = ref('pending')
+const filterVisible = ref(false)
+const filters = ref<Record<string, any>>({})
+const filterFields = [
+    { key: 'party_id', label: '供应商', type: 'party', roleType: 'supplier', labelKey: 'party_name', placeholder: '请选择供应商' },
+    { key: 'source_no', label: '单据号', type: 'text', placeholder: '输入采购单号/批次号' },
+    { key: 'm_no', label: '会员号', type: 'text', placeholder: '输入会员号' },
+    { key: 'contact_mobile', label: '联系人手机', type: 'text', placeholder: '输入手机号' },
+    { key: 'amount', label: '应付金额', type: 'range', minKey: 'min_amount', maxKey: 'max_amount' },
+    { key: 'remain', label: '剩余应付', type: 'range', minKey: 'min_remain', maxKey: 'max_remain' },
+    { key: 'can_offset', label: '折账状态', type: 'select', options: [
+        { label: '全部', value: '' },
+        { label: '可折账', value: 1 },
+    ] },
+    { key: 'date', label: '发生日期', type: 'dateRange', startKey: 'start_at', endKey: 'end_at' },
+] as any[]
+const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
 
 const accounts = ref<any[]>([])
-const accountOptions = computed(() =>
-    accounts.value.map(a => ({ value: a.id, label: `${a.account_name}（余额 ¥${money(a.balance)}）` }))
-)
 
 const payVisible = ref(false)
 const payAccountPickerVisible = ref(false)
@@ -145,6 +238,8 @@ const payForm = ref({ amount: 0, capital_account_id: 0, remark: '' })
 // 逐台付款modal
 const detailPayVisible = ref(false)
 const detailPayRow = ref<any>(null)
+const offsetVisible = ref(false)
+const offsetRow = ref<any>(null)
 const canPay = computed(() =>
     Number(payForm.value.amount) > 0 &&
     Number(payForm.value.amount) <= Number(payRow.value?.remain_amount || 0) + 0.001 &&
@@ -173,10 +268,24 @@ const queryList = async (pageNo: number, pageSize: number) => {
     try {
         const res: any = await getMobilePayableList({
             keyword: keyword.value, status: activeTab.value,
+            ...filterParams(),
             page: pageNo, limit: pageSize
         })
         pagingRef.value?.complete(res?.data?.data || [])
     } catch { pagingRef.value?.complete(false) }
+}
+
+function applyFilter() { reload() }
+function resetFilter() { filters.value = {}; reload() }
+function filterParams() {
+    const params: Record<string, any> = { ...filters.value }
+    Object.keys(params).forEach(key => { if (key.endsWith('_name')) delete params[key] })
+    dateToRange(params)
+    return params
+}
+function dateToRange(params: Record<string, any>) {
+    if (typeof params.start_at === 'string' && params.start_at) params.start_at = Math.floor(new Date(params.start_at + ' 00:00:00').getTime() / 1000)
+    if (typeof params.end_at === 'string' && params.end_at) params.end_at = Math.floor(new Date(params.end_at + ' 23:59:59').getTime() / 1000)
 }
 
 function openPay(row: any) {
@@ -194,9 +303,29 @@ function openDetailPay(row: any) {
     detailPayVisible.value = true
 }
 
+function openOffset(row: any) {
+    if (!row.can_offset) {
+        uni.showToast({ title: '该往来单位暂无可折账应收', icon: 'none' })
+        return
+    }
+    offsetRow.value = row
+    offsetVisible.value = true
+}
+
 function selectPayAccount(account: any) {
     payForm.value.capital_account_id = Number(account.id || 0)
     payAccountPickerVisible.value = false
+}
+
+function fillPayMax() {
+    payForm.value.amount = Number(Number(payRow.value?.remain_amount || 0).toFixed(2))
+}
+
+function capPayAmount() {
+    const max = Number(payRow.value?.remain_amount || 0)
+    const amount = Number(payForm.value.amount || 0)
+    if (amount > max) payForm.value.amount = Number(max.toFixed(2))
+    if (amount < 0) payForm.value.amount = 0
 }
 
 async function submitPay() {
@@ -225,23 +354,297 @@ const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', set
 
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
-.pay-popup { padding: 32rpx; padding-bottom: 0; }
-.pay-popup__title { font-size: 34rpx; font-weight: 700; color: #0f172a; margin-bottom: 20rpx; }
-.pay-info { background: #f8fafc; border-radius: 12rpx; padding: 20rpx; margin-bottom: 24rpx; }
-.pay-info__name { font-size: 30rpx; font-weight: 600; color: #0f172a; display: block; }
-.pay-info__sub { font-size: 24rpx; color: #64748b; margin-top: 4rpx; display: block; }
-.pay-info__remain { font-size: 28rpx; color: #ea580c; font-weight: 600; margin-top: 8rpx; display: block; }
-.pay-form__item { margin-bottom: 20rpx; }
-.pay-label { font-size: 26rpx; color: #374151; display: block; margin-bottom: 8rpx; }
-.account-select { display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border-radius:8rpx; padding:16rpx; min-height:72rpx; box-sizing:border-box; }
-.account-text { font-size:26rpx; color:#0f172a; }
-.account-placeholder { font-size:26rpx; color:#94a3b8; }
-.account-arrow { font-size:32rpx; color:#94a3b8; }
-.account-popup { padding:32rpx; }
-.account-popup__title { font-size:30rpx; font-weight:700; color:#0f172a; margin-bottom:20rpx; }
-.account-item { display:flex; justify-content:space-between; gap:20rpx; padding:22rpx 0; border-bottom:1rpx solid #f1f5f9; }
-.account-item.selected { color:#3b6ef5; }
-.account-item__name { font-size:28rpx; }
-.account-item__balance { font-size:24rpx; color:#64748b; }
-.account-empty { text-align:center; color:#94a3b8; font-size:26rpx; padding:40rpx 0; }
+
+.payable-card {
+    padding: 22rpx 26rpx;
+}
+
+.payable-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18rpx;
+}
+
+.payable-title {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8rpx;
+}
+
+.payable-title__name,
+.payable-title__sub,
+.payable-line__value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.payable-title__name {
+    display: block;
+    line-height: 1.35;
+}
+
+.payable-title__sub {
+    display: block;
+    font-size: 26rpx;
+    font-weight: 700;
+    line-height: 1.35;
+    color: #ea580c;
+}
+
+.payable-line {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    min-width: 0;
+    margin-top: 14rpx;
+    font-size: 24rpx;
+    line-height: 1.35;
+}
+
+.payable-line__label {
+    flex-shrink: 0;
+    color: #94a3b8;
+}
+
+.payable-line__value {
+    flex: 1;
+    min-width: 0;
+    color: #475569;
+}
+
+.payable-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8rpx;
+    margin-top: 12rpx;
+}
+
+.payable-chip {
+    max-width: 100%;
+    height: 38rpx;
+    padding: 0 12rpx;
+    border-radius: 19rpx;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 21rpx;
+    line-height: 38rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+.payable-chip.muted {
+    color: #94a3b8;
+}
+
+.payable-time {
+    margin-top: 10rpx;
+    font-size: 22rpx;
+    line-height: 1.35;
+    color: #94a3b8;
+}
+
+.payable-money {
+    justify-content: space-between;
+    gap: 10rpx;
+    margin-top: 14rpx;
+    padding-top: 14rpx;
+}
+
+.payable-money .amount-box {
+    flex: 1;
+    min-width: 0;
+}
+
+.payable-money .amt-label,
+.payable-money .amt-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.payable-money .amt-value {
+    font-size: 27rpx;
+}
+
+.card-actions {
+    margin-top: 18rpx;
+    display: flex;
+    gap: 12rpx;
+}
+
+.card-action-btn {
+    flex: 1;
+    min-width: 0;
+}
+
+.card-action-btn.main {
+    flex: 1.1;
+}
+
+.pay-popup {
+    max-height: 82vh;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.popup-head {
+    min-height: 96rpx;
+    padding: 0 28rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+    border-bottom: 1rpx solid #eef2f7;
+}
+.popup-head.compact {
+    border-bottom: none;
+}
+.popup-title {
+    display: block;
+    font-size: 34rpx;
+    font-weight: 700;
+    color: #0f172a;
+}
+.popup-subtitle {
+    display: block;
+    margin-top: 4rpx;
+    font-size: 24rpx;
+    color: #64748b;
+}
+.popup-close {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.pay-summary {
+    margin: 24rpx 28rpx 20rpx;
+    padding: 22rpx;
+    border-radius: 18rpx;
+    background: #f8fafc;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10rpx 16rpx;
+    align-items: center;
+}
+.summary-main {
+    min-width: 0;
+}
+.summary-label {
+    display: block;
+    font-size: 23rpx;
+    color: #64748b;
+}
+.summary-amount {
+    display: block;
+    margin-top: 6rpx;
+    font-size: 38rpx;
+    color: #ea580c;
+    font-weight: 800;
+}
+.summary-sub {
+    grid-column: 1 / 3;
+    font-size: 23rpx;
+    color: #94a3b8;
+}
+.pay-form {
+    padding: 0 28rpx 8rpx;
+}
+.pay-form__item {
+    margin-bottom: 22rpx;
+}
+.form-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10rpx;
+}
+.pay-label {
+    font-size: 26rpx;
+    color: #374151;
+    display: block;
+    margin-bottom: 10rpx;
+    font-weight: 600;
+}
+.form-label-row .pay-label {
+    margin-bottom: 0;
+}
+.pay-label.required::before {
+    content: '*';
+    color: #dc2626;
+    margin-right: 4rpx;
+}
+.fill-max {
+    font-size: 24rpx;
+    color: #3b6ef5;
+}
+.account-select {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+    background: #f8fafc;
+    border-radius: 12rpx;
+    border: 2rpx solid transparent;
+    padding: 0 18rpx;
+    min-height: 72rpx;
+    box-sizing: border-box;
+}
+.account-select--on {
+    background: #f8fbff;
+    border-color: #3b6ef5;
+}
+.account-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 26rpx;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.account-placeholder {
+    flex: 1;
+    min-width: 0;
+    font-size: 26rpx;
+    color: #94a3b8;
+}
+.account-popup {
+    min-height: 36vh;
+    max-height: 74vh;
+    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+    background: #fff;
+}
+.offset-tip {
+    margin-top: 12rpx;
+    font-size: 23rpx;
+    color: #b45309;
+    background: #fff7ed;
+    border-radius: 12rpx;
+    padding: 12rpx 16rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12rpx;
+}
+.action-btn {
+    min-width: 0;
+}
+.action-btn--minor {
+    flex: 1;
+}
+.action-btn--major {
+    flex: 2;
+}
 </style>

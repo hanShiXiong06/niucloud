@@ -135,7 +135,7 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getErpAssetInfo, adjustErpAssetCost } from '@/addon/hsx_erp/api/asset'
-import { INVENTORY_STATUS_MAP, COST_ADJUST_BLOCKED, INVENTORY_OUTBOUND } from '@/addon/hsx_erp/api/dict'
+import { INVENTORY_STATUS_MAP, INVENTORY_OUTBOUND, isCostAdjustAllowed } from '@/addon/hsx_erp/api/dict'
 
 const assetId = ref<string>('')
 const asset = ref<any>({})
@@ -166,7 +166,7 @@ const fmtTime = (ts: any) => {
     return `${ d.getFullYear() }-${ p(d.getMonth() + 1) }-${ p(d.getDate()) } ${ p(d.getHours()) }:${ p(d.getMinutes()) }`
 }
 
-const blocked = computed(() => COST_ADJUST_BLOCKED.includes(String(asset.value.inventory_status)))
+const blocked = computed(() => !isCostAdjustAllowed(asset.value.inventory_status))
 const isOutbound = computed(() => String(asset.value.inventory_status) === INVENTORY_OUTBOUND)
 const stockInText = computed(() => fmtTime(asset.value.stock_in_at))
 
@@ -202,6 +202,10 @@ const enrich = async () => {
 
 const submit = async () => {
     if (!canSubmit.value || submitting.value) return
+    if (blocked.value) {
+        uni.showToast({ title: `当前状态「${statusLabel(asset.value.inventory_status)}」不可调整成本`, icon: 'none' })
+        return
+    }
     if (Number(newCost.value) < 0) {
         uni.showToast({ title: '成本不能为负', icon: 'none' })
         return

@@ -23,6 +23,7 @@
 
     &__foot {
         display: flex;
+        justify-content: space-around;
         align-items: center;
         gap: 24rpx;
         margin-top: 16rpx;
@@ -34,6 +35,7 @@
 // ── 字段行（对齐 phone_shop .field）────────────────────────────────────────
 .field {
     display: flex;
+    justify-content: space-between;
     align-items: center;
     min-height: 92rpx;
     border-bottom: 2rpx solid #f3f4f6;
@@ -119,7 +121,7 @@
 // ── 状态标签行 ────────────────────────────────────────────────────────────────
 .status-row {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     gap: 10rpx;
     // flex-wrap: wrap;

@@ -232,14 +232,11 @@ async function submit() {
                 reason: i.reason || '',
             }))
         })
-        uni.showToast({ title: '退货申请已提交，等待财务确认', icon: 'success' })
+        uni.showToast({ title: '采购退货已完成', icon: 'success', duration: 800 })
         setTimeout(() => {
+            uni.hideToast()
             uni.navigateBack()
-            // 通知上一页刷新
-            const pages = getCurrentPages()
-            const prevPage = pages[pages.length - 2] as any
-            if (prevPage?.reload) prevPage.reload()
-        }, 1500)
+        }, 850)
     } catch (e: any) {
         uni.showToast({ title: e?.message || '提交失败', icon: 'none' })
     } finally { submitting.value = false }

@@ -1,0 +1,360 @@
+<template>
+    <u-popup :show="show" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="close">
+        <view class="offset-modal">
+            <view class="modal-header">
+                <view>
+                    <text class="modal-title">应收应付折账</text>
+                    <text class="modal-subtitle">{{ partyName || '-' }}</text>
+                </view>
+                <u-icon name="close" size="20" color="#94a3b8" @click="close" />
+            </view>
+
+            <view class="offset-summary">
+                <view class="summary-item">
+                    <text class="summary-label">勾选应付</text>
+                    <text class="summary-value red">¥{{ money(payableChecked) }}</text>
+                </view>
+                <view class="summary-item">
+                    <text class="summary-label">勾选应收</text>
+                    <text class="summary-value blue">¥{{ money(receivableChecked) }}</text>
+                </view>
+                <view class="summary-item">
+                    <text class="summary-label">可抵扣</text>
+                    <text class="summary-value orange">¥{{ money(offsetMax) }}</text>
+                </view>
+            </view>
+
+            <view v-if="loading" class="offset-loading"><u-loading-icon size="28" /></view>
+            <scroll-view v-else scroll-y class="offset-body">
+                <view class="offset-section">
+                    <view class="offset-section__head">
+                        <text>我要付给他</text>
+                        <text>¥{{ money(payableChecked) }}</text>
+                    </view>
+                    <view v-for="item in payables" :key="'p'+item.id" class="offset-row" @click="togglePayable(item)">
+                        <u-checkbox :checked="item.checked" :disabled="Number(item.remain || 0) <= 0" @click.stop @change="onPayableCheck(item, $event)" />
+                        <view class="offset-row__main">
+                            <text class="offset-row__title">{{ item.model || item.source_no || '应付款' }}</text>
+                            <text class="offset-row__sub">{{ item.imei ? 'IMEI ' + item.imei : (item.payable_no || '-') }}</text>
+                        </view>
+                        <text class="offset-row__amount">¥{{ money(item.remain) }}</text>
+                    </view>
+                    <view v-if="!payables.length" class="offset-empty">暂无可折应付</view>
+                </view>
+
+                <view class="offset-section">
+                    <view class="offset-section__head">
+                        <text>他要付给我</text>
+                        <text>¥{{ money(receivableChecked) }}</text>
+                    </view>
+                    <view v-for="item in receivables" :key="'r'+item.id" class="offset-row" @click="toggleReceivable(item)">
+                        <u-checkbox :checked="item.checked" :disabled="Number(item.remain || 0) <= 0" @click.stop @change="onReceivableCheck(item, $event)" />
+                        <view class="offset-row__main">
+                            <text class="offset-row__title">{{ item.source_no || item.sale_no || item.receivable_no || '应收款' }}</text>
+                            <text class="offset-row__sub">{{ item.source_label || sourceLabel(item.source_type) }} · {{ item.receivable_no || '-' }}</text>
+                        </view>
+                        <text class="offset-row__amount blue">¥{{ money(item.remain) }}</text>
+                    </view>
+                    <view v-if="!receivables.length" class="offset-empty">暂无可折应收</view>
+                </view>
+
+                <view class="offset-form">
+                    <view class="offset-form__item">
+                        <text class="pay-label">本次抵扣</text>
+                        <u-input v-model="form.amount" type="number" :placeholder="'最多 ¥'+money(offsetMax)" :customStyle="inputStyle" @blur="capAmount" />
+                    </view>
+                    <view v-if="diffAmount > 0" class="offset-diff">
+                        <view class="offset-diff__line" @click="form.settle_diff = !form.settle_diff">
+                            <u-checkbox :checked="form.settle_diff" @click.stop @change="form.settle_diff = normalizeChecked($event)" />
+                            <text>{{ diffText }}</text>
+                        </view>
+                        <view v-if="form.settle_diff" class="account-row" @click="showAccountPicker = true">
+                            <text class="account-label required">{{ diffDirection === 'payable' ? '付款账户' : '收款账户' }}</text>
+                            <view class="account-select" :class="{ 'account-select--on': form.capital_account_id }">
+                                <text :class="form.capital_account_id ? 'account-text' : 'account-placeholder'">{{ selectedAccountLabel || '点击选择账户' }}</text>
+                                <u-icon name="arrow-right" color="#cbd5e1" size="16" />
+                            </view>
+                        </view>
+                    </view>
+                    <view class="offset-form__item">
+                        <text class="pay-label">备注</text>
+                        <u-input v-model="form.remark" placeholder="如：同行往来对冲" :customStyle="inputStyle" />
+                    </view>
+                </view>
+            </scroll-view>
+
+            <view class="action-bar">
+                <view class="action-btn action-btn--minor">
+                    <u-button @click="close">取消</u-button>
+                </view>
+                <view class="action-btn action-btn--major">
+                    <u-button type="warning" :loading="submitting" :disabled="!canSubmit" @click="submit">
+                        确认折账 ¥{{ money(form.amount) }}
+                    </u-button>
+                </view>
+            </view>
+        </view>
+
+        <u-popup :show="showAccountPicker" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="showAccountPicker = false">
+            <view class="account-popup">
+                <view class="account-popup__head">
+                    <text class="account-popup__title">选择账户</text>
+                    <view class="account-popup__close" @click="showAccountPicker = false">
+                        <u-icon name="close" color="#64748b" size="20" />
+                    </view>
+                </view>
+                <u-cell-group v-if="accounts.length" :border="false">
+                    <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectAccount(a)">
+                        <template #value>
+                            <u-icon
+                                v-if="Number(a.id) === Number(form.capital_account_id)"
+                                name="checkmark-circle-fill"
+                                color="#3b6ef5"
+                                size="20"
+                            />
+                        </template>
+                    </u-cell>
+                </u-cell-group>
+                <u-empty v-else mode="data" text="暂无可用资金账户" />
+            </view>
+        </u-popup>
+    </u-popup>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { confirmMobileOffset, getMobilePayablePartyItems, getMobileReceivableList } from '@/addon/hsx_erp/api/erp'
+
+const props = withDefaults(defineProps<{
+    show: boolean
+    partyId?: number
+    partyName?: string
+    accounts?: any[]
+}>(), {
+    show: false,
+    partyId: 0,
+    partyName: '',
+    accounts: () => [],
+})
+
+const emit = defineEmits<{
+    (e: 'update:show', v: boolean): void
+    (e: 'success'): void
+}>()
+
+const loading = ref(false)
+const submitting = ref(false)
+const showAccountPicker = ref(false)
+const payables = ref<any[]>([])
+const receivables = ref<any[]>([])
+const form = ref({ amount: 0, settle_diff: false, capital_account_id: 0, remark: '' })
+const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '12rpx 16rpx' }
+
+const payableChecked = computed(() => payables.value.reduce((sum, row) => row.checked ? sum + Number(row.remain || 0) : sum, 0))
+const receivableChecked = computed(() => receivables.value.reduce((sum, row) => row.checked ? sum + Number(row.remain || 0) : sum, 0))
+const offsetMax = computed(() => Math.min(payableChecked.value, receivableChecked.value))
+const diffAmount = computed(() => Math.abs(payableChecked.value - receivableChecked.value))
+const diffDirection = computed(() => payableChecked.value > receivableChecked.value ? 'payable' : 'receivable')
+const diffText = computed(() => {
+    if (diffAmount.value <= 0) return ''
+    return diffDirection.value === 'payable'
+        ? `抵扣后仍需付款 ¥${money(diffAmount.value)}，本次一并结清`
+        : `抵扣后仍需收款 ¥${money(diffAmount.value)}，本次一并结清`
+})
+const selectedAccountLabel = computed(() => {
+    const account = props.accounts.find((a: any) => Number(a.id) === Number(form.value.capital_account_id))
+    return account ? `${account.account_name}（余额 ¥${money(account.balance)}）` : ''
+})
+const canSubmit = computed(() =>
+    Number(form.value.amount) > 0 &&
+    Number(form.value.amount) <= offsetMax.value + 0.0001 &&
+    (!form.value.settle_diff || Number(form.value.capital_account_id) > 0)
+)
+
+let loadToken = 0
+watch(() => [props.show, props.partyId], () => {
+    if (props.show && props.partyId > 0) openModal()
+}, { immediate: true })
+
+function openModal() {
+    form.value = { amount: 0, settle_diff: false, capital_account_id: props.accounts[0]?.id || 0, remark: '' }
+    payables.value = []
+    receivables.value = []
+    loadItems()
+}
+
+async function loadItems() {
+    const token = ++loadToken
+    loading.value = true
+    try {
+        const [payableRes, receivableRes]: any[] = await Promise.all([
+            getMobilePayablePartyItems(props.partyId, { page: 1, limit: 100 }),
+            getMobileReceivableList({ party_id: props.partyId, status: '', page: 1, limit: 100 }),
+        ])
+        if (token !== loadToken) return
+        payables.value = (payableRes?.data?.data || []).map((row: any) => {
+            const remain = Number(row.allocated_remain ?? row.remain_amount ?? 0)
+            return { ...row, id: Number(row.payable_id || row.id || 0), remain, checked: remain > 0 }
+        }).filter((row: any) => row.id > 0 && row.remain > 0)
+        receivables.value = (receivableRes?.data?.data || []).map((row: any) => {
+            const remain = Number(row.remain_amount ?? (Number(row.amount || 0) - Number(row.settled_amount || 0)))
+            return { ...row, remain, checked: remain > 0 }
+        }).filter((row: any) => Number(row.id || 0) > 0 && row.remain > 0)
+        syncAmount()
+    } catch (e: any) {
+        uni.showToast({ title: e?.message || '折账数据加载失败', icon: 'none' })
+    } finally {
+        if (token === loadToken) loading.value = false
+    }
+}
+
+function syncAmount() {
+    form.value.amount = Number(offsetMax.value.toFixed(2))
+}
+
+function togglePayable(item: any) {
+    if (Number(item.remain || 0) <= 0) return
+    item.checked = !item.checked
+    syncAmount()
+}
+
+function toggleReceivable(item: any) {
+    if (Number(item.remain || 0) <= 0) return
+    item.checked = !item.checked
+    syncAmount()
+}
+
+function onPayableCheck(item: any, checked: any) {
+    item.checked = normalizeChecked(checked)
+    syncAmount()
+}
+
+function onReceivableCheck(item: any, checked: any) {
+    item.checked = normalizeChecked(checked)
+    syncAmount()
+}
+
+function normalizeChecked(checked: any) {
+    if (typeof checked === 'boolean') return checked
+    if (checked && typeof checked === 'object' && 'value' in checked) return !!checked.value
+    if (checked && typeof checked === 'object' && 'detail' in checked) return !!checked.detail?.value
+    return !!checked
+}
+
+function capAmount() {
+    const max = offsetMax.value
+    const amount = Number(form.value.amount || 0)
+    if (amount > max) form.value.amount = Number(max.toFixed(2))
+    if (amount < 0) form.value.amount = 0
+}
+
+function selectAccount(account: any) {
+    form.value.capital_account_id = Number(account.id || 0)
+    showAccountPicker.value = false
+}
+
+async function submit() {
+    capAmount()
+    if (!canSubmit.value) return
+    const payableIds = unique(payables.value.filter(row => row.checked).map(row => Number(row.id || 0)).filter(Boolean))
+    const receivableIds = unique(receivables.value.filter(row => row.checked).map(row => Number(row.id || 0)).filter(Boolean))
+    if (!payableIds.length || !receivableIds.length) {
+        uni.showToast({ title: '请同时选择应付和应收', icon: 'none' })
+        return
+    }
+    submitting.value = true
+    try {
+        await confirmMobileOffset({
+            payable_ids: payableIds,
+            receivable_ids: receivableIds,
+            amount: Number(form.value.amount),
+            settle_diff: form.value.settle_diff,
+            capital_account_id: form.value.settle_diff ? form.value.capital_account_id : 0,
+            remark: form.value.remark || '手机端应收应付折账',
+        })
+        uni.showToast({ title: '折账已确认', icon: 'success' })
+        emit('success')
+        close()
+    } catch (e: any) {
+        uni.showToast({ title: e?.message || '折账失败，请重试', icon: 'none' })
+    } finally {
+        submitting.value = false
+    }
+}
+
+function close() {
+    emit('update:show', false)
+    showAccountPicker.value = false
+}
+
+function unique(list: number[]) {
+    return Array.from(new Set(list))
+}
+
+const money = (v: any) => Number(v || 0).toFixed(2)
+const sourceLabel = (s: string) => ({ sale: '销售应收', purchase_return: '采购退货应收' }[s] || s || '应收款')
+</script>
+
+<style scoped lang="scss">
+@import '@/addon/hsx_erp/styles/erp-mobile.scss';
+.offset-modal { max-height: 88vh; display: flex; flex-direction: column; background: #fff; }
+.modal-header { display:flex; justify-content:space-between; align-items:center; padding:32rpx 32rpx 20rpx; }
+.modal-title { display:block; font-size:34rpx; font-weight:700; color:#0f172a; }
+.modal-subtitle { display:block; margin-top:6rpx; font-size:24rpx; color:#64748b; }
+.offset-summary { display:flex; gap:14rpx; padding:0 32rpx 20rpx; }
+.summary-item { flex:1; background:#f8fafc; border-radius:16rpx; padding:16rpx; }
+.summary-label { display:block; font-size:22rpx; color:#94a3b8; }
+.summary-value { display:block; margin-top:8rpx; font-size:28rpx; font-weight:700; color:#0f172a; }
+.summary-value.red { color:#dc2626; }
+.summary-value.blue { color:#2563eb; }
+.summary-value.orange { color:#ea580c; }
+.offset-loading { display:flex; justify-content:center; padding:80rpx 0; }
+.offset-body { max-height: 58vh; padding:0 32rpx; box-sizing:border-box; }
+.offset-section { margin-bottom:22rpx; }
+.offset-section__head { display:flex; justify-content:space-between; color:#334155; font-size:26rpx; font-weight:700; margin-bottom:12rpx; }
+.offset-row { display:flex; align-items:center; gap:16rpx; padding:18rpx 0; border-bottom:1rpx solid #f1f5f9; }
+.offset-row__main { flex:1; min-width:0; }
+.offset-row__title { display:block; font-size:27rpx; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.offset-row__sub { display:block; margin-top:4rpx; font-size:22rpx; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.offset-row__amount { font-size:27rpx; font-weight:700; color:#dc2626; }
+.offset-row__amount.blue { color:#2563eb; }
+.offset-empty { text-align:center; color:#94a3b8; font-size:25rpx; padding:36rpx 0; }
+.offset-form { padding:8rpx 0 24rpx; }
+.offset-form__item { margin-bottom:20rpx; }
+.pay-label { display:block; margin-bottom:8rpx; font-size:25rpx; color:#374151; }
+.offset-diff { background:#fff7ed; border-radius:16rpx; padding:18rpx; margin-bottom:20rpx; }
+.offset-diff__line { display:flex; align-items:center; gap:10rpx; color:#9a3412; font-size:25rpx; margin-bottom:14rpx; }
+.account-row { margin-top:8rpx; }
+.account-label { display:block; font-size:25rpx; color:#374151; margin-bottom:8rpx; }
+.account-select { min-height:72rpx; display:flex; justify-content:space-between; align-items:center; gap:16rpx; background:#fff; border:2rpx solid transparent; border-radius:12rpx; padding:0 18rpx; box-sizing:border-box; }
+.account-select--on { background:#f8fbff; border-color:#3b6ef5; }
+.account-text { flex:1; min-width:0; font-size:25rpx; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.account-placeholder { flex:1; min-width:0; font-size:25rpx; color:#94a3b8; }
+.action-btn { min-width:0; }
+.action-btn--minor { flex:1; }
+.action-btn--major { flex:2; }
+.account-popup {
+    min-height:36vh;
+    max-height:74vh;
+    padding-bottom:calc(20rpx + env(safe-area-inset-bottom));
+    background:#fff;
+}
+.account-popup__head {
+    min-height:96rpx;
+    padding:0 28rpx;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:20rpx;
+}
+.account-popup__title { font-size:30rpx; font-weight:700; color:#0f172a; }
+.account-popup__close {
+    width:56rpx;
+    height:56rpx;
+    border-radius:28rpx;
+    background:#f8fafc;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+</style>
