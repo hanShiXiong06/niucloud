@@ -165,25 +165,63 @@
                 </div>
 
                 <div class="section-title">2. 货品</div>
-                <div class="mb-3 flex items-center justify-between">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div class="font-medium">待售库存</div>
-                    <div class="flex gap-2">
-                        <el-input v-model.trim="stock.keyword" clearable class="!w-[240px]" placeholder="型号 / IMEI / 采购来源" @keyup.enter="loadStock" />
+                    <div class="flex flex-wrap gap-2">
+                        <el-input v-model.trim="stock.keyword" clearable class="!w-[220px]" placeholder="型号 / IMEI / 采购来源" @keyup.enter="reloadStock" />
+                        <el-select v-model="stock.warehouse_id" clearable class="!w-[130px]" placeholder="仓库" @change="onStockWarehouseChange">
+                            <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                        </el-select>
+                        <el-select v-model="stock.location_id" clearable class="!w-[130px]" placeholder="库位" :disabled="!stock.warehouse_id" @change="reloadStock">
+                            <el-option v-for="item in stockLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                        </el-select>
+                        <el-tree-select
+                            v-model="stock.category_id"
+                            :data="categoryTree"
+                            :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
+                            check-strictly
+                            clearable
+                            class="!w-[170px]"
+                            node-key="category_id"
+                            placeholder="分类"
+                            @change="reloadStock"
+                        />
                         <el-button :icon="Search" @click="loadStock">查询</el-button>
                     </div>
                 </div>
-                <el-table :data="stock.data" v-loading="stock.loading" size="small" max-height="300" @selection-change="onStockSelection">
+                <div class="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div class="sale-pick-metric">
+                        <div class="metric-label">已选设备</div>
+                        <div class="metric-value">{{ selectedAssets.length }} 台</div>
+                    </div>
+                    <div class="sale-pick-metric">
+                        <div class="metric-label">预计销售</div>
+                        <div class="metric-value text-blue-600">{{ money(selectedAmount) }}</div>
+                    </div>
+                    <div class="sale-pick-metric">
+                        <div class="metric-label">预计毛利</div>
+                        <div class="metric-value" :class="selectedProfit >= 0 ? 'text-green-600' : 'text-red-600'">{{ money(selectedProfit) }}</div>
+                    </div>
+                </div>
+                <el-table :data="stock.data" v-loading="stock.loading" size="small" max-height="360" @selection-change="onStockSelection">
                     <el-table-column type="selection" width="48" />
-                    <el-table-column label="设备" min-width="240">
+                    <el-table-column label="设备" min-width="280">
                         <template #default="{ row }">
-                            <div class="font-medium">{{ row.model || '-' }}</div>
-                            <div class="text-xs text-gray-500">{{ row.spec || '-' }} · IMEI {{ row.imei || '-' }}</div>
-                            <div class="text-xs text-gray-400">资产号：{{ row.asset_no || '-' }}</div>
+                            <div class="font-medium text-gray-900">{{ row.model || '-' }}</div>
+                            <div class="mt-0.5 text-xs text-gray-500">{{ compactDeviceInfo(row) }}</div>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                <el-tag v-if="row.category_name" size="small" effect="plain" type="info">{{ row.category_name }}</el-tag>
+                                <el-tooltip v-if="row.asset_no" :content="`资产号：${row.asset_no}`" placement="top">
+                                    <el-tag size="small" effect="plain">资产</el-tag>
+                                </el-tooltip>
+                            </div>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="party_name" label="采购来源" min-width="130" />
-                    <el-table-column label="位置" min-width="150">
-                        <template #default="{ row }">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</template>
+                    <el-table-column label="来源 / 位置" min-width="170">
+                        <template #default="{ row }">
+                            <div>{{ row.party_name || '-' }}</div>
+                            <div class="mt-0.5 text-xs text-gray-500">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</div>
+                        </template>
                     </el-table-column>
                     <el-table-column label="总成本" width="120" align="right"><template #default="{ row }">{{ money(row.total_cost) }}</template></el-table-column>
                     <el-table-column label="销售价" width="150" align="right">
@@ -191,7 +229,7 @@
                     </el-table-column>
                 </el-table>
                 <div class="mt-3 flex items-center justify-between">
-                    <div class="text-sm text-gray-500">已选 {{ selectedAssets.length }} 台 · 成本 {{ money(selectedCost) }} · 销售 {{ money(selectedAmount) }} · 预计毛利 {{ money(selectedProfit) }}</div>
+                    <div class="text-sm text-gray-500">成本 {{ money(selectedCost) }} · 当前筛选仅展示可直接销售库存</div>
                     <el-pagination v-model:current-page="stock.page" v-model:page-size="stock.limit" layout="total, prev, pager, next" :total="stock.total" @current-change="loadStock" />
                 </div>
 
@@ -289,7 +327,7 @@ function onTabChange(tab: string) {
     loadList()
 }
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
-const stock = reactive({ loading: false, data: [] as any[], keyword: '', page: 1, limit: 8, total: 0 })
+const stock = reactive({ loading: false, data: [] as any[], keyword: '', warehouse_id: '', location_id: '', category_id: '', page: 1, limit: 8, total: 0 })
 const accounts = ref<any[]>([])
 const staffOptions = ref<any[]>([])
 const warehouses = ref<any[]>([])
@@ -313,6 +351,8 @@ const selectedAmount = computed(() => selectedAssets.value.reduce((sum, row) => 
 const selectedProfit = computed(() => selectedAmount.value - selectedCost.value)
 const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
 const searchLocations = computed(() => searchWarehouse.value?.locations || [])
+const stockWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(stock.warehouse_id)) || null)
+const stockLocations = computed(() => stockWarehouse.value?.locations || [])
 
 watch(() => create.form.settle_mode, () => {
     if (create.form.settle_mode === 'cash') create.form.received_amount = selectedAmount.value
@@ -347,7 +387,14 @@ async function loadList() {
 async function loadStock() {
     stock.loading = true
     try {
-        const res: any = await getErpSaleStock({ keyword: stock.keyword, page: stock.page, limit: stock.limit })
+        const res: any = await getErpSaleStock({
+            keyword: stock.keyword,
+            warehouse_id: stock.warehouse_id,
+            location_id: stock.location_id,
+            category_id: stock.category_id,
+            page: stock.page,
+            limit: stock.limit
+        })
         stock.data = res?.data?.data || []
         stock.total = res?.data?.total || 0
         stock.data.forEach((row: any) => {
@@ -356,6 +403,11 @@ async function loadStock() {
     } finally {
         stock.loading = false
     }
+}
+
+function reloadStock() {
+    stock.page = 1
+    loadStock()
 }
 
 async function loadAccounts() {
@@ -397,6 +449,10 @@ function openCreate() {
     create.form.salesman_uid = currentUid.value || staffOptions.value[0]?.uid || 0
     selectedAssets.value = []
     stock.keyword = ''
+    stock.warehouse_id = ''
+    stock.location_id = ''
+    stock.category_id = ''
+    stock.page = 1
     create.visible = true
     loadStock()
     loadAccounts()
@@ -471,6 +527,11 @@ function handleReset() {
 
 function onSearchWarehouseChange() {
     search.location_id = ''
+}
+
+function onStockWarehouseChange() {
+    stock.location_id = ''
+    reloadStock()
 }
 
 function canCancelSale(row: any) {
@@ -556,6 +617,14 @@ function saleItemStatusLabel(status: string) {
     return map[status] || status || '-'
 }
 
+function compactDeviceInfo(row: any) {
+    return [
+        row.spec || '',
+        row.imei ? `IMEI ${row.imei}` : '',
+        row.sn ? `SN ${row.sn}` : ''
+    ].filter(Boolean).join(' · ') || '-'
+}
+
 function money(value: any) {
     return `¥${Number(value || 0).toFixed(2)}`
 }
@@ -593,6 +662,21 @@ function staffName(user: any) {
     padding-left: 10px;
     color: #111827;
     font-size: 15px;
+    font-weight: 650;
+}
+.sale-pick-metric {
+    border-radius: 8px;
+    background: #f8fafc;
+    padding: 10px 12px;
+}
+.metric-label {
+    color: #64748b;
+    font-size: 12px;
+}
+.metric-value {
+    margin-top: 4px;
+    color: #111827;
+    font-size: 18px;
     font-weight: 650;
 }
 </style>
