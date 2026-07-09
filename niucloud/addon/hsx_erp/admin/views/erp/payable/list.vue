@@ -109,7 +109,7 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="pay.visible" title="财务确认付款" width="880px">
+        <el-dialog v-model="pay.visible" title="财务确认付款" width="1080px">
             <div v-if="pay.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
                 <div>付款对象：<span class="font-medium text-gray-900">{{ pay.row.party_name }}</span></div>
                 <div class="mt-1">采购批次：{{ pay.row.batch_no || pay.row.purchase_no || '-' }}</div>
