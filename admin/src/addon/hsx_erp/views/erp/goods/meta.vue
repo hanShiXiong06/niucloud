@@ -4,7 +4,7 @@
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <div class="text-page-title">商品资料</div>
-                    <div class="mt-1 text-sm text-gray-500">维护 ERP 自有分类、规格和成色。安装商城时可优先使用商城资料，ERP 资料作为独立兜底。</div>
+                    <div class="mt-1 text-sm text-gray-500">管理 ERP 自有分类、规格和成色。分类按三级路径展示，录入和查找更直观。</div>
                 </div>
                 <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
             </div>
@@ -13,20 +13,23 @@
                 <el-tab-pane label="分类" name="category">
                     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div class="flex items-center gap-2">
-                            <el-input v-model.trim="categoryQuery.keyword" clearable placeholder="搜索分类名称" class="!w-[260px]" @keyup.enter="loadCategories" />
-                            <el-select v-model="categoryQuery.level" clearable placeholder="全部层级" class="!w-[140px]" @change="loadCategories">
-                                <el-option label="一级" :value="1" />
-                                <el-option label="二级" :value="2" />
-                                <el-option label="三级" :value="3" />
-                            </el-select>
+                            <el-input v-model.trim="categoryQuery.keyword" clearable placeholder="搜索分类名称或路径" class="!w-[280px]" @keyup.enter="loadCategories" />
                             <el-button @click="loadCategories">查询</el-button>
+                            <el-tag effect="plain">共 {{ categoryRows.length }} 个分类</el-tag>
                         </div>
-                        <el-button type="primary" :icon="Plus" @click="openCategory()">新增分类</el-button>
+                        <el-button type="primary" :icon="Plus" @click="openCategory()">新增一级分类</el-button>
                     </div>
 
-                    <el-table :data="categoryTree" v-loading="categoryLoading" row-key="category_id" size="large" default-expand-all>
-                        <el-table-column prop="category_name" label="分类名称" min-width="220" />
-                        <el-table-column prop="category_full_name" label="完整路径" min-width="260" show-overflow-tooltip />
+                    <el-table :data="categoryRows" v-loading="categoryLoading" row-key="category_id" size="large" empty-text="暂无分类">
+                        <el-table-column label="一级分类" min-width="160" show-overflow-tooltip>
+                            <template #default="{ row }">{{ row.level_names[0] || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column label="二级分类" min-width="160" show-overflow-tooltip>
+                            <template #default="{ row }">{{ row.level_names[1] || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column label="三级分类" min-width="180" show-overflow-tooltip>
+                            <template #default="{ row }">{{ row.level_names[2] || '-' }}</template>
+                        </el-table-column>
                         <el-table-column label="来源" width="120">
                             <template #default="{ row }">
                                 <el-tag :type="row.source_plugin === 'phone_shop' ? 'success' : 'info'" effect="plain">
@@ -34,7 +37,7 @@
                                 </el-tag>
                             </template>
                         </el-table-column>
-                        <el-table-column label="层级" width="90">
+                        <el-table-column label="当前层级" width="100">
                             <template #default="{ row }">{{ row.level }}级</template>
                         </el-table-column>
                         <el-table-column label="显示" width="90">
@@ -207,7 +210,7 @@ const specLoading = ref(false)
 const categoryTree = ref<any[]>([])
 const specGroups = ref<any[]>([])
 const grades = ref<any[]>([])
-const categoryQuery = reactive({ keyword: '', level: '' as any })
+const categoryQuery = reactive({ keyword: '' })
 
 const categoryDialog = reactive<any>({
     visible: false,
@@ -243,6 +246,8 @@ const categoryParentOptions = computed(() => {
     return clone
 })
 
+const categoryRows = computed(() => flattenCategoryRows(categoryTree.value))
+
 onMounted(loadAll)
 
 async function loadAll() {
@@ -257,11 +262,23 @@ async function loadAll() {
 async function loadCategories() {
     categoryLoading.value = true
     try {
-        const res: any = await getErpGoodsCategoryTree({ ...categoryQuery })
+        const res: any = await getErpGoodsCategoryTree({ keyword: categoryQuery.keyword })
         categoryTree.value = Array.isArray(res?.data) ? res.data : []
     } finally {
         categoryLoading.value = false
     }
+}
+
+function flattenCategoryRows(rows: any[], parents: string[] = []): any[] {
+    const list: any[] = []
+    ;(rows || []).forEach(row => {
+        const names = [...parents, row.category_name || '']
+        list.push({ ...row, level_names: names })
+        if (Array.isArray(row.child_list) && row.child_list.length) {
+            list.push(...flattenCategoryRows(row.child_list, names))
+        }
+    })
+    return list
 }
 
 async function loadSpecs() {

@@ -55,15 +55,17 @@
                     </el-select>
                 </el-form-item>
                 <el-form-item label="分类">
-                    <el-tree-select
-                        v-model="search.category_id"
-                        :data="categoryTree"
-                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
-                        check-strictly
-                        clearable
-                        class="!w-[220px]"
-                        node-key="category_id"
-                        placeholder="全部分类"
+                        <el-tree-select
+                            v-model="search.category_id"
+                            :data="categoryTree"
+                            :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
+                            check-strictly
+                            clearable
+                            default-expand-all
+                            filterable
+                            class="!w-[220px]"
+                            node-key="category_id"
+                            placeholder="全部分类"
                     />
                 </el-form-item>
                 <el-form-item label="采购员">
@@ -179,7 +181,7 @@
                 <div class="mt-1 flex items-center justify-between">
                     <div class="font-medium">机器明细</div>
                     <div class="flex items-center gap-2">
-                        <el-button @click="openGoodsMeta('category')">商品资料维护</el-button>
+                        <el-button @click="openGoodsMeta('category')">管理商品资料</el-button>
                         <el-button :icon="Plus" @click="addItem">加一台</el-button>
                     </div>
                 </div>
@@ -194,7 +196,7 @@
                         <template #default="{ row }">
                             <div class="flex items-center gap-2">
                                 <el-input v-model.trim="row.spec" placeholder="256G 黑色" />
-                                <el-button link type="primary" @click="openGoodsMeta('spec')">维护</el-button>
+                                <el-button link type="primary" @click="openGoodsMeta('spec')">管理规格</el-button>
                             </div>
                         </template>
                     </el-table-column>
@@ -254,12 +256,14 @@
                             :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
                             check-strictly
                             clearable
+                            default-expand-all
+                            filterable
                             class="flex-1"
                             node-key="category_id"
                             placeholder="选择设备分类"
                             @change="value => onItemCategoryChange(itemExtra.item, value)"
                         />
-                        <el-button @click="openGoodsMeta('category')">维护</el-button>
+                        <el-button @click="openGoodsMeta('category')">管理分类</el-button>
                     </div>
                 </el-form-item>
                 <el-form-item label="质检员">
@@ -282,7 +286,7 @@
             </template>
         </el-dialog>
 
-        <el-dialog v-model="goodsMeta.visible" title="商品资料维护" width="920px" destroy-on-close append-to-body>
+        <el-dialog v-model="goodsMeta.visible" title="管理商品资料" width="920px" destroy-on-close append-to-body>
             <ErpGoodsMetaManager :active="goodsMeta.active" @saved="onGoodsMetaSaved" />
             <template #footer>
                 <el-button type="primary" @click="goodsMeta.visible = false">完成</el-button>
