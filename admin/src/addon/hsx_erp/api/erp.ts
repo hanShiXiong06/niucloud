@@ -24,6 +24,51 @@ export function getErpStaffOptions(params: Record<string, any> = {}) {
     return request.get('erp/staff/options', { params })
 }
 
+// ── 商品资料 ─────────────────────────────────────────────────────────────────
+export function getErpGoodsCategoryTree(params: Record<string, any> = {}) {
+    return request.get('erp/goods/category/tree', { params })
+}
+
+export function getErpGoodsCategoryList(params: Record<string, any> = {}) {
+    return request.get('erp/goods/category/lists', { params })
+}
+
+export function saveErpGoodsCategory(id: number, data: Record<string, any>) {
+    return request.post(`erp/goods/category/save/${id}`, data)
+}
+
+export function deleteErpGoodsCategory(id: number) {
+    return request.delete(`erp/goods/category/${id}`)
+}
+
+export function getErpGoodsSpecMeta() {
+    return request.get('erp/goods/spec/meta')
+}
+
+export function saveErpGoodsSpecGroup(id: number, data: Record<string, any>) {
+    return request.post(`erp/goods/spec/group/save/${id}`, data)
+}
+
+export function deleteErpGoodsSpecGroup(id: number) {
+    return request.delete(`erp/goods/spec/group/${id}`)
+}
+
+export function saveErpGoodsSpecItem(id: number, data: Record<string, any>) {
+    return request.post(`erp/goods/spec/item/save/${id}`, data)
+}
+
+export function deleteErpGoodsSpecItem(id: number) {
+    return request.delete(`erp/goods/spec/item/${id}`)
+}
+
+export function saveErpGoodsGrade(id: number, data: Record<string, any>) {
+    return request.post(`erp/goods/grade/save/${id}`, data)
+}
+
+export function deleteErpGoodsGrade(id: number) {
+    return request.delete(`erp/goods/grade/${id}`)
+}
+
 export function getErpPayableList(params: Record<string, any>) {
     return request.get('erp/finance/payable/lists', { params })
 }
