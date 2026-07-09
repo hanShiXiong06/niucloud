@@ -185,31 +185,48 @@
                         <el-button :icon="Plus" @click="addItem">加一台</el-button>
                     </div>
                 </div>
-                <el-table :data="create.form.items" class="mt-3" size="large">
-                    <el-table-column label="型号" min-width="170">
-                        <template #default="{ row }"><el-input v-model.trim="row.model" placeholder="iPhone 15 Pro" /></template>
-                    </el-table-column>
-                    <el-table-column label="IMEI" min-width="170">
-                        <template #default="{ row }"><el-input v-model.trim="row.imei" /></template>
-                    </el-table-column>
-                    <el-table-column label="规格" min-width="150">
-                        <template #default="{ row }">
-                            <el-input v-model.trim="row.spec" placeholder="可在更多中选择" />
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="采购成本" width="170">
-                        <template #default="{ row }"><el-input-number v-model="row.purchase_cost" :min="0" :precision="2" :controls="false" class="!w-full" /></template>
-                    </el-table-column>
-                    <el-table-column label="备注" min-width="180">
-                        <template #default="{ row }"><el-input v-model.trim="row.remark" /></template>
-                    </el-table-column>
-                    <el-table-column label="操作" width="120" align="center">
-                        <template #default="{ row, $index }">
-                            <el-button type="primary" link @click="openItemExtra(row, $index)">更多</el-button>
-                            <el-button type="danger" link @click="removeItem($index)">删除</el-button>
-                        </template>
-                    </el-table-column>
-                </el-table>
+                <el-alert
+                    class="mt-3"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                    title="分类和规格会影响设备名称，规则可在「业务规则 - 设备命名规则」中调整。"
+                />
+                <div class="purchase-device-grid mt-3">
+                    <div v-for="(row, index) in create.form.items" :key="index" class="purchase-device-card">
+                        <div class="purchase-device-card__head">
+                            <div>
+                                <div class="purchase-device-card__index">设备 {{ index + 1 }}</div>
+                                <div class="purchase-device-card__hint">{{ itemCoreSummary(row) }}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <el-tag v-if="row.category_id" size="small" effect="plain">已选分类</el-tag>
+                                <el-tag v-if="row.spec" size="small" type="success" effect="plain">已完善规格</el-tag>
+                            </div>
+                        </div>
+                        <div class="purchase-device-card__body">
+                            <el-form-item label="型号" required class="purchase-device-form-item">
+                                <el-input v-model.trim="row.model" placeholder="选择分类后可自动生成，也可手动修改" @input="markManualModel(row)" />
+                            </el-form-item>
+                            <el-form-item label="IMEI" class="purchase-device-form-item">
+                                <el-input v-model.trim="row.imei" placeholder="扫描或手输 IMEI" />
+                            </el-form-item>
+                            <el-form-item label="采购成本" required class="purchase-device-form-item">
+                                <el-input-number v-model="row.purchase_cost" :min="0" :precision="2" :controls="false" class="!w-full" />
+                            </el-form-item>
+                            <el-form-item label="备注" class="purchase-device-form-item">
+                                <el-input v-model.trim="row.remark" placeholder="核心备注，如来源、异常说明" />
+                            </el-form-item>
+                        </div>
+                        <div class="purchase-device-card__footer">
+                            <span class="text-xs text-gray-400">分类、规格、图片、质检等放在完善资料中处理。</span>
+                            <div>
+                                <el-button type="primary" @click="openItemExtra(row, index)">完善资料</el-button>
+                                <el-button type="danger" plain @click="removeItem(index)">删除</el-button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="mt-3 text-right text-sm text-gray-500">本单采购成本合计：<span class="font-semibold text-gray-800">{{ money(createTotal) }}</span></div>
 
                 <div class="section-title">3. 账目</div>
@@ -469,6 +486,7 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { adjustErpPurchaseCost, cancelErpPurchase, createErpPurchase, getErpGoodsCategoryTree, getErpGoodsSpecMeta, getErpPurchaseInfo, getErpPurchaseList, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { getErpConfig } from '@/addon/hsx_erp/api/config'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpGoodsMetaManager from '@/addon/hsx_erp/components/ErpGoodsMetaManager.vue'
 
@@ -495,6 +513,7 @@ const categoryTree = ref<any[]>([])
 const specMeta = ref<any>({ groups: [], grades: [] })
 const staffOptions = ref<any[]>([])
 const currentUid = ref(0)
+const titleRules = reactive({ category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' })
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
 const itemExtra = reactive({ visible: false, index: -1, item: null as any })
 const goodsMeta = reactive({ visible: false, active: 'category' })
@@ -541,6 +560,7 @@ onMounted(() => {
     loadStaffOptions()
     loadCategories()
     loadSpecMeta()
+    loadRules()
 })
 
 function defaultForm() {
@@ -582,7 +602,9 @@ function blankItem() {
         estimate_sale_price: undefined,
         image_urls: '',
         quality_remark: '',
-        remark: ''
+        remark: '',
+        _auto_model: '',
+        _model_manual: false
     }
 }
 
@@ -624,6 +646,11 @@ async function loadSpecMeta() {
     specMeta.value = res?.data || { groups: [], grades: [] }
 }
 
+async function loadRules() {
+    const res: any = await getErpConfig()
+    Object.assign(titleRules, res?.data?.product_title || {})
+}
+
 function buildSearchParams() {
     const [start_at, end_at] = Array.isArray(search.dateRange) ? search.dateRange : []
     return {
@@ -656,6 +683,7 @@ function openCreate() {
     loadAccounts()
     loadWarehouses()
     loadStaffOptions()
+    loadRules()
 }
 
 function applyDefaultWarehouse() {
@@ -707,6 +735,12 @@ function onItemCategoryChange(item: any, value: any) {
     const node = findCategoryNode(categoryTree.value, Number(value || 0))
     item.category_name = node?.category_full_name || node?.category_name || ''
     item.category_path = node ? categoryPathIds(node).join(',') : ''
+    item.selected_specs = {}
+    item.selected_grade = null
+    item.spec = ''
+    item.spec_json = {}
+    rebuildItemModel(item, true)
+    ElMessage.info('当前分类会参与生成设备名称，可在「业务规则 - 设备命名规则」中修改规则。')
 }
 
 function findCategoryNode(rows: any[], id: number, parents: any[] = []): any {
@@ -778,6 +812,15 @@ function selectedSpecParts(item: any) {
     return specGroups.value.map((group: any) => selected[group.key]?.value || '').filter(Boolean)
 }
 
+function selectedTitleSpecParts(item: any) {
+    if (Number(titleRules.spec_in_title) !== 1) return []
+    const selected = item?.selected_specs || {}
+    return specGroups.value
+        .filter((group: any) => !!group.title_part)
+        .map((group: any) => selected[group.key]?.value || '')
+        .filter(Boolean)
+}
+
 function uniqueParts(parts: any[]) {
     const seen = new Set<string>()
     return parts.map(part => String(part || '').trim()).filter(part => {
@@ -801,8 +844,53 @@ function rebuildItemSpec(item: any) {
         color: item.color || '',
         battery: item.battery || '',
         warranty: Number(item.warranty || 0),
-        title_rule: {}
+        title_rule: { ...titleRules }
     }
+    rebuildItemModel(item)
+}
+
+function categoryNames(item: any): string[] {
+    return String(item?.category_name || '').split(/[>\-/\\｜|,，\s]+/).map((name: string) => name.trim()).filter(Boolean)
+}
+
+function categoryTitleByRule(item: any) {
+    const names = categoryNames(item)
+    if (!names.length) return ''
+    const mode = titleRules.category_mode || 'auto'
+    if (mode === 'full') return names.join(' ')
+    if (mode === 'level_1_2') return names.slice(0, 2).join(' ')
+    if (mode === 'level_2_3') return names.slice(-2).join(' ')
+    if (mode === 'level_3') return names[names.length - 1] || ''
+    if (names.length >= 3) return names.slice(1, 3).join(' ')
+    if (names.length === 2) return names.join(' ')
+    return names[0] || ''
+}
+
+function buildItemModel(item: any) {
+    const parts = [categoryTitleByRule(item), ...selectedTitleSpecParts(item)]
+    if (Number(titleRules.grade_in_title) === 1 && item?.selected_grade?.value) parts.push(item.selected_grade.value)
+    return uniqueParts(parts).join(titleRules.separator || ' ')
+}
+
+function rebuildItemModel(item: any, force = false) {
+    const model = buildItemModel(item)
+    if (!model) return
+    if (force || !item.model || item.model === item._auto_model || !item._model_manual) {
+        item.model = model
+        item._auto_model = model
+        item._model_manual = false
+    }
+}
+
+function markManualModel(item: any) {
+    item._model_manual = item.model !== item._auto_model
+}
+
+function itemCoreSummary(item: any) {
+    return [
+        item.imei ? `IMEI ${item.imei}` : '未填 IMEI',
+        item.remark || ''
+    ].filter(Boolean).join(' · ')
 }
 
 function compactItemSubTitle(item: any) {
@@ -998,6 +1086,48 @@ function staffName(user: any) {
     font-size: 15px;
     font-weight: 650;
 }
+.purchase-device-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+.purchase-device-card {
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
+    background: #fff;
+    padding: 14px;
+}
+.purchase-device-card__head,
+.purchase-device-card__footer {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+.purchase-device-card__index {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 650;
+}
+.purchase-device-card__hint {
+    margin-top: 4px;
+    color: #94a3b8;
+    font-size: 12px;
+}
+.purchase-device-card__body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 12px;
+    margin-top: 12px;
+}
+.purchase-device-card__footer {
+    align-items: center;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 12px;
+}
+.purchase-device-form-item {
+    margin-bottom: 14px;
+}
 .item-extra-head {
     display: flex;
     align-items: flex-start;
@@ -1087,6 +1217,14 @@ function staffName(user: any) {
     }
     .spec-grid {
         grid-template-columns: 1fr;
+    }
+    .purchase-device-grid,
+    .purchase-device-card__body {
+        grid-template-columns: 1fr;
+    }
+    .purchase-device-card__head,
+    .purchase-device-card__footer {
+        flex-direction: column;
     }
 }
 </style>

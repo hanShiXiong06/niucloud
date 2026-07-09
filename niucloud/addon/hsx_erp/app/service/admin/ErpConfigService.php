@@ -54,6 +54,16 @@ class ErpConfigService extends BaseAdminService
         $rules['purchase']['create_payable_on_inbound'] = 1;
         $rules['purchase']['allow_cancel_before_finance_fact'] = $this->boolInt($rules['purchase']['allow_cancel_before_finance_fact'] ?? 1);
 
+        $rules['product_title']['category_mode'] = in_array(($rules['product_title']['category_mode'] ?? 'auto'), ['auto', 'level_1_2', 'level_2_3', 'level_3', 'full'], true)
+            ? $rules['product_title']['category_mode']
+            : 'auto';
+        $rules['product_title']['spec_in_title'] = $this->boolInt($rules['product_title']['spec_in_title'] ?? 1);
+        $rules['product_title']['grade_in_title'] = $this->boolInt($rules['product_title']['grade_in_title'] ?? 0);
+        $rules['product_title']['separator'] = trim((string)($rules['product_title']['separator'] ?? ' '));
+        if ($rules['product_title']['separator'] === '') {
+            $rules['product_title']['separator'] = ' ';
+        }
+
         $rules['sale']['create_receivable_on_outbound'] = 1;
         $rules['sale']['allow_cancel_before_finance_fact'] = $this->boolInt($rules['sale']['allow_cancel_before_finance_fact'] ?? 1);
         $rules['sale']['return_to_original_location_on_cancel'] = $this->boolInt($rules['sale']['return_to_original_location_on_cancel'] ?? 1);
@@ -105,6 +115,12 @@ class ErpConfigService extends BaseAdminService
             'purchase' => [
                 'create_payable_on_inbound' => 1,
                 'allow_cancel_before_finance_fact' => 1,
+            ],
+            'product_title' => [
+                'category_mode' => 'auto',
+                'spec_in_title' => 1,
+                'grade_in_title' => 0,
+                'separator' => ' ',
             ],
             'sale' => [
                 'create_receivable_on_outbound' => 1,

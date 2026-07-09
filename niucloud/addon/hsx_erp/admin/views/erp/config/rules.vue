@@ -43,6 +43,39 @@
                 </section>
 
                 <section class="rule-section">
+                    <div class="section-title">设备命名规则</div>
+                    <el-alert
+                        class="mb-4"
+                        type="info"
+                        :closable="false"
+                        show-icon
+                        title="采购开单选择分类和规格时，会按这里的规则自动生成设备名称。"
+                    />
+                    <el-form label-width="180px">
+                        <el-form-item label="分类写入名称">
+                            <el-radio-group v-model="form.product_title.category_mode">
+                                <el-radio-button label="auto">自动</el-radio-button>
+                                <el-radio-button label="level_1_2">一级+二级</el-radio-button>
+                                <el-radio-button label="level_2_3">二级+三级</el-radio-button>
+                                <el-radio-button label="level_3">仅末级</el-radio-button>
+                                <el-radio-button label="full">完整路径</el-radio-button>
+                            </el-radio-group>
+                            <div class="mt-2 text-xs text-gray-500">自动：三级分类默认取二级+三级，二级分类取一级+二级，避免出现“手机 苹果 iPhone”这类冗余名称。</div>
+                        </el-form-item>
+                        <el-form-item label="规格写入名称">
+                            <el-switch v-model="form.product_title.spec_in_title" :active-value="1" :inactive-value="0" />
+                            <span class="ml-3 text-sm text-gray-500">如内存、容量、颜色等被标记为标题字段的规格。</span>
+                        </el-form-item>
+                        <el-form-item label="成色写入名称">
+                            <el-switch v-model="form.product_title.grade_in_title" :active-value="1" :inactive-value="0" />
+                        </el-form-item>
+                        <el-form-item label="名称分隔符">
+                            <el-input v-model="form.product_title.separator" class="!w-[160px]" placeholder="默认空格" />
+                        </el-form-item>
+                    </el-form>
+                </section>
+
+                <section class="rule-section">
                     <div class="section-title">销售规则</div>
                     <el-form label-width="180px">
                         <el-form-item label="出库立即生成应收">
@@ -107,6 +140,7 @@ function defaultRules() {
     return {
         finance: { enable_offset: 1, finance_fact_lock: 1, settlement_requires_account: 1 },
         purchase: { create_payable_on_inbound: 1, allow_cancel_before_finance_fact: 1 },
+        product_title: { category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' },
         sale: { create_receivable_on_outbound: 1, allow_cancel_before_finance_fact: 1, return_to_original_location_on_cancel: 1, enable_peer_pending: 1, enable_trial_sale: 0, profit_confirm_mode: 'settlement' },
         refurbish: { enabled: 0, default_required: 0 },
         consignment: { enabled: 0, settle_payable_after_receipt: 1, transfer_to_owned_requires_repurchase: 1 }
@@ -119,6 +153,7 @@ async function loadConfig() {
         const res: any = await getErpConfig()
         Object.assign(form.finance, res?.data?.finance || {})
         Object.assign(form.purchase, res?.data?.purchase || {})
+        Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
@@ -133,6 +168,7 @@ async function submit() {
         const res: any = await saveErpConfig(JSON.parse(JSON.stringify(form)))
         Object.assign(form.finance, res?.data?.finance || {})
         Object.assign(form.purchase, res?.data?.purchase || {})
+        Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
