@@ -194,10 +194,7 @@
                     </el-table-column>
                     <el-table-column label="规格" min-width="150">
                         <template #default="{ row }">
-                            <div class="flex items-center gap-2">
-                                <el-input v-model.trim="row.spec" placeholder="256G 黑色" />
-                                <el-button link type="primary" @click="openGoodsMeta('spec')">管理规格</el-button>
-                            </div>
+                            <el-input v-model.trim="row.spec" placeholder="可在更多中选择" />
                         </template>
                     </el-table-column>
                     <el-table-column label="采购成本" width="170">
@@ -242,45 +239,119 @@
             </template>
         </el-dialog>
 
-        <el-dialog v-model="itemExtra.visible" title="设备入库信息" width="620px" append-to-body>
-            <div v-if="itemExtra.item" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>设备：<span class="font-medium text-gray-900">{{ itemExtra.item.model || `第 ${itemExtra.index + 1} 台` }}</span></div>
-                <div class="mt-1">{{ itemExtra.item.spec || '-' }} · IMEI {{ itemExtra.item.imei || '-' }}</div>
+        <el-dialog v-model="itemExtra.visible" title="完善设备信息" width="760px" append-to-body>
+            <div v-if="itemExtra.item" class="item-extra-head">
+                <div>
+                    <div class="item-extra-title">{{ itemExtra.item.model || `第 ${itemExtra.index + 1} 台设备` }}</div>
+                    <div class="item-extra-sub">{{ compactItemSubTitle(itemExtra.item) }}</div>
+                </div>
+                <div class="item-extra-tags">
+                    <el-tag v-if="itemExtra.item.category_name" effect="plain">{{ itemExtra.item.category_name }}</el-tag>
+                    <el-tag v-if="itemExtra.item.spec" type="success" effect="plain">{{ itemExtra.item.spec }}</el-tag>
+                </div>
             </div>
-            <el-form v-if="itemExtra.item" label-width="100px">
-                <el-form-item label="设备分类">
-                    <div class="flex w-full items-center gap-2">
-                        <el-tree-select
-                            v-model="itemExtra.item.category_id"
-                            :data="categoryTree"
-                            :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
-                            check-strictly
-                            clearable
-                            default-expand-all
-                            filterable
-                            class="flex-1"
-                            node-key="category_id"
-                            placeholder="选择设备分类"
-                            @change="value => onItemCategoryChange(itemExtra.item, value)"
-                        />
-                        <el-button @click="openGoodsMeta('category')">管理分类</el-button>
+
+            <div v-if="itemExtra.item" class="item-extra-layout">
+                <section class="item-extra-section">
+                    <div class="item-extra-section__head">
+                        <div>
+                            <div class="item-extra-section__title">分类</div>
+                            <div class="item-extra-section__desc">最多三级分类，选择后会保存到设备快照。</div>
+                        </div>
+                        <el-button link type="primary" @click="openGoodsMeta('category')">管理分类</el-button>
                     </div>
-                </el-form-item>
-                <el-form-item label="质检员">
-                    <el-select v-model="itemExtra.item.inspector_uid" clearable filterable class="w-full" placeholder="未质检可不选">
-                        <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="预计卖价">
-                    <el-input-number v-model="itemExtra.item.estimate_sale_price" :min="0" :precision="2" :controls="false" class="!w-[220px]" />
-                </el-form-item>
-                <el-form-item label="图片">
-                    <el-input v-model.trim="itemExtra.item.image_urls" placeholder="图片地址，多张用逗号分隔" />
-                </el-form-item>
-                <el-form-item label="质检备注">
-                    <el-input v-model.trim="itemExtra.item.quality_remark" type="textarea" :rows="3" placeholder="如：屏幕划痕、电池效率等" />
-                </el-form-item>
-            </el-form>
+                    <el-tree-select
+                        v-model="itemExtra.item.category_id"
+                        :data="categoryTree"
+                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
+                        check-strictly
+                        clearable
+                        default-expand-all
+                        filterable
+                        class="w-full"
+                        node-key="category_id"
+                        placeholder="选择设备分类"
+                        @change="value => onItemCategoryChange(itemExtra.item, value)"
+                    />
+                </section>
+
+                <section class="item-extra-section">
+                    <div class="item-extra-section__head">
+                        <div>
+                            <div class="item-extra-section__title">规格与成色</div>
+                            <div class="item-extra-section__desc">选择规格会自动生成规格文本，并随采购明细保存。</div>
+                        </div>
+                        <el-button link type="primary" @click="openGoodsMeta('spec')">管理规格</el-button>
+                    </div>
+                    <div v-if="specGroups.length" class="spec-grid">
+                        <div v-for="group in specGroups" :key="group.key" class="spec-field">
+                            <div class="spec-label">{{ group.label }}</div>
+                            <el-select
+                                :model-value="selectedSpecValue(itemExtra.item, group)"
+                                clearable
+                                filterable
+                                class="w-full"
+                                placeholder="请选择"
+                                @change="value => onSpecChange(itemExtra.item, group, value)"
+                            >
+                                <el-option v-for="option in group.items" :key="option.value" :label="option.label" :value="option.value" />
+                            </el-select>
+                        </div>
+                    </div>
+                    <el-empty v-else :image-size="68" description="暂无规格项">
+                        <el-button type="primary" link @click="openGoodsMeta('spec')">去添加规格</el-button>
+                    </el-empty>
+                    <div class="spec-grid mt-3">
+                        <div class="spec-field">
+                            <div class="spec-label">成色</div>
+                            <el-select
+                                :model-value="itemExtra.item.selected_grade?.value || ''"
+                                clearable
+                                filterable
+                                class="w-full"
+                                placeholder="请选择"
+                                @change="value => onGradeChange(itemExtra.item, value)"
+                            >
+                                <el-option v-for="option in gradeOptions" :key="option.value" :label="option.label" :value="option.value" />
+                            </el-select>
+                        </div>
+                        <div class="spec-field">
+                            <div class="spec-label">颜色</div>
+                            <el-input v-model.trim="itemExtra.item.color" clearable placeholder="如：黑色 / 橙色" @change="rebuildItemSpec(itemExtra.item)" />
+                        </div>
+                        <div class="spec-field">
+                            <div class="spec-label">电池效率</div>
+                            <el-input-number v-model="itemExtra.item.battery" :min="0" :max="100" :precision="0" :controls="false" placeholder="选填" class="!w-full" @change="rebuildItemSpec(itemExtra.item)" />
+                        </div>
+                        <div class="spec-field">
+                            <div class="spec-label">保修截止</div>
+                            <el-date-picker v-model="itemExtra.item.warranty" type="date" value-format="X" clearable class="!w-full" placeholder="选填" @change="rebuildItemSpec(itemExtra.item)" />
+                        </div>
+                    </div>
+                </section>
+
+                <section class="item-extra-section">
+                    <div class="item-extra-section__title mb-3">质检与售价</div>
+                    <el-form label-width="86px">
+                        <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
+                            <el-form-item label="质检员">
+                                <el-select v-model="itemExtra.item.inspector_uid" clearable filterable class="w-full" placeholder="未质检可不选">
+                                    <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="预计卖价">
+                                <el-input-number v-model="itemExtra.item.estimate_sale_price" :min="0" :precision="2" :controls="false" placeholder="选填" class="!w-full" />
+                            </el-form-item>
+                        </div>
+                        <el-form-item label="图片">
+                            <el-input v-model.trim="itemExtra.item.image_urls" clearable placeholder="图片地址，多张用逗号分隔" />
+                        </el-form-item>
+                        <el-form-item label="质检备注">
+                            <el-input v-model.trim="itemExtra.item.quality_remark" type="textarea" :rows="3" placeholder="如：屏幕划痕、电池效率等" />
+                        </el-form-item>
+                    </el-form>
+                </section>
+            </div>
             <template #footer>
                 <el-button type="primary" @click="itemExtra.visible = false">完成</el-button>
             </template>
@@ -394,7 +465,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
-import { adjustErpPurchaseCost, cancelErpPurchase, createErpPurchase, getErpGoodsCategoryTree, getErpPurchaseInfo, getErpPurchaseList, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { adjustErpPurchaseCost, cancelErpPurchase, createErpPurchase, getErpGoodsCategoryTree, getErpGoodsSpecMeta, getErpPurchaseInfo, getErpPurchaseList, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpGoodsMetaManager from '@/addon/hsx_erp/components/ErpGoodsMetaManager.vue'
 
@@ -418,6 +489,7 @@ const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, 
 const accounts = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const categoryTree = ref<any[]>([])
+const specMeta = ref<any>({ groups: [], grades: [] })
 const staffOptions = ref<any[]>([])
 const currentUid = ref(0)
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
@@ -438,6 +510,8 @@ const summary = computed(() => {
     }, { count: 0, totalCost: 0, paid: 0, payable: 0 })
 })
 const createTotal = computed(() => create.form.items.reduce((sum: number, row: any) => sum + Number(row.purchase_cost || 0), 0))
+const specGroups = computed(() => normalizeSpecGroups(specMeta.value?.groups || []))
+const gradeOptions = computed(() => normalizeOptions(specMeta.value?.grades || []))
 const currentWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(create.form.warehouse_id)) || null)
 const currentLocations = computed(() => currentWarehouse.value?.locations || [])
 const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
@@ -463,6 +537,7 @@ onMounted(() => {
     loadWarehouses()
     loadStaffOptions()
     loadCategories()
+    loadSpecMeta()
 })
 
 function defaultForm() {
@@ -490,12 +565,18 @@ function blankItem() {
         model: '',
         imei: '',
         spec: '',
+        spec_json: {},
+        selected_specs: {},
+        selected_grade: null,
+        color: '',
+        battery: undefined,
+        warranty: undefined,
         category_id: 0,
         category_name: '',
         category_path: '',
         purchase_cost: 0,
         inspector_uid: null,
-        estimate_sale_price: 0,
+        estimate_sale_price: undefined,
         image_urls: '',
         quality_remark: '',
         remark: ''
@@ -533,6 +614,11 @@ async function loadStaffOptions() {
 async function loadCategories() {
     const res: any = await getErpGoodsCategoryTree()
     categoryTree.value = Array.isArray(res?.data) ? res.data : []
+}
+
+async function loadSpecMeta() {
+    const res: any = await getErpGoodsSpecMeta()
+    specMeta.value = res?.data || { groups: [], grades: [] }
 }
 
 function buildSearchParams() {
@@ -597,9 +683,11 @@ function removeItem(index: number) {
 }
 
 function openItemExtra(row: any, index: number) {
+    hydrateItemSpecState(row)
     itemExtra.item = row
     itemExtra.index = index
     itemExtra.visible = true
+    if (!specMeta.value?.groups?.length && !specMeta.value?.grades?.length) loadSpecMeta()
 }
 
 function openGoodsMeta(active = 'category') {
@@ -609,6 +697,7 @@ function openGoodsMeta(active = 'category') {
 
 async function onGoodsMetaSaved() {
     await loadCategories()
+    await loadSpecMeta()
 }
 
 function onItemCategoryChange(item: any, value: any) {
@@ -629,6 +718,105 @@ function findCategoryNode(rows: any[], id: number, parents: any[] = []): any {
 
 function categoryPathIds(node: any) {
     return [...(node?._parents || []), node].map((row: any) => Number(row.category_id || 0)).filter(Boolean)
+}
+
+function normalizeOptions(list: any): any[] {
+    if (!Array.isArray(list)) return []
+    return list.map((option: any, index: number) => {
+        const label = String(option?.label ?? option?.item_value ?? option?.grade_name ?? option?.name ?? option?.value ?? '').trim()
+        return {
+            ...option,
+            id: option?.id ?? option?.item_id ?? option?.grade_id ?? index + 1,
+            label,
+            value: String(option?.value ?? option?.item_value ?? option?.grade_name ?? label).trim(),
+        }
+    }).filter(option => option.label && option.value)
+}
+
+function normalizeSpecGroups(groups: any[]): any[] {
+    return (groups || []).map((group: any) => ({
+        ...group,
+        key: group.key || `spec_${group.id || group.source_id || group.label}`,
+        items: normalizeOptions(group.items),
+    })).filter((group: any) => group.items.length)
+}
+
+function hydrateItemSpecState(item: any) {
+    if (!item) return
+    if (!item.selected_specs) item.selected_specs = item.spec_json?.specs || {}
+    if (!item.selected_grade) item.selected_grade = item.spec_json?.grade || null
+    if (item.color === undefined) item.color = item.spec_json?.color || ''
+    if (item.battery === undefined) item.battery = item.spec_json?.battery || undefined
+    if (item.warranty === undefined) item.warranty = item.spec_json?.warranty || undefined
+}
+
+function selectedSpecValue(item: any, group: any) {
+    return item?.selected_specs?.[group.key]?.value || ''
+}
+
+function onSpecChange(item: any, group: any, value: string) {
+    if (!item) return
+    const option = group.items.find((row: any) => row.value === value)
+    item.selected_specs = { ...(item.selected_specs || {}) }
+    if (!option) delete item.selected_specs[group.key]
+    else item.selected_specs[group.key] = { label: option.label, value: option.value, group_key: group.key, group_label: group.label, title_part: !!group.title_part }
+    rebuildItemSpec(item)
+}
+
+function onGradeChange(item: any, value: string) {
+    if (!item) return
+    const option = gradeOptions.value.find((row: any) => row.value === value)
+    item.selected_grade = option ? { label: option.label, value: option.value } : null
+    rebuildItemSpec(item)
+}
+
+function selectedSpecParts(item: any) {
+    const selected = item?.selected_specs || {}
+    return specGroups.value.map((group: any) => selected[group.key]?.value || '').filter(Boolean)
+}
+
+function uniqueParts(parts: any[]) {
+    const seen = new Set<string>()
+    return parts.map(part => String(part || '').trim()).filter(part => {
+        if (!part || seen.has(part)) return false
+        seen.add(part)
+        return true
+    })
+}
+
+function rebuildItemSpec(item: any) {
+    if (!item) return
+    const parts = selectedSpecParts(item)
+    if (item.selected_grade?.value) parts.push(item.selected_grade.value)
+    if (item.color) parts.push(item.color)
+    if (item.battery !== undefined && item.battery !== null && item.battery !== '') parts.push(`电池${item.battery}%`)
+    if (Number(item.warranty || 0) > 0) parts.push(`保修至${formatDate(item.warranty)}`)
+    item.spec = uniqueParts(parts).join(' ')
+    item.spec_json = {
+        specs: item.selected_specs || {},
+        grade: item.selected_grade || null,
+        color: item.color || '',
+        battery: item.battery || '',
+        warranty: Number(item.warranty || 0),
+        title_rule: {}
+    }
+}
+
+function compactItemSubTitle(item: any) {
+    return [
+        item.spec || '',
+        item.imei ? `IMEI ${item.imei}` : '',
+        item.sn ? `SN ${item.sn}` : ''
+    ].filter(Boolean).join(' · ') || '还没有填写规格和串号'
+}
+
+function formatDate(value: any) {
+    const time = Number(value || 0)
+    if (!time) return ''
+    const date = new Date(time * 1000)
+    const month = `${date.getMonth() + 1}`.padStart(2, '0')
+    const day = `${date.getDate()}`.padStart(2, '0')
+    return `${date.getFullYear()}-${month}-${day}`
 }
 
 async function submitCreate() {
@@ -806,5 +994,87 @@ function staffName(user: any) {
     color: #111827;
     font-size: 15px;
     font-weight: 650;
+}
+.item-extra-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
+    background: #f8fafc;
+    padding: 14px 16px;
+}
+.item-extra-title {
+    color: #111827;
+    font-size: 16px;
+    font-weight: 650;
+}
+.item-extra-sub {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 13px;
+}
+.item-extra-tags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    max-width: 360px;
+}
+.item-extra-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.item-extra-section {
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+.item-extra-section__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+.item-extra-section__title {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 650;
+}
+.item-extra-section__desc {
+    margin-top: 4px;
+    color: #94a3b8;
+    font-size: 12px;
+}
+.spec-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+.spec-field {
+    min-width: 0;
+}
+.spec-label {
+    margin-bottom: 6px;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+}
+@media (max-width: 768px) {
+    .item-extra-head,
+    .item-extra-section__head {
+        flex-direction: column;
+    }
+    .item-extra-tags {
+        justify-content: flex-start;
+        max-width: none;
+    }
+    .spec-grid {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
