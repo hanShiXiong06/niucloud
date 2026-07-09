@@ -90,7 +90,6 @@ declare module '@vue/runtime-core' {
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElTree: typeof import('element-plus/es')['ElTree']
     ElTreeSelect: typeof import('element-plus/es')['ElTreeSelect']
-    ElTreeV2: typeof import('element-plus/es')['ElTreeV2']
     ElUpload: typeof import('element-plus/es')['ElUpload']
     ExportSure: typeof import('./src/components/export-sure/index.vue')['default']
     HeatMap: typeof import('./src/components/heat-map/index.vue')['default']
