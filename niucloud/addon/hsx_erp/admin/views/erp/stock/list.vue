@@ -251,55 +251,63 @@
                     <div class="flex flex-wrap items-start justify-between gap-4">
                         <div>
                             <div class="text-lg font-semibold">{{ detail.data.model || '-' }}</div>
-                            <div class="mt-1 text-sm text-gray-500">{{ detail.data.spec || '-' }} · IMEI {{ detail.data.imei || '-' }} · 资产号 {{ detail.data.asset_no || '-' }}</div>
+                            <div class="mt-1 text-sm text-gray-500">{{ assetSubTitle(detail.data) }}</div>
                         </div>
                         <div class="flex flex-wrap gap-1">
                             <el-tag :type="assetStatusMeta(detail.data.status).type">{{ assetStatusMeta(detail.data.status).label }}</el-tag>
-                            <el-tag :type="refurbishMeta(detail.data.refurbish_status).type" effect="plain">{{ refurbishMeta(detail.data.refurbish_status).label }}</el-tag>
-                            <el-tag :type="targetMeta(detail.data.sale_target).type" effect="plain">{{ targetMeta(detail.data.sale_target).label }}</el-tag>
+                            <template v-if="detail.data.status === 'in_stock'">
+                                <el-tag :type="refurbishMeta(detail.data.refurbish_status).type" effect="plain">{{ refurbishMeta(detail.data.refurbish_status).label }}</el-tag>
+                                <el-tag :type="targetMeta(detail.data.sale_target).type" effect="plain">{{ targetMeta(detail.data.sale_target).label }}</el-tag>
+                                <el-tag v-if="detail.data.sale_target === 'mall'" :type="listingMeta(detail.data.listing_status).type" effect="plain">{{ listingMeta(detail.data.listing_status).label }}</el-tag>
+                            </template>
                         </div>
                     </div>
 
                     <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-                        <div class="summary-tile"><div class="summary-label">采购成本</div><div class="summary-value">{{ money(detail.data.purchase_cost) }}</div></div>
-                        <div class="summary-tile"><div class="summary-label">调整成本</div><div class="summary-value">{{ money(detail.data.adjust_cost) }}</div></div>
-                        <div class="summary-tile"><div class="summary-label">整备成本</div><div class="summary-value">{{ money(detail.data.refurbish_cost) }}</div></div>
-                        <div class="summary-tile"><div class="summary-label">当前总成本</div><div class="summary-value">{{ money(detail.data.total_cost) }}</div></div>
+                        <div v-for="item in detailMetrics(detail.data)" :key="item.label" class="summary-tile">
+                            <div class="summary-label">{{ item.label }}</div>
+                            <div class="summary-value" :class="item.className">{{ item.value }}</div>
+                        </div>
                     </div>
 
                     <el-descriptions class="mt-5" :column="3" border>
                         <el-descriptions-item label="采购来源">{{ detail.data.party_name || '-' }}</el-descriptions-item>
-                        <el-descriptions-item label="仓库库位">{{ [detail.data.warehouse_name, detail.data.location_name].filter(Boolean).join(' / ') || '-' }}</el-descriptions-item>
+                        <el-descriptions-item :label="detail.data.status === 'in_stock' ? '当前仓库' : '出库仓库'">{{ [detail.data.warehouse_name, detail.data.location_name].filter(Boolean).join(' / ') || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="质检员">{{ detail.data.inspector_name || '-' }}</el-descriptions-item>
-                        <el-descriptions-item label="预计卖价">{{ Number(detail.data.estimate_sale_price || 0) ? money(detail.data.estimate_sale_price) : '-' }}</el-descriptions-item>
-                        <el-descriptions-item label="销售价">{{ Number(detail.data.sale_price || 0) ? money(detail.data.sale_price) : '-' }}</el-descriptions-item>
-                        <el-descriptions-item label="毛利">{{ Number(detail.data.profit || 0) ? money(detail.data.profit) : '-' }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="预计卖价">{{ Number(detail.data.estimate_sale_price || 0) ? money(detail.data.estimate_sale_price) : '-' }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="入库库龄">{{ detail.data.stock_in_at ? `${stockAgeDays(detail.data.stock_in_at)} 天` : '-' }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="上架状态">{{ listingMeta(detail.data.listing_status).label }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="销售价">{{ Number(detail.data.sale_price || 0) ? money(detail.data.sale_price) : '-' }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="毛利">{{ Number(detail.data.profit || 0) ? money(detail.data.profit) : '-' }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="销售单">{{ detail.data.sale_order?.sale_no || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="入库图片" :span="3">{{ detail.data.image_urls || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="备注" :span="3">{{ detail.data.quality_remark || detail.data.remark || '-' }}</el-descriptions-item>
                     </el-descriptions>
 
-                    <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div>
+                    <el-collapse v-model="detailActivePanels" class="mt-6">
+                        <el-collapse-item name="purchase" title="采购批次">
                             <div class="section-title">采购批次</div>
                             <el-descriptions :column="1" border>
                                 <el-descriptions-item label="采购单">{{ detail.data.purchase_order?.purchase_no || '-' }}</el-descriptions-item>
                                 <el-descriptions-item label="采购用户">{{ detail.data.purchase_order?.party_name || detail.data.party_name || '-' }}</el-descriptions-item>
                                 <el-descriptions-item label="付款状态">{{ financeStatusLabel(detail.data.purchase_order?.finance_status) }}</el-descriptions-item>
                             </el-descriptions>
-                        </div>
-                        <div>
+                        </el-collapse-item>
+                        <el-collapse-item name="sale" title="销售批次">
                             <div class="section-title">销售批次</div>
                             <el-descriptions :column="1" border>
                                 <el-descriptions-item label="销售单">{{ detail.data.sale_order?.sale_no || '-' }}</el-descriptions-item>
                                 <el-descriptions-item label="销售客户">{{ detail.data.sale_order?.party_name || '-' }}</el-descriptions-item>
                                 <el-descriptions-item label="收款状态">{{ financeStatusLabel(detail.data.sale_order?.finance_status) }}</el-descriptions-item>
                             </el-descriptions>
-                        </div>
-                    </div>
+                        </el-collapse-item>
+                    </el-collapse>
 
                     <div class="mt-6">
                         <div class="section-title">设备流水</div>
-                        <el-table :data="detail.data.asset_ledgers || []" size="small">
+                        <el-alert class="mb-3" title="库存流水记录设备入库、销售出库、退货、成本调整、流转设置等库存动作；老数据或未触发库存动作时可能为空。" type="info" :closable="false" show-icon />
+                        <el-empty v-if="!(detail.data.asset_ledgers || []).length" description="暂无库存流水" />
+                        <el-table v-else :data="detail.data.asset_ledgers || []" size="small">
                             <el-table-column label="流水号" min-width="180">
                                 <template #default="{ row }">{{ row.ledger_no || '-' }}</template>
                             </el-table-column>
@@ -337,7 +345,8 @@
 
                     <div class="mt-6">
                         <div class="section-title">账目流水</div>
-                        <el-table :data="detail.data.account_ledgers || []" size="small">
+                        <el-empty v-if="!(detail.data.account_ledgers || []).length" description="暂无设备关联账目流水" />
+                        <el-table v-else :data="detail.data.account_ledgers || []" size="small">
                             <el-table-column label="类型" width="120"><template #default="{ row }">{{ bizTypeLabel(row.biz_type) }}</template></el-table-column>
                             <el-table-column label="方向" width="100">
                                 <template #default="{ row }">
@@ -373,6 +382,7 @@ function onTabChange(tab: string) {
 }
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const detail = reactive({ visible: false, loading: false, data: null as any })
+const detailActivePanels = ref<string[]>([])
 const flow = reactive({ visible: false, saving: false, row: null as any, form: defaultFlowForm() })
 const warehouses = ref<any[]>([])
 const categoryTree = ref<any[]>([])
@@ -473,6 +483,7 @@ async function openDetail(row: any) {
     try {
         const res: any = await getErpStockInfo(row.id)
         detail.data = res?.data || null
+        detailActivePanels.value = detail.data?.status === 'in_stock' ? ['purchase'] : ['sale']
     } finally {
         detail.loading = false
     }
@@ -523,6 +534,40 @@ function assetStatusMeta(status: string) {
         void: { label: '作废', type: 'danger' }
     }
     return map[status] || { label: status || '-', type: 'info' }
+}
+
+function assetSubTitle(row: any) {
+    return [
+        row.spec || '',
+        row.imei ? `IMEI ${row.imei}` : '',
+        row.sn ? `SN ${row.sn}` : '',
+        row.asset_no ? `资产号 ${row.asset_no}` : ''
+    ].filter(Boolean).join(' · ') || '-'
+}
+
+function detailMetrics(row: any) {
+    if ((row?.status || '') === 'sold') {
+        return [
+            { label: '销售价', value: Number(row.sale_price || 0) ? money(row.sale_price) : '-' },
+            { label: '总成本', value: money(row.total_cost) },
+            { label: '毛利', value: Number(row.profit || 0) ? money(row.profit) : '-', className: Number(row.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600' },
+            { label: '销售单', value: row.sale_order?.sale_no || '-' }
+        ]
+    }
+    if ((row?.status || '') === 'in_stock') {
+        return [
+            { label: '当前总成本', value: money(row.total_cost) },
+            { label: '预计卖价', value: Number(row.estimate_sale_price || 0) ? money(row.estimate_sale_price) : '-' },
+            { label: '库龄', value: row.stock_in_at ? `${stockAgeDays(row.stock_in_at)} 天` : '-' },
+            { label: '销售去向', value: targetMeta(row.sale_target).label }
+        ]
+    }
+    return [
+        { label: '采购成本', value: money(row.purchase_cost) },
+        { label: '调整成本', value: money(row.adjust_cost) },
+        { label: '整备成本', value: money(row.refurbish_cost) },
+        { label: '当前总成本', value: money(row.total_cost) }
+    ]
 }
 
 function refurbishMeta(status: string) {
