@@ -32,7 +32,25 @@
                 </el-form-item>
                 <el-form-item>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                    <el-button :icon="Filter" @click="advancedVisible = !advancedVisible">{{ advancedVisible ? '收起条件' : '更多条件' }}</el-button>
                     <el-button @click="handleReset">重置</el-button>
+                </el-form-item>
+            </el-form>
+            <el-form v-show="advancedVisible" :inline="true" class="rounded bg-gray-50 px-3 pt-3" @submit.prevent>
+                <el-form-item label="客户">
+                    <el-input v-model.trim="search.party_name" clearable class="!w-[180px]" placeholder="客户名称" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item label="来源单">
+                    <el-input v-model.trim="search.source_no" clearable class="!w-[190px]" placeholder="销售单 / 退货单" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item label="手机号">
+                    <el-input v-model.trim="search.contact_mobile" clearable class="!w-[170px]" placeholder="联系人手机号" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item label="开单人">
+                    <el-input v-model.trim="search.salesman_name" clearable class="!w-[150px]" placeholder="销售/开单人" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item>
+                    <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
                 </el-form-item>
             </el-form>
 
@@ -45,7 +63,10 @@
                 </el-table-column>
                 <el-table-column label="销售批次" min-width="230">
                     <template #default="{ row }">
-                        <div class="font-medium text-gray-900">{{ row.batch_no || row.receivable_no }}</div>
+                        <div class="flex items-center gap-2">
+                            <div class="font-medium text-gray-900">{{ row.batch_no || row.receivable_no }}</div>
+                            <el-tag size="small" effect="plain">{{ row.source_label || sourceTypeText(row.source_type) }}</el-tag>
+                        </div>
                         <div class="mt-1 text-xs text-gray-500">{{ row.sale_channel || '未填写渠道' }} · {{ row.item_count || 0 }} 台</div>
                         <div class="mt-1 text-xs text-gray-500">销售时间 {{ formatTime(row.sale_at || row.occurred_at) }}</div>
                     </template>
@@ -86,10 +107,17 @@
             </div>
         </el-card>
 
-        <el-drawer v-model="detail.visible" title="销售批次明细" size="860px">
+        <el-drawer v-model="detail.visible" title="应收详情" size="920px">
             <div v-if="detail.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>客户：<span class="font-medium text-gray-900">{{ detail.row.party_name || '-' }}</span></div>
-                <div class="mt-1">批次：{{ detail.row.batch_no || detail.row.receivable_no }} · 应收 {{ money(detail.row.amount) }} · 剩余 {{ money(remain(detail.row)) }}</div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span>客户：<span class="font-medium text-gray-900">{{ detail.row.party_name || '-' }}</span></span>
+                    <el-tag size="small" effect="plain">{{ detail.row.source_label || sourceTypeText(detail.row.source_type) }}</el-tag>
+                    <el-tag :type="statusMeta(detail.row.status).type" size="small">{{ statusMeta(detail.row.status).label }}</el-tag>
+                </div>
+                <div class="mt-1">来源单：{{ detail.row.batch_no || detail.row.source_no || detail.row.receivable_no }} · 应收 {{ money(detail.row.amount) }} · 已结算 {{ money(detail.row.settled_amount) }} · 剩余 {{ money(remain(detail.row)) }}</div>
+                <div v-if="detail.row.source_order" class="mt-1 text-xs text-gray-500">
+                    {{ sourceOrderSummary(detail.row) }}
+                </div>
             </div>
             <div class="mb-2 font-medium text-gray-900">设备明细</div>
             <el-table :data="detail.items" v-loading="detail.loading" size="small" empty-text="暂无设备明细">
@@ -323,12 +351,21 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Filter, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
-import { confirmErpOffset, confirmErpReceipt, getErpPayablePartyItems, getErpReceivableItems, getErpReceivableList } from '@/addon/hsx_erp/api/erp'
+import { confirmErpOffset, confirmErpReceipt, getErpPayablePartyItems, getErpReceivableInfo, getErpReceivableItems, getErpReceivableList } from '@/addon/hsx_erp/api/erp'
 
 const activeStatus = ref('')
-const search = reactive({ keyword: '', dateRange: [] as any[] })
+const search = reactive({
+    keyword: '',
+    dateRange: [] as any[],
+    party_name: '',
+    source_no: '',
+    contact_mobile: '',
+    salesman_name: '',
+    can_offset: ''
+})
+const advancedVisible = ref(false)
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const accounts = ref<any[]>([])
 const detail = reactive({ visible: false, loading: false, row: null as any, items: [] as any[], settlements: [] as any[] })
@@ -386,10 +423,11 @@ async function loadList() {
     try {
         const [startAt, endAt] = search.dateRange || []
         const res: any = await getErpReceivableList({
-            keyword: search.keyword,
+            ...search,
             status: activeStatus.value,
             start_at: Number(startAt || 0),
             end_at: Number(endAt || 0) ? Number(endAt) + 86399 : 0,
+            dateRange: undefined,
             page: table.page,
             limit: table.limit
         })
@@ -412,9 +450,11 @@ async function openDetail(row: any) {
     detail.visible = true
     detail.loading = true
     try {
-        const res: any = await getErpReceivableItems(row.id)
-        detail.items = Array.isArray(res?.data) ? res.data : (res?.data?.items || [])
-        detail.settlements = Array.isArray(res?.data) ? [] : (res?.data?.settlements || [])
+        const res: any = await getErpReceivableInfo(row.id)
+        const data = res?.data || row
+        detail.row = { ...row, ...data }
+        detail.items = data?.items || []
+        detail.settlements = data?.settlements || []
     } finally {
         detail.loading = false
     }
@@ -573,7 +613,17 @@ async function submitReceipt() {
 }
 
 function handleSearch() { table.page = 1; loadList() }
-function handleReset() { search.keyword = ''; search.dateRange = []; activeStatus.value = ''; handleSearch() }
+function handleReset() {
+    search.keyword = ''
+    search.dateRange = []
+    search.party_name = ''
+    search.source_no = ''
+    search.contact_mobile = ''
+    search.salesman_name = ''
+    search.can_offset = ''
+    activeStatus.value = ''
+    handleSearch()
+}
 function remain(row: any) { return Math.max(0, Number(row.remain_amount ?? (Number(row.amount || 0) - Number(row.settled_amount || 0)))) }
 function itemRemain(row: any) { return Math.max(0, Number(row.sale_price || 0) - Number(row.allocated_settled || 0)) }
 function syncReceiptAmount(row: any) {
@@ -604,6 +654,26 @@ function deviceSummary(device: any) {
         Number(device.sale_price || 0) > 0 ? `售价 ${money(device.sale_price)}` : '',
         Number(device.cost || 0) > 0 ? `成本 ${money(device.cost)}` : ''
     ].filter(Boolean).join(' · ') || '-'
+}
+function sourceTypeText(type: string) {
+    const map: any = { sale: '销售应收', purchase_return: '采购退货应收' }
+    return map[type] || type || '应收'
+}
+function sourceOrderSummary(row: any) {
+    const order = row.source_order || {}
+    if (row.source_type === 'purchase_return') {
+        return [
+            order.purchase_no ? `原采购单 ${order.purchase_no}` : '',
+            order.refund_mode ? `退款方式 ${order.refund_mode}` : '',
+            order.remark ? `备注 ${order.remark}` : ''
+        ].filter(Boolean).join(' · ')
+    }
+    return [
+        order.sale_channel ? `渠道 ${order.sale_channel}` : '',
+        order.salesman_name ? `开单人 ${order.salesman_name}` : '',
+        order.settle_method ? `开单结算 ${order.settle_method}` : '',
+        order.remark ? `备注 ${order.remark}` : ''
+    ].filter(Boolean).join(' · ')
 }
 function statusMeta(status: string) {
     const map: any = { pending: { label: '待结算', type: 'warning' }, partial: { label: '部分结算', type: 'primary' }, settled: { label: '已结清', type: 'success' } }

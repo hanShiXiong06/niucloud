@@ -141,6 +141,10 @@ export function getErpReceivableList(params: Record<string, any>) {
     return request.get('erp/finance/receivable/lists', { params })
 }
 
+export function getErpReceivableInfo(id: number) {
+    return request.get(`erp/finance/receivable/${id}`)
+}
+
 export function getErpReceivableItems(id: number) {
     return request.get(`erp/finance/receivable/${id}/items`)
 }

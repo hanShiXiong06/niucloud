@@ -48,7 +48,22 @@
                 </el-form-item>
                 <el-form-item>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                    <el-button :icon="Filter" @click="advancedVisible = !advancedVisible">{{ advancedVisible ? '收起条件' : '更多条件' }}</el-button>
                     <el-button @click="handleReset">重置</el-button>
+                </el-form-item>
+            </el-form>
+            <el-form v-show="advancedVisible" :inline="true" class="rounded bg-gray-50 px-3 pt-3" @submit.prevent>
+                <el-form-item label="供应商">
+                    <el-input v-model.trim="search.party_name" clearable class="!w-[180px]" placeholder="供应商名称" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item label="来源单">
+                    <el-input v-model.trim="search.source_no" clearable class="!w-[190px]" placeholder="采购单 / 应付单" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item label="手机号">
+                    <el-input v-model.trim="search.contact_mobile" clearable class="!w-[170px]" placeholder="联系人手机号" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item>
+                    <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
                 </el-form-item>
             </el-form>
 
@@ -506,12 +521,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search, Tickets } from '@element-plus/icons-vue'
+import { Filter, Refresh, Search, Tickets } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { confirmErpOffset, confirmErpPartyPayment, confirmErpPayableItemsPayment, getErpAccountLedger, getErpPayableList, getErpPayablePartyItems, getErpReceivableItems, getErpReceivableList, getErpSettlementList } from '@/addon/hsx_erp/api/erp'
 
 const activeStatus = ref('')
-const search = reactive({ keyword: '' })
+const search = reactive({ keyword: '', party_name: '', source_no: '', contact_mobile: '', can_offset: '' })
+const advancedVisible = ref(false)
 const dateRange = ref<any[]>([])
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const accounts = ref<any[]>([])
@@ -598,6 +614,10 @@ function handleSearch() {
 
 function handleReset() {
     search.keyword = ''
+    search.party_name = ''
+    search.source_no = ''
+    search.contact_mobile = ''
+    search.can_offset = ''
     activeStatus.value = ''
     dateRange.value = []
     handleSearch()
