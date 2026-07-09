@@ -196,7 +196,7 @@
                     <div v-for="(row, index) in create.form.items" :key="index" class="purchase-device-card">
                         <div class="purchase-device-card__head">
                             <div>
-                                <div class="purchase-device-card__index">设备 {{ index + 1 }}</div>
+                                <div class="purchase-device-card__index">{{ row.model || `设备 ${index + 1}` }}</div>
                                 <div class="purchase-device-card__hint">{{ itemCoreSummary(row) }}</div>
                             </div>
                             <div class="flex items-center gap-2">
@@ -205,23 +205,23 @@
                             </div>
                         </div>
                         <div class="purchase-device-card__body">
-                            <el-form-item label="型号" required class="purchase-device-form-item">
-                                <el-input v-model.trim="row.model" placeholder="选择分类后可自动生成，也可手动修改" @input="markManualModel(row)" />
-                            </el-form-item>
-                            <el-form-item label="IMEI" class="purchase-device-form-item">
-                                <el-input v-model.trim="row.imei" placeholder="扫描或手输 IMEI" />
-                            </el-form-item>
-                            <el-form-item label="采购成本" required class="purchase-device-form-item">
-                                <el-input-number v-model="row.purchase_cost" :min="0" :precision="2" :controls="false" class="!w-full" />
-                            </el-form-item>
-                            <el-form-item label="备注" class="purchase-device-form-item">
-                                <el-input v-model.trim="row.remark" placeholder="核心备注，如来源、异常说明" />
-                            </el-form-item>
+                            <div class="purchase-device-meta">
+                                <span>IMEI</span>
+                                <strong>{{ row.imei || '-' }}</strong>
+                            </div>
+                            <div class="purchase-device-meta">
+                                <span>采购成本</span>
+                                <strong>{{ money(row.purchase_cost) }}</strong>
+                            </div>
+                            <div class="purchase-device-meta">
+                                <span>备注</span>
+                                <strong>{{ row.remark || '-' }}</strong>
+                            </div>
                         </div>
                         <div class="purchase-device-card__footer">
-                            <span class="text-xs text-gray-400">分类、规格、图片、质检等放在完善资料中处理。</span>
+                            <span class="text-xs text-gray-400">基础信息、分类、规格、图片、质检都在右侧抽屉里处理。</span>
                             <div>
-                                <el-button type="primary" @click="openItemExtra(row, index)">完善资料</el-button>
+                                <el-button type="primary" @click="openItemExtra(row, index)">编辑设备</el-button>
                                 <el-button type="danger" plain @click="removeItem(index)">删除</el-button>
                             </div>
                         </div>
@@ -256,7 +256,13 @@
             </template>
         </el-dialog>
 
-        <el-dialog v-model="itemExtra.visible" title="完善设备信息" width="760px" append-to-body>
+        <el-drawer v-model="itemExtra.visible" size="560px" direction="rtl" append-to-body class="purchase-item-drawer">
+            <template #header>
+                <div>
+                    <div class="item-extra-title">编辑设备 {{ itemExtra.index + 1 }}</div>
+                    <div class="item-extra-sub">{{ itemExtra.item?.model || '从基础信息开始完善' }}</div>
+                </div>
+            </template>
             <div v-if="itemExtra.item" class="item-extra-head">
                 <div>
                     <div class="item-extra-title">{{ itemExtra.item.model || `第 ${itemExtra.index + 1} 台设备` }}</div>
@@ -269,6 +275,31 @@
             </div>
 
             <div v-if="itemExtra.item" class="item-extra-layout">
+                <section class="item-extra-section">
+                    <div class="item-extra-section__title mb-3">基础信息</div>
+                    <el-alert
+                        class="mb-3"
+                        type="info"
+                        :closable="false"
+                        show-icon
+                        title="选择分类和规格后会自动生成设备名称；如果手动修改型号，系统会保留你的手动名称。"
+                    />
+                    <el-form label-position="top" class="drawer-mobile-form">
+                        <el-form-item label="型号" required>
+                            <el-input v-model.trim="itemExtra.item.model" placeholder="选择分类后可自动生成，也可手动修改" @input="markManualModel(itemExtra.item)" />
+                        </el-form-item>
+                        <el-form-item label="IMEI">
+                            <el-input v-model.trim="itemExtra.item.imei" placeholder="扫描或手输 IMEI" />
+                        </el-form-item>
+                        <el-form-item label="采购成本" required>
+                            <el-input-number v-model="itemExtra.item.purchase_cost" :min="0" :precision="2" :controls="false" class="!w-full" />
+                        </el-form-item>
+                        <el-form-item label="备注">
+                            <el-input v-model.trim="itemExtra.item.remark" type="textarea" :rows="2" placeholder="核心备注，如来源、异常说明" />
+                        </el-form-item>
+                    </el-form>
+                </section>
+
                 <section class="item-extra-section">
                     <div class="item-extra-section__head">
                         <div>
@@ -373,9 +404,10 @@
                 </section>
             </div>
             <template #footer>
+                <el-button @click="itemExtra.visible = false">关闭</el-button>
                 <el-button type="primary" @click="itemExtra.visible = false">完成</el-button>
             </template>
-        </el-dialog>
+        </el-drawer>
 
         <el-dialog v-model="goodsMeta.visible" title="管理商品资料" width="920px" destroy-on-close append-to-body>
             <ErpGoodsMetaManager :active="goodsMeta.active" @saved="onGoodsMetaSaved" />
@@ -1115,18 +1147,35 @@ function staffName(user: any) {
     font-size: 12px;
 }
 .purchase-device-card__body {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     margin-top: 12px;
+}
+.purchase-device-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: 6px;
+    background: #f8fafc;
+    padding: 9px 10px;
+    color: #64748b;
+    font-size: 13px;
+}
+.purchase-device-meta strong {
+    min-width: 0;
+    color: #111827;
+    font-weight: 600;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .purchase-device-card__footer {
     align-items: center;
     border-top: 1px solid #f1f5f9;
     padding-top: 12px;
-}
-.purchase-device-form-item {
-    margin-bottom: 14px;
 }
 .item-extra-head {
     display: flex;
@@ -1165,6 +1214,20 @@ function staffName(user: any) {
     border: 1px solid #eef2f7;
     border-radius: 8px;
     padding: 14px 16px;
+}
+.drawer-mobile-form :deep(.el-form-item) {
+    margin-bottom: 14px;
+}
+.drawer-mobile-form :deep(.el-form-item__label) {
+    color: #475569;
+    font-weight: 600;
+    line-height: 22px;
+}
+.purchase-item-drawer :deep(.el-drawer__body) {
+    background: #f8fafc;
+}
+.purchase-item-drawer :deep(.el-drawer__footer) {
+    border-top: 1px solid #eef2f7;
 }
 .item-extra-section__head {
     display: flex;
@@ -1218,8 +1281,7 @@ function staffName(user: any) {
     .spec-grid {
         grid-template-columns: 1fr;
     }
-    .purchase-device-grid,
-    .purchase-device-card__body {
+    .purchase-device-grid {
         grid-template-columns: 1fr;
     }
     .purchase-device-card__head,
