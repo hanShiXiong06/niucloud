@@ -98,6 +98,9 @@
                             </el-form-item>
                         </el-col>
                         <el-col :span="24">
+                            <el-alert :title="saleRefundModeTip(form.refund_mode)" type="info" :closable="false" show-icon />
+                        </el-col>
+                        <el-col :span="24">
                             <el-form-item label="退回仓库">
                                 <el-select v-model="form.return_to_warehouse_id" style="width:180px" @change="onWarehouseChange">
                                     <el-option
@@ -201,6 +204,7 @@
                         <el-descriptions-item label="操作员">{{ selected.operator_name }}</el-descriptions-item>
                         <el-descriptions-item label="备注">{{ selected.remark || '-' }}</el-descriptions-item>
                     </el-descriptions>
+                    <el-alert class="mb-4" :title="saleRefundModeTip(selected.refund_mode)" type="info" :closable="false" show-icon />
 
                     <div class="text-sm font-medium mb-2">退货明细</div>
                     <el-table :data="selectedDetail?.items || []" size="small" border>
@@ -464,6 +468,10 @@ function statusTagType(status: string) {
 function refundModeLabel(mode: string) {
     const map: Record<string, string> = { cash: '现金退回', offset: '应付冲减' }
     return map[mode] || mode
+}
+function saleRefundModeTip(mode: string) {
+    if (mode === 'offset') return '应付冲减：适合客户后续还有往来款抵扣；已收款部分会形成应付退款，未收款部分优先冲销原应收。'
+    return '现金退回：适合直接把已收款项退给客户；未收款、未形成事实收款的部分，系统仍优先冲销原应收。'
 }
 
 const route = useRoute()
