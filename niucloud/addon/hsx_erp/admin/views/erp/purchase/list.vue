@@ -178,7 +178,10 @@
 
                 <div class="mt-1 flex items-center justify-between">
                     <div class="font-medium">机器明细</div>
-                    <el-button :icon="Plus" @click="addItem">加一台</el-button>
+                    <div class="flex items-center gap-2">
+                        <el-button @click="openGoodsMeta('category')">商品资料维护</el-button>
+                        <el-button :icon="Plus" @click="addItem">加一台</el-button>
+                    </div>
                 </div>
                 <el-table :data="create.form.items" class="mt-3" size="large">
                     <el-table-column label="型号" min-width="170">
@@ -188,7 +191,12 @@
                         <template #default="{ row }"><el-input v-model.trim="row.imei" /></template>
                     </el-table-column>
                     <el-table-column label="规格" min-width="150">
-                        <template #default="{ row }"><el-input v-model.trim="row.spec" placeholder="256G 黑色" /></template>
+                        <template #default="{ row }">
+                            <div class="flex items-center gap-2">
+                                <el-input v-model.trim="row.spec" placeholder="256G 黑色" />
+                                <el-button link type="primary" @click="openGoodsMeta('spec')">维护</el-button>
+                            </div>
+                        </template>
                     </el-table-column>
                     <el-table-column label="采购成本" width="170">
                         <template #default="{ row }"><el-input-number v-model="row.purchase_cost" :min="0" :precision="2" :controls="false" class="!w-full" /></template>
@@ -238,6 +246,22 @@
                 <div class="mt-1">{{ itemExtra.item.spec || '-' }} · IMEI {{ itemExtra.item.imei || '-' }}</div>
             </div>
             <el-form v-if="itemExtra.item" label-width="100px">
+                <el-form-item label="设备分类">
+                    <div class="flex w-full items-center gap-2">
+                        <el-tree-select
+                            v-model="itemExtra.item.category_id"
+                            :data="categoryTree"
+                            :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
+                            check-strictly
+                            clearable
+                            class="flex-1"
+                            node-key="category_id"
+                            placeholder="选择设备分类"
+                            @change="value => onItemCategoryChange(itemExtra.item, value)"
+                        />
+                        <el-button @click="openGoodsMeta('category')">维护</el-button>
+                    </div>
+                </el-form-item>
                 <el-form-item label="质检员">
                     <el-select v-model="itemExtra.item.inspector_uid" clearable filterable class="w-full" placeholder="未质检可不选">
                         <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
@@ -255,6 +279,13 @@
             </el-form>
             <template #footer>
                 <el-button type="primary" @click="itemExtra.visible = false">完成</el-button>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="goodsMeta.visible" title="商品资料维护" width="920px" destroy-on-close append-to-body>
+            <ErpGoodsMetaManager :active="goodsMeta.active" @saved="onGoodsMetaSaved" />
+            <template #footer>
+                <el-button type="primary" @click="goodsMeta.visible = false">完成</el-button>
             </template>
         </el-dialog>
 
@@ -361,6 +392,7 @@ import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import { adjustErpPurchaseCost, cancelErpPurchase, createErpPurchase, getErpGoodsCategoryTree, getErpPurchaseInfo, getErpPurchaseList, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
+import ErpGoodsMetaManager from '@/addon/hsx_erp/components/ErpGoodsMetaManager.vue'
 
 const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
 const activeTab = ref('')
@@ -386,6 +418,7 @@ const staffOptions = ref<any[]>([])
 const currentUid = ref(0)
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
 const itemExtra = reactive({ visible: false, index: -1, item: null as any })
+const goodsMeta = reactive({ visible: false, active: 'category' })
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const adjust = reactive({ visible: false, saving: false, itemId: 0, item: null as any, form: { type: 'deduct', amount: 0, remark: '' } })
 
@@ -449,7 +482,20 @@ function defaultForm() {
 }
 
 function blankItem() {
-    return { model: '', imei: '', spec: '', purchase_cost: 0, inspector_uid: null, estimate_sale_price: 0, image_urls: '', quality_remark: '', remark: '' }
+    return {
+        model: '',
+        imei: '',
+        spec: '',
+        category_id: 0,
+        category_name: '',
+        category_path: '',
+        purchase_cost: 0,
+        inspector_uid: null,
+        estimate_sale_price: 0,
+        image_urls: '',
+        quality_remark: '',
+        remark: ''
+    }
 }
 
 async function loadList() {
@@ -550,6 +596,35 @@ function openItemExtra(row: any, index: number) {
     itemExtra.item = row
     itemExtra.index = index
     itemExtra.visible = true
+}
+
+function openGoodsMeta(active = 'category') {
+    goodsMeta.active = active
+    goodsMeta.visible = true
+}
+
+async function onGoodsMetaSaved() {
+    await loadCategories()
+}
+
+function onItemCategoryChange(item: any, value: any) {
+    const node = findCategoryNode(categoryTree.value, Number(value || 0))
+    item.category_name = node?.category_full_name || node?.category_name || ''
+    item.category_path = node ? categoryPathIds(node).join(',') : ''
+}
+
+function findCategoryNode(rows: any[], id: number, parents: any[] = []): any {
+    for (const row of rows || []) {
+        const current = { ...row, _parents: parents }
+        if (Number(row.category_id) === id) return current
+        const child = findCategoryNode(row.child_list || [], id, [...parents, row])
+        if (child) return child
+    }
+    return null
+}
+
+function categoryPathIds(node: any) {
+    return [...(node?._parents || []), node].map((row: any) => Number(row.category_id || 0)).filter(Boolean)
 }
 
 async function submitCreate() {

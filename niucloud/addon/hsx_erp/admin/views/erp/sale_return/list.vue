@@ -459,6 +459,10 @@ async function submitCreate() {
         ElMessage.warning('请选择至少一台退货设备')
         return
     }
+    if (!form.return_to_warehouse_id || !form.return_to_location_id) {
+        ElMessage.warning('请选择退回仓库和库位')
+        return
+    }
     submitting.value = true
     try {
         await createErpSaleReturn({
