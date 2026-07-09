@@ -111,7 +111,7 @@
 import { computed, ref, watch } from 'vue'
 import { img } from '@/utils/common'
 import { ElMessage } from 'element-plus'
-import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
+import CounterpartySelect from '@/addon/phone_shop/components/CounterpartySelect.vue'
 import { getErpCapitalAccounts, erpOutboundCreate } from '@/addon/phone_shop/api/erp_outbound'
 
 const props = defineProps<{ modelValue: boolean; goodsList: any[] }>()

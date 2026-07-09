@@ -164,9 +164,8 @@ import { img } from '@/utils/common'
 import { getMemberList } from '@/app/api/member'
 import { cashierGoods, cashierCheckout, cashierCategoryTree } from '@/addon/phone_shop/api/cashier'
 import { getSpecGroups, getGrades } from '@/addon/phone_shop/api/spec'
-import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
-import { getErpConfig } from '@/addon/hsx_erp/api/config'
-import CheckResultPanel from '@/addon/hsx_recycle/views/recycle_order/components/CheckResultPanel.vue'
+import { getErpCapitalAccounts, getErpSettleConfig } from '@/addon/phone_shop/api/erp_outbound'
+import CheckResultPanel from '@/addon/phone_shop/components/CheckResultPanel.vue'
 
 const categories = ref<any[]>([])
 const categoryId = ref(0)
@@ -213,7 +212,7 @@ const paymentMode = ref('offline_cash')
 const allowCash = ref(true)   // 现结开关:后台「收款设置」关闭后,收银台只能挂账
 const loadSettleConfig = async () => {
   try {
-    const res: any = await getErpConfig()
+    const res: any = await getErpSettleConfig()
     allowCash.value = Number(res.data?.allow_instant_settle ?? 1) === 1
     if (!allowCash.value) paymentMode.value = 'offline_credit'
   } catch (e) { /* ERP 未启用时默认允许现结 */ }
@@ -318,7 +317,7 @@ const removeFromCart = (i: number) => cart.value.splice(i, 1)
 const openDetail = (g: any) => { detail.row = g; detail.visible = true }
 
 const loadAccounts = async () => {
-  try { const res: any = await getCapitalAccounts(); accountOptions.value = res.data?.data || res.data?.list || res.data || [] } catch (e) { /* ERP 未启用时忽略 */ }
+  try { const res: any = await getErpCapitalAccounts(); accountOptions.value = res.data?.data || res.data?.list || res.data || [] } catch (e) { /* ERP 未启用时忽略 */ }
 }
 
 const accNameOf = (id: any) => { const a = accountOptions.value.find((x: any) => x.id === id); return a ? (a.account_name || a.name) : '' }

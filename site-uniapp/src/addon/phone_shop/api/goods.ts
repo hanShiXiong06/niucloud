@@ -61,7 +61,7 @@ export function getGoodsCategory(params: Record<string, any> = {}) {
  * 商品分类（树结构，child_list 为子级）
  */
 export function getCategoryTree() {
-    return request.get('phone_shop/goods/tree')
+    return request.get('phone_shop/goods/category/tree')
 }
 
 /** 新增分类（pid=0 为一级） */

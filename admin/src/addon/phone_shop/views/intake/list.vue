@@ -215,7 +215,7 @@ import { ElMessage } from 'element-plus'
 import { getDeviceIntakePages, getDeviceIntakeInfo, setDeviceIntakeStatus, seedTestDeviceIntake, buildDeviceIntake, syncDeviceIntakeSchema, previewDeviceIntake } from '@/addon/phone_shop/api/device_intake'
 import { getBrandList, getCategoryTree, getLabelList } from '@/addon/phone_shop/api/goods'
 import { getSpecOptionsByCategory, getGrades } from '@/addon/phone_shop/api/spec'
-import CheckResultPanel from '@/addon/hsx_recycle/views/recycle_order/components/CheckResultPanel.vue'
+import CheckResultPanel from '@/addon/phone_shop/components/CheckResultPanel.vue'
 
 const router = useRouter()
 
