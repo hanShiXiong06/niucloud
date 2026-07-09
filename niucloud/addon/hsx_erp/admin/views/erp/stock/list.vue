@@ -51,6 +51,28 @@
                 <el-form-item label="关键词">
                     <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 来源 / 仓库" @keyup.enter="handleSearch" />
                 </el-form-item>
+                <el-form-item label="仓库">
+                    <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
+                        <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="库位">
+                    <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
+                        <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="分类">
+                    <el-tree-select
+                        v-model="search.category_id"
+                        :data="categoryTree"
+                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
+                        check-strictly
+                        clearable
+                        class="!w-[220px]"
+                        node-key="category_id"
+                        placeholder="全部分类"
+                    />
+                </el-form-item>
                 <el-form-item label="整备">
                     <el-select v-model="search.refurbish_status" clearable class="!w-[140px]" placeholder="全部">
                         <el-option label="无需整备" value="none" />
@@ -65,6 +87,33 @@
                         <el-option label="卖同行" value="peer" />
                         <el-option label="上商城" value="mall" />
                     </el-select>
+                </el-form-item>
+                <el-form-item label="上架">
+                    <el-select v-model="search.listing_status" clearable class="!w-[140px]" placeholder="全部">
+                        <el-option label="不需要" value="none" />
+                        <el-option label="待拍照" value="need_photo" />
+                        <el-option label="待定价" value="need_price" />
+                        <el-option label="可上架" value="ready" />
+                        <el-option label="已上架" value="listed" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="入库时间">
+                    <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                </el-form-item>
+                <el-form-item label="库龄">
+                    <el-input-number v-model="search.stock_age_min" :min="0" :precision="0" :controls="false" placeholder="最少天" class="!w-[100px]" />
+                    <span class="mx-1 text-gray-400">-</span>
+                    <el-input-number v-model="search.stock_age_max" :min="0" :precision="0" :controls="false" placeholder="最多天" class="!w-[100px]" />
+                </el-form-item>
+                <el-form-item label="成本">
+                    <el-input-number v-model="search.min_cost" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                    <span class="mx-1 text-gray-400">-</span>
+                    <el-input-number v-model="search.max_cost" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                </el-form-item>
+                <el-form-item label="预计售价">
+                    <el-input-number v-model="search.min_price" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                    <span class="mx-1 text-gray-400">-</span>
+                    <el-input-number v-model="search.max_price" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                 </el-form-item>
                 <el-form-item>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
@@ -311,9 +360,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { getErpStockInfo, getErpStockList, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { getErpGoodsCategoryTree, getErpStockInfo, getErpStockList, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 
-const search = reactive({ keyword: '', status: '', refurbish_status: '', sale_target: '' })
+const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
 const activeTab = ref('')
 
 function onTabChange(tab: string) {
@@ -324,6 +374,10 @@ function onTabChange(tab: string) {
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const flow = reactive({ visible: false, saving: false, row: null as any, form: defaultFlowForm() })
+const warehouses = ref<any[]>([])
+const categoryTree = ref<any[]>([])
+const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
+const searchLocations = computed(() => searchWarehouse.value?.locations || [])
 
 const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.count += 1
@@ -335,7 +389,11 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
     return acc
 }, { count: 0, cost: 0, inStockCount: 0, needRefurbish: 0, saleable: 0, sold: 0 }))
 
-onMounted(loadList)
+onMounted(() => {
+    loadList()
+    loadWarehouses()
+    loadCategories()
+})
 
 function stockAgeDays(stockInAt: number): number {
     if (!stockInAt) return 0
@@ -366,11 +424,31 @@ function defaultFlowForm() {
 async function loadList() {
     table.loading = true
     try {
-        const res: any = await getErpStockList({ ...search, page: table.page, limit: table.limit })
+        const res: any = await getErpStockList({ ...buildSearchParams(), page: table.page, limit: table.limit })
         table.data = res?.data?.data || []
         table.total = res?.data?.total || 0
     } finally {
         table.loading = false
+    }
+}
+
+async function loadWarehouses() {
+    const res: any = await getErpWarehouseOptions()
+    warehouses.value = Array.isArray(res?.data) ? res.data : []
+}
+
+async function loadCategories() {
+    const res: any = await getErpGoodsCategoryTree()
+    categoryTree.value = Array.isArray(res?.data) ? res.data : []
+}
+
+function buildSearchParams() {
+    const [start_at, end_at] = Array.isArray(search.dateRange) ? search.dateRange : []
+    return {
+        ...search,
+        start_at: start_at || '',
+        end_at: end_at || '',
+        dateRange: undefined
     }
 }
 
@@ -380,12 +458,13 @@ function handleSearch() {
 }
 
 function handleReset() {
-    search.keyword = ''
-    search.status = ''
-    search.refurbish_status = ''
-    search.sale_target = ''
+    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
     activeTab.value = ''
     handleSearch()
+}
+
+function onSearchWarehouseChange() {
+    search.location_id = ''
 }
 
 async function openDetail(row: any) {

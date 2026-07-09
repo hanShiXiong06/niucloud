@@ -44,6 +44,46 @@
                 <el-form-item label="关键词">
                     <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="型号 / IMEI / 资产号 / 销售单 / 客户" @keyup.enter="handleSearch" />
                 </el-form-item>
+                <el-form-item label="仓库">
+                    <el-select v-model="search.warehouse_id" clearable class="!w-[160px]" placeholder="全部仓库" @change="onSearchWarehouseChange">
+                        <el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="库位">
+                    <el-select v-model="search.location_id" clearable class="!w-[160px]" placeholder="全部库位" :disabled="!search.warehouse_id">
+                        <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="分类">
+                    <el-tree-select
+                        v-model="search.category_id"
+                        :data="categoryTree"
+                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
+                        check-strictly
+                        clearable
+                        class="!w-[220px]"
+                        node-key="category_id"
+                        placeholder="全部分类"
+                    />
+                </el-form-item>
+                <el-form-item label="开单人">
+                    <el-select v-model="search.salesman_uid" clearable filterable class="!w-[150px]" placeholder="全部">
+                        <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="销售时间">
+                    <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                </el-form-item>
+                <el-form-item label="售价">
+                    <el-input-number v-model="search.min_amount" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                    <span class="mx-1 text-gray-400">-</span>
+                    <el-input-number v-model="search.max_amount" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                </el-form-item>
+                <el-form-item label="毛利">
+                    <el-input-number v-model="search.min_profit" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
+                    <span class="mx-1 text-gray-400">-</span>
+                    <el-input-number v-model="search.max_profit" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
+                </el-form-item>
                 <el-form-item>
                     <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
                     <el-button @click="handleReset">重置</el-button>
@@ -218,10 +258,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
-import { cancelErpSale, confirmErpReceipt, createErpSale, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
+import { cancelErpSale, confirmErpReceipt, createErpSale, getErpGoodsCategoryTree, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 
-const search = reactive({ keyword: '', finance_status: '', status: '' })
+const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
 const activeTab = ref('')
 const router = useRouter()
 
@@ -240,6 +281,8 @@ const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, 
 const stock = reactive({ loading: false, data: [] as any[], keyword: '', page: 1, limit: 8, total: 0 })
 const accounts = ref<any[]>([])
 const staffOptions = ref<any[]>([])
+const warehouses = ref<any[]>([])
+const categoryTree = ref<any[]>([])
 const currentUid = ref(0)
 const selectedAssets = ref<any[]>([])
 const salePrices = reactive<Record<number, number>>({})
@@ -257,6 +300,8 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
 const selectedCost = computed(() => selectedAssets.value.reduce((sum, row) => sum + Number(row.total_cost || 0), 0))
 const selectedAmount = computed(() => selectedAssets.value.reduce((sum, row) => sum + Number(salePrices[row.id] || 0), 0))
 const selectedProfit = computed(() => selectedAmount.value - selectedCost.value)
+const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
+const searchLocations = computed(() => searchWarehouse.value?.locations || [])
 
 watch(() => create.form.settle_mode, () => {
     if (create.form.settle_mode === 'cash') create.form.received_amount = selectedAmount.value
@@ -269,6 +314,8 @@ onMounted(() => {
     loadList()
     loadAccounts()
     loadStaffOptions()
+    loadWarehouses()
+    loadCategories()
 })
 
 function defaultForm() {
@@ -278,7 +325,7 @@ function defaultForm() {
 async function loadList() {
     table.loading = true
     try {
-        const res: any = await getErpSaleList({ ...search, page: table.page, limit: table.limit })
+        const res: any = await getErpSaleList({ ...buildSearchParams(), page: table.page, limit: table.limit })
         table.data = res?.data?.data || []
         table.total = res?.data?.total || 0
     } finally {
@@ -311,6 +358,26 @@ async function loadStaffOptions() {
     staffOptions.value = res?.data?.users || []
     if (!create.form.salesman_uid) {
         create.form.salesman_uid = currentUid.value || staffOptions.value[0]?.uid || 0
+    }
+}
+
+async function loadWarehouses() {
+    const res: any = await getErpWarehouseOptions()
+    warehouses.value = Array.isArray(res?.data) ? res.data : []
+}
+
+async function loadCategories() {
+    const res: any = await getErpGoodsCategoryTree()
+    categoryTree.value = Array.isArray(res?.data) ? res.data : []
+}
+
+function buildSearchParams() {
+    const [start_at, end_at] = Array.isArray(search.dateRange) ? search.dateRange : []
+    return {
+        ...search,
+        start_at: start_at || '',
+        end_at: end_at || '',
+        dateRange: undefined
     }
 }
 
@@ -386,11 +453,13 @@ function handleSearch() {
 }
 
 function handleReset() {
-    search.keyword = ''
-    search.finance_status = ''
-    search.status = ''
+    Object.assign(search, { keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
     activeTab.value = ''
     handleSearch()
+}
+
+function onSearchWarehouseChange() {
+    search.location_id = ''
 }
 
 function canCancelSale(row: any) {
