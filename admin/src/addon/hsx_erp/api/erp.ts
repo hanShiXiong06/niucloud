@@ -133,6 +133,10 @@ export function cancelErpSale(id: number, data: Record<string, any>) {
     return request.post(`erp/sale/${id}/cancel`, data)
 }
 
+export function cancelErpSaleItem(itemId: number, data: Record<string, any>) {
+    return request.post(`erp/sale/item/${itemId}/cancel`, data)
+}
+
 export function getErpReceivableList(params: Record<string, any>) {
     return request.get('erp/finance/receivable/lists', { params })
 }

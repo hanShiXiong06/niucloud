@@ -245,7 +245,18 @@
                     <el-table-column label="成本" width="130" align="right"><template #default="{ row }">{{ money(row.cost) }}</template></el-table-column>
                     <el-table-column label="售价" width="130" align="right"><template #default="{ row }">{{ money(row.sale_price) }}</template></el-table-column>
                     <el-table-column label="毛利" width="130" align="right"><template #default="{ row }">{{ money(row.profit) }}</template></el-table-column>
+                    <el-table-column label="状态" width="100">
+                        <template #default="{ row }">
+                            <el-tag :type="row.status === 'sold' ? 'success' : row.status === 'void' ? 'info' : 'warning'" effect="plain">{{ saleItemStatusLabel(row.status) }}</el-tag>
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="remark" label="备注" min-width="180" />
+                    <el-table-column label="操作" width="120" align="center" fixed="right">
+                        <template #default="{ row }">
+                            <el-button v-if="canCancelSaleItem(row)" type="danger" link @click="cancelSaleItem(row)">撤销本台</el-button>
+                            <span v-else class="text-xs text-gray-400">-</span>
+                        </template>
+                    </el-table-column>
                 </el-table>
             </div>
         </el-drawer>
@@ -259,7 +270,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
-import { cancelErpSale, confirmErpReceipt, createErpSale, getErpGoodsCategoryTree, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { cancelErpSale, cancelErpSaleItem, confirmErpReceipt, createErpSale, getErpGoodsCategoryTree, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 
 const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
@@ -497,6 +508,30 @@ async function cancelSale(row: any) {
     }
 }
 
+function canCancelSaleItem(row: any) {
+    return detail.data?.status === 'completed' && detail.data?.finance_status === 'pending' && row.status === 'sold'
+}
+
+async function cancelSaleItem(row: any) {
+    try {
+        const result: any = await ElMessageBox.prompt(
+            '撤销后该设备会回到原仓库库存；如果这是销售单最后一台设备，系统会同步撤销整张销售单。已有收款或折账的单据不能直接撤销。',
+            '撤销单台销售',
+            {
+                confirmButtonText: '确认撤销',
+                cancelButtonText: '取消',
+                inputPlaceholder: '填写撤销原因，便于后续追溯'
+            }
+        )
+        await cancelErpSaleItem(Number(row.id), { remark: result?.value || '' })
+        ElMessage.success('设备销售已撤销')
+        if (detail.data?.id) await openDetail(detail.data)
+        await loadList()
+    } catch (e: any) {
+        if (e !== 'cancel' && e !== 'close') throw e
+    }
+}
+
 function statusMeta(status: string) {
     const map: any = {
         pending: { label: '待收款', type: 'warning' },
@@ -514,6 +549,11 @@ function orderStatusMeta(status: string) {
         void: { label: '已撤销', type: 'info' }
     }
     return map[status] || { label: status || '-', type: 'info' }
+}
+
+function saleItemStatusLabel(status: string) {
+    const map: any = { sold: '已售', returned: '已退货', void: '已撤销' }
+    return map[status] || status || '-'
 }
 
 function money(value: any) {
