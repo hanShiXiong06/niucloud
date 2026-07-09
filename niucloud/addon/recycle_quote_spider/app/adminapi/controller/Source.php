@@ -49,7 +49,8 @@ class Source extends BaseAdminController
 
     public function sync(int $id)
     {
-        return success('同步完成', (new QuoteSourceService())->sync($id));
+        $data = (new QuoteSourceService())->sync($id);
+        return success($data['message'] ?? '同步任务已创建', $data);
     }
 
     public function createDefault()

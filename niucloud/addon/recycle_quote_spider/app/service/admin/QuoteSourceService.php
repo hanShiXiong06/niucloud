@@ -93,13 +93,17 @@ class QuoteSourceService extends BaseAdminService
                     'message' => '同步任务已创建，但队列推送失败，请检查Redis和队列服务。',
                 ] + $task;
             }
-            return ['async' => true] + $task;
+            return [
+                'async' => true,
+                'queue_enabled' => true,
+                'message' => '同步任务已进入队列，请在同步日志中查看进度。',
+            ] + $task;
         }
 
         return [
             'async' => false,
             'queue_enabled' => false,
-            'message' => '同步任务已创建，请开启队列后执行。当前队列未启用，直接同步可能导致504。',
+            'message' => '同步任务已创建但尚未执行：当前队列未启用，请开启队列服务后执行。',
         ] + $task;
     }
 

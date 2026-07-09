@@ -1051,7 +1051,14 @@ const syncSource = async (row: any) => {
         const data = res.data || {}
         selectedSourceId.value = row.id
         activeTab.value = 'log'
-        ElMessage.info(data.message || '同步任务已创建，请在同步日志中查看进度')
+        const message = data.message || '同步任务已创建，请在同步日志中查看进度'
+        if (data.async) {
+            ElMessage.success(message)
+        } else if (data.queue_enabled === false) {
+            ElMessage.warning(message)
+        } else {
+            ElMessage.info(message)
+        }
         startLogRefresh()
         loadSources()
     } finally {
