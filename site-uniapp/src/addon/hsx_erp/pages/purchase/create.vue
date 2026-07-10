@@ -486,7 +486,7 @@ function categoryNamesFromPayload(payload: any): string[] {
     const node = payload?.node || {}
     const full = String(node.category_full_name || '').trim()
     if (full) {
-        return full.split(/[>\-/\\｜|,，\s]+/).map((name: string) => name.trim()).filter(Boolean)
+        return full.split(/[>\-/\\｜|,，]+/).map((name: string) => name.trim()).filter(Boolean)
     }
     const name = String(node.category_name || '').trim()
     return name ? [name] : []
@@ -495,7 +495,7 @@ function categoryNamesFromPayload(payload: any): string[] {
 function categoryTitleByRule(item: any): string {
     const names = Array.isArray(item.category_names) && item.category_names.length
         ? item.category_names
-        : String(item.category_name || '').split(/[>\-/\\｜|,，\s]+/).filter(Boolean)
+        : String(item.category_name || '').split(/[>\-/\\｜|,，]+/).filter(Boolean)
     if (!names.length) return ''
     const mode = metaFor(item)?.title_rules?.category_mode || 'auto'
     if (mode === 'full') return names.join(' ')

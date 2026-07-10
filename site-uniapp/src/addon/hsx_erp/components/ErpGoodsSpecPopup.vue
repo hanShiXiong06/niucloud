@@ -311,7 +311,7 @@ function categoryTitle(): string {
     const item = props.item as any
     const names = Array.isArray(item.category_names) && item.category_names.length
         ? item.category_names
-        : String(item.category_name || '').split(/[>\-/\\｜|,，\s]+/).filter(Boolean)
+        : String(item.category_name || '').split(/[>\-/\\｜|,，]+/).filter(Boolean)
     if (!names.length) return ''
     const mode = (props.meta as any)?.title_rules?.category_mode || 'auto'
     if (mode === 'full') return names.join(' ')

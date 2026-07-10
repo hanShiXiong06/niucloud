@@ -14,6 +14,7 @@ class ErpGoodsMetaService extends BaseAdminService
         $categoryPath = $this->normalizeCategoryPath($where['category_path'] ?? []);
         $shopMeta = $this->phoneShopMeta($categoryId, $categoryPath);
         $erpCategories = (new ErpGoodsCategoryService())->tree();
+        $titleRules = $this->titleRules();
         if ($shopMeta['available']) {
             $categories = $shopMeta['categories'] ?: $erpCategories;
             return [
@@ -21,7 +22,7 @@ class ErpGoodsMetaService extends BaseAdminService
                 'source_label' => '商城商品资料',
                 'category_source' => $shopMeta['categories'] ? 'phone_shop' : 'erp',
                 'mode' => 'sync_preferred',
-                'title_rules' => $this->defaultTitleRules(),
+                'title_rules' => $titleRules,
                 'custom_fields' => $this->customFields(),
                 'tips' => [
                     '当前站点已安装商城，ERP 优先使用商城分类、规格、成色等资料。',
@@ -39,7 +40,7 @@ class ErpGoodsMetaService extends BaseAdminService
             'source_label' => 'ERP 本地资料',
             'category_source' => 'erp',
             'mode' => 'local_fallback',
-            'title_rules' => $this->defaultTitleRules(),
+            'title_rules' => $titleRules,
             'custom_fields' => $this->customFields(),
             'tips' => [
                 '当前未检测到可用商城资料，ERP 使用本地默认规格。',
@@ -303,6 +304,28 @@ class ErpGoodsMetaService extends BaseAdminService
             'grade_in_title' => false,
             'separator' => ' ',
         ];
+    }
+
+    private function titleRules(): array
+    {
+        $rules = $this->defaultTitleRules();
+        $config = (new ErpConfigService())->getRules()['product_title'] ?? [];
+
+        if (isset($config['category_mode'])) {
+            $rules['category_mode'] = (string)$config['category_mode'];
+        }
+        if (array_key_exists('spec_in_title', $config)) {
+            $rules['spec_in_title'] = (int)$config['spec_in_title'] === 1;
+        }
+        if (array_key_exists('grade_in_title', $config)) {
+            $rules['grade_in_title'] = (int)$config['grade_in_title'] === 1;
+        }
+        if (isset($config['separator'])) {
+            $separator = trim((string)$config['separator']);
+            $rules['separator'] = $separator === '' ? ' ' : $separator;
+        }
+
+        return $rules;
     }
 
     private function customFields(): array
