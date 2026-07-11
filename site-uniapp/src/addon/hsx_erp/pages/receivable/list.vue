@@ -3,7 +3,7 @@
         <ErpListHeader
             v-model="keyword"
             v-model:activeTab="activeTab"
-            placeholder="往来单位/销售单号"
+            placeholder="往来单位/销售单号/退货单号"
             :tabs="tabs"
             :show-filter="true"
             :filter-count="filterCount"
@@ -21,13 +21,12 @@
                         <text class="card-title">{{ row.party_name }}</text>
                         <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
                     </view>
-                    <view class="card-meta">类型：{{ row.source_label || sourceLabel(row.source_type) }}</view>
-                    <view class="card-meta">单据：{{ row.batch_no || row.sale_no || row.source_no || '-' }}</view>
+                    <ErpFinanceSourceSummary :row="row" direction="receivable" compact />
                     <view class="card-meta" v-if="row.purchase_no">原采购单：{{ row.purchase_no }}</view>
                     <view class="card-meta" v-if="row.salesman_name">销售员：{{ row.salesman_name }}</view>
                     <view class="card-meta" v-if="row.item_count">共 {{ row.item_count }} 台设备</view>
                     <view class="card-meta" v-if="row.return_remark">说明：{{ row.return_remark }}</view>
-                    <view class="card-time">{{ erpTimeLine(row, ['received_at', 'receipt_at', 'sale_at']) }}</view>
+                    <view class="card-time">发生时间：{{ erpTimeLine(row, ['occurred_at', 'received_at', 'receipt_at', 'sale_at', 'create_at', 'update_at']) }}</view>
                     <view class="erp-card__foot">
                         <view class="amount-box">
                             <text class="amt-label">应收合计</text>
@@ -67,15 +66,16 @@
                     </view>
                 </view>
 
+                <scroll-view scroll-y class="popup-scroll" :show-scrollbar="true">
+
                 <view class="pay-summary">
                     <view class="summary-main">
                         <text class="summary-label">剩余应收</text>
                         <text class="summary-amount blue">¥{{ money(receiptRow.remain_amount) }}</text>
                     </view>
                     <u-tag :text="statusLabel(receiptRow.status)" :type="statusType(receiptRow.status)" plain plainFill size="mini" />
-                    <text class="summary-sub">{{ receiptRow.source_label || sourceLabel(receiptRow.source_type) }} · {{ receiptRow.batch_no || receiptRow.sale_no || '-' }}</text>
-                    <text v-if="receiptRow.purchase_no" class="summary-sub">原采购单：{{ receiptRow.purchase_no }}</text>
                 </view>
+                <view class="popup-source-wrap"><ErpFinanceSourceSummary :row="receiptRow" direction="receivable" /></view>
 
                 <view class="pay-form">
                     <view class="pay-form__item">
@@ -105,6 +105,7 @@
                         <u-input v-model="receiptForm.remark" placeholder="如：微信/现金/银行卡" :customStyle="inputStyle" />
                     </view>
                 </view>
+                </scroll-view>
                 <view class="action-bar">
                     <view class="action-btn action-btn--minor">
                         <u-button @click="receiptVisible = false">取消</u-button>
@@ -126,6 +127,7 @@
                         <u-icon name="close" color="#64748b" size="20" />
                     </view>
                 </view>
+                <scroll-view scroll-y class="account-popup__body">
                 <u-cell-group v-if="accounts.length" :border="false">
                     <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectReceiptAccount(a)">
                         <template #value>
@@ -139,6 +141,7 @@
                     </u-cell>
                 </u-cell-group>
                 <u-empty v-else mode="data" text="暂无可用资金账户" />
+                </scroll-view>
             </view>
         </u-popup>
 
@@ -148,8 +151,9 @@
             v-model:show="detailReceiptVisible"
             :receivable-id="detailReceiptRow?.id"
             :party-name="detailReceiptRow?.party_name"
+            :source-row="detailReceiptRow"
             :accounts="accounts"
-            @success="() => { reload(); detailReceiptRow = null }"
+            @success="() => { refreshAfterSettlement(); detailReceiptRow = null }"
         />
 
         <ErpOffsetConfirmModal
@@ -158,7 +162,7 @@
             :party-id="offsetRow?.party_id"
             :party-name="offsetRow?.party_name"
             :accounts="accounts"
-            @success="() => { reload(); offsetRow = null }"
+            @success="() => { refreshAfterSettlement(); offsetRow = null }"
         />
 
         <ErpFilterPopup
@@ -174,16 +178,21 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 
 import { getMobileReceivableList, confirmMobileSaleReceipt, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpReceiptConfirmModal from '@/addon/hsx_erp/components/ErpReceiptConfirmModal.vue'
 import ErpOffsetConfirmModal from '@/addon/hsx_erp/components/ErpOffsetConfirmModal.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
+import ErpFinanceSourceSummary from '@/addon/hsx_erp/components/ErpFinanceSourceSummary.vue'
 
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
+import { erpFinanceSourceFilterOptions, erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
+import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
+import { useErpFinanceOptions } from '@/addon/hsx_erp/hooks/useErpFinanceOptions'
 
 const { pagingStyle } = useListHeader(126)
 
@@ -199,8 +208,14 @@ const tabs = [
 const activeTab = ref('pending')
 const filterVisible = ref(false)
 const filters = ref<Record<string, any>>({})
-const filterFields = [
+const { options: saleChannelOptions, load: loadSaleChannels } = useErpSaleChannels()
+const { load: loadFinanceOptions, categoryOptions, sourceOptions } = useErpFinanceOptions()
+const filterFields = computed(() => [
     { key: 'party_id', label: '往来单位', type: 'party', roleType: 'all', labelKey: 'party_name', placeholder: '请选择客户/供应商' },
+    { key: 'source_type', label: '业务场景', type: 'select', options: [{ label: '全部', value: '' }, ...erpFinanceSourceFilterOptions('receivable')] },
+    { key: 'finance_type_key', label: '收入类型', type: 'select', options: [{ label: '全部', value: '' }, ...categoryOptions('income')] },
+    { key: 'business_source_key', label: '业务来源', type: 'select', options: [{ label: '全部', value: '' }, ...sourceOptions('income')] },
+    { key: 'channel_code', label: '销售渠道', type: 'select', options: [{ label: '全部', value: '' }, ...saleChannelOptions.value.map(item => ({ label: item.name, value: item.key }))] },
     { key: 'source_no', label: '单据号', type: 'text', placeholder: '输入销售单号/退货单号' },
     { key: 'm_no', label: '会员号', type: 'text', placeholder: '输入会员号' },
     { key: 'contact_mobile', label: '联系人手机', type: 'text', placeholder: '输入手机号' },
@@ -212,7 +227,7 @@ const filterFields = [
         { label: '可折账', value: 1 },
     ] },
     { key: 'date', label: '发生日期', type: 'dateRange', startKey: 'start_at', endKey: 'end_at' },
-] as any[]
+] as any[])
 const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
 
 const accounts = ref<any[]>([])
@@ -237,18 +252,31 @@ const selectedReceiptAccountLabel = computed(() => {
 })
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '12rpx 16rpx' }
 
-onMounted(async () => {
+onMounted(() => {
+    loadAccounts()
+    loadSaleChannels().catch(() => undefined)
+    loadFinanceOptions().catch(() => undefined)
+})
+
+async function loadAccounts() {
     try {
         const res: any = await getMobileCapitalAccounts()
         accounts.value = res?.data?.list || []
     } catch {}
-})
+}
 
 const reload = () => pagingRef.value?.reload()
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
 
 onShow(() => reload())
+onLoad((query: any) => {
+    const sourceKeyword = String(query?.keyword || query?.source_no || '')
+    if (sourceKeyword) {
+        try { keyword.value = decodeURIComponent(sourceKeyword) } catch { keyword.value = sourceKeyword }
+        activeTab.value = ''
+    }
+})
 
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
@@ -275,11 +303,12 @@ function dateToRange(params: Record<string, any>) {
 }
 
 function openReceipt(row: any) {
+    const source = erpFinanceSourceMeta(row, 'receivable')
     receiptRow.value = row
     receiptForm.value = {
         amount: Number(Number(row.remain_amount || 0).toFixed(2)),
         capital_account_id: accounts.value[0]?.id || 0,
-        remark: ''
+        remark: source.business_reason
     }
     receiptVisible.value = true
 }
@@ -327,30 +356,62 @@ function capReceiptAmount() {
 }
 
 async function submitReceipt() {
-    if (!receiptRow.value) return
+    if (!receiptRow.value || receipting.value) return
     if (!canReceipt.value) {
         uni.showToast({ title: receiptForm.value.capital_account_id ? '请输入收款金额' : '请选择收款账户', icon: 'none' })
         return
     }
     if (!capReceiptAmount()) return
+    const account = accounts.value.find((item: any) => Number(item.id) === Number(receiptForm.value.capital_account_id))
+    const source = erpFinanceSourceMeta(receiptRow.value, 'receivable')
+    const isReturnRefund = source.biz_scene === 'purchase_return'
+    const snapshot = cloneErpSubmitSnapshot({
+        receivableId: Number(receiptRow.value.id || 0),
+        partyName: receiptRow.value.party_name || '-',
+        partyRoleLabel: source.party_role_label || '往来主体',
+        financeTypeName: source.finance_type_name,
+        sourceNo: source.source_no || '-',
+        amount: Number(receiptForm.value.amount),
+        capital_account_id: Number(receiptForm.value.capital_account_id),
+        accountName: account?.account_name || '所选账户',
+        remark: receiptForm.value.remark || '手机端确认收款',
+        isReturnRefund,
+    })
     receipting.value = true
+    const confirmed = await confirmErpPopupAction({
+        title: isReturnRefund ? '确认退款到账' : '确认客户收款',
+        content: `${snapshot.partyRoleLabel}：${snapshot.partyName}\n业务类型：${snapshot.financeTypeName}\n来源单：${snapshot.sourceNo}\n${snapshot.isReturnRefund ? '退款' : '收款'}金额：¥${money(snapshot.amount)}\n到账账户：${snapshot.accountName}\n确认后写入资金流水和应收核销记录，不能直接删除。`,
+        confirmText: '确认到账',
+        closePopup: () => {
+            receiptAccountPickerVisible.value = false
+            receiptVisible.value = false
+        },
+        reopenPopup: () => { receiptVisible.value = true },
+    })
+    if (!confirmed) {
+        receipting.value = false
+        return
+    }
     try {
-        await confirmMobileSaleReceipt(receiptRow.value.id, {
-            amount: Number(receiptForm.value.amount),
-            capital_account_id: receiptForm.value.capital_account_id,
-            remark: receiptForm.value.remark || '手机端确认收款',
+        await confirmMobileSaleReceipt(snapshot.receivableId, {
+            amount: snapshot.amount,
+            capital_account_id: snapshot.capital_account_id,
+            remark: snapshot.remark,
         })
         uni.showToast({ title: '收款已确认', icon: 'success' })
-        receiptVisible.value = false
-        receiptAccountPickerVisible.value = false
-        reload()
+        await refreshAfterSettlement()
     } catch (e: any) {
         uni.showToast({ title: e?.message || '收款失败，请重试', icon: 'none' })
+        receiptVisible.value = true
     } finally { receipting.value = false }
 }
 
+async function refreshAfterSettlement() {
+    await loadAccounts()
+    reload()
+}
+
 const money = (v: any) => Number(v || 0).toFixed(2)
-const sourceLabel = (s: string) => ({ sale: '销售收款', purchase_return: '采购退货退款' }[s] || s || '应收款')
 const statusLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s || '-')
 const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
 </script>
@@ -359,12 +420,14 @@ const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', set
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
 .card-actions { margin-top:16rpx; display:flex; gap:12rpx; }
 .offset-tip { margin-top:12rpx; font-size:23rpx; color:#b45309; background:#fff7ed; border-radius:12rpx; padding:12rpx 16rpx; }
-.pay-popup { max-height:82vh; background:#fff; display:flex; flex-direction:column; overflow:hidden; }
+.pay-popup { height:82vh; max-height:1080rpx; background:#fff; display:flex; flex-direction:column; overflow:hidden; }
+.popup-scroll { flex:1; min-height:0; width:100%; box-sizing:border-box; }
 .popup-head { min-height:96rpx; padding:0 28rpx; display:flex; align-items:center; justify-content:space-between; gap:20rpx; border-bottom:1rpx solid #eef2f7; }
 .popup-head.compact { border-bottom:0; }
 .popup-title { display:block; font-size:34rpx; font-weight:700; color:#0f172a; }
 .popup-subtitle { display:block; margin-top:4rpx; font-size:24rpx; color:#64748b; }
 .popup-close { width:56rpx; height:56rpx; border-radius:28rpx; background:#f8fafc; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.popup-source-wrap { margin:0 28rpx 20rpx; }
 .pay-summary { margin:24rpx 28rpx 20rpx; padding:22rpx; border-radius:18rpx; background:#f8fafc; display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10rpx 16rpx; align-items:center; }
 .summary-main { min-width:0; }
 .summary-label { display:block; font-size:23rpx; color:#64748b; }
@@ -382,7 +445,8 @@ const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', set
 .account-select--on { background:#f8fbff; border-color:#3b6ef5; }
 .account-text { flex:1; min-width:0; font-size:26rpx; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .account-placeholder { flex:1; min-width:0; font-size:26rpx; color:#94a3b8; }
-.account-popup { min-height:36vh; max-height:74vh; padding-bottom:calc(20rpx + env(safe-area-inset-bottom)); background:#fff; }
+.account-popup { height:60vh; max-height:820rpx; padding-bottom:calc(20rpx + env(safe-area-inset-bottom)); background:#fff; display:flex; flex-direction:column; overflow:hidden; }
+.account-popup__body { flex:1; min-height:0; width:100%; }
 .action-btn { min-width:0; }
 .action-btn--minor { flex:1; }
 .action-btn--major { flex:2; }

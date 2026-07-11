@@ -19,7 +19,7 @@ export const INVENTORY_STATUS_MAP: Record<string, string> = {
     inbound_rejected: '入库驳回',
     in_stock: '在库',
     sold: '已售',
-    returned: '已退',
+    returned: '已退货',
     void: '已作废',
     refurbishing: '整备中',
     pending_pricing: '待销售定价',
@@ -38,6 +38,32 @@ export const ERP_DICT_FALLBACK: ErpDictMap = {
             type: ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' } as Record<string, string>)[value] || 'info',
             filterable: true
         })),
+    purchase_finance_status: [
+        { value: 'pending', label: '待付款', type: 'warning', filterable: true },
+        { value: 'partial', label: '部分付款', type: 'primary', filterable: true },
+        { value: 'settled', label: '已结清', type: 'success', filterable: true },
+        { value: 'void', label: '已撤销', type: 'info', filterable: true }
+    ],
+    purchase_order_status: [
+        { value: 'completed', label: '已完成', type: 'success', filterable: true },
+        { value: 'returned', label: '已退货', type: 'warning', filterable: true },
+        { value: 'void', label: '已撤销', type: 'info', filterable: true }
+    ],
+    purchase_return_flow: [
+        { value: 'direct_void', label: '直接退货', type: 'warning', filterable: false },
+        { value: 'refund_receivable', label: '退货退款', type: 'warning', filterable: false },
+        { value: 'mixed', label: '退货退款', type: 'warning', filterable: false }
+    ],
+    purchase_refund_mode: [
+        { value: 'none', label: '无需退款', type: 'info', filterable: false },
+        { value: 'cash', label: '退款待确认', type: 'warning', filterable: false },
+        { value: 'offset', label: '往来折抵', type: 'primary', filterable: false }
+    ],
+    return_status: [
+        { value: 'pending', label: '旧单待确认', type: 'warning', filterable: true },
+        { value: 'confirmed', label: '已完成', type: 'success', filterable: true },
+        { value: 'cancelled', label: '已撤销', type: 'info', filterable: true }
+    ],
     refurbish_status: [
         { value: 'none', label: '无需整备', type: 'info', filterable: true },
         { value: 'pending', label: '待整备', type: 'warning', filterable: true },
@@ -64,11 +90,13 @@ export async function loadErpDicts(): Promise<ErpDictMap> {
     if (dictCache) return dictCache
     try {
         const res: any = await request.get('erp/dicts')
-        dictCache = { ...ERP_DICT_FALLBACK, ...(res?.data || {}) }
+        const resolved = { ...ERP_DICT_FALLBACK, ...(res?.data || {}) }
+        dictCache = resolved
+        return resolved
     } catch (e) {
         dictCache = ERP_DICT_FALLBACK
+        return ERP_DICT_FALLBACK
     }
-    return dictCache
 }
 
 export function dictLabel(dicts: ErpDictMap | null | undefined, group: string, value: string): string {
@@ -85,10 +113,9 @@ export function dictTabs(dicts: ErpDictMap | null | undefined, group: string, wi
     return withAll ? [{ label: '全部', name: '全部', value: '' }, ...tabs] : tabs
 }
 
-// 成本调整允许在库、已售/在售设备，退货、作废等终态不再改动账务口径。
+// 成本调整只允许仍在库的设备；已售设备必须走售后利润调整，避免覆盖历史销售利润。
 export const COST_ADJUST_ALLOWED: string[] = [
     'in_stock',
-    'sold',
     'available_for_sale'
 ]
 

@@ -1,6 +1,6 @@
 <template>
     <view class="cost-list-page">
-        <RecyclePageHeader  />
+        <ErpPageHeader title="成本调整" />
         <view class="page-header">
                     
                     <u-search
@@ -86,6 +86,7 @@ import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, isCostAdjustAllowed, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 
 const keyword = ref('')
@@ -93,7 +94,7 @@ const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
 const erpDicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
 // 胶囊筛选行高度上调，让设备列表落在胶囊按钮下方、留出间距
-const { pageHeaderStyle, pagingStyle } = useListHeader(104)
+const { pageHeaderStyle, pagingStyle } = useListHeader(104, 264)
 // 详情页调整成本后返回需要刷新
 const dirty = ref(false)
 

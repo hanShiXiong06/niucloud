@@ -4,11 +4,13 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\service\admin;
 
 use addon\hsx_erp\app\dict\ErpDict;
+use addon\hsx_erp\app\dict\FinanceDict;
 use addon\hsx_erp\app\model\ErpAccountLedger;
 use addon\hsx_erp\app\model\ErpMoneyLedger;
 use addon\hsx_erp\app\model\ErpOffset;
 use addon\hsx_erp\app\model\ErpOffsetLink;
 use addon\hsx_erp\app\model\ErpAsset;
+use addon\hsx_erp\app\model\ErpAssetLedger;
 use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
@@ -17,15 +19,21 @@ use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
 use addon\hsx_erp\app\model\ErpReceivable;
 use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
+use addon\hsx_erp\app\model\ErpSaleReturnOrder;
 use addon\hsx_erp\app\model\ErpSettlement;
 use addon\hsx_erp\app\model\ErpSettlementLink;
 use addon\hsx_erp\app\model\ErpCapitalAccount;
+use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpMoney;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
 
 class ErpFinanceService extends BaseAdminService
 {
+    /** @var int[] 当前请求在事务内写入、待事务提交后派发的结算领域事件。 */
+    private array $settlementOutboxIds = [];
+
     public function dashboard(array $where = []): array
     {
         $range = $this->dashboardRange($where);
@@ -33,59 +41,189 @@ class ErpFinanceService extends BaseAdminService
         $saleQuery = ErpSaleOrder::where([['site_id', '=', $this->site_id]]);
         $settlementQuery = ErpSettlement::where([['site_id', '=', $this->site_id]]);
         $stockQuery = ErpAsset::where([['site_id', '=', $this->site_id]]);
+        $operatingExpenseQuery = ErpPayable::where([['site_id', '=', $this->site_id], ['source_type', '=', 'hsx_erp.operating_expense']]);
+        $operatingIncomeQuery = ErpReceivable::where([['site_id', '=', $this->site_id], ['source_type', '=', 'hsx_erp.operating_income']]);
+        $purchaseTable = (new ErpPurchaseOrder())->getTable();
+        $saleTable = (new ErpSaleOrder())->getTable();
+        $effectivePurchaseQuery = ErpAsset::alias('a')
+            ->leftJoin($purchaseTable . ' o', 'o.id = a.purchase_order_id AND o.site_id = a.site_id')
+            ->where('a.site_id', '=', $this->site_id)
+            ->whereNotIn('a.status', [ErpDict::ASSET_RETURNED, ErpDict::ASSET_VOID]);
+        $effectiveSaleQuery = ErpSaleItem::alias('i')
+            ->leftJoin($saleTable . ' o', 'o.id = i.sale_order_id AND o.site_id = i.site_id')
+            ->where('i.site_id', '=', $this->site_id)
+            ->where('i.status', '=', ErpDict::ASSET_SOLD);
 
         if ($range['start_at'] > 0) {
             $purchaseQuery->where('purchase_at', '>=', $range['start_at']);
             $saleQuery->where('sale_at', '>=', $range['start_at']);
-            $settlementQuery->where('confirmed_at', '>=', $range['start_at']);
+            $settlementQuery->whereRaw('IF(confirmed_at > 0, confirmed_at, create_at) >= ' . (int)$range['start_at']);
+            $effectivePurchaseQuery->where('o.purchase_at', '>=', $range['start_at']);
+            $effectiveSaleQuery->where('o.sale_at', '>=', $range['start_at']);
+            $operatingExpenseQuery->where('occurred_at', '>=', $range['start_at']);
+            $operatingIncomeQuery->where('occurred_at', '>=', $range['start_at']);
         }
         if ($range['end_at'] > 0) {
             $purchaseQuery->where('purchase_at', '<=', $range['end_at']);
             $saleQuery->where('sale_at', '<=', $range['end_at']);
-            $settlementQuery->where('confirmed_at', '<=', $range['end_at']);
+            $settlementQuery->whereRaw('IF(confirmed_at > 0, confirmed_at, create_at) <= ' . (int)$range['end_at']);
+            $effectivePurchaseQuery->where('o.purchase_at', '<=', $range['end_at']);
+            $effectiveSaleQuery->where('o.sale_at', '<=', $range['end_at']);
+            $operatingExpenseQuery->where('occurred_at', '<=', $range['end_at']);
+            $operatingIncomeQuery->where('occurred_at', '<=', $range['end_at']);
         }
 
-        $purchaseAmount = (float)(clone $purchaseQuery)->where('status', '<>', 'void')->sum('total_cost');
-        $saleAmount = (float)(clone $saleQuery)->where('status', '<>', 'void')->sum('total_amount');
-        $profitAmount = (float)(clone $saleQuery)->where('status', '<>', 'void')->sum('profit');
+        $effectivePurchaseIds = array_values(array_unique(array_map('intval', (clone $effectivePurchaseQuery)->column('a.purchase_order_id'))));
+        $effectiveSaleIds = array_values(array_unique(array_map('intval', (clone $effectiveSaleQuery)->column('i.sale_order_id'))));
+        $purchaseAmount = (float)(clone $effectivePurchaseQuery)->sum('a.purchase_cost');
+        // 销售原价保留在 sale_price 中用于审计；经营口径必须使用当前净销售收入。
+        // 售后补差只会调整设备毛利，净销售收入 = 成本 + 当前毛利。
+        $saleOriginalAmount = (float)(clone $effectiveSaleQuery)->sum('i.sale_price');
+        $saleAmount = (float)(clone $effectiveSaleQuery)->sum(Db::raw('i.cost + i.profit'));
+        $profitAmount = (float)(clone $effectiveSaleQuery)->sum('i.profit');
         $receiptAmount = (float)(clone $settlementQuery)->where('settlement_type', '=', ErpDict::SETTLEMENT_RECEIPT)->sum('amount');
         $paymentAmount = (float)(clone $settlementQuery)->where('settlement_type', '=', ErpDict::SETTLEMENT_PAYMENT)->sum('amount');
         $offsetAmount = (float)(clone $settlementQuery)->where('settlement_type', '=', ErpDict::SETTLEMENT_OFFSET)->sum('amount');
+        $operatingExpenseAmount = (float)(clone $operatingExpenseQuery)->where('status', '<>', ErpDict::STATUS_VOID)->sum('amount');
+        $operatingIncomeAmount = (float)(clone $operatingIncomeQuery)->where('status', '<>', ErpDict::STATUS_VOID)->sum('amount');
+        $turnover = $this->todayTurnoverMetrics();
 
         $payableBase = ErpPayable::where([['site_id', '=', $this->site_id]])
-            ->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL]);
+            ->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL])
+            ->whereRaw('amount > settled_amount');
         $receivableBase = ErpReceivable::where([['site_id', '=', $this->site_id]])
-            ->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL]);
+            ->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL])
+            ->whereRaw('amount > settled_amount');
         $payableRemain = (float)(clone $payableBase)->sum('amount') - (float)(clone $payableBase)->sum('settled_amount');
         $receivableRemain = (float)(clone $receivableBase)->sum('amount') - (float)(clone $receivableBase)->sum('settled_amount');
 
         return [
             'range' => $range,
             'summary' => [
-                'purchase_count' => (int)(clone $purchaseQuery)->where('status', '<>', 'void')->count(),
+                'purchase_count' => count($effectivePurchaseIds),
                 'purchase_amount' => round($purchaseAmount, 2),
-                'sale_count' => (int)(clone $saleQuery)->where('status', '<>', 'void')->count(),
+                'sale_count' => count($effectiveSaleIds),
                 'sale_amount' => round($saleAmount, 2),
+                'sale_original_amount' => round($saleOriginalAmount, 2),
+                'sale_compensation_amount' => round(max(0, $saleOriginalAmount - $saleAmount), 2),
                 'profit_amount' => round($profitAmount, 2),
+                'operating_income_amount' => round($operatingIncomeAmount, 2),
+                'operating_expense_amount' => round($operatingExpenseAmount, 2),
+                'operating_profit_amount' => round($profitAmount + $operatingIncomeAmount - $operatingExpenseAmount, 2),
                 'receipt_amount' => round($receiptAmount, 2),
                 'payment_amount' => round($paymentAmount, 2),
                 'offset_amount' => round($offsetAmount, 2),
                 'payable_remain' => round(max(0, $payableRemain), 2),
                 'receivable_remain' => round(max(0, $receivableRemain), 2),
-                'stock_count' => (int)(clone $stockQuery)->whereIn('status', ['in_stock', 'pending_sale'])->count(),
-                'stock_cost' => round((float)(clone $stockQuery)->whereIn('status', ['in_stock', 'pending_sale'])->sum('total_cost'), 2),
+                'stock_count' => (int)(clone $stockQuery)->whereIn('status', ['in_stock', 'pending_sale', 'available_for_sale'])->count(),
+                'stock_cost' => round((float)(clone $stockQuery)->whereIn('status', ['in_stock', 'pending_sale', 'available_for_sale'])->sum('total_cost'), 2),
+                'today_sold_count' => $turnover['sold_count'],
+                'opening_stock_count' => $turnover['opening_stock_count'],
+                'turnover_rate' => $turnover['rate'],
             ],
             'todo' => [
-                'payable_count' => (int)ErpPayable::where([['site_id', '=', $this->site_id]])->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL])->count(),
-                'receivable_count' => (int)ErpReceivable::where([['site_id', '=', $this->site_id]])->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL])->count(),
+                'payable_count' => (int)(clone $payableBase)->count(),
+                'receivable_count' => (int)(clone $receivableBase)->count(),
                 'offset_party_count' => $this->offsetPartyCount(),
             ],
             'recent' => [
-                'purchases' => (clone $purchaseQuery)->field('id,purchase_no,party_name,total_cost,finance_status,purchase_at')->order('purchase_at desc,id desc')->limit(5)->select()->toArray(),
-                'sales' => (clone $saleQuery)->field('id,sale_no,party_name,total_amount,profit,finance_status,sale_at')->order('sale_at desc,id desc')->limit(5)->select()->toArray(),
-                'settlements' => (clone $settlementQuery)->field('id,settlement_no,party_name,settlement_type,amount,cash_direction,capital_account_name,confirmed_at')->order('confirmed_at desc,id desc')->limit(6)->select()->toArray(),
+                'purchases' => $this->dashboardRecentPurchases($effectivePurchaseIds),
+                'sales' => $this->dashboardRecentSales($effectiveSaleIds),
+                'settlements' => $this->dashboardRecentSettlements(clone $settlementQuery),
             ],
         ];
+    }
+
+    private function dashboardRecentPurchases(array $purchaseIds): array
+    {
+        if ($purchaseIds === []) return [];
+        $rows = ErpPurchaseOrder::where('site_id', '=', $this->site_id)
+            ->whereIn('id', $purchaseIds)
+            ->field('id,purchase_no,party_name,total_cost,finance_status,purchase_at')
+            ->order('purchase_at desc,id desc')->limit(5)->select()->toArray();
+        foreach ($rows as &$row) {
+            $totals = $this->effectivePurchasePayableTotals((int)$row['id']);
+            $row['total_cost'] = $totals['amount'];
+            $row['finance_status'] = ErpDict::financeStatus($totals['amount'], $totals['settled_amount']);
+        }
+        unset($row);
+        return $rows;
+    }
+
+    /** 今日动销率 = 今日有效销量 ÷ 今日零点库存。零点库存由当前库存反推当天状态流水。 */
+    private function todayTurnoverMetrics(): array
+    {
+        $start = strtotime(date('Y-m-d 00:00:00'));
+        $end = strtotime(date('Y-m-d 23:59:59'));
+        $sellableStatuses = [ErpDict::ASSET_IN_STOCK, 'pending_sale', 'available_for_sale'];
+        $currentStock = (int)ErpAsset::where('site_id', '=', $this->site_id)->whereIn('status', $sellableStatuses)->count();
+        $ledgers = ErpAssetLedger::where('site_id', '=', $this->site_id)
+            ->where('occurred_at', '>=', $start)->where('occurred_at', '<=', $end)
+            ->field('before_status,after_status')->select()->toArray();
+        $netChange = 0;
+        foreach ($ledgers as $ledger) {
+            $before = in_array((string)($ledger['before_status'] ?? ''), $sellableStatuses, true) ? 1 : 0;
+            $after = in_array((string)($ledger['after_status'] ?? ''), $sellableStatuses, true) ? 1 : 0;
+            $netChange += $after - $before;
+        }
+        $openingStock = max(0, $currentStock - $netChange);
+        $saleTable = (new ErpSaleOrder())->getTable();
+        $soldCount = (int)ErpSaleItem::alias('i')->leftJoin($saleTable . ' o', 'o.id = i.sale_order_id AND o.site_id = i.site_id')
+            ->where('i.site_id', '=', $this->site_id)->where('i.status', '=', ErpDict::ASSET_SOLD)
+            ->where('o.sale_at', '>=', $start)->where('o.sale_at', '<=', $end)->count();
+        return ['sold_count' => $soldCount, 'opening_stock_count' => $openingStock, 'rate' => $openingStock > 0 ? round($soldCount / $openingStock * 100, 2) : 0.0];
+    }
+
+    private function dashboardRecentSettlements($query): array
+    {
+        $rows = $query->field('id,settlement_no,party_id,party_name,settlement_type,amount,cash_direction,capital_account_name,IF(confirmed_at > 0, confirmed_at, create_at) as confirmed_at')
+            ->order('confirmed_at desc,id desc')->limit(6)->select()->toArray();
+        if ($rows === []) return [];
+        $links = ErpSettlementLink::where('site_id', '=', $this->site_id)
+            ->whereIn('settlement_id', array_column($rows, 'id'))
+            ->field('settlement_id,target_type,target_id,asset_id,biz_scene,category_name,applied_amount')
+            ->order('id asc')->select()->toArray();
+        $linkMap = [];
+        foreach ($links as $link) $linkMap[(int)$link['settlement_id']][] = $link;
+        foreach ($rows as &$row) {
+            $targets = $linkMap[(int)$row['id']] ?? [];
+            $row['targets'] = $targets;
+            $row['target_count'] = count($targets);
+            $row['target_type'] = (string)($targets[0]['target_type'] ?? '');
+            $row['target_id'] = (int)($targets[0]['target_id'] ?? 0);
+            $row['target_source_no'] = '';
+            if ($row['target_id'] > 0 && $row['target_type'] === ErpDict::TARGET_PAYABLE) {
+                $row['target_source_no'] = (string)(ErpPayable::where([['site_id', '=', $this->site_id], ['id', '=', $row['target_id']]])->value('source_no') ?: '');
+            } elseif ($row['target_id'] > 0 && $row['target_type'] === ErpDict::TARGET_RECEIVABLE) {
+                $row['target_source_no'] = (string)(ErpReceivable::where([['site_id', '=', $this->site_id], ['id', '=', $row['target_id']]])->value('source_no') ?: '');
+            }
+            $row['biz_scene'] = count(array_unique(array_filter(array_column($targets, 'biz_scene')))) === 1 ? (string)($targets[0]['biz_scene'] ?? '') : 'mixed';
+        }
+        unset($row);
+        return $rows;
+    }
+
+    private function dashboardRecentSales(array $saleIds): array
+    {
+        if ($saleIds === []) return [];
+        $rows = ErpSaleOrder::where('site_id', '=', $this->site_id)
+            ->whereIn('id', $saleIds)
+            ->field('id,sale_no,party_name,total_amount,profit,finance_status,sale_at')
+            ->order('sale_at desc,id desc')->limit(5)->select()->toArray();
+        foreach ($rows as &$row) {
+            $items = ErpSaleItem::where([['site_id', '=', $this->site_id], ['sale_order_id', '=', (int)$row['id']], ['status', '=', ErpDict::ASSET_SOLD]])
+                ->field('sale_price,cost,profit')->select()->toArray();
+            $row['original_total_amount'] = round(array_sum(array_column($items, 'sale_price')), 2);
+            $row['total_amount'] = round(array_sum(array_map(static fn(array $item): float => (float)$item['cost'] + (float)$item['profit'], $items)), 2);
+            $row['compensation_amount'] = round(max(0, (float)$row['original_total_amount'] - (float)$row['total_amount']), 2);
+            $row['profit'] = round(array_sum(array_column($items, 'profit')), 2);
+            $receivable = ErpReceivable::where([['site_id', '=', $this->site_id], ['source_type', '=', 'sale'], ['source_id', '=', (int)$row['id']]])->findOrEmpty();
+            if (!$receivable->isEmpty()) {
+                $row['finance_status'] = ErpDict::financeStatus((float)$receivable->amount, (float)$receivable->settled_amount);
+            }
+        }
+        unset($row);
+        return $rows;
     }
 
     public function payablePage(array $where): array
@@ -110,7 +248,27 @@ class ErpFinanceService extends BaseAdminService
             ];
         }
         if ((string)$receivable->source_type !== 'sale' || (int)$receivable->source_id <= 0) {
-            return ['items' => [], 'settlements' => $settlements];
+            $assetId = (int)($receivable->asset_id ?? 0);
+            if ($assetId <= 0) {
+                return ['source_type' => (string)$receivable->source_type, 'items' => [], 'settlements' => $settlements];
+            }
+            $asset = ErpAsset::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', $assetId],
+            ])->field('id,asset_no,imei,sn,model,spec,status,warehouse_name,location_name,total_cost')->findOrEmpty();
+            if ($asset->isEmpty()) {
+                return ['source_type' => (string)$receivable->source_type, 'items' => [], 'settlements' => $settlements];
+            }
+            $item = $asset->toArray();
+            $item['asset_id'] = $assetId;
+            $item['sale_item_id'] = 0;
+            $item['sale_price'] = round((float)$receivable->amount, 2);
+            $item['cost'] = 0.0;
+            $item['profit'] = 0.0;
+            $item['allocated_settled'] = round((float)$receivable->settled_amount, 2);
+            $item['allocated_remain'] = max(0, round((float)$receivable->amount - (float)$receivable->settled_amount, 2));
+            $item['remark'] = (string)($receivable->business_reason ?? $receivable->remark ?? '');
+            return ['source_type' => (string)$receivable->source_type, 'items' => [$item], 'settlements' => $settlements];
         }
 
         $assetTable = (new ErpAsset())->getTable();
@@ -176,7 +334,7 @@ class ErpFinanceService extends BaseAdminService
             $order = ErpSaleOrder::where([
                 ['site_id', '=', $this->site_id],
                 ['id', '=', (int)$receivable->source_id],
-            ])->field('id,sale_no,sale_channel,settle_method,salesman_name,total_amount,received_amount,receivable_amount,status,finance_status,remark,sale_at,create_at,update_at')->find();
+            ])->field('id,sale_no,sale_channel,sale_channel_key,channel_source_plugin,channel_source_key,origin_plugin,origin_plugin_name,origin_type,origin_name,origin_id,origin_no,settle_method,salesman_name,total_amount,received_amount,receivable_amount,status,finance_status,remark,sale_at,create_at,update_at')->find();
             if ($order) {
                 $row['source_order'] = $order->toArray();
                 $row['batch_no'] = (string)($row['source_order']['sale_no'] ?? $receivable->source_no);
@@ -187,14 +345,29 @@ class ErpFinanceService extends BaseAdminService
             $order = ErpPurchaseReturnOrder::where([
                 ['site_id', '=', $this->site_id],
                 ['id', '=', (int)$receivable->source_id],
-            ])->field('id,return_no,purchase_order_id,purchase_no,refund_mode,total_amount,status,remark,occurred_at,create_at,update_at')->find();
+            ])->field('id,return_no,purchase_order_id,purchase_no,party_name,operator_name,refund_mode,total_amount,status,remark,occurred_at,create_at,update_at')->find();
             if ($order) {
                 $row['source_order'] = $order->toArray();
                 $row['batch_no'] = (string)($row['source_order']['return_no'] ?? $receivable->source_no);
                 $row['purchase_no'] = (string)($row['source_order']['purchase_no'] ?? '');
                 $row['return_remark'] = (string)($row['source_order']['remark'] ?? '');
+                $row['business_reason'] = sprintf(
+                    '采购退货已完成，已付款部分形成供货商退款应收 %s；财务需核对供货商实际退款到账。',
+                    '¥' . number_format((float)$receivable->amount, 2, '.', '')
+                );
             }
         }
+
+        $sourceContext = array_merge($row, (array)($row['source_order'] ?? []));
+        if (empty($sourceContext['channel_code'])) {
+            $sourceContext['channel_code'] = (string)($sourceContext['sale_channel_key'] ?? '');
+        }
+        if (empty($sourceContext['channel_name'])) {
+            $sourceContext['channel_name'] = (string)($sourceContext['sale_channel'] ?? '');
+        }
+        $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($sourceContext, 'receivable');
+        $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
+        $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
 
         return $row;
     }
@@ -216,7 +389,8 @@ class ErpFinanceService extends BaseAdminService
         $fallbackSettled = max(0, round($settledAmount - $itemSettledTotal, 2));
         foreach ($items as &$item) {
             $returnCost = round((float)($item['return_cost'] ?? 0), 2);
-            $refundAmount = round((float)($item['paid_amount'] ?? $returnCost), 2);
+            $refundAmount = $this->purchaseReturnItemRefundAmount($item);
+            $offsetAmount = round((float)($item['unpaid_offset_amount'] ?? 0), 2);
             $allocated = round((float)($itemSettledMap[(int)$item['asset_id']] ?? 0) + $this->allocatedAmount($refundAmount, $totalAmount, $fallbackSettled), 2);
             $item['id'] = (int)$item['asset_id'];
             $item['sale_price'] = $refundAmount;
@@ -225,10 +399,30 @@ class ErpFinanceService extends BaseAdminService
             $item['allocated_settled'] = $allocated;
             $item['allocated_remain'] = max(0, round($refundAmount - $allocated, 2));
             $item['source_label'] = '采购退货退款';
+            if ($refundAmount > 0.0001 && $offsetAmount > 0.0001) {
+                $item['settlement_explanation'] = sprintf('未付款 ¥%.2f 已冲销应付；已付款部分需收回 ¥%.2f。', $offsetAmount, $refundAmount);
+            } elseif ($refundAmount > 0.0001) {
+                $item['settlement_explanation'] = sprintf('该设备采购款已支付，退货后需向供货商收回 ¥%.2f。', $refundAmount);
+            } else {
+                $item['settlement_explanation'] = sprintf('该设备未付款，已冲销应付 ¥%.2f，无需实际收款。', $offsetAmount);
+            }
         }
         unset($item);
 
         return $items;
+    }
+
+    private function purchaseReturnItemRefundAmount(array $item): float
+    {
+        $policy = json_decode((string)($item['policy_json'] ?? ''), true);
+        if (is_array($policy) && array_key_exists('refund_amount', $policy)) {
+            return max(0, round((float)$policy['refund_amount'], 2));
+        }
+        $stored = round((float)($item['refund_receivable_amount'] ?? 0), 2);
+        if ($stored > 0.0001 || (float)($item['paid_amount'] ?? 0) <= 0.0001) {
+            return max(0, $stored);
+        }
+        return max(0, round((float)($item['paid_amount'] ?? 0), 2));
     }
 
     private function receivableItemSettledMap(int $receivableId): array
@@ -262,10 +456,23 @@ class ErpFinanceService extends BaseAdminService
             $kw = trim((string)$where['keyword']);
             $query->whereLike('ledger_no|party_name|source_no|remark', '%' . $kw . '%');
         }
-        return $query->order('id desc')->paginate([
+        $page = $query->order('id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
+        foreach ($page['data'] as &$row) {
+            $bizType = trim((string)($row['biz_type'] ?? ''));
+            $sourceType = trim((string)($row['source_type'] ?? ''));
+            $direction = (string)($row['direction'] ?? '');
+            $amount = round((float)($row['amount'] ?? 0), 2);
+            $row['biz_type_text'] = FinanceDict::bizTypeText($bizType);
+            $row['source_type_text'] = FinanceDict::sourceTypeText($sourceType);
+            $row['direction_text'] = $direction === 'decrease' ? '账款减少' : '账款增加';
+            $row['amount_sign'] = $direction === 'decrease' ? '-' : '+';
+            $row['signed_amount'] = $direction === 'decrease' ? -$amount : $amount;
+        }
+        unset($row);
+        return $page;
     }
 
     public function moneyLedgerPage(array $where): array
@@ -273,7 +480,7 @@ class ErpFinanceService extends BaseAdminService
         $query = ErpMoneyLedger::where([['site_id', '=', $this->site_id]]);
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('ledger_no|party_name|capital_account_name|remark', '%' . $kw . '%');
+            $query->whereLike('ledger_no|party_name|capital_account_name|category_name|remark', '%' . $kw . '%');
         }
         return $query->order('id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
@@ -336,13 +543,23 @@ class ErpFinanceService extends BaseAdminService
 
         $ids = array_column($page['data'], 'id');
         $linksBySettlement = [];
+        $moneyBySettlement = [];
         if (!empty($ids)) {
             $linksBySettlement = $this->settlementTargetDetails(array_map('intval', $ids));
+            $moneyRows = ErpMoneyLedger::where([['site_id', '=', $this->site_id]])
+                ->whereIn('settlement_id', array_map('intval', $ids))
+                ->order('id asc')
+                ->select()
+                ->toArray();
+            foreach ($moneyRows as $moneyRow) {
+                $moneyBySettlement[(int)$moneyRow['settlement_id']][] = $moneyRow;
+            }
         }
         foreach ($page['data'] as &$row) {
             $row['settlement_type_text'] = self::settlementTypeText((string)$row['settlement_type']);
             $row['pay_method_text'] = $this->payMethodText($row);
             $row['links'] = $linksBySettlement[(int)$row['id']] ?? [];
+            $row['money_ledgers'] = $moneyBySettlement[(int)$row['id']] ?? [];
         }
         unset($row);
         return $page;
@@ -388,10 +605,14 @@ class ErpFinanceService extends BaseAdminService
         if ($amount <= 0) {
             throw new CommonException('付款金额必须大于0');
         }
-        $settlementId = 0;
-        Db::transaction(function () use ($payableId, $amount, $data, &$settlementId) {
-            $settlementId = $this->confirmPaymentInTransaction($payableId, $amount, $data);
-        });
+        $settlementId = $this->runIdempotentSettlement($data, ErpDict::SETTLEMENT_PAYMENT, function (array $requestData) use ($payableId, $amount): int {
+            $settlementId = 0;
+            Db::transaction(function () use ($payableId, $amount, $requestData, &$settlementId) {
+                $settlementId = $this->confirmPaymentInTransaction($payableId, $amount, $requestData);
+            });
+            return $settlementId;
+        }, ['amount' => $amount, 'target_type' => ErpDict::TARGET_PAYABLE, 'target_ids' => [$payableId]]);
+        $this->flushSettlementDomainEvents();
         return $settlementId;
     }
 
@@ -403,41 +624,198 @@ class ErpFinanceService extends BaseAdminService
         if ($amount <= 0) {
             throw new CommonException('付款金额必须大于0');
         }
-        $settlementIds = [];
-        Db::transaction(function () use ($partyId, $amount, $data, &$settlementIds) {
-            $left = round($amount, 2);
-            $payables = ErpPayable::where([
+        $expectedIds = array_values(array_unique(array_filter(array_map('intval', array_merge(
+            (array)($data['payable_ids'] ?? []), [(int)($data['payable_id'] ?? 0)]
+        )))));
+        $settlementId = $this->runIdempotentSettlement($data, ErpDict::SETTLEMENT_PAYMENT, function (array $requestData) use ($partyId, $amount): int {
+            $settlementId = 0;
+            Db::transaction(function () use ($partyId, $amount, $requestData, &$settlementId) {
+                $left = round($amount, 2);
+                $items = [];
+                $payables = $this->partyPaymentTargets($partyId, $requestData);
+                foreach ($payables as $row) {
+                    if ($left <= 0) {
+                        break;
+                    }
+                    $remain = round((float)$row['amount'] - (float)$row['settled_amount'], 2);
+                    if ($remain <= 0) {
+                        continue;
+                    }
+                    $apply = min($left, $remain);
+                    $items[] = ['payable_id' => (int)$row['id'], 'amount' => $apply];
+                    $left = round($left - $apply, 2);
+                }
+                if ($left > 0.0001) {
+                    throw new CommonException('付款金额不能大于当前来源批次剩余应付');
+                }
+                $settlementId = $this->confirmPayableItemsInTransaction($partyId, $items, $requestData);
+            });
+            return $settlementId;
+        }, array_filter([
+            'amount' => $amount,
+            'party_id' => $partyId,
+            'target_type' => $expectedIds !== [] ? ErpDict::TARGET_PAYABLE : '',
+            'target_ids' => $expectedIds,
+            'target_match' => 'subset',
+            'source_type' => trim((string)($data['source_type'] ?? '')),
+            'batch_id' => (int)($data['purchase_order_id'] ?? 0) > 0
+                ? (int)$data['purchase_order_id']
+                : ((int)($data['source_id'] ?? 0) > 0 ? (int)$data['source_id'] : (int)($data['batch_id'] ?? 0)),
+            'batch_no' => trim((string)($data['batch_no'] ?? '')),
+        ], static fn($value): bool => $value !== '' && $value !== []));
+        $this->flushSettlementDomainEvents();
+        return [$settlementId];
+    }
+
+    /**
+     * “整体付款”只能在用户明确选择的应付或当前来源批次内分配，绝不按主体跨批次猜账。
+     *
+     * 兼容两种请求：
+     * 1. payable_ids / payable_id：前端明确传应付主键（推荐）；
+     * 2. source_type + purchase_order_id|source_id|batch_id：旧整体付款按当前批次展开。
+     */
+    private function partyPaymentTargets(int $partyId, array $data): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', array_merge(
+            (array)($data['payable_ids'] ?? []),
+            [(int)($data['payable_id'] ?? 0)]
+        )))));
+        $sourceType = trim((string)($data['source_type'] ?? ''));
+        $batchId = (int)($data['purchase_order_id'] ?? 0);
+        if ($batchId <= 0) $batchId = (int)($data['source_id'] ?? 0);
+        if ($batchId <= 0) $batchId = (int)($data['batch_id'] ?? 0);
+
+        $query = ErpPayable::where([
+            ['site_id', '=', $this->site_id],
+            ['party_id', '=', $partyId],
+        ])->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL]);
+
+        if ($ids !== []) {
+            $query->whereIn('id', $ids);
+        } else {
+            if ($sourceType === '' || $batchId <= 0) {
+                throw new CommonException('整体付款必须提交 payable_ids，或明确当前来源类型和批次');
+            }
+            $this->applyPayableBatchScope($query, $sourceType, $batchId);
+        }
+
+        $payables = $query->order('occurred_at asc,id asc')->lock(true)->select();
+        if ($payables->isEmpty()) {
+            throw new CommonException('当前来源批次没有可付款应付，请刷新后重试');
+        }
+        if ($ids !== [] && $payables->count() !== count($ids)) {
+            throw new CommonException('部分应付款不存在、已结清或已变化，请刷新后重试');
+        }
+
+        $this->assertSinglePayableBatch($payables, $sourceType, $batchId, trim((string)($data['batch_no'] ?? '')));
+        return $payables->toArray();
+    }
+
+    private function applyPayableBatchScope($query, string $sourceType, int $batchId): void
+    {
+        if ($sourceType === 'purchase') {
+            $assetIds = ErpAsset::where([
                 ['site_id', '=', $this->site_id],
-                ['party_id', '=', $partyId],
-            ])->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL])
-                ->order('occurred_at asc,id asc')
-                ->select()
-                ->toArray();
-            foreach ($payables as $row) {
-                if ($left <= 0) {
-                    break;
+                ['purchase_order_id', '=', $batchId],
+            ])->column('id');
+            $query->where(function ($scope) use ($batchId, $assetIds) {
+                $scope->where(function ($purchase) use ($batchId) {
+                    $purchase->where('source_type', '=', 'purchase')->where('source_id', '=', $batchId);
+                });
+                if ($assetIds !== []) {
+                    $scope->whereOr(function ($assets) use ($assetIds) {
+                        $assets->where('source_type', '=', 'purchase_asset')->whereIn('source_id', array_map('intval', $assetIds));
+                    });
                 }
-                $remain = round((float)$row['amount'] - (float)$row['settled_amount'], 2);
-                if ($remain <= 0) {
-                    continue;
-                }
-                $apply = min($left, $remain);
-                $settlementIds[] = $this->confirmPaymentInTransaction((int)$row['id'], $apply, $data);
-                $left = round($left - $apply, 2);
-            }
-            if ($left > 0.0001) {
-                throw new CommonException('付款金额不能大于该供应商剩余应付');
-            }
+            });
+            return;
+        }
+
+        if (in_array($sourceType, ['refurbish', 'sale_return'], true)) {
+            $query->where('source_type', '=', $sourceType)->where('source_id', '=', $batchId);
+            return;
+        }
+
+        $query->where('source_id', '=', $batchId)->where(function ($scope) use ($sourceType) {
+            $scope->where('source_type', '=', $sourceType)->whereOr('biz_scene', '=', $sourceType);
         });
-        return $settlementIds;
+    }
+
+    private function assertSinglePayableBatch(iterable $payables, string $expectedSourceType = '', int $expectedBatchId = 0, string $expectedBatchNo = ''): void
+    {
+        $rows = [];
+        $purchaseAssetIds = [];
+        foreach ($payables as $payable) {
+            $row = is_array($payable) ? $payable : $payable->toArray();
+            $rows[] = $row;
+            if ((string)($row['source_type'] ?? '') === 'purchase_asset') {
+                $purchaseAssetIds[] = (int)($row['source_id'] ?? 0);
+            }
+        }
+        $assetBatchMap = $purchaseAssetIds === [] ? [] : ErpAsset::where([['site_id', '=', $this->site_id]])
+            ->whereIn('id', array_values(array_unique($purchaseAssetIds)))
+            ->column('purchase_order_id', 'id');
+
+        $signatures = [];
+        foreach ($rows as $row) {
+            $rawType = (string)($row['source_type'] ?? '');
+            $sourceType = match ($rawType) {
+                'purchase', 'purchase_asset' => 'purchase',
+                'refurbish' => 'refurbish',
+                'sale_return' => 'sale_return',
+                default => trim((string)($row['biz_scene'] ?? '')) ?: $rawType,
+            };
+            $batchId = $rawType === 'purchase_asset'
+                ? (int)($assetBatchMap[(int)($row['source_id'] ?? 0)] ?? 0)
+                : (int)($row['source_id'] ?? 0);
+            $batchNo = trim((string)($row['source_no'] ?? $row['origin_no'] ?? ''));
+            $signatures[$sourceType . ':' . $batchId] = [$sourceType, $batchId, $batchNo];
+        }
+        if (count($signatures) !== 1) {
+            throw new CommonException('整体付款只能核销当前一个来源批次，请逐批付款');
+        }
+        [$actualSourceType, $actualBatchId, $actualBatchNo] = array_values($signatures)[0];
+        if ($actualSourceType === 'purchase' && $actualBatchId > 0) {
+            $actualBatchNo = (string)ErpPurchaseOrder::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', $actualBatchId],
+            ])->value('purchase_no');
+        }
+        if ($expectedSourceType !== '' && $actualSourceType !== $expectedSourceType) {
+            throw new CommonException('应付款来源已变化，请刷新后重试');
+        }
+        if ($expectedBatchId > 0 && $actualBatchId !== $expectedBatchId) {
+            throw new CommonException('应付款批次已变化，请刷新后重试');
+        }
+        if ($expectedBatchNo !== '' && $actualBatchNo !== '' && $actualBatchNo !== $expectedBatchNo) {
+            throw new CommonException('应付款来源单号已变化，请刷新后重试');
+        }
     }
 
     public function confirmPayableItemsPayment(int $partyId, array $items, array $data): int
     {
-        $settlementId = 0;
-        Db::transaction(function () use ($partyId, $items, $data, &$settlementId) {
-            $settlementId = $this->confirmPayableItemsInTransaction($partyId, $items, $data);
-        });
+        $expectedIds = [];
+        $expectedAmount = 0.0;
+        foreach ($items as $item) {
+            $payableId = (int)($item['payable_id'] ?? 0);
+            $itemAmount = round((float)($item['amount'] ?? 0), 2);
+            if ($payableId <= 0 || $itemAmount <= 0) continue;
+            $expectedIds[] = $payableId;
+            $expectedAmount = round($expectedAmount + $itemAmount, 2);
+        }
+        $settlementId = $this->runIdempotentSettlement($data, ErpDict::SETTLEMENT_PAYMENT, function (array $requestData) use ($partyId, $items): int {
+            $settlementId = 0;
+            Db::transaction(function () use ($partyId, $items, $requestData, &$settlementId) {
+                $settlementId = $this->confirmPayableItemsInTransaction($partyId, $items, $requestData);
+            });
+            return $settlementId;
+        }, [
+            'amount' => $expectedAmount,
+            'party_id' => $partyId,
+            'target_type' => ErpDict::TARGET_PAYABLE,
+            'target_ids' => array_values(array_unique($expectedIds)),
+        ]);
+        $this->flushSettlementDomainEvents();
         return $settlementId;
     }
 
@@ -456,11 +834,12 @@ class ErpFinanceService extends BaseAdminService
             $applyMap[$payableId] = round(($applyMap[$payableId] ?? 0) + $amount, 2);
         }
         if (empty($applyMap)) {
-            throw new CommonException('请选择要付款的设备');
+            throw new CommonException('请选择要付款的应付明细');
         }
         $payables = ErpPayable::where([['site_id', '=', $this->site_id]])
             ->whereIn('id', array_keys($applyMap))
             ->order('id asc')
+            ->lock(true)
             ->select();
         if ($payables->count() !== count($applyMap)) {
             throw new CommonException('应付款不存在或已变化');
@@ -473,15 +852,15 @@ class ErpFinanceService extends BaseAdminService
                 $firstPayable = $payable;
             }
             if ((int)$payable->party_id !== $partyId) {
-                throw new CommonException('只能处理同一个供应商的应付款');
+                throw new CommonException('只能处理同一个往来主体的应付款');
             }
             if (!in_array((string)$payable->status, [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL], true)) {
-                throw new CommonException('只能付款待付款或部分付款的设备');
+                throw new CommonException('只能付款待付款或部分付款的应付明细');
             }
             $amount = (float)$applyMap[(int)$payable->id];
             $remain = round((float)$payable->amount - (float)$payable->settled_amount, 2);
             if ($amount > $remain + 0.0001) {
-                throw new CommonException('付款金额不能大于设备剩余应付');
+                throw new CommonException('付款金额不能大于该明细剩余应付');
             }
             $totalAmount = round($totalAmount + $amount, 2);
         }
@@ -516,7 +895,8 @@ class ErpFinanceService extends BaseAdminService
         }
 
         $balanceAfter = $this->adjustCapitalAccount((int)($account['id'] ?? 0), 'out', $totalAmount);
-        (new ErpLedgerService())->money([
+        $categoryMeta = $this->combinedCategoryMeta($payables);
+        (new ErpLedgerService())->money(array_merge([
             'settlement_id' => $settlementId,
             'capital_account_id' => (int)($account['id'] ?? 0),
             'capital_account_name' => (string)($account['name'] ?? ''),
@@ -525,11 +905,13 @@ class ErpFinanceService extends BaseAdminService
             'balance_after' => $balanceAfter,
             'party_id' => $partyId,
             'party_name' => (string)$firstPayable->party_name,
+            'voucher_urls' => $data['voucher_urls'] ?? '',
             'remark' => (string)($data['remark'] ?? '确认付款'),
-        ]);
+        ], $categoryMeta));
         foreach ($purchaseIds as $purchaseId) {
             $this->refreshPurchaseFinance($purchaseId);
         }
+        $this->queueSettlementCompletedEvent($settlementId);
         return $settlementId;
     }
 
@@ -538,7 +920,10 @@ class ErpFinanceService extends BaseAdminService
         if ($amount <= 0) {
             throw new CommonException('付款金额必须大于0');
         }
-        $payable = $this->findPayable($payableId);
+        $payable = $this->findPayable($payableId, true);
+        if (!in_array((string)$payable->status, [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL], true)) {
+            throw new CommonException('只能付款待付款或部分付款的应付款');
+        }
         $remain = round((float)$payable->amount - (float)$payable->settled_amount, 2);
         if ($amount > $remain + 0.0001) {
             throw new CommonException('付款金额不能大于剩余应付');
@@ -548,7 +933,7 @@ class ErpFinanceService extends BaseAdminService
         $settlementId = (int)$settlement->id;
         $this->applyPayable($payable, $amount, $settlementId);
         $balanceAfter = $this->adjustCapitalAccount((int)($account['id'] ?? 0), 'out', $amount);
-        (new ErpLedgerService())->money([
+        (new ErpLedgerService())->money(array_merge([
             'settlement_id' => $settlementId,
             'capital_account_id' => (int)($account['id'] ?? 0),
             'capital_account_name' => (string)($account['name'] ?? ''),
@@ -557,20 +942,23 @@ class ErpFinanceService extends BaseAdminService
             'balance_after' => $balanceAfter,
             'party_id' => (int)$payable->party_id,
             'party_name' => (string)$payable->party_name,
+            'voucher_urls' => $data['voucher_urls'] ?? '',
             'remark' => (string)($data['remark'] ?? '确认付款'),
-        ]);
+        ], $this->targetCategoryMeta($payable)));
         (new ErpLedgerService())->account([
             'biz_type' => 'payment',
             'direction' => 'decrease',
             'amount' => $amount,
             'party_id' => (int)$payable->party_id,
             'party_name' => (string)$payable->party_name,
+            'asset_id' => $this->assetIdFromPayable($payable),
             'source_type' => 'payable',
             'source_id' => (int)$payable->id,
             'source_no' => (string)$payable->payable_no,
             'remark' => (string)($data['remark'] ?? '财务确认付款'),
         ]);
         $this->refreshPurchaseByPayable($payable);
+        $this->queueSettlementCompletedEvent($settlementId);
         return $settlementId;
     }
 
@@ -579,22 +967,31 @@ class ErpFinanceService extends BaseAdminService
         if ($amount <= 0) {
             throw new CommonException('收款金额必须大于0');
         }
-        $settlementId = 0;
-        Db::transaction(function () use ($receivableId, $amount, $data, &$settlementId) {
-            $receivable = $this->findReceivable($receivableId);
-            $receiptApply = $this->applyReceiptItems($receivable, (array)($data['items'] ?? []), $amount);
+        $expectedAmount = round(array_sum(array_map(
+            static fn(array $item): float => max(0, round((float)($item['amount'] ?? 0), 2)),
+            array_values(array_filter((array)($data['items'] ?? []), 'is_array'))
+        )), 2);
+        if ($expectedAmount <= 0) $expectedAmount = $amount;
+        $settlementId = $this->runIdempotentSettlement($data, ErpDict::SETTLEMENT_RECEIPT, function (array $requestData) use ($receivableId, $amount): int {
+            $settlementId = 0;
+            Db::transaction(function () use ($receivableId, $amount, $requestData, &$settlementId) {
+            $receivable = $this->findReceivable($receivableId, true);
+            if (!in_array((string)$receivable->status, [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL], true)) {
+                throw new CommonException('只能收款待收款或部分收款的应收款');
+            }
+            $receiptApply = $this->applyReceiptItems($receivable, (array)($requestData['items'] ?? []), $amount);
             $amount = (float)$receiptApply['amount'];
             $receiptItems = (array)$receiptApply['items'];
             $remain = round((float)$receivable->amount - (float)$receivable->settled_amount, 2);
             if ($amount > $remain + 0.0001) {
                 throw new CommonException('收款金额不能大于剩余应收');
             }
-            $account = $this->resolveAccount((int)($data['capital_account_id'] ?? 0));
-            $settlement = $this->createSettlement($receivable, ErpDict::SETTLEMENT_RECEIPT, $amount, 'in', $account, $data);
+            $account = $this->resolveAccount((int)($requestData['capital_account_id'] ?? 0));
+            $settlement = $this->createSettlement($receivable, ErpDict::SETTLEMENT_RECEIPT, $amount, 'in', $account, $requestData);
             $settlementId = (int)$settlement->id;
             $this->applyReceivable($receivable, $amount, $settlementId);
             $balanceAfter = $this->adjustCapitalAccount((int)($account['id'] ?? 0), 'in', $amount);
-            (new ErpLedgerService())->money([
+            (new ErpLedgerService())->money(array_merge([
                 'settlement_id' => $settlementId,
                 'capital_account_id' => (int)($account['id'] ?? 0),
                 'capital_account_name' => (string)($account['name'] ?? ''),
@@ -603,13 +1000,18 @@ class ErpFinanceService extends BaseAdminService
                 'balance_after' => $balanceAfter,
                 'party_id' => (int)$receivable->party_id,
                 'party_name' => (string)$receivable->party_name,
-                'remark' => (string)($data['remark'] ?? '确认收款'),
-            ]);
-            $this->writeReceiptAccountLedgers($receivable, $amount, $receiptItems, (string)($data['remark'] ?? '财务确认收款'));
+                'voucher_urls' => $requestData['voucher_urls'] ?? '',
+                'remark' => (string)($requestData['remark'] ?? '确认收款'),
+            ], $this->targetCategoryMeta($receivable)));
+            $this->writeReceiptAccountLedgers($receivable, $amount, $receiptItems, (string)($requestData['remark'] ?? '财务确认收款'));
             if ((string)$receivable->source_type === 'sale') {
                 $this->refreshSaleFinance((int)$receivable->source_id);
             }
-        });
+            $this->queueSettlementCompletedEvent($settlementId);
+            });
+            return $settlementId;
+        }, ['amount' => $expectedAmount, 'target_type' => ErpDict::TARGET_RECEIVABLE, 'target_ids' => [$receivableId]]);
+        $this->flushSettlementDomainEvents();
         return $settlementId;
     }
 
@@ -617,6 +1019,18 @@ class ErpFinanceService extends BaseAdminService
     {
         if ((string)$receivable->source_type === 'purchase_return') {
             return $this->applyReceiptPurchaseReturnItems($receivable, $items, $amount);
+        }
+        if ((string)$receivable->source_type !== 'sale') {
+            $assetId = (int)($receivable->asset_id ?? 0);
+            if ($assetId <= 0) return ['amount' => $amount, 'items' => []];
+            $itemAmount = $amount;
+            foreach ($items as $item) {
+                if ((int)($item['asset_id'] ?? $item['id'] ?? 0) !== $assetId) continue;
+                $candidate = round((float)($item['amount'] ?? 0), 2);
+                if ($candidate > 0) $itemAmount = $candidate;
+                break;
+            }
+            return ['amount' => $itemAmount, 'items' => [['asset_id' => $assetId, 'amount' => $itemAmount]]];
         }
         return $this->applyReceiptSaleItems($receivable, $items, $amount);
     }
@@ -752,7 +1166,7 @@ class ErpFinanceService extends BaseAdminService
             $assetId = (int)$returnItem->asset_id;
             $receiptAmount = (float)$applyMap[$assetId];
             $settled = (float)($itemSettledMap[$assetId] ?? 0);
-            $refundAmount = round((float)$returnItem->paid_amount, 2);
+            $refundAmount = $this->purchaseReturnItemRefundAmount($returnItem->toArray());
             if (round($settled + $receiptAmount, 2) > $refundAmount + 0.0001) {
                 throw new CommonException('设备本次收款不能大于该设备剩余应收');
             }
@@ -808,7 +1222,19 @@ class ErpFinanceService extends BaseAdminService
         if ($partyId <= 0) {
             throw new CommonException('请选择供应商');
         }
-        (new ErpWarehouseService())->ensureReady();
+        // 未指定业务类型时用于折账：必须返回该主体全部应付事实，不能只返回采购本金。
+        if (trim((string)($where['source_type'] ?? '')) === '') {
+            return $this->allPayableItems($partyId, $where);
+        }
+        if ((string)($where['source_type'] ?? '') === 'sale_return') {
+            return $this->saleReturnPayableItems($partyId, $where);
+        }
+        if ((string)($where['source_type'] ?? '') === 'refurbish') {
+            return $this->refurbishPayableItems($partyId, $where);
+        }
+        if (!empty($where['source_type']) && (string)$where['source_type'] !== 'purchase') {
+            return $this->externalPayableItems($partyId, $where);
+        }
         $orderTable = (new ErpPurchaseOrder())->getTable();
         $payableTable = (new ErpPayable())->getTable();
         $query = ErpAsset::alias('a')
@@ -832,14 +1258,31 @@ class ErpFinanceService extends BaseAdminService
             'a.warehouse_name',
             'a.location_name',
             'o.purchase_no',
+            'o.purchase_channel',
             'o.purchase_at',
             'o.total_cost as order_total_cost',
             'IFNULL(p.id, po.id) as payable_id',
+            'COALESCE(p.payable_no, po.payable_no) as payable_no',
             'IFNULL(p.amount, a.total_cost) as payable_amount',
             'IFNULL(p.settled_amount, po.settled_amount) as settled_amount',
             'IFNULL(p.status, po.status) as payable_status',
             'p.id as asset_payable_id',
             'po.id as order_payable_id',
+            'COALESCE(p.origin_plugin,po.origin_plugin,o.origin_plugin) as origin_plugin',
+            'COALESCE(p.origin_plugin_name,po.origin_plugin_name,o.origin_plugin_name) as origin_plugin_name',
+            'COALESCE(p.origin_type,po.origin_type,o.origin_type) as origin_type',
+            'COALESCE(p.origin_name,po.origin_name,o.origin_name) as origin_name',
+            'COALESCE(p.origin_id,po.origin_id,o.origin_id) as origin_id',
+            'COALESCE(p.origin_no,po.origin_no,o.origin_no) as origin_no',
+            'COALESCE(p.biz_scene,po.biz_scene) as biz_scene',
+            'COALESCE(p.category_key,po.category_key) as category_key',
+            'COALESCE(p.category_name,po.category_name) as category_name',
+            'COALESCE(p.category_statement_group,po.category_statement_group) as category_statement_group',
+            'COALESCE(p.category_source_plugin,po.category_source_plugin) as category_source_plugin',
+            'COALESCE(p.category_source_key,po.category_source_key) as category_source_key',
+            'COALESCE(p.channel_code,po.channel_code) as channel_code',
+            'COALESCE(p.channel_name,po.channel_name,o.purchase_channel) as channel_name',
+            'COALESCE(p.business_reason,po.business_reason) as business_reason',
         ])->order('a.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
@@ -852,6 +1295,10 @@ class ErpFinanceService extends BaseAdminService
                 $row['allocated_paid'] = $this->allocatedAmount((float)$row['total_cost'], (float)$row['order_total_cost'], (float)$row['settled_amount']);
                 $row['allocated_remain'] = max(0, round((float)$row['total_cost'] - (float)$row['allocated_paid'], 2));
             }
+            $row['source_no'] = (string)($row['purchase_no'] ?? '');
+            $row['source_type'] = 'purchase';
+            if (empty($row['channel_name'])) $row['channel_name'] = (string)($row['purchase_channel'] ?? '');
+            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
         }
         unset($row);
         $payableIds = array_values(array_unique(array_filter(array_map(static fn($row) => (int)($row['payable_id'] ?? 0), $page['data']))));
@@ -863,81 +1310,315 @@ class ErpFinanceService extends BaseAdminService
         return $page;
     }
 
+    /**
+     * 折账候选统一事实列表：采购、整备、销售退货及插件支出全部按 payable_id 返回。
+     * 不再经采购设备反推应付，避免整备费用错绑到采购应付。
+     */
+    private function allPayableItems(int $partyId, array $where): array
+    {
+        $assetTable = (new ErpAsset())->getTable();
+        $query = ErpPayable::alias('p')
+            ->leftJoin($assetTable . ' a', "a.id = IF(p.asset_id > 0, p.asset_id, IF(p.source_type = 'purchase_asset', p.source_id, 0)) AND a.site_id = p.site_id")
+            ->where([
+                ['p.site_id', '=', $this->site_id],
+                ['p.party_id', '=', $partyId],
+            ]);
+        if (!empty($where['status'])) {
+            $query->where('p.status', '=', (string)$where['status']);
+        } else {
+            $query->whereIn('p.status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL]);
+        }
+        if (!empty($where['keyword'])) {
+            $kw = trim((string)$where['keyword']);
+            $query->whereLike('p.payable_no|p.source_no|p.origin_no|p.business_reason|p.remark|a.asset_no|a.imei|a.sn|a.model|a.spec', '%' . $kw . '%');
+        }
+        $page = $query->field([
+            'a.id', 'a.asset_no', 'a.imei', 'a.sn', 'a.model', 'a.spec', 'a.status',
+            'a.warehouse_name', 'a.location_name', 'a.total_cost as current_total_cost',
+            'p.id as payable_id', 'p.payable_no', 'p.amount as payable_amount', 'p.amount as total_cost',
+            'p.settled_amount', 'p.status as payable_status', 'p.id as asset_payable_id', '0 as order_payable_id',
+            'p.source_type', 'p.source_id', 'p.source_no', 'p.source_no as purchase_no', 'p.asset_id',
+            'p.remark', 'p.occurred_at as purchase_at', 'p.origin_plugin', 'p.origin_plugin_name',
+            'p.origin_type', 'p.origin_name', 'p.origin_id', 'p.origin_no', 'p.biz_scene',
+            'p.category_key', 'p.category_name', 'p.category_statement_group', 'p.category_source_plugin',
+            'p.category_source_key', 'p.channel_code', 'p.channel_name', 'p.business_reason',
+        ])->order('p.occurred_at asc,p.id asc')->paginate([
+            'list_rows' => (int)($where['limit'] ?? 200),
+            'page' => (int)($where['page'] ?? 1),
+        ])->toArray();
+
+        foreach ($page['data'] as &$row) {
+            $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
+            $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
+            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+        }
+        unset($row);
+        $payableIds = array_values(array_unique(array_filter(array_map(static fn(array $row): int => (int)$row['payable_id'], $page['data']))));
+        $settlementMap = $this->payableSettlementDetails($payableIds);
+        foreach ($page['data'] as &$row) {
+            $row['settlements'] = $settlementMap[(int)$row['payable_id']] ?? [];
+        }
+        unset($row);
+        return $page;
+    }
+
+    /** 销售退货退款应付：一条应付只对应一台设备。 */
+    private function saleReturnPayableItems(int $partyId, array $where): array
+    {
+        $assetTable = (new ErpAsset())->getTable();
+        $query = ErpPayable::alias('p')
+            ->leftJoin($assetTable . ' a', 'a.id = p.asset_id AND a.site_id = p.site_id')
+            ->where([
+                ['p.site_id', '=', $this->site_id],
+                ['p.party_id', '=', $partyId],
+                ['p.source_type', '=', 'sale_return'],
+            ]);
+        if (!empty($where['purchase_order_id'])) {
+            $query->where('p.source_id', '=', (int)$where['purchase_order_id']);
+        }
+        if (!empty($where['status'])) {
+            $query->where('p.status', '=', (string)$where['status']);
+        } else {
+            $query->where('p.status', '<>', ErpDict::STATUS_VOID);
+        }
+        if (!empty($where['keyword'])) {
+            $kw = trim((string)$where['keyword']);
+            $query->whereLike('p.payable_no|p.source_no|p.remark|a.asset_no|a.imei|a.sn|a.model|a.spec', '%' . $kw . '%');
+        }
+        $page = $query->field([
+            'a.id',
+            'a.asset_no',
+            'a.imei',
+            'a.sn',
+            'a.model',
+            'a.spec',
+            'a.status',
+            'a.warehouse_name',
+            'a.location_name',
+            'p.source_no as purchase_no',
+            'p.id as payable_id',
+            'p.amount as payable_amount',
+            'p.amount as total_cost',
+            'p.settled_amount',
+            'p.status as payable_status',
+            'p.id as asset_payable_id',
+            '0 as order_payable_id',
+            'p.remark',
+            'p.occurred_at as purchase_at',
+            'p.source_type', 'p.source_no', 'p.origin_plugin', 'p.origin_plugin_name', 'p.origin_type', 'p.origin_name',
+            'p.origin_id', 'p.origin_no', 'p.biz_scene', 'p.category_key', 'p.category_name',
+            'p.category_statement_group', 'p.category_source_plugin', 'p.category_source_key',
+            'p.channel_code', 'p.channel_name', 'p.business_reason',
+        ])->order('p.id asc')->paginate([
+            'list_rows' => (int)($where['limit'] ?? 15),
+            'page' => (int)($where['page'] ?? 1),
+        ])->toArray();
+        foreach ($page['data'] as &$row) {
+            $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
+            $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
+            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+        }
+        unset($row);
+        $payableIds = array_values(array_filter(array_map(static fn($row) => (int)($row['payable_id'] ?? 0), $page['data'])));
+        $settlementMap = $this->payableSettlementDetails($payableIds);
+        foreach ($page['data'] as &$row) {
+            $row['settlements'] = $settlementMap[(int)$row['payable_id']] ?? [];
+        }
+        unset($row);
+        return $page;
+    }
+
+    /** 整备费用应付：应付记录本身已经按设备保存 asset_id。 */
+    private function refurbishPayableItems(int $partyId, array $where): array
+    {
+        $assetTable = (new ErpAsset())->getTable();
+        $query = ErpPayable::alias('p')
+            ->leftJoin($assetTable . ' a', 'a.id = p.asset_id AND a.site_id = p.site_id')
+            ->where([
+                ['p.site_id', '=', $this->site_id],
+                ['p.party_id', '=', $partyId],
+                ['p.source_type', '=', 'refurbish'],
+            ]);
+        if (!empty($where['purchase_order_id'])) {
+            $query->where('p.source_id', '=', (int)$where['purchase_order_id']);
+        }
+        if (!empty($where['status'])) {
+            $query->where('p.status', '=', (string)$where['status']);
+        } else {
+            $query->where('p.status', '<>', ErpDict::STATUS_VOID);
+        }
+        if (!empty($where['keyword'])) {
+            $kw = trim((string)$where['keyword']);
+            $query->whereLike('p.payable_no|p.source_no|p.remark|a.asset_no|a.imei|a.sn|a.model|a.spec', '%' . $kw . '%');
+        }
+        $page = $query->field([
+            'a.id', 'a.asset_no', 'a.imei', 'a.sn', 'a.model', 'a.spec', 'a.status',
+            'a.warehouse_name', 'a.location_name', 'a.total_cost as current_total_cost',
+            'p.source_no as purchase_no', 'p.id as payable_id', 'p.amount as payable_amount',
+            'p.amount as total_cost', 'p.settled_amount', 'p.status as payable_status',
+            'p.id as asset_payable_id', '0 as order_payable_id', 'p.remark', 'p.occurred_at as purchase_at',
+            'p.source_type', 'p.source_no', 'p.origin_plugin', 'p.origin_plugin_name', 'p.origin_type', 'p.origin_name',
+            'p.origin_id', 'p.origin_no', 'p.biz_scene', 'p.category_key', 'p.category_name',
+            'p.category_statement_group', 'p.category_source_plugin', 'p.category_source_key',
+            'p.channel_code', 'p.channel_name', 'p.business_reason',
+        ])->order('p.id asc')->paginate([
+            'list_rows' => (int)($where['limit'] ?? 15),
+            'page' => (int)($where['page'] ?? 1),
+        ])->toArray();
+        foreach ($page['data'] as &$row) {
+            $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
+            $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
+            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+        }
+        unset($row);
+        $payableIds = array_values(array_filter(array_map(static fn($row) => (int)($row['payable_id'] ?? 0), $page['data'])));
+        $settlementMap = $this->payableSettlementDetails($payableIds);
+        foreach ($page['data'] as &$row) {
+            $row['settlements'] = $settlementMap[(int)$row['payable_id']] ?? [];
+        }
+        unset($row);
+        return $page;
+    }
+
+    /** 维修、检测及未来插件费用：直接以应付快照为事实，不伪装成采购批次。 */
+    private function externalPayableItems(int $partyId, array $where): array
+    {
+        $assetTable = (new ErpAsset())->getTable();
+        $query = ErpPayable::alias('p')
+            ->leftJoin($assetTable . ' a', 'a.id = p.asset_id AND a.site_id = p.site_id')
+            ->where([['p.site_id', '=', $this->site_id], ['p.party_id', '=', $partyId]])
+            ->where(function ($query) use ($where) {
+                $sourceType = (string)$where['source_type'];
+                $query->where('p.biz_scene', '=', $sourceType)->whereOr('p.source_type', '=', $sourceType);
+            });
+        if (!empty($where['purchase_order_id'])) $query->where('p.source_id', '=', (int)$where['purchase_order_id']);
+        if (!empty($where['status'])) $query->where('p.status', '=', (string)$where['status']);
+        else $query->where('p.status', '<>', ErpDict::STATUS_VOID);
+        if (!empty($where['keyword'])) {
+            $kw = trim((string)$where['keyword']);
+            $query->whereLike('p.payable_no|p.source_no|p.origin_no|p.business_reason|p.remark|a.asset_no|a.imei|a.sn|a.model|a.spec', '%' . $kw . '%');
+        }
+        $page = $query->field([
+            'a.id', 'a.asset_no', 'a.imei', 'a.sn', 'a.model', 'a.spec', 'a.status',
+            'a.warehouse_name', 'a.location_name', 'a.total_cost as current_total_cost',
+            'p.source_no as purchase_no', 'p.id as payable_id', 'p.amount as payable_amount',
+            'p.amount as total_cost', 'p.settled_amount', 'p.status as payable_status',
+            'p.id as asset_payable_id', '0 as order_payable_id', 'p.remark', 'p.occurred_at as purchase_at',
+            'p.source_type', 'p.source_no', 'p.origin_plugin', 'p.origin_plugin_name', 'p.origin_type', 'p.origin_name',
+            'p.origin_id', 'p.origin_no', 'p.biz_scene', 'p.category_key', 'p.category_name',
+            'p.category_statement_group', 'p.category_source_plugin', 'p.category_source_key',
+            'p.channel_code', 'p.channel_name', 'p.business_reason',
+        ])->order('p.id asc')->paginate([
+            'list_rows' => (int)($where['limit'] ?? 15),
+            'page' => (int)($where['page'] ?? 1),
+        ])->toArray();
+        foreach ($page['data'] as &$row) {
+            $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
+            $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
+            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+        }
+        unset($row);
+        $payableIds = array_values(array_filter(array_map(static fn($row) => (int)($row['payable_id'] ?? 0), $page['data'])));
+        $settlementMap = $this->payableSettlementDetails($payableIds);
+        foreach ($page['data'] as &$row) $row['settlements'] = $settlementMap[(int)$row['payable_id']] ?? [];
+        unset($row);
+        return $page;
+    }
+
     public function confirmOffset(array $payableIds, array $receivableIds, float $amount, string $remark = '', array $data = []): int
     {
         if ($amount <= 0) {
             throw new CommonException('折账金额必须大于0');
         }
+        $requestId = ErpIdempotency::normalize($data['request_id'] ?? '');
+        $existingOffsetId = $this->existingOffsetId($requestId);
+        if ($existingOffsetId > 0) {
+            $this->assertOffsetReplayMatches($existingOffsetId, $payableIds, $receivableIds, $amount, !empty($data['settle_diff']));
+            return $existingOffsetId;
+        }
+        $data['request_id'] = $requestId !== '' ? $requestId : null;
         $offsetId = 0;
-        Db::transaction(function () use ($payableIds, $receivableIds, $amount, $remark, $data, &$offsetId) {
-            $payables = $this->openPayables($payableIds);
-            $receivables = $this->openReceivables($receivableIds);
-            if (empty($payables) || empty($receivables)) {
-                throw new CommonException('折账必须同时选择应付和应收');
-            }
-            $partyId = (int)$payables[0]['party_id'];
-            foreach (array_merge($payables, $receivables) as $row) {
-                if ((int)$row['party_id'] !== $partyId) {
-                    throw new CommonException('折账只能处理同一个往来单位');
+        try {
+            Db::transaction(function () use ($payableIds, $receivableIds, $amount, $remark, $data, &$offsetId) {
+                $payables = $this->openPayables($payableIds);
+                $receivables = $this->openReceivables($receivableIds);
+                if (empty($payables) || empty($receivables)) {
+                    throw new CommonException('折账必须同时选择应付和应收');
                 }
-            }
-            $payableRemain = round(array_sum(array_map(fn($r) => round((float)$r['amount'] - (float)$r['settled_amount'], 2), $payables)), 2);
-            $receivableRemain = round(array_sum(array_map(fn($r) => round((float)$r['amount'] - (float)$r['settled_amount'], 2), $receivables)), 2);
-            $offsetLimit = min($payableRemain, $receivableRemain);
-            if ($amount > $offsetLimit + 0.0001) {
-                if (!empty($data['settle_diff']) && $amount <= max($payableRemain, $receivableRemain) + 0.0001) {
-                    $amount = $offsetLimit;
-                } else {
-                    throw new CommonException('折账金额不能大于可折账金额');
+                $partyId = (int)$payables[0]['party_id'];
+                foreach (array_merge($payables, $receivables) as $row) {
+                    if ((int)$row['party_id'] !== $partyId) {
+                        throw new CommonException('折账只能处理同一个往来单位');
+                    }
                 }
+                $payableRemain = round(array_sum(array_map(fn($r) => round((float)$r['amount'] - (float)$r['settled_amount'], 2), $payables)), 2);
+                $receivableRemain = round(array_sum(array_map(fn($r) => round((float)$r['amount'] - (float)$r['settled_amount'], 2), $receivables)), 2);
+                $offsetLimit = min($payableRemain, $receivableRemain);
+                if ($amount > $offsetLimit + 0.0001) {
+                    if (!empty($data['settle_diff']) && $amount <= max($payableRemain, $receivableRemain) + 0.0001) {
+                        $amount = $offsetLimit;
+                    } else {
+                        throw new CommonException('折账金额不能大于可折账金额');
+                    }
+                }
+                $partyName = (string)$payables[0]['party_name'];
+                $settlement = ErpSettlement::create([
+                    'site_id' => $this->site_id,
+                    'request_id' => $data['request_id'],
+                    'settlement_no' => ErpLedgerService::makeNo('ST'),
+                    'party_id' => $partyId,
+                    'party_name' => $partyName,
+                    'settlement_type' => ErpDict::SETTLEMENT_OFFSET,
+                    'amount' => $amount,
+                    'cash_direction' => 'none',
+                    'status' => 'confirmed',
+                    'operator_uid' => (int)$this->uid,
+                    'operator_name' => (string)$this->username,
+                    'confirmed_at' => time(),
+                    'remark' => $remark,
+                    'create_at' => time(),
+                ]);
+                $offset = ErpOffset::create([
+                    'site_id' => $this->site_id,
+                    'offset_no' => ErpLedgerService::makeNo('OF'),
+                    'settlement_id' => (int)$settlement->id,
+                    'party_id' => $partyId,
+                    'party_name' => $partyName,
+                    'amount' => $amount,
+                    'operator_uid' => (int)$this->uid,
+                    'operator_name' => (string)$this->username,
+                    'confirmed_at' => time(),
+                    'remark' => $remark,
+                    'create_at' => time(),
+                ]);
+                $offsetId = (int)$offset->id;
+                $this->consumeOffsetTargets($payables, ErpDict::TARGET_PAYABLE, $amount, (int)$settlement->id, $offsetId);
+                $this->consumeOffsetTargets($receivables, ErpDict::TARGET_RECEIVABLE, $amount, (int)$settlement->id, $offsetId);
+                if (!empty($data['settle_diff'])) {
+                    $this->settleOffsetDifference($payableIds, $receivableIds, $payableRemain, $receivableRemain, $amount, $data);
+                }
+                (new ErpLedgerService())->account([
+                    'biz_type' => 'offset',
+                    'direction' => 'decrease',
+                    'amount' => $amount,
+                    'party_id' => $partyId,
+                    'party_name' => $partyName,
+                    'source_type' => 'offset',
+                    'source_id' => $offsetId,
+                    'source_no' => (string)$offset->offset_no,
+                    'remark' => $remark ?: '应收应付折账',
+                ]);
+                $this->queueSettlementCompletedEvent((int)$settlement->id);
+            });
+        } catch (\Throwable $e) {
+            $existingOffsetId = $this->existingOffsetId($requestId);
+            if ($existingOffsetId > 0) {
+                $this->assertOffsetReplayMatches($existingOffsetId, $payableIds, $receivableIds, $amount, !empty($data['settle_diff']));
+                return $existingOffsetId;
             }
-            $partyName = (string)$payables[0]['party_name'];
-            $settlement = ErpSettlement::create([
-                'site_id' => $this->site_id,
-                'settlement_no' => ErpLedgerService::makeNo('ST'),
-                'party_id' => $partyId,
-                'party_name' => $partyName,
-                'settlement_type' => ErpDict::SETTLEMENT_OFFSET,
-                'amount' => $amount,
-                'cash_direction' => 'none',
-                'status' => 'confirmed',
-                'operator_uid' => (int)$this->uid,
-                'operator_name' => (string)$this->username,
-                'confirmed_at' => time(),
-                'remark' => $remark,
-                'create_at' => time(),
-            ]);
-            $offset = ErpOffset::create([
-                'site_id' => $this->site_id,
-                'offset_no' => ErpLedgerService::makeNo('OF'),
-                'settlement_id' => (int)$settlement->id,
-                'party_id' => $partyId,
-                'party_name' => $partyName,
-                'amount' => $amount,
-                'operator_uid' => (int)$this->uid,
-                'operator_name' => (string)$this->username,
-                'confirmed_at' => time(),
-                'remark' => $remark,
-                'create_at' => time(),
-            ]);
-            $offsetId = (int)$offset->id;
-            $this->consumeOffsetTargets($payables, ErpDict::TARGET_PAYABLE, $amount, (int)$settlement->id, $offsetId);
-            $this->consumeOffsetTargets($receivables, ErpDict::TARGET_RECEIVABLE, $amount, (int)$settlement->id, $offsetId);
-            if (!empty($data['settle_diff'])) {
-                $this->settleOffsetDifference($payableIds, $receivableIds, $payableRemain, $receivableRemain, $amount, $data);
-            }
-            (new ErpLedgerService())->account([
-                'biz_type' => 'offset',
-                'direction' => 'decrease',
-                'amount' => $amount,
-                'party_id' => $partyId,
-                'party_name' => $partyName,
-                'source_type' => 'offset',
-                'source_id' => $offsetId,
-                'source_no' => (string)$offset->offset_no,
-                'remark' => $remark ?: '应收应付折账',
-            ]);
-        });
+            throw $e;
+        }
+        $this->flushSettlementDomainEvents();
         return $offsetId;
     }
 
@@ -945,19 +1626,45 @@ class ErpFinanceService extends BaseAdminService
     {
         $partyTable = (new ErpParty())->getTable();
         $orderTable = (new ErpSaleOrder())->getTable();
+        $returnTable = (new ErpPurchaseReturnOrder())->getTable();
         $assetTable = (new ErpAsset())->getTable();
         $query = ErpReceivable::alias('r')
             ->leftJoin($partyTable . ' party', 'party.id = r.party_id AND party.site_id = r.site_id')
             ->leftJoin($orderTable . ' o', "r.source_type = 'sale' AND o.id = r.source_id AND o.site_id = r.site_id")
+            ->leftJoin($returnTable . ' pr', "r.source_type = 'purchase_return' AND pr.id = r.source_id AND pr.site_id = r.site_id")
             ->where([['r.site_id', '=', $this->site_id]]);
 
         if (!empty($where['status'])) {
             $query->where('r.status', '=', (string)$where['status']);
+            if (in_array((string)$where['status'], [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL], true)) {
+                $query->whereRaw('r.amount > r.settled_amount');
+            }
         } else {
             $query->where('r.status', '<>', ErpDict::STATUS_VOID);
         }
         if (!empty($where['party_id'])) {
             $query->where('r.party_id', '=', (int)$where['party_id']);
+        }
+        if (!empty($where['source_type'])) {
+            $query->where('r.source_type', '=', (string)$where['source_type']);
+        }
+        if (!empty($where['finance_type_key'])) {
+            $query->where('r.category_key', '=', (string)$where['finance_type_key']);
+        }
+        if (!empty($where['business_source_key'])) {
+            $query->where('r.origin_type', '=', (string)$where['business_source_key']);
+        }
+        if (!empty($where['source_plugin'])) {
+            $query->where('r.origin_plugin', '=', (string)$where['source_plugin']);
+        }
+        if (!empty($where['channel_code'])) {
+            $channelCode = (string)$where['channel_code'];
+            $query->where(function ($q) use ($channelCode) {
+                $q->where('r.channel_code', '=', $channelCode)->whereOr('o.sale_channel_key', '=', $channelCode);
+            });
+        }
+        if (!empty($where['biz_scene'])) {
+            $query->where('r.biz_scene', '=', (string)$where['biz_scene']);
         }
         if (!empty($where['start_at'])) {
             $query->where('r.occurred_at', '>=', (int)$where['start_at']);
@@ -982,6 +1689,40 @@ class ErpFinanceService extends BaseAdminService
         }
         if (!empty($where['salesman_uid'])) {
             $query->where('o.salesman_uid', '=', (int)$where['salesman_uid']);
+        }
+        if (!empty($where['operator_uid'])) {
+            $operatorUid = (int)$where['operator_uid'];
+            $query->where(function ($q) use ($operatorUid) {
+                $q->where(function ($sale) use ($operatorUid) {
+                    $sale->where('r.source_type', '=', 'sale')->where('o.salesman_uid', '=', $operatorUid);
+                })->whereOr(function ($purchaseReturn) use ($operatorUid) {
+                    $purchaseReturn->where('r.source_type', '=', 'purchase_return')->where('pr.operator_id', '=', $operatorUid);
+                });
+            });
+        }
+        if (!empty($where['imei'])) {
+            $imei = trim((string)$where['imei']);
+            $matchedSaleIds = ErpSaleItem::where([['site_id', '=', $this->site_id]])
+                ->whereLike('imei', '%' . $imei . '%')->column('sale_order_id');
+            $matchedReturnIds = ErpPurchaseReturnItem::where([['site_id', '=', $this->site_id]])
+                ->whereLike('imei|asset_no|model', '%' . $imei . '%')->column('return_id');
+            if (empty($matchedSaleIds) && empty($matchedReturnIds)) {
+                $query->where('r.id', '=', 0);
+            } else {
+                $query->where(function ($q) use ($matchedSaleIds, $matchedReturnIds) {
+                    if (!empty($matchedSaleIds)) {
+                        $q->where(function ($sale) use ($matchedSaleIds) {
+                            $sale->where('r.source_type', '=', 'sale')->whereIn('r.source_id', array_values(array_unique(array_map('intval', $matchedSaleIds))));
+                        });
+                    }
+                    if (!empty($matchedReturnIds)) {
+                        $method = empty($matchedSaleIds) ? 'where' : 'whereOr';
+                        $q->{$method}(function ($purchaseReturn) use ($matchedReturnIds) {
+                            $purchaseReturn->where('r.source_type', '=', 'purchase_return')->whereIn('r.source_id', array_values(array_unique(array_map('intval', $matchedReturnIds))));
+                        });
+                    }
+                });
+            }
         }
         if (($where['min_amount'] ?? '') !== '') {
             $query->where('r.amount', '>=', (float)$where['min_amount']);
@@ -1029,6 +1770,22 @@ class ErpFinanceService extends BaseAdminService
             'r.source_type',
             'r.source_id',
             'r.source_no',
+            'r.asset_id',
+            'r.origin_plugin',
+            'r.origin_plugin_name',
+            'r.origin_type',
+            'r.origin_name',
+            'r.origin_id',
+            'r.origin_no',
+            'r.biz_scene',
+            'r.category_key',
+            'r.category_name',
+            'r.category_statement_group',
+            'r.category_source_plugin',
+            'r.category_source_key',
+            'r.channel_code',
+            'r.channel_name',
+            'r.business_reason',
             'r.amount',
             'r.settled_amount',
             'r.status',
@@ -1036,6 +1793,13 @@ class ErpFinanceService extends BaseAdminService
             'r.remark',
             'o.sale_no',
             'o.sale_channel',
+            'o.sale_channel_key',
+            'o.origin_plugin as order_origin_plugin',
+            'o.origin_plugin_name as order_origin_plugin_name',
+            'o.origin_type as order_origin_type',
+            'o.origin_name as order_origin_name',
+            'o.origin_id as order_origin_id',
+            'o.origin_no as order_origin_no',
             'o.settle_method',
             'o.salesman_uid',
             'o.salesman_name',
@@ -1044,6 +1808,8 @@ class ErpFinanceService extends BaseAdminService
             'o.received_amount',
             'o.receivable_amount',
             'o.finance_status',
+            'pr.operator_id as return_operator_uid',
+            'pr.operator_name as return_operator_name',
         ])->order('r.id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
@@ -1095,7 +1861,6 @@ class ErpFinanceService extends BaseAdminService
 
         foreach ($page['data'] as &$row) {
             $row['batch_no'] = $row['source_no'] ?: ($row['sale_no'] ?? '');
-            $row['source_label'] = $this->receivableSourceLabel((string)$row['source_type']);
             if ((string)$row['source_type'] === 'purchase_return') {
                 $returnRow = $returnMap[(int)$row['source_id']] ?? [];
                 $row['batch_no'] = (string)($returnRow['return_no'] ?? $row['source_no'] ?? '');
@@ -1103,17 +1868,33 @@ class ErpFinanceService extends BaseAdminService
                 $row['item_count'] = $itemCountMap['purchase_return_' . (int)$row['source_id']] ?? 0;
                 $row['opening_settle_method'] = '采购退货退款';
                 $row['return_remark'] = (string)($returnRow['remark'] ?? '');
+                $row['business_operator_uid'] = (int)($row['return_operator_uid'] ?? 0);
+                $row['business_operator_name'] = (string)($row['return_operator_name'] ?? '');
             } else {
-                $row['item_count'] = $itemCountMap[(int)$row['source_id']] ?? 0;
+                $row['item_count'] = $itemCountMap[(int)$row['source_id']] ?? ((int)($row['asset_id'] ?? 0) > 0 ? 1 : 0);
                 $row['opening_settle_method'] = (string)($row['settle_method'] ?? '');
+                $row['business_operator_uid'] = (int)($row['salesman_uid'] ?? 0);
+                $row['business_operator_name'] = (string)($row['salesman_name'] ?? '');
+                foreach (['plugin', 'plugin_name', 'type', 'name', 'id', 'no'] as $originField) {
+                    $field = 'origin_' . $originField;
+                    $orderField = 'order_origin_' . $originField;
+                    if (empty($row[$field]) && !empty($row[$orderField])) $row[$field] = $row[$orderField];
+                }
+                if (empty($row['channel_code'])) $row['channel_code'] = (string)($row['sale_channel_key'] ?? '');
+                if (empty($row['channel_name'])) $row['channel_name'] = (string)($row['sale_channel'] ?? '');
             }
+            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'receivable');
+            $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
+            $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
             $row['remain_amount'] = max(0, round((float)$row['amount'] - (float)$row['settled_amount'], 2));
+            $row['finance_status'] = ErpDict::financeStatus((float)$row['amount'], (float)$row['settled_amount']);
+            $row['status'] = $row['finance_status'];
         }
         unset($row);
         $summaryMap = $this->settlementSummaryForTargets(ErpDict::TARGET_RECEIVABLE, array_column($page['data'], 'id'));
         foreach ($page['data'] as &$row) {
             $summary = $summaryMap[(int)$row['id']] ?? [];
-            $row['settle_summary'] = $summary['text'] ?? $this->emptySettleSummary((float)$row['settled_amount']);
+            $row['settle_summary'] = $summary['text'] ?? ((float)$row['amount'] <= 0.0001 ? '已冲销，无剩余应收' : $this->emptySettleSummary((float)$row['settled_amount']));
             $row['settle_summary_items'] = $summary['items'] ?? [];
         }
         unset($row);
@@ -1142,15 +1923,17 @@ class ErpFinanceService extends BaseAdminService
 
     private function payableBatchPage(array $where): array
     {
-        (new ErpWarehouseService())->ensureReady();
         $partyTable = (new ErpParty())->getTable();
         $assetTable = (new ErpAsset())->getTable();
         $orderTable = (new ErpPurchaseOrder())->getTable();
-        $batchExpr = "IF(p.source_type = 'purchase_asset', a.purchase_order_id, p.source_id)";
+        $saleReturnTable = (new ErpSaleReturnOrder())->getTable();
+        $batchExpr = "CASE WHEN p.source_type = 'purchase_asset' THEN a.purchase_order_id ELSE p.source_id END";
+        $sourceGroupExpr = "CASE WHEN p.source_type = 'sale_return' THEN 'sale_return' WHEN p.source_type = 'refurbish' THEN 'refurbish' WHEN p.source_type IN ('purchase','purchase_asset') THEN 'purchase' ELSE COALESCE(NULLIF(p.biz_scene,''),'external') END";
         $query = ErpPayable::alias('p')
             ->leftJoin($partyTable . ' party', 'party.id = p.party_id AND party.site_id = p.site_id')
-            ->leftJoin($assetTable . ' a', "p.source_type = 'purchase_asset' AND a.id = p.source_id AND a.site_id = p.site_id")
-            ->leftJoin($orderTable . ' o', 'o.id = ' . $batchExpr . ' AND o.site_id = p.site_id')
+            ->leftJoin($assetTable . ' a', "a.id = IF(p.asset_id > 0, p.asset_id, IF(p.source_type = 'purchase_asset', p.source_id, 0)) AND a.site_id = p.site_id")
+            ->leftJoin($orderTable . ' o', "p.source_type IN ('purchase','purchase_asset') AND o.id = " . $batchExpr . ' AND o.site_id = p.site_id')
+            ->leftJoin($saleReturnTable . ' sr', "p.source_type = 'sale_return' AND sr.id = p.source_id AND sr.site_id = p.site_id")
             ->where([['p.site_id', '=', $this->site_id]]);
 
         if (!empty($where['status'])) {
@@ -1160,6 +1943,31 @@ class ErpFinanceService extends BaseAdminService
         }
         if (!empty($where['party_id'])) {
             $query->where('p.party_id', '=', (int)$where['party_id']);
+        }
+        if (!empty($where['source_type'])) {
+            if ((string)$where['source_type'] === 'purchase') {
+                $query->whereIn('p.source_type', ['purchase', 'purchase_asset']);
+            } else {
+                $query->where('p.source_type', '=', (string)$where['source_type']);
+            }
+        }
+        if (!empty($where['finance_type_key'])) {
+            $query->where('p.category_key', '=', (string)$where['finance_type_key']);
+        }
+        if (!empty($where['business_source_key'])) {
+            $query->where('p.origin_type', '=', (string)$where['business_source_key']);
+        }
+        if (!empty($where['source_plugin'])) {
+            $query->where('p.origin_plugin', '=', (string)$where['source_plugin']);
+        }
+        if (!empty($where['channel_code'])) {
+            $channelCode = (string)$where['channel_code'];
+            $query->where(function ($q) use ($channelCode) {
+                $q->where('p.channel_code', '=', $channelCode)->whereOr('o.purchase_channel', '=', $channelCode);
+            });
+        }
+        if (!empty($where['biz_scene'])) {
+            $query->where('p.biz_scene', '=', (string)$where['biz_scene']);
         }
         if (!empty($where['start_at'])) {
             $query->where('p.occurred_at', '>=', (int)$where['start_at']);
@@ -1189,38 +1997,119 @@ class ErpFinanceService extends BaseAdminService
         }
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('p.payable_no|p.party_name|p.source_no|p.remark|party.contact_name|party.contact_mobile|party.m_no|a.asset_no|a.imei|a.sn|a.model|a.spec|o.purchase_no|o.purchase_channel|o.purchaser_name', '%' . $kw . '%');
+            $query->whereLike('p.payable_no|p.party_name|p.source_no|p.remark|party.contact_name|party.contact_mobile|party.m_no|a.asset_no|a.imei|a.sn|a.model|a.spec|o.purchase_no|o.purchase_channel|o.purchaser_name|sr.return_no|sr.sale_no|sr.operator_name', '%' . $kw . '%');
         }
 
         $page = $query->field([
             'p.party_id',
+            $sourceGroupExpr . ' as source_type',
             $batchExpr . ' as purchase_order_id',
             'MAX(p.party_name) as party_name',
+            'MAX(p.source_no) as payable_source_no',
+            'MAX(p.remark) as payable_remark',
+            'MAX(p.origin_plugin) as origin_plugin',
+            'MAX(p.origin_plugin_name) as origin_plugin_name',
+            'MAX(p.origin_type) as origin_type',
+            'MAX(p.origin_name) as origin_name',
+            'MAX(p.origin_id) as origin_id',
+            'MAX(p.origin_no) as origin_no',
+            'MAX(p.biz_scene) as biz_scene',
+            'MAX(p.category_key) as category_key',
+            'MAX(p.category_name) as category_name',
+            'MAX(p.category_statement_group) as category_statement_group',
+            'MAX(p.category_source_plugin) as category_source_plugin',
+            'MAX(p.category_source_key) as category_source_key',
+            'MAX(p.channel_code) as channel_code',
+            'MAX(p.channel_name) as channel_name',
+            'MAX(p.business_reason) as business_reason',
             'MAX(party.contact_name) as contact_name',
             'MAX(party.contact_mobile) as contact_mobile',
             'MAX(party.m_no) as m_no',
             'MAX(o.purchase_no) as purchase_no',
             'MAX(o.purchase_channel) as purchase_channel',
+            'MAX(o.origin_plugin) as order_origin_plugin',
+            'MAX(o.origin_plugin_name) as order_origin_plugin_name',
+            'MAX(o.origin_type) as order_origin_type',
+            'MAX(o.origin_name) as order_origin_name',
+            'MAX(o.origin_id) as order_origin_id',
+            'MAX(o.origin_no) as order_origin_no',
             'MAX(o.settle_method) as settle_method',
             'MAX(o.purchaser_name) as purchaser_name',
             'MAX(o.purchase_at) as purchase_at',
             'MAX(o.warehouse_name) as warehouse_name',
             'MAX(o.location_name) as location_name',
+            'MAX(sr.return_no) as sale_return_no',
+            'MAX(sr.business_type) as sale_return_business_type',
+            'MAX(sr.sale_no) as sale_no',
+            'MAX(sr.operator_name) as return_operator_name',
             'COUNT(p.id) as payable_count',
+            "GROUP_CONCAT(CASE WHEN p.status IN ('pending','partial') AND p.amount > p.settled_amount THEN p.id ELSE NULL END ORDER BY p.id ASC) as open_payable_ids",
             'SUM(p.amount) as amount',
             'SUM(p.settled_amount) as settled_amount',
             'MAX(p.occurred_at) as latest_at',
             'MIN(p.occurred_at) as first_at',
-        ])->group('p.party_id,' . $batchExpr)->order('latest_at desc')->paginate([
+        ])->group('p.party_id,' . $sourceGroupExpr . ',' . $batchExpr)->order('latest_at desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
 
+        // 整备费用没有采购单可提供采购员；经办人应来自创建该笔整备事实的设备账本。
+        // 这里按整备来源单号一次性回填，避免列表逐行查询，同时让 PC/移动端看到真实操作人。
+        $refurbishSourceNos = array_values(array_unique(array_filter(array_map(
+            static fn(array $row): string => (string)($row['source_type'] ?? '') === 'refurbish'
+                ? trim((string)($row['payable_source_no'] ?? ''))
+                : '',
+            (array)($page['data'] ?? [])
+        ))));
+        $refurbishOperatorMap = [];
+        if (!empty($refurbishSourceNos)) {
+            $refurbishOperatorMap = ErpAssetLedger::where([
+                ['site_id', '=', $this->site_id],
+                ['action', '=', 'refurbish'],
+            ])->whereIn('source_no', $refurbishSourceNos)->column('operator_name', 'source_no');
+        }
+
         foreach ($page['data'] as &$row) {
-            $row['batch_no'] = $row['purchase_no'] ?: ('采购批次#' . (int)$row['purchase_order_id']);
+            $row['payable_ids'] = array_values(array_unique(array_filter(array_map(
+                'intval',
+                explode(',', (string)($row['open_payable_ids'] ?? ''))
+            ))));
+            unset($row['open_payable_ids']);
+            if ((string)$row['source_type'] === 'sale_return') {
+                $row['batch_no'] = (string)($row['sale_return_no'] ?: ('销售退货#' . (int)$row['purchase_order_id']));
+                $isCompensation = (string)($row['sale_return_business_type'] ?? '') === 'after_sale_compensation';
+                $row['purchase_channel'] = $isCompensation ? '售后补差付款' : '客户退货退款';
+                $row['purchaser_name'] = (string)($row['return_operator_name'] ?? '');
+                $row['purchase_at'] = (int)($row['latest_at'] ?? 0);
+                $row['opening_settle_method'] = $isCompensation ? '公司向客户支付售后补差款' : '公司向客户退还销售货款';
+            } elseif ((string)$row['source_type'] === 'refurbish') {
+                $row['batch_no'] = (string)($row['payable_source_no'] ?: ('整备费用#' . (int)$row['purchase_order_id']));
+                $row['purchase_channel'] = '设备整备支出';
+                $row['purchaser_name'] = (string)($refurbishOperatorMap[(string)($row['payable_source_no'] ?? '')] ?? '系统登记');
+                $row['purchase_at'] = (int)($row['latest_at'] ?? 0);
+                $row['opening_settle_method'] = (string)($row['payable_remark'] ?: '公司应向整备服务商支付费用');
+            } elseif ((string)$row['source_type'] === 'purchase') {
+                $row['batch_no'] = $row['purchase_no'] ?: ('采购批次#' . (int)$row['purchase_order_id']);
+                $row['opening_settle_method'] = (string)($row['settle_method'] ?? '');
+                foreach (['plugin', 'plugin_name', 'type', 'name', 'id', 'no'] as $originField) {
+                    $field = 'origin_' . $originField;
+                    $orderField = 'order_origin_' . $originField;
+                    if (empty($row[$field]) && !empty($row[$orderField])) $row[$field] = $row[$orderField];
+                }
+                if (empty($row['channel_name'])) $row['channel_name'] = (string)($row['purchase_channel'] ?? '');
+            } else {
+                $row['batch_no'] = (string)($row['origin_no'] ?: $row['payable_source_no'] ?: ($row['category_name'] . '#' . (int)$row['purchase_order_id']));
+                $row['purchase_channel'] = (string)($row['channel_name'] ?: $row['origin_name'] ?: '插件业务');
+                $row['purchaser_name'] = (string)($row['origin_plugin_name'] ?: '系统接入');
+                $row['purchase_at'] = (int)($row['latest_at'] ?? 0);
+                $row['opening_settle_method'] = (string)($row['business_reason'] ?: '插件业务形成应付，由财务确认实际付款。');
+            }
+            $row['source_no'] = (string)$row['batch_no'];
+            $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+            $row['source_label'] = (string)$row['source_meta']['finance_type_name'];
+            $row['business_reason'] = (string)($row['source_meta']['business_reason'] ?? $row['business_reason'] ?? '');
             $row['remain_amount'] = max(0, round((float)$row['amount'] - (float)$row['settled_amount'], 2));
             $row['finance_status'] = ErpDict::financeStatus((float)$row['amount'], (float)$row['settled_amount']);
-            $row['opening_settle_method'] = (string)($row['settle_method'] ?? '');
         }
         unset($row);
         $this->fillPayableBatchSettleSummary($page['data']);
@@ -1296,6 +2185,11 @@ class ErpFinanceService extends BaseAdminService
         }
 
         foreach ($rows as &$row) {
+            if ((string)($row['source_type'] ?? '') === 'sale_return') {
+                $row['settle_summary_items'] = [];
+                $row['settle_summary'] = $this->emptySettleSummary((float)($row['settled_amount'] ?? 0));
+                continue;
+            }
             $key = (int)($row['party_id'] ?? 0) . '_' . (int)($row['purchase_order_id'] ?? 0);
             $items = array_values($batchItems[$key] ?? []);
             $row['settle_summary_items'] = $items;
@@ -1369,7 +2263,6 @@ class ErpFinanceService extends BaseAdminService
 
     private function payablePartyPage(array $where): array
     {
-        (new ErpWarehouseService())->ensureReady();
         $partyTable = (new ErpParty())->getTable();
         $assetTable = (new ErpAsset())->getTable();
         $orderTable = (new ErpPurchaseOrder())->getTable();
@@ -1495,6 +2388,15 @@ class ErpFinanceService extends BaseAdminService
         if ($period === 'today') {
             return ['start_at' => strtotime(date('Y-m-d 00:00:00')), 'end_at' => strtotime(date('Y-m-d 23:59:59')), 'period' => 'today'];
         }
+        if ($period === 'yesterday') {
+            return ['start_at' => strtotime('yesterday 00:00:00'), 'end_at' => strtotime('yesterday 23:59:59'), 'period' => 'yesterday'];
+        }
+        if ($period === 'last7') {
+            return ['start_at' => strtotime('-6 days 00:00:00'), 'end_at' => strtotime('today 23:59:59'), 'period' => 'last7'];
+        }
+        if ($period === 'last_month') {
+            return ['start_at' => strtotime('first day of last month 00:00:00'), 'end_at' => strtotime('last day of last month 23:59:59'), 'period' => 'last_month'];
+        }
         if ($period === 'all') {
             return ['start_at' => 0, 'end_at' => 0, 'period' => 'all'];
         }
@@ -1556,7 +2458,7 @@ class ErpFinanceService extends BaseAdminService
         $moneyMap = [];
         $moneyRows = ErpMoneyLedger::where([['site_id', '=', $this->site_id]])
             ->whereIn('settlement_id', $settlementIds)
-            ->field('settlement_id,ledger_no,direction,amount,capital_account_name,balance_after,occurred_at,remark')
+            ->field('settlement_id,ledger_no,direction,category_key,category_name,category_statement_group,amount,capital_account_name,balance_after,voucher_urls,occurred_at,remark')
             ->order('id asc')
             ->select()
             ->toArray();
@@ -1617,7 +2519,7 @@ class ErpFinanceService extends BaseAdminService
         $moneyMap = [];
         $moneyRows = ErpMoneyLedger::where([['site_id', '=', $this->site_id]])
             ->whereIn('settlement_id', $settlementIds)
-            ->field('settlement_id,ledger_no,direction,amount,capital_account_name,balance_after,occurred_at,remark')
+            ->field('settlement_id,ledger_no,direction,category_key,category_name,category_statement_group,amount,capital_account_name,balance_after,voucher_urls,occurred_at,remark')
             ->order('id asc')
             ->select()
             ->toArray();
@@ -1666,7 +2568,7 @@ class ErpFinanceService extends BaseAdminService
         if (!empty($payableIds)) {
             $rows = ErpPayable::where([['site_id', '=', $this->site_id]])
                 ->whereIn('id', array_values(array_unique($payableIds)))
-                ->field('id,payable_no,party_name,source_type,source_id,source_no,amount,settled_amount,status')
+                ->field('id,payable_no,party_name,asset_id,source_type,source_id,source_no,origin_plugin,origin_plugin_name,origin_type,origin_name,origin_id,origin_no,biz_scene,category_key,category_name,category_statement_group,category_source_plugin,category_source_key,channel_code,channel_name,business_reason,amount,settled_amount,status')
                 ->select()
                 ->toArray();
             foreach ($rows as $row) {
@@ -1678,7 +2580,7 @@ class ErpFinanceService extends BaseAdminService
         if (!empty($receivableIds)) {
             $rows = ErpReceivable::where([['site_id', '=', $this->site_id]])
                 ->whereIn('id', array_values(array_unique($receivableIds)))
-                ->field('id,receivable_no,party_name,source_type,source_id,source_no,amount,settled_amount,status')
+                ->field('id,receivable_no,party_name,source_type,source_id,source_no,origin_plugin,origin_plugin_name,origin_type,origin_name,origin_id,origin_no,biz_scene,category_key,category_name,category_statement_group,category_source_plugin,category_source_key,channel_code,channel_name,business_reason,amount,settled_amount,status')
                 ->select()
                 ->toArray();
             foreach ($rows as $row) {
@@ -1692,6 +2594,7 @@ class ErpFinanceService extends BaseAdminService
             $targetType = (string)$link['target_type'];
             $targetId = (int)$link['target_id'];
             $target = $targetType === ErpDict::TARGET_PAYABLE ? ($payableMap[$targetId] ?? []) : ($receivableMap[$targetId] ?? []);
+            $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($target, $targetType === ErpDict::TARGET_PAYABLE ? 'payable' : 'receivable');
             $map[(int)$link['settlement_id']][] = [
                 'target_type' => $targetType,
                 'target_type_text' => $targetType === ErpDict::TARGET_PAYABLE ? '应付' : '应收',
@@ -1703,6 +2606,12 @@ class ErpFinanceService extends BaseAdminService
                 'settled_amount' => (float)($target['settled_amount'] ?? 0),
                 'status' => (string)($target['status'] ?? ''),
                 'applied_amount' => (float)$link['applied_amount'],
+                'source_meta' => $sourceMeta,
+                'finance_type_name' => (string)($sourceMeta['finance_type_name'] ?? ''),
+                'business_source_name' => (string)($sourceMeta['business_source_name'] ?? ''),
+                'biz_scene' => (string)($target['biz_scene'] ?? ''),
+                'category_statement_group' => (string)($target['category_statement_group'] ?? ''),
+                'business_reason' => (string)($target['business_reason'] ?? ''),
                 'devices' => $targetDeviceMap[$targetType . '_' . $targetId] ?? [],
             ];
         }
@@ -1711,10 +2620,13 @@ class ErpFinanceService extends BaseAdminService
 
     private function settlementTargetDeviceMap(array $payableMap, array $receivableMap): array
     {
+        $payableDirectAssetIds = [];
         $payableAssetIds = [];
         $payablePurchaseIds = [];
         foreach ($payableMap as $id => $row) {
-            if ((string)($row['source_type'] ?? '') === 'purchase_asset') {
+            if ((int)($row['asset_id'] ?? 0) > 0) {
+                $payableDirectAssetIds[(int)$row['asset_id']][] = (int)$id;
+            } elseif ((string)($row['source_type'] ?? '') === 'purchase_asset') {
                 $payableAssetIds[(int)$row['source_id']][] = (int)$id;
             } elseif ((string)($row['source_type'] ?? '') === 'purchase') {
                 $payablePurchaseIds[(int)$row['source_id']][] = (int)$id;
@@ -1729,19 +2641,23 @@ class ErpFinanceService extends BaseAdminService
         }
 
         $map = [];
-        if (!empty($payableAssetIds) || !empty($payablePurchaseIds)) {
+        if (!empty($payableDirectAssetIds) || !empty($payableAssetIds) || !empty($payablePurchaseIds)) {
             $query = ErpAsset::where([['site_id', '=', $this->site_id]]);
-            $query->where(function ($q) use ($payableAssetIds, $payablePurchaseIds) {
-                if (!empty($payableAssetIds)) {
-                    $q->whereIn('id', array_keys($payableAssetIds));
+            $query->where(function ($q) use ($payableDirectAssetIds, $payableAssetIds, $payablePurchaseIds) {
+                $directIds = array_values(array_unique(array_merge(array_keys($payableDirectAssetIds), array_keys($payableAssetIds))));
+                if (!empty($directIds)) {
+                    $q->whereIn('id', $directIds);
                 }
                 if (!empty($payablePurchaseIds)) {
-                    !empty($payableAssetIds) ? $q->whereOr('purchase_order_id', 'in', array_keys($payablePurchaseIds)) : $q->whereIn('purchase_order_id', array_keys($payablePurchaseIds));
+                    !empty($directIds) ? $q->whereOr('purchase_order_id', 'in', array_keys($payablePurchaseIds)) : $q->whereIn('purchase_order_id', array_keys($payablePurchaseIds));
                 }
             });
             $rows = $query->field('id,asset_no,imei,sn,model,spec,total_cost,sale_price,profit,warehouse_name,location_name,purchase_order_id')->select()->toArray();
             foreach ($rows as $row) {
                 $device = $this->formatSettlementDevice($row, 'purchase');
+                foreach ($payableDirectAssetIds[(int)$row['id']] ?? [] as $payableId) {
+                    $map[ErpDict::TARGET_PAYABLE . '_' . $payableId][] = $device;
+                }
                 foreach ($payableAssetIds[(int)$row['id']] ?? [] as $payableId) {
                     $map[ErpDict::TARGET_PAYABLE . '_' . $payableId][] = $device;
                 }
@@ -1829,8 +2745,11 @@ class ErpFinanceService extends BaseAdminService
 
     private function createSettlement($target, string $type, float $amount, string $cashDirection, array $account, array $data): ErpSettlement
     {
+        $confirmedAt = (int)($data['confirmed_at'] ?? 0);
+        if ($confirmedAt <= 0) $confirmedAt = time();
         return ErpSettlement::create([
             'site_id' => $this->site_id,
+            'request_id' => $data['request_id'] ?? null,
             'settlement_no' => ErpLedgerService::makeNo('ST'),
             'party_id' => (int)$target->party_id,
             'party_name' => (string)$target->party_name,
@@ -1842,7 +2761,8 @@ class ErpFinanceService extends BaseAdminService
             'status' => 'confirmed',
             'operator_uid' => (int)$this->uid,
             'operator_name' => (string)$this->username,
-            'confirmed_at' => (int)($data['confirmed_at'] ?? time()),
+            'confirmed_at' => $confirmedAt,
+            'voucher_urls' => is_array($data['voucher_urls'] ?? null) ? json_encode($data['voucher_urls'], JSON_UNESCAPED_UNICODE) : trim((string)($data['voucher_urls'] ?? '')),
             'remark' => (string)($data['remark'] ?? ''),
             'create_at' => time(),
         ]);
@@ -1850,38 +2770,242 @@ class ErpFinanceService extends BaseAdminService
 
     private function applyPayable(ErpPayable $payable, float $amount, int $settlementId): void
     {
+        $amount = round($amount, 2);
+        $remain = round((float)$payable->amount - (float)$payable->settled_amount, 2);
+        if ($amount <= 0 || $amount > $remain + 0.0001) {
+            throw new CommonException('应付款核销金额无效或已超过剩余应付');
+        }
         $newSettled = round((float)$payable->settled_amount + $amount, 2);
         $payable->save([
             'settled_amount' => $newSettled,
             'status' => ErpDict::financeStatus((float)$payable->amount, $newSettled),
             'update_at' => time(),
         ]);
-        ErpSettlementLink::create([
+        ErpSettlementLink::create(array_merge([
             'site_id' => $this->site_id,
             'settlement_id' => $settlementId,
             'target_type' => ErpDict::TARGET_PAYABLE,
             'target_id' => (int)$payable->id,
             'applied_amount' => $amount,
             'create_at' => time(),
-        ]);
+        ], $this->settlementLinkMeta($payable, 'payable')));
     }
 
     private function applyReceivable(ErpReceivable $receivable, float $amount, int $settlementId): void
     {
+        $amount = round($amount, 2);
+        $remain = round((float)$receivable->amount - (float)$receivable->settled_amount, 2);
+        if ($amount <= 0 || $amount > $remain + 0.0001) {
+            throw new CommonException('应收款核销金额无效或已超过剩余应收');
+        }
         $newSettled = round((float)$receivable->settled_amount + $amount, 2);
         $receivable->save([
             'settled_amount' => $newSettled,
             'status' => ErpDict::financeStatus((float)$receivable->amount, $newSettled),
             'update_at' => time(),
         ]);
-        ErpSettlementLink::create([
+        ErpSettlementLink::create(array_merge([
             'site_id' => $this->site_id,
             'settlement_id' => $settlementId,
             'target_type' => ErpDict::TARGET_RECEIVABLE,
             'target_id' => (int)$receivable->id,
             'applied_amount' => $amount,
             'create_at' => time(),
+        ], $this->settlementLinkMeta($receivable, 'receivable')));
+    }
+
+    private function targetCategoryMeta($target): array
+    {
+        $row = is_array($target) ? $target : $target->toArray();
+        $side = $target instanceof ErpReceivable || (($row['receivable_no'] ?? '') !== '') ? 'receivable' : 'payable';
+        $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($row, $side);
+        $categoryKey = trim((string)($row['category_key'] ?? '')) ?: (string)($sourceMeta['finance_type_key'] ?? '');
+        return [
+            'category_key' => $categoryKey,
+            'category_name' => trim((string)($row['category_name'] ?? '')) ?: (string)($sourceMeta['finance_type_name'] ?? ''),
+            'category_statement_group' => trim((string)($row['category_statement_group'] ?? '')) ?: (string)($sourceMeta['statement_group'] ?? ''),
+            'category_source_plugin' => trim((string)($row['category_source_plugin'] ?? '')) ?: 'hsx_erp',
+            'category_source_key' => trim((string)($row['category_source_key'] ?? '')) ?: $categoryKey,
+        ];
+    }
+
+    private function combinedCategoryMeta(iterable $targets): array
+    {
+        $rows = [];
+        $payableSide = false;
+        foreach ($targets as $target) {
+            if ($target instanceof ErpPayable) $payableSide = true;
+            $meta = $this->targetCategoryMeta($target);
+            $rows[(string)$meta['category_key']] = $meta;
+        }
+        if (count($rows) === 1) return array_values($rows)[0];
+        return [
+            'category_key' => 'mixed',
+            'category_name' => $payableSide ? '混合支出' : '混合收入',
+            'category_statement_group' => 'mixed',
+            'category_source_plugin' => 'hsx_erp',
+            'category_source_key' => 'mixed',
+        ];
+    }
+
+    private function settlementLinkMeta($target, string $side): array
+    {
+        $row = is_array($target) ? $target : $target->toArray();
+        $category = $this->targetCategoryMeta($target);
+        $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($row, $side);
+        return array_merge($category, [
+            'asset_id' => (int)($row['asset_id'] ?? 0),
+            'biz_scene' => (string)($row['biz_scene'] ?? $sourceMeta['biz_scene'] ?? ''),
+            'origin_plugin' => (string)($row['origin_plugin'] ?? $sourceMeta['source_plugin'] ?? ''),
+            'origin_type' => (string)($row['origin_type'] ?? $sourceMeta['business_source_key'] ?? ''),
+            'origin_id' => (string)($row['origin_id'] ?? ''),
         ]);
+    }
+
+    /** 在结算事务内固化完整来源/设备快照，事务提交后再派发给插件。 */
+    private function queueSettlementCompletedEvent(int $settlementId): void
+    {
+        $settlement = ErpSettlement::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', $settlementId],
+        ])->findOrEmpty();
+        if ($settlement->isEmpty()) {
+            throw new CommonException('结算领域事件缺少结算单');
+        }
+
+        $links = ErpSettlementLink::where([
+            ['site_id', '=', $this->site_id],
+            ['settlement_id', '=', $settlementId],
+        ])->order('id asc')->select()->toArray();
+        $targets = [];
+        foreach ($links as $link) {
+            $side = (string)($link['target_type'] ?? '');
+            $targetId = (int)($link['target_id'] ?? 0);
+            $target = $side === ErpDict::TARGET_PAYABLE
+                ? ErpPayable::where([['site_id', '=', $this->site_id], ['id', '=', $targetId]])->findOrEmpty()
+                : ErpReceivable::where([['site_id', '=', $this->site_id], ['id', '=', $targetId]])->findOrEmpty();
+            if ($target->isEmpty()) continue;
+
+            $assets = $this->settlementTargetAssets($target, $side, (int)($link['asset_id'] ?? 0));
+            $sourceMeta = (new ErpFinanceSourceService())->sourceMeta($target->toArray(), $side);
+            $targets[] = [
+                'target_type' => $side,
+                'target_id' => $targetId,
+                'target_no' => $side === ErpDict::TARGET_PAYABLE ? (string)$target->payable_no : (string)$target->receivable_no,
+                'applied_amount' => round((float)($link['applied_amount'] ?? 0), 2),
+                'target_amount' => round((float)$target->amount, 2),
+                'settled_amount' => round((float)$target->settled_amount, 2),
+                'remaining_amount' => max(0, round((float)$target->amount - (float)$target->settled_amount, 2)),
+                'finance_status' => (string)$target->status,
+                'source_type' => (string)$target->source_type,
+                'source_id' => (int)$target->source_id,
+                'source_no' => (string)$target->source_no,
+                'source_meta' => $sourceMeta,
+                'origin' => [
+                    'plugin' => (string)($target->origin_plugin ?? ''),
+                    'type' => (string)($target->origin_type ?? ''),
+                    'id' => (string)($target->origin_id ?? ''),
+                    'no' => (string)($target->origin_no ?? ''),
+                ],
+                'asset' => $assets[0] ?? null,
+                'assets' => $assets,
+            ];
+        }
+
+        $queued = (new ErpIntegrationService())->enqueueDomainEvent(
+            'erp.settlement.completed.v1',
+            'settlement',
+            $settlementId,
+            [
+                'settlement_id' => $settlementId,
+                'settlement_no' => (string)$settlement->settlement_no,
+                'settlement_type' => (string)$settlement->settlement_type,
+                'amount' => round((float)$settlement->amount, 2),
+                'cash_direction' => (string)$settlement->cash_direction,
+                'capital_account_id' => (int)$settlement->capital_account_id,
+                'capital_account_name' => (string)$settlement->capital_account_name,
+                'party_id' => (int)$settlement->party_id,
+                'party_name' => (string)$settlement->party_name,
+                'confirmed_at' => (int)$settlement->confirmed_at,
+                'targets' => $targets,
+                'snapshot_at' => time(),
+            ]
+        );
+        $this->settlementOutboxIds[] = (int)$queued['id'];
+    }
+
+    /** @return array<int,array{id:int,asset_no:string,imei:string,sn:string,model:string,spec:string}> */
+    private function settlementTargetAssets($target, string $side, int $linkAssetId = 0): array
+    {
+        $assetIds = [];
+        if ($linkAssetId > 0) $assetIds[] = $linkAssetId;
+        $targetAssetId = (int)($target->asset_id ?? 0);
+        if ($targetAssetId > 0) $assetIds[] = $targetAssetId;
+
+        $sourceType = (string)$target->source_type;
+        $sourceId = (int)$target->source_id;
+        if ($side === ErpDict::TARGET_PAYABLE && $sourceType === 'purchase_asset') {
+            $assetIds[] = $sourceId;
+        } elseif ($side === ErpDict::TARGET_PAYABLE && $sourceType === 'purchase' && $sourceId > 0) {
+            $assetIds = array_merge($assetIds, array_map('intval', ErpAsset::where([
+                ['site_id', '=', $this->site_id],
+                ['purchase_order_id', '=', $sourceId],
+            ])->column('id')));
+        } elseif ($side === ErpDict::TARGET_RECEIVABLE && $sourceType === 'sale' && $sourceId > 0) {
+            $assetIds = array_merge($assetIds, array_map('intval', ErpSaleItem::where([
+                ['site_id', '=', $this->site_id],
+                ['sale_order_id', '=', $sourceId],
+            ])->column('asset_id')));
+        } elseif ($side === ErpDict::TARGET_RECEIVABLE && $sourceType === 'purchase_return' && $sourceId > 0) {
+            $assetIds = array_merge($assetIds, array_map('intval', ErpPurchaseReturnItem::where([
+                ['site_id', '=', $this->site_id],
+                ['return_id', '=', $sourceId],
+            ])->column('asset_id')));
+        }
+
+        $assetIds = array_values(array_unique(array_filter($assetIds)));
+        if ($assetIds === []) return [];
+        $rows = ErpAsset::where([['site_id', '=', $this->site_id]])
+            ->whereIn('id', $assetIds)
+            ->field('id,asset_no,imei,sn,model,spec,spec_json')
+            ->select()->toArray();
+        $map = [];
+        foreach ($rows as $row) $map[(int)$row['id']] = $row;
+        $result = [];
+        foreach ($assetIds as $assetId) {
+            if (!isset($map[$assetId])) continue;
+            $row = $map[$assetId];
+            $sourceSnapshot = json_decode((string)($row['spec_json'] ?? ''), true);
+            if (!is_array($sourceSnapshot)) $sourceSnapshot = [];
+            $result[] = [
+                'id' => (int)$row['id'],
+                'asset_no' => (string)$row['asset_no'],
+                'imei' => (string)$row['imei'],
+                'sn' => (string)$row['sn'],
+                'model' => (string)$row['model'],
+                'spec' => (string)$row['spec'],
+                'source_plugin' => (string)($sourceSnapshot['source_plugin'] ?? ''),
+                'source_device_id' => $sourceSnapshot['source_device_id'] ?? '',
+                'source_order_no' => (string)($sourceSnapshot['source_order_no'] ?? ''),
+            ];
+        }
+        return $result;
+    }
+
+    /** 只在外层事务提交后派发；失败由 outbox 重试任务补偿。 */
+    private function flushSettlementDomainEvents(): void
+    {
+        try {
+            if (Db::connect()->getPdo()->inTransaction()) return;
+        } catch (\Throwable $e) {
+            // 无活动连接时仍尝试派发，dispatch 会把失败保存在 outbox。
+        }
+        $ids = array_values(array_unique(array_filter($this->settlementOutboxIds)));
+        $this->settlementOutboxIds = [];
+        $integration = new ErpIntegrationService();
+        foreach ($ids as $id) {
+            $integration->dispatchDomainEvent((int)$id);
+        }
     }
 
     private function settleOffsetDifference(array $payableIds, array $receivableIds, float $payableRemain, float $receivableRemain, float $offsetAmount, array $data): void
@@ -1899,7 +3023,7 @@ class ErpFinanceService extends BaseAdminService
         }
 
         if ($payableLeft > 0) {
-            $payables = $this->openPayables($payableIds);
+            $payables = $this->openPayables($payableIds, false);
             $items = [];
             foreach ($payables as $payable) {
                 $remain = max(0, round((float)$payable['amount'] - (float)$payable['settled_amount'], 2));
@@ -1909,13 +3033,14 @@ class ErpFinanceService extends BaseAdminService
             }
             if (!empty($items)) {
                 $this->confirmPayableItemsInTransaction((int)$payables[0]['party_id'], $items, array_merge($data, [
+                    'request_id' => ErpIdempotency::child((string)($data['request_id'] ?? ''), 'difference-payment') ?: null,
                     'remark' => (string)($data['remark'] ?? '折账后差额付款'),
                 ]));
             }
             return;
         }
 
-        $receivables = $this->openReceivables($receivableIds);
+        $receivables = $this->openReceivables($receivableIds, false);
         $items = [];
         foreach ($receivables as $receivable) {
             $remain = max(0, round((float)$receivable['amount'] - (float)$receivable['settled_amount'], 2));
@@ -1925,8 +3050,130 @@ class ErpFinanceService extends BaseAdminService
         }
         if (!empty($items)) {
             $this->confirmReceivableItemsInTransaction((int)$receivables[0]['party_id'], $items, array_merge($data, [
+                'request_id' => ErpIdempotency::child((string)($data['request_id'] ?? ''), 'difference-receipt') ?: null,
                 'remark' => (string)($data['remark'] ?? '折账后差额收款'),
             ]));
+        }
+    }
+
+    private function runIdempotentSettlement(array $data, string $settlementType, callable $callback, array $expected = []): int
+    {
+        $requestId = ErpIdempotency::normalize($data['request_id'] ?? '');
+        $existingId = $this->existingSettlementId($requestId, $settlementType, $expected);
+        if ($existingId > 0) {
+            return $existingId;
+        }
+        $data['request_id'] = $requestId !== '' ? $requestId : null;
+        try {
+            return (int)$callback($data);
+        } catch (\Throwable $e) {
+            $existingId = $this->existingSettlementId($requestId, $settlementType, $expected);
+            if ($existingId > 0) {
+                return $existingId;
+            }
+            throw $e;
+        }
+    }
+
+    private function existingSettlementId(string $requestId, string $settlementType, array $expected = []): int
+    {
+        if ($requestId === '') {
+            return 0;
+        }
+        $settlement = ErpSettlement::where([
+            ['site_id', '=', $this->site_id],
+            ['request_id', '=', $requestId],
+        ])->findOrEmpty();
+        if ($settlement->isEmpty()) {
+            return 0;
+        }
+        if ((string)$settlement->settlement_type !== $settlementType) {
+            throw new CommonException('request_id已用于其他结算业务');
+        }
+        if (isset($expected['amount']) && abs((float)$settlement->amount - (float)$expected['amount']) > 0.0001) {
+            throw new CommonException('request_id已用于不同金额的结算请求');
+        }
+        if (!empty($expected['party_id']) && (int)$settlement->party_id !== (int)$expected['party_id']) {
+            throw new CommonException('request_id已用于其他往来主体的结算请求');
+        }
+        $targetType = trim((string)($expected['target_type'] ?? ''));
+        $targetIds = array_values(array_unique(array_filter(array_map('intval', (array)($expected['target_ids'] ?? [])))));
+        if ($targetType !== '' && $targetIds !== []) {
+            $existingTargetIds = ErpSettlementLink::where([
+                ['site_id', '=', $this->site_id],
+                ['settlement_id', '=', (int)$settlement->id],
+                ['target_type', '=', $targetType],
+            ])->order('target_id asc')->column('target_id');
+            $existingTargetIds = array_values(array_unique(array_map('intval', $existingTargetIds)));
+            sort($existingTargetIds);
+            sort($targetIds);
+            $targetMatch = (string)($expected['target_match'] ?? 'exact');
+            $mismatch = $targetMatch === 'subset'
+                ? ($existingTargetIds === [] || array_diff($existingTargetIds, $targetIds) !== [])
+                : $existingTargetIds !== $targetIds;
+            if ($mismatch) {
+                throw new CommonException('request_id已用于其他应收应付明细的结算请求');
+            }
+        }
+        if (!empty($expected['source_type']) || !empty($expected['batch_id']) || !empty($expected['batch_no'])) {
+            $payableIds = ErpSettlementLink::where([
+                ['site_id', '=', $this->site_id],
+                ['settlement_id', '=', (int)$settlement->id],
+                ['target_type', '=', ErpDict::TARGET_PAYABLE],
+            ])->column('target_id');
+            $payables = $payableIds === [] ? [] : ErpPayable::where([['site_id', '=', $this->site_id]])
+                ->whereIn('id', array_values(array_unique(array_map('intval', $payableIds))))->select();
+            if ($payables === [] || (is_object($payables) && $payables->isEmpty())) {
+                throw new CommonException('request_id对应的应付款核销明细不存在');
+            }
+            $this->assertSinglePayableBatch(
+                $payables,
+                trim((string)($expected['source_type'] ?? '')),
+                (int)($expected['batch_id'] ?? 0),
+                trim((string)($expected['batch_no'] ?? ''))
+            );
+        }
+        return (int)$settlement->id;
+    }
+
+    private function existingOffsetId(string $requestId): int
+    {
+        $settlementId = $this->existingSettlementId($requestId, ErpDict::SETTLEMENT_OFFSET);
+        if ($settlementId <= 0) {
+            return 0;
+        }
+        $offset = ErpOffset::where([
+            ['site_id', '=', $this->site_id],
+            ['settlement_id', '=', $settlementId],
+        ])->findOrEmpty();
+        return $offset->isEmpty() ? 0 : (int)$offset->id;
+    }
+
+    private function assertOffsetReplayMatches(int $offsetId, array $payableIds, array $receivableIds, float $amount, bool $settleDiff = false): void
+    {
+        $offset = ErpOffset::where([['site_id', '=', $this->site_id], ['id', '=', $offsetId]])->findOrEmpty();
+        if ($offset->isEmpty()) throw new CommonException('折账幂等记录不存在');
+        if (abs((float)$offset->amount - $amount) > 0.0001 && (!$settleDiff || $amount + 0.0001 < (float)$offset->amount)) {
+            throw new CommonException('request_id已用于不同金额的折账请求');
+        }
+        $expected = [
+            ErpDict::TARGET_PAYABLE => array_values(array_unique(array_filter(array_map('intval', $payableIds)))),
+            ErpDict::TARGET_RECEIVABLE => array_values(array_unique(array_filter(array_map('intval', $receivableIds)))),
+        ];
+        foreach ($expected as $targetType => $targetIds) {
+            sort($targetIds);
+            $existing = ErpOffsetLink::where([
+                ['site_id', '=', $this->site_id],
+                ['offset_id', '=', $offsetId],
+                ['target_type', '=', $targetType],
+            ])->column('target_id');
+            $existing = array_values(array_unique(array_map('intval', $existing)));
+            sort($existing);
+            // 折账金额可能在一侧提前耗尽，未实际核销的已选明细不会生成 link；
+            // 重放至少必须包含原请求已实际核销的全部目标。
+            if ($existing === [] || array_diff($existing, $targetIds) !== []) {
+                throw new CommonException('request_id已用于其他应收应付明细的折账请求');
+            }
         }
     }
 
@@ -1951,6 +3198,7 @@ class ErpFinanceService extends BaseAdminService
         $receivables = ErpReceivable::where([['site_id', '=', $this->site_id]])
             ->whereIn('id', array_keys($applyMap))
             ->order('id asc')
+            ->lock(true)
             ->select();
         if ($receivables->count() !== count($applyMap)) {
             throw new CommonException('应收款不存在或已变化');
@@ -1991,15 +3239,18 @@ class ErpFinanceService extends BaseAdminService
                 'amount' => $amount,
                 'party_id' => (int)$receivable->party_id,
                 'party_name' => (string)$receivable->party_name,
+                'asset_id' => (int)($receivable->asset_id ?? 0),
                 'source_type' => 'receivable',
                 'source_id' => (int)$receivable->id,
                 'source_no' => (string)$receivable->receivable_no,
                 'remark' => (string)($data['remark'] ?? '财务确认收款'),
             ]);
-            $this->refreshSaleFinance((int)$receivable->source_id);
+            if ((string)$receivable->source_type === 'sale') {
+                $this->refreshSaleFinance((int)$receivable->source_id);
+            }
         }
         $balanceAfter = $this->adjustCapitalAccount((int)($account['id'] ?? 0), 'in', $totalAmount);
-        (new ErpLedgerService())->money([
+        (new ErpLedgerService())->money(array_merge([
             'settlement_id' => $settlementId,
             'capital_account_id' => (int)($account['id'] ?? 0),
             'capital_account_name' => (string)($account['name'] ?? ''),
@@ -2008,8 +3259,10 @@ class ErpFinanceService extends BaseAdminService
             'balance_after' => $balanceAfter,
             'party_id' => $partyId,
             'party_name' => (string)$firstReceivable->party_name,
+            'voucher_urls' => $data['voucher_urls'] ?? '',
             'remark' => (string)($data['remark'] ?? '确认收款'),
-        ]);
+        ], $this->combinedCategoryMeta($receivables)));
+        $this->queueSettlementCompletedEvent($settlementId);
         return $settlementId;
     }
 
@@ -2026,13 +3279,15 @@ class ErpFinanceService extends BaseAdminService
                 continue;
             }
             if ($targetType === ErpDict::TARGET_PAYABLE) {
-                $target = $this->findPayable((int)$row['id']);
+                $target = $this->findPayable((int)$row['id'], true);
                 $this->applyPayable($target, $apply, $settlementId);
                 $this->refreshPurchaseByPayable($target);
             } else {
-                $target = $this->findReceivable((int)$row['id']);
+                $target = $this->findReceivable((int)$row['id'], true);
                 $this->applyReceivable($target, $apply, $settlementId);
-                $this->refreshSaleFinance((int)$target->source_id);
+                if ((string)$target->source_type === 'sale') {
+                    $this->refreshSaleFinance((int)$target->source_id);
+                }
             }
             ErpOffsetLink::create([
                 'site_id' => $this->site_id,
@@ -2046,63 +3301,82 @@ class ErpFinanceService extends BaseAdminService
         }
     }
 
-    private function findPayable(int $id): ErpPayable
+    private function findPayable(int $id, bool $forUpdate = false): ErpPayable
     {
-        $row = ErpPayable::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
+        $query = ErpPayable::where([['site_id', '=', $this->site_id], ['id', '=', $id]]);
+        if ($forUpdate) {
+            $query->lock(true);
+        }
+        $row = $query->findOrEmpty();
         if ($row->isEmpty()) {
             throw new CommonException('应付款不存在');
         }
         return $row;
     }
 
-    private function findReceivable(int $id): ErpReceivable
+    private function findReceivable(int $id, bool $forUpdate = false): ErpReceivable
     {
-        $row = ErpReceivable::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
+        $query = ErpReceivable::where([['site_id', '=', $this->site_id], ['id', '=', $id]]);
+        if ($forUpdate) {
+            $query->lock(true);
+        }
+        $row = $query->findOrEmpty();
         if ($row->isEmpty()) {
             throw new CommonException('应收款不存在');
         }
         return $row;
     }
 
-    private function openPayables(array $ids): array
+    private function openPayables(array $ids, bool $strict = true): array
     {
-        $ids = array_values(array_filter(array_map('intval', $ids)));
-        return empty($ids) ? [] : ErpPayable::where([['site_id', '=', $this->site_id]])
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($ids === []) return [];
+        $rows = ErpPayable::where([['site_id', '=', $this->site_id]])
             ->whereIn('id', $ids)->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL])
-            ->order('id asc')->select()->toArray();
+            ->order('id asc')->lock(true)->select()->toArray();
+        if ($strict && count($rows) !== count($ids)) {
+            throw new CommonException('部分应付款不存在、已结清或已变化，请刷新后重试');
+        }
+        return $rows;
     }
 
-    private function openReceivables(array $ids): array
+    private function openReceivables(array $ids, bool $strict = true): array
     {
-        $ids = array_values(array_filter(array_map('intval', $ids)));
-        return empty($ids) ? [] : ErpReceivable::where([['site_id', '=', $this->site_id]])
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($ids === []) return [];
+        $rows = ErpReceivable::where([['site_id', '=', $this->site_id]])
             ->whereIn('id', $ids)->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL])
-            ->order('id asc')->select()->toArray();
+            ->order('id asc')->lock(true)->select()->toArray();
+        if ($strict && count($rows) !== count($ids)) {
+            throw new CommonException('部分应收款不存在、已结清或已变化，请刷新后重试');
+        }
+        return $rows;
     }
 
     private function resolveAccount(int $id): array
     {
         if ($id <= 0) {
-            return ['id' => 0, 'name' => '未指定账户'];
+            throw new CommonException('实际收付款必须选择资金账户');
         }
-        $account = ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
+        $account = ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $id], ['status', '=', 1]])->findOrEmpty();
         if ($account->isEmpty()) {
-            throw new CommonException('资金账户不存在');
+            throw new CommonException('资金账户不存在或已停用');
         }
         return ['id' => (int)$account->id, 'name' => (string)$account->account_name];
     }
 
-    private function adjustCapitalAccount(int $accountId, string $direction, float $amount): float
+    private function adjustCapitalAccount(int $accountId, string $direction, float $amount): string
     {
         if ($accountId <= 0) {
-            return 0.0;
+            return '0.00';
         }
-        $account = ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $accountId]])->findOrEmpty();
+        $account = ErpCapitalAccount::where([['site_id', '=', $this->site_id], ['id', '=', $accountId], ['status', '=', 1]])->lock(true)->findOrEmpty();
         if ($account->isEmpty()) {
-            throw new CommonException('资金账户不存在');
+            throw new CommonException('资金账户不存在或已停用');
         }
-        $delta = $direction === 'in' ? $amount : -$amount;
-        $balanceAfter = round((float)$account->balance + $delta, 2);
+        $balanceAfter = $direction === 'in'
+            ? ErpMoney::add($account->balance, $amount)
+            : ErpMoney::subtract($account->balance, $amount);
         $account->save([
             'balance' => $balanceAfter,
             'update_at' => time(),
@@ -2119,30 +3393,58 @@ class ErpFinanceService extends BaseAdminService
         if ($order->isEmpty()) {
             return;
         }
-        $assetIds = ErpAsset::where([
-            ['site_id', '=', $this->site_id],
-            ['purchase_order_id', '=', $purchaseId],
-        ])->column('id');
-        $assetPaid = 0.0;
-        if (!empty($assetIds)) {
-            $assetPaid = (float)ErpPayable::where([
-                ['site_id', '=', $this->site_id],
-                ['source_type', '=', 'purchase_asset'],
-            ])->whereIn('source_id', $assetIds)->sum('settled_amount');
-        }
-        $orderPaid = (float)ErpPayable::where([
-            ['site_id', '=', $this->site_id],
-            ['source_type', '=', 'purchase'],
-            ['source_id', '=', $purchaseId],
-        ])->sum('settled_amount');
-        $paid = $assetPaid > 0 ? $assetPaid : $orderPaid;
-        $total = (float)$order->total_cost;
+        // 采购退货会把对应设备应付置为 void。付款、折账之后必须继续按
+        // “仍生效的设备应付”计算，不能再拿原采购单总额判断是否结清。
+        $totals = $this->effectivePurchasePayableTotals($purchaseId);
+        $total = $totals['amount'];
+        $paid = $totals['settled_amount'];
         $order->save([
             'paid_amount' => round($paid, 2),
             'payable_amount' => max(0, round($total - $paid, 2)),
             'finance_status' => ErpDict::financeStatus($total, $paid),
             'update_at' => time(),
         ]);
+    }
+
+    /**
+     * 获取采购单当前有效应付口径。
+     *
+     * 新数据按设备生成 purchase_asset；兼容历史数据时，仅在没有设备级应付的情况下
+     * 回退 purchase 批次级应付，避免两套迁移数据被重复汇总。
+     * 已采购退货/作废的应付不再计入金额和结算状态。
+     *
+     * @return array{amount: float, settled_amount: float}
+     */
+    private function effectivePurchasePayableTotals(int $purchaseId): array
+    {
+        if ($purchaseId <= 0) {
+            return ['amount' => 0.0, 'settled_amount' => 0.0];
+        }
+        $assetIds = array_map('intval', ErpAsset::where([
+            ['site_id', '=', $this->site_id],
+            ['purchase_order_id', '=', $purchaseId],
+        ])->column('id'));
+        $rows = [];
+        if ($assetIds !== []) {
+            $rows = ErpPayable::where([
+                ['site_id', '=', $this->site_id],
+                ['source_type', '=', 'purchase_asset'],
+            ])->whereIn('source_id', $assetIds)
+                ->where('status', '<>', ErpDict::STATUS_VOID)
+                ->field('amount,settled_amount')->select()->toArray();
+        }
+        if ($rows === []) {
+            $rows = ErpPayable::where([
+                ['site_id', '=', $this->site_id],
+                ['source_type', '=', 'purchase'],
+                ['source_id', '=', $purchaseId],
+            ])->where('status', '<>', ErpDict::STATUS_VOID)
+                ->field('amount,settled_amount')->select()->toArray();
+        }
+        return [
+            'amount' => round(array_sum(array_map(static fn(array $row): float => (float)$row['amount'], $rows)), 2),
+            'settled_amount' => round(array_sum(array_map(static fn(array $row): float => (float)$row['settled_amount'], $rows)), 2),
+        ];
     }
 
     private function refreshPurchaseByPayable(ErpPayable $payable): void
@@ -2170,6 +3472,10 @@ class ErpFinanceService extends BaseAdminService
 
     private function assetIdFromPayable(ErpPayable $payable): int
     {
+        $assetId = (int)($payable->asset_id ?? 0);
+        if ($assetId > 0) {
+            return $assetId;
+        }
         return (string)$payable->source_type === 'purchase_asset' ? (int)$payable->source_id : 0;
     }
 

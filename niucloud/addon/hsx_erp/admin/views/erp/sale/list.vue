@@ -12,22 +12,28 @@
                 </div>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <ErpRoleFocus :items="saleRoleFocus" />
+
+            <div class="mt-5 flex flex-wrap items-center justify-between gap-2">
+                <div class="text-sm font-medium text-gray-700">本页有效销售汇总</div>
+                <div class="text-xs text-gray-400">已取消、已退货设备不计入；毛利为成交额减设备成本</div>
+            </div>
+            <div class="mt-2 grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div class="summary-tile">
-                    <div class="summary-label">销售台数</div>
+                    <div class="summary-label">有效销售台数</div>
                     <div class="summary-value">{{ summary.count }}</div>
                 </div>
                 <div class="summary-tile">
-                    <div class="summary-label">成交金额</div>
+                    <div class="summary-label">实际销售收入</div>
                     <div class="summary-value">{{ money(summary.amount) }}</div>
                 </div>
                 <div class="summary-tile">
-                    <div class="summary-label">设备成本</div>
+                    <div class="summary-label">有效设备成本</div>
                     <div class="summary-value">{{ money(summary.cost) }}</div>
                 </div>
                 <div class="summary-tile">
-                    <div class="summary-label">毛利</div>
-                    <div class="summary-value text-green-600">{{ money(summary.profit) }}</div>
+                    <div class="summary-label">实际毛利</div>
+                    <div class="summary-value" :class="summary.profit >= 0 ? 'text-green-600' : 'text-red-600'">{{ money(summary.profit) }}</div>
                 </div>
             </div>
 
@@ -37,7 +43,6 @@
                 <el-tab-pane label="待收款" name="pending" />
                 <el-tab-pane label="部分收款" name="partial" />
                 <el-tab-pane label="已结清" name="settled" />
-                <el-tab-pane label="已撤销" name="void" />
             </el-tabs>
 
             <el-form :inline="true" class="mt-2" @submit.prevent>
@@ -90,47 +95,55 @@
                 </el-form-item>
             </el-form>
 
-            <el-table :data="table.data" v-loading="table.loading" size="large">
+            <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="saleRowClassName">
                 <el-table-column label="设备" min-width="240">
                     <template #default="{ row }">
-                        <div class="font-medium">{{ row.model || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.spec || '-' }} · IMEI {{ row.imei || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-400">资产号：{{ row.asset_no || '-' }}</div>
+                        <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
                     </template>
                 </el-table-column>
-                <el-table-column label="销售客户" min-width="170">
+                <el-table-column label="客户 / 渠道" min-width="170">
                     <template #default="{ row }">
                         <div>{{ row.party_name || '-' }}</div>
                         <div class="mt-1 text-xs text-gray-500">渠道：{{ row.sale_channel || '-' }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="金额" min-width="170" align="right">
+                <el-table-column label="成交 / 毛利" min-width="180" align="right">
                     <template #default="{ row }">
-                        <div>{{ money(row.sale_price) }}</div>
+                        <div>{{ money(row.net_sale_amount) }}</div>
+                        <div v-if="Number(row.sale_compensation_amount || 0)" class="mt-1 text-xs text-orange-500">原成交 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div>
                         <div class="mt-1 text-xs text-gray-500">成本 {{ money(row.cost) }} · 毛利 {{ money(row.profit) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="位置" min-width="160">
                     <template #default="{ row }">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</template>
                 </el-table-column>
-                <el-table-column label="批次" min-width="210">
-                    <template #default="{ row }">
-                        <div>{{ row.sale_no || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.sale_at) }}</div>
-                        <div class="mt-1 text-xs text-gray-400">制单员：{{ row.salesman_name || '-' }}</div>
+                <el-table-column label="销售批次" min-width="230">
+                    <template #default="{ row, $index }">
+                        <div class="flex items-center gap-2">
+                            <span class="batch-dot" :class="`batch-dot--${batchTone(row)}`"></span>
+                            <span class="font-medium">{{ row.sale_no || '-' }}</span>
+                        </div>
+                        <div v-if="isBatchFirst($index)" class="mt-1 text-xs font-medium text-blue-600">本页同批 {{ batchPageSize(row) }} 台</div>
+                        <div class="mt-1 text-xs text-slate-500">来源：{{ row.origin_name || 'ERP销售' }}<span v-if="row.origin_plugin_name">· {{ row.origin_plugin_name }}</span></div>
+                        <div class="mt-1 text-xs text-gray-500">渠道：{{ row.sale_channel || '-' }}</div>
+                        <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.sale_at || row.create_at) }}</div>
+                        <div class="mt-1 text-xs text-gray-400">业务员：{{ row.salesman_name || '-' }}</div>
                     </template>
                 </el-table-column>
-                <el-table-column label="收款状态" width="120">
-                    <template #default="{ row }"><el-tag :type="statusMeta(row.finance_status).type">{{ statusMeta(row.finance_status).label }}</el-tag></template>
-                </el-table-column>
-                <el-table-column label="单据" width="110">
-                    <template #default="{ row }"><el-tag :type="orderStatusMeta(row.order_status).type" effect="plain">{{ orderStatusMeta(row.order_status).label }}</el-tag></template>
-                </el-table-column>
-                <el-table-column label="操作" fixed="right" width="190" align="center">
+                <el-table-column label="当前状态" min-width="180">
                     <template #default="{ row }">
-                        <el-button type="primary" link @click="openDetail(row)">批次</el-button>
-                        <el-button v-if="canReturnSale(row)" type="warning" link @click="goSaleReturn(row)">退货</el-button>
-                        <el-button v-if="canCancelSale(row)" type="danger" link @click="cancelSale(row)">撤销</el-button>
+                        <div class="sale-status-stack">
+                            <el-tag :type="saleStateMeta(row).type" effect="plain">{{ saleStateMeta(row).label }}</el-tag>
+                            <span v-if="showFinanceStatus(row)" class="sale-status-stack__finance">收款 · {{ statusMeta(row.finance_status).label }}</span>
+                            <span v-if="saleStateHint(row)" class="sale-status-stack__hint">{{ saleStateHint(row) }}</span>
+                        </div>
+                    </template>
+                </el-table-column>
+                <el-table-column label="操作" fixed="right" width="210" align="center">
+                    <template #default="{ row }">
+                        <el-button type="primary" link @click="openDetail(row)">销售单</el-button>
+                        <el-button v-if="canReturnSale(row)" type="warning" link @click="goSaleReturn(row)">销售退货</el-button>
+                        <el-button v-if="canCancelSaleItemFromList(row)" type="danger" link @click="cancelSaleItem(row)">取消销售</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -155,7 +168,9 @@
                         <counterparty-select v-model="create.form.party_id" role-type="customer" placeholder="搜索或新建销售客户" @resolved="onPartyResolved" />
                     </el-form-item>
                     <el-form-item label="销售渠道">
-                        <el-input v-model.trim="create.form.sale_channel" placeholder="门店 / 同行 / 小程序" />
+                        <el-select v-model="create.form.sale_channel_key" filterable class="w-full" placeholder="选择销售渠道" @change="onSaleChannelChange">
+                            <el-option v-for="item in saleChannelOptions" :key="item.key" :label="item.name" :value="item.key" />
+                        </el-select>
                     </el-form-item>
                     <el-form-item label="制单员" required>
                         <el-select v-model="create.form.salesman_uid" filterable class="w-full" placeholder="选择制单员">
@@ -203,7 +218,7 @@
                         <div class="metric-value" :class="selectedProfit >= 0 ? 'text-green-600' : 'text-red-600'">{{ money(selectedProfit) }}</div>
                     </div>
                 </div>
-                <el-table :data="stock.data" v-loading="stock.loading" size="small" max-height="360" @selection-change="onStockSelection">
+                <el-table ref="stockTableRef" class="sale-select-table" :data="stock.data" v-loading="stock.loading" size="small" max-height="360" @row-click="onStockRowClick" @selection-change="onStockSelection">
                     <el-table-column type="selection" width="48" />
                     <el-table-column label="设备" min-width="280">
                         <template #default="{ row }">
@@ -250,6 +265,7 @@
                         </el-select>
                     </el-form-item>
                 </div>
+                <el-form-item v-if="create.form.settle_mode === 'cash'" label="收款凭证"><ErpFinanceVoucherUpload v-model="create.form.voucher_urls" /></el-form-item>
                 <el-form-item class="mt-4" label="备注">
                     <el-input v-model.trim="create.form.remark" type="textarea" :rows="2" />
                 </el-form-item>
@@ -266,11 +282,16 @@
                 <el-descriptions v-if="detail.data" :column="4" border>
                     <el-descriptions-item label="销售单号">{{ detail.data.sale_no }}</el-descriptions-item>
                     <el-descriptions-item label="客户">{{ detail.data.party_name }}</el-descriptions-item>
+                    <el-descriptions-item label="业务来源">{{ detail.data.origin_name || 'ERP销售' }}<span v-if="detail.data.origin_plugin_name">· {{ detail.data.origin_plugin_name }}</span></el-descriptions-item>
+                    <el-descriptions-item label="销售渠道">{{ detail.data.sale_channel || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="原业务单号">{{ detail.data.origin_no || detail.data.sale_no || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="制单员">{{ detail.data.salesman_name || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="收款状态">
                         <el-tag :type="statusMeta(detail.data.finance_status).type">{{ statusMeta(detail.data.finance_status).label }}</el-tag>
                     </el-descriptions-item>
-                    <el-descriptions-item label="销售金额">{{ money(detail.data.total_amount) }}</el-descriptions-item>
+                    <el-descriptions-item label="原成交金额">{{ money(detail.data.gross_total_amount) }}</el-descriptions-item>
+                    <el-descriptions-item label="售后补差">-{{ money(detail.data.sale_compensation_amount) }}</el-descriptions-item>
+                    <el-descriptions-item label="实际销售收入">{{ money(detail.data.net_total_amount) }}</el-descriptions-item>
                     <el-descriptions-item label="成本">{{ money(detail.data.total_cost) }}</el-descriptions-item>
                     <el-descriptions-item label="毛利">{{ money(detail.data.profit) }}</el-descriptions-item>
                     <el-descriptions-item label="剩余应收">{{ money(detail.data.receivable_amount) }}</el-descriptions-item>
@@ -281,7 +302,7 @@
                     <el-table-column prop="model" label="型号" min-width="180" />
                     <el-table-column prop="imei" label="IMEI" min-width="170" />
                     <el-table-column label="成本" width="130" align="right"><template #default="{ row }">{{ money(row.cost) }}</template></el-table-column>
-                    <el-table-column label="售价" width="130" align="right"><template #default="{ row }">{{ money(row.sale_price) }}</template></el-table-column>
+                    <el-table-column label="销售收入" width="180" align="right"><template #default="{ row }"><div>{{ money(row.net_sale_amount) }}</div><div v-if="Number(row.sale_compensation_amount || 0)" class="text-xs text-orange-500">原价 {{ money(row.sale_price) }} · 补差 -{{ money(row.sale_compensation_amount) }}</div></template></el-table-column>
                     <el-table-column label="毛利" width="130" align="right"><template #default="{ row }">{{ money(row.profit) }}</template></el-table-column>
                     <el-table-column label="状态" width="100">
                         <template #default="{ row }">
@@ -291,7 +312,7 @@
                     <el-table-column prop="remark" label="备注" min-width="180" />
                     <el-table-column label="操作" width="120" align="center" fixed="right">
                         <template #default="{ row }">
-                            <el-button v-if="canCancelSaleItem(row)" type="danger" link @click="cancelSaleItem(row)">撤销本台</el-button>
+                            <el-button v-if="canCancelSaleItem(row)" type="danger" link @click="cancelSaleItem(row)">取消销售</el-button>
                             <span v-else class="text-xs text-gray-400">-</span>
                         </template>
                     </el-table-column>
@@ -307,13 +328,23 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
+import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
-import { cancelErpSale, cancelErpSaleItem, confirmErpReceipt, createErpSale, getErpGoodsCategoryTree, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { cancelErpSaleItem, confirmErpReceipt, createErpSale, getErpGoodsCategoryTree, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
+import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
+import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
+import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 
 const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
 const activeTab = ref('')
 const router = useRouter()
+const saleRoleFocus = [
+    { role: '销售', focus: '客户、成交价、毛利与设备批次' },
+    { role: '仓管', focus: '出库设备身份、原位置与资产状态' },
+    { role: '财务', focus: '收款状态、已收事实与剩余应收' },
+]
 
 function onTabChange(tab: string) {
     if (tab === 'void') {
@@ -332,16 +363,18 @@ const accounts = ref<any[]>([])
 const staffOptions = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const categoryTree = ref<any[]>([])
+const saleChannelOptions = ref<any[]>([])
 const currentUid = ref(0)
 const selectedAssets = ref<any[]>([])
+const stockTableRef = ref<any>()
 const salePrices = reactive<Record<number, number>>({})
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
 const detail = reactive({ visible: false, loading: false, data: null as any })
 
 const summary = computed(() => table.data.reduce((acc, row: any) => {
-    if (row.order_status === 'void') return acc
+    if (row.order_status === 'void' || row.status !== 'sold') return acc
     acc.count += 1
-    acc.amount += Number(row.sale_price || 0)
+    acc.amount += Number(row.net_sale_amount || 0)
     acc.cost += Number(row.cost || 0)
     acc.profit += Number(row.profit || 0)
     return acc
@@ -362,15 +395,33 @@ watch(selectedAmount, amount => {
 })
 
 onMounted(() => {
-    loadList()
     loadAccounts()
     loadStaffOptions()
     loadWarehouses()
     loadCategories()
+    loadSaleChannels()
 })
+useErpPageRefresh(loadList)
 
 function defaultForm() {
-    return { party_id: 0, party_name: '', sale_channel: '', salesman_uid: 0, settle_method: '', settle_mode: 'credit', received_amount: 0, capital_account_id: 0, remark: '' }
+    return { party_id: 0, party_name: '', sale_channel: '', sale_channel_key: '', channel_source_plugin: '', channel_source_key: '', salesman_uid: 0, settle_method: '', settle_mode: 'credit', received_amount: 0, capital_account_id: 0, voucher_urls: '', remark: '' }
+}
+
+async function loadSaleChannels() {
+    const res: any = await getErpSaleChannelOptions()
+    saleChannelOptions.value = (Array.isArray(res?.data) ? res.data : []).filter((row: any) => Number(row.enabled ?? 1) === 1)
+    if (!create.form.sale_channel_key) {
+        const preferred = saleChannelOptions.value.find((row: any) => Number(row.is_default || 0) === 1) || saleChannelOptions.value[0]
+        if (preferred) onSaleChannelChange(preferred.key)
+    }
+}
+
+function onSaleChannelChange(key: string) {
+    const channel = saleChannelOptions.value.find((row: any) => row.key === key)
+    create.form.sale_channel_key = channel?.key || ''
+    create.form.sale_channel = channel?.name || ''
+    create.form.channel_source_plugin = channel?.source_plugin || ''
+    create.form.channel_source_key = channel?.source_key || ''
 }
 
 async function loadList() {
@@ -447,6 +498,8 @@ function buildSearchParams() {
 function openCreate() {
     create.form = defaultForm()
     create.form.salesman_uid = currentUid.value || staffOptions.value[0]?.uid || 0
+    const preferredChannel = saleChannelOptions.value.find((row: any) => Number(row.is_default || 0) === 1) || saleChannelOptions.value[0]
+    if (preferredChannel) onSaleChannelChange(preferredChannel.key)
     selectedAssets.value = []
     stock.keyword = ''
     stock.warehouse_id = ''
@@ -463,8 +516,15 @@ function onStockSelection(rows: any[]) {
     selectedAssets.value = rows
 }
 
+function onStockRowClick(row: any, _column: any, event: MouseEvent) {
+    const target = event?.target as HTMLElement | null
+    if (target?.closest('input,button,a,.el-input-number,.el-checkbox')) return
+    stockTableRef.value?.toggleRowSelection(row)
+}
+
 async function submitCreate() {
     if (!create.form.party_id && !create.form.party_name) return ElMessage.warning('请选择销售客户')
+    if (!create.form.sale_channel_key) return ElMessage.warning('请选择销售渠道')
     if (!create.form.salesman_uid) return ElMessage.warning('请选择制单员')
     if (!selectedAssets.value.length) return ElMessage.warning('请选择要销售的库存机器')
     if (selectedAssets.value.some(row => Number(salePrices[row.id] || 0) <= 0)) return ElMessage.warning('请填写每台机器销售价')
@@ -473,6 +533,12 @@ async function submitCreate() {
         if (!create.form.capital_account_id) return ElMessage.warning('请选择收款账户')
         if (Number(create.form.received_amount) > selectedAmount.value) return ElMessage.warning('收款不能大于销售金额')
     }
+    const confirmed = await ElMessageBox.confirm(
+        `确认向「${create.form.party_name || '所选客户'}」销售出库 ${selectedAssets.value.length} 台，销售总额 ${money(selectedAmount.value)}。提交后设备立即退出库存并生成应收；${create.form.settle_mode === 'cash' ? `同时确认现结收款 ${money(create.form.received_amount)}。` : '本次按挂账处理。'}普通操作不能直接撤销。`,
+        '确认销售出库',
+        { type: 'warning', confirmButtonText: '确认出库', cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!confirmed) return
     create.saving = true
     try {
         const saleRes: any = await createErpSale({
@@ -487,7 +553,8 @@ async function submitCreate() {
                 await confirmErpReceipt(receivable.id, {
                     amount: Number(create.form.received_amount),
                     capital_account_id: create.form.capital_account_id,
-                    remark: '销售现结收款'
+                    remark: '销售现结收款',
+                    voucher_urls: create.form.voucher_urls
                 })
             }
         }
@@ -534,58 +601,45 @@ function onStockWarehouseChange() {
     reloadStock()
 }
 
-function canCancelSale(row: any) {
-    return row.order_status === 'completed' && row.finance_status === 'pending'
-}
-
-/** 设备已售出且销售单未撤销，才能发起退货 */
+/** 已形成收款事实的在售设备走销售退货；未收款设备直接取消销售。 */
 function canReturnSale(row: any) {
-    return row.status === 'sold' && row.order_status !== 'void'
+    return row.status === 'sold'
+        && row.order_status !== 'void'
+        && row.return_status !== 'pending'
+        && ['partial', 'settled'].includes(String(row.finance_status || ''))
 }
 
 function goSaleReturn(row: any) {
     router.push({
         path: '/site/hsx_erp/sale_return',
-        query: { sale_order_id: row.sale_order_id },
+        query: { sale_order_id: row.sale_order_id, asset_id: row.asset_id },
     })
 }
 
-async function cancelSale(row: any) {
-    try {
-        const result: any = await ElMessageBox.prompt(
-            '撤销后设备会回到原仓库，应收款作废。已有收款或折账的单据不能撤销，需要走退货流程。',
-            '撤销销售单',
-            {
-                confirmButtonText: '确认撤销',
-                cancelButtonText: '取消',
-                inputPlaceholder: '填写撤销原因，便于后续追溯'
-            }
-        )
-        await cancelErpSale(Number(row.sale_order_id || row.id), { remark: result?.value || '' })
-        ElMessage.success('销售单已撤销')
-        await loadList()
-    } catch (e: any) {
-        if (e !== 'cancel' && e !== 'close') throw e
-    }
+function canCancelSaleItemFromList(row: any) {
+    return row.status === 'sold'
+        && row.order_status === 'completed'
+        && row.finance_status === 'pending'
+        && row.return_status !== 'pending'
 }
 
 function canCancelSaleItem(row: any) {
-    return detail.data?.status === 'completed' && detail.data?.finance_status === 'pending' && row.status === 'sold'
+    return detail.data?.status === 'completed' && detail.data?.finance_status === 'pending' && row.status === 'sold' && row.return_status !== 'pending'
 }
 
 async function cancelSaleItem(row: any) {
     try {
         const result: any = await ElMessageBox.prompt(
-            '撤销后该设备会回到原仓库库存；如果这是销售单最后一台设备，系统会同步撤销整张销售单。已有收款或折账的单据不能直接撤销。',
-            '撤销单台销售',
+            '取消后该设备会回到原仓库，并冲销对应未收应收；如果这是销售单最后一台有效设备，系统会同步结束整张销售单。已有收款或折账的设备必须走销售退货。',
+            '确认取消销售',
             {
-                confirmButtonText: '确认撤销',
-                cancelButtonText: '取消',
-                inputPlaceholder: '填写撤销原因，便于后续追溯'
+                confirmButtonText: '确认取消销售',
+                cancelButtonText: '返回检查',
+                inputPlaceholder: '填写取消原因，便于后续追溯'
             }
         )
         await cancelErpSaleItem(Number(row.id), { remark: result?.value || '' })
-        ElMessage.success('设备销售已撤销')
+        ElMessage.success('设备销售已取消')
         if (detail.data?.id) await openDetail(detail.data)
         await loadList()
     } catch (e: any) {
@@ -598,7 +652,7 @@ function statusMeta(status: string) {
         pending: { label: '待收款', type: 'warning' },
         partial: { label: '部分收款', type: 'primary' },
         settled: { label: '已结清', type: 'success' },
-        void: { label: '已撤销', type: 'info' }
+        void: { label: '已取消', type: 'info' }
     }
     return map[status] || { label: status || '-', type: 'info' }
 }
@@ -607,13 +661,30 @@ function orderStatusMeta(status: string) {
     const map: any = {
         completed: { label: '已完成', type: 'success' },
         returned: { label: '已退货', type: 'warning' },
-        void: { label: '已撤销', type: 'info' }
+        void: { label: '已取消', type: 'info' }
     }
     return map[status] || { label: status || '-', type: 'info' }
 }
 
+function saleStateMeta(row: any) {
+    if (row.return_status === 'pending') return { label: '退货处理中', type: 'warning' }
+    if (row.status === 'returned') return { label: '已销售退货', type: 'warning' }
+    if (row.status === 'void' || row.order_status === 'void') return { label: '已取消销售', type: 'info' }
+    return { label: '已出库', type: 'success' }
+}
+
+function showFinanceStatus(row: any) {
+    return row.status === 'sold' && row.order_status !== 'void'
+}
+
+function saleStateHint(row: any) {
+    if (row.return_no) return row.return_no
+    if (row.status === 'void') return row.remark || '未形成有效销售'
+    return ''
+}
+
 function saleItemStatusLabel(status: string) {
-    const map: any = { sold: '已售', returned: '已退货', void: '已撤销' }
+    const map: any = { sold: '已出库', returned: '已销售退货', void: '已取消销售' }
     return map[status] || status || '-'
 }
 
@@ -638,6 +709,28 @@ function formatTime(value: any) {
 function staffName(user: any) {
     return user?.name || user?.real_name || user?.username || `员工#${user?.uid || '-'}`
 }
+
+function batchKey(row: any) {
+    return Number(row?.sale_order_id || row?.id || 0)
+}
+
+function batchTone(row: any) {
+    return Math.abs(batchKey(row)) % 4
+}
+
+function isBatchFirst(index: number) {
+    if (index <= 0) return true
+    return batchKey(table.data[index]) !== batchKey(table.data[index - 1])
+}
+
+function batchPageSize(row: any) {
+    const key = batchKey(row)
+    return table.data.filter((item: any) => batchKey(item) === key).length
+}
+
+function saleRowClassName({ row, rowIndex }: { row: any; rowIndex: number }) {
+    return [`erp-batch-tone-${batchTone(row)}`, isBatchFirst(rowIndex) ? 'erp-batch-start' : '', row.status !== 'sold' ? 'erp-sale-inactive' : ''].filter(Boolean).join(' ')
+}
 </script>
 
 <style scoped>
@@ -656,6 +749,26 @@ function staffName(user: any) {
     font-size: 22px;
     font-weight: 650;
 }
+.batch-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+}
+.batch-dot--0 { background: #60a5fa; }
+.batch-dot--1 { background: #34d399; }
+.batch-dot--2 { background: #a78bfa; }
+.batch-dot--3 { background: #f59e0b; }
+.sale-status-stack { display: flex; align-items: flex-start; flex-direction: column; gap: 5px; }
+.sale-status-stack__finance { color: #64748b; font-size: 12px; }
+.sale-status-stack__hint { overflow: hidden; max-width: 170px; color: #94a3b8; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+:deep(.el-table__body tr.erp-batch-tone-0 > td.el-table__cell) { background: #f7fbff; }
+:deep(.el-table__body tr.erp-batch-tone-1 > td.el-table__cell) { background: #f7fcfa; }
+:deep(.el-table__body tr.erp-batch-tone-2 > td.el-table__cell) { background: #fbf9ff; }
+:deep(.el-table__body tr.erp-batch-tone-3 > td.el-table__cell) { background: #fffaf3; }
+:deep(.el-table__body tr.erp-batch-start > td.el-table__cell) { border-top: 2px solid #dbe4ef; }
+:deep(.el-table__body tr.erp-sale-inactive > td.el-table__cell) { color: #94a3b8; background: #f8fafc; }
+:deep(.el-table__body tr:hover > td.el-table__cell) { background: #eef5ff !important; }
 .section-title {
     margin: 18px 0 12px;
     border-left: 3px solid var(--el-color-primary);

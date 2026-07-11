@@ -144,6 +144,22 @@
     z-index: 20;
 }
 
+.fab--label {
+    width: auto;
+    min-width: 168rpx;
+    padding: 0 28rpx;
+    gap: 10rpx;
+    border-radius: 999rpx;
+}
+
+.fab__text {
+    color: #fff;
+    font-size: 25rpx;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+}
+
 // ── 底部浮条（表单提交）──────────────────────────────────────────────────────
 .float-bar {
     position: fixed;

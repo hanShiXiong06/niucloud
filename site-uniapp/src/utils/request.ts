@@ -2,10 +2,14 @@ import useUserStore from '@/stores/user'
 import { t } from '@/locale'
 import { getToken, getAppChannel, redirect, currRoute, isUrl } from './common'
 import qs from 'qs'
+import { beginRequestLoading, endRequestLoading } from '@/hooks/useRequestLoading'
 
 interface RequestConfig {
     showErrorMessage?: boolean
     showSuccessMessage?: boolean
+    showLoading?: boolean
+    loadingText?: string
+    loadingDelay?: number
 }
 
 interface RequestOptions extends UniNamespace.RequestOptions, RequestOptions { }
@@ -68,6 +72,7 @@ class Request {
      */
     public upload(url: string, data: AnyObject = {}, config: RequestConfig = {}) {
         this.requestInterceptors()
+        const loadingToken = config.showLoading === false ? 0 : beginRequestLoading({ title: config.loadingText || '上传中…', delay: config.loadingDelay })
 
         const params = Object.assign(uni.$u.deepClone(this.config), config, {
             url: this.baseUrl + url,
@@ -93,6 +98,9 @@ class Request {
                 },
                 fail: res => {
                     reject(res)
+                },
+                complete: () => {
+                    if (loadingToken) endRequestLoading(loadingToken)
                 }
             })
         })
@@ -103,6 +111,7 @@ class Request {
      */
     private request(method: string, url: string, data ?: AnyObject, config: RequestConfig = {}) {
         this.requestInterceptors()
+        const loadingToken = config.showLoading === false ? 0 : beginRequestLoading({ title: config.loadingText || '加载中…', delay: config.loadingDelay })
 
         const params = Object.assign(uni.$u.deepClone(this.config), config, {
             url: this.baseUrl + url,
@@ -136,6 +145,7 @@ class Request {
                     reject(res)
                 },
                 complete: (res) => {
+                    if (loadingToken) endRequestLoading(loadingToken)
                     this.handleRequestFail(res)
                 }
             })

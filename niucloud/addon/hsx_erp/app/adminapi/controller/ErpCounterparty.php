@@ -13,13 +13,15 @@ use think\facade\Db;
 
 class ErpCounterparty extends BaseAdminController
 {
-    private static bool $partyMemberTableEnsured = false;
 
     public function options()
     {
         $params = $this->request->params([
             ['keyword', ''],
             ['role_type', ''],
+            ['page', 1],
+            ['limit', 20],
+            ['paginate', 0],
         ]);
         $keyword = trim((string)$params['keyword']);
         $query = ErpParty::where([['site_id', '=', $this->siteId()], ['status', '=', 1]]);
@@ -27,15 +29,20 @@ class ErpCounterparty extends BaseAdminController
             $query->whereLike('party_name|contact_name|contact_mobile|m_no', '%' . $keyword . '%');
         }
         if (!empty($params['role_type']) && (string)$params['role_type'] !== 'all') {
-            $query->where('party_type', '=', $this->normalizeType((string)$params['role_type']));
+            $role = $this->normalizeRole((string)$params['role_type']);
+            $query->whereRaw("FIND_IN_SET('" . addslashes($role) . "', role_flags)");
         }
-        $rows = $query->field('id,party_no,party_name,party_type,contact_name,contact_mobile,m_no')
-            ->order('id desc')
-            ->limit(20)
-            ->select()
-            ->toArray();
+        $page = max(1, (int)$params['page']);
+        $limit = max(10, min(50, (int)$params['limit']));
+        $query->field('id,party_no,party_name,party_type,role_flags,group_keys,contact_name,contact_mobile,m_no')->order('id desc');
+        if ((int)$params['paginate'] !== 1) {
+            return success(array_map(fn($row) => $this->formatRow($row), $query->limit(50)->select()->toArray()));
+        }
+        $result = $query->paginate(['list_rows' => $limit, 'page' => $page])->toArray();
+        $rows = (array)($result['data'] ?? []);
+        $result['data'] = array_map(fn($row) => $this->formatRow($row), $rows);
 
-        return success(array_map(fn($row) => $this->formatRow($row), $rows));
+        return success($result);
     }
 
     public function quickContact()
@@ -55,26 +62,71 @@ class ErpCounterparty extends BaseAdminController
         if ($mobile === '') {
             throw new CommonException('请填写手机号');
         }
-        $type = $this->normalizeType((string)$params['role_type']);
-        $result = $this->quickCreateContact($name, $mobile, $type, trim((string)$params['m_no']));
+        $requestedRole = (string)$params['role_type'];
+        $type = $this->normalizeType($requestedRole);
+        $result = $this->quickCreateContact($name, $mobile, $type, trim((string)$params['m_no']), $this->normalizeRole($requestedRole));
         return success($result);
+    }
+
+    /** 新增不需要登录账号的 ERP 往来主体。 */
+    public function quickParty()
+    {
+        $params = $this->request->params([
+            ['name', ''], ['mobile', ''], ['m_no', ''], ['role_type', 'customer'], ['group_keys', []],
+        ]);
+        $name = trim((string)$params['name']);
+        if ($name === '') throw new CommonException('请填写主体名称');
+        $party = $this->ensureParty($name, trim((string)$params['mobile']), $this->normalizeType((string)$params['role_type']), trim((string)$params['m_no']), $this->normalizeRole((string)$params['role_type']));
+        $groups = array_values(array_unique(array_filter(array_map('trim', (array)$params['group_keys']))));
+        if ($groups !== []) $party->save(['group_keys' => implode(',', $groups), 'update_at' => time()]);
+        return success($this->formatRow($party->toArray()));
+    }
+
+    public function updateParty(int $id)
+    {
+        $party = ErpParty::where([['site_id', '=', $this->siteId()], ['id', '=', $id]])->findOrEmpty();
+        if ($party->isEmpty()) throw new CommonException('往来主体不存在');
+        $params = $this->request->params([
+            ['party_name', ''], ['contact_name', ''], ['contact_mobile', ''], ['m_no', ''], ['role_flags', []], ['group_keys', []],
+        ]);
+        $name = trim((string)$params['party_name']);
+        if ($name === '') throw new CommonException('主体名称不能为空');
+        $allowedRoles = ['purchase_supplier', 'sale_customer', 'recycle_customer', 'refurbish_provider', 'other'];
+        $roles = array_values(array_unique(array_intersect($allowedRoles, array_map('trim', (array)$params['role_flags']))));
+        if ($roles === []) throw new CommonException('至少选择一个主体身份');
+        $groups = array_values(array_unique(array_filter(array_map('trim', (array)$params['group_keys']))));
+        $party->save([
+            'party_name' => $name, 'contact_name' => trim((string)$params['contact_name']), 'contact_mobile' => trim((string)$params['contact_mobile']),
+            'm_no' => trim((string)$params['m_no']), 'role_flags' => implode(',', $roles), 'group_keys' => implode(',', $groups), 'update_at' => time(),
+        ]);
+        return success($this->formatRow($party->toArray()));
     }
 
     public function memberOptions()
     {
-        $this->ensurePartyMemberTable();
         $keyword = trim((string)$this->request->param('keyword', ''));
+        $page = max(1, (int)$this->request->param('page', 1));
+        $limit = max(10, min(50, (int)$this->request->param('limit', 30)));
+        $paginate = (int)$this->request->param('paginate', 0) === 1;
+        $roleFilter = trim((string)$this->request->param('role_filter', ''));
         $query = Member::where([['site_id', '=', $this->siteId()]]);
+        if ($roleFilter !== '' && $roleFilter !== 'all') {
+            $role = $this->normalizeRole($roleFilter);
+            $partyIds = ErpParty::where([['site_id', '=', $this->siteId()], ['status', '=', 1]])
+                ->whereRaw("FIND_IN_SET('" . addslashes($role) . "', role_flags)")
+                ->column('id');
+            $memberIds = $partyIds === [] ? [] : ErpPartyMember::where([['site_id', '=', $this->siteId()], ['status', '=', 1]])->whereIn('party_id', $partyIds)->column('member_id');
+            if ($memberIds === []) return success($paginate ? ['data' => [], 'current_page' => 1, 'last_page' => 1, 'total' => 0] : []);
+            $query->whereIn('member_id', $memberIds);
+        }
         if ($keyword !== '') {
             $query->whereLike('member_no|username|nickname|mobile', '%' . $keyword . '%');
         }
-        $members = $query->field('member_id,member_no,username,nickname,mobile,status')
-            ->order('member_id desc')
-            ->limit(50)
-            ->select()
-            ->toArray();
+        $baseQuery = $query->field('member_id,member_no,username,nickname,mobile,status')->order('member_id desc');
+        $pageResult = $paginate ? $baseQuery->paginate(['list_rows' => $limit, 'page' => $page])->toArray() : null;
+        $members = $paginate ? (array)($pageResult['data'] ?? []) : $baseQuery->limit(50)->select()->toArray();
         if (empty($members)) {
-            return success([]);
+            return success($paginate ? array_merge((array)$pageResult, ['data' => []]) : []);
         }
         $relations = ErpPartyMember::where([
             ['site_id', '=', $this->siteId()],
@@ -86,7 +138,7 @@ class ErpCounterparty extends BaseAdminController
         if (!empty($partyIds)) {
             $parties = ErpParty::where([['site_id', '=', $this->siteId()]])
                 ->whereIn('id', $partyIds)
-                ->field('id,party_name,m_no')
+                ->field('id,party_name,m_no,role_flags,group_keys')
                 ->select()
                 ->toArray();
             $partyMap = array_column($parties, null, 'id');
@@ -100,14 +152,17 @@ class ErpCounterparty extends BaseAdminController
             $member['party_name'] = (string)($party['party_name'] ?? '');
             $member['counterparty_name'] = (string)($party['party_name'] ?? '');
             $member['m_no'] = (string)($party['m_no'] ?? '');
+            $member['role_flags'] = $this->csvValues((string)($party['role_flags'] ?? ''));
+            $member['group_keys'] = $this->csvValues((string)($party['group_keys'] ?? ''));
         }
         unset($member);
-        return success($members);
+        if (!$paginate) return success($members);
+        $pageResult['data'] = $members;
+        return success($pageResult);
     }
 
     public function resolveContact()
     {
-        $this->ensurePartyMemberTable();
         $params = $this->request->params([
             ['member_id', 0],
             ['name', ''],
@@ -120,7 +175,8 @@ class ErpCounterparty extends BaseAdminController
                 trim((string)$params['name']),
                 trim((string)$params['mobile']),
                 $this->normalizeType((string)$params['role_type']),
-                ''
+                '',
+                $this->normalizeRole((string)$params['role_type'])
             ));
         }
         $member = Member::where([['site_id', '=', $this->siteId()], ['member_id', '=', $memberId]])->findOrEmpty();
@@ -135,11 +191,12 @@ class ErpCounterparty extends BaseAdminController
         if (!$relation->isEmpty()) {
             $party = ErpParty::where([['site_id', '=', $this->siteId()], ['id', '=', (int)$relation->party_id]])->findOrEmpty();
             if (!$party->isEmpty()) {
+                $this->appendPartyRole($party, $this->normalizeRole((string)$params['role_type']));
                 return success($this->formatContact($member->toArray(), $party->toArray(), false));
             }
         }
         $name = trim((string)($member->nickname ?: $member->username ?: ('对接人' . $memberId)));
-        $party = $this->ensureParty($name, (string)$member->mobile, $this->normalizeType((string)$params['role_type']), '');
+        $party = $this->ensureParty($name, (string)$member->mobile, $this->normalizeType((string)$params['role_type']), '', $this->normalizeRole((string)$params['role_type']));
         $this->bindPartyMember((int)$party->id, $memberId);
         return success($this->formatContact($member->toArray(), $party->toArray(), true));
     }
@@ -162,7 +219,19 @@ class ErpCounterparty extends BaseAdminController
         };
     }
 
-    private function quickCreateContact(string $name, string $mobile, string $type, string $mNo): array
+    private function normalizeRole(string $type): string
+    {
+        return match ($type) {
+            'supplier', 'purchase_supplier' => 'purchase_supplier',
+            'refurbish_provider' => 'refurbish_provider',
+            'recycle_customer' => 'recycle_customer',
+            'channel' => 'sale_customer',
+            'other' => 'other',
+            default => 'sale_customer',
+        };
+    }
+
+    private function quickCreateContact(string $name, string $mobile, string $type, string $mNo, string $role = ''): array
     {
         if ($name === '') {
             throw new CommonException('请填写对接人姓名');
@@ -183,15 +252,16 @@ class ErpCounterparty extends BaseAdminController
             ]);
             $member = Member::where([['site_id', '=', $this->siteId()], ['member_id', '=', $memberId]])->findOrEmpty();
         }
-        $party = $this->ensureParty($name, $mobile, $type, $mNo);
+        $party = $this->ensureParty($name, $mobile, $type, $mNo, $role !== '' ? $role : $this->normalizeRole($type));
         $this->bindPartyMember((int)$party->id, (int)$member->member_id);
         return $this->formatContact($member->toArray(), $party->toArray(), true);
     }
 
-    private function ensureParty(string $name, string $mobile, string $type, string $mNo): ErpParty
+    private function ensureParty(string $name, string $mobile, string $type, string $mNo, string $role = ''): ErpParty
     {
         $party = ErpParty::where([['site_id', '=', $this->siteId()], ['party_name', '=', $name]])->findOrEmpty();
         if (!$party->isEmpty()) {
+            $this->appendPartyRole($party, $role !== '' ? $role : $this->normalizeRole($type));
             return $party;
         }
         $now = time();
@@ -200,6 +270,8 @@ class ErpCounterparty extends BaseAdminController
             'party_no' => ErpLedgerService::makeNo('PT'),
             'party_name' => $name,
             'party_type' => $type,
+            'role_flags' => $role !== '' ? $role : $this->normalizeRole($type),
+            'group_keys' => '',
             'contact_name' => $name,
             'contact_mobile' => $mobile,
             'm_no' => $mNo,
@@ -209,9 +281,22 @@ class ErpCounterparty extends BaseAdminController
         ]);
     }
 
+    private function appendPartyRole(ErpParty $party, string $role): void
+    {
+        if ($role === '') return;
+        $roles = $this->csvValues((string)$party->role_flags);
+        if (in_array($role, $roles, true)) return;
+        $roles[] = $role;
+        $party->save(['role_flags' => implode(',', $roles), 'update_at' => time()]);
+    }
+
+    private function csvValues(string $value): array
+    {
+        return array_values(array_unique(array_filter(array_map('trim', explode(',', $value)))));
+    }
+
     private function bindPartyMember(int $partyId, int $memberId): void
     {
-        $this->ensurePartyMemberTable();
         $now = time();
         $relation = ErpPartyMember::where([['site_id', '=', $this->siteId()], ['member_id', '=', $memberId]])->findOrEmpty();
         $values = [
@@ -231,30 +316,6 @@ class ErpCounterparty extends BaseAdminController
         ]));
     }
 
-    private function ensurePartyMemberTable(): void
-    {
-        if (self::$partyMemberTableEnsured) {
-            return;
-        }
-        self::$partyMemberTableEnsured = true;
-        $table = (new ErpPartyMember())->getTable();
-        Db::execute("CREATE TABLE IF NOT EXISTS `{$table}` (
-            `id` int unsigned NOT NULL AUTO_INCREMENT,
-            `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
-            `party_id` int NOT NULL DEFAULT 0 COMMENT '往来主体ID',
-            `member_id` int NOT NULL DEFAULT 0 COMMENT '对接人会员ID',
-            `relation_role` varchar(20) NOT NULL DEFAULT 'business' COMMENT 'owner/finance/business',
-            `is_finance_contact` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否主要财务联系人',
-            `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1有效/0失效',
-            `remark` varchar(255) NOT NULL DEFAULT '',
-            `create_at` int NOT NULL DEFAULT 0,
-            `update_at` int NOT NULL DEFAULT 0,
-            PRIMARY KEY (`id`),
-            UNIQUE KEY `uk_site_member` (`site_id`,`member_id`),
-            KEY `idx_party` (`site_id`,`party_id`,`status`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-往来主体对接人'");
-    }
-
     private function formatContact(array $member, array $party, bool $autoCreated): array
     {
         $memberName = (string)($member['nickname'] ?: $member['username'] ?: ('会员#' . ($member['member_id'] ?? 0)));
@@ -267,6 +328,8 @@ class ErpCounterparty extends BaseAdminController
             'counterparty_id' => (int)($party['id'] ?? 0),
             'counterparty_name' => (string)($party['party_name'] ?? ''),
             'm_no' => (string)($party['m_no'] ?? ''),
+            'role_flags' => $this->csvValues((string)($party['role_flags'] ?? '')),
+            'group_keys' => $this->csvValues((string)($party['group_keys'] ?? '')),
             'auto_created' => $autoCreated,
         ];
     }
@@ -282,6 +345,8 @@ class ErpCounterparty extends BaseAdminController
             'party_name' => (string)($row['party_name'] ?? ''),
             'name' => (string)($row['party_name'] ?? ''),
             'party_type' => (string)($row['party_type'] ?? 'customer'),
+            'role_flags' => $this->csvValues((string)($row['role_flags'] ?? '')),
+            'group_keys' => $this->csvValues((string)($row['group_keys'] ?? '')),
             'contact_name' => (string)($row['contact_name'] ?? ''),
             'contact_mobile' => (string)($row['contact_mobile'] ?? ''),
             'mobile' => (string)($row['contact_mobile'] ?? ''),

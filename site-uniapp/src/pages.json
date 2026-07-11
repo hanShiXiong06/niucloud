@@ -492,6 +492,11 @@
 					"needLogin": true
 				},
 				{
+					"path": "pages/payable/detail",
+					"style": { "navigationBarTitleText": "应付详情" },
+					"needLogin": true
+				},
+				{
 					"path": "pages/receivable/list",
 					"style": { "navigationBarTitleText": "应收款" },
 					"needLogin": true
@@ -502,8 +507,23 @@
 					"needLogin": true
 				},
 				{
+					"path": "pages/operating_finance/list",
+					"style": { "navigationBarTitleText": "经营收支" },
+					"needLogin": true
+				},
+				{
 					"path": "pages/stock/list",
 					"style": { "navigationBarTitleText": "库存设备" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/serial_trace/list",
+					"style": { "navigationBarTitleText": "串号追踪" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/serial_trace/detail",
+					"style": { "navigationBarTitleText": "串号生命周期" },
 					"needLogin": true
 				},
 				{
@@ -524,6 +544,11 @@
 				{
 					"path": "pages/sale_return/create",
 					"style": { "navigationBarTitleText": "发起销售退货" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale_return/detail",
+					"style": { "navigationBarTitleText": "销售退货详情" },
 					"needLogin": true
 				},
 				{

@@ -1,71 +1,117 @@
 <template>
     <div class="main-container">
         <el-card class="!border-none" shadow="never">
-            <div class="flex items-start justify-between gap-4">
+            <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                    <div class="text-page-title">ERP 工作台</div>
-                    <div class="mt-1 text-sm text-gray-500">先围绕采购和财务付款跑通闭环，所有付款都由财务确认后正式核销。</div>
+                    <div class="text-page-title">ERP 经营工作台</div>
+                    <div class="mt-1 text-sm text-gray-500">统一查看采购、销售、库存、利润与财务待办，统计来自完整业务数据。</div>
                 </div>
-                <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
-            </div>
-
-            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-                <div class="summary-tile">
-                    <div class="summary-label">采购单数</div>
-                    <div class="summary-value">{{ purchaseRows.length }}</div>
-                </div>
-                <div class="summary-tile">
-                    <div class="summary-label">采购金额</div>
-                    <div class="summary-value">{{ money(purchaseTotal) }}</div>
-                </div>
-                <div class="summary-tile">
-                    <div class="summary-label">待财务付款</div>
-                    <div class="summary-value text-orange-600">{{ payablePending.length }}</div>
-                </div>
-                <div class="summary-tile">
-                    <div class="summary-label">剩余应付</div>
-                    <div class="summary-value text-orange-600">{{ money(payableRemain) }}</div>
+                <div class="flex items-center gap-3">
+                    <el-button @click="openKpiConfig">绩效配置</el-button>
+                    <el-radio-group v-model="period" @change="loadDashboard">
+                        <el-radio-button label="today">今日</el-radio-button>
+                        <el-radio-button label="yesterday">昨天</el-radio-button>
+                        <el-radio-button label="last7">近7天</el-radio-button>
+                        <el-radio-button label="month">本月</el-radio-button>
+                        <el-radio-button label="last_month">上月</el-radio-button>
+                        <el-radio-button label="all">全部</el-radio-button>
+                    </el-radio-group>
+                    <el-date-picker v-model="customRange" type="daterange" range-separator="至" start-placeholder="自定义开始" end-placeholder="自定义结束" :clearable="true" @change="onCustomRangeChange" />
+                    <el-button :icon="Refresh" :loading="loading" @click="loadDashboard">刷新</el-button>
                 </div>
             </div>
 
-            <div class="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
-                <div class="panel">
-                    <div class="panel-head">
-                        <div class="panel-title">待财务确认付款</div>
-                        <div class="text-xs text-gray-400">财务核对账户流水后再确认</div>
-                    </div>
-                    <el-table :data="payablePending" v-loading="loading" size="large" max-height="420">
-                        <el-table-column prop="party_name" label="付款对象" min-width="150" />
-                        <el-table-column prop="source_no" label="来源单号" min-width="150" />
-                        <el-table-column label="剩余应付" width="130" align="right">
-                            <template #default="{ row }">{{ money(remain(row)) }}</template>
-                        </el-table-column>
-                        <el-table-column label="状态" width="110">
-                            <template #default="{ row }">
-                                <el-tag :type="row.status === 'partial' ? 'primary' : 'warning'">{{ row.status === 'partial' ? '部分付款' : '待付款' }}</el-tag>
-                            </template>
-                        </el-table-column>
+            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div v-for="item in summaryCards" :key="item.label" class="summary-tile">
+                    <div class="summary-label">{{ item.label }}</div>
+                    <div class="summary-value" :class="item.className">{{ item.value }}</div>
+                    <div v-if="item.hint" class="mt-1 text-xs text-gray-400">{{ item.hint }}</div>
+                </div>
+            </div>
+
+            <div class="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-5">
+                <div class="panel xl:col-span-3">
+                    <div class="panel-head"><div><div class="panel-title">经营结构</div><div class="mt-1 text-xs text-gray-400">销售、经营收支与最终利润对比</div></div><el-tag effect="plain">{{ periodLabel }}</el-tag></div>
+                    <div ref="operationChartRef" class="operation-chart"></div>
+                </div>
+                <div class="panel xl:col-span-2">
+                    <div class="panel-head"><div><div class="panel-title">利润构成</div><div class="mt-1 text-xs text-gray-400">收入来源与经营费用占比</div></div></div>
+                    <div ref="structureChartRef" class="operation-chart"></div>
+                </div>
+            </div>
+
+            <div class="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <div class="panel xl:col-span-3">
+                    <div class="panel-head"><div><div class="panel-title">员工绩效</div><div class="mt-1 text-xs text-gray-400">按真实采购、销售、质检与财务事实计算；展开可看每项指标</div></div><el-tag effect="plain">{{ periodLabel }}</el-tag></div>
+                    <el-table :data="kpi.staff || []" empty-text="本期暂无员工业务事实">
+                        <el-table-column type="expand"><template #default="{ row }"><div class="grid grid-cols-1 gap-3 p-3 md:grid-cols-3"><div v-for="item in row.details" :key="item.metric_key" class="rounded bg-slate-50 p-3"><div class="text-sm font-medium">{{ item.metric_name }}</div><div class="mt-2 text-xs text-gray-500">实际 {{ item.actual }}{{ item.unit }} / 目标 {{ item.target }}{{ item.unit }}</div><el-progress class="mt-2" :percentage="Math.min(100, Number(item.completion_rate || 0))" /></div></div></template></el-table-column>
+                        <el-table-column type="index" label="排名" width="70" />
+                        <el-table-column prop="name" label="员工" min-width="150" />
+                        <el-table-column label="综合得分" width="180"><template #default="{ row }"><el-progress :percentage="Math.min(100, Number(row.score || 0))" :format="() => `${row.score} 分`" /></template></el-table-column>
                     </el-table>
                 </div>
-
                 <div class="panel">
                     <div class="panel-head">
-                        <div class="panel-title">最近采购单</div>
-                        <div class="text-xs text-gray-400">采购开单后自动生成库存和应付</div>
+                        <div class="panel-title">财务待办</div>
+                        <div class="text-xs text-gray-400">当前未结余额，不受统计期间影响</div>
                     </div>
-                    <el-table :data="purchaseRows" v-loading="loading" size="large" max-height="420">
-                        <el-table-column prop="purchase_no" label="采购单号" min-width="160" />
-                        <el-table-column prop="party_name" label="采购渠道" min-width="150" />
-                        <el-table-column label="金额" width="130" align="right">
-                            <template #default="{ row }">{{ money(row.total_cost) }}</template>
+                    <div class="todo-grid">
+                        <div class="todo-item"><span>待付款</span><strong>{{ todo.payable_count || 0 }} 笔</strong></div>
+                        <div class="todo-item"><span>待收款</span><strong>{{ todo.receivable_count || 0 }} 笔</strong></div>
+                        <div class="todo-item"><span>可折账主体</span><strong>{{ todo.offset_party_count || 0 }} 个</strong></div>
+                        <div class="todo-item"><span>剩余应付</span><strong class="text-orange-600">{{ money(summary.payable_remain) }}</strong></div>
+                        <div class="todo-item"><span>剩余应收</span><strong class="text-blue-600">{{ money(summary.receivable_remain) }}</strong></div>
+                    </div>
+                </div>
+
+                <div class="panel xl:col-span-2">
+                    <div class="panel-head">
+                        <div class="panel-title">最近结算</div>
+                        <div class="text-xs text-gray-400">收款、付款与折账事实</div>
+                    </div>
+                    <el-table :data="recent.settlements || []" v-loading="loading" size="large" max-height="320" empty-text="暂无结算记录">
+                        <el-table-column prop="settlement_no" label="结算单号" min-width="170" />
+                        <el-table-column prop="party_name" label="往来单位" min-width="140" />
+                        <el-table-column label="类型" width="90">
+                            <template #default="{ row }"><el-tag :type="settlementType(row.settlement_type)">{{ settlementLabel(row.settlement_type) }}</el-tag></template>
                         </el-table-column>
-                        <el-table-column label="付款状态" width="110">
-                            <template #default="{ row }">
-                                <el-tag :type="row.finance_status === 'settled' ? 'success' : row.finance_status === 'partial' ? 'primary' : 'warning'">
-                                    {{ row.finance_status === 'settled' ? '已结清' : row.finance_status === 'partial' ? '部分付款' : '待付款' }}
-                                </el-tag>
-                            </template>
-                        </el-table-column>
+                        <el-table-column label="金额" width="130" align="right"><template #default="{ row }">{{ money(row.amount) }}</template></el-table-column>
+                        <el-table-column prop="capital_account_name" label="资金账户" min-width="130" />
+                        <el-table-column label="确认时间" width="170"><template #default="{ row }">{{ formatTime(row.confirmed_at) }}</template></el-table-column>
+                        <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="!row.target_id" @click="goSettlement(row)">查看账单</el-button></template></el-table-column>
+                    </el-table>
+                </div>
+            </div>
+
+            <el-dialog v-model="kpiConfigVisible" title="员工绩效配置" width="680px" append-to-body>
+                <el-alert title="目标按当前看板统计周期计算；权重决定综合得分占比，超额完成最高计到该项 120%。" type="info" :closable="false" class="mb-4" />
+                <el-table :data="kpiRules">
+                    <el-table-column prop="metric_name" label="指标" min-width="140" />
+                    <el-table-column label="周期目标" width="180"><template #default="{ row }"><el-input-number v-model="row.target_value" :min="0.01" :precision="2" /><span class="ml-1 text-xs text-gray-400">{{ row.unit }}</span></template></el-table-column>
+                    <el-table-column label="权重" width="160"><template #default="{ row }"><el-input-number v-model="row.weight" :min="0.01" :max="100" :precision="1" /><span class="ml-1 text-xs text-gray-400">%</span></template></el-table-column>
+                    <el-table-column label="启用" width="80"><template #default="{ row }"><el-switch v-model="row.enabled" :active-value="1" :inactive-value="0" /></template></el-table-column>
+                </el-table>
+                <template #footer><el-button @click="kpiConfigVisible=false">取消</el-button><el-button type="primary" :loading="kpiSaving" @click="saveKpiConfig">保存配置</el-button></template>
+            </el-dialog>
+
+            <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div class="panel">
+                    <div class="panel-head"><div class="panel-title">最近采购</div><div class="text-xs text-gray-400">最近 5 张采购单</div></div>
+                    <el-table :data="recent.purchases || []" v-loading="loading" size="large" max-height="320" empty-text="暂无采购记录">
+                        <el-table-column prop="purchase_no" label="采购单号" min-width="165" />
+                        <el-table-column prop="party_name" label="采购渠道" min-width="140" />
+                        <el-table-column label="金额" width="125" align="right"><template #default="{ row }">{{ money(row.total_cost) }}</template></el-table-column>
+                        <el-table-column label="状态" width="100"><template #default="{ row }">{{ financeStatus(row.finance_status, '付款') }}</template></el-table-column>
+                    </el-table>
+                </div>
+                <div class="panel">
+                    <div class="panel-head"><div class="panel-title">最近销售</div><div class="text-xs text-gray-400">最近 5 张销售单</div></div>
+                    <el-table :data="recent.sales || []" v-loading="loading" size="large" max-height="320" empty-text="暂无销售记录">
+                        <el-table-column prop="sale_no" label="销售单号" min-width="165" />
+                        <el-table-column prop="party_name" label="销售客户" min-width="140" />
+                        <el-table-column label="销售额" width="120" align="right"><template #default="{ row }">{{ money(row.total_amount) }}</template></el-table-column>
+                        <el-table-column label="毛利" width="120" align="right"><template #default="{ row }">{{ money(row.profit) }}</template></el-table-column>
+                        <el-table-column label="状态" width="100"><template #default="{ row }">{{ financeStatus(row.finance_status, '收款') }}</template></el-table-column>
                     </el-table>
                 </div>
             </div>
@@ -74,40 +120,149 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import * as echarts from 'echarts'
 import { Refresh } from '@element-plus/icons-vue'
-import { getErpPayableList, getErpPurchaseList } from '@/addon/hsx_erp/api/erp'
+import { ElMessage } from 'element-plus'
+import { getErpDashboard, getErpKpiDashboard, getErpKpiRules, saveErpKpiRules } from '@/addon/hsx_erp/api/erp'
+import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 
 const loading = ref(false)
-const purchaseRows = ref<any[]>([])
-const payableRows = ref<any[]>([])
+const period = ref('month')
+const customRange = ref<Date[]>([])
+const router = useRouter()
+const data = ref<any>({})
+const kpi = ref<any>({})
+const kpiConfigVisible = ref(false)
+const kpiSaving = ref(false)
+const kpiRules = ref<any[]>([])
 
-const purchaseTotal = computed(() => purchaseRows.value.reduce((sum, row) => sum + Number(row.total_cost || 0), 0))
-const payablePending = computed(() => payableRows.value.filter(row => remain(row) > 0))
-const payableRemain = computed(() => payablePending.value.reduce((sum, row) => sum + remain(row), 0))
+const summary = computed(() => data.value?.summary || {})
+const todo = computed(() => data.value?.todo || {})
+const recent = computed(() => data.value?.recent || {})
+const periodLabel = computed(() => ({ today: '今日', yesterday: '昨天', last7: '近7天', month: '本月', last_month: '上月', custom: '自定义', all: '全部' } as Record<string, string>)[period.value] || '本期')
+const operationChartRef = ref<HTMLElement>()
+const structureChartRef = ref<HTMLElement>()
+let operationChart: echarts.ECharts | undefined
+let structureChart: echarts.ECharts | undefined
+const summaryCards = computed(() => [
+    { label: '采购单数', value: summary.value.purchase_count || 0, hint: money(summary.value.purchase_amount) },
+    { label: '销售单数', value: summary.value.sale_count || 0, hint: money(summary.value.sale_amount) },
+    { label: '销售毛利', value: money(summary.value.profit_amount), className: Number(summary.value.profit_amount || 0) >= 0 ? 'text-green-600' : 'text-red-600' },
+    { label: '经营费用', value: money(summary.value.operating_expense_amount), className: 'text-orange-600' },
+    { label: '经营净利润', value: money(summary.value.operating_profit_amount), hint: `其他经营收入 ${money(summary.value.operating_income_amount)}`, className: Number(summary.value.operating_profit_amount || 0) >= 0 ? 'text-green-600' : 'text-red-600' },
+    { label: '库存设备', value: summary.value.stock_count || 0, hint: `库存成本 ${money(summary.value.stock_cost)}` },
+    { label: '今日动销率', value: `${Number(summary.value.turnover_rate || 0).toFixed(2)}%`, hint: `今日售出 ${summary.value.today_sold_count || 0} 台 ÷ 零点库存 ${summary.value.opening_stock_count || 0} 台`, className: Number(summary.value.turnover_rate || 0) > 0 ? 'text-blue-600' : '' },
+    { label: '期间收款', value: money(summary.value.receipt_amount), className: 'text-green-600' },
+    { label: '期间付款', value: money(summary.value.payment_amount), className: 'text-orange-600' },
+    { label: '期间折账', value: money(summary.value.offset_amount), className: 'text-blue-600' },
+    { label: '净现金流', value: money(Number(summary.value.receipt_amount || 0) - Number(summary.value.payment_amount || 0)) },
+])
 
-onMounted(loadAll)
+useErpPageRefresh(loadDashboard)
 
-async function loadAll() {
+async function loadDashboard() {
     loading.value = true
     try {
-        const [purchaseRes, payableRes]: any[] = await Promise.all([
-            getErpPurchaseList({ page: 1, limit: 8 }),
-            getErpPayableList({ status: '', page: 1, limit: 8 })
-        ])
-        purchaseRows.value = purchaseRes?.data?.data || []
-        payableRows.value = payableRes?.data?.data || []
+        const params: Record<string, any> = { period: period.value }
+        if (period.value === 'custom' && customRange.value?.length === 2) {
+            const start = new Date(customRange.value[0]); start.setHours(0, 0, 0, 0)
+            const end = new Date(customRange.value[1]); end.setHours(23, 59, 59, 999)
+            params.start_at = Math.floor(start.getTime() / 1000)
+            params.end_at = Math.floor(end.getTime() / 1000)
+        }
+        const [res, kpiRes]: any[] = await Promise.all([getErpDashboard(params), getErpKpiDashboard(params)])
+        data.value = res?.data || {}
+        kpi.value = kpiRes?.data || {}
+        await nextTick()
+        renderCharts()
     } finally {
         loading.value = false
     }
 }
 
-function remain(row: any) {
-    return Math.max(0, Number(row.amount || 0) - Number(row.settled_amount || 0))
+async function openKpiConfig() {
+    const res: any = await getErpKpiRules()
+    kpiRules.value = (res?.data || []).map((row: any) => ({ ...row, target_value: Number(row.target_value), weight: Number(row.weight), enabled: Number(row.enabled) }))
+    kpiConfigVisible.value = true
 }
+
+async function saveKpiConfig() {
+    kpiSaving.value = true
+    try { await saveErpKpiRules(kpiRules.value); ElMessage.success('绩效配置已保存'); kpiConfigVisible.value = false; await loadDashboard() }
+    finally { kpiSaving.value = false }
+}
+
+function onCustomRangeChange(value: Date[]) {
+    if (!value?.length) return
+    period.value = 'custom'
+    loadDashboard()
+}
+
+function goSettlement(row: any) {
+    if (!row?.target_type) return
+    router.push({ path: `/site/hsx_erp/${row.target_type}`, query: row.target_source_no ? { source_no: row.target_source_no } : {} })
+}
+
+function renderCharts() {
+    if (operationChartRef.value) {
+        operationChart ||= echarts.init(operationChartRef.value)
+        const values = [summary.value.sale_amount, summary.value.profit_amount, summary.value.operating_income_amount, summary.value.operating_expense_amount, summary.value.operating_profit_amount].map(Number)
+        operationChart.setOption({
+            animationDuration: 650,
+            grid: { left: 18, right: 18, top: 26, bottom: 14, containLabel: true },
+            tooltip: { trigger: 'axis', valueFormatter: (value: any) => money(value) },
+            xAxis: { type: 'category', data: ['销售额', '销售毛利', '经营收入', '经营费用', '净利润'], axisTick: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }, axisLabel: { color: '#64748b' } },
+            yAxis: { type: 'value', axisLabel: { color: '#94a3b8', formatter: (value: number) => value >= 10000 ? `${(value / 10000).toFixed(1)}万` : value }, splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } } },
+            series: [{ type: 'bar', barMaxWidth: 38, data: values.map((value, index) => ({ value, itemStyle: { color: ['#3b82f6', '#10b981', '#06b6d4', '#f97316', '#8b5cf6'][index], borderRadius: value >= 0 ? [7, 7, 0, 0] : [0, 0, 7, 7] } })) }]
+        }, true)
+    }
+    if (structureChartRef.value) {
+        structureChart ||= echarts.init(structureChartRef.value)
+        const source = [
+            { name: '销售毛利', value: Math.max(0, Number(summary.value.profit_amount || 0)) },
+            { name: '经营收入', value: Math.max(0, Number(summary.value.operating_income_amount || 0)) },
+            { name: '经营费用', value: Math.max(0, Number(summary.value.operating_expense_amount || 0)) },
+        ]
+        const hasData = source.some(item => item.value > 0)
+        structureChart.setOption({
+            color: ['#10b981', '#3b82f6', '#f97316'],
+            tooltip: { trigger: 'item', formatter: (item: any) => `${item.name}<br/>${money(item.value)} · ${item.percent}%` },
+            legend: { bottom: 0, icon: 'circle', textStyle: { color: '#64748b' } },
+            graphic: hasData ? [] : [{ type: 'text', left: 'center', top: 'middle', style: { text: '本期暂无构成数据', fill: '#94a3b8', fontSize: 14 } }],
+            series: [{ type: 'pie', radius: ['46%', '68%'], center: ['50%', '43%'], avoidLabelOverlap: true, padAngle: 2, itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 3 }, label: { color: '#475569', formatter: '{b}\n{d}%' }, data: hasData ? source : [] }]
+        }, true)
+    }
+}
+
+const resizeCharts = () => { operationChart?.resize(); structureChart?.resize() }
+window.addEventListener('resize', resizeCharts)
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', resizeCharts)
+    operationChart?.dispose()
+    structureChart?.dispose()
+})
 
 function money(value: any) {
     return `¥${Number(value || 0).toFixed(2)}`
+}
+
+function settlementLabel(type: string) {
+    return ({ receipt: '收款', payment: '付款', offset: '折账' } as Record<string, string>)[type] || type || '-'
+}
+
+function settlementType(type: string) {
+    return ({ receipt: 'success', payment: 'warning', offset: 'primary' } as Record<string, string>)[type] || 'info'
+}
+
+function financeStatus(status: string, action: string) {
+    return ({ settled: '已结清', partial: `部分${action}`, pending: `待${action}`, void: '已作废' } as Record<string, string>)[status] || status || '-'
+}
+
+function formatTime(value: any) {
+    const timestamp = Number(value || 0)
+    return timestamp ? new Date(timestamp * 1000).toLocaleString() : '-'
 }
 </script>
 
@@ -142,5 +297,25 @@ function money(value: any) {
     color: #111827;
     font-size: 16px;
     font-weight: 650;
+}
+.operation-chart { width: 100%; height: 320px; }
+.todo-grid {
+    display: grid;
+    gap: 12px;
+}
+.todo-item {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 10px;
+    color: #64748b;
+}
+.todo-item:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+.todo-item strong {
+    color: #111827;
 }
 </style>

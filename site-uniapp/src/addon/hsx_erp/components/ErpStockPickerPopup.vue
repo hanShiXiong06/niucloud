@@ -125,6 +125,7 @@
 import { computed, ref, watch } from 'vue'
 import request from '@/utils/request'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
+import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import ErpCategoryPopup from '@/addon/hsx_erp/components/ErpCategoryPopup.vue'
 
@@ -255,7 +256,7 @@ function select(row: any) {
 function close() { emit('update:show', false) }
 const money = (v: any) => Number(v || 0).toFixed(2)
 function suggestPrice(row: any) {
-    return Number(row.retail_price || row.estimate_sale_price || row.sale_price || row.total_cost || 0)
+    return firstPositiveErpAmount(row.retail_price, row.estimate_sale_price, row.sale_price, row.total_cost)
 }
 function suggestProfit(row: any) {
     return suggestPrice(row) - Number(row.total_cost || 0)

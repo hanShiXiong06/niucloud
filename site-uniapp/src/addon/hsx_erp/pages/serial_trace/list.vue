@@ -1,0 +1,45 @@
+<template>
+    <view class="erp-page">
+        <ErpListHeader v-model="keyword" placeholder="输入 IMEI / SN / 型号 / 供货商" :show-scan="true" @search="reload" @scan="scan" />
+
+        <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true" :default-page-size="15" :style="pagingStyle">
+              <view class="trace-tip">同一串号允许多次入库；每次入库作为独立记录，最新记录排在最上面。</view>
+            <template #empty><u-empty mode="list" text="暂无串号记录" /></template>
+            <view class="list-wrap">
+                <view v-for="row in list" :key="row.id" class="erp-card trace-card" @click="goDetail(row)">
+                    <view class="erp-card__head">
+                        <view class="trace-title"><text class="card-title">{{ row.model || '未填写设备名称' }}</text><text class="trace-serial">{{ row.serial_no || '-' }}</text></view>
+                        <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
+                    </view>
+                    <view class="trace-main">
+                        <view><text>供货商</text><strong>{{ row.party_name || '未记录' }}</strong></view>
+                        <view><text>入库时间</text><strong>{{ formatErpTime(row.stock_in_at || row.create_at) }}</strong></view>
+                    </view>
+                    <view class="trace-meta">{{ row.spec || '未填写规格' }} · {{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}</view>
+                    <view class="trace-foot"><text v-if="Number(row.inbound_count) > 1" class="repeat">该串号累计入库 {{ row.inbound_count }} 次</text><text v-else>首次入库记录</text><text class="detail">查看完整流转 ›</text></view>
+                </view>
+            </view>
+        </z-paging>
+    </view>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { getMobileSerialTraceList } from '@/addon/hsx_erp/api/erp'
+import { formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
+import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
+import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
+const { pagingStyle } = useListHeader( 0 ,106)
+const keyword=ref(''),list=ref<any[]>([]),pagingRef=ref<any>(null)
+const reload=()=>pagingRef.value?.reload()
+async function queryList(page:number,limit:number){try{const res:any=await getMobileSerialTraceList({keyword:keyword.value,page,limit});pagingRef.value?.complete(res?.data?.data||[])}catch(_){pagingRef.value?.complete(false)}}
+async function scan(){try{keyword.value=await scanErpCode();reload()}catch(e:any){if(!String(e?.errMsg||'').includes('cancel'))uni.showToast({title:e?.message||'扫码失败',icon:'none'})}}
+function goDetail(row:any){uni.navigateTo({url:`/addon/hsx_erp/pages/serial_trace/detail?id=${Number(row.id||0)}`})}
+const statusLabel=(s:string)=>({in_stock:'在库',sold:'已售',returned:'已退货',void:'已作废'}[s]||s||'-')
+const statusType=(s:string)=>({in_stock:'success',sold:'primary',returned:'warning',void:'info'}[s]||'info')
+</script>
+<style scoped lang="scss">
+@import '@/addon/hsx_erp/styles/erp-mobile.scss';
+.trace-tip{margin:14rpx 22rpx 0;padding:16rpx 18rpx;border-radius:14rpx;background:#eff6ff;color:#475569;font-size:22rpx;line-height:1.5}.trace-card{padding:22rpx 24rpx}.trace-title{min-width:0;display:flex;flex-direction:column;gap:7rpx}.trace-serial{color:#2563eb;font-size:25rpx;font-weight:700}.trace-main{display:grid;grid-template-columns:1fr 1fr;gap:12rpx;margin-top:16rpx}.trace-main view{padding:14rpx;border-radius:12rpx;background:#f8fafc}.trace-main text,.trace-main strong{display:block}.trace-main text{color:#94a3b8;font-size:20rpx}.trace-main strong{margin-top:5rpx;color:#334155;font-size:23rpx}.trace-meta{margin-top:12rpx;color:#64748b;font-size:22rpx}.trace-foot{display:flex;justify-content:space-between;gap:16rpx;margin-top:15rpx;padding-top:14rpx;border-top:1rpx solid #f1f5f9;color:#94a3b8;font-size:21rpx}.trace-foot .repeat{color:#c2410c}.trace-foot .detail{color:#2563eb}
+</style>

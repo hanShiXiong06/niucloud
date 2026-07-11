@@ -1,6 +1,6 @@
 <template>
     <!-- 触发区域：显示已选名称 + 清除按钮 -->
-    <div class="erp-party-select" @click="open">
+    <div v-bind="attrs" class="erp-party-select" @click="open">
         <el-input
             :model-value="displayName"
             :placeholder="placeholder"
@@ -32,6 +32,9 @@
             />
             <el-button type="primary" :icon="Search" @click="doSearch">搜索</el-button>
         </div>
+        <div v-if="partyType === 'supplier'" class="mb-3 flex gap-2">
+            <el-check-tag v-for="item in supplierFilters" :key="item.value" :checked="activeRoleFilter === item.value" @change="activeRoleFilter = item.value; doSearch()">{{ item.label }}</el-check-tag>
+        </div>
 
         <el-table
             v-loading="loading"
@@ -44,8 +47,12 @@
             <el-table-column prop="contact_name" label="联系人" width="90" />
             <el-table-column prop="contact_mobile" label="手机" width="120" />
             <el-table-column prop="m_no" label="编号" width="100" />
-            <el-table-column label="操作" width="70" fixed="right">
+            <el-table-column label="身份" min-width="120">
+                <template #default="{ row }"><el-tag v-for="role in row.role_flags || []" :key="role" size="small" class="mr-1">{{ roleLabel(role) }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="操作" width="110" fixed="right">
                 <template #default="{ row }">
+                    <el-button type="primary" link size="small" @click.stop="openManage(row)">管理</el-button>
                     <el-button type="primary" link size="small" @click="selectRow(row)">选择</el-button>
                 </template>
             </el-table-column>
@@ -64,19 +71,29 @@
             <div v-if="allowCreate" class="flex gap-2 items-center">
                 <el-input
                     v-model="quickName"
-                    placeholder="输入名称快速新建"
+                    placeholder="输入名称新增主体"
                     size="small"
                     style="width:160px"
                     @keyup.enter="quickCreate"
                 />
-                <el-button type="success" size="small" @click="quickCreate">新建并选择</el-button>
+                <el-button type="success" size="small" @click="quickCreate">新增主体</el-button>
             </div>
         </div>
     </el-dialog>
+    <el-dialog v-model="manageVisible" title="往来主体身份管理" width="520px" append-to-body>
+        <el-form label-width="86px"><el-form-item label="主体名称"><el-input v-model="manageForm.party_name" /></el-form-item><el-form-item label="联系电话"><el-input v-model="manageForm.contact_mobile" /></el-form-item><el-form-item label="多重身份"><el-checkbox-group v-model="manageForm.role_flags"><el-checkbox v-for="item in roleOptions" :key="item.value" :label="item.value">{{ item.label }}</el-checkbox></el-checkbox-group></el-form-item><el-form-item label="业务分组"><el-select v-model="manageForm.group_keys" multiple allow-create filterable default-first-option placeholder="选择或输入分组"><el-option label="重点客户" value="key_customer" /><el-option label="长期合作" value="long_term" /><el-option label="整备服务" value="refurbish" /></el-select></el-form-item></el-form>
+        <template #footer><el-button @click="manageVisible=false">取消</el-button><el-button type="primary" :loading="manageSaving" @click="saveManage">保存</el-button></template>
+    </el-dialog>
 </template>
 
+<script lang="ts">
+export default {
+    inheritAttrs: false,
+}
+</script>
+
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, useAttrs } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -87,7 +104,10 @@ interface Party {
     contact_name?: string
     contact_mobile?: string
     m_no?: string
+    role_flags?: string[]
 }
+
+const attrs = useAttrs()
 
 const props = withDefaults(defineProps<{
     modelValue?: number | null
@@ -120,6 +140,17 @@ const tableData = ref<Party[]>([])
 const page = ref(1)
 const total = ref(0)
 const quickName = ref('')
+const manageVisible = ref(false)
+const manageSaving = ref(false)
+const manageForm = ref<any>({ id: 0, party_name: '', contact_mobile: '', role_flags: [], group_keys: [] })
+const roleOptions = [{label:'采购供货商',value:'purchase_supplier'},{label:'销售客户',value:'sale_customer'},{label:'回收客户',value:'recycle_customer'},{label:'整备服务商',value:'refurbish_provider'}]
+const activeRoleFilter = ref('all')
+const supplierFilters = [
+    { label: '全部', value: 'all' },
+    { label: '采购供货商', value: 'purchase_supplier' },
+    { label: '整备服务商', value: 'refurbish_provider' },
+]
+const roleLabel = (role: string) => ({ purchase_supplier: '采购供货商', refurbish_provider: '整备服务商', sale_customer: '销售客户', recycle_customer: '回收客户' } as Record<string, string>)[role] || '其他'
 
 const dialogTitle = computed(() => {
     const map = { supplier: '选择供应商', customer: '选择客户', all: '选择往来单位' }
@@ -144,10 +175,10 @@ async function loadData() {
             keyword: keyword.value,
             page: page.value,
             limit: 10,
+            paginate: 1,
         }
-        if (props.partyType !== 'all') {
-            params.party_type = props.partyType
-        }
+        if (activeRoleFilter.value !== 'all') params.role_type = activeRoleFilter.value
+        else if (props.partyType !== 'all') params.role_type = props.partyType
         const res = await request.get('erp/counterparty/options', { params })
         tableData.value = res.data?.data || res.data || []
         total.value = res.data?.total || tableData.value.length
@@ -178,6 +209,14 @@ function handleClear() {
     emit('change', null)
 }
 
+function openManage(row: Party) { manageForm.value = { ...row, role_flags: [...(row.role_flags || [])], group_keys: [...((row as any).group_keys || [])] }; manageVisible.value = true }
+async function saveManage() {
+    if (!manageForm.value.party_name || !manageForm.value.role_flags.length) return ElMessage.warning('请填写名称并至少选择一个身份')
+    manageSaving.value = true
+    try { await request.post(`erp/counterparty/update/${manageForm.value.id}`, manageForm.value); ElMessage.success('主体身份已更新'); manageVisible.value = false; await loadData() }
+    finally { manageSaving.value = false }
+}
+
 async function quickCreate() {
     const name = quickName.value.trim()
     if (!name) {
@@ -185,9 +224,9 @@ async function quickCreate() {
         return
     }
     try {
-        const res = await request.post('erp/counterparty/quick_contact', {
-            party_name: name,
-            party_type: props.partyType === 'all' ? 'customer' : props.partyType,
+        const res = await request.post('erp/counterparty/quick_party', {
+            name,
+            role_type: activeRoleFilter.value !== 'all' ? activeRoleFilter.value : (props.partyType === 'all' ? 'customer' : props.partyType),
         })
         const party = res.data as Party
         selectRow(party)
@@ -199,6 +238,7 @@ async function quickCreate() {
 </script>
 
 <style scoped>
-.erp-party-select { cursor: pointer; }
+.erp-party-select { width: 100%; min-width: 0; cursor: pointer; }
+.erp-party-select :deep(.el-input) { width: 100%; min-width: 0; }
 .erp-party-select :deep(.el-input__inner) { cursor: pointer; }
 </style>

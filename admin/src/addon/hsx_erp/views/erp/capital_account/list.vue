@@ -7,6 +7,7 @@
                     <div class="mt-1 text-sm text-gray-500">维护现金、微信、支付宝、银行卡等账户。付款和收款都要先选账户，流水自动留痕。</div>
                 </div>
                 <div class="flex gap-2">
+                    <el-button type="success" :icon="Money" @click="operatingVisible = true">经营收支</el-button>
                     <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
                     <el-button type="primary" :icon="Plus" @click="openEdit()">新建账户</el-button>
                 </div>
@@ -79,6 +80,10 @@
             <el-empty v-if="!loading && !accounts.length" description="还没有付款账户" :image-size="80" />
         </el-card>
 
+        <el-drawer v-model="operatingVisible" title="经营收支" size="96%" destroy-on-close append-to-body>
+            <OperatingFinanceList />
+        </el-drawer>
+
         <el-dialog v-model="editVisible" :title="form.id ? '编辑账户' : '新建账户'" width="520px">
             <el-form :model="form" label-width="90px">
                 <el-form-item label="账户名称" required>
@@ -121,10 +126,15 @@
             <div class="mb-3 text-sm text-gray-500">账户：{{ entryForm.account_name }}（当前余额 {{ money(entryForm.balance) }}）</div>
             <el-form :model="entryForm" label-width="80px">
                 <el-form-item label="方向">
-                    <el-radio-group v-model="entryForm.direction">
+                    <el-radio-group v-model="entryForm.direction" @change="resetEntryCategory">
                         <el-radio value="in">收入（+）</el-radio>
                         <el-radio value="out">支出（-）</el-radio>
                     </el-radio-group>
+                </el-form-item>
+                <el-form-item :label="entryForm.direction === 'in' ? '收入类型' : '支出类型'" required>
+                    <el-select v-model="entryForm.category_key" class="w-full" placeholder="请选择收支类型">
+                        <el-option v-for="item in entryCategoryOptions" :key="item.key" :label="item.name" :value="item.key" />
+                    </el-select>
                 </el-form-item>
                 <el-form-item label="金额" required>
                     <el-input-number v-model="entryForm.amount" :min="0" :precision="2" :controls="false" class="!w-[200px]" />
@@ -135,6 +145,7 @@
                 <el-form-item label="备注">
                     <el-input v-model.trim="entryForm.remark" type="textarea" :rows="2" />
                 </el-form-item>
+                <el-form-item label="资金凭证"><ErpFinanceVoucherUpload v-model="entryForm.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="entryVisible = false">取消</el-button>
@@ -160,6 +171,11 @@
                         <el-tag :type="row.direction === 'in' ? 'success' : 'warning'" size="small" effect="light">{{ row.direction === 'in' ? '收入' : '支出' }}</el-tag>
                     </template>
                 </el-table-column>
+                <el-table-column label="收支类型" min-width="135">
+                    <template #default="{ row }">
+                        <div>{{ row.category_name || '历史流水' }}</div>
+                    </template>
+                </el-table-column>
                 <el-table-column label="金额" width="130" align="right">
                     <template #default="{ row }">
                         <span :class="row.direction === 'in' ? 'text-green-600' : 'text-orange-600'">{{ row.direction === 'in' ? '+' : '-' }}{{ money(row.amount) }}</span>
@@ -174,6 +190,7 @@
                     <template #default="{ row }">{{ formatTime(row.occurred_at) }}</template>
                 </el-table-column>
                 <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
+                <el-table-column label="凭证" width="190"><template #default="{ row }"><ErpImageGallery :value="row.voucher_urls" :size="42" :limit="3" empty-text="未上传" /></template></el-table-column>
             </el-table>
             <div class="mt-4 flex justify-end">
                 <el-pagination layout="total, prev, pager, next" :total="ledger.total" :page-size="ledger.limit" :current-page="ledger.page" @current-change="onLedgerPage" />
@@ -187,7 +204,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, Money, Plus, Refresh, Tickets } from '@element-plus/icons-vue'
 import { deleteCapitalAccount, getCapitalAccounts, getCapitalLedger, recordCapitalEntry, saveCapitalAccount } from '@/addon/hsx_erp/api/capital_account'
+import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
+import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
+import OperatingFinanceList from '@/addon/hsx_erp/views/erp/operating_finance/list.vue'
 
 const money = (value: any) => `¥${Number(value || 0).toFixed(2)}`
 const formatTime = (value: number) => value ? new Date(value * 1000).toLocaleString() : '-'
@@ -199,9 +220,11 @@ const accentColor = (type: string) => ({ cash: '#16a34a', wechat: '#07c160', ali
 const typeMark = (type: string) => ({ cash: '¥', wechat: '微', alipay: '支', bank: '卡', other: '账' } as Record<string, string>)[type] || '账'
 
 const loading = ref(false)
+const operatingVisible = ref(false)
 const saving = ref(false)
 const accounts = ref<any[]>([])
 const typeMap = ref<Record<string, string>>({ cash: '现金', wechat: '微信', alipay: '支付宝', bank: '银行卡', other: '其他' })
+const financeCategories = ref<any[]>([])
 const totalBalance = computed(() => accounts.value.reduce((sum, row) => sum + Number(row.balance || 0), 0))
 const defaultAccount = computed(() => accounts.value.find((row: any) => Number(row.is_default) === 1) || null)
 
@@ -214,6 +237,11 @@ async function loadAll() {
     } finally {
         loading.value = false
     }
+}
+
+async function loadFinanceCategories() {
+    const res: any = await getErpFinanceCategories()
+    financeCategories.value = (res?.data || []).filter((item: any) => Number(item.enabled) === 1)
 }
 
 const editVisible = ref(false)
@@ -276,6 +304,12 @@ async function onDelete(row: any) {
 
 const entryVisible = ref(false)
 const entryForm = reactive<any>({})
+const entryCategoryOptions = computed(() => financeCategories.value.filter((item: any) => item.direction === (entryForm.direction === 'in' ? 'income' : 'expense')))
+
+function resetEntryCategory() {
+    const preferredKey = entryForm.direction === 'in' ? 'other_income' : 'other_expense'
+    entryForm.category_key = entryCategoryOptions.value.find((item: any) => item.key === preferredKey)?.key || entryCategoryOptions.value[0]?.key || ''
+}
 
 function openEntry(row: any) {
     Object.assign(entryForm, {
@@ -283,11 +317,14 @@ function openEntry(row: any) {
         account_name: row.account_name,
         balance: row.balance,
         direction: 'in',
+        category_key: '',
         amount: 0,
         party_id: 0,
         counterparty_name: '',
+        voucher_urls: '',
         remark: ''
     })
+    resetEntryCategory()
     entryVisible.value = true
 }
 
@@ -297,6 +334,9 @@ function onEntryPartyResolved(row: any) {
 
 async function onEntry() {
     if (Number(entryForm.amount || 0) <= 0) return ElMessage.warning('金额必须大于0')
+    if (!entryForm.category_key) return ElMessage.warning(`请选择${entryForm.direction === 'in' ? '收入' : '支出'}类型`)
+    const category = entryCategoryOptions.value.find((item: any) => item.key === entryForm.category_key)
+    if (Number(category?.party_required || 0) === 1 && !Number(entryForm.party_id || 0)) return ElMessage.warning('该收支类型必须选择往来主体')
     saving.value = true
     try {
         await recordCapitalEntry({ ...entryForm })
@@ -348,7 +388,7 @@ function onLedgerPage(page: number) {
     loadLedger()
 }
 
-onMounted(loadAll)
+onMounted(() => Promise.all([loadAll(), loadFinanceCategories()]))
 </script>
 
 <style scoped>

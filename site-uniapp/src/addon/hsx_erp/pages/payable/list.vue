@@ -3,7 +3,7 @@
         <ErpListHeader
             v-model="keyword"
             v-model:activeTab="activeTab"
-            placeholder="供应商/采购单号"
+            placeholder="付款对象 / IMEI / 来源单"
             :tabs="tabs"
             :show-filter="true"
             :filter-count="filterCount"
@@ -16,7 +16,7 @@
             :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无应付记录" /></template>
             <view class="list-wrap">
-                <view v-for="row in list" :key="String(row.party_id)+'_'+String(row.purchase_order_id)" class="erp-card payable-card">
+                <view v-for="row in list" :key="String(row.party_id)+'_'+String(row.source_type)+'_'+String(row.purchase_order_id)" class="erp-card payable-card">
                     <view class="payable-card__head">
                         <view class="payable-title">
                             <text class="card-title payable-title__name">{{ row.party_name || '-' }}</text>
@@ -25,18 +25,15 @@
                         <u-tag :text="statusLabel(row.finance_status)" :type="statusType(row.finance_status)" plain plainFill size="mini" />
                     </view>
 
-                    <view class="payable-line">
-                        <text class="payable-line__label">采购批次</text>
-                        <text class="payable-line__value">{{ row.batch_no || row.purchase_no || '-' }}</text>
-                    </view>
+                    <ErpFinanceSourceSummary :row="row" direction="payable" compact />
 
                     <view class="payable-chips">
-                        <view v-if="row.purchaser_name" class="payable-chip">采购员 {{ row.purchaser_name }}</view>
+                        <view v-if="row.purchaser_name" class="payable-chip">业务操作人 {{ row.purchaser_name }}</view>
                         <view v-if="row.warehouse_name" class="payable-chip">{{ row.warehouse_name }}</view>
                         <view v-if="row.payable_count" class="payable-chip muted">{{ row.payable_count }} 笔应付</view>
                     </view>
 
-                    <view class="payable-time">{{ erpTimeLine(row, ['paid_at', 'pay_at', 'stock_in_at']) }}</view>
+                    <view class="payable-time">{{ erpTimeLine(row, ['latest_at', 'first_at', 'paid_at', 'pay_at', 'stock_in_at']) }}</view>
 
                     <view class="erp-card__foot payable-money">
                         <view class="amount-box">
@@ -52,6 +49,7 @@
                             <text class="amt-value orange">¥{{ money(row.remain_amount) }}</text>
                         </view>
                     </view>
+                    <view class="detail-entry" @click="openDetail(row)">查看关联设备与结算明细 <text>›</text></view>
                     <view v-if="row.finance_status !== 'settled' && Number(row.remain_amount) > 0" class="card-actions">
                         <view class="card-action-btn main">
                             <u-button type="primary" size="small" text="逐台付款" @click="openDetailPay(row)" />
@@ -84,14 +82,16 @@
                     </view>
                 </view>
 
+                <scroll-view scroll-y class="popup-scroll" :show-scrollbar="true">
+
                 <view class="pay-summary">
                     <view class="summary-main">
                         <text class="summary-label">剩余应付</text>
                         <text class="summary-amount">¥{{ money(payRow.remain_amount) }}</text>
                     </view>
                     <u-tag :text="statusLabel(payRow.finance_status)" :type="statusType(payRow.finance_status)" plain plainFill size="mini" />
-                    <text class="summary-sub">{{ payRow.batch_no || payRow.purchase_no || '无单据号' }}</text>
                 </view>
+                <view class="popup-source-wrap"><ErpFinanceSourceSummary :row="payRow" direction="payable" /></view>
 
                 <view class="pay-form">
                     <view class="pay-form__item">
@@ -120,7 +120,9 @@
                         <text class="pay-label">备注</text>
                         <u-input v-model="payForm.remark" placeholder="如：转账/现金/核对单号" :customStyle="inputStyle" />
                     </view>
+                    <ErpVoucherUploader v-model="payForm.voucher_urls" @uploading="voucherUploading = $event" />
                 </view>
+                </scroll-view>
                 <view class="action-bar">
                     <view class="action-btn action-btn--minor">
                         <u-button @click="payVisible = false">取消</u-button>
@@ -140,6 +142,7 @@
                         <u-icon name="close" color="#64748b" size="20" />
                     </view>
                 </view>
+                <scroll-view scroll-y class="account-popup__body">
                 <u-cell-group v-if="accounts.length" :border="false">
                     <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectPayAccount(a)">
                         <template #value>
@@ -153,6 +156,7 @@
                     </u-cell>
                 </u-cell-group>
                 <u-empty v-else mode="data" text="暂无可用资金账户" />
+                </scroll-view>
             </view>
         </u-popup>
 
@@ -163,8 +167,10 @@
             :party-id="detailPayRow?.party_id"
             :party-name="detailPayRow?.party_name"
             :purchase-order-id="detailPayRow?.purchase_order_id"
+            :source-type="detailPayRow?.source_type || ''"
+            :source-row="detailPayRow"
             :accounts="accounts"
-            @success="() => { reload(); detailPayRow = null }"
+            @success="() => { refreshAfterSettlement(); detailPayRow = null }"
         />
 
         <ErpOffsetConfirmModal
@@ -173,7 +179,7 @@
             :party-id="offsetRow?.party_id"
             :party-name="offsetRow?.party_name"
             :accounts="accounts"
-            @success="() => { reload(); offsetRow = null }"
+            @success="() => { refreshAfterSettlement(); offsetRow = null }"
         />
 
         <ErpFilterPopup
@@ -196,8 +202,14 @@ import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpPayConfirmModal from '@/addon/hsx_erp/components/ErpPayConfirmModal.vue'
 import ErpOffsetConfirmModal from '@/addon/hsx_erp/components/ErpOffsetConfirmModal.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
+import ErpFinanceSourceSummary from '@/addon/hsx_erp/components/ErpFinanceSourceSummary.vue'
+import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
+import { erpFinanceSourceFilterOptions, erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
+import { useErpFinanceOptions } from '@/addon/hsx_erp/hooks/useErpFinanceOptions'
+import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
 
 const { pagingStyle } = useListHeader(126)
 
@@ -213,9 +225,15 @@ const tabs = [
 const activeTab = ref('pending')
 const filterVisible = ref(false)
 const filters = ref<Record<string, any>>({})
-const filterFields = [
-    { key: 'party_id', label: '供应商', type: 'party', roleType: 'supplier', labelKey: 'party_name', placeholder: '请选择供应商' },
-    { key: 'source_no', label: '单据号', type: 'text', placeholder: '输入采购单号/批次号' },
+const { load: loadFinanceOptions, categoryOptions, sourceOptions } = useErpFinanceOptions()
+const { options: channelOptions, load: loadSaleChannels } = useErpSaleChannels()
+const filterFields = computed(() => [
+    { key: 'party_id', label: '付款对象', type: 'party', roleType: 'all', labelKey: 'party_name', placeholder: '请选择供应商/客户/服务商' },
+    { key: 'source_type', label: '业务场景', type: 'select', options: [{ label: '全部', value: '' }, ...erpFinanceSourceFilterOptions('payable')] },
+    { key: 'finance_type_key', label: '支出类型', type: 'select', options: [{ label: '全部', value: '' }, ...categoryOptions('expense')] },
+    { key: 'business_source_key', label: '业务来源', type: 'select', options: [{ label: '全部', value: '' }, ...sourceOptions('expense')] },
+    { key: 'channel_code', label: '业务渠道', type: 'select', options: [{ label: '全部', value: '' }, ...channelOptions.value.map(item => ({ label: item.name, value: item.key }))] },
+    { key: 'source_no', label: '来源单号', type: 'text', placeholder: '输入采购单/退货单/整备单号' },
     { key: 'm_no', label: '会员号', type: 'text', placeholder: '输入会员号' },
     { key: 'contact_mobile', label: '联系人手机', type: 'text', placeholder: '输入手机号' },
     { key: 'amount', label: '应付金额', type: 'range', minKey: 'min_amount', maxKey: 'max_amount' },
@@ -225,7 +243,7 @@ const filterFields = [
         { label: '可折账', value: 1 },
     ] },
     { key: 'date', label: '发生日期', type: 'dateRange', startKey: 'start_at', endKey: 'end_at' },
-] as any[]
+] as any[])
 const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
 
 const accounts = ref<any[]>([])
@@ -233,8 +251,9 @@ const accounts = ref<any[]>([])
 const payVisible = ref(false)
 const payAccountPickerVisible = ref(false)
 const paying = ref(false)
+const voucherUploading = ref(false)
 const payRow = ref<any>(null)
-const payForm = ref({ amount: 0, capital_account_id: 0, remark: '' })
+const payForm = ref({ amount: 0, capital_account_id: 0, remark: '', voucher_urls: '' })
 // 逐台付款modal
 const detailPayVisible = ref(false)
 const detailPayRow = ref<any>(null)
@@ -243,7 +262,7 @@ const offsetRow = ref<any>(null)
 const canPay = computed(() =>
     Number(payForm.value.amount) > 0 &&
     Number(payForm.value.amount) <= Number(payRow.value?.remain_amount || 0) + 0.001 &&
-    payForm.value.capital_account_id > 0
+    payForm.value.capital_account_id > 0 && !voucherUploading.value
 )
 const selectedPayAccountLabel = computed(() => {
     const a = accounts.value.find(a => Number(a.id) === Number(payForm.value.capital_account_id))
@@ -252,11 +271,17 @@ const selectedPayAccountLabel = computed(() => {
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '12rpx 16rpx' }
 
 onMounted(async () => {
+    loadFinanceOptions().catch(() => undefined)
+    loadSaleChannels().catch(() => undefined)
+    await loadAccounts()
+})
+
+async function loadAccounts() {
     try {
         const res: any = await getMobileCapitalAccounts()
         accounts.value = res?.data?.list || []
     } catch {}
-})
+}
 
 const reload = () => pagingRef.value?.reload()
 const handleSearch = () => reload()
@@ -289,11 +314,13 @@ function dateToRange(params: Record<string, any>) {
 }
 
 function openPay(row: any) {
+    const source = erpFinanceSourceMeta(row, 'payable')
     payRow.value = row
     payForm.value = {
         amount: Number(Number(row.remain_amount || 0).toFixed(2)),
         capital_account_id: accounts.value[0]?.id || 0,
-        remark: ''
+        remark: source.business_reason,
+        voucher_urls: '',
     }
     payVisible.value = true
 }
@@ -301,6 +328,16 @@ function openPay(row: any) {
 function openDetailPay(row: any) {
     detailPayRow.value = row
     detailPayVisible.value = true
+}
+
+function openDetail(row: any) {
+    const query = [
+        `party_id=${Number(row.party_id || 0)}`,
+        `source_type=${encodeURIComponent(String(row.source_type || ''))}`,
+        `purchase_order_id=${Number(row.purchase_order_id || 0)}`,
+        `party_name=${encodeURIComponent(String(row.party_name || ''))}`,
+    ].join('&')
+    uni.navigateTo({ url: `/addon/hsx_erp/pages/payable/detail?${query}` })
 }
 
 function openOffset(row: any) {
@@ -329,22 +366,65 @@ function capPayAmount() {
 }
 
 async function submitPay() {
-    if (!canPay.value || !payRow.value) return
+    if (!canPay.value || !payRow.value || paying.value) return
+    const account = accounts.value.find((item: any) => Number(item.id) === Number(payForm.value.capital_account_id))
+    const source = erpFinanceSourceMeta(payRow.value, 'payable')
+    const snapshot = cloneErpSubmitSnapshot({
+        partyId: Number(payRow.value.party_id || 0),
+        partyName: payRow.value.party_name || '-',
+        partyRoleLabel: source.party_role_label || '付款对象',
+        financeTypeName: source.finance_type_name,
+        sourceNo: source.source_no || '-',
+        source_type: String(payRow.value.source_type || source.biz_scene || ''),
+        purchase_order_id: Number(payRow.value.purchase_order_id || 0),
+        batch_no: String(payRow.value.batch_no || source.source_no || ''),
+        payable_ids: Array.isArray(payRow.value.payable_ids)
+            ? payRow.value.payable_ids.map(Number).filter((id: number) => id > 0)
+            : [],
+        amount: Number(payForm.value.amount),
+        capital_account_id: Number(payForm.value.capital_account_id),
+        accountName: account?.account_name || '所选账户',
+        remark: payForm.value.remark || '手机端确认付款',
+        voucher_urls: payForm.value.voucher_urls,
+    })
     paying.value = true
+    const confirmed = await confirmErpPopupAction({
+        title: '确认付款并记账',
+        content: `${snapshot.partyRoleLabel}：${snapshot.partyName}\n业务类型：${snapshot.financeTypeName}\n来源单：${snapshot.sourceNo}\n付款金额：¥${money(snapshot.amount)}\n付款账户：${snapshot.accountName}\n确认后写入资金流水，不能直接删除。`,
+        confirmText: '确认付款',
+        closePopup: () => {
+            payAccountPickerVisible.value = false
+            payVisible.value = false
+        },
+        reopenPopup: () => { payVisible.value = true },
+    })
+    if (!confirmed) {
+        paying.value = false
+        return
+    }
     try {
         // 调用"整体付款"接口，自动分配到该供应商各批次欠款
-        await confirmMobilePurchasePayment(payRow.value.party_id, {
-            amount: Number(payForm.value.amount),
-            capital_account_id: payForm.value.capital_account_id,
-            remark: payForm.value.remark || '手机端确认付款',
+        await confirmMobilePurchasePayment(snapshot.partyId, {
+            amount: snapshot.amount,
+            capital_account_id: snapshot.capital_account_id,
+            remark: snapshot.remark,
+            payable_ids: snapshot.payable_ids,
+            source_type: snapshot.source_type,
+            purchase_order_id: snapshot.purchase_order_id,
+            batch_no: snapshot.batch_no,
+            voucher_urls: snapshot.voucher_urls,
         })
         uni.showToast({ title: '付款已确认', icon: 'success' })
-        payVisible.value = false
-        payAccountPickerVisible.value = false
-        reload()
+        await refreshAfterSettlement()
     } catch (e: any) {
         uni.showToast({ title: e?.message || '付款失败，请重试', icon: 'none' })
+        payVisible.value = true
     } finally { paying.value = false }
+}
+
+async function refreshAfterSettlement() {
+    await loadAccounts()
+    reload()
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
@@ -358,6 +438,8 @@ const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', set
 .payable-card {
     padding: 22rpx 26rpx;
 }
+.popup-source-wrap { margin:0 28rpx 20rpx; }
+.detail-entry { display:flex; align-items:center; justify-content:flex-end; gap:8rpx; margin-top:14rpx; padding-top:14rpx; border-top:1rpx solid #f1f5f9; color:#2563eb; font-size:23rpx; }
 
 .payable-card__head {
     display: flex;
@@ -488,12 +570,14 @@ const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', set
 }
 
 .pay-popup {
-    max-height: 82vh;
+    height: 82vh;
+    max-height: 1080rpx;
     background: #fff;
     display: flex;
     flex-direction: column;
     overflow: hidden;
 }
+.popup-scroll { flex:1; min-height:0; width:100%; box-sizing:border-box; }
 .popup-head {
     min-height: 96rpx;
     padding: 0 28rpx;
@@ -621,11 +705,15 @@ const statusType = (s: string) => ({ pending: 'warning', partial: 'primary', set
     color: #94a3b8;
 }
 .account-popup {
-    min-height: 36vh;
-    max-height: 74vh;
+    height: 60vh;
+    max-height: 820rpx;
     padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
     background: #fff;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
 }
+.account-popup__body { flex:1; min-height:0; width:100%; }
 .offset-tip {
     margin-top: 12rpx;
     font-size: 23rpx;

@@ -39,5 +39,7 @@ const erpTimeLabel = (field: string) => ({
     confirmed_at: '确认时间',
     occurred_at: '发生时间',
     create_at: '创建时间',
-    update_at: '更新时间'
+    update_at: '更新时间',
+    first_at:"创建时间",
+    latest_at:"最后更新"
 }[field] || '时间')

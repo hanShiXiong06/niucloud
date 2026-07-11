@@ -31,14 +31,16 @@
                         <text>我要付给他</text>
                         <text>¥{{ money(payableChecked) }}</text>
                     </view>
-                    <view v-for="item in payables" :key="'p'+item.id" class="offset-row" @click="togglePayable(item)">
-                        <u-checkbox :checked="item.checked" :disabled="Number(item.remain || 0) <= 0" @click.stop @change="onPayableCheck(item, $event)" />
-                        <view class="offset-row__main">
-                            <text class="offset-row__title">{{ item.model || item.source_no || '应付款' }}</text>
-                            <text class="offset-row__sub">{{ item.imei ? 'IMEI ' + item.imei : (item.payable_no || '-') }}</text>
+                    <u-checkbox-group v-model="selectedPayableIds" placement="column" @change="onPayableSelectionChange">
+                        <view v-for="item in payables" :key="'p'+item.id" class="offset-row" @click="togglePayable(item)">
+                            <u-checkbox :name="Number(item.id)" :disabled="Number(item.remain || 0) <= 0" @click.stop />
+                            <view class="offset-row__main">
+                                <text class="offset-row__title">{{ payableTitle(item) }}</text>
+                                <text class="offset-row__sub">{{ payableIdentityLine(item) }}</text>
+                            </view>
+                            <text class="offset-row__amount">¥{{ money(item.remain) }}</text>
                         </view>
-                        <text class="offset-row__amount">¥{{ money(item.remain) }}</text>
-                    </view>
+                    </u-checkbox-group>
                     <view v-if="!payables.length" class="offset-empty">暂无可折应付</view>
                 </view>
 
@@ -47,14 +49,16 @@
                         <text>他要付给我</text>
                         <text>¥{{ money(receivableChecked) }}</text>
                     </view>
-                    <view v-for="item in receivables" :key="'r'+item.id" class="offset-row" @click="toggleReceivable(item)">
-                        <u-checkbox :checked="item.checked" :disabled="Number(item.remain || 0) <= 0" @click.stop @change="onReceivableCheck(item, $event)" />
-                        <view class="offset-row__main">
-                            <text class="offset-row__title">{{ item.source_no || item.sale_no || item.receivable_no || '应收款' }}</text>
-                            <text class="offset-row__sub">{{ item.source_label || sourceLabel(item.source_type) }} · {{ item.receivable_no || '-' }}</text>
+                    <u-checkbox-group v-model="selectedReceivableIds" placement="column" @change="onReceivableSelectionChange">
+                        <view v-for="item in receivables" :key="'r'+item.id" class="offset-row" @click="toggleReceivable(item)">
+                            <u-checkbox :name="Number(item.id)" :disabled="Number(item.remain || 0) <= 0" @click.stop />
+                            <view class="offset-row__main">
+                                <text class="offset-row__title">{{ item.source_no || item.sale_no || item.receivable_no || '应收款' }}</text>
+                                <text class="offset-row__sub">{{ receivableIdentityLine(item) }}</text>
+                            </view>
+                            <text class="offset-row__amount blue">¥{{ money(item.remain) }}</text>
                         </view>
-                        <text class="offset-row__amount blue">¥{{ money(item.remain) }}</text>
-                    </view>
+                    </u-checkbox-group>
                     <view v-if="!receivables.length" class="offset-empty">暂无可折应收</view>
                 </view>
 
@@ -64,8 +68,10 @@
                         <u-input v-model="form.amount" type="number" :placeholder="'最多 ¥'+money(offsetMax)" :customStyle="inputStyle" @blur="capAmount" />
                     </view>
                     <view v-if="diffAmount > 0" class="offset-diff">
-                        <view class="offset-diff__line" @click="form.settle_diff = !form.settle_diff">
-                            <u-checkbox :checked="form.settle_diff" @click.stop @change="form.settle_diff = normalizeChecked($event)" />
+                        <view class="offset-diff__line" @click="toggleSettleDiff">
+                            <u-checkbox-group v-model="settleDiffSelection" @change="onSettleDiffSelectionChange">
+                                <u-checkbox name="settle_diff" @click.stop />
+                            </u-checkbox-group>
                             <text>{{ diffText }}</text>
                         </view>
                         <view v-if="form.settle_diff" class="account-row" @click="showAccountPicker = true">
@@ -80,6 +86,12 @@
                         <text class="pay-label">备注</text>
                         <u-input v-model="form.remark" placeholder="如：同行往来对冲" :customStyle="inputStyle" />
                     </view>
+                    <ErpVoucherUploader
+                        v-if="form.settle_diff"
+                        v-model="form.voucher_urls"
+                        :title="diffDirection === 'payable' ? '差额付款凭证' : '差额收款凭证'"
+                        @uploading="voucherUploading = $event"
+                    />
                 </view>
             </scroll-view>
 
@@ -103,6 +115,7 @@
                         <u-icon name="close" color="#64748b" size="20" />
                     </view>
                 </view>
+                <scroll-view scroll-y class="account-popup__body">
                 <u-cell-group v-if="accounts.length" :border="false">
                     <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectAccount(a)">
                         <template #value>
@@ -116,6 +129,7 @@
                     </u-cell>
                 </u-cell-group>
                 <u-empty v-else mode="data" text="暂无可用资金账户" />
+                </scroll-view>
             </view>
         </u-popup>
     </u-popup>
@@ -124,6 +138,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { confirmMobileOffset, getMobilePayablePartyItems, getMobileReceivableList } from '@/addon/hsx_erp/api/erp'
+import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
+import { erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
+import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 
 const props = withDefaults(defineProps<{
     show: boolean
@@ -144,10 +161,14 @@ const emit = defineEmits<{
 
 const loading = ref(false)
 const submitting = ref(false)
+const voucherUploading = ref(false)
 const showAccountPicker = ref(false)
 const payables = ref<any[]>([])
 const receivables = ref<any[]>([])
-const form = ref({ amount: 0, settle_diff: false, capital_account_id: 0, remark: '' })
+const selectedPayableIds = ref<number[]>([])
+const selectedReceivableIds = ref<number[]>([])
+const settleDiffSelection = ref<string[]>([])
+const form = ref({ amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' })
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '12rpx 16rpx' }
 
 const payableChecked = computed(() => payables.value.reduce((sum, row) => row.checked ? sum + Number(row.remain || 0) : sum, 0))
@@ -168,18 +189,27 @@ const selectedAccountLabel = computed(() => {
 const canSubmit = computed(() =>
     Number(form.value.amount) > 0 &&
     Number(form.value.amount) <= offsetMax.value + 0.0001 &&
-    (!form.value.settle_diff || Number(form.value.capital_account_id) > 0)
+    (!form.value.settle_diff || Number(form.value.capital_account_id) > 0) && !voucherUploading.value
 )
 
 let loadToken = 0
+let preserveOnReopen = false
 watch(() => [props.show, props.partyId], () => {
-    if (props.show && props.partyId > 0) openModal()
+    if (!props.show || props.partyId <= 0) return
+    if (preserveOnReopen) {
+        preserveOnReopen = false
+        return
+    }
+    openModal()
 }, { immediate: true })
 
 function openModal() {
-    form.value = { amount: 0, settle_diff: false, capital_account_id: props.accounts[0]?.id || 0, remark: '' }
+    form.value = { amount: 0, settle_diff: false, capital_account_id: props.accounts[0]?.id || 0, remark: '', voucher_urls: '' }
     payables.value = []
     receivables.value = []
+    selectedPayableIds.value = []
+    selectedReceivableIds.value = []
+    settleDiffSelection.value = []
     loadItems()
 }
 
@@ -200,6 +230,8 @@ async function loadItems() {
             const remain = Number(row.remain_amount ?? (Number(row.amount || 0) - Number(row.settled_amount || 0)))
             return { ...row, remain, checked: remain > 0 }
         }).filter((row: any) => Number(row.id || 0) > 0 && row.remain > 0)
+        selectedPayableIds.value = payables.value.filter(row => row.checked).map(row => Number(row.id))
+        selectedReceivableIds.value = receivables.value.filter(row => row.checked).map(row => Number(row.id))
         syncAmount()
     } catch (e: any) {
         uni.showToast({ title: e?.message || '折账数据加载失败', icon: 'none' })
@@ -214,31 +246,35 @@ function syncAmount() {
 
 function togglePayable(item: any) {
     if (Number(item.remain || 0) <= 0) return
-    item.checked = !item.checked
-    syncAmount()
+    selectedPayableIds.value = toggleId(selectedPayableIds.value, Number(item.id))
+    onPayableSelectionChange(selectedPayableIds.value)
 }
 
 function toggleReceivable(item: any) {
     if (Number(item.remain || 0) <= 0) return
-    item.checked = !item.checked
+    selectedReceivableIds.value = toggleId(selectedReceivableIds.value, Number(item.id))
+    onReceivableSelectionChange(selectedReceivableIds.value)
+}
+
+function onPayableSelectionChange(values: Array<string | number>) {
+    const selected = new Set((values || []).map(Number))
+    payables.value.forEach(item => { item.checked = selected.has(Number(item.id)) })
     syncAmount()
 }
 
-function onPayableCheck(item: any, checked: any) {
-    item.checked = normalizeChecked(checked)
+function onReceivableSelectionChange(values: Array<string | number>) {
+    const selected = new Set((values || []).map(Number))
+    receivables.value.forEach(item => { item.checked = selected.has(Number(item.id)) })
     syncAmount()
 }
 
-function onReceivableCheck(item: any, checked: any) {
-    item.checked = normalizeChecked(checked)
-    syncAmount()
+function onSettleDiffSelectionChange(values: Array<string | number>) {
+    form.value.settle_diff = (values || []).includes('settle_diff')
 }
 
-function normalizeChecked(checked: any) {
-    if (typeof checked === 'boolean') return checked
-    if (checked && typeof checked === 'object' && 'value' in checked) return !!checked.value
-    if (checked && typeof checked === 'object' && 'detail' in checked) return !!checked.detail?.value
-    return !!checked
+function toggleSettleDiff() {
+    settleDiffSelection.value = form.value.settle_diff ? [] : ['settle_diff']
+    form.value.settle_diff = !form.value.settle_diff
 }
 
 function capAmount() {
@@ -254,6 +290,7 @@ function selectAccount(account: any) {
 }
 
 async function submit() {
+    if (submitting.value) return
     capAmount()
     if (!canSubmit.value) return
     const payableIds = unique(payables.value.filter(row => row.checked).map(row => Number(row.id || 0)).filter(Boolean))
@@ -262,21 +299,43 @@ async function submit() {
         uni.showToast({ title: '请同时选择应付和应收', icon: 'none' })
         return
     }
+    const snapshot = cloneErpSubmitSnapshot({
+        payable_ids: payableIds,
+        receivable_ids: receivableIds,
+        amount: Number(form.value.amount),
+        settle_diff: Boolean(form.value.settle_diff),
+        capital_account_id: form.value.settle_diff ? Number(form.value.capital_account_id) : 0,
+        remark: form.value.remark || '手机端应收应付折账',
+        voucher_urls: form.value.voucher_urls,
+        partyName: props.partyName || '-',
+    })
     submitting.value = true
+    const confirmed = await confirmErpPopupAction({
+        title: '确认应收应付折账',
+        content: `往来主体：${snapshot.partyName}\n应付 ${snapshot.payable_ids.length} 笔 / 应收 ${snapshot.receivable_ids.length} 笔\n折账金额：¥${money(snapshot.amount)}\n该操作会同时核销应收和应付，不产生真实收付款；确认后流水不能直接删除。`,
+        confirmText: '确认折账',
+        closePopup: closeForConfirm,
+        reopenPopup: reopenAfterConfirm,
+    })
+    if (!confirmed) {
+        submitting.value = false
+        return
+    }
     try {
         await confirmMobileOffset({
-            payable_ids: payableIds,
-            receivable_ids: receivableIds,
-            amount: Number(form.value.amount),
-            settle_diff: form.value.settle_diff,
-            capital_account_id: form.value.settle_diff ? form.value.capital_account_id : 0,
-            remark: form.value.remark || '手机端应收应付折账',
+            payable_ids: snapshot.payable_ids,
+            receivable_ids: snapshot.receivable_ids,
+            amount: snapshot.amount,
+            settle_diff: snapshot.settle_diff,
+            capital_account_id: snapshot.capital_account_id,
+            remark: snapshot.remark,
+            voucher_urls: snapshot.voucher_urls,
         })
         uni.showToast({ title: '折账已确认', icon: 'success' })
         emit('success')
-        close()
     } catch (e: any) {
         uni.showToast({ title: e?.message || '折账失败，请重试', icon: 'none' })
+        reopenAfterConfirm()
     } finally {
         submitting.value = false
     }
@@ -287,17 +346,42 @@ function close() {
     showAccountPicker.value = false
 }
 
+function closeForConfirm() {
+    showAccountPicker.value = false
+    emit('update:show', false)
+}
+
+function reopenAfterConfirm() {
+    preserveOnReopen = true
+    emit('update:show', true)
+}
+
+function toggleId(values: number[], id: number) {
+    return values.includes(id) ? values.filter(value => value !== id) : [...values, id]
+}
+
 function unique(list: number[]) {
     return Array.from(new Set(list))
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
-const sourceLabel = (s: string) => ({ sale: '销售应收', purchase_return: '采购退货应收' }[s] || s || '应收款')
+const sourceLabel = (s: string) => ({ sale: '销售应收', purchase_return: '采购退货应收' }[s] || '插件应收')
+function payableTitle(item: any) {
+    const meta = erpFinanceSourceMeta(item, 'payable')
+    return [meta.finance_type_name, item.model].filter(Boolean).join(' · ') || '应付款'
+}
+function payableIdentityLine(item: any) {
+    const meta = erpFinanceSourceMeta(item, 'payable')
+    return [meta.source_no, item.imei ? `IMEI ${item.imei}` : '', item.payable_no || ''].filter(Boolean).join(' · ') || '-'
+}
+function receivableIdentityLine(item: any) {
+    return [item.source_label || sourceLabel(item.source_type), item.receivable_no || ''].filter(Boolean).join(' · ') || '应收款'
+}
 </script>
 
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
-.offset-modal { max-height: 88vh; display: flex; flex-direction: column; background: #fff; }
+.offset-modal { height: 88vh; max-height: 1100rpx; display: flex; flex-direction: column; background: #fff; overflow:hidden; }
 .modal-header { display:flex; justify-content:space-between; align-items:center; padding:32rpx 32rpx 20rpx; }
 .modal-title { display:block; font-size:34rpx; font-weight:700; color:#0f172a; }
 .modal-subtitle { display:block; margin-top:6rpx; font-size:24rpx; color:#64748b; }
@@ -309,7 +393,7 @@ const sourceLabel = (s: string) => ({ sale: '销售应收', purchase_return: '�
 .summary-value.blue { color:#2563eb; }
 .summary-value.orange { color:#ea580c; }
 .offset-loading { display:flex; justify-content:center; padding:80rpx 0; }
-.offset-body { max-height: 58vh; padding:0 32rpx; box-sizing:border-box; }
+.offset-body { flex:1; min-height:0; width:100%; padding:0 32rpx; box-sizing:border-box; }
 .offset-section { margin-bottom:22rpx; }
 .offset-section__head { display:flex; justify-content:space-between; color:#334155; font-size:26rpx; font-weight:700; margin-bottom:12rpx; }
 .offset-row { display:flex; align-items:center; gap:16rpx; padding:18rpx 0; border-bottom:1rpx solid #f1f5f9; }
@@ -334,11 +418,15 @@ const sourceLabel = (s: string) => ({ sale: '销售应收', purchase_return: '�
 .action-btn--minor { flex:1; }
 .action-btn--major { flex:2; }
 .account-popup {
-    min-height:36vh;
-    max-height:74vh;
+    height:60vh;
+    max-height:820rpx;
     padding-bottom:calc(20rpx + env(safe-area-inset-bottom));
     background:#fff;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
 }
+.account-popup__body { flex:1; min-height:0; width:100%; }
 .account-popup__head {
     min-height:96rpx;
     padding:0 28rpx;

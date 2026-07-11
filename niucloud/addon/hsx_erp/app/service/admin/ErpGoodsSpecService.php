@@ -11,7 +11,6 @@ class ErpGoodsSpecService extends BaseAdminService
 {
     public function meta(): array
     {
-        $this->ensureTables();
         $this->ensureDefaults();
         $groups = Db::name('erp_goods_spec_group')
             ->where('site_id', $this->site_id)
@@ -67,7 +66,6 @@ class ErpGoodsSpecService extends BaseAdminService
 
     public function saveGroup(int $id, array $data): int
     {
-        $this->ensureTables();
         $label = trim((string)($data['label'] ?? ''));
         if ($label === '') {
             throw new AdminException('请填写规格名称');
@@ -90,7 +88,6 @@ class ErpGoodsSpecService extends BaseAdminService
 
     public function deleteGroup(int $id): bool
     {
-        $this->ensureTables();
         Db::transaction(function () use ($id) {
             Db::name('erp_goods_spec_item')->where([['site_id', '=', $this->site_id], ['group_id', '=', $id]])->delete();
             Db::name('erp_goods_spec_group')->where([['site_id', '=', $this->site_id], ['group_id', '=', $id]])->delete();
@@ -100,7 +97,6 @@ class ErpGoodsSpecService extends BaseAdminService
 
     public function saveItem(int $id, array $data): int
     {
-        $this->ensureTables();
         $groupId = (int)($data['group_id'] ?? 0);
         $value = trim((string)($data['item_value'] ?? $data['label'] ?? ''));
         if ($groupId <= 0) {
@@ -138,14 +134,12 @@ class ErpGoodsSpecService extends BaseAdminService
 
     public function deleteItem(int $id): bool
     {
-        $this->ensureTables();
         Db::name('erp_goods_spec_item')->where([['site_id', '=', $this->site_id], ['item_id', '=', $id]])->delete();
         return true;
     }
 
     public function saveGrade(int $id, array $data): int
     {
-        $this->ensureTables();
         $name = trim((string)($data['grade_name'] ?? $data['label'] ?? ''));
         if ($name === '') {
             throw new AdminException('请填写成色名称');
@@ -168,50 +162,8 @@ class ErpGoodsSpecService extends BaseAdminService
 
     public function deleteGrade(int $id): bool
     {
-        $this->ensureTables();
         Db::name('erp_goods_grade')->where([['site_id', '=', $this->site_id], ['grade_id', '=', $id]])->delete();
         return true;
-    }
-
-    private function ensureTables(): void
-    {
-        $prefix = (string)config('database.connections.mysql.prefix');
-        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_goods_spec_group` (
-            `group_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '规格分组ID',
-            `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
-            `label` varchar(80) NOT NULL DEFAULT '' COMMENT '规格名称，如内存/容量',
-            `title_part` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否参与型号标题',
-            `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
-            `create_at` int NOT NULL DEFAULT 0,
-            `update_at` int NOT NULL DEFAULT 0,
-            PRIMARY KEY (`group_id`),
-            UNIQUE KEY `uk_site_label` (`site_id`,`label`),
-            KEY `idx_site_sort` (`site_id`,`sort`,`group_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品规格分组'");
-        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_goods_spec_item` (
-            `item_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '规格项ID',
-            `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
-            `group_id` int NOT NULL DEFAULT 0 COMMENT '规格分组ID',
-            `item_value` varchar(100) NOT NULL DEFAULT '' COMMENT '规格值',
-            `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
-            `create_at` int NOT NULL DEFAULT 0,
-            `update_at` int NOT NULL DEFAULT 0,
-            PRIMARY KEY (`item_id`),
-            UNIQUE KEY `uk_site_group_value` (`site_id`,`group_id`,`item_value`),
-            KEY `idx_site_group` (`site_id`,`group_id`,`sort`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品规格项'");
-        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_goods_grade` (
-            `grade_id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '成色ID',
-            `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
-            `grade_name` varchar(100) NOT NULL DEFAULT '' COMMENT '成色名称',
-            `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
-            `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1启用/0禁用',
-            `create_at` int NOT NULL DEFAULT 0,
-            `update_at` int NOT NULL DEFAULT 0,
-            PRIMARY KEY (`grade_id`),
-            UNIQUE KEY `uk_site_grade` (`site_id`,`grade_name`),
-            KEY `idx_site_sort` (`site_id`,`status`,`sort`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品成色'");
     }
 
     private function assertUnique(string $table, string $field, string $value, string $pk, int $id): void

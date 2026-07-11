@@ -52,6 +52,19 @@ class ErpStock extends BaseAdminController
         return success($this->service->getPage($params));
     }
 
+    public function serialTrace()
+    {
+        $params = $this->request->params([
+            ['keyword', ''], ['page', 1], ['limit', 15],
+        ]);
+        return success($this->service->serialTracePage($params));
+    }
+
+    public function serialTraceDetail(int $id)
+    {
+        return success($this->service->serialTraceDetail($id));
+    }
+
     public function ledger()
     {
         $params = $this->request->params([
@@ -78,8 +91,22 @@ class ErpStock extends BaseAdminController
             ['cost', 0],
             ['reason', ''],
             ['sync_payable', 1],
+            ['cost_type', 'internal_adjust'],
+            ['expense_type_key', ''],
+            ['party_id', 0],
+            ['party_name', ''],
+            ['refurbish_items', []],
+            ['request_id', ''],
         ]);
-        return success($this->service->adjustCost($id, (float)$params['cost'], (string)$params['reason'], (bool)$params['sync_payable']));
+        return success($this->service->adjustCost(
+            $id,
+            (float)$params['cost'],
+            (string)$params['reason'],
+            (bool)$params['sync_payable'],
+            (string)$params['request_id'],
+            (string)$params['cost_type'],
+            ['expense_type_key' => (string)$params['expense_type_key'], 'party_id' => (int)$params['party_id'], 'party_name' => (string)$params['party_name'], 'refurbish_items' => (array)$params['refurbish_items']]
+        ));
     }
 
     public function flow(int $id)
@@ -89,11 +116,19 @@ class ErpStock extends BaseAdminController
             ['sale_target', ''],
             ['listing_status', ''],
             ['estimate_sale_price', null],
+            ['retail_price', null],
             ['image_urls', null],
             ['quality_remark', null],
+            ['remark_public', null],
+            ['remark_internal', null],
             ['remark', ''],
         ]);
         $this->service->updateFlow($id, $params);
         return success('SUCCESS');
+    }
+
+    public function syncListing(int $id)
+    {
+        return success($this->service->syncListing($id));
     }
 }

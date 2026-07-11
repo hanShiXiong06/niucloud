@@ -5,11 +5,14 @@ namespace addon\hsx_erp\app\service\admin;
 
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseAdminService;
+use think\facade\Log;
 
 class ErpConfigService extends BaseAdminService
 {
     public const CONFIG_KEY = 'HSX_ERP_RULES';
     public const SALE_CHANNEL_KEY = 'HSX_ERP_SALE_CHANNELS';
+    public const SALE_CHANNEL_OPTION_KEY = 'HSX_ERP_SALE_CHANNEL_OPTIONS';
+    public const FINANCE_CATEGORY_KEY = 'HSX_ERP_FINANCE_CATEGORIES';
 
     public function getRules(): array
     {
@@ -29,18 +32,88 @@ class ErpConfigService extends BaseAdminService
 
     public function getSaleChannels(): array
     {
-        $value = (new CoreConfigService())->getConfigValue($this->site_id, self::SALE_CHANNEL_KEY);
-        if (!is_array($value)) {
-            $value = [];
-        }
-        return $this->normalizeSaleChannels($value);
+        return array_values(array_map(static fn(array $row): string => (string)$row['name'], array_filter(
+            $this->getSaleChannelOptions(),
+            static fn(array $row): bool => (int)($row['enabled'] ?? 1) === 1
+        )));
     }
 
     public function saveSaleChannels(array $channels): array
     {
         $rows = $this->normalizeSaleChannels($channels);
         (new CoreConfigService())->setConfig($this->site_id, self::SALE_CHANNEL_KEY, $rows);
+        (new CoreConfigService())->setConfig($this->site_id, self::SALE_CHANNEL_OPTION_KEY, $this->normalizeSaleChannelOptions($rows));
         return $rows;
+    }
+
+    public function getSaleChannelOptions(): array
+    {
+        $config = new CoreConfigService();
+        $value = $config->getConfigValue($this->site_id, self::SALE_CHANNEL_OPTION_KEY);
+        return $this->normalizeSaleChannelOptions(array_merge(
+            $this->baseSaleChannelOptions(),
+            is_array($value) ? $value : [],
+            $this->extensionRows('HsxErpSaleChannelOptions', 'channels')
+        ));
+    }
+
+    public function saveSaleChannelOptions(array $channels): array
+    {
+        $rows = $this->normalizeSaleChannelOptions($channels);
+        $storedRows = array_values(array_filter($rows, static fn(array $row): bool => in_array((string)($row['source_plugin'] ?? ''), ['', 'hsx_erp'], true)));
+        $config = new CoreConfigService();
+        $config->setConfig($this->site_id, self::SALE_CHANNEL_OPTION_KEY, $storedRows);
+        $config->setConfig($this->site_id, self::SALE_CHANNEL_KEY, array_column(array_filter($storedRows, static fn(array $row): bool => (int)$row['enabled'] === 1), 'name'));
+        return $this->getSaleChannelOptions();
+    }
+
+    public function getFinanceCategories(): array
+    {
+        $value = (new CoreConfigService())->getConfigValue($this->site_id, self::FINANCE_CATEGORY_KEY);
+        return $this->normalizeFinanceCategories(array_merge(
+            $this->baseFinanceCategories(),
+            is_array($value) ? $value : [],
+            $this->extensionRows('HsxErpFinanceCategories', 'categories')
+        ));
+    }
+
+    public function saveFinanceCategories(array $categories): array
+    {
+        $rows = $this->normalizeFinanceCategories($categories);
+        $storedRows = array_values(array_filter($rows, static fn(array $row): bool => in_array((string)($row['source_plugin'] ?? ''), ['', 'hsx_erp'], true)));
+        (new CoreConfigService())->setConfig($this->site_id, self::FINANCE_CATEGORY_KEY, $storedRows);
+        return $this->getFinanceCategories();
+    }
+
+    public function findFinanceCategory(string $key): ?array
+    {
+        foreach ($this->getFinanceCategories() as $row) {
+            if ((string)$row['key'] === trim($key) && (int)$row['enabled'] === 1) return $row;
+        }
+        return null;
+    }
+
+    /**
+     * 当前站点可用的业务来源。
+     *
+     * 业务来源只回答“业务从哪里进入 ERP”，不等同于销售渠道或财务分类。
+     * 插件选项由牛云事件加载器按站点套餐装配，ERP 不持久化插件返回值。
+     */
+    public function getBusinessSourceOptions(): array
+    {
+        return $this->normalizeBusinessSourceOptions(array_merge(
+            $this->baseBusinessSourceOptions(),
+            $this->extensionRows('HsxErpBusinessSourceOptions', 'sources')
+        ));
+    }
+
+    public function findBusinessSource(string $key): ?array
+    {
+        $key = trim($key);
+        foreach ($this->getBusinessSourceOptions() as $row) {
+            if ((string)$row['key'] === $key && (int)$row['enabled'] === 1) return $row;
+        }
+        return null;
     }
 
     private function normalize(array $data): array
@@ -102,6 +175,209 @@ class ErpConfigService extends BaseAdminService
             $normalized[] = mb_substr($name, 0, 30);
         }
         return array_values($normalized);
+    }
+
+    private function normalizeSaleChannelOptions(array $channels): array
+    {
+        $defaults = $this->baseSaleChannelOptions();
+        $rows = $channels === [] ? $defaults : $channels;
+        $normalized = [];
+        foreach ($rows as $index => $row) {
+            $data = is_array($row) ? $row : ['name' => (string)$row];
+            $name = mb_substr(trim((string)($data['name'] ?? $data['label'] ?? $data['value'] ?? '')), 0, 30);
+            if ($name === '') continue;
+            $key = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($data['key'] ?? ''));
+            if ($key === '') $key = 'manual_' . substr(md5($name), 0, 12);
+            $sourcePlugin = mb_substr(trim((string)($data['source_plugin'] ?? '')), 0, 40);
+            if (isset($normalized[$key])) {
+                $owner = (string)($normalized[$key]['source_plugin'] ?? '');
+                if ($owner !== $sourcePlugin) {
+                    Log::warning('[hsx_erp] 销售渠道 key 冲突，保留先注册项：site_id=' . $this->site_id . ' key=' . $key . ' owner=' . $owner . ' rejected=' . $sourcePlugin);
+                    continue;
+                }
+            }
+            $normalized[$key] = [
+                'key' => $key,
+                'name' => $name,
+                'channel_type' => in_array((string)($data['channel_type'] ?? ''), ['peer', 'store', 'retail', 'platform', 'other'], true) ? (string)$data['channel_type'] : 'other',
+                'source_plugin' => $sourcePlugin,
+                'source_key' => mb_substr(trim((string)($data['source_key'] ?? '')), 0, 80),
+                'enabled' => $this->boolInt($data['enabled'] ?? 1),
+                'is_default' => $this->boolInt($data['is_default'] ?? ($index === 0 ? 1 : 0)),
+                'sort' => (int)($data['sort'] ?? (100 - $index)),
+            ];
+        }
+        if ($normalized === []) return $defaults;
+        $defaultSeen = false;
+        foreach ($normalized as &$row) {
+            if ((int)$row['enabled'] !== 1 || $defaultSeen) $row['is_default'] = 0;
+            elseif ((int)$row['is_default'] === 1) $defaultSeen = true;
+        }
+        unset($row);
+        if (!$defaultSeen) {
+            foreach ($normalized as &$row) {
+                if ((int)$row['enabled'] === 1) { $row['is_default'] = 1; break; }
+            }
+            unset($row);
+        }
+        $rows = array_values($normalized);
+        usort($rows, static fn(array $a, array $b): int => (int)$b['sort'] <=> (int)$a['sort']);
+        return $rows;
+    }
+
+    private function normalizeFinanceCategories(array $categories): array
+    {
+        $defaults = $this->baseFinanceCategories();
+        $rows = $categories === [] ? $defaults : $categories;
+        $normalized = [];
+        foreach ($rows as $index => $row) {
+            if (!is_array($row)) continue;
+            $key = preg_replace('/[^a-zA-Z0-9_.\-]/', '', (string)($row['key'] ?? ''));
+            $name = mb_substr(trim((string)($row['name'] ?? '')), 0, 40);
+            if ($key === '' || $name === '') continue;
+            $direction = (string)($row['direction'] ?? 'expense') === 'income' ? 'income' : 'expense';
+            $scope = mb_substr(trim((string)($row['scope'] ?? 'general')), 0, 30);
+            $sourcePlugin = mb_substr(trim((string)($row['source_plugin'] ?? '')), 0, 40);
+            if ($sourcePlugin !== '' && $sourcePlugin !== 'hsx_erp'
+                && !str_starts_with($key, $sourcePlugin . '.')
+                && !str_starts_with($key, $sourcePlugin . '_')) {
+                Log::warning('[hsx_erp] 收支分类 key 未使用插件命名空间，已忽略：site_id=' . $this->site_id . ' key=' . $key . ' plugin=' . $sourcePlugin);
+                continue;
+            }
+            if (isset($normalized[$key])) {
+                $owner = (string)($normalized[$key]['source_plugin'] ?? '');
+                if ($owner !== $sourcePlugin) {
+                    Log::warning('[hsx_erp] 收支分类 key 冲突，保留先注册项：site_id=' . $this->site_id . ' key=' . $key . ' owner=' . $owner . ' rejected=' . $sourcePlugin);
+                    continue;
+                }
+            }
+            $statementGroup = (string)($row['statement_group'] ?? '');
+            $allowedStatementGroups = ['revenue', 'revenue_reversal', 'purchase', 'purchase_reversal', 'operating_expense', 'other_income', 'other_expense'];
+            if (!in_array($statementGroup, $allowedStatementGroups, true)) {
+                $statementGroup = $scope === 'refurbish'
+                    ? 'operating_expense'
+                    : ($direction === 'income' ? 'other_income' : 'other_expense');
+            }
+            $normalized[$key] = [
+                'key' => $key, 'name' => $name, 'direction' => $direction,
+                'scope' => $scope,
+                'statement_group' => $statementGroup,
+                'affects_asset_cost' => $this->boolInt($row['affects_asset_cost'] ?? 0),
+                'creates_finance' => $this->boolInt($row['creates_finance'] ?? 1),
+                'party_required' => $this->boolInt($row['party_required'] ?? 0),
+                'source_plugin' => $sourcePlugin,
+                'source_key' => mb_substr(trim((string)($row['source_key'] ?? $key)), 0, 80),
+                'enabled' => $this->boolInt($row['enabled'] ?? 1),
+                'sort' => (int)($row['sort'] ?? (100 - $index)),
+            ];
+        }
+        $rows = array_values($normalized ?: array_column($defaults, null, 'key'));
+        usort($rows, static fn(array $a, array $b): int => (int)$b['sort'] <=> (int)$a['sort']);
+        return $rows;
+    }
+
+    private function normalizeBusinessSourceOptions(array $sources): array
+    {
+        $normalized = [];
+        foreach ($sources as $index => $row) {
+            if (!is_array($row)) continue;
+            $key = preg_replace('/[^a-zA-Z0-9_.\-]/', '', trim((string)($row['key'] ?? '')));
+            $name = mb_substr(trim((string)($row['name'] ?? '')), 0, 40);
+            $sourcePlugin = preg_replace('/[^a-zA-Z0-9_\-]/', '', trim((string)($row['source_plugin'] ?? '')));
+            $sourceKey = preg_replace('/[^a-zA-Z0-9_.\-]/', '', trim((string)($row['source_key'] ?? '')));
+            $scene = preg_replace('/[^a-zA-Z0-9_\-]/', '', trim((string)($row['scene'] ?? '')));
+            if ($key === '' || $name === '' || $sourcePlugin === '' || $sourceKey === '' || $scene === '') {
+                Log::warning('[hsx_erp] 忽略无效业务来源扩展：site_id=' . $this->site_id . ' data=' . json_encode($row, JSON_UNESCAPED_UNICODE));
+                continue;
+            }
+            if ($sourcePlugin !== 'hsx_erp'
+                && !str_starts_with($key, $sourcePlugin . '.')
+                && !str_starts_with($key, $sourcePlugin . '_')) {
+                Log::warning('[hsx_erp] 业务来源 key 未使用插件命名空间，已忽略：site_id=' . $this->site_id . ' key=' . $key . ' plugin=' . $sourcePlugin);
+                continue;
+            }
+            if (isset($normalized[$key])) {
+                $owner = (string)($normalized[$key]['source_plugin'] ?? '');
+                Log::warning('[hsx_erp] 业务来源 key 冲突，保留先注册项：site_id=' . $this->site_id . ' key=' . $key . ' owner=' . $owner . ' rejected=' . $sourcePlugin);
+                continue;
+            }
+            $normalized[$key] = [
+                'key' => $key,
+                'name' => $name,
+                'direction' => (string)($row['direction'] ?? '') === 'income' ? 'income' : 'expense',
+                'scene' => $scene,
+                'source_plugin' => $sourcePlugin,
+                'source_key' => $sourceKey,
+                'enabled' => $this->boolInt($row['enabled'] ?? 1),
+                'sort' => (int)($row['sort'] ?? (100 - $index)),
+            ];
+        }
+        $rows = array_values($normalized);
+        usort($rows, static fn(array $a, array $b): int => (int)$b['sort'] <=> (int)$a['sort']);
+        return $rows;
+    }
+
+    private function baseSaleChannelOptions(): array
+    {
+        return [
+            ['key' => 'erp_peer', 'name' => '同行', 'channel_type' => 'peer', 'source_plugin' => 'hsx_erp', 'source_key' => 'erp_outbound', 'enabled' => 1, 'is_default' => 1, 'sort' => 100],
+            ['key' => 'erp_store', 'name' => '门店', 'channel_type' => 'store', 'source_plugin' => 'hsx_erp', 'source_key' => 'store', 'enabled' => 1, 'is_default' => 0, 'sort' => 90],
+        ];
+    }
+
+    private function baseFinanceCategories(): array
+    {
+        return [
+            ['key' => 'sale_revenue', 'name' => '销售收入', 'direction' => 'income', 'scope' => 'sale', 'statement_group' => 'revenue', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'sale_revenue', 'enabled' => 1, 'sort' => 200],
+            ['key' => 'inventory_purchase', 'name' => '设备采购支出', 'direction' => 'expense', 'scope' => 'purchase', 'statement_group' => 'purchase', 'affects_asset_cost' => 1, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'inventory_purchase', 'enabled' => 1, 'sort' => 190],
+            ['key' => 'sale_refund', 'name' => '销售退货退款', 'direction' => 'expense', 'scope' => 'sale_return', 'statement_group' => 'revenue_reversal', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'sale_refund', 'enabled' => 1, 'sort' => 180],
+            ['key' => 'purchase_refund', 'name' => '采购退货款收回', 'direction' => 'income', 'scope' => 'purchase_return', 'statement_group' => 'purchase_reversal', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'purchase_refund', 'enabled' => 1, 'sort' => 170],
+            ['key' => 'after_sale_compensation', 'name' => '售后补差', 'direction' => 'expense', 'scope' => 'sale_compensation', 'statement_group' => 'revenue_reversal', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'after_sale_compensation', 'enabled' => 1, 'sort' => 160],
+            ['key' => 'refurbish_labor', 'name' => '整备人工费', 'direction' => 'expense', 'scope' => 'refurbish', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 1, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'refurbish_labor', 'enabled' => 1, 'sort' => 100],
+            ['key' => 'refurbish_parts', 'name' => '整备配件费', 'direction' => 'expense', 'scope' => 'refurbish', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 1, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'refurbish_parts', 'enabled' => 1, 'sort' => 90],
+            ['key' => 'refurbish_repair', 'name' => '外修费用', 'direction' => 'expense', 'scope' => 'refurbish', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 1, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'refurbish_repair', 'enabled' => 1, 'sort' => 80],
+            ['key' => 'refurbish_inspection', 'name' => '检测费用', 'direction' => 'expense', 'scope' => 'refurbish', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 1, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'refurbish_inspection', 'enabled' => 1, 'sort' => 70],
+            ['key' => 'refurbish_logistics', 'name' => '整备物流费', 'direction' => 'expense', 'scope' => 'refurbish', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 1, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'refurbish_logistics', 'enabled' => 1, 'sort' => 60],
+            ['key' => 'refurbish_mixed', 'name' => '综合整备费用', 'direction' => 'expense', 'scope' => 'refurbish', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 1, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'refurbish_mixed', 'enabled' => 1, 'sort' => 61],
+            ['key' => 'operating_rent', 'name' => '房租物业', 'direction' => 'expense', 'scope' => 'operating', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'operating_rent', 'enabled' => 1, 'sort' => 59],
+            ['key' => 'operating_utilities', 'name' => '水电网络', 'direction' => 'expense', 'scope' => 'operating', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'operating_utilities', 'enabled' => 1, 'sort' => 58],
+            ['key' => 'operating_office', 'name' => '办公用品', 'direction' => 'expense', 'scope' => 'operating', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'operating_office', 'enabled' => 1, 'sort' => 57],
+            ['key' => 'operating_salary', 'name' => '工资劳务', 'direction' => 'expense', 'scope' => 'operating', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'operating_salary', 'enabled' => 1, 'sort' => 56],
+            ['key' => 'operating_marketing', 'name' => '推广营销', 'direction' => 'expense', 'scope' => 'operating', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'operating_marketing', 'enabled' => 1, 'sort' => 55],
+            ['key' => 'operating_logistics', 'name' => '经营物流', 'direction' => 'expense', 'scope' => 'operating', 'statement_group' => 'operating_expense', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'operating_logistics', 'enabled' => 1, 'sort' => 54],
+            ['key' => 'operating_service_income', 'name' => '维修服务收入', 'direction' => 'income', 'scope' => 'operating', 'statement_group' => 'other_income', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 1, 'source_plugin' => 'hsx_erp', 'source_key' => 'operating_service_income', 'enabled' => 1, 'sort' => 53],
+            ['key' => 'other_expense', 'name' => '其他支出', 'direction' => 'expense', 'scope' => 'general', 'statement_group' => 'other_expense', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 0, 'source_plugin' => 'hsx_erp', 'source_key' => 'other_expense', 'enabled' => 1, 'sort' => 20],
+            ['key' => 'other_income', 'name' => '其他收入', 'direction' => 'income', 'scope' => 'general', 'statement_group' => 'other_income', 'affects_asset_cost' => 0, 'creates_finance' => 1, 'party_required' => 0, 'source_plugin' => 'hsx_erp', 'source_key' => 'other_income', 'enabled' => 1, 'sort' => 10],
+        ];
+    }
+
+    private function baseBusinessSourceOptions(): array
+    {
+        return [
+            ['key' => 'hsx_erp.manual_purchase', 'name' => 'ERP采购', 'direction' => 'expense', 'scene' => 'purchase', 'source_plugin' => 'hsx_erp', 'source_key' => 'manual_purchase', 'enabled' => 1, 'sort' => 200],
+            ['key' => 'hsx_erp.manual_sale', 'name' => 'ERP销售', 'direction' => 'income', 'scene' => 'sale', 'source_plugin' => 'hsx_erp', 'source_key' => 'manual_sale', 'enabled' => 1, 'sort' => 190],
+            ['key' => 'hsx_erp.manual_purchase_return', 'name' => 'ERP采购退货', 'direction' => 'income', 'scene' => 'purchase_return', 'source_plugin' => 'hsx_erp', 'source_key' => 'manual_purchase_return', 'enabled' => 1, 'sort' => 180],
+            ['key' => 'hsx_erp.manual_sale_return', 'name' => 'ERP销售退货', 'direction' => 'expense', 'scene' => 'sale_return', 'source_plugin' => 'hsx_erp', 'source_key' => 'manual_sale_return', 'enabled' => 1, 'sort' => 170],
+            ['key' => 'hsx_erp.manual_refurbish', 'name' => 'ERP整备', 'direction' => 'expense', 'scene' => 'refurbish', 'source_plugin' => 'hsx_erp', 'source_key' => 'manual_refurbish', 'enabled' => 1, 'sort' => 160],
+        ];
+    }
+
+    private function extensionRows(string $eventName, string $bucket): array
+    {
+        try {
+            $results = event($eventName, ['site_id' => $this->site_id, 'erp_version' => '0.0.1']);
+        } catch (\Throwable $e) {
+            Log::warning('[hsx_erp] 动态字典 Hook 加载失败：site_id=' . $this->site_id . ' event=' . $eventName . ' error=' . $e->getMessage());
+            return [];
+        }
+        $rows = [];
+        foreach ((array)$results as $result) {
+            if (!is_array($result) || $result === []) continue;
+            $resultRows = isset($result[$bucket]) && is_array($result[$bucket]) ? $result[$bucket] : $result;
+            if (isset($resultRows['key'])) $resultRows = [$resultRows];
+            foreach ($resultRows as $row) if (is_array($row)) $rows[] = $row;
+        }
+        return $rows;
     }
 
     public static function defaults(): array

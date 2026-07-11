@@ -28,11 +28,21 @@ Route::group('erp', function () {
     Route::post('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@save');
     Route::get('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saleChannels');
     Route::post('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saveSaleChannels');
+    Route::get('config/sale_channel_options', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saleChannelOptions');
+    Route::post('config/sale_channel_options', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saveSaleChannelOptions');
+    Route::get('config/finance_categories', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@financeCategories');
+    Route::post('config/finance_categories', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saveFinanceCategories');
+    Route::get('config/business_source_options', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@businessSourceOptions');
     Route::get('counterparty/options', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@options');
     Route::get('counterparty/member_options', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@memberOptions');
     Route::post('counterparty/quick_contact', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@quickContact');
+    Route::post('counterparty/quick_party', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@quickParty');
+    Route::post('counterparty/update/<id>', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@updateParty');
     Route::post('counterparty/resolve_contact', 'addon\hsx_erp\app\adminapi\controller\ErpCounterparty@resolveContact');
     Route::get('staff/options', 'addon\hsx_erp\app\adminapi\controller\ErpStaff@options');
+    Route::get('kpi/dashboard', 'addon\hsx_erp\app\adminapi\controller\ErpKpi@dashboard');
+    Route::get('kpi/rules', 'addon\hsx_erp\app\adminapi\controller\ErpKpi@rules');
+    Route::post('kpi/rules', 'addon\hsx_erp\app\adminapi\controller\ErpKpi@saveRules');
 
     Route::get('purchase/lists', 'addon\hsx_erp\app\adminapi\controller\ErpPurchase@lists');
     Route::post('purchase/create', 'addon\hsx_erp\app\adminapi\controller\ErpPurchase@create');
@@ -41,10 +51,13 @@ Route::group('erp', function () {
     Route::post('purchase/item/:item_id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\ErpPurchase@adjustCost');
 
     Route::get('stock/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStock@lists');
+    Route::get('stock/serial_trace', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTrace');
+    Route::get('stock/serial_trace/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTraceDetail');
     Route::get('stock/ledger', 'addon\hsx_erp\app\adminapi\controller\ErpStock@ledger');
     Route::post('stock/:id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\ErpStock@adjustCost');
     Route::get('stock/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@info');
     Route::post('stock/:id/flow', 'addon\hsx_erp\app\adminapi\controller\ErpStock@flow');
+    Route::post('stock/:id/sync_listing', 'addon\hsx_erp\app\adminapi\controller\ErpStock@syncListing');
 
     Route::get('warehouse/lists', 'addon\hsx_erp\app\adminapi\controller\ErpWarehouse@lists');
     Route::get('warehouse/options', 'addon\hsx_erp\app\adminapi\controller\ErpWarehouse@options');
@@ -79,6 +92,8 @@ Route::group('erp', function () {
     Route::delete('capital_account/:id', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@delete');
     Route::post('capital_account/entry', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@entry');
     Route::get('capital_account/ledger', 'addon\hsx_erp\app\adminapi\controller\CapitalAccount@ledger');
+    Route::get('operating_finance/lists', 'addon\hsx_erp\app\adminapi\controller\ErpOperatingFinance@lists');
+    Route::post('operating_finance/create', 'addon\hsx_erp\app\adminapi\controller\ErpOperatingFinance@create');
 
     // ── 采购退货 ──────────────────────────────────────────────────────────────
     Route::get('purchase/return/lists', 'addon\hsx_erp\app\adminapi\controller\ErpPurchaseReturn@lists');
@@ -91,6 +106,8 @@ Route::group('erp', function () {
     Route::get('sale/return/lists', 'addon\hsx_erp\app\adminapi\controller\ErpSaleReturn@lists');
     Route::get('sale/return/:id', 'addon\hsx_erp\app\adminapi\controller\ErpSaleReturn@info');
     Route::post('sale/return/create', 'addon\hsx_erp\app\adminapi\controller\ErpSaleReturn@create');
+    Route::post('sale/return/create_and_confirm', 'addon\hsx_erp\app\adminapi\controller\ErpSaleReturn@createAndConfirm');
+    Route::post('sale/return/compensate', 'addon\hsx_erp\app\adminapi\controller\ErpSaleReturn@compensate');
     Route::post('sale/return/:id/confirm', 'addon\hsx_erp\app\adminapi\controller\ErpSaleReturn@confirm');
     Route::post('sale/return/:id/cancel', 'addon\hsx_erp\app\adminapi\controller\ErpSaleReturn@cancel');
 })->middleware([

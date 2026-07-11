@@ -53,7 +53,7 @@
                 </view>
             </view>
             <view class="settle-account-row">
-                <text class="settle-label required">付款账户</text>
+                <text class="settle-label required">{{ accountLabel }}</text>
                 <view class="settle-account-select" :class="{ 'settle-account-select--on': accountId }" @click="showAccountPicker = true">
                     <text :class="accountId ? 'settle-account-text' : 'settle-placeholder'">
                         {{ selectedAccountLabel || '点击选择账户' }}
@@ -65,7 +65,7 @@
 
         <!-- 挂账提示 -->
         <view v-else class="settle-credit-hint">
-            <text class="settle-credit-text">全部挂账，后续通过应付款确认付款</text>
+            <text class="settle-credit-text">{{ creditHint }}</text>
         </view>
 
         <!-- 金额汇总 -->
@@ -143,6 +143,11 @@ const localAmount = ref(props.amount)
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx 16rpx', flex: '1' }
 
 const remaining = computed(() => Math.max(0, props.total - Number(localAmount.value || 0)))
+const isReceipt = computed(() => String(props.labelCash || '').includes('收款'))
+const accountLabel = computed(() => isReceipt.value ? '收款账户' : '付款账户')
+const creditHint = computed(() => isReceipt.value
+    ? `${props.labelCredit}，后续通过应收款确认收款`
+    : `${props.labelCredit}，后续通过应付款确认付款`)
 const selectedAccountLabel = computed(() => {
     const a = props.accounts.find(a => a.id === props.accountId)
     return a ? `${a.account_name}（¥${money(a.balance)}）` : ''

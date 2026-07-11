@@ -16,8 +16,8 @@
 
                     <view class="erp-card__foot sale-finance-foot">
                         <view class="amount-box">
-                            <text class="amt-label">销售总额</text>
-                            <text class="amt-value blue">¥{{ money(order.total_amount) }}</text>
+                            <text class="amt-label">实际销售收入</text>
+                            <text class="amt-value blue">¥{{ money(netSaleAmount(order)) }}</text>
                         </view>
                         <view class="amount-box">
                             <text class="amt-label">总毛利</text>
@@ -32,6 +32,9 @@
                             <text class="amt-value orange">¥{{ money(order.receivable_amount) }}</text>
                         </view>
                     </view>
+                    <view v-if="compensationAmount(order) > 0" class="sale-adjust-note">
+                        原成交 ¥{{ money(order.gross_total_amount ?? order.total_amount) }} · 售后补差 -¥{{ money(compensationAmount(order)) }} · 实际收入 ¥{{ money(netSaleAmount(order)) }}
+                    </view>
 
                     <view class="field">
                         <text class="label">客户</text>
@@ -40,6 +43,14 @@
                     <view class="field">
                         <text class="label">销售渠道</text>
                         <text class="value">{{ order.sale_channel || '-' }}</text>
+                    </view>
+                    <view class="field">
+                        <text class="label">业务来源</text>
+                        <text class="value">{{ order.origin_name || 'ERP销售' }}{{ order.origin_plugin_name ? ' · ' + order.origin_plugin_name : '' }}</text>
+                    </view>
+                    <view class="field">
+                        <text class="label">原业务单号</text>
+                        <text class="value">{{ order.origin_no || order.sale_no || '-' }}</text>
                     </view>
                     <view class="field">
                         <text class="label">开单人</text>
@@ -80,7 +91,7 @@
                     <view class="device-card__head">
                         <view class="device-title">
                             <text class="device-name">{{ item.model || '-' }}</text>
-                            <text class="device-spec">{{ item.spec || '-' }} · IMEI {{ item.imei || '-' }}</text>
+                            <text class="device-spec">{{ deviceIdentityLine(item) }}</text>
                         </view>
                         <u-tag :text="assetLabel(item.status)" :type="assetType(item.status)" plain plainFill size="mini" />
                     </view>
@@ -89,10 +100,13 @@
                         <view v-if="item.category_name" class="sale-chip muted">{{ item.category_name }}</view>
                     </view>
                     <view class="card-time">{{ erpTimeLine(item, ['sale_at', 'sold_at']) }}</view>
+                    <view v-if="compensationAmount(item) > 0" class="sale-adjust-note sale-adjust-note--device">
+                        原成交 ¥{{ money(item.sale_price) }} · 售后补差 -¥{{ money(compensationAmount(item)) }} · 实际收入 ¥{{ money(netSaleAmount(item)) }}
+                    </view>
                     <view class="erp-card__foot sale-device-foot">
                         <view class="amount-box">
-                            <text class="amt-label">售价</text>
-                            <text class="amt-value blue">¥{{ money(item.sale_price) }}</text>
+                            <text class="amt-label">实际收入</text>
+                            <text class="amt-value blue">¥{{ money(netSaleAmount(item)) }}</text>
                         </view>
                         <view class="amount-box">
                             <text class="amt-label">成本</text>
@@ -108,7 +122,7 @@
                             <u-button size="mini" plain type="warning" :text="saleItemCount > 1 ? '撤回此台' : '撤销此台'" @click.stop="cancelSaleItem(item)" />
                         </view>
                         <view v-else-if="!canCancelSale" class="action-button mini">
-                            <u-button size="mini" plain type="warning" text="退货" @click.stop="goReturn()" />
+                            <u-button size="mini" plain type="warning" text="销售退货" @click.stop="goReturn(item)" />
                         </view>
                     </view>
                 </view>
@@ -122,6 +136,8 @@ import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { cancelMobileSale, cancelMobileSaleItem, getMobileSaleInfo } from '@/addon/hsx_erp/api/erp'
 import { erpTimeLine, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
+import { erpNetSaleAmount, erpSaleCompensationAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 const order = ref<any>(null)
@@ -172,8 +188,8 @@ async function loadDetail() {
     }
 }
 
-const goReturn = () => uni.navigateTo({
-    url: `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${saleOrderId.value}&sale_no=${encodeURIComponent(saleNo.value)}&party_name=${encodeURIComponent(order.value?.party_name || '')}`
+const goReturn = (item?: any) => uni.navigateTo({
+    url: `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${saleOrderId.value}&sale_no=${encodeURIComponent(saleNo.value)}&party_name=${encodeURIComponent(order.value?.party_name || '')}&asset_id=${Number(item?.asset_id || 0)}`
 })
 
 const cancelSale = () => {
@@ -228,6 +244,9 @@ const cancelSaleItem = (item: any) => {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+const netSaleAmount = (row: any) => erpNetSaleAmount(row)
+const compensationAmount = (row: any) => erpSaleCompensationAmount(row)
+const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
 const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s)
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
 const assetLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
@@ -248,6 +267,8 @@ const assetType = (s: string) => ({ in_stock: 'success', sold: 'primary', return
 .sale-device-foot .amount-box { flex:1; min-width:0; }
 .sale-finance-foot .amt-value,
 .sale-device-foot .amt-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sale-adjust-note { margin:0 0 14rpx; padding:12rpx 15rpx; border-radius:12rpx; background:#fff7ed; color:#c2410c; font-size:21rpx; line-height:1.45; }
+.sale-adjust-note--device { margin:12rpx 0 0; }
 .form-card .value { word-break: break-all; }
 .order-actions { margin-top:18rpx; padding:18rpx 0 22rpx; border-top:2rpx solid #f3f4f6; }
 .cancel-warning { margin-bottom:14rpx; padding:14rpx 16rpx; border-radius:14rpx; background:#fff7ed; color:#c2410c; font-size:24rpx; line-height:1.45; }

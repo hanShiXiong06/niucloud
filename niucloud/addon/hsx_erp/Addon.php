@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp;
 
+use addon\hsx_erp\app\support\ErpSchema;
 use think\facade\Db;
 
 /**
@@ -15,6 +16,8 @@ class Addon
     public function install()
     {
         $this->installTables();
+        $this->migrateSchema();
+        (new \app\service\core\schedule\CoreScheduleInstallService())->installAddonSchedule('hsx_erp');
         return true;
     }
 
@@ -22,17 +25,21 @@ class Addon
     {
         $tables = $this->getErpTables();
         if (empty($tables)) {
+            (new \app\service\core\schedule\CoreScheduleInstallService())->uninstallAddonSchedule('hsx_erp');
             return true;
         }
 
         $this->backupTables($tables);
         $this->dropTables($tables);
+        (new \app\service\core\schedule\CoreScheduleInstallService())->uninstallAddonSchedule('hsx_erp');
         return true;
     }
 
     public function upgrade()
     {
         $this->installTables();
+        $this->migrateSchema();
+        (new \app\service\core\schedule\CoreScheduleInstallService())->installAddonSchedule('hsx_erp');
         return true;
     }
 
@@ -48,6 +55,11 @@ class Addon
         foreach (array_filter(array_map('trim', explode(';', $sql))) as $statement) {
             Db::execute($statement);
         }
+    }
+
+    private function migrateSchema(): void
+    {
+        ErpSchema::migrate();
     }
 
     /**

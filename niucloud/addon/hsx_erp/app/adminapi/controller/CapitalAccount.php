@@ -52,9 +52,14 @@ class CapitalAccount extends BaseAdminController
         $params = $this->request->params([
             ['account_id', 0],
             ['direction', 'in'],
+            ['category_key', ''],
+            ['category_name', ''],
+            ['category_source_plugin', ''],
+            ['category_source_key', ''],
             ['amount', 0],
             ['party_id', 0],
             ['counterparty_name', ''],
+            ['voucher_urls', ''],
             ['remark', ''],
         ]);
         return success(['id' => $this->service->entry($params)]);

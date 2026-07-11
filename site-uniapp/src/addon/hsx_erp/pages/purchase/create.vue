@@ -1,6 +1,6 @@
 <template>
     <view class="erp-page">
-        <RecyclePageHeader title="采购开单" />
+        <ErpPageHeader title="采购开单" />
         <scroll-view scroll-y style="height:calc(100vh - 100rpx)">
             <view class="form-wrap">
                 <view class="meta-source-card" :class="goodsMeta.source === 'phone_shop' ? 'shop' : 'erp'">
@@ -126,7 +126,7 @@
 
         <!-- 底部提交 -->
         <view class="float-bar">
-            <u-button @click="uni.navigateBack()" :customStyle="{flex:'1'}">取消</u-button>
+            <u-button @click="goBack" :customStyle="{flex:'1'}">取消</u-button>
             <u-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit" :customStyle="{flex:'2'}">
                 确认开单 ¥{{ money(totalCost) }}
             </u-button>
@@ -170,18 +170,20 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getMobileCapitalAccounts, getMobileErpGoodsMeta } from '@/addon/hsx_erp/api/erp'
+import { createMobileErpPurchase, getMobileCapitalAccounts, getMobileErpGoodsMeta } from '@/addon/hsx_erp/api/erp'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import ErpSettleBar from '@/addon/hsx_erp/components/ErpSettleBar.vue'
 import ErpGoodsSpecPopup from '@/addon/hsx_erp/components/ErpGoodsSpecPopup.vue'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import ErpCategoryPopup from '@/addon/hsx_erp/components/ErpCategoryPopup.vue'
-import request from '@/utils/request'
+import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
+import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 
 
 const submitting = ref(false)
+const goBack = () => uni.navigateBack()
 const accounts = ref<any[]>([])
 const goodsMeta = ref<any>({})
 const showPartyPicker = ref(false)
@@ -582,13 +584,23 @@ async function scanDeviceImei(idx: number) {
 }
 
 async function submit() {
+    if (submitting.value) return
     if (!canSubmit.value) {
         uni.showToast({ title: '请完善供应商、设备和付款信息', icon: 'none' })
         return
     }
     submitting.value = true
+    const confirmed = await confirmErpSensitiveAction({
+        title: '确认采购开单',
+        content: `供货商：${form.value.party_name || '-'}\n设备：${form.value.items.length} 台\n采购总额：¥${money(totalCost.value)}\n提交后生成设备资产和应付账款，付款仍需财务确认。`,
+        confirmText: '确认开单',
+    })
+    if (!confirmed) {
+        submitting.value = false
+        return
+    }
     try {
-        await request.post('erp/purchase/create', {
+        await createMobileErpPurchase({
             party_id: form.value.party_id,
             party_name: form.value.party_name,
             m_no: form.value.m_no,
@@ -624,7 +636,7 @@ async function submit() {
                 estimate_sale_price: Number(i.estimate_sale_price || 0),
             }))
         })
-        uni.showToast({ title: '采购开单成功', icon: 'success' })
+        uni.showToast({ title: form.value.settle_mode === 'cash' ? '开单成功，待财务付款' : '采购开单成功', icon: 'success' })
         setTimeout(() => uni.navigateBack(), 1200)
     } catch (e: any) {
         uni.showToast({ title: e?.message || '开单失败', icon: 'none' })

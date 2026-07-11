@@ -7,14 +7,11 @@ use addon\hsx_erp\app\model\ErpAccountLedger;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetLedger;
 use addon\hsx_erp\app\model\ErpMoneyLedger;
+use addon\hsx_erp\app\support\ErpMoney;
 use core\base\BaseAdminService;
-use think\facade\Db;
 
 class ErpLedgerService extends BaseAdminService
 {
-    private static bool $moneyLedgerSchemaEnsured = false;
-    private static bool $assetLedgerSchemaEnsured = false;
-
     public static function makeNo(string $prefix): string
     {
         [$micro] = explode(' ', microtime());
@@ -30,8 +27,8 @@ class ErpLedgerService extends BaseAdminService
             'ledger_no' => self::makeNo('AL'),
             'biz_type' => (string)($data['biz_type'] ?? ''),
             'direction' => (string)($data['direction'] ?? ''),
-            'amount' => round((float)($data['amount'] ?? 0), 2),
-            'balance_after' => round((float)($data['balance_after'] ?? 0), 2),
+            'amount' => ErpMoney::normalize($data['amount'] ?? 0),
+            'balance_after' => ErpMoney::normalize($data['balance_after'] ?? 0),
             'party_id' => (int)($data['party_id'] ?? 0),
             'party_name' => (string)($data['party_name'] ?? ''),
             'asset_id' => (int)($data['asset_id'] ?? 0),
@@ -49,7 +46,6 @@ class ErpLedgerService extends BaseAdminService
 
     public function money(array $data): int
     {
-        $this->ensureMoneyLedgerSchema();
         $now = time();
         $row = ErpMoneyLedger::create([
             'site_id' => $this->site_id,
@@ -58,35 +54,27 @@ class ErpLedgerService extends BaseAdminService
             'capital_account_id' => (int)($data['capital_account_id'] ?? 0),
             'capital_account_name' => (string)($data['capital_account_name'] ?? ''),
             'direction' => (string)($data['direction'] ?? 'in'),
-            'amount' => round((float)($data['amount'] ?? 0), 2),
-            'balance_after' => round((float)($data['balance_after'] ?? 0), 2),
+            'category_key' => (string)($data['category_key'] ?? ''),
+            'category_name' => (string)($data['category_name'] ?? ''),
+            'category_statement_group' => (string)($data['category_statement_group'] ?? ''),
+            'category_source_plugin' => (string)($data['category_source_plugin'] ?? ''),
+            'category_source_key' => (string)($data['category_source_key'] ?? ''),
+            'amount' => ErpMoney::normalize($data['amount'] ?? 0),
+            'balance_after' => ErpMoney::normalize($data['balance_after'] ?? 0),
             'party_id' => (int)($data['party_id'] ?? 0),
             'party_name' => (string)($data['party_name'] ?? ''),
             'operator_uid' => (int)$this->uid,
             'operator_name' => (string)$this->username,
             'occurred_at' => (int)($data['occurred_at'] ?? $now),
+            'voucher_urls' => is_array($data['voucher_urls'] ?? null) ? json_encode($data['voucher_urls'], JSON_UNESCAPED_UNICODE) : trim((string)($data['voucher_urls'] ?? '')),
             'remark' => (string)($data['remark'] ?? ''),
             'create_at' => $now,
         ]);
         return (int)$row->id;
     }
 
-    private function ensureMoneyLedgerSchema(): void
-    {
-        if (self::$moneyLedgerSchemaEnsured) {
-            return;
-        }
-        self::$moneyLedgerSchemaEnsured = true;
-        $table = (new ErpMoneyLedger())->getTable();
-        $columns = Db::query("SHOW COLUMNS FROM `{$table}` LIKE 'balance_after'");
-        if (empty($columns)) {
-            Db::execute("ALTER TABLE `{$table}` ADD COLUMN `balance_after` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '记账后余额' AFTER `amount`");
-        }
-    }
-
     public function asset(array $data): int
     {
-        $this->ensureAssetLedgerSchema();
         $now = time();
         $asset = null;
         $assetId = (int)($data['asset_id'] ?? 0);
@@ -102,6 +90,7 @@ class ErpLedgerService extends BaseAdminService
             : $afterCost;
         $row = ErpAssetLedger::create([
             'site_id' => $this->site_id,
+            'request_id' => $data['request_id'] ?? null,
             'ledger_no' => (string)($data['ledger_no'] ?? self::makeNo('SL')),
             'asset_id' => $assetId,
             'asset_no' => (string)($data['asset_no'] ?? ($asset ? $asset->asset_no : '')),
@@ -136,40 +125,4 @@ class ErpLedgerService extends BaseAdminService
         return (int)$row->id;
     }
 
-    public function ensureAssetLedgerSchema(): void
-    {
-        if (self::$assetLedgerSchemaEnsured) {
-            return;
-        }
-        self::$assetLedgerSchemaEnsured = true;
-        $table = (new ErpAssetLedger())->getTable();
-        $columns = [
-            'ledger_no' => "`ledger_no` varchar(40) NOT NULL DEFAULT '' COMMENT '流水号' AFTER `site_id`",
-            'asset_no' => "`asset_no` varchar(40) NOT NULL DEFAULT '' COMMENT '设备资产号快照' AFTER `asset_id`",
-            'imei' => "`imei` varchar(80) NOT NULL DEFAULT '' COMMENT 'IMEI快照' AFTER `asset_no`",
-            'model' => "`model` varchar(120) NOT NULL DEFAULT '' COMMENT '型号快照' AFTER `imei`",
-            'before_warehouse_id' => "`before_warehouse_id` int NOT NULL DEFAULT 0 AFTER `after_status`",
-            'before_warehouse_name' => "`before_warehouse_name` varchar(100) NOT NULL DEFAULT '' AFTER `before_warehouse_id`",
-            'before_location_id' => "`before_location_id` int NOT NULL DEFAULT 0 AFTER `before_warehouse_name`",
-            'before_location_name' => "`before_location_name` varchar(100) NOT NULL DEFAULT '' AFTER `before_location_id`",
-            'after_warehouse_id' => "`after_warehouse_id` int NOT NULL DEFAULT 0 AFTER `before_location_name`",
-            'after_warehouse_name' => "`after_warehouse_name` varchar(100) NOT NULL DEFAULT '' AFTER `after_warehouse_id`",
-            'after_location_id' => "`after_location_id` int NOT NULL DEFAULT 0 AFTER `after_warehouse_name`",
-            'after_location_name' => "`after_location_name` varchar(100) NOT NULL DEFAULT '' AFTER `after_location_id`",
-            'before_total_cost' => "`before_total_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '变化前成本' AFTER `after_location_name`",
-            'after_total_cost' => "`after_total_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '变化后成本' AFTER `before_total_cost`",
-            'cost_delta' => "`cost_delta` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '成本变化' AFTER `after_total_cost`",
-            'party_id' => "`party_id` int NOT NULL DEFAULT 0 AFTER `cost_delta`",
-            'party_name' => "`party_name` varchar(100) NOT NULL DEFAULT '' AFTER `party_id`",
-            'source_no' => "`source_no` varchar(40) NOT NULL DEFAULT '' AFTER `source_id`",
-            'extra_json' => "`extra_json` longtext COMMENT '扩展快照' AFTER `remark`",
-            'occurred_at' => "`occurred_at` int NOT NULL DEFAULT 0 AFTER `extra_json`",
-        ];
-        foreach ($columns as $column => $definition) {
-            $rows = Db::query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
-            if (empty($rows)) {
-                Db::execute("ALTER TABLE `{$table}` ADD COLUMN {$definition}");
-            }
-        }
-    }
 }

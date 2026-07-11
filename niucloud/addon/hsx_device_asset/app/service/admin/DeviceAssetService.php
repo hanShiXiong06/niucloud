@@ -928,9 +928,10 @@ class DeviceAssetService extends BaseAdminService
             Db::rollback();
             throw new CommonException($e->getMessage());
         }
-        event('DeviceAssetPriceCompleted', $completedEvent);
-
-        return $this->getInfo($assetId);
+        $syncResult = $this->dispatchPriceCompletedEvent($completedEvent);
+        $info = $this->getInfo($assetId);
+        $info['integration_sync'] = $syncResult;
+        return $info;
     }
 
     /**
@@ -987,11 +988,39 @@ class DeviceAssetService extends BaseAdminService
             throw new CommonException('该设备尚未完成定价，无法推送');
         }
         $event = $this->buildPriceCompletedEvent($asset, $assetId);
-        event('DeviceAssetPriceCompleted', $event);
+        $syncResult = $this->dispatchPriceCompletedEvent($event);
         return [
-            'pushed'       => true,
+            'pushed'       => (bool)$syncResult['ok'],
             'erp_asset_id' => $event['payload']['erp_asset_id'],
+            'message' => (string)($syncResult['message'] ?? ''),
+            'results' => $syncResult['results'] ?? [],
         ];
+    }
+
+    /** 定价业务与商城同步分开返回，禁止“没有消费者/被跳过”仍提示推送成功。 */
+    private function dispatchPriceCompletedEvent(array $event): array
+    {
+        try {
+            $results = (array)event('DeviceAssetPriceCompleted', $event);
+            $delivered = false;
+            foreach ($results as $result) {
+                if (!is_array($result)) continue;
+                if (!empty($result['error'])) {
+                    return ['ok' => false, 'message' => (string)($result['message'] ?? '商城同步失败'), 'results' => $results];
+                }
+                if ((string)($result['consumer'] ?? '') === 'phone_shop.device_asset_priced'
+                    && in_array((string)($result['status'] ?? ''), ['processed', 'duplicate'], true)) {
+                    $delivered = true;
+                }
+            }
+            return [
+                'ok' => $delivered,
+                'message' => $delivered ? '已同步商城待上架货源' : '定价已保存，但商城未接收；请确认站点套餐后重试',
+                'results' => $results,
+            ];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => $e->getMessage(), 'results' => []];
+        }
     }
 
     /**

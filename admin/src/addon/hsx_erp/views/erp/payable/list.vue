@@ -4,7 +4,7 @@
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <div class="text-page-title">应付款</div>
-                    <div class="mt-1 text-sm text-gray-500">以供应商和采购批次为账单单位，财务确认付款或折账后才正式结算。</div>
+                    <div class="mt-1 text-sm text-gray-500">统一处理采购、整备、销售退货与售后补差等支出；按业务来源和设备逐笔核对。</div>
                 </div>
                 <div class="flex gap-2">
                     <el-button :icon="Tickets" @click="openSettlement">结算明细</el-button>
@@ -12,6 +12,8 @@
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                 </div>
             </div>
+
+            <ErpRoleFocus :items="payableRoleFocus" />
 
             <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div class="summary-tile">
@@ -41,7 +43,7 @@
 
             <el-form :inline="true" class="mt-1" @submit.prevent>
                 <el-form-item label="关键词">
-                    <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="供应商 / 手机号 / IMEI / 型号 / 采购单" @keyup.enter="handleSearch" />
+                    <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="往来主体 / IMEI / 型号 / 来源单" @keyup.enter="handleSearch" />
                 </el-form-item>
                 <el-form-item label="时间">
                     <el-date-picker v-model="dateRange" type="daterange" value-format="X" start-placeholder="开始日期" end-placeholder="结束日期" />
@@ -53,8 +55,8 @@
                 </el-form-item>
             </el-form>
             <el-form v-show="advancedVisible" :inline="true" class="rounded bg-gray-50 px-3 pt-3" @submit.prevent>
-                <el-form-item label="供应商">
-                    <el-input v-model.trim="search.party_name" clearable class="!w-[180px]" placeholder="供应商名称" @keyup.enter="handleSearch" />
+                <el-form-item label="往来主体">
+                    <ErpPartySelect v-model="search.party_id" v-model:party-name="search.party_name" party-type="all" :allow-create="false" clearable class="!w-[220px]" placeholder="选择供货商、客户或服务商" />
                 </el-form-item>
                 <el-form-item label="来源单">
                     <el-input v-model.trim="search.source_no" clearable class="!w-[190px]" placeholder="采购单 / 应付单" @keyup.enter="handleSearch" />
@@ -62,23 +64,35 @@
                 <el-form-item label="手机号">
                     <el-input v-model.trim="search.contact_mobile" clearable class="!w-[170px]" placeholder="联系人手机号" @keyup.enter="handleSearch" />
                 </el-form-item>
+                <el-form-item label="支出类型">
+                    <el-select v-model="search.finance_type_key" clearable filterable class="!w-[170px]" placeholder="全部支出类型">
+                        <el-option v-for="item in financeTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="业务渠道">
+                    <el-select v-model="search.channel_code" clearable filterable class="!w-[170px]" placeholder="全部渠道">
+                        <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                </el-form-item>
                 <el-form-item>
                     <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
                 </el-form-item>
             </el-form>
 
             <el-table :data="table.data" v-loading="table.loading" size="large">
-                <el-table-column label="供应商/往来主体" min-width="190">
+                <el-table-column label="往来主体" min-width="210">
                     <template #default="{ row }">
-                        <div class="font-medium text-gray-900">{{ row.party_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ contactText(row) }}</div>
+                        <div class="font-medium text-gray-900"><ErpOverflowText :text="row.party_name" max-width="190px" /></div>
+                        <div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                            <el-tag size="small" effect="plain" type="info">{{ partyRoleLabel(row, '付款对象') }}</el-tag>
+                            <ErpOverflowText :text="contactText(row)" max-width="140px" />
+                        </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="采购批次" min-width="230">
+                <el-table-column label="款项来源" min-width="310">
                     <template #default="{ row }">
-                        <div class="font-medium text-gray-900">{{ row.batch_no || row.purchase_no || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.purchase_channel || '未填写渠道' }} · {{ row.payable_count || 0 }} 台</div>
-                        <div class="mt-1 text-xs text-gray-500">采购时间 {{ formatTime(row.purchase_at || row.latest_at) }}</div>
+                        <ErpFinanceSourceMeta :row="row" compact default-direction="expense" />
+                        <div class="mt-1 text-xs text-gray-400">{{ row.payable_count || 0 }} 笔账 · 业务时间 {{ formatTime(row.purchase_at || row.latest_at) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="账目" min-width="240">
@@ -86,16 +100,16 @@
                         <div>应付 <span class="font-medium">{{ money(row.amount) }}</span></div>
                         <div class="mt-1 text-xs text-gray-500">已结算 {{ money(row.settled_amount) }} · 剩余 {{ money(remain(row)) }}</div>
                         <div class="mt-2 flex flex-wrap gap-1">
-                            <el-tag size="small" effect="plain" type="info">开单：{{ row.opening_settle_method || row.settle_method || '-' }}</el-tag>
-                            <el-tag v-if="!(row.settle_summary_items || []).length" size="small" effect="plain" type="warning">待清算</el-tag>
+                            <el-tag size="small" effect="plain" type="info">结算约定：{{ row.opening_settle_method || row.settle_method || '-' }}</el-tag>
+                            <el-tag v-if="!(row.settle_summary_items || []).length" size="small" effect="plain" :type="remain(row) > 0 ? 'warning' : 'success'">{{ remain(row) > 0 ? '待清算' : '已结清' }}</el-tag>
                             <el-tag v-for="item in row.settle_summary_items" :key="item.label" size="small" effect="plain" :type="settleSummaryTagType(item.label)">
                                 {{ item.label }} {{ money(item.amount) }}
                             </el-tag>
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="采购员" min-width="130">
-                    <template #default="{ row }">{{ row.purchaser_name || '-' }}</template>
+                <el-table-column label="业务操作人" min-width="130">
+                    <template #default="{ row }"><ErpOverflowText :text="row.business_operator_name || row.purchaser_name" max-width="120px" /></template>
                 </el-table-column>
                 <el-table-column label="状态" width="120">
                     <template #default="{ row }">
@@ -104,7 +118,7 @@
                 </el-table-column>
                 <el-table-column label="操作" fixed="right" width="220" align="center">
                     <template #default="{ row }">
-                        <el-button type="primary" link @click="openItems(row)">查看列表</el-button>
+                        <el-button type="primary" link @click="openItems(row)">查看明细</el-button>
                         <el-button v-if="canConfirmPay(row)" type="primary" link @click="openPay(row)">确认付款</el-button>
                         <el-button v-if="canConfirmPay(row)" type="success" link @click="openPartyPay(row)">整体付款</el-button>
                         <el-button v-if="canOffset(row)" type="warning" link @click="openOffset(row)">折账</el-button>
@@ -124,10 +138,10 @@
             </div>
         </el-card>
 
-        <el-dialog v-model="pay.visible" title="财务确认付款" width="1080px">
+        <el-dialog v-model="pay.visible" :title="isNonDevicePay ? '财务确认经营付款' : '财务确认付款'" width="1080px">
             <div v-if="pay.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>付款对象：<span class="font-medium text-gray-900">{{ pay.row.party_name }}</span></div>
-                <div class="mt-1">采购批次：{{ pay.row.batch_no || pay.row.purchase_no || '-' }}</div>
+                <div>{{ partyRoleLabel(pay.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ pay.row.party_name }}</span></div>
+                <ErpFinanceSourceMeta :row="pay.row" class="mt-3" default-direction="expense" />
             </div>
             <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div class="rounded bg-red-50 px-3 py-2">
@@ -139,8 +153,8 @@
                     <div class="mt-1 font-medium text-orange-600">{{ money(payAfterRemainTotal) }}</div>
                 </div>
                 <div class="rounded bg-gray-50 px-3 py-2">
-                    <div class="text-xs text-gray-500">已选设备</div>
-                    <div class="mt-1 font-medium text-gray-900">{{ paySelectedCount }} 台</div>
+                    <div class="text-xs text-gray-500">{{ isNonDevicePay ? '费用类型' : '已选设备' }}</div>
+                    <div class="mt-1 font-medium text-gray-900"><ErpOverflowText v-if="isNonDevicePay" :text="pay.row?.category_name || pay.row?.source_meta?.finance_type_name || '经营支出'" max-width="250px" /><template v-else>{{ paySelectedCount }} 台</template></div>
                 </div>
             </div>
             <el-form label-width="100px">
@@ -149,8 +163,16 @@
                         <el-option v-for="item in accounts" :key="item.id" :label="`${item.account_name}（${money(item.balance)}）`" :value="item.id" />
                     </el-select>
                 </el-form-item>
-                <el-form-item label="设备明细" required>
-                    <el-table :data="pay.items" v-loading="pay.loading" size="small" max-height="320" class="w-full">
+                <el-form-item :label="isNonDevicePay ? '费用明细' : '设备明细'" required>
+                    <el-table v-if="isNonDevicePay" :data="pay.items" v-loading="pay.loading" size="small" max-height="320" class="w-full">
+                        <el-table-column width="54"><template #default="{ row }"><el-checkbox v-model="row.checked" :disabled="Number(row.allocated_remain || 0) <= 0" @change="syncPayAmount(row)" /></template></el-table-column>
+                        <el-table-column label="支出类型" min-width="150"><template #default="{ row }"><ErpOverflowText :text="row.category_name || pay.row?.category_name || '经营支出'" max-width="180px" /></template></el-table-column>
+                        <el-table-column label="费用事项" min-width="280"><template #default="{ row }"><ErpOverflowText :text="row.business_reason || row.remark || pay.row?.business_reason" :lines="2" max-width="360px" /></template></el-table-column>
+                        <el-table-column label="来源单号" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.source_no || row.payable_no || '-' }}</template></el-table-column>
+                        <el-table-column label="剩余应付" width="120" align="right"><template #default="{ row }">{{ money(row.allocated_remain) }}</template></el-table-column>
+                        <el-table-column label="本次付款" width="160"><template #default="{ row }"><el-input-number v-model="row.pay_amount" :disabled="!row.checked" :min="0" :max="Number(row.allocated_remain || 0)" :precision="2" :controls="false" class="!w-[130px]" /></template></el-table-column>
+                    </el-table>
+                    <el-table v-else :data="pay.items" v-loading="pay.loading" size="small" max-height="320" class="w-full">
                         <el-table-column width="54">
                             <template #default="{ row }">
                                 <el-checkbox v-model="row.checked" :disabled="Number(row.allocated_remain || 0) <= 0" @change="syncPayAmount(row)" />
@@ -159,11 +181,14 @@
                         <el-table-column label="设备" min-width="230">
                             <template #default="{ row }">
                                 <div class="font-medium">{{ row.model || '-' }}</div>
-                                <div class="mt-1 text-xs text-gray-500">{{ row.spec || '-' }} · IMEI {{ row.imei || '-' }}</div>
+                                <div class="mt-1 text-xs text-gray-500">{{ row.spec || '未填写规格' }} · IMEI {{ row.imei || '-' }}</div>
                             </template>
                         </el-table-column>
                         <el-table-column label="应付金额" width="120" align="right">
-                            <template #default="{ row }">{{ money(row.total_cost || row.payable_amount) }}</template>
+                            <template #default="{ row }">
+                                <div>{{ money(row.payable_amount) }}</div>
+                                <div v-if="row.current_total_cost" class="mt-1 text-xs text-gray-400">当前成本 {{ money(row.current_total_cost) }}</div>
+                            </template>
                         </el-table-column>
                         <el-table-column label="已付" width="110" align="right">
                             <template #default="{ row }">{{ money(row.allocated_paid) }}</template>
@@ -192,6 +217,7 @@
                 <el-form-item label="备注">
                     <el-input v-model.trim="pay.form.remark" type="textarea" :rows="2" placeholder="如：已核对银行卡流水" />
                 </el-form-item>
+                <el-form-item label="付款凭证"><ErpFinanceVoucherUpload v-model="pay.form.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="pay.visible = false">取消</el-button>
@@ -199,10 +225,11 @@
             </template>
         </el-dialog>
 
-        <!-- 整体付款对话框（一次性付清该供应商全部剩余应付） -->
+        <!-- 整体付款对话框（一次性结清当前往来主体的剩余应付） -->
         <el-dialog v-model="partyPay.visible" title="整体付款" width="480px">
             <div v-if="partyPay.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>付款对象：<span class="font-medium text-gray-900">{{ partyPay.row.party_name }}</span></div>
+                <div>{{ partyRoleLabel(partyPay.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ partyPay.row.party_name }}</span></div>
+                <ErpFinanceSourceMeta :row="partyPay.row" class="mt-3" default-direction="expense" />
                 <div class="mt-1">剩余应付总额：<span class="font-medium text-red-600">{{ money(partyPay.row.remain_amount) }}</span></div>
             </div>
             <el-form label-width="100px">
@@ -225,6 +252,7 @@
                 <el-form-item label="备注">
                     <el-input v-model.trim="partyPay.form.remark" placeholder="如：整体结清本批欠款" />
                 </el-form-item>
+                <el-form-item label="付款凭证"><ErpFinanceVoucherUpload v-model="partyPay.form.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="partyPay.visible = false">取消</el-button>
@@ -323,6 +351,7 @@
                 <el-form-item label="备注">
                     <el-input v-model.trim="offset.form.remark" type="textarea" :rows="2" placeholder="如：同行往来对冲" />
                 </el-form-item>
+                <el-form-item v-if="offset.form.settle_diff" label="差额凭证"><ErpFinanceVoucherUpload v-model="offset.form.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="offset.visible = false">取消</el-button>
@@ -330,27 +359,30 @@
             </template>
         </el-dialog>
 
-        <el-drawer v-model="items.visible" :title="`${items.row?.batch_no || '采购批次'} · 应付批次明细`" size="86%">
+        <el-drawer v-model="items.visible" :title="`${financeTypeLabel(items.row, '应付款')} · 设备明细`" size="86%">
             <div v-if="items.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>供应商：<span class="font-medium text-gray-900">{{ items.row.party_name || '-' }}</span></div>
-                <div class="mt-1">批次：{{ items.row.batch_no || '-' }} · 应付 {{ money(items.row.amount) }} · 已结算 {{ money(items.row.settled_amount) }} · 剩余 {{ money(remain(items.row)) }}</div>
+                <div>{{ partyRoleLabel(items.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ items.row.party_name || '-' }}</span></div>
+                <ErpFinanceSourceMeta :row="items.row" class="mt-3" default-direction="expense" />
+                <div class="mt-3 border-t border-gray-200 pt-2">应付 {{ money(items.row.amount) }} · 已结算 {{ money(items.row.settled_amount) }} · 剩余 {{ money(remain(items.row)) }}</div>
             </div>
             <div class="mb-2 font-medium text-gray-900">设备明细</div>
             <el-table :data="items.data" v-loading="items.loading" size="large">
                 <el-table-column label="设备" min-width="240">
                     <template #default="{ row }">
                         <div class="font-medium">{{ row.model || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.spec || '-' }} · IMEI {{ row.imei || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-400">资产号：{{ row.asset_no || '-' }}</div>
+                        <div class="mt-1 text-xs text-gray-500">{{ row.spec || '未填写规格' }} · IMEI {{ row.imei || '-' }}</div>
+                        <div class="mt-1 flex text-xs text-gray-400"><span>资产号：</span><ErpCopyText :value="row.asset_no" title="系统资产号" max-width="180px" /></div>
                     </template>
                 </el-table-column>
                 <el-table-column label="位置" min-width="150">
                     <template #default="{ row }">{{ [row.warehouse_name, row.location_name].filter(Boolean).join(' / ') || '-' }}</template>
                 </el-table-column>
-                <el-table-column prop="purchase_no" label="采购单" min-width="170" />
+                <el-table-column label="来源单号" min-width="180">
+                    <template #default="{ row }"><ErpCopyText :value="row.source_meta?.source_no || row.source_no || row.purchase_no" title="来源单号" max-width="170px" /></template>
+                </el-table-column>
                 <el-table-column label="应付" min-width="180" align="right">
                     <template #default="{ row }">
-                        <div>{{ money(row.total_cost) }}</div>
+                        <div>{{ money(row.payable_amount) }}</div>
                         <div class="mt-1 text-xs text-gray-500">已结算 {{ money(row.allocated_paid) }}</div>
                     </template>
                 </el-table-column>
@@ -374,7 +406,7 @@
                     <template #default="{ row }">
                         <div class="font-medium" :class="row.settlement_type === 'offset' ? 'text-amber-600' : 'text-gray-900'">{{ row.settlement_type_text || '-' }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ row.pay_method_text || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-400">{{ row.settlement_no || '-' }}</div>
+                        <div class="mt-1 text-xs text-gray-400"><ErpCopyText :value="row.settlement_no" title="结算单号" max-width="170px" /></div>
                     </template>
                 </el-table-column>
                 <el-table-column label="本次结算" width="130" align="right">
@@ -412,6 +444,7 @@
                                 <span :class="ledger.direction === 'in' ? 'text-green-600' : 'text-red-600'">{{ ledger.direction === 'in' ? '收款' : '付款' }} {{ money(ledger.amount) }}</span>
                             </div>
                             <div class="mt-1 text-gray-400">{{ ledger.ledger_no }} · 账户余额 {{ money(ledger.balance_after) }}</div>
+                            <ErpImageGallery v-if="ledger.voucher_urls" class="mt-2" :value="ledger.voucher_urls" :size="48" :limit="3" />
                         </div>
                         <div v-if="!row.money_ledgers?.length" class="text-xs text-gray-400">折账不产生资金流水</div>
                     </template>
@@ -420,30 +453,51 @@
         </el-drawer>
 
         <el-drawer v-model="ledger.visible" title="账目流水" size="72%">
-            <div class="mb-3 flex flex-wrap items-center gap-2">
+            <div class="ledger-intro">
+                <div>
+                    <b>每笔业务怎样影响账面</b>
+                    <span>这里记录应收、应付、成本与真实收付款变化，不等同于银行卡流水；每条记录直接说明“新增应付、冲回应收、实际支出”等业务结果。</span>
+                </div>
+                <span>共 {{ ledger.total }} 条</span>
+            </div>
+            <div class="ledger-summary">
+                <div><span>本页记录</span><b>{{ ledger.data.length }}</b></div>
+                <div><span>实际收付款</span><b class="text-green-600">{{ ledgerPageSummary.cash }} 笔</b></div>
+                <div><span>账款 / 成本变化</span><b class="text-blue-600">{{ ledgerPageSummary.business }} 笔</b></div>
+            </div>
+            <div class="ledger-toolbar">
                 <el-input v-model.trim="ledger.keyword" clearable class="!w-[260px]" placeholder="流水号 / 往来单位 / 单号 / 备注" @keyup.enter="loadLedger" />
                 <el-button type="primary" @click="loadLedger">查询</el-button>
                 <el-button @click="ledger.keyword = ''; loadLedger()">重置</el-button>
             </div>
-            <el-table :data="ledger.data" v-loading="ledger.loading" size="large">
-                <el-table-column prop="ledger_no" label="流水号" min-width="180" />
-                <el-table-column label="业务" width="110">
-                    <template #default="{ row }"><el-tag effect="plain">{{ bizText(row.biz_type) }}</el-tag></template>
-                </el-table-column>
-                <el-table-column label="方向" width="100">
-                    <template #default="{ row }">{{ row.direction === 'increase' ? '增加' : row.direction === 'decrease' ? '减少' : '-' }}</template>
-                </el-table-column>
-                <el-table-column label="金额" width="130" align="right">
-                    <template #default="{ row }">{{ money(row.amount) }}</template>
-                </el-table-column>
-                <el-table-column prop="party_name" label="往来单位" min-width="150" />
-                <el-table-column prop="source_no" label="来源单号" min-width="160" />
-                <el-table-column prop="remark" label="备注" min-width="180" />
-                <el-table-column label="时间" width="170">
-                    <template #default="{ row }">{{ formatTime(row.occurred_at) }}</template>
-                </el-table-column>
-            </el-table>
-            <div class="mt-4 flex justify-end">
+            <div v-loading="ledger.loading" class="ledger-body">
+                <el-empty v-if="!ledger.loading && !ledger.data.length" description="暂无账目流水" />
+                <el-collapse v-else v-model="ledger.expanded" class="ledger-event-list">
+                    <el-collapse-item v-for="row in ledger.data" :key="row.id || row.ledger_no" :name="row.id || row.ledger_no">
+                        <template #title>
+                            <div class="ledger-event-head">
+                                <span class="ledger-event-dot" :class="row.direction === 'decrease' ? 'is-decrease' : 'is-increase'"></span>
+                                <div class="ledger-event-main">
+                                    <div class="ledger-event-title"><el-tag size="small" effect="plain">{{ bizText(row) }}</el-tag><b>{{ row.party_name || '未记录往来单位' }}</b></div>
+                                    <span>{{ ledgerSentence(row) }}</span>
+                                </div>
+                                <div class="ledger-event-result">
+                                    <strong :class="ledgerAmountMeta(row).className">{{ ledgerAmountMeta(row).text }}</strong>
+                                    <span>{{ formatTime(row.occurred_at) }}</span>
+                                </div>
+                            </div>
+                        </template>
+                        <div class="ledger-event-detail">
+                            <div><span>来源单号</span><b>{{ row.source_no || '-' }}</b></div>
+                            <div><span>账目流水号</span><b>{{ row.ledger_no || '-' }}</b></div>
+                            <div><span>操作人</span><b>{{ row.operator_name || '-' }}</b></div>
+                            <div><span>账务影响</span><b>{{ ledgerImpactText(row) }}</b></div>
+                            <div v-if="row.remark"><span>原始备注</span><b>{{ row.remark }}</b></div>
+                        </div>
+                    </el-collapse-item>
+                </el-collapse>
+            </div>
+            <div class="ledger-pagination">
                 <el-pagination
                     v-model:current-page="ledger.page"
                     v-model:page-size="ledger.limit"
@@ -454,8 +508,12 @@
             </div>
         </el-drawer>
 
-        <el-drawer v-model="settle.visible" title="结算明细 · 每笔账怎么结的" size="80%">
-            <div class="mb-3 flex flex-wrap items-center gap-2">
+        <el-drawer v-model="settle.visible" title="结算记录" size="72%">
+            <div class="settlement-intro">
+                <div><b>每笔钱怎么结的</b><span>先看往来单位、金额和结算方式；设备、账款单号、资金流水和凭证按需展开。</span></div>
+                <span>共 {{ settle.total }} 笔</span>
+            </div>
+            <div class="settlement-toolbar">
                 <el-input v-model.trim="settle.keyword" clearable class="!w-[240px]" placeholder="结算单号 / 往来单位 / 账户 / 备注" @keyup.enter="reloadSettlement" />
                 <el-select v-model="settle.type" clearable class="!w-[150px]" placeholder="结算方式" @change="reloadSettlement">
                     <el-option label="付款" value="payment" />
@@ -468,44 +526,8 @@
                     <el-button link type="primary" @click="settle.assetId = 0; settle.assetLabel = ''; reloadSettlement()">清除</el-button>
                 </span>
             </div>
-            <el-table :data="settle.data" v-loading="settle.loading" size="large">
-                <el-table-column prop="settlement_no" label="结算单号" min-width="180" />
-                <el-table-column label="结算方式" width="110">
-                    <template #default="{ row }">
-                        <el-tag :type="settleTypeTag(row.settlement_type)" effect="plain">{{ row.settlement_type_text || row.settlement_type }}</el-tag>
-                    </template>
-                </el-table-column>
-                <el-table-column label="收付方式 / 账户" min-width="160">
-                    <template #default="{ row }">
-                        <span :class="row.settlement_type === 'offset' ? 'text-amber-600' : 'text-gray-900'">{{ row.pay_method_text || '-' }}</span>
-                    </template>
-                </el-table-column>
-                <el-table-column label="金额" width="130" align="right">
-                    <template #default="{ row }">{{ money(row.amount) }}</template>
-                </el-table-column>
-                <el-table-column prop="party_name" label="往来单位" min-width="140" />
-                <el-table-column label="关联设备 / 抵扣明细" min-width="330">
-                    <template #default="{ row }">
-                        <div v-for="(l, i) in (row.links || [])" :key="i" class="mb-2 rounded bg-gray-50 px-2 py-2 text-xs text-gray-600">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-medium text-gray-900">{{ l.target_type_text }} {{ l.target_no || l.source_no || `#${l.target_id}` }}</span>
-                                <span class="font-medium text-gray-900">抵 {{ money(l.applied_amount) }}</span>
-                            </div>
-                            <div v-for="device in l.devices" :key="`${l.target_type}_${l.target_id}_${device.asset_id}_${device.imei}`" class="mt-2 border-l-2 border-gray-200 pl-2">
-                                <div class="font-medium text-gray-900">{{ device.model || '-' }}</div>
-                                <div class="mt-1 text-gray-500">{{ device.imei ? `IMEI ${device.imei}` : device.asset_no || '-' }}</div>
-                                <div class="mt-1 text-gray-500">{{ deviceSummary(device) }}</div>
-                            </div>
-                        </div>
-                        <span v-if="!(row.links || []).length" class="text-xs text-gray-400">-</span>
-                    </template>
-                </el-table-column>
-                <el-table-column prop="operator_name" label="经手人" width="110" />
-                <el-table-column label="确认时间" width="170">
-                    <template #default="{ row }">{{ formatTime(row.confirmed_at) }}</template>
-                </el-table-column>
-            </el-table>
-            <div class="mt-4 flex justify-end">
+            <ErpSettlementCards :rows="settle.data" :loading="settle.loading" />
+            <div class="settlement-pagination">
                 <el-pagination
                     v-model:current-page="settle.page"
                     v-model:page-size="settle.limit"
@@ -520,23 +542,44 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Filter, Refresh, Search, Tickets } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
+import { getErpFinanceCategories, getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { confirmErpOffset, confirmErpPartyPayment, confirmErpPayableItemsPayment, getErpAccountLedger, getErpPayableList, getErpPayablePartyItems, getErpReceivableItems, getErpReceivableList, getErpSettlementList } from '@/addon/hsx_erp/api/erp'
+import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
+import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
+import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
+import ErpSettlementCards from '@/addon/hsx_erp/components/ErpSettlementCards.vue'
+import ErpFinanceSourceMeta from '@/addon/hsx_erp/components/ErpFinanceSourceMeta.vue'
+import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
+import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
+import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
+
+const route = useRoute()
+
+const payableRoleFocus = [
+    { role: '财务', focus: '采购、整备、售后等各类应付，付款账户与逐台核销明细' },
+    { role: '业务', focus: '采购来源或售后退货来源、设备归属与退款原因' },
+    { role: '负责人', focus: '现金支出、未付风险与折账事实' },
+]
 
 const activeStatus = ref('')
-const search = reactive({ keyword: '', party_name: '', source_no: '', contact_mobile: '', can_offset: '' })
+const search = reactive({ keyword: '', party_id: null as number | null, party_name: '', source_no: String(route.query.source_no || ''), contact_mobile: '', finance_type_key: '', business_source_key: '', channel_code: '', can_offset: '' })
 const advancedVisible = ref(false)
 const dateRange = ref<any[]>([])
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const accounts = ref<any[]>([])
-const pay = reactive({ visible: false, saving: false, loading: false, row: null as any, items: [] as any[], form: { capital_account_id: 0, remark: '' } })
+const registeredFinanceCategories = ref<any[]>([])
+const registeredChannels = ref<any[]>([])
+const pay = reactive({ visible: false, saving: false, loading: false, row: null as any, items: [] as any[], form: { capital_account_id: 0, remark: '', voucher_urls: '' } })
 const items = reactive({ visible: false, loading: false, row: null as any, data: [] as any[], settlements: [] as any[], page: 1, limit: 15, total: 0 })
-const ledger = reactive({ visible: false, loading: false, keyword: '', data: [] as any[], page: 1, limit: 15, total: 0 })
-const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '' } })
+const ledger = reactive({ visible: false, loading: false, keyword: '', data: [] as any[], expanded: [] as Array<number | string>, page: 1, limit: 15, total: 0 })
+const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const settle = reactive({ visible: false, loading: false, keyword: '', type: '', assetId: 0, assetLabel: '', data: [] as any[], page: 1, limit: 15, total: 0 })
-const partyPay = reactive({ visible: false, saving: false, row: null as any, form: { amount: 0, capital_account_id: 0, remark: '' } })
+const partyPay = reactive({ visible: false, saving: false, row: null as any, form: { amount: 0, capital_account_id: 0, remark: '', voucher_urls: '' } })
 
 const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.count += 1
@@ -545,12 +588,28 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.remain += remain(row)
     return acc
 }, { count: 0, amount: 0, settled: 0, remain: 0 }))
+const financeTypeOptions = computed(() => sourceOptions('finance_type_key', 'finance_type_name', registeredFinanceCategories.value
+    .filter((item: any) => Number(item.enabled ?? 1) === 1 && item.direction === 'expense')
+    .map((item: any) => ({ value: String(item.key), label: String(item.name) }))))
+const channelOptions = computed(() => sourceOptions('channel_code', 'channel_name', registeredChannels.value
+    .filter((item: any) => Number(item.enabled ?? 1) === 1)
+    .map((item: any) => ({ value: String(item.key), label: String(item.name) }))))
+
+const ledgerPageSummary = computed(() => ledger.data.reduce((acc, row: any) => {
+    if (['payment', 'receipt'].includes(String(row.biz_type || '').toLowerCase())) acc.cash += 1
+    else acc.business += 1
+    return acc
+}, { cash: 0, business: 0 }))
 
 const paySelectedTotal = computed(() => pay.items.reduce((sum: number, row: any) => {
     if (!row.checked) return sum
     return sum + Number(row.pay_amount || 0)
 }, 0))
 const paySelectedCount = computed(() => pay.items.filter((row: any) => row.checked && Number(row.pay_amount || 0) > 0).length)
+const isNonDevicePay = computed(() => {
+    const row = pay.row || {}
+    return String(row.source_type || '').includes('operating_') || String(row.biz_scene || '').includes('operating_') || String(row.category_statement_group || '').includes('operating_')
+})
 const payAfterRemainTotal = computed(() => pay.items.reduce((sum: number, row: any) => sum + payAfterRemain(row), 0))
 const canSubmitPay = computed(() => paySelectedTotal.value > 0 && Number(pay.form.capital_account_id || 0) > 0)
 
@@ -580,9 +639,10 @@ const offsetResultText = computed(() => {
 })
 
 onMounted(() => {
-    loadList()
     loadAccounts()
+    loadDynamicOptions()
 })
+useErpPageRefresh(loadList)
 
 async function loadList() {
     table.loading = true
@@ -607,6 +667,22 @@ async function loadAccounts() {
     accounts.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || [])
 }
 
+async function loadDynamicOptions() {
+    const [categories, channels] = await Promise.allSettled([
+        getErpFinanceCategories(),
+        getErpSaleChannelOptions()
+    ])
+    if (categories.status === 'fulfilled') registeredFinanceCategories.value = responseRows(categories.value)
+    if (channels.status === 'fulfilled') registeredChannels.value = responseRows(channels.value)
+}
+
+function responseRows(response: any) {
+    const data = response?.data
+    if (Array.isArray(data)) return data
+    if (Array.isArray(data?.list)) return data.list
+    return []
+}
+
 function handleSearch() {
     table.page = 1
     loadList()
@@ -614,9 +690,13 @@ function handleSearch() {
 
 function handleReset() {
     search.keyword = ''
+    search.party_id = null
     search.party_name = ''
     search.source_no = ''
     search.contact_mobile = ''
+    search.finance_type_key = ''
+    search.business_source_key = ''
+    search.channel_code = ''
     search.can_offset = ''
     activeStatus.value = ''
     dateRange.value = []
@@ -627,7 +707,7 @@ async function openPay(row: any) {
     if (!canConfirmPay(row)) return
     pay.row = row
     pay.items = []
-    pay.form = { capital_account_id: accounts.value[0]?.id || 0, remark: '' }
+    pay.form = { capital_account_id: accounts.value[0]?.id || 0, remark: row.source_meta?.business_reason || (row.source_type === 'sale_return' ? (row.sale_return_business_type === 'after_sale_compensation' ? `公司向客户【${row.party_name || '-'}】支付售后补差款` : `公司向客户【${row.party_name || '-'}】退还销售货款`) : (row.source_type === 'refurbish' ? `公司向整备服务商【${row.party_name || '-'}】支付设备整备费用` : '')), voucher_urls: '' }
     pay.visible = true
     pay.loading = true
     try {
@@ -635,6 +715,7 @@ async function openPay(row: any) {
             ...search,
             status: '',
             purchase_order_id: row.purchase_order_id || 0,
+            source_type: row.source_type || '',
             start_at: Number(dateRange.value?.[0] || 0),
             end_at: Number(dateRange.value?.[1] || 0) ? Number(dateRange.value[1]) + 86399 : 0,
             page: 1,
@@ -644,7 +725,7 @@ async function openPay(row: any) {
             .filter((item: any) => Number(item.allocated_remain || 0) > 0 && Number(item.asset_payable_id || 0) > 0)
             .map((item: any) => ({ ...item, checked: true, pay_amount: Number(item.allocated_remain || 0) }))
         if (!pay.items.length && remain(row) > 0) {
-            ElMessage.warning('当前应付缺少设备级账目，请用新采购开单数据验证')
+            ElMessage.warning(isNonDevicePay.value ? '当前经营应付明细已变化，请刷新后重试' : '当前应付缺少设备级账目，请用新采购开单数据验证')
         }
     } finally {
         pay.loading = false
@@ -656,10 +737,17 @@ async function submitPay() {
     const selected = pay.items
         .filter((row: any) => row.checked && Number(row.pay_amount || 0) > 0)
         .map((row: any) => ({ payable_id: Number(row.payable_id || 0), amount: Number(row.pay_amount || 0) }))
-    if (!selected.length) return ElMessage.warning('请选择要付款的设备')
+    if (!selected.length) return ElMessage.warning(isNonDevicePay.value ? '请选择要付款的费用明细' : '请选择要付款的设备')
     if (paySelectedTotal.value <= 0) return ElMessage.warning('请填写付款金额')
     if (!pay.form.capital_account_id) return ElMessage.warning('请选择付款账户')
     if (pay.items.some((row: any) => row.checked && Number(row.pay_amount || 0) > Number(row.allocated_remain || 0))) return ElMessage.warning('本次付款不能大于设备剩余应付')
+    const payAccount = accounts.value.find((item: any) => Number(item.id) === Number(pay.form.capital_account_id))
+    const payConfirmed = await ElMessageBox.confirm(
+        `确认向「${pay.row.party_name || '该付款对象'}」付款 ${money(paySelectedTotal.value)}，付款账户「${payAccount?.account_name || '所选账户'}」，核销 ${selected.length} ${isNonDevicePay.value ? '笔经营支出' : '台设备应付'}。确认后将写入资金流水，不能直接删除。`,
+        isNonDevicePay.value ? '确认经营付款' : '确认设备付款',
+        { type: 'warning', confirmButtonText: '确认付款并记账', cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!payConfirmed) return
     pay.saving = true
     try {
         await confirmErpPayableItemsPayment(pay.row.party_id, { ...pay.form, items: selected })
@@ -695,6 +783,7 @@ function openPartyPay(row: any) {
         amount: Number((row.remain_amount || 0).toFixed(2)),
         capital_account_id: 0,
         remark: '',
+        voucher_urls: '',
     }
     partyPay.visible = true
 }
@@ -703,9 +792,22 @@ async function submitPartyPay() {
     if (!partyPay.row) return
     if (!partyPay.form.amount || partyPay.form.amount <= 0) return ElMessage.warning('请填写付款金额')
     if (!partyPay.form.capital_account_id) return ElMessage.warning('请选择付款账户')
+    const partyAccount = accounts.value.find((item: any) => Number(item.id) === Number(partyPay.form.capital_account_id))
+    const partyPayConfirmed = await ElMessageBox.confirm(
+        `确认向「${partyPay.row.party_name || '该付款对象'}」支付当前业务批次 ${money(partyPay.form.amount)}，付款账户「${partyAccount?.account_name || '所选账户'}」。系统只核销本卡片明确列出的应付，不会跨批次猜账，确认后不能直接删除。`,
+        '确认整体付款',
+        { type: 'warning', confirmButtonText: '确认付款并记账', cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!partyPayConfirmed) return
     partyPay.saving = true
     try {
-        await confirmErpPartyPayment(partyPay.row.party_id, partyPay.form)
+        await confirmErpPartyPayment(partyPay.row.party_id, {
+            ...partyPay.form,
+            payable_ids: (partyPay.row.payable_ids || []).map(Number).filter((id: number) => id > 0),
+            source_type: partyPay.row.source_type || '',
+            purchase_order_id: Number(partyPay.row.purchase_order_id || partyPay.row.source_id || 0),
+            batch_no: partyPay.row.batch_no || partyPay.row.source_no || '',
+        })
         ElMessage.success('整体付款已确认')
         partyPay.visible = false
         await loadList()
@@ -720,12 +822,12 @@ async function openOffset(row: any) {
     offset.row = row
     offset.payables = []
     offset.receivables = []
-    offset.form = { amount: 0, settle_diff: false, capital_account_id: 0, remark: '' }
+    offset.form = { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' }
     offset.visible = true
     offset.loading = true
     try {
         const [payRes, recRes]: any = await Promise.all([
-            getErpPayablePartyItems(row.party_id, { status: '', purchase_order_id: row.purchase_order_id || 0, page: 1, limit: 200 }),
+            getErpPayablePartyItems(row.party_id, { status: '', source_type: row.source_type || '', purchase_order_id: row.purchase_order_id || 0, page: 1, limit: 200 }),
             getErpReceivableList({ party_id: row.party_id, page: 1, limit: 200 })
         ])
         offset.payables = (payRes?.data?.data || [])
@@ -798,6 +900,12 @@ async function submitOffset() {
         if (offsetDiffAmount.value <= 0) return ElMessage.warning('当前没有需要结清的差额')
         if (!offset.form.capital_account_id) return ElMessage.warning('请选择差额收付款账户')
     }
+    const offsetConfirmed = await ElMessageBox.confirm(
+        `确认对「${offset.row.party_name || '该往来主体'}」执行应付应收折账 ${money(amount)}。该操作会同时核销双方账目${offset.form.settle_diff ? `，并结清差额 ${money(offsetDiffAmount.value)}` : ''}；确认后不能直接删除流水。`,
+        '确认应付应收折账',
+        { type: 'warning', confirmButtonText: '确认折账并记账', cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!offsetConfirmed) return
     offset.saving = true
     try {
         await confirmErpOffset({
@@ -835,6 +943,7 @@ async function loadItems() {
             ...search,
             status: activeStatus.value,
             purchase_order_id: items.row.purchase_order_id || 0,
+            source_type: items.row.source_type || '',
             start_at: Number(dateRange.value?.[0] || 0),
             end_at: Number(dateRange.value?.[1] || 0) ? Number(dateRange.value[1]) + 86399 : 0,
             page: items.page,
@@ -904,11 +1013,6 @@ async function loadSettlement() {
     }
 }
 
-function settleTypeTag(type: string) {
-    const map: any = { payment: 'primary', receipt: 'success', offset: 'warning' }
-    return map[type] || 'info'
-}
-
 function remain(row: any) {
     return Math.max(0, Number(row.amount || 0) - Number(row.settled_amount || 0))
 }
@@ -942,9 +1046,72 @@ function contactText(row: any) {
     return [row.contact_name, row.contact_mobile || row.m_no].filter(Boolean).join(' / ') || '-'
 }
 
-function bizText(type: string) {
-    const map: any = { purchase: '采购', payment: '付款', adjust: '调整', offset: '折账', sale: '销售', receipt: '收款' }
-    return map[type] || type || '-'
+function partyRoleLabel(row: any, fallback: string) {
+    return row?.source_meta?.party_role_label || fallback
+}
+
+function financeTypeLabel(row: any, fallback: string) {
+    return row?.source_meta?.finance_type_name || row?.source_label || fallback
+}
+
+function sourceOptions(valueKey: string, labelKey: string, defaults: Array<{ value: string, label: string }>) {
+    const map = new Map(defaults.map(item => [item.value, item.label]))
+    table.data.forEach((row: any) => {
+        const value = String(row?.source_meta?.[valueKey] || '').trim()
+        if (value) map.set(value, String(row?.source_meta?.[labelKey] || value))
+    })
+    return Array.from(map, ([value, label]) => ({ value, label }))
+}
+
+function bizText(value: any) {
+    const type = typeof value === 'object' ? value?.biz_type : value
+    const map: any = {
+        purchase: '采购应付', purchase_cancel: '采购撤销冲回', purchase_return: '采购退货冲回', purchase_return_loss: '采购退货损失',
+        sale: '销售应收', sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销', sale_return: '销售退货冲回',
+        sale_compensation: '售后补差应付', payment: '实际付款', receipt: '实际收款', offset: '往来折账',
+        adjust: '成本调整', refurbish: '整备成本'
+    }
+    return (typeof value === 'object' ? value?.biz_type_text : '') || map[String(type || '').toLowerCase()] || '账务调整'
+}
+
+function ledgerSentence(row: any) {
+    const map: any = {
+        purchase: '采购入库形成应付款', purchase_cancel: '撤销采购并冲回原应付款', purchase_return: '采购退货冲回设备成本', purchase_return_loss: '采购退货产生不可收回损失',
+        sale: '销售出库形成应收款', sale_cancel: '撤销整张销售单并冲回应收', sale_item_cancel: '撤销该设备销售并冲回应收', sale_return: '客户退货并冲回销售应收',
+        sale_compensation: '公司同意补偿客户，新增一笔待付给客户的款项', payment: '公司已经完成实际付款', receipt: '公司已经确认实际收款', offset: '应收与应付完成折账核销',
+        adjust: '设备成本发生调整', refurbish: '设备新增整备成本'
+    }
+    return map[String(row?.biz_type || '').toLowerCase()] || '账面发生业务变化'
+}
+
+function ledgerAmountMeta(row: any) {
+    const amount = money(row?.amount)
+    const type = String(row?.biz_type || '').toLowerCase()
+    const decrease = String(row?.direction || '').toLowerCase() === 'decrease'
+    const map: any = {
+        purchase: { text: `新增应付 ${amount}`, className: 'text-orange-600' },
+        purchase_cancel: { text: `冲回应付 ${amount}`, className: 'text-green-600' },
+        purchase_return: { text: `冲回成本 ${amount}`, className: 'text-green-600' },
+        purchase_return_loss: { text: `新增损失 ${amount}`, className: 'text-red-600' },
+        sale: { text: `新增应收 ${amount}`, className: 'text-blue-600' },
+        sale_cancel: { text: `冲回应收 ${amount}`, className: 'text-orange-600' },
+        sale_item_cancel: { text: `冲回应收 ${amount}`, className: 'text-orange-600' },
+        sale_return: { text: `冲回应收 ${amount}`, className: 'text-orange-600' },
+        sale_compensation: { text: `新增应付 ${amount}`, className: 'text-orange-600' },
+        payment: { text: `实际支出 ${amount}`, className: 'text-red-600' },
+        receipt: { text: `实际收入 ${amount}`, className: 'text-green-600' },
+        offset: { text: `折账核销 ${amount}`, className: 'text-purple-600' },
+        refurbish: { text: `新增成本 ${amount}`, className: 'text-orange-600' }
+    }
+    return map[type] || { text: `${decrease ? '减少' : '增加'} ${amount}`, className: decrease ? 'text-orange-600' : 'text-blue-600' }
+}
+
+function ledgerImpactText(row: any) {
+    const type = String(row?.biz_type || '').toLowerCase()
+    if (type === 'sale_compensation') return `公司新增欠客户 ${money(row.amount)}，这不是资金入账；财务付款后会另有“实际支出”记录。`
+    if (type === 'payment') return `公司资金账户实际支出 ${money(row.amount)}。`
+    if (type === 'receipt') return `公司资金账户实际收入 ${money(row.amount)}。`
+    return `${ledgerSentence(row)}，账务金额 ${money(row.amount)}。`
 }
 
 function settleSummaryTagType(label: string) {
@@ -990,4 +1157,44 @@ function formatTime(value: any) {
     font-size: 22px;
     font-weight: 650;
 }
+.ledger-intro { display:flex; max-width:1040px; margin:0 auto 12px; align-items:flex-start; justify-content:space-between; gap:18px; padding:14px 16px; border:1px solid #dbeafe; border-radius:8px; background:#f8fbff; }
+.ledger-intro > div { display:flex; min-width:0; flex-direction:column; gap:4px; }
+.ledger-intro b { color:#1e293b; font-size:15px; }
+.ledger-intro div span { color:#64748b; font-size:12px; line-height:1.6; }
+.ledger-intro > span { flex:none; padding:4px 9px; border-radius:999px; color:#1d4ed8; background:#dbeafe; font-size:12px; font-weight:600; }
+.ledger-summary { display:grid; max-width:1040px; margin:0 auto 12px; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.ledger-summary > div { display:flex; min-width:0; flex-direction:column; gap:5px; padding:11px 14px; border:1px solid #e5e7eb; border-radius:7px; background:#fff; }
+.ledger-summary span { color:#94a3b8; font-size:12px; }
+.ledger-summary b { color:#1e293b; font-size:17px; }
+.ledger-toolbar { display:flex; max-width:1040px; margin:0 auto 14px; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 12px; border-radius:7px; background:#f8fafc; }
+.ledger-body { min-height:160px; }
+.ledger-event-list { max-width:1040px; margin:0 auto; border-top:0; }
+.ledger-event-list :deep(.el-collapse-item) { margin-bottom:10px; overflow:hidden; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+.ledger-event-list :deep(.el-collapse-item__header) { height:auto; min-height:76px; padding:0 16px; border-bottom:0; line-height:normal; }
+.ledger-event-list :deep(.el-collapse-item__wrap) { border-top:1px solid #f1f5f9; border-bottom:0; }
+.ledger-event-list :deep(.el-collapse-item__content) { padding:12px 16px 16px; }
+.ledger-event-head { display:flex; width:100%; min-width:0; align-items:center; gap:12px; padding:12px 10px 12px 0; }
+.ledger-event-dot { width:9px; height:9px; flex:none; border-radius:50%; }
+.ledger-event-dot.is-increase { background:#3b82f6; box-shadow:0 0 0 4px #dbeafe; }
+.ledger-event-dot.is-decrease { background:#f59e0b; box-shadow:0 0 0 4px #fef3c7; }
+.ledger-event-main { display:flex; min-width:0; flex:1; flex-direction:column; gap:6px; }
+.ledger-event-title { display:flex; min-width:0; align-items:center; gap:9px; }
+.ledger-event-title b { overflow:hidden; color:#1e293b; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }
+.ledger-event-main > span { overflow:hidden; color:#64748b; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.ledger-event-result { display:flex; min-width:150px; flex:none; align-items:flex-end; flex-direction:column; gap:5px; }
+.ledger-event-result strong { font-size:18px; }
+.ledger-event-result span { color:#94a3b8; font-size:12px; }
+.ledger-event-detail { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; padding-left:21px; }
+.ledger-event-detail > div { display:flex; min-width:0; flex-direction:column; gap:4px; }
+.ledger-event-detail span { color:#94a3b8; font-size:12px; }
+.ledger-event-detail b { overflow-wrap:anywhere; color:#475569; font-size:13px; font-weight:500; }
+.ledger-pagination { display:flex; max-width:1040px; margin:16px auto 0; justify-content:flex-end; }
+@media (max-width: 900px) { .ledger-summary { grid-template-columns:1fr; } .ledger-event-result { min-width:110px; } .ledger-event-detail { grid-template-columns:1fr; } }
+.settlement-intro { display:flex; max-width:1040px; margin:0 auto 12px; align-items:flex-start; justify-content:space-between; gap:18px; padding:14px 16px; border:1px solid #dbeafe; border-radius:8px; background:#f8fbff; }
+.settlement-intro > div { display:flex; flex-direction:column; gap:4px; }
+.settlement-intro b { color:#1e293b; font-size:15px; }
+.settlement-intro div span { color:#64748b; font-size:12px; }
+.settlement-intro > span { flex:none; padding:4px 9px; border-radius:999px; color:#1d4ed8; background:#dbeafe; font-size:12px; font-weight:600; }
+.settlement-toolbar { display:flex; max-width:1040px; margin:0 auto 14px; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 12px; border-radius:7px; background:#f8fafc; }
+.settlement-pagination { display:flex; max-width:1040px; margin:16px auto 0; justify-content:flex-end; }
 </style>

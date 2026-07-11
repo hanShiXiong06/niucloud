@@ -26,6 +26,12 @@
                 <u-icon name="close" size="20" color="#94a3b8" @click="close" />
             </view>
 
+            <scroll-view scroll-y class="modal-body" :show-scrollbar="true">
+
+            <view class="source-wrap">
+                <ErpFinanceSourceSummary :row="sourceRow" direction="receivable" />
+            </view>
+
             <!-- 汇总行 -->
             <view class="summary-row">
                 <view class="summary-item">
@@ -55,53 +61,61 @@
 
             <!-- 设备明细（对齐PC端：可调售价） -->
             <view v-if="loadingItems" class="items-loading"><u-loading-icon size="24" /></view>
-            <scroll-view v-else scroll-y class="items-list">
-                <view v-for="item in items" :key="item.id" class="device-row">
-                    <view class="device-row__check">
-                        <u-checkbox
-                            :checked="item.checked"
-                            :disabled="Number(item.allocated_remain || 0) <= 0"
-                            @change="onCheck(item, $event)"
-                        />
-                    </view>
-                    <view class="device-row__info">
-                        <text class="device-row__model">{{ item.model }}</text>
-                        <text class="device-row__sub">{{ item.spec || '-' }} · {{ item.imei }}</text>
-                        <text v-if="sourceType === 'purchase_return'" class="device-row__sub">
-                            退货金额 ¥{{ money(item.return_cost) }} · 已付 ¥{{ money(item.paid_amount) }}
-                        </text>
-                        <text v-if="item.reason" class="device-row__reason">原因：{{ item.reason }}</text>
-                        <view class="device-row__amounts">
-                            <text class="amt-tiny">已收 ¥{{ money(item.allocated_settled) }}</text>
-                            <text class="amt-tiny blue">余 ¥{{ money(itemRemain(item)) }}</text>
+            <view v-else class="items-list">
+                <u-checkbox-group v-model="selectedReceivableItemIds" placement="column" @change="onSelectionChange">
+                    <view v-for="item in items" :key="item.id" class="device-row">
+                        <view class="device-row__check">
+                            <u-checkbox
+                                :name="receivableItemIdentity(item)"
+                                :disabled="Number(item.allocated_remain || 0) <= 0"
+                            />
+                        </view>
+                        <view class="device-row__info">
+                            <text class="device-row__model">{{ item.model }}</text>
+                            <text class="device-row__sub">{{ deviceIdentityLine(item) }}</text>
+                            <text v-if="sourceType === 'purchase_return'" class="device-row__sub">
+                                退货金额 ¥{{ money(item.return_cost) }} · 已付 ¥{{ money(item.paid_amount) }}
+                            </text>
+                            <text v-if="item.reason" class="device-row__reason">原因：{{ item.reason }}</text>
+                            <text v-if="item.settlement_explanation" class="device-row__explanation">
+                                {{ item.settlement_explanation }}
+                            </text>
+                            <view class="device-row__amounts">
+                                <text class="amt-tiny">已收 ¥{{ money(item.allocated_settled) }}</text>
+                                <text class="amt-tiny blue">余 ¥{{ money(itemRemain(item)) }}</text>
+                            </view>
+                        </view>
+                        <view class="device-row__input">
+                            <text class="price-edit-label">{{ amountLabel }}</text>
+                            <u-input
+                                v-model="item.sale_price"
+                                type="number"
+                                :disabled="sourceType !== 'sale'"
+                                :customStyle="priceInputStyle"
+                                @blur="onPriceChange(item)"
+                            />
+                            <text class="price-edit-label mt">本次收款</text>
+                            <u-input
+                                v-model="item.receipt_amount"
+                                type="number"
+                                :disabled="!item.checked"
+                                :placeholder="money(itemRemain(item))"
+                                :customStyle="priceInputStyle"
+                                @blur="capReceiptAmount(item)"
+                            />
                         </view>
                     </view>
-                    <view class="device-row__input">
-                        <text class="price-edit-label">{{ amountLabel }}</text>
-                        <u-input
-                            v-model="item.sale_price"
-                            type="number"
-                            :disabled="sourceType !== 'sale'"
-                            :customStyle="priceInputStyle"
-                            @blur="onPriceChange(item)"
-                        />
-                        <text class="price-edit-label mt">本次收款</text>
-                        <u-input
-                            v-model="item.receipt_amount"
-                            type="number"
-                            :disabled="!item.checked"
-                            :placeholder="money(itemRemain(item))"
-                            :customStyle="priceInputStyle"
-                            @blur="capReceiptAmount(item)"
-                        />
-                    </view>
-                </view>
-            </scroll-view>
+                </u-checkbox-group>
+            </view>
 
             <!-- 备注 -->
             <view class="remark-row">
                 <u-input v-model="form.remark" placeholder="备注（可选）" :customStyle="remarkStyle" />
             </view>
+            <view class="voucher-row">
+                <ErpVoucherUploader v-model="form.voucher_urls" @uploading="voucherUploading = $event" />
+            </view>
+            </scroll-view>
 
             <!-- 底部按钮 -->
             <view class="modal-actions">
@@ -125,6 +139,7 @@
                         <u-icon name="close" color="#64748b" size="20" />
                     </view>
                 </view>
+                <scroll-view scroll-y class="account-popup__body">
                 <u-cell-group v-if="accounts.length" :border="false">
                     <u-cell v-for="a in accounts" :key="a.id" :title="a.account_name" :label="'余额 ¥' + money(a.balance)" @click="selectAccount(a)">
                         <template #value>
@@ -138,6 +153,7 @@
                     </u-cell>
                 </u-cell-group>
                 <u-empty v-else mode="data" text="暂无可用资金账户" />
+                </scroll-view>
             </view>
         </u-popup>
     </u-popup>
@@ -146,17 +162,24 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { getMobileReceivableItems, confirmMobileSaleReceipt } from '@/addon/hsx_erp/api/erp'
+import ErpFinanceSourceSummary from '@/addon/hsx_erp/components/ErpFinanceSourceSummary.vue'
+import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
+import { erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
+import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
+import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 
 const props = withDefaults(defineProps<{
     show: boolean
     receivableId?: number
     partyName?: string
     accounts?: any[]
+    sourceRow?: any
 }>(), {
     show: false,
     receivableId: 0,
     partyName: '',
     accounts: () => [],
+    sourceRow: () => ({}),
 })
 
 const emit = defineEmits<{
@@ -168,8 +191,10 @@ const items = ref<any[]>([])
 const sourceType = ref('')
 const loadingItems = ref(false)
 const submitting = ref(false)
+const voucherUploading = ref(false)
 const showAccountPicker = ref(false)
-const form = ref({ capital_account_id: 0, remark: '' })
+const selectedReceivableItemIds = ref<number[]>([])
+const form = ref({ capital_account_id: 0, remark: '', voucher_urls: '' })
 
 const priceInputStyle = { width: '140rpx', background: '#f8fafc', borderRadius: '8rpx', padding: '6rpx 12rpx' }
 const remarkStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx 16rpx', marginTop: '12rpx' }
@@ -182,19 +207,26 @@ const totalAfter = computed(() => items.value.reduce((s, i) => {
     return s + Math.max(0, remain - receipt)
 }, 0))
 const checkedCount = computed(() => items.value.filter(i => i.checked && Number(i.receipt_amount || 0) > 0).length)
-const canSubmit = computed(() => totalReceipt.value > 0 && form.value.capital_account_id > 0)
+const canSubmit = computed(() => totalReceipt.value > 0 && form.value.capital_account_id > 0 && !voucherUploading.value)
 const selectedAccountLabel = computed(() => {
     const a = props.accounts.find(a => a.id === form.value.capital_account_id)
     return a ? `${a.account_name}（¥${money(a.balance)}）` : ''
 })
 const amountLabel = computed(() => sourceType.value === 'purchase_return' ? '应退金额' : '售价')
+const sourceMeta = computed(() => erpFinanceSourceMeta(props.sourceRow, 'receivable'))
 
 let loadToken = 0
+let preserveOnReopen = false
 
 watch(
     () => [props.show, props.receivableId],
     () => {
-        if (props.show && props.receivableId > 0) openModal()
+        if (!props.show || props.receivableId <= 0) return
+        if (preserveOnReopen) {
+            preserveOnReopen = false
+            return
+        }
+        openModal()
     },
     { immediate: true }
 )
@@ -206,8 +238,13 @@ watch(() => props.accounts, () => {
 })
 
 function openModal() {
-    form.value = { capital_account_id: props.accounts[0]?.id || 0, remark: '' }
+    form.value = {
+        capital_account_id: props.accounts[0]?.id || 0,
+        remark: sourceMeta.value.business_reason || '',
+        voucher_urls: '',
+    }
     items.value = []
+    selectedReceivableItemIds.value = []
     sourceType.value = ''
     loadItems()
 }
@@ -226,25 +263,20 @@ async function loadItems() {
             checked: Number(row.allocated_remain) > 0,
             receipt_amount: Number(Number(row.allocated_remain || 0).toFixed(2)),
         }))
+        selectedReceivableItemIds.value = items.value.filter(item => item.checked).map(receivableItemIdentity)
     } finally {
         if (token === loadToken) loadingItems.value = false
     }
 }
 
-function onCheck(item: any, checked: any) {
-    item.checked = normalizeChecked(checked)
-    if (item.checked) {
-        item.receipt_amount = Number(Number(itemRemain(item)).toFixed(2))
-    } else {
-        item.receipt_amount = 0
-    }
-}
-
-function normalizeChecked(checked: any) {
-    if (typeof checked === 'boolean') return checked
-    if (checked && typeof checked === 'object' && 'value' in checked) return !!checked.value
-    if (checked && typeof checked === 'object' && 'detail' in checked) return !!checked.detail?.value
-    return !!checked
+function onSelectionChange(values: Array<string | number>) {
+    const selected = new Set((values || []).map(Number))
+    items.value.forEach(item => {
+        const wasChecked = Boolean(item.checked)
+        item.checked = selected.has(receivableItemIdentity(item))
+        if (item.checked && !wasChecked) item.receipt_amount = Number(Number(itemRemain(item)).toFixed(2))
+        if (!item.checked) item.receipt_amount = 0
+    })
 }
 
 function onPriceChange(item: any) {
@@ -273,46 +305,105 @@ function selectAccount(a: any) {
 }
 
 async function submit() {
+    if (submitting.value) return
     const overItem = items.value.find(i => i.checked && Number(i.receipt_amount || 0) > itemRemain(i) + 0.0001)
     if (overItem) {
         capReceiptAmount(overItem)
         return
     }
-    submitting.value = true
-    try {
-        const receiptItems = items.value
-            .filter(i => i.checked && Number(i.receipt_amount || 0) > 0)
-            .map(i => ({
-                id: i.id,
-                sale_item_id: sourceType.value === 'sale' ? i.id : 0,
-                asset_id: i.asset_id || i.id,
-                sale_price: Number(i.sale_price),
-                amount: Number(i.receipt_amount),
-            }))
 
-        await confirmMobileSaleReceipt(props.receivableId, {
-            amount: totalReceipt.value,
-            capital_account_id: form.value.capital_account_id,
-            remark: form.value.remark || '手机端确认收款',
-            items: receiptItems,
+    const receiptItems = items.value
+        .filter(i => i.checked && Number(i.receipt_amount || 0) > 0)
+        .map(i => ({
+            id: i.id,
+            sale_item_id: sourceType.value === 'sale' ? i.id : 0,
+            asset_id: i.asset_id || i.id,
+            sale_price: Number(i.sale_price),
+            amount: Number(i.receipt_amount),
+        }))
+    if (!receiptItems.length || !canSubmit.value) {
+        uni.showToast({ title: '请选择设备、填写收款金额并选择账户', icon: 'none' })
+        return
+    }
+
+    const account = props.accounts.find(row => Number(row.id) === Number(form.value.capital_account_id))
+    const source = sourceMeta.value
+    const snapshot = cloneErpSubmitSnapshot({
+        receivableId: Number(props.receivableId),
+        items: receiptItems,
+        amount: receiptItems.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+        capital_account_id: Number(form.value.capital_account_id),
+        remark: form.value.remark || '手机端确认收款',
+        voucher_urls: form.value.voucher_urls,
+        partyName: props.partyName || '-',
+        financeTypeName: source.finance_type_name,
+        partyRoleLabel: source.party_role_label || '往来单位',
+        sourceNo: source.source_no || '',
+        bizScene: source.biz_scene,
+        accountName: account?.account_name || '-',
+    })
+    submitting.value = true
+    const confirmed = await confirmErpPopupAction({
+        title: snapshot.bizScene === 'purchase_return' ? '确认退款到账' : '确认设备级收款',
+        content: [
+            `${snapshot.partyRoleLabel}：${snapshot.partyName}`,
+            `业务：${snapshot.financeTypeName}`,
+            snapshot.sourceNo ? `来源单：${snapshot.sourceNo}` : '',
+            `设备：${snapshot.items.length} 台`,
+            `本次入账：¥${money(snapshot.amount)}`,
+            `收款账户：${snapshot.accountName}`,
+            '确认后将写入实际收款流水，请核对设备、金额和账户。',
+        ].filter(Boolean).join('\n'),
+        confirmText: '确认入账',
+        closePopup: closeForConfirm,
+        reopenPopup: reopenAfterConfirm,
+    })
+    if (!confirmed) {
+        submitting.value = false
+        return
+    }
+    try {
+        await confirmMobileSaleReceipt(snapshot.receivableId, {
+            amount: snapshot.amount,
+            capital_account_id: snapshot.capital_account_id,
+            remark: snapshot.remark,
+            items: snapshot.items,
+            voucher_urls: snapshot.voucher_urls,
         })
         uni.showToast({ title: '收款已确认', icon: 'success' })
         emit('success')
-        close()
     } catch (e: any) {
         uni.showToast({ title: e?.message || '收款失败', icon: 'none' })
+        reopenAfterConfirm()
     } finally { submitting.value = false }
 }
 
 function close() { emit('update:show', false) }
+function closeForConfirm() {
+    showAccountPicker.value = false
+    emit('update:show', false)
+}
+function reopenAfterConfirm() {
+    preserveOnReopen = true
+    emit('update:show', true)
+}
+function receivableItemIdentity(item: any) {
+    return Number(item?.id || item?.sale_item_id || item?.asset_id || 0)
+}
+function deviceIdentityLine(item: any) {
+    return erpDeviceIdentityLine(item, '未填写规格或 IMEI')
+}
 const money = (v: any) => Number(v || 0).toFixed(2)
 </script>
 
 <style scoped lang="scss">
-.modal-wrap { max-height: 90vh; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
+.modal-wrap { height: 90vh; max-height: 1120rpx; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); overflow:hidden; }
 .modal-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 28rpx 32rpx 16rpx; }
+.modal-body { flex:1; min-height:0; width:100%; box-sizing:border-box; }
 .modal-title { font-size: 32rpx; font-weight: 700; color: #0f172a; display: block; }
 .modal-subtitle { font-size: 26rpx; color: #64748b; display: block; margin-top: 4rpx; }
+.source-wrap { padding: 0 32rpx 16rpx; }
+.source-wrap :deep(.finance-source) { margin-top: 0; }
 .summary-row { display: flex; margin: 0 32rpx 16rpx; background: #f8fafc; border-radius: 12rpx; overflow: hidden; }
 .summary-item { flex: 1; padding: 14rpx 0; text-align: center; border-right: 1rpx solid #e2e8f0; &:last-child { border-right: none; } }
 .summary-label { font-size: 22rpx; color: #94a3b8; display: block; }
@@ -327,13 +418,14 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .account-text { flex: 1; min-width: 0; font-size: 26rpx; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-placeholder { flex: 1; min-width: 0; font-size: 26rpx; color: #94a3b8; }
 .items-loading { display: flex; justify-content: center; padding: 32rpx; }
-.items-list { flex: 1; max-height: 420rpx; padding: 0 32rpx; box-sizing: border-box; }
+.items-list { padding: 0 32rpx; box-sizing: border-box; }
 .device-row { display: flex; align-items: flex-start; gap: 12rpx; padding: 16rpx 0; border-bottom: 1rpx solid #f1f5f9; box-sizing: border-box; }
 .device-row__check { padding-top: 4rpx; }
 .device-row__info { flex: 1; }
 .device-row__model { font-size: 26rpx; font-weight: 600; color: #0f172a; }
 .device-row__sub { font-size: 22rpx; color: #64748b; display: block; margin-top: 4rpx; }
 .device-row__reason { font-size: 22rpx; color: #ea580c; display: block; margin-top: 4rpx; }
+.device-row__explanation { font-size: 21rpx; color: #475569; display: block; margin-top: 6rpx; line-height: 1.5; }
 .price-edit-row { display: flex; align-items: center; gap: 8rpx; margin-top: 8rpx; }
 .price-edit-label { font-size: 22rpx; color: #94a3b8; }
 .price-edit-label.mt { display: block; margin-top: 8rpx; }
@@ -342,16 +434,21 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .amt-tiny.blue { color: #2563eb; }
 .device-row__input { flex-shrink: 0; }
 .remark-row { padding: 0 32rpx 12rpx; }
+.voucher-row { padding: 0 32rpx 14rpx; }
 .modal-actions { display: flex; gap: 16rpx; padding: 16rpx 32rpx; border-top: 1rpx solid #f1f5f9; }
 .action-btn { min-width: 0; }
 .action-btn--minor { flex: 1; }
 .action-btn--major { flex: 2; }
 .account-popup {
-    min-height: 36vh;
-    max-height: 74vh;
+    height: 60vh;
+    max-height: 820rpx;
     padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
     background: #fff;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
 }
+.account-popup__body { flex:1; min-height:0; width:100%; }
 .account-popup__head {
     min-height: 96rpx;
     padding: 0 28rpx;

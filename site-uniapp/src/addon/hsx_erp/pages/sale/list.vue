@@ -13,14 +13,18 @@
         />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :style="pagingStyle">
-            <template #empty><u-empty mode="list" text="暂无销售记录" /></template>
+            <template #empty><u-empty mode="list" :text="returnMode ? '暂无可发起退货的销售设备' : '暂无销售记录'" /></template>
             <view class="list-wrap">
+                <view v-if="returnMode" class="return-mode-tip">
+                    <u-icon name="info-circle" color="#2563eb" size="15" />
+                    <text>请选择客户实际退回的设备；系统会自动关联销售单，无需手输单号。</text>
+                </view>
 
-                <view v-for="row in list" :key="row.id" class="erp-card sale-card" :class="{ 'sale-card--void': isVoidSale(row) }" @click="goDetail(row)">
+                <view v-for="row in list" :key="row.id" class="erp-card sale-card" :class="{ 'sale-card--void': isVoidSale(row) }" @click="handleRowClick(row)">
                     <view class="sale-card__head">
                         <view class="sale-title">
                             <text class="card-title sale-title__model">{{ row.model || '-' }}</text>
-                            <text class="sale-title__sub">{{ row.spec || '-' }} · IMEI {{ row.imei || '-' }}</text>
+                            <text class="sale-title__sub">{{ deviceIdentityLine(row) }}</text>
                         </view>
                         <view class="tag-stack">
                             <u-tag v-if="isVoidSale(row)" text="已作废" type="info" plain plainFill size="mini" />
@@ -43,6 +47,10 @@
                         <text class="sale-line__label">客户</text>
                         <text class="sale-line__value">{{ row.party_name || '-' }}</text>
                     </view>
+                    <view class="sale-line">
+                        <text class="sale-line__label">来源 / 渠道</text>
+                        <text class="sale-line__value">{{ row.origin_name || 'ERP销售' }} / {{ row.sale_channel || '-' }}</text>
+                    </view>
 
                     <view class="sale-chips">
                         <view class="sale-chip">{{ row.warehouse_name || '-' }}</view>
@@ -54,10 +62,14 @@
 
                     <view class="sale-time">{{ erpTimeLine(row, ['sale_at', 'sold_at', 'received_at']) }}</view>
 
+                    <view v-if="compensationAmount(row) > 0" class="sale-adjust-note">
+                        原成交 ¥{{ money(row.sale_price) }} · 售后补差 -¥{{ money(compensationAmount(row)) }} · 实际收入 ¥{{ money(netSaleAmount(row)) }}
+                    </view>
+
                     <view class="erp-card__foot sale-card__foot">
                         <view class="amount-box">
-                            <text class="amt-label">售价</text>
-                            <text class="amt-value blue">¥{{ money(row.sale_price) }}</text>
+                            <text class="amt-label">实际收入</text>
+                            <text class="amt-value blue">¥{{ money(netSaleAmount(row)) }}</text>
                         </view>
                         <view class="amount-box">
                             <text class="amt-label">成本</text>
@@ -72,10 +84,18 @@
                             <text class="amt-value" :class="isVoidSale(row) ? 'muted' : 'orange'">¥{{ money(row.receivable_amount) }}</text>
                         </view>
                     </view>
+                    <view v-if="returnMode" class="return-mode-action">
+                        <text>{{ row.status === 'sold' && !isVoidSale(row) ? '选择此设备退货' : '当前设备不可退货' }}</text>
+                        <u-icon v-if="row.status === 'sold' && !isVoidSale(row)" name="arrow-right" color="#ea580c" size="12" />
+                    </view>
+                    <view v-else-if="row.status === 'sold' && !isVoidSale(row)" class="after-sale-actions">
+                        <u-button size="small" type="warning" plain text="销售退货" @click.stop="startAfterSale(row, 'return')" />
+                        <u-button size="small" type="primary" plain text="售后补差" @click.stop="startAfterSale(row, 'compensation')" />
+                    </view>
                 </view>
             </view>
         </z-paging>
-            <view class="fab" @click="goCreate" ><u-icon name="plus" color="#fff" size="26"></u-icon></view>
+            <view v-if="!returnMode" class="fab" @click="goCreate" ><u-icon name="plus" color="#fff" size="26"></u-icon></view>
 
         <ErpFilterPopup
             v-model:show="filterVisible"
@@ -90,13 +110,15 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 
 import { getMobileSaleList } from '@/addon/hsx_erp/api/erp'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
+import { erpNetSaleAmount, erpSaleCompensationAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 
 const { pagingStyle } = useListHeader(126)
 
@@ -104,6 +126,7 @@ const { pagingStyle } = useListHeader(126)
 const keyword = ref('')
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
+const returnMode = ref(false)
 
 const tabs = [
     { label: '全部', value: '' },
@@ -134,6 +157,10 @@ const reload = () => pagingRef.value?.reload()
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
 
+onLoad((query: any) => {
+    returnMode.value = String(query?.mode || '') === 'return'
+})
+
 onShow(() => reload())
 
 
@@ -162,10 +189,31 @@ function dateToRange(params: Record<string, any>) {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+const netSaleAmount = (row: any) => erpNetSaleAmount(row)
+const compensationAmount = (row: any) => erpSaleCompensationAmount(row)
+const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
 
 const goDetail = (row: any) => uni.navigateTo({
     url: `/addon/hsx_erp/pages/sale/detail?sale_order_id=${row.sale_order_id}&sale_no=${encodeURIComponent(row.sale_no || '')}`
 })
+function handleRowClick(row: any) {
+    if (!returnMode.value) {
+        goDetail(row)
+        return
+    }
+    if (row.status !== 'sold' || isVoidSale(row)) {
+        uni.showToast({ title: '该设备当前不可销售退货', icon: 'none' })
+        return
+    }
+    uni.navigateTo({
+        url: `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${Number(row.sale_order_id || 0)}&sale_no=${encodeURIComponent(row.sale_no || '')}&party_name=${encodeURIComponent(row.party_name || '')}&asset_id=${Number(row.asset_id || row.id || 0)}`
+    })
+}
+function startAfterSale(row: any, mode: 'return' | 'compensation') {
+    uni.navigateTo({
+        url: `/addon/hsx_erp/pages/sale_return/create?mode=${mode}&sale_order_id=${Number(row.sale_order_id || 0)}&sale_no=${encodeURIComponent(row.sale_no || '')}&party_name=${encodeURIComponent(row.party_name || '')}&asset_id=${Number(row.asset_id || row.id || 0)}`
+    })
+}
 const goCreate = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/sale/create' })
 const financeLabel = (s: string) => ({ pending: '待收款', partial: '部分收款', settled: '已结清', void: '已作废' }[s] || s || '-')
 const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', settled: 'success', void: 'info' }[s] || 'info')
@@ -186,6 +234,24 @@ function voidSummary(row: any) {
     transition: background .2s ease;
 }
 
+.return-mode-tip {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    margin:0px 18rpx 18rpx;
+    padding: 18rpx 20rpx;
+    border-radius: 26rpx;
+    background: #eff6ff;
+    color: #475569;
+    font-size: 23rpx;
+    line-height: 1.5;
+
+}
+
+.return-mode-tip text { flex: 1; }
+.return-mode-action { display:flex; align-items:center; justify-content:flex-end; gap:8rpx; margin-top:14rpx; padding-top:14rpx; border-top:2rpx solid #f3f4f6; color:#ea580c; font-size:23rpx; }
+.after-sale-actions{display:grid;grid-template-columns:1fr 1fr;gap:12rpx;margin-top:14rpx;padding-top:14rpx;border-top:2rpx solid #f3f4f6}
+
 .sale-card--void {
     background: #f8fafc;
     border: 2rpx solid #e2e8f0;
@@ -203,6 +269,8 @@ function voidSummary(row: any) {
     justify-content: space-between;
     gap: 18rpx;
 }
+
+.sale-adjust-note { margin-top:12rpx; padding:11rpx 14rpx; border-radius:12rpx; background:#fff7ed; color:#c2410c; font-size:21rpx; line-height:1.45; }
 
 .tag-stack {
     flex-shrink: 0;

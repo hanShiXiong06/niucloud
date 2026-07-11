@@ -260,7 +260,9 @@ class RecycleDevicePaymentService extends BaseAdminService
         $now = time();
         // 结清方式: 现金(有户头支出)/折账/折账+现金, 由结算事件带来的 method 决定, 不再写死"折账"
         $method = (string)($info['method'] ?? 'offset');
-        $payTypeText = $method === 'cash' ? '现金' : ($method === 'mixed' ? '折账+现金' : '折账');
+        $payTypeText = $method === 'payment'
+            ? 'ERP实际付款'
+            : ($method === 'cash' ? '现金' : ($method === 'mixed' ? '折账+现金' : '折账'));
         $payRemark = $payTypeText . '结清 单号:' . $settlementNo;
         $marked = 0;
         Db::startTrans();
@@ -287,7 +289,7 @@ class RecycleDevicePaymentService extends BaseAdminService
                     'pay_time'   => $now,
                     'pay_uid'    => (int)$this->uid,
                     'pay_no'     => $settlementNo,
-                    'pay_type'   => '折账',
+                    'pay_type'   => $payTypeText,
                     'pay_remark' => $payRemark,
                     'update_at'  => $now,
                 ]);
@@ -302,7 +304,7 @@ class RecycleDevicePaymentService extends BaseAdminService
                     'device_model' => (string)$device->model,
                     'amount'       => $amount,
                     'pay_type'     => $payTypeText,
-                    'pay_account'  => '',
+                    'pay_account'  => (string)($info['account'] ?? ''),
                     'pay_name'     => (string)($info['operator'] ?? ''),
                     'pay_remark'   => $payRemark,
                     'pay_uid'      => (int)$this->uid,

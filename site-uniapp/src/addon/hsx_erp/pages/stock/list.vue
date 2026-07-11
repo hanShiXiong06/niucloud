@@ -11,6 +11,10 @@
             @tab-change="onTab"
             @filter="filterVisible = true"
         />
+        <view class="trace-entry" @click="goSerialTrace">
+            <view><text class="trace-entry__title">串号追踪</text><text class="trace-entry__sub">查询同一 IMEI / SN 的多次入库与完整流转</text></view>
+            <u-icon name="arrow-right" color="#64748b" size="15" />
+        </view>
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无库存设备" /></template>
@@ -19,7 +23,7 @@
                     <view class="stock-card__head">
                         <view class="stock-title">
                             <text class="card-title stock-title__model">{{ row.model || '-' }}</text>
-                            <text class="stock-title__sub">{{ row.spec || '无规格' }} · IMEI {{ row.imei || '-' }}</text>
+                            <text class="stock-title__sub">{{ deviceIdentityLine(row) }}</text>
                         </view>
                         <view class="tag-stack">
                             <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
@@ -55,8 +59,12 @@
                                 <text class="stock-line__value">{{ row.asset_no || '-' }}</text>
                             </view>
                             <view class="stock-line">
-                                <text class="stock-line__label">来源</text>
-                                <text class="stock-line__value">{{ row.party_name || '-' }}</text>
+                                <text class="stock-line__label">入库来源</text>
+                                <text class="stock-line__value">{{ row.inbound_origin_name || 'ERP采购' }}{{ row.inbound_origin_plugin_name ? ' · ' + row.inbound_origin_plugin_name : '' }}</text>
+                            </view>
+                            <view v-if="row.m_no" class="stock-line">
+                                <text class="stock-line__label">M号</text>
+                                <text class="stock-line__value">{{ row.m_no }}</text>
                             </view>
                             <view class="stock-line">
                                 <text class="stock-line__label">更新时间</text>
@@ -71,7 +79,9 @@
 
                     <view v-else class="stock-chips">
                         <view v-if="row.sale_party_name" class="stock-chip">{{ row.sale_party_name }}</view>
+                        <view class="stock-chip primary">{{ row.outbound_origin_name || 'ERP销售' }} / {{ row.outbound_channel || row.sale_channel || '-' }}</view>
                         <view v-if="row.warehouse_name" class="stock-chip muted">原仓 {{ row.warehouse_name }}</view>
+                        <view v-if="Number(row.outbound_compensation_amount || 0)" class="stock-chip warning">售后补差 -¥{{ money(row.outbound_compensation_amount) }}</view>
                     </view>
 
                     <view class="erp-card__foot stock-card__foot">
@@ -114,6 +124,8 @@ import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type Er
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
+import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 
 
 
@@ -148,6 +160,7 @@ const filterFields = computed(() => [
 ] as any[])
 const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
 const reload = () => pagingRef.value?.reload()
+const goSerialTrace = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/serial_trace/list' })
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
 
@@ -181,6 +194,7 @@ function dateToRange(params: Record<string, any>) {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
+const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
 const formatTime = (ts: any) => {
     const n = Number(ts || 0)
     if (!n) return '-'
@@ -212,9 +226,10 @@ const ageText = (row: any) => {
     const ts = Number(row.stock_in_at || row.create_at || 0)
     return ts ? `${ageDays(ts)}天` : '-'
 }
-const priceLabel = (row: any) => row.status === 'sold' ? '售价' : '标价'
+const priceLabel = (row: any) => row.status === 'sold' ? '实际收入' : '标价'
 const displayPrice = (row: any) => {
-    const price = row.status === 'sold' ? row.sale_price : (row.retail_price || row.estimate_sale_price)
+    if (row.status === 'sold') return `¥${money(row.outbound_net_sale_amount)}`
+    const price = firstPositiveErpAmount(row.retail_price, row.estimate_sale_price)
     return Number(price || 0) > 0 ? `¥${money(price)}` : '-'
 }
 const profitText = (v: any) => Number(v || 0) ? `¥${money(v)}` : '-'
@@ -369,6 +384,11 @@ const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
     color: #94a3b8;
 }
 
+.stock-chip.warning {
+    color: #d97706;
+    background: #fffbeb;
+}
+
 .stock-extra {
     margin-top: 10rpx;
     padding: 2rpx 0 4rpx;
@@ -409,4 +429,5 @@ const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
 .stock-card__foot .amt-value {
     font-size: 27rpx;
 }
+.trace-entry{display:flex;align-items:center;justify-content:space-between;gap:16rpx;margin:14rpx 22rpx 0;padding:17rpx 20rpx;border-radius:14rpx;background:#f8fafc;color:#334155}.trace-entry__title,.trace-entry__sub{display:block}.trace-entry__title{font-size:25rpx;font-weight:700}.trace-entry__sub{margin-top:4rpx;color:#94a3b8;font-size:20rpx}
 </style>

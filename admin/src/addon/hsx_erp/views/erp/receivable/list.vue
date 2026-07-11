@@ -4,10 +4,12 @@
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <div class="text-page-title">应收款</div>
-                    <div class="mt-1 text-sm text-gray-500">以客户和销售批次为账单单位，财务确认到账后才正式结算。</div>
+                    <div class="mt-1 text-sm text-gray-500">统一管理销售收入、采购退货款及维修等插件扩展收入；财务按收入类型、业务来源和到账账户核对。</div>
                 </div>
                 <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
             </div>
+
+            <ErpRoleFocus :items="receivableRoleFocus" />
 
             <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div class="summary-tile"><div class="summary-label">应收批次</div><div class="summary-value">{{ summary.count }}</div></div>
@@ -24,8 +26,24 @@
             </el-tabs>
 
             <el-form :inline="true" class="mt-1" @submit.prevent>
-                <el-form-item label="关键词">
-                    <el-input v-model.trim="search.keyword" clearable class="!w-[300px]" placeholder="客户 / 手机号 / IMEI / 销售单 / 渠道" @keyup.enter="handleSearch" />
+                <el-form-item label="IMEI">
+                    <el-input v-model.trim="search.imei" clearable class="!w-[180px]" placeholder="输入设备 IMEI" @keyup.enter="handleSearch" />
+                </el-form-item>
+                <el-form-item label="往来主体">
+                    <ErpPartySelect
+                        v-model="search.party_id"
+                        v-model:party-name="searchPartyName"
+                        party-type="all"
+                        :allow-create="false"
+                        class="!w-[220px]"
+                        placeholder="选择客户或供货商"
+                    />
+                </el-form-item>
+                <el-form-item label="业务场景">
+                    <el-select v-model="search.source_type" clearable class="!w-[160px]" placeholder="全部来源">
+                        <el-option label="销售应收" value="sale" />
+                        <el-option label="采购退货退款" value="purchase_return" />
+                    </el-select>
                 </el-form-item>
                 <el-form-item label="时间">
                     <el-date-picker v-model="search.dateRange" type="daterange" value-format="X" start-placeholder="开始时间" end-placeholder="结束时间" class="!w-[300px]" />
@@ -37,17 +55,28 @@
                 </el-form-item>
             </el-form>
             <el-form v-show="advancedVisible" :inline="true" class="rounded bg-gray-50 px-3 pt-3" @submit.prevent>
-                <el-form-item label="客户">
-                    <el-input v-model.trim="search.party_name" clearable class="!w-[180px]" placeholder="客户名称" @keyup.enter="handleSearch" />
-                </el-form-item>
                 <el-form-item label="来源单">
                     <el-input v-model.trim="search.source_no" clearable class="!w-[190px]" placeholder="销售单 / 退货单" @keyup.enter="handleSearch" />
                 </el-form-item>
-                <el-form-item label="手机号">
-                    <el-input v-model.trim="search.contact_mobile" clearable class="!w-[170px]" placeholder="联系人手机号" @keyup.enter="handleSearch" />
+                <el-form-item label="收入类型">
+                    <el-select v-model="search.finance_type_key" clearable filterable class="!w-[170px]" placeholder="全部收入类型">
+                        <el-option v-for="item in financeTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
                 </el-form-item>
-                <el-form-item label="开单人">
-                    <el-input v-model.trim="search.salesman_name" clearable class="!w-[150px]" placeholder="销售/开单人" @keyup.enter="handleSearch" />
+                <el-form-item label="业务来源">
+                    <el-select v-model="search.business_source_key" clearable filterable class="!w-[170px]" placeholder="全部业务来源">
+                        <el-option v-for="item in businessSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="业务渠道">
+                    <el-select v-model="search.channel_code" clearable filterable class="!w-[170px]" placeholder="全部渠道">
+                        <el-option v-for="item in channelOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="业务操作人">
+                    <el-select v-model="search.operator_uid" clearable filterable class="!w-[180px]" placeholder="选择操作人">
+                        <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
+                    </el-select>
                 </el-form-item>
                 <el-form-item>
                     <el-checkbox v-model="search.can_offset" true-label="1" false-label="">只看可折账</el-checkbox>
@@ -55,20 +84,19 @@
             </el-form>
 
             <el-table :data="table.data" v-loading="table.loading" size="large">
-                <el-table-column label="客户/往来主体" min-width="190">
+                <el-table-column label="往来主体" min-width="190">
                     <template #default="{ row }">
                         <div class="font-medium text-gray-900">{{ row.party_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ contactText(row) }}</div>
+                        <div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                            <el-tag size="small" effect="plain" type="info">{{ partyRoleLabel(row, '往来主体') }}</el-tag>
+                            <span>{{ contactText(row) }}</span>
+                        </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="销售批次" min-width="230">
+                <el-table-column label="款项来源" min-width="310">
                     <template #default="{ row }">
-                        <div class="flex items-center gap-2">
-                            <div class="font-medium text-gray-900">{{ row.batch_no || row.receivable_no }}</div>
-                            <el-tag size="small" effect="plain">{{ row.source_label || sourceTypeText(row.source_type) }}</el-tag>
-                        </div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.sale_channel || '未填写渠道' }} · {{ row.item_count || 0 }} 台</div>
-                        <div class="mt-1 text-xs text-gray-500">销售时间 {{ formatTime(row.sale_at || row.occurred_at) }}</div>
+                        <ErpFinanceSourceMeta :row="row" compact default-direction="income" />
+                        <div class="mt-1 text-xs text-gray-400">{{ row.item_count || 0 }} 台 · 业务时间 {{ formatTime(row.sale_at || row.occurred_at) }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="账目" min-width="240">
@@ -76,18 +104,18 @@
                         <div>应收 <span class="font-medium">{{ money(row.amount) }}</span></div>
                         <div class="mt-1 text-xs text-gray-500">已结算 {{ money(row.settled_amount) }} · 剩余 {{ money(row.remain_amount ?? remain(row)) }}</div>
                         <div class="mt-2 flex flex-wrap gap-1">
-                            <el-tag size="small" effect="plain" type="info">开单：{{ row.opening_settle_method || row.settle_method || '-' }}</el-tag>
-                            <el-tag v-if="!(row.settle_summary_items || []).length" size="small" effect="plain" type="warning">待清算</el-tag>
+                            <el-tag size="small" effect="plain" type="info">结算约定：{{ row.opening_settle_method || row.settle_method || '-' }}</el-tag>
+                            <el-tag v-if="!(row.settle_summary_items || []).length" size="small" effect="plain" :type="remain(row) > 0 ? 'warning' : 'success'">{{ remain(row) > 0 ? '待清算' : '已结清' }}</el-tag>
                             <el-tag v-for="item in row.settle_summary_items" :key="item.label" size="small" effect="plain" :type="settleSummaryTagType(item.label)">
                                 {{ item.label }} {{ money(item.amount) }}
                             </el-tag>
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="制单/销售" min-width="150">
+                <el-table-column label="业务操作人" min-width="150">
                     <template #default="{ row }">
-                        <div>{{ row.salesman_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.receivable_no }}</div>
+                        <div>{{ row.business_operator_name || row.salesman_name || '-' }}</div>
+                        <div class="mt-1 text-xs text-gray-500"><ErpCopyText :value="row.receivable_no" title="应收单号" max-width="135px" /></div>
                     </template>
                 </el-table-column>
                 <el-table-column label="状态" width="120">
@@ -110,11 +138,11 @@
         <el-drawer v-model="detail.visible" title="应收详情" size="920px">
             <div v-if="detail.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
                 <div class="flex flex-wrap items-center gap-2">
-                    <span>客户：<span class="font-medium text-gray-900">{{ detail.row.party_name || '-' }}</span></span>
-                    <el-tag size="small" effect="plain">{{ detail.row.source_label || sourceTypeText(detail.row.source_type) }}</el-tag>
+                    <span>{{ partyRoleLabel(detail.row, '往来主体') }}：<span class="font-medium text-gray-900">{{ detail.row.party_name || '-' }}</span></span>
                     <el-tag :type="statusMeta(detail.row.status).type" size="small">{{ statusMeta(detail.row.status).label }}</el-tag>
                 </div>
-                <div class="mt-1">来源单：{{ detail.row.batch_no || detail.row.source_no || detail.row.receivable_no }} · 应收 {{ money(detail.row.amount) }} · 已结算 {{ money(detail.row.settled_amount) }} · 剩余 {{ money(remain(detail.row)) }}</div>
+                <ErpFinanceSourceMeta :row="detail.row" class="mt-3" default-direction="income" />
+                <div class="mt-3 border-t border-gray-200 pt-2">应收 {{ money(detail.row.amount) }} · 已结算 {{ money(detail.row.settled_amount) }} · 剩余 {{ money(remain(detail.row)) }}</div>
                 <div v-if="detail.row.source_order" class="mt-1 text-xs text-gray-500">
                     {{ sourceOrderSummary(detail.row) }}
                 </div>
@@ -142,55 +170,8 @@
                 </el-table-column>
             </el-table>
 
-            <div class="mb-2 mt-6 font-medium text-gray-900">结算明细</div>
-            <el-table :data="detail.settlements" v-loading="detail.loading" size="small" empty-text="暂无结算记录">
-                <el-table-column label="结款方式" min-width="180">
-                    <template #default="{ row }">
-                        <div class="font-medium" :class="row.settlement_type === 'offset' ? 'text-amber-600' : 'text-gray-900'">{{ row.settlement_type_text || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ row.pay_method_text || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-400">{{ row.settlement_no || '-' }}</div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="本次结算" width="130" align="right">
-                    <template #default="{ row }">{{ money(row.applied_amount) }}</template>
-                </el-table-column>
-                <el-table-column label="确认信息" min-width="190">
-                    <template #default="{ row }">
-                        <div>{{ row.operator_name || '-' }}</div>
-                        <div class="mt-1 text-xs text-gray-500">{{ formatTime(row.confirmed_at) }}</div>
-                        <div v-if="row.remark" class="mt-1 text-xs text-gray-500">{{ row.remark }}</div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="关联设备 / 账目" min-width="330">
-                    <template #default="{ row }">
-                        <div v-for="target in row.targets" :key="`${target.target_type}_${target.target_id}`" class="mb-2 rounded bg-gray-50 px-2 py-2 text-xs text-gray-600">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-medium text-gray-900">{{ target.target_type_text }} {{ target.target_no || target.source_no || '-' }}</span>
-                                <span class="font-medium text-gray-900">结算 {{ money(target.applied_amount) }}</span>
-                            </div>
-                            <div v-for="device in target.devices" :key="`${target.target_type}_${target.target_id}_${device.asset_id}_${device.imei}`" class="mt-2 border-l-2 border-gray-200 pl-2">
-                                <div class="font-medium text-gray-900">{{ device.model || '-' }}</div>
-                                <div class="mt-1 text-gray-500">{{ device.imei ? `IMEI ${device.imei}` : device.asset_no || '-' }}</div>
-                                <div class="mt-1 text-gray-500">{{ deviceSummary(device) }}</div>
-                            </div>
-                            <div v-if="!target.devices?.length" class="mt-1 text-gray-400">{{ target.source_no || '-' }}</div>
-                        </div>
-                        <div v-if="!row.targets?.length" class="text-xs text-gray-400">-</div>
-                    </template>
-                </el-table-column>
-                <el-table-column label="账户收付明细" min-width="260">
-                    <template #default="{ row }">
-                        <div v-for="ledger in row.money_ledgers" :key="ledger.ledger_no" class="mb-2 rounded bg-gray-50 px-2 py-2 text-xs text-gray-600">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-medium text-gray-900">{{ ledger.capital_account_name || row.capital_account_name || '-' }}</span>
-                                <span :class="ledger.direction === 'in' ? 'text-green-600' : 'text-red-600'">{{ ledger.direction === 'in' ? '收款' : '付款' }} {{ money(ledger.amount) }}</span>
-                            </div>
-                            <div class="mt-1 text-gray-400">{{ ledger.ledger_no }} · 账户余额 {{ money(ledger.balance_after) }}</div>
-                        </div>
-                        <div v-if="!row.money_ledgers?.length" class="text-xs text-gray-400">折账不产生资金流水</div>
-                    </template>
-                </el-table-column>
-            </el-table>
+            <div class="mb-2 mt-6 font-medium text-gray-900">结算记录</div>
+            <ErpSettlementCards :rows="detail.settlements" :loading="detail.loading" />
         </el-drawer>
 
         <el-dialog v-model="offset.visible" title="应收应付折账" width="920px">
@@ -246,7 +227,7 @@
                         <el-table-column width="46">
                             <template #default="{ row }"><el-checkbox v-model="row.checked" @change="syncOffsetAmount" /></template>
                         </el-table-column>
-                        <el-table-column label="销售批次" min-width="180">
+                        <el-table-column label="业务来源" min-width="180">
                             <template #default="{ row }">
                                 <div class="text-sm">{{ row.source_no || row.batch_no || '应收' }}</div>
                                 <div class="mt-0.5 text-xs text-gray-500">{{ row.receivable_no }}</div>
@@ -279,6 +260,7 @@
                 <el-form-item label="备注">
                     <el-input v-model.trim="offset.form.remark" type="textarea" :rows="2" placeholder="如：同一客户往来抵扣" />
                 </el-form-item>
+                <el-form-item v-if="offset.form.settle_diff" label="差额凭证"><ErpFinanceVoucherUpload v-model="offset.form.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="offset.visible = false">取消</el-button>
@@ -286,20 +268,21 @@
             </template>
         </el-dialog>
 
-        <el-dialog v-model="receipt.visible" title="财务确认收款" width="920px">
+        <el-dialog v-model="receipt.visible" :title="receiptDialogTitle" width="980px">
             <div v-if="receipt.row" class="mb-4 rounded bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <div>收款客户：<span class="font-medium text-gray-900">{{ receipt.row.party_name }}</span></div>
-                <div class="mt-1">销售批次：{{ receipt.row.batch_no || receipt.row.receivable_no }}</div>
+                <div>{{ receiptPartyLabel }}：<span class="font-medium text-gray-900">{{ receipt.row.party_name }}</span></div>
+                <ErpFinanceSourceMeta :row="receiptSourceRow" class="mt-3" default-direction="income" />
+                <div v-if="isPurchaseReturnReceipt && receipt.row.purchase_no" class="mt-1">原采购单：{{ receipt.row.purchase_no }}</div>
                 <div class="mt-1">剩余应收：<span class="font-medium text-orange-600">{{ money(remain(receipt.row)) }}</span></div>
             </div>
             <div class="mb-2 flex items-center justify-between">
-                <span class="font-medium text-gray-900">按设备确认收款</span>
-                <span class="text-sm text-gray-500">本次收款合计 <span class="font-medium text-green-600">{{ money(receiptTotal) }}</span></span>
+                <span class="font-medium text-gray-900">{{ receiptItemTitle }}</span>
+                <span class="text-sm text-gray-500">本次到账合计 <span class="font-medium text-green-600">{{ money(receiptTotal) }}</span></span>
             </div>
             <el-table :data="receipt.items" v-loading="receipt.loading" size="small" max-height="360" empty-text="暂无设备明细">
                 <el-table-column width="46">
                     <template #default="{ row }">
-                        <el-checkbox v-model="row.checked" @change="syncReceiptAmount(row)" />
+                        <el-checkbox v-model="row.checked" :disabled="itemRemain(row) <= 0" @change="syncReceiptAmount(row)" />
                     </template>
                 </el-table-column>
                 <el-table-column label="设备" min-width="220">
@@ -307,29 +290,33 @@
                         <div class="font-medium text-gray-900">{{ row.model || '-' }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ row.imei ? `IMEI ${row.imei}` : row.asset_no || '-' }}</div>
                         <div class="mt-1 text-xs text-gray-500">{{ row.spec || '-' }}</div>
+                        <div v-if="isPurchaseReturnReceipt" class="mt-2 text-xs leading-5" :class="Number(row.refund_amount || 0) > 0 ? 'text-orange-600' : 'text-green-600'">
+                            {{ row.settlement_explanation || returnReceiptItemReason(row) }}
+                        </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="实际销售价" width="150" align="right">
+                <el-table-column :label="isPurchaseReturnReceipt ? '应退金额' : '实际销售价'" width="150" align="right">
                     <template #default="{ row }">
-                        <el-input-number v-model="row.sale_price" :min="0" :precision="2" :controls="false" class="!w-[120px]" @change="syncReceiptAmount(row)" />
+                        <span v-if="isPurchaseReturnReceipt" class="font-medium" :class="Number(row.refund_amount || 0) > 0 ? 'text-orange-600' : 'text-gray-400'">{{ money(row.refund_amount || row.sale_price) }}</span>
+                        <el-input-number v-else v-model="row.sale_price" :min="0" :precision="2" :controls="false" class="!w-[120px]" @change="syncReceiptAmount(row)" />
                     </template>
                 </el-table-column>
-                <el-table-column label="已结算" width="120" align="right">
+                <el-table-column :label="isPurchaseReturnReceipt ? '已到账' : '已结算'" width="120" align="right">
                     <template #default="{ row }">{{ money(row.allocated_settled) }}</template>
                 </el-table-column>
-                <el-table-column label="本次收款" width="150" align="right">
+                <el-table-column :label="isPurchaseReturnReceipt ? '本次到账' : '本次收款'" width="150" align="right">
                     <template #default="{ row }">
                         <el-input-number v-model="row.receipt_amount" :min="0" :max="itemRemain(row)" :precision="2" :controls="false" class="!w-[120px]" :disabled="!row.checked" />
                     </template>
                 </el-table-column>
-                <el-table-column label="收后剩余" width="120" align="right">
+                <el-table-column :label="isPurchaseReturnReceipt ? '到账后剩余' : '收后剩余'" width="120" align="right">
                     <template #default="{ row }">{{ money(Math.max(0, itemRemain(row) - Number(row.receipt_amount || 0))) }}</template>
                 </el-table-column>
             </el-table>
             <el-form label-width="100px">
-                <el-form-item label="收款金额" required>
+                <el-form-item :label="isPurchaseReturnReceipt ? '到账金额' : '收款金额'" required>
                     <span class="font-medium text-green-600">{{ money(receiptTotal) }}</span>
-                    <span class="ml-2 text-xs text-gray-500">由上方设备本次收款自动汇总</span>
+                    <span class="ml-2 text-xs text-gray-500">由上方设备本次到账自动汇总</span>
                 </el-form-item>
                 <el-form-item label="收款账户">
                     <el-select v-model="receipt.form.capital_account_id" clearable class="w-full" placeholder="选择银行卡/微信/支付宝">
@@ -337,12 +324,13 @@
                     </el-select>
                 </el-form-item>
                 <el-form-item label="备注">
-                    <el-input v-model.trim="receipt.form.remark" type="textarea" :rows="2" placeholder="如：已核对到账记录" />
+                    <el-input v-model.trim="receipt.form.remark" type="textarea" :rows="2" :placeholder="isPurchaseReturnReceipt ? '如：已核对供货商退款到账记录' : '如：已核对到账记录'" />
                 </el-form-item>
+                <el-form-item label="收款凭证"><ErpFinanceVoucherUpload v-model="receipt.form.voucher_urls" /></el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="receipt.visible = false">取消</el-button>
-                <el-button type="primary" :loading="receipt.saving" :disabled="!canSubmitReceipt" @click="submitReceipt">确认收款</el-button>
+                <el-button type="primary" :loading="receipt.saving" :disabled="!canSubmitReceipt" @click="submitReceipt">{{ isPurchaseReturnReceipt ? '确认退款到账' : '确认收款' }}</el-button>
             </template>
         </el-dialog>
     </div>
@@ -350,27 +338,51 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Filter, Refresh, Search } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
-import { confirmErpOffset, confirmErpReceipt, getErpPayablePartyItems, getErpReceivableInfo, getErpReceivableItems, getErpReceivableList } from '@/addon/hsx_erp/api/erp'
+import { getErpBusinessSourceOptions, getErpFinanceCategories, getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
+import { confirmErpOffset, confirmErpReceipt, getErpPayablePartyItems, getErpReceivableInfo, getErpReceivableItems, getErpReceivableList, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
+import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
+import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
+import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+import ErpSettlementCards from '@/addon/hsx_erp/components/ErpSettlementCards.vue'
+import ErpFinanceSourceMeta from '@/addon/hsx_erp/components/ErpFinanceSourceMeta.vue'
+import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 
+const receivableRoleFocus = [
+    { role: '财务', focus: '收入类型、业务来源、往来余额、到账账户与核销事实' },
+    { role: '业务', focus: '销售、采购退货或维修服务等原始单据和设备明细' },
+    { role: '负责人', focus: '现金回笼、逾期风险与折账事实' },
+]
+
+const route = useRoute()
 const activeStatus = ref('')
 const search = reactive({
-    keyword: '',
+    imei: '',
+    party_id: null as number | null,
+    source_type: '',
     dateRange: [] as any[],
-    party_name: '',
-    source_no: '',
-    contact_mobile: '',
-    salesman_name: '',
+    source_no: String(route.query.source_no || ''),
+    finance_type_key: '',
+    business_source_key: '',
+    channel_code: '',
+    operator_uid: null as number | null,
     can_offset: ''
 })
+const searchPartyName = ref('')
+const staffOptions = ref<any[]>([])
 const advancedVisible = ref(false)
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const accounts = ref<any[]>([])
+const registeredFinanceCategories = ref<any[]>([])
+const registeredBusinessSources = ref<any[]>([])
+const registeredChannels = ref<any[]>([])
 const detail = reactive({ visible: false, loading: false, row: null as any, items: [] as any[], settlements: [] as any[] })
-const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '' } })
-const receipt = reactive({ visible: false, saving: false, loading: false, row: null as any, items: [] as any[], form: { amount: 0, capital_account_id: 0, remark: '' } })
+const offset = reactive({ visible: false, saving: false, loading: false, row: null as any, payables: [] as any[], receivables: [] as any[], form: { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' } })
+const receipt = reactive({ visible: false, saving: false, loading: false, row: null as any, items: [] as any[], form: { amount: 0, capital_account_id: 0, remark: '', voucher_urls: '' } })
 const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.count += 1
     acc.amount += Number(row.amount || 0)
@@ -378,6 +390,15 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.remain += remain(row)
     return acc
 }, { count: 0, amount: 0, settled: 0, remain: 0 }))
+const financeTypeOptions = computed(() => sourceOptions('finance_type_key', 'finance_type_name', registeredFinanceCategories.value
+    .filter((item: any) => Number(item.enabled ?? 1) === 1 && item.direction === 'income')
+    .map((item: any) => ({ value: String(item.key), label: String(item.name) }))))
+const businessSourceOptions = computed(() => sourceOptions('business_source_key', 'business_source_name', registeredBusinessSources.value
+    .filter((item: any) => Number(item.enabled ?? 1) === 1 && item.direction === 'income')
+    .map((item: any) => ({ value: String(item.key), label: String(item.name) }))))
+const channelOptions = computed(() => sourceOptions('channel_code', 'channel_name', registeredChannels.value
+    .filter((item: any) => Number(item.enabled ?? 1) === 1)
+    .map((item: any) => ({ value: String(item.key), label: String(item.name) }))))
 const offsetPayableChecked = computed(() => offset.payables.reduce((sum: number, row: any) => row.checked ? sum + Number(row.remain || 0) : sum, 0))
 const offsetReceivableChecked = computed(() => offset.receivables.reduce((sum: number, row: any) => row.checked ? sum + Number(row.remain || 0) : sum, 0))
 const offsetMax = computed(() => Math.max(0, Math.min(offsetPayableChecked.value, offsetReceivableChecked.value)))
@@ -412,11 +433,21 @@ const receiptTotal = computed(() => receipt.items.reduce((sum: number, row: any)
     return sum + Number(row.receipt_amount || 0)
 }, 0))
 const receiptRemainTotal = computed(() => receipt.items.reduce((sum: number, row: any) => sum + itemRemain(row), 0))
+const isPurchaseReturnReceipt = computed(() => receipt.row?.source_type === 'purchase_return')
+const receiptDialogTitle = computed(() => isPurchaseReturnReceipt.value ? '财务确认供货商退款' : '财务确认收款')
+const receiptPartyLabel = computed(() => partyRoleLabel(receipt.row, isPurchaseReturnReceipt.value ? '退款供货商' : '收款客户'))
+const receiptItemTitle = computed(() => isPurchaseReturnReceipt.value ? '按退货设备确认退款到账' : '按设备确认收款')
+const receiptBusinessReason = computed(() => receipt.row?.source_meta?.business_reason || receipt.row?.business_reason || (isPurchaseReturnReceipt.value
+    ? '采购退货已完成，已付款部分需要由供货商退回，财务在此确认实际到账。'
+    : '销售出库形成应收，财务核对客户实际到账后完成核销。'))
+const receiptSourceRow = computed(() => ({ ...(receipt.row || {}), business_reason: receiptBusinessReason.value }))
 
 onMounted(() => {
-    loadList()
     loadAccounts()
+    loadStaffOptions()
+    loadDynamicOptions()
 })
+useErpPageRefresh(loadList)
 
 async function loadList() {
     table.loading = true
@@ -443,6 +474,29 @@ async function loadAccounts() {
     accounts.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || [])
 }
 
+async function loadStaffOptions() {
+    const res: any = await getErpStaffOptions()
+    staffOptions.value = res?.data?.users || []
+}
+
+async function loadDynamicOptions() {
+    const [categories, sources, channels] = await Promise.allSettled([
+        getErpFinanceCategories(),
+        getErpBusinessSourceOptions(),
+        getErpSaleChannelOptions()
+    ])
+    if (categories.status === 'fulfilled') registeredFinanceCategories.value = responseRows(categories.value)
+    if (sources.status === 'fulfilled') registeredBusinessSources.value = responseRows(sources.value)
+    if (channels.status === 'fulfilled') registeredChannels.value = responseRows(channels.value)
+}
+
+function responseRows(response: any) {
+    const data = response?.data
+    if (Array.isArray(data)) return data
+    if (Array.isArray(data?.list)) return data.list
+    return []
+}
+
 async function openDetail(row: any) {
     detail.row = row
     detail.items = []
@@ -464,20 +518,26 @@ async function openReceipt(row: any) {
     if (!canConfirmReceipt(row)) return
     receipt.row = row
     receipt.items = []
-    receipt.form = { amount: remain(row), capital_account_id: accounts.value[0]?.id || 0, remark: '' }
+    receipt.form = { amount: remain(row), capital_account_id: accounts.value[0]?.id || 0, remark: '', voucher_urls: '' }
     receipt.visible = true
     receipt.loading = true
     try {
-        const res: any = await getErpReceivableItems(row.id)
-        const list = Array.isArray(res?.data) ? res.data : (res?.data?.items || [])
+        const res: any = await getErpReceivableInfo(row.id)
+        const data = res?.data || {}
+        receipt.row = { ...row, ...data }
+        const list = Array.isArray(data) ? data : (data?.items || [])
         receipt.items = list.map((item: any) => ({
             ...item,
             sale_item_id: Number(item.id || 0),
+            asset_id: Number(item.asset_id || item.id || 0),
             sale_price: Number(item.sale_price || 0),
             allocated_settled: Number(item.allocated_settled || 0),
             receipt_amount: Math.max(0, Number(item.allocated_remain || 0)),
             checked: Number(item.allocated_remain || 0) > 0
         }))
+        if (receipt.row?.source_type === 'purchase_return') {
+            receipt.form.remark = '确认供货商退货退款到账'
+        }
         syncReceiptFormAmount()
     } finally {
         receipt.loading = false
@@ -489,7 +549,7 @@ async function openOffset(row: any) {
     offset.row = row
     offset.payables = []
     offset.receivables = []
-    offset.form = { amount: 0, settle_diff: false, capital_account_id: 0, remark: '' }
+    offset.form = { amount: 0, settle_diff: false, capital_account_id: 0, remark: '', voucher_urls: '' }
     offset.visible = true
     offset.loading = true
     try {
@@ -567,6 +627,12 @@ async function submitOffset() {
         if (offsetDiffAmount.value <= 0) return ElMessage.warning('当前没有需要结清的差额')
         if (!offset.form.capital_account_id) return ElMessage.warning('请选择差额收付款账户')
     }
+    const offsetConfirmed = await ElMessageBox.confirm(
+        `确认对「${offset.row.party_name || '该往来主体'}」执行应收应付折账 ${money(amount)}。该操作不产生真实收付款，但会同时核销双方账目${offset.form.settle_diff ? `，并结清差额 ${money(offsetDiffAmount.value)}` : ''}；确认后不能直接删除流水。`,
+        '确认应收应付折账',
+        { type: 'warning', confirmButtonText: '确认折账并记账', cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!offsetConfirmed) return
     offset.saving = true
     try {
         await confirmErpOffset({
@@ -592,6 +658,13 @@ async function submitReceipt() {
     if (amount <= 0) return ElMessage.warning('请选择要收款的设备并填写本次收款')
     if (amount > receiptRemainTotal.value) return ElMessage.warning('收款金额不能大于设备剩余应收')
     if (!receipt.form.capital_account_id) return ElMessage.warning('请选择收款账户')
+    const account = accounts.value.find((item: any) => Number(item.id) === Number(receipt.form.capital_account_id))
+    const receiptConfirmed = await ElMessageBox.confirm(
+        `确认收到「${receipt.row.party_name || '该往来主体'}」${isPurchaseReturnReceipt.value ? '退货退款' : '款项'} ${money(amount)}，到账账户「${account?.account_name || '所选账户'}」，核销 ${receipt.items.filter((item: any) => item.checked).length} 台设备。确认后将写入资金流水和应收核销记录，不能直接删除。`,
+        isPurchaseReturnReceipt.value ? '确认供货商退款到账' : '确认客户收款到账',
+        { type: 'warning', confirmButtonText: isPurchaseReturnReceipt.value ? '确认退款到账' : '确认收款到账', cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!receiptConfirmed) return
     receipt.saving = true
     try {
         await confirmErpReceipt(receipt.row.id, {
@@ -599,6 +672,7 @@ async function submitReceipt() {
             amount,
             items: receipt.items.filter((item: any) => item.checked).map((item: any) => ({
                 sale_item_id: item.sale_item_id,
+                asset_id: item.asset_id,
                 sale_price: item.sale_price,
                 amount: item.receipt_amount
             }))
@@ -614,12 +688,16 @@ async function submitReceipt() {
 
 function handleSearch() { table.page = 1; loadList() }
 function handleReset() {
-    search.keyword = ''
+    search.imei = ''
+    search.party_id = null
+    searchPartyName.value = ''
+    search.source_type = ''
     search.dateRange = []
-    search.party_name = ''
     search.source_no = ''
-    search.contact_mobile = ''
-    search.salesman_name = ''
+    search.finance_type_key = ''
+    search.business_source_key = ''
+    search.channel_code = ''
+    search.operator_uid = null
     search.can_offset = ''
     activeStatus.value = ''
     handleSearch()
@@ -641,6 +719,15 @@ function syncReceiptFormAmount() {
 function canConfirmReceipt(row: any) { return remain(row) > 0 && row.status !== 'settled' }
 function canOffset(row: any) { return Boolean(row.can_offset) && remain(row) > 0 }
 function contactText(row: any) { return [row.contact_name, row.contact_mobile || row.m_no].filter(Boolean).join(' / ') || '-' }
+function partyRoleLabel(row: any, fallback: string) { return row?.source_meta?.party_role_label || fallback }
+function sourceOptions(valueKey: string, labelKey: string, defaults: Array<{ value: string, label: string }>) {
+    const map = new Map(defaults.map(item => [item.value, item.label]))
+    table.data.forEach((row: any) => {
+        const value = String(row?.source_meta?.[valueKey] || '').trim()
+        if (value) map.set(value, String(row?.source_meta?.[labelKey] || value))
+    })
+    return Array.from(map, ([value, label]) => ({ value, label }))
+}
 function settleSummaryTagType(label: string) {
     if (label === '折账') return 'warning'
     if (label.includes('微信') || label.includes('支付宝') || label.includes('现金')) return 'success'
@@ -659,12 +746,21 @@ function sourceTypeText(type: string) {
     const map: any = { sale: '销售应收', purchase_return: '采购退货应收' }
     return map[type] || type || '应收'
 }
+function purchaseRefundModeLabel(mode: string) {
+    const map: Record<string, string> = {
+        none: '未付款，冲销原应付',
+        cash: '供货商退款待确认',
+        receivable: '形成退款应收',
+        offset: '往来折抵',
+    }
+    return map[mode] || '按退货结算规则处理'
+}
 function sourceOrderSummary(row: any) {
     const order = row.source_order || {}
     if (row.source_type === 'purchase_return') {
         return [
             order.purchase_no ? `原采购单 ${order.purchase_no}` : '',
-            order.refund_mode ? `退款方式 ${order.refund_mode}` : '',
+            order.refund_mode ? `退款方式 ${purchaseRefundModeLabel(order.refund_mode)}` : '',
             order.remark ? `备注 ${order.remark}` : ''
         ].filter(Boolean).join(' · ')
     }
@@ -675,16 +771,27 @@ function sourceOrderSummary(row: any) {
         order.remark ? `备注 ${order.remark}` : ''
     ].filter(Boolean).join(' · ')
 }
+function returnReceiptItemReason(row: any) {
+    const refund = Number(row?.refund_amount || row?.sale_price || 0)
+    const offset = Number(row?.unpaid_offset_amount || 0)
+    if (refund > 0 && offset > 0) return `未付款 ${money(offset)} 已冲销应付；已付款部分需收回 ${money(refund)}`
+    if (refund > 0) return `采购款已支付，退货后需向供货商收回 ${money(refund)}`
+    return `未付款部分已冲销应付 ${money(offset)}，本设备无需实际收款`
+}
 function statusMeta(status: string) {
     const map: any = { pending: { label: '待结算', type: 'warning' }, partial: { label: '部分结算', type: 'primary' }, settled: { label: '已结清', type: 'success' } }
     return map[status] || { label: status || '-', type: 'info' }
 }
 function money(value: any) { return `¥${Number(value || 0).toFixed(2)}` }
 function formatTime(value: any) { return Number(value || 0) ? new Date(Number(value) * 1000).toLocaleString() : '-' }
+function staffName(user: any) { return user?.name || user?.real_name || user?.username || `员工#${user?.uid || '-'}` }
 </script>
 
 <style scoped>
 .summary-tile { border-radius: 8px; background: #f8fafc; padding: 14px 16px; }
 .summary-label { color: #64748b; font-size: 13px; }
 .summary-value { margin-top: 6px; color: #0f172a; font-size: 22px; font-weight: 700; }
+.receipt-business-reason { display:flex; gap:10px; margin-top:10px; padding:9px 11px; border:1px solid #fed7aa; border-radius:7px; background:#fff7ed; line-height:1.55; }
+.receipt-business-reason span { flex:none; color:#9a3412; font-size:12px; font-weight:650; }
+.receipt-business-reason b { color:#7c2d12; font-size:12px; font-weight:500; }
 </style>

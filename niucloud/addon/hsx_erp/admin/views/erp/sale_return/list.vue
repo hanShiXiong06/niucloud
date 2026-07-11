@@ -1,328 +1,212 @@
 <template>
-    <div class="erp-dual-layout">
-        <!-- 左栏：退货单列表 -->
+    <div class="main-container">
+        <!-- 退货单列表：只在列表模式展示，不再固定占用左栏 -->
         <div class="erp-list-panel">
             <div class="panel-header">
-                <span class="panel-title">销售退货</span>
+                <div>
+                    <div class="text-page-title">销售退货</div>
+                    <div class="panel-subtitle">客户退回已售设备；系统按单台已收款情况自动冲销应收或生成退款应付。</div>
+                </div>
                 <div class="flex gap-2">
-                    <el-button size="small" :loading="listLoading" @click="loadList">刷新</el-button>
-                    <el-button type="primary" size="small" :icon="Plus" @click="openCreate">新建退货</el-button>
+                    <el-button :icon="Refresh" :loading="listLoading" @click="loadList">刷新</el-button>
+                    <el-button type="primary" :icon="Plus" @click="openCreate">新建退货</el-button>
+                    <el-button type="warning" plain @click="openCompensation">售后补差</el-button>
                 </div>
             </div>
 
-            <div class="status-tabs">
-                <span
-                    v-for="tab in statusTabs" :key="tab.value"
-                    class="status-tab"
-                    :class="{ active: listWhere.status === tab.value }"
-                    @click="switchStatus(tab.value)"
-                >{{ tab.label }}</span>
-            </div>
+            <el-tabs v-model="listWhere.status" class="mt-4 erp-status-tabs" @tab-change="switchStatus">
+                <el-tab-pane v-for="tab in statusTabs" :key="tab.value" :label="tab.label" :name="tab.value" />
+            </el-tabs>
 
-            <div class="panel-search">
-                <el-input
-                    v-model="listWhere.keyword"
-                    placeholder="退货单号/销售单号/客户"
-                    clearable size="small"
-                    @change="loadList"
-                />
-                <el-date-picker
-                    v-model="listWhere.dateRange"
-                    type="daterange"
-                    value-format="X"
-                    start-placeholder="开始"
-                    end-placeholder="结束"
-                    size="small"
-                    class="mt-2 !w-full"
-                    @change="loadList"
-                />
-                <div class="mt-2 flex justify-end">
-                    <el-button size="small" @click="resetListWhere">重置筛选</el-button>
-                </div>
-            </div>
+            <el-form :inline="true" class="mt-2" @submit.prevent>
+                <el-form-item label="关键词">
+                    <el-input v-model.trim="listWhere.keyword" clearable class="!w-[260px]" placeholder="退货单号 / 销售单号" @keyup.enter="searchList" />
+                </el-form-item>
+                <el-form-item label="客户">
+                    <ErpPartySelect v-model="listWhere.party_id" v-model:party-name="listPartyName" party-type="customer" :allow-create="false" class="!w-[220px]" placeholder="全部客户" />
+                </el-form-item>
+                <el-form-item label="退货时间">
+                    <el-date-picker v-model="listWhere.dateRange" type="daterange" value-format="X" start-placeholder="开始" end-placeholder="结束" class="!w-[260px]" />
+                </el-form-item>
+                <el-form-item>
+                    <el-button type="primary" :icon="Search" @click="searchList">查询</el-button>
+                    <el-button @click="resetListWhere">重置</el-button>
+                </el-form-item>
+            </el-form>
 
-            <div v-loading="listLoading" class="panel-list">
-                <div
-                    v-for="item in listData"
-                    :key="item.id"
-                    class="list-item"
-                    :class="{ selected: selected?.id === item.id }"
-                    @click="selectItem(item)"
-                >
-                    <div class="flex items-center justify-between">
-                        <span class="font-medium text-sm">{{ item.return_no }}</span>
-                        <el-tag :type="statusTagType(item.status)" size="small">{{ statusLabel(item.status) }}</el-tag>
-                    </div>
-                    <div class="text-xs text-gray-500 mt-1">{{ item.party_name }} · {{ item.sale_no }}</div>
-                    <div class="mt-2 flex items-center justify-between text-xs">
-                        <span class="text-gray-400">{{ refundModeLabel(item.refund_mode) }}</span>
-                        <span class="font-medium text-orange-600">¥{{ item.total_amount }}</span>
-                    </div>
-                </div>
-                <el-empty v-if="!listLoading && listData.length === 0" description="暂无退货单" :image-size="60" />
-            </div>
+            <el-table :data="listData" v-loading="listLoading" size="large" @row-click="selectItem">
+                <el-table-column label="业务单据" min-width="220">
+                    <template #default="{ row }">
+                        <div class="font-medium">{{ row.return_no || '-' }}</div>
+                        <div class="mt-1 text-xs" :class="row.business_type === 'after_sale_compensation' ? 'text-orange-500' : 'text-gray-500'">{{ businessTypeLabel(row.business_type) }}</div>
+                    </template>
+                </el-table-column>
+                <el-table-column label="客户 / 原销售单" min-width="220">
+                    <template #default="{ row }"><div class="font-medium">{{ row.party_name || '-' }}</div><div class="mt-1 text-xs text-gray-500">{{ row.sale_no || '-' }}</div></template>
+                </el-table-column>
+                <el-table-column label="账务处理" min-width="150"><template #default="{ row }">{{ refundModeLabel(row.refund_mode) }}</template></el-table-column>
+                <el-table-column label="业务金额" width="140" align="right"><template #default="{ row }"><span class="font-medium text-orange-600">¥{{ row.total_amount }}</span></template></el-table-column>
+                <el-table-column label="状态" width="140" align="center"><template #default="{ row }"><el-tag :type="statusTagType(row.status)" effect="plain">{{ statusLabel(row.status, row.business_type) }}</el-tag></template></el-table-column>
+                <el-table-column label="操作" width="100" align="center"><template #default="{ row }"><el-button type="primary" link @click.stop="selectItem(row)">查看</el-button></template></el-table-column>
+            </el-table>
 
             <div class="panel-footer">
                 <el-pagination
                     v-model:current-page="pagination.page"
                     :page-size="pagination.limit"
                     :total="pagination.total"
-                    layout="prev, pager, next"
-                    small background
+                    layout="total, prev, pager, next"
                     @current-change="loadList"
                 />
             </div>
         </div>
 
-        <!-- 右栏：详情 / 新建 -->
-        <div class="erp-form-panel">
-            <!-- 新建表单 -->
-            <template v-if="mode === 'create'">
-                <div class="form-header">
-                    <span class="form-title">新建销售退货单</span>
-                    <div class="flex gap-2">
-                        <el-button @click="resetCreate">取消</el-button>
-                        <el-button type="primary" :loading="submitting" @click="submitCreate">保存</el-button>
-                    </div>
+        <ErpReturnDialog
+            :model-value="mode === 'create'"
+            :title="createType === 'compensation' ? '新建售后补差单' : '新建销售退货单'"
+            :subtitle="createType === 'compensation' ? '客户继续持有设备；补差按设备减少毛利并生成客户应付。' : '选择客户和实际退回的设备，系统自动关联原销售记录并处理回库与退款。'"
+            :confirm-text="createType === 'compensation' ? '确认售后补差' : '保存退货单'"
+            :tip="createType === 'compensation' ? '提交前请核对设备、补差金额和付款方式；确认后将直接影响设备毛利和客户应付。' : '保存前请核对设备和实际退款金额；回库位置由系统按设备原仓位确定。'"
+            :loading="submitting"
+            @close="resetCreate"
+            @confirm="submitCreate"
+        >
+                <div class="return-flow-guide">
+                    <div><span>1</span><b>选择客户</b><small>系统加载该客户相关设备</small></div>
+                    <i></i>
+                    <div><span>2</span><b>{{ createType === 'compensation' ? '选择补差设备' : '选择退回设备' }}</b><small>逐台填写金额和原因</small></div>
+                    <i></i>
+                    <div><span>3</span><b>{{ createType === 'compensation' ? '确认补差' : '确认回库与退款' }}</b><small>{{ createType === 'compensation' ? '设备保持已售并减少毛利' : '系统自动判断冲应收或退款' }}</small></div>
                 </div>
 
-                <el-form ref="formRef" :model="form" label-width="100px" class="form-body">
-                    <el-row :gutter="16">
-                        <el-col :span="12">
-                            <el-form-item label="原销售单" prop="sale_order_id" :rules="[{ required: true, message: '请选择原销售单' }]">
-                                <el-select
-                                    v-model="form.sale_order_id"
-                                    placeholder="搜索销售单号/客户"
-                                    filterable remote
-                                    :remote-method="searchSaleOrders"
-                                    :loading="saleSearchLoading"
-                                    style="width:100%"
-                                    @change="onSaleOrderChange"
-                                >
-                                    <el-option
-                                        v-for="o in saleOptions"
-                                        :key="o.id"
-                                        :label="`${o.sale_no} · ${o.party_name}`"
-                                        :value="o.id"
-                                    />
-                                </el-select>
+                <el-form ref="formRef" :model="form" label-position="top" class="form-body sale-return-shell">
+                    <section class="sale-source-card">
+                        <div class="sale-source-heading">
+                            <div><div class="section-kicker">{{ createType === 'compensation' ? '补差对象' : '退货对象' }}</div><div class="section-hint">{{ createType === 'compensation' ? '选择客户后加载其已售设备，补差精确记录到单台机器' : '选择客户后自动加载可退设备，系统按原仓位回库' }}</div></div>
+                        </div>
+                        <div class="sale-source-fields">
+                            <el-form-item :label="createType === 'compensation' ? '补差客户' : '退货客户'" prop="party_id" :rules="[{ required: true, message: '请选择客户' }]">
+                                <ErpPartySelect v-model="form.party_id" v-model:party-name="sourcePartyName" party-type="customer" :allow-create="false" placeholder="选择客户" @change="onSourcePartyChange" />
                             </el-form-item>
-                        </el-col>
-                        <el-col :span="12">
                             <el-form-item label="退款方式">
-                                <el-select v-model="form.refund_mode" style="width:100%">
-                                    <el-option label="现金退回" value="cash" />
-                                    <el-option label="应付冲减" value="offset" />
-                                </el-select>
+                                <el-select v-model="form.refund_mode" class="w-full"><el-option :label="createType === 'compensation' ? '现场补差' : '现场退款'" value="cash" /><el-option label="转财务退款" value="payable" /></el-select>
                             </el-form-item>
-                        </el-col>
-                        <el-col :span="24">
-                            <el-alert :title="saleRefundModeTip(form.refund_mode)" type="info" :closable="false" show-icon />
-                        </el-col>
-                        <el-col :span="24">
-                            <el-form-item label="退回仓库">
-                                <el-select v-model="form.return_to_warehouse_id" style="width:180px" @change="onWarehouseChange">
-                                    <el-option
-                                        v-for="w in warehouseOptions"
-                                        :key="w.id"
-                                        :label="w.warehouse_name"
-                                        :value="w.id"
-                                    />
-                                </el-select>
-                                <el-select v-model="form.return_to_location_id" style="width:140px;margin-left:8px" placeholder="库位">
-                                    <el-option
-                                        v-for="l in locationOptions"
-                                        :key="l.id"
-                                        :label="l.location_name"
-                                        :value="l.id"
-                                    />
-                                </el-select>
+                            <el-form-item v-if="form.refund_mode === 'cash'" label="出款账户" required>
+                                <el-select v-model="form.capital_account_id" class="w-full" placeholder="选择实际退款账户"><el-option v-for="account in accounts" :key="account.id" :label="`${account.account_name}（余额 ¥${Number(account.balance || 0).toFixed(2)}）`" :value="account.id" /></el-select>
                             </el-form-item>
-                        </el-col>
-                        <el-col :span="24">
-                            <el-form-item label="备注">
-                                <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="退货原因或备注" />
-                            </el-form-item>
-                        </el-col>
-                    </el-row>
-
-                    <!-- 设备选择表 -->
-                    <div class="mt-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-sm font-medium">选择退货设备</span>
-                            <span class="text-xs text-gray-400">只显示已售设备</span>
+                            <el-form-item v-else :label="createType === 'compensation' ? '设备处理' : '回库规则'"><div class="original-location-rule">{{ createType === 'compensation' ? '客户继续持有设备，不改变库存；补差直接减少该设备毛利' : '自动退回每台设备的原仓库 / 原库位' }}</div></el-form-item>
                         </div>
-                        <el-table
-                            ref="assetsTableRef"
-                            :data="availableAssets"
-                            v-loading="assetsLoading"
-                            size="small"
-                            border
-                            @selection-change="onAssetSelectionChange"
-                        >
-                            <el-table-column type="selection" width="45" />
-                            <el-table-column prop="imei" label="IMEI/序列号" min-width="130" />
-                            <el-table-column prop="model" label="型号" min-width="120" />
-                            <el-table-column prop="spec" label="规格" width="90" />
-                            <el-table-column prop="sale_price" label="销售价" width="80">
-                                <template #default="{ row }">¥{{ row.sale_price }}</template>
-                            </el-table-column>
-                            <el-table-column label="退货价" width="100">
-                                <template #default="{ row }">
-                                    <el-input-number
-                                        v-model="row._return_price"
-                                        :min="0" :precision="2" :step="1"
-                                        size="small" style="width:88px"
-                                        @change="syncReturnItems"
-                                    />
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="退货原因" min-width="120">
-                                <template #default="{ row }">
-                                    <el-input v-model="row._reason" placeholder="可选" size="small" @change="syncReturnItems" />
-                                </template>
-                            </el-table-column>
-                        </el-table>
+                        <el-alert :title="saleRefundModeTip(form.refund_mode)" type="info" :closable="false" show-icon />
+                        <div v-if="createType === 'compensation' && form.refund_mode === 'cash'" class="mt-3"><div class="mb-2 text-sm text-gray-600">付款凭证（选填）</div><ErpFinanceVoucherUpload v-model="form.voucher_urls" /></div>
+                    </section>
 
-                        <div class="mt-2 flex items-center gap-4 text-sm">
-                            <span>已选 <b class="text-primary">{{ form.items.length }}</b> 台</span>
-                            <span>退款合计 <b class="text-orange-600">¥{{ totalReturnAmount }}</b></span>
-                        </div>
+                    <div class="sale-return-grid">
+                        <main class="sale-device-panel">
+                            <div class="section-heading">
+                                <div><div class="section-kicker">{{ createType === 'compensation' ? '选择补差设备' : '选择退回设备' }}</div><div class="section-hint">先看设备名称、规格、IMEI 和价格；销售单号仅用于追溯</div></div>
+                                <span class="selected-count">已选 {{ form.items.length }} 台</span>
+                            </div>
+                            <div v-loading="assetsLoading" class="sale-device-grid">
+                                <article v-for="row in availableAssets" :key="row.asset_id || row.id" class="sale-device-card" :class="{ selected: isSaleAssetSelected(row) }" @click="toggleSaleAssetCard(row)">
+                                    <div class="device-card-head">
+                                        <el-checkbox :model-value="isSaleAssetSelected(row)" @click.stop @change="setSaleAssetSelected(row, Boolean($event))" />
+                                        <div class="device-card-title-wrap"><div class="device-card-title">{{ row.model || '未填写设备名称' }}</div><div class="device-card-spec">{{ row.spec || '未填写规格' }}</div></div>
+                                        <el-tag :type="createType === 'compensation' ? 'warning' : 'success'" size="small" effect="light">{{ createType === 'compensation' ? '可补差' : '可退货' }}</el-tag>
+                                    </div>
+                                    <div class="device-core-info"><span class="device-imei">IMEI {{ row.imei || row.sn || '-' }}</span><span>原仓位 {{ row.warehouse_name || '-' }} / {{ row.location_name || '-' }}</span><span>销售来源 {{ row.sale_no || '-' }}</span></div>
+                                    <div class="device-money-grid"><div><span>原销售价</span><b>¥{{ Number(row.sale_price || 0).toFixed(2) }}</b></div><div><span>{{ createType === 'compensation' ? '本次补差' : '本次退货价' }}</span><b class="text-orange-600">¥{{ Number(row._return_price || 0).toFixed(2) }}</b></div></div>
+                                    <div v-if="isSaleAssetSelected(row)" class="device-card-form" @click.stop>
+                                        <div class="device-field"><label>{{ createType === 'compensation' ? '补差金额' : '退货价' }}</label><el-input-number v-model="row._return_price" :min="0" :max="Number(row.sale_price || 0)" :precision="2" :step="1" @change="syncReturnItems" /></div>
+                                        <div class="device-field"><label>{{ createType === 'compensation' ? '补差原因' : '退货原因' }} <span>选填</span></label><el-input v-model="row._reason" :placeholder="createType === 'compensation' ? '例如售后协商补偿' : '例如客户反悔、设备问题'" @change="syncReturnItems" /></div>
+                                    </div>
+                                </article>
+                                <el-empty v-if="!assetsLoading && form.party_id && !availableAssets.length" description="该客户暂无可退设备" :image-size="70" />
+                                <div v-if="!assetsLoading && !form.party_id" class="device-empty-guide">选择客户后，在这里核对{{ createType === 'compensation' ? '要补差' : '要退回' }}的设备</div>
+                            </div>
+                        </main>
+                        <aside class="sale-decision-panel">
+                            <section class="sale-decision-card">
+                                <div class="decision-label">{{ createType === 'compensation' ? '本次补差结果' : '本次退货结果' }}</div><div class="decision-title">{{ form.items.length ? `已选 ${form.items.length} 台` : '请先选择设备' }}</div>
+                                <div class="decision-copy">{{ createType === 'compensation' ? '设备继续保持已售；补差逐台减少销售毛利，并生成客户退款应付。' : '确认收到设备后，每台设备自动回到销售前的原仓位；已收款部分逐台生成客户退款应付。' }}</div>
+                                <div class="decision-metrics"><div><span>{{ createType === 'compensation' ? '涉及设备' : '退回库存' }}</span><b>{{ form.items.length }} 台</b></div><div><span>{{ createType === 'compensation' ? '补差合计' : '退款合计' }}</span><b class="text-orange-600">¥{{ totalReturnAmount }}</b></div></div>
+                            </section>
+                            <section class="side-form-card"><label class="side-form-label">整单备注</label><el-input v-model="form.remark" type="textarea" :rows="3" :placeholder="createType === 'compensation' ? '选填，记录售后协商背景' : '选填，记录退货背景或特殊说明'" /></section>
+                        </aside>
                     </div>
                 </el-form>
-            </template>
+        </ErpReturnDialog>
 
-            <!-- 详情视图 -->
-            <template v-else-if="mode === 'detail' && selected">
-                <div class="form-header">
-                    <div>
-                        <span class="form-title">{{ selected.return_no }}</span>
-                        <el-tag :type="statusTagType(selected.status)" class="ml-2">{{ statusLabel(selected.status) }}</el-tag>
-                    </div>
-                    <div class="flex gap-2">
-                        <el-button
-                            v-if="selected.status === 'pending'"
-                            type="danger" size="small"
-                            @click="doCancel(selected.id)"
-                        >撤销</el-button>
-                        <el-button
-                            v-if="selected.status === 'pending'"
-                            type="primary" size="small"
-                            :loading="confirming"
-                            @click="doConfirm(selected.id)"
-                        >财务确认</el-button>
-                    </div>
-                </div>
+        <el-drawer
+            v-model="detail.visible"
+            :title="detail.businessType === 'after_sale_compensation' ? '售后补差详情' : '销售退货详情'"
+            size="76%"
+            destroy-on-close
+            @closed="onDetailClosed"
+        >
+            <SaleReturnDetail
+                v-if="detail.id"
+                :id="detail.id"
+                embedded
+                @updated="onDetailUpdated"
+                @close="detail.visible = false"
+            />
+        </el-drawer>
 
-                <div class="detail-body">
-                    <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                        <div class="return-metric">
-                            <div class="metric-label">退款金额</div>
-                            <div class="metric-value text-orange-600">¥{{ selected.total_amount }}</div>
-                        </div>
-                        <div class="return-metric">
-                            <div class="metric-label">退货台数</div>
-                            <div class="metric-value">{{ selectedDetail?.items?.length || 0 }}</div>
-                        </div>
-                        <div class="return-metric">
-                            <div class="metric-label">退款方式</div>
-                            <div class="metric-value">{{ refundModeLabel(selected.refund_mode) }}</div>
-                        </div>
-                    </div>
-                    <el-descriptions :column="3" border size="small" class="mb-4">
-                        <el-descriptions-item label="客户">{{ selected.party_name }}</el-descriptions-item>
-                        <el-descriptions-item label="原销售单">{{ selected.sale_no }}</el-descriptions-item>
-                        <el-descriptions-item label="退款金额">¥{{ selected.total_amount }}</el-descriptions-item>
-                        <el-descriptions-item label="退款方式">{{ refundModeLabel(selected.refund_mode) }}</el-descriptions-item>
-                        <el-descriptions-item label="操作员">{{ selected.operator_name }}</el-descriptions-item>
-                        <el-descriptions-item label="备注">{{ selected.remark || '-' }}</el-descriptions-item>
-                    </el-descriptions>
-                    <el-alert class="mb-4" :title="saleRefundModeTip(selected.refund_mode)" type="info" :closable="false" show-icon />
-
-                    <div class="mb-2 flex items-center justify-between">
-                        <span class="text-sm font-medium">退货明细</span>
-                        <span class="text-xs text-gray-500">已收款才需要真实退款，未收款部分会冲销原应收。</span>
-                    </div>
-                    <el-table :data="selectedDetail?.items || []" size="small" border>
-                        <el-table-column prop="imei" label="IMEI" min-width="130" />
-                        <el-table-column prop="model" label="型号" min-width="110" />
-                        <el-table-column prop="sale_price" label="销售价" width="80">
-                            <template #default="{ row }">¥{{ row.sale_price }}</template>
-                        </el-table-column>
-                        <el-table-column prop="return_price" label="退货价" width="80">
-                            <template #default="{ row }">¥{{ row.return_price }}</template>
-                        </el-table-column>
-                        <el-table-column prop="received_amount" label="已收金额" width="90">
-                            <template #default="{ row }">¥{{ row.received_amount }}</template>
-                        </el-table-column>
-                        <el-table-column label="财务处理" width="120">
-                            <template #default="{ row }">
-                                <span v-if="row.received_amount <= 0" class="text-gray-500">减少应收</span>
-                                <span v-else-if="row.received_amount >= row.return_price - 0.01" class="text-blue-600">生成应付退款</span>
-                                <span v-else class="text-orange-600">混合处理</span>
-                            </template>
-                        </el-table-column>
-                        <el-table-column prop="reason" label="原因" min-width="100" />
-                    </el-table>
-                </div>
-            </template>
-
-            <template v-else>
-                <el-empty description="选择左侧退货单查看详情，或点击「新建退货」" class="mt-20" />
-            </template>
-        </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     getErpSaleReturnList,
-    getErpSaleReturnInfo,
     createErpSaleReturn,
-    confirmErpSaleReturn,
-    cancelErpSaleReturn,
+    createErpSaleCompensation,
 } from '@/addon/hsx_erp/api/erp'
 import { getErpSaleList, getErpSaleInfo } from '@/addon/hsx_erp/api/erp'
-import request from '@/utils/request'
+import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
+import ErpReturnDialog from '@/addon/hsx_erp/components/ErpReturnDialog.vue'
+import SaleReturnDetail from './detail.vue'
+import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
+import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
+import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 
 const statusTabs = [
     { label: '全部', value: '' },
-    { label: '待确认', value: 'pending' },
-    { label: '已确认', value: 'confirmed' },
-    { label: '已撤销', value: 'cancelled' },
+    { label: '待确认收货', value: 'pending' },
+    { label: '已完成退货', value: 'confirmed' },
+    { label: '已取消', value: 'cancelled' },
 ]
-
-const mode = ref<'idle' | 'create' | 'detail'>('idle')
+const mode = ref<'idle' | 'create'>('idle')
 const listLoading = ref(false)
 const submitting = ref(false)
-const confirming = ref(false)
+const createType = ref<'return'|'compensation'>('return')
 const listData = ref<any[]>([])
-const selected = ref<any>(null)
-const selectedDetail = ref<any>(null)
 const pagination = reactive({ page: 1, limit: 15, total: 0 })
-const listWhere = reactive({ keyword: '', status: '', dateRange: [] as any[] })
+const listWhere = reactive({ keyword: '', party_id: null as number | null, status: '', dateRange: [] as any[] })
+const listPartyName = ref('')
 
 const formRef = ref()
 const assetsTableRef = ref()
 const form = reactive({
+    party_id: null as number | null,
     sale_order_id: null as number | null,
     refund_mode: 'cash',
-    return_to_warehouse_id: 0,
-    return_to_location_id: 0,
+    capital_account_id: 0,
+    voucher_urls: '',
     remark: '',
     items: [] as any[],
 })
+const sourcePartyName = ref('')
 const saleOptions = ref<any[]>([])
 const saleSearchLoading = ref(false)
 const availableAssets = ref<any[]>([])
 const assetsLoading = ref(false)
 const selectedAssets = ref<any[]>([])
-const warehouseOptions = ref<any[]>([])
-const locationOptions = ref<any[]>([])
+const detail = reactive({ visible: false, id: 0, businessType: '' })
+const accounts = ref<any[]>([])
 
 const totalReturnAmount = computed(() =>
     form.items.reduce((s: number, i: any) => s + (Number(i.return_price) || 0), 0).toFixed(2)
@@ -347,14 +231,21 @@ async function loadList() {
     }
 }
 
-function switchStatus(status: string) {
-    listWhere.status = status
+function switchStatus(status: any) {
+    listWhere.status = String(status || '')
+    pagination.page = 1
+    loadList()
+}
+
+function searchList() {
     pagination.page = 1
     loadList()
 }
 
 function resetListWhere() {
     listWhere.keyword = ''
+    listWhere.party_id = null
+    listPartyName.value = ''
     listWhere.status = ''
     listWhere.dateRange = []
     pagination.page = 1
@@ -362,38 +253,37 @@ function resetListWhere() {
 }
 
 async function selectItem(item: any) {
-    selected.value = item
-    mode.value = 'detail'
-    const res = await getErpSaleReturnInfo(item.id)
-    selectedDetail.value = res.data
+    detail.id = Number(item?.id || 0)
+    detail.businessType = String(item?.business_type || '')
+    detail.visible = detail.id > 0
+}
+
+function onDetailClosed() {
+    detail.id = 0
+    detail.businessType = ''
+}
+
+async function onDetailUpdated() {
+    await loadList()
 }
 
 function openCreate() {
+    createType.value = 'return'
     mode.value = 'create'
-    selected.value = null
+    form.party_id = null
+    sourcePartyName.value = ''
     form.sale_order_id = null
     form.refund_mode = 'cash'
-    form.return_to_warehouse_id = 0
-    form.return_to_location_id = 0
+    form.capital_account_id = Number(accounts.value[0]?.id || 0)
+    form.voucher_urls = ''
     form.remark = ''
     form.items = []
     availableAssets.value = []
-    loadWarehouseOptions()
 }
+function openCompensation() { openCreate(); createType.value='compensation'; form.refund_mode='payable' }
 
 function resetCreate() {
-    mode.value = selected.value ? 'detail' : 'idle'
-}
-
-async function loadWarehouseOptions() {
-    const res = await request.get('erp/warehouse/options')
-    warehouseOptions.value = res.data || []
-}
-
-function onWarehouseChange(warehouseId: number) {
-    const warehouse = warehouseOptions.value.find((w: any) => w.id === warehouseId)
-    locationOptions.value = warehouse?.locations || []
-    form.return_to_location_id = locationOptions.value[0]?.id || 0
+    mode.value = 'idle'
 }
 
 async function searchSaleOrders(query: string) {
@@ -419,6 +309,26 @@ async function searchSaleOrders(query: string) {
     }
 }
 
+async function onSourcePartyChange(party: any) {
+    form.party_id = party?.id ? Number(party.id) : null
+    sourcePartyName.value = party?.party_name || ''
+    formRef.value?.clearValidate('party_id')
+    form.sale_order_id = null
+    availableAssets.value = []
+    selectedAssets.value = []
+    form.items = []
+    if (!form.party_id) return
+    assetsLoading.value = true
+    try {
+        const res = await getErpSaleList({ party_id: form.party_id, limit: 100 })
+        availableAssets.value = (res.data?.data || [])
+            .filter((item: any) => item.status === 'sold' && item.order_status !== 'void' && !item.return_id)
+            .map((item: any) => ({ ...item, _return_price: createType.value === 'compensation' ? 0 : Number(item.sale_price || 0), _reason: '' }))
+    } finally {
+        assetsLoading.value = false
+    }
+}
+
 async function onSaleOrderChange(orderId: number) {
     if (!orderId) {
         availableAssets.value = []
@@ -427,6 +337,8 @@ async function onSaleOrderChange(orderId: number) {
     assetsLoading.value = true
     try {
         const res = await getErpSaleInfo(orderId)
+        form.party_id = Number(res.data?.party_id || 0) || null
+        sourcePartyName.value = res.data?.party_name || ''
         const items = (res.data?.items || [])
             .filter((i: any) => i.status === 'sold')
             .map((i: any) => ({
@@ -445,35 +357,70 @@ function onAssetSelectionChange(selection: any[]) {
     syncReturnItems()
 }
 
+function isSaleAssetSelected(row: any) {
+    const assetId = Number(row.asset_id || row.id)
+    return selectedAssets.value.some((item: any) => Number(item.asset_id || item.id) === assetId)
+}
+
+function setSaleAssetSelected(row: any, checked: boolean) {
+    const assetId = Number(row.asset_id || row.id)
+    const next = selectedAssets.value.filter((item: any) => Number(item.asset_id || item.id) !== assetId)
+    if (checked) next.push(row)
+    selectedAssets.value = next
+    syncReturnItems()
+}
+
+function toggleSaleAssetCard(row: any) {
+    setSaleAssetSelected(row, !isSaleAssetSelected(row))
+}
+
 function syncReturnItems() {
     form.items = selectedAssets.value.map((a: any) => ({
         asset_id: a.asset_id || a.id,
+        sale_order_id: a.sale_order_id || form.sale_order_id,
         return_price: Number(a._return_price) || 0,
         reason: a._reason || '',
     }))
 }
 
 async function submitCreate() {
+    syncReturnItems()
     await formRef.value?.validate()
     if (!form.items.length) {
-        ElMessage.warning('请选择至少一台退货设备')
+        ElMessage.warning(createType.value === 'compensation' ? '请选择至少一台补差设备' : '请选择至少一台退货设备')
         return
     }
-    if (!form.return_to_warehouse_id || !form.return_to_location_id) {
-        ElMessage.warning('请选择退回仓库和库位')
+    if (form.items.some((item: any) => Number(item.return_price || 0) <= 0)) {
+        ElMessage.warning(createType.value === 'compensation' ? '请填写每台设备的补差金额' : '退货金额必须大于 0')
         return
     }
+    if (form.refund_mode === 'cash' && !form.capital_account_id) {
+        ElMessage.warning('现场退款必须选择实际出款账户')
+        return
+    }
+    const actionName = createType.value === 'compensation' ? '售后补差' : '销售退货'
+    const confirmed = await ElMessageBox.confirm(
+        createType.value === 'compensation'
+            ? `确认对 ${form.items.length} 台设备补差 ¥${totalReturnAmount.value}？设备仍由客户持有，补差将逐台减少销售毛利并生成客户退款应付。`
+            : `确认发起销售退货 ${form.items.length} 台，退货金额 ¥${totalReturnAmount.value}。提交后等待实际收货；确认收到设备后自动回到各自原仓位，并逐台处理客户账款。`,
+        `确认${actionName}`,
+        { type: 'warning', confirmButtonText: `确认${actionName}`, cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!confirmed) return
     submitting.value = true
     try {
-        await createErpSaleReturn({
-            sale_order_id: form.sale_order_id,
+        const payload = {
+            party_id: form.party_id,
+            sale_order_id: 0,
             refund_mode: form.refund_mode,
-            return_to_warehouse_id: form.return_to_warehouse_id,
-            return_to_location_id: form.return_to_location_id,
+            capital_account_id: form.capital_account_id,
+            voucher_urls: form.voucher_urls,
             remark: form.remark,
             items: form.items,
-        })
-        ElMessage.success('退货单已创建，等待财务确认')
+        }
+        if (createType.value === 'compensation') await createErpSaleCompensation(payload)
+        else await createErpSaleReturn(payload)
+        ElMessage.success(createType.value === 'compensation' ? '售后补差已生成设备级客户应付' : '退货单已创建，等待确认收到设备')
         mode.value = 'idle'
         loadList()
     } finally {
@@ -481,33 +428,10 @@ async function submitCreate() {
     }
 }
 
-async function doConfirm(id: number) {
-    await ElMessageBox.confirm('确认后设备将回到库存，应收账款将同步处理，是否继续？', '财务确认', { type: 'warning' })
-    confirming.value = true
-    try {
-        await confirmErpSaleReturn(id)
-        ElMessage.success('退货已确认')
-        loadList()
-        const res = await getErpSaleReturnInfo(id)
-        selected.value = listData.value.find((i) => i.id === id) || selected.value
-        selectedDetail.value = res.data
-    } finally {
-        confirming.value = false
-    }
-}
-
-async function doCancel(id: number) {
-    await ElMessageBox.confirm('确认撤销该退货单？撤销后无法恢复。', '撤销退货', { type: 'warning' })
-    await cancelErpSaleReturn(id)
-    ElMessage.success('退货单已撤销')
-    loadList()
-    mode.value = 'idle'
-    selected.value = null
-}
-
-function statusLabel(status: string) {
+function statusLabel(status: string, businessType = '') {
+    if (businessType === 'after_sale_compensation') return status === 'cancelled' ? '补差已取消' : '补差已确认'
     const map: Record<string, string> = {
-        pending: '待确认', confirmed: '已确认', cancelled: '已撤销',
+        pending: '待确认收货', confirmed: '已完成退货', cancelled: '已取消',
     }
     return map[status] || status
 }
@@ -518,16 +442,26 @@ function statusTagType(status: string) {
     return map[status] || ''
 }
 function refundModeLabel(mode: string) {
-    const map: Record<string, string> = { cash: '现金退回', offset: '应付冲减' }
+    const map: Record<string, string> = { cash: '现场退款', payable: '转财务退款', offset: '往来折抵' }
     return map[mode] || mode
 }
+function businessTypeLabel(type: string) {
+    return type === 'after_sale_compensation' ? '售后补差' : '退货退款'
+}
 function saleRefundModeTip(mode: string) {
-    if (mode === 'offset') return '应付冲减：适合客户后续还有往来款抵扣；已收款部分会形成应付退款，未收款部分优先冲销原应收。'
-    return '现金退回：适合直接把已收款项退给客户；未收款、未形成事实收款的部分，系统仍优先冲销原应收。'
+    if (createType.value === 'compensation') {
+        if (mode === 'cash') return '现场补差：从所选账户立即向客户付款并记账；付款凭证可在确认时选填。'
+        return '转财务退款：补差确认后逐台生成客户应付，由财务选择账户付款；是否折账由财务决定。'
+    }
+    if (mode === 'payable') return '转财务退款：确认收货后逐台生成待退款应付，由财务选择账户付款。'
+    return '现场退款：必须先指定出款账户；确认实际收到退货设备后，系统立即向客户付款、核销并记录资金流水。'
 }
 
 const route = useRoute()
-loadList()
+async function loadPage() {
+    await Promise.all([loadList(), getCapitalAccounts().then((res: any) => { accounts.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || []) })])
+}
+useErpPageRefresh(loadPage)
 // 如果从销售页带着 sale_order_id 过来，自动打开新建并预选销售单
 if (route.query.sale_order_id) {
     openCreate()
@@ -537,25 +471,96 @@ if (route.query.sale_order_id) {
 </script>
 
 <style scoped>
-.erp-dual-layout { display: flex; height: calc(100vh - 120px); overflow: hidden; }
-.erp-list-panel { width: 300px; min-width: 260px; border-right: 1px solid #e4e7ed; display: flex; flex-direction: column; background: #fff; }
-.erp-form-panel { flex: 1; overflow-y: auto; padding: 16px; background: #fff; }
-.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; border-bottom: 1px solid #f0f0f0; }
-.panel-title { font-weight: 600; font-size: 14px; }
-.status-tabs { display: flex; padding: 6px 8px; gap: 4px; border-bottom: 1px solid #f0f0f0; }
-.status-tab { padding: 2px 10px; border-radius: 12px; font-size: 12px; cursor: pointer; color: #606266; transition: all .2s; }
-.status-tab:hover { background: #f5f7fa; }
-.status-tab.active { background: var(--el-color-primary-light-9); color: var(--el-color-primary); font-weight: 500; }
-.panel-search { padding: 8px; }
-.panel-list { flex: 1; overflow-y: auto; padding: 4px 0; }
-.list-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f5f5f5; transition: background .15s; }
-.list-item:hover { background: #f5f7fa; }
-.list-item.selected { background: var(--el-color-primary-light-9); }
-.panel-footer { padding: 8px; border-top: 1px solid #f0f0f0; display: flex; justify-content: center; }
+.erp-list-panel, .erp-form-panel { width: 100%; padding: 20px; border: 0; border-radius: 0; background: #fff; box-shadow: none; }
+.erp-form-panel { padding: 20px; }
+.panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 0; }
+.panel-title { color: #111827; font-weight: 650; font-size: 20px; }
+.panel-subtitle, .form-subtitle { margin-top: 5px; color: #64748b; font-size: 13px; line-height: 20px; }
+.return-status-tabs { padding: 0 22px; border-top: 1px solid #f0f3f7; }
+.return-status-tabs :deep(.el-tabs__header) { margin: 0; }
+.return-status-tabs :deep(.el-tabs__nav-wrap::after) { height: 1px; background: #f0f3f7; }
+.return-status-tabs :deep(.el-tabs__item) { height: 48px; padding: 0 18px; }
+.panel-search { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 22px; background: #fbfcfe; }
+.panel-search > * { max-width: 100%; min-width: 0; }
+.filter-keyword { width: min(360px, 100%); }
+.filter-party { width: 220px; max-width: 100%; min-width: 0; }
+.filter-date { width: 280px; max-width: 100%; min-width: 0 !important; }
+.filter-date:deep(.el-date-editor) { width: 100%; max-width: 100%; min-width: 0; }
+.filter-actions { margin-left: auto; }
+.panel-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 12px; min-height: 240px; padding: 18px 22px; }
+.list-item { min-width: 0; padding: 14px 15px; cursor: pointer; border: 1px solid #e7ecf3; border-radius: 9px; background: #fff; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.list-item:hover { border-color: #a8c7ff; box-shadow: 0 5px 16px rgba(37, 99, 235, .08); transform: translateY(-1px); }
+.list-item.selected { border-color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.panel-list :deep(.el-empty) { grid-column: 1 / -1; }
+.panel-footer { padding-top: 16px; display: flex; justify-content: flex-end; }
 .form-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0; }
-.form-title { font-size: 16px; font-weight: 600; }
-.form-body, .detail-body { padding: 0 4px; }
+.form-title { color: #111827; font-size: 18px; font-weight: 650; }
+.form-body, .detail-body { max-width: 1440px; margin: 0 auto; padding: 0 4px; }
+.return-flow-guide { display:grid; max-width:1100px; margin:0 auto 18px; grid-template-columns:minmax(0,1fr) 44px minmax(0,1fr) 44px minmax(0,1fr); align-items:center; border:1px solid #dbeafe; border-radius:10px; background:#f8fbff; padding:12px 16px; }
+.return-flow-guide div { display:grid; grid-template-columns:28px 1fr; column-gap:9px; align-items:center; }
+.return-flow-guide span { display:flex; width:28px; height:28px; grid-row:1/3; align-items:center; justify-content:center; border-radius:50%; color:#fff; background:var(--el-color-primary); font-size:12px; font-weight:700; }
+.return-flow-guide b { color:#1e293b; font-size:13px; }
+.return-flow-guide small { margin-top:2px; color:#94a3b8; font-size:11px; }
+.return-flow-guide i { height:1px; background:#bfdbfe; }
 .return-metric { border-radius: 8px; background: #f8fafc; padding: 12px 14px; }
 .metric-label { color: #64748b; font-size: 12px; }
 .metric-value { margin-top: 4px; color: #111827; font-size: 18px; font-weight: 600; }
+.sale-return-shell { max-width:1440px; margin:0 auto; }
+.sale-source-card { margin-bottom:18px; padding:15px 16px; border-radius:6px; background:#f8fafc; }
+.sale-source-heading { margin-bottom:12px; }
+.sale-source-fields { display:grid; grid-template-columns:minmax(220px,1fr) minmax(180px,.7fr) minmax(300px,1.2fr); gap:12px; }
+.sale-source-fields :deep(.el-form-item) { margin-bottom:12px; }
+.original-location-rule { display:flex; width:100%; min-height:32px; align-items:center; padding:0 11px; border:1px solid #dbeafe; border-radius:4px; color:#1d4ed8; background:#eff6ff; font-size:13px; }
+.section-kicker { color:#111827; font-size:15px; font-weight:650; }
+.section-hint { margin-top:3px; color:#94a3b8; font-size:12px; }
+.sale-return-grid { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:20px; align-items:start; }
+.sale-device-panel { min-width:0; }
+.section-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; }
+.selected-count { padding:4px 10px; border-radius:999px; color:var(--el-color-primary); background:var(--el-color-primary-light-9); font-size:12px; font-weight:600; }
+.sale-device-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:12px; min-height:100px; }
+.sale-device-grid :deep(.el-empty) { grid-column:1/-1; }
+.sale-device-card { min-width:0; padding:14px; border:1px solid #dfe5ec; border-radius:6px; background:#fff; cursor:pointer; transition:border-color .15s,box-shadow .15s,background .15s; }
+.sale-device-card:hover { border-color:#a5b4fc; }
+.sale-device-card.selected { border-color:var(--el-color-primary); background:#f8fbff; box-shadow:0 0 0 1px var(--el-color-primary-light-7); }
+.device-card-head { display:flex; align-items:flex-start; gap:10px; }
+.device-card-title-wrap { flex:1; min-width:0; }
+.device-card-title { overflow:hidden; color:#111827; font-size:15px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.device-card-spec { margin-top:4px; overflow:hidden; color:#64748b; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.device-core-info { display:flex; flex-wrap:wrap; gap:6px 14px; margin:12px 0; color:#64748b; font-size:12px; }
+.device-core-info span { padding:3px 7px; border-radius:5px; background:#f1f5f9; }
+.device-core-info .device-imei { color:#334155; font-weight:650; }
+.device-money-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding-top:11px; border-top:1px solid #eef2f7; }
+.device-money-grid div { display:flex; flex-direction:column; gap:4px; }
+.device-money-grid span { color:#94a3b8; font-size:11px; }
+.device-money-grid b { color:#334155; font-size:13px; font-weight:650; }
+.device-card-form { display:grid; grid-template-columns:minmax(160px,.65fr) minmax(220px,1.35fr); gap:10px; margin-top:12px; padding-top:12px; border-top:1px dashed #cbd5e1; }
+.device-field { display:flex; min-width:0; flex-direction:column; gap:6px; }
+.device-field label { color:#64748b; font-size:12px; }
+.device-field label span { margin-left:4px; color:#a8b2c1; font-weight:400; }
+.device-field :deep(.el-input-number) { width:100%; }
+.device-empty-guide { display:flex; grid-column:1/-1; min-height:100px; align-items:center; justify-content:center; border:1px dashed #cbd5e1; border-radius:6px; color:#94a3b8; background:#f8fafc; font-size:13px; }
+.sale-decision-panel { position:sticky; top:0; display:flex; flex-direction:column; gap:12px; }
+.sale-decision-card { padding:16px; border:1px solid #fed7aa; border-radius:8px; background:#fffaf5; }
+.decision-label { color:#64748b; font-size:12px; }
+.decision-title { margin-top:5px; color:#c2410c; font-size:18px; font-weight:700; }
+.decision-copy { margin-top:8px; color:#64748b; font-size:12px; line-height:1.6; }
+.decision-metrics { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; padding-top:12px; border-top:1px solid #ffedd5; }
+.decision-metrics div { display:flex; flex-direction:column; gap:4px; }
+.decision-metrics span { color:#94a3b8; font-size:11px; }
+.decision-metrics b { color:#334155; font-size:13px; font-weight:650; }
+.side-form-card { padding:14px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; }
+.side-form-label { display:block; margin-bottom:8px; color:#334155; font-size:13px; font-weight:650; }
+@media (max-width: 768px) {
+    .erp-list-panel, .erp-form-panel { padding: 12px; }
+    .panel-header, .form-header { align-items: stretch; flex-direction: column; }
+    .panel-search { align-items: stretch; flex-direction: column; }
+    .filter-keyword, .filter-party, .filter-date { width: 100%; }
+    .filter-actions { margin-left: 0; text-align: right; }
+    .panel-list { grid-template-columns: 1fr; padding: 12px; }
+    .return-flow-guide { grid-template-columns:1fr; gap:9px; }
+    .return-flow-guide i { display:none; }
+    .sale-source-fields, .sale-return-grid, .device-card-form { grid-template-columns:1fr; }
+    .sale-decision-panel { position:static; }
+    .sale-device-grid { grid-template-columns:1fr; }
+}
 </style>

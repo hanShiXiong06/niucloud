@@ -14,7 +14,7 @@
                     <view class="asset-head">
                         <view class="asset-title">
                             <text class="asset-title__model">{{ asset.model || '-' }}</text>
-                            <text class="asset-title__sub">{{ asset.spec || '无规格' }} · IMEI {{ asset.imei || '-' }}</text>
+                            <text class="asset-title__sub">{{ deviceIdentityLine(asset) }}</text>
                         </view>
                         <u-tag :text="statusLabel(asset.status)" :type="statusType(asset.status)" plain plainFill size="mini" />
                     </view>
@@ -34,8 +34,8 @@
                             <text class="amt-value">¥{{ money(asset.total_cost) }}</text>
                         </view>
                         <view class="amount-box">
-                            <text class="amt-label">{{ asset.status === 'sold' ? '售价' : '预估价' }}</text>
-                            <text class="amt-value blue">{{ asset.status === 'sold' ? ('¥' + money(asset.sale_price)) : displayEstimate(asset) }}</text>
+                            <text class="amt-label">{{ asset.status === 'sold' ? '实际收入' : '预估价' }}</text>
+                            <text class="amt-value blue">{{ asset.status === 'sold' ? ('¥' + money(netSaleAmount(asset))) : displayEstimate(asset) }}</text>
                         </view>
                         <view class="amount-box">
                             <text class="amt-label">{{ asset.status === 'sold' ? '毛利' : '库龄' }}</text>
@@ -43,6 +43,9 @@
                                 {{ asset.status === 'sold' ? ('¥' + money(asset.profit)) : ageText(asset) }}
                             </text>
                         </view>
+                    </view>
+                    <view v-if="asset.status === 'sold' && compensationAmount(asset) > 0" class="sale-adjust-note">
+                        原成交 ¥{{ money(originalSaleAmount(asset)) }} · 售后补差 -¥{{ money(compensationAmount(asset)) }} · 实际收入 ¥{{ money(netSaleAmount(asset)) }}
                     </view>
 
                     <view class="field">
@@ -84,30 +87,35 @@
                     <view class="form-card-title">采购信息</view>
                     <view class="field"><text class="label">供应商</text><text class="value">{{ asset.party_name }}</text></view>
                     <view class="field"><text class="label">采购单号</text><text class="value">{{ asset.purchase_order.purchase_no }}</text></view>
+                    <view v-if="asset.purchase_order.m_no || asset.m_no" class="field"><text class="label">M号</text><text class="value">{{ asset.purchase_order.m_no || asset.m_no }}</text></view>
                     <view class="field field--last"><text class="label">付款状态</text>
                         <u-tag :text="financeLabel(asset.purchase_order.finance_status)" :type="financeType(asset.purchase_order.finance_status)" plain plainFill size="mini" />
                     </view>
                 </view>
 
-                <view class="form-card" v-if="asset.sale_order">
+                <view class="form-card" v-if="asset.status === 'sold' && asset.sale_order">
                     <view class="form-card-title">销售信息</view>
                     <view class="field"><text class="label">客户</text><text class="value">{{ asset.sale_order.party_name }}</text></view>
                     <view class="field"><text class="label">销售单号</text><text class="value">{{ asset.sale_order.sale_no }}</text></view>
-                    <view class="field"><text class="label">售价</text><text class="value blue">¥{{ money(asset.sale_price) }}</text></view>
+                    <view class="field"><text class="label">实际销售收入</text><text class="value blue">¥{{ money(netSaleAmount(asset)) }}</text></view>
+                    <view v-if="compensationAmount(asset) > 0" class="field">
+                        <text class="label">原成交 / 售后补差</text>
+                        <text class="value orange">¥{{ money(originalSaleAmount(asset)) }} / -¥{{ money(compensationAmount(asset)) }}</text>
+                    </view>
                     <view class="field field--last"><text class="label">毛利</text>
-                        <text class="value" :class="Number(asset.profit)>=0?'green':'red'">¥{{ money(asset.profit) }}</text>
+                        <text class="value" :class="Number(asset.profit || asset.last_sale_item?.profit)>=0?'green':'red'">¥{{ money(asset.profit || asset.last_sale_item?.profit) }}</text>
                     </view>
                 </view>
 
                 <view class="section-title">设备履历</view>
                 <view class="flow-card" v-for="(flow, idx) in ledger" :key="idx">
                     <view class="flow-head">
-                        <text class="flow-action">{{ actionLabel(flow.action) }}</text>
+                        <text class="flow-action">{{ flow.action_text || actionLabel(flow.action) }}</text>
                         <text class="flow-time">{{ formatDate(flow.occurred_at || flow.create_at) }}</text>
                     </view>
                     <view class="card-meta" v-if="flow.source_no">单据：{{ flow.source_no }}</view>
                     <view class="card-meta" v-if="flow.before_status && flow.after_status">
-                        {{ statusLabel(flow.before_status) }} → {{ statusLabel(flow.after_status) }}
+                        {{ flow.before_status_text || statusLabel(flow.before_status) }} → {{ flow.after_status_text || statusLabel(flow.after_status) }}
                     </view>
                     <view class="card-meta" v-if="flow.cost_delta && Number(flow.cost_delta)">
                         成本变化：{{ Number(flow.cost_delta)>0?'+':'' }}¥{{ money(flow.cost_delta) }}
@@ -116,10 +124,65 @@
                 </view>
                 <view class="empty-tip" v-if="!ledger.length">暂无设备履历</view>
 
+                <view class="section-title account-section-title">设备账务轨迹</view>
+                <view class="account-tip">按设备展示采购应付、销售应收、实际收付款、折账与冲销结果；售后补差的应付和实际付款会合并，避免重复理解金额。</view>
+                <view class="account-card" v-for="row in visibleAccountTimeline" :key="row.id || row.ledger_no">
+                    <view class="account-card__head">
+                        <text class="account-card__title">{{ accountBizLabel(row) }}</text>
+                        <text class="account-card__state" :class="accountStateClass(row)">{{ accountSettlementText(row) }}</text>
+                    </view>
+                    <view class="account-card__result">
+                        <text>{{ accountImpactText(row) }}</text>
+                        <text class="account-card__amount" :class="accountAmountClass(row)">¥{{ money(row.amount) }}</text>
+                    </view>
+                    <view class="account-card__meta" v-if="row._display_source_no || row.source_no">来源：{{ row._display_source_no || row.source_no }}</view>
+                    <view class="account-card__meta">{{ accountRemark(row) }}</view>
+                    <view class="account-card__time">{{ formatTime(row.occurred_at || row.create_at) }}</view>
+                </view>
+                <view class="empty-tip account-empty" v-if="!accountTimeline.length">暂无设备账务记录</view>
+                <view v-if="accountTimeline.length > accountPreviewLimit" class="account-more" @click="showAllAccountLedger = !showAllAccountLedger">
+                    <text>{{ showAllAccountLedger ? '收起账务轨迹' : `展开全部 ${accountTimeline.length} 条` }}</text>
+                    <u-icon :name="showAllAccountLedger ? 'arrow-up' : 'arrow-down'" color="#2563eb" size="13" />
+                </view>
+
                 <!-- 底部操作 -->
                 <view class="bottom-actions">
-                    <view v-if="asset.status === 'in_stock'" class="bottom-action-btn">
-                        <u-button type="primary" text="调整成本" @click="goAdjust" />
+                    <view v-if="asset.status === 'in_stock'" class="bottom-action-row">
+                        <view class="bottom-action-btn"><u-button type="primary" text="调整成本" @click="goAdjust" /></view>
+                        <view class="bottom-action-btn">
+                            <u-button
+                                type="warning"
+                                :text="returnActionLabel(asset)"
+                                :disabled="asset.return_flow?.returnable === false"
+                                @click="goReturn"
+                            />
+                        </view>
+                    </view>
+                    <view v-if="asset.status === 'sold'" class="bottom-action-row">
+                        <view class="bottom-action-btn full">
+                            <u-button type="warning" text="发起销售退货" @click="goSaleReturn" />
+                        </view>
+                    </view>
+                    <view v-if="asset.status === 'in_stock' && asset.sale_target === 'mall'" class="listing-sync-card" :class="`listing-sync-card--${listingSyncStatus || 'idle'}`">
+                        <view class="listing-sync-card__head">
+                            <view class="listing-sync-card__title">
+                                <u-icon :name="listingSyncIcon" :color="listingSyncColor" size="15" />
+                                <text>拍照定价：{{ listingSyncLabel }}</text>
+                            </view>
+                            <text v-if="Number(listingSync.attempts || 0) > 0" class="listing-sync-card__attempts">已尝试 {{ listingSync.attempts }} 次</text>
+                        </view>
+                        <text v-if="listingSyncStatus === 'failed' && listingSync.last_error" class="listing-sync-card__error">{{ listingSync.last_error }}</text>
+                        <text v-else-if="listingSyncStatus === 'done'" class="listing-sync-card__desc">设备资料已成功同步到拍照定价流程。</text>
+                        <text v-else-if="['pending', 'processing'].includes(listingSyncStatus)" class="listing-sync-card__desc">系统正在处理，请稍后刷新设备档案查看结果。</text>
+                    </view>
+                    <view v-if="showListingSyncAction" class="bottom-action-row secondary-row">
+                        <view class="bottom-action-btn full">
+                            <u-button type="primary" plain :loading="syncingListing" :text="listingSyncStatus === 'failed' ? '重试同步拍照定价' : '同步拍照定价'" @click="syncListing" />
+                        </view>
+                    </view>
+                    <view v-if="asset.status === 'in_stock' && asset.return_flow?.returnable === false" class="return-disabled-reason">
+                        <u-icon name="info-circle" color="#94a3b8" size="14" />
+                        <text>{{ asset.return_flow?.block_reason || '当前设备不可采购退货' }}</text>
                     </view>
                 </view>
             </view>
@@ -128,14 +191,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { getMobileStockInfo } from '@/addon/hsx_erp/api/erp'
+import { getMobileStockInfo, syncMobileStockListing } from '@/addon/hsx_erp/api/erp'
+import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
+import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 const asset = ref<any>(null)
 const ledger = ref<any[]>([])
+const showAllAccountLedger = ref(false)
+const accountPreviewLimit = 4
 const loading = ref(true)
+const syncingListing = ref(false)
 const loadError = ref('')
 const assetId = ref(0)
 const detailLoaded = ref(false)
@@ -169,6 +238,7 @@ async function loadDetail(options: { silent?: boolean } = {}) {
         }
         asset.value = data
         ledger.value = data.asset_ledgers || data.ledger || data.asset_ledger || []
+        showAllAccountLedger.value = false
     } catch (e: any) {
         if (seq !== loadSeq) return
         const message = e?.message || e?.msg || '设备档案加载失败'
@@ -206,17 +276,83 @@ const goAdjust = () => {
     uni.navigateTo({ url: `/addon/hsx_erp/pages/cost_adjust/detail?${q}` })
 }
 
+const syncListing = async () => {
+    if (!asset.value || syncingListing.value || !showListingSyncAction.value) return
+    const confirmed = await confirmErpSensitiveAction({
+        title: listingSyncStatus.value === 'failed' ? '重试拍照定价同步' : '同步拍照定价',
+        content: `确认同步「${asset.value.model || asset.value.imei || '-'}」？系统会记录同步状态，重复操作不会重复建档。`,
+        confirmText: listingSyncStatus.value === 'failed' ? '确认重试' : '确认同步',
+    })
+    if (!confirmed) return
+    syncingListing.value = true
+    try {
+        const res: any = await syncMobileStockListing(asset.value.id)
+        if (res?.data?.ok === false) {
+            uni.showToast({ title: res?.data?.message || '同步失败', icon: 'none' })
+            return
+        }
+        uni.showToast({ title: '同步任务已提交', icon: 'success' })
+        await reload()
+    } catch (e: any) {
+        uni.showToast({ title: e?.message || '同步失败，请重试', icon: 'none' })
+        await reload()
+    } finally {
+        syncingListing.value = false
+    }
+}
+
+const returnActionLabel = (_row: any) => '采购退货'
+const goReturn = () => {
+    if (!asset.value || asset.value.return_flow?.returnable === false) return
+    const a = asset.value
+    uni.navigateTo({
+        url: `/addon/hsx_erp/pages/purchase_return/create?purchase_order_id=${a.purchase_order_id || ''}&purchase_no=${encodeURIComponent(a.purchase_order?.purchase_no || '')}&party_name=${encodeURIComponent(a.party_name || '')}&asset_id=${a.id || ''}`
+    })
+}
+
+const goSaleReturn = () => {
+    if (!asset.value || asset.value.status !== 'sold') return
+    const row = asset.value
+    const saleOrderId = Number(row.sale_order_id || row.sale_order?.id || row.last_sale_item?.sale_order_id || 0)
+    if (!saleOrderId) {
+        uni.showToast({ title: '未找到关联销售单，请刷新设备档案', icon: 'none' })
+        return
+    }
+    uni.navigateTo({
+        url: `/addon/hsx_erp/pages/sale_return/create?sale_order_id=${saleOrderId}&sale_no=${encodeURIComponent(row.sale_order?.sale_no || '')}&party_name=${encodeURIComponent(row.sale_order?.party_name || row.sale_party_name || '')}&asset_id=${Number(row.id || 0)}`
+    })
+}
+
 const money = (v: any) => Number(v || 0).toFixed(2)
 const formatDate = (ts: number) => ts ? new Date(ts * 1000).toLocaleDateString('zh-CN') : '-'
+const formatTime = (ts: number) => ts ? new Date(ts * 1000).toLocaleString('zh-CN') : '-'
 const ageDays = (ts: number) => ts ? Math.floor((Date.now() / 1000 - ts) / 86400) : 0
 const ageText = (row: any) => {
     const ts = Number(row?.stock_in_at || row?.create_at || 0)
     return ts ? `${ageDays(ts)}天` : '-'
 }
 const displayEstimate = (row: any) => {
-    const price = row?.retail_price || row?.estimate_sale_price
+    const price = firstPositiveErpAmount(row?.retail_price, row?.estimate_sale_price)
     return Number(price || 0) > 0 ? `¥${money(price)}` : '-'
 }
+const netSaleAmount = (row: any) => erpNetSaleAmount({ ...row, ...(row?.last_sale_item || {}) })
+const originalSaleAmount = (row: any) => erpOriginalSaleAmount({ ...row, ...(row?.last_sale_item || {}) })
+const compensationAmount = (row: any) => erpSaleCompensationAmount({ ...row, ...(row?.last_sale_item || {}) })
+const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
+const listingSync = computed(() => asset.value?.listing_sync || {})
+const listingSyncStatus = computed(() => String(listingSync.value.status || '').toLowerCase())
+const listingSyncLabel = computed(() => listingSync.value.status_label || ({
+    pending: '等待处理', processing: '同步中', done: '已同步', failed: '同步失败',
+} as Record<string, string>)[listingSyncStatus.value] || '尚未同步')
+const listingSyncColor = computed(() => ({
+    pending: '#d97706', processing: '#2563eb', done: '#16a34a', failed: '#dc2626',
+} as Record<string, string>)[listingSyncStatus.value] || '#64748b')
+const listingSyncIcon = computed(() => ({
+    pending: 'clock', processing: 'reload', done: 'checkmark-circle', failed: 'close-circle',
+} as Record<string, string>)[listingSyncStatus.value] || 'camera')
+const showListingSyncAction = computed(() => asset.value?.status === 'in_stock'
+    && asset.value?.sale_target === 'mall'
+    && !['pending', 'processing', 'done'].includes(listingSyncStatus.value))
 const statusLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
 const statusType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' }[s] || 'info')
 const financeLabel = (s: string) => ({ pending: '待付款', partial: '部分付款', settled: '已结清', void: '已作废' }[s] || s || '-')
@@ -224,8 +360,99 @@ const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', se
 const actionLabel = (a: string) => ({
     inbound: '采购入库', sold: '销售出库', purchase_return: '采购退货',
     sale_return: '销售退货', cost_adjust: '成本调整', purchase_cancel: '采购撤销',
-    sale_cancel: '销售撤销', refurbish: '整备', flow_set: '流转设置'
-}[a] || a || '-')
+    sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销', refurbish: '整备', flow_set: '流转设置'
+}[a] || '库存调整')
+
+function mergeAccountTimeline(rows: any[] = []) {
+    const source = (rows || []).map((row: any) => ({ ...row }))
+    const compensations = source.filter((row: any) => String(row.biz_type || '').toLowerCase() === 'sale_compensation')
+    const mergedCompensationIds = new Set<number>()
+    source.forEach((row: any) => {
+        if (String(row.biz_type || '').toLowerCase() !== 'payment') return
+        const paymentAt = Number(row.occurred_at || row.create_at || 0)
+        const match = compensations
+            .filter((comp: any) => {
+                const hasLifecycle = Boolean(row.lifecycle_key || comp.lifecycle_key)
+                const sameLifecycle = hasLifecycle ? Boolean(row.lifecycle_key && comp.lifecycle_key && row.lifecycle_key === comp.lifecycle_key) : true
+                return !mergedCompensationIds.has(Number(comp.id)) && sameLifecycle && Number(comp.asset_id || 0) === Number(row.asset_id || 0) && Math.abs(Number(comp.amount || 0) - Number(row.amount || 0)) < 0.001 && Number(comp.occurred_at || comp.create_at || 0) <= paymentAt
+            })
+            .sort((a: any, b: any) => Number(b.occurred_at || b.create_at || 0) - Number(a.occurred_at || a.create_at || 0))[0]
+        if (!match) return
+        mergedCompensationIds.add(Number(match.id))
+        row._merged_compensation = true
+        row._display_source_no = match.source_no || row.source_no
+        row.settlement_methods = Array.from(new Set([...(row.settlement_methods || []), ...(match.settlement_methods || []), '实际付款']))
+    })
+    return source.filter((row: any) => !mergedCompensationIds.has(Number(row.id)))
+}
+
+const accountTimeline = computed(() => mergeAccountTimeline(asset.value?.account_ledgers || []))
+const visibleAccountTimeline = computed(() => showAllAccountLedger.value ? accountTimeline.value : accountTimeline.value.slice(0, accountPreviewLimit))
+
+function accountBizLabel(row: any) {
+    if (row?._merged_compensation) return '售后补差付款'
+    const type = String(row?.biz_type || '').toLowerCase()
+    const map: Record<string, string> = {
+        purchase: '采购应付', purchase_cancel: '采购撤销冲回', purchase_return: '采购退货冲回', purchase_return_loss: '采购退货损失',
+        sale: '销售应收', sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销', sale_return: '销售退货冲回',
+        sale_compensation: '售后补差应付', adjust: '成本调整', refurbish: '整备成本',
+        payment: '实际付款', receipt: '实际收款', offset: '往来折账'
+    }
+    if (type === 'sale_compensation' && (row?.settlement_methods || []).includes('折账结清')) return '售后补差折账'
+    return row?.biz_type_text || map[type] || '账务调整'
+}
+
+function accountImpactText(row: any) {
+    const type = String(row?.biz_type || '').toLowerCase()
+    if (row?._merged_compensation) return '公司已向客户支付售后补差'
+    if (type === 'purchase') return '采购入库形成应付款'
+    if (['purchase_cancel', 'purchase_return'].includes(type)) return '原采购应付已经冲回'
+    if (type === 'purchase_return_loss') return '采购退货形成不可收回损失'
+    if (type === 'sale') return row?.business_state === 'reversed' ? '原销售应收已经冲销' : '销售出库形成应收款'
+    if (['sale_cancel', 'sale_item_cancel'].includes(type)) return '撤销销售并冲回设备应收'
+    if (type === 'sale_return') return '客户退货并冲回销售应收'
+    if (type === 'sale_compensation') return '公司新增一笔待付给客户的补差款'
+    if (type === 'payment') return '公司已经完成实际付款'
+    if (type === 'receipt') return '公司已经确认实际收款'
+    if (type === 'offset') return '应收与应付完成折账核销'
+    if (type === 'refurbish') return '设备整备成本增加'
+    return '设备账务发生调整'
+}
+
+function accountSettlementText(row: any) {
+    const methods = Array.from(new Set((row?.settlement_methods || []).filter(Boolean)))
+    if (methods.length) return methods.join('、')
+    if (row?.business_state_text) return row.business_state_text
+    const type = String(row?.biz_type || '').toLowerCase()
+    if (type === 'sale') return '待客户付款'
+    if (['purchase', 'refurbish', 'sale_compensation'].includes(type)) return '待财务付款'
+    return '账务已记录'
+}
+
+function accountStateClass(row: any) {
+    const text = accountSettlementText(row)
+    if (text.includes('待')) return 'is-pending'
+    if (text.includes('冲销') || text.includes('结清') || text.includes('收款')) return 'is-settled'
+    return 'is-paid'
+}
+
+function accountAmountClass(row: any) {
+    const type = String(row?.biz_type || '').toLowerCase()
+    if (['receipt', 'sale_cancel', 'sale_item_cancel', 'sale_return', 'purchase_cancel', 'purchase_return'].includes(type)) return 'is-income'
+    if (['payment', 'sale_compensation', 'purchase_return_loss'].includes(type) || row?._merged_compensation) return 'is-expense'
+    return ''
+}
+
+function accountRemark(row: any) {
+    const type = String(row?.biz_type || '').toLowerCase()
+    const remark = String(row?.remark || '').trim()
+    if (row?._merged_compensation) return '补差应付与实际付款已合并展示，本次只计一笔。'
+    if (type === 'sale_compensation' && (!remark || remark === '售后补差')) return '这是公司欠客户的补差款，不是资金收入；财务付款后才形成实际支出。'
+    if (type === 'sale_cancel' && !remark) return '销售单已撤销，设备回到库存，原销售应收已冲回。'
+    if (type === 'sale_item_cancel' && !remark) return '该设备销售已撤销，设备应收已冲回。'
+    if (type === 'offset' && !remark) return '本次通过应收应付互抵完成结算，不产生资金收付。'
+    return remark || accountImpactText(row)
+}
 </script>
 
 <style scoped lang="scss">
@@ -244,6 +471,7 @@ const actionLabel = (a: string) => ({
 .asset-finance-foot { justify-content:space-between; gap:10rpx; margin:16rpx 0 10rpx; padding:18rpx 0; border-top:0; border-bottom:2rpx solid #f3f4f6; }
 .asset-finance-foot .amount-box { flex:1; min-width:0; }
 .asset-finance-foot .amt-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sale-adjust-note { margin:0 0 12rpx; padding:12rpx 15rpx; border-radius:12rpx; background:#fff7ed; color:#c2410c; font-size:21rpx; line-height:1.45; }
 .form-card .value { word-break:break-all; }
 .form-card .value.blue { color:#2563eb; }
 .form-card .value.green { color:#16a34a; }
@@ -256,8 +484,40 @@ const actionLabel = (a: string) => ({
 .flow-action { font-size:26rpx; font-weight:600; color:#0f172a; }
 .flow-time { font-size:22rpx; color:#94a3b8; }
 .empty-tip { text-align:center; color:#94a3b8; font-size:26rpx; padding:40rpx 0; }
+.account-section-title { padding-bottom:12rpx; }
+.account-tip { margin:0 24rpx 14rpx; padding:16rpx 18rpx; border-radius:14rpx; background:#eff6ff; color:#64748b; font-size:22rpx; line-height:1.55; }
+.account-card { margin:0 24rpx 14rpx; padding:20rpx 22rpx; border:2rpx solid #e5e7eb; border-radius:18rpx; background:#fff; box-shadow:0 2rpx 10rpx rgba(15,23,42,.035); }
+.account-card__head,.account-card__result { display:flex; align-items:center; justify-content:space-between; gap:16rpx; }
+.account-card__title { color:#0f172a; font-size:27rpx; font-weight:650; }
+.account-card__state { flex:none; padding:5rpx 12rpx; border-radius:999rpx; background:#eff6ff; color:#2563eb; font-size:21rpx; }
+.account-card__state.is-pending { background:#fff7ed; color:#ea580c; }
+.account-card__state.is-settled { background:#f0fdf4; color:#16a34a; }
+.account-card__result { margin-top:15rpx; color:#475569; font-size:23rpx; }
+.account-card__result > text:first-child { flex:1; min-width:0; }
+.account-card__amount { flex:none; color:#1e293b; font-size:27rpx; font-weight:700; }
+.account-card__amount.is-income { color:#16a34a; }
+.account-card__amount.is-expense { color:#dc2626; }
+.account-card__meta { margin-top:11rpx; color:#64748b; font-size:22rpx; line-height:1.5; word-break:break-all; }
+.account-card__time { margin-top:11rpx; color:#94a3b8; font-size:21rpx; }
+.account-empty { margin:0 24rpx; padding:28rpx 0; border-radius:16rpx; background:#fff; }
+.account-more { display:flex; align-items:center; justify-content:center; gap:8rpx; margin:0 24rpx 20rpx; padding:14rpx; color:#2563eb; font-size:23rpx; }
 .bottom-actions { margin:32rpx; }
-.bottom-action-btn { width:100%; }
+.bottom-action-row { display:flex; gap:16rpx; }
+.bottom-action-btn { flex:1; min-width:0; }
+.listing-sync-card { margin:18rpx 0 14rpx; padding:16rpx 18rpx; border:2rpx solid #e2e8f0; border-radius:16rpx; background:#f8fafc; }
+.listing-sync-card--pending { border-color:#fed7aa; background:#fff7ed; }
+.listing-sync-card--processing { border-color:#bfdbfe; background:#eff6ff; }
+.listing-sync-card--done { border-color:#bbf7d0; background:#f0fdf4; }
+.listing-sync-card--failed { border-color:#fecaca; background:#fef2f2; }
+.listing-sync-card__head,.listing-sync-card__title { display:flex; align-items:center; gap:9rpx; }
+.listing-sync-card__head { justify-content:space-between; }
+.listing-sync-card__title { color:#334155; font-size:23rpx; font-weight:650; }
+.listing-sync-card__attempts { flex:none; color:#94a3b8; font-size:19rpx; }
+.listing-sync-card__desc,.listing-sync-card__error { display:block; margin-top:9rpx; font-size:21rpx; line-height:1.5; }
+.listing-sync-card__desc { color:#64748b; }
+.listing-sync-card__error { color:#b91c1c; word-break:break-all; }
+.return-disabled-reason { display:flex; align-items:flex-start; gap:8rpx; margin-top:14rpx; color:#94a3b8; font-size:22rpx; line-height:1.5; }
+.return-disabled-reason text { flex:1; }
 .error-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:520rpx; padding:40rpx; box-sizing:border-box; }
 .retry-btn { margin-top:24rpx; width:180rpx; }
 .loading-wrap { display:flex; justify-content:center; align-items:center; height:400rpx; }

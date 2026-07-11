@@ -60,6 +60,7 @@ class ErpPurchase extends BaseAdminController
             ['party_id', 0],
             ['m_no', ''],
             ['purchase_channel', ''],
+            ['purchase_channel_key', ''],
             ['purchaser_uid', 0],
             ['settle_method', ''],
             ['settle_mode', 'credit'],
@@ -74,7 +75,16 @@ class ErpPurchase extends BaseAdminController
             ['source_plugin', 'erp'],
             ['source_type', 'manual'],
             ['source_id', ''],
+            ['origin_plugin', ''],
+            ['origin_plugin_name', ''],
+            ['origin_type', ''],
+            ['origin_name', ''],
+            ['origin_id', ''],
+            ['origin_no', ''],
+            ['origin_event_id', ''],
+            ['event_id', ''],
             ['items', []],
+            ['request_id', ''],
         ]);
         return success(['id' => $this->service->create($params)]);
     }
@@ -84,8 +94,9 @@ class ErpPurchase extends BaseAdminController
         $params = $this->request->params([
             ['amount', 0],
             ['remark', ''],
+            ['request_id', ''],
         ]);
-        return success($this->service->adjustCost($item_id, (float)$params['amount'], (string)$params['remark']));
+        return success($this->service->adjustCost($item_id, (float)$params['amount'], (string)$params['remark'], true, (string)$params['request_id']));
     }
 
     public function cancel(int $id)

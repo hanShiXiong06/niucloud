@@ -44,4 +44,31 @@ class ErpConfig extends BaseAdminController
         ]);
         return success((new ErpConfigService())->saveSaleChannels((array)$params['channels']));
     }
+
+    public function saleChannelOptions()
+    {
+        return success((new ErpConfigService())->getSaleChannelOptions());
+    }
+
+    public function saveSaleChannelOptions()
+    {
+        $params = $this->request->params([['channels', []]]);
+        return success((new ErpConfigService())->saveSaleChannelOptions((array)$params['channels']));
+    }
+
+    public function financeCategories()
+    {
+        return success((new ErpConfigService())->getFinanceCategories());
+    }
+
+    public function businessSourceOptions()
+    {
+        return success((new ErpConfigService())->getBusinessSourceOptions());
+    }
+
+    public function saveFinanceCategories()
+    {
+        $params = $this->request->params([['categories', []]]);
+        return success((new ErpConfigService())->saveFinanceCategories((array)$params['categories']));
+    }
 }

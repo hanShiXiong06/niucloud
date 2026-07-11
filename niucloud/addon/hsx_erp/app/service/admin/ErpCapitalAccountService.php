@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\service\admin;
 
+use addon\hsx_erp\app\dict\FinanceDict;
 use addon\hsx_erp\app\model\ErpCapitalAccount;
 use addon\hsx_erp\app\model\ErpMoneyLedger;
 use core\base\BaseAdminService;
@@ -101,8 +102,17 @@ class ErpCapitalAccountService extends BaseAdminService
         if ($amount <= 0) {
             throw new CommonException('金额必须大于0');
         }
+        $categoryKey = trim((string)($data['category_key'] ?? ''));
+        $category = (new ErpConfigService())->findFinanceCategory($categoryKey);
+        $expectedDirection = $direction === 'in' ? 'income' : 'expense';
+        if (!$category || (string)($category['direction'] ?? '') !== $expectedDirection) {
+            throw new CommonException($direction === 'in' ? '请选择有效的收入类型' : '请选择有效的支出类型');
+        }
+        if ((int)($category['party_required'] ?? 0) === 1 && (int)($data['party_id'] ?? 0) <= 0) {
+            throw new CommonException('该收支类型必须选择往来主体');
+        }
         $ledgerId = 0;
-        Db::transaction(function () use ($accountId, $amount, $direction, $data, &$ledgerId) {
+        Db::transaction(function () use ($accountId, $amount, $direction, $category, $data, &$ledgerId) {
             $account = $this->findAccount($accountId);
             $delta = $direction === 'in' ? $amount : -$amount;
             $balanceAfter = round((float)$account->balance + $delta, 2);
@@ -114,10 +124,16 @@ class ErpCapitalAccountService extends BaseAdminService
                 'capital_account_id' => (int)$account->id,
                 'capital_account_name' => (string)$account->account_name,
                 'direction' => $direction,
+                'category_key' => (string)$category['key'],
+                'category_name' => (string)$category['name'],
+                'category_statement_group' => (string)($category['statement_group'] ?? ($direction === 'in' ? 'other_income' : 'other_expense')),
+                'category_source_plugin' => (string)($category['source_plugin'] ?? ''),
+                'category_source_key' => (string)($category['source_key'] ?? ''),
                 'amount' => $amount,
                 'party_id' => (int)($data['party_id'] ?? 0),
                 'party_name' => trim((string)($data['counterparty_name'] ?? '')),
                 'balance_after' => $balanceAfter,
+                'voucher_urls' => $data['voucher_urls'] ?? '',
                 'remark' => trim((string)($data['remark'] ?? '手工记账')),
             ]);
         });
@@ -135,7 +151,7 @@ class ErpCapitalAccountService extends BaseAdminService
         }
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
-            $query->whereLike('ledger_no|party_name|capital_account_name|remark', '%' . $kw . '%');
+            $query->whereLike('ledger_no|party_name|capital_account_name|category_name|remark', '%' . $kw . '%');
         }
         if (!empty($where['start_time'])) {
             $query->where('occurred_at', '>=', (int)$where['start_time']);
@@ -152,6 +168,12 @@ class ErpCapitalAccountService extends BaseAdminService
     public function typeMap(): array
     {
         return self::TYPE_MAP;
+    }
+
+    /** 兼容既有调用；实际字典由 FinanceDict 统一维护。 */
+    public static function bizTypeMap(): array
+    {
+        return FinanceDict::getBizTypeMap();
     }
 
     private function findAccount(int $id): ErpCapitalAccount

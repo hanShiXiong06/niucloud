@@ -53,7 +53,9 @@ class ErpFinance extends BaseAdminController
             ['amount', 0],
             ['capital_account_id', 0],
             ['confirmed_at', 0],
+            ['voucher_urls', ''],
             ['remark', ''],
+            ['request_id', ''],
         ]);
         return success(['id' => $this->service->confirmPayment($id, (float)$params['amount'], $params)]);
     }
@@ -62,9 +64,18 @@ class ErpFinance extends BaseAdminController
     {
         $params = $this->request->params([
             ['amount', 0],
+            ['payable_id', 0],
+            ['payable_ids', []],
+            ['source_type', ''],
+            ['source_id', 0],
+            ['purchase_order_id', 0],
+            ['batch_id', 0],
+            ['batch_no', ''],
             ['capital_account_id', 0],
             ['confirmed_at', 0],
+            ['voucher_urls', ''],
             ['remark', ''],
+            ['request_id', ''],
         ]);
         return success(['ids' => $this->service->confirmPartyPayment($party_id, (float)$params['amount'], $params)]);
     }
@@ -75,7 +86,9 @@ class ErpFinance extends BaseAdminController
             ['items', []],
             ['capital_account_id', 0],
             ['confirmed_at', 0],
+            ['voucher_urls', ''],
             ['remark', ''],
+            ['request_id', ''],
         ]);
         return success(['id' => $this->service->confirmPayableItemsPayment(
             $party_id,
@@ -96,7 +109,9 @@ class ErpFinance extends BaseAdminController
             ['items', []],
             ['capital_account_id', 0],
             ['confirmed_at', 0],
+            ['voucher_urls', ''],
             ['remark', ''],
+            ['request_id', ''],
         ]);
         return success(['id' => $this->service->confirmReceipt($id, (float)$params['amount'], $params)]);
     }
@@ -109,7 +124,9 @@ class ErpFinance extends BaseAdminController
             ['amount', 0],
             ['settle_diff', false],
             ['capital_account_id', 0],
+            ['voucher_urls', ''],
             ['remark', ''],
+            ['request_id', ''],
         ]);
         return success(['id' => $this->service->confirmOffset(
             (array)$params['payable_ids'],
@@ -151,13 +168,21 @@ class ErpFinance extends BaseAdminController
         return $this->request->params([
             ['keyword', ''],
             ['status', ''],
+            ['source_type', ''],
+            ['finance_type_key', ''],
+            ['business_source_key', ''],
+            ['source_plugin', ''],
+            ['channel_code', ''],
+            ['biz_scene', ''],
             ['party_id', 0],
             ['party_name', ''],
             ['purchase_order_id', 0],
             ['source_no', ''],
+            ['imei', ''],
             ['m_no', ''],
             ['contact_mobile', ''],
             ['salesman_uid', 0],
+            ['operator_uid', 0],
             ['salesman_name', ''],
             ['min_amount', ''],
             ['max_amount', ''],

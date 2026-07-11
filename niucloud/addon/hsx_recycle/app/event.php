@@ -41,8 +41,14 @@ return [
         // 承接 ERP 设备成本调整事件，在回收设备上留痕(未打款时提醒是否同步回收价)
         'ErpAssetCostAdjusted' => [ 'addon\hsx_recycle\app\listener\ErpCostAdjustedListener' ],
 
+        // ERP 动态业务来源：只有当前站点套餐包含回收插件时才贡献“回收插件采购”。
+        'HsxErpBusinessSourceOptions' => [ 'addon\hsx_recycle\app\listener\erp\ErpBusinessSourceOptionsListener' ],
+
         // 下游流转回流：订阅 ERP/数据中台事件，把设备下游生命周期(已入库/转中台/已定价)镜像回回收设备
-        'ErpDomainEvent' => [ 'addon\hsx_recycle\app\listener\downstream\ErpAssetDownstreamListener' ],
+        'ErpDomainEvent' => [
+            'addon\hsx_recycle\app\listener\downstream\ErpAssetDownstreamListener',
+            'addon\hsx_recycle\app\listener\downstream\ErpSettlementCompletedListener',
+        ],
         'DeviceAssetPriceCompleted' => [ 'addon\hsx_recycle\app\listener\downstream\DeviceAssetPricedListener' ],
 
         // 代卖转回收：ERP 把代卖设备买断为自有时，回收侧把该设备由代卖标记为回收（成本转移到我方）

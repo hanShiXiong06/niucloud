@@ -11,6 +11,8 @@ use addon\hsx_erp\app\model\ErpPurchaseOrder;
 use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
 use addon\hsx_erp\app\model\ErpPurchaseReturnItem;
 use addon\hsx_erp\app\model\ErpReceivable;
+use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -26,6 +28,35 @@ use think\facade\Db;
  */
 class ErpPurchaseReturnService extends BaseAdminService
 {
+    /** 业务端按供货方选设备，系统按原采购单自动拆单。 */
+    public function createBatch(array $data): array
+    {
+        $items = (array)($data['items'] ?? []);
+        if ($items === []) {
+            throw new CommonException('请至少选择一台退货设备');
+        }
+        $groups = [];
+        foreach ($items as $item) {
+            $orderId = (int)($item['purchase_order_id'] ?? 0);
+            if ($orderId <= 0) {
+                throw new CommonException('退货设备缺少原采购关系，请刷新后重试');
+            }
+            $groups[$orderId][] = $item;
+        }
+        $baseRequestId = ErpIdempotency::normalize($data['request_id'] ?? '');
+        $ids = [];
+        Db::transaction(function () use ($data, $groups, $baseRequestId, &$ids) {
+            foreach ($groups as $orderId => $groupItems) {
+                $groupData = $data;
+                $groupData['purchase_order_id'] = (int)$orderId;
+                $groupData['items'] = $groupItems;
+                $groupData['request_id'] = ErpIdempotency::child($baseRequestId, 'po-' . $orderId);
+                $ids[] = $this->create($groupData);
+            }
+        });
+        return $ids;
+    }
+
     // ─── 公开接口 ────────────────────────────────────────────────────────────
 
     /**
@@ -34,6 +65,12 @@ class ErpPurchaseReturnService extends BaseAdminService
      */
     public function create(array $data): int
     {
+        $requestId = ErpIdempotency::normalize($data['request_id'] ?? '');
+        $existingId = $this->existingReturnId($requestId);
+        if ($existingId > 0) {
+            return $existingId;
+        }
+        $data['request_id'] = $requestId !== '' ? $requestId : null;
         $purchaseOrderId = (int)($data['purchase_order_id'] ?? 0);
         if ($purchaseOrderId <= 0) {
             throw new CommonException('请选择原采购单');
@@ -44,12 +81,14 @@ class ErpPurchaseReturnService extends BaseAdminService
         }
 
         $returnId = 0;
-        Db::transaction(function () use ($data, $purchaseOrderId, $items, &$returnId) {
+        try {
+            Db::transaction(function () use ($data, $purchaseOrderId, $items, &$returnId) {
             $now  = time();
             $order = $this->findPurchaseOrder($purchaseOrderId);
 
             $totalAmount = 0.0;
             $itemsData   = [];
+            $requiresRefund = false;
             foreach ($items as $item) {
                 $assetId = (int)($item['asset_id'] ?? 0);
                 if ($assetId <= 0) {
@@ -62,27 +101,47 @@ class ErpPurchaseReturnService extends BaseAdminService
                 // 禁止重复建待确认退货单
                 $this->assertNoPendingReturn($assetId);
 
-                $returnCost = round((float)($item['return_cost'] ?? (float)$asset->total_cost), 2);
-                if ($returnCost < 0) {
-                    throw new CommonException('退货成本不能小于0');
-                }
-
-                // 快照已付金额，供确认时决定分支
                 $payable    = $this->findAssetPayable($assetId);
+                $supplierAmount = $payable
+                    ? round((float)$payable->amount, 2)
+                    : round((float)$asset->purchase_cost, 2);
                 $paidAmount = $payable ? round((float)$payable->settled_amount, 2) : 0.0;
+                // 未形成付款/折账事实时，不存在“供应商退多少钱”的问题，整台直接取消。
+                $returnCost = $paidAmount <= 0.0001
+                    ? $supplierAmount
+                    : round((float)($item['return_cost'] ?? $supplierAmount), 2);
+                if ($returnCost <= 0) {
+                    throw new CommonException('供应商确认退回金额必须大于0');
+                }
+                if ($returnCost > $supplierAmount + 0.0001) {
+                    throw new CommonException(sprintf('供应商确认退回金额不能超过采购结算本金 ¥%.2f；额外补偿请走财务调账', $supplierAmount));
+                }
+                $returnPolicy = ErpPurchaseReturnPolicy::assess($asset->toArray(), $supplierAmount, $paidAmount, $returnCost);
+                if (!$returnPolicy['returnable']) {
+                    throw new CommonException((string)$returnPolicy['block_reason']);
+                }
+                if ($returnPolicy['requires_refund']) {
+                    $requiresRefund = true;
+                }
 
                 $totalAmount  = round($totalAmount + $returnCost, 2);
                 $itemsData[] = [
                     'asset'       => $asset,
                     'return_cost' => $returnCost,
                     'paid_amount' => $paidAmount,
+                    'policy' => $returnPolicy,
                     'reason'      => trim((string)($item['reason'] ?? '')),
                 ];
             }
 
             $returnNo = ErpLedgerService::makeNo('PR');
+            $requestedRefundMode = trim((string)($data['refund_mode'] ?? 'cash'));
+            $refundMode = $requiresRefund && in_array($requestedRefundMode, ['cash', 'offset'], true)
+                ? $requestedRefundMode
+                : ($requiresRefund ? 'cash' : 'none');
             $return   = ErpPurchaseReturnOrder::create([
                 'site_id'            => $this->site_id,
+                'request_id'         => $data['request_id'],
                 'return_no'          => $returnNo,
                 'purchase_order_id'  => $purchaseOrderId,
                 'purchase_no'        => (string)$order->purchase_no,
@@ -93,7 +152,7 @@ class ErpPurchaseReturnService extends BaseAdminService
                 'total_amount'       => $totalAmount,
                 'settled_amount'     => 0,
                 'status'             => 'pending',
-                'refund_mode'        => trim((string)($data['refund_mode'] ?? 'cash')),
+                'refund_mode'        => $refundMode,
                 'capital_account_id' => (int)($data['capital_account_id'] ?? 0),
                 'remark'             => trim((string)($data['remark'] ?? '')),
                 'occurred_at'        => $now,
@@ -115,13 +174,26 @@ class ErpPurchaseReturnService extends BaseAdminService
                     'purchase_item_id' => (int)$asset->purchase_item_id,
                     'return_cost'      => $row['return_cost'],
                     'paid_amount'      => $row['paid_amount'],
+                    'supplier_amount' => $row['policy']['supplier_amount'],
+                    'unpaid_offset_amount' => $row['policy']['offset_amount'],
+                    'refund_receivable_amount' => $row['policy']['refund_amount'],
+                    'retained_payable_amount' => $row['policy']['retained_payable_amount'],
+                    'internal_cost' => round((float)$row['policy']['refurbish_cost'] + abs((float)$row['policy']['unclassified_cost']), 2),
+                    'policy_json' => json_encode($row['policy'], JSON_UNESCAPED_UNICODE),
                     'reason'           => $row['reason'],
                     'create_at'        => $now,
                 ]);
             }
 
             $this->completeReturn($return, ['remark' => trim((string)($data['remark'] ?? ''))], $now);
-        });
+            });
+        } catch (\Throwable $e) {
+            $existingId = $this->existingReturnId($requestId);
+            if ($existingId > 0) {
+                return $existingId;
+            }
+            throw $e;
+        }
 
         return $returnId;
     }
@@ -133,7 +205,7 @@ class ErpPurchaseReturnService extends BaseAdminService
     {
         Db::transaction(function () use ($returnId, $data) {
             $now    = time();
-            $return = $this->findReturn($returnId);
+            $return = $this->findReturn($returnId, true);
 
             if ((string)$return->status !== 'pending') {
                 throw new CommonException('只有待确认的退货单可以确认');
@@ -172,7 +244,7 @@ class ErpPurchaseReturnService extends BaseAdminService
             $asset = ErpAsset::where([
                 ['site_id', '=', $this->site_id],
                 ['id',      '=', (int)$item->asset_id],
-            ])->findOrEmpty();
+            ])->lock(true)->findOrEmpty();
 
             if ($asset->isEmpty()) {
                 throw new CommonException('退货设备不存在，asset_id=' . $item->asset_id);
@@ -182,24 +254,28 @@ class ErpPurchaseReturnService extends BaseAdminService
             }
 
             $payable       = $this->findAssetPayable((int)$asset->id);
-            $payableAmount = $payable ? round((float)$payable->amount, 2) : 0.0;
+            $payableAmount = $payable ? round((float)$payable->amount, 2) : round((float)$asset->purchase_cost, 2);
             $paidAmount    = $payable ? round((float)$payable->settled_amount, 2) : 0.0;
 
-            // ── 三分支退款逻辑 ─────────────────────────────────────────
-            if ($paidAmount <= 0) {
-                // 分支①：全部未付 → 直接作废应付，无现金流
-                $this->voidPayable($payable);
-
-            } elseif ($paidAmount >= $payableAmount - 0.0001) {
-                // 分支②：全部已付 → 生成"应收退款"（供应商欠我们）
-                $receivableAmount = round($receivableAmount + $paidAmount, 2);
-
-            } else {
-                // 分支③：部分付款 → 作废未付部分 + 生成已付部分的应收
-                $unpaid = round($payableAmount - $paidAmount, 2);
-                $this->partialVoidPayable($payable, $unpaid);
-                $receivableAmount = round($receivableAmount + $paidAmount, 2);
+            $returnFlow = ErpPurchaseReturnPolicy::assess(
+                $asset->toArray(),
+                $payableAmount,
+                $paidAmount,
+                (float)$item->return_cost
+            );
+            if (!$returnFlow['returnable']) {
+                throw new CommonException((string)$returnFlow['block_reason']);
             }
+            $this->reducePayableForReturn($payable, (float)$returnFlow['offset_amount']);
+            $receivableAmount = round($receivableAmount + (float)$returnFlow['refund_amount'], 2);
+            $item->save([
+                'supplier_amount' => $returnFlow['supplier_amount'],
+                'unpaid_offset_amount' => $returnFlow['offset_amount'],
+                'refund_receivable_amount' => $returnFlow['refund_amount'],
+                'retained_payable_amount' => $returnFlow['retained_payable_amount'],
+                'internal_cost' => round((float)$returnFlow['refurbish_cost'] + abs((float)$returnFlow['unclassified_cost']), 2),
+                'policy_json' => json_encode($returnFlow, JSON_UNESCAPED_UNICODE),
+            ]);
 
             // ── 资产状态 → 已退回 ─────────────────────────────────────
             $beforeStatus = (string)$asset->status;
@@ -235,7 +311,8 @@ class ErpPurchaseReturnService extends BaseAdminService
                 'source_id'            => $returnId,
                 'source_no'            => (string)$return->return_no,
                 'occurred_at'          => $now,
-                'remark'               => $remark,
+                'remark'               => $remark . sprintf('；供应商退回 ¥%.2f', (float)$item->return_cost),
+                'extra'                => $returnFlow,
             ]);
 
             // ── 账目流水（成本减少）────────────────────────────────────
@@ -251,6 +328,21 @@ class ErpPurchaseReturnService extends BaseAdminService
                 'source_no'   => (string)$return->return_no,
                 'remark'      => $remark,
             ]);
+            $returnLoss = max(0, round($payableAmount - (float)$item->return_cost, 2));
+            if ($returnLoss > 0.0001) {
+                $ledger->account([
+                    'biz_type' => 'purchase_return_loss',
+                    'direction' => 'increase',
+                    'amount' => $returnLoss,
+                    'party_id' => (int)$return->party_id,
+                    'party_name' => (string)$return->party_name,
+                    'asset_id' => (int)$asset->id,
+                    'source_type' => 'purchase_return',
+                    'source_id' => $returnId,
+                    'source_no' => (string)$return->return_no,
+                    'remark' => sprintf('供应商折价退货损失：结算本金 ¥%.2f，确认退回 ¥%.2f', $payableAmount, (float)$item->return_cost),
+                ]);
+            }
         }
 
         if ($receivableAmount > 0) {
@@ -273,15 +365,17 @@ class ErpPurchaseReturnService extends BaseAdminService
      */
     public function cancel(int $returnId, string $remark = ''): bool
     {
-        $return = $this->findReturn($returnId);
-        if ((string)$return->status !== 'pending') {
-            throw new CommonException('只有待确认的退货单可以撤销');
-        }
-        $return->save([
-            'status'    => 'cancelled',
-            'remark'    => $remark !== '' ? ((string)$return->remark . ' / ' . $remark) : (string)$return->remark,
-            'update_at' => time(),
-        ]);
+        Db::transaction(function () use ($returnId, $remark) {
+            $return = $this->findReturn($returnId, true);
+            if ((string)$return->status !== 'pending') {
+                throw new CommonException('只有待确认的退货单可以撤销');
+            }
+            $return->save([
+                'status'    => 'cancelled',
+                'remark'    => $remark !== '' ? ((string)$return->remark . ' / ' . $remark) : (string)$return->remark,
+                'update_at' => time(),
+            ]);
+        });
         return true;
     }
 
@@ -309,10 +403,28 @@ class ErpPurchaseReturnService extends BaseAdminService
             $query->where('occurred_at', '<=', (int)$where['end_at']);
         }
 
-        return $query->order('id desc')->paginate([
+        $result = $query->order('id desc')->paginate([
             'list_rows' => (int)($where['limit'] ?? 15),
             'page'      => (int)($where['page'] ?? 1),
         ])->toArray();
+        $returnIds = array_values(array_filter(array_map(
+            static fn(array $row): int => (int)($row['id'] ?? 0),
+            (array)($result['data'] ?? [])
+        )));
+        $receivables = [];
+        if (!empty($returnIds)) {
+            foreach (ErpReceivable::where([
+                ['site_id', '=', $this->site_id],
+                ['source_type', '=', 'purchase_return'],
+            ])->whereIn('source_id', $returnIds)->field('source_id,amount,settled_amount,status')->select()->toArray() as $row) {
+                $receivables[(int)$row['source_id']] = $row;
+            }
+        }
+        foreach ($result['data'] as &$row) {
+            $row = $this->appendProcessStatus($row, $receivables[(int)$row['id']] ?? null);
+        }
+        unset($row);
+        return $result;
     }
 
     /**
@@ -325,17 +437,55 @@ class ErpPurchaseReturnService extends BaseAdminService
             ['site_id',   '=', $this->site_id],
             ['return_id', '=', $returnId],
         ])->order('id asc')->select()->toArray();
+        $receivable = ErpReceivable::where([
+            ['site_id', '=', $this->site_id],
+            ['source_type', '=', 'purchase_return'],
+            ['source_id', '=', $returnId],
+        ])->field('id,receivable_no,amount,settled_amount,status')->findOrEmpty();
+        $return['refund_receivable'] = $receivable->isEmpty() ? null : $receivable->toArray();
+        $return = $this->appendProcessStatus($return, $return['refund_receivable']);
+        return $return;
+    }
+
+    /** 面向业务人员只暴露一个主状态：退机已确认后，由退款进度接管状态表达。 */
+    private function appendProcessStatus(array $return, ?array $receivable): array
+    {
+        $status = (string)($return['status'] ?? '');
+        if ($status === 'pending') {
+            $process = ['value' => 'legacy_pending', 'label' => '旧单待确认', 'type' => 'warning'];
+        } elseif ($status === 'cancelled') {
+            $process = ['value' => 'cancelled', 'label' => '已撤销', 'type' => 'info'];
+        } elseif ($receivable === null) {
+            $process = ['value' => 'returned', 'label' => '退货完成', 'type' => 'success'];
+        } else {
+            $amount = round((float)($receivable['amount'] ?? 0), 2);
+            $settled = round((float)($receivable['settled_amount'] ?? 0), 2);
+            if ($amount > 0 && $settled + 0.0001 >= $amount) {
+                $process = ['value' => 'refunded', 'label' => '已退款', 'type' => 'success'];
+            } elseif ($settled > 0.0001) {
+                $process = ['value' => 'partial_refund', 'label' => '部分退款', 'type' => 'warning'];
+            } else {
+                $process = ['value' => 'awaiting_refund', 'label' => '待退款', 'type' => 'warning'];
+            }
+        }
+        $return['process_status'] = $process['value'];
+        $return['process_status_label'] = $process['label'];
+        $return['process_status_type'] = $process['type'];
         return $return;
     }
 
     // ─── 私有辅助 ────────────────────────────────────────────────────────────
 
-    private function findReturn(int $id): ErpPurchaseReturnOrder
+    private function findReturn(int $id, bool $forUpdate = false): ErpPurchaseReturnOrder
     {
-        $row = ErpPurchaseReturnOrder::where([
+        $query = ErpPurchaseReturnOrder::where([
             ['site_id', '=', $this->site_id],
             ['id',      '=', $id],
-        ])->findOrEmpty();
+        ]);
+        if ($forUpdate) {
+            $query->lock(true);
+        }
+        $row = $query->findOrEmpty();
         if ($row->isEmpty()) {
             throw new CommonException('采购退货单不存在');
         }
@@ -360,7 +510,7 @@ class ErpPurchaseReturnService extends BaseAdminService
             ['site_id',           '=', $this->site_id],
             ['id',                '=', $assetId],
             ['purchase_order_id', '=', $purchaseOrderId],
-        ])->findOrEmpty();
+        ])->lock(true)->findOrEmpty();
         if ($asset->isEmpty()) {
             throw new CommonException('设备不存在或不属于该采购单，asset_id=' . $assetId);
         }
@@ -374,7 +524,7 @@ class ErpPurchaseReturnService extends BaseAdminService
             ['site_id',      '=', $this->site_id],
             ['source_type',  '=', 'purchase_asset'],
             ['source_id',    '=', $assetId],
-        ])->findOrEmpty();
+        ])->lock(true)->findOrEmpty();
         return $payable->isEmpty() ? null : $payable;
     }
 
@@ -394,28 +544,26 @@ class ErpPurchaseReturnService extends BaseAdminService
         }
     }
 
-    /** 分支①：全部未付 → 作废应付 */
-    private function voidPayable(?ErpPayable $payable): void
+    /** 退货金额优先冲销未付款；不得修改已经形成的付款事实。 */
+    private function reducePayableForReturn(?ErpPayable $payable, float $offsetAmount): void
     {
-        if ($payable === null) {
+        $offsetAmount = max(0, round($offsetAmount, 2));
+        if ($payable === null || $offsetAmount <= 0.0001) {
             return;
         }
-        if ((float)$payable->settled_amount > 0.0001) {
-            throw new CommonException('应付已有付款记录，不能直接作废，请走部分付款分支');
+        $amount = round((float)$payable->amount, 2);
+        $settled = round((float)$payable->settled_amount, 2);
+        $remaining = max(0, round($amount - $settled, 2));
+        if ($offsetAmount > $remaining + 0.0001) {
+            throw new CommonException('退货冲销金额超过剩余应付，请刷新后重试');
         }
+        $newAmount = max($settled, round($amount - $offsetAmount, 2));
+        $status = $newAmount <= 0.0001 && $settled <= 0.0001
+            ? ErpDict::STATUS_VOID
+            : ErpDict::financeStatus($newAmount, $settled);
         $payable->save([
-            'status'    => ErpDict::STATUS_VOID,
-            'update_at' => time(),
-        ]);
-    }
-
-    /** 分支③辅助：减少应付金额（作废未付部分） */
-    private function partialVoidPayable(ErpPayable $payable, float $unpaidAmount): void
-    {
-        $newAmount = max(0, round((float)$payable->amount - $unpaidAmount, 2));
-        $payable->save([
-            'amount'    => $newAmount,
-            'status'    => ErpDict::financeStatus($newAmount, (float)$payable->settled_amount),
+            'amount' => $newAmount,
+            'status' => $status,
             'update_at' => time(),
         ]);
     }
@@ -427,7 +575,19 @@ class ErpPurchaseReturnService extends BaseAdminService
         string                 $remark,
         int                    $now
     ): void {
-        ErpReceivable::create([
+        $purchase = ErpPurchaseOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['id', '=', (int)$return->purchase_order_id],
+        ])->field('purchase_channel,origin_plugin,origin_plugin_name,origin_type,origin_name,origin_id,origin_no')->find();
+        $sourceService = new ErpFinanceSourceService();
+        $source = $sourceService->purchaseReturn([
+            'origin_no' => (string)$return->return_no,
+            'channel_code' => 'purchase_return',
+            'channel_name' => (string)($purchase?->purchase_channel ?? ''),
+            'business_reason' => '采购退货已完成，已付款部分 ¥' . number_format($amount, 2, '.', '')
+                . ' 形成供货商退款应收，财务需确认实际到账。',
+        ]);
+        ErpReceivable::create(array_merge([
             'site_id'        => $this->site_id,
             'receivable_no'  => ErpLedgerService::makeNo('AR'),
             'party_id'       => (int)$return->party_id,
@@ -442,7 +602,7 @@ class ErpPurchaseReturnService extends BaseAdminService
             'remark'         => $remark ?: '采购退货应收',
             'create_at'      => $now,
             'update_at'      => $now,
-        ]);
+        ], $sourceService->persistable($source)));
     }
 
     /**
@@ -507,5 +667,17 @@ class ErpPurchaseReturnService extends BaseAdminService
             'finance_status' => $financeStatus,
             'update_at'      => time(),
         ]);
+    }
+
+    private function existingReturnId(string $requestId): int
+    {
+        if ($requestId === '') {
+            return 0;
+        }
+        $return = ErpPurchaseReturnOrder::where([
+            ['site_id', '=', $this->site_id],
+            ['request_id', '=', $requestId],
+        ])->findOrEmpty();
+        return $return->isEmpty() ? 0 : (int)$return->id;
     }
 }

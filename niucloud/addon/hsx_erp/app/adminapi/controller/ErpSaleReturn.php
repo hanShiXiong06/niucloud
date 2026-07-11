@@ -23,6 +23,8 @@ class ErpSaleReturn extends BaseAdminController
             ['keyword', ''],
             ['status', ''],
             ['party_id', 0],
+            ['imei', ''],
+            ['operator_id', 0],
             ['start_at', 0],
             ['end_at', 0],
             ['page', 1],
@@ -46,14 +48,40 @@ class ErpSaleReturn extends BaseAdminController
             ['return_to_location_id', 0],
             ['remark', ''],
             ['items', []],
+            ['request_id', ''],
         ]);
-        return success(['id' => $this->service->create($params)]);
+        // 即使来自单张销售单，也按设备原仓位拆单，禁止前端指定统一回库位置。
+        $ids = $this->service->createBatch($params);
+        return success(['id' => (int)($ids[0] ?? 0), 'ids' => $ids]);
+    }
+
+    public function createAndConfirm()
+    {
+        $params = $this->request->params([
+            ['sale_order_id', 0],
+            ['refund_mode', 'payable'],
+            ['capital_account_id', 0],
+            ['voucher_urls', ''],
+            ['remark', ''],
+            ['items', []],
+            ['request_id', ''],
+        ]);
+        $ids = $this->service->createAndConfirm($params);
+        return success(['id' => (int)($ids[0] ?? 0), 'ids' => $ids]);
+    }
+
+    public function compensate()
+    {
+        $params=$this->request->params([['party_id',0],['refund_mode','payable'],['capital_account_id',0],['voucher_urls',''],['remark',''],['items',[]],['request_id','']]);
+        return success(['id'=>$this->service->createCompensation($params)]);
     }
 
     public function confirm(int $id)
     {
         $params = $this->request->params([
             ['remark', ''],
+            ['capital_account_id', 0],
+            ['voucher_urls', ''],
         ]);
         return success($this->service->confirm($id, $params));
     }

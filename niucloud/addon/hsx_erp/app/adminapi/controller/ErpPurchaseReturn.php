@@ -44,8 +44,26 @@ class ErpPurchaseReturn extends BaseAdminController
             ['capital_account_id', 0],
             ['remark', ''],
             ['items', []],
+            ['request_id', ''],
         ]);
-        return success(['id' => $this->service->create($params)]);
+        $ids = (int)$params['purchase_order_id'] > 0
+            ? [$this->service->create($params)]
+            : $this->service->createBatch($params);
+        $id = (int)($ids[0] ?? 0);
+        $result = $this->service->info($id);
+        $returnNos = [];
+        foreach ($ids as $returnId) {
+            $returnInfo = $this->service->info((int)$returnId);
+            $returnNos[] = (string)($returnInfo['return_no'] ?? '');
+        }
+        return success([
+            'id' => $id,
+            'ids' => $ids,
+            'return_nos' => array_values(array_filter($returnNos)),
+            'return_no' => (string)($result['return_no'] ?? ''),
+            'refund_mode' => (string)($result['refund_mode'] ?? 'none'),
+            'refund_receivable' => $result['refund_receivable'] ?? null,
+        ]);
     }
 
     public function confirm(int $id)

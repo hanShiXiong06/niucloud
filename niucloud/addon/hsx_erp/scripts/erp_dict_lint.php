@@ -62,7 +62,7 @@ function writtenValues(string $appDir, string $field): array
 $checks = [
     'action'      => [$root . '/app/dict/ErpDict.php', 'function getLedgerActionMap'],
     'cost_type'   => [$root . '/app/dict/ErpDict.php', 'function getCostTypeMap'],
-    'biz_type'    => [$root . '/app/service/admin/ErpCapitalAccountService.php', 'function bizTypeMap'],
+    'biz_type'    => [$root . '/app/dict/FinanceDict.php', 'function getBizTypeMap'],
     'source_type' => [$root . '/app/dict/FinanceDict.php', 'function getSourceTypeMap'],
 ];
 

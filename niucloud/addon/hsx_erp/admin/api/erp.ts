@@ -1,5 +1,33 @@
 import request from '@/utils/request'
 
+export function getErpOperatingFinanceList(params: Record<string, any> = {}) {
+    return request.get('erp/operating_finance/lists', { params })
+}
+
+export function createErpOperatingFinance(data: Record<string, any>) {
+    return request.post('erp/operating_finance/create', data)
+}
+
+function withErpRequestId(data: Record<string, any>, prefix: string) {
+    const current = String(data?.request_id ?? '').trim()
+    if (current) return data
+    return {
+        ...data,
+        request_id: `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 12)}`
+    }
+}
+
+export function getErpDicts() {
+    return request.get('erp/dicts')
+}
+
+export function getErpDashboard(params: Record<string, any> = {}) {
+    return request.get('erp/dashboard', { params })
+}
+export function getErpKpiDashboard(params: Record<string, any> = {}) { return request.get('erp/kpi/dashboard', { params }) }
+export function getErpKpiRules() { return request.get('erp/kpi/rules') }
+export function saveErpKpiRules(rules: any[]) { return request.post('erp/kpi/rules', { rules }) }
+
 export function getErpPurchaseList(params: Record<string, any>) {
     return request.get('erp/purchase/lists', { params })
 }
@@ -9,7 +37,7 @@ export function getErpPurchaseInfo(id: number) {
 }
 
 export function createErpPurchase(data: Record<string, any>) {
-    return request.post('erp/purchase/create', data)
+    return request.post('erp/purchase/create', withErpRequestId(data, 'purchase'))
 }
 
 export function cancelErpPurchase(id: number, data: Record<string, any>) {
@@ -17,7 +45,7 @@ export function cancelErpPurchase(id: number, data: Record<string, any>) {
 }
 
 export function adjustErpPurchaseCost(itemId: number, data: Record<string, any>) {
-    return request.post(`erp/purchase/item/${itemId}/adjust_cost`, data)
+    return request.post(`erp/purchase/item/${itemId}/adjust_cost`, withErpRequestId(data, 'cost-adjust'))
 }
 
 export function getErpStaffOptions(params: Record<string, any> = {}) {
@@ -74,15 +102,15 @@ export function getErpPayableList(params: Record<string, any>) {
 }
 
 export function confirmErpPayment(id: number, data: Record<string, any>) {
-    return request.post(`erp/finance/payable/${id}/confirm_payment`, data)
+    return request.post(`erp/finance/payable/${id}/confirm_payment`, withErpRequestId(data, 'payment'))
 }
 
 export function confirmErpPartyPayment(partyId: number, data: Record<string, any>) {
-    return request.post(`erp/finance/payable/party/${partyId}/confirm_payment`, data)
+    return request.post(`erp/finance/payable/party/${partyId}/confirm_payment`, withErpRequestId(data, 'party-payment'))
 }
 
 export function confirmErpPayableItemsPayment(partyId: number, data: Record<string, any>) {
-    return request.post(`erp/finance/payable/party/${partyId}/confirm_items_payment`, data)
+    return request.post(`erp/finance/payable/party/${partyId}/confirm_items_payment`, withErpRequestId(data, 'items-payment'))
 }
 
 export function getErpPayablePartyItems(partyId: number, params: Record<string, any>) {
@@ -104,6 +132,7 @@ export function getErpSaleStock(params: Record<string, any>) {
 export function getErpStockList(params: Record<string, any>) {
     return request.get('erp/stock/lists', { params })
 }
+export function getErpSerialTraceList(params: Record<string, any>) { return request.get('erp/stock/serial_trace', { params }) }
 
 export function getErpStockLedger(params: Record<string, any>) {
     return request.get('erp/stock/ledger', { params })
@@ -113,8 +142,16 @@ export function getErpStockInfo(id: number) {
     return request.get(`erp/stock/${id}`)
 }
 
+export function adjustErpStockCost(id: number, data: Record<string, any>) {
+    return request.post(`erp/stock/${id}/adjust_cost`, withErpRequestId(data, 'stock-cost'))
+}
+
 export function updateErpStockFlow(id: number, data: Record<string, any>) {
     return request.post(`erp/stock/${id}/flow`, data)
+}
+
+export function syncErpStockListing(id: number) {
+    return request.post(`erp/stock/${id}/sync_listing`)
 }
 
 export function getErpSaleList(params: Record<string, any>) {
@@ -126,7 +163,7 @@ export function getErpSaleInfo(id: number) {
 }
 
 export function createErpSale(data: Record<string, any>) {
-    return request.post('erp/sale/create', data)
+    return request.post('erp/sale/create', withErpRequestId(data, 'sale'))
 }
 
 export function cancelErpSale(id: number, data: Record<string, any>) {
@@ -150,11 +187,11 @@ export function getErpReceivableItems(id: number) {
 }
 
 export function confirmErpReceipt(id: number, data: Record<string, any>) {
-    return request.post(`erp/finance/receivable/${id}/confirm_receipt`, data)
+    return request.post(`erp/finance/receivable/${id}/confirm_receipt`, withErpRequestId(data, 'receipt'))
 }
 
 export function confirmErpOffset(data: Record<string, any>) {
-    return request.post('erp/finance/offset', data)
+    return request.post('erp/finance/offset', withErpRequestId(data, 'offset'))
 }
 
 export function getErpSettlementList(params: Record<string, any>) {
@@ -171,7 +208,7 @@ export function getErpPurchaseReturnInfo(id: number) {
 }
 
 export function createErpPurchaseReturn(data: Record<string, any>) {
-    return request.post('erp/purchase/return/create', data)
+    return request.post('erp/purchase/return/create', withErpRequestId(data, 'purchase-return'))
 }
 
 export function confirmErpPurchaseReturn(id: number, data: Record<string, any> = {}) {
@@ -192,8 +229,9 @@ export function getErpSaleReturnInfo(id: number) {
 }
 
 export function createErpSaleReturn(data: Record<string, any>) {
-    return request.post('erp/sale/return/create', data)
+    return request.post('erp/sale/return/create', withErpRequestId(data, 'sale-return'))
 }
+export function createErpSaleCompensation(data: Record<string, any>) { return request.post('erp/sale/return/compensate', withErpRequestId(data, 'sale-compensation')) }
 
 export function confirmErpSaleReturn(id: number, data: Record<string, any> = {}) {
     return request.post(`erp/sale/return/${id}/confirm`, data)

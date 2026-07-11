@@ -15,3 +15,4 @@ export function getErpMemberOptions(params: Record<string, any> = {}) {
 export function resolveErpContact(data: Record<string, any>) {
     return request.post('erp/counterparty/resolve_contact', data)
 }
+export function quickCreateErpParty(data: Record<string, any>) { return request.post('erp/counterparty/quick_party', data) }

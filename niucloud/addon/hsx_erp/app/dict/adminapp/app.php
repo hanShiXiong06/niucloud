@@ -56,6 +56,15 @@ return [
         'icon' => '/addon/hsx_erp/site-app/icon_07.png'
     ],
     [
+        'name' => '经营收支',
+        'key' => 'hsx_erp_operating_finance',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_operating_finance',
+        'sort' => 14,
+        'page' => '/addon/hsx_erp/pages/operating_finance/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_06.png'
+    ],
+    [
         'name' => '采购退货',
         'key' => 'hsx_erp_purchase_return',
         'group' => 'hsx_erp',
@@ -81,5 +90,15 @@ return [
         'sort' => 17,
         'page' => '/addon/hsx_erp/pages/cost_adjust/list',
         'icon' => '/addon/hsx_erp/site-app/icon_08.png'
-    ]
+    ],
+    // site-uniapp/src/addon/hsx_erp/pages/serial_trace/list.vue
+     [
+        'name' => '串号追踪',
+        'key' => 'hsx_erp_serial_trace',
+        'group' => 'hsx_erp',
+        'menu_key' => '',
+        'sort' => 18,
+        'page' => '/addon/hsx_erp/pages/serial_trace/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_08.png'
+    ],
 ];

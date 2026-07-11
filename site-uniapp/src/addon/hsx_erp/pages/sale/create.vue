@@ -1,6 +1,6 @@
 <template>
     <view class="erp-page">
-        <RecyclePageHeader title="销售出库" />
+        <ErpPageHeader title="销售出库" />
         <scroll-view scroll-y style="height:calc(100vh - 200rpx)">
             <view class="form-wrap">
 
@@ -16,13 +16,16 @@
                         </view>
                     </view>
                     <view class="form-row" @click="showChannelPicker = true">
-                        <text class="form-label">销售渠道</text>
+                        <text class="form-label required">销售渠道</text>
                         <view class="form-input">
                             <text :class="form.sale_channel ? 'input-text' : 'input-placeholder'">
-                                {{ form.sale_channel || '点击选择或维护渠道' }}
+                                {{ form.sale_channel || '点击选择销售渠道' }}
                             </text>
                             <text class="input-arrow">›</text>
                         </view>
+                    </view>
+                    <view v-if="form.channel_source_plugin" class="channel-source-tip">
+                        渠道来源：{{ form.channel_source_plugin === 'hsx_erp' ? 'ERP' : '已安装插件' }}
                     </view>
                     <view class="form-row">
                         <text class="form-label">备注</text>
@@ -52,7 +55,7 @@
                             <u-input
                                 v-model="asset._sale_price"
                                 type="number"
-                                :placeholder="'建议 ¥' + money(asset.retail_price || asset.estimate_sale_price || asset.total_cost)"
+                                :placeholder="'建议 ¥' + money(suggestedSalePrice(asset))"
                                 :customStyle="inputStyle"
                             />
                         </view>
@@ -80,13 +83,14 @@
                     label-cash="本次收款"
                     label-credit="全部挂账"
                 />
+                <ErpVoucherUploader v-if="form.settle_mode === 'cash'" v-model="form.voucher_urls" title="收款凭证" @uploading="voucherUploading = $event" />
 
             </view>
         </scroll-view>
 
         <!-- 底部提交 -->
         <view class="bottom-bar">
-            <u-button @click="uni.navigateBack()" :customStyle="{flex:'1'}">取消</u-button>
+            <u-button @click="goBack" :customStyle="{flex:'1'}">取消</u-button>
             <u-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit" :customStyle="{flex:'2'}">
                 确认出库 ¥{{ money(totalSale) }}
             </u-button>
@@ -108,33 +112,41 @@
         />
         <ErpSaleChannelPopup
             v-model:show="showChannelPicker"
-            v-model="form.sale_channel"
+            v-model="form.sale_channel_key"
+            @change="onSaleChannelChange"
         />
     </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
+import { confirmMobileSaleReceipt, createMobileSale, getMobileCapitalAccounts, getMobileSaleInfo } from '@/addon/hsx_erp/api/erp'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpStockPickerPopup from '@/addon/hsx_erp/components/ErpStockPickerPopup.vue'
 import ErpSaleChannelPopup from '@/addon/hsx_erp/components/ErpSaleChannelPopup.vue'
 import ErpSettleBar from '@/addon/hsx_erp/components/ErpSettleBar.vue'
-import request from '@/utils/request'
+import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
+import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
+import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
+import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
+import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 const submitting = ref(false)
+const voucherUploading = ref(false)
+const goBack = () => uni.navigateBack()
 const accounts = ref<any[]>([])
 const selectedAssets = ref<any[]>([])
 const showPartyPicker = ref(false)
 const showStockPicker = ref(false)
 const stockPickerScanTrigger = ref(0)
 const showChannelPicker = ref(false)
+const { load: loadSaleChannels, preferred: preferredSaleChannel } = useErpSaleChannels()
 
 const form = ref({
     party_id: 0, party_name: '',
-    sale_channel: '', remark: '',
+    sale_channel: '', sale_channel_key: '', channel_source_plugin: '', channel_source_key: '', remark: '',
     settle_mode: 'credit' as 'credit' | 'cash',
-    received_amount: 0, capital_account_id: 0,
+    received_amount: 0, capital_account_id: 0, voucher_urls: '',
 })
 
 const inputStyle = { background: '#f8fafc', borderRadius: '8rpx', padding: '8rpx 16rpx' }
@@ -144,6 +156,7 @@ const totalProfit = computed(() => totalSale.value - totalCost.value)
 
 const canSubmit = computed(() =>
     form.value.party_id > 0 &&
+    Boolean(form.value.sale_channel_key) &&
     selectedAssets.value.length > 0 &&
     selectedAssets.value.every(a => Number(a._sale_price) > 0) &&
     (
@@ -151,23 +164,47 @@ const canSubmit = computed(() =>
         (
             Number(form.value.received_amount || 0) > 0 &&
             Number(form.value.received_amount || 0) <= totalSale.value &&
-            Number(form.value.capital_account_id || 0) > 0
+            Number(form.value.capital_account_id || 0) > 0 && !voucherUploading.value
         )
     )
 )
 
-onMounted(async () => {
+onMounted(() => {
+    loadAccounts()
+    loadDefaultSaleChannel()
+})
+
+async function loadAccounts() {
     try {
         const res: any = await getMobileCapitalAccounts()
         accounts.value = res?.data?.list || []
     } catch {}
-})
+}
+
+async function loadDefaultSaleChannel() {
+    try {
+        await loadSaleChannels()
+        if (!form.value.sale_channel_key) {
+            const channel = preferredSaleChannel()
+            if (channel) onSaleChannelChange(channel)
+        }
+    } catch (error: any) {
+        uni.showToast({ title: error?.message || '销售渠道加载失败', icon: 'none' })
+    }
+}
 
 function onAssetSelected(asset: any) {
     selectedAssets.value.push({
         ...asset,
-        _sale_price: Number(asset.retail_price || asset.estimate_sale_price || asset.total_cost || 0),
+        _sale_price: suggestedSalePrice(asset),
     })
+}
+
+function onSaleChannelChange(channel: any) {
+    form.value.sale_channel_key = String(channel?.key || '')
+    form.value.sale_channel = String(channel?.name || '')
+    form.value.channel_source_plugin = String(channel?.source_plugin || '')
+    form.value.channel_source_key = String(channel?.source_key || '')
 }
 
 function removeAsset(idx: number) { selectedAssets.value.splice(idx, 1) }
@@ -178,18 +215,33 @@ function openScanStockPicker() {
 }
 
 const profitClass = (a: any) => Number(a._sale_price) - Number(a.total_cost) >= 0 ? 'green' : 'red'
+const suggestedSalePrice = (asset: any) => firstPositiveErpAmount(asset?.retail_price, asset?.estimate_sale_price, asset?.total_cost)
 
 async function submit() {
+    if (submitting.value) return
     if (!canSubmit.value) {
-        uni.showToast({ title: '请完善客户、设备和收款信息', icon: 'none' })
+        uni.showToast({ title: '请完善客户、销售渠道、设备和收款信息', icon: 'none' })
         return
     }
     submitting.value = true
+    const saleTotal = selectedAssets.value.reduce((sum, item) => sum + Number(item._sale_price || 0), 0)
+    const confirmed = await confirmErpSensitiveAction({
+        title: '确认销售出库',
+        content: `客户：${form.value.party_name || '-'}\n渠道：${form.value.sale_channel || '-'}\n设备：${selectedAssets.value.length} 台\n销售总额：¥${money(saleTotal)}\n提交后设备立即退出库存并生成应收，不能普通撤销。`,
+        confirmText: '确认出库',
+    })
+    if (!confirmed) {
+        submitting.value = false
+        return
+    }
     try {
-        const res: any = await request.post('erp/sale/create', {
+        const res: any = await createMobileSale({
             party_id: form.value.party_id,
             party_name: form.value.party_name,
             sale_channel: form.value.sale_channel,
+            sale_channel_key: form.value.sale_channel_key,
+            channel_source_plugin: form.value.channel_source_plugin,
+            channel_source_key: form.value.channel_source_key,
             remark: form.value.remark,
             items: selectedAssets.value.map(a => ({
                 asset_id: a.id,
@@ -200,13 +252,14 @@ async function submit() {
         if (form.value.settle_mode === 'cash' && form.value.received_amount > 0) {
             const saleId = res?.data?.id || res?.data
             if (saleId) {
-                const detail: any = await request.get(`erp/sale/${saleId}`)
+                const detail: any = await getMobileSaleInfo(Number(saleId))
                 const receivableId = detail?.data?.receivables?.[0]?.id
                 if (receivableId) {
-                    await request.post(`erp/finance/receivable/${receivableId}/confirm_receipt`, {
+                    await confirmMobileSaleReceipt(Number(receivableId), {
                         amount: form.value.received_amount,
                         capital_account_id: form.value.capital_account_id,
                         remark: '销售现结收款',
+                        voucher_urls: form.value.voucher_urls,
                     })
                 }
             }
@@ -229,7 +282,8 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .form-section__actions { display:flex; align-items:center; gap:12rpx; }
 .form-section__title { font-size:28rpx; font-weight:600; color:#374151; }
 .form-row { display:flex; align-items:center; gap:16rpx; margin-bottom:16rpx; &:last-child { margin-bottom:0; } }
-.form-label { font-size:26rpx; color:#374151; width:120rpx; flex-shrink:0; }
+.channel-source-tip { margin:-6rpx 0 16rpx 176rpx; color:#94a3b8; font-size:20rpx; }
+.form-label { font-size:26rpx; color:#374151; width:150rpx; flex-shrink:0; }
 .form-label.required::before { content:'*'; color:#dc2626; margin-right:4rpx; }
 .form-input { flex:1; display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border-radius:8rpx; padding:12rpx 16rpx; }
 .input-text { font-size:26rpx; color:#0f172a; }
