@@ -1,4 +1,6 @@
 <template>
+    <!-- 原生客户端由 pages.json 导航栏提供标题和返回能力，避免重复显示两层头部。 -->
+    <!-- #ifndef APP-PLUS -->
     <view class="erp-page-header" :style="headerStyle">
         <view class="erp-page-header__content" :style="contentStyle">
             <view class="erp-page-header__side">
@@ -16,6 +18,7 @@
         </view>
     </view>
     <view v-if="fill" :style="placeholderStyle"></view>
+    <!-- #endif -->
 </template>
 
 <script setup lang="ts">
