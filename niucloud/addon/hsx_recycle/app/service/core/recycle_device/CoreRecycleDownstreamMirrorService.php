@@ -3,7 +3,12 @@ declare(strict_types=1);
 
 namespace addon\hsx_recycle\app\service\core\recycle_device;
 
+use addon\hsx_recycle\app\dict\order\RecycleDownstreamDict;
+use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
+use addon\hsx_recycle\app\model\order\RecycleOrder;
+use think\facade\Db;
 use think\facade\Log;
 
 /**
@@ -22,6 +27,107 @@ use think\facade\Log;
  */
 class CoreRecycleDownstreamMirrorService
 {
+    /** ERP 采购退货完成后，同步回收设备业务状态；已付款事实保持不变。 */
+    public function applyPurchaseReturn(int $deviceId, array $extra = [], string $eventId = ''): array
+    {
+        try {
+            return Db::transaction(function () use ($deviceId, $extra, $eventId) {
+                if ($deviceId <= 0) return ['skipped' => true, 'reason' => 'invalid_args'];
+
+                $conditions = [['id', '=', $deviceId]];
+                $siteId = (int)($extra['site_id'] ?? 0);
+                if ($siteId > 0) $conditions[] = ['site_id', '=', $siteId];
+
+                $device = RecycleDevice::where($conditions)->lock(true)->findOrEmpty();
+                if ($device->isEmpty()) return ['skipped' => true, 'reason' => 'device_not_found'];
+                if ($eventId !== '' && (string)$device->downstream_event_id === $eventId) {
+                    return ['skipped' => true, 'reason' => 'duplicate_event'];
+                }
+
+                $now = time();
+                $oldStatus = (int)$device->status;
+                $returnNo = trim((string)($extra['return_no'] ?? ''));
+                $remark = 'ERP采购退货已确认，设备已退出ERP库存';
+                if ($returnNo !== '') $remark .= '，退货单：' . $returnNo;
+
+                $device->save([
+                    'status' => RecycleOrderDict::DEVICE_STATUS_RETURNED,
+                    'confirm_status' => RecycleOrderDict::CONFIRM_STATUS_REJECTED,
+                    'confirm_remark' => $remark,
+                    'settlement_mode' => RecycleOrderDict::DISPOSE_TYPE_RETURN,
+                    'dispose_type' => RecycleOrderDict::DISPOSE_TYPE_RETURN,
+                    'dispose_status' => RecycleOrderDict::DISPOSE_STATUS_RETURNED,
+                    'return_time' => $now,
+                    'return_remark' => $remark,
+                    'downstream_stage' => max((int)$device->downstream_stage, RecycleDownstreamDict::STAGE_PURCHASE_RETURN_PENDING),
+                    'downstream_stage_at' => $now,
+                    'downstream_erp_asset_id' => (int)($extra['erp_asset_id'] ?? $device->downstream_erp_asset_id ?? 0),
+                    'downstream_event_id' => $eventId,
+                    'update_at' => $now,
+                ]);
+
+                if ($oldStatus !== RecycleOrderDict::DEVICE_STATUS_RETURNED) {
+                    RecycleDeviceLog::create([
+                        'site_id' => (int)$device->site_id,
+                        'device_id' => (int)$device->id,
+                        'order_id' => (int)$device->order_id,
+                        'operator_id' => 0,
+                        'operator_name' => 'ERP同步',
+                        'operation_type' => 'erp_purchase_return',
+                        'action' => 'erp_purchase_return',
+                        'old_status' => $oldStatus,
+                        'new_status' => RecycleOrderDict::DEVICE_STATUS_RETURNED,
+                        'remark' => $remark,
+                        'create_at' => $now,
+                    ]);
+                }
+
+                $this->closeOrderWhenAllReturned((int)$device->order_id, (int)$device->site_id, $now);
+
+                return [
+                    'updated' => true,
+                    'device_id' => $deviceId,
+                    'order_id' => (int)$device->order_id,
+                    'stage' => (int)$device->downstream_stage,
+                    'status' => RecycleOrderDict::DEVICE_STATUS_RETURNED,
+                ];
+            });
+        } catch (\Throwable $e) {
+            try {
+                Log::error('[hsx_recycle] purchase return mirror failed: ' . $e->getMessage());
+            } catch (\Throwable $ignore) {
+            }
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    private function closeOrderWhenAllReturned(int $orderId, int $siteId, int $now): void
+    {
+        if ($orderId <= 0 || $siteId <= 0) return;
+
+        $conditions = [
+            ['site_id', '=', $siteId],
+            ['order_id', '=', $orderId],
+        ];
+        $total = (int)RecycleDevice::where($conditions)->count();
+        $returned = (int)RecycleDevice::where($conditions)
+            ->where('status', RecycleOrderDict::DEVICE_STATUS_RETURNED)
+            ->count();
+        if ($total <= 0 || $returned < $total) return;
+
+        RecycleOrder::where([
+            ['site_id', '=', $siteId],
+            ['id', '=', $orderId],
+            ['delete_at', '=', 0],
+        ])->update([
+            'status' => RecycleOrderDict::ORDER_STATUS_CLOSED,
+            'complete_at' => $now,
+            'close_time' => $now,
+            'close_reason' => 'ERP采购退货完成，全部设备已退回客户',
+            'update_at' => $now,
+        ]);
+    }
+
     /**
      * 应用一条下游阶段回流
      * @param int $deviceId 回收设备ID（下游统一称 source_device_id）
@@ -37,7 +143,11 @@ class CoreRecycleDownstreamMirrorService
                 return ['skipped' => true, 'reason' => 'invalid_args'];
             }
 
-            $device = RecycleDevice::where([['id', '=', $deviceId]])->findOrEmpty();
+            $conditions = [['id', '=', $deviceId]];
+            if ((int)($extra['site_id'] ?? 0) > 0) {
+                $conditions[] = ['site_id', '=', (int)$extra['site_id']];
+            }
+            $device = RecycleDevice::where($conditions)->findOrEmpty();
             if ($device->isEmpty()) {
                 return ['skipped' => true, 'reason' => 'device_not_found'];
             }

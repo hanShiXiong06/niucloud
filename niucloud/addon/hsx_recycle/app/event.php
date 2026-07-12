@@ -43,6 +43,7 @@ return [
 
         // ERP 动态业务来源：只有当前站点套餐包含回收插件时才贡献“回收插件采购”。
         'HsxErpBusinessSourceOptions' => [ 'addon\hsx_recycle\app\listener\erp\ErpBusinessSourceOptionsListener' ],
+        'GetRecyclePaymentMethods' => [ 'addon\hsx_recycle\app\listener\erp\RecyclePaymentMethodsProvider' ],
 
         // 下游流转回流：订阅 ERP/数据中台事件，把设备下游生命周期(已入库/转中台/已定价)镜像回回收设备
         'ErpDomainEvent' => [

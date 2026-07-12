@@ -25,6 +25,10 @@ class RecycleDownstreamDict
     public const STAGE_PRICED = 30;
     /** 已售/已下架（预留，待 shop 插件接入行情/销售） */
     public const STAGE_SOLD = 40;
+    /** ERP 已完成采购退货，设备已经退回客户 */
+    public const STAGE_PURCHASE_RETURN_PENDING = 50;
+    /** ERP 采购退货款已经实际到账 */
+    public const STAGE_PURCHASE_RETURN_SETTLED = 60;
 
     /**
      * 阶段名称映射
@@ -38,6 +42,8 @@ class RecycleDownstreamDict
             self::STAGE_READY_FOR_PHOTO => '转中台·待拍照',
             self::STAGE_PRICED => '已定价·可售',
             self::STAGE_SOLD => '已售/下架',
+            self::STAGE_PURCHASE_RETURN_PENDING => 'ERP采退·已退回',
+            self::STAGE_PURCHASE_RETURN_SETTLED => 'ERP采退·已到账',
         ];
     }
 

@@ -173,9 +173,6 @@ class DeviceSummaryHelper
             $fieldQuery->where('site_id', '=', $siteId);
         }
         $fields = $fieldQuery->field('id,template_id,field_key')->select()->toArray();
-        if (empty($fields)) {
-            return [];
-        }
 
         // field_id => [template_id, field_key]
         $fieldMeta = [];
@@ -184,7 +181,7 @@ class DeviceSummaryHelper
         }
 
         // 2) 取这些字段的全部选项
-        $options = Db::name('recycle_check_option')
+        $options = empty($fieldMeta) ? [] : Db::name('recycle_check_option')
             ->whereIn('field_id', array_keys($fieldMeta))
             ->field('id,field_id,option_value,option_label')
             ->select()->toArray();
@@ -206,6 +203,36 @@ class DeviceSummaryHelper
             $optionId = (string)($opt['id'] ?? '');
             if ($optionId !== '') {
                 $map[$meta['template_id']][$meta['field_key']][$optionId] = $label;
+            }
+        }
+
+        // 外部导入模板会把完整结构保存在 template.schema_json，不一定拆分到 field/option 表。
+        // 两种存储格式必须共用同一解析入口，否则同一个 option value 在导出、打印和 ERP 中会退化成数字 ID。
+        $templateQuery = Db::name('recycle_check_template')->whereIn('id', $templateIds);
+        if ($siteId > 0) {
+            $templateQuery->where('site_id', '=', $siteId);
+        }
+        $compactTemplates = $templateQuery->field('id,schema_json')->select()->toArray();
+        foreach ($compactTemplates as $template) {
+            $templateId = (int)($template['id'] ?? 0);
+            $schema = json_decode((string)($template['schema_json'] ?? ''), true);
+            if ($templateId <= 0 || !is_array($schema)) continue;
+            foreach ((array)($schema['groups'] ?? []) as $group) {
+                if (!is_array($group)) continue;
+                foreach ((array)($group['fields'] ?? []) as $field) {
+                    if (!is_array($field)) continue;
+                    $fieldKey = trim((string)($field['field_key'] ?? ''));
+                    if ($fieldKey === '' || (!empty($fieldKeys) && !in_array($fieldKey, $fieldKeys, true))) continue;
+                    foreach ((array)($field['options'] ?? []) as $option) {
+                        if (!is_array($option)) continue;
+                        $label = trim((string)($option['label'] ?? $option['name'] ?? $option['option_label'] ?? ''));
+                        $value = trim((string)($option['value'] ?? $option['option_value'] ?? ''));
+                        if ($label === '') continue;
+                        if ($value !== '') $map[$templateId][$fieldKey][$value] = $label;
+                        $optionId = trim((string)($option['id'] ?? ''));
+                        if ($optionId !== '') $map[$templateId][$fieldKey][$optionId] = $label;
+                    }
+                }
             }
         }
         return $map;

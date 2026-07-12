@@ -28,12 +28,40 @@ class ErpAssetDownstreamListener
                 'erp.asset.ready_for_photo.v1' => RecycleDownstreamDict::STAGE_READY_FOR_PHOTO,
                 'erp.asset.sold.v1'            => RecycleDownstreamDict::STAGE_SOLD,
                 'erp.asset.delisted.v1'        => RecycleDownstreamDict::STAGE_SOLD,
+                'erp.purchase_return.completed.v1' => RecycleDownstreamDict::STAGE_PURCHASE_RETURN_PENDING,
             ];
             if (!isset($stageMap[$name])) {
                 return ['skipped' => true];
             }
 
             $payload = (array)($event['payload'] ?? []);
+            if ($name === 'erp.purchase_return.completed.v1') {
+                $results = [];
+                foreach ((array)($payload['assets'] ?? []) as $asset) {
+                    if (!is_array($asset)) continue;
+                    $deviceId = (int)($asset['source_device_id'] ?? 0);
+                    if ($deviceId <= 0) continue;
+                    $results[] = $this->mirrorPurchaseReturn(
+                        $deviceId,
+                        [
+                            'erp_asset_id' => (int)($asset['asset_id'] ?? 0),
+                            'site_id' => (int)($event['site_id'] ?? 0),
+                            'return_no' => (string)($payload['return_no'] ?? ''),
+                        ],
+                        (string)($event['event_id'] ?? '') . ':' . $deviceId
+                    );
+                }
+                foreach ($results as $result) {
+                    if (!empty($result['error'])) {
+                        return ['consumer' => 'hsx_recycle', 'status' => 'failed', 'error' => true, 'message' => (string)($result['message'] ?? '采购退货镜像更新失败')];
+                    }
+                }
+                return [
+                    'consumer' => 'hsx_recycle',
+                    'status' => $results === [] ? 'skipped' : 'processed',
+                    'results' => $results,
+                ];
+            }
             $deviceId = (int)($payload['source_device_id'] ?? 0);
             if ($deviceId <= 0) {
                 // 兜底：stocked 事件的 source.id 即回收设备ID（ready_for_photo 的 source 是入库单，不取）
@@ -44,7 +72,10 @@ class ErpAssetDownstreamListener
             }
 
             $eventId = (string)($event['event_id'] ?? '');
-            $extra = ['erp_asset_id' => (int)($payload['asset_id'] ?? $event['aggregate_id'] ?? 0)];
+            $extra = [
+                'erp_asset_id' => (int)($payload['asset_id'] ?? $event['aggregate_id'] ?? 0),
+                'site_id' => (int)($event['site_id'] ?? 0),
+            ];
 
             $stage = $stageMap[$name];
 
@@ -52,5 +83,10 @@ class ErpAssetDownstreamListener
         } catch (\Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    protected function mirrorPurchaseReturn(int $deviceId, array $extra, string $eventId): array
+    {
+        return (new CoreRecycleDownstreamMirrorService())->applyPurchaseReturn($deviceId, $extra, $eventId);
     }
 }

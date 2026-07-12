@@ -128,7 +128,7 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `cost_adjust_amount` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '累计成本调整金额，负数为成本减少',
   `cost_adjust_count` int NOT NULL DEFAULT 0 COMMENT '成本调整次数',
   `last_cost_adjust_time` int NOT NULL DEFAULT 0 COMMENT '最后成本调整时间',
-  `downstream_stage` tinyint NOT NULL DEFAULT 0 COMMENT '下游镜像：0未流转,10入库,20待拍照,30可售,40已售,50ERP采退待收,60ERP采退到账',
+  `downstream_stage` tinyint NOT NULL DEFAULT 0 COMMENT '下游镜像：0未流转,10入库,20待拍照,30可售,40已售,50ERP采退已退回,60ERP采退到账',
   `downstream_stage_at` int NOT NULL DEFAULT 0 COMMENT '下游流转阶段更新时间',
   `downstream_erp_asset_id` int NOT NULL DEFAULT 0 COMMENT '关联ERP资产ID(下游回流)',
   `downstream_sale_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '中台销售定价(下游回流)',

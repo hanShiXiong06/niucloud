@@ -5,6 +5,8 @@ namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\model\address\PhoneShopPaymentInfo;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use app\model\member\Member;
 use core\base\BaseAdminService;
@@ -19,6 +21,10 @@ class RecycleDeviceErpSyncService extends BaseAdminService
 {
     /** @var array<int,array> 同一批同步内复用会员快照，避免逐设备重复查询。 */
     private array $memberSnapshotCache = [];
+    /** @var array<int,array> */
+    private array $paymentMethodCache = [];
+    /** @var array<int,array<string,array<string,string>>> 质检模板规格选项缓存。 */
+    private array $specOptionLabelCache = [];
 
     public function dispatch(array $deviceIds, array $targets = ['self_erp'], array $placement = []): array
     {
@@ -180,6 +186,27 @@ class RecycleDeviceErpSyncService extends BaseAdminService
 
         $result = $flush();
 
+        // 已经入库时只刷新型号/规格等来源快照，绝不重复创建采购、资产和应付。
+        if (!empty($result['has_asset'])) {
+            $device = RecycleDevice::where([
+                ['site_id', '=', $this->site_id],
+                ['id', '=', $deviceId],
+            ])->with(['order', 'consignmentOrder'])->findOrEmpty();
+            if (!$device->isEmpty()) {
+                $responses = (array)event('RefreshErpDeviceSnapshot', [
+                    'site_id' => $this->site_id,
+                    'source_device_id' => $deviceId,
+                    'device' => $this->buildSnapshot($device->toArray()),
+                ]);
+                foreach ($responses as $response) {
+                    if (is_array($response) && !empty($response['snapshot_refreshed'])) {
+                        $result['snapshot_refreshed'] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         // ERP 还没这台资产 → 入库同步根本没落地：重新 dispatch 入库，再 flush 一次
         if (empty($result['has_asset'])) {
             try {
@@ -248,6 +275,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         if ($memberName === '') $memberName = trim((string)($member['username'] ?? ''));
         $memberMobile = trim((string)($member['mobile'] ?? ''));
         if ($memberMobile === '') $memberMobile = trim((string)($device['order']['customer_phone'] ?? ''));
+        $spec = $this->resolveDeviceSpec($device);
 
         return [
             'source_id' => (int)($device['order_id'] ?? 0),
@@ -259,8 +287,11 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             'sn' => (string)($device['sn'] ?? ''),
             'model' => (string)($device['model'] ?? ''),
             'category_id' => (int)($device['category_id'] ?? 0),
-            'capacity' => (string)($device['capacity'] ?? ''),
-            'color' => (string)($device['color'] ?? ''),
+            'capacity' => $spec['capacity_label'],
+            'capacity_value' => $spec['capacity_value'],
+            'color' => $spec['color_label'],
+            'color_value' => $spec['color_value'],
+            'payment_methods' => $this->paymentMethods($memberId),
             'ownership_type' => $isConsign ? 'consign' : 'owned',
             'purchase_cost' => $isConsign ? 0 : round((float)($device['final_price'] ?? 0), 2),
             'counterparty' => [
@@ -350,6 +381,51 @@ class RecycleDeviceErpSyncService extends BaseAdminService
             ['member_id', '=', $memberId],
         ])->field('member_id,nickname,username,mobile')->findOrEmpty();
         return $this->memberSnapshotCache[$memberId] = ($member->isEmpty() ? [] : $member->toArray());
+    }
+
+    private function paymentMethods(int $memberId): array
+    {
+        if ($memberId <= 0) return [];
+        if (array_key_exists($memberId, $this->paymentMethodCache)) {
+            return $this->paymentMethodCache[$memberId];
+        }
+        $rows = PhoneShopPaymentInfo::where([['member_id', '=', $memberId]])
+            ->field('pay_type,account,qrcode_image,is_default')
+            ->order('is_default desc,id desc')->select()->toArray();
+        return $this->paymentMethodCache[$memberId] = array_values(array_map(static fn(array $row): array => [
+            'pay_type' => trim((string)($row['pay_type'] ?? '')),
+            'account' => trim((string)($row['account'] ?? '')),
+            'qrcode_image' => trim((string)($row['qrcode_image'] ?? '')),
+            'is_default' => (int)($row['is_default'] ?? 0),
+        ], $rows));
+    }
+
+    /**
+     * ERP 快照必须携带可读文案，不能把回收模板内部的选项 ID 当作规格展示。
+     * 原始值同时保留，方便审计以及模板选项调整后的重新同步。
+     */
+    private function resolveDeviceSpec(array $device): array
+    {
+        $templateId = (int)($device['check_template_id'] ?? 0);
+        if ($templateId > 0 && !array_key_exists($templateId, $this->specOptionLabelCache)) {
+            $maps = DeviceSummaryHelper::buildOptionLabelMap(
+                [$templateId],
+                ['capacity', 'color'],
+                (int)$this->site_id
+            );
+            $this->specOptionLabelCache[$templateId] = (array)($maps[$templateId] ?? []);
+        }
+
+        $optionMap = $this->specOptionLabelCache[$templateId] ?? [];
+        $capacityValue = $device['capacity'] ?? '';
+        $colorValue = $device['color'] ?? '';
+
+        return [
+            'capacity_value' => is_array($capacityValue) ? $capacityValue : trim((string)$capacityValue),
+            'capacity_label' => DeviceSummaryHelper::resolveDisplayValue($capacityValue, (array)($optionMap['capacity'] ?? [])),
+            'color_value' => is_array($colorValue) ? $colorValue : trim((string)$colorValue),
+            'color_label' => DeviceSummaryHelper::resolveDisplayValue($colorValue, (array)($optionMap['color'] ?? [])),
+        ];
     }
 
     private function normalizeRefurbishmentItems($items): array
