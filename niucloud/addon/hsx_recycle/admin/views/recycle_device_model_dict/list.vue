@@ -299,6 +299,7 @@
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
 import {
@@ -315,6 +316,7 @@ import {
 } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 
 const loading = ref(false)
+const route = useRoute()
 const saving = ref(false)
 const tree = ref<any[]>([])
 const treeRef = ref<any>(null)
@@ -965,7 +967,21 @@ const handleResetTemplateBinding = async () => {
   await loadTemplateBinding()
 }
 
-onMounted(() => loadTree())
+const openTemplateBindingFromRoute = async () => {
+  const targetId = Number(route.query.template_target_id || 0)
+  if (targetId <= 0) return
+  const targetName = String(route.query.template_target_name || '')
+  await openTemplateDialog({
+    id: targetId,
+    node_name: targetName || `型号节点 #${targetId}`,
+    model_full_name: targetName,
+  })
+}
+
+onMounted(async () => {
+  await loadTree()
+  await openTemplateBindingFromRoute()
+})
 </script>
 
 <style scoped>

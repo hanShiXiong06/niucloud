@@ -433,6 +433,7 @@
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Filter } from '@element-plus/icons-vue'
 import {
@@ -445,6 +446,7 @@ import {
     getCheckFields,
     getCheckGroups,
     getCheckTemplatePages,
+    getCheckTemplateSchema,
     initDefaultCheckTemplate,
     saveCheckField,
     saveCheckGroup,
@@ -455,6 +457,7 @@ import {
 import { getRecycleDeviceModelDictChildren } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 
 const templateLoading = ref(false)
+const route = useRoute()
 const groupLoading = ref(false)
 const fieldLoading = ref(false)
 const templates = ref<any[]>([])
@@ -898,7 +901,26 @@ const removeOption = async (row: any) => {
     await loadFields(fieldId)
 }
 
-onMounted(loadTemplates)
+const openTemplateFromRoute = async () => {
+    const templateId = Number(route.query.template_id || 0)
+    if (templateId <= 0) return
+    try {
+        const res: any = await getCheckTemplateSchema({ template_id: templateId })
+        const template = res.data?.template || null
+        if (!template) {
+            ElMessage.warning('指定的质检模板不存在或已停用')
+            return
+        }
+        await openTemplateEditor(template)
+    } catch (error) {
+        ElMessage.error('加载指定质检模板失败')
+    }
+}
+
+onMounted(async () => {
+    await loadTemplates()
+    await openTemplateFromRoute()
+})
 </script>
 
 <style scoped>

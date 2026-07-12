@@ -42,66 +42,94 @@
         </el-alert>
 
         <div class="device-list">
-            <DeviceEntryCard
+            <div
                 v-for="(row, index) in devices"
                 :key="row.id || row._k || index"
-                :device="row"
-                :index="index"
-                :can-remove="devices.length > 1"
-                @save="saveDeviceRow(row, index)"
-                @update="updateDeviceRow(row)"
-                @remove="removeDeviceRow(index)"
-                @edit-summary="openSummaryDialog(row)"
+                class="device-entry-item"
             >
-                <template #model>
-                    <div class="model-picker-wrap">
-                        <div class="model-picker">
-                            <el-cascader
-                                v-if="!row.model_input_mode"
-                                v-model="row.model_path"
-                                :options="modelTreeOptions"
-                                :props="modelCascaderProps"
-                                :before-filter="keyword => handleModelBeforeFilter(row, keyword)"
-                                :filter-method="modelSearchFilterMethod"
-                                :show-all-levels="false"
-                                placeholder="从型号库搜索，如 17P"
-                                filterable
-                                clearable
-                                size="small"
-                                class="model-cascader"
-                                :loading="modelLoading"
-                                @visible-change="visible => onModelVisibleChange(row, visible)"
-                                @change="value => handleModelPathChange(row, value)"
-                            />
-                            <el-input
-                                v-else
-                                v-model="row.model"
-                                placeholder="输入完整型号，如 iPhone 17 Pro Max"
-                                clearable
-                                size="small"
-                                @input="handleManualModelInput(row)"
-                            />
-                            <el-button
-                                link
-                                type="primary"
-                                size="small"
-                                class="model-mode-button"
-                                :icon="row.model_input_mode ? List : EditPen"
-                                @click="toggleModelInputMode(row)"
-                            >
-                                {{ row.model_input_mode ? '返回型号库' : '手动录入' }}
-                            </el-button>
+                <DeviceEntryCard
+                    :device="row"
+                    :index="index"
+                    :can-remove="devices.length > 1"
+                    @save="saveDeviceRow(row, index)"
+                    @update="updateDeviceRow(row)"
+                    @remove="removeDeviceRow(index)"
+                    @edit-summary="openSummaryDialog(row)"
+                >
+                    <template #model>
+                        <div class="model-picker-wrap">
+                            <div class="model-picker">
+                                <el-cascader
+                                    v-if="!row.model_input_mode"
+                                    v-model="row.model_path"
+                                    :options="modelTreeOptions"
+                                    :props="modelCascaderProps"
+                                    :before-filter="keyword => handleModelBeforeFilter(row, keyword)"
+                                    :filter-method="modelSearchFilterMethod"
+                                    :show-all-levels="false"
+                                    placeholder="从型号库搜索，如 17P"
+                                    filterable
+                                    clearable
+                                    size="small"
+                                    class="model-cascader"
+                                    :loading="modelLoading"
+                                    @visible-change="visible => onModelVisibleChange(row, visible)"
+                                    @change="value => handleModelPathChange(row, value)"
+                                />
+                                <el-input
+                                    v-else
+                                    v-model="row.model"
+                                    placeholder="输入完整型号，如 iPhone 17 Pro Max"
+                                    clearable
+                                    size="small"
+                                    @input="handleManualModelInput(row)"
+                                />
+                                <el-button
+                                    link
+                                    type="primary"
+                                    size="small"
+                                    class="model-mode-button"
+                                    :icon="row.model_input_mode ? List : EditPen"
+                                    @click="toggleModelInputMode(row)"
+                                >
+                                    {{ row.model_input_mode ? '返回型号库' : '手动录入' }}
+                                </el-button>
+                            </div>
+                            <div v-if="row.model_search_empty && !row.model_input_mode" class="model-picker-feedback is-warning">
+                                型号库暂未找到“{{ row.model_search_keyword }}”。可缩短关键词重试；确认是未收录新款后再
+                                <el-button link type="primary" size="small" @click="enableManualModelInput(row)">手动录入</el-button>
+                            </div>
+                            <div v-else-if="row.model_input_mode" class="model-picker-feedback">
+                                手动型号不会自动关联标准分类和质检模板，建议仅用于暂未收录的新款机型。
+                            </div>
                         </div>
-                        <div v-if="row.model_search_empty && !row.model_input_mode" class="model-picker-feedback is-warning">
-                            型号库暂未找到“{{ row.model_search_keyword }}”。可缩短关键词重试；确认是未收录新款后再
-                            <el-button link type="primary" size="small" @click="enableManualModelInput(row)">手动录入</el-button>
-                        </div>
-                        <div v-else-if="row.model_input_mode" class="model-picker-feedback">
-                            手动型号不会自动关联标准分类和质检模板，建议仅用于暂未收录的新款机型。
-                        </div>
+                    </template>
+                </DeviceEntryCard>
+
+                <div
+                    v-if="row.category_id && !row.model_input_mode && !row.summary_loading"
+                    class="template-assist"
+                    :class="templateAssistState(row).className"
+                >
+                    <div class="template-assist__main">
+                        <el-icon><component :is="templateAssistState(row).icon" /></el-icon>
+                        <span>{{ templateAssistState(row).text }}</span>
                     </div>
-                </template>
-            </DeviceEntryCard>
+                    <div class="template-assist__actions">
+                        <el-button link type="primary" size="small" :icon="Setting" @click="openTemplateBinding(row)">
+                            {{ row.check_template_bound ? '调整绑定' : '关联模板' }}
+                        </el-button>
+                        <el-button
+                            v-if="row.check_template_id"
+                            link
+                            type="primary"
+                            size="small"
+                            @click="openTemplateSummary(row)"
+                        >设置摘要字段</el-button>
+                        <el-button link type="primary" size="small" :icon="Refresh" @click="refreshRowTemplate(row)">刷新</el-button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <CheckSummaryDialog
@@ -118,9 +146,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, EditPen, List, Connection } from '@element-plus/icons-vue'
+import { Plus, EditPen, List, Connection, CircleCheck, Warning, Setting, Refresh } from '@element-plus/icons-vue'
 import { addOrderDevice, updateOrderDevice, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
 import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions, getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
@@ -147,6 +176,8 @@ const props = withDefaults(defineProps<{
 })
 
 const savedDeviceCount = computed(() => props.devices.filter(d => d.saved && d.id).length)
+const router = useRouter()
+const pendingTemplateRefreshRow = ref<DeviceEntryRow | null>(null)
 const MODEL_ENTRY_TIP_CACHE_KEY = 'hsx_recycle:model_entry_tip:dismissed:v1'
 const showModelEntryTip = ref(true)
 
@@ -324,6 +355,9 @@ const clearCheckTemplate = (row: DeviceEntryRow) => {
     row.check_template_name = ''
     row.summary_fields = []
     row.summary_values = {}
+    row.check_template_bound = false
+    row.check_template_source_name = ''
+    row.check_template_summary_count = 0
 }
 
 const loadCheckTemplate = async (row: DeviceEntryRow) => {
@@ -343,7 +377,7 @@ const loadCheckTemplate = async (row: DeviceEntryRow) => {
         const summaryFields: CheckSummaryField[] = []
         groups.forEach((group: any) => {
             (group.fields || []).forEach((field: any) => {
-                if (Number(field?.extra_config?.summary_visible || 0) === 1 && summaryFields.length < 5) {
+                if (Number(field?.extra_config?.summary_visible || 0) === 1 && summaryFields.length < 10) {
                     summaryFields.push({
                         id: Number(field.id),
                         field_key: String(field.field_key),
@@ -366,6 +400,9 @@ const loadCheckTemplate = async (row: DeviceEntryRow) => {
 
         row.check_template_id = Number(resolve.template_id || template.id || 0)
         row.check_template_name = String(resolve.template_name || template.template_name || '')
+        row.check_template_bound = Boolean(resolve.matched)
+        row.check_template_source_name = String(resolve.source_name || '')
+        row.check_template_summary_count = summaryFields.length
         row.summary_fields = summaryFields
 
         const values: Record<string, any> = { ...(row.summary_values || {}) }
@@ -382,9 +419,11 @@ const loadCheckTemplate = async (row: DeviceEntryRow) => {
             }
         })
         row.summary_values = values
+        return true
     } catch (error) {
         console.error('加载质检模板摘要字段失败:', error)
         clearCheckTemplate(row)
+        return false
     } finally {
         row.summary_loading = false
     }
@@ -403,6 +442,74 @@ const handleSummaryConfirm = (values: Record<string, any>) => {
     if (!activeRow.value) return
     activeRow.value.summary_values = { ...values }
     if (activeRow.value.saved) activeRow.value.dirty = true
+}
+
+const templateAssistState = (row: DeviceEntryRow) => {
+    if (!row.check_template_bound) {
+        return {
+            className: 'is-warning',
+            icon: Warning,
+            text: `当前使用默认模板“${row.check_template_name || '默认质检模板'}”，尚未为该型号建立明确绑定。`
+        }
+    }
+    if (!Number(row.check_template_summary_count || 0)) {
+        return {
+            className: 'is-warning',
+            icon: Warning,
+            text: `“${row.check_template_name || '质检模板'}”已生效，但还没有设置设备摘要字段。来源：${row.check_template_source_name || '型号规则'}。`
+        }
+    }
+    return {
+        className: 'is-ready',
+        icon: CircleCheck,
+        text: `“${row.check_template_name}”已生效，设备摘要 ${row.check_template_summary_count} 项。来源：${row.check_template_source_name || '型号规则'}。`
+    }
+}
+
+const openManagementPage = (path: string, query: Record<string, any>, row: DeviceEntryRow) => {
+    pendingTemplateRefreshRow.value = row
+    const href = router.resolve({ path, query }).href
+    const opened = window.open(href, '_blank')
+    if (opened) opened.opener = null
+    else {
+        pendingTemplateRefreshRow.value = null
+        ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
+    }
+}
+
+const openTemplateBinding = (row: DeviceEntryRow) => {
+    if (!row.category_id) {
+        ElMessage.warning('请先从型号库选择标准型号')
+        return
+    }
+    openManagementPage('/site/hsx_recycle/recycle_device_model_dict/list', {
+        template_target_id: row.category_id,
+        template_target_name: row.model || ''
+    }, row)
+}
+
+const openTemplateSummary = (row: DeviceEntryRow) => {
+    if (!row.check_template_id) {
+        openTemplateBinding(row)
+        return
+    }
+    openManagementPage('/site/hsx_recycle/check/template', {
+        template_id: row.check_template_id
+    }, row)
+}
+
+const refreshRowTemplate = async (row: DeviceEntryRow, showMessage = true) => {
+    const loaded = await loadCheckTemplate(row)
+    if (!showMessage) return
+    if (loaded) ElMessage.success('已重新加载该型号的模板配置')
+    else ElMessage.error('模板配置加载失败，请稍后重试')
+}
+
+const handleWindowFocus = () => {
+    const row = pendingTemplateRefreshRow.value
+    if (!row) return
+    pendingTemplateRefreshRow.value = null
+    refreshRowTemplate(row, false)
 }
 
 // ============ 行的增删 ============
@@ -616,6 +723,11 @@ onMounted(() => {
     // 不再一次性拉整棵型号树(3万条);级联改为懒加载,打开时按 pid 取一层
     modelNodeMap.value = {}
     initExistingRows()
+    window.addEventListener('focus', handleWindowFocus)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('focus', handleWindowFocus)
 })
 
 defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
@@ -681,6 +793,56 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.device-entry-item {
+    min-width: 0;
+}
+
+.template-assist {
+    margin: -1px 10px 0;
+    min-height: 34px;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-top: 0;
+    border-radius: 0 0 7px 7px;
+    background-color: var(--el-fill-color-lighter);
+    font-size: 12px;
+}
+
+.template-assist.is-warning {
+    color: var(--el-color-warning-dark-2);
+    background-color: var(--el-color-warning-light-9);
+    border-color: var(--el-color-warning-light-7);
+}
+
+.template-assist.is-ready {
+    color: var(--el-color-success-dark-2);
+    background-color: var(--el-color-success-light-9);
+    border-color: var(--el-color-success-light-7);
+}
+
+.template-assist__main,
+.template-assist__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.template-assist__main {
+    min-width: 0;
+}
+
+.template-assist__actions {
+    flex: 0 0 auto;
+}
+
+:deep(.template-assist__actions .el-button + .el-button) {
+    margin-left: 2px;
 }
 
 .model-picker {

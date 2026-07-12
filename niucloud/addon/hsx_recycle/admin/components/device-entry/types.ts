@@ -2,7 +2,7 @@
  * 设备录入相关共享类型
  */
 
-/** 质检摘要字段（由质检模板按 summary_visible 配置筛出，最多 5 个） */
+/** 质检摘要字段（由质检模板按 summary_visible 配置筛出，最多 10 个） */
 export interface CheckSummaryField {
     id?: number
     field_key: string
@@ -39,6 +39,9 @@ export interface DeviceEntryRow {
     // 质检模板（按型号触发）
     check_template_id?: number
     check_template_name?: string
+    check_template_bound?: boolean
+    check_template_source_name?: string
+    check_template_summary_count?: number
     summary_loading?: boolean
     summary_fields?: CheckSummaryField[]
     summary_values?: Record<string, any>
