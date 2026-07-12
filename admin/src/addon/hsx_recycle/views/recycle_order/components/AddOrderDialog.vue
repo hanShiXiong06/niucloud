@@ -129,7 +129,7 @@
                     <span v-else>请先选择客户并保存至少一台设备</span>
                 </div>
                 <div class="dialog-footer__actions">
-                    <el-button @click="dialogVisible = false">
+                    <el-button @click="closeDialog">
                         {{ draftOrder.id ? '暂存并关闭' : '取消' }}
                     </el-button>
                     <el-button
@@ -147,7 +147,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
     Aim,
@@ -181,7 +181,10 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:visible', 'success', 'closed'])
 
-const dialogVisible = ref(props.visible)
+const dialogVisible = computed({
+    get: () => props.visible,
+    set: (value: boolean) => emit('update:visible', value)
+})
 const loading = ref(false)
 const formRef = ref()
 const form = ref({
@@ -211,8 +214,9 @@ const memberInitial = computed(() => {
 
 const updateResponsiveState = () => { isMobile.value = window.innerWidth <= 768 }
 
-watch(() => props.visible, (value) => { dialogVisible.value = value })
-watch(dialogVisible, (value) => { emit('update:visible', value) })
+const closeDialog = () => {
+    emit('update:visible', false)
+}
 
 const handleMemberChange = (memberId: string | number | null, member: Member | null) => {
     form.value.member_id = memberId || ''
@@ -309,8 +313,7 @@ const handleConfirm = async () => {
         })
         if (res.code !== 1) throw new Error(res.message || '签收失败')
         ElMessage.success(`已签收 ${savedDevices.length} 台设备`)
-        resetForm()
-        dialogVisible.value = false
+        closeDialog()
         emit('success')
     } catch (error: any) {
         if (error === 'cancel' || error === 'close') return
