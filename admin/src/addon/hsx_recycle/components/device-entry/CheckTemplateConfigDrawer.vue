@@ -131,14 +131,14 @@
 
                 <el-alert
                     v-if="isImportedTemplate"
-                    type="warning"
+                    type="info"
                     show-icon
                     :closable="false"
-                    title="当前是外部导入模板，其结构由数据源维护，暂不能在这里修改摘要字段。可改绑手工模板后设置。"
+                    title="当前是外部导入模板：字段结构和选项由数据源维护，但可以设置设备摘要。"
                     class="template-config__notice"
                 />
 
-                <el-collapse v-else-if="fieldGroups.length" v-model="activeGroups" class="summary-groups">
+                <el-collapse v-if="fieldGroups.length" v-model="activeGroups" class="summary-groups">
                     <el-collapse-item v-for="group in fieldGroups" :key="group.id" :name="String(group.id)">
                         <template #title>
                             <div class="summary-group__title">
@@ -380,19 +380,17 @@ const saveConfig = async () => {
             sort: Number(binding.value.sort || 0)
         })
 
-        if (!isImportedTemplate.value) {
-            const changedFields: any[] = []
-            fieldGroups.value.forEach(group => (group.fields || []).forEach((field: any) => {
-                if (originalSummaryState.value[String(field.id)] !== isSummaryVisible(field)) changedFields.push(field)
-            }))
-            for (const field of changedFields) {
-                await saveCheckField({
-                    ...field,
-                    template_id: selectedTemplateId.value,
-                    group_id: field.group_id,
-                    extra_config: normalizeExtraConfig(field.extra_config)
-                })
-            }
+        const changedFields: any[] = []
+        fieldGroups.value.forEach(group => (group.fields || []).forEach((field: any) => {
+            if (originalSummaryState.value[String(field.id)] !== isSummaryVisible(field)) changedFields.push(field)
+        }))
+        for (const field of changedFields) {
+            await saveCheckField({
+                ...field,
+                template_id: selectedTemplateId.value,
+                group_id: field.group_id,
+                extra_config: normalizeExtraConfig(field.extra_config)
+            })
         }
 
         ElMessage.success('质检模板、打印模板与摘要字段已应用')
