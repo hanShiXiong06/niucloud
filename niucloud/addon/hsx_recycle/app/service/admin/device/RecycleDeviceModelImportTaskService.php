@@ -455,9 +455,21 @@ class RecycleDeviceModelImportTaskService extends BaseAdminService
         $task['status_name'] = $labels[$status] ?? $status;
         $task['status_type'] = $types[$status] ?? 'info';
         $task['progress'] = $total > 0 ? min(100, (int)floor($processed * 100 / $total)) : ($status === 'completed' ? 100 : 0);
-        $task['create_at_text'] = !empty($task['create_at']) ? date('Y-m-d H:i:s', (int)$task['create_at']) : '-';
-        $task['finish_at_text'] = !empty($task['finish_at']) ? date('Y-m-d H:i:s', (int)$task['finish_at']) : '-';
+        $task['create_at_text'] = $this->formatTime($task['create_at'] ?? 0);
+        $task['finish_at_text'] = $this->formatTime($task['finish_at'] ?? 0);
         return $task;
+    }
+
+    private function formatTime($value): string
+    {
+        if ($value === '' || $value === null || $value === 0 || $value === '0') {
+            return '-';
+        }
+        if (is_numeric($value)) {
+            return date('Y-m-d H:i:s', (int)$value);
+        }
+        $timestamp = strtotime((string)$value);
+        return $timestamp !== false ? date('Y-m-d H:i:s', $timestamp) : '-';
     }
 
     private function absolutePath(string $relativePath): string

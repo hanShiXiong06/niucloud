@@ -57,7 +57,8 @@ try {
         'update_at' => $now,
     ]);
 
-    (new RecycleDeviceModelImportTaskService())->runTask($taskId, $siteId);
+    $taskService = new RecycleDeviceModelImportTaskService();
+    $taskService->runTask($taskId, $siteId);
     $task = Db::name('recycle_device_model_import_task')->where('id', $taskId)->find();
     $assert((string)$task['status'] === 'partial', '包含重复行的任务应标记为部分完成');
     $assert((int)$task['total_rows'] === 3 && (int)$task['processed_rows'] === 3, '任务进度应完整记录');
@@ -69,6 +70,12 @@ try {
         ['node_type', '=', 'model'],
     ])->count();
     $assert((int)$leafCount === 2, '型号字典应写入两个末级型号');
+    $formatTime = new ReflectionMethod($taskService, 'formatTime');
+    $formatTime->setAccessible(true);
+    $assert(
+        $formatTime->invoke($taskService, '2026-07-12 14:00:00') === '2026-07-12 14:00:00',
+        '日期字符串不得被强制转整数后显示为 1970 年'
+    );
 
     echo "[PASS] recycle device model async import task smoke test\n";
 } finally {
