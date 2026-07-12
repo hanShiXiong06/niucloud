@@ -15,6 +15,7 @@ use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
 use app\model\sys\SysUser;
 use app\model\sys\SysUserRole;
@@ -141,25 +142,10 @@ class RecycleDeviceService extends BaseAdminService
             return $info;
         }
         $byKey = [];
-        $fieldKeyById = [];
         foreach ($fields as $f) {
             $byKey[(string)$f['field_key']] = $f;
-            $fieldKeyById[(int)$f['id']] = (string)$f['field_key'];
         }
-
-        $options = Db::name('recycle_check_option')
-            ->where('site_id', $this->site_id)
-            ->whereIn('field_id', array_keys($fieldKeyById))
-            ->field('field_id,option_value,option_label')
-            ->select()->toArray();
-        $optMap = []; // field_key => [option_value => label]
-        foreach ($options as $o) {
-            $fk = $fieldKeyById[(int)$o['field_id']] ?? '';
-            if ($fk === '') {
-                continue;
-            }
-            $optMap[$fk][(string)$o['option_value']] = (string)$o['option_label'];
-        }
+        $optMap = DeviceSummaryHelper::buildOptionLabelMap([$templateId], $reserved, (int)$this->site_id)[$templateId] ?? [];
 
         $nested = is_array($info['info'] ?? null) ? $info['info'] : [];
         $summary = [];
@@ -167,8 +153,8 @@ class RecycleDeviceService extends BaseAdminService
             if (empty($byKey[$fk])) {
                 continue;
             }
-            $raw = (string)($nested[$fk] ?? ($info[$fk] ?? ''));
-            if ($raw === '') {
+            $raw = $nested[$fk] ?? ($info[$fk] ?? '');
+            if ($raw === '' || $raw === null || $raw === []) {
                 continue;
             }
             $summary[] = [
@@ -176,7 +162,7 @@ class RecycleDeviceService extends BaseAdminService
                 'field_name' => (string)$byKey[$fk]['field_name'],
                 'component'  => (string)$byKey[$fk]['component'],
                 'value'      => $raw,                         // 存储值(ID),规范
-                'label'      => $optMap[$fk][$raw] ?? $raw,   // 选项类→文字;input/number→原值
+                'label'      => DeviceSummaryHelper::resolveDisplayValue($raw, $optMap[$fk] ?? []),
                 'unit'       => (string)($byKey[$fk]['unit'] ?? ''),
             ];
         }
@@ -355,7 +341,7 @@ class RecycleDeviceService extends BaseAdminService
     }
 
     /**
-     * 质检模板"设备摘要"字段(extra_config.summary_visible=1, ≤5, 按 sort)→ 突出项列表。
+     * 质检模板"设备摘要"字段(extra_config.summary_visible=1, ≤10, 按 sort)→ 突出项列表。
      * 值/级别优先取自 result_items(同 field_key), 其次取自已解析的 check_summary(capacity/color 等)。
      * @return array [{field_key, field_name, label, severity}]
      */
@@ -375,7 +361,7 @@ class RecycleDeviceService extends BaseAdminService
             $ec = $this->toArr($f['extra_config'] ?? null);
             if ((int)($ec['summary_visible'] ?? ($ec['show_in_summary'] ?? 0)) === 1) {
                 $picked[] = $f;
-                if (count($picked) >= 5) {
+                if (count($picked) >= 10) {
                     break;
                 }
             }
@@ -394,7 +380,10 @@ class RecycleDeviceService extends BaseAdminService
                 continue;
             }
             $labels = is_array($it['labels'] ?? null) ? $it['labels'] : [];
-            $lookup[$fk] = ['label' => (string)($labels[0] ?? ($it['text'] ?? '')), 'severity' => (string)($it['severity'] ?? 'normal')];
+            $lookup[$fk] = [
+                'label' => !empty($labels) ? implode('、', array_map('strval', $labels)) : (string)($it['text'] ?? ''),
+                'severity' => (string)($it['severity'] ?? 'normal'),
+            ];
         }
         foreach ($checkSummary as $cs) {
             if (!is_array($cs)) {

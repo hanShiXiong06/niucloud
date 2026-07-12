@@ -1,6 +1,10 @@
 import { computed, reactive, type ComputedRef } from 'vue'
+import { resolveCheckValueLabels } from '@/addon/hsx_recycle/utils/checkValue'
 
 export interface DictOptionItem {
+  id?: string | number
+  option_id?: string | number
+  option_value?: string | number
   name: string
   value: string
   label?: string
@@ -182,12 +186,7 @@ function toBooleanValue(value: any): boolean {
 }
 
 function optionLabels(options: DictOptionItem[] = [], value: any): string[] {
-  const values = Array.isArray(value) ? value.map((item) => toStringValue(item)) : [toStringValue(value)]
-  const map: Record<string, string> = {}
-  options.forEach((item) => {
-    map[toStringValue(item.value)] = item.name || item.label || toStringValue(item.value)
-  })
-  return values.map((item) => map[item] || item).filter(Boolean)
+  return resolveCheckValueLabels(options, value)
 }
 
 function normalizeExtraConfig(config: any): Record<string, any> {

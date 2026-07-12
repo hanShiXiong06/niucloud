@@ -233,6 +233,7 @@ import { useCameraUpload } from './composables/useCameraUpload'
 import CheckTemplateSchemaPanel from './CheckTemplateSchemaPanel.vue'
 import CheckTemplateMobilePanel from './CheckTemplateMobilePanel.vue'
 import CheckTemplateSelector from './CheckTemplateSelector.vue'
+import { resolveCheckFieldValue } from '@/addon/hsx_recycle/utils/checkValue'
 
 interface DeviceInfo {
   id?: string | number
@@ -308,6 +309,9 @@ const builtInFieldAccessors: Record<string, {
 }
 
 const normalizeSchemaOption = (option: any) => ({
+  id: option.id,
+  option_id: option.option_id,
+  option_value: option.option_value,
   name: option.name || option.label || option.option_label || '',
   label: option.label || option.name || option.option_label || '',
   value: String(option.value ?? option.option_value ?? ''),
@@ -414,20 +418,11 @@ const getTemplateFieldOptions = (field: CheckTemplateField) => {
 
 const formatSummaryFieldValue = (field: CheckTemplateField) => {
   const value = getTemplateFieldValue(field)
-  if (value === '' || value === null || value === undefined || (Array.isArray(value) && !value.length)) return '-'
-
-  const options = getTemplateFieldOptions(field)
-  if (options.length) {
-    const labelMap = new Map(options.map((option: any) => [String(option.value), option.name || option.label || option.value]))
-    if (Array.isArray(value)) {
-      const labels = value.map(item => labelMap.get(String(item)) || String(item)).filter(Boolean)
-      return labels.length ? labels.join('、') : '-'
-    }
-    return labelMap.get(String(value)) || String(value)
-  }
-
-  if (typeof value === 'boolean') return value ? '是' : '否'
-  return String(value)
+  return resolveCheckFieldValue(
+    { ...field, options: getTemplateFieldOptions(field) },
+    value,
+    { emptyText: '-', includeUnit: true }
+  )
 }
 
 const handleTemplateFieldChange = (field: CheckTemplateField, value: any) => {

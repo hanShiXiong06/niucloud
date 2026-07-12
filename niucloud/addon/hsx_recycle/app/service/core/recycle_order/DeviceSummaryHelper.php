@@ -151,7 +151,7 @@ class DeviceSummaryHelper
      * input/number 等自由输入字段不存在选项，自然不会命中映射，原样保留。
      *
      * @param array $templateIds 设备的 check_template_id 集合
-     * @param array $fieldKeys   需要回译的字段 key,如 ['color','capacity','system_version','warranty_info']
+     * @param array $fieldKeys   需要回译的字段 key；传空数组表示读取模板全部字段
      * @param int   $siteId      站点 id(可选,>0 时附加过滤)
      * @return array [templateId][fieldKey][optionValue] => optionLabel
      */
@@ -159,14 +159,16 @@ class DeviceSummaryHelper
     {
         $templateIds = array_values(array_unique(array_filter(array_map('intval', $templateIds), static fn($v) => $v > 0)));
         $fieldKeys = array_values(array_filter(array_map('strval', $fieldKeys), static fn($v) => $v !== ''));
-        if (empty($templateIds) || empty($fieldKeys)) {
+        if (empty($templateIds)) {
             return [];
         }
 
         // 1) 取目标模板下、指定 key 的字段
         $fieldQuery = Db::name('recycle_check_field')
-            ->whereIn('template_id', $templateIds)
-            ->whereIn('field_key', $fieldKeys);
+            ->whereIn('template_id', $templateIds);
+        if (!empty($fieldKeys)) {
+            $fieldQuery->whereIn('field_key', $fieldKeys);
+        }
         if ($siteId > 0) {
             $fieldQuery->where('site_id', '=', $siteId);
         }
@@ -184,7 +186,7 @@ class DeviceSummaryHelper
         // 2) 取这些字段的全部选项
         $options = Db::name('recycle_check_option')
             ->whereIn('field_id', array_keys($fieldMeta))
-            ->field('field_id,option_value,option_label')
+            ->field('id,field_id,option_value,option_label')
             ->select()->toArray();
 
         // 3) 组装 [templateId][fieldKey][optionValue] => label
@@ -200,8 +202,70 @@ class DeviceSummaryHelper
                 continue;
             }
             $map[$meta['template_id']][$meta['field_key']][$value] = $label;
+            // 兼容历史设备保存的是 option 主键而不是 option_value 的情况。
+            $optionId = (string)($opt['id'] ?? '');
+            if ($optionId !== '') {
+                $map[$meta['template_id']][$meta['field_key']][$optionId] = $label;
+            }
         }
         return $map;
+    }
+
+    /**
+     * 把任意质检原始值转换为展示文案。
+     * 支持数组、JSON 数组、逗号分隔多值以及 {value,label} 结构；未命中映射时保留原值。
+     *
+     * @param mixed $rawValue
+     * @param array $valueLabel option_value/option_id => option_label
+     * @param string $separator 多值连接符
+     */
+    public static function resolveDisplayValue($rawValue, array $valueLabel = [], string $separator = '、'): string
+    {
+        if ($rawValue === null || $rawValue === '' || $rawValue === []) {
+            return '';
+        }
+
+        if (is_bool($rawValue)) {
+            return $rawValue ? '是' : '否';
+        }
+
+        if (is_array($rawValue)) {
+            $values = self::isListArray($rawValue) ? $rawValue : [$rawValue];
+        } else {
+            $text = trim((string)$rawValue);
+            $decoded = json_decode($text, true);
+            if (is_array($decoded)) {
+                $values = self::isListArray($decoded) ? $decoded : [$decoded];
+            } elseif (!empty($valueLabel) && preg_match('/[,，]/u', $text)) {
+                $values = preg_split('/[,，]/u', $text) ?: [];
+            } else {
+                $values = [$text];
+            }
+        }
+
+        $labels = [];
+        foreach ($values as $value) {
+            if (is_array($value)) {
+                $directLabel = (string)($value['label'] ?? $value['name'] ?? $value['option_label'] ?? '');
+                $value = $value['value'] ?? $value['option_value'] ?? $value['id'] ?? '';
+                if ($directLabel !== '') {
+                    $labels[] = $directLabel;
+                    continue;
+                }
+            }
+            $key = trim((string)$value);
+            if ($key === '') {
+                continue;
+            }
+            $labels[] = $valueLabel[$key] ?? $key;
+        }
+
+        return implode($separator, $labels);
+    }
+
+    private static function isListArray(array $value): bool
+    {
+        return array_keys($value) === array_keys(array_values($value));
     }
 
     /**
@@ -214,15 +278,6 @@ class DeviceSummaryHelper
      */
     public static function resolveReservedValue(string $rawValue, array $valueLabel): string
     {
-        if ($rawValue === '' || empty($valueLabel)) {
-            return $rawValue;
-        }
-        // 去掉防科学计数法的制表符前缀再判断,回填后保持原样
-        $parts = explode(',', $rawValue);
-        $resolved = array_map(static function ($part) use ($valueLabel) {
-            $key = trim($part);
-            return $valueLabel[$key] ?? $part;
-        }, $parts);
-        return implode(',', $resolved);
+        return self::resolveDisplayValue($rawValue, $valueLabel, ',');
     }
 }

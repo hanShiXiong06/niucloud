@@ -1,16 +1,9 @@
 import type { CheckSummaryField } from './types'
+import { resolveCheckFieldValue } from '@/addon/hsx_recycle/utils/checkValue'
 
 /** 选项值 → 展示文案（选项类映射 label，开关映射 是/否，多选用顿号连接） */
 export function summaryOptionLabel(field: CheckSummaryField, val: any): string {
-    if (Array.isArray(val)) {
-        return val.map(v => summaryOptionLabel(field, v)).filter(Boolean).join('、')
-    }
-    if (field.component === 'switch') {
-        return val ? '是' : '否'
-    }
-    const opt = (field.options || []).find(o => String(o.value) === String(val))
-    if (opt) return String(opt.label)
-    return val === undefined || val === null ? '' : String(val)
+    return resolveCheckFieldValue(field, val, { emptyText: '' })
 }
 
 /** 折叠态规格标签：[{ key, name, value }] */
@@ -26,7 +19,7 @@ export function buildSummaryChips(
         chips.push({
             key: field.field_key,
             name: field.field_name,
-            value: `${summaryOptionLabel(field, v)}${field.unit || ''}`
+            value: resolveCheckFieldValue(field, v, { emptyText: '', includeUnit: true })
         })
     })
     return chips

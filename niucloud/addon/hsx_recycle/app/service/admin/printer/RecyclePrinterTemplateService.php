@@ -14,6 +14,7 @@ use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
 use addon\hsx_recycle\app\dict\order\RecycleConsignmentDict;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\dict\order\RecycleReturnOrderDict;
+use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 use core\exception\CommonException;
@@ -839,35 +840,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     private function buildTemplateOptionLabelMap(int $templateId): array
     {
-        if ($templateId <= 0) {
-            return [];
-        }
-        $fields = \think\facade\Db::name('recycle_check_field')
-            ->where('site_id', $this->site_id)
-            ->where('template_id', $templateId)
-            ->field('id,field_key')
-            ->select()->toArray();
-        if (empty($fields)) {
-            return [];
-        }
-        $fieldKeyById = [];
-        foreach ($fields as $f) {
-            $fieldKeyById[(int)$f['id']] = (string)$f['field_key'];
-        }
-        $options = \think\facade\Db::name('recycle_check_option')
-            ->where('site_id', $this->site_id)
-            ->whereIn('field_id', array_keys($fieldKeyById))
-            ->field('field_id,option_value,option_label')
-            ->select()->toArray();
-        $map = [];
-        foreach ($options as $o) {
-            $fk = $fieldKeyById[(int)$o['field_id']] ?? '';
-            if ($fk === '') {
-                continue;
-            }
-            $map[$fk][(string)$o['option_value']] = (string)$o['option_label'];
-        }
-        return $map;
+        return DeviceSummaryHelper::buildOptionLabelMap([$templateId], [], (int)$this->site_id)[$templateId] ?? [];
     }
 
     /**
@@ -883,33 +856,7 @@ class RecyclePrinterTemplateService extends BaseAdminService
      */
     private function resolveOptionLabel(array $map, string $fieldKey, $raw): string
     {
-        if ($raw === null || $raw === '' || $raw === []) {
-            return '';
-        }
-        $opt = $map[$fieldKey] ?? null;
-        $values = [];
-        if (is_array($raw)) {
-            $values = $raw;
-        } else {
-            $s = trim((string)$raw);
-            $decoded = json_decode($s, true);
-            if (is_array($decoded)) {
-                $values = $decoded;
-            } elseif (preg_match('/[,，]/u', $s)) {
-                $values = preg_split('/[,，]/u', $s);
-            } else {
-                $values = [$s];
-            }
-        }
-        $labels = [];
-        foreach ($values as $v) {
-            $key = trim((string)$v);
-            if ($key === '') {
-                continue;
-            }
-            $labels[] = ($opt !== null && array_key_exists($key, $opt)) ? $opt[$key] : $key;
-        }
-        return implode('、', $labels);
+        return DeviceSummaryHelper::resolveDisplayValue($raw, $map[$fieldKey] ?? []);
     }
 
     /**
