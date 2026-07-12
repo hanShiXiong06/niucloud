@@ -274,7 +274,6 @@ function suggestProfit(row: any) {
 .popup-search :deep(.u-search) { flex: 1; }
 .popup-scan { width: 68rpx; height: 68rpx; border-radius: 50%; background: #eff3ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .filter-row { display:flex; align-items:center; gap:12rpx; padding:0 24rpx 12rpx; overflow-x:auto; white-space:nowrap; }
-.filter-row::-webkit-scrollbar { display:none; }
 .filter-chip { min-height:56rpx; display:flex; align-items:center; gap:8rpx; padding:0 18rpx; border-radius:28rpx; background:#f8fafc; border:1rpx solid #e2e8f0; color:#64748b; font-size:24rpx; flex-shrink:0; }
 .filter-chip.active { color:#3b6ef5; background:#eff6ff; border-color:#bfdbfe; }
 .filter-chip :deep(.field) { min-height:54rpx; }

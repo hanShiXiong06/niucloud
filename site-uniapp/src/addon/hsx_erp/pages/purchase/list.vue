@@ -12,7 +12,7 @@
             @filter="filterVisible = true"
         />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15" :style="pagingStyle">
+            :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无采购记录" /></template>
             <view class="list-wrap">
                 <view v-if="returnMode" class="return-mode-tip">
@@ -163,7 +163,7 @@ const filterCount = computed(() => Object.entries(filters.value).filter(([key, v
 const reload = () => pagingRef.value?.reload()
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
-const { pagingStyle } = useListHeader(126)
+const { pagingStyle } = useListHeader({ tabs: true })
 onShow(async () => {
     dicts.value = await loadErpDicts()
     reload()
@@ -308,7 +308,7 @@ function returnSummary(row: any) {
 .batch-statuses { display:flex; flex-wrap:wrap; gap:12rpx 24rpx; padding:14rpx 16rpx; border-radius:14rpx; background:rgba(241,245,249,.82); }
 .batch-status-item { display:flex; align-items:center; gap:8rpx; }
 .batch-status-label { color:#64748b; font-size:20rpx; }
-.batch-payment-text { color:#64748b; font-size:21rpx; }
+.batch-payment-text { color:#64748b; font-size:21rpx; display: flex; align-items: center; }
 .batch-meta { display:flex; min-width:0; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8rpx 20rpx; }
 .batch-number { display:flex; min-width:0; align-items:center; gap:10rpx; color:#94a3b8; font-size:20rpx; }
 .batch-number__label { flex:0 0 auto; }

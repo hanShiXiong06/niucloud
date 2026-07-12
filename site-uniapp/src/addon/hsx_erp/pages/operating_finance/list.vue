@@ -5,7 +5,7 @@
                <view> <u-button type="primary" size="small" text="记一笔" @click="openCreate" /></view>
             </template>
         </ErpListHeader>
-        <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true" :default-page-size="15" :style="pagingStyle">
+        <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true" :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无经营收支" /></template>
             <view class="summary-grid"><view><text>经营收入</text><strong class="green">¥{{ money(summary.income) }}</strong></view><view><text>经营支出</text><strong class="orange">¥{{ money(summary.expense) }}</strong></view><view><text>待收待付</text><strong class="blue">¥{{ money(summary.unsettled) }}</strong></view></view>
             <view class="list-wrap"><view v-for="row in list" :key="`${row.direction}-${row.id}`" class="erp-card op-card">
@@ -51,7 +51,7 @@ import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpCapitalAccountPopup from '@/addon/hsx_erp/components/ErpCapitalAccountPopup.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
-const {pagingStyle}=useListHeader(300,300),pagingRef=ref<any>(null),list=ref<any[]>([]),keyword=ref(''),direction=ref(''),summary=ref({income:0,expense:0,unsettled:0}),categories=ref<any[]>([]),accounts=ref<any[]>([]),createVisible=ref(false),categoryVisible=ref(false),partyVisible=ref(false),accountVisible=ref(false),saving=ref(false)
+const {pagingStyle}=useListHeader({title:true,tabs:true,h5TopRpx:300}),pagingRef=ref<any>(null),list=ref<any[]>([]),keyword=ref(''),direction=ref(''),summary=ref({income:0,expense:0,unsettled:0}),categories=ref<any[]>([]),accounts=ref<any[]>([]),createVisible=ref(false),categoryVisible=ref(false),partyVisible=ref(false),accountVisible=ref(false),saving=ref(false)
 const tabs=[{label:'全部',value:''},{label:'收入',value:'income'},{label:'支出',value:'expense'}],inputStyle={textAlign:'right',background:'#f8fafc',borderRadius:'10rpx',padding:'8rpx 12rpx'}
 const form=ref<any>({direction:'expense',category_key:'',party_id:0,party_name:'',amount:'',settlement_mode:'pending',capital_account_id:0,voucher_urls:'',remark:''})
 const operatingCategories=computed(()=>categories.value.filter(row=>row.scope==='operating'&&Number(row.enabled??1)===1)),formCategories=computed(()=>operatingCategories.value.filter(row=>row.direction===form.value.direction)),selectedCategory=computed(()=>operatingCategories.value.find(row=>row.key===form.value.category_key)),selectedAccountLabel=computed(()=>{const a=accounts.value.find(row=>Number(row.id)===Number(form.value.capital_account_id));return a?`${a.account_name} · ¥${money(a.balance)}`:''})

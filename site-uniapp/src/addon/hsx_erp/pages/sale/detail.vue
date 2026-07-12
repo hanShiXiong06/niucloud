@@ -1,6 +1,6 @@
 <template>
     <view class="erp-page">
-        <ErpPageHeader :title="pageTitle" />
+
         <view v-if="loading" class="loading-wrap"><u-loading-icon size="36" /></view>
         <scroll-view v-else scroll-y style="height:100%">
             <view class="detail-wrap">

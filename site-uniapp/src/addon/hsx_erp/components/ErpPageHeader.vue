@@ -1,6 +1,7 @@
 <template>
     <!-- 原生客户端由 pages.json 导航栏提供标题和返回能力，避免重复显示两层头部。 -->
-    <!-- #ifndef APP-PLUS -->
+    <!-- ERP 小程序页面使用 pages.json 原生导航栏；仅 H5 需要补充页面头部。 -->
+    <!-- #ifdef H5 -->
     <view class="erp-page-header" :style="headerStyle">
         <view class="erp-page-header__content" :style="contentStyle">
             <view class="erp-page-header__side">

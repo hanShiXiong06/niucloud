@@ -1,6 +1,6 @@
 <template>
     <view class="erp-page">
-        <ErpPageHeader title="销售出库" />
+
         <scroll-view scroll-y style="height:calc(100vh - 200rpx)">
             <view class="form-wrap">
 

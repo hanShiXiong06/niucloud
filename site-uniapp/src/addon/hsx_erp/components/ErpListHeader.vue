@@ -10,7 +10,7 @@
     />
 -->
 <template>
-    <view class="erp-top-bar" :style="{ paddingTop: topPadding }">
+    <view class="erp-top-bar">
         <!-- 标题行（可选，有标题时显示标题+右侧slot） -->
         <view v-if="title" class="title-row">
             <text class="title-text">{{ title }}</text>
@@ -58,8 +58,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
+import { getErpListHeaderHeightRpx } from '@/addon/hsx_erp/utils/navbar'
 
 const props = withDefaults(defineProps<{
     modelValue?: string        // keyword v-model
@@ -92,23 +92,12 @@ const emit = defineEmits<{
     (e: 'filter'): void
 }>()
 
-const { pageHeaderStyle } = useListHeader(0)
-
-// 顶部安全距离
-const topPadding = computed(() => {
-    const statusBarHeight = (uni as any).getSystemInfoSync?.()?.statusBarHeight || 0
-    return `calc(${statusBarHeight}px + 16rpx)`
-})
-
-// 计算占位高度
-const placeholderHeight = computed(() => {
-    const statusBarHeight = (uni as any).getSystemInfoSync?.()?.statusBarHeight || 0
-    const titleH = props.title ? 80 : 0
-    const searchH = props.showSearch ? 72 + 20 : 0  // pill + gap
-    const tabH = props.tabs?.length ? 60 + 16 : 0   // tab + gap
-    const safeTop = statusBarHeight + 16
-    return `${safeTop + titleH + searchH + tabH + 14}px`
-})
+// 与 useListHeader 使用同一公式，避免 fixed 工具区与 z-paging 各算一套高度。
+const placeholderHeight = computed(() => `${getErpListHeaderHeightRpx({
+    title: !!props.title,
+    search: props.showSearch,
+    tabs: !!props.tabs?.length,
+})}rpx`)
 
 const localKeyword = ref(props.modelValue)
 const localTab = ref(props.activeTab)
@@ -147,7 +136,7 @@ function onTab(val: string) {
     top: 0; left: 0; right: 0;
     z-index: 100;
     background: var(--page-bg-color, #f3f4f6);
-    padding: 0 24rpx 16rpx;
+    padding: 16rpx 24rpx;
     box-sizing: border-box;
 }
 
@@ -227,7 +216,6 @@ function onTab(val: string) {
     margin-top: 16rpx;
     overflow-x: auto;
     white-space: nowrap;
-    &::-webkit-scrollbar { display: none; }
 }
 .erp-tab {
     padding: 8rpx 26rpx;

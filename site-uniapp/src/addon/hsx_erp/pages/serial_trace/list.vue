@@ -2,7 +2,7 @@
     <view class="erp-page">
         <ErpListHeader v-model="keyword" placeholder="输入 IMEI / SN / 型号 / 供货商" :show-scan="true" @search="reload" @scan="scan" />
 
-        <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true" :default-page-size="15" :style="pagingStyle">
+        <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true" :default-page-size="15" :paging-style="pagingStyle">
               <view class="trace-tip">同一串号允许多次入库；每次入库作为独立记录，最新记录排在最上面。</view>
             <template #empty><u-empty mode="list" text="暂无串号记录" /></template>
             <view class="list-wrap">
@@ -30,7 +30,7 @@ import { formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
-const { pagingStyle } = useListHeader( 0 ,106)
+const { pagingStyle } = useListHeader({ tabs: false, h5TopRpx: 106 })
 const keyword=ref(''),list=ref<any[]>([]),pagingRef=ref<any>(null)
 const reload=()=>pagingRef.value?.reload()
 async function queryList(page:number,limit:number){try{const res:any=await getMobileSerialTraceList({keyword:keyword.value,page,limit});pagingRef.value?.complete(res?.data?.data||[])}catch(_){pagingRef.value?.complete(false)}}

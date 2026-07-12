@@ -67,14 +67,14 @@
                     <view v-for="(item, index) in refurbishItems" :key="index" class="refurbish-row">
                         <view class="refurbish-row__main">
                             <view class="refurbish-fields">
-                                <u-input v-model="item.name"  customStyle="padding:15rpx" border="none" placeholder="项目，如：换屏、修面容" />
+                                <u-input class="refurbish-name-input" v-model="item.name" customStyle="padding:15rpx" border="none" placeholder="项目，如：换屏、修面容" />
                                 <view class="refurbish-amount">
                                     <text>¥</text>
-                                    <u-input v-model="item.amount" type="digit" border="none" placeholder="费用" inputAlign="right" />
+                                    <u-input v-model="item.amount" type="digit" border="none" placeholder="费用" inputAlign="right" :customStyle="{ minWidth: '0' }" />
                                 </view>
                             </view>
                             <view class="item-party" :class="{ selected: item.party_id }" @click="openPartyPopup(index)">
-                                <view>
+                                <view class="item-party__meta">
                                     <text class="item-party__label">本项服务商</text>
                                     <text class="item-party__hint">分别生成应付</text>
                                 </view>
@@ -180,7 +180,7 @@
             <!-- 历史调整 -->
             <view class="card" v-if="adjustHistory.length">
                 <view class="field-label">历史成本调整</view>
-                <view v-for="(h, i) in adjustHistory" :key="i" class="history-item">
+                <view v-for="(h, i) in adjustHistory" :key="i" class="history-item" :class="{ 'history-item--last': i === adjustHistory.length - 1 }">
                     <view class="history-line">
                         <text class="history-cost">¥{{ formatMoney(h.before_cost) }} → ¥{{ formatMoney(h.after_cost) }}</text>
                         <text class="history-time">{{ fmtTime(h.occurred_at) }}</text>
@@ -464,15 +464,14 @@ onLoad((options: any) => {
 .refurbish-row { display:flex; align-items:center; gap:12rpx; }
 .refurbish-row__main { display:flex; flex:1; flex-direction:column; overflow:hidden; border:1rpx solid #e2e8f0; border-radius:14rpx; background:#f8fafc; }
 .refurbish-fields { display:grid; grid-template-columns:minmax(0, 1fr) 190rpx; }
-.refurbish-fields > :first-child { padding:0 16rpx; }
+.refurbish-name-input { padding:0 16rpx; }
 .item-party { display:flex; align-items:center; justify-content:space-between; gap:14rpx; min-height:72rpx; padding:0 16rpx; border-top:1rpx solid #e2e8f0; background:#fff; }
-.item-party > view:first-child { display:flex; flex-direction:column; }
+.item-party__meta { display:flex; flex-direction:column; }
 .item-party__label { color:#475569; font-size:22rpx; font-weight:600; }
 .item-party__hint { color:#94a3b8; font-size:18rpx; }
 .item-party__selection { display:flex; align-items:center; gap:6rpx; color:#94a3b8; font-size:22rpx; }
 .item-party.selected .item-party__selection { color:#2563eb; font-weight:600; }
 .refurbish-amount { display:flex; align-items:center; padding:0 16rpx; border-left:1rpx solid #e2e8f0; color:#475569; }
-.refurbish-amount :deep(.u-input) { min-width:0; }
 .refurbish-delete { display:flex; align-items:center; justify-content:center; width:54rpx; height:54rpx; border-radius:50%; background:#fef2f2; }
 .system-cost-head { display:flex; align-items:center; justify-content:space-between; color:#64748b; font-size:25rpx; }
 .system-cost-total { color:#f97316; font-size:30rpx; font-weight:700; }
@@ -618,9 +617,8 @@ onLoad((options: any) => {
 .history-item {
     padding: 18rpx 0;
     border-bottom: 1rpx solid #f1f5f9;
-
-    &:last-child { border-bottom: none; padding-bottom: 0; }
 }
+.history-item--last { border-bottom: none; padding-bottom: 0; }
 .history-line {
     display: flex;
     align-items: center;

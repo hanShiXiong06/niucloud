@@ -12,7 +12,7 @@
             @filter="filterVisible = true"
         />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15" :style="pagingStyle">
+            :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" :text="returnMode ? '暂无可发起退货的销售设备' : '暂无销售记录'" /></template>
             <view class="list-wrap">
                 <view v-if="returnMode" class="return-mode-tip">
@@ -120,7 +120,7 @@ import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import { erpNetSaleAmount, erpSaleCompensationAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 
-const { pagingStyle } = useListHeader(126)
+const { pagingStyle } = useListHeader({ tabs: true })
 
 
 const keyword = ref('')

@@ -25,3 +25,20 @@ export function getErpNavbarMetrics() {
         sideWidthRpx: Math.max(96, Math.ceil(capsuleWidthPx * 2 + 30))
     }
 }
+
+/**
+ * 原生导航栏下 ERP 列表工具区的实际高度（rpx）。
+ * 小程序页面 viewport 已经从原生导航栏下方开始，严禁再次叠加状态栏/胶囊高度。
+ */
+export function getErpListHeaderHeightRpx(options: {
+    title?: boolean
+    search?: boolean
+    tabs?: boolean
+} = {}) {
+    const { title = false, search = true, tabs = true } = options
+    const verticalPadding = 32 // 顶部 16 + 底部 16
+    const titleHeight = title ? 72 : 0
+    const searchHeight = search ? 72 : 0
+    const tabsHeight = tabs ? 68 : 0 // margin-top 16 + 标签行约 52
+    return verticalPadding + titleHeight + searchHeight + tabsHeight
+}

@@ -1,29 +1,14 @@
 <template>
     <view class="cost-list-page">
-        <ErpPageHeader title="成本调整" />
-        <view class="page-header">
-                    
-                    <u-search
-                        v-model="keyword"
-                        placeholder="型号 / 资产号 / IMEI / SN"
-                        :showAction="false"
-                        bgColor="#f1f5f9"
-                        height="34"
-                        :customStyle="{ marginTop: '16rpx' }"
-                        @search="reload"
-                        @clear="reload"
-                    ></u-search>
-                    <u-tabs
-                        :list="statusTabs"
-                        :current="currentIndex"
-                        lineColor="#3b6ef5"
-                        :activeStyle="{ color: '#0f172a', fontWeight: '600' }"
-                        :inactiveStyle="{ color: '#64748b' }"
-                        lineWidth="40"
-                        :customStyle="{ marginTop: '8rpx' }"
-                        @click="onTabClick"
-                    ></u-tabs>
-                </view>     
+        <ErpListHeader
+            v-model="keyword"
+            v-model:active-tab="activeTab"
+            placeholder="型号 / 资产号 / IMEI / SN"
+            :tabs="statusTabs"
+            :show-scan="true"
+            @search="reload"
+            @tab-change="onTabClick"
+        />
         <z-paging
             ref="pagingRef"
             v-model="list"
@@ -86,21 +71,20 @@ import { getErpAssetList } from '@/addon/hsx_erp/api/asset'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, isCostAdjustAllowed, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
-import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
+import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 
 
 const keyword = ref('')
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
 const erpDicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
-// 胶囊筛选行高度上调，让设备列表落在胶囊按钮下方、留出间距
-const { pageHeaderStyle, pagingStyle } = useListHeader(104, 264)
+const { pagingStyle } = useListHeader({ tabs: true, h5TopRpx: 264 })
 // 详情页调整成本后返回需要刷新
 const dirty = ref(false)
 
 const statusTabs = computed(() => dictTabs(erpDicts.value, 'asset_status', true))
-const currentIndex = ref(0)
-const status = computed(() => statusTabs.value[currentIndex.value]?.value || '')
+const activeTab = ref('')
+const status = computed(() => activeTab.value)
 
 const statusLabel = (s: string) => dictLabel(erpDicts.value, 'asset_status', s)
 const statusType = (s: string) => dictType(erpDicts.value, 'asset_status', s)
@@ -109,9 +93,8 @@ const canAdjust = (row: any) => isCostAdjustAllowed(row?.inventory_status)
 
 const reload = () => pagingRef.value?.reload()
 
-const onTabClick = (item: any) => {
-    if (currentIndex.value === item.index) return
-    currentIndex.value = item.index
+const onTabClick = (value: string) => {
+    activeTab.value = value
     reload()
 }
 
@@ -154,7 +137,7 @@ const goAdjust = (row: any) => {
 onShow(() => {
     loadErpDicts().then((dicts) => {
         erpDicts.value = dicts
-        if (currentIndex.value >= statusTabs.value.length) currentIndex.value = 0
+        if (!statusTabs.value.some(item => item.value === activeTab.value)) activeTab.value = ''
     })
     if (dirty.value) {
         dirty.value = false
@@ -167,18 +150,6 @@ onShow(() => {
 .cost-list-page {
     min-height: 100vh;
     background: #f6f7fb;
-}
-
-.page-header {
-    padding: 20rpx 24rpx 8rpx;
-    background: #fff;
-    box-shadow: 0 2rpx 12rpx rgba(15, 23, 42, 0.04);
-
-    .header-tip {
-        font-size: 22rpx;
-        color: #94a3b8;
-        line-height: 1.5;
-    }
 }
 
 .list-content {

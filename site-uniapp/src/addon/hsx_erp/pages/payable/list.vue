@@ -13,7 +13,7 @@
         />
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15" :style="pagingStyle">
+            :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无应付记录" /></template>
             <view class="list-wrap">
                 <view v-for="row in list" :key="String(row.party_id)+'_'+String(row.source_type)+'_'+String(row.purchase_order_id)" class="erp-card payable-card">
@@ -211,7 +211,7 @@ import { erpFinanceSourceFilterOptions, erpFinanceSourceMeta } from '@/addon/hsx
 import { useErpFinanceOptions } from '@/addon/hsx_erp/hooks/useErpFinanceOptions'
 import { useErpSaleChannels } from '@/addon/hsx_erp/hooks/useErpSaleChannels'
 
-const { pagingStyle } = useListHeader(126)
+const { pagingStyle } = useListHeader({ tabs: true })
 
 const keyword = ref('')
 const list = ref<any[]>([])

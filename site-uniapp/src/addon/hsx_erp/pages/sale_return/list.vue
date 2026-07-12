@@ -13,7 +13,7 @@
             @filter="filterVisible = true"
         />
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15" :style="pagingStyle">
+            :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无退货记录" /></template>
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card" @click="goDetail(row)">
@@ -86,7 +86,7 @@ import { erpTimeLine } from '@/addon/hsx_erp/hooks/useErpTime'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
 
-const { pagingStyle } = useListHeader(126)
+const { pagingStyle } = useListHeader({ tabs: true })
 
 
 const list = ref<any[]>([])

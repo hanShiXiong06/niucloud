@@ -13,7 +13,7 @@
         />
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
-            :default-page-size="15" :style="pagingStyle">
+            :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无库存设备" /></template>
               <view class="trace-entry" @click="goSerialTrace">
                     <view><text class="trace-entry__title">串号追踪</text><text class="trace-entry__sub">查询同一 IMEI / SN 的多次入库与完整流转</text></view>
@@ -138,7 +138,7 @@ import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitive
 
 
 
-const { pagingStyle } = useListHeader(126)
+const { pagingStyle } = useListHeader({ tabs: true })
 
 
 
