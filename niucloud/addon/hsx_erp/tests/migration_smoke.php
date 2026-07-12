@@ -47,6 +47,8 @@ $assert(str_contains($schema, "erp_settlement_link` l") && str_contains($schema,
 foreach (['retail_price', 'remark_public', 'remark_internal'] as $field) {
     $assert(str_contains($schema, "'{$field}'"), '集中迁移必须补齐设备流转字段：' . $field);
 }
+$assert(substr_count($schema, "'manager_uid'") >= 2, '集中迁移必须补齐仓库和库位负责人字段');
+$assert(substr_count($schema, "'idx_site_manager'") >= 2, '集中迁移必须补齐仓库和库位负责人索引');
 $assetBlockStart = strpos($schema, "'erp_asset' => [");
 $assetBlockEnd = strpos($schema, "'erp_sale_order' => [", $assetBlockStart ?: 0);
 $assetBlock = $assetBlockStart !== false && $assetBlockEnd !== false
@@ -84,6 +86,7 @@ foreach (['origin_plugin', 'origin_type', 'biz_scene', 'category_statement_group
 foreach (['retail_price', 'remark_public', 'remark_internal'] as $field) {
     $assert(str_contains($sql, '`' . $field . '`'), '全新安装结构必须包含设备流转字段：' . $field);
 }
+$assert(substr_count($sql, '`manager_uid` int NOT NULL DEFAULT 0') >= 2, '全新安装结构必须包含仓库和库位负责人');
 $installAssetStart = strpos($sql, 'CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset`');
 $installAssetEnd = strpos($sql, 'CREATE TABLE IF NOT EXISTS `{{prefix}}erp_asset_ledger`', $installAssetStart ?: 0);
 $installAssetBlock = $installAssetStart !== false && $installAssetEnd !== false

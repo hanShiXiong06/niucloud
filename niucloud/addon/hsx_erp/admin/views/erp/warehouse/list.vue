@@ -20,6 +20,13 @@
                             <el-table :data="row.locations || []" border size="small" empty-text="暂无库位">
                                 <el-table-column prop="location_name" label="库位名称" min-width="160" />
                                 <el-table-column prop="location_code" label="库位编码" min-width="140" />
+                                <el-table-column label="负责人" min-width="150">
+                                    <template #default="{ row: location }">
+                                        <span v-if="location.manager_effective_name">{{ location.manager_effective_name }}</span>
+                                        <span v-else class="text-orange-500">未设置</span>
+                                        <el-tag v-if="location.manager_source === 'warehouse'" class="ml-2" size="small" effect="plain">继承仓库</el-tag>
+                                    </template>
+                                </el-table-column>
                                 <el-table-column label="状态" width="100">
                                     <template #default="{ row: location }">
                                         <el-tag :type="location.status === 1 ? 'success' : 'info'">{{ location.status === 1 ? '启用' : '停用' }}</el-tag>
@@ -38,6 +45,12 @@
                 </el-table-column>
                 <el-table-column prop="warehouse_name" label="仓库名称" min-width="180" />
                 <el-table-column prop="warehouse_code" label="仓库编码" width="150" />
+                <el-table-column label="负责人" min-width="130">
+                    <template #default="{ row }">
+                        <span v-if="row.manager_name">{{ row.manager_name }}</span>
+                        <span v-else class="text-orange-500">未设置</span>
+                    </template>
+                </el-table-column>
                 <el-table-column label="业务属性" min-width="230">
                     <template #default="{ row }">
                         <div class="flex flex-wrap gap-1">
@@ -75,6 +88,12 @@
             <el-form label-width="96px">
                 <el-form-item label="仓库名称" required><el-input v-model.trim="warehouseDialog.form.warehouse_name" /></el-form-item>
                 <el-form-item label="仓库编码"><el-input v-model.trim="warehouseDialog.form.warehouse_code" /></el-form-item>
+                <el-form-item label="负责人" required>
+                    <el-select v-model="warehouseDialog.form.manager_uid" class="w-full" filterable placeholder="选择本站管理员">
+                        <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
+                    </el-select>
+                    <div class="mt-1 text-xs text-gray-400">负责仓库整体库存；未单独指定负责人的库位将继承此人。</div>
+                </el-form-item>
                 <el-form-item label="业务类型" required>
                     <el-select v-model="warehouseDialog.form.warehouse_type" class="w-full" @change="onWarehouseTypeChange">
                         <el-option label="二手机仓" value="owned" />
@@ -115,6 +134,12 @@
                 <el-form-item label="所属仓库">{{ locationDialog.warehouseName }}</el-form-item>
                 <el-form-item label="库位名称" required><el-input v-model.trim="locationDialog.form.location_name" /></el-form-item>
                 <el-form-item label="库位编码"><el-input v-model.trim="locationDialog.form.location_code" /></el-form-item>
+                <el-form-item label="负责人">
+                    <el-select v-model="locationDialog.form.manager_uid" class="w-full" clearable filterable placeholder="不选择则继承仓库负责人">
+                        <el-option v-for="item in staffOptions" :key="item.uid" :label="staffName(item)" :value="item.uid" />
+                    </el-select>
+                    <div class="mt-1 text-xs text-gray-400">可指定具体库管；留空时自动由所属仓库负责人承担。</div>
+                </el-form-item>
                 <el-form-item label="状态"><el-switch v-model="locationDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
                 <el-form-item label="排序"><el-input-number v-model="locationDialog.form.sort" :min="0" :controls="false" class="!w-[160px]" /></el-form-item>
                 <el-form-item label="备注"><el-input v-model.trim="locationDialog.form.remark" type="textarea" :rows="2" /></el-form-item>
@@ -131,28 +156,31 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import { getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import { deleteErpWarehouse, deleteErpWarehouseLocation, getErpWarehouseList, saveErpWarehouse, saveErpWarehouseLocation } from '@/addon/hsx_erp/api/warehouse'
 
 const loading = ref(false)
 const warehouses = ref<any[]>([])
+const staffOptions = ref<any[]>([])
 const warehouseDialog = reactive<any>({
     visible: false,
     loading: false,
-    form: { id: 0, warehouse_name: '', warehouse_code: '', warehouse_type: 'owned', need_photo: 0, need_pricing: 0, allow_direct_sale: 1, allow_transfer: 1, default_sale_target: 'unset', status: 1, is_default: 0, sort: 0, remark: '' }
+    form: { id: 0, warehouse_name: '', warehouse_code: '', manager_uid: null, warehouse_type: 'owned', need_photo: 0, need_pricing: 0, allow_direct_sale: 1, allow_transfer: 1, default_sale_target: 'unset', status: 1, is_default: 0, sort: 0, remark: '' }
 })
 const locationDialog = reactive<any>({
     visible: false,
     loading: false,
     warehouseId: 0,
     warehouseName: '',
-    form: { id: 0, location_name: '', location_code: '', status: 1, sort: 0, remark: '' }
+    form: { id: 0, location_name: '', location_code: '', manager_uid: null, status: 1, sort: 0, remark: '' }
 })
 
 async function loadData() {
     loading.value = true
     try {
-        const res: any = await getErpWarehouseList()
-        warehouses.value = Array.isArray(res?.data) ? res.data : []
+        const [warehouseRes, staffRes]: any[] = await Promise.all([getErpWarehouseList(), getErpStaffOptions()])
+        warehouses.value = Array.isArray(warehouseRes?.data) ? warehouseRes.data : []
+        staffOptions.value = Array.isArray(staffRes?.data?.users) ? staffRes.data.users : []
     } finally {
         loading.value = false
     }
@@ -163,6 +191,7 @@ function openWarehouse(row: any = {}) {
         id: Number(row.id || 0),
         warehouse_name: row.warehouse_name || '',
         warehouse_code: row.warehouse_code || '',
+        manager_uid: Number(row.manager_uid || 0) || null,
         warehouse_type: row.warehouse_type || 'owned',
         need_photo: row.need_photo ?? 0,
         need_pricing: row.need_pricing ?? 0,
@@ -180,6 +209,7 @@ function openWarehouse(row: any = {}) {
 
 async function submitWarehouse() {
     if (!warehouseDialog.form.warehouse_name) return ElMessage.warning('请填写仓库名称')
+    if (!warehouseDialog.form.manager_uid) return ElMessage.warning('请选择仓库负责人')
     warehouseDialog.loading = true
     try {
         await saveErpWarehouse(warehouseDialog.form.id, { ...warehouseDialog.form })
@@ -198,6 +228,7 @@ function openLocation(warehouse: any, row: any = {}) {
         id: Number(row.id || 0),
         location_name: row.location_name || '',
         location_code: row.location_code || '',
+        manager_uid: Number(row.manager_uid || 0) || null,
         status: row.status ?? 1,
         sort: row.sort ?? 0,
         remark: row.remark || ''
@@ -256,6 +287,10 @@ function warehouseTypeMeta(type: string) {
         exception: { label: '异常仓', type: 'danger', desc: '退回、复检、争议或待处理设备，默认不允许直接销售。' }
     }
     return map[type || 'owned'] || map.owned
+}
+
+function staffName(item: any) {
+    return item?.name || item?.real_name || item?.username || `员工#${item?.uid || ''}`
 }
 
 onMounted(loadData)

@@ -43,6 +43,8 @@ final class ErpSchema
                 'group_keys' => "`group_keys` varchar(255) NOT NULL DEFAULT '' COMMENT '业务分组，逗号分隔' AFTER `role_flags`",
             ],
             'erp_warehouse' => [
+                'manager_uid' => "`manager_uid` int NOT NULL DEFAULT 0 COMMENT '仓库负责人UID' AFTER `warehouse_code`",
+                'manager_name' => "`manager_name` varchar(60) NOT NULL DEFAULT '' COMMENT '仓库负责人名称快照' AFTER `manager_uid`",
                 'warehouse_type' => "`warehouse_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned二手机/peer同行/consignment代卖/exception异常' AFTER `warehouse_code`",
                 'ownership_type' => "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖/pending待定' AFTER `warehouse_type`",
                 'need_photo' => "`need_photo` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要拍照' AFTER `ownership_type`",
@@ -50,6 +52,10 @@ final class ErpSchema
                 'allow_direct_sale' => "`allow_direct_sale` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许直接销售' AFTER `need_pricing`",
                 'allow_transfer' => "`allow_transfer` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许调拨' AFTER `allow_direct_sale`",
                 'default_sale_target' => "`default_sale_target` varchar(20) NOT NULL DEFAULT 'unset' COMMENT 'unset未定/peer同行/mall商城' AFTER `allow_transfer`",
+            ],
+            'erp_warehouse_location' => [
+                'manager_uid' => "`manager_uid` int NOT NULL DEFAULT 0 COMMENT '库位负责人UID，0表示继承仓库负责人' AFTER `location_code`",
+                'manager_name' => "`manager_name` varchar(60) NOT NULL DEFAULT '' COMMENT '库位负责人名称快照' AFTER `manager_uid`",
             ],
             'erp_purchase_order' => [
                 'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端幂等请求ID' AFTER `site_id`",
@@ -244,6 +250,8 @@ final class ErpSchema
         }
 
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_sn', 'KEY `idx_site_sn` (`site_id`,`sn`)');
+        self::ensureIndex($prefix . 'erp_warehouse', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
+        self::ensureIndex($prefix . 'erp_warehouse_location', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish', 'KEY `idx_site_refurbish` (`site_id`,`refurbish_status`,`refurbish_pending_at`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish_provider', 'KEY `idx_site_refurbish_provider` (`site_id`,`refurbish_provider_id`,`refurbish_status`)');
         self::ensureIndex($prefix . 'erp_asset_ledger', 'idx_action_source_no', 'KEY `idx_action_source_no` (`site_id`,`action`,`source_no`)');

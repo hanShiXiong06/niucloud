@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse` (
   `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
   `warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '仓库名称',
   `warehouse_code` varchar(60) NOT NULL DEFAULT '' COMMENT '仓库编码',
+  `manager_uid` int NOT NULL DEFAULT 0 COMMENT '仓库负责人UID',
+  `manager_name` varchar(60) NOT NULL DEFAULT '' COMMENT '仓库负责人名称快照',
   `warehouse_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned二手机/peer同行/consignment代卖/exception异常',
   `ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖/pending待定',
   `need_photo` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要拍照',
@@ -42,7 +44,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse` (
   `update_at` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_site_name` (`site_id`,`warehouse_name`),
-  KEY `idx_site_status` (`site_id`,`status`,`sort`)
+  KEY `idx_site_status` (`site_id`,`status`,`sort`),
+  KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-仓库';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse_location` (
@@ -51,6 +54,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse_location` (
   `warehouse_id` int NOT NULL DEFAULT 0 COMMENT '仓库ID',
   `location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '库位名称',
   `location_code` varchar(60) NOT NULL DEFAULT '' COMMENT '库位编码',
+  `manager_uid` int NOT NULL DEFAULT 0 COMMENT '库位负责人UID，0表示继承仓库负责人',
+  `manager_name` varchar(60) NOT NULL DEFAULT '' COMMENT '库位负责人名称快照',
   `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1启用/0停用',
   `sort` int NOT NULL DEFAULT 0,
   `remark` varchar(255) NOT NULL DEFAULT '',
@@ -58,7 +63,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}erp_warehouse_location` (
   `update_at` int NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_warehouse_name` (`site_id`,`warehouse_id`,`location_name`),
-  KEY `idx_site_warehouse` (`site_id`,`warehouse_id`,`status`,`sort`)
+  KEY `idx_site_warehouse` (`site_id`,`warehouse_id`,`status`,`sort`),
+  KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-仓库库位';
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}erp_party` (

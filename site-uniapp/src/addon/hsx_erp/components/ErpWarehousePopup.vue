@@ -39,6 +39,7 @@
                                 {{ typeLabel(wh.warehouse_type) || '仓库' }}
                                 <text v-if="wh.locations?.length"> · {{ wh.locations.length }} 个库位</text>
                             </text>
+                            <text class="warehouse-row__manager">负责人 {{ wh.manager_effective_name || '未设置' }}</text>
                         </view>
                         <u-icon v-if="wh.id === activeWarehouseId" name="arrow-right" size="15" color="#3b6ef5" />
                     </view>
@@ -57,7 +58,13 @@
                         :class="{ active: loc.id === locationId }"
                         @click="selectLocation(loc)"
                     >
-                        <text class="location-row__name">{{ loc.location_name }}</text>
+                        <view class="location-row__main">
+                            <text class="location-row__name">{{ loc.location_name }}</text>
+                            <text class="location-row__manager">
+                                负责人 {{ loc.manager_effective_name || '未设置' }}
+                                <text v-if="loc.manager_source === 'warehouse'"> · 继承仓库</text>
+                            </text>
+                        </view>
                         <u-icon v-if="loc.id === locationId" name="checkmark-circle-fill" color="#3b6ef5" size="20" />
                     </view>
 
@@ -182,7 +189,7 @@ const typeLabel = (t: string) => ({
     box-sizing: border-box;
 }
 .warehouse-row {
-    min-height: 108rpx;
+    min-height: 126rpx;
     padding: 18rpx 18rpx 18rpx 24rpx;
     box-sizing: border-box;
     display: flex;
@@ -215,6 +222,15 @@ const typeLabel = (t: string) => ({
     text-overflow:ellipsis;
     white-space:nowrap;
 }
+.warehouse-row__manager {
+    display:block;
+    margin-top:4rpx;
+    font-size: 21rpx;
+    color: #64748b;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
 .location-head {
     position: sticky;
     top: 0;
@@ -234,7 +250,9 @@ const typeLabel = (t: string) => ({
     border-bottom:1rpx solid #f1f5f9;
 }
 .location-row.active .location-row__name { color:#3b6ef5; font-weight:600; }
+.location-row__main { min-width:0; flex:1; }
 .location-row__name { font-size:28rpx; color:#0f172a; }
+.location-row__manager { display:block; margin-top:6rpx; font-size:22rpx; color:#94a3b8; }
 .location-empty { padding: 48rpx 0; text-align:center; }
 .location-empty__tip { display:block; margin-top:18rpx; font-size:24rpx; color:#94a3b8; }
 </style>

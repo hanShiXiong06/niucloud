@@ -32,6 +32,7 @@ class ErpWarehouse extends BaseAdminController
         return success($this->service->saveWarehouse($this->request->params([
             ['warehouse_name', ''],
             ['warehouse_code', ''],
+            ['manager_uid', 0],
             ['warehouse_type', 'owned'],
             ['ownership_type', 'owned'],
             ['need_photo', 0],
@@ -51,6 +52,7 @@ class ErpWarehouse extends BaseAdminController
         return success($this->service->saveLocation($warehouse_id, $this->request->params([
             ['location_name', ''],
             ['location_code', ''],
+            ['manager_uid', 0],
             ['status', 1],
             ['sort', 0],
             ['remark', ''],

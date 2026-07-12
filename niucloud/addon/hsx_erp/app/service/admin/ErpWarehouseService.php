@@ -27,7 +27,19 @@ class ErpWarehouseService extends BaseAdminService
             $locationMap[(int)$location['warehouse_id']][] = $location;
         }
         foreach ($warehouses as &$warehouse) {
-            $warehouse['locations'] = $locationMap[(int)$warehouse['id']] ?? [];
+            $warehouseManagerUid = (int)($warehouse['manager_uid'] ?? 0);
+            $warehouseManagerName = (string)($warehouse['manager_name'] ?? '');
+            $warehouse['manager_effective_uid'] = $warehouseManagerUid;
+            $warehouse['manager_effective_name'] = $warehouseManagerName;
+            $warehouse['manager_source'] = $warehouseManagerUid > 0 ? 'warehouse' : 'none';
+            $warehouse['locations'] = array_map(function (array $location) use ($warehouseManagerUid, $warehouseManagerName) {
+                $locationManagerUid = (int)($location['manager_uid'] ?? 0);
+                $locationManagerName = (string)($location['manager_name'] ?? '');
+                $location['manager_effective_uid'] = $locationManagerUid > 0 ? $locationManagerUid : $warehouseManagerUid;
+                $location['manager_effective_name'] = $locationManagerUid > 0 ? $locationManagerName : $warehouseManagerName;
+                $location['manager_source'] = $locationManagerUid > 0 ? 'location' : ($warehouseManagerUid > 0 ? 'warehouse' : 'none');
+                return $location;
+            }, $locationMap[(int)$warehouse['id']] ?? []);
         }
         unset($warehouse);
         return $warehouses;
@@ -64,6 +76,11 @@ class ErpWarehouseService extends BaseAdminService
 
         $now = time();
         $isDefault = (int)($data['is_default'] ?? 0) === 1 ? 1 : 0;
+        $managerUid = (int)($data['manager_uid'] ?? 0);
+        if ($managerUid <= 0) {
+            throw new CommonException('请选择仓库负责人');
+        }
+        $manager = (new ErpStaffService())->resolve($managerUid, '仓库负责人');
         $warehouseType = $this->normalizeWarehouseType((string)($data['warehouse_type'] ?? 'owned'));
         $defaultSaleTarget = $this->normalizeDefaultSaleTarget((string)($data['default_sale_target'] ?? 'unset'));
         $ownershipType = $warehouseType === 'consignment' ? 'consigned' : 'owned';
@@ -71,7 +88,7 @@ class ErpWarehouseService extends BaseAdminService
             $ownershipType = 'pending';
         }
         $warehouseId = 0;
-        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $warehouseType, $ownershipType, $defaultSaleTarget, &$warehouseId) {
+        Db::transaction(function () use ($id, $name, $data, $now, $isDefault, $manager, $warehouseType, $ownershipType, $defaultSaleTarget, &$warehouseId) {
             if ($isDefault === 1) {
                 ErpWarehouse::where([['site_id', '=', $this->site_id]])->update([
                     'is_default' => 0,
@@ -81,6 +98,8 @@ class ErpWarehouseService extends BaseAdminService
             $values = [
                 'warehouse_name' => $name,
                 'warehouse_code' => trim((string)($data['warehouse_code'] ?? '')),
+                'manager_uid' => (int)$manager['uid'],
+                'manager_name' => (string)$manager['name'],
                 'warehouse_type' => $warehouseType,
                 'ownership_type' => $ownershipType,
                 'need_photo' => (int)($data['need_photo'] ?? 0) === 1 ? 1 : 0,
@@ -111,7 +130,7 @@ class ErpWarehouseService extends BaseAdminService
 
     public function saveLocation(int $warehouseId, array $data, int $id = 0): int
     {
-        $this->findWarehouse($warehouseId);
+        $warehouse = $this->findWarehouse($warehouseId);
         $name = trim((string)($data['location_name'] ?? ''));
         if ($name === '') {
             throw new CommonException('请填写库位名称');
@@ -126,10 +145,21 @@ class ErpWarehouseService extends BaseAdminService
             throw new CommonException('该仓库下库位名称已存在');
         }
         $now = time();
+        $managerUid = (int)($data['manager_uid'] ?? 0);
+        if ($managerUid > 0) {
+            $manager = (new ErpStaffService())->resolve($managerUid, '库位负责人');
+        } else {
+            if ((int)($warehouse->manager_uid ?? 0) <= 0) {
+                throw new CommonException('请先设置仓库负责人，或为库位单独选择负责人');
+            }
+            $manager = ['uid' => 0, 'name' => ''];
+        }
         $values = [
             'warehouse_id' => $warehouseId,
             'location_name' => $name,
             'location_code' => trim((string)($data['location_code'] ?? '')),
+            'manager_uid' => (int)$manager['uid'],
+            'manager_name' => (string)$manager['name'],
             'status' => (int)($data['status'] ?? 1) === 1 ? 1 : 0,
             'sort' => (int)($data['sort'] ?? 0),
             'remark' => trim((string)($data['remark'] ?? '')),
