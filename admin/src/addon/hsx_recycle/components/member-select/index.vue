@@ -8,6 +8,7 @@
             placeholder="请输入用户信息"
             :remote-method="handleSearch"
             :loading="loading"
+            :disabled="disabled"
             clearable
             class="w-full"
             @change="handleSelectChange"
@@ -30,15 +31,13 @@
                                 :alt="member.nickname"
                                 class="w-full h-full object-cover"
                             />
-                            <div 
-                                v-else 
-                                class="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-medium text-xs"
+                            <div
+                                v-else
+                                class="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600 font-medium text-xs"
                             >
                                 {{ member.nickname?.charAt(0)?.toUpperCase() || '用' }}
                             </div>
                         </div>
-                        <!-- 在线状态指示器 -->
-                        <div class="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full border border-white"></div>
                     </div>
                     
                     <!-- 用户信息 -->
@@ -128,6 +127,10 @@ const props = defineProps({
         default: '请输入用户昵称、手机号或用户编号搜索'
     },
     showPagination: {
+        type: Boolean,
+        default: false
+    },
+    disabled: {
         type: Boolean,
         default: false
     }
@@ -227,7 +230,7 @@ const handlePageChange = async (page: number) => {
 const handleSelectChange = (value: number | string | null) => {
     selectedMemberId.value = value
     emit('update:modelValue', value || null)
-    emit('change', value || null, memberList.value.find(m => m.member_id === value))
+    emit('change', value || null, memberList.value.find(m => String(m.member_id) === String(value)) || null)
 }
 
 /**
