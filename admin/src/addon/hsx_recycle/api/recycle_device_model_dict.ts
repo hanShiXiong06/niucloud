@@ -49,6 +49,34 @@ export function importExternalRecycleDeviceModelDict(data: Record<string, any>) 
   });
 }
 
+export function uploadRecycleDeviceModelImport(data: FormData) {
+  return request.post("/recycle/recycle_device_model_dict/import_upload", data, {
+    headers: { "Content-Type": "multipart/form-data" },
+    showErrorMessage: true,
+  });
+}
+
+export function getRecycleDeviceModelImportTasks(params: Record<string, any> = {}) {
+  return request.get("/recycle/recycle_device_model_dict/import_tasks", { params });
+}
+
+export function getRecycleDeviceModelImportTask(id: number | string) {
+  return request.get(`/recycle/recycle_device_model_dict/import_tasks/${id}`);
+}
+
+export function retryRecycleDeviceModelImportTask(id: number | string) {
+  return request.post(`/recycle/recycle_device_model_dict/import_tasks/${id}/retry`, {}, {
+    showErrorMessage: true,
+  });
+}
+
+export function deleteRecycleDeviceModelImportTask(id: number | string) {
+  return request.delete(`/recycle/recycle_device_model_dict/import_tasks/${id}`, {
+    showErrorMessage: true,
+    showSuccessMessage: true,
+  });
+}
+
 export function updateRecycleDeviceModelDictSort(data: Record<string, any>) {
   return request.post("/recycle/recycle_device_model_dict/sort/update", data, {
     showErrorMessage: true,

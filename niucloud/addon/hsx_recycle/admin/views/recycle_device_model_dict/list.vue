@@ -4,7 +4,7 @@
       <template #header>
         <PageHeader title="设备分类" description="按动态层级组织设备分类；签收时只选择最末级节点。">
           <template #actions>
-            <el-button type="primary" plain @click="openImportDialog">导入数据</el-button>
+            <el-button type="primary" plain @click="openImportDialog">导入设备分类</el-button>
             <el-button type="primary" plain @click="openQuickDialog">快速录入</el-button>
             <el-button type="primary" plain @click="openTemplateDialog()">通用模板</el-button>
             <el-button type="primary" @click="openCreateRoot">新增分类</el-button>
@@ -167,60 +167,149 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="importDialogVisible" title="导入设备分类" width="760px">
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        title="支持 Excel、CSV、TSV 或 JSON。表头请包含：品类、品类ID、品牌、品牌ID、系列、型号、产品ID、热门。"
-      />
-      <el-form label-width="90px" class="import-form">
-        <el-form-item label="数据来源">
-          <el-input v-model="importSource" placeholder="如：recycle_spider" />
-        </el-form-item>
-        <el-form-item label="选择文件">
-          <el-upload
-            drag
-            action="#"
-            accept=".xlsx,.xls,.csv,.tsv,.json,application/json,text/csv,text/tab-separated-values"
-            :auto-upload="false"
-            :show-file-list="false"
-            :on-change="handleImportFileChange"
-            class="import-upload"
-          >
-            <div class="import-upload__main">
-              <div class="import-upload__title">{{ importFileName || '点击或拖拽文件到这里' }}</div>
-              <div class="import-upload__tip">Excel/CSV/TSV 使用首行作为表头；JSON 支持数组或 { rows: [] }</div>
-            </div>
-          </el-upload>
-        </el-form-item>
-      </el-form>
+    <el-dialog v-model="importDialogVisible" title="导入设备分类" width="920px" :close-on-click-modal="false">
+      <el-tabs v-model="importActiveTab" class="import-workbench">
+        <el-tab-pane label="上传导入" name="upload">
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="Excel 上传后由后台队列分批导入，可以关闭窗口继续其他工作。"
+            description="表头至少包含：品类、品牌、型号；可选品类ID、品牌ID、系列、产品ID、热门。单个文件不超过 20MB。"
+          />
+          <el-form label-width="90px" class="import-form">
+            <el-form-item label="数据来源">
+              <el-input v-model="importSource" maxlength="50" placeholder="如：recycle_spider" />
+            </el-form-item>
+            <el-form-item label="Excel 文件">
+              <el-upload
+                drag
+                action="#"
+                accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                :auto-upload="false"
+                :show-file-list="false"
+                :on-change="handleImportFileChange"
+                class="import-upload"
+              >
+                <div class="import-upload__main">
+                  <div class="import-upload__title">{{ importFileName || '点击或拖拽 Excel 到这里' }}</div>
+                  <div class="import-upload__tip">支持 xls、xlsx，使用首个工作表；系统会自动识别表头位置</div>
+                </div>
+              </el-upload>
+            </el-form-item>
+          </el-form>
 
-      <div v-if="importRows.length" class="import-preview">
-        <div class="import-preview__head">
-          <span>已识别 {{ importRows.length }} 行</span>
-          <el-tag v-if="importRows.length > importPreviewLimit" type="info" effect="plain">
-            仅预览前 {{ importPreviewLimit }} 行
-          </el-tag>
-        </div>
-        <el-table :data="importRows.slice(0, importPreviewLimit)" size="small" height="260">
-          <el-table-column prop="品类" label="品类" min-width="160" />
-          <el-table-column prop="品类ID" label="品类ID" width="90" />
-          <el-table-column prop="品牌" label="品牌" width="110" />
-          <el-table-column prop="品牌ID" label="品牌ID" width="90" />
-          <el-table-column prop="系列" label="系列" min-width="120" />
-          <el-table-column prop="型号" label="型号" min-width="180" />
-          <el-table-column prop="产品ID" label="产品ID" width="100" />
-          <el-table-column prop="热门" label="热门" width="80" />
-        </el-table>
-      </div>
+          <div v-if="importRows.length" class="import-preview">
+            <div class="import-preview__head">
+              <span>本地预览识别 {{ importRows.length }} 行</span>
+              <el-tag v-if="importRows.length > importPreviewLimit" type="info" effect="plain">
+                仅展示前 {{ importPreviewLimit }} 行
+              </el-tag>
+            </div>
+            <el-table :data="importRows.slice(0, importPreviewLimit)" size="small" height="260">
+              <el-table-column prop="品类" label="品类" min-width="150" />
+              <el-table-column prop="品类ID" label="品类ID" width="90" />
+              <el-table-column prop="品牌" label="品牌" width="110" />
+              <el-table-column prop="品牌ID" label="品牌ID" width="90" />
+              <el-table-column prop="系列" label="系列" min-width="120" />
+              <el-table-column prop="型号" label="型号" min-width="180" />
+              <el-table-column prop="产品ID" label="产品ID" width="100" />
+              <el-table-column prop="热门" label="热门" width="80" />
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane name="tasks">
+          <template #label>
+            <span>导入记录</span>
+            <el-badge v-if="activeImportTaskCount" :value="activeImportTaskCount" class="import-task-badge" />
+          </template>
+          <div class="import-task-toolbar">
+            <div class="import-task-toolbar__tip">运行中的任务会自动刷新，关闭窗口不会中断。</div>
+            <el-button :loading="importTaskLoading" @click="loadImportTasks">刷新记录</el-button>
+          </div>
+          <el-table v-loading="importTaskLoading" :data="importTasks" height="430" empty-text="暂无导入任务">
+            <el-table-column label="文件" min-width="180">
+              <template #default="{ row }">
+                <div class="task-file-name">{{ row.file_name }}</div>
+                <div class="task-file-meta">{{ row.source }} · {{ row.operator_name || '未知操作人' }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }"><el-tag :type="row.status_type" effect="plain">{{ row.status_name }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="进度" min-width="180">
+              <template #default="{ row }">
+                <el-progress :percentage="Number(row.progress || 0)" :stroke-width="8" />
+                <div class="task-progress-text">{{ row.processed_rows || 0 }} / {{ row.total_rows || 0 }} 行</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="结果" min-width="150">
+              <template #default="{ row }">
+                <div>新增 {{ row.created_count || 0 }}</div>
+                <div class="task-result-muted">跳过 {{ row.skipped_count || 0 }} · 错误 {{ row.error_count || 0 }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="创建时间" width="160" prop="create_at_text" />
+            <el-table-column label="操作" width="150" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openImportTaskDetail(row)">详情</el-button>
+                <el-button v-if="['pending', 'failed'].includes(row.status)" link type="primary" @click="retryImportTask(row)">重试</el-button>
+                <el-button v-if="!['queued', 'processing'].includes(row.status)" link type="danger" @click="removeImportTask(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="import-task-pagination">
+            <el-pagination
+              v-model:current-page="importTaskPage.page"
+              :page-size="importTaskPage.limit"
+              :total="importTaskPage.total"
+              layout="total, prev, pager, next"
+              small
+              background
+              @current-change="loadImportTasks"
+            />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
 
       <template #footer>
-        <el-button @click="importDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="importing" :disabled="!importRows.length" @click="submitImport">
-          确认导入
-        </el-button>
+        <el-button @click="importDialogVisible = false">关闭</el-button>
+        <el-button
+          v-if="importActiveTab === 'upload'"
+          type="primary"
+          :loading="importing"
+          :disabled="!importRawFile || !importRows.length"
+          @click="submitImport"
+        >创建后台导入任务</el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog v-model="importTaskDetailVisible" title="导入任务详情" width="720px" append-to-body>
+      <div v-if="activeImportTask" class="task-detail">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="文件名">{{ activeImportTask.file_name }}</el-descriptions-item>
+          <el-descriptions-item label="状态"><el-tag :type="activeImportTask.status_type">{{ activeImportTask.status_name }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="数据来源">{{ activeImportTask.source }}</el-descriptions-item>
+          <el-descriptions-item label="工作表">{{ activeImportTask.sheet_name || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="处理结果" :span="2">
+            新增 {{ activeImportTask.created_count || 0 }}，更新 {{ activeImportTask.updated_count || 0 }}，跳过 {{ activeImportTask.skipped_count || 0 }}
+          </el-descriptions-item>
+          <el-descriptions-item label="任务提示" :span="2">{{ activeImportTask.message || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="activeImportTask.error_message" label="失败原因" :span="2">
+            <span class="task-error-message">{{ activeImportTask.error_message }}</span>
+          </el-descriptions-item>
+        </el-descriptions>
+        <div v-if="taskErrorSamples.length" class="task-errors">
+          <div class="task-errors__title">跳过/错误明细</div>
+          <el-table :data="taskErrorSamples" size="small" max-height="300">
+            <el-table-column prop="line" label="Excel 行" width="90" />
+            <el-table-column prop="reason" label="原因" min-width="420" />
+          </el-table>
+          <div v-if="activeImportTask.result_json?.errors_truncated" class="task-errors__tip">错误较多，仅展示前 {{ taskErrorSamples.length }} 条。</div>
+        </div>
+      </div>
+      <template #footer><el-button @click="importTaskDetailVisible = false">关闭</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="templateDialogVisible" title="模板绑定配置" width="720px">
@@ -298,7 +387,7 @@
 <script setup lang="ts">
 import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
@@ -306,12 +395,16 @@ import {
   addRecycleDeviceModelDict,
   deleteRecycleDeviceModelDict,
   editRecycleDeviceModelDict,
+  deleteRecycleDeviceModelImportTask,
   getRecycleDeviceModelDictChildren,
+  getRecycleDeviceModelImportTask,
+  getRecycleDeviceModelImportTasks,
   getTemplateBindingInfo,
-  importExternalRecycleDeviceModelDict,
   quickAddRecycleDeviceModelDict,
   resetTemplateBinding,
+  retryRecycleDeviceModelImportTask,
   saveTemplateBinding,
+  uploadRecycleDeviceModelImport,
   updateRecycleDeviceModelDictSort,
 } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 
@@ -344,10 +437,19 @@ const templateDialogVisible = ref(false)
 const sortDialogVisible = ref(false)
 const quickContent = ref('')
 const importFileName = ref('')
+const importRawFile = ref<File | null>(null)
 const importRows = ref<any[]>([])
 const importSource = ref('recycle_spider')
 const importing = ref(false)
 const importPreviewLimit = 20
+const importActiveTab = ref('upload')
+const importTaskLoading = ref(false)
+const importTasks = ref<any[]>([])
+const importTaskPage = reactive({ page: 1, limit: 10, total: 0 })
+const importTaskDetailVisible = ref(false)
+const activeImportTask = ref<any>(null)
+const importTaskHadRunning = ref(false)
+let importTaskTimer: ReturnType<typeof window.setInterval> | null = null
 const parentContext = ref<any>(null)
 const templateTarget = ref<any>(null)
 const templateSaving = ref(false)
@@ -388,6 +490,8 @@ const dialogTitle = computed(() => {
   if (parentContext.value) return '添加下级分类'
   return '新增一级分类'
 })
+const activeImportTaskCount = computed(() => importTasks.value.filter(item => ['queued', 'processing'].includes(item.status)).length)
+const taskErrorSamples = computed(() => activeImportTask.value?.result_json?.skipped || [])
 
 const rootCreateMode = computed(() => !editForm.id && !parentContext.value)
 
@@ -737,11 +841,21 @@ const submitQuickAdd = async () => {
 
 const openImportDialog = () => {
   importDialogVisible.value = true
+  loadImportTasks()
 }
 
 const handleImportFileChange = async (file: any) => {
   const raw = file.raw
   if (!raw) return
+  if (!/\.(xlsx|xls)$/i.test(raw.name || '')) {
+    ElMessage.warning('请选择 xls 或 xlsx 格式的 Excel 文件')
+    return
+  }
+  if (Number(raw.size || 0) > 20 * 1024 * 1024) {
+    ElMessage.warning('Excel 文件不能超过 20MB')
+    return
+  }
+  importRawFile.value = raw
   importFileName.value = raw.name || ''
   try {
     importRows.value = await parseImportFile(raw)
@@ -751,48 +865,86 @@ const handleImportFileChange = async (file: any) => {
     }
     ElMessage.success(`已识别 ${importRows.value.length} 行数据`)
   } catch (error: any) {
+    importRawFile.value = null
     importRows.value = []
     ElMessage.error(error.message || '文件解析失败')
   }
 }
 
 const submitImport = async () => {
-  if (!importRows.value.length) {
+  if (!importRawFile.value || !importRows.value.length) {
     ElMessage.warning('请先选择要导入的文件')
     return
   }
   importing.value = true
   try {
-    const res = await importExternalRecycleDeviceModelDict({
-      source: importSource.value || 'recycle_spider',
-      rows: importRows.value,
-    })
+    const formData = new FormData()
+    formData.append('file', importRawFile.value)
+    formData.append('source', importSource.value || 'recycle_spider')
+    const res = await uploadRecycleDeviceModelImport(formData)
     const data = res.data || {}
-    const message = `新增 ${data.created_count || 0} 行，跳过 ${data.skipped_count || 0} 行`
-    if (data.skipped?.length) {
-      await ElMessageBox.alert(data.skipped.slice(0, 30).map((item: any) => `第${item.line}行：${item.reason}`).join('\n'), message, {
-        confirmButtonText: '我知道了',
-        customClass: 'model-dict-duplicate-alert',
-      })
-    } else {
-      ElMessage.success(message)
-    }
-    importDialogVisible.value = false
+    if (data.queue_enabled === false) ElMessage.warning(data.message || '任务已创建，但队列尚未启用')
+    else ElMessage.success(data.message || '导入任务已创建')
+    importActiveTab.value = 'tasks'
     importRows.value = []
     importFileName.value = ''
-    await reloadTree()
+    importRawFile.value = null
+    importTaskPage.page = 1
+    await loadImportTasks()
   } finally {
     importing.value = false
   }
 }
 
-const readFileText = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('读取文件失败'))
-    reader.readAsText(file, 'utf-8')
-  })
+const loadImportTasks = async () => {
+  importTaskLoading.value = true
+  try {
+    const res: any = await getRecycleDeviceModelImportTasks({
+      page: importTaskPage.page,
+      limit: importTaskPage.limit,
+    })
+    const data = res.data || {}
+    importTasks.value = data.data || data.list || []
+    importTaskPage.total = Number(data.total || importTasks.value.length)
+    const hasRunning = importTasks.value.some(item => ['queued', 'processing'].includes(item.status))
+    if (importTaskHadRunning.value && !hasRunning) await reloadTree()
+    importTaskHadRunning.value = hasRunning
+  } finally {
+    importTaskLoading.value = false
+  }
+}
+
+const openImportTaskDetail = async (row: any) => {
+  const res: any = await getRecycleDeviceModelImportTask(row.id)
+  activeImportTask.value = res.data || row
+  importTaskDetailVisible.value = true
+}
+
+const retryImportTask = async (row: any) => {
+  const res: any = await retryRecycleDeviceModelImportTask(row.id)
+  if (res.data?.queue_enabled === false) ElMessage.warning(res.data.message || '队列尚未启用')
+  else ElMessage.success(res.data?.message || '任务已重新进入队列')
+  await loadImportTasks()
+}
+
+const removeImportTask = async (row: any) => {
+  await ElMessageBox.confirm(`确定删除导入记录“${row.file_name}”吗？`, '删除导入记录', { type: 'warning' })
+  await deleteRecycleDeviceModelImportTask(row.id)
+  if (activeImportTask.value?.id === row.id) importTaskDetailVisible.value = false
+  await loadImportTasks()
+}
+
+const startImportTaskPolling = () => {
+  if (importTaskTimer) return
+  importTaskTimer = window.setInterval(() => {
+    if (importDialogVisible.value && importActiveTab.value === 'tasks' && !importTaskLoading.value) loadImportTasks()
+  }, 2500)
+}
+
+const stopImportTaskPolling = () => {
+  if (!importTaskTimer) return
+  window.clearInterval(importTaskTimer)
+  importTaskTimer = null
 }
 
 const readFileArrayBuffer = (file: File): Promise<ArrayBuffer> => {
@@ -805,88 +957,17 @@ const readFileArrayBuffer = (file: File): Promise<ArrayBuffer> => {
 }
 
 const parseImportFile = async (file: File): Promise<any[]> => {
-  const fileName = file.name || ''
-  if (/\.(xlsx|xls)$/i.test(fileName)) {
-    const buffer = await readFileArrayBuffer(file)
-    const workbook = XLSX.read(buffer, { type: 'array' })
-    const sheetName = workbook.SheetNames[0]
-    if (!sheetName) return []
-    const sheet = workbook.Sheets[sheetName]
-    return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
-      .map((row: any) => Object.keys(row).reduce((result: Record<string, string>, key) => {
-        result[String(key).trim()] = String(row[key] ?? '').trim()
-        return result
-      }, {}))
-      .filter((row: any) => Object.values(row).some(value => String(value || '').trim() !== ''))
-  }
-  const text = await readFileText(file)
-  return parseImportRows(text, fileName)
-}
-
-const parseImportRows = (text: string, fileName: string): any[] => {
-  const content = text.replace(/^\uFEFF/, '').trim()
-  if (!content) return []
-  if (fileName.toLowerCase().endsWith('.json') || content.startsWith('[') || content.startsWith('{')) {
-    const parsed = JSON.parse(content)
-    const rows = Array.isArray(parsed) ? parsed : parsed.rows
-    if (!Array.isArray(rows)) {
-      throw new Error('JSON 格式错误，请使用数组或 { rows: [] }')
-    }
-    return rows.filter(item => item && typeof item === 'object')
-  }
-  return parseDelimitedRows(content)
-}
-
-const parseDelimitedRows = (content: string): any[] => {
-  const firstLine = content.split(/\r?\n/, 1)[0] || ''
-  const delimiter = firstLine.includes('\t') ? '\t' : ','
-  const rows = parseDelimited(content, delimiter)
-  if (rows.length < 2) return []
-  const headers = rows[0].map(item => item.trim())
-  return rows.slice(1)
-    .filter(row => row.some(cell => String(cell || '').trim() !== ''))
-    .map(row => headers.reduce((result: Record<string, string>, key, index) => {
-      result[key] = String(row[index] || '').trim()
+  const buffer = await readFileArrayBuffer(file)
+  const workbook = XLSX.read(buffer, { type: 'array' })
+  const sheetName = workbook.SheetNames[0]
+  if (!sheetName) return []
+  const sheet = workbook.Sheets[sheetName]
+  return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
+    .map((row: any) => Object.keys(row).reduce((result: Record<string, string>, key) => {
+      result[String(key).trim()] = String(row[key] ?? '').trim()
       return result
     }, {}))
-}
-
-const parseDelimited = (content: string, delimiter: string): string[][] => {
-  const rows: string[][] = []
-  let row: string[] = []
-  let cell = ''
-  let quoted = false
-
-  for (let index = 0; index < content.length; index++) {
-    const char = content[index]
-    const next = content[index + 1]
-    if (char === '"' && quoted && next === '"') {
-      cell += '"'
-      index++
-      continue
-    }
-    if (char === '"') {
-      quoted = !quoted
-      continue
-    }
-    if (char === delimiter && !quoted) {
-      row.push(cell)
-      cell = ''
-      continue
-    }
-    if ((char === '\n' || char === '\r') && !quoted) {
-      if (char === '\r' && next === '\n') index++
-      row.push(cell)
-      rows.push(row)
-      row = []
-      cell = ''
-      continue
-    }
-    cell += char
-  }
-  row.push(cell)
-  rows.push(row)
-  return rows
+    .filter((row: any) => Object.values(row).some(value => String(value || '').trim() !== ''))
 }
 
 const resetTemplateForm = (row?: any) => {
@@ -978,10 +1059,17 @@ const openTemplateBindingFromRoute = async () => {
   })
 }
 
+watch(importDialogVisible, (visible) => {
+  if (visible) startImportTaskPolling()
+  else stopImportTaskPolling()
+})
+
 onMounted(async () => {
   await loadTree()
   await openTemplateBindingFromRoute()
 })
+
+onBeforeUnmount(stopImportTaskPolling)
 </script>
 
 <style scoped>
@@ -1066,6 +1154,70 @@ onMounted(async () => {
   margin-bottom: 8px;
   color: #334155;
   font-size: 13px;
+}
+
+.import-workbench {
+  min-height: 520px;
+}
+
+.import-task-badge {
+  margin-left: 8px;
+}
+
+.import-task-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.import-task-toolbar__tip,
+.task-file-meta,
+.task-progress-text,
+.task-result-muted,
+.task-errors__tip {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.task-file-name {
+  overflow: hidden;
+  color: #0f172a;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-file-meta,
+.task-progress-text {
+  margin-top: 4px;
+}
+
+.import-task-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.task-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.task-error-message {
+  color: var(--el-color-danger);
+}
+
+.task-errors__title {
+  margin-bottom: 10px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.task-errors__tip {
+  margin-top: 8px;
 }
 
 .virtual-tree-panel {
