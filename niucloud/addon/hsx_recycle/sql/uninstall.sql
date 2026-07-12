@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS `{{prefix}}recycle_check_group`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_check_template`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_device_price`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_device_model_dict`;
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_model_import_task`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_template_binding`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_device_model`;
 DROP TABLE IF EXISTS `{{prefix}}recycle_device_brand`;

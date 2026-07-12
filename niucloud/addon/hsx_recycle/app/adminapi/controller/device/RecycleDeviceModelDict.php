@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_recycle\app\adminapi\controller\device;
 
 use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
+use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelImportTaskService;
 use core\base\BaseAdminController;
 use think\App;
 
@@ -112,6 +113,37 @@ class RecycleDeviceModelDict extends BaseAdminController
         ]);
 
         return success($this->service->importExternalRows(is_array($data['rows']) ? $data['rows'] : [], (string)$data['source']));
+    }
+
+    public function importUpload()
+    {
+        $source = (string)$this->request->param('source', 'recycle_spider');
+        return success((new RecycleDeviceModelImportTaskService())->upload($this->request->file('file'), $source));
+    }
+
+    public function importTasks()
+    {
+        $data = $this->request->params([
+            ['status', ''],
+            ['page', 1],
+            ['limit', 10],
+        ]);
+        return success((new RecycleDeviceModelImportTaskService())->getPage($data));
+    }
+
+    public function importTaskInfo(int $id)
+    {
+        return success((new RecycleDeviceModelImportTaskService())->getInfo($id));
+    }
+
+    public function importTaskRetry(int $id)
+    {
+        return success((new RecycleDeviceModelImportTaskService())->retry($id));
+    }
+
+    public function importTaskDelete(int $id)
+    {
+        return success((new RecycleDeviceModelImportTaskService())->delete($id));
     }
 
     public function updateSort()

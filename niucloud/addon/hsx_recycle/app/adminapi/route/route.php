@@ -156,6 +156,11 @@ Route::group('recycle', function () {
     Route::get('recycle_device_model_dict', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@lists');
     Route::post('recycle_device_model_dict/quick_add', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@quickAdd');
     Route::post('recycle_device_model_dict/external_import', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@externalImport');
+    Route::post('recycle_device_model_dict/import_upload', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@importUpload');
+    Route::get('recycle_device_model_dict/import_tasks', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@importTasks');
+    Route::get('recycle_device_model_dict/import_tasks/:id', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@importTaskInfo');
+    Route::post('recycle_device_model_dict/import_tasks/:id/retry', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@importTaskRetry');
+    Route::delete('recycle_device_model_dict/import_tasks/:id', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@importTaskDelete');
     Route::post('recycle_device_model_dict/sort/update', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@updateSort');
     Route::post('recycle_device_model_dict', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@add');
     Route::put('recycle_device_model_dict/:id', 'addon\hsx_recycle\app\adminapi\controller\device\RecycleDeviceModelDict@edit');

@@ -128,7 +128,7 @@ CREATE TABLE `{{prefix}}recycle_device` (
   `cost_adjust_amount` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '累计成本调整金额，负数为成本减少',
   `cost_adjust_count` int NOT NULL DEFAULT 0 COMMENT '成本调整次数',
   `last_cost_adjust_time` int NOT NULL DEFAULT 0 COMMENT '最后成本调整时间',
-  `downstream_stage` tinyint NOT NULL DEFAULT 0 COMMENT '下游流转阶段镜像：0-未流转,10-已入库,20-转中台待拍照,30-已定价可售,40-已售下架',
+  `downstream_stage` tinyint NOT NULL DEFAULT 0 COMMENT '下游镜像：0未流转,10入库,20待拍照,30可售,40已售,50ERP采退待收,60ERP采退到账',
   `downstream_stage_at` int NOT NULL DEFAULT 0 COMMENT '下游流转阶段更新时间',
   `downstream_erp_asset_id` int NOT NULL DEFAULT 0 COMMENT '关联ERP资产ID(下游回流)',
   `downstream_sale_price` decimal(10,2) NOT NULL DEFAULT 0 COMMENT '中台销售定价(下游回流)',
@@ -199,6 +199,36 @@ CREATE TABLE `{{prefix}}recycle_device_model_dict` (
   KEY `idx_site_level` (`site_id`,`level`),
   KEY `idx_site_select` (`site_id`,`is_hot`,`select_count`,`sort`)
 ) COMMENT='回收设备分类表';
+
+DROP TABLE IF EXISTS `{{prefix}}recycle_device_model_import_task`;
+CREATE TABLE `{{prefix}}recycle_device_model_import_task` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT COMMENT '任务ID',
+  `site_id` int NOT NULL DEFAULT 0 COMMENT '站点ID',
+  `operator_uid` int NOT NULL DEFAULT 0 COMMENT '操作人UID',
+  `operator_name` varchar(60) NOT NULL DEFAULT '' COMMENT '操作人名称',
+  `source` varchar(50) NOT NULL DEFAULT 'recycle_spider' COMMENT '数据来源',
+  `file_name` varchar(255) NOT NULL DEFAULT '' COMMENT '原始文件名',
+  `file_path` varchar(500) NOT NULL DEFAULT '' COMMENT '服务端文件路径',
+  `sheet_name` varchar(120) NOT NULL DEFAULT '' COMMENT '工作表名称',
+  `status` varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/queued/processing/completed/partial/failed',
+  `queue_enabled` tinyint(1) NOT NULL DEFAULT 0 COMMENT '创建时是否启用队列',
+  `total_rows` int NOT NULL DEFAULT 0 COMMENT '数据总行数',
+  `processed_rows` int NOT NULL DEFAULT 0 COMMENT '已处理行数',
+  `created_count` int NOT NULL DEFAULT 0 COMMENT '新增数量',
+  `updated_count` int NOT NULL DEFAULT 0 COMMENT '更新数量',
+  `skipped_count` int NOT NULL DEFAULT 0 COMMENT '跳过数量',
+  `error_count` int NOT NULL DEFAULT 0 COMMENT '错误数量',
+  `result_json` longtext NULL COMMENT '结果与错误样例JSON',
+  `message` varchar(500) NOT NULL DEFAULT '' COMMENT '任务提示',
+  `error_message` varchar(1000) NOT NULL DEFAULT '' COMMENT '失败原因',
+  `start_at` int NOT NULL DEFAULT 0 COMMENT '开始时间',
+  `finish_at` int NOT NULL DEFAULT 0 COMMENT '完成时间',
+  `create_at` int NOT NULL DEFAULT 0 COMMENT '创建时间',
+  `update_at` int NOT NULL DEFAULT 0 COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_site_status` (`site_id`,`status`),
+  KEY `idx_site_create` (`site_id`,`create_at`)
+) COMMENT='回收设备分类异步导入任务';
 
 DROP TABLE IF EXISTS `{{prefix}}recycle_template_binding`;
 CREATE TABLE IF NOT EXISTS `{{prefix}}recycle_template_binding` (

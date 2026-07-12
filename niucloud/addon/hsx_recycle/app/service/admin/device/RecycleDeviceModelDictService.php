@@ -214,7 +214,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
         ];
     }
 
-    public function importExternalRows(array $rows, string $source = 'recycle_spider'): array
+    public function importExternalRows(array $rows, string $source = 'recycle_spider', array $lineNumbers = []): array
     {
         $source = trim($source) !== '' ? trim($source) : 'recycle_spider';
         $created = 0;
@@ -222,9 +222,10 @@ class RecycleDeviceModelDictService extends BaseAdminService
         $seenPaths = [];
 
         foreach ($rows as $index => $row) {
+            $lineNo = (int)($lineNumbers[$index] ?? ($index + 1));
             if (!is_array($row)) {
                 $skipped[] = [
-                    'line' => $index + 1,
+                    'line' => $lineNo,
                     'reason' => '行数据格式错误',
                 ];
                 continue;
@@ -235,7 +236,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
                 $pathText = implode('/', $payload['parts']);
                 if (isset($seenPaths[$pathText])) {
                     $skipped[] = [
-                        'line' => $index + 1,
+                        'line' => $lineNo,
                         'reason' => '导入文件内重复：' . $pathText,
                     ];
                     continue;
@@ -243,7 +244,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
                 $seenPaths[$pathText] = true;
                 if ($this->pathExists($payload['parts'])) {
                     $skipped[] = [
-                        'line' => $index + 1,
+                        'line' => $lineNo,
                         'reason' => '同一站点已存在，已跳过：' . $pathText,
                     ];
                     continue;
@@ -252,7 +253,7 @@ class RecycleDeviceModelDictService extends BaseAdminService
                 $created++;
             } catch (\Throwable $e) {
                 $skipped[] = [
-                    'line' => $index + 1,
+                    'line' => $lineNo,
                     'reason' => $e->getMessage(),
                 ];
             }
@@ -267,6 +268,23 @@ class RecycleDeviceModelDictService extends BaseAdminService
             'skipped_count' => count($skipped),
             'skipped' => $skipped,
         ];
+    }
+
+    /**
+     * 队列任务没有后台请求上下文，显式按任务站点执行并在结束后恢复上下文。
+     */
+    public function importExternalRowsForSite(array $rows, string $source, int $siteId, array $lineNumbers = []): array
+    {
+        if ($siteId <= 0) {
+            throw new CommonException('导入任务缺少站点信息');
+        }
+        $oldSiteId = $this->site_id;
+        $this->site_id = $siteId;
+        try {
+            return $this->importExternalRows($rows, $source, $lineNumbers);
+        } finally {
+            $this->site_id = $oldSiteId;
+        }
     }
 
     public function updateSort(array $rows): bool
