@@ -1,275 +1,334 @@
 <template>
-    <div class="w-full">
-        <el-select
-            v-model="selectedMemberId"
-            filterable
-            remote
-            reserve-keyword
-            placeholder="请输入用户信息"
-            :remote-method="handleSearch"
-            :loading="loading"
+    <div class="member-select" @click="openSelector">
+        <el-input
+            :model-value="selectedMemberLabel"
+            :placeholder="placeholder"
+            readonly
             :disabled="disabled"
             clearable
-            class="w-full"
-            @change="handleSelectChange"
-            @clear="handleClear"
+            @clear.stop="clearSelection"
         >
-            <el-option
-                v-for="member in memberList"
-                :key="member.member_id"
-                :label="formatMemberLabel(member)"
-                :value="member.member_id"
-                class="!h-auto !p-0"
+            <template #prefix><el-icon><User /></el-icon></template>
+            <template #suffix><el-icon v-if="!modelValue"><Search /></el-icon></template>
+        </el-input>
+    </div>
+
+    <el-dialog
+        v-model="selectorVisible"
+        title="选择客户"
+        width="720px"
+        append-to-body
+        destroy-on-close
+        class="member-selector-dialog"
+    >
+        <div class="member-selector__toolbar">
+            <el-input
+                v-model.trim="searchParams.keyword"
+                clearable
+                placeholder="搜索昵称、手机号或会员编号"
+                @keyup.enter="searchMembers"
+                @clear="searchMembers"
             >
-                <div class="flex items-center py-1 px-1.5 hover:bg-gray-50 rounded transition-colors">
-                    <!-- 头像区域 -->
-                    <div class="relative flex-shrink-0 mr-2">
-                        <div class="w-7 h-7 rounded-full overflow-hidden ring-1 ring-gray-200">
-                            <img 
-                                v-if="member.headimg" 
-                                :src="img(member.headimg)" 
-                                :alt="member.nickname"
-                                class="w-full h-full object-cover"
-                            />
-                            <div
-                                v-else
-                                class="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600 font-medium text-xs"
-                            >
-                                {{ member.nickname?.charAt(0)?.toUpperCase() || '用' }}
-                            </div>
+                <template #prefix><el-icon><Search /></el-icon></template>
+            </el-input>
+            <el-button type="primary" :icon="Search" @click="searchMembers">搜索</el-button>
+            <el-button :icon="Plus" @click="openCreateDialog">新增客户</el-button>
+        </div>
+
+        <el-table
+            v-loading="loading"
+            :data="memberList"
+            height="360"
+            highlight-current-row
+            empty-text="暂无客户，可点击右上角新增"
+            @row-dblclick="selectMember"
+        >
+            <el-table-column label="客户" min-width="210">
+                <template #default="{ row }">
+                    <div class="member-cell">
+                        <el-avatar :size="34" :src="row.headimg ? img(row.headimg) : ''">
+                            {{ memberInitial(row) }}
+                        </el-avatar>
+                        <div class="member-cell__body">
+                            <div class="member-cell__name">{{ row.nickname || row.username || '未设置昵称' }}</div>
+                            <div class="member-cell__no">{{ row.member_no || '暂无会员编号' }}</div>
                         </div>
                     </div>
-                    
-                    <!-- 用户信息 -->
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-1 leading-tight">
-                            <span class="text-sm font-medium text-gray-900 truncate">
-                                <span class="text-xs text-gray-500 font-mono bg-gray-100 px-1 py-0.5 rounded mr-1">{{ member.member_no }}</span>
-                                {{ member.nickname || '未设置昵称' }}
-                            </span>
-                            <el-tag 
-                                v-if="member.member_level_name" 
-                                type="info" 
-                                size="small"
-                                class="!text-xs !px-1 !py-0 !bg-blue-50 !text-blue-600 !border-blue-200"
-                            >
-                                {{ member.member_level_name }}
-                            </el-tag>
-                        </div>
-                        <div v-if="member.mobile" class="text-xs text-blue-600 font-medium -mt-0.5">
-                             {{ member.mobile }}
-                        </div>
-                    </div>
-                </div>
-            </el-option>
-            
-            <!-- 无数据状态 -->
-            <template #empty>
-                <div class="flex flex-col items-center justify-center py-8 px-4">
-                    <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                        <el-icon size="24" class="text-gray-400">
-                            <User />
-                        </el-icon>
-                    </div>
-                    <p class="text-sm text-gray-500 mb-2" v-if="!hasSearched">
-                        请输入关键词搜索用户
-                    </p>
-                    <p class="text-sm text-gray-500 mb-2" v-else>
-                        未找到相关用户
-                    </p>
-                    <p class="text-xs text-gray-400">
-                        支持昵称、手机号、用户编号搜索
-                    </p>
-                </div>
-            </template>
-        </el-select>
-        
-        <!-- 分页控制 -->
-        <div v-if="showPagination && memberList.length > 0" class="flex justify-center mt-3">
+                </template>
+            </el-table-column>
+            <el-table-column prop="mobile" label="手机号" width="140">
+                <template #default="{ row }">{{ row.mobile || '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="member_level_name" label="会员等级" min-width="110">
+                <template #default="{ row }">
+                    <el-tag v-if="row.member_level_name" size="small" type="info" effect="plain">
+                        {{ row.member_level_name }}
+                    </el-tag>
+                    <span v-else>-</span>
+                </template>
+            </el-table-column>
+            <el-table-column label="操作" width="80" align="right">
+                <template #default="{ row }">
+                    <el-button type="primary" link @click="selectMember(row)">选择</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+
+        <div class="member-selector__footer">
+            <span class="member-selector__tip">双击客户也可以快速选择</span>
             <el-pagination
                 v-model:current-page="searchParams.page"
                 :page-size="searchParams.limit"
-                layout="prev, pager, next"
                 :total="total"
-                :small="true"
-                @current-change="handlePageChange"
-                class="!bg-transparent"
+                layout="total, prev, pager, next"
+                small
+                background
+                @current-change="loadMembers"
             />
         </div>
-    </div>
+    </el-dialog>
+
+    <el-dialog
+        v-model="createVisible"
+        title="新增客户"
+        width="520px"
+        append-to-body
+        destroy-on-close
+        :close-on-click-modal="false"
+    >
+        <el-alert
+            title="新建后会自动选中该客户，不需要返回列表再次搜索。"
+            type="info"
+            show-icon
+            :closable="false"
+            class="create-member__alert"
+        />
+        <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="88px">
+            <el-form-item label="会员编号" prop="member_no">
+                <el-input v-model.trim="createForm.member_no" maxlength="20" clearable />
+            </el-form-item>
+            <el-form-item label="手机号" prop="mobile">
+                <el-input v-model.trim="createForm.mobile" maxlength="11" clearable placeholder="用于登录和识别客户" />
+            </el-form-item>
+            <el-form-item label="客户称呼">
+                <el-input v-model.trim="createForm.nickname" maxlength="20" clearable placeholder="例如：张先生" />
+            </el-form-item>
+            <el-form-item label="登录密码" prop="password">
+                <el-input v-model="createForm.password" type="password" show-password clearable autocomplete="new-password" />
+            </el-form-item>
+            <el-form-item label="确认密码" prop="password_copy">
+                <el-input v-model="createForm.password_copy" type="password" show-password clearable autocomplete="new-password" />
+            </el-form-item>
+        </el-form>
+        <template #footer>
+            <el-button @click="createVisible = false">取消</el-button>
+            <el-button type="primary" :loading="creating" @click="createMember">新增并选择</el-button>
+        </template>
+    </el-dialog>
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, watch } from 'vue'
-import { getMemberList } from '@/app/api/member'
+import { computed, reactive, ref, watch } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { Plus, Search, User } from '@element-plus/icons-vue'
+import { addMember, getMemberInfo, getMemberList, getMemberNo } from '@/app/api/member'
 import { img } from '@/utils/common'
-import { User } from '@element-plus/icons-vue'
-import { debounce } from 'lodash-es'
 
 interface Member {
-    member_id: number
-    member_no: string
-    nickname: string
-    mobile: string
-    headimg: string
-    balance: string
-    member_level_name: string
-    status: number
+    member_id: number | string
+    member_no?: string
+    nickname?: string
+    username?: string
+    mobile?: string
+    headimg?: string
+    member_level_name?: string
 }
 
-const props = defineProps({
-    modelValue: {
-        type: [Number, String],
-        default: null
-    },
-    placeholder: {
-        type: String,
-        default: '请输入用户昵称、手机号或用户编号搜索'
-    },
-    showPagination: {
-        type: Boolean,
-        default: false
-    },
-    disabled: {
-        type: Boolean,
-        default: false
-    }
+const props = withDefaults(defineProps<{
+    modelValue?: number | string | null
+    placeholder?: string
+    showPagination?: boolean
+    disabled?: boolean
+}>(), {
+    modelValue: null,
+    placeholder: '点击选择客户',
+    showPagination: false,
+    disabled: false
 })
 
-const emit = defineEmits(['update:modelValue', 'change'])
+const emit = defineEmits<{
+    (event: 'update:modelValue', value: number | string | null): void
+    (event: 'change', value: number | string | null, member: Member | null): void
+}>()
 
-const selectedMemberId = ref<number | string | null>(props.modelValue)
-const memberList = ref<Member[]>([])
+const selectorVisible = ref(false)
+const createVisible = ref(false)
 const loading = ref(false)
-const hasSearched = ref(false)
+const creating = ref(false)
+const memberList = ref<Member[]>([])
+const selectedMember = ref<Member | null>(null)
 const total = ref(0)
+const createFormRef = ref<FormInstance>()
 
-const searchParams = reactive({
-    page: 1,
-    limit: 10,
-    keyword: '',
-    register_type: '',
-    member_label: '',
-    register_channel: '',
-    member_level: ''
+const searchParams = reactive({ page: 1, limit: 10, keyword: '' })
+const createForm = reactive({
+    member_no: '',
+    init_member_no: '',
+    mobile: '',
+    nickname: '',
+    password: '',
+    password_copy: ''
 })
 
-/**
- * 格式化用户显示标签
- */
-const formatMemberLabel = (member: Member) => {
-    const parts = []
-    if (member.nickname) parts.push(member.nickname)
-    if (member.mobile) parts.push(`(${member.mobile})`)
-    if (member.member_no) parts.push(`[${member.member_no}]`)
-    return parts.join(' ')
-}
+const selectedMemberLabel = computed(() => {
+    if (!selectedMember.value) return props.modelValue ? `客户 ID：${props.modelValue}` : ''
+    const name = selectedMember.value.nickname || selectedMember.value.username || '未设置昵称'
+    return [name, selectedMember.value.mobile].filter(Boolean).join(' · ')
+})
 
-/**
- * 防抖搜索处理
- */
-const handleSearch = debounce(async (query: string) => {
-    if (!query || query.length < 2) {
-        memberList.value = []
-        hasSearched.value = false
-        return
-    }
-    
-    loading.value = true
-    hasSearched.value = true
-    searchParams.keyword = query
-    searchParams.page = 1
-    
-    try {
-        await loadMembers()
-    } finally {
-        loading.value = false
-    }
-}, 300)
-
-/**
- * 加载用户列表
- */
-const loadMembers = async () => {
-    try {
-        const { data, code } = await getMemberList({
-            ...searchParams,
-            status: 1 // 只显示正常状态的用户
-        })
-        
-        if (code === 1) {
-            memberList.value = data?.data || []
-            total.value = data?.total || 0
-        } else {
-            memberList.value = []
-            total.value = 0
+const createRules: FormRules = {
+    member_no: [
+        { required: true, message: '请输入会员编号', trigger: 'blur' },
+        { pattern: /^[0-9a-zA-Z]+$/, message: '会员编号只能包含数字和字母', trigger: 'blur' }
+    ],
+    mobile: [
+        { required: true, message: '请输入手机号', trigger: 'blur' },
+        { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
+    ],
+    password: [{ required: true, message: '请输入登录密码', trigger: 'blur' }],
+    password_copy: [
+        { required: true, message: '请再次输入密码', trigger: 'blur' },
+        {
+            validator: (_rule, value, callback) => {
+                value === createForm.password ? callback() : callback(new Error('两次输入的密码不一致'))
+            },
+            trigger: 'blur'
         }
-    } catch (error) {
-        console.error('加载用户列表失败:', error)
-        memberList.value = []
-        total.value = 0
-    }
+    ]
 }
 
-/**
- * 分页变化处理
- */
-const handlePageChange = async (page: number) => {
-    searchParams.page = page
+const memberInitial = (member: Member) => String(member.nickname || member.username || '客').slice(0, 1)
+
+const loadMembers = async () => {
     loading.value = true
     try {
-        await loadMembers()
+        const res: any = await getMemberList({
+            page: searchParams.page,
+            limit: searchParams.limit,
+            keyword: searchParams.keyword,
+            status: 1
+        })
+        memberList.value = res.data?.data || []
+        total.value = Number(res.data?.total || memberList.value.length)
     } finally {
         loading.value = false
     }
 }
 
-/**
- * 选择变化处理
- */
-const handleSelectChange = (value: number | string | null) => {
-    selectedMemberId.value = value
-    emit('update:modelValue', value || null)
-    emit('change', value || null, memberList.value.find(m => String(m.member_id) === String(value)) || null)
+const openSelector = () => {
+    if (props.disabled) return
+    selectorVisible.value = true
+    searchParams.page = 1
+    loadMembers()
 }
 
-/**
- * 清除选择
- */
-const handleClear = () => {
-    selectedMemberId.value = null
-    memberList.value = []
-    hasSearched.value = false
+const searchMembers = () => {
+    searchParams.page = 1
+    loadMembers()
+}
+
+const selectMember = (member: Member) => {
+    selectedMember.value = member
+    emit('update:modelValue', member.member_id)
+    emit('change', member.member_id, member)
+    selectorVisible.value = false
+}
+
+const clearSelection = () => {
+    selectedMember.value = null
     emit('update:modelValue', null)
     emit('change', null, null)
 }
 
-/**
- * 监听外部值变化
- */
-watch(() => props.modelValue, (newValue) => {
-    selectedMemberId.value = newValue
-})
-</script>
-
-<style lang="scss" scoped>
-// 全局样式覆盖
-:deep(.el-select-dropdown__item) {
-    height: auto !important;
-    padding: 2px 4px !important;
-    line-height: 1.2;
-    
-    &:hover {
-        background-color: #f8f9fa !important;
+const resetCreateForm = async () => {
+    Object.assign(createForm, {
+        member_no: '', init_member_no: '', mobile: '', nickname: '', password: '', password_copy: ''
+    })
+    createFormRef.value?.clearValidate()
+    try {
+        const res: any = await getMemberNo()
+        createForm.member_no = String(res.data || '')
+        createForm.init_member_no = createForm.member_no
+    } catch (error) {
+        console.error('获取会员编号失败:', error)
     }
 }
 
-:deep(.el-select-dropdown__item.is-selected) {
-    background-color: #f0f9ff !important;
-    border-left: 3px solid #3b82f6;
+const openCreateDialog = async () => {
+    createVisible.value = true
+    await resetCreateForm()
 }
 
-:deep(.el-select-dropdown__item:hover) {
-    background-color: #f8fafc !important;
+const createMember = async () => {
+    if (!createFormRef.value || creating.value) return
+    const valid = await createFormRef.value.validate().catch(() => false)
+    if (!valid) return
+    creating.value = true
+    try {
+        const res: any = await addMember({ ...createForm })
+        let member: Member | null = null
+        const memberId = res.data?.member_id || res.data?.id || res.data
+        if (memberId && !Number.isNaN(Number(memberId))) {
+            const detail: any = await getMemberInfo(Number(memberId))
+            member = detail.data || null
+        }
+        if (!member) {
+            const listRes: any = await getMemberList({ keyword: createForm.mobile, page: 1, limit: 10, status: 1 })
+            member = (listRes.data?.data || []).find((item: Member) => item.mobile === createForm.mobile) || null
+        }
+        if (!member) throw new Error('客户已新增，但未能自动读取客户资料')
+        createVisible.value = false
+        ElMessage.success('客户已新增并选中')
+        selectMember(member)
+    } catch (error: any) {
+        if (error?.message) ElMessage.error(error.message)
+    } finally {
+        creating.value = false
+    }
+}
+
+const loadSelectedMember = async (value: number | string | null | undefined) => {
+    if (!value) {
+        selectedMember.value = null
+        return
+    }
+    if (String(selectedMember.value?.member_id || '') === String(value)) return
+    try {
+        const res: any = await getMemberInfo(Number(value))
+        selectedMember.value = res.data || null
+    } catch (error) {
+        selectedMember.value = null
+    }
+}
+
+watch(() => props.modelValue, loadSelectedMember, { immediate: true })
+</script>
+
+<style lang="scss" scoped>
+.member-select { width: 100%; min-width: 0; cursor: pointer; }
+.member-select :deep(.el-input__inner) { cursor: pointer; }
+.member-selector__toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-bottom: 12px; }
+.member-selector__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.member-selector__tip { color: var(--el-text-color-secondary); font-size: 12px; }
+.member-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.member-cell__body { min-width: 0; }
+.member-cell__name { overflow: hidden; color: var(--el-text-color-primary); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.member-cell__no { margin-top: 2px; color: var(--el-text-color-secondary); font-size: 12px; }
+.create-member__alert { margin-bottom: 18px; }
+@media (max-width: 720px) {
+    .member-selector__toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+    .member-selector__toolbar > :last-child { grid-column: 1 / -1; }
+    .member-selector__footer { align-items: flex-end; flex-direction: column; }
 }
 </style>
