@@ -116,17 +116,9 @@
                         <span>{{ templateAssistState(row).text }}</span>
                     </div>
                     <div class="template-assist__actions">
-                        <el-button link type="primary" size="small" :icon="Setting" @click="openTemplateBinding(row)">
-                            {{ row.check_template_bound ? '调整绑定' : '关联模板' }}
+                        <el-button link type="primary" size="small" :icon="Setting" @click="openTemplateConfig(row)">
+                            {{ row.check_template_bound && row.check_template_summary_count ? '调整质检配置' : '配置质检模板' }}
                         </el-button>
-                        <el-button
-                            v-if="row.check_template_id"
-                            link
-                            type="primary"
-                            size="small"
-                            @click="openTemplateSummary(row)"
-                        >设置摘要字段</el-button>
-                        <el-button link type="primary" size="small" :icon="Refresh" @click="refreshRowTemplate(row)">刷新</el-button>
                     </div>
                 </div>
             </div>
@@ -142,19 +134,25 @@
             :loading="!!activeRow?.summary_loading"
             @confirm="handleSummaryConfirm"
         />
+        <CheckTemplateConfigDrawer
+            v-model:visible="templateConfigVisible"
+            :category-id="templateConfigRow?.category_id || 0"
+            :model-name="templateConfigRow?.model || ''"
+            @saved="handleTemplateConfigSaved"
+        />
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, EditPen, List, Connection, CircleCheck, Warning, Setting, Refresh } from '@element-plus/icons-vue'
+import { Plus, EditPen, List, Connection, CircleCheck, Warning, Setting } from '@element-plus/icons-vue'
 import { addOrderDevice, updateOrderDevice, deleteOrderDevice } from '@/addon/hsx_recycle/api/recycle_order'
 import { getRecycleDeviceModelDictChildren, getRecycleDeviceModelDictOptions, getRecycleDeviceModelDictTree } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check_template'
 import DeviceEntryCard from './DeviceEntryCard.vue'
 import CheckSummaryDialog from './CheckSummaryDialog.vue'
+import CheckTemplateConfigDrawer from './CheckTemplateConfigDrawer.vue'
 import { useLocalDevice } from './useLocalDevice'
 import { validateSummaryRequired } from './summaryUtil'
 import { normalizeDevice, buildUpdatePayload } from './deviceUtil'
@@ -176,8 +174,6 @@ const props = withDefaults(defineProps<{
 })
 
 const savedDeviceCount = computed(() => props.devices.filter(d => d.saved && d.id).length)
-const router = useRouter()
-const pendingTemplateRefreshRow = ref<DeviceEntryRow | null>(null)
 const MODEL_ENTRY_TIP_CACHE_KEY = 'hsx_recycle:model_entry_tip:dismissed:v1'
 const showModelEntryTip = ref(true)
 
@@ -466,50 +462,22 @@ const templateAssistState = (row: DeviceEntryRow) => {
     }
 }
 
-const openManagementPage = (path: string, query: Record<string, any>, row: DeviceEntryRow) => {
-    pendingTemplateRefreshRow.value = row
-    const href = router.resolve({ path, query }).href
-    const opened = window.open(href, '_blank')
-    if (opened) opened.opener = null
-    else {
-        pendingTemplateRefreshRow.value = null
-        ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
-    }
-}
+const templateConfigVisible = ref(false)
+const templateConfigRow = ref<DeviceEntryRow | null>(null)
 
-const openTemplateBinding = (row: DeviceEntryRow) => {
+const openTemplateConfig = (row: DeviceEntryRow) => {
     if (!row.category_id) {
         ElMessage.warning('请先从型号库选择标准型号')
         return
     }
-    openManagementPage('/site/hsx_recycle/recycle_device_model_dict/list', {
-        template_target_id: row.category_id,
-        template_target_name: row.model || ''
-    }, row)
+    templateConfigRow.value = row
+    templateConfigVisible.value = true
 }
 
-const openTemplateSummary = (row: DeviceEntryRow) => {
-    if (!row.check_template_id) {
-        openTemplateBinding(row)
-        return
-    }
-    openManagementPage('/site/hsx_recycle/check/template', {
-        template_id: row.check_template_id
-    }, row)
-}
-
-const refreshRowTemplate = async (row: DeviceEntryRow, showMessage = true) => {
-    const loaded = await loadCheckTemplate(row)
-    if (!showMessage) return
-    if (loaded) ElMessage.success('已重新加载该型号的模板配置')
-    else ElMessage.error('模板配置加载失败，请稍后重试')
-}
-
-const handleWindowFocus = () => {
-    const row = pendingTemplateRefreshRow.value
+const handleTemplateConfigSaved = async () => {
+    const row = templateConfigRow.value
     if (!row) return
-    pendingTemplateRefreshRow.value = null
-    refreshRowTemplate(row, false)
+    await loadCheckTemplate(row)
 }
 
 // ============ 行的增删 ============
@@ -723,11 +691,6 @@ onMounted(() => {
     // 不再一次性拉整棵型号树(3万条);级联改为懒加载,打开时按 pid 取一层
     modelNodeMap.value = {}
     initExistingRows()
-    window.addEventListener('focus', handleWindowFocus)
-})
-
-onBeforeUnmount(() => {
-    window.removeEventListener('focus', handleWindowFocus)
 })
 
 defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
