@@ -1,7 +1,7 @@
 <template>
     <el-drawer
         v-model="drawerVisible"
-        title="配置质检模板"
+        title="配置设备模板"
         size="min(680px, 100vw)"
         append-to-body
         destroy-on-close
@@ -17,7 +17,7 @@
                     <div class="template-context__name">{{ modelName || '未命名型号' }}</div>
                     <div class="template-context__meta">型号库节点 ID：{{ categoryId || '-' }}</div>
                 </div>
-                <el-tag v-if="effective.check_template_id" type="success" effect="plain">模板已生效</el-tag>
+                <el-tag v-if="effective.check_template_id || effective.print_template_id" type="success" effect="plain">模板已生效</el-tag>
                 <el-tag v-else type="warning" effect="plain">待配置</el-tag>
             </section>
 
@@ -26,14 +26,14 @@
                 show-icon
                 :closable="false"
                 class="template-config__notice"
-                title="模板决定该型号需要录入哪些质检信息；摘要字段决定设备卡片中优先展示哪些结果。"
+                title="质检模板负责验机信息，打印模板负责设备标签；两者独立配置、共同继承。"
             />
 
             <section class="config-section">
                 <div class="config-section__head">
                     <div>
-                        <div class="config-section__title">1. 关联质检模板</div>
-                        <div class="config-section__desc">当前型号可独立绑定，也可以继续使用上级型号或全局模板。</div>
+                        <div class="config-section__title">1. 关联模板</div>
+                        <div class="config-section__desc">当前型号可独立配置质检和标签打印，也可以继续使用上级型号或全局规则。</div>
                     </div>
                     <el-button v-if="binding.id" link type="primary" :loading="resetting" @click="restoreInheritance">
                         恢复继承
@@ -45,8 +45,13 @@
                         <el-select
                             v-model="selectedTemplateId"
                             filterable
+                            remote
+                            reserve-keyword
+                            clearable
+                            :remote-method="searchCheckTemplates"
+                            :loading="checkTemplateSearching"
                             class="w-full"
-                            placeholder="请选择质检模板"
+                            placeholder="输入模板名或型号搜索质检模板"
                             @change="loadSelectedTemplateSchema"
                         >
                             <el-option
@@ -63,17 +68,54 @@
                             </el-option>
                         </el-select>
                     </el-form-item>
+                    <div class="form-help">支持搜索手工模板和外部导入模板，例如输入“iPhone 17 Pro”。</div>
+
+                    <el-form-item label="打印标签模板" class="print-template-form-item">
+                        <el-select
+                            v-model="selectedPrintTemplateId"
+                            filterable
+                            clearable
+                            class="w-full"
+                            placeholder="请选择设备标签打印模板"
+                        >
+                            <el-option
+                                v-for="item in printTemplateOptions"
+                                :key="item.template_id"
+                                :label="printTemplateLabel(item)"
+                                :value="Number(item.template_id)"
+                            >
+                                <div class="template-option">
+                                    <span>{{ item.template_name }}</span>
+                                    <span class="template-option__meta">{{ item.width || '-' }} × {{ item.height || '-' }} mm</span>
+                                    <el-tag v-if="Number(item.is_default) === 1" size="small" type="success" effect="plain">默认</el-tag>
+                                </div>
+                            </el-option>
+                        </el-select>
+                    </el-form-item>
                 </el-form>
 
-                <div v-if="effective.check_template_id" class="effective-rule">
-                    <span>当前生效：</span>
-                    <strong>{{ effective.check_template_name || '未命名模板' }}</strong>
-                    <span>，来源于 {{ effective.source_name || sourceTypeLabel(effective.source_type) }}</span>
+                <div v-if="effective.check_template_id || effective.print_template_id" class="effective-rule">
+                    <div v-if="effective.check_template_id">
+                        <span>生效质检：</span><strong>{{ effective.check_template_name || '未命名模板' }}</strong>
+                    </div>
+                    <div v-if="effective.print_template_id">
+                        <span>生效打印：</span><strong>{{ effective.print_template_name || '未命名模板' }}</strong>
+                    </div>
+                    <div class="effective-rule__source">来源：{{ effective.source_name || sourceTypeLabel(effective.source_type) }}</div>
                 </div>
 
-                <el-empty v-if="!templateOptions.length && !loading" description="还没有可用的质检模板" :image-size="72">
+                <el-empty v-if="!templateOptions.length && !loading && !checkTemplateSearching" description="还没有可用的质检模板" :image-size="72">
                     <el-button type="primary" :loading="initializing" @click="initializeDefaultTemplate">初始化默认模板</el-button>
                 </el-empty>
+
+                <el-alert
+                    v-if="!printTemplateOptions.length && !loading"
+                    type="warning"
+                    show-icon
+                    :closable="false"
+                    title="还没有可用的设备标签打印模板，请先在打印模板中新增并启用。"
+                    class="template-config__notice"
+                />
             </section>
 
             <section v-if="selectedTemplateId" class="config-section">
@@ -139,7 +181,7 @@
                     <el-button
                         type="primary"
                         :loading="saving"
-                        :disabled="!selectedTemplateId"
+                        :disabled="!selectedTemplateId && !selectedPrintTemplateId"
                         @click="saveConfig"
                     >保存并应用</el-button>
                 </div>
@@ -158,6 +200,7 @@ import {
     saveTemplateBinding
 } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
 import {
+    getCheckTemplateAll,
     getCheckTemplateSchema,
     initDefaultCheckTemplate,
     saveCheckField
@@ -181,13 +224,17 @@ const emit = defineEmits<{
 const SCENE_KEY = 'manual_device_label'
 const loading = ref(false)
 const schemaLoading = ref(false)
+const checkTemplateSearching = ref(false)
 const saving = ref(false)
 const resetting = ref(false)
 const initializing = ref(false)
 const binding = ref<Record<string, any>>({})
 const effective = ref<Record<string, any>>({})
 const templateOptions = ref<any[]>([])
+const baseTemplateOptions = ref<any[]>([])
+const printTemplateOptions = ref<any[]>([])
 const selectedTemplateId = ref(0)
+const selectedPrintTemplateId = ref(0)
 const selectedTemplate = ref<Record<string, any>>({})
 const fieldGroups = ref<any[]>([])
 const activeGroups = ref<string[]>([])
@@ -226,6 +273,43 @@ const sourceTypeLabel = (type: string) => type === 'global' ? '通用兜底' : '
 const componentLabel = (component: string) => ({
     input: '输入框', textarea: '多行文本', radio: '单选', checkbox: '多选', select: '下拉选择', switch: '开关'
 } as Record<string, string>)[component] || '质检项'
+const printTemplateLabel = (item: any) => {
+    const size = item.width && item.height ? `（${item.width}×${item.height}mm）` : ''
+    return `${item.template_name || '未命名模板'}${size}`
+}
+
+const mergeTemplateOptions = (items: any[], includeCurrent = true) => {
+    const selected = includeCurrent
+        ? templateOptions.value.filter(item => Number(item.id) === Number(selectedTemplateId.value))
+        : []
+    const merged = [...selected, ...(items || [])]
+    const map = new Map<number, any>()
+    merged.forEach(item => {
+        const id = Number(item?.id || 0)
+        if (id) map.set(id, item)
+    })
+    templateOptions.value = Array.from(map.values())
+}
+
+const searchCheckTemplates = async (keyword: string) => {
+    const value = String(keyword || '').trim()
+    if (!value) {
+        templateOptions.value = [...baseTemplateOptions.value]
+        return
+    }
+    checkTemplateSearching.value = true
+    try {
+        const res: any = await getCheckTemplateAll({
+            keyword: value,
+            category_id: Number(props.categoryId),
+            status: 1,
+            limit: 100
+        })
+        mergeTemplateOptions(res.data || [])
+    } finally {
+        checkTemplateSearching.value = false
+    }
+}
 
 const loadConfig = async () => {
     if (!Number(props.categoryId)) return
@@ -239,8 +323,12 @@ const loadConfig = async () => {
         const data = res.data || {}
         binding.value = data.binding || {}
         effective.value = data.effective || {}
-        templateOptions.value = data.check_template_options || []
+        baseTemplateOptions.value = data.check_template_options || []
+        templateOptions.value = [...baseTemplateOptions.value]
+        printTemplateOptions.value = data.print_template_options || []
         selectedTemplateId.value = Number(binding.value.check_template_id || effective.value.check_template_id || 0)
+        selectedPrintTemplateId.value = Number(binding.value.print_template_id || effective.value.print_template_id || 0)
+        await searchCheckTemplates(props.modelName || '')
         await loadSelectedTemplateSchema()
     } finally {
         loading.value = false
@@ -277,7 +365,7 @@ const toggleSummary = (field: any, value: any) => {
 }
 
 const saveConfig = async () => {
-    if (!selectedTemplateId.value || saving.value) return
+    if ((!selectedTemplateId.value && !selectedPrintTemplateId.value) || saving.value) return
     saving.value = true
     try {
         await saveTemplateBinding({
@@ -285,7 +373,7 @@ const saveConfig = async () => {
             target_id: Number(props.categoryId),
             scene_key: SCENE_KEY,
             check_template_id: selectedTemplateId.value,
-            print_template_id: Number(binding.value.print_template_id || 0),
+            print_template_id: selectedPrintTemplateId.value,
             inherit_enabled: Number(binding.value.inherit_enabled ?? 1),
             status: 1,
             remark: binding.value.remark || '',
@@ -307,7 +395,7 @@ const saveConfig = async () => {
             }
         }
 
-        ElMessage.success('质检模板与摘要字段已应用')
+        ElMessage.success('质检模板、打印模板与摘要字段已应用')
         emit('saved')
         drawerVisible.value = false
     } finally {
@@ -356,7 +444,11 @@ const initializeDefaultTemplate = async () => {
 .config-section__title { color: var(--el-text-color-primary); font-size: 15px; font-weight: 600; }
 .config-section__desc { margin-top: 4px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 18px; }
 .template-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.effective-rule { margin-top: -4px; padding: 8px 10px; border-radius: 6px; color: var(--el-text-color-regular); background: var(--el-fill-color-lighter); font-size: 12px; }
+.template-option__meta { margin-left: auto; color: var(--el-text-color-secondary); font-size: 12px; }
+.form-help { margin: -12px 0 16px; color: var(--el-text-color-secondary); font-size: 12px; }
+.print-template-form-item { margin-top: 6px; }
+.effective-rule { display: grid; gap: 5px; margin-top: -4px; padding: 10px; border-radius: 6px; color: var(--el-text-color-regular); background: var(--el-fill-color-lighter); font-size: 12px; }
+.effective-rule__source { color: var(--el-text-color-secondary); }
 .summary-groups { border-top: 0; }
 .summary-group__title { display: flex; align-items: center; justify-content: space-between; width: 100%; padding-right: 12px; }
 .summary-group__title span:last-child { color: var(--el-text-color-secondary); font-size: 12px; font-weight: 400; }

@@ -117,7 +117,7 @@
                     </div>
                     <div class="template-assist__actions">
                         <el-button link type="primary" size="small" :icon="Setting" @click="openTemplateConfig(row)">
-                            {{ row.check_template_bound && row.check_template_summary_count ? '调整质检配置' : '配置质检模板' }}
+                            {{ row.check_template_bound && row.check_template_summary_count ? '调整设备模板' : '配置设备模板' }}
                         </el-button>
                     </div>
                 </div>
