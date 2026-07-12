@@ -11,13 +11,23 @@
     <u-popup :show="show" mode="bottom" :safe-area-inset-bottom="true" border-radius="32rpx" @close="close">
         <view class="popup-wrap">
             <view class="popup-header">
-                <text class="popup-title">{{ roleType === 'supplier' ? '选择供应商' : '选择客户' }}</text>
+                <text class="popup-title">{{ editingMember ? '修改会员昵称' : (roleType === 'supplier' ? '选择供应商' : '选择客户') }}</text>
                 <view class="popup-header__actions">
-                    <text class="create-link" @click="showCreate = !showCreate">{{ showCreate ? '返回列表' : '新增' }}</text>
+                    <text v-if="editingMember" class="create-link" @click="cancelMemberEdit">返回列表</text>
+                    <text v-else class="create-link" @click="showCreate = !showCreate">{{ showCreate ? '返回列表' : '新增' }}</text>
                     <u-icon name="close" size="20" color="#94a3b8" @click="close" />
                 </view>
             </view>
-            <view v-if="showCreate" class="create-panel">
+            <view v-if="editingMember" class="create-panel">
+                <view class="member-edit-summary">
+                    <text class="member-edit-summary__name">{{ editingMember.nickname || editingMember.username || '未命名会员' }}</text>
+                    <text class="member-edit-summary__meta">{{ editingMember.mobile || '未填写手机号' }}{{ editingMember.member_no ? ` · ${editingMember.member_no}` : '' }}</text>
+                </view>
+                <u-input v-model="editNickname" border="surround" maxlength="50" placeholder="请输入会员昵称" clearable />
+                <text class="create-help">这里只修改会员昵称，不会修改 ERP 往来主体名称和历史单据。</text>
+                <view class="create-submit"><u-button type="primary" :loading="savingNickname" text="保存昵称" @click="saveMemberNickname" /></view>
+            </view>
+            <view v-else-if="showCreate" class="create-panel">
                 <view class="create-tabs">
                     <view :class="{ active: createMember }" @click="createMember = true">新增客户账号</view>
                     <view :class="{ active: !createMember }" @click="createMember = false">仅新增往来主体</view>
@@ -55,9 +65,15 @@
                     >
                         <view class="party-item__main">
                             <view class="party-item__left">
-                                <text class="party-item__name">
-                                    {{ item.party_name || item.counterparty_name || item.nickname || item.username || '未命名' }}
-                                </text>
+                                <view class="party-item__name-row">
+                                    <text class="party-item__name">
+                                        {{ item.party_name || item.counterparty_name || item.nickname || item.username || '未命名' }}
+                                    </text>
+                                    <view class="party-item__edit" @click.stop="beginMemberEdit(item)">
+                                        <u-icon name="edit-pen" color="#2563eb" size="14" />
+                                        <text>改会员名</text>
+                                    </view>
+                                </view>
                                 <text v-if="item.party_name" class="party-item__member">
                                     会员：{{ item.nickname || item.username }}
                                 </text>
@@ -96,6 +112,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import request from '@/utils/request'
+import { editMemberField } from '@/app/api/member'
 
 const props = withDefaults(defineProps<{
     show: boolean
@@ -126,7 +143,10 @@ const loading = ref(false)
 const loadingMore = ref(false)
 const resolving = ref(false)
 const creating = ref(false)
+const savingNickname = ref(false)
 const showCreate = ref(false)
+const editingMember = ref<any>(null)
+const editNickname = ref('')
 const createMember = ref(true)
 const createName = ref('')
 const createMobile = ref('')
@@ -143,6 +163,8 @@ watch(() => props.show, (v) => {
     if (v) {
         keyword.value = ''
         showCreate.value = false
+        editingMember.value = null
+        editNickname.value = ''
         activeRoleFilter.value = props.initialRoleFilter
         search(true)
     }
@@ -169,6 +191,35 @@ async function search(reset = true) {
 function loadMore() { search(false) }
 function onSearch() { search(true) }
 function setRoleFilter(value: 'all' | 'purchase_supplier' | 'refurbish_provider') { activeRoleFilter.value = value; search(true) }
+
+function beginMemberEdit(member: any) {
+    if (!Number(member?.member_id || 0)) return uni.showToast({ title: '该记录没有关联会员', icon: 'none' })
+    showCreate.value = false
+    editingMember.value = member
+    editNickname.value = String(member.nickname || member.username || '').trim()
+}
+
+function cancelMemberEdit() {
+    editingMember.value = null
+    editNickname.value = ''
+}
+
+async function saveMemberNickname() {
+    const member = editingMember.value
+    const nickname = editNickname.value.trim()
+    if (!member?.member_id) return uni.showToast({ title: '该记录没有关联会员', icon: 'none' })
+    if (!nickname) return uni.showToast({ title: '请输入会员昵称', icon: 'none' })
+    savingNickname.value = true
+    try {
+        await editMemberField(Number(member.member_id), 'nickname', nickname)
+        member.nickname = nickname
+        cancelMemberEdit()
+    } catch (e: any) {
+        uni.showToast({ title: e?.msg || e?.message || '会员昵称修改失败', icon: 'none' })
+    } finally {
+        savingNickname.value = false
+    }
+}
 
 async function selectMember(member: any) {
     resolving.value = true
@@ -225,6 +276,11 @@ function close() { emit('update:show', false) }
 .role-filters view.active,.create-tabs view.active { background:#dbeafe; color:#2563eb; font-weight:600; }
 .create-panel { display:flex; flex-direction:column; gap:18rpx; padding:0 28rpx 28rpx; }
 .create-help { color:#64748b; font-size:21rpx; line-height:1.5; }
+.create-submit { width:100%; }
+.member-edit-summary { padding:18rpx 20rpx; border-radius:8rpx; background:#f8fafc; }
+.member-edit-summary__name,.member-edit-summary__meta { display:block; }
+.member-edit-summary__name { color:#0f172a; font-size:27rpx; font-weight:600; }
+.member-edit-summary__meta { margin-top:5rpx; color:#64748b; font-size:22rpx; }
 .popup-search { padding: 0 24rpx 16rpx; }
 .popup-hint { display:block; margin-top:12rpx; color:#64748b; font-size:21rpx; line-height:1.45; }
 .popup-list { flex: 1; overflow-y: auto; padding: 0 24rpx; gap: 16rpx; box-sizing: border-box; }
@@ -240,7 +296,9 @@ function close() { emit('update:show', false) }
 .party-item__main { display: flex; align-items: flex-start; justify-content: space-between; }
 .party-item__left { flex: 1; }
 .party-item__right { text-align: right; flex-shrink: 0; }
+.party-item__name-row { display:flex; align-items:center; gap:12rpx; min-width:0; }
 .party-item__name { font-size: 28rpx; font-weight: 600; color: #0f172a; display: block; }
+.party-item__edit { display:flex; align-items:center; flex:none; gap:4rpx; padding:5rpx 8rpx; color:#2563eb; font-size:20rpx; }
 .party-item__member { font-size: 22rpx; color: #94a3b8; display: block; margin-top: 4rpx; }
 .party-item__mobile { font-size: 26rpx; color: #64748b; display: block; }
 .party-item__mno { font-size: 22rpx; color: #94a3b8; display: block; margin-top: 4rpx; }
