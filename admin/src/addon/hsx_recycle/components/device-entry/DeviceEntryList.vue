@@ -25,6 +25,22 @@
             </div>
         </div>
 
+        <el-alert
+            v-if="showModelEntryTip"
+            class="model-entry-tip"
+            type="info"
+            show-icon
+            closable
+            @close="dismissModelEntryTip"
+        >
+            <template #title>
+                <span>请优先从型号库选择，输入时可忽略空格和大小写，例如“17P”可以检索 iPhone 17 Pro 系列。</span>
+            </template>
+            <div class="model-entry-tip__desc">
+                老机型通常已收录；新款若暂时查不到，可使用手动录入。型号库约每月更新一次，建议更新后重新关联标准型号。
+            </div>
+        </el-alert>
+
         <div class="device-list">
             <DeviceEntryCard
                 v-for="(row, index) in devices"
@@ -38,39 +54,51 @@
                 @edit-summary="openSummaryDialog(row)"
             >
                 <template #model>
-                    <div class="model-picker">
-                        <el-cascader
-                            v-if="!row.model_input_mode"
-                            v-model="row.model_path"
-                            :options="modelTreeOptions"
-                            :props="modelCascaderProps"
-                            :before-filter="handleModelBeforeFilter"
-                            :filter-method="modelSearchFilterMethod"
-                            :show-all-levels="false"
-                            placeholder="选择/搜索型号"
-                            filterable
-                            clearable
-                            size="small"
-                            class="model-cascader"
-                            :loading="modelLoading"
-                            @visible-change="onModelVisibleChange"
-                            @change="value => handleModelPathChange(row, value)"
-                        />
-                        <el-input
-                            v-else
-                            v-model="row.model"
-                            placeholder="输入型号或 品牌/系列/型号"
-                            clearable
-                            size="small"
-                        />
-                        <el-button
-                            link
-                            type="primary"
-                            class="model-mode-button"
-                            :icon="row.model_input_mode ? List : EditPen"
-                            :title="row.model_input_mode ? '选择型号' : '手动输入'"
-                            @click="toggleModelInputMode(row)"
-                        />
+                    <div class="model-picker-wrap">
+                        <div class="model-picker">
+                            <el-cascader
+                                v-if="!row.model_input_mode"
+                                v-model="row.model_path"
+                                :options="modelTreeOptions"
+                                :props="modelCascaderProps"
+                                :before-filter="keyword => handleModelBeforeFilter(row, keyword)"
+                                :filter-method="modelSearchFilterMethod"
+                                :show-all-levels="false"
+                                placeholder="从型号库搜索，如 17P"
+                                filterable
+                                clearable
+                                size="small"
+                                class="model-cascader"
+                                :loading="modelLoading"
+                                @visible-change="visible => onModelVisibleChange(row, visible)"
+                                @change="value => handleModelPathChange(row, value)"
+                            />
+                            <el-input
+                                v-else
+                                v-model="row.model"
+                                placeholder="输入完整型号，如 iPhone 17 Pro Max"
+                                clearable
+                                size="small"
+                                @input="handleManualModelInput(row)"
+                            />
+                            <el-button
+                                link
+                                type="primary"
+                                size="small"
+                                class="model-mode-button"
+                                :icon="row.model_input_mode ? List : EditPen"
+                                @click="toggleModelInputMode(row)"
+                            >
+                                {{ row.model_input_mode ? '返回型号库' : '手动录入' }}
+                            </el-button>
+                        </div>
+                        <div v-if="row.model_search_empty && !row.model_input_mode" class="model-picker-feedback is-warning">
+                            型号库暂未找到“{{ row.model_search_keyword }}”。可缩短关键词重试；确认是未收录新款后再
+                            <el-button link type="primary" size="small" @click="enableManualModelInput(row)">手动录入</el-button>
+                        </div>
+                        <div v-else-if="row.model_input_mode" class="model-picker-feedback">
+                            手动型号不会自动关联标准分类和质检模板，建议仅用于暂未收录的新款机型。
+                        </div>
                     </div>
                 </template>
             </DeviceEntryCard>
@@ -119,6 +147,17 @@ const props = withDefaults(defineProps<{
 })
 
 const savedDeviceCount = computed(() => props.devices.filter(d => d.saved && d.id).length)
+const MODEL_ENTRY_TIP_CACHE_KEY = 'hsx_recycle:model_entry_tip:dismissed:v1'
+const showModelEntryTip = ref(true)
+
+const dismissModelEntryTip = () => {
+    showModelEntryTip.value = false
+    try {
+        window.localStorage.setItem(MODEL_ENTRY_TIP_CACHE_KEY, '1')
+    } catch (error) {
+        console.warn('保存型号录入提示状态失败:', error)
+    }
+}
 
 // ============ 型号字典级联 ============
 const modelLoading = ref(false)
@@ -190,21 +229,27 @@ const normalizeModelSearchNodes = (nodes: any[]): any[] => (nodes || []).map((it
 
 // el-cascader 输入关键字时触发:空 → 回到懒加载浏览;有词 → 后端扁平搜索(结果带完整 category_path)并切非懒加载展示。
 // 返回 Promise<boolean>:resolve(true) 后级联用新 options(非懒)重建面板展示搜索结果。
-const handleModelBeforeFilter = (keyword: string) => {
+const handleModelBeforeFilter = (row: DeviceEntryRow, keyword: string) => {
     const value = String(keyword || '').trim()
     if (!value) {
         modelSearching.value = false
+        row.model_search_keyword = ''
+        row.model_search_empty = false
         return false
     }
     modelLoading.value = true
+    row.model_search_keyword = value
     return getRecycleDeviceModelDictOptions({ keyword: value })
         .then((res: any) => {
-            modelTreeOptions.value = normalizeModelSearchNodes(res.data || [])
+            const nodes = normalizeModelSearchNodes(res.data || [])
+            modelTreeOptions.value = nodes
             modelSearching.value = true
+            row.model_search_empty = nodes.length === 0
             return true
         })
         .catch((error: any) => {
             console.error('搜索型号字典失败:', error)
+            row.model_search_empty = false
             return false
         })
         .finally(() => {
@@ -213,11 +258,12 @@ const handleModelBeforeFilter = (keyword: string) => {
 }
 
 // 下拉关闭后复位:清掉搜索态,下次打开回到懒加载浏览
-const onModelVisibleChange = (visible: boolean) => {
+const onModelVisibleChange = (row: DeviceEntryRow, visible: boolean) => {
     if (!visible && modelSearching.value) {
         modelSearching.value = false
         modelTreeOptions.value = []
     }
+    if (!visible && !row.model_search_empty) row.model_search_keyword = ''
 }
 
 const normalizeModelSearchText = (value: any) => String(value || '').toLowerCase().replace(/[\s\-_\/\\.　]+/g, '')
@@ -241,17 +287,35 @@ const handleModelPathChange = (row: DeviceEntryRow, value: Array<string | number
     row.category_id = Number(leafId) || 0
     row.category_path = fullPath
     row.model_path = fullPath
+    row.model_search_keyword = ''
+    row.model_search_empty = false
     if (row.saved) row.dirty = true
     if (row.category_id) loadCheckTemplate(row)
     else clearCheckTemplate(row)
 }
 
+const enableManualModelInput = (row: DeviceEntryRow) => {
+    row.model_input_mode = true
+    row.model_path = []
+    row.category_id = 0
+    row.category_path = []
+    row.model_search_empty = false
+    clearCheckTemplate(row)
+    if (row.saved) row.dirty = true
+}
+
 const toggleModelInputMode = (row: DeviceEntryRow) => {
-    row.model_input_mode = !row.model_input_mode
-    if (row.model_input_mode) {
-        row.model_path = []
-        clearCheckTemplate(row)
+    if (!row.model_input_mode) {
+        enableManualModelInput(row)
+        return
     }
+    row.model_input_mode = false
+    row.model_search_keyword = ''
+    row.model_search_empty = false
+}
+
+const handleManualModelInput = (row: DeviceEntryRow) => {
+    if (row.saved) row.dirty = true
 }
 
 // ============ 质检模板 / 摘要 ============
@@ -544,6 +608,11 @@ const initExistingRows = () => {
 }
 
 onMounted(() => {
+    try {
+        showModelEntryTip.value = window.localStorage.getItem(MODEL_ENTRY_TIP_CACHE_KEY) !== '1'
+    } catch (error) {
+        showModelEntryTip.value = true
+    }
     // 不再一次性拉整棵型号树(3万条);级联改为懒加载,打开时按 pid 取一层
     modelNodeMap.value = {}
     initExistingRows()
@@ -597,6 +666,17 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     color: #606266;
 }
 
+.model-entry-tip {
+    margin-bottom: 10px;
+}
+
+.model-entry-tip__desc {
+    margin-top: 3px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    line-height: 18px;
+}
+
 .device-list {
     display: flex;
     flex-direction: column;
@@ -608,6 +688,33 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
     align-items: center;
     gap: 8px;
     width: 100%;
+}
+
+.model-picker-wrap {
+    width: 100%;
+    min-width: 0;
+}
+
+.model-picker-feedback {
+    margin-top: 4px;
+    color: var(--el-text-color-secondary);
+    font-size: 11px;
+    line-height: 16px;
+}
+
+.model-picker-feedback.is-warning {
+    color: var(--el-color-warning-dark-2);
+}
+
+:deep(.model-picker-feedback .el-button) {
+    height: auto;
+    padding: 0 2px;
+    vertical-align: baseline;
+}
+
+.model-mode-button {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 :deep(.el-cascader) {

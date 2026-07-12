@@ -33,6 +33,9 @@ export interface DeviceEntryRow {
     dirty?: boolean
     model_path?: Array<string | number>
     model_input_mode?: boolean
+    /** 型号库搜索反馈，仅用于前端交互 */
+    model_search_keyword?: string
+    model_search_empty?: boolean
     // 质检模板（按型号触发）
     check_template_id?: number
     check_template_name?: string
