@@ -29,6 +29,17 @@
 
             <view class="source-wrap"><ErpFinanceSourceSummary :row="sourceRow" direction="payable" /></view>
 
+            <view v-if="payeeMethods.length" class="payee-wrap">
+                <view class="payee-title">客户收款资料 <text>来自回收订单，仅供核对</text></view>
+                <view v-for="(method,index) in payeeMethods" :key="`${method.pay_type}-${method.account}-${index}`" class="payee-item">
+                    <view class="payee-info">
+                        <text class="payee-type">{{ method.pay_type || '其他收款方式' }}<text v-if="method.is_default" class="payee-default">默认</text></text>
+                        <text class="payee-account">{{ method.account || '未填写账号' }}</text>
+                    </view>
+                    <u-image v-if="method.qrcode_image" :src="img(method.qrcode_image)" width="84rpx" height="84rpx" radius="8rpx" />
+                </view>
+            </view>
+
             <!-- 汇总行 -->
             <view class="summary-row">
                 <view class="summary-item">
@@ -150,11 +161,13 @@ import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vu
 import { erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
 import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { img } from '@/utils/common'
 
 const props = withDefaults(defineProps<{
     show: boolean
     partyId?: number
     partyName?: string
+    payableId?: number
     purchaseOrderId?: number
     sourceType?: string
     sourceRow?: any
@@ -163,6 +176,7 @@ const props = withDefaults(defineProps<{
     show: false,
     partyId: 0,
     partyName: '',
+    payableId: 0,
     purchaseOrderId: 0,
     sourceType: '',
     sourceRow: () => ({}),
@@ -199,12 +213,20 @@ const selectedAccountLabel = computed(() => {
     const a = props.accounts.find(a => Number(a.id) === Number(form.value.capital_account_id))
     return a ? `${a.account_name}（¥${money(a.balance)}）` : ''
 })
+const payeeMethods = computed(() => {
+    const unique = new Map<string, any>()
+    items.value.flatMap((row: any) => Array.isArray(row.payee_methods) ? row.payee_methods : []).forEach((item: any) => {
+        const key = `${String(item.pay_type || '').trim()}|${String(item.account || '').trim()}|${String(item.qrcode_image || '').trim()}`
+        if (key !== '||' && !unique.has(key)) unique.set(key, item)
+    })
+    return Array.from(unique.values())
+})
 
 let loadToken = 0
 let preserveOnReopen = false
 
 watch(
-    () => [props.show, props.partyId, props.purchaseOrderId, props.sourceType],
+    () => [props.show, props.partyId, props.payableId, props.purchaseOrderId, props.sourceType],
     () => {
         if (!props.show || props.partyId <= 0) return
         if (preserveOnReopen) {
@@ -235,6 +257,7 @@ async function loadItems() {
     loadingItems.value = true
     try {
         const params: any = { limit: 50 }
+        if (props.payableId) params.payable_id = props.payableId
         if (props.purchaseOrderId) params.purchase_order_id = props.purchaseOrderId
         if (props.sourceType) params.source_type = props.sourceType
         const res: any = await getMobilePayablePartyItems(props.partyId, params)
@@ -349,6 +372,9 @@ const money = (v: any) => Number(v || 0).toFixed(2)
 .modal-title { font-size: 32rpx; font-weight: 700; color: #0f172a; display: block; }
 .modal-subtitle { font-size: 26rpx; color: #64748b; display: block; margin-top: 4rpx; }
 .source-wrap { margin:0 32rpx 16rpx; }
+.payee-wrap { margin:0 32rpx 16rpx; padding:16rpx; border:1rpx solid #fde68a; border-radius:12rpx; background:#fffbeb; }
+.payee-title { color:#78350f; font-size:24rpx; font-weight:650; }.payee-title text { margin-left:8rpx; color:#a16207; font-size:20rpx; font-weight:400; }
+.payee-item { display:flex; align-items:center; justify-content:space-between; gap:14rpx; margin-top:12rpx; padding:12rpx; border-radius:10rpx; background:#fff; }.payee-info { min-width:0; flex:1; }.payee-type,.payee-account { display:block; }.payee-type { color:#0f172a; font-size:24rpx; font-weight:600; }.payee-account { margin-top:5rpx; color:#475569; font-size:22rpx; word-break:break-all; }.payee-default { margin-left:8rpx; color:#d97706; font-size:18rpx; font-weight:500; }
 .summary-row { display: flex; gap: 0; margin: 0 32rpx 16rpx; background: #f8fafc; border-radius: 12rpx; overflow: hidden; }
 .summary-item { flex: 1; padding: 14rpx 0; text-align: center; border-right: 1rpx solid #e2e8f0; &:last-child { border-right: none; } }
 .summary-label { font-size: 22rpx; color: #94a3b8; display: block; }

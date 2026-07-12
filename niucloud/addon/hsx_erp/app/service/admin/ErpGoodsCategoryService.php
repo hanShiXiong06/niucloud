@@ -41,7 +41,7 @@ class ErpGoodsCategoryService extends BaseAdminService
         return $this->model->field($this->fields())->where([['site_id', '=', $this->site_id], ['category_id', '=', $id]])->findOrEmpty()->toArray();
     }
 
-    public function save(int $id, array $data): int
+    public function save(int $id, array $data, bool $sync = true): int
     {
         $name = trim((string)($data['category_name'] ?? ''));
         if ($name === '') {
@@ -94,11 +94,14 @@ class ErpGoodsCategoryService extends BaseAdminService
             }
             $this->model->where([['site_id', '=', $this->site_id], ['category_id', '=', $id]])->update($payload);
             $this->rebuildFullNames();
+            if ($sync) (new ErpCategorySyncService())->pushLocalCategory($id);
             return $id;
         }
         $payload['create_at'] = $now;
         $category = $this->model->create($payload);
-        return (int)$category->category_id;
+        $categoryId = (int)$category->category_id;
+        if ($sync) (new ErpCategorySyncService())->pushLocalCategory($categoryId);
+        return $categoryId;
     }
 
     public function delete(int $id): bool

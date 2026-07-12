@@ -8,6 +8,7 @@ use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetLedger;
 use addon\hsx_erp\app\model\ErpCapitalAccount;
 use addon\hsx_erp\app\model\ErpParty;
+use addon\hsx_erp\app\model\ErpPartyMember;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpPurchaseItem;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
@@ -16,6 +17,7 @@ use addon\hsx_erp\app\model\ErpPurchaseReturnOrder;
 use addon\hsx_erp\app\model\ErpWarehouse;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
+use app\model\member\Member;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -425,10 +427,22 @@ class ErpPurchaseService extends BaseAdminService
             throw new CommonException('请填写采购渠道/客户');
         }
         $now = time();
+        $erpRules = (new ErpConfigService())->getRules();
         $orderId = 0;
+        $cashSettlementCreated = false;
+        $financeService = new ErpFinanceService();
         try {
-            Db::transaction(function () use ($data, $items, $partyName, $now, &$orderId) {
-            $party = $this->ensureParty((int)($data['party_id'] ?? 0), $partyName, (string)($data['m_no'] ?? ''), 'supplier');
+            Db::transaction(function () use ($data, $items, $partyName, $now, $erpRules, $financeService, &$orderId, &$cashSettlementCreated) {
+            $party = $this->ensureParty(
+                (int)($data['party_id'] ?? 0),
+                $partyName,
+                (string)($data['m_no'] ?? ''),
+                'supplier',
+                (int)($data['member_id'] ?? 0),
+                (string)($data['contact_name'] ?? ''),
+                (string)($data['contact_mobile'] ?? ''),
+                (string)($data['source_plugin'] ?? $data['origin_plugin'] ?? '')
+            );
             $partyName = (string)$party->party_name;
             $purchaseNo = ErpLedgerService::makeNo('PO');
             $financeSourceService = new ErpFinanceSourceService();
@@ -450,11 +464,21 @@ class ErpPurchaseService extends BaseAdminService
                 throw new CommonException('采购成本必须大于0');
             }
             $paidAmount = round((float)($data['paid_amount'] ?? 0), 2);
+            $settleMode = (string)($data['settle_mode'] ?? 'credit');
+            if (!in_array($settleMode, ['credit', 'cash'], true)) {
+                throw new CommonException('采购结算方式不正确');
+            }
             if ($paidAmount < 0) {
                 throw new CommonException('本次付款不能小于0');
             }
             if ($paidAmount > $totalCost + 0.0001) {
                 throw new CommonException('本次付款不能大于采购成本');
+            }
+            if ($settleMode === 'cash' && $paidAmount <= 0) {
+                throw new CommonException('现结采购必须填写本次付款金额');
+            }
+            if ($settleMode === 'credit') {
+                $paidAmount = 0.0;
             }
             $capitalAccountId = (int)($data['capital_account_id'] ?? 0);
             $capitalAccountName = '';
@@ -553,11 +577,15 @@ class ErpPurchaseService extends BaseAdminService
                 'update_at' => $now,
             ]);
             $orderId = (int)$order->id;
+            $payableApplications = [];
             foreach ($resolvedItems as $resolved) {
                 $item = $resolved['item'];
                 $warehouse = $resolved['warehouse'];
                 $location = $resolved['location'];
                 $assetFlow = $resolved['asset_flow'];
+                if (array_key_exists('refurbish_required', $item) && (int)($erpRules['refurbish']['enabled'] ?? 1) === 1) {
+                    $assetFlow['refurbish_status'] = !empty($item['refurbish_required']) ? 'pending' : 'none';
+                }
                 $itemWarehouseId = (int)$warehouse->id;
                 $itemWarehouseName = (string)$warehouse->warehouse_name;
                 $itemLocationId = (int)$location->id;
@@ -640,8 +668,12 @@ class ErpPurchaseService extends BaseAdminService
                     'purchase_cost' => $cost,
                     'total_cost' => $cost,
                     'refurbish_status' => $assetFlow['refurbish_status'],
+                    'refurbish_pending_at' => $assetFlow['refurbish_status'] === 'pending' ? $now : 0,
+                    'refurbish_remark' => $assetFlow['refurbish_status'] === 'pending' ? mb_substr(trim((string)($item['refurbish_reason'] ?? '')), 0, 500) : '',
                     'sale_target' => $assetFlow['sale_target'],
-                    'listing_status' => $this->listingStatusByWarehouse($warehouse, $assetFlow['sale_target'], trim((string)($item['image_urls'] ?? '')), $estimateSalePrice),
+                    'listing_status' => $assetFlow['refurbish_status'] === 'pending'
+                        ? 'none'
+                        : $this->listingStatusByWarehouse($warehouse, $assetFlow['sale_target'], trim((string)($item['image_urls'] ?? '')), $estimateSalePrice),
                     'status' => ErpDict::ASSET_IN_STOCK,
                     'source_plugin' => (string)($data['source_plugin'] ?? 'erp'),
                     'source_type' => (string)($data['source_type'] ?? 'manual'),
@@ -681,7 +713,7 @@ class ErpPurchaseService extends BaseAdminService
                     'source_no' => $purchaseNo,
                     'remark' => '采购成本',
                 ]);
-                ErpPayable::create(array_merge([
+                $payable = ErpPayable::create(array_merge([
                     'site_id' => $this->site_id,
                     'payable_no' => ErpLedgerService::makeNo('AP'),
                     'party_id' => (int)$party->id,
@@ -697,10 +729,30 @@ class ErpPurchaseService extends BaseAdminService
                     'create_at' => $now,
                     'update_at' => $now,
                 ], $financeSourceService->persistable($purchaseSource)));
+                $payableApplications[] = [
+                    'payable_id' => (int)$payable->id,
+                    'amount' => $cost,
+                ];
             }
             if ($paidAmount > 0) {
-                (new ErpOperationLogService())->record('purchase_payment_requested', 'purchase', $orderId, $purchaseNo, '采购开单申请付款，等待财务确认', [
-                    'requested_amount' => $paidAmount,
+                $remainingPayment = $paidAmount;
+                $itemsToPay = [];
+                foreach ($payableApplications as $application) {
+                    if ($remainingPayment <= 0.0001) break;
+                    $applyAmount = min($remainingPayment, (float)$application['amount']);
+                    $itemsToPay[] = ['payable_id' => (int)$application['payable_id'], 'amount' => round($applyAmount, 2)];
+                    $remainingPayment = round($remainingPayment - $applyAmount, 2);
+                }
+                if ($remainingPayment > 0.0001) throw new CommonException('现结金额分配失败，请重新提交');
+                $financeService->confirmPayableItemsInTransaction((int)$party->id, $itemsToPay, [
+                    'capital_account_id' => $capitalAccountId,
+                    'voucher_urls' => (string)($data['voucher_urls'] ?? ''),
+                    'request_id' => 'purchase-cash:' . ((string)($data['request_id'] ?? '') ?: $purchaseNo),
+                    'remark' => '采购开单现结付款',
+                ]);
+                $cashSettlementCreated = true;
+                (new ErpOperationLogService())->record('purchase_cash_settled', 'purchase', $orderId, $purchaseNo, '采购开单已完成现结付款', [
+                    'paid_amount' => $paidAmount,
                     'capital_account_id' => $capitalAccountId,
                     'capital_account_name' => $capitalAccountName,
                 ]);
@@ -712,6 +764,9 @@ class ErpPurchaseService extends BaseAdminService
                 return $existingId;
             }
             throw $e;
+        }
+        if ($cashSettlementCreated) {
+            $financeService->flushPendingSettlementDomainEvents();
         }
         return $orderId;
     }
@@ -972,29 +1027,112 @@ class ErpPurchaseService extends BaseAdminService
         return true;
     }
 
-    private function ensureParty(int $id, string $name, string $mNo, string $type): ErpParty
+    private function ensureParty(
+        int $id,
+        string $name,
+        string $mNo,
+        string $type,
+        int $memberId = 0,
+        string $contactName = '',
+        string $contactMobile = '',
+        string $sourcePlugin = ''
+    ): ErpParty
     {
+        $contactName = trim($contactName) ?: $name;
+        $contactMobile = trim($contactMobile) ?: trim($mNo);
+        if ($memberId > 0) {
+            $member = Member::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])
+                ->field('member_id,nickname,username,mobile')->findOrEmpty();
+            if (!$member->isEmpty()) {
+                $memberName = trim((string)($member->nickname ?: $member->username));
+                if ($memberName !== '') $name = $memberName;
+                if (trim((string)$member->mobile) !== '') $contactMobile = trim((string)$member->mobile);
+                $contactName = $name;
+                $relation = ErpPartyMember::where([
+                    ['site_id', '=', $this->site_id], ['member_id', '=', $memberId], ['status', '=', 1],
+                ])->findOrEmpty();
+                if (!$relation->isEmpty()) {
+                    $boundParty = ErpParty::where([['site_id', '=', $this->site_id], ['id', '=', (int)$relation->party_id]])->findOrEmpty();
+                    if (!$boundParty->isEmpty()) {
+                        $this->syncPartyIdentity($boundParty, $name, $contactName, $contactMobile, $sourcePlugin);
+                        return $boundParty;
+                    }
+                }
+            } else {
+                // 外部事件不能凭空创建会员账号；会员不存在时只创建普通 ERP 主体。
+                $memberId = 0;
+            }
+        }
         if ($id > 0) {
             $party = ErpParty::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->findOrEmpty();
             if (!$party->isEmpty()) {
+                $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin);
+                if ($memberId > 0) $this->bindPartyMember((int)$party->id, $memberId);
+                return $party;
+            }
+        }
+        if ($contactMobile !== '') {
+            $party = ErpParty::where([['site_id', '=', $this->site_id], ['contact_mobile', '=', $contactMobile]])->findOrEmpty();
+            if ($party->isEmpty()) {
+                $party = ErpParty::where([['site_id', '=', $this->site_id], ['m_no', '=', $contactMobile]])->findOrEmpty();
+            }
+            if (!$party->isEmpty()) {
+                $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin);
+                if ($memberId > 0) $this->bindPartyMember((int)$party->id, $memberId);
                 return $party;
             }
         }
         $party = ErpParty::where([['site_id', '=', $this->site_id], ['party_name', '=', $name]])->findOrEmpty();
         if (!$party->isEmpty()) {
+            $this->syncPartyIdentity($party, $name, $contactName, $contactMobile, $sourcePlugin);
+            if ($memberId > 0) $this->bindPartyMember((int)$party->id, $memberId);
             return $party;
         }
         $now = time();
-        return ErpParty::create([
+        $party = ErpParty::create([
             'site_id' => $this->site_id,
             'party_no' => ErpLedgerService::makeNo('PT'),
             'party_name' => $name,
             'party_type' => $type,
+            'role_flags' => $sourcePlugin === 'hsx_recycle' ? 'purchase_supplier,recycle_customer' : 'purchase_supplier',
+            'contact_name' => $contactName,
+            'contact_mobile' => $contactMobile,
             'm_no' => $mNo,
             'status' => 1,
             'create_at' => $now,
             'update_at' => $now,
         ]);
+        if ($memberId > 0) $this->bindPartyMember((int)$party->id, $memberId);
+        return $party;
+    }
+
+    private function syncPartyIdentity(ErpParty $party, string $name, string $contactName, string $mobile, string $sourcePlugin): void
+    {
+        $save = [];
+        $currentName = trim((string)$party->party_name);
+        if (($currentName === '' || str_starts_with($currentName, '来源客户#')) && $name !== '') $save['party_name'] = $name;
+        if (trim((string)$party->contact_name) === '' && $contactName !== '') $save['contact_name'] = $contactName;
+        if (trim((string)$party->contact_mobile) === '' && $mobile !== '') $save['contact_mobile'] = $mobile;
+        if (trim((string)$party->m_no) === '' && $mobile !== '') $save['m_no'] = $mobile;
+        $roles = array_values(array_unique(array_filter(array_map('trim', explode(',', (string)$party->role_flags)))));
+        foreach ($sourcePlugin === 'hsx_recycle' ? ['purchase_supplier', 'recycle_customer'] : ['purchase_supplier'] as $role) {
+            if (!in_array($role, $roles, true)) $roles[] = $role;
+        }
+        if (implode(',', $roles) !== (string)$party->role_flags) $save['role_flags'] = implode(',', $roles);
+        if ($save !== []) $party->save(array_merge($save, ['update_at' => time()]));
+    }
+
+    private function bindPartyMember(int $partyId, int $memberId): void
+    {
+        if ($partyId <= 0 || $memberId <= 0) return;
+        $now = time();
+        $relation = ErpPartyMember::where([['site_id', '=', $this->site_id], ['member_id', '=', $memberId]])->findOrEmpty();
+        $values = ['party_id' => $partyId, 'relation_role' => 'business', 'status' => 1, 'update_at' => $now];
+        if (!$relation->isEmpty()) {
+            $relation->save($values);
+            return;
+        }
+        ErpPartyMember::create(array_merge($values, ['site_id' => $this->site_id, 'member_id' => $memberId, 'create_at' => $now]));
     }
 
     private function normalizePurchaseItems(array $items): array

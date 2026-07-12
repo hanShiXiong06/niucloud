@@ -12,6 +12,13 @@
             </view>
         </view>
 
+        <view v-if="refurbishReminder.visible" class="refurbish-reminder">
+            <view class="refurbish-reminder__head"><text>整备积压提醒</text><view @click="showReminderActions"><u-icon name="close" color="#92400e" size="18" /></view></view>
+            <text class="refurbish-reminder__title">今日新增 {{ refurbishReminder.today_count }} 台待整备</text>
+            <text class="refurbish-reminder__desc">当前待整备 {{ refurbishReminder.pending_count }} 台，整备中 {{ refurbishReminder.processing_count }} 台。请及时完成分配，避免影响动销。</text>
+            <u-button size="small" type="warning" plain @click="go('/addon/hsx_erp/pages/stock/list?refurbish_status=pending')">查看整备设备</u-button>
+        </view>
+
         <view class="period-card">
             <u-tabs
                 :list="periodTabs"
@@ -81,7 +88,9 @@
                 <text class="chart-period">{{ periods[periodIndex]?.label }}</text>
             </view>
             <view class="chart-render">
-                <qiun-data-charts type="column" :chartData="operationChartData" :opts="operationChartOpts" :canvas2d="true" canvasId="erpOperationChart" :ontouch="true" />
+                <qiun-data-charts v-if="dashboardReady && operationChartHasData" :key="`operation-${chartVersion}`" type="column" :chartData="operationChartData" :opts="operationChartOpts" :canvas2d="true" :canvasId="`erpOperationChart${chartVersion}`" :ontouch="true" />
+                <view v-else-if="dashboardReady" class="chart-empty">本期暂无经营数据</view>
+                <u-loading-icon v-else mode="circle" text="经营数据加载中" />
             </view>
         </view>
 
@@ -91,7 +100,8 @@
                 <text class="kpi-rank">{{ index + 1 }}</text>
                 <view class="kpi-main"><view class="kpi-name"><text>{{ staff.name }}</text><text>{{ staff.score }} 分</text></view><u-line-progress :percentage="Math.min(100, Number(staff.score || 0))" :showText="false" activeColor="#3b6ef5" height="7" /></view>
             </view>
-            <u-empty v-if="!(kpi.staff || []).length" mode="data" text="本期暂无员工业务事实" :image-size="56" />
+            <u-empty v-if="dashboardReady && !(kpi.staff || []).length" mode="data" text="本期暂无员工业务事实" :image-size="56" />
+            <u-loading-icon v-else-if="!dashboardReady" mode="circle" text="绩效数据加载中" />
         </view>
 
         <view class="chart-card">
@@ -99,7 +109,9 @@
                 <view><text class="chart-title">利润构成</text><text class="chart-sub">看清利润从哪里来、花到哪里去</text></view>
             </view>
             <view class="chart-render chart-render--ring">
-                <qiun-data-charts type="ring" :chartData="profitStructureData" :opts="profitStructureOpts" :canvas2d="true" canvasId="erpProfitStructure" :ontouch="true" />
+                <qiun-data-charts v-if="dashboardReady && profitStructureHasData" :key="`profit-${chartVersion}`" type="ring" :chartData="profitStructureData" :opts="profitStructureOpts" :canvas2d="true" :canvasId="`erpProfitStructure${chartVersion}`" :ontouch="true" />
+                <view v-else-if="dashboardReady" class="chart-empty">本期暂无利润构成数据</view>
+                <u-loading-icon v-else mode="circle" text="利润数据加载中" />
             </view>
         </view>
 
@@ -155,6 +167,27 @@
             <u-loading-icon mode="circle" text="加载中" />
         </view>
         <u-empty v-else-if="!(recent.settlements || []).length" mode="list" text="暂无结算记录" />
+
+        <view class="section-title">最近采购</view>
+        <view v-for="row in (recent.purchases || [])" :key="'p'+row.id" class="erp-card recent-order" @click="goPurchase(row)">
+            <view class="erp-card__head">
+                <view class="recent-order__main"><text class="card-title">{{ row.party_name || '未填写供应商' }}</text><text class="card-meta">{{ row.purchase_no || '-' }}</text></view>
+                <u-tag :text="financeStatus(row.finance_status, '付款')" :type="financeStatusType(row.finance_status)" plain plainFill size="mini" />
+            </view>
+            <view class="compact-foot"><text class="compact-amount">¥{{ money(row.total_cost) }}</text><text class="card-time">{{ time(row.purchase_at) }} · 查看采购单</text></view>
+        </view>
+        <u-empty v-if="dashboardReady && !(recent.purchases || []).length" mode="list" text="暂无采购记录" />
+
+        <view class="section-title">最近销售</view>
+        <view v-for="row in (recent.sales || [])" :key="'sale'+row.id" class="erp-card recent-order" @click="goSale(row)">
+            <view class="erp-card__head">
+                <view class="recent-order__main"><text class="card-title">{{ row.party_name || '未填写客户' }}</text><text class="card-meta">{{ row.sale_no || '-' }}</text></view>
+                <u-tag :text="financeStatus(row.finance_status, '收款')" :type="financeStatusType(row.finance_status)" plain plainFill size="mini" />
+            </view>
+            <view class="recent-sale-metrics"><text>销售 ¥{{ money(row.total_amount) }}</text><text :class="Number(row.profit || 0) >= 0 ? 'green' : 'red'">毛利 {{ signedMoney(row.profit) }}</text></view>
+            <view class="card-time">{{ time(row.sale_at) }} · 查看销售单</view>
+        </view>
+        <u-empty v-if="dashboardReady && !(recent.sales || []).length" mode="list" text="暂无销售记录" />
         <u-calendar :show="calendarShow" mode="range" title="选择统计日期" :defaultDate="customDates" :monthNum="12" @confirm="onCalendarConfirm" @close="calendarShow = false" />
     </view>
 </template>
@@ -162,7 +195,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { getMobileErpDashboard, getMobileErpKpiDashboard } from '@/addon/hsx_erp/api/erp'
+import { dismissMobileErpRefurbishReminder, getMobileErpDashboard, getMobileErpKpiDashboard } from '@/addon/hsx_erp/api/erp'
 import qiunDataCharts from '@/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
 
 const loading = ref(false)
@@ -171,6 +204,8 @@ const calendarShow = ref(false)
 const customDates = ref<string[]>([])
 const data = ref<any>({})
 const kpi = ref<any>({})
+const dashboardReady = ref(false)
+const chartVersion = ref(0)
 const periods = [
     { label: '今日', value: 'today' },
     { label: '昨天', value: 'yesterday' },
@@ -201,6 +236,7 @@ const quickActions = [
 const summary = computed(() => data.value?.summary || {})
 const todo = computed(() => data.value?.todo || {})
 const recent = computed(() => data.value?.recent || {})
+const refurbishReminder = computed(() => data.value?.reminders?.refurbish || {})
 const netCashFlow = computed(() => Number(summary.value.receipt_amount || 0) - Number(summary.value.payment_amount || 0))
 const netCashFlowClass = computed(() => netCashFlow.value > 0 ? 'green' : (netCashFlow.value < 0 ? 'red' : ''))
 const operationChartData = computed(() => ({
@@ -213,11 +249,13 @@ const operationChartData = computed(() => ({
         Number(summary.value.operating_profit_amount || 0),
     ] }]
 }))
+const operationChartHasData = computed(() => operationChartData.value.series[0].data.some(item => Number(item || 0) !== 0))
 const profitStructureData = computed(() => ({ series: [{ data: [
     { name: '销售毛利', value: Math.max(0, Number(summary.value.profit_amount || 0)) },
     { name: '经营收入', value: Math.max(0, Number(summary.value.operating_income_amount || 0)) },
     { name: '经营费用', value: Math.max(0, Number(summary.value.operating_expense_amount || 0)) },
 ] }] }))
+const profitStructureHasData = computed(() => profitStructureData.value.series[0].data.some(item => Number(item.value || 0) > 0))
 const operationChartOpts = {
     color: ['#3b82f6'], padding: [12, 10, 8, 10], legend: { show: false }, dataLabel: false,
     xAxis: { disableGrid: true, fontColor: '#64748b', rotateLabel: true },
@@ -231,6 +269,7 @@ const profitStructureOpts = {
 }
 
 onShow(loadData)
+let loadSequence = 0
 
 function switchPeriod(value: string) {
     period.value = value
@@ -259,6 +298,7 @@ function dateTimestamp(value: string, end = false) {
 }
 
 async function loadData() {
+    const sequence = ++loadSequence
     loading.value = true
     try {
         const params: any = { period: period.value }
@@ -266,18 +306,43 @@ async function loadData() {
             params.start_at = dateTimestamp(customDates.value[0])
             params.end_at = dateTimestamp(customDates.value[customDates.value.length - 1], true)
         }
-        const [res, kpiRes]: any[] = await Promise.all([getMobileErpDashboard(params), getMobileErpKpiDashboard(params)])
-        data.value = res?.data || {}
-        kpi.value = kpiRes?.data || {}
+        const [dashboardResult, kpiResult] = await Promise.allSettled([getMobileErpDashboard(params), getMobileErpKpiDashboard(params)])
+        if (sequence !== loadSequence) return
+        if (dashboardResult.status === 'rejected') throw dashboardResult.reason
+        data.value = (dashboardResult.value as any)?.data || {}
+        // 绩效是可选权限，失败时只隐藏绩效，不影响采购、销售、库存和财务首页。
+        kpi.value = kpiResult.status === 'fulfilled' ? ((kpiResult.value as any)?.data || {}) : {}
+        dashboardReady.value = true
+        chartVersion.value += 1
     } catch (e: any) {
-        uni.showToast({ title: e?.message || '经营数据加载失败', icon: 'none' })
+        if (sequence !== loadSequence) return
+        const message = String(e?.message || e?.msg || '')
+        // 登录拦截由框架统一跳转，避免在登录页残留“经营数据加载失败”的误导提示。
+        if (!/MUST_LOGIN|未登录|请登录|登录失效/i.test(message)) {
+            uni.showToast({ title: message || '经营数据加载失败', icon: 'none' })
+        }
+        data.value = {}
+        kpi.value = {}
+        dashboardReady.value = true
+        chartVersion.value += 1
     } finally {
-        loading.value = false
+        if (sequence === loadSequence) loading.value = false
     }
 }
 
 function go(path: string) {
     uni.navigateTo({ url: path })
+}
+
+function showReminderActions() {
+    uni.showActionSheet({
+        itemList: ['今天不再提醒', '永久关闭此提醒'],
+        success: async ({ tapIndex }) => {
+            await dismissMobileErpRefurbishReminder(tapIndex === 1 ? 'forever' : 'today')
+            uni.showToast({ title: tapIndex === 1 ? '已永久关闭，可在设置中重新开启' : '今天不再提醒', icon: 'none' })
+            await loadData()
+        }
+    })
 }
 
 function goSettlement(row: any) {
@@ -289,10 +354,20 @@ function goSettlement(row: any) {
     go(`/addon/hsx_erp/pages/${row.target_type}/detail?id=${id}`)
 }
 
+function goPurchase(row: any) {
+    go(`/addon/hsx_erp/pages/purchase/detail?purchase_order_id=${Number(row?.id || 0)}&purchase_no=${encodeURIComponent(String(row?.purchase_no || ''))}`)
+}
+
+function goSale(row: any) {
+    go(`/addon/hsx_erp/pages/sale/detail?sale_order_id=${Number(row?.id || 0)}&sale_no=${encodeURIComponent(String(row?.sale_no || ''))}`)
+}
+
 const money = (v: any) => Number(v || 0).toFixed(2)
 const signedMoney = (v: any) => `${Number(v || 0) > 0 ? '+' : ''}¥${money(v)}`
 const settlementLabel = (s: string) => ({ receipt: '收款', payment: '付款', offset: '折账' }[s] || s || '-')
 const settlementType = (s: string) => ({ receipt: 'success', payment: 'warning', offset: 'error' }[s] || 'info')
+const financeStatus = (status: string, action: string) => ({ settled: '已结清', partial: `部分${action}`, pending: `待${action}`, void: '已作废' }[status] || status || '-')
+const financeStatusType = (status: string) => ({ settled: 'success', partial: 'warning', pending: 'warning', void: 'info' }[status] || 'info')
 const time = (v: any) => {
     const ts = Number(v || 0)
     if (!ts) return '-'
@@ -310,6 +385,10 @@ const time = (v: any) => {
 .dashboard-page {
     padding-bottom: 40rpx;
 }
+.refurbish-reminder { margin:0 24rpx 20rpx; padding:24rpx; border:1rpx solid #fed7aa; border-radius:24rpx; background:#fff7ed; }
+.refurbish-reminder__head { display:flex; align-items:center; justify-content:space-between; color:#92400e; font-size:23rpx; font-weight:700; }
+.refurbish-reminder__title { display:block; margin-top:12rpx; color:#9a3412; font-size:30rpx; font-weight:800; }
+.refurbish-reminder__desc { display:block; margin:10rpx 0 18rpx; color:#9a3412; font-size:23rpx; line-height:1.6; }
 .dashboard-head {
     background: #fff;
     padding: 34rpx 28rpx 18rpx;
@@ -468,6 +547,14 @@ const time = (v: any) => {
     color: #0f172a;
     font-weight: 800;
 }
+.recent-order { padding:22rpx 26rpx; }
+.recent-order__main { min-width:0; flex:1; }
+.recent-order__main .card-title,
+.recent-order__main .card-meta { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.recent-order__main .card-meta { margin-top:6rpx; }
+.recent-sale-metrics { display:flex; justify-content:space-between; gap:16rpx; margin:16rpx 0 10rpx; padding-top:14rpx; border-top:1rpx solid #eef2f7; color:#475569; font-size:24rpx; font-weight:650; }
+.recent-sale-metrics .green { color:#16a34a; }
+.recent-sale-metrics .red { color:#dc2626; }
 .loading-row {
     padding: 42rpx 0;
     display: flex;

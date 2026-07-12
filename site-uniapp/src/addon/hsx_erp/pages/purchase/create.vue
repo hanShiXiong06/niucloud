@@ -120,6 +120,9 @@
                     :accounts="accounts"
                     label-cash="本次付款"
                 />
+                <view v-if="form.settle_mode === 'cash'" class="form-section">
+                    <ErpVoucherUploader v-model="form.voucher_urls" title="付款凭证" @uploading="voucherUploading = $event" />
+                </view>
 
             </view>
         </scroll-view>
@@ -204,6 +207,7 @@ const form = ref({
     location_id: 0, location_name: '',
     settle_mode: 'credit' as 'credit' | 'cash',
     paid_amount: 0, capital_account_id: 0,
+    voucher_urls: '',
     remark: '',
     items: [] as any[],
 })
@@ -225,6 +229,7 @@ const goodsMetaTip = computed(() => {
     return 'ERP 会优先复用站点内可用的商城资料，无法读取时自动使用本地资料。'
 })
 const canSubmit = computed(() =>
+    !voucherUploading.value &&
     form.value.party_id > 0 &&
     form.value.items.length > 0 &&
     form.value.items.every(i => i.imei && i.model && i.category_id && i.warehouse_id && Number(i.purchase_cost) > 0) &&
@@ -237,6 +242,7 @@ const canSubmit = computed(() =>
         )
     )
 )
+const voucherUploading = ref(false)
 
 onMounted(async () => {
     try {
@@ -592,7 +598,7 @@ async function submit() {
     submitting.value = true
     const confirmed = await confirmErpSensitiveAction({
         title: '确认采购开单',
-        content: `供货商：${form.value.party_name || '-'}\n设备：${form.value.items.length} 台\n采购总额：¥${money(totalCost.value)}\n提交后生成设备资产和应付账款，付款仍需财务确认。`,
+        content: `供货商：${form.value.party_name || '-'}\n设备：${form.value.items.length} 台\n采购总额：¥${money(totalCost.value)}\n${form.value.settle_mode === 'cash' ? `将立即从所选账户付款 ¥${money(form.value.paid_amount)}，无需再次到财务确认。` : '本次全部挂账，后续到应付款结算。'}`,
         confirmText: '确认开单',
     })
     if (!confirmed) {
@@ -611,6 +617,7 @@ async function submit() {
             settle_mode: form.value.settle_mode,
             paid_amount: form.value.settle_mode === 'cash' ? Number(form.value.paid_amount) : 0,
             capital_account_id: form.value.settle_mode === 'cash' ? form.value.capital_account_id : 0,
+            voucher_urls: form.value.settle_mode === 'cash' ? form.value.voucher_urls : '',
             remark: form.value.remark,
             items: form.value.items.map(i => ({
                 imei: i.imei, model: i.model, spec: i.spec,
@@ -636,7 +643,10 @@ async function submit() {
                 estimate_sale_price: Number(i.estimate_sale_price || 0),
             }))
         })
-        uni.showToast({ title: form.value.settle_mode === 'cash' ? '开单成功，待财务付款' : '采购开单成功', icon: 'success' })
+        const remaining = Math.max(0, totalCost.value - Number(form.value.paid_amount || 0))
+        uni.showToast({ title: form.value.settle_mode === 'cash'
+            ? (remaining > 0.0001 ? `已现付，剩余¥${money(remaining)}待付` : '入库与付款已完成')
+            : '采购已入库，等待付款', icon: 'success' })
         setTimeout(() => uni.navigateBack(), 1200)
     } catch (e: any) {
         uni.showToast({ title: e?.message || '开单失败', icon: 'none' })

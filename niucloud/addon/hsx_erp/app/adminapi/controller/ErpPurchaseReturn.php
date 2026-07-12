@@ -40,8 +40,9 @@ class ErpPurchaseReturn extends BaseAdminController
     {
         $params = $this->request->params([
             ['purchase_order_id', 0],
-            ['refund_mode', 'cash'],
+            ['refund_mode', 'receivable'],
             ['capital_account_id', 0],
+            ['voucher_urls', ''],
             ['remark', ''],
             ['items', []],
             ['request_id', ''],

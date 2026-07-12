@@ -22,6 +22,11 @@ class ErpFinance extends BaseAdminController
         return success($this->service->payablePage($this->listParams()));
     }
 
+    public function payableInfo(int $id)
+    {
+        return success($this->service->payableInfo($id));
+    }
+
     public function dashboard()
     {
         $params = $this->request->params([
@@ -152,6 +157,7 @@ class ErpFinance extends BaseAdminController
         $params = $this->request->params([
             ['keyword', ''],
             ['party_id', 0],
+            ['payable_id', 0],
             ['settlement_type', ''],
             ['capital_account_id', 0],
             ['asset_id', 0],
@@ -167,6 +173,7 @@ class ErpFinance extends BaseAdminController
     {
         return $this->request->params([
             ['keyword', ''],
+            ['payable_id', 0],
             ['status', ''],
             ['source_type', ''],
             ['finance_type_key', ''],

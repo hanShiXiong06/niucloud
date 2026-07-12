@@ -68,7 +68,8 @@ export const ERP_DICT_FALLBACK: ErpDictMap = {
         { value: 'none', label: '无需整备', type: 'info', filterable: true },
         { value: 'pending', label: '待整备', type: 'warning', filterable: true },
         { value: 'processing', label: '整备中', type: 'primary', filterable: true },
-        { value: 'done', label: '整备完成', type: 'success', filterable: true }
+        { value: 'done', label: '整备完成', type: 'success', filterable: true },
+        { value: 'failed', label: '整备异常', type: 'error', filterable: true }
     ],
     sale_target: [
         { value: 'unset', label: '去向未定', type: 'info', filterable: true },

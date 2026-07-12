@@ -11,6 +11,29 @@
 
             <el-tabs v-model="activeTab" class="mt-5">
                 <el-tab-pane label="分类" name="category">
+                    <div v-if="categorySync.providers?.length" class="mb-4 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+                        <div class="flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                                <div class="flex items-center gap-2 font-medium text-gray-900">
+                                    ERP 与 {{ categorySync.providers[0]?.name || '商城' }}分类
+                                    <el-tag :type="categorySync.config?.initialized ? 'success' : 'warning'" effect="plain">
+                                        {{ categorySync.config?.initialized ? '已绑定' : '待初始化' }}
+                                    </el-tag>
+                                </div>
+                                <div class="mt-1 text-sm text-gray-500">
+                                    ERP 与商城保留各自分类 ID，通过映射关联。已绑定 {{ categorySync.mapped_count || 0 }} 项<span v-if="categorySync.failed_count">，{{ categorySync.failed_count }} 项异常</span>。
+                                </div>
+                                <div v-if="!categorySync.config?.initialized" class="mt-2 text-xs text-amber-600">已有商城客户请选择导入；新客户可让 ERP 分类同步到商城。首次操作不会删除任一端分类。</div>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <template v-if="!categorySync.config?.initialized">
+                                    <el-button :loading="syncLoading" @click="runCategorySync('pull')">已有商城分类，导入并绑定</el-button>
+                                    <el-button type="primary" :loading="syncLoading" @click="runCategorySync('push')">ERP 为主，同步到商城</el-button>
+                                </template>
+                                <el-button v-else type="primary" plain :loading="syncLoading" @click="runCategorySync('reconcile')">双向校准</el-button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div class="flex items-center gap-2">
                             <el-input v-model.trim="categoryQuery.keyword" clearable placeholder="搜索分类名称或路径" class="!w-[280px]" @keyup.enter="loadCategories" />
@@ -196,11 +219,13 @@ import {
     deleteErpGoodsSpecGroup,
     deleteErpGoodsSpecItem,
     getErpGoodsCategoryTree,
+    getErpCategorySyncStatus,
     getErpGoodsSpecMeta,
     saveErpGoodsCategory,
     saveErpGoodsGrade,
     saveErpGoodsSpecGroup,
-    saveErpGoodsSpecItem
+    saveErpGoodsSpecItem,
+    syncErpCategories
 } from '@/addon/hsx_erp/api/erp'
 
 const activeTab = ref('category')
@@ -208,6 +233,8 @@ const loading = ref(false)
 const categoryLoading = ref(false)
 const specLoading = ref(false)
 const categoryTree = ref<any[]>([])
+const categorySync = ref<any>({ providers: [], config: {} })
+const syncLoading = ref(false)
 const specGroups = ref<any[]>([])
 const grades = ref<any[]>([])
 const categoryQuery = reactive({ keyword: '' })
@@ -253,9 +280,31 @@ onMounted(loadAll)
 async function loadAll() {
     loading.value = true
     try {
-        await Promise.all([loadCategories(), loadSpecs()])
+        await Promise.all([loadCategories(), loadSpecs(), loadCategorySyncStatus()])
     } finally {
         loading.value = false
+    }
+}
+
+async function loadCategorySyncStatus() {
+    const res: any = await getErpCategorySyncStatus()
+    categorySync.value = res?.data || { providers: [], config: {} }
+}
+
+async function runCategorySync(action: 'pull' | 'push' | 'reconcile') {
+    const wording = action === 'pull' ? '从商城导入并绑定分类' : action === 'push' ? '将 ERP 分类同步到商城' : '双向校准 ERP 与商城分类'
+    await ElMessageBox.confirm(`${wording}？系统按分类路径匹配，不会删除任一端已有分类。`, '分类同步确认', {
+        type: 'warning', confirmButtonText: '确认执行'
+    })
+    syncLoading.value = true
+    try {
+        const provider = categorySync.value.providers?.[0]?.key || 'phone_shop'
+        const res: any = await syncErpCategories({ action, provider })
+        const result = res?.data || {}
+        ElMessage.success(`同步完成：导入 ${result.pulled || 0}，推送 ${result.pushed || 0}，异常 ${result.failed || 0}`)
+        await Promise.all([loadCategories(), loadCategorySyncStatus()])
+    } finally {
+        syncLoading.value = false
     }
 }
 

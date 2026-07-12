@@ -57,6 +57,14 @@ export function getErpGoodsCategoryTree(params: Record<string, any> = {}) {
     return request.get('erp/goods/category/tree', { params })
 }
 
+export function getErpCategorySyncStatus() {
+    return request.get('erp/goods/category/sync/status')
+}
+
+export function syncErpCategories(data: Record<string, any>) {
+    return request.post('erp/goods/category/sync', data)
+}
+
 export function getErpGoodsCategoryList(params: Record<string, any> = {}) {
     return request.get('erp/goods/category/lists', { params })
 }
@@ -144,6 +152,14 @@ export function getErpStockInfo(id: number) {
 
 export function adjustErpStockCost(id: number, data: Record<string, any>) {
     return request.post(`erp/stock/${id}/adjust_cost`, withErpRequestId(data, 'stock-cost'))
+}
+
+export function sendErpStockRefurbish(data: Record<string, any>) {
+    return request.post('erp/stock/refurbish/send', withErpRequestId(data, 'refurbish-send'))
+}
+
+export function completeErpStockRefurbish(id: number, data: Record<string, any>) {
+    return request.post(`erp/stock/${id}/refurbish/complete`, withErpRequestId(data, 'refurbish-complete'))
 }
 
 export function updateErpStockFlow(id: number, data: Record<string, any>) {

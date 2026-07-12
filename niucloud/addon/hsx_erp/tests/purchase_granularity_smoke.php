@@ -103,8 +103,8 @@ $assert(str_contains($mobileReturn, 'selectedRequiresRefund'), '移动退货页�
 $assert(str_contains($mobileReturn, 'selectedOffsetTotal'), '移动退货页必须展示冲销未付款金额');
 $assert(str_contains($mobileReturn, 'selectedRefundTotal'), '移动退货页必须展示退款应收金额');
 $assert(str_contains($mobileReturn, 'block_reason'), '移动退货页必须解释设备不可采购退货的原因');
-$assert(str_contains($mobileReturn, "refund_mode: selectedRequiresRefund.value ? 'cash' : 'none'"), '未付款退货必须提交无需退款模式');
-$assert(!str_contains($mobileReturn, 'const refundModes'), '移动退货页不得让业务人员手工选择财务分流');
+$assert(str_contains($mobileReturn, "refund_mode: selectedRequiresRefund.value ? form.value.refund_mode : 'none'"), '未付款退货必须提交无需退款模式，已付款设备使用用户选择的收款路径');
+$assert(str_contains($mobileReturn, '当场收款') && str_contains($mobileReturn, '记账待收') && str_contains($mobileReturn, 'capital_account_id'), '移动采购退货必须明确区分当场到账与记账待收，并在现收时选择账户');
 foreach (['业务管理员确认退机', '系统处理结果', '我已核对设备，并确认机器已经交还供货方', 'showSubmitResult', '去确认退款'] as $needle) {
     $assert(str_contains($mobileReturn, $needle), '移动退货页缺少流程引导：' . $needle);
 }
@@ -116,7 +116,9 @@ $assert(str_contains($mobileSaleReturnList, '新建销退'), '移动销售退货
 $returnService = (string)file_get_contents($root . '/app/service/admin/ErpPurchaseReturnService.php');
 $assert(str_contains($returnService, 'ErpPurchaseReturnPolicy::assess'), '退货服务必须执行统一商业退货策略');
 $assert(str_contains($returnService, 'createBatch') && str_contains($returnService, "'purchase_order_id'"), '采购退货必须支持按设备来源自动拆单');
-$assert(str_contains($returnService, "(\$requiresRefund ? 'cash' : 'none')"), '未付款退货单必须记录为无需退款');
+$assert(str_contains($returnService, ": 'none';"), '未付款退货单必须记录为无需退款');
+$assert(str_contains($returnService, "'purchase-return-cash:'") && str_contains($returnService, 'confirmReceivableItemsInTransaction'), '采购退货当场收款必须在同一事务内生成并核销应收事实');
+$assert(str_contains($returnService, '当场收款必须选择实际到账账户'), '采购退货现场收款必须强制选择资金账户');
 $assert(str_contains($returnService, "['refund_receivable']"), '采购退货详情必须返回退款应收进度');
 foreach (['supplier_amount', 'unpaid_offset_amount', 'refund_receivable_amount', 'retained_payable_amount', 'policy_json'] as $field) {
     $assert(str_contains($returnService, "'{$field}'"), '退货明细缺少商业决策审计字段：' . $field);
@@ -309,6 +311,11 @@ $mobileSaleCreate = (string)file_get_contents($repo . '/site-uniapp/src/addon/hs
 $pcSaleCreate = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/sale/list.vue');
 $assert(str_contains($mobileSaleCreate, 'ErpVoucherUploader') && str_contains($mobileSaleCreate, 'voucher_urls: form.value.voucher_urls'), '移动端销售现结必须支持收款凭证');
 $assert(str_contains($pcSaleCreate, 'ErpFinanceVoucherUpload') && str_contains($pcSaleCreate, 'voucher_urls: create.form.voucher_urls'), 'PC 销售现结必须支持收款凭证');
+$pcPurchaseCreate = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/purchase/list.vue');
+$mobilePurchaseCreate = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/pages/purchase/create.vue');
+$assert(str_contains($service, 'confirmPayableItemsInTransaction') && str_contains($service, 'purchase_cash_settled') && str_contains($service, 'flushPendingSettlementDomainEvents'), '采购现结必须在采购事务内核销设备应付、写入资金流水，并在提交后派发事件');
+$assert(str_contains($pcPurchaseCreate, '无需再次到财务确认') && str_contains($pcPurchaseCreate, 'ErpFinanceVoucherUpload') && !str_contains($pcPurchaseCreate, '付款等待财务确认'), 'PC采购现结必须即时付款并支持付款凭证，不能提示再次财务确认');
+$assert(str_contains($mobilePurchaseCreate, '无需再次到财务确认') && str_contains($mobilePurchaseCreate, 'ErpVoucherUploader') && !str_contains($mobilePurchaseCreate, '待财务付款'), '移动采购现结必须即时付款并支持付款凭证，不能提示再次财务确认');
 $saleChannels = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/hooks/useErpSaleChannels.ts');
 $channelPopup = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/components/ErpSaleChannelPopup.vue');
 $assert(str_contains($saleChannels, "platform: '平台'"), '移动端 platform 渠道类型必须显示中文');
@@ -433,6 +440,13 @@ $assert(str_contains($saleService, "'sale_channel_key'") && str_contains($saleSe
 $assert(str_contains($saleList, 'getErpSaleChannelOptions') && str_contains($saleList, '<el-select v-model="create.form.sale_channel_key"'), 'PC销售开单必须使用动态渠道下拉，不能让用户自由输入');
 foreach (["'source_type' => 'refurbish'", '\'asset_id\' => $id', '请为每一项整备项目选择服务商', "'amount' => \$itemAmount", "'party_id' => \$itemPartyId"] as $needle) {
     $assert(str_contains($stockService, $needle), '设备整备费用必须按设备和服务商生成应付：' . $needle);
+}
+$inboundListener = (string)file_get_contents($root . '/app/listener/ErpDeviceInboundRequested.php');
+foreach (["\$device['refurbishment']", "'refurbish_required'", "'refurbishment_suggestion'", "'estimated_cost'"] as $needle) {
+    $assert(str_contains($inboundListener, $needle), '回收插件的整备决定必须透传到ERP入库，不得丢失：' . $needle);
+}
+foreach (['sendRefurbish', 'completeRefurbish', 'refurbish_complete', '整备费用必须在设备“整备完成”时登记', "['pending', 'processing', 'failed']"] as $needle) {
+    $assert(str_contains($stockService, $needle), '整备必须走待整备、开始、完工及异常闭环：' . $needle);
 }
 $capitalService = (string)file_get_contents($root . '/app/service/admin/ErpCapitalAccountService.php');
 $capitalView = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/capital_account/list.vue');

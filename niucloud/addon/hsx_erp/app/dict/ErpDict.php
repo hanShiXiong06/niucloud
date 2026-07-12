@@ -57,6 +57,8 @@ class ErpDict
             'sale_item_cancel' => '单台销售撤销',
             'cost_adjust' => '成本调整',
             'refurbish' => '整备费用登记',
+            'refurbish_send' => '开始整备',
+            'refurbish_complete' => '整备完工',
             'flow' => '流转设置',
             'flow_set' => '流转设置',
         ];
@@ -203,6 +205,7 @@ class ErpDict
                 ['value' => 'pending', 'label' => '待整备', 'type' => 'warning', 'filterable' => true],
                 ['value' => 'processing', 'label' => '整备中', 'type' => 'primary', 'filterable' => true],
                 ['value' => 'done', 'label' => '整备完成', 'type' => 'success', 'filterable' => true],
+                ['value' => 'failed', 'label' => '整备异常', 'type' => 'danger', 'filterable' => true],
             ],
             'sale_target' => [
                 ['value' => 'unset', 'label' => '去向未定', 'type' => 'info', 'filterable' => true],

@@ -104,7 +104,7 @@ class FakeRecycleInboundListener extends ErpDeviceInboundRequested
 
 $counterpartyA = [
     'source_plugin' => 'niucloud', 'source_type' => 'member', 'source_id' => 88,
-    'name' => '回收客户甲', 'mobile' => '13800000001',
+    'member_id' => 88, 'name' => '回收客户甲', 'mobile' => '13800000001',
 ];
 $counterpartyB = [
     'source_plugin' => 'niucloud', 'source_type' => 'member', 'source_id' => 99,
@@ -164,6 +164,8 @@ $assert(($first['origin_type'] ?? '') === 'hsx_recycle.recycle_purchase', '采�
 $assert(($first['origin_no'] ?? '') === 'RC20260711001' && ($first['source_order_no'] ?? '') === 'RC20260711001', '采购单必须保存原回收单号');
 $assert(($first['origin_event_id'] ?? '') === $event['event_id'], '采购单必须保存原始事件ID');
 $assert(($first['party_name'] ?? '') === '回收客户甲', '采购单必须按来源往来主体建单');
+$assert(($first['member_id'] ?? 0) === 88, '回收会员ID必须传给ERP并绑定既有会员主体');
+$assert(($first['contact_mobile'] ?? '') === '13800000001', '回收会员手机号必须写入ERP主体联系方式');
 $assert(($first['paid_amount'] ?? -1) === 0, '缺少ERP账户时不得伪造已付款事实');
 $assert(count($first['items'] ?? []) === 2, '同来源订单和往来主体的设备必须合并建单');
 $assert(($first['items'][0]['warehouse_id'] ?? 0) === 1 && ($first['items'][0]['location_id'] ?? 0) === 11, '第一台设备必须保留自己的仓库库位');
@@ -231,5 +233,10 @@ $assert(in_array('addon\hsx_erp\app\listener\ErpDeviceInboundRequested', $listen
 $listenerSource = (string)file_get_contents(dirname(__DIR__) . '/app/listener/ErpDeviceInboundRequested.php');
 $assert(str_contains($listenerSource, 'withinTransaction') && str_contains($listenerSource, 'completeInbox'), '整次设备入库必须以顶层事务和Inbox保证原子幂等');
 $assert(!str_contains($listenerSource, "!== 'hsx_recycle'"), 'ERP入库核心不得只认某一个具体插件');
+
+$recycleSyncSource = (string)file_get_contents(dirname(__DIR__, 2) . '/hsx_recycle/app/service/admin/order/RecycleDeviceErpSyncService.php');
+$assert(str_contains($recycleSyncSource, 'memberSnapshot') && str_contains($recycleSyncSource, "['nickname']"), '回收插件必须按member_id读取nickname/mobile生成ERP主体快照');
+$purchaseSource = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/ErpPurchaseService.php');
+$assert(str_contains($purchaseSource, 'ErpPartyMember') && str_contains($purchaseSource, 'bindPartyMember'), 'ERP采购入库必须把来源会员稳定绑定到往来主体');
 
 echo "[PASS] ERP recycle inbound listener smoke test\n";

@@ -12,6 +12,7 @@ use addon\hsx_erp\app\model\ErpOffsetLink;
 use addon\hsx_erp\app\model\ErpAsset;
 use addon\hsx_erp\app\model\ErpAssetLedger;
 use addon\hsx_erp\app\model\ErpParty;
+use addon\hsx_erp\app\model\ErpPartyMember;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpPurchaseOrder;
 use addon\hsx_erp\app\model\ErpPurchaseReturnItem;
@@ -87,6 +88,27 @@ class ErpFinanceService extends BaseAdminService
         $operatingExpenseAmount = (float)(clone $operatingExpenseQuery)->where('status', '<>', ErpDict::STATUS_VOID)->sum('amount');
         $operatingIncomeAmount = (float)(clone $operatingIncomeQuery)->where('status', '<>', ErpDict::STATUS_VOID)->sum('amount');
         $turnover = $this->todayTurnoverMetrics();
+        $refurbishRules = (array)((new ErpConfigService())->getRules()['refurbish'] ?? []);
+        $refurbishThreshold = max(1, (int)($refurbishRules['daily_reminder_threshold'] ?? 25));
+        $todayStart = strtotime(date('Y-m-d 00:00:00'));
+        $todayPendingRefurbish = (int)ErpAsset::where([
+            ['site_id', '=', $this->site_id], ['status', '=', ErpDict::ASSET_IN_STOCK],
+        ])->where('refurbish_status', '=', 'pending')
+            ->where(function ($query) use ($todayStart) {
+                $query->where('refurbish_pending_at', '>=', $todayStart)
+                    ->whereOr(function ($legacy) use ($todayStart) {
+                        $legacy->where('refurbish_pending_at', '=', 0)->where('stock_in_at', '>=', $todayStart);
+                    });
+            })->count();
+        $pendingRefurbish = (int)ErpAsset::where([
+            ['site_id', '=', $this->site_id], ['status', '=', ErpDict::ASSET_IN_STOCK], ['refurbish_status', '=', 'pending'],
+        ])->count();
+        $processingRefurbish = (int)ErpAsset::where([
+            ['site_id', '=', $this->site_id], ['status', '=', ErpDict::ASSET_IN_STOCK], ['refurbish_status', '=', 'processing'],
+        ])->count();
+        $showRefurbishReminder = (int)($refurbishRules['daily_reminder_enabled'] ?? 1) === 1
+            && (string)($refurbishRules['reminder_dismiss_date'] ?? '') !== date('Y-m-d')
+            && $todayPendingRefurbish >= $refurbishThreshold;
 
         $payableBase = ErpPayable::where([['site_id', '=', $this->site_id]])
             ->whereIn('status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL])
@@ -125,6 +147,18 @@ class ErpFinanceService extends BaseAdminService
                 'payable_count' => (int)(clone $payableBase)->count(),
                 'receivable_count' => (int)(clone $receivableBase)->count(),
                 'offset_party_count' => $this->offsetPartyCount(),
+                'refurbish_pending_count' => $pendingRefurbish,
+                'refurbish_processing_count' => $processingRefurbish,
+            ],
+            'reminders' => [
+                'refurbish' => [
+                    'visible' => $showRefurbishReminder,
+                    'today_count' => $todayPendingRefurbish,
+                    'pending_count' => $pendingRefurbish,
+                    'processing_count' => $processingRefurbish,
+                    'threshold' => $refurbishThreshold,
+                    'tracking_mode' => (string)($refurbishRules['tracking_mode'] ?? 'simple'),
+                ],
             ],
             'recent' => [
                 'purchases' => $this->dashboardRecentPurchases($effectivePurchaseIds),
@@ -1245,6 +1279,9 @@ class ErpFinanceService extends BaseAdminService
         if (!empty($where['purchase_order_id'])) {
             $query->where('a.purchase_order_id', '=', (int)$where['purchase_order_id']);
         }
+        if (!empty($where['payable_id'])) {
+            $query->whereRaw('IFNULL(p.id, po.id) = ' . (int)$where['payable_id']);
+        }
         $this->applyFinanceFilters($query, $where, 'a', 'o', 'p');
         $page = $query->field([
             'a.id',
@@ -1253,6 +1290,7 @@ class ErpFinanceService extends BaseAdminService
             'a.sn',
             'a.model',
             'a.spec',
+            'a.spec_json',
             'a.total_cost',
             'a.status',
             'a.warehouse_name',
@@ -1287,6 +1325,7 @@ class ErpFinanceService extends BaseAdminService
             'list_rows' => (int)($where['limit'] ?? 15),
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
+        $fallbackPayeeMethods = $this->payeeMethodsForParty($partyId);
         foreach ($page['data'] as &$row) {
             if (!empty($row['asset_payable_id'])) {
                 $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
@@ -1297,6 +1336,9 @@ class ErpFinanceService extends BaseAdminService
             }
             $row['source_no'] = (string)($row['purchase_no'] ?? '');
             $row['source_type'] = 'purchase';
+            $row['payee_methods'] = $this->payeeMethodsFromSpec($row['spec_json'] ?? '');
+            if (empty($row['payee_methods'])) $row['payee_methods'] = $fallbackPayeeMethods;
+            unset($row['spec_json']);
             if (empty($row['channel_name'])) $row['channel_name'] = (string)($row['purchase_channel'] ?? '');
             $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
         }
@@ -1308,6 +1350,37 @@ class ErpFinanceService extends BaseAdminService
         }
         unset($row);
         return $page;
+    }
+
+    public function payableInfo(int $id): array
+    {
+        $payable = $this->findPayable($id)->toArray();
+        $sourceType = (string)($payable['source_type'] ?? '');
+        $purchaseOrderId = 0;
+        if ($sourceType === 'purchase_asset') {
+            $assetId = (int)($payable['asset_id'] ?? 0);
+            if ($assetId <= 0) $assetId = (int)($payable['source_id'] ?? 0);
+            $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', $assetId]])
+                ->field('id,purchase_order_id')->findOrEmpty();
+            if (!$asset->isEmpty()) $purchaseOrderId = (int)$asset->purchase_order_id;
+            $sourceType = 'purchase';
+        } elseif ($sourceType === 'purchase') {
+            $purchaseOrderId = (int)($payable['source_id'] ?? 0);
+        }
+        return [
+            'id' => (int)$payable['id'],
+            'payable_id' => (int)$payable['id'],
+            'payable_no' => (string)$payable['payable_no'],
+            'party_id' => (int)$payable['party_id'],
+            'party_name' => (string)$payable['party_name'],
+            'source_type' => $sourceType,
+            'source_id' => (int)($payable['source_id'] ?? 0),
+            'source_no' => (string)($payable['source_no'] ?? ''),
+            'purchase_order_id' => $purchaseOrderId,
+            'amount' => (float)$payable['amount'],
+            'settled_amount' => (float)$payable['settled_amount'],
+            'status' => (string)$payable['status'],
+        ];
     }
 
     /**
@@ -1328,12 +1401,15 @@ class ErpFinanceService extends BaseAdminService
         } else {
             $query->whereIn('p.status', [ErpDict::STATUS_PENDING, ErpDict::STATUS_PARTIAL]);
         }
+        if (!empty($where['payable_id'])) {
+            $query->where('p.id', '=', (int)$where['payable_id']);
+        }
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
             $query->whereLike('p.payable_no|p.source_no|p.origin_no|p.business_reason|p.remark|a.asset_no|a.imei|a.sn|a.model|a.spec', '%' . $kw . '%');
         }
         $page = $query->field([
-            'a.id', 'a.asset_no', 'a.imei', 'a.sn', 'a.model', 'a.spec', 'a.status',
+            'a.id', 'a.asset_no', 'a.imei', 'a.sn', 'a.model', 'a.spec', 'a.spec_json', 'a.status',
             'a.warehouse_name', 'a.location_name', 'a.total_cost as current_total_cost',
             'p.id as payable_id', 'p.payable_no', 'p.amount as payable_amount', 'p.amount as total_cost',
             'p.settled_amount', 'p.status as payable_status', 'p.id as asset_payable_id', '0 as order_payable_id',
@@ -1347,10 +1423,14 @@ class ErpFinanceService extends BaseAdminService
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
 
+        $fallbackPayeeMethods = $this->payeeMethodsForParty($partyId);
         foreach ($page['data'] as &$row) {
             $row['allocated_paid'] = round((float)$row['settled_amount'], 2);
             $row['allocated_remain'] = max(0, round((float)$row['payable_amount'] - (float)$row['allocated_paid'], 2));
             $row['source_meta'] = (new ErpFinanceSourceService())->sourceMeta($row, 'payable');
+            $row['payee_methods'] = $this->payeeMethodsFromSpec($row['spec_json'] ?? '');
+            if (empty($row['payee_methods'])) $row['payee_methods'] = $fallbackPayeeMethods;
+            unset($row['spec_json']);
         }
         unset($row);
         $payableIds = array_values(array_unique(array_filter(array_map(static fn(array $row): int => (int)$row['payable_id'], $page['data']))));
@@ -1360,6 +1440,45 @@ class ErpFinanceService extends BaseAdminService
         }
         unset($row);
         return $page;
+    }
+
+    private function payeeMethodsFromSpec($specJson): array
+    {
+        if (is_array($specJson)) $spec = $specJson;
+        else {
+            $spec = json_decode((string)$specJson, true);
+            if (!is_array($spec)) return [];
+        }
+        $methods = array_values(array_filter((array)($spec['payee_methods'] ?? []), 'is_array'));
+        return array_values(array_filter(array_map(static fn(array $item): array => [
+            'pay_type' => trim((string)($item['pay_type'] ?? '')),
+            'account' => trim((string)($item['account'] ?? '')),
+            'qrcode_image' => trim((string)($item['qrcode_image'] ?? '')),
+            'is_default' => (int)($item['is_default'] ?? 0),
+        ], $methods), static fn(array $item): bool => $item['pay_type'] !== '' || $item['account'] !== '' || $item['qrcode_image'] !== ''));
+    }
+
+    private function payeeMethodsForParty(int $partyId): array
+    {
+        $relation = ErpPartyMember::where([
+            ['site_id', '=', $this->site_id], ['party_id', '=', $partyId], ['status', '=', 1],
+        ])->order('id asc')->findOrEmpty();
+        if ($relation->isEmpty()) return [];
+        $memberId = (int)$relation->member_id;
+        try {
+            $responses = array_values(array_filter((array)event('GetRecyclePaymentMethods', [
+                'site_id' => $this->site_id,
+                'member_ids' => [$memberId],
+            ]), 'is_array'));
+        } catch (\Throwable $e) {
+            return [];
+        }
+        foreach ($responses as $response) {
+            if (!empty($response[$memberId]) && is_array($response[$memberId])) {
+                return array_values($response[$memberId]);
+            }
+        }
+        return [];
     }
 
     /** 销售退货退款应付：一条应付只对应一台设备。 */
@@ -3008,6 +3127,12 @@ class ErpFinanceService extends BaseAdminService
         }
     }
 
+    /** 供采购现结等外层事务在成功提交后派发结算完成事件，避免事件早于数据库提交。 */
+    public function flushPendingSettlementDomainEvents(): void
+    {
+        $this->flushSettlementDomainEvents();
+    }
+
     private function settleOffsetDifference(array $payableIds, array $receivableIds, float $payableRemain, float $receivableRemain, float $offsetAmount, array $data): void
     {
         $payableLeft = max(0, round($payableRemain - $offsetAmount, 2));
@@ -3177,7 +3302,13 @@ class ErpFinanceService extends BaseAdminService
         }
     }
 
-    private function confirmReceivableItemsInTransaction(int $partyId, array $items, array $data): int
+    /**
+     * 在调用方事务中确认多笔应收到账。
+     *
+     * 供采购退货现场收款等领域服务复用同一套结算、账户余额和资金流水规则；
+     * 调用方事务提交后必须调用 flushPendingSettlementDomainEvents() 派发事件。
+     */
+    public function confirmReceivableItemsInTransaction(int $partyId, array $items, array $data): int
     {
         if ($partyId <= 0) {
             throw new CommonException('请选择收款对象');

@@ -32,6 +32,13 @@ class ErpConfig extends BaseAdminController
         return success((new ErpConfigService())->saveRules($params));
     }
 
+    public function dismissRefurbishReminder()
+    {
+        $params = $this->request->params([['mode', 'today']]);
+        $mode = (string)$params['mode'] === 'forever' ? 'forever' : 'today';
+        return success((new ErpConfigService())->dismissRefurbishReminder($mode));
+    }
+
     public function saleChannels()
     {
         return success((new ErpConfigService())->getSaleChannels());

@@ -33,6 +33,7 @@ $schema = (string)file_get_contents($root . '/app/support/ErpSchema.php');
 foreach (['erp_settlement', 'erp_settlement_link', 'erp_payable', 'erp_receivable', 'erp_purchase_return', 'erp_purchase_return_item', 'erp_sale_return', 'erp_purchase_order', 'erp_sale_order', 'erp_asset_ledger', 'erp_account_ledger', 'erp_money_ledger'] as $table) {
     $assert(str_contains($schema, "'{$table}'"), "集中迁移缺少{$table}");
 }
+$assert(str_contains($schema, 'erp_category_mapping'), '集中迁移缺少跨插件分类映射表');
 $assert(str_contains($schema, "'balance_after'"), '集中迁移必须补齐账目流水余额字段');
 $assert(str_contains($schema, "'refund_receivable_amount'"), '集中迁移必须补齐退货退款应收审计字段');
 $assert(str_contains($schema, "'policy_json'"), '集中迁移必须保存采购退货策略快照');
@@ -75,6 +76,8 @@ $assert(str_contains($sql, '`balance_after` decimal(14,2)'), '全新安装结构
 $assert(str_contains($sql, '`refund_receivable_amount` decimal(12,2)'), '全新安装结构必须包含退款应收拆分字段');
 $assert(str_contains($sql, '`sale_channel_key` varchar(80)'), '全新安装结构必须包含动态销售渠道编码');
 $assert(str_contains($sql, '`category_key` varchar(80)'), '全新安装结构必须包含动态收支分类编码');
+$assert(str_contains($sql, 'CREATE TABLE IF NOT EXISTS `{{prefix}}erp_category_mapping`'), '全新安装结构必须包含跨插件分类映射表');
+$assert(str_contains($sql, '`uk_site_target_category`'), '分类映射必须约束站点、插件和目标分类唯一');
 foreach (['origin_plugin', 'origin_type', 'biz_scene', 'category_statement_group', 'channel_code', 'business_reason'] as $field) {
     $assert(str_contains($sql, '`' . $field . '`'), '全新安装结构必须包含财务事实来源字段：' . $field);
 }

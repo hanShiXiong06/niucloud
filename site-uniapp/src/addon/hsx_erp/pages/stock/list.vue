@@ -11,19 +11,21 @@
             @tab-change="onTab"
             @filter="filterVisible = true"
         />
-        <view class="trace-entry" @click="goSerialTrace">
-            <view><text class="trace-entry__title">串号追踪</text><text class="trace-entry__sub">查询同一 IMEI / SN 的多次入库与完整流转</text></view>
-            <u-icon name="arrow-right" color="#64748b" size="15" />
-        </view>
+
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无库存设备" /></template>
+              <view class="trace-entry" @click="goSerialTrace">
+                    <view><text class="trace-entry__title">串号追踪</text><text class="trace-entry__sub">查询同一 IMEI / SN 的多次入库与完整流转</text></view>
+                    <u-icon name="arrow-right" color="#64748b" size="15" />
+                </view>
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card stock-card" :class="{ 'stock-card--sold': isSold(row), 'stock-card--void': isVoid(row) }" @click="goDetail(row)">
                     <view class="stock-card__head">
                         <view class="stock-title">
                             <text class="card-title stock-title__model">{{ row.model || '-' }}</text>
                             <text class="stock-title__sub">{{ deviceIdentityLine(row) }}</text>
+                            <text v-if="row.imei" class="stock-title__sub">IMEI {{ row.imei }}</text>
                         </view>
                         <view class="tag-stack">
                             <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
@@ -100,6 +102,10 @@
                             </text>
                         </view>
                     </view>
+                    <view v-if="row.status === 'in_stock' && ['pending','processing'].includes(row.refurbish_status)" class="stock-actions" @click.stop>
+                        <u-button v-if="row.refurbish_status === 'pending'" size="small" type="warning" plain text="开始整备" @click="startRefurbish(row)" />
+                        <u-button size="small" type="primary" plain text="登记完工" @click="goCompleteRefurbish(row)" />
+                    </view>
                 </view>
             </view>
         </z-paging>
@@ -112,20 +118,24 @@
             @confirm="applyFilter"
             @reset="resetFilter"
         />
+        <ErpPartyPopup v-model:show="providerPopupVisible" v-model:partyId="providerPartyId" v-model:partyName="providerPartyName" roleType="supplier" roleContext="refurbish_provider" @select="confirmExternalRefurbish" />
     </view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 
-import { getMobileStockList } from '@/addon/hsx_erp/api/erp'
+import { getMobileErpConfig, getMobileStockList } from '@/addon/hsx_erp/api/erp'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
+import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { sendErpAssetRefurbish } from '@/addon/hsx_erp/api/asset'
+import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 
 
 
@@ -138,6 +148,11 @@ const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
 const erpDicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
 const expandedMap = ref<Record<string, boolean>>({})
+const refurbishTrackingMode = ref<'simple' | 'external'>('simple')
+const providerPopupVisible = ref(false)
+const providerPartyId = ref(0)
+const providerPartyName = ref('')
+const pendingRefurbishRow = ref<any>(null)
 
 const tabs = computed(() => dictTabs(erpDicts.value, 'asset_status', true))
 const activeTab = ref('')
@@ -166,7 +181,14 @@ const onTab = (val: string) => { activeTab.value = val; reload() }
 
 onShow(async () => {
     erpDicts.value = await loadErpDicts()
+    try {
+        const config: any = await getMobileErpConfig()
+        refurbishTrackingMode.value = config?.data?.refurbish?.tracking_mode === 'external' ? 'external' : 'simple'
+    } catch {}
     reload()
+})
+onLoad((options: any) => {
+    if (options?.refurbish_status) filters.value.refurbish_status = String(options.refurbish_status)
 })
 
 const queryList = async (pageNo: number, pageSize: number) => {
@@ -206,6 +228,32 @@ const formatTime = (ts: any) => {
 const goDetail = (row: any) => uni.navigateTo({
     url: `/addon/hsx_erp/pages/stock/detail?id=${row.id}`
 })
+async function startRefurbish(row: any) {
+    if (refurbishTrackingMode.value === 'external') {
+        pendingRefurbishRow.value = row
+        providerPartyId.value = 0
+        providerPartyName.value = ''
+        providerPopupVisible.value = true
+        return
+    }
+    await doStartRefurbish(row, 0, '')
+}
+async function confirmExternalRefurbish(party: any) {
+    providerPopupVisible.value = false
+    if (!pendingRefurbishRow.value) return
+    await doStartRefurbish(pendingRefurbishRow.value, Number(party?.party_id || 0), String(party?.party_name || ''))
+    pendingRefurbishRow.value = null
+}
+async function doStartRefurbish(row: any, providerPartyId: number, providerName: string) {
+    const confirmed = await confirmErpSensitiveAction({ title: '开始整备', content: `确认设备「${row.model || row.imei || '-'}」开始整备？\n设备仍保留原库存位置，但整备完成前不可销售。`, confirmText: '确认开始' })
+    if (!confirmed) return
+    await sendErpAssetRefurbish({ asset_ids: [Number(row.id)], tracking_mode: refurbishTrackingMode.value, provider_party_id: providerPartyId, remark: providerName ? `送交${providerName}整备` : '移动端开始整备' })
+    uni.showToast({ title: providerName ? `已交给${providerName}` : '已进入整备中', icon: 'none' })
+    reload()
+}
+function goCompleteRefurbish(row: any) {
+    uni.navigateTo({ url: `/addon/hsx_erp/pages/cost_adjust/detail?id=${row.id}&mode=refurbish_complete` })
+}
 const isSold = (row: any) => row?.status === 'sold'
 const isVoid = (row: any) => row?.status === 'void'
 const isExpanded = (row: any) => !!expandedMap.value[String(row?.id || '')]
@@ -267,6 +315,7 @@ const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
     justify-content: space-between;
     gap: 18rpx;
 }
+.stock-actions { display:flex; justify-content:flex-end; gap:14rpx; margin-top:18rpx; padding-top:18rpx; border-top:1rpx solid #eef2f7; }
 
 .stock-title {
     flex: 1;

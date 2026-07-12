@@ -37,7 +37,7 @@
         </view>
 
         <template v-else>
-            <view class="card">
+            <view v-if="!refurbishMode" class="card">
                 <view class="field-label">成本类型（必选）</view>
                 <view class="cost-type-list">
                     <view v-for="item in costTypes" :key="item.value" class="cost-type-item relative" :class="{ active: costType === item.value }" @click="selectCostType(item.value)">
@@ -52,18 +52,22 @@
                 </view>
             </view>
             <view v-if="costType === 'refurbish'" class="card">
+                <view class="field-label">整备结果（必选）</view>
+                <view class="reason-chips mb-[24rpx]"><view v-for="item in refurbishResults" :key="item.value" class="chip" :class="{ active: refurbishResult === item.value }" @click="refurbishResult=item.value">{{ item.label }}</view></view>
                 <view class="section-head">
                     <view>
                         <view class="field-label !mb-0">整备项目与费用</view>
                         <text class="section-desc">逐项填写，系统自动汇总并计入设备成本</text>
                     </view>
-                    <u-button size="mini" type="primary" plain text="添加项目" @click="addRefurbishItem" />
+                    <view>
+                        <u-button size="small" type="primary" plain text="添加项目" @click="addRefurbishItem" />
+                    </view>
                 </view>
                 <view class="refurbish-list">
                     <view v-for="(item, index) in refurbishItems" :key="index" class="refurbish-row">
                         <view class="refurbish-row__main">
                             <view class="refurbish-fields">
-                                <u-input v-model="item.name" border="none" placeholder="项目，如：换屏、修面容" />
+                                <u-input v-model="item.name"  customStyle="padding:15rpx" border="none" placeholder="项目，如：换屏、修面容" />
                                 <view class="refurbish-amount">
                                     <text>¥</text>
                                     <u-input v-model="item.amount" type="digit" border="none" placeholder="费用" inputAlign="right" />
@@ -151,6 +155,7 @@
                     height="120"
                     :customStyle="{ background: '#f8fafc', marginTop: '16rpx' }"
                 ></u-textarea>
+                <ErpVoucherUploader v-if="costType === 'refurbish'" v-model="refurbishVoucherUrls" title="整备凭证" hint="可上传维修清单、服务商账单或设备返回照片" />
             </view>
 
             <!-- 同步应付 -->
@@ -198,7 +203,7 @@
                 shape="circle"
                 :loading="submitting"
                 :disabled="!canSubmit"
-                text="确认调整"
+                :text="refurbishMode ? '确认整备完工' : '确认调整'"
                 color="#3b6ef5"
                 @click="submit"
             ></u-button>
@@ -210,10 +215,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { getErpAssetInfo, adjustErpAssetCost, getErpFinanceCategories } from '@/addon/hsx_erp/api/asset'
+import { getErpAssetInfo, adjustErpAssetCost, completeErpAssetRefurbish, getErpFinanceCategories } from '@/addon/hsx_erp/api/asset'
 import { INVENTORY_STATUS_MAP, INVENTORY_OUTBOUND, isCostAdjustAllowed } from '@/addon/hsx_erp/api/dict'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
+import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 
 const assetId = ref<string>('')
 const asset = ref<any>({})
@@ -222,6 +228,10 @@ const adjustHistory = ref<any[]>([])
 const newCost = ref<string>('')
 const reason = ref<string>('')
 const costType = ref<'purchase_adjust' | 'refurbish' | 'internal_adjust'>('internal_adjust')
+const refurbishMode = ref(false)
+const refurbishResult = ref<'success' | 'partial' | 'failed'>('success')
+const refurbishVoucherUrls = ref('')
+const refurbishResults = [{ value: 'success', label: '修复成功' }, { value: 'partial', label: '部分修复' }, { value: 'failed', label: '修复失败' }] as const
 const submitting = ref<boolean>(false)
 const financeCategories = ref<any[]>([])
 const expenseTypeKey = ref('')
@@ -234,7 +244,6 @@ const refurbishExpenseTypes = computed(() => financeCategories.value.filter((row
 
 const costTypes = [
     { value: 'purchase_adjust', label: '供应商调价', description: '退补差价、议价调整；可同步改变应付和采购退货本金。' },
-    { value: 'refurbish', label: '整备费用', description: '维修、配件、人工、检测等费用；增加设备成本并生成整备服务商应付。' },
     { value: 'internal_adjust', label: '内部成本修正', description: '修正账面成本但不改供应商往来；提交后标准采购退货会被锁定，直到完成分类。' },
 ] as const
 const reasonPresets = computed(() => costType.value === 'refurbish'
@@ -297,9 +306,9 @@ const refurbishReason = computed(() => {
 })
 const canSubmit = computed(() => {
     if (costType.value === 'refurbish') {
-        return refurbishTotal.value > 0
-            && normalizedRefurbishItems.value.length > 0
-            && normalizedRefurbishItems.value.every(item => item.name.length > 0 && item.amount > 0 && item.party_id > 0)
+        const filled = normalizedRefurbishItems.value.filter(item => item.name || item.amount > 0 || item.party_id > 0)
+        const itemsValid = filled.every(item => item.name.length > 0 && item.amount > 0 && item.party_id > 0)
+        return itemsValid && (refurbishResult.value === 'success' || !!reason.value.trim())
     }
     if (!deltaValid.value) return false
     if (Number(newCost.value) <= 0) return false
@@ -374,27 +383,21 @@ const submit = async () => {
         return
     }
     const confirmed = await confirmErpSensitiveAction({
-        title: '确认成本调整',
+        title: costType.value === 'refurbish' ? '确认整备完工' : '确认成本调整',
         content: costType.value === 'refurbish'
             ? `设备：${asset.value.model || asset.value.imei || asset.value.asset_no || '-'}\n项目：${refurbishReason.value}\n整备合计：¥${formatMoney(refurbishTotal.value)}\n成本：¥${formatMoney(asset.value.current_cost)} → ¥${formatMoney(submittedCost)}\n将生成整备服务商应付并保留流水。`
             : `设备：${asset.value.model || asset.value.imei || asset.value.asset_no || '-'}\n成本：¥${formatMoney(asset.value.current_cost)} → ¥${formatMoney(submittedCost)}\n类型：${costTypes.find(item => item.value === costType.value)?.label || costType.value}\n提交后保留成本和账务流水。`,
-        confirmText: '确认调整',
+        confirmText: costType.value === 'refurbish' ? '确认完工' : '确认调整',
     })
     if (!confirmed) return
     submitting.value = true
     try {
-        await adjustErpAssetCost(
-            assetId.value,
-            submittedCost,
-            submittedReason,
-            !isOutbound.value && costType.value === 'purchase_adjust',
-            costType.value,
-            costType.value === 'refurbish' ? {
-                expense_type_key: 'refurbish_mixed',
-                refurbish_items: normalizedRefurbishItems.value,
-            } : {}
-        )
-        uni.showToast({ title: costType.value === 'refurbish' ? '整备费用已计入总成本' : '成本已调整', icon: 'none' })
+        if (costType.value === 'refurbish') {
+            await completeErpAssetRefurbish(assetId.value, { result: refurbishResult.value, refurbish_items: normalizedRefurbishItems.value.filter(item => item.name || item.amount > 0 || item.party_id > 0), voucher_urls: refurbishVoucherUrls.value, remark: reason.value.trim() })
+        } else {
+            await adjustErpAssetCost(assetId.value, submittedCost, submittedReason, !isOutbound.value && costType.value === 'purchase_adjust', costType.value)
+        }
+        uni.showToast({ title: costType.value === 'refurbish' ? '整备结果、成本与应付已同步' : '成本已调整', icon: 'none' })
         setTimeout(() => uni.navigateBack(), 800)
     } catch (e) {
         // 拦截器已提示具体错误
@@ -405,6 +408,12 @@ const submit = async () => {
 
 onLoad((options: any) => {
     assetId.value = String(options?.id || '')
+    refurbishMode.value = String(options?.mode || '') === 'refurbish_complete'
+    if (refurbishMode.value) {
+        costType.value = 'refurbish'
+        refurbishItems.value = []
+        uni.setNavigationBarTitle({ title: '整备完工' })
+    }
     if (!assetId.value) {
         uni.showToast({ title: '缺少资产ID', icon: 'none' })
         return

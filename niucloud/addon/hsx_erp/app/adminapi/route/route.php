@@ -10,6 +10,8 @@ Route::group('erp', function () {
     Route::get('dashboard', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@dashboard');
     Route::get('goods/meta', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsMeta@meta');
     Route::get('goods/category/tree', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@tree');
+    Route::get('goods/category/sync/status', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@syncStatus');
+    Route::post('goods/category/sync', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@sync');
     Route::get('goods/category/export', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@export');
     Route::post('goods/category/import', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@import');
     Route::get('goods/category/lists', 'addon\hsx_erp\app\adminapi\controller\ErpGoodsCategory@lists');
@@ -26,6 +28,7 @@ Route::group('erp', function () {
     Route::get('dicts', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dicts');
     Route::get('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@info');
     Route::post('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@save');
+    Route::post('config/refurbish_reminder/dismiss', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dismissRefurbishReminder');
     Route::get('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saleChannels');
     Route::post('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saveSaleChannels');
     Route::get('config/sale_channel_options', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saleChannelOptions');
@@ -54,7 +57,9 @@ Route::group('erp', function () {
     Route::get('stock/serial_trace', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTrace');
     Route::get('stock/serial_trace/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTraceDetail');
     Route::get('stock/ledger', 'addon\hsx_erp\app\adminapi\controller\ErpStock@ledger');
+    Route::post('stock/refurbish/send', 'addon\hsx_erp\app\adminapi\controller\ErpStock@sendRefurbish');
     Route::post('stock/:id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\ErpStock@adjustCost');
+    Route::post('stock/:id/refurbish/complete', 'addon\hsx_erp\app\adminapi\controller\ErpStock@completeRefurbish');
     Route::get('stock/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@info');
     Route::post('stock/:id/flow', 'addon\hsx_erp\app\adminapi\controller\ErpStock@flow');
     Route::post('stock/:id/sync_listing', 'addon\hsx_erp\app\adminapi\controller\ErpStock@syncListing');
@@ -74,6 +79,7 @@ Route::group('erp', function () {
     Route::get('sale/:id', 'addon\hsx_erp\app\adminapi\controller\ErpSale@info');
 
     Route::get('finance/payable/lists', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@payableLists');
+    Route::get('finance/payable/info/:id', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@payableInfo');
     Route::get('finance/payable/party/:party_id/items', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@payablePartyItems');
     Route::get('finance/receivable/lists', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@receivableLists');
     Route::get('finance/receivable/:id', 'addon\hsx_erp\app\adminapi\controller\ErpFinance@receivableInfo');

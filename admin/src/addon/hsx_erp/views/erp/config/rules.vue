@@ -111,6 +111,24 @@
                         <el-form-item label="入库默认整备">
                             <el-switch v-model="form.refurbish.default_required" :active-value="1" :inactive-value="0" :disabled="form.refurbish.enabled !== 1" />
                         </el-form-item>
+                        <el-form-item label="整备跟踪方式">
+                            <div>
+                                <el-radio-group v-model="form.refurbish.tracking_mode" :disabled="form.refurbish.enabled !== 1">
+                                    <el-radio-button label="simple">简易登记</el-radio-button>
+                                    <el-radio-button label="external">外送追踪</el-radio-button>
+                                </el-radio-group>
+                                <div class="mt-1 text-xs text-gray-400">简易登记只在完工时记录服务商和费用；外送追踪会记录设备当前交给了哪家整备商。</div>
+                            </div>
+                        </el-form-item>
+                        <el-form-item label="首页积压提醒">
+                            <el-switch v-model="form.refurbish.daily_reminder_enabled" :active-value="1" :inactive-value="0" :disabled="form.refurbish.enabled !== 1" />
+                        </el-form-item>
+                        <el-form-item label="当日待整备阈值">
+                            <div class="flex items-center gap-2">
+                                <el-input-number v-model="form.refurbish.daily_reminder_threshold" :min="1" :max="999" :precision="0" :disabled="form.refurbish.daily_reminder_enabled !== 1" />
+                                <span class="text-sm text-gray-500">台；达到后提醒老板及时分配处理</span>
+                            </div>
+                        </el-form-item>
                         <el-form-item label="启用代卖">
                             <el-switch v-model="form.consignment.enabled" :active-value="1" :inactive-value="0" />
                         </el-form-item>
@@ -142,7 +160,7 @@ function defaultRules() {
         purchase: { create_payable_on_inbound: 1, allow_cancel_before_finance_fact: 1 },
         product_title: { category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' },
         sale: { create_receivable_on_outbound: 1, allow_cancel_before_finance_fact: 1, return_to_original_location_on_cancel: 1, enable_peer_pending: 1, enable_trial_sale: 0, profit_confirm_mode: 'settlement' },
-        refurbish: { enabled: 0, default_required: 0 },
+        refurbish: { enabled: 1, default_required: 0, tracking_mode: 'simple', daily_reminder_enabled: 1, daily_reminder_threshold: 25, reminder_dismiss_date: '' },
         consignment: { enabled: 0, settle_payable_after_receipt: 1, transfer_to_owned_requires_repurchase: 1 }
     }
 }

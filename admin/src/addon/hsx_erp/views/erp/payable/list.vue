@@ -143,6 +143,18 @@
                 <div>{{ partyRoleLabel(pay.row, '付款对象') }}：<span class="font-medium text-gray-900">{{ pay.row.party_name }}</span></div>
                 <ErpFinanceSourceMeta :row="pay.row" class="mt-3" default-direction="expense" />
             </div>
+            <div v-if="payeeMethods.length" class="mb-4 rounded border border-amber-200 bg-amber-50 px-4 py-3">
+                <div class="mb-2 text-sm font-medium text-amber-900">客户收款资料 <span class="font-normal text-amber-700">（来自回收订单，仅供付款核对）</span></div>
+                <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <div v-for="(method,index) in payeeMethods" :key="`${method.pay_type}-${method.account}-${index}`" class="flex items-center justify-between gap-3 rounded bg-white px-3 py-2">
+                        <div class="min-w-0 text-sm">
+                            <div class="font-medium text-gray-900">{{ method.pay_type || '其他收款方式' }} <el-tag v-if="method.is_default" size="small" type="warning" effect="plain">默认</el-tag></div>
+                            <div class="mt-1 break-all text-gray-600">{{ method.account || '未填写账号' }}</div>
+                        </div>
+                        <ErpImageGallery v-if="method.qrcode_image" :value="img(method.qrcode_image)" :size="48" :limit="1" />
+                    </div>
+                </div>
+            </div>
             <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div class="rounded bg-red-50 px-3 py-2">
                     <div class="text-xs text-gray-500">本次付款</div>
@@ -557,6 +569,7 @@ import ErpFinanceSourceMeta from '@/addon/hsx_erp/components/ErpFinanceSourceMet
 import ErpCopyText from '@/addon/hsx_erp/components/ErpCopyText.vue'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpOverflowText from '@/addon/hsx_erp/components/ErpOverflowText.vue'
+import { img } from '@/utils/common'
 
 const route = useRoute()
 
@@ -612,6 +625,14 @@ const isNonDevicePay = computed(() => {
 })
 const payAfterRemainTotal = computed(() => pay.items.reduce((sum: number, row: any) => sum + payAfterRemain(row), 0))
 const canSubmitPay = computed(() => paySelectedTotal.value > 0 && Number(pay.form.capital_account_id || 0) > 0)
+const payeeMethods = computed(() => {
+    const unique = new Map<string, any>()
+    pay.items.flatMap((row: any) => Array.isArray(row.payee_methods) ? row.payee_methods : []).forEach((item: any) => {
+        const key = `${String(item.pay_type || '').trim()}|${String(item.account || '').trim()}|${String(item.qrcode_image || '').trim()}`
+        if (key !== '||' && !unique.has(key)) unique.set(key, item)
+    })
+    return Array.from(unique.values())
+})
 
 const offsetPayableChecked = computed(() => offset.payables.reduce((sum: number, row: any) => row.checked ? sum + Number(row.remain || 0) : sum, 0))
 const offsetReceivableChecked = computed(() => offset.receivables.reduce((sum: number, row: any) => row.checked ? sum + Number(row.remain || 0) : sum, 0))

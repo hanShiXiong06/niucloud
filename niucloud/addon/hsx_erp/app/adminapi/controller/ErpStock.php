@@ -109,6 +109,25 @@ class ErpStock extends BaseAdminController
         ));
     }
 
+    public function sendRefurbish()
+    {
+        $params = $this->request->params([
+            ['asset_ids', []], ['provider_party_id', 0], ['remark', ''], ['tracking_mode', ''], ['request_id', ''],
+        ]);
+        return success($this->service->sendRefurbish(
+            (array)$params['asset_ids'], (int)$params['provider_party_id'], (string)$params['remark'], (string)$params['tracking_mode'], (string)$params['request_id']
+        ));
+    }
+
+    public function completeRefurbish(int $id)
+    {
+        $params = $this->request->params([
+            ['result', ''], ['refurbish_items', []], ['expense_type_key', 'refurbish_mixed'],
+            ['warehouse_id', 0], ['location_id', 0], ['voucher_urls', []], ['remark', ''], ['request_id', ''],
+        ]);
+        return success($this->service->completeRefurbish($id, $params));
+    }
+
     public function flow(int $id)
     {
         $params = $this->request->params([

@@ -18,14 +18,210 @@ use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
 use addon\hsx_erp\app\model\ErpSettlement;
 use addon\hsx_erp\app\model\ErpSettlementLink;
+use addon\hsx_erp\app\model\ErpWarehouse;
+use addon\hsx_erp\app\model\ErpWarehouseLocation;
 use addon\hsx_erp\app\support\ErpIdempotency;
 use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
+use think\facade\Log;
 
 class ErpStockService extends BaseAdminService
 {
+    /**
+     * 批量送修：一筐设备只选择一次整备商并确认一次。
+     * 不创建“整备仓”，设备库存归属保持不变，外部保管信息记录在整备快照中。
+     */
+    public function sendRefurbish(array $assetIds, int $providerPartyId = 0, string $remark = '', string $trackingMode = '', string $requestId = ''): array
+    {
+        $assetIds = array_values(array_unique(array_filter(array_map('intval', $assetIds))));
+        if ($assetIds === []) throw new CommonException('请至少选择一台待整备设备');
+        if (count($assetIds) > 200) throw new CommonException('单次送修最多选择200台设备');
+        $requestId = ErpIdempotency::normalize($requestId);
+        if ($requestId !== '') {
+            $existing = ErpAssetLedger::where([
+                ['site_id', '=', $this->site_id], ['request_id', '=', ErpIdempotency::child($requestId, (string)$assetIds[0])], ['action', '=', 'refurbish_send'],
+            ])->findOrEmpty();
+            if (!$existing->isEmpty()) return ['batch_no' => (string)$existing->source_no, 'count' => count($assetIds), 'idempotent' => true];
+        }
+        $rules = (new ErpConfigService())->getRules();
+        if ((int)($rules['refurbish']['enabled'] ?? 1) !== 1) throw new CommonException('整备流程尚未启用');
+        $trackingMode = in_array($trackingMode, ['simple', 'external'], true)
+            ? $trackingMode
+            : (string)($rules['refurbish']['tracking_mode'] ?? 'simple');
+        $providerName = '';
+        if ($providerPartyId > 0) {
+            $party = ErpParty::where([['site_id', '=', $this->site_id], ['id', '=', $providerPartyId], ['status', '=', 1]])->findOrEmpty();
+            if ($party->isEmpty()) throw new CommonException('整备服务商不存在或已停用');
+            $providerName = (string)$party->party_name;
+        } elseif ($trackingMode === 'external') {
+            throw new CommonException('外送追踪模式请选择整备商');
+        }
+        $batchNo = ErpLedgerService::makeNo('RB');
+        $now = time();
+        Db::transaction(function () use ($assetIds, $providerPartyId, $providerName, $remark, $batchNo, $now, $requestId) {
+            $assets = ErpAsset::where([['site_id', '=', $this->site_id]])->whereIn('id', $assetIds)->lock(true)->select();
+            if (count($assets) !== count($assetIds)) throw new CommonException('部分设备不存在，请刷新后重试');
+            $ledger = new ErpLedgerService();
+            foreach ($assets as $asset) {
+                if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) throw new CommonException('只有在库设备可以送修');
+                if ((string)$asset->refurbish_status !== 'pending') {
+                    throw new CommonException('设备【' . (string)($asset->model ?: $asset->asset_no) . '】不是待整备状态');
+                }
+                $asset->save([
+                    'refurbish_status' => 'processing',
+                    'listing_status' => 'none',
+                    'refurbish_batch_no' => $batchNo,
+                    'refurbish_provider_id' => $providerPartyId,
+                    'refurbish_provider_name' => $providerName,
+                    'refurbish_sent_at' => $now,
+                    'refurbish_sent_uid' => (int)$this->uid,
+                    'refurbish_sent_name' => (string)$this->username,
+                    'refurbish_remark' => mb_substr(trim($remark), 0, 500),
+                    'update_at' => $now,
+                ]);
+                $ledger->asset([
+                    'asset_id' => (int)$asset->id,
+                    'request_id' => $requestId !== '' ? ErpIdempotency::child($requestId, (string)$asset->id) : null,
+                    'action' => 'refurbish_send',
+                    'before_status' => 'in_stock/pending',
+                    'after_status' => 'in_stock/processing',
+                    'party_id' => $providerPartyId,
+                    'party_name' => $providerName,
+                    'source_type' => 'refurbish',
+                    'source_id' => (int)$asset->id,
+                    'source_no' => $batchNo,
+                    'remark' => $providerName !== '' ? ('送交' . $providerName . '整备') : '开始店内整备',
+                    'extra' => ['refurbish_batch_no' => $batchNo, 'provider_id' => $providerPartyId, 'provider_name' => $providerName, 'remark' => trim($remark)],
+                ]);
+            }
+        });
+        return ['batch_no' => $batchNo, 'count' => count($assetIds), 'provider_id' => $providerPartyId, 'provider_name' => $providerName];
+    }
+
+    /** 扫码完工：最终清单才形成设备成本及服务商应付。 */
+    public function completeRefurbish(int $id, array $data): array
+    {
+        $result = in_array((string)($data['result'] ?? ''), ['success', 'partial', 'failed'], true)
+            ? (string)$data['result'] : '';
+        if ($result === '') throw new CommonException('请选择整备结果');
+        $requestId = ErpIdempotency::normalize((string)($data['request_id'] ?? ''));
+        if ($requestId !== '' && ErpAssetLedger::where('site_id', '=', $this->site_id)
+            ->where('request_id', '=', $requestId)->whereIn('action', ['refurbish', 'refurbish_complete'])->count() > 0) {
+            return $this->info($id);
+        }
+        $asset = $this->findAsset($id);
+        if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK || !in_array((string)$asset->refurbish_status, ['pending', 'processing'], true)) {
+            throw new CommonException('只有待整备或整备中的在库设备可以登记完工');
+        }
+        $destination = $this->resolveRefurbishDestination($asset, (int)($data['warehouse_id'] ?? 0), (int)($data['location_id'] ?? 0));
+        $items = array_values(array_filter((array)($data['refurbish_items'] ?? []), 'is_array'));
+        $total = round(array_sum(array_map(static fn(array $item): float => (float)($item['amount'] ?? 0), $items)), 2);
+        $context = [
+            'workflow_complete' => 1,
+            'result' => $result,
+            'refurbish_items' => $items,
+            'expense_type_key' => count($items) > 1 ? 'refurbish_mixed' : (string)($data['expense_type_key'] ?? 'refurbish_mixed'),
+            'destination' => $destination,
+            'voucher_urls' => $data['voucher_urls'] ?? '',
+        ];
+        $reason = mb_substr(trim((string)($data['remark'] ?? '')), 0, 500);
+        if ($total > 0) {
+            $this->adjustCost($id, round((float)$asset->total_cost + $total, 2), $reason, false, $requestId, 'refurbish', $context);
+        } else {
+            $this->completeRefurbishWithoutCost($id, $result, $reason, $requestId, $destination, $data['voucher_urls'] ?? '');
+        }
+        $completed = $this->findAsset($id);
+        if ($result === 'success' && (string)$completed->sale_target === 'mall') {
+            try {
+                $this->syncListing($id);
+            } catch (\Throwable $e) {
+                // 整备完工是本地库存事实，外围拍照/商城同步失败不得回滚完工，交由同步状态重试。
+                Log::warning('ERP整备完工后触发拍照定价同步失败', ['site_id' => $this->site_id, 'asset_id' => $id, 'message' => $e->getMessage()]);
+            }
+        }
+        return $this->info($id);
+    }
+
+    private function resolveRefurbishDestination(ErpAsset $asset, int $warehouseId, int $locationId): array
+    {
+        if ($warehouseId <= 0) {
+            return ['warehouse_id' => (int)$asset->warehouse_id, 'warehouse_name' => (string)$asset->warehouse_name, 'location_id' => (int)$asset->location_id, 'location_name' => (string)$asset->location_name];
+        }
+        $warehouse = ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId], ['status', '=', 1]])->findOrEmpty();
+        if ($warehouse->isEmpty()) throw new CommonException('目标仓库不存在或已停用');
+        $locationName = '';
+        if ($locationId > 0) {
+            $location = ErpWarehouseLocation::where([['site_id', '=', $this->site_id], ['id', '=', $locationId], ['warehouse_id', '=', $warehouseId], ['status', '=', 1]])->findOrEmpty();
+            if ($location->isEmpty()) throw new CommonException('目标库位不属于所选仓库或已停用');
+            $locationName = (string)$location->location_name;
+        }
+        return ['warehouse_id' => $warehouseId, 'warehouse_name' => (string)$warehouse->warehouse_name, 'location_id' => $locationId, 'location_name' => $locationName];
+    }
+
+    private function listingStatusAfterRefurbish(ErpAsset $asset, array $destination): string
+    {
+        if ((string)$asset->sale_target !== 'mall') return 'none';
+        $warehouseId = (int)($destination['warehouse_id'] ?? $asset->warehouse_id);
+        $warehouse = $warehouseId > 0
+            ? ErpWarehouse::where([['site_id', '=', $this->site_id], ['id', '=', $warehouseId], ['status', '=', 1]])->findOrEmpty()
+            : null;
+        $needPhoto = $warehouse && !$warehouse->isEmpty() ? (int)$warehouse->need_photo === 1 : true;
+        $needPricing = $warehouse && !$warehouse->isEmpty() ? (int)$warehouse->need_pricing === 1 : true;
+        if ($needPhoto && trim((string)$asset->image_urls) === '') return 'need_photo';
+        if ($needPricing && (float)$asset->estimate_sale_price <= 0 && (float)$asset->retail_price <= 0) return 'need_price';
+        return 'ready';
+    }
+
+    private function completeRefurbishWithoutCost(int $id, string $result, string $reason, string $requestId, array $destination, mixed $voucherUrls): void
+    {
+        $requestId = ErpIdempotency::normalize($requestId);
+        if ($requestId !== '' && ErpAssetLedger::where([
+            ['site_id', '=', $this->site_id], ['request_id', '=', $requestId], ['action', '=', 'refurbish_complete'],
+        ])->count() > 0) return;
+        Db::transaction(function () use ($id, $result, $reason, $requestId, $destination, $voucherUrls) {
+            $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->lock(true)->findOrEmpty();
+            if ($asset->isEmpty() || (string)$asset->status !== ErpDict::ASSET_IN_STOCK || !in_array((string)$asset->refurbish_status, ['pending', 'processing'], true)) {
+                throw new CommonException('只有待整备或整备中的在库设备可以登记完工');
+            }
+            $before = [
+                'warehouse_id' => (int)$asset->warehouse_id, 'warehouse_name' => (string)$asset->warehouse_name,
+                'location_id' => (int)$asset->location_id, 'location_name' => (string)$asset->location_name,
+            ];
+            $beforeRefurbishStatus = (string)$asset->refurbish_status;
+            $status = $result === 'success' ? 'done' : 'failed';
+            $now = time();
+            $asset->save(array_merge([
+                'refurbish_status' => $status,
+                'refurbish_result' => $result,
+                'refurbish_completed_at' => $now,
+                'refurbish_completed_uid' => (int)$this->uid,
+                'refurbish_completed_name' => (string)$this->username,
+                'refurbish_voucher_urls' => is_array($voucherUrls) ? json_encode($voucherUrls, JSON_UNESCAPED_UNICODE) : trim((string)$voucherUrls),
+                'refurbish_remark' => $reason,
+                'listing_status' => $status === 'done' ? $this->listingStatusAfterRefurbish($asset, $destination) : 'none',
+                'update_at' => $now,
+            ], $destination));
+            (new ErpLedgerService())->asset([
+                'asset_id' => $id,
+                'request_id' => $requestId !== '' ? $requestId : null,
+                'action' => 'refurbish_complete',
+                'before_status' => 'in_stock/' . $beforeRefurbishStatus,
+                'after_status' => 'in_stock/' . $status,
+                'before_warehouse_id' => $before['warehouse_id'], 'before_warehouse_name' => $before['warehouse_name'],
+                'before_location_id' => $before['location_id'], 'before_location_name' => $before['location_name'],
+                'after_warehouse_id' => (int)($destination['warehouse_id'] ?? $before['warehouse_id']),
+                'after_warehouse_name' => (string)($destination['warehouse_name'] ?? $before['warehouse_name']),
+                'after_location_id' => (int)($destination['location_id'] ?? $before['location_id']),
+                'after_location_name' => (string)($destination['location_name'] ?? $before['location_name']),
+                'before_total_cost' => (float)$asset->total_cost, 'after_total_cost' => (float)$asset->total_cost, 'cost_delta' => 0,
+                'source_type' => 'refurbish', 'source_id' => $id, 'source_no' => (string)$asset->refurbish_batch_no,
+                'remark' => $reason !== '' ? $reason : ($status === 'done' ? '整备完成（无新增费用）' : '整备未成功'),
+                'extra' => ['result' => $result, 'voucher_urls' => $voucherUrls, 'destination' => $destination],
+            ]);
+        });
+    }
     /** 串号追踪：同一 IMEI/SN 允许多次入库，每次资产记录独立展示，最新在前。 */
     public function serialTracePage(array $where): array
     {
@@ -792,6 +988,11 @@ class ErpStockService extends BaseAdminService
             $row['after_status_text'] = ErpDict::assetStatusText((string)($row['after_status'] ?? ''));
             $row['cost_type'] = $costType;
             $row['cost_type_text'] = $costType !== '' ? ErpDict::costTypeText($costType) : '';
+            $operatorName = trim((string)($row['operator_name'] ?? ''));
+            $operatorId = (int)($row['operator_id'] ?? $row['operator_uid'] ?? 0);
+            $row['operator_name'] = $operatorName;
+            // 旧流水可能没有经办人快照。前端统一消费该字段，避免留白或展示内部 ID。
+            $row['operator_display'] = $operatorName !== '' ? $operatorName : ($operatorId > 0 ? ('员工 #' . $operatorId) : '系统自动');
         }
         unset($row);
         return $rows;
@@ -806,17 +1007,23 @@ class ErpStockService extends BaseAdminService
         $refurbishStatus = (string)($data['refurbish_status'] ?? '');
         $saleTarget = (string)($data['sale_target'] ?? '');
         $listingStatus = (string)($data['listing_status'] ?? '');
-        $allowedRefurbish = ['none', 'pending', 'processing', 'done'];
+        $allowedRefurbish = ['none', 'pending'];
         $allowedTarget = ['unset', 'peer', 'mall'];
         $allowedListing = ['none', 'need_photo', 'need_price', 'ready', 'listed'];
         $save = ['update_at' => time()];
         $changes = [];
         if ($refurbishStatus !== '') {
             if (!in_array($refurbishStatus, $allowedRefurbish, true)) {
-                throw new CommonException('整备状态不正确');
+                throw new CommonException('整备中、完工和异常状态必须通过整备流程操作，不能手工改状态');
             }
             if ($refurbishStatus !== (string)$asset->refurbish_status) {
                 $save['refurbish_status'] = $refurbishStatus;
+                if ($refurbishStatus === 'pending') {
+                    $save['refurbish_pending_at'] = time();
+                    $save['listing_status'] = 'none';
+                } elseif ($refurbishStatus === 'none') {
+                    $save['refurbish_pending_at'] = 0;
+                }
                 $changes[] = '整备状态';
             }
         }
@@ -926,6 +1133,9 @@ class ErpStockService extends BaseAdminService
         if ((string)$asset->sale_target !== 'mall') {
             throw new CommonException('请先将设备销售去向设置为上商城');
         }
+        if (in_array((string)$asset->refurbish_status, ['pending', 'processing', 'failed'], true)) {
+            throw new CommonException('设备整备完成前不能进入拍照定价或商城上架流程');
+        }
         return (new ErpIntegrationService())->publishDomainEvent(
             'erp.asset.ready_for_photo.v1',
             'asset',
@@ -1007,6 +1217,9 @@ class ErpStockService extends BaseAdminService
             throw new CommonException('成本类型不正确');
         }
         if ($costType === 'refurbish') {
+            if ((int)($context['workflow_complete'] ?? 0) !== 1) {
+                throw new CommonException('整备费用必须在设备“整备完成”时登记，不能从普通成本调整直接录入');
+            }
             return $this->addRefurbishCost($id, $afterCost, $reason, $requestId, $context);
         }
         $purchaseItemId = (int)$asset->purchase_item_id;
@@ -1066,23 +1279,38 @@ class ErpStockService extends BaseAdminService
         }
         unset($refurbishItem);
         $refurbishTotal = round(array_sum(array_map(static fn(array $item): float => (float)($item['amount'] ?? 0), $refurbishItems)), 2);
-        Db::transaction(function () use ($id, $afterCost, $reason, $requestId, $category, $refurbishItems, $refurbishTotal) {
+        $result = (string)($context['result'] ?? 'success');
+        $destination = (array)($context['destination'] ?? []);
+        $voucherUrls = $context['voucher_urls'] ?? '';
+        Db::transaction(function () use ($id, $afterCost, $reason, $requestId, $category, $refurbishItems, $refurbishTotal, $result, $destination, $voucherUrls) {
             $asset = ErpAsset::where([['site_id', '=', $this->site_id], ['id', '=', $id]])->lock(true)->findOrEmpty();
-            if ($asset->isEmpty() || !in_array((string)$asset->status, [ErpDict::ASSET_IN_STOCK, 'available_for_sale'], true)) {
-                throw new CommonException('只有仍在库存中的设备可以登记整备费用');
+            if ($asset->isEmpty() || (string)$asset->status !== ErpDict::ASSET_IN_STOCK || !in_array((string)$asset->refurbish_status, ['pending', 'processing'], true)) {
+                throw new CommonException('只有待整备或整备中的在库设备可以登记整备费用');
             }
             $beforeCost = round((float)$asset->total_cost, 2);
+            $beforeLocation = [
+                'warehouse_id' => (int)$asset->warehouse_id, 'warehouse_name' => (string)$asset->warehouse_name,
+                'location_id' => (int)$asset->location_id, 'location_name' => (string)$asset->location_name,
+            ];
             // 多项目整备以服务端明细合计为唯一事实；锁内基于最新成本累加，避免并发调整覆盖。
             $delta = $refurbishTotal > 0 ? $refurbishTotal : round($afterCost - $beforeCost, 2);
             if ($delta <= 0.0001) {
                 throw new CommonException('整备费用只能增加成本；冲销整备费请走红字调整');
             }
-            $asset->save([
+            $completedAt = time();
+            $asset->save(array_merge([
                 'refurbish_cost' => round((float)$asset->refurbish_cost + $delta, 2),
                 'total_cost' => round($beforeCost + $delta, 2),
-                'refurbish_status' => 'done',
-                'update_at' => time(),
-            ]);
+                'refurbish_status' => $result === 'success' ? 'done' : 'failed',
+                'refurbish_result' => $result,
+                'refurbish_completed_at' => $completedAt,
+                'refurbish_completed_uid' => (int)$this->uid,
+                'refurbish_completed_name' => (string)$this->username,
+                'refurbish_voucher_urls' => is_array($voucherUrls) ? json_encode($voucherUrls, JSON_UNESCAPED_UNICODE) : trim((string)$voucherUrls),
+                'refurbish_remark' => $reason,
+                'listing_status' => $result === 'success' ? $this->listingStatusAfterRefurbish($asset, $destination) : 'none',
+                'update_at' => $completedAt,
+            ], $destination));
             $ledger = new ErpLedgerService();
             $expenseNo = ErpLedgerService::makeNo('RF');
             $financeSourceService = new ErpFinanceSourceService();
@@ -1094,7 +1322,15 @@ class ErpStockService extends BaseAdminService
                 'request_id' => $requestId !== '' ? $requestId : null,
                 'action' => 'refurbish',
                 'before_status' => (string)$asset->status,
-                'after_status' => (string)$asset->status,
+                'after_status' => 'in_stock/' . ($result === 'success' ? 'done' : 'failed'),
+                'before_warehouse_id' => $beforeLocation['warehouse_id'],
+                'before_warehouse_name' => $beforeLocation['warehouse_name'],
+                'before_location_id' => $beforeLocation['location_id'],
+                'before_location_name' => $beforeLocation['location_name'],
+                'after_warehouse_id' => (int)($destination['warehouse_id'] ?? $beforeLocation['warehouse_id']),
+                'after_warehouse_name' => (string)($destination['warehouse_name'] ?? $beforeLocation['warehouse_name']),
+                'after_location_id' => (int)($destination['location_id'] ?? $beforeLocation['location_id']),
+                'after_location_name' => (string)($destination['location_name'] ?? $beforeLocation['location_name']),
                 'before_total_cost' => $beforeCost,
                 'after_total_cost' => round($beforeCost + $delta, 2),
                 'cost_delta' => $delta,
@@ -1104,7 +1340,7 @@ class ErpStockService extends BaseAdminService
                 'source_id' => $id,
                 'source_no' => $expenseNo,
                 'remark' => $reason !== '' ? $reason : (string)$category['name'],
-                'extra' => ['cost_type' => 'refurbish', 'expense_type_key' => $category['key'], 'expense_type_name' => $category['name'], 'source_plugin' => $category['source_plugin'], 'source_key' => $category['source_key'], 'refurbish_cost' => $delta, 'refurbish_items' => $refurbishItems],
+                'extra' => ['cost_type' => 'refurbish', 'expense_type_key' => $category['key'], 'expense_type_name' => $category['name'], 'source_plugin' => $category['source_plugin'], 'source_key' => $category['source_key'], 'refurbish_cost' => $delta, 'refurbish_items' => $refurbishItems, 'result' => $result, 'voucher_urls' => $voucherUrls, 'destination' => $destination],
             ]);
             foreach ($refurbishItems as $index => $refurbishItem) {
                 $itemName = (string)$refurbishItem['name'];

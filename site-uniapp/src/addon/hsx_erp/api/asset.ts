@@ -59,6 +59,14 @@ export async function getErpAssetInfo(id: number | string) {
     }
 }
 
+export function sendErpAssetRefurbish(data: Record<string, any>) {
+    return request.post('erp/stock/refurbish/send', withAssetRequestId(data, 'refurbish-send'))
+}
+
+export function completeErpAssetRefurbish(id: number | string, data: Record<string, any>) {
+    return request.post(`erp/stock/${id}/refurbish/complete`, withAssetRequestId(data, 'refurbish-complete'))
+}
+
 /**
  * 调整在库设备成本（写成本流水，并按规则回填回收/财务）
  * @param id          ERP 资产 id

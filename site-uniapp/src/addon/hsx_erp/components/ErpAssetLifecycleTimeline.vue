@@ -24,6 +24,7 @@
                 </view>
                 <view class="timeline-meta">
                     <text v-if="node.party_name">{{ partyPrefix(node.action) }}：{{ node.party_name }}</text>
+                    <text>操作人：{{ operatorLabel(node) }}</text>
                     <text v-if="node.source_no">单据：{{ node.source_no }}</text>
                     <text v-if="node.asset_no">资产：{{ node.asset_no }}</text>
                 </view>
@@ -61,6 +62,7 @@ const nodes = computed(() => (props.flows || []).map((flow:any,index:number) => 
 }))
 const statusLabel=(s:string)=>({in_stock:'在我的库存',sold:'已销售给客户',returned:'已退还供应商',void:'已作废',available_for_sale:'可销售'}[s]||s||'未知状态')
 const partyPrefix=(action:string)=>['inbound','purchase_return','purchase_cancel'].includes(action)?'供应商':['sold','sale_return','sale_return_cancel','sale_cancel','sale_item_cancel'].includes(action)?'客户':'往来方'
+const operatorLabel=(node:any)=>String(node?.operator_display || node?.operator_name || (Number(node?.operator_id || node?.operator_uid || 0) > 0 ? `员工 #${Number(node?.operator_id || node?.operator_uid)}` : '系统自动'))
 const currentTone=computed(()=>({in_stock:'purchase',sold:'sale',returned:'purchase-return',void:'other'} as any)[props.currentStatus]||'other')
 </script>
 

@@ -25,6 +25,18 @@ final class ErpSchema
             PRIMARY KEY (`id`), UNIQUE KEY `uk_site_metric` (`site_id`,`metric_key`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-员工KPI规则'");
 
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_category_mapping` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `erp_category_id` int NOT NULL DEFAULT 0, `target_plugin` varchar(40) NOT NULL DEFAULT '',
+            `target_category_id` varchar(64) NOT NULL DEFAULT '', `sync_direction` varchar(20) NOT NULL DEFAULT 'two_way',
+            `sync_status` varchar(20) NOT NULL DEFAULT 'synced', `last_sync_hash` varchar(64) NOT NULL DEFAULT '',
+            `last_error` varchar(500) NOT NULL DEFAULT '', `last_synced_at` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_erp_target` (`site_id`,`erp_category_id`,`target_plugin`),
+            UNIQUE KEY `uk_site_target_category` (`site_id`,`target_plugin`,`target_category_id`),
+            KEY `idx_site_status` (`site_id`,`sync_status`,`update_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-跨插件分类映射'");
+
         $columns = [
             'erp_party' => [
                 'role_flags' => "`role_flags` varchar(255) NOT NULL DEFAULT '' COMMENT '多身份：purchase_supplier,sale_customer,recycle_customer,refurbish_provider' AFTER `party_type`",
@@ -88,7 +100,20 @@ final class ErpSchema
                 'retail_price' => "`retail_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '零售价（上架商城定价，由库管设置）' AFTER `estimate_sale_price`",
                 'image_urls' => "`image_urls` text COMMENT '入库图片JSON/逗号分隔' AFTER `retail_price`",
                 'quality_remark' => "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `image_urls`",
-                'refurbish_status' => "`refurbish_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/pending待整备/processing整备中/done已完成' AFTER `total_cost`",
+                'refurbish_status' => "`refurbish_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/pending待整备/processing整备中/done已完成/failed整备异常' AFTER `total_cost`",
+                'refurbish_pending_at' => "`refurbish_pending_at` int NOT NULL DEFAULT 0 COMMENT '进入待整备时间' AFTER `refurbish_status`",
+                'refurbish_batch_no' => "`refurbish_batch_no` varchar(40) NOT NULL DEFAULT '' COMMENT '整备交接批次号' AFTER `refurbish_pending_at`",
+                'refurbish_provider_id' => "`refurbish_provider_id` int NOT NULL DEFAULT 0 COMMENT '当前外送整备商主体ID' AFTER `refurbish_batch_no`",
+                'refurbish_provider_name' => "`refurbish_provider_name` varchar(100) NOT NULL DEFAULT '' COMMENT '当前外送整备商名称快照' AFTER `refurbish_provider_id`",
+                'refurbish_sent_at' => "`refurbish_sent_at` int NOT NULL DEFAULT 0 COMMENT '送修/开始整备时间' AFTER `refurbish_provider_name`",
+                'refurbish_sent_uid' => "`refurbish_sent_uid` int NOT NULL DEFAULT 0 COMMENT '送修经手人UID' AFTER `refurbish_sent_at`",
+                'refurbish_sent_name' => "`refurbish_sent_name` varchar(60) NOT NULL DEFAULT '' COMMENT '送修经手人名称' AFTER `refurbish_sent_uid`",
+                'refurbish_result' => "`refurbish_result` varchar(20) NOT NULL DEFAULT '' COMMENT 'success修复成功/partial部分修复/failed修复失败' AFTER `refurbish_sent_name`",
+                'refurbish_completed_at' => "`refurbish_completed_at` int NOT NULL DEFAULT 0 COMMENT '整备完成时间' AFTER `refurbish_result`",
+                'refurbish_completed_uid' => "`refurbish_completed_uid` int NOT NULL DEFAULT 0 COMMENT '整备完工登记人UID' AFTER `refurbish_completed_at`",
+                'refurbish_completed_name' => "`refurbish_completed_name` varchar(60) NOT NULL DEFAULT '' COMMENT '整备完工登记人名称' AFTER `refurbish_completed_uid`",
+                'refurbish_voucher_urls' => "`refurbish_voucher_urls` text COMMENT '整备结果/费用凭证图片' AFTER `refurbish_completed_name`",
+                'refurbish_remark' => "`refurbish_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '整备交接及结果说明' AFTER `refurbish_voucher_urls`",
                 'sale_target' => "`sale_target` varchar(20) NOT NULL DEFAULT 'unset' COMMENT 'unset未定/peer卖同行/mall上商城' AFTER `refurbish_status`",
                 'listing_status' => "`listing_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/need_photo待拍照/need_price待定价/ready可上架/listed已上架' AFTER `sale_target`",
                 'remark_public' => "`remark_public` varchar(500) NOT NULL DEFAULT '' COMMENT '对外说明' AFTER `remark`",
@@ -219,6 +244,8 @@ final class ErpSchema
         }
 
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_sn', 'KEY `idx_site_sn` (`site_id`,`sn`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish', 'KEY `idx_site_refurbish` (`site_id`,`refurbish_status`,`refurbish_pending_at`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish_provider', 'KEY `idx_site_refurbish_provider` (`site_id`,`refurbish_provider_id`,`refurbish_status`)');
         self::ensureIndex($prefix . 'erp_asset_ledger', 'idx_action_source_no', 'KEY `idx_action_source_no` (`site_id`,`action`,`source_no`)');
         self::ensureIndex($prefix . 'erp_purchase_order', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
         self::ensureIndex($prefix . 'erp_sale_order', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');

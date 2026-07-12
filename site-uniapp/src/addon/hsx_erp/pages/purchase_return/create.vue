@@ -127,6 +127,24 @@
                             <strong>{{ selectedRequiresRefund ? `生成退款应收 ¥${money(selectedRefundTotal)}` : '无需财务处理' }}</strong>
                         </view>
                     </view>
+                    <template v-if="selectedRequiresRefund">
+                        <view class="settlement-choice">
+                            <text class="settlement-choice__label">退款怎么处理</text>
+                            <view class="settlement-tabs">
+                                <view class="settlement-tab" :class="{ active: form.refund_mode === 'cash' }" @click="form.refund_mode = 'cash'">当场收款</view>
+                                <view class="settlement-tab" :class="{ active: form.refund_mode === 'receivable' }" @click="form.refund_mode = 'receivable'">记账待收</view>
+                            </view>
+                            <text class="settlement-choice__tip">{{ form.refund_mode === 'cash' ? '供货方已退款，选择实际到账账户后直接完成。' : '供货方暂未退款，生成应收交财务后续收款或折账。' }}</text>
+                        </view>
+                        <view v-if="form.refund_mode === 'cash'" class="field" @click="showAccountPicker = true">
+                            <text class="label"><text class="req">*</text>到账账户</text>
+                            <text class="value" :class="form.capital_account_id ? '' : 'placeholder'">{{ selectedAccountName || '请选择实际到账账户' }}</text>
+                            <u-icon name="arrow-right" color="#94a3b8" size="16" />
+                        </view>
+                        <view v-if="form.refund_mode === 'cash'" class="voucher-wrap">
+                            <ErpVoucherUploader v-model="form.voucher_urls" title="收款凭证（选填）" />
+                        </view>
+                    </template>
                     <view class="field field--last">
                         <text class="label">备注</text>
                         <u-input
@@ -171,18 +189,28 @@
                 :customStyle="{flex:'2'}"
             >{{ submitButtonText }}</u-button>
         </view>
+
+        <u-picker
+            :show="showAccountPicker"
+            :columns="[accountColumns]"
+            keyName="label"
+            @confirm="onAccountConfirm"
+            @cancel="showAccountPicker = false"
+            @close="showAccountPicker = false"
+        />
     </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { createErpPurchaseReturn } from '@/addon/hsx_erp/api/erp'
+import { createErpPurchaseReturn, getMobileCapitalAccounts } from '@/addon/hsx_erp/api/erp'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import request from '@/utils/request'
 import useUserStore from '@/stores/user'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 
 const purchaseOrderId = ref(0)
 const purchaseNo = ref('')
@@ -206,7 +234,31 @@ const operatorName = computed(() => {
     return user.real_name || user.name || user.username || user.nickname || '当前登录管理员'
 })
 
-const form = ref({ remark: '' })
+const form = ref({ refund_mode: 'receivable', capital_account_id: 0, voucher_urls: '', remark: '' })
+const capitalAccounts = ref<any[]>([])
+const showAccountPicker = ref(false)
+const accountColumns = computed(() => capitalAccounts.value.map(item => ({
+    ...item,
+    label: `${item.account_name}${Number(item.is_default) === 1 ? '（默认）' : ''}`,
+})))
+const selectedAccountName = computed(() => capitalAccounts.value.find(item => Number(item.id) === Number(form.value.capital_account_id))?.account_name || '')
+
+async function loadCapitalAccounts() {
+    try {
+        const res: any = await getMobileCapitalAccounts()
+        capitalAccounts.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || [])
+        const preferred = capitalAccounts.value.find(item => Number(item.is_default) === 1) || capitalAccounts.value[0]
+        if (!form.value.capital_account_id && preferred) form.value.capital_account_id = Number(preferred.id)
+    } catch {
+        capitalAccounts.value = []
+    }
+}
+
+function onAccountConfirm(event: any) {
+    const selected = event?.value?.[0]
+    if (selected?.id) form.value.capital_account_id = Number(selected.id)
+    showAccountPicker.value = false
+}
 
 function onHandoverSelectionChange(values: Array<string | number>) {
     handoverConfirmed.value = (values || []).includes('handover')
@@ -222,7 +274,7 @@ onLoad(async (query: any) => {
     targetAssetId.value = Number(query?.asset_id || 0)
     purchaseNo.value = safeRepeatedDecode(query?.purchase_no || '')
     partyName.value = safeRepeatedDecode(query?.party_name || '')
-    if (purchaseOrderId.value) await loadAssets()
+    await Promise.all([purchaseOrderId.value ? loadAssets() : Promise.resolve(), loadCapitalAccounts()])
 })
 
 async function loadAssets() {
@@ -355,7 +407,9 @@ const selectedOffsetTotal = computed(() => selectedFlows.value.reduce((sum, flow
 const selectedRefundTotal = computed(() => selectedFlows.value.reduce((sum, flow) => sum + flow.refund_amount, 0))
 const selectedRequiresRefund = computed(() => selectedRefundTotal.value > 0.0001)
 const submitButtonText = computed(() => selectedRequiresRefund.value
-    ? `确认退货，生成应收 ¥${money(selectedRefundTotal.value)}`
+    ? (form.value.refund_mode === 'cash'
+        ? `确认退货并收款 ¥${money(selectedRefundTotal.value)}`
+        : `确认退货并记账 ¥${money(selectedRefundTotal.value)}`)
     : '确认退货并冲销应付')
 const returnPolicyText = computed(() => selectedRequiresRefund.value
     ? `冲销未付款 ¥${money(selectedOffsetTotal.value)}，并生成供货方退款应收 ¥${money(selectedRefundTotal.value)}。`
@@ -363,7 +417,8 @@ const returnPolicyText = computed(() => selectedRequiresRefund.value
 const canSubmit = computed(() => selectedItems.value.length > 0 && purchaseOrderId.value > 0 && selectedItems.value.every(item => {
     const amount = Number(item.return_cost || 0)
     return amount > 0 && amount <= Number(item.payable_amount || 0) + 0.0001
-}) && handoverConfirmed.value)
+}) && handoverConfirmed.value
+    && (!selectedRequiresRefund.value || form.value.refund_mode !== 'cash' || form.value.capital_account_id > 0))
 
 function calculateReturnFlow(item: any) {
     const supplierAmount = Math.max(0, Number(item.payable_amount || 0))
@@ -390,7 +445,9 @@ async function submit() {
     try {
         const res: any = await createErpPurchaseReturn({
             purchase_order_id: purchaseOrderId.value,
-            refund_mode: selectedRequiresRefund.value ? 'cash' : 'none',
+            refund_mode: selectedRequiresRefund.value ? form.value.refund_mode : 'none',
+            capital_account_id: form.value.refund_mode === 'cash' ? form.value.capital_account_id : 0,
+            voucher_urls: form.value.refund_mode === 'cash' ? form.value.voucher_urls : '',
             remark: form.value.remark,
             items: selectedItems.value.map(i => ({
                 asset_id: i.asset_id,
@@ -407,13 +464,15 @@ async function submit() {
 function confirmSubmit(): Promise<boolean> {
     const devices = selectedItems.value.map(item => item.imei || item.asset_no || item.model || '-').join('、')
     const content = selectedRequiresRefund.value
-        ? `设备：${devices}\n确认后立即退出库存。冲销未付款 ¥${money(selectedOffsetTotal.value)}；生成退款应收 ¥${money(selectedRefundTotal.value)}。`
+        ? (form.value.refund_mode === 'cash'
+            ? `设备：${devices}\n确认后立即退出库存。退款 ¥${money(selectedRefundTotal.value)} 已当场到账，将记入“${selectedAccountName.value || '-'}”。`
+            : `设备：${devices}\n确认后立即退出库存。供货方暂欠 ¥${money(selectedRefundTotal.value)}，将生成退款应收。`)
         : `设备：${devices}\n确认后立即退出库存，对应设备应付作废，无需财务退款。`
     return new Promise(resolve => {
         uni.showModal({
             title: '确认设备已经交还供货方',
             content,
-            confirmText: selectedRequiresRefund.value ? '确认退货并生应收' : '确认退货冲销应付',
+            confirmText: selectedRequiresRefund.value ? (form.value.refund_mode === 'cash' ? '确认退货并收款' : '确认退货并记账') : '确认退货冲销应付',
             cancelText: '再检查一下',
             success: result => resolve(!!result.confirm),
             fail: () => resolve(false),
@@ -435,6 +494,16 @@ function showSubmitResult(result: any) {
         return
     }
     const refundAmount = Number(receivable?.amount || selectedRefundTotal.value)
+    if (form.value.refund_mode === 'cash') {
+        uni.showModal({
+            title: '退货及收款已完成',
+            content: `设备已退出库存，退款 ¥${money(refundAmount)} 已进入“${selectedAccountName.value || '所选账户'}”。${returnNo ? `\n退货单：${returnNo}` : ''}\n本次无需财务再次处理。`,
+            showCancel: false,
+            confirmText: '完成',
+            success: () => uni.navigateBack(),
+        })
+        return
+    }
     uni.showModal({
         title: '已退机，等待供货方退款',
         content: `设备已退出库存，已生成退款应收 ¥${money(refundAmount)}。${returnNo ? `\n退货单：${returnNo}` : ''}\n下一步：到“应收款”确认实际到账。`,
@@ -503,6 +572,13 @@ function safeRepeatedDecode(value: any) {
 .return-result-item text { color:#64748b; }
 .return-result-item strong { color:#166534; font-weight:650; text-align:right; }
 .return-result-item.warning strong { color:#c2410c; }
+.settlement-choice { margin:14rpx 0 4rpx; padding:18rpx; border:1rpx solid #dbeafe; border-radius:14rpx; background:#f8fbff; }
+.settlement-choice__label { display:block; color:#0f172a; font-size:23rpx; font-weight:650; }
+.settlement-tabs { display:grid; grid-template-columns:1fr 1fr; gap:10rpx; margin-top:14rpx; }
+.settlement-tab { padding:15rpx 12rpx; border:1rpx solid #cbd5e1; border-radius:12rpx; background:#fff; color:#64748b; font-size:22rpx; text-align:center; }
+.settlement-tab.active { border-color:#3b6ef5; background:#eff6ff; color:#2563eb; font-weight:650; }
+.settlement-choice__tip { display:block; margin-top:12rpx; color:#64748b; font-size:20rpx; line-height:1.5; }
+.voucher-wrap { padding:16rpx 0 6rpx; }
 .loading-center { display: flex; justify-content: center; padding: 48rpx; }
 .load-error-card { display:flex; flex-direction:column; align-items:center; gap:14rpx; margin:16rpx 24rpx; padding:28rpx; border:1rpx solid #fecaca; border-radius:18rpx; background:#fff7f7; color:#b91c1c; font-size:22rpx; line-height:1.5; text-align:center; }
 .empty-tip { text-align: center; color: #94a3b8; font-size: 26rpx; padding: 48rpx 0; }

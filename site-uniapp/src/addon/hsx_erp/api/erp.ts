@@ -14,6 +14,8 @@ export function getMobileErpDashboard(params: Record<string, any> = {}) {
     return request.get('erp/dashboard', params)
 }
 export function getMobileErpKpiDashboard(params: Record<string, any> = {}) { return request.get('erp/kpi/dashboard', params) }
+export function dismissMobileErpRefurbishReminder(mode: 'today' | 'forever' = 'today') { return request.post('erp/config/refurbish_reminder/dismiss', { mode }) }
+export function getMobileErpConfig() { return request.get('erp/config') }
 
 export function getMobileOperatingFinanceList(params: Record<string, any> = {}) {
     return request.get('erp/operating_finance/lists', params)
@@ -128,6 +130,9 @@ export function syncMobileStockListing(id: number) {
 // ─── 应付款 ──────────────────────────────────────────────────────────────────
 export function getMobilePayableList(params: Record<string, any>) {
     return request.get('erp/finance/payable/lists', params)
+}
+export function getMobilePayableInfo(id: number | string) {
+    return request.get(`erp/finance/payable/info/${id}`)
 }
 export function getMobilePayablePartyItems(partyId: number, params: Record<string, any>) {
     return request.get(`erp/finance/payable/party/${partyId}/items`, params)

@@ -7,6 +7,7 @@
                     <div class="mt-1 text-sm text-gray-500">以设备为主线同时查看入库来源、当前库存和销售出库，未出库设备保留明确缺省状态。</div>
                 </div>
                 <div class="flex gap-2">
+                    <el-button v-if="selectedPendingIds.length" type="warning" @click="openSendRefurbish()">批量开始整备（{{ selectedPendingIds.length }}）</el-button>
                     <el-button type="primary" plain @click="openSerialTrace">串号追踪</el-button>
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                 </div>
@@ -83,6 +84,7 @@
                         <el-option label="待整备" value="pending" />
                         <el-option label="整备中" value="processing" />
                         <el-option label="已完成" value="done" />
+                        <el-option label="整备异常" value="failed" />
                     </el-select>
                 </el-form-item>
                 <el-form-item label="去向">
@@ -125,7 +127,8 @@
                 </el-form-item>
             </el-form>
 
-            <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="stockRowClassName">
+            <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="stockRowClassName" @selection-change="onSelectionChange">
+                <el-table-column type="selection" width="48" :selectable="row => row.status === 'in_stock' && row.refurbish_status === 'pending'" />
                 <el-table-column label="设备" min-width="260">
                     <template #default="{ row }">
                         <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
@@ -226,12 +229,14 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="280" align="center">
+                <el-table-column label="操作" fixed="right" width="330" align="center">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openDetail(row)">档案</el-button>
                         <el-button v-if="row.status === 'in_stock'" type="primary" link @click="openFlow(row)">流转</el-button>
                         <el-button v-if="row.status === 'in_stock'" type="warning" link @click="openExpense(row)">成本调整</el-button>
-                        <el-button v-if="row.status === 'in_stock' && row.sale_target === 'mall'" type="success" link @click="syncListing(row)">{{ row.listing_sync?.status === 'failed' ? '重试同步' : '同步拍照定价' }}</el-button>
+                        <el-button v-if="row.status === 'in_stock' && row.refurbish_status === 'pending'" type="warning" link @click="openSendRefurbish(row)">开始整备</el-button>
+                        <el-button v-if="row.status === 'in_stock' && ['pending','processing'].includes(row.refurbish_status)" type="success" link @click="openCompleteRefurbish(row)">登记完工</el-button>
+                        <el-button v-if="row.status === 'in_stock' && row.sale_target === 'mall' && !['pending','processing','failed'].includes(row.refurbish_status)" type="success" link @click="syncListing(row)">{{ row.listing_sync?.status === 'failed' ? '重试同步' : '同步拍照定价' }}</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -257,11 +262,9 @@
                 </div>
                 <div class="mt-4 grid grid-cols-1 gap-x-4 md:grid-cols-2">
                     <el-form-item label="整备状态">
-                        <el-select v-model="flow.form.refurbish_status" class="w-full">
+                        <el-select v-model="flow.form.refurbish_status" class="w-full" :disabled="!['none','pending'].includes(flow.row?.refurbish_status)">
                             <el-option label="无需整备" value="none" />
                             <el-option label="待整备" value="pending" />
-                            <el-option label="整备中" value="processing" />
-                            <el-option label="已完成" value="done" />
                         </el-select>
                     </el-form-item>
                     <el-form-item label="销售去向">
@@ -309,14 +312,22 @@
         <el-dialog v-model="serialTrace.visible" title="串号追踪" width="920px" destroy-on-close>
             <div class="mb-4 flex gap-2"><el-input v-model.trim="serialTrace.keyword" clearable placeholder="输入 IMEI / SN / 型号 / 供货商" @keyup.enter="loadSerialTrace" /><el-button type="primary" @click="loadSerialTrace">查询</el-button></div>
             <el-alert class="mb-4" title="同一串号允许多次入库；每次作为独立记录，最新入库排在最上面。" type="info" :closable="false" show-icon />
-            <el-table :data="serialTrace.data" v-loading="serialTrace.loading" empty-text="暂无串号记录">
-                <el-table-column label="设备" min-width="220"><template #default="{ row }"><div class="font-medium">{{ row.model || '-' }}</div><div class="mt-1 text-xs text-blue-600">{{ row.serial_no || '-' }}</div><div class="mt-1 text-xs text-gray-400">{{ row.spec || '-' }}</div></template></el-table-column>
-                <el-table-column label="供货商" min-width="170"><template #default="{ row }">{{ row.party_name || '未记录' }}</template></el-table-column>
-                <el-table-column label="入库时间" width="180"><template #default="{ row }">{{ formatTime(row.stock_in_at || row.create_at) }}</template></el-table-column>
-                <el-table-column label="次数" width="100"><template #default="{ row }"><el-tag v-if="row.inbound_count > 1" type="warning">{{ row.inbound_count }} 次</el-tag><span v-else>首次</span></template></el-table-column>
-                <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusMeta(row.status).type">{{ statusMeta(row.status).label }}</el-tag></template></el-table-column>
-                <el-table-column label="操作" width="110"><template #default="{ row }"><el-button type="primary" link @click="openTraceDetail(row)">查看流转</el-button></template></el-table-column>
-            </el-table>
+            <div v-loading="serialTrace.loading" class="min-h-[120px]">
+                <div v-if="serialTrace.data.length" class="overflow-hidden rounded-lg border border-slate-200">
+                    <div class="grid grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px] gap-3 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
+                        <span>设备</span><span>供货商</span><span>入库时间</span><span>次数</span><span>状态</span><span>操作</span>
+                    </div>
+                    <div v-for="row in serialTrace.data" :key="row.id" class="grid grid-cols-[minmax(220px,2fr)_minmax(140px,1fr)_170px_90px_100px_90px] items-center gap-3 border-t border-slate-100 px-4 py-3 text-sm">
+                        <div class="min-w-0"><div class="truncate font-medium" :title="row.model">{{ row.model || '-' }}</div><div class="mt-1 text-xs text-blue-600">{{ row.serial_no || '-' }}</div><div class="mt-1 truncate text-xs text-gray-400" :title="row.spec">{{ row.spec || '-' }}</div></div>
+                        <div class="truncate" :title="row.party_name || '未记录'">{{ row.party_name || '未记录' }}</div>
+                        <div>{{ formatTime(row.stock_in_at || row.create_at) }}</div>
+                        <div><el-tag v-if="row.inbound_count > 1" type="warning">{{ row.inbound_count }} 次</el-tag><span v-else>首次</span></div>
+                        <div><el-tag :type="statusMeta(row.status).type">{{ statusMeta(row.status).label }}</el-tag></div>
+                        <div><el-button type="primary" link @click="openTraceDetail(row)">查看流转</el-button></div>
+                    </div>
+                </div>
+                <el-empty v-else-if="!serialTrace.loading" description="暂无串号记录" />
+            </div>
             <div class="mt-4 flex justify-end"><el-pagination v-model:current-page="serialTrace.page" :page-size="serialTrace.limit" layout="total,prev,pager,next" :total="serialTrace.total" @current-change="loadSerialTrace" /></div>
         </el-dialog>
 
@@ -330,26 +341,40 @@
                 <el-form-item label="成本类型" required>
                     <el-radio-group v-model="expense.form.cost_type">
                         <el-radio-button label="purchase_adjust">供应商调价</el-radio-button>
-                        <el-radio-button label="refurbish">整备费用</el-radio-button>
                         <el-radio-button label="internal_adjust">内部修正</el-radio-button>
                     </el-radio-group>
                 </el-form-item>
-                <el-form-item v-if="expense.form.cost_type === 'refurbish'" label="支出类型" required>
-                    <el-select v-model="expense.form.expense_type_key" class="w-full" placeholder="选择整备支出类型">
-                        <el-option v-for="item in refurbishExpenseTypes" :key="item.key" :label="item.name" :value="item.key" />
-                    </el-select>
-                </el-form-item>
-                <el-form-item v-if="expense.form.cost_type === 'refurbish'" label="整备服务商" required>
-                    <counterparty-select v-model="expense.form.party_id" role-type="supplier" placeholder="搜索或新建费用收款方" @resolved="onExpensePartyResolved" />
-                </el-form-item>
-                <el-form-item v-if="expense.form.cost_type === 'refurbish'" label="本次费用" required><el-input-number v-model="expense.form.amount" :min="0" :precision="2" :controls="false" class="!w-full" /></el-form-item>
-                <el-form-item v-else label="调整后成本" required><el-input-number v-model="expense.form.after_cost" :min="0.01" :precision="2" :controls="false" class="!w-full" /></el-form-item>
-                <el-form-item label="调整原因" required><el-input v-model.trim="expense.form.reason" type="textarea" :rows="3" :placeholder="expense.form.cost_type === 'refurbish' ? '例如更换屏幕、维修人工、检测费用' : '说明调价或账面修正原因'" /></el-form-item>
+                <el-form-item label="调整后成本" required><el-input-number v-model="expense.form.after_cost" :min="0.01" :precision="2" :controls="false" class="!w-full" /></el-form-item>
+                <el-form-item label="调整原因" required><el-input v-model.trim="expense.form.reason" type="textarea" :rows="3" placeholder="说明供应商调价或账面修正原因；整备费用请走整备完工" /></el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="expense.visible = false">取消</el-button>
                 <el-button type="primary" :loading="expense.saving" @click="submitExpense">确认调整</el-button>
             </template>
+        </el-dialog>
+
+        <el-dialog v-model="sendRefurbish.visible" title="开始整备" width="600px" destroy-on-close>
+            <el-alert :title="sendRefurbish.form.tracking_mode === 'external' ? '外送追踪会记录这些设备当前在哪家整备商手中。' : '简易登记不追踪在谁手中，完工时再填写每项服务商和费用。'" type="info" :closable="false" show-icon />
+            <div class="my-4 rounded-lg bg-slate-50 p-4"><strong>本次 {{ sendRefurbish.assetIds.length }} 台设备</strong><div class="mt-1 text-xs text-gray-500">一次确认即可完成整筐设备交接，设备仍归属原库存位置。</div></div>
+            <el-form label-width="100px">
+                <el-form-item label="跟踪方式"><el-radio-group v-model="sendRefurbish.form.tracking_mode"><el-radio-button label="simple">简易登记</el-radio-button><el-radio-button label="external">外送追踪</el-radio-button></el-radio-group></el-form-item>
+                <el-form-item v-if="sendRefurbish.form.tracking_mode === 'external'" label="整备商" required><counterparty-select v-model="sendRefurbish.form.provider_party_id" role-type="supplier" placeholder="选择当前接收设备的整备商" /></el-form-item>
+                <el-form-item label="交接说明"><el-input v-model.trim="sendRefurbish.form.remark" type="textarea" :rows="3" placeholder="选填，例如整筐送修、预计返回时间" /></el-form-item>
+            </el-form>
+            <template #footer><el-button @click="sendRefurbish.visible=false">取消</el-button><el-button type="warning" :loading="sendRefurbish.saving" @click="submitSendRefurbish">确认开始</el-button></template>
+        </el-dialog>
+
+        <el-dialog v-model="completeRefurbish.visible" title="登记整备结果" width="820px" destroy-on-close>
+            <div class="rounded-lg bg-slate-50 p-4"><div class="font-medium">{{ completeRefurbish.row?.model || '-' }}</div><div class="mt-1 text-xs text-gray-500">IMEI {{ completeRefurbish.row?.imei || '-' }} · 当前成本 {{ money(completeRefurbish.row?.total_cost) }}</div></div>
+            <el-form class="mt-4" label-width="100px">
+                <el-form-item label="整备结果" required><el-radio-group v-model="completeRefurbish.form.result"><el-radio-button label="success">修复成功</el-radio-button><el-radio-button label="partial">部分修复</el-radio-button><el-radio-button label="failed">修复失败</el-radio-button></el-radio-group></el-form-item>
+                <el-form-item label="实际项目"><div class="w-full space-y-2"><div v-for="(item,index) in completeRefurbish.form.refurbish_items" :key="index" class="grid grid-cols-12 gap-2"><el-input v-model.trim="item.name" class="col-span-4" placeholder="例如换屏、换电池、人工" /><el-input-number v-model="item.amount" class="!w-full col-span-3" :min="0" :precision="2" :controls="false" placeholder="金额" /><div class="col-span-4"><counterparty-select v-model="item.party_id" role-type="supplier" placeholder="服务商" /></div><el-button class="col-span-1" text type="danger" @click="removeRefurbishItem(index)">删除</el-button></div><el-button plain type="primary" @click="addRefurbishItem">+ 添加实际整备项目</el-button><div class="text-xs text-gray-400">没有产生费用可以不添加；每项可选择不同整备商，系统按设备、按服务商分别生成应付。</div></div></el-form-item>
+                <el-form-item label="完成后仓库"><el-select v-model="completeRefurbish.form.warehouse_id" class="w-full" placeholder="默认保留原仓库" clearable @change="completeRefurbish.form.location_id=0"><el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" /></el-select></el-form-item>
+                <el-form-item label="完成后库位"><el-select v-model="completeRefurbish.form.location_id" class="w-full" placeholder="默认保留原库位" clearable><el-option v-for="item in completeLocations" :key="item.id" :label="item.location_name" :value="item.id" /></el-select></el-form-item>
+                <el-form-item label="结果说明"><el-input v-model.trim="completeRefurbish.form.remark" type="textarea" :rows="3" placeholder="记录实际维修结果、未修好原因或异常去向" /></el-form-item>
+                <el-form-item label="整备凭证"><ErpFinanceVoucherUpload v-model="completeRefurbish.form.voucher_urls" /><div class="ml-3 text-xs text-gray-400">可上传维修清单、服务商账单或设备返回照片；实际付款凭证由财务付款时上传。</div></el-form-item>
+            </el-form>
+            <template #footer><el-button @click="completeRefurbish.visible=false">取消</el-button><el-button type="primary" :loading="completeRefurbish.saving" @click="submitCompleteRefurbish">确认完工</el-button></template>
         </el-dialog>
 
         <el-drawer v-model="detail.visible" title="设备档案" size="72%" destroy-on-close>
@@ -390,7 +415,9 @@
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="最近毛利">{{ Number(detail.data.profit || detail.data.last_sale_item?.profit || 0) ? money(detail.data.profit || detail.data.last_sale_item?.profit) : '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="销售单">{{ detail.data.sale_order?.sale_no || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="入库图片" :span="3"><ErpImageGallery :value="detail.data.image_urls" :size="72" :limit="9" /></el-descriptions-item>
-                        <el-descriptions-item label="备注" :span="3">{{ detail.data.quality_remark || detail.data.remark || '-' }}</el-descriptions-item>
+                        <el-descriptions-item label="备注" :span="3" width="100">
+                            {{ detail.data.quality_remark || detail.data.remark || '-' }}
+                        </el-descriptions-item>
                     </el-descriptions>
 
                     <el-collapse v-model="detailActivePanels" class="mt-6">
@@ -447,6 +474,9 @@
                             <el-table-column label="来源" min-width="160">
                                 <template #default="{ row }"><div>{{ row.source_no || '-' }}</div><div v-if="row.source_type" class="mt-1 text-xs text-gray-400">{{ row.source_type_text || sourceTypeLabel(row.source_type) }}</div></template>
                             </el-table-column>
+                            <el-table-column label="操作人" min-width="110">
+                                <template #default="{ row }">{{ row.operator_display || row.operator_name || (Number(row.operator_id || row.operator_uid || 0) > 0 ? `员工 #${Number(row.operator_id || row.operator_uid)}` : '系统自动') }}</template>
+                            </el-table-column>
                             <el-table-column label="说明" min-width="260"><template #default="{ row }">{{ accountLedgerRemark(row) }}</template></el-table-column>
                             <el-table-column label="时间" width="180"><template #default="{ row }">{{ formatTime(row.occurred_at || row.create_at) }}</template></el-table-column>
                         </el-table>
@@ -477,18 +507,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, getErpGoodsCategoryTree, getErpSerialTraceList, getErpStockInfo, getErpStockList, syncErpStockListing, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, completeErpStockRefurbish, getErpGoodsCategoryTree, getErpSerialTraceList, getErpStockInfo, getErpStockList, sendErpStockRefurbish, syncErpStockListing, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
+import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 
 const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+const route = useRoute()
 const activeTab = ref('')
 
 function onTabChange(tab: string) {
@@ -502,6 +535,9 @@ const detailActivePanels = ref<string[]>([])
 const flow = reactive({ visible: false, saving: false, row: null as any, form: defaultFlowForm() })
 const expense = reactive({ visible: false, saving: false, row: null as any, form: { cost_type: 'refurbish', expense_type_key: '', party_id: 0, party_name: '', amount: 0, after_cost: 0, reason: '' } })
 const serialTrace = reactive({ visible: false, loading: false, keyword: '', data: [] as any[], page: 1, limit: 10, total: 0 })
+const selectedRows = ref<any[]>([])
+const sendRefurbish = reactive({ visible: false, saving: false, assetIds: [] as number[], form: { tracking_mode: 'simple', provider_party_id: 0, remark: '' } })
+const completeRefurbish = reactive({ visible: false, saving: false, row: null as any, form: { result: 'success', refurbish_items: [] as any[], warehouse_id: 0, location_id: 0, voucher_urls: '', remark: '' } })
 const financeCategories = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const categoryTree = ref<any[]>([])
@@ -509,9 +545,11 @@ const activatedOnce = ref(false)
 const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
 const searchLocations = computed(() => searchWarehouse.value?.locations || [])
 const refurbishExpenseTypes = computed(() => financeCategories.value.filter((row: any) => row.direction === 'expense' && row.scope === 'refurbish' && Number(row.enabled ?? 1) === 1))
+const selectedPendingIds = computed(() => selectedRows.value.filter(row => row.status === 'in_stock' && row.refurbish_status === 'pending').map(row => Number(row.id)))
+const completeWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(completeRefurbish.form.warehouse_id)) || null)
+const completeLocations = computed(() => completeWarehouse.value?.locations || [])
 const costTypeTip = computed(() => ({
     purchase_adjust: '供应商调价会同步采购本金和供应商应付；已形成付款事实时后端会阻止直接修改。',
-    refurbish: '整备费用增加设备成本，并按整备服务商生成独立设备级应付。',
     internal_adjust: '内部修正只订正账面成本，不改变供应商往来。',
 }[expense.form.cost_type] || '请核对成本调整类型和金额'))
 const stockRoleFocus = [
@@ -524,13 +562,14 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
     acc.count += 1
     if (row.status === 'in_stock') acc.cost += Number(row.total_cost || 0)
     if (row.status === 'in_stock') acc.inStockCount += 1
-    if (['pending', 'processing'].includes(row.refurbish_status || '')) acc.needRefurbish += 1
-    if (row.status === 'in_stock' && !['pending', 'processing'].includes(row.refurbish_status || '')) acc.saleable += 1
+    if (['pending', 'processing', 'failed'].includes(row.refurbish_status || '')) acc.needRefurbish += 1
+    if (row.status === 'in_stock' && !['pending', 'processing', 'failed'].includes(row.refurbish_status || '')) acc.saleable += 1
     if (row.status === 'sold') acc.sold += 1
     return acc
 }, { count: 0, cost: 0, inStockCount: 0, needRefurbish: 0, saleable: 0, sold: 0 }))
 
 onMounted(() => {
+    if (route.query.refurbish_status) search.refurbish_status = String(route.query.refurbish_status)
     loadList()
     loadWarehouses()
     loadCategories()
@@ -589,12 +628,20 @@ async function loadList() {
     }
 }
 
-function openSerialTrace() { serialTrace.visible = true; serialTrace.page = 1; loadSerialTrace() }
+async function openSerialTrace() {
+    serialTrace.visible = true
+    serialTrace.page = 1
+    // 等弹窗和 el-table 完成挂载后再写入异步数据，避免只更新分页总数、表体不重绘。
+    await nextTick()
+    await loadSerialTrace()
+}
 async function loadSerialTrace() {
     serialTrace.loading = true
     try {
         const res: any = await getErpSerialTraceList({ keyword: serialTrace.keyword, page: serialTrace.page, limit: serialTrace.limit })
-        serialTrace.data = res?.data?.data || []
+        const rows = Array.isArray(res?.data?.data) ? res.data.data : []
+        // 保留同一响应式数组引用，兼容 destroy-on-close 弹窗的重新挂载。
+        serialTrace.data.splice(0, serialTrace.data.length, ...rows)
         serialTrace.total = Number(res?.data?.total || 0)
     } finally { serialTrace.loading = false }
 }
@@ -617,7 +664,7 @@ async function loadFinanceCategories() {
 
 function openExpense(row: any) {
     expense.row = row
-    expense.form = { cost_type: 'refurbish', expense_type_key: refurbishExpenseTypes.value[0]?.key || '', party_id: 0, party_name: '', amount: 0, after_cost: Number(row.total_cost || 0), reason: '' }
+    expense.form = { cost_type: 'purchase_adjust', expense_type_key: '', party_id: 0, party_name: '', amount: 0, after_cost: Number(row.total_cost || 0), reason: '' }
     expense.visible = true
 }
 
@@ -630,18 +677,12 @@ async function submitExpense() {
     if (!expense.row?.id) return
     const costType = expense.form.cost_type
     if (!expense.form.reason) return ElMessage.warning('请填写调整原因')
-    if (costType === 'refurbish' && !expense.form.expense_type_key) return ElMessage.warning('请选择支出类型')
-    if (costType === 'refurbish' && !expense.form.party_id) return ElMessage.warning('请选择整备服务商')
-    if (costType === 'refurbish' && Number(expense.form.amount || 0) <= 0) return ElMessage.warning('请输入本次整备费用')
-    if (costType !== 'refurbish' && Number(expense.form.after_cost) <= 0) return ElMessage.warning('调整后成本必须大于 0')
-    const category = refurbishExpenseTypes.value.find((row: any) => row.key === expense.form.expense_type_key)
-    const afterCost = costType === 'refurbish'
-        ? Number(expense.row.total_cost || 0) + Number(expense.form.amount || 0)
-        : Number(expense.form.after_cost || 0)
-    const typeNames: Record<string, string> = { purchase_adjust: '供应商调价', refurbish: category?.name || '整备费用', internal_adjust: '内部成本修正' }
+    if (Number(expense.form.after_cost) <= 0) return ElMessage.warning('调整后成本必须大于 0')
+    const afterCost = Number(expense.form.after_cost || 0)
+    const typeNames: Record<string, string> = { purchase_adjust: '供应商调价', internal_adjust: '内部成本修正' }
     const typeName = typeNames[costType] || '成本调整'
     const confirmed = await ElMessageBox.confirm(
-        `确认执行「${typeName}」？设备成本将由 ${money(expense.row.total_cost)} 调整为 ${money(afterCost)}。${costType === 'refurbish' ? `并生成应付给「${expense.form.party_name || '所选服务商'}」的账款。` : ''}`,
+        `确认执行「${typeName}」？设备成本将由 ${money(expense.row.total_cost)} 调整为 ${money(afterCost)}。整备费用必须在整备完工时按实际项目登记。`,
         '确认成本调整',
         { type: 'warning', confirmButtonText: '确认调整', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
@@ -649,15 +690,61 @@ async function submitExpense() {
     expense.saving = true
     try {
         await adjustErpStockCost(expense.row.id, {
-            cost: afterCost, cost_type: costType, expense_type_key: costType === 'refurbish' ? expense.form.expense_type_key : '',
+            cost: afterCost, cost_type: costType, expense_type_key: '',
             party_id: expense.form.party_id, party_name: expense.form.party_name, reason: expense.form.reason
         })
-        ElMessage.success(costType === 'refurbish' ? '整备费用已计入成本，应付款已生成' : '设备成本已调整')
+        ElMessage.success('设备成本已调整')
         expense.visible = false
         await loadList()
     } finally {
         expense.saving = false
     }
+}
+
+function onSelectionChange(rows: any[]) { selectedRows.value = rows }
+
+function openSendRefurbish(row?: any) {
+    const ids = row?.id ? [Number(row.id)] : selectedPendingIds.value
+    if (!ids.length) return ElMessage.warning('请先选择待整备设备')
+    sendRefurbish.assetIds = ids
+    sendRefurbish.form = { tracking_mode: 'simple', provider_party_id: 0, remark: '' }
+    sendRefurbish.visible = true
+}
+
+async function submitSendRefurbish() {
+    if (sendRefurbish.form.tracking_mode === 'external' && !sendRefurbish.form.provider_party_id) return ElMessage.warning('请选择整备商')
+    const confirmed = await ElMessageBox.confirm(`确认开始处理这 ${sendRefurbish.assetIds.length} 台设备？确认后设备进入“整备中”，暂不可销售。`, '确认开始整备', { type: 'warning' }).then(() => true).catch(() => false)
+    if (!confirmed) return
+    sendRefurbish.saving = true
+    try {
+        await sendErpStockRefurbish({ asset_ids: sendRefurbish.assetIds, ...sendRefurbish.form })
+        ElMessage.success('设备已进入整备中')
+        sendRefurbish.visible = false
+        await loadList()
+    } finally { sendRefurbish.saving = false }
+}
+
+function openCompleteRefurbish(row: any) {
+    completeRefurbish.row = row
+    completeRefurbish.form = { result: 'success', refurbish_items: [], warehouse_id: Number(row.warehouse_id || 0), location_id: Number(row.location_id || 0), voucher_urls: '', remark: '' }
+    completeRefurbish.visible = true
+}
+function addRefurbishItem() { completeRefurbish.form.refurbish_items.push({ name: '', amount: 0, party_id: 0 }) }
+function removeRefurbishItem(index: number) { completeRefurbish.form.refurbish_items.splice(index, 1) }
+async function submitCompleteRefurbish() {
+    const invalid = completeRefurbish.form.refurbish_items.some(item => !String(item.name || '').trim() || Number(item.amount || 0) <= 0 || !Number(item.party_id || 0))
+    if (invalid) return ElMessage.warning('请完整填写每一项名称、金额和服务商')
+    if (completeRefurbish.form.result !== 'success' && !completeRefurbish.form.remark) return ElMessage.warning('部分修复或失败时请填写原因')
+    const amount = completeRefurbish.form.refurbish_items.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    const confirmed = await ElMessageBox.confirm(`确认登记整备结果？本次新增设备成本 ${money(amount)}，有费用的项目会分别生成服务商应付；确认后不能普通撤销。`, '确认整备完工', { type: 'warning', confirmButtonText: '确认完工' }).then(() => true).catch(() => false)
+    if (!confirmed) return
+    completeRefurbish.saving = true
+    try {
+        await completeErpStockRefurbish(completeRefurbish.row.id, completeRefurbish.form)
+        ElMessage.success('整备结果已登记，成本与应付已同步')
+        completeRefurbish.visible = false
+        await loadList()
+    } finally { completeRefurbish.saving = false }
 }
 
 function buildSearchParams() {
@@ -730,7 +817,7 @@ async function submitFlow() {
     if (!confirmed) return
     flow.saving = true
     try {
-        await updateErpStockFlow(flow.row.id, flow.form)
+        await updateErpStockFlow(flow.row.id, { ...flow.form, refurbish_status: ['none', 'pending'].includes(flow.row?.refurbish_status) ? flow.form.refurbish_status : '' })
         ElMessage.success('设备流转已更新')
         flow.visible = false
         await loadList()
@@ -840,7 +927,8 @@ function refurbishMeta(status: string) {
         none: { label: '无需整备', type: 'info' },
         pending: { label: '待整备', type: 'warning' },
         processing: { label: '整备中', type: 'danger' },
-        done: { label: '整备完成', type: 'success' }
+        done: { label: '整备完成', type: 'success' },
+        failed: { label: '整备异常', type: 'danger' }
     }
     return map[status || 'none'] || { label: status || '-', type: 'info' }
 }

@@ -60,7 +60,7 @@
             :model-value="mode === 'create'"
             title="新建采购退货单"
             subtitle="核对设备已经实际交还供货方，再确认库存与账务处理。"
-            confirm-text="确认退货"
+            :confirm-text="createConfirmText"
             tip="确认后设备立即退出库存；请先核对交接事实和单台结算。"
             :loading="submitting"
             :disabled="!canSubmit"
@@ -189,6 +189,23 @@
                                 </div>
                             </section>
 
+                            <section v-if="selectedRequiresRefund" class="side-form-card">
+                                <label class="side-form-label">退款怎么处理</label>
+                                <el-radio-group v-model="form.refund_mode" class="w-full">
+                                    <el-radio-button value="cash">当场收款</el-radio-button>
+                                    <el-radio-button value="receivable">记账待收</el-radio-button>
+                                </el-radio-group>
+                                <div class="mt-2 text-xs leading-5 text-gray-500">
+                                    {{ form.refund_mode === 'cash' ? '供货方已经退款：选择实际到账账户，本次直接完成，不进入财务待办。' : '供货方暂未退款：生成设备级应收，由财务后续收款或折账。' }}
+                                </div>
+                                <el-select v-if="form.refund_mode === 'cash'" v-model="form.capital_account_id" class="mt-3 w-full" placeholder="选择实际到账账户">
+                                    <el-option v-for="account in capitalAccounts" :key="account.id" :label="account.account_name" :value="account.id" />
+                                </el-select>
+                                <div v-if="form.refund_mode === 'cash'" class="mt-3">
+                                    <ErpFinanceVoucherUpload v-model="form.voucher_urls" />
+                                </div>
+                            </section>
+
                             <section class="side-form-card">
                                 <label class="side-form-label">整单备注</label>
                                 <el-input v-model="form.remark" type="textarea" :rows="3" placeholder="选填，记录退货背景或特殊说明" />
@@ -304,6 +321,8 @@ import { useRoute, useRouter } from 'vue-router'
 import useUserStore from '@/stores/modules/user'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpReturnDialog from '@/addon/hsx_erp/components/ErpReturnDialog.vue'
+import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 
 // ── 状态 ──────────────────────────────────────────────────────────────────────
@@ -331,6 +350,8 @@ const form = reactive({
     party_id: null as number | null,
     purchase_order_id: null as number | null,
     refund_mode: 'cash',
+    capital_account_id: null as number | null,
+    voucher_urls: '',
     remark: '',
     items: [] as any[],
 })
@@ -342,6 +363,7 @@ const assetsLoading = ref(false)
 const selectedAssets = ref<any[]>([])
 const selectedPurchaseInfo = ref<any>(null)
 const handoverConfirmed = ref(false)
+const capitalAccounts = ref<any[]>([])
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -356,6 +378,9 @@ const selectedFlows = computed(() => selectedAssets.value.map(item => calculateR
 const selectedOffsetTotal = computed(() => selectedFlows.value.reduce((sum, flow) => sum + flow.offset_amount, 0))
 const selectedRefundTotal = computed(() => selectedFlows.value.reduce((sum, flow) => sum + flow.refund_amount, 0))
 const selectedRequiresRefund = computed(() => selectedRefundTotal.value > 0.0001)
+const createConfirmText = computed(() => !selectedRequiresRefund.value
+    ? '确认退货'
+    : (form.refund_mode === 'cash' ? '确认退货并收款' : '确认退货并记账'))
 const decisionTitle = computed(() => {
     if (!selectedAssets.value.length) return '请先选择设备'
     return selectedRequiresRefund.value ? '已退机 · 等待财务收款' : '已退机 · 无需财务处理'
@@ -366,6 +391,7 @@ const returnPolicyText = computed(() => {
     return `冲销未付款 ¥${selectedOffsetTotal.value.toFixed(2)}，并生成供货方退款应收 ¥${selectedRefundTotal.value.toFixed(2)}。`
 })
 const canSubmit = computed(() => form.items.length > 0 && !!form.party_id && handoverConfirmed.value
+    && (!selectedRequiresRefund.value || form.refund_mode !== 'cash' || Number(form.capital_account_id || 0) > 0)
     && selectedAssets.value.every((item: any) => {
         if (Number(item.paid_amount || 0) <= 0.0001) return true
         const amount = Number(item._return_cost || 0)
@@ -435,7 +461,9 @@ function openCreate() {
     selected.value = null
     form.party_id = null
     form.purchase_order_id = null
-    form.refund_mode = 'none'
+    form.refund_mode = 'receivable'
+    form.capital_account_id = null
+    form.voucher_urls = ''
     form.remark = ''
     form.items = []
     availableAssets.value = []
@@ -444,6 +472,15 @@ function openCreate() {
     selectedAssets.value = []
     selectedPurchaseInfo.value = null
     handoverConfirmed.value = false
+    loadCapitalAccounts()
+}
+
+async function loadCapitalAccounts() {
+    if (capitalAccounts.value.length) return
+    const res: any = await getCapitalAccounts()
+    capitalAccounts.value = Array.isArray(res?.data) ? res.data : (res?.data?.list || [])
+    const preferred = capitalAccounts.value.find((item: any) => Number(item.is_default) === 1) || capitalAccounts.value[0]
+    if (!form.capital_account_id && preferred) form.capital_account_id = Number(preferred.id)
 }
 
 function resetCreate() {
@@ -627,8 +664,13 @@ async function submitCreate() {
         return
     }
     const imeis = selectedAssets.value.map((item: any) => item.imei || item.asset_no || item.model || '-').join('、')
+    const settlementText = !selectedRequiresRefund.value
+        ? '本次仅冲销未付款应付，不产生退款应收。'
+        : (form.refund_mode === 'cash'
+            ? `供货方退款 ¥${selectedRefundTotal.value.toFixed(2)} 已当场到账，将记入所选资金账户。`
+            : `供货方暂欠 ¥${selectedRefundTotal.value.toFixed(2)}，将生成退款应收交财务跟进。`)
     const confirmed = await ElMessageBox.confirm(
-        `确认退货 ${selectedAssets.value.length} 台（${imeis}）。确认后设备立即退出库存；冲销应付 ¥${selectedOffsetTotal.value.toFixed(2)}，生成退款应收 ¥${selectedRefundTotal.value.toFixed(2)}。`,
+        `确认退货 ${selectedAssets.value.length} 台（${imeis}）。确认后设备立即退出库存；冲销应付 ¥${selectedOffsetTotal.value.toFixed(2)}。${settlementText}`,
         '确认设备已经交还供货方',
         { confirmButtonText: '确认退货', cancelButtonText: '再检查一下', type: 'warning' }
     ).then(() => true).catch(() => false)
@@ -637,14 +679,16 @@ async function submitCreate() {
     try {
         const res: any = await createErpPurchaseReturn({
             purchase_order_id: 0,
-            refund_mode: selectedRequiresRefund.value ? 'cash' : 'none',
+            refund_mode: selectedRequiresRefund.value ? form.refund_mode : 'none',
+            capital_account_id: form.refund_mode === 'cash' ? Number(form.capital_account_id || 0) : 0,
+            voucher_urls: form.refund_mode === 'cash' ? form.voucher_urls : '',
             remark: form.remark,
             items: form.items,
         })
         const result = res?.data || {}
         mode.value = 'idle'
         loadList()
-        if (selectedRequiresRefund.value) {
+        if (selectedRequiresRefund.value && form.refund_mode === 'receivable') {
             const refundAmount = Number(result?.refund_receivable?.amount || selectedRefundTotal.value).toFixed(2)
             const goFinance = await ElMessageBox.confirm(
                 `设备已退出库存，退款应收 ¥${refundAmount} 已生成。下一步由财务到「应收款」确认供货方实际退款。`,
@@ -656,7 +700,10 @@ async function submitCreate() {
                 router.push({ path: '/site/hsx_erp/receivable', query: returnNos.length === 1 ? { source_no: returnNos[0] } : {} })
             }
         } else {
-            await ElMessageBox.alert('设备已退出库存，对应设备应付已作废，本次无需财务退款处理。', '退货已完成', {
+            const message = selectedRequiresRefund.value
+                ? `设备已退出库存，退款 ¥${selectedRefundTotal.value.toFixed(2)} 已记入所选账户，本次无需财务再次处理。`
+                : '设备已退出库存，对应设备应付已作废，本次无需财务退款处理。'
+            await ElMessageBox.alert(message, '退货已完成', {
                 confirmButtonText: '知道了', type: 'success'
             })
         }
@@ -708,14 +755,15 @@ function statusTagType(status: string) {
     return map[status] || ''
 }
 function refundModeLabel(mode: string) {
-    const map: Record<string, string> = { none: '未付款，已冲销应付', cash: '退款待确认', offset: '往来折抵' }
+    const map: Record<string, string> = { none: '未付款，已冲销应付', cash: '当场收款', receivable: '记账待收', offset: '记账待收（历史）' }
     return map[mode] || mode
 }
 function purchaseRefundModeTip(mode: string) {
     const map: Record<string, string> = {
         none: '本次退货未形成需要追回的付款，系统仅冲销原应付，无需财务跟进。',
-        cash: '已付款部分已生成供货方退款应收，财务需在「应收款」确认实际到账。',
-        offset: '退款通过往来折抵处理，财务需核对对应的折抵流水。',
+        cash: '供货方退款已当场进入所选资金账户，系统已形成实际收款流水，无需财务再次确认。',
+        receivable: '设备已经退给供货方，退款暂未到账；系统已生成应收，由财务后续收款或折账。',
+        offset: '历史单按记账待收处理，由财务核对后续结算。',
     }
     return map[mode] || '请根据本单账务处理结果完成后续核对。'
 }

@@ -21,13 +21,17 @@ use think\facade\Db;
  * 采购退货服务
  *
  * 设计原则：
- *  - create()：业务人员确认退货，立即回退资产、处理应付/应收三分支。
+ *  - create()：业务人员确认退货，立即回退资产并一次选择现场收款或记账待收。
  *  - confirm()：保留兼容旧待确认退货单，新流程不再依赖二次确认。
- *  - 三分支：① 未付款→冲销应付；② 已付款→生成应收退款；③ 部分付款→混合。
+ *  - 两种结算：① 现场收款→选择账户并立即记资金流水；② 记账待收→生成应收交财务。
+ *  - 未付款部分始终自动冲销应付，不要求业务人员额外操作。
  *  - 错账不涂改：已形成资金事实的部分通过应收退款走逆向流水。
  */
 class ErpPurchaseReturnService extends BaseAdminService
 {
+    /** @var int[] 当前请求内待事务提交后派发的采购退货事件 */
+    private array $returnOutboxIds = [];
+
     /** 业务端按供货方选设备，系统按原采购单自动拆单。 */
     public function createBatch(array $data): array
     {
@@ -81,8 +85,9 @@ class ErpPurchaseReturnService extends BaseAdminService
         }
 
         $returnId = 0;
+        $financeService = null;
         try {
-            Db::transaction(function () use ($data, $purchaseOrderId, $items, &$returnId) {
+            Db::transaction(function () use ($data, $purchaseOrderId, $items, &$returnId, &$financeService) {
             $now  = time();
             $order = $this->findPurchaseOrder($purchaseOrderId);
 
@@ -135,10 +140,17 @@ class ErpPurchaseReturnService extends BaseAdminService
             }
 
             $returnNo = ErpLedgerService::makeNo('PR');
-            $requestedRefundMode = trim((string)($data['refund_mode'] ?? 'cash'));
-            $refundMode = $requiresRefund && in_array($requestedRefundMode, ['cash', 'offset'], true)
-                ? $requestedRefundMode
-                : ($requiresRefund ? 'cash' : 'none');
+            $requestedRefundMode = trim((string)($data['refund_mode'] ?? 'receivable'));
+            // 历史 offset 入口不再由业务人员决定折账，统一转为应收后交财务处理。
+            if ($requestedRefundMode === 'offset') {
+                $requestedRefundMode = 'receivable';
+            }
+            $refundMode = $requiresRefund
+                ? ($requestedRefundMode === 'cash' ? 'cash' : 'receivable')
+                : 'none';
+            if ($refundMode === 'cash' && (int)($data['capital_account_id'] ?? 0) <= 0) {
+                throw new CommonException('当场收款必须选择实际到账账户');
+            }
             $return   = ErpPurchaseReturnOrder::create([
                 'site_id'            => $this->site_id,
                 'request_id'         => $data['request_id'],
@@ -186,6 +198,36 @@ class ErpPurchaseReturnService extends BaseAdminService
             }
 
             $this->completeReturn($return, ['remark' => trim((string)($data['remark'] ?? ''))], $now);
+
+            // 当场收款仍先建立采购退货应收事实，再在同一事务内立即核销，
+            // 从而保留“为什么收、收到了哪个账户、关联哪些设备”的完整审计链路。
+            if ($refundMode === 'cash') {
+                $receivable = ErpReceivable::where([
+                    ['site_id', '=', $this->site_id],
+                    ['source_type', '=', 'purchase_return'],
+                    ['source_id', '=', $returnId],
+                ])->lock(true)->findOrEmpty();
+                if ($receivable->isEmpty()) {
+                    throw new CommonException('采购退货退款应收未生成，不能确认现场收款');
+                }
+                $receiptAmount = round((float)$receivable->amount, 2);
+                $financeService = new ErpFinanceService();
+                $financeService->confirmReceivableItemsInTransaction(
+                    (int)$return->party_id,
+                    [['receivable_id' => (int)$receivable->id, 'amount' => $receiptAmount]],
+                    [
+                        'request_id' => ErpIdempotency::child((string)($data['request_id'] ?? ''), 'cash-receipt')
+                            ?: 'purchase-return-cash:' . (string)$return->return_no,
+                        'capital_account_id' => (int)($data['capital_account_id'] ?? 0),
+                        'voucher_urls' => $data['voucher_urls'] ?? '',
+                        'remark' => trim((string)($data['remark'] ?? '')) ?: '采购退货现场收款',
+                    ]
+                );
+                $return->save([
+                    'settled_amount' => $receiptAmount,
+                    'update_at' => $now,
+                ]);
+            }
             });
         } catch (\Throwable $e) {
             $existingId = $this->existingReturnId($requestId);
@@ -195,6 +237,10 @@ class ErpPurchaseReturnService extends BaseAdminService
             throw $e;
         }
 
+        $this->flushReturnDomainEvents();
+        if ($financeService instanceof ErpFinanceService) {
+            $financeService->flushPendingSettlementDomainEvents();
+        }
         return $returnId;
     }
 
@@ -212,6 +258,8 @@ class ErpPurchaseReturnService extends BaseAdminService
             }
             $this->completeReturn($return, $data, $now);
         });
+
+        $this->flushReturnDomainEvents();
 
         return true;
     }
@@ -239,6 +287,7 @@ class ErpPurchaseReturnService extends BaseAdminService
 
         $ledger = new ErpLedgerService();
         $receivableAmount = 0.0;
+        $returnedAssets = [];
 
         foreach ($items as $item) {
             $asset = ErpAsset::where([
@@ -328,6 +377,20 @@ class ErpPurchaseReturnService extends BaseAdminService
                 'source_no'   => (string)$return->return_no,
                 'remark'      => $remark,
             ]);
+            $sourceSnapshot = json_decode((string)($asset->spec_json ?? ''), true);
+            if (!is_array($sourceSnapshot)) $sourceSnapshot = [];
+            if ((string)($sourceSnapshot['source_plugin'] ?? '') === 'hsx_recycle'
+                && (int)($sourceSnapshot['source_device_id'] ?? 0) > 0) {
+                $returnedAssets[] = [
+                    'asset_id' => (int)$asset->id,
+                    'asset_no' => (string)$asset->asset_no,
+                    'imei' => (string)$asset->imei,
+                    'source_plugin' => 'hsx_recycle',
+                    'source_device_id' => (int)$sourceSnapshot['source_device_id'],
+                    'source_order_no' => (string)($sourceSnapshot['source_order_no'] ?? ''),
+                    'return_amount' => round((float)$item->return_cost, 2),
+                ];
+            }
             $returnLoss = max(0, round($payableAmount - (float)$item->return_cost, 2));
             if ($returnLoss > 0.0001) {
                 $ledger->account([
@@ -358,6 +421,39 @@ class ErpPurchaseReturnService extends BaseAdminService
             'settled_amount' => 0,
             'update_at'      => $now,
         ]);
+        if ($returnedAssets !== []) {
+            $queued = (new ErpIntegrationService())->enqueueDomainEvent(
+                'erp.purchase_return.completed.v1',
+                'purchase_return',
+                $returnId,
+                [
+                    'return_id' => $returnId,
+                    'return_no' => (string)$return->return_no,
+                    'purchase_order_id' => (int)$return->purchase_order_id,
+                    'purchase_no' => (string)$return->purchase_no,
+                    'party_id' => (int)$return->party_id,
+                    'party_name' => (string)$return->party_name,
+                    'refund_mode' => (string)$return->refund_mode,
+                    'refund_amount' => $receivableAmount,
+                    'assets' => $returnedAssets,
+                    'occurred_at' => $now,
+                ]
+            );
+            $this->returnOutboxIds[] = (int)$queued['id'];
+        }
+    }
+
+    /** 只在外层事务提交后派发；批量退货的外层事务由 outbox 重试任务兜底。 */
+    private function flushReturnDomainEvents(): void
+    {
+        try {
+            if (Db::connect()->getPdo()->inTransaction()) return;
+        } catch (\Throwable $e) {
+        }
+        $ids = array_values(array_unique(array_filter($this->returnOutboxIds)));
+        $this->returnOutboxIds = [];
+        $integration = new ErpIntegrationService();
+        foreach ($ids as $id) $integration->dispatchDomainEvent($id);
     }
 
     /**
@@ -461,11 +557,11 @@ class ErpPurchaseReturnService extends BaseAdminService
             $amount = round((float)($receivable['amount'] ?? 0), 2);
             $settled = round((float)($receivable['settled_amount'] ?? 0), 2);
             if ($amount > 0 && $settled + 0.0001 >= $amount) {
-                $process = ['value' => 'refunded', 'label' => '已退款', 'type' => 'success'];
+                $process = ['value' => 'refunded', 'label' => '退款已到账', 'type' => 'success'];
             } elseif ($settled > 0.0001) {
                 $process = ['value' => 'partial_refund', 'label' => '部分退款', 'type' => 'warning'];
             } else {
-                $process = ['value' => 'awaiting_refund', 'label' => '待退款', 'type' => 'warning'];
+                $process = ['value' => 'awaiting_refund', 'label' => '记账待收', 'type' => 'warning'];
             }
         }
         $return['process_status'] = $process['value'];

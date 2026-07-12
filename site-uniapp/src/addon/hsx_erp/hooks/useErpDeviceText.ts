@@ -10,6 +10,6 @@ export function erpSpecLine(value: any, fallback = '无规格'): string {
 
 export function erpDeviceIdentityLine(row: any, fallback = '未填写设备信息'): string {
     const spec = erpSpecLine(row?.spec, '')
-    const identity = row?.imei ? `IMEI ${row.imei}` : (row?.sn ? `SN ${row.sn}` : '')
-    return [spec, identity].filter(Boolean).join(' · ') || fallback
+    // const identity = row?.imei ? `IMEI ${row.imei}` : (row?.sn ? `SN ${row.sn}` : '')
+    return [spec ].filter(Boolean).join(' · ') || fallback
 }

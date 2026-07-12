@@ -31,7 +31,7 @@ class ErpSaleService extends BaseAdminService
                 ['a.site_id', '=', $this->site_id],
                 ['a.status', '=', ErpDict::ASSET_IN_STOCK],
             ])
-            ->whereNotIn('a.refurbish_status', ['pending', 'processing'])
+            ->whereNotIn('a.refurbish_status', ['pending', 'processing', 'failed'])
             ->where('w.allow_direct_sale', '=', 1);
         if (!empty($where['keyword'])) {
             $kw = trim((string)$where['keyword']);
@@ -288,7 +288,7 @@ class ErpSaleService extends BaseAdminService
                     ['site_id', '=', $this->site_id],
                     ['id', '=', $assetId],
                     ['status', '=', ErpDict::ASSET_IN_STOCK],
-                ])->whereNotIn('refurbish_status', ['pending', 'processing'])->lock(true)->findOrEmpty();
+                ])->whereNotIn('refurbish_status', ['pending', 'processing', 'failed'])->lock(true)->findOrEmpty();
                 if ($asset->isEmpty()) {
                     throw new CommonException('库存机器不存在或不可销售');
                 }

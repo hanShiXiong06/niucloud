@@ -1,7 +1,9 @@
 <template>
     <view class="erp-page">
         <ErpListHeader v-model="keyword" v-model:active-tab="direction" title="经营收支" placeholder="往来主体 / 类型 / 单号" :tabs="tabs" :show-scan="false" @search="reload" @tab-change="changeDirection">
-            <template #right><u-button type="primary" size="small" text="记一笔" @click="openCreate" /></template>
+            <template #right>
+               <view> <u-button type="primary" size="small" text="记一笔" @click="openCreate" /></view>
+            </template>
         </ErpListHeader>
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true" :default-page-size="15" :style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无经营收支" /></template>

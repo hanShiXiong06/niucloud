@@ -8,6 +8,10 @@ export function saveErpConfig(data: Record<string, any>) {
     return request.post('erp/config', data)
 }
 
+export function dismissErpRefurbishReminder(mode: 'today' | 'forever' = 'today') {
+    return request.post('erp/config/refurbish_reminder/dismiss', { mode })
+}
+
 export function getErpSaleChannelOptions() {
     return request.get('erp/config/sale_channel_options')
 }

@@ -21,6 +21,20 @@
                 </div>
             </div>
 
+            <el-alert v-if="refurbishReminder.visible" class="mt-4" type="warning" show-icon :closable="false">
+                <template #title>今日新增 {{ refurbishReminder.today_count }} 台待整备设备，已达到提醒阈值</template>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <span>当前待整备 {{ refurbishReminder.pending_count }} 台、整备中 {{ refurbishReminder.processing_count }} 台。请及时完成分配，避免设备积压影响动销。</span>
+                    <div class="flex gap-2">
+                        <el-button size="small" type="warning" @click="goRefurbishQueue">查看整备设备</el-button>
+                        <el-dropdown @command="dismissRefurbish">
+                            <el-button size="small">关闭提醒</el-button>
+                            <template #dropdown><el-dropdown-menu><el-dropdown-item command="today">今天不再提醒</el-dropdown-item><el-dropdown-item command="forever" divided>永久关闭此提醒</el-dropdown-item></el-dropdown-menu></template>
+                        </el-dropdown>
+                    </div>
+                </div>
+            </el-alert>
+
             <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div v-for="item in summaryCards" :key="item.label" class="summary-tile">
                     <div class="summary-label">{{ item.label }}</div>
@@ -127,6 +141,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getErpDashboard, getErpKpiDashboard, getErpKpiRules, saveErpKpiRules } from '@/addon/hsx_erp/api/erp'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
+import { dismissErpRefurbishReminder } from '@/addon/hsx_erp/api/config'
 
 const loading = ref(false)
 const period = ref('month')
@@ -137,10 +152,12 @@ const kpi = ref<any>({})
 const kpiConfigVisible = ref(false)
 const kpiSaving = ref(false)
 const kpiRules = ref<any[]>([])
+let dashboardLoadSequence = 0
 
 const summary = computed(() => data.value?.summary || {})
 const todo = computed(() => data.value?.todo || {})
 const recent = computed(() => data.value?.recent || {})
+const refurbishReminder = computed(() => data.value?.reminders?.refurbish || {})
 const periodLabel = computed(() => ({ today: '今日', yesterday: '昨天', last7: '近7天', month: '本月', last_month: '上月', custom: '自定义', all: '全部' } as Record<string, string>)[period.value] || '本期')
 const operationChartRef = ref<HTMLElement>()
 const structureChartRef = ref<HTMLElement>()
@@ -163,6 +180,7 @@ const summaryCards = computed(() => [
 useErpPageRefresh(loadDashboard)
 
 async function loadDashboard() {
+    const sequence = ++dashboardLoadSequence
     loading.value = true
     try {
         const params: Record<string, any> = { period: period.value }
@@ -172,14 +190,32 @@ async function loadDashboard() {
             params.start_at = Math.floor(start.getTime() / 1000)
             params.end_at = Math.floor(end.getTime() / 1000)
         }
-        const [res, kpiRes]: any[] = await Promise.all([getErpDashboard(params), getErpKpiDashboard(params)])
-        data.value = res?.data || {}
-        kpi.value = kpiRes?.data || {}
+        const [dashboardResult, kpiResult] = await Promise.allSettled([getErpDashboard(params), getErpKpiDashboard(params)])
+        if (sequence !== dashboardLoadSequence) return
+        if (dashboardResult.status === 'rejected') throw dashboardResult.reason
+        data.value = (dashboardResult.value as any)?.data || {}
+        // KPI 是扩展模块。没有绩效权限或配置异常时，不得拖垮老板工作台核心经营数据。
+        kpi.value = kpiResult.status === 'fulfilled' ? ((kpiResult.value as any)?.data || {}) : {}
         await nextTick()
         renderCharts()
+    } catch (error: any) {
+        if (sequence !== dashboardLoadSequence) return
+        data.value = {}
+        kpi.value = {}
+        ElMessage.error(error?.message || error?.msg || '经营数据加载失败，请稍后重试')
     } finally {
-        loading.value = false
+        if (sequence === dashboardLoadSequence) loading.value = false
     }
+}
+
+function goRefurbishQueue() {
+    router.push({ path: '/site/hsx_erp/stock', query: { refurbish_status: 'pending' } })
+}
+
+async function dismissRefurbish(mode: 'today' | 'forever') {
+    await dismissErpRefurbishReminder(mode)
+    ElMessage.success(mode === 'forever' ? '已永久关闭整备积压提醒，可在业务规则中重新开启' : '今天不再提醒')
+    await loadDashboard()
 }
 
 async function openKpiConfig() {

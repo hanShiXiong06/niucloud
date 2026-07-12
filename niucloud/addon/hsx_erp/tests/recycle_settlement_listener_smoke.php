@@ -68,4 +68,13 @@ $finance = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/ErpF
 $assert(str_contains($finance, "'erp.settlement.completed.v1'") && str_contains($finance, "'remaining_amount'"), 'ERP结算事件必须包含结算结果和剩余金额');
 $assert(str_contains($finance, "'source_device_id'") && str_contains($finance, "'source_plugin'"), 'ERP结算事件必须带来源设备行快照供插件回写');
 
+$returnService = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/ErpPurchaseReturnService.php');
+$assetListener = (string)file_get_contents(dirname(__DIR__, 2) . '/hsx_recycle/app/listener/downstream/ErpAssetDownstreamListener.php');
+$settlementListener = (string)file_get_contents(dirname(__DIR__, 2) . '/hsx_recycle/app/listener/downstream/ErpSettlementCompletedListener.php');
+$downstreamDict = (string)file_get_contents(dirname(__DIR__, 2) . '/hsx_recycle/app/dict/order/RecycleDownstreamDict.php');
+$assert(str_contains($returnService, "'erp.purchase_return.completed.v1'") && str_contains($returnService, "'source_device_id'"), 'ERP采购退货必须通过outbox回显到来源回收设备');
+$assert(str_contains($assetListener, 'mirrorPurchaseReturn'), 'ERP采购退货必须同步回收设备业务状态');
+$assert(str_contains($settlementListener, "'receivable'") && str_contains($settlementListener, 'STAGE_PURCHASE_RETURN_SETTLED'), '采购退货应收到账后必须更新回收端只读镜像');
+$assert(str_contains($downstreamDict, 'ERP采退·已退回') && str_contains($downstreamDict, 'ERP采退·已到账'), '回收端必须区分设备已退回和退款已到账');
+
 echo "[PASS] ERP recycle settlement callback smoke test\n";

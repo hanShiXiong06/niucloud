@@ -749,7 +749,7 @@ function sourceTypeText(type: string) {
 function purchaseRefundModeLabel(mode: string) {
     const map: Record<string, string> = {
         none: '未付款，冲销原应付',
-        cash: '供货商退款待确认',
+        cash: '当场收款已到账',
         receivable: '形成退款应收',
         offset: '往来折抵',
     }

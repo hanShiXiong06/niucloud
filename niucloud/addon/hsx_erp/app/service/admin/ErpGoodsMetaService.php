@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace addon\hsx_erp\app\service\admin;
 
+use addon\hsx_erp\app\model\ErpCategoryMapping;
 use core\base\BaseAdminService;
 use think\facade\Db;
 
@@ -12,23 +13,33 @@ class ErpGoodsMetaService extends BaseAdminService
     {
         $categoryId = (int)($where['category_id'] ?? 0);
         $categoryPath = $this->normalizeCategoryPath($where['category_path'] ?? []);
-        $shopMeta = $this->phoneShopMeta($categoryId, $categoryPath);
+        $rules = (new ErpConfigService())->getRules();
+        $syncRules = (array)($rules['category_sync'] ?? []);
+        $categorySyncReady = (int)($syncRules['enabled'] ?? 0) === 1 && (int)($syncRules['initialized'] ?? 0) === 1;
+        [$shopCategoryId, $shopCategoryPath] = $categorySyncReady
+            ? $this->mappedShopCategoryIds($categoryId, $categoryPath)
+            : [$categoryId, $categoryPath];
+        $shopMeta = $this->phoneShopMeta($shopCategoryId, $shopCategoryPath);
         $erpCategories = (new ErpGoodsCategoryService())->tree();
         $titleRules = $this->titleRules();
         if ($shopMeta['available']) {
-            $categories = $shopMeta['categories'] ?: $erpCategories;
+            $categories = $categorySyncReady ? $erpCategories : ($shopMeta['categories'] ?: $erpCategories);
             return [
                 'source' => 'phone_shop',
                 'source_label' => '商城商品资料',
-                'category_source' => $shopMeta['categories'] ? 'phone_shop' : 'erp',
+                'category_source' => $categorySyncReady || !$shopMeta['categories'] ? 'erp' : 'phone_shop',
                 'mode' => 'sync_preferred',
+                'category_sync' => [
+                    'initialized' => $categorySyncReady ? 1 : 0,
+                    'provider' => (string)($syncRules['provider'] ?? 'phone_shop'),
+                    'mode' => (string)($syncRules['mode'] ?? 'disabled'),
+                ],
                 'title_rules' => $titleRules,
                 'custom_fields' => $this->customFields(),
                 'tips' => [
-                    '当前站点已安装商城，ERP 优先使用商城分类、规格、成色等资料。',
-                    $shopMeta['categories'] ? '当前分类来源为商城分类。' : '商城分类为空，当前分类来源已回退为 ERP 本地分类。',
-                    '分类和规格 CRUD 建议在商城资料中维护，ERP 保存采购/库存快照。',
-                    '后续可开启同步任务，将商城资料同步为 ERP 快照，保证单独使用时也可回退。',
+                    '当前站点已安装商城，规格与成色可继续使用商城资料。',
+                    $categorySyncReady ? '分类已使用 ERP 本地主键，并通过映射与商城双向绑定。' : '分类尚未初始化同步，请在商品资料中选择“商城导入”或“ERP 推送”。',
+                    'ERP 与商城各自保留独立分类主键，重装后可通过双向校准恢复绑定。',
                 ],
                 'categories' => $categories,
                 'specs' => $shopMeta['specs'],
@@ -49,6 +60,18 @@ class ErpGoodsMetaService extends BaseAdminService
             'categories' => $erpCategories,
             'specs' => $this->erpFallbackSpecs(),
         ];
+    }
+
+    private function mappedShopCategoryIds(int $categoryId, array $categoryPath): array
+    {
+        $erpIds = array_values(array_unique(array_filter(array_map('intval', array_merge([$categoryId], $categoryPath)))));
+        if ($erpIds === []) return [0, []];
+        $map = ErpCategoryMapping::where('site_id', '=', $this->site_id)
+            ->where('target_plugin', '=', 'phone_shop')
+            ->whereIn('erp_category_id', $erpIds)
+            ->column('target_category_id', 'erp_category_id');
+        $targetPath = array_values(array_filter(array_map(static fn(int $id): int => (int)($map[$id] ?? 0), $categoryPath)));
+        return [(int)($map[$categoryId] ?? 0), $targetPath];
     }
 
     private function phoneShopMeta(int $categoryId, array $categoryPath = []): array

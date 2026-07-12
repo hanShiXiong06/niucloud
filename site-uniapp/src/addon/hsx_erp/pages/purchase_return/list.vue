@@ -26,12 +26,14 @@
                         <strong>{{ accountingLabel(row) }}</strong>
                     </view>
                     <view v-if="row.refund_mode === 'none' && row.status === 'confirmed'" class="direct-return-tip">未发生实际付款，设备已退出库存，对应设备应付已冲销；无需生成退款应收或资金流水。</view>
-                    <view v-else-if="row.status === 'confirmed' && row.refund_mode === 'cash' && row.process_status !== 'refunded'" class="refund-next">
+                    <view v-else-if="row.status === 'confirmed' && row.refund_mode === 'receivable' && row.process_status !== 'refunded'" class="refund-next">
                         <view>
                             <text class="refund-next__title">下一步：确认供应商退款到账</text>
                             <text class="refund-next__sub">退款应收已生成，请到应收款选择收款账户并确认到账。</text>
                         </view>
+                        <view>
                         <u-button type="warning" size="small" plain text="去应收款" @click.stop="goRefundReceivable(row)" />
+                        </view>
                     </view>
                     <view class="card-meta" v-if="row.remark">备注：{{ row.remark }}</view>
                     <view class="card-time">{{ erpTimeLine(row, ['returned_at', 'return_at', 'confirmed_at']) }}</view>
@@ -146,7 +148,8 @@ function accountingLabel(row: any) {
     if (row.status === 'cancelled') return '已取消，未执行库存与账务处理'
     if (row.status === 'pending') return '待确认，尚未执行库存与账务处理'
     if (row.refund_mode === 'none') return '未付款，已冲销应付'
-    if (row.refund_mode === 'offset') return '已转财务折账处理'
+    if (row.refund_mode === 'cash') return row.process_status === 'refunded' ? '当场收款已到账' : '现场收款处理中'
+    if (row.refund_mode === 'offset') return '历史记账待收'
     const process = String(row.process_status || '')
     if (process === 'refunded') return '供货方退款已到账'
     if (process === 'partial_refund') return '供货方已部分退款'

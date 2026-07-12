@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace addon\hsx_erp\app\adminapi\controller;
 
 use addon\hsx_erp\app\service\admin\ErpGoodsCategoryService;
+use addon\hsx_erp\app\service\admin\ErpCategorySyncService;
 use core\base\BaseAdminController;
 
 class ErpGoodsCategory extends BaseAdminController
@@ -62,5 +63,19 @@ class ErpGoodsCategory extends BaseAdminController
             ['rows', []],
         ]);
         return success((new ErpGoodsCategoryService())->importRows((array)$data['rows']));
+    }
+
+    public function syncStatus()
+    {
+        return success((new ErpCategorySyncService())->status());
+    }
+
+    public function sync()
+    {
+        $data = $this->request->params([
+            ['action', 'reconcile'],
+            ['provider', 'phone_shop'],
+        ]);
+        return success((new ErpCategorySyncService())->sync((string)$data['action'], (string)$data['provider']));
     }
 }

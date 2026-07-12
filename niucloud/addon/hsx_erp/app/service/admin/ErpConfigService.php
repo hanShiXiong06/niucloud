@@ -25,8 +25,10 @@ class ErpConfigService extends BaseAdminService
 
     public function saveRules(array $data): array
     {
-        $rules = $this->normalize($data);
-        (new CoreConfigService())->setConfig($this->site_id, self::CONFIG_KEY, $rules);
+        $config = new CoreConfigService();
+        $stored = $config->getConfigValue($this->site_id, self::CONFIG_KEY);
+        $rules = $this->normalize(array_replace_recursive(is_array($stored) ? $stored : [], $data));
+        $config->setConfig($this->site_id, self::CONFIG_KEY, $rules);
         return $rules;
     }
 
@@ -148,6 +150,24 @@ class ErpConfigService extends BaseAdminService
 
         $rules['refurbish']['enabled'] = $this->boolInt($rules['refurbish']['enabled'] ?? 0);
         $rules['refurbish']['default_required'] = $this->boolInt($rules['refurbish']['default_required'] ?? 0);
+        $rules['refurbish']['tracking_mode'] = in_array((string)($rules['refurbish']['tracking_mode'] ?? 'simple'), ['simple', 'external'], true)
+            ? (string)$rules['refurbish']['tracking_mode']
+            : 'simple';
+        $rules['refurbish']['daily_reminder_enabled'] = $this->boolInt($rules['refurbish']['daily_reminder_enabled'] ?? 1);
+        $rules['refurbish']['daily_reminder_threshold'] = max(1, min(999, (int)($rules['refurbish']['daily_reminder_threshold'] ?? 25)));
+        $rules['refurbish']['reminder_dismiss_date'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($rules['refurbish']['reminder_dismiss_date'] ?? ''))
+            ? (string)$rules['refurbish']['reminder_dismiss_date']
+            : '';
+
+        $rules['category_sync']['enabled'] = $this->boolInt($rules['category_sync']['enabled'] ?? 0);
+        $rules['category_sync']['initialized'] = $this->boolInt($rules['category_sync']['initialized'] ?? 0);
+        $rules['category_sync']['provider'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($rules['category_sync']['provider'] ?? 'phone_shop')) ?: 'phone_shop';
+        $rules['category_sync']['mode'] = in_array((string)($rules['category_sync']['mode'] ?? 'disabled'), ['disabled', 'two_way', 'shop_master', 'erp_master'], true)
+            ? (string)$rules['category_sync']['mode']
+            : 'disabled';
+        $rules['category_sync']['last_action'] = in_array((string)($rules['category_sync']['last_action'] ?? ''), ['', 'pull', 'push', 'reconcile'], true)
+            ? (string)$rules['category_sync']['last_action']
+            : '';
 
         $rules['consignment']['enabled'] = $this->boolInt($rules['consignment']['enabled'] ?? 0);
         $rules['consignment']['settle_payable_after_receipt'] = $this->boolInt($rules['consignment']['settle_payable_after_receipt'] ?? 1);
@@ -407,8 +427,19 @@ class ErpConfigService extends BaseAdminService
                 'profit_confirm_mode' => 'settlement',
             ],
             'refurbish' => [
-                'enabled' => 0,
+                'enabled' => 1,
                 'default_required' => 0,
+                'tracking_mode' => 'simple',
+                'daily_reminder_enabled' => 1,
+                'daily_reminder_threshold' => 25,
+                'reminder_dismiss_date' => '',
+            ],
+            'category_sync' => [
+                'enabled' => 0,
+                'initialized' => 0,
+                'provider' => 'phone_shop',
+                'mode' => 'disabled',
+                'last_action' => '',
             ],
             'consignment' => [
                 'enabled' => 0,
@@ -416,5 +447,18 @@ class ErpConfigService extends BaseAdminService
                 'transfer_to_owned_requires_repurchase' => 1,
             ],
         ];
+    }
+
+    /** 首页整备量提醒：关闭今天或永久关闭此类提醒。 */
+    public function dismissRefurbishReminder(string $mode): array
+    {
+        $rules = $this->getRules();
+        if ($mode === 'forever') {
+            $rules['refurbish']['daily_reminder_enabled'] = 0;
+            $rules['refurbish']['reminder_dismiss_date'] = '';
+        } else {
+            $rules['refurbish']['reminder_dismiss_date'] = date('Y-m-d');
+        }
+        return $this->saveRules($rules);
     }
 }

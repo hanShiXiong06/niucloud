@@ -257,6 +257,9 @@ class ErpDeviceInboundRequested
         return [
             'party_id' => 0,
             'party_name' => $partyName,
+            'member_id' => (int)($counterparty['member_id'] ?? (($counterparty['source_type'] ?? '') === 'member' ? ($counterparty['source_id'] ?? 0) : 0)),
+            'contact_name' => trim((string)($counterparty['contact_name'] ?? $partyName)),
+            'contact_mobile' => trim((string)($counterparty['mobile'] ?? '')),
             'm_no' => trim((string)($counterparty['m_no'] ?? $counterparty['mobile'] ?? '')),
             'purchase_channel' => $channelName,
             'purchase_channel_key' => $channelCode,
@@ -286,6 +289,9 @@ class ErpDeviceInboundRequested
     protected function mapDeviceItem(array $device, int $warehouseId, int $locationId, float $cost, string $sourcePlugin, string $sourcePluginName): array
     {
         $check = (array)($device['check_snapshot'] ?? []);
+        $refurbishment = (array)($device['refurbishment'] ?? []);
+        $refurbishmentReason = mb_substr(trim((string)($refurbishment['reason'] ?? '')), 0, 500);
+        $refurbishmentItems = array_values(array_filter((array)($refurbishment['suggested_items'] ?? []), 'is_array'));
         $sourceDeviceId = mb_substr(trim((string)($device['source_device_id'] ?? '')), 0, 80);
         $sourceDeviceValue = ctype_digit($sourceDeviceId) ? (int)$sourceDeviceId : $sourceDeviceId;
         $capacity = trim((string)($device['capacity'] ?? ''));
@@ -315,13 +321,23 @@ class ErpDeviceInboundRequested
             'spec' => $spec,
             'spec_json' => [
                 'capacity' => $capacity,
+                'capacity_value' => $device['capacity_value'] ?? $capacity,
                 'color' => $color,
+                'color_value' => $device['color_value'] ?? $color,
                 'imei2' => trim((string)($device['imei2'] ?? '')),
                 'source_plugin' => $sourcePlugin,
                 'source_device_id' => $sourceDeviceValue,
                 'source_order_no' => trim((string)($device['source_order_no'] ?? '')),
                 'settlement_status' => trim((string)($device['settlement_status'] ?? '')),
                 'source_paid_amount' => round((float)($device['paid_amount'] ?? 0), 2),
+                'payee_methods' => array_values(array_filter((array)($device['payment_methods'] ?? []), 'is_array')),
+                'refurbishment_suggestion' => [
+                    'required' => (bool)($refurbishment['required'] ?? false),
+                    'reason' => $refurbishmentReason,
+                    'items' => $refurbishmentItems,
+                    'estimated_cost' => round((float)($refurbishment['estimated_cost'] ?? 0), 2),
+                    'decision_source' => trim((string)($refurbishment['decision_source'] ?? $sourcePlugin)),
+                ],
             ],
             'color' => $color,
             'category_id' => (int)($device['category_id'] ?? 0),
@@ -330,6 +346,8 @@ class ErpDeviceInboundRequested
             'image_urls' => trim((string)$images),
             'quality_remark' => mb_substr(implode('；', $qualityParts), 0, 500),
             'purchase_cost' => $cost,
+            'refurbish_required' => (bool)($refurbishment['required'] ?? false),
+            'refurbish_reason' => $refurbishmentReason,
             'remark' => $sourceDeviceId !== '' ? '来源设备#' . $sourceDeviceId : '外部来源设备',
             'remark_internal' => $sourceDeviceId !== ''
                 ? '来源插件 ' . ($sourcePluginName ?: $sourcePlugin) . '；来源设备ID ' . $sourceDeviceId

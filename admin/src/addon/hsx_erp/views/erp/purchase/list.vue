@@ -294,6 +294,9 @@
                             <el-option v-for="item in accounts" :key="item.id" :label="`${item.account_name}（${money(item.balance)}）`" :value="item.id" />
                         </el-select>
                     </el-form-item>
+                    <el-form-item v-if="create.form.settle_mode === 'cash'" label="付款凭证">
+                        <ErpFinanceVoucherUpload v-model="create.form.voucher_urls" />
+                    </el-form-item>
                 </div>
                 <el-form-item class="mt-4" label="备注">
                     <el-input v-model.trim="create.form.remark" type="textarea" :rows="2" />
@@ -384,18 +387,15 @@
                         </div>
                         <el-button link type="primary" @click="openGoodsMeta('category')">管理分类</el-button>
                     </div>
-                    <el-tree-select
-                        v-model="itemExtra.item.category_id"
-                        :data="categoryTree"
-                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
-                        check-strictly
+                    <el-cascader
+                        v-model="itemExtra.item._category_path"
+                        :options="categoryTree"
+                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list', checkStrictly: true, emitPath: true }"
                         clearable
-                        default-expand-all
                         filterable
                         class="w-full"
-                        node-key="category_id"
-                        placeholder="选择设备分类"
-                        @change="value => onItemCategoryChange(itemExtra.item, value)"
+                        placeholder="按一级 / 二级 / 三级选择分类"
+                        @change="value => onItemCategoryChange(itemExtra.item, Array.isArray(value) ? value[value.length - 1] : value)"
                     />
                 </section>
 
@@ -602,6 +602,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
@@ -708,6 +709,7 @@ function defaultForm() {
         settle_mode: 'credit',
         paid_amount: 0,
         capital_account_id: 0,
+        voucher_urls: '',
         warehouse_id: 0,
         warehouse_name: '',
         location_id: 0,
@@ -733,6 +735,7 @@ function blankItem() {
         category_name: '',
         category_names: [],
         category_path: '',
+        _category_path: [],
         purchase_cost: 0,
         inspector_uid: null,
         estimate_sale_price: undefined,
@@ -891,6 +894,13 @@ function removeItem(index: number) {
 
 function openItemExtra(row: any, index: number) {
     hydrateItemSpecState(row)
+    if (!Array.isArray(row._category_path)) {
+        row._category_path = String(row.category_path || '').split(',').map(Number).filter(Boolean)
+        if (!row._category_path.length && Number(row.category_id || 0) > 0) {
+            const node = findCategoryNode(categoryTree.value, Number(row.category_id))
+            row._category_path = node ? categoryPathIds(node) : [Number(row.category_id)]
+        }
+    }
     itemExtra.item = row
     itemExtra.index = index
     itemExtra.visible = true
@@ -937,6 +947,7 @@ function onItemCategoryChange(item: any, value: any) {
     const node = findCategoryNode(categoryTree.value, Number(value || 0))
     item.category_name = node?.category_full_name || node?.category_name || ''
     item.category_path = node ? categoryPathIds(node).join(',') : ''
+    item._category_path = node ? categoryPathIds(node) : []
     item.category_names = node ? categoryPathNames(node) : []
     item.selected_specs = {}
     item.selected_grade = null
@@ -1136,7 +1147,7 @@ async function submitCreate() {
         if (Number(create.form.paid_amount || 0) > createTotal.value) return ElMessage.warning('付款不能大于采购成本')
     }
     const createConfirmed = await ElMessageBox.confirm(
-        `确认向「${create.form.party_name || '所选供货商'}」采购 ${create.form.items.length} 台，采购总额 ${money(createTotal.value)}。提交后将生成设备资产和设备应付；${create.form.settle_mode === 'cash' ? `申请现结 ${money(create.form.paid_amount)}，仍需财务确认付款。` : '本次按挂账处理。'}`,
+        `确认向「${create.form.party_name || '所选供货商'}」采购 ${create.form.items.length} 台，采购总额 ${money(createTotal.value)}。提交后将生成设备资产和设备应付；${create.form.settle_mode === 'cash' ? `立即从所选账户付款 ${money(create.form.paid_amount)}，无需再次到财务确认。` : '本次按挂账处理，后续到应付款结算。'}`,
         '确认采购开单',
         { type: 'warning', confirmButtonText: '确认开单', cancelButtonText: '返回检查' }
     ).then(() => true).catch(() => false)
@@ -1149,7 +1160,10 @@ async function submitCreate() {
             location_name: currentLocations.value.find((row: any) => Number(row.id) === Number(create.form.location_id))?.location_name || create.form.location_name,
             settle_method: create.form.settle_mode === 'cash' ? '现结' : '挂账'
         })
-        ElMessage.success(create.form.settle_mode === 'cash' ? '采购单已生成，付款等待财务确认' : '采购单已生成')
+        const remaining = Math.max(0, createTotal.value - Number(create.form.paid_amount || 0))
+        ElMessage.success(create.form.settle_mode === 'cash'
+            ? (remaining > 0.0001 ? `采购已现付，剩余 ${money(remaining)} 进入应付款` : '采购入库与现结付款已完成')
+            : '采购单已生成，等待财务付款')
         create.visible = false
         loadList()
     } finally {

@@ -169,6 +169,13 @@ class ErpFinanceSourceService extends BaseAdminService
         $businessSourceName = ($bizScene === 'operating' || str_starts_with($bizScene, 'operating_'))
             ? (string)($snapshot['category_name'] ?? '经营收支')
             : (string)($snapshot['origin_name'] ?? 'ERP业务');
+        $channelCode = trim((string)($snapshot['channel_code'] ?? ''));
+        $channelName = trim((string)($snapshot['channel_name'] ?? ''));
+        // 兼容早期数据：曾把 purchase_return 等业务场景误存为“渠道”。
+        // 场景已经单独展示，渠道只保留真实的同行、小程序等销售/采购入口。
+        $internalScenes = ['purchase', 'sale', 'purchase_return', 'sale_return', 'after_sale_compensation', 'refurbish'];
+        if (in_array($channelName, $internalScenes, true)) $channelName = '';
+        if (in_array($channelCode, $internalScenes, true)) $channelCode = '';
 
         return [
             // 应收/应付是财务方向的最终事实，避免未知插件场景被旧 source_type 推断反向。
@@ -185,8 +192,8 @@ class ErpFinanceSourceService extends BaseAdminService
             'source_no' => $originNo !== '' ? $originNo : $internalSourceNo,
             'origin_no' => $originNo,
             'internal_source_no' => $internalSourceNo,
-            'channel_code' => (string)($snapshot['channel_code'] ?? ''),
-            'channel_name' => (string)($snapshot['channel_name'] ?? ''),
+            'channel_code' => $channelCode,
+            'channel_name' => $channelName,
             'biz_scene' => $bizScene,
             'party_role_label' => $knownScene
                 ? (string)($snapshot['party_role_label'] ?? ($side === 'receivable' ? '付款方' : '收款方'))

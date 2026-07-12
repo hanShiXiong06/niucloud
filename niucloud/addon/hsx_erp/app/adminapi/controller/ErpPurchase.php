@@ -66,6 +66,7 @@ class ErpPurchase extends BaseAdminController
             ['settle_mode', 'credit'],
             ['paid_amount', 0],
             ['capital_account_id', 0],
+            ['voucher_urls', ''],
             ['warehouse_id', 0],
             ['warehouse_name', ''],
             ['location_id', 0],
