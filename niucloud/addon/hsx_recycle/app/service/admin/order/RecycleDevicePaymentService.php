@@ -9,6 +9,7 @@ use addon\hsx_recycle\app\model\order\RecycleDeviceLog;
 use addon\hsx_recycle\app\model\order\RecycleDevicePayment;
 use addon\hsx_recycle\app\model\order\RecycleOrder;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderEventService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
@@ -25,6 +26,7 @@ class RecycleDevicePaymentService extends BaseAdminService
 
     public function assertOrderPaymentAllowed(?int $orderId = null): void
     {
+        $this->assertLocalPaymentAllowed();
         $mode = $this->getPaymentMode();
         if ($orderId) {
             $order = RecycleOrder::where([
@@ -43,6 +45,7 @@ class RecycleDevicePaymentService extends BaseAdminService
 
     public function payDevices(int $orderId, array $data): array
     {
+        $this->assertLocalPaymentAllowed();
         $deviceIds = array_values(array_unique(array_filter(array_map('intval', $data['device_ids'] ?? []))));
         if (empty($deviceIds)) {
             throw new CommonException('请选择需要打款的设备');
@@ -182,6 +185,13 @@ class RecycleDevicePaymentService extends BaseAdminService
         } catch (\Throwable $e) {
             Db::rollback();
             throw new CommonException($e->getMessage());
+        }
+    }
+
+    public function assertLocalPaymentAllowed(): void
+    {
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
+            throw new CommonException('当前站点财务已由 ERP 接管，请到“二手机 ERP - 应付款”完成付款');
         }
     }
 

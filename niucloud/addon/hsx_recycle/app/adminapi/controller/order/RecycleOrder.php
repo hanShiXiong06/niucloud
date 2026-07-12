@@ -9,6 +9,7 @@ use addon\hsx_recycle\app\service\admin\order\RecycleDevicePaymentService;
 use addon\hsx_recycle\app\model\order\RecycleOrder as RecycleOrderModel;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
 use addon\hsx_recycle\app\validate\RecycleOrderValidate;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use core\base\BaseAdminController;
 use core\exception\CommonException;
 use think\App;
@@ -343,25 +344,25 @@ class RecycleOrder extends BaseAdminController
      */
     public function capitalAccountOptions()
     {
+        $capability = (new RecycleErpCapabilityService())->paymentCapability($this->request->siteId());
         $accounts = [];
-        $erpConnected = false;
-        try {
-            $raw = (array)event('GetErpCapitalAccountList', ['site_id' => $this->request->siteId()]);
-            foreach ($raw as $r) {
-                if (is_array($r)) {
-                    // 只要有插件应答（哪怕空数组），即视为 ERP 已接入
-                    $erpConnected = true;
-                    $accounts = array_values($r);
-                    break;
+        $erpConnected = (bool)$capability['erp_connected'];
+        if ($erpConnected) {
+            try {
+                $raw = (array)event('GetErpCapitalAccountList', ['site_id' => $this->request->siteId()]);
+                foreach ($raw as $r) {
+                    if (is_array($r)) {
+                        $accounts = array_values($r);
+                        break;
+                    }
                 }
+            } catch (\Throwable $e) {
+                $accounts = [];
             }
-        } catch (\Throwable $e) {
-            $erpConnected = false;
-            $accounts = [];
         }
 
         // 兜底：事件未应答时，若 ERP 类在场则直接取（避免依赖事件注册时机）
-        if (empty($accounts)) {
+        if ($erpConnected && empty($accounts)) {
             $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpCapitalAccountService';
             if (class_exists($cls)) {
                 try {
@@ -369,17 +370,13 @@ class RecycleOrder extends BaseAdminController
                     $accounts = array_values(array_filter($all, function ($a) {
                         return (int)($a['status'] ?? 1) === 1;
                     }));
-                    $erpConnected = true;
                 } catch (\Throwable $e) {
                     // ERP 在场但取数失败：保持已连接判断，账户留空
                 }
             }
         }
 
-        return success([
-            'accounts' => $accounts,
-            'erp_connected' => $erpConnected,
-        ]);
+        return success(array_merge(['accounts' => $accounts], $capability));
     }
 
     /**

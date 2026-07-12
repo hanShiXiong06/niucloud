@@ -1,7 +1,9 @@
 import { ElLoading, ElMessage, ElMessageBox } from 'element-plus'
 import type { Ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   deleteRecycleOrder,
+  getCapitalAccountOptions,
   getMerchantPayInfo,
   pushOrderNotify,
   updateRecycleOrder
@@ -39,6 +41,7 @@ const isDialogCanceled = (error: any) => {
 }
 
 export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
+  const router = useRouter()
   const {
     list,
     pagination,
@@ -214,6 +217,25 @@ export function useRecycleOrderActions(options: UseRecycleOrderActionsOptions) {
       openOrderDeviceDialog(row, priceDeviceLogVisible)
     },
     order_payment: async (row: any) => {
+      const capability = await getCapitalAccountOptions()
+      if (capability.data?.payment_managed_by_erp) {
+        try {
+          await ElMessageBox.confirm(
+            capability.data?.message || '当前站点财务已由 ERP 接管，请到 ERP 应付款完成付款。',
+            '回收端打款已关闭',
+            {
+              confirmButtonText: '前往 ERP 应付款',
+              cancelButtonText: '知道了',
+              type: 'info'
+            }
+          )
+        } catch (error) {
+          if (isDialogCanceled(error)) return
+          throw error
+        }
+        await router.push(capability.data?.payment_path || '/site/hsx_erp/payable')
+        return
+      }
       currentOrderId.value = row.id
       paymentDialogVisible.value = true
 

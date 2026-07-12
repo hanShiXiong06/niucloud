@@ -6,6 +6,7 @@ namespace addon\hsx_recycle\app\service\admin\order;
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderStatusService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderEventService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\model\RecycleOrder;
 use app\service\core\pay\CoreTransferService;
 use app\service\core\site\CoreSiteAccountService;
@@ -30,6 +31,7 @@ class RecycleOrderPaymentService extends BaseAdminService
      */
     public function payment(int $orderId, array $data): bool
     {
+        $this->assertLocalPaymentAllowed();
         Log::info('【回收打款】开始执行payment方法', [
             'order_id' => $orderId,
             'data' => $data,
@@ -100,6 +102,7 @@ class RecycleOrderPaymentService extends BaseAdminService
      */
     public function confirmPayment(int $orderId, array $data): bool
     {
+        $this->assertLocalPaymentAllowed();
         Log::info('【回收打款】开始执行confirmPayment方法', [
             'order_id' => $orderId,
             'data' => $data,
@@ -163,6 +166,13 @@ class RecycleOrderPaymentService extends BaseAdminService
                 'trace' => $e->getTraceAsString()
             ]);
             throw new CommonException($e->getMessage());
+        }
+    }
+
+    private function assertLocalPaymentAllowed(): void
+    {
+        if ((new RecycleErpCapabilityService())->isPaymentManaged($this->site_id)) {
+            throw new CommonException('当前站点财务已由 ERP 接管，请到“二手机 ERP - 应付款”完成付款');
         }
     }
 
@@ -387,4 +397,4 @@ class RecycleOrderPaymentService extends BaseAdminService
             'update_data' => $updateData
         ]);
     }
-} 
+}
