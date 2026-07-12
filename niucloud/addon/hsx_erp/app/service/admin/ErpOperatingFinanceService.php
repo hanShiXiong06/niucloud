@@ -33,8 +33,11 @@ class ErpOperatingFinanceService extends BaseAdminService
         if ($requestId === '') throw new CommonException('请求缺少幂等标识，请刷新后重试');
         $direction = (string)$category['direction'] === 'income' ? 'income' : 'expense';
         $occurredAt = (int)($data['occurred_at'] ?? 0) ?: time();
-        $lineId = (string)base_convert(substr(hash('sha256', $requestId), 0, 12), 16, 10);
-        $sourceNo = ($direction === 'income' ? 'OI' : 'OE') . strtoupper(substr(hash('sha256', $requestId), 0, 22));
+        $requestHash = hash('sha256', $requestId);
+        // 完整稳定行号写入 origin_id；通用财务事实入口只在其能安全落入
+        // 旧有符号 INT 关联列时才同步 source_id。
+        $lineId = (string)base_convert(substr($requestHash, 0, 12), 16, 10);
+        $sourceNo = ($direction === 'income' ? 'OI' : 'OE') . strtoupper(substr($requestHash, 0, 22));
         $result = (new ErpFinanceFactService())->consume([
             'event_name' => ErpFinanceFactService::CONTRACT_NAME,
             'event_version' => ErpFinanceFactService::CONTRACT_VERSION,

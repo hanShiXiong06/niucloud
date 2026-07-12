@@ -12,6 +12,11 @@ foreach (['ErpFinanceFactService', "'settlement_mode'", 'confirmReceipt', 'confi
 }
 $assert(str_contains($service, "['affects_asset_cost'] ?? 0) !== 0"), '经营费用必须拒绝影响设备成本的分类');
 $assert(str_contains($service, "hash('sha256', \$requestId)"), '经营记账来源单号和行号必须由幂等键稳定生成');
+$regressionRequestId = 'operating-finance:mrhodgi3:8tseaz45p9';
+$regressionHash = hash('sha256', $regressionRequestId);
+$legacyOverflowId = (string)base_convert(substr($regressionHash, 0, 12), 16, 10);
+$assert((float)$legacyOverflowId > 2147483647, '线上回归样例必须能够复现旧行号溢出');
+$assert($legacyOverflowId === '120275037744500', '线上回归样例的完整行号必须稳定保留到origin_id');
 $assert(str_contains($service, "'source_name' => (string)\$category['name']"), '经营收支业务来源必须使用支出类型，不能把用户说明冒充来源');
 
 $config = (string)file_get_contents($root . '/app/service/admin/ErpConfigService.php');
@@ -21,6 +26,33 @@ foreach (['operating_rent', 'operating_utilities', 'operating_office', 'operatin
 $finance = (string)file_get_contents($root . '/app/service/admin/ErpFinanceService.php');
 foreach (['operating_income_amount', 'operating_expense_amount', 'operating_profit_amount'] as $needle) {
     $assert(str_contains($finance, $needle), '经营看板缺少经营利润口径：' . $needle);
+}
+$factService = (string)file_get_contents($root . '/app/service/admin/ErpFinanceFactService.php');
+$assert(str_contains($factService, 'LEGACY_SOURCE_ID_MAX = 2147483647'), '财务事实入口必须按数据库INT上限处理旧source_id');
+$assert(str_contains($factService, 'normalizeLegacySourceId($lineId)'), '财务事实入口必须统一规范外部明细ID');
+$assert(str_contains($factService, "'origin_id' => (string)\$snapshot['line_id']"), '超大或字符串明细ID必须完整保存到origin_id');
+$assert(substr_count($factService, "unset(\$request['source_id'])") === 1 && substr_count($factService, "unset(\$current['source_id'])") === 1, '失败记录重试必须忽略派生source_id但继续校验原始line_id');
+require_once $repo . '/niucloud/vendor/autoload.php';
+$factReflection = new ReflectionClass(addon\hsx_erp\app\service\admin\ErpFinanceFactService::class);
+$factInstance = $factReflection->newInstanceWithoutConstructor();
+$normalizeLegacyId = $factReflection->getMethod('normalizeLegacySourceId');
+$normalizeLegacyId->setAccessible(true);
+$assert($normalizeLegacyId->invoke($factInstance, '2147483647') === 2147483647, '数据库INT上限必须可正常写入');
+$assert($normalizeLegacyId->invoke($factInstance, '2147483648') === 0, '超过数据库INT上限的数字必须只保存到origin_id');
+$assert($normalizeLegacyId->invoke($factInstance, $legacyOverflowId) === 0, '线上溢出行号不得再写入source_id');
+$assert($normalizeLegacyId->invoke($factInstance, 'external-uuid') === 0, '外部字符串行号不得错误转换为source_id');
+$assert($normalizeLegacyId->invoke($factInstance, '00042') === 42, '合法前导零数字ID应规范为整数');
+$assertSameRequest = $factReflection->getMethod('assertSameInboxRequest');
+$assertSameRequest->setAccessible(true);
+$storedRequest = ['event_id' => $regressionRequestId, 'line_id' => $legacyOverflowId, 'source_id' => (int)$legacyOverflowId, 'amount' => '10000.00'];
+try {
+    $assertSameRequest->invoke(
+        $factInstance,
+        ['payload_json' => json_encode(['request' => $storedRequest], JSON_UNESCAPED_UNICODE)],
+        array_replace($storedRequest, ['source_id' => 0])
+    );
+} catch (Throwable $e) {
+    $assert(false, '升级前失败的经营收支必须允许使用同一request_id重试：' . $e->getMessage());
 }
 foreach (['todayTurnoverMetrics', 'today_sold_count', 'opening_stock_count', 'turnover_rate'] as $needle) {
     $assert(str_contains($finance, $needle), '经营看板缺少今日动销率口径：' . $needle);

@@ -22,6 +22,8 @@ use think\facade\Db;
  */
 class ErpFinanceFactService extends BaseAdminService
 {
+    private const LEGACY_SOURCE_ID_MAX = 2147483647;
+
     public const EVENT_NAME = 'ErpFinanceFactRequested';
     public const CONTRACT_NAME = 'finance.fact.requested.v1';
     public const CONTRACT_VERSION = 1;
@@ -151,7 +153,7 @@ class ErpFinanceFactService extends BaseAdminService
         // 外部系统的明细 ID 可能是 UUID/SKU，不能强制转 int 后丢失。ERP 旧关联列
         // 继续保存可用的数值 ID；完整原始值始终写入 origin_id 与事件快照。
         $lineId = mb_substr(trim((string)($event['line_id'] ?? $event['source_line_id'] ?? '')), 0, 80);
-        $numericLineId = ctype_digit($lineId) && (float)$lineId <= PHP_INT_MAX ? (int)$lineId : 0;
+        $numericLineId = $this->normalizeLegacySourceId($lineId);
         $categoryKey = $this->stableKey((string)($event['category_key'] ?? ''), 80, true);
         $amount = ErpMoney::normalize($event['amount'] ?? '');
         $occurredAt = (int)($event['occurred_at'] ?? 0);
@@ -218,6 +220,21 @@ class ErpFinanceFactService extends BaseAdminService
             'category_source_key' => mb_substr(trim((string)($category['source_key'] ?? $payload['category_key'])), 0, 80),
             'business_reason' => mb_substr($reason, 0, 255),
         ]);
+    }
+
+    /**
+     * source_id 是兼容 ERP 旧内部关联的有符号 INT，外部大整数或字符串 ID
+     * 由 origin_id 完整承载，不能按 PHP 64 位整数上限直接写入数据库。
+     */
+    protected function normalizeLegacySourceId(string $value): int
+    {
+        if ($value === '' || !ctype_digit($value)) return 0;
+        $normalized = ltrim($value, '0');
+        if ($normalized === '') return 0;
+        $max = (string)self::LEGACY_SOURCE_ID_MAX;
+        if (strlen($normalized) > strlen($max)) return 0;
+        if (strlen($normalized) === strlen($max) && strcmp($normalized, $max) > 0) return 0;
+        return (int)$normalized;
     }
 
     /** @return array{target_type:string,target_id:int,target_no:string} */
@@ -474,8 +491,12 @@ class ErpFinanceFactService extends BaseAdminService
         $stored = json_decode((string)($inbox['payload_json'] ?? ''), true);
         $request = is_array($stored) && is_array($stored['request'] ?? null) ? $stored['request'] : null;
         if ($request === null) return;
+        // source_id 只是由 line_id 派生的旧 INT 兼容列。升级前失败记录可能保存了
+        // 超范围数值，升级后会规范为 0；业务身份仍由原始 line_id 严格校验。
+        unset($request['source_id']);
         ksort($request);
         $current = $payload;
+        unset($current['source_id']);
         ksort($current);
         $storedHash = hash('sha256', json_encode($request, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
         $currentHash = hash('sha256', json_encode($current, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
