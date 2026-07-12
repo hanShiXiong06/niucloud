@@ -27,7 +27,7 @@ class DeviceExportService extends BaseAdminService
     public function getPage(array $where = []): array
     {
 
-        $field = 'id, imei, imei2, sn, model, member_id, category_id, status, update_at, final_price, sell_price, create_at, order_id, check_result_buyer, check_images_buyer,price_uid,export_time,dispose_type,dispose_status,settlement_mode,consignment_order_id';
+        $field = 'id, imei, imei2, sn, model, member_id, category_id, status, update_at, final_price, sell_price, create_at, order_id, check_result_buyer, check_images_buyer,price_uid,export_time,dispose_type,dispose_status,settlement_mode,consignment_order_id,sale_destination,target_warehouse_id,target_warehouse_name,target_location_id,target_location_name';
 
         $search_model = $this->model
             ->where([['site_id', '=', $this->site_id]])

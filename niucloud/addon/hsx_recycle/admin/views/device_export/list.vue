@@ -145,6 +145,7 @@
                                     <el-tag size="small" effect="plain" :type="erpStatusMeta(row).type">{{ erpStatusMeta(row).label }}</el-tag>
                                 </el-tooltip>
                                 <el-tag v-else size="small" type="info" effect="plain">未同步</el-tag>
+                                <el-tag v-if="erpPlacementMissing(row)" size="small" type="danger" effect="plain">缺少入库位置</el-tag>
                             </div>
                             <div v-if="row.consignmentOrder?.consignment_no || row.consignment_order?.consignment_no" class="mt-1 text-xs text-[var(--el-color-primary)]">
                                 {{ row.consignmentOrder?.consignment_no || row.consignment_order?.consignment_no }}
@@ -339,6 +340,37 @@
             </div>
         </el-dialog>
 
+        <el-dialog v-model="placementDialogVisible" title="补全 ERP 入库位置" width="520px" destroy-on-close>
+            <el-alert
+                type="warning"
+                :closable="false"
+                show-icon
+                :title="`有 ${placementPendingRows.length} 台设备缺少仓库或库位，补全后将立即重新同步。`"
+            />
+            <el-form label-position="top" class="mt-5">
+                <el-form-item label="入库仓库" required>
+                    <el-select v-model="placementForm.target_warehouse_id" class="w-full" placeholder="请选择仓库" @change="onRepairWarehouseChange">
+                        <el-option
+                            v-for="warehouse in erpWarehouses"
+                            :key="warehouse.id"
+                            :label="warehouse.warehouse_name"
+                            :value="Number(warehouse.id)"
+                            :disabled="!(warehouse.locations || []).length"
+                        />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="具体库位" required>
+                    <el-select v-model="placementForm.target_location_id" class="w-full" placeholder="请选择库位" :disabled="!placementForm.target_warehouse_id">
+                        <el-option v-for="location in repairLocations" :key="location.id" :label="location.location_name" :value="Number(location.id)" />
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="placementDialogVisible = false">取消</el-button>
+                <el-button type="primary" :loading="placementSubmitting" @click="submitPlacementRepair">补全并同步</el-button>
+            </template>
+        </el-dialog>
+
         <!-- 图片预览 -->
         <el-image-viewer
             v-if="imageViewerVisible"
@@ -355,6 +387,7 @@ import { t } from '@/lang'
 import { FormInstance, ElMessage, ElImageViewer, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { getRecycleDeviceList, syncRecycleDevicesToErp, updateDevice, getDeviceSyncHealth, resyncRecycleDevice } from '@/addon/hsx_recycle/api/device_export'
+import { getSaleDestinationOptions } from '@/addon/hsx_recycle/api/recycle_order'
 import { img } from '@/utils/common'
 import { View, User, Picture, RefreshRight } from '@element-plus/icons-vue'
 import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
@@ -486,6 +519,44 @@ const resyncLoadingId = ref<number | null>(null)
 
 const isStuck = (row: any) => Boolean(syncHealthMap.value[row.id]?.stuck)
 const stuckReason = (row: any) => syncHealthMap.value[row.id]?.reason || '该设备下游同步未完成'
+const erpPlacementMissing = (row: any) => !Number(row.target_warehouse_id) || !Number(row.target_location_id)
+
+type ErpWarehouse = { id: number; warehouse_name: string; is_default?: number; locations?: Array<{ id: number; location_name: string }> }
+const erpWarehouses = ref<ErpWarehouse[]>([])
+const placementDialogVisible = ref(false)
+const placementSubmitting = ref(false)
+const placementMode = ref<'single' | 'bulk'>('single')
+const placementPendingRows = ref<any[]>([])
+const placementSyncRows = ref<any[]>([])
+const placementForm = reactive({ target_warehouse_id: 0, target_location_id: 0 })
+const repairLocations = computed(() => erpWarehouses.value.find(item => Number(item.id) === Number(placementForm.target_warehouse_id))?.locations || [])
+const defaultRepairPlacement = computed(() => {
+    const warehouse = erpWarehouses.value.find(item => Number(item.is_default) === 1 && (item.locations || []).length)
+        || erpWarehouses.value.find(item => (item.locations || []).length)
+    const location = warehouse?.locations?.[0]
+    return warehouse && location
+        ? { target_warehouse_id: Number(warehouse.id), target_location_id: Number(location.id) }
+        : null
+})
+
+const loadErpWarehouses = async () => {
+    try {
+        const res: any = await getSaleDestinationOptions()
+        erpWarehouses.value = res?.data?.erp_connected ? (res?.data?.warehouses || []) : []
+    } catch (e) {
+        erpWarehouses.value = []
+    }
+}
+
+const onRepairWarehouseChange = () => { placementForm.target_location_id = 0 }
+const openPlacementRepair = (rows: any[], mode: 'single' | 'bulk', syncRows: any[] = rows) => {
+    placementPendingRows.value = rows
+    placementSyncRows.value = syncRows
+    placementMode.value = mode
+    placementForm.target_warehouse_id = 0
+    placementForm.target_location_id = 0
+    placementDialogVisible.value = true
+}
 
 const loadSyncHealth = async () => {
     const ids = (deviceTableData.data || []).map((r: any) => r.id).filter(Boolean)
@@ -503,9 +574,14 @@ const loadSyncHealth = async () => {
 }
 
 const handleResync = async (row: any) => {
+    if (erpPlacementMissing(row) && !defaultRepairPlacement.value) {
+        openPlacementRepair([row], 'single')
+        return
+    }
     resyncLoadingId.value = row.id
     try {
-        const res: any = await resyncRecycleDevice(row.id)
+        const placement = erpPlacementMissing(row) ? (defaultRepairPlacement.value || {}) : {}
+        const res: any = await resyncRecycleDevice(row.id, placement)
         const r = res?.data || {}
         if (r.has_asset === false) {
             ElMessage.warning('该设备尚未在 ERP 建立资产，已尝试重新入库同步，请稍候刷新查看')
@@ -611,11 +687,20 @@ const syncErpEvent = async () => {
         return
     }
 
-    const unsyncedCount = selectedDevices.value.filter((row: any) => !row.erp_sync).length
-    const syncedCount = selectedDevices.value.length - unsyncedCount
-    const confirmMessage = syncedCount > 0
-        ? `已选择 ${selectedDevices.value.length} 台设备，其中 ${syncedCount} 台已同步过。系统会自动跳过重复设备，是否继续？`
-        : `确定将选中的 ${selectedDevices.value.length} 台设备同步到 ERP 待入库池吗？`
+    const syncCandidates = selectedDevices.value.filter((row: any) => !row.erp_sync)
+    if (!syncCandidates.length) {
+        ElMessage.info('所选设备均已同步到 ERP，无需重复同步')
+        return
+    }
+    const missingRows = syncCandidates.filter(erpPlacementMissing)
+    if (missingRows.length && !defaultRepairPlacement.value) {
+        openPlacementRepair(missingRows, 'bulk', syncCandidates)
+        return
+    }
+
+    const skippedCount = selectedDevices.value.length - syncCandidates.length
+    const defaultHint = missingRows.length ? `；其中 ${missingRows.length} 台缺少位置，将自动入库到默认仓库和默认库位` : ''
+    const confirmMessage = `确定同步 ${syncCandidates.length} 台设备到 ERP 吗${defaultHint}？${skippedCount ? ` 已自动跳过 ${skippedCount} 台已同步设备。` : ''}`
 
     try {
         await ElMessageBox.confirm(confirmMessage, '批量同步 ERP', {
@@ -624,7 +709,8 @@ const syncErpEvent = async () => {
             type: 'warning'
         })
         erpSyncLoading.value = true
-        const res: any = await syncRecycleDevicesToErp(selectedDevices.value.map((row: any) => row.id))
+        const placement = missingRows.length ? (defaultRepairPlacement.value || {}) : {}
+        const res: any = await syncRecycleDevicesToErp(syncCandidates.map((row: any) => row.id), ['self_erp'], placement)
         const result = (res?.data?.results || []).find((item: any) => item?.target === 'self_erp')
         const created = Number(result?.created_count || 0)
         const existing = Number(result?.existing_count || 0)
@@ -637,6 +723,31 @@ const syncErpEvent = async () => {
         }
     } finally {
         erpSyncLoading.value = false
+    }
+}
+
+const submitPlacementRepair = async () => {
+    if (!placementForm.target_warehouse_id || !placementForm.target_location_id) {
+        ElMessage.warning('请选择入库仓库和具体库位')
+        return
+    }
+    const placement = { ...placementForm }
+    placementSubmitting.value = true
+    try {
+        if (placementMode.value === 'single') {
+            await resyncRecycleDevice(placementPendingRows.value[0].id, placement)
+        } else {
+            const selectedIds = placementSyncRows.value.map((row: any) => row.id)
+            await syncRecycleDevicesToErp(selectedIds, ['self_erp'], placement)
+            selectedDevices.value = []
+        }
+        ElMessage.success('入库位置已补全，ERP 同步已重新执行')
+        placementDialogVisible.value = false
+        loadDeviceList()
+    } catch (error: any) {
+        ElMessage.error(error?.msg || error?.message || '补全并同步失败')
+    } finally {
+        placementSubmitting.value = false
     }
 }
 
@@ -714,6 +825,7 @@ const tableRowClassName = ({ row }: { row: any }) => {
 
 // 初始化加载，默认回收时间为最近 7 天（含今天）
 setDefaultDateRange()
+loadErpWarehouses()
 loadDeviceList()
 </script>
 

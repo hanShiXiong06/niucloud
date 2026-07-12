@@ -87,7 +87,7 @@
                         <view class="section-title">销售去向</view>
 
                         <template v-if="warehouseMode">
-                            <view class="dest-hint">选择目标仓库即可（库位可不选，入库时再定）；流向按仓库类型自动确定。</view>
+                            <view class="dest-hint">ERP 入库必须同时选择仓库和具体库位；流向按仓库类型自动确定。</view>
                             <view class="dest-chips">
                                 <u-tag
                                     v-for="w in erpWarehouses"
@@ -102,7 +102,7 @@
                             </view>
 
                             <template v-if="currentWarehouseLocations.length">
-                                <view class="dest-sub-label">库位（可选）</view>
+                                <view class="dest-sub-label">库位（必选）</view>
                                 <view class="dest-chips">
                                     <u-tag
                                         v-for="loc in currentWarehouseLocations"
@@ -355,13 +355,8 @@ const selectWarehouse = (w: ErpWarehouse) => {
 }
 
 const selectLocation = (loc: { id: number; location_name: string }) => {
-    if (Number(formData.value.target_location_id) === Number(loc.id)) {
-        formData.value.target_location_id = 0
-        formData.value.target_location_name = ''
-    } else {
-        formData.value.target_location_id = Number(loc.id)
-        formData.value.target_location_name = loc.location_name || ''
-    }
+    formData.value.target_location_id = Number(loc.id)
+    formData.value.target_location_name = loc.location_name || ''
 }
 
 const selectDestination = (value: string) => {
@@ -593,6 +588,16 @@ const handleSubmit = async () => {
 
     if (!formData.value.final_price || Number(formData.value.final_price) <= 0) {
         uni.showToast({ title: '请输入有效的回收价格', icon: 'none' })
+        return
+    }
+
+    if (erpConnected.value && !erpWarehouses.value.length) {
+        uni.showToast({ title: 'ERP 尚无可用仓库和库位，请先完成仓库配置', icon: 'none' })
+        return
+    }
+
+    if (erpConnected.value && (!formData.value.target_warehouse_id || !formData.value.target_location_id)) {
+        uni.showToast({ title: '请选择入库仓库和具体库位', icon: 'none' })
         return
     }
 

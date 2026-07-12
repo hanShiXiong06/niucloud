@@ -8,6 +8,7 @@ use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceCostAdjustmentService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrinterTemplateService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\validate\RecycleDeviceValidate;
 use core\base\BaseAdminController;
 use think\App;
@@ -470,19 +471,24 @@ class RecycleDevice extends BaseAdminController
         // 当 ERP 已安装时，向其同步查询启用仓库列表（解耦：只发标准事件，ERP 未装则无人应答 → 回退固定渠道）
         // erp_connected 用于区分「ERP 未接入」与「ERP 已接入但暂无仓库」两种状态，便于前端给出明确提示。
         $warehouses = [];
-        $erpConnected = false;
+        $erpConnected = (new RecycleErpCapabilityService())->isEnabled((int)$this->request->siteId());
+        if (!$erpConnected) {
+            return success([
+                'items' => RecycleOrderDict::getSaleDestinationOptions(),
+                'warehouses' => [],
+                'erp_connected' => false,
+            ]);
+        }
         try {
-            $raw = (array)event('GetErpWarehouseList', ['site_id' => $this->site_id]);
+            $raw = (array)event('GetErpWarehouseList', ['site_id' => (int)$this->request->siteId()]);
             foreach ($raw as $r) {
                 if (is_array($r)) {
                     // 只要有插件应答(哪怕返回空数组)，即视为 ERP 已接入
-                    $erpConnected = true;
                     $warehouses = array_values($r);
                     break;
                 }
             }
         } catch (\Throwable $e) {
-            $erpConnected = false;
             $warehouses = [];
         }
 
@@ -490,11 +496,10 @@ class RecycleDevice extends BaseAdminController
         // （ERP 未安装则类不存在 → 跳过，回退固定渠道；避免依赖事件注册时机）
         if (empty($warehouses)) {
             $cls = '\\addon\\hsx_erp\\app\\service\\admin\\ErpWarehouseService';
-            if (class_exists($cls)) {
+            if ($erpConnected && class_exists($cls)) {
                 try {
                     $list = (new $cls())->getOptions();
                     if (is_array($list)) {
-                        $erpConnected = true;
                         $warehouses = array_values($list);
                     }
                 } catch (\Throwable $e) {

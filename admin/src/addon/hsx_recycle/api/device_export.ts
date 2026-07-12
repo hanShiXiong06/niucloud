@@ -31,10 +31,11 @@ export function updateDevice(deviceId: number, data: any) {
 /**
  * 将选中的设备批量同步到 ERP。
  */
-export function syncRecycleDevicesToErp(deviceIds: Array<number | string>, targets: string[] = ['self_erp']) {
+export function syncRecycleDevicesToErp(deviceIds: Array<number | string>, targets: string[] = ['self_erp'], placement: Record<string, any> = {}) {
     return request.post('recycle/device_export/sync_erp', {
         device_ids: deviceIds,
-        targets
+        targets,
+        placement
     })
 }
 
@@ -49,6 +50,6 @@ export function getDeviceSyncHealth(deviceIds: Array<number | string>) {
 /**
  * 重新同步单台设备（兜底：事件失效时手动补齐下游步骤，如中台待拍照）。
  */
-export function resyncRecycleDevice(deviceId: number | string) {
-    return request.post(`recycle/device_export/${deviceId}/resync`, {})
+export function resyncRecycleDevice(deviceId: number | string, placement: Record<string, any> = {}) {
+    return request.post(`recycle/device_export/${deviceId}/resync`, { placement })
 }

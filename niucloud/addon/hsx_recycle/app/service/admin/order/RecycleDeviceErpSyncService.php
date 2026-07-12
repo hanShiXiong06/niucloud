@@ -5,6 +5,8 @@ namespace addon\hsx_recycle\app\service\admin\order;
 
 use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
 use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
+use app\model\member\Member;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 
@@ -15,7 +17,10 @@ use core\exception\CommonException;
  */
 class RecycleDeviceErpSyncService extends BaseAdminService
 {
-    public function dispatch(array $deviceIds, array $targets = ['self_erp']): array
+    /** @var array<int,array> 同一批同步内复用会员快照，避免逐设备重复查询。 */
+    private array $memberSnapshotCache = [];
+
+    public function dispatch(array $deviceIds, array $targets = ['self_erp'], array $placement = []): array
     {
         $deviceIds = array_values(array_unique(array_filter(array_map('intval', $deviceIds))));
         $targets = array_values(array_unique(array_filter(array_map('strval', $targets))));
@@ -31,6 +36,10 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         ])->whereIn('id', $deviceIds)->with(['order', 'consignmentOrder'])->select();
         if ($devices->count() !== count($deviceIds)) {
             throw new CommonException('部分设备不存在或不属于当前站点');
+        }
+
+        if (in_array('self_erp', $targets, true)) {
+            $this->ensureInboundPlacement($devices, $placement);
         }
 
         $snapshots = [];
@@ -94,6 +103,19 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         }
 
         $merged = [];
+        $missingPlacement = [];
+        if ((new RecycleErpCapabilityService())->isEnabled($this->site_id)) {
+            $rows = RecycleDevice::where([['site_id', '=', $this->site_id]])
+                ->whereIn('id', $deviceIds)
+                ->field('id,target_warehouse_id,target_location_id')
+                ->select()
+                ->toArray();
+            foreach ($rows as $row) {
+                if ((int)$row['target_warehouse_id'] <= 0 || (int)$row['target_location_id'] <= 0) {
+                    $missingPlacement[(int)$row['id']] = true;
+                }
+            }
+        }
         try {
             $results = (array)event('GetErpDeviceSyncHealth', [
                 'site_id' => $this->site_id,
@@ -115,6 +137,15 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         // 没有应答(ERP 未装)的设备 → 视为健康，不显示按钮
         $out = [];
         foreach ($deviceIds as $id) {
+            if (isset($missingPlacement[$id]) && empty($merged[$id]['has_asset'])) {
+                $out[$id] = [
+                    'stuck' => true,
+                    'has_asset' => false,
+                    'repair_required' => true,
+                    'reason' => '缺少 ERP 入库仓库或库位',
+                ];
+                continue;
+            }
             $out[$id] = $merged[$id] ?? ['stuck' => false, 'has_asset' => true, 'reason' => ''];
         }
         return $out;
@@ -125,7 +156,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
      * @param int $deviceId
      * @return array
      */
-    public function resync(int $deviceId): array
+    public function resync(int $deviceId, array $placement = []): array
     {
         $deviceId = (int)$deviceId;
         if ($deviceId <= 0) {
@@ -152,7 +183,7 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         // ERP 还没这台资产 → 入库同步根本没落地：重新 dispatch 入库，再 flush 一次
         if (empty($result['has_asset'])) {
             try {
-                $this->dispatch([$deviceId], ['self_erp']);
+                $this->dispatch([$deviceId], ['self_erp'], $placement);
             } catch (\Throwable $e) {
                 throw new CommonException('重新入库同步失败：' . $e->getMessage());
             }
@@ -162,12 +193,61 @@ class RecycleDeviceErpSyncService extends BaseAdminService
         return $result;
     }
 
+    /**
+     * 新数据强校验；历史缺失数据可在重同步时传入 placement 一次性补齐。
+     */
+    private function ensureInboundPlacement($devices, array $placement): void
+    {
+        $capability = new RecycleErpCapabilityService();
+        if (!$capability->isEnabled($this->site_id)) return;
+
+        $repair = [];
+        if (!empty($placement)) {
+            $repair = $capability->validateInboundPlacement(
+                $this->site_id,
+                (int)($placement['target_warehouse_id'] ?? 0),
+                (int)($placement['target_location_id'] ?? 0)
+            );
+        }
+
+        $validated = [];
+        foreach ($devices as $device) {
+            $warehouseId = (int)$device->target_warehouse_id;
+            $locationId = (int)$device->target_location_id;
+            if (($warehouseId <= 0 || $locationId <= 0) && !empty($repair)) {
+                $warehouseId = (int)$repair['warehouse_id'];
+                $locationId = (int)$repair['location_id'];
+                $device->target_warehouse_id = $warehouseId;
+                $device->target_warehouse_name = (string)$repair['warehouse_name'];
+                $device->target_location_id = $locationId;
+                $device->target_location_name = (string)$repair['location_name'];
+                $device->save();
+            }
+            if ($warehouseId <= 0 || $locationId <= 0) {
+                $label = trim((string)($device->imei ?: $device->model ?: ('设备#' . $device->id)));
+                throw new CommonException($label . '缺少 ERP 入库仓库或库位，请先补全入库位置后再同步');
+            }
+
+            $key = $warehouseId . ':' . $locationId;
+            if (!isset($validated[$key])) {
+                $validated[$key] = $capability->validateInboundPlacement($this->site_id, $warehouseId, $locationId);
+            }
+        }
+    }
+
     private function buildSnapshot(array $device): array
     {
         $isConsign = (string)($device['dispose_type'] ?? '') === RecycleOrderDict::DISPOSE_TYPE_CONSIGN
             || (int)($device['status'] ?? 0) === RecycleOrderDict::DEVICE_STATUS_CONSIGNED;
         $memberId = (int)($device['member_id'] ?? ($device['order']['member_id'] ?? 0));
         $counterpartySourceId = $memberId > 0 ? $memberId : (int)($device['order_id'] ?? 0);
+        $member = $this->memberSnapshot($memberId);
+        // 回收用户本来就是牛云会员，ERP 主体优先沿用会员身份，不再用“来源客户#ID”。
+        $memberName = trim((string)($member['nickname'] ?? ''));
+        if ($memberName === '') $memberName = trim((string)($device['order']['customer_name'] ?? ''));
+        if ($memberName === '') $memberName = trim((string)($member['username'] ?? ''));
+        $memberMobile = trim((string)($member['mobile'] ?? ''));
+        if ($memberMobile === '') $memberMobile = trim((string)($device['order']['customer_phone'] ?? ''));
 
         return [
             'source_id' => (int)($device['order_id'] ?? 0),
@@ -187,11 +267,12 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 'source_plugin' => $memberId > 0 ? 'niucloud' : 'hsx_recycle',
                 'source_type' => $memberId > 0 ? 'member' : 'order_customer',
                 'source_id' => $counterpartySourceId,
+                'member_id' => $memberId,
                 'counterparty_type' => 'individual',
                 'role_type' => $isConsign ? 'consignor' : 'supplier',
-                'name' => (string)($device['order']['customer_name'] ?? ''),
-                'mobile' => (string)($device['order']['customer_phone'] ?? ''),
-                'contact_name' => (string)($device['order']['customer_name'] ?? ''),
+                'name' => $memberName,
+                'mobile' => $memberMobile,
+                'contact_name' => $memberName,
             ],
             'paid_amount' => $isConsign ? 0 : round((float)($device['pay_amount'] ?? 0), 2),
             'settlement_status' => $isConsign
@@ -256,6 +337,19 @@ class RecycleDeviceErpSyncService extends BaseAdminService
                 'listing_price' => round((float)($device['consignment_order']['listing_price'] ?? 0), 2),
             ] : null,
         ];
+    }
+
+    private function memberSnapshot(int $memberId): array
+    {
+        if ($memberId <= 0) return [];
+        if (array_key_exists($memberId, $this->memberSnapshotCache)) {
+            return $this->memberSnapshotCache[$memberId];
+        }
+        $member = Member::where([
+            ['site_id', '=', $this->site_id],
+            ['member_id', '=', $memberId],
+        ])->field('member_id,nickname,username,mobile')->findOrEmpty();
+        return $this->memberSnapshotCache[$memberId] = ($member->isEmpty() ? [] : $member->toArray());
     }
 
     private function normalizeRefurbishmentItems($items): array

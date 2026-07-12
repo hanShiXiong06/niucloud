@@ -16,6 +16,7 @@ use addon\hsx_recycle\app\service\admin\device\RecycleDeviceModelDictService;
 use addon\hsx_recycle\app\service\core\recycle_device\CoreRecycleDeviceLogService;
 use addon\hsx_recycle\app\service\core\recycle_order\CoreRecycleOrderNotifyService;
 use addon\hsx_recycle\app\service\core\recycle_order\DeviceSummaryHelper;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use addon\hsx_recycle\app\service\admin\printer\RecyclePrintSceneService;
 use app\model\sys\SysUser;
 use app\model\sys\SysUserRole;
@@ -1458,8 +1459,18 @@ class RecycleDeviceService extends BaseAdminService
      */
     public function confirmPrice(int $id, float $price, string $remark = '', ?float $sellPrice = null, array $refurbishment = []): bool
     {
-       
-     
+        $placement = (new RecycleErpCapabilityService())->validateInboundPlacement(
+            $this->site_id,
+            (int)($refurbishment['target_warehouse_id'] ?? 0),
+            (int)($refurbishment['target_location_id'] ?? 0)
+        );
+        if (!empty($placement)) {
+            $refurbishment['target_warehouse_id'] = $placement['warehouse_id'];
+            $refurbishment['target_warehouse_name'] = $placement['warehouse_name'];
+            $refurbishment['target_location_id'] = $placement['location_id'];
+            $refurbishment['target_location_name'] = $placement['location_name'];
+        }
+
         // 开启事务
         Db::startTrans();
         try {
@@ -1491,7 +1502,7 @@ class RecycleDeviceService extends BaseAdminService
             $device->price_uid = $this->uid;
             $device->price_at = time(); // 添加定价时间
             $device->sale_destination = $saleDestination;
-            // 目标仓库（ERP 安装时由定价弹窗选择；未选则保持 0/空，不影响固定渠道流程）
+            // ERP 联动时已在事务前完成仓库/库位强校验；独立运行时保持固定渠道兼容。
             if (isset($refurbishment['target_warehouse_id'])) {
                 $device->target_warehouse_id = (int)$refurbishment['target_warehouse_id'];
             }

@@ -5,6 +5,7 @@ namespace addon\hsx_recycle\app\adminapi\controller\device\export;
 
 use addon\hsx_recycle\app\service\admin\device_export\DeviceExportService;
 use addon\hsx_recycle\app\service\admin\order\RecycleDeviceErpSyncService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
 use core\base\BaseAdminController;
 use think\Response;
 
@@ -62,11 +63,17 @@ class DeviceExportController extends BaseAdminController
         $data = $this->request->params([
             ['device_ids', []],
             ['targets', ['self_erp']],
+            ['placement', []],
         ]);
 
+        $placement = (array)$data['placement'];
+        if (empty($placement)) {
+            $placement = (new RecycleErpCapabilityService())->defaultInboundPlacement((int)$this->request->siteId());
+        }
         return success((new RecycleDeviceErpSyncService())->dispatch(
             (array)$data['device_ids'],
-            (array)$data['targets']
+            (array)$data['targets'],
+            $placement
         ));
     }
 
@@ -90,6 +97,13 @@ class DeviceExportController extends BaseAdminController
      */
     public function resync(int $id)
     {
-        return success((new RecycleDeviceErpSyncService())->resync($id));
+        $data = $this->request->params([
+            ['placement', []],
+        ]);
+        $placement = (array)$data['placement'];
+        if (empty($placement)) {
+            $placement = (new RecycleErpCapabilityService())->defaultInboundPlacement((int)$this->request->siteId());
+        }
+        return success((new RecycleDeviceErpSyncService())->resync($id, $placement));
     }
 }

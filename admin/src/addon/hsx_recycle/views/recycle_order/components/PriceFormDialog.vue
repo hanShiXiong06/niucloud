@@ -107,13 +107,13 @@
                 <el-cascader
                   v-model="warehousePath"
                   :options="warehouseCascaderOptions"
-                  :props="{ checkStrictly: true, expandTrigger: 'hover' }"
-                  placeholder="选择入库仓库 / 库位（决定销售流向）"
+                  :props="{ checkStrictly: false, expandTrigger: 'hover', emitPath: true }"
+                  placeholder="请选择入库仓库和具体库位"
                   class="w-full"
                   @change="onCascaderChange"
                 />
                 <div class="pfd-hint">
-                  选到仓库即可（库位可不选，留给入库时再定）；流向按仓库业务类型自动确定：<b>{{ saleDestinationText || '—' }}</b><template v-if="saleDestinationDescription">（{{ saleDestinationDescription }}）</template>
+                  ERP 入库必须指定到具体库位；流向按仓库业务类型自动确定：<b>{{ saleDestinationText || '—' }}</b><template v-if="saleDestinationDescription">（{{ saleDestinationDescription }}）</template>
                 </div>
               </template>
 
@@ -130,7 +130,7 @@
                 </el-radio-group>
                 <div v-if="saleDestinationDescription" class="pfd-hint">{{ saleDestinationDescription }}</div>
                 <div v-if="erpConnected && !erpWarehouses.length" class="pfd-hint pfd-hint--warn">
-                  已连接 ERP，但尚未创建启用的仓库。可先按固定渠道定价，或到「ERP · 仓库管理」创建仓库后改用仓库选择。
+                  已连接 ERP，但尚无可用的仓库和库位。请先到「ERP · 仓库管理」完成配置，本设备暂不能提交定价。
                 </div>
               </template>
             </section>
@@ -303,7 +303,8 @@ const warehouseMode = computed(() => erpConnected.value && erpWarehouses.value.l
 const warehouseCascaderOptions = computed(() => erpWarehouses.value.map(w => {
     const node: any = {
         value: w.id,
-        label: `${w.warehouse_name} · ${WH_TYPE_LABEL[w.business_type || 'mall'] || '商城'}`
+        label: `${w.warehouse_name} · ${WH_TYPE_LABEL[w.business_type || 'mall'] || '商城'}`,
+        disabled: !(w.locations || []).length
     }
     const locs = w.locations || []
     if (locs.length) node.children = locs.map(l => ({ value: l.id, label: l.location_name }))
@@ -563,6 +564,14 @@ watch(dialogVisible, (v) => { emit('update:visible', v) })
 const handleCancel = () => { dialogVisible.value = false; emit('cancel') }
 const handleConfirm = () => {
     if (!isFormValid.value) { ElMessage.warning('请输入有效的价格'); return }
+    if (erpConnected.value && !erpWarehouses.value.length) {
+        ElMessage.warning('ERP 尚无可用仓库和库位，请先完成仓库配置')
+        return
+    }
+    if (erpConnected.value && (!deviceForm.target_warehouse_id || !deviceForm.target_location_id)) {
+        ElMessage.warning('ERP 入库必须选择仓库和具体库位')
+        return
+    }
     if (deviceForm.refurbishment_required === 1 && !deviceForm.refurbishment_assignee_uid) {
         ElMessage.warning('请选择整备负责人')
         return
