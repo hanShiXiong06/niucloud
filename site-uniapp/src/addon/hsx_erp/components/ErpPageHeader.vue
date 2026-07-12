@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
+import { getErpNavbarMetrics } from '@/addon/hsx_erp/utils/navbar'
 
 withDefaults(defineProps<{
     title: string
@@ -33,7 +33,7 @@ withDefaults(defineProps<{
     fill: true
 })
 
-const metrics = getRecycleNavbarMetrics()
+const metrics = getErpNavbarMetrics()
 const headerStyle = computed(() => `height:${metrics.navbarHeightPx}px;`)
 const placeholderStyle = computed(() => `height:${metrics.navbarHeightPx}px;`)
 const contentStyle = computed(() => [

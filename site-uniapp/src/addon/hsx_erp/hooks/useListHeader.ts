@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { pxToRpx } from '@/utils/common'
-import { getRecycleNavbarMetrics } from '@/addon/hsx_recycle/utils/navbar'
+import { getErpNavbarMetrics } from '@/addon/hsx_erp/utils/navbar'
 
 export const useListHeader = (statusTabsHeight = 82, h5Top = 186) => {
     const isMp = ref(false)
@@ -9,7 +9,7 @@ export const useListHeader = (statusTabsHeight = 82, h5Top = 186) => {
     isMp.value = true
     // #endif
 
-    const navbarMetrics = getRecycleNavbarMetrics()
+    const navbarMetrics = getErpNavbarMetrics()
     const navbarHeightPx = navbarMetrics.navbarHeightPx
     const navbarHeightRpx = pxToRpx(navbarHeightPx)
 
