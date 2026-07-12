@@ -733,7 +733,7 @@ defineExpose({ savedDeviceCount, addDeviceRow, stopAuto })
 
 .model-picker .model-mode-button {
     flex: 0 0 auto;
-    width: 28px;
+    width: 68px;
     padding: 0;
 }
 </style>
