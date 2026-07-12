@@ -41,7 +41,7 @@
                             <text class="amt-value orange">¥{{ money(row.remain_amount) }}</text>
                         </view>
                     </view>
-                    <view v-if="row.status !== 'settled' && row.status !== 'void' && Number(row.remain_amount) > 0" class="card-actions">
+                    <view v-if="row.status !== 'settled' && row.status !== 'void' && Number(row.remain_amount) > 0" class="card-actions" @click.stop @tap.stop>
                         <u-button type="primary" size="small" @click.stop="openDetailReceipt(row)">明细收款</u-button>
                         <u-button type="success" size="small" plain @click.stop="openReceipt(row)">整体收款</u-button>
                         <u-button v-if="row.can_offset" type="warning" size="small" plain @click.stop="openOffset(row)">折账</u-button>

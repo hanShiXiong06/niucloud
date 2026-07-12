@@ -25,7 +25,6 @@
                         <view class="stock-title">
                             <text class="card-title stock-title__model">{{ row.model || '-' }}</text>
                             <text class="stock-title__sub">{{ deviceIdentityLine(row) }}</text>
-                            <text v-if="row.imei" class="stock-title__sub">IMEI {{ row.imei }}</text>
                         </view>
                         <view class="tag-stack">
                             <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />

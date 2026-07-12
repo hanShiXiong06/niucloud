@@ -1433,6 +1433,7 @@ class ErpFinanceService extends BaseAdminService
             unset($row['spec_json']);
         }
         unset($row);
+        $this->appendFinanceDevices($page['data'], ErpDict::TARGET_PAYABLE, 'payable_id');
         $payableIds = array_values(array_unique(array_filter(array_map(static fn(array $row): int => (int)$row['payable_id'], $page['data']))));
         $settlementMap = $this->payableSettlementDetails($payableIds);
         foreach ($page['data'] as &$row) {
@@ -2010,6 +2011,7 @@ class ErpFinanceService extends BaseAdminService
             $row['status'] = $row['finance_status'];
         }
         unset($row);
+        $this->appendFinanceDevices($page['data'], ErpDict::TARGET_RECEIVABLE);
         $summaryMap = $this->settlementSummaryForTargets(ErpDict::TARGET_RECEIVABLE, array_column($page['data'], 'id'));
         foreach ($page['data'] as &$row) {
             $summary = $summaryMap[(int)$row['id']] ?? [];
@@ -2752,18 +2754,24 @@ class ErpFinanceService extends BaseAdminService
             }
         }
 
+        $receivableDirectAssetIds = [];
         $receivableSaleIds = [];
+        $receivablePurchaseReturnIds = [];
         foreach ($receivableMap as $id => $row) {
-            if ((string)($row['source_type'] ?? '') === 'sale') {
+            if ((int)($row['asset_id'] ?? 0) > 0) {
+                $receivableDirectAssetIds[(int)$row['asset_id']][] = (int)$id;
+            } elseif ((string)($row['source_type'] ?? '') === 'sale') {
                 $receivableSaleIds[(int)$row['source_id']][] = (int)$id;
+            } elseif ((string)($row['source_type'] ?? '') === 'purchase_return') {
+                $receivablePurchaseReturnIds[(int)$row['source_id']][] = (int)$id;
             }
         }
 
         $map = [];
-        if (!empty($payableDirectAssetIds) || !empty($payableAssetIds) || !empty($payablePurchaseIds)) {
+        if (!empty($payableDirectAssetIds) || !empty($payableAssetIds) || !empty($payablePurchaseIds) || !empty($receivableDirectAssetIds)) {
             $query = ErpAsset::where([['site_id', '=', $this->site_id]]);
-            $query->where(function ($q) use ($payableDirectAssetIds, $payableAssetIds, $payablePurchaseIds) {
-                $directIds = array_values(array_unique(array_merge(array_keys($payableDirectAssetIds), array_keys($payableAssetIds))));
+            $query->where(function ($q) use ($payableDirectAssetIds, $payableAssetIds, $payablePurchaseIds, $receivableDirectAssetIds) {
+                $directIds = array_values(array_unique(array_merge(array_keys($payableDirectAssetIds), array_keys($payableAssetIds), array_keys($receivableDirectAssetIds))));
                 if (!empty($directIds)) {
                     $q->whereIn('id', $directIds);
                 }
@@ -2783,6 +2791,9 @@ class ErpFinanceService extends BaseAdminService
                 foreach ($payablePurchaseIds[(int)$row['purchase_order_id']] ?? [] as $payableId) {
                     $map[ErpDict::TARGET_PAYABLE . '_' . $payableId][] = $device;
                 }
+                foreach ($receivableDirectAssetIds[(int)$row['id']] ?? [] as $receivableId) {
+                    $map[ErpDict::TARGET_RECEIVABLE . '_' . $receivableId][] = $this->formatSettlementDevice($row, 'sale');
+                }
             }
         }
 
@@ -2795,8 +2806,8 @@ class ErpFinanceService extends BaseAdminService
                 ->field([
                     'i.sale_order_id',
                     'i.asset_id as id',
-                    'i.imei',
-                    'i.model',
+                    "COALESCE(NULLIF(i.imei,''), a.imei) as imei",
+                    "COALESCE(NULLIF(i.model,''), a.model) as model",
                     'i.cost as total_cost',
                     'i.sale_price',
                     'i.profit',
@@ -2816,7 +2827,48 @@ class ErpFinanceService extends BaseAdminService
             }
         }
 
+        if (!empty($receivablePurchaseReturnIds)) {
+            $assetTable = (new ErpAsset())->getTable();
+            $rows = ErpPurchaseReturnItem::alias('i')
+                ->leftJoin($assetTable . ' a', 'a.id = i.asset_id AND a.site_id = i.site_id')
+                ->where([['i.site_id', '=', $this->site_id]])
+                ->whereIn('i.return_id', array_keys($receivablePurchaseReturnIds))
+                ->field([
+                    'i.return_id', 'i.asset_id as id',
+                    "COALESCE(NULLIF(i.asset_no,''), a.asset_no) as asset_no",
+                    "COALESCE(NULLIF(i.imei,''), a.imei) as imei",
+                    "COALESCE(NULLIF(i.model,''), a.model) as model",
+                    'i.return_cost as total_cost', 'a.sn', 'a.spec', 'a.warehouse_name', 'a.location_name',
+                ])->select()->toArray();
+            foreach ($rows as $row) {
+                $device = $this->formatSettlementDevice($row, 'purchase_return');
+                foreach ($receivablePurchaseReturnIds[(int)$row['return_id']] ?? [] as $receivableId) {
+                    $map[ErpDict::TARGET_RECEIVABLE . '_' . $receivableId][] = $device;
+                }
+            }
+        }
+
         return $map;
+    }
+
+    /** 给应收/应付候选一次性附加设备快照，供折账和结算界面准确展示型号与IMEI。 */
+    private function appendFinanceDevices(array &$rows, string $targetType, string $idField = 'id'): void
+    {
+        if ($rows === []) return;
+        $targets = [];
+        foreach ($rows as $row) {
+            $id = (int)($row[$idField] ?? 0);
+            if ($id > 0) $targets[$id] = $row;
+        }
+        if ($targets === []) return;
+        $deviceMap = $targetType === ErpDict::TARGET_PAYABLE
+            ? $this->settlementTargetDeviceMap($targets, [])
+            : $this->settlementTargetDeviceMap([], $targets);
+        foreach ($rows as &$row) {
+            $id = (int)($row[$idField] ?? 0);
+            $row['devices'] = $deviceMap[$targetType . '_' . $id] ?? [];
+        }
+        unset($row);
     }
 
     private function formatSettlementDevice(array $row, string $scene): array

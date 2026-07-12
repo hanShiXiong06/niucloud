@@ -50,15 +50,15 @@
                         </view>
                     </view>
                     <view class="detail-entry" @click="openDetail(row)">查看关联设备与结算明细 <text>›</text></view>
-                    <view v-if="row.finance_status !== 'settled' && Number(row.remain_amount) > 0" class="card-actions">
+                    <view v-if="row.finance_status !== 'settled' && Number(row.remain_amount) > 0" class="card-actions" @click.stop @tap.stop>
                         <view class="card-action-btn main">
-                            <u-button type="primary" size="small" text="逐台付款" @click="openDetailPay(row)" />
+                            <u-button type="primary" size="small" text="逐台付款" @click.stop="openDetailPay(row)" />
                         </view>
                         <view class="card-action-btn">
-                            <u-button type="success" size="small" plain text="整体付款" @click="openPay(row)" />
+                            <u-button type="success" size="small" plain text="整体付款" @click.stop="openPay(row)" />
                         </view>
                         <view v-if="row.can_offset" class="card-action-btn">
-                            <u-button type="warning" size="small" plain text="折账" @click="openOffset(row)" />
+                            <u-button type="warning" size="small" plain text="折账" @click.stop="openOffset(row)" />
                         </view>
                     </view>
                     <view v-if="row.can_offset" class="offset-tip">

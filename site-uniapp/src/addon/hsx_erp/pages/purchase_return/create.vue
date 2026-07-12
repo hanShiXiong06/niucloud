@@ -210,6 +210,7 @@ import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 import request from '@/utils/request'
 import useUserStore from '@/stores/user'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 
 const purchaseOrderId = ref(0)
@@ -525,9 +526,7 @@ function showSubmitResult(result: any) {
 
 const money = (v: any) => Number(v || 0).toFixed(2)
 const formatDateTime = (ts: any) => {
-    const value = Number(ts || 0)
-    if (!value) return '-'
-    return new Date(value * 1000).toLocaleString('zh-CN', { hour12: false })
+    return formatErpTime(ts)
 }
 
 function safeRepeatedDecode(value: any) {

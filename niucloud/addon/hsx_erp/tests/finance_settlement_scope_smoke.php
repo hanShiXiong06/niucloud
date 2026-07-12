@@ -34,6 +34,17 @@ $assert(str_contains($finance, "'p.id as payable_id'"), '折账与付款候选�
 $assert(str_contains($finance, "['payable_ids']"), '应付批次列表必须返回当前卡片可核销的显式 payable_ids');
 
 foreach ([
+    'appendFinanceDevices',
+    'settlementTargetDeviceMap',
+    'receivableDirectAssetIds',
+    'receivablePurchaseReturnIds',
+    "COALESCE(NULLIF(i.imei,''), a.imei) as imei",
+    "'devices' => \$targetDeviceMap",
+] as $needle) {
+    $assert(str_contains($finance, $needle), '折账候选或结算快照缺少关联设备与IMEI：' . $needle);
+}
+
+foreach ([
     '应付款核销金额无效或已超过剩余应付',
     '应收款核销金额无效或已超过剩余应收',
     '部分应付款不存在、已结清或已变化',

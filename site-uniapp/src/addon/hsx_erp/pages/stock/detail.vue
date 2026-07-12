@@ -53,6 +53,14 @@
                         <text class="value">{{ asset.asset_no || '-' }}</text>
                     </view>
                     <view class="field">
+                        <text class="label">IMEI</text>
+                        <text class="value identity-value">{{ asset.imei || '-' }}</text>
+                    </view>
+                    <view v-if="asset.sn" class="field">
+                        <text class="label">SN</text>
+                        <text class="value identity-value">{{ asset.sn }}</text>
+                    </view>
+                    <view class="field">
                         <text class="label">仓库</text>
                         <text class="value">{{ asset.warehouse_name || '-' }}{{ asset.location_name ? ' / '+asset.location_name : '' }}</text>
                     </view>
@@ -197,6 +205,7 @@ import { getMobileStockInfo, syncMobileStockListing } from '@/addon/hsx_erp/api/
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
+import { formatErpDate, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
 const asset = ref<any>(null)
@@ -324,8 +333,8 @@ const goSaleReturn = () => {
 }
 
 const money = (v: any) => Number(v || 0).toFixed(2)
-const formatDate = (ts: number) => ts ? new Date(ts * 1000).toLocaleDateString('zh-CN') : '-'
-const formatTime = (ts: number) => ts ? new Date(ts * 1000).toLocaleString('zh-CN') : '-'
+const formatDate = (ts: number) => formatErpDate(ts)
+const formatTime = (ts: number) => formatErpTime(ts)
 const ageDays = (ts: number) => ts ? Math.floor((Date.now() / 1000 - ts) / 86400) : 0
 const ageText = (row: any) => {
     const ts = Number(row?.stock_in_at || row?.create_at || 0)

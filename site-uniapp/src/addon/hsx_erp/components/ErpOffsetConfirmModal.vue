@@ -28,7 +28,7 @@
             <scroll-view v-else scroll-y class="offset-body">
                 <view class="offset-section">
                     <view class="offset-section__head">
-                        <text>我要付给他</text>
+                        <view><text>客户给我的设备</text><text class="offset-section__caption">应付：我要付给客户</text></view>
                         <text>¥{{ money(payableChecked) }}</text>
                     </view>
                     <u-checkbox-group v-model="selectedPayableIds" placement="column" @change="onPayableSelectionChange">
@@ -37,6 +37,14 @@
                             <view class="offset-row__main">
                                 <text class="offset-row__title">{{ payableTitle(item) }}</text>
                                 <text class="offset-row__sub">{{ payableIdentityLine(item) }}</text>
+                                <view v-if="financeDevices(item).length" class="offset-devices">
+                                    <view v-for="(device, index) in financeDevices(item)" :key="`pd-${device.asset_id || device.id || index}`" class="offset-device">
+                                        <text class="offset-device__title">{{ device.model || '未填写型号' }}</text>
+                                        <text class="offset-device__serial">{{ deviceSerial(device) }}</text>
+                                        <text v-if="deviceSpec(device)" class="offset-device__spec">{{ deviceSpec(device) }}</text>
+                                    </view>
+                                </view>
+                                <text v-else class="offset-row__non-device">非设备业务，无关联 IMEI</text>
                             </view>
                             <text class="offset-row__amount">¥{{ money(item.remain) }}</text>
                         </view>
@@ -46,7 +54,7 @@
 
                 <view class="offset-section">
                     <view class="offset-section__head">
-                        <text>他要付给我</text>
+                        <view><text>我给客户的设备</text><text class="offset-section__caption">应收：客户要付给我</text></view>
                         <text>¥{{ money(receivableChecked) }}</text>
                     </view>
                     <u-checkbox-group v-model="selectedReceivableIds" placement="column" @change="onReceivableSelectionChange">
@@ -55,6 +63,14 @@
                             <view class="offset-row__main">
                                 <text class="offset-row__title">{{ item.source_no || item.sale_no || item.receivable_no || '应收款' }}</text>
                                 <text class="offset-row__sub">{{ receivableIdentityLine(item) }}</text>
+                                <view v-if="financeDevices(item).length" class="offset-devices">
+                                    <view v-for="(device, index) in financeDevices(item)" :key="`rd-${device.asset_id || device.id || index}`" class="offset-device">
+                                        <text class="offset-device__title">{{ device.model || '未填写型号' }}</text>
+                                        <text class="offset-device__serial">{{ deviceSerial(device) }}</text>
+                                        <text v-if="deviceSpec(device)" class="offset-device__spec">{{ deviceSpec(device) }}</text>
+                                    </view>
+                                </view>
+                                <text v-else class="offset-row__non-device">非设备业务，无关联 IMEI</text>
                             </view>
                             <text class="offset-row__amount blue">¥{{ money(item.remain) }}</text>
                         </view>
@@ -140,6 +156,7 @@ import { computed, ref, watch } from 'vue'
 import { confirmMobileOffset, getMobilePayablePartyItems, getMobileReceivableList } from '@/addon/hsx_erp/api/erp'
 import { cloneErpSubmitSnapshot, confirmErpPopupAction } from '@/addon/hsx_erp/hooks/useErpPopupConfirm'
 import { erpFinanceSourceMeta } from '@/addon/hsx_erp/hooks/useErpFinanceSource'
+import { erpSpecLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 
 const props = withDefaults(defineProps<{
@@ -377,6 +394,16 @@ function payableIdentityLine(item: any) {
 function receivableIdentityLine(item: any) {
     return [item.source_label || sourceLabel(item.source_type), item.receivable_no || ''].filter(Boolean).join(' · ') || '应收款'
 }
+function financeDevices(item: any) {
+    if (Array.isArray(item?.devices) && item.devices.length) return item.devices
+    return item?.model || item?.imei || item?.sn || item?.asset_no ? [item] : []
+}
+function deviceSerial(device: any) {
+    if (device?.imei) return `IMEI ${device.imei}`
+    if (device?.sn) return `SN ${device.sn}`
+    return 'IMEI 未填写'
+}
+const deviceSpec = (device: any) => erpSpecLine(device?.spec, '')
 </script>
 
 <style scoped lang="scss">
@@ -395,11 +422,21 @@ function receivableIdentityLine(item: any) {
 .offset-loading { display:flex; justify-content:center; padding:80rpx 0; }
 .offset-body { flex:1; min-height:0; width:100%; padding:0 32rpx; box-sizing:border-box; }
 .offset-section { margin-bottom:22rpx; }
-.offset-section__head { display:flex; justify-content:space-between; color:#334155; font-size:26rpx; font-weight:700; margin-bottom:12rpx; }
+.offset-section__head { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; color:#334155; font-size:26rpx; font-weight:700; margin-bottom:12rpx; }
+.offset-section__head > view { min-width:0; }
+.offset-section__head > text:last-child { flex:none; }
+.offset-section__caption { display:block; margin-top:4rpx; color:#94a3b8; font-size:20rpx; font-weight:400; }
 .offset-row { display:flex; align-items:center; gap:16rpx; padding:18rpx 0; border-bottom:1rpx solid #f1f5f9; }
 .offset-row__main { flex:1; min-width:0; }
 .offset-row__title { display:block; font-size:27rpx; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .offset-row__sub { display:block; margin-top:4rpx; font-size:22rpx; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.offset-devices { margin-top:12rpx; display:flex; flex-direction:column; gap:8rpx; }
+.offset-device { padding:12rpx 14rpx; border-radius:12rpx; background:#f8fafc; }
+.offset-device__title,.offset-device__serial,.offset-device__spec { display:block; line-height:1.45; }
+.offset-device__title { color:#334155; font-size:23rpx; font-weight:600; }
+.offset-device__serial { margin-top:3rpx; color:#0f172a; font-size:22rpx; font-weight:600; word-break:break-all; }
+.offset-device__spec { margin-top:3rpx; color:#64748b; font-size:21rpx; word-break:break-all; }
+.offset-row__non-device { display:block; margin-top:9rpx; color:#94a3b8; font-size:21rpx; }
 .offset-row__amount { font-size:27rpx; font-weight:700; color:#dc2626; }
 .offset-row__amount.blue { color:#2563eb; }
 .offset-empty { text-align:center; color:#94a3b8; font-size:25rpx; padding:36rpx 0; }

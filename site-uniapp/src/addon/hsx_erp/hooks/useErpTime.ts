@@ -6,6 +6,11 @@ export const formatErpTime = (value: any) => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+export const formatErpDate = (value: any) => {
+    const formatted = formatErpTime(value)
+    return formatted === '-' ? '-' : formatted.slice(0, 10)
+}
+
 export const erpPrimaryTime = (row: any, fields: string[] = []) => {
     for (const field of fields) {
         const ts = Number(row?.[field] || 0)
