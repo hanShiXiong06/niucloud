@@ -406,10 +406,35 @@ class ErpStockService extends BaseAdminService
             });
         }
         if (($where['stock_age_min'] ?? '') !== '') {
-            $query->where('a.stock_in_at', '<=', time() - max(0, (int)$where['stock_age_min']) * 86400);
+            $query->whereRaw('IF(a.stock_in_at > 0, a.stock_in_at, a.create_at) <= ' . (time() - max(0, (int)$where['stock_age_min']) * 86400));
         }
         if (($where['stock_age_max'] ?? '') !== '') {
-            $query->where('a.stock_in_at', '>=', time() - max(0, (int)$where['stock_age_max']) * 86400);
+            $query->whereRaw('IF(a.stock_in_at > 0, a.stock_in_at, a.create_at) >= ' . (time() - max(0, (int)$where['stock_age_max']) * 86400));
+        }
+        if (!empty($where['turnover_level'])) {
+            $rules = (new ErpTurnoverService())->rules();
+            $attention = (int)($rules['attention_days'] ?? 7);
+            $warning = (int)($rules['warning_days'] ?? 15);
+            $critical = (int)($rules['critical_days'] ?? 30);
+            $ageColumn = 'IF(a.stock_in_at > 0, a.stock_in_at, a.create_at)';
+            $attentionCutoff = time() - ($attention + 1) * 86400;
+            $warningCutoff = time() - ($warning + 1) * 86400;
+            $criticalCutoff = time() - ($critical + 1) * 86400;
+            $level = (string)$where['turnover_level'];
+            $query->where('a.status', '=', ErpDict::ASSET_IN_STOCK);
+            if ($level === 'healthy') {
+                $query->whereRaw($ageColumn . ' >= ' . $attentionCutoff);
+            } elseif ($level === 'attention') {
+                $query->whereRaw($ageColumn . ' < ' . $attentionCutoff)
+                    ->whereRaw($ageColumn . ' >= ' . $warningCutoff);
+            } elseif ($level === 'risk') {
+                $query->whereRaw($ageColumn . ' < ' . $warningCutoff);
+            } elseif ($level === 'warning') {
+                $query->whereRaw($ageColumn . ' < ' . $warningCutoff)
+                    ->whereRaw($ageColumn . ' >= ' . $criticalCutoff);
+            } elseif ($level === 'critical') {
+                $query->whereRaw($ageColumn . ' < ' . $criticalCutoff);
+            }
         }
         if (!empty($where['start_at'])) {
             $query->where('a.stock_in_at', '>=', (int)$where['start_at']);
@@ -430,7 +455,13 @@ class ErpStockService extends BaseAdminService
         ])->toArray();
         $page['data'] = $this->appendLifecycleContext((array)($page['data'] ?? []));
         $page['data'] = $this->appendListingSyncState((array)$page['data']);
+        $page['data'] = (new ErpTurnoverService())->decorate((array)$page['data']);
         return $page;
+    }
+
+    public function turnoverSummary(): array
+    {
+        return (new ErpTurnoverService())->summary();
     }
 
     /**

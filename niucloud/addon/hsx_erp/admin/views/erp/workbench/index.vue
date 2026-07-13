@@ -35,6 +35,20 @@
                 </div>
             </el-alert>
 
+            <el-alert v-if="turnoverReminder.visible" class="mt-4" type="error" show-icon :closable="false">
+                <template #title>库存周转预警：{{ turnoverReminder.warning_total_count }} 台设备已超过预警库龄</template>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <span>其中严重滞销 {{ turnoverReminder.critical_count }} 台，占用库存成本 {{ money(turnoverReminder.warning_total_cost) }}；当前平均库龄 {{ turnoverReminder.average_age_days }} 天。</span>
+                    <div class="flex gap-2">
+                        <el-button size="small" type="danger" @click="goTurnoverQueue">查看预警库存</el-button>
+                        <el-dropdown @command="dismissTurnover">
+                            <el-button size="small">关闭提醒</el-button>
+                            <template #dropdown><el-dropdown-menu><el-dropdown-item command="today">今天不再提醒</el-dropdown-item><el-dropdown-item command="forever" divided>永久关闭此提醒</el-dropdown-item></el-dropdown-menu></template>
+                        </el-dropdown>
+                    </div>
+                </div>
+            </el-alert>
+
             <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div v-for="item in summaryCards" :key="item.label" class="summary-tile">
                     <div class="summary-label">{{ item.label }}</div>
@@ -141,7 +155,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getErpDashboard, getErpKpiDashboard, getErpKpiRules, saveErpKpiRules } from '@/addon/hsx_erp/api/erp'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
-import { dismissErpRefurbishReminder } from '@/addon/hsx_erp/api/config'
+import { dismissErpRefurbishReminder, dismissErpTurnoverReminder } from '@/addon/hsx_erp/api/config'
 
 const loading = ref(false)
 const period = ref('month')
@@ -158,6 +172,7 @@ const summary = computed(() => data.value?.summary || {})
 const todo = computed(() => data.value?.todo || {})
 const recent = computed(() => data.value?.recent || {})
 const refurbishReminder = computed(() => data.value?.reminders?.refurbish || {})
+const turnoverReminder = computed(() => data.value?.reminders?.turnover || {})
 const periodLabel = computed(() => ({ today: '今日', yesterday: '昨天', last7: '近7天', month: '本月', last_month: '上月', custom: '自定义', all: '全部' } as Record<string, string>)[period.value] || '本期')
 const operationChartRef = ref<HTMLElement>()
 const structureChartRef = ref<HTMLElement>()
@@ -171,6 +186,7 @@ const summaryCards = computed(() => [
     { label: '经营净利润', value: money(summary.value.operating_profit_amount), hint: `其他经营收入 ${money(summary.value.operating_income_amount)}`, className: Number(summary.value.operating_profit_amount || 0) >= 0 ? 'text-green-600' : 'text-red-600' },
     { label: '库存设备', value: summary.value.stock_count || 0, hint: `库存成本 ${money(summary.value.stock_cost)}` },
     { label: '今日动销率', value: `${Number(summary.value.turnover_rate || 0).toFixed(2)}%`, hint: `今日售出 ${summary.value.today_sold_count || 0} 台 ÷ 零点库存 ${summary.value.opening_stock_count || 0} 台`, className: Number(summary.value.turnover_rate || 0) > 0 ? 'text-blue-600' : '' },
+    { label: '库存周转', value: `${Number(summary.value.average_stock_age_days || 0).toFixed(1)} 天`, hint: `预警 ${summary.value.turnover_warning_count || 0} 台 · 占用 ${money(summary.value.turnover_warning_cost)}`, className: Number(summary.value.turnover_warning_count || 0) > 0 ? 'text-orange-600' : 'text-green-600' },
     { label: '期间收款', value: money(summary.value.receipt_amount), className: 'text-green-600' },
     { label: '期间付款', value: money(summary.value.payment_amount), className: 'text-orange-600' },
     { label: '期间折账', value: money(summary.value.offset_amount), className: 'text-blue-600' },
@@ -212,9 +228,19 @@ function goRefurbishQueue() {
     router.push({ path: '/site/hsx_erp/stock', query: { refurbish_status: 'pending' } })
 }
 
+function goTurnoverQueue() {
+    router.push({ path: '/site/hsx_erp/stock', query: { turnover_level: 'risk' } })
+}
+
 async function dismissRefurbish(mode: 'today' | 'forever') {
     await dismissErpRefurbishReminder(mode)
     ElMessage.success(mode === 'forever' ? '已永久关闭整备积压提醒，可在业务规则中重新开启' : '今天不再提醒')
+    await loadDashboard()
+}
+
+async function dismissTurnover(mode: 'today' | 'forever') {
+    await dismissErpTurnoverReminder(mode)
+    ElMessage.success(mode === 'forever' ? '已永久关闭库存周转提醒，可在业务规则中重新开启' : '今天不再提醒')
     await loadDashboard()
 }
 

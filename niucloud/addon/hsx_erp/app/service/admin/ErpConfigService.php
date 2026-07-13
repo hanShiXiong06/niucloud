@@ -159,6 +159,18 @@ class ErpConfigService extends BaseAdminService
             ? (string)$rules['refurbish']['reminder_dismiss_date']
             : '';
 
+        $attentionDays = max(1, min(365, (int)($rules['turnover']['attention_days'] ?? 7)));
+        $warningDays = max($attentionDays + 1, min(730, (int)($rules['turnover']['warning_days'] ?? 15)));
+        $criticalDays = max($warningDays + 1, min(1095, (int)($rules['turnover']['critical_days'] ?? 30)));
+        $rules['turnover']['attention_days'] = $attentionDays;
+        $rules['turnover']['warning_days'] = $warningDays;
+        $rules['turnover']['critical_days'] = $criticalDays;
+        $rules['turnover']['reminder_enabled'] = $this->boolInt($rules['turnover']['reminder_enabled'] ?? 1);
+        $rules['turnover']['reminder_count_threshold'] = max(1, min(9999, (int)($rules['turnover']['reminder_count_threshold'] ?? 1)));
+        $rules['turnover']['reminder_dismiss_date'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($rules['turnover']['reminder_dismiss_date'] ?? ''))
+            ? (string)$rules['turnover']['reminder_dismiss_date']
+            : '';
+
         $rules['category_sync']['enabled'] = $this->boolInt($rules['category_sync']['enabled'] ?? 0);
         $rules['category_sync']['initialized'] = $this->boolInt($rules['category_sync']['initialized'] ?? 0);
         $rules['category_sync']['provider'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($rules['category_sync']['provider'] ?? 'phone_shop')) ?: 'phone_shop';
@@ -434,6 +446,14 @@ class ErpConfigService extends BaseAdminService
                 'daily_reminder_threshold' => 25,
                 'reminder_dismiss_date' => '',
             ],
+            'turnover' => [
+                'attention_days' => 7,
+                'warning_days' => 15,
+                'critical_days' => 30,
+                'reminder_enabled' => 1,
+                'reminder_count_threshold' => 1,
+                'reminder_dismiss_date' => '',
+            ],
             'category_sync' => [
                 'enabled' => 0,
                 'initialized' => 0,
@@ -458,6 +478,19 @@ class ErpConfigService extends BaseAdminService
             $rules['refurbish']['reminder_dismiss_date'] = '';
         } else {
             $rules['refurbish']['reminder_dismiss_date'] = date('Y-m-d');
+        }
+        return $this->saveRules($rules);
+    }
+
+    /** 首页库存周转提醒：关闭今天或永久关闭此类提醒。 */
+    public function dismissTurnoverReminder(string $mode): array
+    {
+        $rules = $this->getRules();
+        if ($mode === 'forever') {
+            $rules['turnover']['reminder_enabled'] = 0;
+            $rules['turnover']['reminder_dismiss_date'] = '';
+        } else {
+            $rules['turnover']['reminder_dismiss_date'] = date('Y-m-d');
         }
         return $this->saveRules($rules);
     }

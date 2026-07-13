@@ -29,6 +29,7 @@ Route::group('erp', function () {
     Route::get('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@info');
     Route::post('config', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@save');
     Route::post('config/refurbish_reminder/dismiss', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dismissRefurbishReminder');
+    Route::post('config/turnover_reminder/dismiss', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@dismissTurnoverReminder');
     Route::get('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saleChannels');
     Route::post('config/sale_channels', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saveSaleChannels');
     Route::get('config/sale_channel_options', 'addon\hsx_erp\app\adminapi\controller\ErpConfig@saleChannelOptions');
@@ -54,6 +55,7 @@ Route::group('erp', function () {
     Route::post('purchase/item/:item_id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\ErpPurchase@adjustCost');
 
     Route::get('stock/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStock@lists');
+    Route::get('stock/turnover_summary', 'addon\hsx_erp\app\adminapi\controller\ErpStock@turnoverSummary');
     Route::get('stock/serial_trace', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTrace');
     Route::get('stock/serial_trace/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTraceDetail');
     Route::get('stock/ledger', 'addon\hsx_erp\app\adminapi\controller\ErpStock@ledger');

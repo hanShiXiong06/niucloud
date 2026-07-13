@@ -12,6 +12,10 @@ export function dismissErpRefurbishReminder(mode: 'today' | 'forever' = 'today')
     return request.post('erp/config/refurbish_reminder/dismiss', { mode })
 }
 
+export function dismissErpTurnoverReminder(mode: 'today' | 'forever' = 'today') {
+    return request.post('erp/config/turnover_reminder/dismiss', { mode })
+}
+
 export function getErpSaleChannelOptions() {
     return request.get('erp/config/sale_channel_options')
 }

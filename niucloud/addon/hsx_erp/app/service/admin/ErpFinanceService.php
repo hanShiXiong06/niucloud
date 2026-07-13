@@ -88,6 +88,7 @@ class ErpFinanceService extends BaseAdminService
         $operatingExpenseAmount = (float)(clone $operatingExpenseQuery)->where('status', '<>', ErpDict::STATUS_VOID)->sum('amount');
         $operatingIncomeAmount = (float)(clone $operatingIncomeQuery)->where('status', '<>', ErpDict::STATUS_VOID)->sum('amount');
         $turnover = $this->todayTurnoverMetrics();
+        $stockTurnover = (new ErpTurnoverService())->summary();
         $refurbishRules = (array)((new ErpConfigService())->getRules()['refurbish'] ?? []);
         $refurbishThreshold = max(1, (int)($refurbishRules['daily_reminder_threshold'] ?? 25));
         $todayStart = strtotime(date('Y-m-d 00:00:00'));
@@ -142,6 +143,9 @@ class ErpFinanceService extends BaseAdminService
                 'today_sold_count' => $turnover['sold_count'],
                 'opening_stock_count' => $turnover['opening_stock_count'],
                 'turnover_rate' => $turnover['rate'],
+                'average_stock_age_days' => $stockTurnover['average_age_days'],
+                'turnover_warning_count' => $stockTurnover['warning_total_count'],
+                'turnover_warning_cost' => $stockTurnover['warning_total_cost'],
             ],
             'todo' => [
                 'payable_count' => (int)(clone $payableBase)->count(),
@@ -158,6 +162,15 @@ class ErpFinanceService extends BaseAdminService
                     'processing_count' => $processingRefurbish,
                     'threshold' => $refurbishThreshold,
                     'tracking_mode' => (string)($refurbishRules['tracking_mode'] ?? 'simple'),
+                ],
+                'turnover' => [
+                    'visible' => (bool)$stockTurnover['reminder_visible'],
+                    'warning_count' => (int)$stockTurnover['warning_count'],
+                    'critical_count' => (int)$stockTurnover['critical_count'],
+                    'warning_total_count' => (int)$stockTurnover['warning_total_count'],
+                    'warning_total_cost' => (float)$stockTurnover['warning_total_cost'],
+                    'average_age_days' => (float)$stockTurnover['average_age_days'],
+                    'thresholds' => $stockTurnover['thresholds'],
                 ],
             ],
             'recent' => [

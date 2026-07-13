@@ -17,29 +17,33 @@
 
             <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-6">
                 <div class="summary-tile">
-                    <div class="summary-label">当前页有效库存</div>
-                    <div class="summary-value">{{ summary.inStockCount }}</div>
-                    <div class="mt-1 text-xs text-gray-400">另有 {{ summary.count - summary.inStockCount }} 条历史流转记录</div>
+                    <div class="summary-label">有效库存</div>
+                    <div class="summary-value">{{ turnoverSummary.total_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">平均库龄 {{ turnoverSummary.average_age_days || 0 }} 天</div>
                 </div>
                 <div class="summary-tile">
                     <div class="summary-label">库存成本</div>
-                    <div class="summary-value">{{ money(summary.cost) }}</div>
+                    <div class="summary-value">{{ money(turnoverSummary.total_cost) }}</div>
                 </div>
                 <div class="summary-tile">
-                    <div class="summary-label">均台成本</div>
-                    <div class="summary-value">{{ summary.inStockCount > 0 ? money(summary.cost / summary.inStockCount) : '-' }}</div>
+                    <div class="summary-label">周转正常</div>
+                    <div class="summary-value text-green-600">{{ turnoverSummary.healthy_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">≤ {{ turnoverSummary.thresholds?.attention_days || 7 }} 天</div>
                 </div>
                 <div class="summary-tile">
-                    <div class="summary-label">待整备</div>
-                    <div class="summary-value text-orange-600">{{ summary.needRefurbish }}</div>
+                    <div class="summary-label">需要关注</div>
+                    <div class="summary-value text-blue-600">{{ turnoverSummary.attention_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">{{ (turnoverSummary.thresholds?.attention_days || 7) + 1 }}～{{ turnoverSummary.thresholds?.warning_days || 15 }} 天</div>
                 </div>
                 <div class="summary-tile">
-                    <div class="summary-label">可直接卖</div>
-                    <div class="summary-value text-green-600">{{ summary.saleable }}</div>
+                    <div class="summary-label">周转预警</div>
+                    <div class="summary-value text-orange-600">{{ turnoverSummary.warning_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">占用 {{ money(turnoverSummary.warning_cost) }}</div>
                 </div>
                 <div class="summary-tile">
-                    <div class="summary-label">已售</div>
-                    <div class="summary-value text-gray-600">{{ summary.sold }}</div>
+                    <div class="summary-label">严重滞销</div>
+                    <div class="summary-value text-red-600">{{ turnoverSummary.critical_count || 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-400">占用 {{ money(turnoverSummary.critical_cost) }}</div>
                 </div>
             </div>
 
@@ -111,6 +115,15 @@
                     <span class="mx-1 text-gray-400">-</span>
                     <el-input-number v-model="search.stock_age_max" :min="0" :precision="0" :controls="false" placeholder="最多天" class="!w-[100px]" />
                 </el-form-item>
+                <el-form-item label="周转">
+                    <el-select v-model="search.turnover_level" clearable class="!w-[140px]" placeholder="全部等级">
+                        <el-option label="全部预警" value="risk" />
+                        <el-option label="周转正常" value="healthy" />
+                        <el-option label="需要关注" value="attention" />
+                        <el-option label="周转预警" value="warning" />
+                        <el-option label="严重滞销" value="critical" />
+                    </el-select>
+                </el-form-item>
                 <el-form-item label="成本">
                     <el-input-number v-model="search.min_cost" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
                     <span class="mx-1 text-gray-400">-</span>
@@ -145,15 +158,16 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="库龄" width="120" align="center">
+                <el-table-column label="库龄 / 周转" width="170" align="center">
                     <template #default="{ row }">
                         <span v-if="row.status === 'sold' && row.outbound_at" class="age-pill age-pill--success">
                             {{ turnoverDays(row) }}天售出
                         </span>
-                        <span v-else-if="row.stock_in_at && row.status === 'in_stock'" class="age-pill" :class="stockAgeDaysClass(row.stock_in_at)">
-                            在库{{ stockAgeDays(row.stock_in_at) }}天
+                        <span v-else-if="row.status === 'in_stock'" class="age-pill" :class="`age-pill--${row.turnover_type || 'neutral'}`" :title="row.turnover_label">
+                            在库{{ row.stock_age_days || 0 }}天 · {{ row.turnover_label }}
                         </span>
                         <span v-else class="age-pill age-pill--muted">已退出</span>
+                        <div v-if="row.status === 'in_stock' && row.turnover_level !== 'healthy'" class="mt-1 text-xs text-gray-400">{{ row.turnover_action }}</div>
                     </template>
                 </el-table-column>
                 <el-table-column label="成本 / 价值" min-width="175" align="right">
@@ -322,7 +336,7 @@
                         <div class="truncate" :title="row.party_name || '未记录'">{{ row.party_name || '未记录' }}</div>
                         <div>{{ formatTime(row.stock_in_at || row.create_at) }}</div>
                         <div><el-tag v-if="row.inbound_count > 1" type="warning">{{ row.inbound_count }} 次</el-tag><span v-else>首次</span></div>
-                        <div><el-tag :type="statusMeta(row.status).type">{{ statusMeta(row.status).label }}</el-tag></div>
+                        <div><el-tag :type="assetStatusMeta(row.status).type">{{ assetStatusMeta(row.status).label }}</el-tag></div>
                         <div><el-button type="primary" link @click="openTraceDetail(row)">查看流转</el-button></div>
                     </div>
                 </div>
@@ -330,6 +344,70 @@
             </div>
             <div class="mt-4 flex justify-end"><el-pagination v-model:current-page="serialTrace.page" :page-size="serialTrace.limit" layout="total,prev,pager,next" :total="serialTrace.total" @current-change="loadSerialTrace" /></div>
         </el-dialog>
+
+        <el-drawer v-model="serialTraceDetail.visible" title="串号生命周期" size="760px" destroy-on-close>
+            <div v-loading="serialTraceDetail.loading" class="min-h-[320px]">
+                <template v-if="serialTraceDetail.data">
+                    <div class="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0">
+                                <div class="truncate text-lg font-semibold text-slate-900" :title="serialTraceDetail.data.model">{{ serialTraceDetail.data.model || '未填写设备名称' }}</div>
+                                <div class="mt-1 truncate text-sm text-slate-500" :title="serialTraceDetail.data.spec">{{ serialTraceDetail.data.spec || '未填写规格' }}</div>
+                            </div>
+                            <el-tag :type="assetStatusMeta(serialTraceDetail.data.current_status).type">{{ assetStatusMeta(serialTraceDetail.data.current_status).label }}</el-tag>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between rounded-lg bg-white/80 px-4 py-3">
+                            <span class="text-sm text-slate-500">IMEI / SN</span>
+                            <span class="select-all font-semibold text-blue-700">{{ serialTraceDetail.data.serial_no || '-' }}</span>
+                        </div>
+                        <div class="mt-4 grid grid-cols-4 gap-3 text-center">
+                            <div><div class="text-xl font-bold text-slate-900">{{ serialTraceDetail.data.inbound_count || 0 }}</div><div class="mt-1 text-xs text-slate-500">入库次数</div></div>
+                            <div><div class="text-xl font-bold text-slate-900">{{ serialTraceDetail.data.sale_count || 0 }}</div><div class="mt-1 text-xs text-slate-500">销售次数</div></div>
+                            <div><div class="text-xl font-bold text-slate-900">{{ serialTraceDetail.data.after_sale_count || 0 }}</div><div class="mt-1 text-xs text-slate-500">售后退回</div></div>
+                            <div><div class="text-xl font-bold text-slate-900">{{ serialTraceDetail.data.purchase_return_count || 0 }}</div><div class="mt-1 text-xs text-slate-500">采购退货</div></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex items-end justify-between">
+                        <div><div class="font-semibold text-slate-900">入库周期</div><div class="mt-1 text-xs text-slate-400">同一串号每次重新入库均为一段独立业务</div></div>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-3">
+                        <button v-for="cycle in serialTraceDetail.data.cycles || []" :key="cycle.id" type="button" class="rounded-lg border p-4 text-left transition hover:border-blue-400 hover:bg-blue-50" :class="cycle.is_current ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white'" @click="openTraceCycle(cycle)">
+                            <div class="flex items-center justify-between gap-2"><span class="font-semibold text-blue-700">第 {{ cycle.cycle_no }} 次入库</span><el-tag v-if="cycle.is_current" size="small" type="primary">当前周期</el-tag></div>
+                            <div class="mt-2 truncate text-sm text-slate-700" :title="cycle.party_name || '未记录供应商'">{{ cycle.party_name || '未记录供应商' }}</div>
+                            <div class="mt-1 text-xs text-slate-400">{{ formatTime(cycle.stock_in_at || cycle.create_at) }}</div>
+                            <div class="mt-2 truncate text-xs text-slate-500" :title="`${cycle.warehouse_name || '未记录仓库'} / ${cycle.location_name || '未记录库位'}`">{{ cycle.warehouse_name || '未记录仓库' }} / {{ cycle.location_name || '未记录库位' }}</div>
+                        </button>
+                    </div>
+
+                    <div class="mb-4 mt-7"><div class="font-semibold text-slate-900">完整流转时间轴</div><div class="mt-1 text-xs text-slate-400">由早到晚展示采购、销售、售后及采退，每一步均保留经办人</div></div>
+                    <el-empty v-if="!(serialTraceDetail.data.timeline || []).length" description="暂无流转记录" />
+                    <el-timeline v-else class="pr-3">
+                        <el-timeline-item v-for="(node, index) in serialTraceDetail.data.timeline || []" :key="`${node.id || index}-${node.cycle_no || 1}`" :timestamp="formatTime(node.occurred_at || node.create_at)" placement="top" :type="traceActionMeta(node.action).type">
+                            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div><span class="font-semibold text-slate-900">{{ node.action_text || assetActionLabel(node.action) }}</span><span class="ml-2 text-xs text-slate-400">第 {{ node.cycle_no || 1 }} 次入库周期</span></div>
+                                    <el-tag size="small" effect="plain" :type="traceActionMeta(node.action).type">{{ traceActionMeta(node.action).label }}</el-tag>
+                                </div>
+                                <div v-if="node.before_status || node.after_status" class="mt-3 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                                    <span>{{ node.before_status_text || assetStatusMeta(node.before_status).label }}</span><span class="text-slate-300">→</span><strong class="text-slate-700">{{ node.after_status_text || assetStatusMeta(node.after_status).label }}</strong>
+                                </div>
+                                <div v-if="isTraceCostAdjust(node)" class="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-3">
+                                    <div class="flex items-center justify-between gap-3"><span class="text-sm font-medium text-amber-800">{{ node.cost_type_text || '成本调整' }}</span><strong :class="Number(node.cost_delta || 0) >= 0 ? 'text-red-600' : 'text-green-600'">{{ signedMoney(node.cost_delta) }}</strong></div>
+                                    <div class="mt-1 text-xs text-amber-700/80">设备成本：{{ money(node.before_total_cost) }} → {{ money(node.after_total_cost) }}</div>
+                                </div>
+                                <div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-slate-500">
+                                    <div>操作人：<span class="text-slate-700">{{ node.operator_display || node.operator_name || '系统自动' }}</span></div>
+                                    <div v-if="node.party_name">往来方：<span class="text-slate-700">{{ node.party_name }}</span></div>
+                                    <div v-if="node.source_no" class="col-span-2 truncate" :title="node.source_no">关联单号：<span class="select-all text-slate-700">{{ node.source_no }}</span></div>
+                                </div>
+                                <div v-if="node.remark" class="mt-3 border-t border-dashed border-slate-200 pt-3 text-sm leading-6 text-slate-600">{{ node.remark }}</div>
+                            </div>
+                        </el-timeline-item>
+                    </el-timeline>
+                </template>
+            </div>
+        </el-drawer>
 
         <el-dialog v-model="expense.visible" title="设备成本调整" width="680px" destroy-on-close>
             <el-alert :title="costTypeTip" type="warning" :closable="false" show-icon />
@@ -511,7 +589,7 @@ import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, completeErpStockRefurbish, getErpGoodsCategoryTree, getErpSerialTraceList, getErpStockInfo, getErpStockList, sendErpStockRefurbish, syncErpStockListing, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, completeErpStockRefurbish, getErpGoodsCategoryTree, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, sendErpStockRefurbish, syncErpStockListing, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
@@ -520,7 +598,7 @@ import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
 
-const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
 const route = useRoute()
 const activeTab = ref('')
 
@@ -530,11 +608,13 @@ function onTabChange(tab: string) {
     loadList()
 }
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
+const turnoverSummary = ref<any>({ thresholds: {} })
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const detailActivePanels = ref<string[]>([])
 const flow = reactive({ visible: false, saving: false, row: null as any, form: defaultFlowForm() })
 const expense = reactive({ visible: false, saving: false, row: null as any, form: { cost_type: 'refurbish', expense_type_key: '', party_id: 0, party_name: '', amount: 0, after_cost: 0, reason: '' } })
 const serialTrace = reactive({ visible: false, loading: false, keyword: '', data: [] as any[], page: 1, limit: 10, total: 0 })
+const serialTraceDetail = reactive({ visible: false, loading: false, data: null as any })
 const selectedRows = ref<any[]>([])
 const sendRefurbish = reactive({ visible: false, saving: false, assetIds: [] as number[], form: { tracking_mode: 'simple', provider_party_id: 0, remark: '' } })
 const completeRefurbish = reactive({ visible: false, saving: false, row: null as any, form: { result: 'success', refurbish_items: [] as any[], warehouse_id: 0, location_id: 0, voucher_urls: '', remark: '' } })
@@ -570,6 +650,7 @@ const summary = computed(() => table.data.reduce((acc, row: any) => {
 
 onMounted(() => {
     if (route.query.refurbish_status) search.refurbish_status = String(route.query.refurbish_status)
+    if (route.query.turnover_level) search.turnover_level = String(route.query.turnover_level)
     loadList()
     loadWarehouses()
     loadCategories()
@@ -587,13 +668,6 @@ onActivated(() => {
 function stockAgeDays(stockInAt: number): number {
     if (!stockInAt) return 0
     return Math.floor((Date.now() / 1000 - stockInAt) / 86400)
-}
-
-function stockAgeDaysClass(stockInAt: number): string {
-    const days = stockAgeDays(stockInAt)
-    if (days >= 90) return 'age-pill--danger'
-    if (days >= 30) return 'age-pill--warning'
-    return 'age-pill--neutral'
 }
 
 function turnoverDays(row: any): number {
@@ -620,9 +694,13 @@ function defaultFlowForm() {
 async function loadList() {
     table.loading = true
     try {
-        const res: any = await getErpStockList({ ...buildSearchParams(), page: table.page, limit: table.limit })
+        const [res, turnoverRes]: any[] = await Promise.all([
+            getErpStockList({ ...buildSearchParams(), page: table.page, limit: table.limit }),
+            getErpStockTurnoverSummary()
+        ])
         table.data = res?.data?.data || []
         table.total = res?.data?.total || 0
+        turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
     } finally {
         table.loading = false
     }
@@ -645,7 +723,47 @@ async function loadSerialTrace() {
         serialTrace.total = Number(res?.data?.total || 0)
     } finally { serialTrace.loading = false }
 }
-function openTraceDetail(row: any) { serialTrace.visible = false; openDetail(row) }
+async function openTraceDetail(row: any) {
+    if (!row?.id) return
+    serialTraceDetail.visible = true
+    serialTraceDetail.loading = true
+    serialTraceDetail.data = null
+    try {
+        const res: any = await getErpSerialTraceDetail(Number(row.id))
+        serialTraceDetail.data = res?.data || null
+    } catch (error: any) {
+        serialTraceDetail.visible = false
+        ElMessage.error(error?.message || '串号生命周期加载失败')
+    } finally {
+        serialTraceDetail.loading = false
+    }
+}
+
+function openTraceCycle(cycle: any) {
+    if (!cycle?.id) return
+    serialTraceDetail.visible = false
+    serialTrace.visible = false
+    openDetail(cycle)
+}
+
+function traceActionMeta(action: string) {
+    const value = String(action || '').toLowerCase()
+    if (['inbound'].includes(value)) return { label: '采购', type: 'primary' as const }
+    if (['sold'].includes(value)) return { label: '销售', type: 'success' as const }
+    if (['sale_return', 'sale_return_cancel', 'sale_cancel', 'sale_item_cancel'].includes(value)) return { label: '售后', type: 'warning' as const }
+    if (['purchase_return', 'purchase_cancel'].includes(value)) return { label: '采退', type: 'danger' as const }
+    if (['cost_adjust', 'refurbish'].includes(value)) return { label: '成本', type: 'warning' as const }
+    return { label: '设备记录', type: 'info' as const }
+}
+
+function isTraceCostAdjust(node: any): boolean {
+    return ['cost_adjust', 'refurbish'].includes(String(node?.action || '').toLowerCase())
+}
+
+function signedMoney(value: any): string {
+    const amount = Number(value || 0)
+    return `${amount > 0 ? '+' : ''}${money(amount)}`
+}
 
 async function loadWarehouses() {
     const res: any = await getErpWarehouseOptions()
@@ -763,7 +881,7 @@ function handleSearch() {
 }
 
 function handleReset() {
-    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
     activeTab.value = ''
     handleSearch()
 }
@@ -1144,6 +1262,7 @@ function formatTime(value: any) {
 .age-pill--neutral { color: #475569; background: #f1f5f9; }
 .age-pill--warning { color: #b45309; background: #fef3c7; }
 .age-pill--danger { color: #b91c1c; background: #fee2e2; }
+.age-pill--primary { color: #1d4ed8; background: #dbeafe; }
 .age-pill--muted { color: #94a3b8; background: #f1f5f9; }
 .stock-exit-state { display: flex; align-items: flex-start; gap: 9px; border-radius: 8px; padding: 10px 12px; }
 .stock-exit-state__dot { width: 8px; height: 8px; flex: 0 0 auto; margin-top: 5px; border-radius: 50%; background: currentColor; }

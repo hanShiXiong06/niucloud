@@ -15,6 +15,18 @@
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无库存设备" /></template>
+              <view class="turnover-overview">
+                    <view class="turnover-overview__main">
+                        <view><text class="turnover-overview__label">库存周转</text><text class="turnover-overview__value">平均 {{ turnoverSummary.average_age_days || 0 }} 天</text></view>
+                        <view class="turnover-overview__risk" @click="filterTurnover('risk')"><text>{{ turnoverSummary.warning_total_count || 0 }} 台预警</text><u-icon name="arrow-right" color="#c2410c" size="13" /></view>
+                    </view>
+                    <view class="turnover-overview__items">
+                        <view @click="filterTurnover('healthy')"><strong class="green">{{ turnoverSummary.healthy_count || 0 }}</strong><text>正常</text></view>
+                        <view @click="filterTurnover('attention')"><strong class="blue">{{ turnoverSummary.attention_count || 0 }}</strong><text>关注</text></view>
+                        <view @click="filterTurnover('warning')"><strong class="orange">{{ turnoverSummary.warning_count || 0 }}</strong><text>预警</text></view>
+                        <view @click="filterTurnover('critical')"><strong class="red">{{ turnoverSummary.critical_count || 0 }}</strong><text>严重</text></view>
+                    </view>
+                </view>
               <view class="trace-entry" @click="goSerialTrace">
                     <view><text class="trace-entry__title">串号追踪</text><text class="trace-entry__sub">查询同一 IMEI / SN 的多次入库与完整流转</text></view>
                     <u-icon name="arrow-right" color="#64748b" size="15" />
@@ -40,6 +52,10 @@
                         <u-icon name="info-circle" color="#64748b" size="14" />
                         <text>该设备已作废</text>
                     </view>
+                    <view v-else-if="row.is_turnover_warning" class="stock-banner risk">
+                        <u-icon name="warning" :color="row.turnover_level === 'critical' ? '#dc2626' : '#d97706'" size="14" />
+                        <text>{{ row.turnover_label }} · {{ row.turnover_action }}</text>
+                    </view>
 
                     <view class="stock-line">
                         <text class="stock-line__label">{{ isSold(row) ? '销售时间' : timeLabel(row) }}</text>
@@ -53,6 +69,7 @@
                             <view v-if="row.refurbish_status && row.refurbish_status !== 'none'" class="stock-chip">{{ refurbishLabel(row.refurbish_status) }}</view>
                             <view v-if="row.sale_target && row.sale_target !== 'unset'" class="stock-chip primary">{{ targetLabel(row.sale_target) }}</view>
                             <view v-if="row.listing_status && row.listing_status !== 'none'" class="stock-chip">{{ listingLabel(row.listing_status) }}</view>
+                            <view v-if="row.status === 'in_stock'" class="stock-chip" :class="turnoverTone(row.turnover_level)">{{ row.turnover_label || '周转正常' }}</view>
                         </view>
                         <view v-if="isExpanded(row)" class="stock-extra">
                             <view class="stock-line">
@@ -97,7 +114,7 @@
                         <view class="amount-box">
                             <text class="amt-label">{{ isSold(row) ? '毛利' : '库龄' }}</text>
                             <text class="amt-value" :class="isSold(row) ? profitClass(row.profit) : ageClass(row.stock_in_at || row.create_at, row.status)">
-                                {{ isSold(row) ? profitText(row.profit) : ageText(row) }}
+                                {{ isSold(row) ? profitText(row.profit) : `${row.stock_age_days || 0}天` }}
                             </text>
                         </view>
                     </view>
@@ -125,7 +142,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 
-import { getMobileErpConfig, getMobileStockList } from '@/addon/hsx_erp/api/erp'
+import { getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary } from '@/addon/hsx_erp/api/erp'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
@@ -152,6 +169,7 @@ const providerPopupVisible = ref(false)
 const providerPartyId = ref(0)
 const providerPartyName = ref('')
 const pendingRefurbishRow = ref<any>(null)
+const turnoverSummary = ref<any>({ thresholds: {} })
 
 const tabs = computed(() => dictTabs(erpDicts.value, 'asset_status', true))
 const activeTab = ref('')
@@ -170,10 +188,16 @@ const filterFields = computed(() => [
     { key: 'cost', label: '总成本', type: 'range', minKey: 'min_cost', maxKey: 'max_cost' },
     { key: 'price', label: '标价/预估价', type: 'range', minKey: 'min_price', maxKey: 'max_price' },
     { key: 'age', label: '库龄天数', type: 'range', minKey: 'stock_age_min', maxKey: 'stock_age_max' },
+    { key: 'turnover_level', label: '周转等级', type: 'select', options: [
+        { label: '全部预警', value: 'risk' }, { label: '周转正常', value: 'healthy' }, { label: '需要关注', value: 'attention' },
+        { label: '周转预警', value: 'warning' }, { label: '严重滞销', value: 'critical' }
+    ] },
     { key: 'date', label: '入库日期', type: 'dateRange', startKey: 'start_at', endKey: 'end_at' },
 ] as any[])
 const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
 const reload = () => pagingRef.value?.reload()
+function filterTurnover(level: string) { filters.value = { ...filters.value, turnover_level: level }; reload() }
+const turnoverTone = (level: string) => ({ attention: 'primary', warning: 'warning', critical: 'danger' }[level] || '')
 const goSerialTrace = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/serial_trace/list' })
 const handleSearch = () => reload()
 const onTab = (val: string) => { activeTab.value = val; reload() }
@@ -188,15 +212,16 @@ onShow(async () => {
 })
 onLoad((options: any) => {
     if (options?.refurbish_status) filters.value.refurbish_status = String(options.refurbish_status)
+    if (options?.turnover_level) filters.value.turnover_level = String(options.turnover_level)
 })
 
 const queryList = async (pageNo: number, pageSize: number) => {
     try {
-        const res: any = await getMobileStockList({
-            keyword: keyword.value, status: activeTab.value,
-            ...filterParams(),
-            page: pageNo, limit: pageSize
-        })
+        const summaryRequest = pageNo === 1 ? getMobileStockTurnoverSummary() : Promise.resolve(null)
+        const [res, turnoverRes]: any[] = await Promise.all([
+            getMobileStockList({ keyword: keyword.value, status: activeTab.value, ...filterParams(), page: pageNo, limit: pageSize }), summaryRequest
+        ])
+        if (turnoverRes) turnoverSummary.value = turnoverRes?.data || { thresholds: {} }
         pagingRef.value?.complete(res?.data?.data || [])
     } catch { pagingRef.value?.complete(false) }
 }
@@ -379,6 +404,7 @@ const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
     background: #f1f5f9;
     color: #64748b;
 }
+.stock-banner.risk { background: #fff7ed; color: #c2410c; }
 
 .stock-line {
     display: flex;
@@ -436,6 +462,7 @@ const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
     color: #d97706;
     background: #fffbeb;
 }
+.stock-chip.danger { color: #dc2626; background: #fef2f2; }
 
 .stock-extra {
     margin-top: 10rpx;
@@ -478,4 +505,15 @@ const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
     font-size: 27rpx;
 }
 .trace-entry{display:flex;align-items:center;justify-content:space-between;gap:16rpx;margin:14rpx 22rpx 0;padding:17rpx 20rpx;border-radius:14rpx;background:#f8fafc;color:#334155}.trace-entry__title,.trace-entry__sub{display:block}.trace-entry__title{font-size:25rpx;font-weight:700}.trace-entry__sub{margin-top:4rpx;color:#94a3b8;font-size:20rpx}
+.turnover-overview { margin: 18rpx 22rpx 0; padding: 22rpx; border: 1rpx solid #e2e8f0; border-radius: 20rpx; background: #fff; }
+.turnover-overview__main { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.turnover-overview__label, .turnover-overview__value { display: block; }
+.turnover-overview__label { color: #64748b; font-size: 22rpx; }
+.turnover-overview__value { margin-top: 5rpx; color: #0f172a; font-size: 30rpx; font-weight: 800; }
+.turnover-overview__risk { display: flex; align-items: center; gap: 5rpx; padding: 10rpx 14rpx; border-radius: 999rpx; background: #fff7ed; color: #c2410c; font-size: 22rpx; font-weight: 700; }
+.turnover-overview__items { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 18rpx; padding-top: 16rpx; border-top: 1rpx solid #f1f5f9; }
+.turnover-overview__items view { text-align: center; }
+.turnover-overview__items strong, .turnover-overview__items text { display: block; }
+.turnover-overview__items strong { font-size: 28rpx; }.turnover-overview__items text { margin-top: 3rpx; color: #94a3b8; font-size: 20rpx; }
+.turnover-overview__items .green { color: #16a34a; }.turnover-overview__items .blue { color: #2563eb; }.turnover-overview__items .orange { color: #d97706; }.turnover-overview__items .red { color: #dc2626; }
 </style>

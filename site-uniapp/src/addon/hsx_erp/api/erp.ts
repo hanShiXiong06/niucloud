@@ -15,6 +15,7 @@ export function getMobileErpDashboard(params: Record<string, any> = {}) {
 }
 export function getMobileErpKpiDashboard(params: Record<string, any> = {}) { return request.get('erp/kpi/dashboard', params) }
 export function dismissMobileErpRefurbishReminder(mode: 'today' | 'forever' = 'today') { return request.post('erp/config/refurbish_reminder/dismiss', { mode }) }
+export function dismissMobileErpTurnoverReminder(mode: 'today' | 'forever' = 'today') { return request.post('erp/config/turnover_reminder/dismiss', { mode }) }
 export function getMobileErpConfig() { return request.get('erp/config') }
 
 export function getMobileOperatingFinanceList(params: Record<string, any> = {}) {
@@ -113,6 +114,9 @@ export function saveErpSaleChannels(channels: string[]) {
 // ─── 库存 ────────────────────────────────────────────────────────────────────
 export function getMobileStockList(params: Record<string, any>) {
     return request.get('erp/stock/lists', params)
+}
+export function getMobileStockTurnoverSummary() {
+    return request.get('erp/stock/turnover_summary')
 }
 export function getMobileSerialTraceList(params: Record<string, any>) {
     return request.get('erp/stock/serial_trace', params)

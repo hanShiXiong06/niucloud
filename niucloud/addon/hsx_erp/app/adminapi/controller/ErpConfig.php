@@ -27,6 +27,7 @@ class ErpConfig extends BaseAdminController
             ['product_title', []],
             ['sale', []],
             ['refurbish', []],
+            ['turnover', []],
             ['consignment', []],
         ]);
         return success((new ErpConfigService())->saveRules($params));
@@ -37,6 +38,13 @@ class ErpConfig extends BaseAdminController
         $params = $this->request->params([['mode', 'today']]);
         $mode = (string)$params['mode'] === 'forever' ? 'forever' : 'today';
         return success((new ErpConfigService())->dismissRefurbishReminder($mode));
+    }
+
+    public function dismissTurnoverReminder()
+    {
+        $params = $this->request->params([['mode', 'today']]);
+        $mode = (string)$params['mode'] === 'forever' ? 'forever' : 'today';
+        return success((new ErpConfigService())->dismissTurnoverReminder($mode));
     }
 
     public function saleChannels()

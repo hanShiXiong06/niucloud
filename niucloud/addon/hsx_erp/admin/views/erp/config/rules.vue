@@ -140,6 +140,31 @@
                         </el-form-item>
                     </el-form>
                 </section>
+
+                <section class="rule-section">
+                    <div class="section-title">库存周转预警</div>
+                    <el-alert class="mb-4" type="info" :closable="false" show-icon title="库龄按设备实际入库时间计算；阈值供库存中心、移动端和经营工作台统一使用。" />
+                    <el-form label-width="180px">
+                        <el-form-item label="关注起始天数">
+                            <el-input-number v-model="form.turnover.attention_days" :min="1" :max="365" :precision="0" />
+                        </el-form-item>
+                        <el-form-item label="预警起始天数">
+                            <el-input-number v-model="form.turnover.warning_days" :min="form.turnover.attention_days + 1" :max="730" :precision="0" />
+                        </el-form-item>
+                        <el-form-item label="严重滞销天数">
+                            <el-input-number v-model="form.turnover.critical_days" :min="form.turnover.warning_days + 1" :max="1095" :precision="0" />
+                        </el-form-item>
+                        <el-form-item label="首页周转提醒">
+                            <el-switch v-model="form.turnover.reminder_enabled" :active-value="1" :inactive-value="0" />
+                        </el-form-item>
+                        <el-form-item label="提醒设备数量">
+                            <div class="flex items-center gap-2">
+                                <el-input-number v-model="form.turnover.reminder_count_threshold" :min="1" :max="9999" :precision="0" :disabled="form.turnover.reminder_enabled !== 1" />
+                                <span class="text-sm text-gray-500">台达到预警或严重滞销后提醒</span>
+                            </div>
+                        </el-form-item>
+                    </el-form>
+                </section>
             </div>
         </el-card>
     </div>
@@ -161,6 +186,7 @@ function defaultRules() {
         product_title: { category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' },
         sale: { create_receivable_on_outbound: 1, allow_cancel_before_finance_fact: 1, return_to_original_location_on_cancel: 1, enable_peer_pending: 1, enable_trial_sale: 0, profit_confirm_mode: 'settlement' },
         refurbish: { enabled: 1, default_required: 0, tracking_mode: 'simple', daily_reminder_enabled: 1, daily_reminder_threshold: 25, reminder_dismiss_date: '' },
+        turnover: { attention_days: 7, warning_days: 15, critical_days: 30, reminder_enabled: 1, reminder_count_threshold: 1, reminder_dismiss_date: '' },
         consignment: { enabled: 0, settle_payable_after_receipt: 1, transfer_to_owned_requires_repurchase: 1 }
     }
 }
@@ -174,6 +200,7 @@ async function loadConfig() {
         Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
+        Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
     } finally {
         loading.value = false
@@ -189,6 +216,7 @@ async function submit() {
         Object.assign(form.product_title, res?.data?.product_title || {})
         Object.assign(form.sale, res?.data?.sale || {})
         Object.assign(form.refurbish, res?.data?.refurbish || {})
+        Object.assign(form.turnover, res?.data?.turnover || {})
         Object.assign(form.consignment, res?.data?.consignment || {})
         ElMessage.success('业务规则已保存')
     } finally {

@@ -44,12 +44,18 @@ class ErpStock extends BaseAdminController
             ['max_price', ''],
             ['stock_age_min', ''],
             ['stock_age_max', ''],
+            ['turnover_level', ''],
             ['start_at', 0],
             ['end_at', 0],
             ['page', 1],
             ['limit', 15],
         ]);
         return success($this->service->getPage($params));
+    }
+
+    public function turnoverSummary()
+    {
+        return success($this->service->turnoverSummary());
     }
 
     public function serialTrace()

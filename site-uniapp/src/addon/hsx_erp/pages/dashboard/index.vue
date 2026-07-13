@@ -19,6 +19,13 @@
             <u-button size="small" type="warning" plain @click="go('/addon/hsx_erp/pages/stock/list?refurbish_status=pending')">查看整备设备</u-button>
         </view>
 
+        <view v-if="turnoverReminder.visible" class="turnover-reminder">
+            <view class="refurbish-reminder__head"><text>库存周转预警</text><view @click="showTurnoverReminderActions"><u-icon name="close" color="#991b1b" size="18" /></view></view>
+            <text class="refurbish-reminder__title">{{ turnoverReminder.warning_total_count }} 台设备周转过慢</text>
+            <text class="refurbish-reminder__desc">严重滞销 {{ turnoverReminder.critical_count }} 台，占用成本 ¥{{ money(turnoverReminder.warning_total_cost) }}，平均库龄 {{ turnoverReminder.average_age_days }} 天。</text>
+            <u-button size="small" type="error" plain @click="go('/addon/hsx_erp/pages/stock/list?turnover_level=risk')">查看预警库存</u-button>
+        </view>
+
         <view class="period-card">
             <u-tabs
                 :list="periodTabs"
@@ -79,6 +86,10 @@
             <view class="turnover-strip">
                 <view><text>今日动销率</text><strong>{{ Number(summary.turnover_rate || 0).toFixed(2) }}%</strong></view>
                 <text>今日有效售出 {{ summary.today_sold_count || 0 }} 台 ÷ 今日零点库存 {{ summary.opening_stock_count || 0 }} 台</text>
+            </view>
+            <view class="turnover-strip stock-age-strip">
+                <view><text>平均库龄</text><strong>{{ Number(summary.average_stock_age_days || 0).toFixed(1) }} 天</strong></view>
+                <text>周转预警 {{ summary.turnover_warning_count || 0 }} 台 · 占用成本 ¥{{ money(summary.turnover_warning_cost) }}</text>
             </view>
         </view>
 
@@ -195,7 +206,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { dismissMobileErpRefurbishReminder, getMobileErpDashboard, getMobileErpKpiDashboard } from '@/addon/hsx_erp/api/erp'
+import { dismissMobileErpRefurbishReminder, dismissMobileErpTurnoverReminder, getMobileErpDashboard, getMobileErpKpiDashboard } from '@/addon/hsx_erp/api/erp'
 import qiunDataCharts from '@/components/qiun-data-charts/components/qiun-data-charts/qiun-data-charts.vue'
 
 const loading = ref(false)
@@ -237,6 +248,7 @@ const summary = computed(() => data.value?.summary || {})
 const todo = computed(() => data.value?.todo || {})
 const recent = computed(() => data.value?.recent || {})
 const refurbishReminder = computed(() => data.value?.reminders?.refurbish || {})
+const turnoverReminder = computed(() => data.value?.reminders?.turnover || {})
 const netCashFlow = computed(() => Number(summary.value.receipt_amount || 0) - Number(summary.value.payment_amount || 0))
 const netCashFlowClass = computed(() => netCashFlow.value > 0 ? 'green' : (netCashFlow.value < 0 ? 'red' : ''))
 const operationChartData = computed(() => ({
@@ -345,6 +357,17 @@ function showReminderActions() {
     })
 }
 
+function showTurnoverReminderActions() {
+    uni.showActionSheet({
+        itemList: ['今天不再提醒', '永久关闭此提醒'],
+        success: async ({ tapIndex }) => {
+            await dismissMobileErpTurnoverReminder(tapIndex === 1 ? 'forever' : 'today')
+            uni.showToast({ title: tapIndex === 1 ? '已永久关闭，可在设置中重新开启' : '今天不再提醒', icon: 'none' })
+            await loadData()
+        }
+    })
+}
+
 function goSettlement(row: any) {
     const id = Number(row?.target_id || 0)
     if (!id || !['payable', 'receivable'].includes(String(row?.target_type || ''))) {
@@ -386,6 +409,7 @@ const time = (v: any) => {
     padding-bottom: 40rpx;
 }
 .refurbish-reminder { margin:0 24rpx 20rpx; padding:24rpx; border:1rpx solid #fed7aa; border-radius:24rpx; background:#fff7ed; }
+.turnover-reminder { margin:0 24rpx 20rpx; padding:24rpx; border:1rpx solid #fecaca; border-radius:24rpx; background:#fef2f2; }
 .refurbish-reminder__head { display:flex; align-items:center; justify-content:space-between; color:#92400e; font-size:23rpx; font-weight:700; }
 .refurbish-reminder__title { display:block; margin-top:12rpx; color:#9a3412; font-size:30rpx; font-weight:800; }
 .refurbish-reminder__desc { display:block; margin:10rpx 0 18rpx; color:#9a3412; font-size:23rpx; line-height:1.6; }
