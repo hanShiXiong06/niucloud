@@ -37,6 +37,10 @@ class ErpSaleService extends BaseAdminService
             $kw = trim((string)$where['keyword']);
             $query->whereLike('a.asset_no|a.imei|a.sn|a.model|a.spec|a.category_name|a.party_name|a.warehouse_name|a.location_name', '%' . $kw . '%');
         }
+        $assetIds = array_values(array_unique(array_filter(array_map('intval', (array)($where['asset_ids'] ?? [])))));
+        if ($assetIds !== []) {
+            $query->whereIn('a.id', $assetIds);
+        }
         if (!empty($where['warehouse_id'])) {
             $query->where('a.warehouse_id', '=', (int)$where['warehouse_id']);
         }

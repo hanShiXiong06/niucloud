@@ -58,6 +58,33 @@ class ErpStock extends BaseAdminController
         return success($this->service->turnoverSummary());
     }
 
+    public function adjustRetailPrice(int $id)
+    {
+        $params = $this->request->params([
+            ['retail_price', 0], ['reason', ''], ['request_id', ''],
+        ]);
+        return success($this->service->adjustRetailPrice(
+            $id,
+            (float)$params['retail_price'],
+            (string)$params['reason'],
+            (string)$params['request_id']
+        ));
+    }
+
+    public function transfer()
+    {
+        $params = $this->request->params([
+            ['asset_ids', []], ['warehouse_id', 0], ['location_id', 0], ['reason', ''], ['request_id', ''],
+        ]);
+        return success($this->service->transfer(
+            (array)$params['asset_ids'],
+            (int)$params['warehouse_id'],
+            (int)$params['location_id'],
+            (string)$params['reason'],
+            (string)$params['request_id']
+        ));
+    }
+
     public function serialTrace()
     {
         $params = $this->request->params([
@@ -143,6 +170,10 @@ class ErpStock extends BaseAdminController
             ['estimate_sale_price', null],
             ['retail_price', null],
             ['image_urls', null],
+            ['category_id', null],
+            ['category_name', null],
+            ['category_path', null],
+            ['spec', null],
             ['quality_remark', null],
             ['remark_public', null],
             ['remark_internal', null],

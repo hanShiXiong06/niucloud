@@ -56,11 +56,13 @@ class ErpDict
             'sale_cancel' => '整单销售撤销',
             'sale_item_cancel' => '单台销售撤销',
             'cost_adjust' => '成本调整',
+            'retail_price_adjust' => '零售价调整',
             'refurbish' => '整备费用登记',
             'refurbish_send' => '开始整备',
             'refurbish_complete' => '整备完工',
             'flow' => '流转设置',
             'flow_set' => '流转设置',
+            'transfer' => '库存调拨',
         ];
     }
 

@@ -27,6 +27,13 @@
                         <u-icon name="info-circle" color="#64748b" size="14" />
                         <text>该设备已作废</text>
                     </view>
+                    <view v-else-if="asset.status === 'in_stock'" class="turnover-action-card" :class="`is-${asset.turnover_level || 'healthy'}`">
+                        <view class="turnover-action-card__main">
+                            <text class="turnover-action-card__title">{{ asset.turnover_label || '库存周转' }} · 在库 {{ asset.stock_age_days || 0 }} 天</text>
+                            <text class="turnover-action-card__desc">{{ asset.turnover_action || asset.warehouse_policy?.primary_action_reason || '根据仓库规则处理当前设备' }}</text>
+                        </view>
+                        <u-button size="small" :type="primaryActionType" :text="asset.turnover_action_label || '处理'" @click="handlePrimaryAction" />
+                    </view>
 
                     <view class="erp-card__foot asset-finance-foot">
                         <view class="amount-box">
@@ -155,6 +162,9 @@
 
                 <!-- 底部操作 -->
                 <view class="bottom-actions">
+                    <view v-if="asset.status === 'in_stock'" class="bottom-action-row primary-turnover-row">
+                        <view class="bottom-action-btn full"><u-button type="primary" :text="asset.turnover_action_label || '处理库存'" @click="handlePrimaryAction" /></view>
+                    </view>
                     <view v-if="asset.status === 'in_stock'" class="bottom-action-row">
                         <view class="bottom-action-btn"><u-button type="primary" text="调整成本" @click="goAdjust" /></view>
                         <view class="bottom-action-btn">
@@ -195,18 +205,45 @@
                 </view>
             </view>
         </scroll-view>
+
+        <u-popup :show="productVisible" mode="bottom" round="20" :safe-area-inset-bottom="true" @close="productVisible = false">
+            <view class="action-popup">
+                <view class="action-popup__head"><view><text class="action-popup__title">完善商品资料</text><text class="action-popup__sub">用于商城展示和销售定价，不修改采购成本</text></view><u-icon name="close" color="#94a3b8" size="20" @click="productVisible=false" /></view>
+                <scroll-view scroll-y class="action-popup__body">
+                    <ErpCategoryPopup v-model="productForm.category_id" label="商品分类" :embedded="true" :clearable="true" @change="onProductCategoryChange" />
+                    <view class="popup-form-row"><text>设备规格</text><u-input v-model="productForm.spec" placeholder="容量、颜色、成色、电池等" border="none" inputAlign="right" /></view>
+                    <view class="popup-form-row"><text>零售价</text><u-input v-model="productForm.retail_price" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
+                    <ErpVoucherUploader v-model="productForm.image_urls" title="商品图片" hint="上传正面、背面、边框和瑕疵图，支持点击预览" add-text="上传图片" :max-count="9" />
+                </scroll-view>
+                <view class="action-popup__foot"><u-button type="primary" :loading="productSaving" text="保存商品资料" @click="submitProduct" /></view>
+            </view>
+        </u-popup>
+
+        <u-popup :show="retailVisible" mode="bottom" round="20" :safe-area-inset-bottom="true" @close="retailVisible=false">
+            <view class="action-popup action-popup--compact">
+                <view class="action-popup__head"><view><text class="action-popup__title">{{ Number(asset?.retail_price || 0) > 0 ? '调整零售价' : '设置零售价' }}</text><text class="action-popup__sub">零售价用于销售，不改变设备成本</text></view><u-icon name="close" color="#94a3b8" size="20" @click="retailVisible=false" /></view>
+                <view class="popup-form-row"><text>新零售价</text><u-input v-model="retailForm.retail_price" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
+                <view class="popup-form-row"><text>调整原因</text><u-input v-model="retailForm.reason" placeholder="已有价格调整时必填" border="none" inputAlign="right" /></view>
+                <view class="action-popup__foot"><u-button type="primary" :loading="retailSaving" text="确认保存" @click="submitRetail" /></view>
+            </view>
+        </u-popup>
+
+        <ErpWarehousePopup v-model:show="warehouseVisible" v-model:warehouse-id="transferForm.warehouse_id" v-model:warehouse-name="transferForm.warehouse_name" v-model:location-id="transferForm.location_id" v-model:location-name="transferForm.location_name" @change="submitTransfer" />
     </view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { getMobileStockInfo, syncMobileStockListing } from '@/addon/hsx_erp/api/erp'
+import { adjustMobileStockRetailPrice, getMobileStockInfo, syncMobileStockListing, transferMobileStock, updateMobileStockFlow } from '@/addon/hsx_erp/api/erp'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import { formatErpDate, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
+import ErpCategoryPopup from '@/addon/hsx_erp/components/ErpCategoryPopup.vue'
+import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
+import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 
 const asset = ref<any>(null)
 const ledger = ref<any[]>([])
@@ -217,6 +254,14 @@ const syncingListing = ref(false)
 const loadError = ref('')
 const assetId = ref(0)
 const detailLoaded = ref(false)
+const productVisible = ref(false)
+const productSaving = ref(false)
+const productForm = ref<any>({ category_id: 0, category_name: '', category_path: '', spec: '', retail_price: '', image_urls: '' })
+const retailVisible = ref(false)
+const retailSaving = ref(false)
+const retailForm = ref({ retail_price: '', reason: '' })
+const warehouseVisible = ref(false)
+const transferForm = ref({ warehouse_id: 0, warehouse_name: '', location_id: 0, location_name: '' })
 let loadSeq = 0
 
 onLoad((query: any) => {
@@ -269,6 +314,95 @@ async function loadDetail(options: { silent?: boolean } = {}) {
 
 function reload() {
     return loadDetail({ silent: true })
+}
+
+const primaryActionType = computed(() => ['transfer', 'complete_refurbish', 'resolve_refurbish'].includes(String(asset.value?.turnover_action_key || '')) ? 'warning' : 'primary')
+
+function handlePrimaryAction() {
+    if (!asset.value) return
+    const action = String(asset.value.turnover_action_key || asset.value.warehouse_policy?.primary_action || 'view')
+    if (['set_retail_price', 'adjust_retail_price'].includes(action)) return openRetail()
+    if (['complete_listing', 'sync_listing'].includes(action)) return action === 'sync_listing' ? syncListing() : openProduct()
+    if (['transfer', 'resolve_warehouse'].includes(action)) return openTransfer()
+    if (action === 'direct_sale') return uni.navigateTo({ url: `/addon/hsx_erp/pages/sale/create?asset_ids=${asset.value.id}` })
+    if (action === 'start_refurbish') return uni.navigateTo({ url: `/addon/hsx_erp/pages/stock/list?refurbish_status=pending` })
+    if (['complete_refurbish', 'resolve_refurbish'].includes(action)) return goAdjustRefurbish()
+    uni.showToast({ title: asset.value.warehouse_policy?.primary_action_reason || '当前仅支持查看设备档案', icon: 'none' })
+}
+
+function openProduct() {
+    if (!asset.value) return
+    productForm.value = {
+        category_id: Number(asset.value.category_id || 0), category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
+        spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '',
+    }
+    productVisible.value = true
+}
+
+function onProductCategoryChange(payload: any) {
+    const nodes = Array.isArray(payload?.category_nodes) ? payload.category_nodes : []
+    productForm.value.category_id = Number(payload?.category_id || 0)
+    productForm.value.category_name = payload?.node?.category_name || ''
+    productForm.value.category_path = (payload?.category_path || []).join(',')
+    if (!productForm.value.category_name && nodes.length) productForm.value.category_name = nodes[nodes.length - 1]?.category_name || ''
+}
+
+async function submitProduct() {
+    if (!asset.value?.id) return
+    if (!Number(productForm.value.category_id || 0)) return uni.showToast({ title: '请选择商品分类', icon: 'none' })
+    if (!String(productForm.value.spec || '').trim()) return uni.showToast({ title: '请填写设备规格', icon: 'none' })
+    if (asset.value.warehouse_policy?.need_photo && !String(productForm.value.image_urls || '').trim()) return uni.showToast({ title: '当前仓库要求上传商品图片', icon: 'none' })
+    if (asset.value.warehouse_policy?.need_pricing && Number(productForm.value.retail_price || 0) <= 0) return uni.showToast({ title: '当前仓库要求填写零售价', icon: 'none' })
+    productSaving.value = true
+    try {
+        await updateMobileStockFlow(asset.value.id, { ...productForm.value, retail_price: Number(productForm.value.retail_price || 0), remark: '移动端完善商城商品资料' })
+        productVisible.value = false
+        uni.showToast({ title: '商品资料已保存', icon: 'success' })
+        await reload()
+    } catch (e: any) { uni.showToast({ title: e?.message || '保存失败', icon: 'none' }) }
+    finally { productSaving.value = false }
+}
+
+function openRetail() {
+    retailForm.value = { retail_price: String(Number(asset.value?.retail_price || 0) || ''), reason: '' }
+    retailVisible.value = true
+}
+
+async function submitRetail() {
+    const price = Number(retailForm.value.retail_price || 0)
+    if (price <= 0) return uni.showToast({ title: '请填写有效零售价', icon: 'none' })
+    if (Number(asset.value?.retail_price || 0) > 0 && !retailForm.value.reason.trim()) return uni.showToast({ title: '调整已有价格时请填写原因', icon: 'none' })
+    const confirmed = await confirmErpSensitiveAction({ title: '确认零售价', content: `零售价将设置为 ¥${money(price)}。本操作不会修改采购成本。`, confirmText: '确认保存' })
+    if (!confirmed) return
+    retailSaving.value = true
+    try {
+        await adjustMobileStockRetailPrice(asset.value.id, { retail_price: price, reason: retailForm.value.reason })
+        retailVisible.value = false
+        uni.showToast({ title: '零售价已保存', icon: 'success' })
+        await reload()
+    } catch (e: any) { uni.showToast({ title: e?.message || '保存失败', icon: 'none' }) }
+    finally { retailSaving.value = false }
+}
+
+function openTransfer() {
+    transferForm.value = { warehouse_id: 0, warehouse_name: '', location_id: 0, location_name: '' }
+    warehouseVisible.value = true
+}
+
+async function submitTransfer(warehouse: any, location: any) {
+    if (!asset.value?.id || !warehouse?.id || !location?.id) return
+    const confirmed = await confirmErpSensitiveAction({ title: '确认库存调拨', content: `设备将调拨到「${warehouse.warehouse_name} / ${location.location_name}」，并重新应用目标仓库的销售和商城规则。`, confirmText: '确认调拨' })
+    if (!confirmed) return
+    try {
+        await transferMobileStock({ asset_ids: [asset.value.id], warehouse_id: warehouse.id, location_id: location.id, reason: '移动端库存周转调拨' })
+        uni.showToast({ title: '调拨完成', icon: 'success' })
+        await reload()
+    } catch (e: any) { uni.showToast({ title: e?.message || '调拨失败', icon: 'none' }) }
+}
+
+function goAdjustRefurbish() {
+    if (!asset.value) return
+    uni.navigateTo({ url: `/addon/hsx_erp/pages/cost_adjust/detail?id=${asset.value.id}&mode=refurbish_complete` })
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -369,7 +503,8 @@ const financeType = (s: string) => ({ pending: 'warning', partial: 'primary', se
 const actionLabel = (a: string) => ({
     inbound: '采购入库', sold: '销售出库', purchase_return: '采购退货',
     sale_return: '销售退货', cost_adjust: '成本调整', purchase_cancel: '采购撤销',
-    sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销', refurbish: '整备', flow_set: '流转设置'
+    sale_cancel: '整单销售撤销', sale_item_cancel: '单台销售撤销', refurbish: '整备',
+    retail_price_adjust: '零售价调整', transfer: '库存调拨', flow: '流转设置', flow_set: '流转设置'
 }[a] || '库存调整')
 
 function mergeAccountTimeline(rows: any[] = []) {
@@ -477,6 +612,9 @@ function accountRemark(row: any) {
 .asset-banner.sold { background:#eff6ff; color:#2563eb; }
 .asset-banner.void { background:#f1f5f9; color:#64748b; }
 .asset-banner text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.turnover-action-card { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin:16rpx 0 0; padding:18rpx; border:2rpx solid #dbeafe; border-radius:16rpx; background:#eff6ff; }
+.turnover-action-card.is-warning { border-color:#fed7aa; background:#fff7ed; }.turnover-action-card.is-critical { border-color:#fecaca; background:#fef2f2; }
+.turnover-action-card__main { flex:1; min-width:0; }.turnover-action-card__title,.turnover-action-card__desc { display:block; }.turnover-action-card__title { color:#0f172a; font-size:24rpx; font-weight:700; }.turnover-action-card__desc { margin-top:5rpx; color:#64748b; font-size:21rpx; line-height:1.45; }
 .asset-finance-foot { justify-content:space-between; gap:10rpx; margin:16rpx 0 10rpx; padding:18rpx 0; border-top:0; border-bottom:2rpx solid #f3f4f6; }
 .asset-finance-foot .amount-box { flex:1; min-width:0; }
 .asset-finance-foot .amt-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -512,6 +650,7 @@ function accountRemark(row: any) {
 .account-more { display:flex; align-items:center; justify-content:center; gap:8rpx; margin:0 24rpx 20rpx; padding:14rpx; color:#2563eb; font-size:23rpx; }
 .bottom-actions { margin:32rpx; }
 .bottom-action-row { display:flex; gap:16rpx; }
+.primary-turnover-row { margin-bottom:16rpx; }
 .bottom-action-btn { flex:1; min-width:0; }
 .listing-sync-card { margin:18rpx 0 14rpx; padding:16rpx 18rpx; border:2rpx solid #e2e8f0; border-radius:16rpx; background:#f8fafc; }
 .listing-sync-card--pending { border-color:#fed7aa; background:#fff7ed; }
@@ -530,4 +669,5 @@ function accountRemark(row: any) {
 .error-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:520rpx; padding:40rpx; box-sizing:border-box; }
 .retry-btn { margin-top:24rpx; width:180rpx; }
 .loading-wrap { display:flex; justify-content:center; align-items:center; height:400rpx; }
+.action-popup { height:78vh; display:flex; flex-direction:column; background:#fff; }.action-popup--compact { height:auto; min-height:520rpx; }.action-popup__head { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; padding:28rpx 30rpx 20rpx; border-bottom:1rpx solid #f1f5f9; }.action-popup__title,.action-popup__sub { display:block; }.action-popup__title { color:#0f172a; font-size:32rpx; font-weight:750; }.action-popup__sub { margin-top:5rpx; color:#94a3b8; font-size:21rpx; }.action-popup__body { flex:1; min-height:0; padding:12rpx 30rpx; box-sizing:border-box; }.action-popup__foot { padding:20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #f1f5f9; }.popup-form-row { display:flex; align-items:center; gap:20rpx; min-height:96rpx; padding:0 30rpx; border-bottom:1rpx solid #f1f5f9; color:#334155; font-size:25rpx; }.action-popup__body .popup-form-row { padding:0; }
 </style>

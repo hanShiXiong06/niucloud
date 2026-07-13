@@ -8,7 +8,7 @@
                 </div>
                 <div class="flex gap-2">
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
-                    <el-button type="primary" :icon="Plus" @click="openCreate">销售出库</el-button>
+                    <el-button type="primary" :icon="Plus" @click="openCreate()">销售出库</el-button>
                 </div>
             </div>
 
@@ -323,8 +323,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
@@ -340,6 +340,7 @@ import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
 const activeTab = ref('')
 const router = useRouter()
+const route = useRoute()
 const saleRoleFocus = [
     { role: '销售', focus: '客户、成交价、毛利与设备批次' },
     { role: '仓管', focus: '出库设备身份、原位置与资产状态' },
@@ -366,6 +367,7 @@ const categoryTree = ref<any[]>([])
 const saleChannelOptions = ref<any[]>([])
 const currentUid = ref(0)
 const selectedAssets = ref<any[]>([])
+const pendingAssetIds = ref<number[]>([])
 const stockTableRef = ref<any>()
 const salePrices = reactive<Record<number, number>>({})
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
@@ -400,6 +402,8 @@ onMounted(() => {
     loadWarehouses()
     loadCategories()
     loadSaleChannels()
+    const assetIds = String(route.query.asset_ids || '').split(',').map(Number).filter(id => id > 0)
+    if (assetIds.length) openCreate(assetIds)
 })
 useErpPageRefresh(loadList)
 
@@ -443,14 +447,20 @@ async function loadStock() {
             warehouse_id: stock.warehouse_id,
             location_id: stock.location_id,
             category_id: stock.category_id,
+            asset_ids: pendingAssetIds.value,
             page: stock.page,
             limit: stock.limit
         })
         stock.data = res?.data?.data || []
         stock.total = res?.data?.total || 0
         stock.data.forEach((row: any) => {
-            if (!salePrices[row.id]) salePrices[row.id] = Number(row.total_cost || 0)
+            if (!salePrices[row.id]) salePrices[row.id] = Number(row.retail_price || row.estimate_sale_price || row.total_cost || 0)
         })
+        if (pendingAssetIds.value.length) {
+            selectedAssets.value = stock.data.filter((row: any) => pendingAssetIds.value.includes(Number(row.id)))
+            await nextTick()
+            selectedAssets.value.forEach(row => stockTableRef.value?.toggleRowSelection(row, true))
+        }
     } finally {
         stock.loading = false
     }
@@ -495,17 +505,19 @@ function buildSearchParams() {
     }
 }
 
-function openCreate() {
+function openCreate(assetIds: number[] = []) {
     create.form = defaultForm()
     create.form.salesman_uid = currentUid.value || staffOptions.value[0]?.uid || 0
     const preferredChannel = saleChannelOptions.value.find((row: any) => Number(row.is_default || 0) === 1) || saleChannelOptions.value[0]
     if (preferredChannel) onSaleChannelChange(preferredChannel.key)
     selectedAssets.value = []
+    pendingAssetIds.value = assetIds
     stock.keyword = ''
     stock.warehouse_id = ''
     stock.location_id = ''
     stock.category_id = ''
     stock.page = 1
+    stock.limit = assetIds.length ? Math.max(8, Math.min(200, assetIds.length)) : 8
     create.visible = true
     loadStock()
     loadAccounts()

@@ -8,6 +8,8 @@
                 </div>
                 <div class="flex gap-2">
                     <el-button v-if="selectedPendingIds.length" type="warning" @click="openSendRefurbish()">批量开始整备（{{ selectedPendingIds.length }}）</el-button>
+                    <el-button v-if="selectedSaleableIds.length" type="primary" @click="goSale(selectedSaleableIds)">批量销售（{{ selectedSaleableIds.length }}）</el-button>
+                    <el-button v-if="selectedTransferableIds.length" @click="openTransfer()">批量调拨（{{ selectedTransferableIds.length }}）</el-button>
                     <el-button type="primary" plain @click="openSerialTrace">串号追踪</el-button>
                     <el-button :icon="Refresh" :loading="table.loading" @click="loadList">刷新</el-button>
                 </div>
@@ -16,7 +18,7 @@
             <ErpRoleFocus :items="stockRoleFocus" />
 
             <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-6">
-                <div class="summary-tile">
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('')">
                     <div class="summary-label">有效库存</div>
                     <div class="summary-value">{{ turnoverSummary.total_count || 0 }}</div>
                     <div class="mt-1 text-xs text-gray-400">平均库龄 {{ turnoverSummary.average_age_days || 0 }} 天</div>
@@ -25,25 +27,33 @@
                     <div class="summary-label">库存成本</div>
                     <div class="summary-value">{{ money(turnoverSummary.total_cost) }}</div>
                 </div>
-                <div class="summary-tile">
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('healthy')">
                     <div class="summary-label">周转正常</div>
                     <div class="summary-value text-green-600">{{ turnoverSummary.healthy_count || 0 }}</div>
                     <div class="mt-1 text-xs text-gray-400">≤ {{ turnoverSummary.thresholds?.attention_days || 7 }} 天</div>
                 </div>
-                <div class="summary-tile">
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('attention')">
                     <div class="summary-label">需要关注</div>
                     <div class="summary-value text-blue-600">{{ turnoverSummary.attention_count || 0 }}</div>
                     <div class="mt-1 text-xs text-gray-400">{{ (turnoverSummary.thresholds?.attention_days || 7) + 1 }}～{{ turnoverSummary.thresholds?.warning_days || 15 }} 天</div>
                 </div>
-                <div class="summary-tile">
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('warning')">
                     <div class="summary-label">周转预警</div>
                     <div class="summary-value text-orange-600">{{ turnoverSummary.warning_count || 0 }}</div>
                     <div class="mt-1 text-xs text-gray-400">占用 {{ money(turnoverSummary.warning_cost) }}</div>
                 </div>
-                <div class="summary-tile">
+                <div class="summary-tile summary-tile--clickable" @click="applyTurnoverFilter('critical')">
                     <div class="summary-label">严重滞销</div>
                     <div class="summary-value text-red-600">{{ turnoverSummary.critical_count || 0 }}</div>
                     <div class="mt-1 text-xs text-gray-400">占用 {{ money(turnoverSummary.critical_cost) }}</div>
+                </div>
+            </div>
+
+            <div v-if="(turnoverSummary.actions || []).length || (turnoverSummary.warehouse_risks || []).length" class="turnover-actions-panel">
+                <div><div class="font-medium text-slate-800">当前优先处理</div><div class="mt-1 text-xs text-slate-400">从预警直接进入对应库存，减少重复查找</div></div>
+                <div class="flex flex-1 flex-col items-end gap-2">
+                    <div class="flex flex-wrap justify-end gap-2"><el-button v-for="item in turnoverSummary.actions" :key="item.key" size="small" plain @click="applySummaryAction(item)">{{ item.label }}（{{ item.count }}）</el-button></div>
+                    <div v-if="(turnoverSummary.warehouse_risks || []).length" class="flex flex-wrap justify-end gap-2 text-xs text-slate-500"><span>重点仓库：</span><button v-for="item in turnoverSummary.warehouse_risks" :key="item.warehouse_id" type="button" class="warehouse-risk-chip" @click="applyWarehouseRisk(item)">{{ item.warehouse_name }} {{ item.warning_count }} 台 / {{ money(item.warning_cost) }}</button></div>
                 </div>
             </div>
 
@@ -129,7 +139,7 @@
                     <span class="mx-1 text-gray-400">-</span>
                     <el-input-number v-model="search.max_cost" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
                 </el-form-item>
-                <el-form-item label="预计售价">
+                <el-form-item label="零售价/预估">
                     <el-input-number v-model="search.min_price" :min="0" :precision="2" :controls="false" placeholder="最低" class="!w-[110px]" />
                     <span class="mx-1 text-gray-400">-</span>
                     <el-input-number v-model="search.max_price" :min="0" :precision="2" :controls="false" placeholder="最高" class="!w-[110px]" />
@@ -141,7 +151,7 @@
             </el-form>
 
             <el-table :data="table.data" v-loading="table.loading" size="large" :row-class-name="stockRowClassName" @selection-change="onSelectionChange">
-                <el-table-column type="selection" width="48" :selectable="row => row.status === 'in_stock' && row.refurbish_status === 'pending'" />
+                <el-table-column type="selection" width="48" :selectable="row => row.status === 'in_stock'" />
                 <el-table-column label="设备" min-width="260">
                     <template #default="{ row }">
                         <ErpDeviceIdentity :model="row.model" :spec="row.spec" :imei="row.imei" :sn="row.sn" :asset-no="row.asset_no" />
@@ -173,7 +183,7 @@
                 <el-table-column label="成本 / 价值" min-width="175" align="right">
                     <template #default="{ row }">
                         <div class="font-medium text-gray-900">{{ money(row.total_cost) }}</div>
-                        <div v-if="row.status === 'in_stock'" class="mt-1 text-xs text-gray-500">预计卖价 {{ Number(row.estimate_sale_price || 0) ? money(row.estimate_sale_price) : '-' }}</div>
+                        <div v-if="row.status === 'in_stock'" class="mt-1 text-xs text-gray-500">{{ Number(row.retail_price || 0) ? '零售价' : '内部预估' }} {{ Number(row.retail_price || row.estimate_sale_price || 0) ? money(row.retail_price || row.estimate_sale_price) : '-' }}</div>
                         <div v-else-if="hasEffectiveOutbound(row)" class="mt-1 text-xs" :class="Number(row.outbound_profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'">实际毛利 {{ money(row.outbound_profit) }}</div>
                         <div v-else class="mt-1 text-xs text-gray-400">历史成本</div>
                     </template>
@@ -243,14 +253,22 @@
                         </div>
                     </template>
                 </el-table-column>
-                <el-table-column label="操作" fixed="right" width="330" align="center">
+                <el-table-column label="操作" fixed="right" width="260" align="center">
                     <template #default="{ row }">
                         <el-button type="primary" link @click="openDetail(row)">档案</el-button>
-                        <el-button v-if="row.status === 'in_stock'" type="primary" link @click="openFlow(row)">流转</el-button>
-                        <el-button v-if="row.status === 'in_stock'" type="warning" link @click="openExpense(row)">成本调整</el-button>
-                        <el-button v-if="row.status === 'in_stock' && row.refurbish_status === 'pending'" type="warning" link @click="openSendRefurbish(row)">开始整备</el-button>
-                        <el-button v-if="row.status === 'in_stock' && ['pending','processing'].includes(row.refurbish_status)" type="success" link @click="openCompleteRefurbish(row)">登记完工</el-button>
-                        <el-button v-if="row.status === 'in_stock' && row.sale_target === 'mall' && !['pending','processing','failed'].includes(row.refurbish_status)" type="success" link @click="syncListing(row)">{{ row.listing_sync?.status === 'failed' ? '重试同步' : '同步拍照定价' }}</el-button>
+                        <el-button v-if="row.status === 'in_stock'" type="primary" link @click="handleTurnoverAction(row)">{{ row.turnover_action_label || '处理' }}</el-button>
+                        <el-dropdown v-if="row.status === 'in_stock'" trigger="click" @command="command => handleRowCommand(command, row)">
+                            <el-button link>更多</el-button>
+                            <template #dropdown><el-dropdown-menu>
+                                <el-dropdown-item command="flow">完善资料</el-dropdown-item>
+                                <el-dropdown-item command="retail">设置/调整零售价</el-dropdown-item>
+                                <el-dropdown-item command="transfer" :disabled="!row.can_transfer">调拨</el-dropdown-item>
+                                <el-dropdown-item command="expense">成本调整</el-dropdown-item>
+                                <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
+                                <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
+                                <el-dropdown-item v-if="row.sale_target === 'mall' && !['pending','processing','failed'].includes(row.refurbish_status)" command="sync_listing">{{ row.listing_sync?.status === 'failed' ? '重试同步' : '同步拍照定价' }}</el-dropdown-item>
+                            </el-dropdown-menu></template>
+                        </el-dropdown>
                     </template>
                 </el-table-column>
             </el-table>
@@ -288,6 +306,10 @@
                             <el-option label="上商城" value="mall" />
                         </el-select>
                     </el-form-item>
+                    <el-form-item label="商品分类">
+                        <el-tree-select v-model="flow.form.category_id" :data="categoryTree" :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }" check-strictly clearable class="w-full" node-key="category_id" placeholder="选择商城分类" @change="onFlowCategoryChange" />
+                    </el-form-item>
+                    <el-form-item label="设备规格"><el-input v-model.trim="flow.form.spec" placeholder="容量、颜色、成色、电池等" /></el-form-item>
                     <el-form-item label="上架状态">
                         <el-select v-model="flow.form.listing_status" class="w-full" :disabled="flow.form.sale_target !== 'mall'">
                             <el-option label="不需要" value="none" />
@@ -297,10 +319,10 @@
                             <el-option label="已上架" value="listed" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="预计卖价">
+                    <el-form-item label="内部预估价">
                         <el-input-number v-model="flow.form.estimate_sale_price" :min="0" :precision="2" :controls="false" class="!w-full" />
                     </el-form-item>
-                    <el-form-item label="零售价">
+                    <el-form-item label="销售零售价">
                         <el-input-number v-model="flow.form.retail_price" :min="0" :precision="2" :controls="false" class="!w-full" placeholder="上架商城定价" />
                     </el-form-item>
                 </div>
@@ -321,6 +343,26 @@
                 <el-button @click="flow.visible = false">取消</el-button>
                 <el-button type="primary" :loading="flow.saving" @click="submitFlow">保存</el-button>
             </template>
+        </el-dialog>
+
+        <el-dialog v-model="retail.visible" :title="Number(retail.row?.retail_price || 0) > 0 ? '调整零售价' : '设置零售价'" width="480px" destroy-on-close>
+            <div class="rounded-lg bg-slate-50 px-4 py-3"><div class="font-medium text-slate-800">{{ retail.row?.model || '-' }}</div><div class="mt-1 text-xs text-slate-500">IMEI {{ retail.row?.imei || '-' }} · 成本 {{ money(retail.row?.total_cost) }}</div></div>
+            <el-form class="mt-4" label-width="92px">
+                <el-form-item label="当前零售价"><span>{{ Number(retail.row?.retail_price || 0) > 0 ? money(retail.row?.retail_price) : '未设置' }}</span></el-form-item>
+                <el-form-item label="新零售价" required><el-input-number v-model="retail.form.retail_price" :min="0.01" :precision="2" :controls="false" class="!w-full" /></el-form-item>
+                <el-form-item label="调整原因" :required="Number(retail.row?.retail_price || 0) > 0"><el-input v-model.trim="retail.form.reason" type="textarea" :rows="3" placeholder="首次定价可不填；已有价格调整请说明市场反馈或处理原因" /></el-form-item>
+            </el-form>
+            <template #footer><el-button @click="retail.visible=false">取消</el-button><el-button type="primary" :loading="retail.saving" @click="submitRetailPrice">确认保存</el-button></template>
+        </el-dialog>
+
+        <el-dialog v-model="transfer.visible" title="库存调拨" width="520px" destroy-on-close>
+            <el-alert :title="`本次调拨 ${transfer.assetIds.length} 台设备，调拨后自动应用目标仓库的销售、拍照和定价规则。`" type="info" :closable="false" show-icon />
+            <el-form class="mt-4" label-width="88px">
+                <el-form-item label="目标仓库" required><el-select v-model="transfer.form.warehouse_id" class="w-full" placeholder="选择目标仓库" @change="transfer.form.location_id=0"><el-option v-for="item in warehouses" :key="item.id" :label="item.warehouse_name" :value="item.id" /></el-select></el-form-item>
+                <el-form-item label="目标库位" required><el-select v-model="transfer.form.location_id" class="w-full" placeholder="选择目标库位"><el-option v-for="item in transferLocations" :key="item.id" :label="item.location_name" :value="item.id" /></el-select></el-form-item>
+                <el-form-item label="调拨原因"><el-input v-model.trim="transfer.form.reason" type="textarea" :rows="3" placeholder="例如：长库龄转同行仓、调整销售渠道" /></el-form-item>
+            </el-form>
+            <template #footer><el-button @click="transfer.visible=false">取消</el-button><el-button type="primary" :loading="transfer.saving" @click="submitTransfer">确认调拨</el-button></template>
         </el-dialog>
 
         <el-dialog v-model="serialTrace.visible" title="串号追踪" width="920px" destroy-on-close>
@@ -484,7 +526,7 @@
                         <el-descriptions-item label="采购来源">{{ detail.data.party_name || '-' }}</el-descriptions-item>
                         <el-descriptions-item :label="detail.data.status === 'in_stock' ? '当前仓库' : '出库仓库'">{{ [detail.data.warehouse_name, detail.data.location_name].filter(Boolean).join(' / ') || '-' }}</el-descriptions-item>
                         <el-descriptions-item label="质检员">{{ detail.data.inspector_name || '-' }}</el-descriptions-item>
-                        <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="预计卖价">{{ Number(detail.data.estimate_sale_price || 0) ? money(detail.data.estimate_sale_price) : '-' }}</el-descriptions-item>
+                        <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="销售零售价">{{ Number(detail.data.retail_price || 0) ? money(detail.data.retail_price) : '未设置' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="入库库龄">{{ detail.data.stock_in_at ? `${stockAgeDays(detail.data.stock_in_at)} 天` : '-' }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status === 'in_stock'" label="上架状态">{{ listingMeta(detail.data.listing_status).label }}</el-descriptions-item>
                         <el-descriptions-item v-if="detail.data.status !== 'in_stock'" label="原成交价">{{ Number(detail.data.sale_price || detail.data.last_sale_item?.sale_price || 0) ? money(detail.data.sale_price || detail.data.last_sale_item?.sale_price) : '-' }}</el-descriptions-item>
@@ -586,10 +628,10 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, completeErpStockRefurbish, getErpGoodsCategoryTree, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, sendErpStockRefurbish, syncErpStockListing, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, adjustErpStockRetailPrice, completeErpStockRefurbish, getErpGoodsCategoryTree, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
@@ -600,6 +642,7 @@ import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVouche
 
 const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
 const route = useRoute()
+const router = useRouter()
 const activeTab = ref('')
 
 function onTabChange(tab: string) {
@@ -612,6 +655,8 @@ const turnoverSummary = ref<any>({ thresholds: {} })
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const detailActivePanels = ref<string[]>([])
 const flow = reactive({ visible: false, saving: false, row: null as any, form: defaultFlowForm() })
+const retail = reactive({ visible: false, saving: false, row: null as any, form: { retail_price: 0, reason: '' } })
+const transfer = reactive({ visible: false, saving: false, assetIds: [] as number[], form: { warehouse_id: 0, location_id: 0, reason: '' } })
 const expense = reactive({ visible: false, saving: false, row: null as any, form: { cost_type: 'refurbish', expense_type_key: '', party_id: 0, party_name: '', amount: 0, after_cost: 0, reason: '' } })
 const serialTrace = reactive({ visible: false, loading: false, keyword: '', data: [] as any[], page: 1, limit: 10, total: 0 })
 const serialTraceDetail = reactive({ visible: false, loading: false, data: null as any })
@@ -626,6 +671,10 @@ const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.i
 const searchLocations = computed(() => searchWarehouse.value?.locations || [])
 const refurbishExpenseTypes = computed(() => financeCategories.value.filter((row: any) => row.direction === 'expense' && row.scope === 'refurbish' && Number(row.enabled ?? 1) === 1))
 const selectedPendingIds = computed(() => selectedRows.value.filter(row => row.status === 'in_stock' && row.refurbish_status === 'pending').map(row => Number(row.id)))
+const selectedSaleableIds = computed(() => selectedRows.value.filter(row => Number(row.can_direct_sale || 0) === 1).map(row => Number(row.id)))
+const selectedTransferableIds = computed(() => selectedRows.value.filter(row => Number(row.can_transfer || 0) === 1).map(row => Number(row.id)))
+const transferWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(transfer.form.warehouse_id)) || null)
+const transferLocations = computed(() => transferWarehouse.value?.locations || [])
 const completeWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(completeRefurbish.form.warehouse_id)) || null)
 const completeLocations = computed(() => completeWarehouse.value?.locations || [])
 const costTypeTip = computed(() => ({
@@ -634,7 +683,7 @@ const costTypeTip = computed(() => ({
 }[expense.form.cost_type] || '请核对成本调整类型和金额'))
 const stockRoleFocus = [
     { role: '仓管', focus: '入库位置、当前库存、库龄与出库结果' },
-    { role: '销售', focus: '可售状态、预计售价、客户与最近成交' },
+    { role: '销售', focus: '可售状态、销售零售价、客户与最近成交' },
     { role: '财务', focus: '采购成本、销售毛利与完整资产追溯' },
 ]
 
@@ -684,11 +733,31 @@ function defaultFlowForm() {
         listing_status: 'none',
         estimate_sale_price: 0,
         retail_price: 0,
+        category_id: 0,
+        category_name: '',
+        category_path: '',
+        spec: '',
         image_urls: '',
         quality_remark: '',
         remark_public: '',
         remark_internal: '',
     }
+}
+
+function findCategory(nodes: any[], categoryId: number, parents: any[] = []): { node: any, path: any[] } | null {
+    for (const node of nodes || []) {
+        const path = [...parents, node]
+        if (Number(node.category_id) === Number(categoryId)) return { node, path }
+        const found = findCategory(node.child_list || [], categoryId, path)
+        if (found) return found
+    }
+    return null
+}
+
+function onFlowCategoryChange(value: any) {
+    const found = findCategory(categoryTree.value, Number(value || 0))
+    flow.form.category_name = found?.node?.category_name || ''
+    flow.form.category_path = found ? found.path.map(item => item.category_name).filter(Boolean).join(' / ') : ''
 }
 
 async function loadList() {
@@ -880,6 +949,32 @@ function handleSearch() {
     loadList()
 }
 
+function applyTurnoverFilter(level: string) {
+    search.turnover_level = level
+    search.status = 'in_stock'
+    activeTab.value = 'in_stock'
+    table.page = 1
+    loadList()
+}
+
+function applySummaryAction(item: any) {
+    const query = item?.query || {}
+    Object.assign(search, { refurbish_status: '', listing_status: '', turnover_level: '', ...query, status: 'in_stock' })
+    activeTab.value = 'in_stock'
+    table.page = 1
+    loadList()
+}
+
+function applyWarehouseRisk(item: any) {
+    search.warehouse_id = Number(item?.warehouse_id || 0) || ''
+    search.location_id = ''
+    search.turnover_level = 'risk'
+    search.status = 'in_stock'
+    activeTab.value = 'in_stock'
+    table.page = 1
+    loadList()
+}
+
 function handleReset() {
     Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
     activeTab.value = ''
@@ -910,6 +1005,10 @@ function openFlow(row: any) {
         listing_status: row.listing_status || 'none',
         estimate_sale_price: Number(row.estimate_sale_price || 0),
         retail_price: Number(row.retail_price || 0),
+        category_id: Number(row.category_id || 0),
+        category_name: row.category_name || '',
+        category_path: row.category_path || '',
+        spec: row.spec || '',
         image_urls: row.image_urls || '',
         quality_remark: row.quality_remark || '',
         remark_public: row.remark_public || '',
@@ -918,10 +1017,87 @@ function openFlow(row: any) {
     flow.visible = true
 }
 
+function openRetailPrice(row: any) {
+    retail.row = row
+    retail.form = { retail_price: Number(row?.retail_price || 0), reason: '' }
+    retail.visible = true
+}
+
+async function submitRetailPrice() {
+    if (!retail.row?.id || Number(retail.form.retail_price || 0) <= 0) return ElMessage.warning('请填写有效零售价')
+    if (Number(retail.row.retail_price || 0) > 0 && !retail.form.reason) return ElMessage.warning('调整已有零售价时请填写原因')
+    const confirmed = await ElMessageBox.confirm(
+        `确认将设备零售价${Number(retail.row.retail_price || 0) > 0 ? `由 ${money(retail.row.retail_price)} 调整为` : '设置为'} ${money(retail.form.retail_price)}？本操作只调整对外销售价格，不修改采购成本。`,
+        '确认零售价',
+        { type: 'warning', confirmButtonText: '确认保存', cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!confirmed) return
+    retail.saving = true
+    try {
+        await adjustErpStockRetailPrice(retail.row.id, { ...retail.form })
+        ElMessage.success('零售价已保存')
+        retail.visible = false
+        await loadList()
+    } finally { retail.saving = false }
+}
+
+function openTransfer(row?: any) {
+    const ids = row?.id ? [Number(row.id)] : selectedTransferableIds.value
+    if (!ids.length) return ElMessage.warning('请先选择允许调拨的库存设备')
+    transfer.assetIds = ids
+    transfer.form = { warehouse_id: 0, location_id: 0, reason: '' }
+    transfer.visible = true
+}
+
+async function submitTransfer() {
+    if (!transfer.form.warehouse_id || !transfer.form.location_id) return ElMessage.warning('请选择目标仓库和库位')
+    const warehouse = transferWarehouse.value
+    const confirmed = await ElMessageBox.confirm(
+        `确认将 ${transfer.assetIds.length} 台设备调拨至「${warehouse?.warehouse_name || '-'}」？调拨后将按目标仓库规则重新判断是否可售、是否需要图片和定价。`,
+        '确认库存调拨',
+        { type: 'warning', confirmButtonText: '确认调拨', cancelButtonText: '返回检查' }
+    ).then(() => true).catch(() => false)
+    if (!confirmed) return
+    transfer.saving = true
+    try {
+        await transferErpStock({ asset_ids: transfer.assetIds, ...transfer.form })
+        ElMessage.success('库存调拨完成')
+        transfer.visible = false
+        selectedRows.value = []
+        await loadList()
+    } finally { transfer.saving = false }
+}
+
+function goSale(assetIds: number[]) {
+    if (!assetIds.length) return ElMessage.warning('请选择可销售设备')
+    router.push({ path: '/hsx_erp/sale', query: { asset_ids: assetIds.join(','), source: 'stock_turnover' } })
+}
+
+function handleTurnoverAction(row: any) {
+    const action = String(row?.turnover_action_key || row?.warehouse_policy?.primary_action || 'view')
+    if (['set_retail_price', 'adjust_retail_price'].includes(action)) return openRetailPrice(row)
+    if (action === 'direct_sale') return goSale([Number(row.id)])
+    if (action === 'transfer') return openTransfer(row)
+    if (action === 'start_refurbish') return openSendRefurbish(row)
+    if (['complete_refurbish', 'resolve_refurbish'].includes(action)) return openCompleteRefurbish(row)
+    if (action === 'sync_listing') return syncListing(row)
+    if (action === 'complete_listing') return openFlow(row)
+    if (action === 'resolve_warehouse') return openTransfer(row)
+    return openDetail(row)
+}
+
+function handleRowCommand(command: string, row: any) {
+    const actions: Record<string, () => any> = {
+        flow: () => openFlow(row), retail: () => openRetailPrice(row), transfer: () => openTransfer(row), expense: () => openExpense(row),
+        start_refurbish: () => openSendRefurbish(row), complete_refurbish: () => openCompleteRefurbish(row), sync_listing: () => syncListing(row),
+    }
+    return actions[command]?.()
+}
+
 function onTargetChange(value: string) {
     if (value === 'peer') flow.form.listing_status = 'none'
     if (value === 'mall' && flow.form.listing_status === 'none') {
-        flow.form.listing_status = flow.form.image_urls ? (Number(flow.form.estimate_sale_price || 0) > 0 ? 'ready' : 'need_price') : 'need_photo'
+        flow.form.listing_status = flow.form.image_urls ? (Number(flow.form.retail_price || 0) > 0 ? 'ready' : 'need_price') : 'need_photo'
     }
 }
 
@@ -1027,7 +1203,7 @@ function detailMetrics(row: any) {
     if ((row?.status || '') === 'in_stock') {
         return [
             { label: '当前总成本', value: money(row.total_cost) },
-            { label: '预计卖价', value: Number(row.estimate_sale_price || 0) ? money(row.estimate_sale_price) : '-' },
+            { label: '销售零售价', value: Number(row.retail_price || 0) ? money(row.retail_price) : '未设置' },
             { label: '库龄', value: row.stock_in_at ? `${stockAgeDays(row.stock_in_at)} 天` : '-' },
             { label: '销售去向', value: targetMeta(row.sale_target).label }
         ]
@@ -1124,9 +1300,10 @@ function assetActionLabel(action: string) {
         purchase_cancel: '采购撤销',
         purchase_return: '采购退货出库',
         cost_adjust: '成本调整',
+        retail_price_adjust: '零售价调整',
         flow: '流转设置',
         return: '退货',
-        transfer: '调拨',
+        transfer: '库存调拨',
         refurbish: '整备',
         void: '作废'
     }
@@ -1234,6 +1411,10 @@ function formatTime(value: any) {
     background: #f8fafc;
     padding: 14px 16px;
 }
+.summary-tile--clickable { cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
+.summary-tile--clickable:hover { transform: translateY(-2px); background: #fff; box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
+.turnover-actions-panel { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 14px; border: 1px solid #dbeafe; border-radius: 10px; background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 100%); padding: 13px 16px; }
+.warehouse-risk-chip { border: 1px solid #fed7aa; border-radius: 999px; background: #fff7ed; padding: 4px 9px; color: #c2410c; }
 .summary-label {
     color: #64748b;
     font-size: 13px;

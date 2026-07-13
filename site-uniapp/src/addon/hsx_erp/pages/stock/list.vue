@@ -26,6 +26,13 @@
                         <view @click="filterTurnover('warning')"><strong class="orange">{{ turnoverSummary.warning_count || 0 }}</strong><text>预警</text></view>
                         <view @click="filterTurnover('critical')"><strong class="red">{{ turnoverSummary.critical_count || 0 }}</strong><text>严重</text></view>
                     </view>
+                    <scroll-view v-if="(turnoverSummary.actions || []).length" scroll-x class="turnover-overview__actions">
+                        <view v-for="item in turnoverSummary.actions" :key="item.key" class="turnover-action-chip" @click="applySummaryAction(item)">{{ item.label }} {{ item.count }}</view>
+                    </scroll-view>
+                    <view v-if="(turnoverSummary.warehouse_risks || []).length" class="warehouse-risk-list">
+                        <text class="warehouse-risk-list__label">重点仓库</text>
+                        <view v-for="item in turnoverSummary.warehouse_risks.slice(0, 3)" :key="item.warehouse_id" class="warehouse-risk-row" @click="filterWarehouseRisk(item)"><text>{{ item.warehouse_name }}</text><text>{{ item.warning_count }} 台 · ¥{{ money(item.warning_cost) }}</text></view>
+                    </view>
                 </view>
               <view class="trace-entry" @click="goSerialTrace">
                     <view><text class="trace-entry__title">串号追踪</text><text class="trace-entry__sub">查询同一 IMEI / SN 的多次入库与完整流转</text></view>
@@ -113,14 +120,14 @@
                         </view>
                         <view class="amount-box">
                             <text class="amt-label">{{ isSold(row) ? '毛利' : '库龄' }}</text>
-                            <text class="amt-value" :class="isSold(row) ? profitClass(row.profit) : ageClass(row.stock_in_at || row.create_at, row.status)">
+                            <text class="amt-value" :class="isSold(row) ? profitClass(row.profit) : ageClass(row)">
                                 {{ isSold(row) ? profitText(row.profit) : `${row.stock_age_days || 0}天` }}
                             </text>
                         </view>
                     </view>
-                    <view v-if="row.status === 'in_stock' && ['pending','processing'].includes(row.refurbish_status)" class="stock-actions" @click.stop>
-                        <u-button v-if="row.refurbish_status === 'pending'" size="small" type="warning" plain text="开始整备" @click="startRefurbish(row)" />
-                        <u-button size="small" type="primary" plain text="登记完工" @click="goCompleteRefurbish(row)" />
+                    <view v-if="row.status === 'in_stock'" class="stock-actions" @click.stop>
+                        <text class="stock-actions__reason">{{ row.turnover_action || '查看设备当前处理建议' }}</text>
+                        <u-button size="small" :type="turnoverActionType(row)" :plain="row.turnover_action_key !== 'direct_sale'" :text="row.turnover_action_label || '查看处理'" @click="handleTurnoverAction(row)" />
                     </view>
                 </view>
             </view>
@@ -197,6 +204,8 @@ const filterFields = computed(() => [
 const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
 const reload = () => pagingRef.value?.reload()
 function filterTurnover(level: string) { filters.value = { ...filters.value, turnover_level: level }; reload() }
+function applySummaryAction(item: any) { filters.value = { ...filters.value, refurbish_status: '', listing_status: '', turnover_level: '', ...(item?.query || {}) }; activeTab.value = 'in_stock'; reload() }
+function filterWarehouseRisk(item: any) { filters.value = { ...filters.value, warehouse_id: Number(item?.warehouse_id || 0), warehouse_name: item?.warehouse_name || '', turnover_level: 'risk' }; activeTab.value = 'in_stock'; reload() }
 const turnoverTone = (level: string) => ({ attention: 'primary', warning: 'warning', critical: 'danger' }[level] || '')
 const goSerialTrace = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/serial_trace/list' })
 const handleSearch = () => reload()
@@ -287,10 +296,16 @@ function toggleExpand(row: any) {
     expandedMap.value = { ...expandedMap.value, [key]: !expandedMap.value[key] }
 }
 const ageDays = (ts: number) => ts ? Math.floor((Date.now() / 1000 - ts) / 86400) : 0
-const ageClass = (ts: number, status: string) => {
-    if (status !== 'in_stock') return ''
-    const d = ageDays(ts)
-    return d >= 90 ? 'red' : d >= 30 ? 'orange' : ''
+const ageClass = (row: any) => row?.status !== 'in_stock' ? '' : row?.turnover_level === 'critical' ? 'red' : row?.turnover_level === 'warning' ? 'orange' : ''
+
+const turnoverActionType = (row: any) => ['transfer', 'complete_refurbish', 'resolve_refurbish'].includes(row?.turnover_action_key) ? 'warning' : 'primary'
+function handleTurnoverAction(row: any) {
+    const action = String(row?.turnover_action_key || 'view')
+    if (action === 'start_refurbish') return startRefurbish(row)
+    if (['complete_refurbish', 'resolve_refurbish'].includes(action)) return goCompleteRefurbish(row)
+    if (action === 'direct_sale') return uni.navigateTo({ url: `/addon/hsx_erp/pages/sale/create?asset_ids=${row.id}` })
+    if (action === 'sync_listing') return goDetail(row)
+    return goDetail(row)
 }
 const primaryTime = (row: any) => Number(row.stock_in_at || 0) || Number(row.create_at || 0)
 const timeLabel = (row: any) => Number(row.stock_in_at || 0) ? '入库时间' : '创建时间'
@@ -339,7 +354,8 @@ const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
     justify-content: space-between;
     gap: 18rpx;
 }
-.stock-actions { display:flex; justify-content:flex-end; gap:14rpx; margin-top:18rpx; padding-top:18rpx; border-top:1rpx solid #eef2f7; }
+.stock-actions { display:flex; align-items:center; justify-content:space-between; gap:14rpx; margin-top:18rpx; padding-top:18rpx; border-top:1rpx solid #eef2f7; }
+.stock-actions__reason { flex:1; min-width:0; color:#94a3b8; font-size:21rpx; line-height:1.45; }
 
 .stock-title {
     flex: 1;
@@ -516,4 +532,6 @@ const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
 .turnover-overview__items strong, .turnover-overview__items text { display: block; }
 .turnover-overview__items strong { font-size: 28rpx; }.turnover-overview__items text { margin-top: 3rpx; color: #94a3b8; font-size: 20rpx; }
 .turnover-overview__items .green { color: #16a34a; }.turnover-overview__items .blue { color: #2563eb; }.turnover-overview__items .orange { color: #d97706; }.turnover-overview__items .red { color: #dc2626; }
+.turnover-overview__actions { width:100%; margin-top:16rpx; white-space:nowrap; }.turnover-action-chip { display:inline-flex; align-items:center; min-height:52rpx; margin-right:10rpx; padding:0 16rpx; border-radius:26rpx; background:#eff6ff; color:#2563eb; font-size:21rpx; font-weight:650; }
+.warehouse-risk-list { margin-top:16rpx; padding-top:14rpx; border-top:1rpx dashed #e2e8f0; }.warehouse-risk-list__label { display:block; margin-bottom:6rpx; color:#94a3b8; font-size:20rpx; }.warehouse-risk-row { display:flex; align-items:center; justify-content:space-between; min-height:46rpx; color:#64748b; font-size:21rpx; }.warehouse-risk-row text:last-child { color:#c2410c; }
 </style>

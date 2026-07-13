@@ -56,11 +56,13 @@ Route::group('erp', function () {
 
     Route::get('stock/lists', 'addon\hsx_erp\app\adminapi\controller\ErpStock@lists');
     Route::get('stock/turnover_summary', 'addon\hsx_erp\app\adminapi\controller\ErpStock@turnoverSummary');
+    Route::post('stock/transfer', 'addon\hsx_erp\app\adminapi\controller\ErpStock@transfer');
     Route::get('stock/serial_trace', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTrace');
     Route::get('stock/serial_trace/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@serialTraceDetail');
     Route::get('stock/ledger', 'addon\hsx_erp\app\adminapi\controller\ErpStock@ledger');
     Route::post('stock/refurbish/send', 'addon\hsx_erp\app\adminapi\controller\ErpStock@sendRefurbish');
     Route::post('stock/:id/adjust_cost', 'addon\hsx_erp\app\adminapi\controller\ErpStock@adjustCost');
+    Route::post('stock/:id/retail_price', 'addon\hsx_erp\app\adminapi\controller\ErpStock@adjustRetailPrice');
     Route::post('stock/:id/refurbish/complete', 'addon\hsx_erp\app\adminapi\controller\ErpStock@completeRefurbish');
     Route::get('stock/:id', 'addon\hsx_erp\app\adminapi\controller\ErpStock@info');
     Route::post('stock/:id/flow', 'addon\hsx_erp\app\adminapi\controller\ErpStock@flow');

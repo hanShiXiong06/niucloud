@@ -16,7 +16,7 @@
                 <u-loading-icon v-if="uploading" size="20" />
                 <template v-else>
                     <text class="erp-voucher__plus">＋</text>
-                    <text class="erp-voucher__add-text">上传凭证</text>
+                    <text class="erp-voucher__add-text">{{ addText }}</text>
                 </template>
             </view>
         </view>
@@ -35,8 +35,9 @@ const props = withDefaults(defineProps<{
     emptyText?: string
     maxCount?: number
     readonly?: boolean
+    addText?: string
 }>(), {
-    modelValue: '', title: '收付款凭证', hint: '可上传转账截图、回单或其他资金证据', emptyText: '未上传凭证', maxCount: 3, readonly: false,
+    modelValue: '', title: '收付款凭证', hint: '可上传转账截图、回单或其他资金证据', emptyText: '未上传凭证', maxCount: 3, readonly: false, addText: '上传凭证',
 })
 const emit = defineEmits(['update:modelValue', 'change', 'uploading'])
 const { paths, urls, value, uploading, reset, preview, remove, chooseAndUpload } = useErpVoucher(props.modelValue, props.maxCount)

@@ -78,6 +78,7 @@ class ErpSale extends BaseAdminController
             ['party_name', ''],
             ['warehouse_name', ''],
             ['location_name', ''],
+            ['asset_ids', []],
             ['page', 1],
             ['limit', 15],
         ]);

@@ -118,6 +118,14 @@ export function getMobileStockList(params: Record<string, any>) {
 export function getMobileStockTurnoverSummary() {
     return request.get('erp/stock/turnover_summary')
 }
+
+export function adjustMobileStockRetailPrice(id: number, data: Record<string, any>) {
+    return request.post(`erp/stock/${id}/retail_price`, withErpRequestId(data, `stock-retail-price-${id}`))
+}
+
+export function transferMobileStock(data: Record<string, any>) {
+    return request.post('erp/stock/transfer', withErpRequestId(data, 'stock-transfer'))
+}
 export function getMobileSerialTraceList(params: Record<string, any>) {
     return request.get('erp/stock/serial_trace', params)
 }
@@ -129,6 +137,12 @@ export function getMobileStockInfo(id: number) {
 }
 export function syncMobileStockListing(id: number) {
     return request.post(`erp/stock/${id}/sync_listing`)
+}
+export function updateMobileStockFlow(id: number, data: Record<string, any>) {
+    return request.post(`erp/stock/${id}/flow`, data)
+}
+export function getMobileSaleStock(params: Record<string, any> = {}) {
+    return request.get('erp/sale/stock', params)
 }
 
 // ─── 应付款 ──────────────────────────────────────────────────────────────────

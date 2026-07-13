@@ -120,7 +120,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { confirmMobileSaleReceipt, createMobileSale, getMobileCapitalAccounts, getMobileSaleInfo } from '@/addon/hsx_erp/api/erp'
+import { onLoad } from '@dcloudio/uni-app'
+import { confirmMobileSaleReceipt, createMobileSale, getMobileCapitalAccounts, getMobileSaleInfo, getMobileSaleStock } from '@/addon/hsx_erp/api/erp'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
 import ErpStockPickerPopup from '@/addon/hsx_erp/components/ErpStockPickerPopup.vue'
 import ErpSaleChannelPopup from '@/addon/hsx_erp/components/ErpSaleChannelPopup.vue'
@@ -173,6 +174,20 @@ onMounted(() => {
     loadAccounts()
     loadDefaultSaleChannel()
 })
+
+onLoad((query: any) => {
+    const assetIds = String(query?.asset_ids || '').split(',').map(Number).filter(id => id > 0)
+    if (assetIds.length) preloadAssets(assetIds)
+})
+
+async function preloadAssets(assetIds: number[]) {
+    try {
+        const res: any = await getMobileSaleStock({ asset_ids: assetIds, page: 1, limit: Math.min(200, Math.max(15, assetIds.length)) })
+        const rows = Array.isArray(res?.data?.data) ? res.data.data : []
+        selectedAssets.value = rows.map((asset: any) => ({ ...asset, _sale_price: suggestedSalePrice(asset) }))
+        if (!rows.length) uni.showToast({ title: '所选设备当前不可直接销售', icon: 'none' })
+    } catch (e: any) { uni.showToast({ title: e?.message || '待售设备加载失败', icon: 'none' }) }
+}
 
 async function loadAccounts() {
     try {
