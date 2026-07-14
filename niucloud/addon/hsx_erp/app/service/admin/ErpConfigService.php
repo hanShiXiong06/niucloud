@@ -177,7 +177,7 @@ class ErpConfigService extends BaseAdminService
         $rules['category_sync']['mode'] = in_array((string)($rules['category_sync']['mode'] ?? 'disabled'), ['disabled', 'two_way', 'shop_master', 'erp_master'], true)
             ? (string)$rules['category_sync']['mode']
             : 'disabled';
-        $rules['category_sync']['last_action'] = in_array((string)($rules['category_sync']['last_action'] ?? ''), ['', 'pull', 'push', 'reconcile'], true)
+        $rules['category_sync']['last_action'] = in_array((string)($rules['category_sync']['last_action'] ?? ''), ['', 'pull', 'push', 'reconcile', 'bootstrap'], true)
             ? (string)$rules['category_sync']['last_action']
             : '';
 

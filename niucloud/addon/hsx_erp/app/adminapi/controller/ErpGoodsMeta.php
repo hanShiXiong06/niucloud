@@ -10,10 +10,6 @@ class ErpGoodsMeta extends BaseAdminController
 {
     public function meta()
     {
-        $params = $this->request->params([
-            ['category_id', 0],
-            ['category_path', []],
-        ]);
-        return success((new ErpGoodsMetaService())->meta($params));
+        return success((new ErpGoodsMetaService())->meta());
     }
 }

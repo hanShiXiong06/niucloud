@@ -6,7 +6,7 @@ $assert = static function (bool $condition, string $message): void {
     if (!$condition) { fwrite(STDERR, "[FAIL] {$message}\n"); exit(1); }
 };
 
-$pc = (string)file_get_contents($project . '/admin/src/addon/hsx_erp/views/erp/workbench/index.vue');
+$pc = (string)file_get_contents($project . '/niucloud/addon/hsx_erp/admin/views/erp/workbench/index.vue');
 $mobile = (string)file_get_contents($project . '/site-uniapp/src/addon/hsx_erp/pages/dashboard/index.vue');
 
 $assert(str_contains($pc, 'Promise.allSettled') && str_contains($pc, 'dashboardLoadSequence'), 'PC工作台必须隔离可选KPI失败并防止旧请求覆盖新筛选');

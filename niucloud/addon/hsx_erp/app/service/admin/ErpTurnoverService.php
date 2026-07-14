@@ -145,7 +145,7 @@ class ErpTurnoverService extends BaseAdminService
         $status = ErpDict::ASSET_IN_STOCK;
         $imagePresentExpr = "LOWER(TRIM(COALESCE(a.image_urls,''))) NOT IN ('', '[]', '{}', 'null')";
         $listingReadyExpr = "w.default_sale_target = 'mall' AND a.refurbish_status NOT IN ('pending','processing','failed')
-            AND a.category_id > 0 AND TRIM(COALESCE(a.spec,'')) <> ''
+            AND a.catalog_product_id > 0 AND TRIM(COALESCE(a.spec,'')) <> ''
             AND (w.need_photo = 0 OR {$imagePresentExpr})
             AND (w.need_pricing = 0 OR a.retail_price > 0)";
         $listingIncompleteExpr = "w.default_sale_target = 'mall' AND a.refurbish_status NOT IN ('pending','processing','failed') AND NOT ({$listingReadyExpr})";
@@ -162,7 +162,7 @@ class ErpTurnoverService extends BaseAdminService
             SUM(CASE WHEN w.allow_direct_sale = 1 AND a.refurbish_status NOT IN ('pending','processing','failed') THEN 1 ELSE 0 END) AS saleable_count,
             SUM(CASE WHEN w.allow_transfer = 1 AND a.refurbish_status NOT IN ('pending','processing','failed') THEN 1 ELSE 0 END) AS transferable_count,
             SUM(CASE WHEN a.refurbish_status IN ('pending','processing','failed') THEN 1 ELSE 0 END) AS refurbish_blocked_count,
-            SUM(CASE WHEN w.default_sale_target = 'mall' AND a.category_id <= 0 THEN 1 ELSE 0 END) AS missing_category_count,
+            SUM(CASE WHEN w.default_sale_target = 'mall' AND a.catalog_product_id <= 0 THEN 1 ELSE 0 END) AS missing_category_count,
             SUM(CASE WHEN w.default_sale_target = 'mall' AND TRIM(COALESCE(a.spec,'')) = '' THEN 1 ELSE 0 END) AS missing_spec_count,
             SUM(CASE WHEN w.default_sale_target = 'mall' AND w.need_photo = 1 AND NOT ({$imagePresentExpr}) THEN 1 ELSE 0 END) AS missing_image_count,
             SUM(CASE WHEN w.default_sale_target = 'mall' AND w.need_pricing = 1 AND a.retail_price <= 0 THEN 1 ELSE 0 END) AS missing_price_count,

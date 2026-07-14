@@ -9,6 +9,7 @@ use addon\recycle_quote_spider\app\model\QuoteRow;
 use addon\recycle_quote_spider\app\model\QuoteSource;
 use addon\recycle_quote_spider\app\model\QuoteSyncLog;
 use addon\recycle_quote_spider\app\service\core\QuotePriceHistoryService;
+use addon\recycle_quote_spider\app\support\QuoteSyncIdentity;
 use app\service\core\upload\CoreBase64Service;
 use app\service\core\upload\CoreFetchService;
 use core\base\BaseCoreService;
@@ -212,29 +213,27 @@ class QuoteSyncService extends BaseCoreService
 
     private function syncItem(array $source, array $data, int $categoryId, array &$stats): int
     {
-        $itemId = (string)($data['id'] ?? '');
-        if ($itemId === '') {
+        $upstreamItemId = trim((string)($data['id'] ?? ''));
+        if ($upstreamItemId === '') {
             return 0;
         }
 
+        $stableItemId = QuoteSyncIdentity::itemKey($data);
+        $sourceUrlId = trim((string)($data['url'] ?? $data['source_url_id'] ?? ''));
         $columns = $this->normalizeList($data['key'] ?? []);
         $prices = $this->normalizeList($data['price'] ?? []);
         $isImageQuote = empty($columns) && empty($prices) && !empty($data['image']);
-        $hash = $this->hash($data);
+        $hash = $this->businessHash($data);
 
         $model = new QuoteItem();
-        $old = $model->where([
-            ['site_id', '=', $source['site_id']],
-            ['source_id', '=', $source['id']],
-            ['source_item_id', '=', $itemId],
-        ])->findOrEmpty()->toArray();
+        $old = $this->findExistingItem($source, $data, $stableItemId, $sourceUrlId, $upstreamItemId);
 
         $save = [
             'site_id' => $source['site_id'],
             'source_id' => $source['id'],
             'category_id' => $categoryId,
-            'source_item_id' => $itemId,
-            'source_url_id' => (string)($data['url'] ?? ''),
+            'source_item_id' => $stableItemId,
+            'source_url_id' => $sourceUrlId,
             'brand' => (string)($data['brand'] ?? ''),
             'tab' => (string)($data['tab'] ?? ''),
             'name' => (string)($data['mobile_name'] ?? $data['name'] ?? ''),
@@ -274,8 +273,34 @@ class QuoteSyncService extends BaseCoreService
         if (!$isImageQuote) {
             $this->syncItemRows($source, $id, $data, $old, $stats);
         }
+        (new QuoteDuplicateMergeService())->merge((int)$source['site_id'], (int)$source['id'], $id, $data);
 
         return $id;
+    }
+
+    private function findExistingItem(array $source, array $data, string $stableItemId, string $sourceUrlId, string $upstreamItemId): array
+    {
+        $baseWhere = [
+            ['site_id', '=', (int)$source['site_id']],
+            ['source_id', '=', (int)$source['id']],
+        ];
+        $model = new QuoteItem();
+        $old = $model->where(array_merge($baseWhere, [['source_item_id', '=', $stableItemId]]))->findOrEmpty()->toArray();
+        if (!empty($old)) {
+            return $old;
+        }
+
+        if ($sourceUrlId !== '') {
+            $signature = QuoteSyncIdentity::itemSignature($data);
+            $candidates = $model->where(array_merge($baseWhere, [['source_url_id', '=', $sourceUrlId]]))->order('id desc')->select()->toArray();
+            foreach ($candidates as $candidate) {
+                if (QuoteSyncIdentity::itemSignature($candidate) === $signature) {
+                    return $candidate;
+                }
+            }
+        }
+
+        return $model->where(array_merge($baseWhere, [['source_item_id', '=', $upstreamItemId]]))->findOrEmpty()->toArray();
     }
 
     private function syncItemRows(array $source, int $itemId, array $data, array $itemRule, array &$stats): void
@@ -346,13 +371,14 @@ class QuoteSyncService extends BaseCoreService
         $legacyRowId = $sourceRowId !== ''
             ? $sourceRowId . '#' . md5($rowName . '#' . $index)
             : '';
-        $rowId = $sourceRowId !== ''
+        $previousRowId = $sourceRowId !== ''
             ? $sourceRowId . '#' . md5($rowTab . '#' . $rowName . '#' . $index)
             : md5(json_encode($row, JSON_UNESCAPED_UNICODE) . '#' . $rowTab . '#' . $index);
+        $rowId = QuoteSyncIdentity::rowKey($row, $index);
         $columns = $this->normalizeList($row['key'] ?? $itemRule['columns'] ?? []);
         $prices = $this->normalizeList($row['price'] ?? []);
         $remark = $this->extractRemark($columns, $prices);
-        $hash = $this->hash($row);
+        $hash = $this->businessHash($row);
 
         $model = new QuoteRow();
         $old = $model->where([
@@ -360,6 +386,21 @@ class QuoteSyncService extends BaseCoreService
             ['item_id', '=', $itemId],
             ['source_row_id', '=', $rowId],
         ])->findOrEmpty()->toArray();
+        if (empty($old) && $rowName !== '') {
+            $old = $model->where([
+                ['site_id', '=', $source['site_id']],
+                ['item_id', '=', $itemId],
+                ['tab', '=', $rowTab],
+                ['model_name', '=', $rowName],
+            ])->order('id desc')->findOrEmpty()->toArray();
+        }
+        if (empty($old) && $previousRowId !== $rowId) {
+            $old = $model->where([
+                ['site_id', '=', $source['site_id']],
+                ['item_id', '=', $itemId],
+                ['source_row_id', '=', $previousRowId],
+            ])->findOrEmpty()->toArray();
+        }
         if (empty($old) && $legacyRowId !== '' && $legacyRowId !== $rowId) {
             $old = $model->where([
                 ['site_id', '=', $source['site_id']],
@@ -601,6 +642,13 @@ class QuoteSyncService extends BaseCoreService
     private function hash(array $data): string
     {
         return md5(json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    /** 上游每日版本 ID 只用于请求详情，不应被视为报价内容变化。 */
+    private function businessHash(array $data): string
+    {
+        unset($data['id']);
+        return $this->hash($data);
     }
 
     private function emptyStats(): array

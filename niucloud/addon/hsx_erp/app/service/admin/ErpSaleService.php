@@ -50,16 +50,7 @@ class ErpSaleService extends BaseAdminService
         if (!empty($where['location_id'])) {
             $query->where('a.location_id', '=', (int)$where['location_id']);
         }
-        if (!empty($where['category_id'])) {
-            $categoryId = (int)$where['category_id'];
-            $query->where(function ($q) use ($categoryId) {
-                $q->where('a.category_id', '=', $categoryId)
-                    ->whereOr('a.category_path', 'like', '%,' . $categoryId . ',%')
-                    ->whereOr('a.category_path', 'like', $categoryId . ',%')
-                    ->whereOr('a.category_path', 'like', '%,' . $categoryId)
-                    ->whereOr('a.category_path', '=', (string)$categoryId);
-            });
-        }
+        if (!empty($where['catalog_product_id'])) $query->where('a.catalog_product_id', '=', (int)$where['catalog_product_id']);
         foreach ([
             'asset_no' => 'a.asset_no',
             'imei' => 'a.imei',
@@ -125,16 +116,7 @@ class ErpSaleService extends BaseAdminService
         if (!empty($where['location_id'])) {
             $query->where('a.location_id', '=', (int)$where['location_id']);
         }
-        if (!empty($where['category_id'])) {
-            $categoryId = (int)$where['category_id'];
-            $query->where(function ($q) use ($categoryId) {
-                $q->where('a.category_id', '=', $categoryId)
-                    ->whereOr('a.category_path', 'like', '%,' . $categoryId . ',%')
-                    ->whereOr('a.category_path', 'like', $categoryId . ',%')
-                    ->whereOr('a.category_path', 'like', '%,' . $categoryId)
-                    ->whereOr('a.category_path', '=', (string)$categoryId);
-            });
-        }
+        if (!empty($where['catalog_product_id'])) $query->where('a.catalog_product_id', '=', (int)$where['catalog_product_id']);
         if (!empty($where['salesman_uid'])) {
             $query->where('o.salesman_uid', '=', (int)$where['salesman_uid']);
         }
@@ -174,7 +156,7 @@ class ErpSaleService extends BaseAdminService
             'a.asset_no',
             'a.sn',
             'a.spec',
-            'a.category_id',
+            'a.catalog_product_id',
             'a.category_name',
             'a.category_path',
             'a.warehouse_id',

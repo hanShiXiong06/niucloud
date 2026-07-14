@@ -32,7 +32,7 @@ ERP 手工建档 ──────────────┐
 ## 标准入库设备字段
 
 ```text
-source_device_id, imei, imei2, sn, model, category_id,
+source_device_id, imei, imei2, sn, model, catalog_product_id,
 capacity, color, ownership_type, purchase_cost,
 counterparty, member_id, payable_amount, paid_amount, settlement_status,
 suggested_sale_price, acquired_at, check_snapshot,

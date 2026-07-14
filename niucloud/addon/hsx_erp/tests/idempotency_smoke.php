@@ -45,7 +45,7 @@ foreach (['ErpPurchaseReturnService.php', 'ErpSaleReturnService.php'] as $servic
 }
 
 $apiFiles = [
-    dirname($root, 3) . '/admin/src/addon/hsx_erp/api/erp.ts',
+    dirname($root, 3) . '/niucloud/addon/hsx_erp/admin/api/erp.ts',
     $root . '/admin/api/erp.ts',
     dirname($root, 3) . '/site-uniapp/src/addon/hsx_erp/api/erp.ts',
 ];

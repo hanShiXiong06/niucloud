@@ -35,7 +35,7 @@ class ErpPurchase extends BaseAdminController
             ['warehouse_id', 0],
             ['warehouse_name', ''],
             ['location_id', 0],
-            ['category_id', 0],
+            ['catalog_product_id', 0],
             ['purchaser_uid', 0],
             ['purchaser_name', ''],
             ['min_amount', ''],

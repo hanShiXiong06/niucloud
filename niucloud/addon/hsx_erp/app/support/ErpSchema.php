@@ -25,19 +25,49 @@ final class ErpSchema
             PRIMARY KEY (`id`), UNIQUE KEY `uk_site_metric` (`site_id`,`metric_key`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-员工KPI规则'");
 
-        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_category_mapping` (
-            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
-            `erp_category_id` int NOT NULL DEFAULT 0, `target_plugin` varchar(40) NOT NULL DEFAULT '',
-            `target_category_id` varchar(64) NOT NULL DEFAULT '', `sync_direction` varchar(20) NOT NULL DEFAULT 'two_way',
-            `sync_status` varchar(20) NOT NULL DEFAULT 'synced', `last_sync_hash` varchar(64) NOT NULL DEFAULT '',
-            `last_error` varchar(500) NOT NULL DEFAULT '', `last_synced_at` int NOT NULL DEFAULT 0,
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_catalog_product_master` (
+            `master_product_id` int unsigned NOT NULL AUTO_INCREMENT,
+            `created_site_id` int NOT NULL DEFAULT 0, `source_key` varchar(40) NOT NULL DEFAULT '', `source_product_id` varchar(80) NOT NULL DEFAULT '',
+            `category_source_id` varchar(80) NOT NULL DEFAULT '', `category_path` varchar(255) NOT NULL DEFAULT '',
+            `brand_source_id` varchar(80) NOT NULL DEFAULT '', `brand_name` varchar(100) NOT NULL DEFAULT '',
+            `series_name` varchar(100) NOT NULL DEFAULT '', `product_name` varchar(150) NOT NULL DEFAULT '',
+            `data_hash` char(64) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`master_product_id`), UNIQUE KEY `uk_source_product` (`source_key`,`source_product_id`),
+            KEY `idx_product_name` (`product_name`), KEY `idx_brand_series` (`brand_name`,`series_name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-平台标准产品模板'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_site_catalog_product` (
+            `site_product_id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `master_product_id` int NOT NULL DEFAULT 0,
+            `category_path` varchar(255) NOT NULL DEFAULT '', `product_name` varchar(150) NOT NULL DEFAULT '',
+            `brand_name` varchar(100) NOT NULL DEFAULT '', `series_name` varchar(100) NOT NULL DEFAULT '',
+            `is_enabled` tinyint(1) NOT NULL DEFAULT 1, `sort` int NOT NULL DEFAULT 0,
             `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
-            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_erp_target` (`site_id`,`erp_category_id`,`target_plugin`),
-            UNIQUE KEY `uk_site_target_category` (`site_id`,`target_plugin`,`target_category_id`),
-            KEY `idx_site_status` (`site_id`,`sync_status`,`update_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-跨插件分类映射'");
+            PRIMARY KEY (`site_product_id`), UNIQUE KEY `uk_site_master` (`site_id`,`master_product_id`),
+            KEY `idx_site_category_path` (`site_id`,`category_path`(100),`is_enabled`),
+            KEY `idx_site_brand_series` (`site_id`,`brand_name`,`series_name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-站点产品目录绑定'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_catalog_import_task` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `operator_uid` int NOT NULL DEFAULT 0, `operator_name` varchar(60) NOT NULL DEFAULT '',
+            `source_key` varchar(40) NOT NULL DEFAULT 'excel_product_catalog',
+            `file_name` varchar(255) NOT NULL DEFAULT '', `file_path` varchar(500) NOT NULL DEFAULT '',
+            `sheet_name` varchar(120) NOT NULL DEFAULT '', `status` varchar(20) NOT NULL DEFAULT 'pending',
+            `queue_enabled` tinyint(1) NOT NULL DEFAULT 0, `total_rows` int NOT NULL DEFAULT 0,
+            `processed_rows` int NOT NULL DEFAULT 0, `created_count` int NOT NULL DEFAULT 0,
+            `updated_count` int NOT NULL DEFAULT 0, `skipped_count` int NOT NULL DEFAULT 0,
+            `error_count` int NOT NULL DEFAULT 0, `result_json` longtext NULL,
+            `message` varchar(500) NOT NULL DEFAULT '', `error_message` varchar(1000) NOT NULL DEFAULT '',
+            `start_at` int NOT NULL DEFAULT 0, `finish_at` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), KEY `idx_site_status` (`site_id`,`status`), KEY `idx_site_create` (`site_id`,`create_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品目录异步导入任务'");
 
         $columns = [
+            'erp_catalog_product_master' => [
+                'created_site_id' => "`created_site_id` int NOT NULL DEFAULT 0 COMMENT '首次写入站点，仅用于审计' AFTER `master_product_id`",
+            ],
             'erp_party' => [
                 'role_flags' => "`role_flags` varchar(255) NOT NULL DEFAULT '' COMMENT '多身份：purchase_supplier,sale_customer,recycle_customer,refurbish_provider' AFTER `party_type`",
                 'group_keys' => "`group_keys` varchar(255) NOT NULL DEFAULT '' COMMENT '业务分组，逗号分隔' AFTER `role_flags`",
@@ -80,8 +110,8 @@ final class ErpSchema
                 'color' => "`color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色' AFTER `spec_json`",
                 'battery' => "`battery` tinyint NOT NULL DEFAULT 0 COMMENT '电池效率百分比' AFTER `color`",
                 'warranty' => "`warranty` int NOT NULL DEFAULT 0 COMMENT '保修截止时间' AFTER `battery`",
-                'category_id' => "`category_id` int NOT NULL DEFAULT 0 COMMENT '商品分类ID' AFTER `spec`",
-                'category_name' => "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '商品分类名称快照' AFTER `category_id`",
+                'catalog_product_id' => "`catalog_product_id` int NOT NULL DEFAULT 0 COMMENT '本站ERP目录产品ID' AFTER `spec`",
+                'category_name' => "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '末级品类名称快照' AFTER `catalog_product_id`",
                 'category_path' => "`category_path` varchar(255) NOT NULL DEFAULT '' COMMENT '商品分类路径' AFTER `category_name`",
                 'inspector_uid' => "`inspector_uid` int NOT NULL DEFAULT 0 COMMENT '质检员UID' AFTER `spec`",
                 'inspector_name' => "`inspector_name` varchar(60) NOT NULL DEFAULT '' COMMENT '质检员名称快照' AFTER `inspector_uid`",
@@ -97,8 +127,8 @@ final class ErpSchema
                 'color' => "`color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色' AFTER `spec_json`",
                 'battery' => "`battery` tinyint NOT NULL DEFAULT 0 COMMENT '电池效率百分比' AFTER `color`",
                 'warranty' => "`warranty` int NOT NULL DEFAULT 0 COMMENT '保修截止时间' AFTER `battery`",
-                'category_id' => "`category_id` int NOT NULL DEFAULT 0 COMMENT '商品分类ID' AFTER `spec`",
-                'category_name' => "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '商品分类名称快照' AFTER `category_id`",
+                'catalog_product_id' => "`catalog_product_id` int NOT NULL DEFAULT 0 COMMENT '本站ERP目录产品ID' AFTER `spec`",
+                'category_name' => "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '末级品类名称快照' AFTER `catalog_product_id`",
                 'category_path' => "`category_path` varchar(255) NOT NULL DEFAULT '' COMMENT '商品分类路径' AFTER `category_name`",
                 'inspector_uid' => "`inspector_uid` int NOT NULL DEFAULT 0 COMMENT '质检员UID' AFTER `spec`",
                 'inspector_name' => "`inspector_name` varchar(60) NOT NULL DEFAULT '' COMMENT '质检员名称快照' AFTER `inspector_uid`",
@@ -121,7 +151,7 @@ final class ErpSchema
                 'refurbish_voucher_urls' => "`refurbish_voucher_urls` text COMMENT '整备结果/费用凭证图片' AFTER `refurbish_completed_name`",
                 'refurbish_remark' => "`refurbish_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '整备交接及结果说明' AFTER `refurbish_voucher_urls`",
                 'sale_target' => "`sale_target` varchar(20) NOT NULL DEFAULT 'unset' COMMENT 'unset未定/peer卖同行/mall上商城' AFTER `refurbish_status`",
-                'listing_status' => "`listing_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/need_photo待拍照/need_price待定价/ready可上架/listed已上架' AFTER `sale_target`",
+                'listing_status' => "`listing_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/need_photo待补图片/need_price待补售价/ready资料完整/listed商城已上架' AFTER `sale_target`",
                 'remark_public' => "`remark_public` varchar(500) NOT NULL DEFAULT '' COMMENT '对外说明' AFTER `remark`",
                 'remark_internal' => "`remark_internal` varchar(500) NOT NULL DEFAULT '' COMMENT '对内备注' AFTER `remark_public`",
                 'stock_in_at' => "`stock_in_at` int NOT NULL DEFAULT 0 COMMENT '实际入库时间戳（计算库龄）' AFTER `remark_internal`",
@@ -250,6 +280,8 @@ final class ErpSchema
         }
 
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_sn', 'KEY `idx_site_sn` (`site_id`,`sn`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`,`status`)');
+        self::ensureIndex($prefix . 'erp_purchase_item', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`)');
         self::ensureIndex($prefix . 'erp_warehouse', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
         self::ensureIndex($prefix . 'erp_warehouse_location', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
         self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish', 'KEY `idx_site_refurbish` (`site_id`,`refurbish_status`,`refurbish_pending_at`)');

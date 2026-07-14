@@ -281,8 +281,8 @@ function onWarehouseTypeChange(value: string, applyPreset = true) {
 
 function warehouseTypeMeta(type: string) {
     const map: any = {
-        owned: { label: '二手机仓', type: 'primary', desc: '自有库存仓，入库即生成采购应付，通常需要拍照定价后上商城，也可卖同行。' },
-        peer: { label: '同行仓', type: 'success', desc: '自有库存仓，通常无需拍照定价，可直接同行出库，成交后按实际售价确认利润。' },
+        owned: { label: '二手机仓', type: 'primary', desc: '自有库存仓，入库即生成采购应付；补齐分类、规格、图片和售价后可直接上商城，也可卖同行。' },
+        peer: { label: '同行仓', type: 'success', desc: '自有库存仓，通常无需商品图片，可直接同行出库，成交后按实际售价确认利润。' },
         consignment: { label: '代卖仓', type: 'warning', desc: '寄售库存，不属于自有资产，入库不应生成普通采购应付，不能直接调拨为自有库存。' },
         exception: { label: '异常仓', type: 'danger', desc: '退回、复检、争议或待处理设备，默认不允许直接销售。' }
     }

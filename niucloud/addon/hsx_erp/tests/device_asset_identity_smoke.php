@@ -15,6 +15,7 @@ $assert(!str_contains($source, 'return -(int)$snapshot[\'asset_id\'];'), '不得
 $assert(str_contains($source, 'findExistingAsset') && str_contains($source, 'storedAssetNo'), '升级时必须兼容旧映射并拒绝资产号不一致的错误重绑');
 
 $stock = (string)file_get_contents($root . '/app/service/admin/ErpStockService.php');
-$assert(str_contains($stock, 'appendListingSyncState') && str_contains($stock, "'last_error'"), '库存端必须向业务用户展示拍照定价同步状态和失败原因');
+$assert(str_contains($stock, 'appendListingSyncState') && str_contains($stock, '待补商品图片'), '库存端必须展示用户可理解的商品资料状态，不暴露中台同步实现');
+$assert(!str_contains($stock, 'erp.asset.ready_for_photo.v1'), '库存端不得把拍照中台作为商城上架必经节点');
 
 echo "[PASS] ERP/device-asset stable identity smoke test\n";

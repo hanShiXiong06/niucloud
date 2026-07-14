@@ -2,42 +2,39 @@
     <view class="erp-page">
         <ErpListHeader
             v-model="keyword"
-            v-model:activeTab="activeTab"
-            placeholder="型号/IMEI/资产号/仓库"
-            :tabs="tabs"
+            placeholder="搜索型号 / IMEI / 规格 / 仓位"
             :show-filter="true"
             :filter-count="filterCount"
             @search="handleSearch"
-            @tab-change="onTab"
             @filter="filterVisible = true"
-        />
+        >
+            <template #below>
+                <view class="quick-filters">
+                    <view class="quick-filter" :class="{ active: activeTab }" @click="openQuickFilter('status')">
+                        <text>{{ statusFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="activeTab ? '#2563eb' : '#64748b'" />
+                    </view>
+                    <view class="quick-filter" :class="{ active: filters.warehouse_id }" @click="openWarehouseFilter">
+                        <text>{{ warehouseFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.warehouse_id ? '#2563eb' : '#64748b'" />
+                    </view>
+                    <view class="quick-filter" :class="{ active: filters.turnover_level }" @click="openQuickFilter('turnover')">
+                        <text>{{ turnoverFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.turnover_level ? '#2563eb' : '#64748b'" />
+                    </view>
+                    <view class="quick-filter" :class="{ active: filters.listing_status }" @click="openQuickFilter('listing')">
+                        <text>{{ listingFilterLabel }}</text><u-icon name="arrow-down-fill" size="9" :color="filters.listing_status ? '#2563eb' : '#64748b'" />
+                    </view>
+                </view>
+            </template>
+        </ErpListHeader>
 
         <z-paging ref="pagingRef" v-model="list" @query="queryList" :fixed="true"
             :default-page-size="15" :paging-style="pagingStyle">
             <template #empty><u-empty mode="list" text="暂无库存设备" /></template>
-              <view class="turnover-overview">
-                    <view class="turnover-overview__main">
-                        <view><text class="turnover-overview__label">库存周转</text><text class="turnover-overview__value">平均 {{ turnoverSummary.average_age_days || 0 }} 天</text></view>
-                        <view class="turnover-overview__risk" @click="filterTurnover('risk')"><text>{{ turnoverSummary.warning_total_count || 0 }} 台预警</text><u-icon name="arrow-right" color="#c2410c" size="13" /></view>
-                    </view>
-                    <view class="turnover-overview__items">
-                        <view @click="filterTurnover('healthy')"><strong class="green">{{ turnoverSummary.healthy_count || 0 }}</strong><text>正常</text></view>
-                        <view @click="filterTurnover('attention')"><strong class="blue">{{ turnoverSummary.attention_count || 0 }}</strong><text>关注</text></view>
-                        <view @click="filterTurnover('warning')"><strong class="orange">{{ turnoverSummary.warning_count || 0 }}</strong><text>预警</text></view>
-                        <view @click="filterTurnover('critical')"><strong class="red">{{ turnoverSummary.critical_count || 0 }}</strong><text>严重</text></view>
-                    </view>
-                    <scroll-view v-if="(turnoverSummary.actions || []).length" scroll-x class="turnover-overview__actions">
-                        <view v-for="item in turnoverSummary.actions" :key="item.key" class="turnover-action-chip" @click="applySummaryAction(item)">{{ item.label }} {{ item.count }}</view>
-                    </scroll-view>
-                    <view v-if="(turnoverSummary.warehouse_risks || []).length" class="warehouse-risk-list">
-                        <text class="warehouse-risk-list__label">重点仓库</text>
-                        <view v-for="item in turnoverSummary.warehouse_risks.slice(0, 3)" :key="item.warehouse_id" class="warehouse-risk-row" @click="filterWarehouseRisk(item)"><text>{{ item.warehouse_name }}</text><text>{{ item.warning_count }} 台 · ¥{{ money(item.warning_cost) }}</text></view>
-                    </view>
-                </view>
-              <view class="trace-entry" @click="goSerialTrace">
-                    <view><text class="trace-entry__title">串号追踪</text><text class="trace-entry__sub">查询同一 IMEI / SN 的多次入库与完整流转</text></view>
-                    <u-icon name="arrow-right" color="#64748b" size="15" />
-                </view>
+            <view class="stock-overview">
+                <view class="stock-overview__item"><text class="stock-overview__value">{{ inventoryTotal }}</text><text class="stock-overview__label">当前在库</text></view>
+                <view class="stock-overview__item"><text class="stock-overview__value">{{ turnoverSummary.average_age_days || 0 }}天</text><text class="stock-overview__label">平均库龄</text></view>
+                <view class="stock-overview__item warning" @click="filterTurnover('risk')"><text class="stock-overview__value">{{ turnoverSummary.warning_total_count || 0 }}</text><text class="stock-overview__label">周转预警</text></view>
+                <view class="stock-overview__item trace" @click="goSerialTrace"><u-icon name="scan" color="#2563eb" size="18" /><text class="stock-overview__label">串号追踪</text></view>
+            </view>
             <view class="list-wrap">
                 <view v-for="row in list" :key="row.id" class="erp-card stock-card" :class="{ 'stock-card--sold': isSold(row), 'stock-card--void': isVoid(row) }" @click="goDetail(row)">
                     <view class="stock-card__head">
@@ -45,15 +42,15 @@
                             <text class="card-title stock-title__model">{{ row.model || '-' }}</text>
                             <text class="stock-title__sub">{{ deviceIdentityLine(row) }}</text>
                         </view>
-                        <view class="tag-stack">
+                        <view class="stock-statuses">
                             <u-tag :text="statusLabel(row.status)" :type="statusType(row.status)" plain plainFill size="mini" />
-                            <u-tag v-if="isSold(row) && row.sale_channel" :text="row.sale_channel" type="primary" plain plainFill size="mini" />
+                            <text v-if="operationStatusText(row)" class="stock-operation-status">{{ operationStatusText(row) }}</text>
                         </view>
                     </view>
 
                     <view v-if="isSold(row)" class="stock-banner sold">
                         <u-icon name="checkmark-circle" color="#2563eb" size="14" />
-                        <text>已售出{{ row.sale_no ? ' · ' + row.sale_no : '' }}{{ row.sale_party_name ? ' · ' + row.sale_party_name : '' }}</text>
+                        <text>{{ row.sale_party_name ? `已售给 ${row.sale_party_name}` : '设备已售出' }} · {{ formatDate(row.sale_at || row.update_at) }}</text>
                     </view>
                     <view v-else-if="isVoid(row)" class="stock-banner void">
                         <u-icon name="info-circle" color="#64748b" size="14" />
@@ -64,48 +61,15 @@
                         <text>{{ row.turnover_label }} · {{ row.turnover_action }}</text>
                     </view>
 
-                    <view class="stock-line">
-                        <text class="stock-line__label">{{ isSold(row) ? '销售时间' : timeLabel(row) }}</text>
-                        <text class="stock-line__value">{{ formatTime(isSold(row) ? (row.sale_at || row.update_at) : primaryTime(row)) }}</text>
-                    </view>
-
                     <template v-if="!isSold(row)">
-                        <view class="stock-chips">
-                            <view class="stock-chip">{{ row.warehouse_name || '-' }}{{ row.location_name ? ' / ' + row.location_name : '' }}</view>
-                            <view v-if="row.category_name" class="stock-chip muted">{{ row.category_name }}</view>
-                            <view v-if="row.refurbish_status && row.refurbish_status !== 'none'" class="stock-chip">{{ refurbishLabel(row.refurbish_status) }}</view>
-                            <view v-if="row.sale_target && row.sale_target !== 'unset'" class="stock-chip primary">{{ targetLabel(row.sale_target) }}</view>
-                            <view v-if="row.listing_status && row.listing_status !== 'none'" class="stock-chip">{{ listingLabel(row.listing_status) }}</view>
-                            <view v-if="row.status === 'in_stock'" class="stock-chip" :class="turnoverTone(row.turnover_level)">{{ row.turnover_label || '周转正常' }}</view>
-                        </view>
-                        <view v-if="isExpanded(row)" class="stock-extra">
-                            <view class="stock-line">
-                                <text class="stock-line__label">资产号</text>
-                                <text class="stock-line__value">{{ row.asset_no || '-' }}</text>
-                            </view>
-                            <view class="stock-line">
-                                <text class="stock-line__label">入库来源</text>
-                                <text class="stock-line__value">{{ row.inbound_origin_name || 'ERP采购' }}{{ row.inbound_origin_plugin_name ? ' · ' + row.inbound_origin_plugin_name : '' }}</text>
-                            </view>
-                            <view v-if="row.m_no" class="stock-line">
-                                <text class="stock-line__label">M号</text>
-                                <text class="stock-line__value">{{ row.m_no }}</text>
-                            </view>
-                            <view class="stock-line">
-                                <text class="stock-line__label">更新时间</text>
-                                <text class="stock-line__value">{{ formatTime(row.update_at) }}</text>
-                            </view>
-                        </view>
-                        <view class="stock-expand" @click.stop="toggleExpand(row)">
-                            <text>{{ isExpanded(row) ? '收起' : '更多信息' }}</text>
-                            <u-icon :name="isExpanded(row) ? 'arrow-up' : 'arrow-down'" color="#64748b" size="13" />
+                        <view class="stock-meta">
+                            <view><u-icon name="map" color="#94a3b8" size="13" /><text>{{ stockPosition(row) }}</text></view>
+                            <view><u-icon name="clock" color="#94a3b8" size="13" /><text>{{ formatDate(primaryTime(row)) }} 入库</text></view>
                         </view>
                     </template>
 
-                    <view v-else class="stock-chips">
-                        <view v-if="row.sale_party_name" class="stock-chip">{{ row.sale_party_name }}</view>
-                        <view class="stock-chip primary">{{ row.outbound_origin_name || 'ERP销售' }} / {{ row.outbound_channel || row.sale_channel || '-' }}</view>
-                        <view v-if="row.warehouse_name" class="stock-chip muted">原仓 {{ row.warehouse_name }}</view>
+                    <view v-else-if="row.sale_channel || Number(row.outbound_compensation_amount || 0)" class="stock-chips">
+                        <view v-if="row.sale_channel" class="stock-chip primary">{{ row.sale_channel }}</view>
                         <view v-if="Number(row.outbound_compensation_amount || 0)" class="stock-chip warning">售后补差 -¥{{ money(row.outbound_compensation_amount) }}</view>
                     </view>
 
@@ -127,7 +91,14 @@
                     </view>
                     <view v-if="row.status === 'in_stock'" class="stock-actions" @click.stop>
                         <text class="stock-actions__reason">{{ row.turnover_action || '查看设备当前处理建议' }}</text>
-                        <u-button size="small" :type="turnoverActionType(row)" :plain="row.turnover_action_key !== 'direct_sale'" :text="row.turnover_action_label || '查看处理'" @click="handleTurnoverAction(row)" />
+                        <view class="stock-actions__buttons">
+                            <view v-if="showTransferShortcut(row)" class="stock-transfer-btn" @click="openTransfer(row)">
+                                <u-icon name="reload" color="#2563eb" size="13" /><text>调拨</text>
+                            </view>
+                            <view class="stock-actions__btn">
+                                <u-button size="small" :type="turnoverActionType(row)" :plain="row.turnover_action_key !== 'direct_sale'" :loading="publishingId === Number(row.id) || transferringId === Number(row.id)" :text="row.turnover_action_label || '查看处理'" @click="handleTurnoverAction(row)" />
+                            </view>
+                        </view>
                     </view>
                 </view>
             </view>
@@ -141,6 +112,38 @@
             @confirm="applyFilter"
             @reset="resetFilter"
         />
+        <u-popup :show="quickFilterVisible" mode="bottom" :safe-area-inset-bottom="true" border-radius="28rpx" @close="quickFilterVisible = false">
+            <view class="quick-popup">
+                <view class="quick-popup__head">
+                    <text>{{ quickFilterTitle }}</text>
+                    <u-icon name="close" size="20" color="#94a3b8" @click="quickFilterVisible = false" />
+                </view>
+                <view class="quick-popup__options">
+                    <view v-for="item in quickFilterOptions" :key="item.value" class="quick-option" :class="{ active: quickSelectedValue === item.value }" @click="selectQuickFilter(item.value)">
+                        <text>{{ item.label }}</text>
+                        <u-icon v-if="quickSelectedValue === item.value" name="checkmark-circle-fill" size="20" color="#2563eb" />
+                    </view>
+                </view>
+            </view>
+        </u-popup>
+        <ErpWarehousePopup
+            v-model:show="warehouseFilterVisible"
+            v-model:warehouse-id="filters.warehouse_id"
+            v-model:warehouse-name="filters.warehouse_name"
+            v-model:location-id="filters.location_id"
+            v-model:location-name="filters.location_name"
+            :allow-warehouse-only="true"
+            :allow-clear="true"
+            @change="applyWarehouseFilter"
+        />
+        <ErpWarehousePopup
+            v-model:show="transferVisible"
+            v-model:warehouse-id="transferForm.warehouse_id"
+            v-model:warehouse-name="transferForm.warehouse_name"
+            v-model:location-id="transferForm.location_id"
+            v-model:location-name="transferForm.location_name"
+            @change="submitTransfer"
+        />
         <ErpPartyPopup v-model:show="providerPopupVisible" v-model:partyId="providerPartyId" v-model:partyName="providerPartyName" roleType="supplier" roleContext="refurbish_provider" @select="confirmExternalRefurbish" />
     </view>
 </template>
@@ -149,11 +152,12 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 
-import { getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary } from '@/addon/hsx_erp/api/erp'
+import { getMobileErpConfig, getMobileStockList, getMobileStockTurnoverSummary, syncMobileStockListing, transferMobileStock } from '@/addon/hsx_erp/api/erp'
 import { dictLabel, dictTabs, dictType, ERP_DICT_FALLBACK, loadErpDicts, type ErpDictMap } from '@/addon/hsx_erp/api/dict'
 import ErpListHeader from '@/addon/hsx_erp/components/ErpListHeader.vue'
 import ErpFilterPopup from '@/addon/hsx_erp/components/ErpFilterPopup.vue'
 import ErpPartyPopup from '@/addon/hsx_erp/components/ErpPartyPopup.vue'
+import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import { useListHeader } from '@/addon/hsx_erp/hooks/useListHeader'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
@@ -170,24 +174,39 @@ const keyword = ref('')
 const list = ref<any[]>([])
 const pagingRef = ref<any>(null)
 const erpDicts = ref<ErpDictMap>(ERP_DICT_FALLBACK)
-const expandedMap = ref<Record<string, boolean>>({})
 const refurbishTrackingMode = ref<'simple' | 'external'>('simple')
 const providerPopupVisible = ref(false)
 const providerPartyId = ref(0)
 const providerPartyName = ref('')
 const pendingRefurbishRow = ref<any>(null)
+const publishingId = ref(0)
+const transferringId = ref(0)
+const transferVisible = ref(false)
+const transferRow = ref<any>(null)
+const transferForm = ref({ warehouse_id: 0, warehouse_name: '', location_id: 0, location_name: '' })
 const turnoverSummary = ref<any>({ thresholds: {} })
+const quickFilterVisible = ref(false)
+const quickFilterKey = ref<'status' | 'turnover' | 'listing'>('status')
+const warehouseFilterVisible = ref(false)
 
 const tabs = computed(() => dictTabs(erpDicts.value, 'asset_status', true))
 const activeTab = ref('')
 const filterVisible = ref(false)
 const filters = ref<Record<string, any>>({})
+const turnoverOptions = [
+    { label: '全部库龄', value: '' },
+    { label: '全部预警', value: 'risk' },
+    { label: '周转正常', value: 'healthy' },
+    { label: '需要关注', value: 'attention' },
+    { label: '周转预警', value: 'warning' },
+    { label: '严重滞销', value: 'critical' },
+]
 const filterFields = computed(() => [
     { key: 'asset_no', label: '资产号', type: 'text', placeholder: '输入资产编号' },
     { key: 'imei', label: 'IMEI / 串号', type: 'text', placeholder: '输入 IMEI 或串号' },
     { key: 'model', label: '型号', type: 'text', placeholder: '输入机型型号' },
     { key: 'party_id', label: '来源/供应商', type: 'party', roleType: 'supplier', labelKey: 'party_name', placeholder: '请选择来源/供应商' },
-    { key: 'category_id', label: '设备分类', type: 'category', labelKey: 'category_name', placeholder: '请选择分类' },
+    { key: 'catalog_product_id', label: '商品型号', type: 'category', labelKey: 'catalog_product_name', placeholder: '请选择型号' },
     { key: 'warehouse_id', label: '仓库', type: 'warehouse', labelKey: 'warehouse_name', locationKey: 'location_id', locationLabelKey: 'location_name', placeholder: '请选择仓库/库位' },
     { key: 'refurbish_status', label: '整备状态', type: 'select', options: dictTabs(erpDicts.value, 'refurbish_status', true) },
     { key: 'sale_target', label: '销售去向', type: 'select', options: dictTabs(erpDicts.value, 'sale_target', true) },
@@ -201,15 +220,54 @@ const filterFields = computed(() => [
     ] },
     { key: 'date', label: '入库日期', type: 'dateRange', startKey: 'start_at', endKey: 'end_at' },
 ] as any[])
-const filterCount = computed(() => Object.entries(filters.value).filter(([key, v]) => !key.endsWith('_name') && v !== '' && v !== undefined && v !== null).length)
+const hasFilterValue = (value: any) => value !== '' && value !== undefined && value !== null && value !== 0
+const filterCount = computed(() => filterFields.value.reduce((count, field: any) => {
+    if (field.type === 'range') return count + (hasFilterValue(filters.value[field.minKey]) || hasFilterValue(filters.value[field.maxKey]) ? 1 : 0)
+    if (field.type === 'dateRange') return count + (hasFilterValue(filters.value[field.startKey]) || hasFilterValue(filters.value[field.endKey]) ? 1 : 0)
+    if (field.type === 'warehouse') return count + (hasFilterValue(filters.value[field.key]) || hasFilterValue(filters.value[field.locationKey]) ? 1 : 0)
+    return count + (hasFilterValue(filters.value[field.key]) ? 1 : 0)
+}, 0))
+const inventoryTotal = computed(() => ['healthy_count', 'attention_count', 'warning_count', 'critical_count']
+    .reduce((total, key) => total + Number(turnoverSummary.value?.[key] || 0), 0))
+const quickFilterTitle = computed(() => ({ status: '库存状态', turnover: '库龄与周转', listing: '上架状态' }[quickFilterKey.value]))
+const quickFilterOptions = computed(() => {
+    if (quickFilterKey.value === 'status') return tabs.value
+    if (quickFilterKey.value === 'listing') return dictTabs(erpDicts.value, 'listing_status', true)
+    return turnoverOptions
+})
+const quickSelectedValue = computed(() => {
+    if (quickFilterKey.value === 'status') return activeTab.value
+    if (quickFilterKey.value === 'listing') return String(filters.value.listing_status || '')
+    return String(filters.value.turnover_level || '')
+})
+const optionLabel = (options: any[], value: any, fallback: string) => options.find(item => String(item.value) === String(value || ''))?.label || fallback
+const statusFilterLabel = computed(() => activeTab.value ? optionLabel(tabs.value, activeTab.value, '状态') : '状态')
+const warehouseFilterLabel = computed(() => String(filters.value.location_name || filters.value.warehouse_name || '仓库'))
+const turnoverFilterLabel = computed(() => filters.value.turnover_level ? optionLabel(turnoverOptions, filters.value.turnover_level, '库龄') : '库龄')
+const listingFilterLabel = computed(() => filters.value.listing_status ? optionLabel(dictTabs(erpDicts.value, 'listing_status', true), filters.value.listing_status, '上架') : '上架')
 const reload = () => pagingRef.value?.reload()
-function filterTurnover(level: string) { filters.value = { ...filters.value, turnover_level: level }; reload() }
-function applySummaryAction(item: any) { filters.value = { ...filters.value, refurbish_status: '', listing_status: '', turnover_level: '', ...(item?.query || {}) }; activeTab.value = 'in_stock'; reload() }
-function filterWarehouseRisk(item: any) { filters.value = { ...filters.value, warehouse_id: Number(item?.warehouse_id || 0), warehouse_name: item?.warehouse_name || '', turnover_level: 'risk' }; activeTab.value = 'in_stock'; reload() }
-const turnoverTone = (level: string) => ({ attention: 'primary', warning: 'warning', critical: 'danger' }[level] || '')
+function filterTurnover(level: string) { filters.value = { ...filters.value, turnover_level: level }; activeTab.value = 'in_stock'; reload() }
 const goSerialTrace = () => uni.navigateTo({ url: '/addon/hsx_erp/pages/serial_trace/list' })
 const handleSearch = () => reload()
-const onTab = (val: string) => { activeTab.value = val; reload() }
+function openQuickFilter(key: 'status' | 'turnover' | 'listing') {
+    quickFilterKey.value = key
+    quickFilterVisible.value = true
+}
+function selectQuickFilter(value: string) {
+    if (quickFilterKey.value === 'status') activeTab.value = value
+    if (quickFilterKey.value === 'turnover') {
+        filters.value = { ...filters.value, turnover_level: value }
+        if (value) activeTab.value = 'in_stock'
+    }
+    if (quickFilterKey.value === 'listing') {
+        filters.value = { ...filters.value, listing_status: value }
+        if (value) activeTab.value = 'in_stock'
+    }
+    quickFilterVisible.value = false
+    reload()
+}
+function openWarehouseFilter() { warehouseFilterVisible.value = true }
+function applyWarehouseFilter() { reload() }
 
 onShow(async () => {
     erpDicts.value = await loadErpDicts()
@@ -250,13 +308,18 @@ function dateToRange(params: Record<string, any>) {
 
 const money = (v: any) => Number(v || 0).toFixed(2)
 const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
-const formatTime = (ts: any) => {
+const formatDate = (ts: any) => {
     const n = Number(ts || 0)
     if (!n) return '-'
     const d = new Date(n * 1000)
     const p = (x: number) => String(x).padStart(2, '0')
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
+const stockPosition = (row: any) => row.location_name ? `${row.warehouse_name || '未分仓'} / ${row.location_name}` : (row.warehouse_name || '未分配仓位')
+const operationStatusText = (row: any) => [
+    row.refurbish_status && row.refurbish_status !== 'none' ? refurbishLabel(row.refurbish_status) : '',
+    row.listing_status && row.listing_status !== 'none' ? listingLabel(row.listing_status) : '',
+].filter(Boolean).join(' · ')
 
 const goDetail = (row: any) => uni.navigateTo({
     url: `/addon/hsx_erp/pages/stock/detail?id=${row.id}`
@@ -289,30 +352,73 @@ function goCompleteRefurbish(row: any) {
 }
 const isSold = (row: any) => row?.status === 'sold'
 const isVoid = (row: any) => row?.status === 'void'
-const isExpanded = (row: any) => !!expandedMap.value[String(row?.id || '')]
-function toggleExpand(row: any) {
-    const key = String(row?.id || '')
-    if (!key) return
-    expandedMap.value = { ...expandedMap.value, [key]: !expandedMap.value[key] }
-}
-const ageDays = (ts: number) => ts ? Math.floor((Date.now() / 1000 - ts) / 86400) : 0
 const ageClass = (row: any) => row?.status !== 'in_stock' ? '' : row?.turnover_level === 'critical' ? 'red' : row?.turnover_level === 'warning' ? 'orange' : ''
 
-const turnoverActionType = (row: any) => ['transfer', 'complete_refurbish', 'resolve_refurbish'].includes(row?.turnover_action_key) ? 'warning' : 'primary'
+const turnoverActionType = (row: any) => ['transfer', 'resolve_warehouse', 'complete_refurbish', 'resolve_refurbish'].includes(row?.turnover_action_key) ? 'warning' : 'primary'
+const canTransfer = (row: any) => Number(row?.can_transfer ?? row?.warehouse_policy?.can_transfer ?? 0) === 1 || String(row?.turnover_action_key || row?.warehouse_policy?.primary_action || '') === 'resolve_warehouse'
+const showTransferShortcut = (row: any) => canTransfer(row) && String(row?.turnover_action_key || '') !== 'transfer'
 function handleTurnoverAction(row: any) {
     const action = String(row?.turnover_action_key || 'view')
     if (action === 'start_refurbish') return startRefurbish(row)
     if (['complete_refurbish', 'resolve_refurbish'].includes(action)) return goCompleteRefurbish(row)
     if (action === 'direct_sale') return uni.navigateTo({ url: `/addon/hsx_erp/pages/sale/create?asset_ids=${row.id}` })
-    if (action === 'sync_listing') return goDetail(row)
+    if (action === 'publish_listing') return publishListing(row)
+    if (['transfer', 'resolve_warehouse'].includes(action)) return openTransfer(row)
     return goDetail(row)
 }
-const primaryTime = (row: any) => Number(row.stock_in_at || 0) || Number(row.create_at || 0)
-const timeLabel = (row: any) => Number(row.stock_in_at || 0) ? '入库时间' : '创建时间'
-const ageText = (row: any) => {
-    const ts = Number(row.stock_in_at || row.create_at || 0)
-    return ts ? `${ageDays(ts)}天` : '-'
+function openTransfer(row: any) {
+    if (!canTransfer(row)) {
+        uni.showToast({ title: row?.warehouse_policy?.primary_action_reason || '当前设备不可调拨', icon: 'none' })
+        return
+    }
+    transferRow.value = row
+    transferForm.value = { warehouse_id: 0, warehouse_name: '', location_id: 0, location_name: '' }
+    transferVisible.value = true
 }
+async function submitTransfer(warehouse: any, location: any) {
+    const row = transferRow.value
+    if (!row?.id || !warehouse?.id || !location?.id || transferringId.value) return
+    const from = stockPosition(row)
+    const target = `${warehouse.warehouse_name} / ${location.location_name}`
+    const confirmed = await confirmErpSensitiveAction({
+        title: '确认库存调拨',
+        content: `确认将「${row.model || row.imei || '-'}」从「${from}」调拨到「${target}」？调拨后会重新应用目标仓库的销售和商城规则。`,
+        confirmText: '确认调拨',
+    })
+    if (!confirmed) return
+    transferringId.value = Number(row.id)
+    try {
+        await transferMobileStock({ asset_ids: [Number(row.id)], warehouse_id: Number(warehouse.id), location_id: Number(location.id), reason: '移动端库存列表调拨' })
+        uni.showToast({ title: '调拨完成', icon: 'success' })
+        transferRow.value = null
+        reload()
+    } catch (e: any) {
+        uni.showToast({ title: e?.message || '调拨失败，请重试', icon: 'none' })
+    } finally {
+        transferringId.value = 0
+    }
+}
+async function publishListing(row: any) {
+    if (!row?.id || publishingId.value) return
+    const confirmed = await confirmErpSensitiveAction({
+        title: '上架商城',
+        content: `确认将「${row.model || row.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
+        confirmText: '确认上架',
+    })
+    if (!confirmed) return
+    publishingId.value = Number(row.id)
+    try {
+        const res: any = await syncMobileStockListing(Number(row.id))
+        if (res?.data?.ok === false) throw new Error(res?.data?.message || '上架失败')
+        uni.showToast({ title: res?.data?.message || '已上架商城', icon: 'success' })
+        reload()
+    } catch (e: any) {
+        uni.showToast({ title: e?.message || '上架失败，请重试', icon: 'none' })
+    } finally {
+        publishingId.value = 0
+    }
+}
+const primaryTime = (row: any) => Number(row.stock_in_at || 0) || Number(row.create_at || 0)
 const priceLabel = (row: any) => row.status === 'sold' ? '实际收入' : '标价'
 const displayPrice = (row: any) => {
     if (row.status === 'sold') return `¥${money(row.outbound_net_sale_amount)}`
@@ -325,213 +431,63 @@ const profitClass = (v: any) => Number(v || 0) < 0 ? 'red' : 'green'
 const statusLabel = (s: string) => dictLabel(erpDicts.value, 'asset_status', s)
 const statusType = (s: string) => dictType(erpDicts.value, 'asset_status', s)
 const refurbishLabel = (s: string) => dictLabel(erpDicts.value, 'refurbish_status', s)
-const refurbishType = (s: string) => dictType(erpDicts.value, 'refurbish_status', s)
-const targetLabel = (s: string) => dictLabel(erpDicts.value, 'sale_target', s)
 const listingLabel = (s: string) => dictLabel(erpDicts.value, 'listing_status', s)
-const listingType = (s: string) => dictType(erpDicts.value, 'listing_status', s)
 </script>
 
 <style scoped lang="scss">
 @import '@/addon/hsx_erp/styles/erp-mobile.scss';
 
-.stock-card {
-    padding: 22rpx 26rpx;
-}
+.quick-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10rpx; }
+.quick-filter { height:52rpx; min-width:0; padding:0 12rpx; border-radius:10rpx; background:#fff; color:#64748b; display:flex; align-items:center; justify-content:center; gap:6rpx; box-sizing:border-box; font-size:23rpx; }
+.quick-filter text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.quick-filter.active { color:#2563eb; background:#eff6ff; font-weight:600; }
 
-.stock-card--sold {
-    background: #f8fbff;
-    border: 2rpx solid #bfdbfe;
-}
+.stock-overview { margin:16rpx 22rpx 0; padding:18rpx 8rpx; border-radius:14rpx; background:#fff; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+.stock-overview__item { min-width:0; text-align:center; border-right:1rpx solid #eef2f7; }
+.stock-overview__item:last-child { border-right:0; }
+.stock-overview__item text { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stock-overview__item .stock-overview__value { color:#0f172a; font-size:27rpx; font-weight:700; line-height:1.2; }
+.stock-overview__item .stock-overview__label { margin-top:6rpx; color:#94a3b8; font-size:20rpx; }
+.stock-overview__item.warning .stock-overview__value { color:#d97706; }
+.stock-overview__item.trace { display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.stock-overview__item.trace .stock-overview__label { color:#2563eb; }
 
-.stock-card--void {
-    background: #f8fafc;
-    border: 2rpx solid #e2e8f0;
-}
+.stock-card { padding:22rpx 26rpx; }
+.stock-card--sold { background:#f8fbff; border:2rpx solid #bfdbfe; }
+.stock-card--void { background:#f8fafc; border:2rpx solid #e2e8f0; }
+.stock-card__head { display:flex; align-items:flex-start; justify-content:space-between; gap:18rpx; }
+.stock-title { flex:1; min-width:0; display:flex; flex-direction:column; gap:8rpx; }
+.stock-title__model,.stock-title__sub { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stock-title__model { line-height:1.35; }
+.stock-title__sub { color:#64748b; font-size:24rpx; line-height:1.35; }
+.stock-statuses { flex-shrink:0; max-width:210rpx; display:flex; flex-direction:column; align-items:flex-end; gap:8rpx; }
+.stock-operation-status { max-width:100%; padding:4rpx 8rpx; border-radius:6rpx; background:#eff6ff; color:#2563eb; font-size:19rpx; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; box-sizing:border-box; }
+.stock-banner { display:flex; align-items:center; gap:8rpx; margin:14rpx 0 0; padding:12rpx 16rpx; border-radius:10rpx; font-size:22rpx; line-height:1.45; }
+.stock-banner text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stock-banner.sold { color:#2563eb; background:#eff6ff; }
+.stock-banner.void { color:#64748b; background:#f1f5f9; }
+.stock-banner.risk { color:#c2410c; background:#fff7ed; }
 
-.stock-card__head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 18rpx;
-}
-.stock-actions { display:flex; align-items:center; justify-content:space-between; gap:14rpx; margin-top:18rpx; padding-top:18rpx; border-top:1rpx solid #eef2f7; }
+.stock-meta { display:flex; align-items:center; justify-content:space-between; gap:20rpx; margin-top:16rpx; color:#64748b; font-size:22rpx; }
+.stock-meta view { min-width:0; display:flex; align-items:center; gap:7rpx; }
+.stock-meta text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stock-chips { display:flex; flex-wrap:wrap; gap:8rpx; margin-top:12rpx; }
+.stock-chip { max-width:100%; height:38rpx; padding:0 12rpx; border-radius:8rpx; background:#f8fafc; color:#64748b; font-size:21rpx; line-height:38rpx; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; box-sizing:border-box; }
+.stock-chip.primary { color:#2563eb; background:#eff6ff; }
+.stock-chip.warning { color:#d97706; background:#fffbeb; }
+.stock-card__foot { justify-content:space-between; gap:10rpx; margin-top:16rpx; padding-top:16rpx; }
+.stock-card__foot .amount-box { flex:1; min-width:0; }
+.stock-card__foot .amt-label,.stock-card__foot .amt-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stock-card__foot .amt-value { font-size:27rpx; }
+.stock-actions { display:flex; align-items:center; justify-content:space-between; gap:14rpx; margin-top:16rpx; padding-top:16rpx; border-top:1rpx solid #eef2f7; }
 .stock-actions__reason { flex:1; min-width:0; color:#94a3b8; font-size:21rpx; line-height:1.45; }
+.stock-actions__buttons { flex-shrink:0; display:flex; align-items:center; gap:10rpx; }
+.stock-actions__btn { flex-shrink:0; }
+.stock-transfer-btn { height:52rpx; padding:0 14rpx; border:1rpx solid #bfdbfe; border-radius:8rpx; display:flex; align-items:center; gap:6rpx; color:#2563eb; font-size:22rpx; box-sizing:border-box; }
 
-.stock-title {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8rpx;
-}
-
-.stock-title__model,
-.stock-title__sub,
-.stock-line__value {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.stock-title__model {
-    display: block;
-    line-height: 1.35;
-}
-
-.stock-title__sub {
-    display: block;
-    font-size: 24rpx;
-    line-height: 1.35;
-    color: #64748b;
-}
-
-.tag-stack {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8rpx;
-}
-
-.stock-banner {
-    display: flex;
-    align-items: center;
-    gap: 8rpx;
-    margin: 12rpx 0 10rpx;
-    padding: 12rpx 16rpx;
-    border-radius: 12rpx;
-    font-size: 22rpx;
-    line-height: 1.45;
-}
-
-.stock-banner text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.stock-banner.sold {
-    background: #eff6ff;
-    color: #2563eb;
-}
-
-.stock-banner.void {
-    background: #f1f5f9;
-    color: #64748b;
-}
-.stock-banner.risk { background: #fff7ed; color: #c2410c; }
-
-.stock-line {
-    display: flex;
-    align-items: center;
-    gap: 12rpx;
-    min-width: 0;
-    margin-top: 10rpx;
-    font-size: 24rpx;
-    line-height: 1.35;
-}
-
-.stock-line__label {
-    flex-shrink: 0;
-    color: #94a3b8;
-}
-
-.stock-line__value {
-    flex: 1;
-    min-width: 0;
-    color: #475569;
-}
-
-.stock-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8rpx;
-    margin-top: 12rpx;
-}
-
-.stock-chip {
-    max-width: 100%;
-    height: 38rpx;
-    padding: 0 12rpx;
-    border-radius: 19rpx;
-    background: #f8fafc;
-    color: #64748b;
-    font-size: 21rpx;
-    line-height: 38rpx;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    box-sizing: border-box;
-}
-
-.stock-chip.primary {
-    color: #2563eb;
-    background: #eff6ff;
-}
-
-.stock-chip.muted {
-    color: #94a3b8;
-}
-
-.stock-chip.warning {
-    color: #d97706;
-    background: #fffbeb;
-}
-.stock-chip.danger { color: #dc2626; background: #fef2f2; }
-
-.stock-extra {
-    margin-top: 10rpx;
-    padding: 2rpx 0 4rpx;
-}
-
-.stock-expand {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6rpx;
-    margin-top: 12rpx;
-    min-height: 44rpx;
-    border-radius: 22rpx;
-    background: #f8fafc;
-    color: #64748b;
-    font-size: 22rpx;
-}
-
-.stock-card__foot {
-    justify-content: space-between;
-    gap: 10rpx;
-    margin-top: 14rpx;
-    padding-top: 14rpx;
-}
-
-.stock-card__foot .amount-box {
-    flex: 1;
-    min-width: 0;
-}
-
-.stock-card__foot .amt-label,
-.stock-card__foot .amt-value {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.stock-card__foot .amt-value {
-    font-size: 27rpx;
-}
-.trace-entry{display:flex;align-items:center;justify-content:space-between;gap:16rpx;margin:14rpx 22rpx 0;padding:17rpx 20rpx;border-radius:14rpx;background:#f8fafc;color:#334155}.trace-entry__title,.trace-entry__sub{display:block}.trace-entry__title{font-size:25rpx;font-weight:700}.trace-entry__sub{margin-top:4rpx;color:#94a3b8;font-size:20rpx}
-.turnover-overview { margin: 18rpx 22rpx 0; padding: 22rpx; border: 1rpx solid #e2e8f0; border-radius: 20rpx; background: #fff; }
-.turnover-overview__main { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
-.turnover-overview__label, .turnover-overview__value { display: block; }
-.turnover-overview__label { color: #64748b; font-size: 22rpx; }
-.turnover-overview__value { margin-top: 5rpx; color: #0f172a; font-size: 30rpx; font-weight: 800; }
-.turnover-overview__risk { display: flex; align-items: center; gap: 5rpx; padding: 10rpx 14rpx; border-radius: 999rpx; background: #fff7ed; color: #c2410c; font-size: 22rpx; font-weight: 700; }
-.turnover-overview__items { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 18rpx; padding-top: 16rpx; border-top: 1rpx solid #f1f5f9; }
-.turnover-overview__items view { text-align: center; }
-.turnover-overview__items strong, .turnover-overview__items text { display: block; }
-.turnover-overview__items strong { font-size: 28rpx; }.turnover-overview__items text { margin-top: 3rpx; color: #94a3b8; font-size: 20rpx; }
-.turnover-overview__items .green { color: #16a34a; }.turnover-overview__items .blue { color: #2563eb; }.turnover-overview__items .orange { color: #d97706; }.turnover-overview__items .red { color: #dc2626; }
-.turnover-overview__actions { width:100%; margin-top:16rpx; white-space:nowrap; }.turnover-action-chip { display:inline-flex; align-items:center; min-height:52rpx; margin-right:10rpx; padding:0 16rpx; border-radius:26rpx; background:#eff6ff; color:#2563eb; font-size:21rpx; font-weight:650; }
-.warehouse-risk-list { margin-top:16rpx; padding-top:14rpx; border-top:1rpx dashed #e2e8f0; }.warehouse-risk-list__label { display:block; margin-bottom:6rpx; color:#94a3b8; font-size:20rpx; }.warehouse-risk-row { display:flex; align-items:center; justify-content:space-between; min-height:46rpx; color:#64748b; font-size:21rpx; }.warehouse-risk-row text:last-child { color:#c2410c; }
+.quick-popup { max-height:68vh; background:#fff; display:flex; flex-direction:column; }
+.quick-popup__head { height:92rpx; padding:0 32rpx; border-bottom:1rpx solid #eef2f7; display:flex; align-items:center; justify-content:space-between; box-sizing:border-box; color:#0f172a; font-size:30rpx; font-weight:700; }
+.quick-popup__options { padding:8rpx 30rpx 28rpx; overflow-y:auto; }
+.quick-option { min-height:88rpx; padding:0 10rpx; border-bottom:1rpx solid #f1f5f9; display:flex; align-items:center; justify-content:space-between; color:#334155; font-size:27rpx; }
+.quick-option.active { color:#2563eb; font-weight:600; }
 </style>

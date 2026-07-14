@@ -53,28 +53,67 @@ export function getErpStaffOptions(params: Record<string, any> = {}) {
 }
 
 // ── 商品资料 ─────────────────────────────────────────────────────────────────
-export function getErpGoodsCategoryTree(params: Record<string, any> = {}) {
-    return request.get('erp/goods/category/tree', { params })
+export function getErpGoodsCatalogList(params: Record<string, any> = {}) {
+    return request.get('erp/goods/catalog/lists', { params })
 }
 
-export function getErpCategorySyncStatus() {
-    return request.get('erp/goods/category/sync/status')
+export function getErpGoodsCatalogSummary() {
+    return request.get('erp/goods/catalog/summary')
 }
 
-export function syncErpCategories(data: Record<string, any>) {
-    return request.post('erp/goods/category/sync', data)
+export function getErpGoodsCatalogHierarchy(params: Record<string, any> = {}) {
+    return request.get('erp/goods/catalog/hierarchy', { params })
 }
 
-export function getErpGoodsCategoryList(params: Record<string, any> = {}) {
-    return request.get('erp/goods/category/lists', { params })
+export function saveErpGoodsCatalogProduct(id: number | string, data: Record<string, any>) {
+    return request.post(`erp/goods/catalog/product/save/${id || 0}`, data, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
-export function saveErpGoodsCategory(id: number, data: Record<string, any>) {
-    return request.post(`erp/goods/category/save/${id}`, data)
+export function deleteErpGoodsCatalogProduct(id: number | string) {
+    return request.delete(`erp/goods/catalog/product/${id}`, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
-export function deleteErpGoodsCategory(id: number) {
-    return request.delete(`erp/goods/category/${id}`)
+export function sortErpGoodsCatalogNode(data: Record<string, any>) {
+    return request.post('erp/goods/catalog/node/sort', data, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
+export function uploadErpGoodsCatalogImport(data: FormData) {
+    return request.post('erp/goods/catalog/import/upload', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        showErrorMessage: true
+    })
+}
+
+export function getErpGoodsCatalogImportTasks(params: Record<string, any> = {}) {
+    return request.get('erp/goods/catalog/import/tasks', { params })
+}
+
+export function getErpGoodsCatalogImportTask(id: number | string) {
+    return request.get(`erp/goods/catalog/import/tasks/${id}`)
+}
+
+export function retryErpGoodsCatalogImportTask(id: number | string) {
+    return request.post(`erp/goods/catalog/import/tasks/${id}/retry`, {}, { showErrorMessage: true })
+}
+
+export function deleteErpGoodsCatalogImportTask(id: number | string) {
+    return request.delete(`erp/goods/catalog/import/tasks/${id}`, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
+export function exportErpGoodsCatalog() {
+    return request.get('erp/goods/catalog/export')
 }
 
 export function getErpGoodsSpecMeta() {

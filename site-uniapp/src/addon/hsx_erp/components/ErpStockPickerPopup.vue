@@ -37,8 +37,8 @@
                     <u-icon name="home" size="14" :color="filterWarehouseName ? '#3b6ef5' : '#64748b'" />
                     <text>{{ warehouseFilterText || '仓库' }}</text>
                 </view>
-                <view class="filter-chip" :class="{ active: categoryId }">
-                    <ErpCategoryPopup v-model="categoryId" @change="onCategoryChange" />
+                <view class="filter-chip" :class="{ active: catalogProductId }">
+                    <ErpCatalogProductPopup v-model="catalogProductId" :selected-label="catalogProductName" label="商品型号" :required="false" @change="onCatalogProductChange" />
                 </view>
                 <view v-if="hasFilter" class="filter-clear" @click="clearFilters">清空</view>
             </view>
@@ -127,7 +127,7 @@ import request from '@/utils/request'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import { firstPositiveErpAmount } from '@/addon/hsx_erp/hooks/useErpAmounts'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
-import ErpCategoryPopup from '@/addon/hsx_erp/components/ErpCategoryPopup.vue'
+import ErpCatalogProductPopup from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 
 const props = withDefaults(defineProps<{
     show: boolean
@@ -154,9 +154,9 @@ const filterWarehouseId = ref(0)
 const filterWarehouseName = ref('')
 const filterLocationId = ref(0)
 const filterLocationName = ref('')
-const categoryId = ref<any>('')
-const categoryPath = ref<any[]>([])
-const hasFilter = computed(() => Number(filterWarehouseId.value || 0) > 0 || Number(categoryId.value || 0) > 0)
+const catalogProductId = ref<any>('')
+const catalogProductName = ref('')
+const hasFilter = computed(() => Number(filterWarehouseId.value || 0) > 0 || Number(catalogProductId.value || 0) > 0)
 const warehouseFilterText = computed(() => {
     if (!filterWarehouseName.value) return ''
     return filterLocationName.value ? `${filterWarehouseName.value} / ${filterLocationName.value}` : filterWarehouseName.value
@@ -190,7 +190,7 @@ async function loadPage() {
             keyword: keyword.value,
             warehouse_id: filterWarehouseId.value || 0,
             location_id: filterLocationId.value || 0,
-            category_id: categoryId.value || 0,
+            catalog_product_id: catalogProductId.value || 0,
             page: page.value,
             limit: 15,
         })
@@ -209,9 +209,9 @@ async function loadPage() {
     } finally { loading.value = false }
 }
 
-function onCategoryChange(payload: any) {
-    categoryId.value = payload?.category_id || ''
-    categoryPath.value = payload?.category_path || []
+function onCatalogProductChange(payload: any) {
+    catalogProductId.value = payload?.catalog_product_id || payload?.site_product_id || ''
+    catalogProductName.value = payload?.product_name || payload?.label || ''
     search()
 }
 
@@ -220,8 +220,8 @@ function clearFilters() {
     filterWarehouseName.value = ''
     filterLocationId.value = 0
     filterLocationName.value = ''
-    categoryId.value = ''
-    categoryPath.value = []
+    catalogProductId.value = ''
+    catalogProductName.value = ''
     search()
 }
 

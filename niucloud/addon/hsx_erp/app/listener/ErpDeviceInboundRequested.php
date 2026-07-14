@@ -340,7 +340,7 @@ class ErpDeviceInboundRequested
                 ],
             ],
             'color' => $color,
-            'category_id' => (int)($device['category_id'] ?? 0),
+            'catalog_product_id' => (int)($device['catalog_product_id'] ?? 0),
             'estimate_sale_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
             'retail_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
             'image_urls' => trim((string)$images),

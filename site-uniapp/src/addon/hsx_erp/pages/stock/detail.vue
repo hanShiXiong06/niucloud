@@ -32,7 +32,9 @@
                             <text class="turnover-action-card__title">{{ asset.turnover_label || '库存周转' }} · 在库 {{ asset.stock_age_days || 0 }} 天</text>
                             <text class="turnover-action-card__desc">{{ asset.turnover_action || asset.warehouse_policy?.primary_action_reason || '根据仓库规则处理当前设备' }}</text>
                         </view>
-                        <u-button size="small" :type="primaryActionType" :text="asset.turnover_action_label || '处理'" @click="handlePrimaryAction" />
+                        <view class="turnover-action-card__btn">
+                            <u-button size="small" :type="primaryActionType" :loading="syncingListing && asset.turnover_action_key === 'publish_listing'" :text="asset.turnover_action_label || '处理'" @click="handlePrimaryAction" />
+                        </view>
                     </view>
 
                     <view class="erp-card__foot asset-finance-foot">
@@ -168,6 +170,9 @@
                     <view v-if="asset.status === 'in_stock'" class="bottom-action-row">
                         <view class="bottom-action-btn"><u-button type="primary" text="调整成本" @click="goAdjust" /></view>
                         <view class="bottom-action-btn">
+                            <u-button type="primary" plain text="库存调拨" :loading="transferring" :disabled="!canOpenTransfer" @click="openTransfer" />
+                        </view>
+                        <view class="bottom-action-btn">
                             <u-button
                                 type="warning"
                                 :text="returnActionLabel(asset)"
@@ -179,23 +184,6 @@
                     <view v-if="asset.status === 'sold'" class="bottom-action-row">
                         <view class="bottom-action-btn full">
                             <u-button type="warning" text="发起销售退货" @click="goSaleReturn" />
-                        </view>
-                    </view>
-                    <view v-if="asset.status === 'in_stock' && asset.sale_target === 'mall'" class="listing-sync-card" :class="`listing-sync-card--${listingSyncStatus || 'idle'}`">
-                        <view class="listing-sync-card__head">
-                            <view class="listing-sync-card__title">
-                                <u-icon :name="listingSyncIcon" :color="listingSyncColor" size="15" />
-                                <text>拍照定价：{{ listingSyncLabel }}</text>
-                            </view>
-                            <text v-if="Number(listingSync.attempts || 0) > 0" class="listing-sync-card__attempts">已尝试 {{ listingSync.attempts }} 次</text>
-                        </view>
-                        <text v-if="listingSyncStatus === 'failed' && listingSync.last_error" class="listing-sync-card__error">{{ listingSync.last_error }}</text>
-                        <text v-else-if="listingSyncStatus === 'done'" class="listing-sync-card__desc">设备资料已成功同步到拍照定价流程。</text>
-                        <text v-else-if="['pending', 'processing'].includes(listingSyncStatus)" class="listing-sync-card__desc">系统正在处理，请稍后刷新设备档案查看结果。</text>
-                    </view>
-                    <view v-if="showListingSyncAction" class="bottom-action-row secondary-row">
-                        <view class="bottom-action-btn full">
-                            <u-button type="primary" plain :loading="syncingListing" :text="listingSyncStatus === 'failed' ? '重试同步拍照定价' : '同步拍照定价'" @click="syncListing" />
                         </view>
                     </view>
                     <view v-if="asset.status === 'in_stock' && asset.return_flow?.returnable === false" class="return-disabled-reason">
@@ -210,7 +198,7 @@
             <view class="action-popup">
                 <view class="action-popup__head"><view><text class="action-popup__title">完善商品资料</text><text class="action-popup__sub">用于商城展示和销售定价，不修改采购成本</text></view><u-icon name="close" color="#94a3b8" size="20" @click="productVisible=false" /></view>
                 <scroll-view scroll-y class="action-popup__body">
-                    <ErpCategoryPopup v-model="productForm.category_id" label="商品分类" :embedded="true" :clearable="true" @change="onProductCategoryChange" />
+                    <ErpCatalogProductPopup v-model="productForm.catalog_product_id" :selected-label="productForm.catalog_product_name" label="商品型号" :embedded="true" :clearable="true" @change="onProductCatalogChange" />
                     <view class="popup-form-row"><text>设备规格</text><u-input v-model="productForm.spec" placeholder="容量、颜色、成色、电池等" border="none" inputAlign="right" /></view>
                     <view class="popup-form-row"><text>零售价</text><u-input v-model="productForm.retail_price" type="number" placeholder="0.00" border="none" inputAlign="right" /></view>
                     <ErpVoucherUploader v-model="productForm.image_urls" title="商品图片" hint="上传正面、背面、边框和瑕疵图，支持点击预览" add-text="上传图片" :max-count="9" />
@@ -241,7 +229,7 @@ import { erpNetSaleAmount, erpOriginalSaleAmount, erpSaleCompensationAmount, fir
 import { erpDeviceIdentityLine } from '@/addon/hsx_erp/hooks/useErpDeviceText'
 import { formatErpDate, formatErpTime } from '@/addon/hsx_erp/hooks/useErpTime'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
-import ErpCategoryPopup from '@/addon/hsx_erp/components/ErpCategoryPopup.vue'
+import ErpCatalogProductPopup from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import ErpVoucherUploader from '@/addon/hsx_erp/components/ErpVoucherUploader.vue'
 
@@ -256,11 +244,12 @@ const assetId = ref(0)
 const detailLoaded = ref(false)
 const productVisible = ref(false)
 const productSaving = ref(false)
-const productForm = ref<any>({ category_id: 0, category_name: '', category_path: '', spec: '', retail_price: '', image_urls: '' })
+const productForm = ref<any>({ catalog_product_id: 0, catalog_product_name: '', category_name: '', category_path: '', spec: '', retail_price: '', image_urls: '' })
 const retailVisible = ref(false)
 const retailSaving = ref(false)
 const retailForm = ref({ retail_price: '', reason: '' })
 const warehouseVisible = ref(false)
+const transferring = ref(false)
 const transferForm = ref({ warehouse_id: 0, warehouse_name: '', location_id: 0, location_name: '' })
 let loadSeq = 0
 
@@ -316,13 +305,16 @@ function reload() {
     return loadDetail({ silent: true })
 }
 
-const primaryActionType = computed(() => ['transfer', 'complete_refurbish', 'resolve_refurbish'].includes(String(asset.value?.turnover_action_key || '')) ? 'warning' : 'primary')
+const primaryActionType = computed(() => ['transfer', 'resolve_warehouse', 'complete_refurbish', 'resolve_refurbish'].includes(String(asset.value?.turnover_action_key || '')) ? 'warning' : 'primary')
+const canOpenTransfer = computed(() => Number(asset.value?.can_transfer ?? asset.value?.warehouse_policy?.can_transfer ?? 0) === 1
+    || String(asset.value?.turnover_action_key || asset.value?.warehouse_policy?.primary_action || '') === 'resolve_warehouse')
 
 function handlePrimaryAction() {
     if (!asset.value) return
     const action = String(asset.value.turnover_action_key || asset.value.warehouse_policy?.primary_action || 'view')
     if (['set_retail_price', 'adjust_retail_price'].includes(action)) return openRetail()
-    if (['complete_listing', 'sync_listing'].includes(action)) return action === 'sync_listing' ? syncListing() : openProduct()
+    if (action === 'complete_listing') return openProduct()
+    if (action === 'publish_listing') return publishListing()
     if (['transfer', 'resolve_warehouse'].includes(action)) return openTransfer()
     if (action === 'direct_sale') return uni.navigateTo({ url: `/addon/hsx_erp/pages/sale/create?asset_ids=${asset.value.id}` })
     if (action === 'start_refurbish') return uni.navigateTo({ url: `/addon/hsx_erp/pages/stock/list?refurbish_status=pending` })
@@ -333,23 +325,22 @@ function handlePrimaryAction() {
 function openProduct() {
     if (!asset.value) return
     productForm.value = {
-        category_id: Number(asset.value.category_id || 0), category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
+        catalog_product_id: Number(asset.value.catalog_product_id || 0), catalog_product_name: asset.value.model || '', category_name: asset.value.category_name || '', category_path: asset.value.category_path || '',
         spec: asset.value.spec || '', retail_price: Number(asset.value.retail_price || 0) || '', image_urls: asset.value.image_urls || '',
     }
     productVisible.value = true
 }
 
-function onProductCategoryChange(payload: any) {
-    const nodes = Array.isArray(payload?.category_nodes) ? payload.category_nodes : []
-    productForm.value.category_id = Number(payload?.category_id || 0)
-    productForm.value.category_name = payload?.node?.category_name || ''
-    productForm.value.category_path = (payload?.category_path || []).join(',')
-    if (!productForm.value.category_name && nodes.length) productForm.value.category_name = nodes[nodes.length - 1]?.category_name || ''
+function onProductCatalogChange(payload: any) {
+    productForm.value.catalog_product_id = Number(payload?.catalog_product_id || payload?.site_product_id || 0)
+    productForm.value.catalog_product_name = payload?.product_name || payload?.label || ''
+    productForm.value.category_name = payload?.category_name || ''
+    productForm.value.category_path = payload?.category_path || ''
 }
 
 async function submitProduct() {
     if (!asset.value?.id) return
-    if (!Number(productForm.value.category_id || 0)) return uni.showToast({ title: '请选择商品分类', icon: 'none' })
+    if (!Number(productForm.value.catalog_product_id || 0)) return uni.showToast({ title: '请选择商品型号', icon: 'none' })
     if (!String(productForm.value.spec || '').trim()) return uni.showToast({ title: '请填写设备规格', icon: 'none' })
     if (asset.value.warehouse_policy?.need_photo && !String(productForm.value.image_urls || '').trim()) return uni.showToast({ title: '当前仓库要求上传商品图片', icon: 'none' })
     if (asset.value.warehouse_policy?.need_pricing && Number(productForm.value.retail_price || 0) <= 0) return uni.showToast({ title: '当前仓库要求填写零售价', icon: 'none' })
@@ -385,6 +376,10 @@ async function submitRetail() {
 }
 
 function openTransfer() {
+    if (!canOpenTransfer.value) {
+        uni.showToast({ title: asset.value?.warehouse_policy?.primary_action_reason || '当前设备不可调拨', icon: 'none' })
+        return
+    }
     transferForm.value = { warehouse_id: 0, warehouse_name: '', location_id: 0, location_name: '' }
     warehouseVisible.value = true
 }
@@ -393,11 +388,13 @@ async function submitTransfer(warehouse: any, location: any) {
     if (!asset.value?.id || !warehouse?.id || !location?.id) return
     const confirmed = await confirmErpSensitiveAction({ title: '确认库存调拨', content: `设备将调拨到「${warehouse.warehouse_name} / ${location.location_name}」，并重新应用目标仓库的销售和商城规则。`, confirmText: '确认调拨' })
     if (!confirmed) return
+    transferring.value = true
     try {
         await transferMobileStock({ asset_ids: [asset.value.id], warehouse_id: warehouse.id, location_id: location.id, reason: '移动端库存周转调拨' })
         uni.showToast({ title: '调拨完成', icon: 'success' })
         await reload()
     } catch (e: any) { uni.showToast({ title: e?.message || '调拨失败', icon: 'none' }) }
+    finally { transferring.value = false }
 }
 
 function goAdjustRefurbish() {
@@ -419,25 +416,25 @@ const goAdjust = () => {
     uni.navigateTo({ url: `/addon/hsx_erp/pages/cost_adjust/detail?${q}` })
 }
 
-const syncListing = async () => {
-    if (!asset.value || syncingListing.value || !showListingSyncAction.value) return
+const publishListing = async () => {
+    if (!asset.value || syncingListing.value || Number(asset.value.warehouse_policy?.can_list_mall || 0) !== 1) return
     const confirmed = await confirmErpSensitiveAction({
-        title: listingSyncStatus.value === 'failed' ? '重试拍照定价同步' : '同步拍照定价',
-        content: `确认同步「${asset.value.model || asset.value.imei || '-'}」？系统会记录同步状态，重复操作不会重复建档。`,
-        confirmText: listingSyncStatus.value === 'failed' ? '确认重试' : '确认同步',
+        title: '上架商城',
+        content: `确认将「${asset.value.model || asset.value.imei || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
+        confirmText: '确认上架',
     })
     if (!confirmed) return
     syncingListing.value = true
     try {
         const res: any = await syncMobileStockListing(asset.value.id)
         if (res?.data?.ok === false) {
-            uni.showToast({ title: res?.data?.message || '同步失败', icon: 'none' })
+            uni.showToast({ title: res?.data?.message || '上架失败', icon: 'none' })
             return
         }
-        uni.showToast({ title: '同步任务已提交', icon: 'success' })
+        uni.showToast({ title: res?.data?.message || '已上架商城', icon: 'success' })
         await reload()
     } catch (e: any) {
-        uni.showToast({ title: e?.message || '同步失败，请重试', icon: 'none' })
+        uni.showToast({ title: e?.message || '上架失败，请重试', icon: 'none' })
         await reload()
     } finally {
         syncingListing.value = false
@@ -482,20 +479,6 @@ const netSaleAmount = (row: any) => erpNetSaleAmount({ ...row, ...(row?.last_sal
 const originalSaleAmount = (row: any) => erpOriginalSaleAmount({ ...row, ...(row?.last_sale_item || {}) })
 const compensationAmount = (row: any) => erpSaleCompensationAmount({ ...row, ...(row?.last_sale_item || {}) })
 const deviceIdentityLine = (row: any) => erpDeviceIdentityLine(row)
-const listingSync = computed(() => asset.value?.listing_sync || {})
-const listingSyncStatus = computed(() => String(listingSync.value.status || '').toLowerCase())
-const listingSyncLabel = computed(() => listingSync.value.status_label || ({
-    pending: '等待处理', processing: '同步中', done: '已同步', failed: '同步失败',
-} as Record<string, string>)[listingSyncStatus.value] || '尚未同步')
-const listingSyncColor = computed(() => ({
-    pending: '#d97706', processing: '#2563eb', done: '#16a34a', failed: '#dc2626',
-} as Record<string, string>)[listingSyncStatus.value] || '#64748b')
-const listingSyncIcon = computed(() => ({
-    pending: 'clock', processing: 'reload', done: 'checkmark-circle', failed: 'close-circle',
-} as Record<string, string>)[listingSyncStatus.value] || 'camera')
-const showListingSyncAction = computed(() => asset.value?.status === 'in_stock'
-    && asset.value?.sale_target === 'mall'
-    && !['pending', 'processing', 'done'].includes(listingSyncStatus.value))
 const statusLabel = (s: string) => ({ in_stock: '在库', sold: '已售', returned: '已退', void: '已作废' }[s] || s || '-')
 const statusType = (s: string) => ({ in_stock: 'success', sold: 'primary', returned: 'warning', void: 'info' }[s] || 'info')
 const financeLabel = (s: string) => ({ pending: '待付款', partial: '部分付款', settled: '已结清', void: '已作废' }[s] || s || '-')
@@ -652,18 +635,6 @@ function accountRemark(row: any) {
 .bottom-action-row { display:flex; gap:16rpx; }
 .primary-turnover-row { margin-bottom:16rpx; }
 .bottom-action-btn { flex:1; min-width:0; }
-.listing-sync-card { margin:18rpx 0 14rpx; padding:16rpx 18rpx; border:2rpx solid #e2e8f0; border-radius:16rpx; background:#f8fafc; }
-.listing-sync-card--pending { border-color:#fed7aa; background:#fff7ed; }
-.listing-sync-card--processing { border-color:#bfdbfe; background:#eff6ff; }
-.listing-sync-card--done { border-color:#bbf7d0; background:#f0fdf4; }
-.listing-sync-card--failed { border-color:#fecaca; background:#fef2f2; }
-.listing-sync-card__head,.listing-sync-card__title { display:flex; align-items:center; gap:9rpx; }
-.listing-sync-card__head { justify-content:space-between; }
-.listing-sync-card__title { color:#334155; font-size:23rpx; font-weight:650; }
-.listing-sync-card__attempts { flex:none; color:#94a3b8; font-size:19rpx; }
-.listing-sync-card__desc,.listing-sync-card__error { display:block; margin-top:9rpx; font-size:21rpx; line-height:1.5; }
-.listing-sync-card__desc { color:#64748b; }
-.listing-sync-card__error { color:#b91c1c; word-break:break-all; }
 .return-disabled-reason { display:flex; align-items:flex-start; gap:8rpx; margin-top:14rpx; color:#94a3b8; font-size:22rpx; line-height:1.5; }
 .return-disabled-reason text { flex:1; }
 .error-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:520rpx; padding:40rpx; box-sizing:border-box; }

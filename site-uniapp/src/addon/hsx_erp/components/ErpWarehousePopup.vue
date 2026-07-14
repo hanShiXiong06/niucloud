@@ -17,9 +17,12 @@
             <view class="popup-header">
                 <view>
                     <text class="popup-title">选择仓库</text>
-                    <text class="popup-subtitle">先选仓库，再选库位</text>
+                    <text class="popup-subtitle">{{ allowWarehouseOnly ? '可查看整个仓库，也可精确到库位' : '先选仓库，再选库位' }}</text>
                 </view>
-                <u-icon name="close" size="20" color="#94a3b8" @click="close" />
+                <view class="popup-header__actions">
+                    <text v-if="allowClear && warehouseId" class="popup-clear" @click="clearSelection">不限仓库</text>
+                    <u-icon name="close" size="20" color="#94a3b8" @click="close" />
+                </view>
             </view>
 
             <view v-if="loading" class="popup-loading"><u-loading-icon size="24" /></view>
@@ -49,6 +52,19 @@
                     <view v-if="currentWarehouse" class="location-head">
                         <text class="location-head__title">{{ currentWarehouse.warehouse_name }}</text>
                         <text class="location-head__sub">{{ currentLocations.length ? '请选择库位' : '该仓库暂无库位' }}</text>
+                    </view>
+
+                    <view
+                        v-if="currentWarehouse && allowWarehouseOnly"
+                        class="location-row location-row--all"
+                        :class="{ active: Number(locationId) === 0 && Number(warehouseId) === Number(currentWarehouse.id) }"
+                        @click="selectWholeWarehouse"
+                    >
+                        <view class="location-row__main">
+                            <text class="location-row__name">全部库位</text>
+                            <text class="location-row__manager">查看该仓库内的全部设备</text>
+                        </view>
+                        <u-icon v-if="Number(locationId) === 0 && Number(warehouseId) === Number(currentWarehouse.id)" name="checkmark-circle-fill" color="#3b6ef5" size="20" />
                     </view>
 
                     <view
@@ -88,12 +104,16 @@ const props = withDefaults(defineProps<{
     warehouseName?: string
     locationId?: number
     locationName?: string
+    allowWarehouseOnly?: boolean
+    allowClear?: boolean
 }>(), {
     show: false,
     warehouseId: 0,
     warehouseName: '',
     locationId: 0,
     locationName: '',
+    allowWarehouseOnly: false,
+    allowClear: false,
 })
 
 const emit = defineEmits<{
@@ -147,6 +167,26 @@ function selectLocation(loc: any) {
     close()
 }
 
+function selectWholeWarehouse() {
+    const wh = currentWarehouse.value
+    if (!wh) return
+    emit('update:warehouseId', Number(wh.id || 0))
+    emit('update:warehouseName', String(wh.warehouse_name || ''))
+    emit('update:locationId', 0)
+    emit('update:locationName', '')
+    emit('change', wh, null)
+    close()
+}
+
+function clearSelection() {
+    emit('update:warehouseId', 0)
+    emit('update:warehouseName', '')
+    emit('update:locationId', 0)
+    emit('update:locationName', '')
+    emit('change', null, null)
+    close()
+}
+
 function close() { emit('update:show', false) }
 
 const typeLabel = (t: string) => ({
@@ -168,6 +208,8 @@ const typeLabel = (t: string) => ({
 }
 .popup-title { font-size: 32rpx; font-weight: 700; color: #0f172a; display:block; }
 .popup-subtitle { display:block; font-size:24rpx; color:#94a3b8; margin-top:4rpx; }
+.popup-header__actions { display:flex; align-items:center; gap:24rpx; }
+.popup-clear { color:#2563eb; font-size:24rpx; }
 .popup-loading { display: flex; justify-content: center; padding: 48rpx; }
 .popup-empty { text-align: center; padding: 48rpx 0; color: #94a3b8; font-size: 26rpx; }
 .warehouse-tree {
@@ -250,6 +292,7 @@ const typeLabel = (t: string) => ({
     border-bottom:1rpx solid #f1f5f9;
 }
 .location-row.active .location-row__name { color:#3b6ef5; font-weight:600; }
+.location-row--all { background:#f8fafc; margin-top:12rpx; padding:0 16rpx; border-radius:12rpx; border-bottom:0; }
 .location-row__main { min-width:0; flex:1; }
 .location-row__name { font-size:28rpx; color:#0f172a; }
 .location-row__manager { display:block; margin-top:6rpx; font-size:22rpx; color:#94a3b8; }

@@ -73,19 +73,8 @@
                         <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                     </el-select>
                 </el-form-item>
-                <el-form-item label="分类">
-                        <el-tree-select
-                            v-model="search.category_id"
-                            :data="categoryTree"
-                            :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
-                            check-strictly
-                            clearable
-                            default-expand-all
-                            filterable
-                            class="!w-[220px]"
-                            node-key="category_id"
-                            placeholder="全部分类"
-                    />
+                <el-form-item label="商品型号">
+                    <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
                 </el-form-item>
                 <el-form-item label="采购员">
                     <el-select v-model="search.purchaser_uid" clearable filterable class="!w-[150px]" placeholder="全部">
@@ -223,7 +212,7 @@
                     <div class="mt-1 flex items-center justify-between">
                         <div class="font-medium">机器明细</div>
                         <div class="flex items-center gap-2">
-                            <el-button @click="openGoodsMeta('category')">管理商品资料</el-button>
+                            <el-button @click="openGoodsMeta">管理商品目录</el-button>
                             <el-button :icon="Plus" @click="addItem">加一台</el-button>
                         </div>
                     </div>
@@ -243,7 +232,7 @@
                                         <div class="purchase-device-card__hint">{{ itemCoreSummary(row) }}</div>
                                     </div>
                                     <div class="flex items-center gap-2">
-                                        <el-tag v-if="row.category_id" size="small" effect="plain">已选分类</el-tag>
+                                        <el-tag v-if="row.catalog_product_id" size="small" effect="plain">已选型号</el-tag>
                                         <el-tag v-if="row.spec" size="small" type="success" effect="plain">已完善规格</el-tag>
                                     </div>
                                 </div>
@@ -382,20 +371,15 @@
                 <section class="item-extra-section">
                     <div class="item-extra-section__head">
                         <div>
-                            <div class="item-extra-section__title">分类</div>
-                            <div class="item-extra-section__desc">最多三级分类，选择后会保存到设备快照。</div>
+                            <div class="item-extra-section__title">商品目录型号</div>
+                            <div class="item-extra-section__desc">搜索型号后自动带入品类、品牌、系列和型号快照。</div>
                         </div>
-                        <el-button link type="primary" @click="openGoodsMeta('category')">管理分类</el-button>
+                        <el-button link type="primary" @click="openGoodsMeta">管理目录</el-button>
                     </div>
-                    <el-cascader
-                        v-model="itemExtra.item._category_path"
-                        :options="categoryTree"
-                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list', checkStrictly: true, emitPath: true }"
-                        clearable
-                        filterable
-                        class="w-full"
-                        placeholder="按一级 / 二级 / 三级选择分类"
-                        @change="value => onItemCategoryChange(itemExtra.item, Array.isArray(value) ? value[value.length - 1] : value)"
+                    <ErpCatalogProductSelect
+                        v-model="itemExtra.item.catalog_product_id"
+                        placeholder="输入品牌、系列或型号"
+                        @change="node => onItemCatalogChange(itemExtra.item, node)"
                     />
                 </section>
 
@@ -405,7 +389,7 @@
                             <div class="item-extra-section__title">规格与成色</div>
                             <div class="item-extra-section__desc">选择规格会自动生成规格文本，并随采购明细保存。</div>
                         </div>
-                        <el-button link type="primary" @click="openGoodsMeta('spec')">管理规格</el-button>
+                        <el-button link type="primary" @click="openGoodsMeta">管理规格</el-button>
                     </div>
                     <div v-if="specGroups.length" class="spec-grid">
                         <div v-for="group in specGroups" :key="group.key" class="spec-field">
@@ -423,7 +407,7 @@
                         </div>
                     </div>
                     <el-empty v-else :image-size="68" description="暂无规格项">
-                        <el-button type="primary" link @click="openGoodsMeta('spec')">去添加规格</el-button>
+                        <el-button type="primary" link @click="openGoodsMeta">去添加规格</el-button>
                     </el-empty>
                     <div class="spec-grid mt-3">
                         <div class="spec-field">
@@ -484,13 +468,6 @@
                 <el-button type="primary" @click="itemExtra.visible = false">完成</el-button>
             </template>
         </el-drawer>
-
-        <el-dialog v-model="goodsMeta.visible" title="管理商品资料" width="920px" destroy-on-close append-to-body>
-            <ErpGoodsMetaManager :active="goodsMeta.active" @saved="onGoodsMetaSaved" />
-            <template #footer>
-                <el-button type="primary" @click="goodsMeta.visible = false">完成</el-button>
-            </template>
-        </el-dialog>
 
         <el-drawer v-model="detail.visible" title="采购单详情" size="76%" destroy-on-close>
             <div v-loading="detail.loading">
@@ -606,16 +583,16 @@ import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVouche
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
-import { adjustErpPurchaseCost, createErpPurchase, getErpDicts, getErpGoodsCategoryTree, getErpGoodsSpecMeta, getErpPurchaseInfo, getErpPurchaseList, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { adjustErpPurchaseCost, createErpPurchase, getErpDicts, getErpGoodsSpecMeta, getErpPurchaseInfo, getErpPurchaseList, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import { getErpConfig } from '@/addon/hsx_erp/api/config'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpPartySelect from '@/addon/hsx_erp/components/ErpPartySelect.vue'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
-import ErpGoodsMetaManager from '@/addon/hsx_erp/components/ErpGoodsMetaManager.vue'
+import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 
-const search = reactive<any>({ imei: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
+const search = reactive<any>({ imei: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
 const searchPartyName = ref('')
 const activeTab = ref('')
 const router = useRouter()
@@ -635,14 +612,12 @@ function onTabChange(tab: string) {
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
 const accounts = ref<any[]>([])
 const warehouses = ref<any[]>([])
-const categoryTree = ref<any[]>([])
 const specMeta = ref<any>({ groups: [], grades: [] })
 const staffOptions = ref<any[]>([])
 const currentUid = ref(0)
 const titleRules = reactive({ category_mode: 'auto', spec_in_title: 1, grade_in_title: 0, separator: ' ' })
 const create = reactive({ visible: false, saving: false, form: defaultForm() })
 const itemExtra = reactive({ visible: false, index: -1, item: null as any })
-const goodsMeta = reactive({ visible: false, active: 'category' })
 const detail = reactive({ visible: false, loading: false, data: null as any })
 const adjust = reactive({ visible: false, saving: false, itemId: 0, item: null as any, form: { type: 'deduct', amount: 0, remark: '' } })
 const erpDicts = ref<Record<string, any[]>>({})
@@ -691,7 +666,6 @@ onMounted(() => {
     loadAccounts()
     loadWarehouses()
     loadStaffOptions()
-    loadCategories()
     loadSpecMeta()
     loadRules()
     loadDicts()
@@ -731,11 +705,10 @@ function blankItem() {
         color: '',
         battery: undefined,
         warranty: undefined,
-        category_id: 0,
+        catalog_product_id: 0,
         category_name: '',
         category_names: [],
         category_path: '',
-        _category_path: [],
         purchase_cost: 0,
         inspector_uid: null,
         estimate_sale_price: undefined,
@@ -779,11 +752,6 @@ async function loadStaffOptions() {
     staffOptions.value = res?.data?.users || []
 }
 
-async function loadCategories() {
-    const res: any = await getErpGoodsCategoryTree()
-    categoryTree.value = Array.isArray(res?.data) ? res.data : []
-}
-
 async function loadSpecMeta() {
     const res: any = await getErpGoodsSpecMeta()
     specMeta.value = res?.data || { groups: [], grades: [] }
@@ -815,7 +783,7 @@ function handleSearch() {
 }
 
 function handleReset() {
-    Object.assign(search, { imei: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
+    Object.assign(search, { imei: '', party_id: null, purchase_no: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', purchaser_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined })
     searchPartyName.value = ''
     activeTab.value = ''
     handleSearch()
@@ -894,13 +862,6 @@ function removeItem(index: number) {
 
 function openItemExtra(row: any, index: number) {
     hydrateItemSpecState(row)
-    if (!Array.isArray(row._category_path)) {
-        row._category_path = String(row.category_path || '').split(',').map(Number).filter(Boolean)
-        if (!row._category_path.length && Number(row.category_id || 0) > 0) {
-            const node = findCategoryNode(categoryTree.value, Number(row.category_id))
-            row._category_path = node ? categoryPathIds(node) : [Number(row.category_id)]
-        }
-    }
     itemExtra.item = row
     itemExtra.index = index
     itemExtra.visible = true
@@ -933,48 +894,23 @@ function itemLocationLabel(item: any) {
     return [item.warehouse_name, item.location_name].filter(Boolean).join(' / ') || '待选择'
 }
 
-function openGoodsMeta(active = 'category') {
-    goodsMeta.active = active
-    goodsMeta.visible = true
+function openGoodsMeta() {
+    router.push('/hsx_erp/goods/meta')
 }
 
-async function onGoodsMetaSaved() {
-    await loadCategories()
-    await loadSpecMeta()
-}
-
-function onItemCategoryChange(item: any, value: any) {
-    const node = findCategoryNode(categoryTree.value, Number(value || 0))
-    item.category_name = node?.category_full_name || node?.category_name || ''
-    item.category_path = node ? categoryPathIds(node).join(',') : ''
-    item._category_path = node ? categoryPathIds(node) : []
-    item.category_names = node ? categoryPathNames(node) : []
+function onItemCatalogChange(item: any, node: any) {
+    item.catalog_product_id = Number(node?.site_product_id || 0)
+    item.category_path = String(node?.category_path || '')
+    const categoryParts = item.category_path.split('/').map((value: string) => value.trim()).filter(Boolean)
+    item.category_name = categoryParts[categoryParts.length - 1] || ''
+    item.category_names = [...categoryParts, node?.brand_name, node?.series_name, node?.label].filter(Boolean)
+    if (node?.label) item.model = String(node.label)
     item.selected_specs = {}
     item.selected_grade = null
     item.spec = ''
     item.spec_json = {}
     rebuildItemModel(item, true)
-    ElMessage.info('当前分类会参与生成设备名称，可在「业务规则 - 设备命名规则」中修改规则。')
-}
-
-function findCategoryNode(rows: any[], id: number, parents: any[] = []): any {
-    for (const row of rows || []) {
-        const current = { ...row, _parents: parents }
-        if (Number(row.category_id) === id) return current
-        const child = findCategoryNode(row.child_list || [], id, [...parents, row])
-        if (child) return child
-    }
-    return null
-}
-
-function categoryPathIds(node: any) {
-    return [...(node?._parents || []), node].map((row: any) => Number(row.category_id || 0)).filter(Boolean)
-}
-
-function categoryPathNames(node: any) {
-    return [...(node?._parents || []), node]
-        .map((row: any) => String(row?.category_name || '').trim())
-        .filter(Boolean)
+    ElMessage.success('已带入商品目录型号与品类快照')
 }
 
 function normalizeOptions(list: any): any[] {
@@ -1135,8 +1071,8 @@ function formatDate(value: any) {
 
 async function submitCreate() {
     if (!create.form.party_id && !create.form.party_name) return ElMessage.warning('请选择采购渠道')
-    if (!create.form.items.length || create.form.items.some((row: any) => !row.model || (!row.imei && !row.sn) || Number(row.purchase_cost || 0) <= 0)) {
-        return ElMessage.warning('请补全机器型号、IMEI/SN 和采购成本')
+    if (!create.form.items.length || create.form.items.some((row: any) => !row.catalog_product_id || !row.model || (!row.imei && !row.sn) || Number(row.purchase_cost || 0) <= 0)) {
+        return ElMessage.warning('请补全目录型号、IMEI/SN 和采购成本')
     }
     const missingLocationIndex = create.form.items.findIndex((row: any) => !row.warehouse_id || !row.location_id)
     if (missingLocationIndex >= 0) return ElMessage.warning(`请为第 ${missingLocationIndex + 1} 台设备选择入库仓库和库位`)

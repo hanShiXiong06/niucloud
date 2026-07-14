@@ -13,7 +13,6 @@ use addon\hsx_erp\app\model\ErpPurchaseOrder;
 use addon\hsx_erp\app\model\ErpPayable;
 use addon\hsx_erp\app\model\ErpParty;
 use addon\hsx_erp\app\model\ErpReceivable;
-use addon\hsx_erp\app\model\ErpOutboxEvent;
 use addon\hsx_erp\app\model\ErpSaleItem;
 use addon\hsx_erp\app\model\ErpSaleOrder;
 use addon\hsx_erp\app\model\ErpSettlement;
@@ -25,7 +24,6 @@ use addon\hsx_erp\app\support\ErpPurchaseReturnPolicy;
 use core\base\BaseAdminService;
 use core\exception\CommonException;
 use think\facade\Db;
-use think\facade\Log;
 
 class ErpStockService extends BaseAdminService
 {
@@ -132,15 +130,8 @@ class ErpStockService extends BaseAdminService
         } else {
             $this->completeRefurbishWithoutCost($id, $result, $reason, $requestId, $destination, $data['voucher_urls'] ?? '');
         }
-        $completed = $this->findAsset($id);
-        if ($result === 'success' && (string)$completed->sale_target === 'mall') {
-            try {
-                $this->syncListing($id);
-            } catch (\Throwable $e) {
-                // 整备完工是本地库存事实，外围拍照/商城同步失败不得回滚完工，交由同步状态重试。
-                Log::warning('ERP整备完工后触发拍照定价同步失败', ['site_id' => $this->site_id, 'asset_id' => $id, 'message' => $e->getMessage()]);
-            }
-        }
+        // 整备完工只完成库存事实；资料完整后由用户明确点击“上架商城”。
+        // 不自动派发拍照中台工单，也不让外部插件故障影响整备闭环。
         return $this->info($id);
     }
 
@@ -378,16 +369,7 @@ class ErpStockService extends BaseAdminService
         if (!empty($where['party_id'])) {
             $query->where('a.party_id', '=', (int)$where['party_id']);
         }
-        if (!empty($where['category_id'])) {
-            $categoryId = (int)$where['category_id'];
-            $query->where(function ($q) use ($categoryId) {
-                $q->where('a.category_id', '=', $categoryId)
-                    ->whereOr('a.category_path', 'like', '%,' . $categoryId . ',%')
-                    ->whereOr('a.category_path', 'like', $categoryId . ',%')
-                    ->whereOr('a.category_path', 'like', '%,' . $categoryId)
-                    ->whereOr('a.category_path', '=', (string)$categoryId);
-            });
-        }
+        if (!empty($where['catalog_product_id'])) $query->where('a.catalog_product_id', '=', (int)$where['catalog_product_id']);
         foreach ([
             'asset_no' => 'a.asset_no',
             'imei' => 'a.imei',
@@ -473,8 +455,8 @@ class ErpStockService extends BaseAdminService
             'page' => (int)($where['page'] ?? 1),
         ])->toArray();
         $page['data'] = $this->appendLifecycleContext((array)($page['data'] ?? []));
-        $page['data'] = $this->appendListingSyncState((array)$page['data']);
         $page['data'] = (new ErpTurnoverService())->decorate((array)$page['data']);
+        $page['data'] = $this->appendListingSyncState((array)$page['data']);
         return $page;
     }
 
@@ -898,52 +880,27 @@ class ErpStockService extends BaseAdminService
             'total_cost' => $totalCost,
         ];
         $asset['return_flow'] = ErpPurchaseReturnPolicy::assess($asset, $supplierAmount, $paidAmount);
-        $asset = $this->appendListingSyncState([$asset])[0] ?? $asset;
         $asset = (new ErpTurnoverService())->decorate([$asset])[0] ?? $asset;
+        $asset = $this->appendListingSyncState([$asset])[0] ?? $asset;
         return $asset;
     }
 
-    /** 将拍照定价 Outbox 的最新投递状态回显给业务用户，而不只提供一个盲点重试按钮。 */
+    /** 返回用户能直接理解的商城上架状态，不暴露拍照中台或 Outbox 等内部实现。 */
     private function appendListingSyncState(array $rows): array
     {
-        if ($rows === []) return [];
-        $assetIds = array_values(array_unique(array_filter(array_map(static fn(array $row): int => (int)($row['id'] ?? 0), $rows))));
-        $stateMap = [];
-        if ($assetIds !== []) {
-            $events = ErpOutboxEvent::where([
-                ['site_id', '=', $this->site_id],
-                ['event_name', '=', 'erp.asset.ready_for_photo.v1'],
-            ])->order('id desc')->limit(max(100, count($assetIds) * 20))->select()->toArray();
-            foreach ($events as $event) {
-                $stored = json_decode((string)($event['payload_json'] ?? ''), true);
-                if (!is_array($stored)) continue;
-                $assetId = (int)($stored['aggregate_id'] ?? $stored['payload']['asset_id'] ?? 0);
-                if ($assetId <= 0 || !in_array($assetId, $assetIds, true) || isset($stateMap[$assetId])) continue;
-                $delivery = (array)($stored['_delivery'] ?? []);
-                $status = (string)($event['status'] ?? 'pending');
-                $stateMap[$assetId] = [
-                    'event_id' => (string)($event['event_id'] ?? ''),
-                    'status' => $status,
-                    'status_label' => match ($status) {
-                        'done', 'processed' => '已同步',
-                        'failed' => '同步失败',
-                        'processing' => '同步中',
-                        default => '待同步',
-                    },
-                    'attempts' => (int)($delivery['attempts'] ?? 0),
-                    'last_error' => mb_substr(trim((string)($delivery['last_error'] ?? '')), 0, 500),
-                    'updated_at' => (int)($event['update_at'] ?? $event['create_at'] ?? 0),
-                ];
-            }
-        }
         foreach ($rows as &$row) {
-            $row['listing_sync'] = $stateMap[(int)($row['id'] ?? 0)] ?? [
-                'event_id' => '',
-                'status' => 'not_synced',
-                'status_label' => (string)($row['sale_target'] ?? '') === 'mall' ? '尚未同步' : '无需同步',
-                'attempts' => 0,
+            $status = (string)($row['listing_status'] ?? 'none');
+            $row['listing_sync'] = [
+                'status' => $status,
+                'status_label' => match ($status) {
+                    'listed' => '商城已上架',
+                    'ready' => '商品资料完整',
+                    'need_photo' => '待补商品图片',
+                    'need_price' => '待补商品售价',
+                    default => (string)($row['sale_target'] ?? '') === 'mall' ? '待完善商品资料' : '无需上架',
+                },
                 'last_error' => '',
-                'updated_at' => 0,
+                'goods_id' => 0,
             ];
         }
         unset($row);
@@ -1264,13 +1221,15 @@ class ErpStockService extends BaseAdminService
                 $changes[] = '图片';
             }
         }
-        if (array_key_exists('category_id', $data) && $data['category_id'] !== null) {
-            $categoryId = max(0, (int)$data['category_id']);
-            if ($categoryId !== (int)$asset->category_id) {
-                $save['category_id'] = $categoryId;
-                $save['category_name'] = trim((string)($data['category_name'] ?? ''));
-                $save['category_path'] = trim((string)($data['category_path'] ?? ''));
-                $changes[] = '分类';
+        if (array_key_exists('catalog_product_id', $data) && $data['catalog_product_id'] !== null) {
+            $catalogProductId = max(0, (int)$data['catalog_product_id']);
+            if ($catalogProductId !== (int)($asset->catalog_product_id ?? 0)) {
+                $catalog = (new ErpGoodsCatalogService())->productSnapshot($catalogProductId);
+                $save['catalog_product_id'] = $catalogProductId;
+                $save['category_name'] = $catalog['category_name'];
+                $save['category_path'] = $catalog['category_path'];
+                if (trim((string)$asset->model) === '' && $catalog['product_name'] !== '') $save['model'] = $catalog['product_name'];
+                $changes[] = '商品型号';
             }
         }
         if (array_key_exists('spec', $data) && $data['spec'] !== null) {
@@ -1329,16 +1288,19 @@ class ErpStockService extends BaseAdminService
             'source_id' => $id,
             'remark' => trim((string)($data['remark'] ?? '')) ?: ('更新' . implode('、', array_unique($changes))),
         ]);
-        // 资料保存与外部插件同步必须解耦：未安装商城/拍照插件时 ERP 仍可独立使用。
-        // 资料完整后由“上架准备”显式触发领域事件，避免数据已保存但接口因缺少消费者报失败。
+        // 资料保存与外部插件同步必须解耦：未安装商城时 ERP 仍可独立使用。
+        // 资料完整后由“上架商城”显式触发 Hook；拍照中台不是主流程依赖。
     }
 
-    /** 通过牛云领域事件把ERP设备幂等推送到拍照定价中台。 */
+    /**
+     * 由 ERP 直接把资料完整的设备发布到已安装商城。
+     * 旧方法名保留给已部署前端兼容，语义已经从“同步中台”改为“直接上架”。
+     */
     public function syncListing(int $id): array
     {
         $asset = $this->findAsset($id);
         if ((string)$asset->status !== ErpDict::ASSET_IN_STOCK) {
-            throw new CommonException('只有库存中的设备可以同步拍照定价');
+            throw new CommonException('只有库存中的设备可以上架商城');
         }
         if ((string)$asset->sale_target !== 'mall') {
             throw new CommonException('请先将设备销售去向设置为上商城');
@@ -1351,47 +1313,153 @@ class ErpStockService extends BaseAdminService
             throw new CommonException('当前仓库未配置为商城销售仓，请先调拨到允许上商城的仓库');
         }
         if (in_array((string)$asset->refurbish_status, ['pending', 'processing', 'failed'], true)) {
-            throw new CommonException('设备整备完成前不能进入拍照定价或商城上架流程');
+            throw new CommonException('设备整备完成前不能上架商城');
         }
-        return (new ErpIntegrationService())->publishDomainEvent(
-            'erp.asset.ready_for_photo.v1',
-            'asset',
-            $id,
-            [
-                'asset_id' => $id,
-                'asset_no' => (string)$asset->asset_no,
-                'imei' => (string)$asset->imei,
-                'sn' => (string)$asset->sn,
-                'model' => (string)$asset->model,
-                'spec' => (string)$asset->spec,
-                'spec_json' => $asset->spec_json,
-                'color' => (string)$asset->color,
-                'battery' => (int)$asset->battery,
-                'warranty' => (int)$asset->warranty,
-                'category_id' => (int)$asset->category_id,
-                'category_name' => (string)$asset->category_name,
-                'warehouse_id' => (int)$asset->warehouse_id,
-                'warehouse_name' => (string)$asset->warehouse_name,
-                'location_id' => (int)$asset->location_id,
-                'location_name' => (string)$asset->location_name,
-                'purchase_cost' => round((float)$asset->purchase_cost, 2),
-                'current_cost' => round((float)$asset->total_cost, 2),
-                'estimate_sale_price' => round((float)$asset->estimate_sale_price, 2),
-                'retail_price' => round((float)$asset->retail_price, 2),
-                'image_urls' => $asset->image_urls,
-                'quality_remark' => (string)$asset->quality_remark,
-                'remark_public' => (string)$asset->remark_public,
-                'remark_internal' => (string)$asset->remark_internal,
-                'sale_target' => (string)$asset->sale_target,
-                'listing_status' => (string)$asset->listing_status,
-                'source_plugin' => (string)$asset->source_plugin,
-                'source_type' => (string)$asset->source_type,
-                'source_id' => (string)$asset->source_id,
-                'snapshot_at' => time(),
-            ],
-            [],
-            ['hsx_device_asset.ready_for_photo']
+        if ((int)($policy['can_list_mall'] ?? 0) !== 1) {
+            $missing = implode('、', (array)($policy['missing_labels'] ?? []));
+            throw new CommonException($missing !== '' ? ('请先补充' . $missing) : '商品资料未达到上架条件');
+        }
+        if ((int)($policy['marketplace_available'] ?? 0) !== 1) {
+            throw new CommonException('当前站点未安装商城；商品资料已保存在 ERP，无需再走上架流程');
+        }
+        if ((string)$asset->listing_status === 'listed') {
+            return ['ok' => true, 'status' => 'duplicate', 'message' => '商品已经上架商城'];
+        }
+
+        $categoryPath = $this->marketplaceCategoryPath($asset);
+        $specMeta = $this->decodeJsonObject($asset->spec_json);
+        $images = $this->normalizeImageUrls($asset->image_urls);
+        $qualityRemark = trim((string)$asset->quality_remark);
+        $description = trim((string)$asset->remark_public) ?: ($qualityRemark ?: trim((string)$asset->spec));
+        $assetColor = trim((string)$asset->color);
+        $memory = $this->specFieldText($specMeta, ['memory', 'storage', 'capacity'], ['内存', '容量', '存储']);
+        $specColor = $this->specFieldText($specMeta, ['color'], ['颜色', '色']);
+        $payload = [
+            'erp_asset_id' => $id,
+            'device_id' => (int)((string)$asset->source_plugin === 'hsx_recycle' ? $asset->source_id : 0),
+            'asset_no' => (string)$asset->asset_no,
+            'imei' => (string)$asset->imei,
+            'model_name' => (string)$asset->model,
+            'brand_name' => $this->specValueText($specMeta['brand'] ?? ''),
+            'memory' => $memory,
+            'color' => $assetColor !== '' ? $assetColor : $specColor,
+            'condition_grade' => $this->specValueText($specMeta['condition_grade'] ?? $specMeta['condition'] ?? $specMeta['grade'] ?? ''),
+            'images' => $images,
+            'sale_price' => round((float)$asset->retail_price, 2),
+            'peer_price' => round((float)$asset->estimate_sale_price, 2),
+            'cost_price' => round((float)$asset->total_cost, 2),
+            'qc_info' => array_filter(['规格' => (string)$asset->spec, '质检说明' => $qualityRemark]),
+            'goods_name' => (string)$asset->model,
+            'sub_title' => (string)$asset->spec,
+            'goods_desc' => $description,
+            'goods_category' => $categoryPath,
+            'source_plugin' => (string)$asset->source_plugin,
+            'source_type' => (string)$asset->source_type,
+            'source_id' => (string)$asset->source_id,
+        ];
+
+        $success = null;
+        $failureMessage = '';
+        foreach ((array)event('HsxErpPublishListing', ['site_id' => $this->site_id, 'payload' => $payload]) as $result) {
+            if (!is_array($result) || (string)($result['provider'] ?? '') !== 'phone_shop') continue;
+            if (in_array((string)($result['status'] ?? ''), ['published', 'duplicate'], true) && (int)($result['goods_id'] ?? 0) > 0) {
+                $success = $result;
+                break;
+            }
+            $failureMessage = trim((string)($result['message'] ?? $failureMessage));
+        }
+        if ($success === null) throw new CommonException($failureMessage ?: '商城上架失败，请稍后重试');
+
+        $beforeListingStatus = (string)$asset->listing_status;
+        $asset->save(['listing_status' => 'listed', 'update_at' => time()]);
+        (new ErpLedgerService())->asset([
+            'asset_id' => $id,
+            'action' => 'listing_publish',
+            'before_status' => (string)$asset->status . '/' . $beforeListingStatus,
+            'after_status' => (string)$asset->status . '/listed',
+            'source_type' => 'phone_shop_goods',
+            'source_id' => (int)$success['goods_id'],
+            'remark' => '商品资料由 ERP 直接上架商城',
+            'extra' => ['provider' => 'phone_shop', 'goods_id' => (int)$success['goods_id']],
+        ]);
+        return ['ok' => true, 'status' => (string)$success['status'], 'goods_id' => (int)$success['goods_id'], 'message' => '已直接上架商城'];
+    }
+
+    private function marketplaceCategoryPath(ErpAsset $asset): array
+    {
+        $projection = (new ErpCatalogChannelProjectionService())->ensurePhoneShopPath(
+            (int)$this->site_id,
+            (int)($asset->catalog_product_id ?? 0)
         );
+        return array_values(array_unique(array_map('intval', (array)$projection['category_ids'])));
+    }
+
+    private function decodeJsonObject(mixed $value): array
+    {
+        if (is_array($value)) return $value;
+        $decoded = json_decode(trim((string)$value), true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /** 规格组件可能保存字符串、选项对象或多选数组，上架前统一转换成可读文本。 */
+    private function specValueText(mixed $value): string
+    {
+        if ($value === null || is_bool($value)) return $value === true ? '是' : '';
+        if (is_string($value) || is_int($value) || is_float($value)) return trim((string)$value);
+        if (!is_array($value)) return '';
+
+        if (!array_is_list($value)) {
+            foreach (['label', 'name', 'text', 'title', 'value_name', 'value'] as $key) {
+                if (!array_key_exists($key, $value)) continue;
+                $text = $this->specValueText($value[$key]);
+                if ($text !== '') return $text;
+            }
+        }
+
+        $parts = [];
+        foreach ($value as $item) {
+            $text = $this->specValueText($item);
+            if ($text !== '') $parts[] = $text;
+        }
+        return implode(' / ', array_values(array_unique($parts)));
+    }
+
+    /** 同时兼容旧版根字段和规格组件 specs.{key}.{label,value,group_label} 结构。 */
+    private function specFieldText(array $meta, array $keys, array $groupLabels = []): string
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $meta)) continue;
+            $text = $this->specValueText($meta[$key]);
+            if ($text !== '') return $text;
+        }
+        foreach ((array)($meta['specs'] ?? []) as $key => $option) {
+            if (!is_array($option)) continue;
+            $groupKey = trim((string)($option['group_key'] ?? $key));
+            $groupLabel = trim((string)($option['group_label'] ?? ''));
+            $matched = in_array($groupKey, $keys, true);
+            if (!$matched) {
+                foreach ($groupLabels as $label) {
+                    if ($groupLabel === $label || ($label !== '' && str_contains($groupLabel, $label))) {
+                        $matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!$matched) continue;
+            $text = $this->specValueText($option['label'] ?? $option['value'] ?? $option);
+            if ($text !== '') return $text;
+        }
+        return '';
+    }
+
+    private function normalizeImageUrls(mixed $value): array
+    {
+        if (is_array($value)) return array_values(array_filter(array_map(static fn($url): string => trim((string)$url), $value)));
+        $text = trim((string)$value);
+        if ($text === '') return [];
+        $decoded = json_decode($text, true);
+        $urls = is_array($decoded) ? $decoded : (preg_split('/[,\r\n]+/', $text) ?: []);
+        return array_values(array_filter(array_map(static fn($url): string => trim((string)$url), $urls)));
     }
 
     public function adjustCost(int $id, float $afterCost, string $reason = '', bool $syncPayable = true, string $requestId = '', string $costType = 'internal_adjust', array $context = []): bool

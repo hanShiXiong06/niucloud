@@ -240,7 +240,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import { getMobileCounterpartyOptions, getMobileStaffOptions } from '@/addon/hsx_erp/api/erp'
-import CategoryPicker from '@/addon/hsx_erp/components/ErpCategoryPopup.vue'
+import CategoryPicker from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 
 type Option = { label: string; value: string | number }
@@ -454,9 +454,8 @@ function clearStaff() {
 }
 
 function onCategoryChange(field: Field, payload: any) {
-    const node = payload?.node || payload
-    localValue.value[field.key] = Number(payload?.category_id || node?.category_id || 0)
-    localValue.value[field.labelKey || `${field.key}_name`] = node?.category_full_name || node?.category_name || ''
+    localValue.value[field.key] = Number(payload?.catalog_product_id || payload?.site_product_id || 0)
+    localValue.value[field.labelKey || `${field.key}_name`] = payload?.product_name || payload?.label || ''
 }
 
 function openWarehousePicker(field: Field) {

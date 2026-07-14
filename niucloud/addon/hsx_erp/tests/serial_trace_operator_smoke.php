@@ -4,7 +4,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 $stockService = file_get_contents($root . '/app/service/admin/ErpStockService.php');
 $mobileTimeline = file_get_contents(dirname($root, 3) . '/site-uniapp/src/addon/hsx_erp/components/ErpAssetLifecycleTimeline.vue');
-$pcStock = file_get_contents(dirname($root, 3) . '/admin/src/addon/hsx_erp/views/erp/stock/list.vue');
+$pcStock = file_get_contents(dirname($root, 3) . '/niucloud/addon/hsx_erp/admin/views/erp/stock/list.vue');
 $sourceService = file_get_contents($root . '/app/service/admin/ErpFinanceSourceService.php');
 
 $assertions = [

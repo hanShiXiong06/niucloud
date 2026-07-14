@@ -63,6 +63,7 @@ class ErpDict
             'flow' => '流转设置',
             'flow_set' => '流转设置',
             'transfer' => '库存调拨',
+            'listing_publish' => '商城上架',
         ];
     }
 
@@ -216,10 +217,10 @@ class ErpDict
             ],
             'listing_status' => [
                 ['value' => 'none', 'label' => '无需上架', 'type' => 'info', 'filterable' => true],
-                ['value' => 'need_photo', 'label' => '待拍照', 'type' => 'warning', 'filterable' => true],
-                ['value' => 'need_price', 'label' => '待定价', 'type' => 'warning', 'filterable' => true],
-                ['value' => 'ready', 'label' => '可上架', 'type' => 'primary', 'filterable' => true],
-                ['value' => 'listed', 'label' => '已上架', 'type' => 'success', 'filterable' => true],
+                ['value' => 'need_photo', 'label' => '待补图片', 'type' => 'warning', 'filterable' => true],
+                ['value' => 'need_price', 'label' => '待补售价', 'type' => 'warning', 'filterable' => true],
+                ['value' => 'ready', 'label' => '资料完整', 'type' => 'primary', 'filterable' => true],
+                ['value' => 'listed', 'label' => '商城已上架', 'type' => 'success', 'filterable' => true],
             ],
             'ledger_action' => self::mapOptions(self::getLedgerActionMap()),
             'cost_type' => self::mapOptions(self::getCostTypeMap()),

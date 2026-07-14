@@ -10,7 +10,7 @@ $assert = static function (bool $condition, string $message): void {
 };
 $read = static fn(string $path): string => (string)file_get_contents($root . '/' . $path);
 
-$pc = $read('admin/src/addon/hsx_erp/components/counterparty-select/index.vue');
+$pc = $read('niucloud/addon/hsx_erp/admin/components/counterparty-select/index.vue');
 foreach (['editMemberDetail', "field: 'nickname'", '修改会员昵称', '@click.stop="editMemberNickname(item)"'] as $needle) {
     $assert(str_contains($pc, $needle), 'PC往来对象选择器缺少会员快捷改名：' . $needle);
 }

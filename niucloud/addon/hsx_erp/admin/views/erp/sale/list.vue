@@ -59,17 +59,8 @@
                         <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                     </el-select>
                 </el-form-item>
-                <el-form-item label="分类">
-                    <el-tree-select
-                        v-model="search.category_id"
-                        :data="categoryTree"
-                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
-                        check-strictly
-                        clearable
-                        class="!w-[220px]"
-                        node-key="category_id"
-                        placeholder="全部分类"
-                    />
+                <el-form-item label="商品型号">
+                    <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
                 </el-form-item>
                 <el-form-item label="开单人">
                     <el-select v-model="search.salesman_uid" clearable filterable class="!w-[150px]" placeholder="全部">
@@ -190,17 +181,7 @@
                         <el-select v-model="stock.location_id" clearable class="!w-[130px]" placeholder="库位" :disabled="!stock.warehouse_id" @change="reloadStock">
                             <el-option v-for="item in stockLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                         </el-select>
-                        <el-tree-select
-                            v-model="stock.category_id"
-                            :data="categoryTree"
-                            :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
-                            check-strictly
-                            clearable
-                            class="!w-[170px]"
-                            node-key="category_id"
-                            placeholder="分类"
-                            @change="reloadStock"
-                        />
+                        <ErpCatalogProductSelect v-model="stock.catalog_product_id" class="!w-[230px]" placeholder="商品型号" @change="reloadStock" />
                         <el-button :icon="Search" @click="loadStock">查询</el-button>
                     </div>
                 </div>
@@ -330,14 +311,15 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { getCapitalAccounts } from '@/addon/hsx_erp/api/capital_account'
 import { getErpSaleChannelOptions } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
-import { cancelErpSaleItem, confirmErpReceipt, createErpSale, getErpGoodsCategoryTree, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
+import { cancelErpSaleItem, confirmErpReceipt, createErpSale, getErpSaleInfo, getErpSaleList, getErpSaleStock, getErpStaffOptions } from '@/addon/hsx_erp/api/erp'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
 import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
 import { useErpPageRefresh } from '@/addon/hsx_erp/hooks/useErpPageRefresh'
 
-const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
+const search = reactive<any>({ keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
 const activeTab = ref('')
 const router = useRouter()
 const route = useRoute()
@@ -359,11 +341,10 @@ function onTabChange(tab: string) {
     loadList()
 }
 const table = reactive({ loading: false, data: [] as any[], page: 1, limit: 15, total: 0 })
-const stock = reactive({ loading: false, data: [] as any[], keyword: '', warehouse_id: '', location_id: '', category_id: '', page: 1, limit: 8, total: 0 })
+const stock = reactive({ loading: false, data: [] as any[], keyword: '', warehouse_id: '', location_id: '', catalog_product_id: '', page: 1, limit: 8, total: 0 })
 const accounts = ref<any[]>([])
 const staffOptions = ref<any[]>([])
 const warehouses = ref<any[]>([])
-const categoryTree = ref<any[]>([])
 const saleChannelOptions = ref<any[]>([])
 const currentUid = ref(0)
 const selectedAssets = ref<any[]>([])
@@ -400,7 +381,6 @@ onMounted(() => {
     loadAccounts()
     loadStaffOptions()
     loadWarehouses()
-    loadCategories()
     loadSaleChannels()
     const assetIds = String(route.query.asset_ids || '').split(',').map(Number).filter(id => id > 0)
     if (assetIds.length) openCreate(assetIds)
@@ -446,7 +426,7 @@ async function loadStock() {
             keyword: stock.keyword,
             warehouse_id: stock.warehouse_id,
             location_id: stock.location_id,
-            category_id: stock.category_id,
+            catalog_product_id: stock.catalog_product_id,
             asset_ids: pendingAssetIds.value,
             page: stock.page,
             limit: stock.limit
@@ -490,11 +470,6 @@ async function loadWarehouses() {
     warehouses.value = Array.isArray(res?.data) ? res.data : []
 }
 
-async function loadCategories() {
-    const res: any = await getErpGoodsCategoryTree()
-    categoryTree.value = Array.isArray(res?.data) ? res.data : []
-}
-
 function buildSearchParams() {
     const [start_at, end_at] = Array.isArray(search.dateRange) ? search.dateRange : []
     return {
@@ -515,7 +490,7 @@ function openCreate(assetIds: number[] = []) {
     stock.keyword = ''
     stock.warehouse_id = ''
     stock.location_id = ''
-    stock.category_id = ''
+    stock.catalog_product_id = ''
     stock.page = 1
     stock.limit = assetIds.length ? Math.max(8, Math.min(200, assetIds.length)) : 8
     create.visible = true
@@ -599,7 +574,7 @@ function handleSearch() {
 }
 
 function handleReset() {
-    Object.assign(search, { keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', category_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
+    Object.assign(search, { keyword: '', finance_status: '', status: '', warehouse_id: '', location_id: '', catalog_product_id: '', salesman_uid: '', dateRange: [], min_amount: undefined, max_amount: undefined, min_profit: undefined, max_profit: undefined })
     activeTab.value = ''
     handleSearch()
 }

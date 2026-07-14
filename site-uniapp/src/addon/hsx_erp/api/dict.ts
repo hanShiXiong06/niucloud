@@ -78,10 +78,10 @@ export const ERP_DICT_FALLBACK: ErpDictMap = {
     ],
     listing_status: [
         { value: 'none', label: '无需上架', type: 'info', filterable: true },
-        { value: 'need_photo', label: '待拍照', type: 'warning', filterable: true },
-        { value: 'need_price', label: '待定价', type: 'warning', filterable: true },
-        { value: 'ready', label: '可上架', type: 'primary', filterable: true },
-        { value: 'listed', label: '已上架', type: 'success', filterable: true }
+        { value: 'need_photo', label: '待补图片', type: 'warning', filterable: true },
+        { value: 'need_price', label: '待补售价', type: 'warning', filterable: true },
+        { value: 'ready', label: '资料完整', type: 'primary', filterable: true },
+        { value: 'listed', label: '商城已上架', type: 'success', filterable: true }
     ]
 }
 

@@ -50,6 +50,10 @@
             >{{ tab.label }}</view>
             <slot name="tab-extra" />
         </view>
+
+        <view v-else-if="slots.below" class="below-row">
+            <slot name="below" />
+        </view>
     </view>
 
     <!-- 占位高度（防止内容被 fixed 头部遮住） -->
@@ -57,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, useSlots } from 'vue'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
 import { getErpListHeaderHeightRpx } from '@/addon/hsx_erp/utils/navbar'
 
@@ -92,11 +96,13 @@ const emit = defineEmits<{
     (e: 'filter'): void
 }>()
 
+const slots = useSlots()
+
 // 与 useListHeader 使用同一公式，避免 fixed 工具区与 z-paging 各算一套高度。
 const placeholderHeight = computed(() => `${getErpListHeaderHeightRpx({
     title: !!props.title,
     search: props.showSearch,
-    tabs: !!props.tabs?.length,
+    tabs: !!props.tabs?.length || !!slots.below,
 })}rpx`)
 
 const localKeyword = ref(props.modelValue)
@@ -216,6 +222,9 @@ function onTab(val: string) {
     margin-top: 16rpx;
     overflow-x: auto;
     white-space: nowrap;
+}
+.below-row {
+    margin-top: 16rpx;
 }
 .erp-tab {
     padding: 8rpx 26rpx;

@@ -85,16 +85,7 @@ class ErpPurchaseService extends BaseAdminService
         if (!empty($where['location_id'])) {
             $query->where('a.location_id', '=', (int)$where['location_id']);
         }
-        if (!empty($where['category_id'])) {
-            $categoryId = (int)$where['category_id'];
-            $query->where(function ($q) use ($categoryId) {
-                $q->where('a.category_id', '=', $categoryId)
-                    ->whereOr('a.category_path', 'like', '%,' . $categoryId . ',%')
-                    ->whereOr('a.category_path', 'like', $categoryId . ',%')
-                    ->whereOr('a.category_path', 'like', '%,' . $categoryId)
-                    ->whereOr('a.category_path', '=', (string)$categoryId);
-            });
-        }
+        if (!empty($where['catalog_product_id'])) $query->where('a.catalog_product_id', '=', (int)$where['catalog_product_id']);
         if (!empty($where['purchaser_uid'])) {
             $query->where('o.purchaser_uid', '=', (int)$where['purchaser_uid']);
         }
@@ -604,6 +595,13 @@ class ErpPurchaseService extends BaseAdminService
                 $battery = max(0, min(100, (int)($item['battery'] ?? 0)));
                 $warranty = max(0, (int)($item['warranty'] ?? 0));
                 $specJson = $this->normalizeSpecJson($item['spec_json'] ?? []);
+                $catalogProductId = max(0, (int)($item['catalog_product_id'] ?? 0));
+                $catalog = $catalogProductId > 0
+                    ? (new ErpGoodsCatalogService())->productSnapshot($catalogProductId)
+                    : ['category_name' => '', 'category_path' => '', 'product_name' => ''];
+                $modelName = trim((string)($item['model'] ?? '')) ?: (string)$catalog['product_name'];
+                $categoryName = $catalogProductId > 0 ? (string)$catalog['category_name'] : trim((string)($item['category_name'] ?? ''));
+                $categoryPath = $catalogProductId > 0 ? (string)$catalog['category_path'] : $this->normalizeCategoryPath($item['category_path'] ?? []);
                 $purchaseItem = ErpPurchaseItem::create([
                     'site_id' => $this->site_id,
                     'purchase_order_id' => $orderId,
@@ -613,15 +611,15 @@ class ErpPurchaseService extends BaseAdminService
                     'location_name' => $itemLocationName,
                     'imei' => trim((string)($item['imei'] ?? '')),
                     'sn' => trim((string)($item['sn'] ?? '')),
-                    'model' => trim((string)($item['model'] ?? '')),
+                    'model' => $modelName,
                     'spec' => trim((string)($item['spec'] ?? '')),
                     'spec_json' => $specJson,
                     'color' => $color,
                     'battery' => $battery,
                     'warranty' => $warranty,
-                    'category_id' => (int)($item['category_id'] ?? 0),
-                    'category_name' => trim((string)($item['category_name'] ?? '')),
-                    'category_path' => $this->normalizeCategoryPath($item['category_path'] ?? []),
+                    'catalog_product_id' => $catalogProductId,
+                    'category_name' => $categoryName,
+                    'category_path' => $categoryPath,
                     'inspector_uid' => (int)$inspector['uid'],
                     'inspector_name' => (string)$inspector['name'],
                     'estimate_sale_price' => $estimateSalePrice,
@@ -648,15 +646,15 @@ class ErpPurchaseService extends BaseAdminService
                     'location_name' => $itemLocationName,
                     'imei' => trim((string)($item['imei'] ?? '')),
                     'sn' => trim((string)($item['sn'] ?? '')),
-                    'model' => trim((string)($item['model'] ?? '')),
+                    'model' => $modelName,
                     'spec' => trim((string)($item['spec'] ?? '')),
                     'spec_json' => $specJson,
                     'color' => $color,
                     'battery' => $battery,
                     'warranty' => $warranty,
-                    'category_id' => (int)($item['category_id'] ?? 0),
-                    'category_name' => trim((string)($item['category_name'] ?? '')),
-                    'category_path' => $this->normalizeCategoryPath($item['category_path'] ?? []),
+                    'catalog_product_id' => $catalogProductId,
+                    'category_name' => $categoryName,
+                    'category_path' => $categoryPath,
                     'inspector_uid' => (int)$inspector['uid'],
                     'inspector_name' => (string)$inspector['name'],
                     'estimate_sale_price' => $estimateSalePrice,

@@ -42,7 +42,7 @@ return [
         'key' => 'hsx_erp_receivable',
         'group' => 'hsx_erp',
         'menu_key' => 'hsx_erp_receivable',
-        'sort' => 13,
+        'sort' => 17,
         'page' => '/addon/hsx_erp/pages/receivable/list',
         'icon' => '/addon/hsx_erp/site-app/icon_06.png'
     ],
@@ -55,15 +55,7 @@ return [
         'page' => '/addon/hsx_erp/pages/stock/list',
         'icon' => '/addon/hsx_erp/site-app/icon_07.png'
     ],
-    [
-        'name' => '经营收支',
-        'key' => 'hsx_erp_operating_finance',
-        'group' => 'hsx_erp',
-        'menu_key' => 'hsx_erp_operating_finance',
-        'sort' => 14,
-        'page' => '/addon/hsx_erp/pages/operating_finance/list',
-        'icon' => '/addon/hsx_erp/site-app/icon_06.png'
-    ],
+
     [
         'name' => '采购退货',
         'key' => 'hsx_erp_purchase_return',
@@ -83,6 +75,15 @@ return [
         'icon' => '/addon/hsx_erp/site-app/icon_04.png'
     ],
     [
+        'name' => '经营收支',
+        'key' => 'hsx_erp_operating_finance',
+        'group' => 'hsx_erp',
+        'menu_key' => 'hsx_erp_operating_finance',
+        'sort' => 13,
+        'page' => '/addon/hsx_erp/pages/operating_finance/list',
+        'icon' => '/addon/hsx_erp/site-app/icon_10.png'
+    ],
+    [
         'name' => '成本调整',
         'key' => 'hsx_erp_cost_adjust',
         'group' => 'hsx_erp',
@@ -99,6 +100,6 @@ return [
         'menu_key' => '',
         'sort' => 18,
         'page' => '/addon/hsx_erp/pages/serial_trace/list',
-        'icon' => '/addon/hsx_erp/site-app/icon_08.png'
+        'icon' => '/addon/hsx_erp/site-app/icon_09.png'
     ],
 ];

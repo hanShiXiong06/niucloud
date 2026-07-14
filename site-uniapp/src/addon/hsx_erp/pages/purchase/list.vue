@@ -152,7 +152,7 @@ const filterFields = [
     { key: 'imei', label: 'IMEI / 串号', type: 'text', placeholder: '输入 IMEI 或串号' },
     { key: 'model', label: '型号', type: 'text', placeholder: '输入机型型号' },
     { key: 'party_id', label: '供应商', type: 'party', roleType: 'supplier', labelKey: 'party_name', placeholder: '请选择供应商' },
-    { key: 'category_id', label: '设备分类', type: 'category', labelKey: 'category_name', placeholder: '请选择分类' },
+    { key: 'catalog_product_id', label: '商品型号', type: 'category', labelKey: 'catalog_product_name', placeholder: '请选择型号' },
     { key: 'purchase_no', label: '采购单号', type: 'text', placeholder: '输入采购单号' },
     { key: 'warehouse_id', label: '仓库', type: 'warehouse', labelKey: 'warehouse_name', locationKey: 'location_id', locationLabelKey: 'location_name', placeholder: '请选择仓库/库位' },
     { key: 'purchaser_uid', label: '采购员', type: 'staff', labelKey: 'purchaser_name', placeholder: '请选择采购员' },

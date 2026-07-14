@@ -59,7 +59,7 @@ $assert($normalPolicy['returnable'] === true && $normalPolicy['default_return_am
 $assert($refurbishedPolicy['returnable'] === false && str_contains($refurbishedPolicy['block_reason'], '销售出库'), '已整备设备必须禁止标准采购退货并引导销售出库');
 $assert($unclassifiedPolicy['returnable'] === false && $unclassifiedPolicy['unclassified_cost'] === 100.0, '未分类成本必须先归类再决定业务路径');
 
-$purchaseView = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/purchase/list.vue');
+$purchaseView = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/purchase/list.vue');
 foreach (['入库位置（设备级）', 'applyDefaultLocationToAll', 'purchaseRowClassName', '本页同批', 'ErpDeviceIdentity', 'ErpRoleFocus'] as $needle) {
     $assert(str_contains($purchaseView, $needle), '采购页缺少产品优化：' . $needle);
 }
@@ -158,7 +158,7 @@ $financeSourceService = (string)file_get_contents($root . '/app/service/admin/Er
 foreach (['inventory_purchase', 'sale_revenue', 'purchase_refund', 'sale_refund', 'after_sale_compensation', 'findFinanceCategory', 'findBusinessSource'] as $needle) {
     $assert(str_contains($financeSourceService, $needle), '财务事实来源服务缺少标准分类或动态解析：' . $needle);
 }
-$receivableView = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/receivable/list.vue');
+$receivableView = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/receivable/list.vue');
 foreach (['财务确认供货商退款', 'ErpFinanceSourceMeta', '按退货设备确认退款到账', 'asset_id: item.asset_id', '确认退款到账'] as $needle) {
     $assert(str_contains($receivableView, $needle), 'PC应收款必须为财务展示采购退货退款闭环：' . $needle);
 }
@@ -172,11 +172,11 @@ foreach (["['source_type', '']", "['imei', '']", "['operator_uid', 0]"] as $need
 foreach (["where['source_type']", "where['imei']", "where['operator_uid']"] as $needle) {
     $assert(str_contains($financeService, $needle), '应收款服务缺少结构化筛选逻辑：' . $needle);
 }
-$financeMetaComponent = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/components/ErpFinanceSourceMeta.vue');
+$financeMetaComponent = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/components/ErpFinanceSourceMeta.vue');
 foreach (['finance_type_name', 'business_source_name', 'source_plugin_name', 'channel_name', '应收原因', '应付原因'] as $needle) {
     $assert(str_contains($financeMetaComponent, $needle), 'PC财务来源通用组件缺少关键信息：' . $needle);
 }
-$partySelectComponent = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/components/ErpPartySelect.vue');
+$partySelectComponent = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/components/ErpPartySelect.vue');
 $assert(
     str_contains($partySelectComponent, '<script lang="ts">')
         && str_contains($partySelectComponent, 'inheritAttrs: false')
@@ -185,7 +185,7 @@ $assert(
         && !str_contains($partySelectComponent, 'defineOptions('),
     '往来主体通用组件必须显式透传 class/style，避免 Fragment 属性告警'
 );
-$payableView = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/payable/list.vue');
+$payableView = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/payable/list.vue');
 foreach (['finance_type_key', 'business_source_key', 'channel_code', 'ErpFinanceSourceMeta'] as $needle) {
     $assert(str_contains($payableView, $needle), 'PC应付款缺少动态类型、来源或渠道筛选：' . $needle);
 }
@@ -203,12 +203,12 @@ foreach (['ErpDeviceInboundRequested', 'hsx_recycle.recycle_purchase', 'origin_e
 }
 
 foreach ([
-    '/admin/src/addon/hsx_erp/views/erp/purchase/list.vue' => ['确认采购开单', '确认供应商调价'],
-    '/admin/src/addon/hsx_erp/views/erp/sale/list.vue' => ['确认销售出库'],
-    '/admin/src/addon/hsx_erp/views/erp/sale_return/list.vue' => ['确认发起销售退货'],
-    '/admin/src/addon/hsx_erp/views/erp/payable/list.vue' => ['确认设备付款', '确认整体付款', '确认应付应收折账'],
-    '/admin/src/addon/hsx_erp/views/erp/receivable/list.vue' => ['确认供货商退款到账', '确认应收应付折账'],
-    '/admin/src/addon/hsx_erp/views/erp/stock/list.vue' => ['确认更新设备流转'],
+    '/niucloud/addon/hsx_erp/admin/views/erp/purchase/list.vue' => ['确认采购开单', '确认供应商调价'],
+    '/niucloud/addon/hsx_erp/admin/views/erp/sale/list.vue' => ['确认销售出库'],
+    '/niucloud/addon/hsx_erp/admin/views/erp/sale_return/list.vue' => ['确认发起销售退货'],
+    '/niucloud/addon/hsx_erp/admin/views/erp/payable/list.vue' => ['确认设备付款', '确认整体付款', '确认应付应收折账'],
+    '/niucloud/addon/hsx_erp/admin/views/erp/receivable/list.vue' => ['确认供货商退款到账', '确认应收应付折账'],
+    '/niucloud/addon/hsx_erp/admin/views/erp/stock/list.vue' => ['确认更新设备流转'],
 ] as $relative => $needles) {
     $view = (string)file_get_contents($repo . $relative);
     foreach ($needles as $needle) {
@@ -245,7 +245,7 @@ $assert(
 $returnController = (string)file_get_contents($root . '/app/adminapi/controller/ErpPurchaseReturn.php');
 $assert(str_contains($returnController, "'refund_receivable'"), '采购退货创建结果必须返回后续财务入口数据');
 
-$pcReturn = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/purchase_return/list.vue');
+$pcReturn = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/purchase_return/list.vue');
 foreach (['handoverConfirmed', 'process_status_label', '当前登录管理员', 'refundProgressText', 'goRefundReceivable', 'function purchaseRefundModeTip'] as $needle) {
     $assert(str_contains($pcReturn, $needle), 'PC采购退货页缺少退款闭环：' . $needle);
 }
@@ -261,7 +261,7 @@ $assert(str_contains($pcReturn, 'return-decision-panel'), 'PC采购退货页必�
 $assert(str_contains($pcReturn, 'repeat(auto-fit'), 'PC采购退货设备卡片必须根据可用宽度自动调整列数');
 $assert(str_contains($pcReturn, '自动冲销应付'), '未结算设备必须展示明确的应付处理结论');
 
-$pcSaleReturn = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/sale_return/list.vue');
+$pcSaleReturn = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/sale_return/list.vue');
 $saleReturnService = (string)file_get_contents($root . '/app/service/admin/ErpSaleReturnService.php');
 $assert(str_contains($saleReturnService, 'createBatch') && str_contains($saleReturnService, "'sale_order_id'"), '销售退货必须支持按设备来源自动拆单');
 $assert(str_contains($saleReturnService, '$originalWarehouseId') && str_contains($saleReturnService, '$originalLocationId'), '销售退货必须由后端按设备原仓位自动回库');
@@ -277,7 +277,7 @@ foreach ([$pcReturn, $pcSaleReturn] as $returnWorkbench) {
     }
     $assert(str_contains($returnWorkbench, 'ErpPartySelect'), '采购/销售退货筛选必须复用往来主体组件');
 }
-$saleReturnDetail = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/sale_return/detail.vue');
+$saleReturnDetail = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/sale_return/detail.vue');
 $menuDict = (string)file_get_contents($root . '/app/dict/menu/site.php');
 foreach (['销售退货详情', '退货设备', '处理结论', '确认收到退货设备', '预计退款应付', 'embedded'] as $needle) {
     $assert(str_contains($saleReturnDetail, $needle), '销售退货必须提供可嵌入抽屉的详情组件：' . $needle);
@@ -308,10 +308,10 @@ foreach ([$mobilePay, $mobileReceipt] as $component) {
     $assert(str_contains($component, 'ErpVoucherUploader') && str_contains($component, 'voucher_urls'), '设备级收付款必须上传并提交凭证');
 }
 $mobileSaleCreate = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/pages/sale/create.vue');
-$pcSaleCreate = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/sale/list.vue');
+$pcSaleCreate = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/sale/list.vue');
 $assert(str_contains($mobileSaleCreate, 'ErpVoucherUploader') && str_contains($mobileSaleCreate, 'voucher_urls: form.value.voucher_urls'), '移动端销售现结必须支持收款凭证');
 $assert(str_contains($pcSaleCreate, 'ErpFinanceVoucherUpload') && str_contains($pcSaleCreate, 'voucher_urls: create.form.voucher_urls'), 'PC 销售现结必须支持收款凭证');
-$pcPurchaseCreate = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/purchase/list.vue');
+$pcPurchaseCreate = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/purchase/list.vue');
 $mobilePurchaseCreate = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/pages/purchase/create.vue');
 $assert(str_contains($service, 'confirmPayableItemsInTransaction') && str_contains($service, 'purchase_cash_settled') && str_contains($service, 'flushPendingSettlementDomainEvents'), '采购现结必须在采购事务内核销设备应付、写入资金流水，并在提交后派发事件');
 $assert(str_contains($pcPurchaseCreate, '无需再次到财务确认') && str_contains($pcPurchaseCreate, 'ErpFinanceVoucherUpload') && !str_contains($pcPurchaseCreate, '付款等待财务确认'), 'PC采购现结必须即时付款并支持付款凭证，不能提示再次财务确认');
@@ -326,7 +326,7 @@ $saleReturnCreate = (string)file_get_contents($repo . '/site-uniapp/src/addon/hs
 foreach (['createAndConfirmErpSaleReturn', 'createMobileSaleCompensation', '确认退货并处理退款'] as $needle) {
     $assert(str_contains($saleReturnCreate, $needle), '移动端销售退货/售后补差流程未统一：' . $needle);
 }
-$stockDetailView = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/stock/list.vue');
+$stockDetailView = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/stock/list.vue');
 $assert(str_contains($stockDetailView, 'ErpImageGallery') && str_contains($stockDetailView, 'assetStatusMeta(row.before_status)'), '设备档案必须渲染图片并将库存状态翻译为中文');
 $assert(str_contains($stockDetailView, "sale_compensation: '售后补差应付'") && str_contains($stockDetailView, 'accountLedgerRemark'), '设备账目流水必须解释售后补差等业务事实');
 $assert(str_contains($stockDetailView, '设备账务轨迹') && str_contains($stockDetailView, 'accountTimelineRows') && str_contains($stockDetailView, '_merged_compensation'), '设备档案必须保留采购、销售和售后账务轨迹，并合并同一笔售后补差的应付形成与实际付款');
@@ -338,24 +338,24 @@ $assert(str_contains($stockService, 'enrichAssetAccountLedgers') && str_contains
 $assert(str_contains($stockService, 'markReversedAccountLedgers') && str_contains($stockService, "['last_sale_item']['sale_order_id']") && str_contains($stockService, "['已冲销']"), '设备账务接口必须在撤销后找回原销售关系，并将原销售应收标记为已冲销');
 $mobileStockDetail = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/pages/stock/detail.vue');
 $assert(str_contains($mobileStockDetail, '设备账务轨迹') && str_contains($mobileStockDetail, 'accountBizLabel') && str_contains($mobileStockDetail, 'sale_compensation'), '移动管理端设备档案必须同步展示中文化的设备级账务轨迹');
-$voucherComponent = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue');
+$voucherComponent = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/components/ErpFinanceVoucherUpload.vue');
 $assert(str_contains($voucherComponent, '<upload-image') && str_contains($financeService, 'voucher_urls'), '真实收付款必须支持选填图片凭证并写入资金流水');
-$settlementCards = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/components/ErpSettlementCards.vue');
+$settlementCards = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/components/ErpSettlementCards.vue');
 $assert(str_contains($settlementCards, 'resultSentence') && str_contains($settlementCards, '<el-collapse-item') && str_contains($settlementCards, '真实资金与凭证'), '结算明细必须先展示业务结论，设备账款与资金凭证按需展开');
-$pcPayable = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/payable/list.vue');
+$pcPayable = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/payable/list.vue');
 $assert(str_contains($financeService, "row['money_ledgers']") && str_contains($pcPayable, 'ErpSettlementCards'), '全局结算抽屉必须返回真实资金流水并复用结算卡片组件');
 $assert(str_contains($financeService, 'payableDirectAssetIds') && str_contains($financeService, "'asset_id'"), '结算摘要必须通过设备级应付关联资产，不能把售后补差付款显示为0台设备');
 $assert(str_contains($pcPayable, 'ledger-event-list') && str_contains($pcPayable, 'ledgerAmountMeta') && str_contains($pcPayable, '这不是资金入账') && str_contains($pcPayable, "sale_compensation: '售后补差应付'") && !str_contains($pcPayable, 'signedLedgerMoney'), '账目流水必须使用可折叠业务事件卡片，并明确区分新增应付与真实资金进出，不能使用脱离科目的裸正负金额');
-$refreshHook = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/hooks/useErpPageRefresh.ts');
+$refreshHook = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/hooks/useErpPageRefresh.ts');
 foreach (['onMounted', 'onActivated', 'pending', 'refresh'] as $needle) {
     $assert(str_contains($refreshHook, $needle), 'ERP页面恢复刷新机制缺少：' . $needle);
 }
 foreach (['purchase/list.vue', 'sale/list.vue', 'purchase_return/list.vue', 'sale_return/list.vue', 'sale_return/detail.vue', 'payable/list.vue', 'receivable/list.vue', 'workbench/index.vue'] as $relative) {
-    $page = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/' . $relative);
+    $page = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/' . $relative);
     $assert(str_contains($page, 'useErpPageRefresh'), 'ERP核心页面返回时必须刷新接口：' . $relative);
 }
 
-$purchaseList = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/purchase/list.vue');
+$purchaseList = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/purchase/list.vue');
 foreach (['canAdjustSupplierPrice', 'supplierAdjustBlockedReason', '设备已完成采购退货，不能再调整供应商采购价'] as $needle) {
     $assert(str_contains($purchaseList, $needle), 'PC采购列表必须禁止已退货设备供应商调价：' . $needle);
 }
@@ -364,7 +364,7 @@ foreach (['本页有效采购汇总', '已退货、已作废设备不计入', "a
 }
 $assert(str_contains($service, "status === ErpDict::ASSET_RETURNED") || str_contains($service, "status) === ErpDict::ASSET_RETURNED"), '后端必须拒绝已退货设备成本调整');
 
-$identity = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/components/ErpDeviceIdentity.vue');
+$identity = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/components/ErpDeviceIdentity.vue');
 $assert(str_contains($identity, '系统资产号'), '资产号应以弱化的系统标识展示');
 
 $roleDoc = (string)file_get_contents($root . '/docs/menu-role-information-priority.md');
@@ -380,7 +380,7 @@ foreach (['供应商结算本金', '整备成本', '当前总成本', '优先冲
 
 $saleService = (string)file_get_contents($root . '/app/service/admin/ErpSaleService.php');
 $assert(str_contains($saleService, '$cost = round((float)$asset->total_cost, 2);'), '销售出库必须使用设备当前总成本计算毛利');
-$saleList = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/sale/list.vue');
+$saleList = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/sale/list.vue');
 foreach (['本页有效销售汇总', "row.status !== 'sold'", '已销售退货', '已取消销售', '本页同批', 'saleRowClassName', '取消销售'] as $needle) {
     $assert(str_contains($saleList, $needle), 'PC销售列表必须按有效设备展示批次、状态和汇总：' . $needle);
 }
@@ -389,7 +389,7 @@ foreach (['appendReturnContext', "['status', '=', ErpDict::ASSET_SOLD]", "where(
 }
 $assert(str_contains($saleList, '实际销售收入') && str_contains($saleList, 'net_sale_amount'), '销售列表和汇总必须按扣除售后补差后的实际销售收入展示');
 $assert(str_contains($saleService, 'after_sale_compensation') && str_contains($saleService, 'sale_compensation_amount') && str_contains($saleService, 'net_sale_amount'), '销售接口必须区分真正退货与售后补差，并返回设备级实际销售收入');
-$stockList = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/stock/list.vue');
+$stockList = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/stock/list.vue');
 $assert(str_contains($stockList, 'onActivated') && str_contains($stockList, 'activatedOnce'), '库存中心从财务页面返回后必须自动刷新结算状态');
 foreach (['label="入库"', 'label="出库"', '尚未销售出库', 'outboundStatusMeta', 'hasEffectiveOutbound', '当前库存 / 流转', '订单结算', '采购款', '销售款', 'financeStatusMeta'] as $needle) {
     $assert(str_contains($stockList, $needle), '库存中心必须同时展示设备入库、出库和缺省状态：' . $needle);
@@ -449,7 +449,7 @@ foreach (['sendRefurbish', 'completeRefurbish', 'refurbish_complete', '整备费
     $assert(str_contains($stockService, $needle), '整备必须走待整备、开始、完工及异常闭环：' . $needle);
 }
 $capitalService = (string)file_get_contents($root . '/app/service/admin/ErpCapitalAccountService.php');
-$capitalView = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/capital_account/list.vue');
+$capitalView = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/capital_account/list.vue');
 $assert(str_contains($capitalService, 'findFinanceCategory') && str_contains($capitalService, "'category_source_plugin'"), '手工收付款必须校验动态收支类型并保存插件来源快照');
 $assert(str_contains($capitalView, 'getErpFinanceCategories') && str_contains($capitalView, 'entryCategoryOptions'), '资金账户记账必须使用动态收入/支出类型');
 $hookDoc = (string)file_get_contents($root . '/docs/ERP动态字典与插件Hook契约.md');

@@ -1,17 +1,15 @@
 <template>
 	<view class="show-price-page" :style="[pageStyleVars, themeStyleVars]">
-		<view class="custom-navbar" :class="{ compact: isScrolled }" :style="customNavbarStyle">
-			<view class="navbar-content" :style="navbarContentStyle">
-				<view class="navbar-left" :style="navbarSideStyle" @click="goBack">
-					<u-icon name="arrow-left" color="#ffffff" size="42rpx"></u-icon>
-				</view>
-				<view class="navbar-center" :style="navbarCenterStyle">
-					<text class="navbar-title">{{ navbarTitle }}</text>
-					<text v-if="priceDateDisplay && priceDateDisplay !== '--'" class="navbar-date">{{ priceDateDisplay }}</text>
-				</view>
-				<view class="navbar-capsule-space" :style="navbarSideStyle"></view>
-			</view>
-		</view>
+		<PricePageNavbar
+			:title="navbarTitle"
+			:date="priceDateDisplay"
+			:compact="isScrolled"
+			:navbar-style="customNavbarStyle"
+			:content-style="navbarContentStyle"
+			:side-style="navbarSideStyle"
+			:center-style="navbarCenterStyle"
+			@back="goBack"
+		/>
 
 		<!-- 加载状态 -->
 		<view v-if="loading" class="loading-container">
@@ -227,46 +225,18 @@
 			</view>
 		</view>
 
-		<view v-if="showTypeSheet" class="sheet-mask" @click="showTypeSheet = false">
-			<view class="type-sheet" @click.stop>
-				<view class="type-sheet-head">
-					<text class="type-title">选择报价单</text>
-					<text class="type-close" @click="showTypeSheet = false">关闭</text>
-				</view>
-				<block v-if="source === 'spider'">
-					<view v-if="spiderSheets.length === 0" class="type-empty">暂无可切换报价单</view>
-					<view
-						v-for="it in spiderSheets"
-						:key="it.id"
-						class="type-item"
-						:class="{ active: String(it.id) === String(spiderItemId) }"
-						@click="switchSpiderSheet(it)"
-					>
-						<view>
-							<text class="type-name">{{ it.name || it.title }}</text>
-							<text class="type-meta">{{ it.model_count || 0 }} 个型号</text>
-						</view>
-						<text class="type-check">✓</text>
-					</view>
-				</block>
-				<block v-else>
-					<view v-if="quotationTypes.length === 0" class="type-empty">暂无可切换报价单</view>
-					<view
-						v-for="item in quotationTypes"
-						:key="item.dataset_id || item.quotation_id"
-						class="type-item"
-						:class="{ active: String(item.dataset_id) === String(datasetId) || String(item.quotation_id) === String(priceTypeId) }"
-						@click="switchQuotation(item)"
-					>
-						<view>
-							<text class="type-name">{{ item.title || item.dataset_name || item.price_name }}</text>
-							<text class="type-meta">{{ item.last_sync_at_text || '待同步' }} · {{ item.model_count || 0 }} 个型号</text>
-						</view>
-						<text class="type-check">✓</text>
-					</view>
-				</block>
-			</view>
-		</view>
+		<QuoteTypeSheet
+			:visible="showTypeSheet"
+			:source="source"
+			:spider-sheets="spiderSheets"
+			:spider-item-id="spiderItemId"
+			:quotation-types="quotationTypes"
+			:dataset-id="datasetId"
+			:price-type-id="priceTypeId"
+			@close="showTypeSheet = false"
+			@select-spider="switchSpiderSheet"
+			@select-quotation="switchQuotation"
+		/>
 		<ModelFilterPopup
 			v-if="showModelFilter"
 			:visible="showModelFilter"
@@ -288,7 +258,9 @@ import { getQuoteSpiderDetail, getQuoteSpiderCategoryTree, getQuoteSpiderItems, 
 import { getOrderSubmitConfig } from '@/addon/hsx_recycle/api/order'
 import { img } from '@/utils/common'
 import ModelFilterPopup from './components/ModelFilterPopup.vue'
+import PricePageNavbar from './components/PricePageNavbar.vue'
 import PriceTrendPopup from './components/PriceTrendPopup.vue'
+import QuoteTypeSheet from './components/QuoteTypeSheet.vue'
 
 const DEFAULT_NOTICE_TEXT = '温馨提示：报价仅供参考，最终价格以质检结果为准'
 
@@ -426,6 +398,7 @@ const spiderSourceId = ref(0)
 const spiderSheets = ref<any[]>([])
 const source = ref('')
 const priceDate = ref('')
+const quoteUpdateAt = ref<number | string>('')
 const pageTitle = ref('报价查询')
 const loading = ref(false)
 const tableData = ref<QuotationPriceData[]>([])
@@ -624,19 +597,9 @@ const seriesTabs = computed<SeriesTab[]>(() => {
 })
 
 const priceDateDisplay = computed(() => {
-	const dateList = tableData.value
-		.map(item => (item.price_date || '').trim())
-		.filter(Boolean)
-
-	if (dateList.length > 0) {
-		// price_date 为 YYYY-MM-DD，按字符串排序即可得到最新日期
-		return [...new Set(dateList)].sort().at(-1) || '--'
-	}
-
-	// 兜底：若接口未返回 price_date，则回退到 create_at
-	const raw = tableData.value[0]?.create_at
-	if (!raw) return '--'
-	return formatDate(raw)
+	// 自动同步会更新主记录，人工调价可能只更新型号行，两种时间都要参与比较。
+	const rowDates = tableData.value.flatMap(item => [item.update_at, item.price_date, item.create_at])
+	return latestQuoteDate([quoteUpdateAt.value, priceDate.value, ...rowDates]) || '--'
 })
 
 const navbarTitle = computed(() => {
@@ -951,20 +914,27 @@ function spiderPriceTrend(row: Record<string, any>, columnName: string): '' | 'u
 	return cur > prev ? 'up' : 'down'
 }
 
-function formatDate(timestamp: number | string): string {
-	if (!timestamp) return '--'
-	const raw = Number(timestamp)
-	const ms = String(raw).length === 10 ? raw * 1000 : raw
+function normalizeQuoteDate(value: unknown): string {
+	if (value === null || value === undefined || value === '') return ''
+	const text = String(value).trim()
+	const dateText = text.match(/^(\d{4}-\d{2}-\d{2})/)?.[1]
+	if (dateText) return dateText
+
+	const raw = Number(text)
+	if (!Number.isFinite(raw) || raw <= 0) return ''
+	const ms = text.length === 10 ? raw * 1000 : raw
 	const date = new Date(ms)
-	if (Number.isNaN(date.getTime())) return '--'
+	if (Number.isNaN(date.getTime())) return ''
 
 	const year = date.getFullYear()
 	const month = `${date.getMonth() + 1}`.padStart(2, '0')
 	const day = `${date.getDate()}`.padStart(2, '0')
-	const hour = `${date.getHours()}`.padStart(2, '0')
-	const minute = `${date.getMinutes()}`.padStart(2, '0')
+	return `${year}-${month}-${day}`
+}
 
-	return `${year}-${month}-${day} ${hour}:${minute}`
+function latestQuoteDate(values: unknown[]): string {
+	const dates = values.map(normalizeQuoteDate).filter(Boolean)
+	return dates.length ? [...new Set(dates)].sort().at(-1) || '' : ''
 }
 
 async function loadPriceData() {
@@ -984,6 +954,7 @@ async function loadPriceData() {
 
 		if (res.code === 1 && res.data) {
 			quoteNoticeText.value = DEFAULT_NOTICE_TEXT
+			quoteUpdateAt.value = ''
 			tableData.value = res.data || []
 			if (tableData.value.length > 0) {
 				priceTypeName.value = tableData.value[0].price_name || ''
@@ -1013,6 +984,7 @@ async function loadSpiderPriceData() {
 		const res = await getQuoteSpiderDetail(spiderItemId.value) as any
 		if (res.code === 1 && res.data) {
 			const item = res.data as QuoteSpiderItem
+			quoteUpdateAt.value = item.last_sync_at || item.price_date || item.update_at || item.update_at_text || item.last_sync_at_text || ''
 			spiderCategoryId.value = Number((item as any).category_id || 0)
 			spiderSourceId.value = Number((item as any).source_id || 0)
 			spiderImageUrl.value = resolveSpiderImage(item)
@@ -2036,59 +2008,6 @@ onPageScroll((event) => {
 	pointer-events: none;
 }
 
-.custom-navbar {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	z-index: 999;
-	backdrop-filter: blur(8rpx);
-	background: var(--toolbar-bg);
-	border-bottom: 1rpx solid var(--line);
-
-	.navbar-content {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		box-sizing: content-box;
-	}
-
-	.navbar-left,
-	.navbar-right {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-	}
-
-	.navbar-left {
-		.iconfont {
-			font-size: 40rpx;
-			color: var(--text-main);
-		}
-	}
-
-	.navbar-right {
-		justify-content: flex-end;
-
-		.refresh-text {
-			font-size: 24rpx;
-			color: var(--brand);
-			padding: 10rpx 14rpx;
-			background: var(--bg-soft);
-			border-radius: 999rpx;
-		}
-	}
-
-	.navbar-title {
-		flex: 1;
-		text-align: center;
-		font-size: 32rpx;
-		font-weight: 700;
-		letter-spacing: 1rpx;
-	}
-}
-
 .price-content,
 .loading-container,
 .empty-container {
@@ -2533,75 +2452,6 @@ onPageScroll((event) => {
 		opacity: 1;
 		transform: translateY(0);
 	}
-}
-
-.custom-navbar {
-	background: var(--button-bg);
-	border-bottom: 1rpx solid var(--line);
-	color: var(--button-text);
-
-	.navbar-content {
-		position: relative;
-	}
-
-	.navbar-left {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-
-		:deep(.u-icon) {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-		}
-	}
-
-	.navbar-center {
-		position: absolute;
-		left: 50%;
-		transform: translateX(-50%);
-		max-width: 66%;
-		display: flex;
-		flex-direction: row;
-		align-items: center;
-		justify-content: center;
-		gap: 12rpx;
-		padding: 0 10rpx;
-		box-sizing: border-box;
-		pointer-events: none;
-	}
-
-	.navbar-title {
-		flex: 0 1 auto;
-		min-width: 0;
-		max-width: 360rpx;
-		font-size: 30rpx;
-		line-height: 44rpx;
-		font-weight: 700;
-		text-align: center;
-		color: var(--button-text);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.navbar-date {
-		flex: 0 0 auto;
-		font-size: 22rpx;
-		line-height: 44rpx;
-		color: var(--button-text);
-		opacity: 0.72;
-		white-space: nowrap;
-	}
-
-	.navbar-capsule-space {
-		flex-shrink: 0;
-	}
-}
-
-.custom-navbar.compact {
-	background: var(--button-bg);
 }
 
 .price-content,
@@ -3315,92 +3165,6 @@ onPageScroll((event) => {
 	color: var(--text-main);
 	white-space: pre-wrap;
 	word-break: break-word;
-}
-
-.sheet-mask {
-	position: fixed;
-	left: 0;
-	right: 0;
-	top: 0;
-	bottom: 0;
-	z-index: 2000;
-	background: rgba(0, 0, 0, 0.42);
-	display: flex;
-	align-items: flex-end;
-}
-
-.type-sheet {
-	width: 100%;
-	max-height: 1100rpx;
-	padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom));
-	background: var(--bg-card);
-	border-radius: 28rpx 28rpx 0 0;
-	box-sizing: border-box;
-	overflow-y: auto;
-}
-
-.type-sheet-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 18rpx;
-}
-
-.type-title {
-	font-size: 32rpx;
-	line-height: 44rpx;
-	font-weight: 800;
-	color: var(--text-main);
-}
-
-.type-close {
-	font-size: 24rpx;
-	color: var(--text-sub);
-	padding: 10rpx 18rpx;
-	background: var(--bg-soft);
-	border-radius: 22rpx;
-}
-
-.type-empty {
-	padding: 50rpx 0;
-	text-align: center;
-	font-size: 26rpx;
-	color: var(--text-sub);
-}
-
-.type-item {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 22rpx 8rpx;
-	border-top: 1rpx solid var(--line);
-}
-
-.type-name {
-	display: block;
-	font-size: 29rpx;
-	line-height: 40rpx;
-	font-weight: 700;
-	color: var(--text-main);
-}
-
-.type-meta {
-	display: block;
-	margin-top: 6rpx;
-	font-size: 23rpx;
-	line-height: 32rpx;
-	color: var(--text-sub);
-}
-
-.type-check {
-	display: none;
-	font-size: 30rpx;
-	color: var(--brand);
-	font-weight: 800;
-}
-
-.type-item.active .type-check {
-	display: block;
 }
 
 </style>

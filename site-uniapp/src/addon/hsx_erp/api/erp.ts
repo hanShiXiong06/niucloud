@@ -38,28 +38,8 @@ export function getMobileErpGoodsMeta(params: Record<string, any> = {}) {
     return request.get('erp/goods/meta', params)
 }
 
-export function getMobileErpCategoryTree(params: Record<string, any> = {}) {
-    return request.get('erp/goods/category/tree', params)
-}
-
-export function getMobileErpCategoryList(params: Record<string, any> = {}) {
-    return request.get('erp/goods/category/lists', params)
-}
-
-export function saveMobileErpCategory(id: number | string = 0, data: Record<string, any>) {
-    return request.post(`erp/goods/category/save/${id || 0}`, data)
-}
-
-export function deleteMobileErpCategory(id: number | string) {
-    return request.delete(`erp/goods/category/${id}`)
-}
-
-export function exportMobileErpCategory() {
-    return request.get('erp/goods/category/export')
-}
-
-export function importMobileErpCategory(rows: any[]) {
-    return request.post('erp/goods/category/import', { rows })
+export function getMobileErpGoodsCatalogHierarchy(params: Record<string, any> = {}) {
+    return request.get('erp/goods/catalog/hierarchy', params)
 }
 
 // ─── 采购 ────────────────────────────────────────────────────────────────────

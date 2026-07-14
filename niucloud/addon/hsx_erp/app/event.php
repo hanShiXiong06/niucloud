@@ -24,17 +24,14 @@ return [
         'ErpSaleCreatedRequested' => [
             'addon\hsx_erp\app\listener\ErpSaleCreatedRequested',
         ],
-        'HsxErpCategoryChanged' => [
-            'addon\hsx_erp\app\listener\ErpCategoryChanged',
+        'HsxErpMarketplaceProviders' => [
+            'addon\hsx_erp\app\listener\marketplace\PhoneShopMarketplaceProvider',
         ],
-        'HsxErpCategoryProviders' => [
-            'addon\hsx_erp\app\listener\category\PhoneShopCategoryProvider',
+        'HsxErpPublishListing' => [
+            'addon\hsx_erp\app\listener\marketplace\PhoneShopDirectListing',
         ],
-        'HsxErpCategoryPull' => [
-            'addon\hsx_erp\app\listener\category\PhoneShopCategoryPull',
-        ],
-        'HsxErpCategoryPush' => [
-            'addon\hsx_erp\app\listener\category\PhoneShopCategoryPush',
+        'HsxErpCatalogProducts' => [
+            'addon\hsx_erp\app\listener\catalog\ErpCatalogProducts',
         ],
     ],
 ];

@@ -100,6 +100,10 @@ export interface QuoteSpiderItem {
   is_hot: number;
   model_count: number;
   last_sync_at_text: string;
+  last_sync_at?: number | string;
+  update_at?: number | string;
+  update_at_text?: string;
+  price_date?: string;
   rows?: QuoteSpiderRow[];
 }
 
@@ -125,6 +129,8 @@ export interface QuoteSpiderRow {
   manual_prices?: Record<string, any>;
   final_prices?: Record<string, any>;
   remark?: string;
+  price_date?: string;
   create_at?: number | string;
   update_at?: number | string;
+  update_at_text?: string;
 }

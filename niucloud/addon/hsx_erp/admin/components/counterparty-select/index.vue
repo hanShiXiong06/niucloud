@@ -17,11 +17,25 @@
             @visible-change="visible => visible && !options.length && onSearch('')"
         >
             <el-option v-for="item in options" :key="item.member_id" :value="item.member_id" :label="labelOf(item)">
-                <span class="font-medium">{{ nameOf(item) }}</span>
-                <span class="ml-1 text-xs text-gray-400">{{ item.mobile || '无手机' }}</span>
-                <el-tag v-if="item.party_name || item.counterparty_name" size="small" effect="plain" class="ml-2">{{ item.party_name || item.counterparty_name }}</el-tag>
-                <span v-else class="ml-2 text-xs text-orange-500">无主体 · 选后自动建</span>
-                <el-tag v-for="role in item.role_flags || []" :key="role" size="small" type="info" class="ml-1">{{ roleLabel(role) }}</el-tag>
+                <div class="member-option">
+                    <div class="member-option__info">
+                        <span class="font-medium">{{ nameOf(item) }}</span>
+                        <span class="ml-1 text-xs text-gray-400">{{ item.mobile || '无手机' }}</span>
+                        <el-tag v-if="item.party_name || item.counterparty_name" size="small" effect="plain" class="ml-2">{{ item.party_name || item.counterparty_name }}</el-tag>
+                        <span v-else class="ml-2 text-xs text-orange-500">无主体 · 选后自动建</span>
+                        <el-tag v-for="role in item.role_flags || []" :key="role" size="small" type="info" class="ml-1">{{ roleLabel(role) }}</el-tag>
+                    </div>
+                    <el-tooltip content="修改会员昵称" placement="top">
+                        <el-button
+                            link
+                            type="primary"
+                            :icon="EditPen"
+                            aria-label="修改会员昵称"
+                            @mousedown.stop
+                            @click.stop="editMemberNickname(item)"
+                        />
+                    </el-tooltip>
+                </div>
             </el-option>
         </el-select>
         <el-button @click="createVisible = true">新建</el-button>
@@ -50,8 +64,10 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { EditPen } from '@element-plus/icons-vue'
 import { getErpMemberOptions, quickCreateErpParty, resolveErpContact } from '@/addon/hsx_erp/api/counterparty'
+import { editMemberDetail } from '@/app/api/member'
 
 const props = withDefaults(defineProps<{
     modelValue?: number | string
@@ -108,6 +124,36 @@ async function onPick(memberId: number) {
         onClear()
     } finally {
         resolving.value = false
+    }
+}
+
+async function editMemberNickname(item: any) {
+    const memberId = Number(item?.member_id || 0)
+    if (!memberId) return ElMessage.warning('该记录没有关联会员')
+    try {
+        const { value } = await ElMessageBox.prompt(
+            '这里只修改会员昵称，不会修改 ERP 往来主体名称和历史单据。',
+            '修改会员昵称',
+            {
+                confirmButtonText: '保存',
+                cancelButtonText: '取消',
+                inputValue: nameOf(item),
+                inputPlaceholder: '请输入会员昵称',
+                inputValidator: value => {
+                    const name = String(value || '').trim()
+                    if (!name) return '会员昵称不能为空'
+                    if (name.length > 50) return '会员昵称不能超过50个字符'
+                    return true
+                }
+            }
+        )
+        const nickname = String(value || '').trim()
+        await editMemberDetail({ member_id: memberId, field: 'nickname', value: nickname })
+        item.nickname = nickname
+    } catch (error: any) {
+        if (error !== 'cancel' && error !== 'close') {
+            ElMessage.error(error?.msg || error?.message || '会员昵称修改失败')
+        }
     }
 }
 
@@ -174,4 +220,6 @@ watch(() => props.modelValue, value => {
     gap: 8px;
 }
 .role-filter { display:flex; width:100%; gap:6px; }
+.member-option { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; }
+.member-option__info { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>

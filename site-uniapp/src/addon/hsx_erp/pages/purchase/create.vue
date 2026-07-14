@@ -56,22 +56,22 @@
                             <text class="form-label required">型号</text>
                             <u-input v-model="item.model" placeholder="如：iPhone 15 128G 黑色" :customStyle="inputStyle" />
                         </view>
-                        <ErpCategoryPopup
-                            v-model="item.category_id"
-                            label="设备分类"
-                            placeholder="请选择设备分类"
+                        <ErpCatalogProductPopup
+                            v-model="item.catalog_product_id"
+                            :selected-label="item.catalog_product_name"
+                            label="商品型号"
+                            placeholder="请选择商品型号"
                             layout="horizontal"
                             :embedded="true"
                             :clearable="true"
-                            :api-path="categoryApiPath"
-                            @change="payload => onCategoryChange(idx, payload)"
-                            @clear="clearItemCategory(idx)"
+                            @change="payload => onCatalogProductChange(idx, payload)"
+                            @clear="clearItemCatalogProduct(idx)"
                         />
                         <view class="form-row" @click="openSpecPicker(idx)">
                             <text class="form-label">商品规格</text>
                             <view class="form-input" :class="{ 'form-input--on': specSummary(item) }">
                                 <text :class="specSummary(item) ? 'input-text' : 'input-placeholder'">
-                                    {{ specSummary(item) || (item.category_id ? '点击选择内存/颜色/保修/成色' : '请先选择分类') }}
+                                    {{ specSummary(item) || (item.catalog_product_id ? '点击选择内存/颜色/保修/成色' : '请先选择商品型号') }}
                                 </text>
                                 <view v-if="specSummary(item)" class="inline-clear" @click.stop="clearItemSpec(idx)">
                                     <u-icon name="close-circle-fill" color="#94a3b8" size="17" />
@@ -179,7 +179,7 @@ import ErpWarehousePopup from '@/addon/hsx_erp/components/ErpWarehousePopup.vue'
 import ErpSettleBar from '@/addon/hsx_erp/components/ErpSettleBar.vue'
 import ErpGoodsSpecPopup from '@/addon/hsx_erp/components/ErpGoodsSpecPopup.vue'
 import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
-import ErpCategoryPopup from '@/addon/hsx_erp/components/ErpCategoryPopup.vue'
+import ErpCatalogProductPopup from '@/addon/hsx_erp/components/ErpCatalogProductPopup.vue'
 import { confirmErpSensitiveAction } from '@/addon/hsx_erp/hooks/useErpSensitiveConfirm'
 import ErpPageHeader from '@/addon/hsx_erp/components/ErpPageHeader.vue'
 
@@ -222,7 +222,6 @@ const whDisplayText = computed(() => {
 const totalCost = computed(() => form.value.items.reduce((s, i) => s + Number(i.purchase_cost || 0), 0))
 const activeSpecItem = computed(() => form.value.items[activeSpecItemIndex.value] || {})
 const activeSpecMeta = computed(() => metaFor(activeSpecItem.value))
-const categoryApiPath = computed(() => goodsMeta.value?.category_source === 'phone_shop' ? 'phone_shop/goods/category/tree' : 'erp/goods/category/tree')
 const goodsMetaTip = computed(() => {
     const tips = Array.isArray(goodsMeta.value?.tips) ? goodsMeta.value.tips : []
     if (tips.length) return tips[0]
@@ -232,7 +231,7 @@ const canSubmit = computed(() =>
     !voucherUploading.value &&
     form.value.party_id > 0 &&
     form.value.items.length > 0 &&
-    form.value.items.every(i => i.imei && i.model && i.category_id && i.warehouse_id && Number(i.purchase_cost) > 0) &&
+    form.value.items.every(i => i.imei && i.model && i.catalog_product_id && i.warehouse_id && Number(i.purchase_cost) > 0) &&
     (
         form.value.settle_mode !== 'cash' ||
         (
@@ -252,9 +251,9 @@ onMounted(async () => {
     loadGoodsMeta()
 })
 
-async function loadGoodsMeta(categoryId = 0, categoryPath: any[] = []) {
+async function loadGoodsMeta() {
     try {
-        const res: any = await getMobileErpGoodsMeta({ category_id: categoryId, category_path: categoryPath })
+        const res: any = await getMobileErpGoodsMeta()
         goodsMeta.value = res?.data || {}
         return goodsMeta.value
     } catch {
@@ -283,9 +282,12 @@ function newDeviceItem(imei = '') {
         imei,
         model: '',
         spec: '',
-        category_id: '',
+        catalog_product_id: '',
+        catalog_product_name: '',
         category_name: '',
-        category_path: [] as any[],
+        category_path: '',
+        brand_name: '',
+        series_name: '',
         category_names: [] as string[],
         goods_meta: null,
         selected_specs: {},
@@ -345,8 +347,8 @@ function clearItemSpec(idx: number) {
 function openSpecPicker(idx: number) {
     const item = form.value.items[idx]
     if (!item) return
-    if (!item.category_id) {
-        uni.showToast({ title: '请先选择设备分类', icon: 'none' })
+    if (!item.catalog_product_id) {
+        uni.showToast({ title: '请先选择商品型号', icon: 'none' })
         return
     }
     activeSpecItemIndex.value = idx
@@ -372,7 +374,7 @@ async function refreshActiveSpecMeta() {
         await loadGoodsMeta()
         return
     }
-    item.goods_meta = await loadGoodsMeta(Number(item.category_id || 0), item.category_path || [])
+    item.goods_meta = await loadGoodsMeta()
 }
 
 function openItemWarehouse(idx: number) {
@@ -418,31 +420,39 @@ async function scanAddDevice() {
     }
 }
 
-async function onCategoryChange(idx: number, payload: any) {
+async function onCatalogProductChange(idx: number, payload: any) {
     const item = form.value.items[idx]
     if (!item) return
-    item.category_id = payload?.category_id || ''
-    item.category_name = payload?.node?.category_full_name || payload?.node?.category_name || ''
-    item.category_path = payload?.category_path || []
-    item.category_names = categoryNamesFromPayload(payload)
+    item.catalog_product_id = Number(payload?.catalog_product_id || payload?.site_product_id || 0)
+    item.catalog_product_name = payload?.product_name || payload?.label || ''
+    item.category_name = payload?.category_name || ''
+    item.category_path = payload?.category_path || ''
+    item.brand_name = payload?.brand_name || ''
+    item.series_name = payload?.series_name || ''
+    item.category_names = item.catalog_product_name ? [item.catalog_product_name] : []
+    item.model = item.catalog_product_name || item.model
+    item._auto_model = item.model
     item.selected_specs = {}
     item.selected_grade = null
     item.color = ''
     item.battery = ''
     item.warranty = 0
     rebuildItemTitles(item, true)
-    if (item.category_id) {
-        item.goods_meta = await loadGoodsMeta(Number(item.category_id), item.category_path)
+    if (item.catalog_product_id) {
+        item.goods_meta = await loadGoodsMeta()
         rebuildItemTitles(item, true)
     }
 }
 
-function clearItemCategory(idx: number) {
+function clearItemCatalogProduct(idx: number) {
     const item = form.value.items[idx]
     if (!item) return
-    item.category_id = ''
+    item.catalog_product_id = ''
+    item.catalog_product_name = ''
     item.category_name = ''
-    item.category_path = []
+    item.category_path = ''
+    item.brand_name = ''
+    item.series_name = ''
     item.category_names = []
     item.goods_meta = null
     item.selected_specs = {}
@@ -484,20 +494,6 @@ function specGroupsFor(item: any): any[] {
 
 function gradeOptionsFor(item: any): any[] {
     return normalizeOptions(metaFor(item)?.specs?.grades || [])
-}
-
-function categoryNamesFromPayload(payload: any): string[] {
-    const nodes = Array.isArray(payload?.category_nodes) ? payload.category_nodes : []
-    if (nodes.length) {
-        return nodes.map((node: any) => String(node?.category_name || '').trim()).filter(Boolean)
-    }
-    const node = payload?.node || {}
-    const full = String(node.category_full_name || '').trim()
-    if (full) {
-        return full.split(/[>\-/\\｜|,，]+/).map((name: string) => name.trim()).filter(Boolean)
-    }
-    const name = String(node.category_name || '').trim()
-    return name ? [name] : []
 }
 
 function categoryTitleByRule(item: any): string {
@@ -632,9 +628,9 @@ async function submit() {
                 color: i.color || '',
                 battery: i.battery || '',
                 warranty: Number(i.warranty || 0),
-                category_id: Number(i.category_id || 0),
+                catalog_product_id: Number(i.catalog_product_id || 0),
                 category_name: i.category_name || '',
-                category_path: i.category_path || [],
+                category_path: i.category_path || '',
                 warehouse_id: Number(i.warehouse_id || 0),
                 warehouse_name: i.warehouse_name || '',
                 location_id: Number(i.location_id || 0),

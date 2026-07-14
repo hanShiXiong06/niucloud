@@ -33,7 +33,8 @@ $schema = (string)file_get_contents($root . '/app/support/ErpSchema.php');
 foreach (['erp_settlement', 'erp_settlement_link', 'erp_payable', 'erp_receivable', 'erp_purchase_return', 'erp_purchase_return_item', 'erp_sale_return', 'erp_purchase_order', 'erp_sale_order', 'erp_asset_ledger', 'erp_account_ledger', 'erp_money_ledger'] as $table) {
     $assert(str_contains($schema, "'{$table}'"), "集中迁移缺少{$table}");
 }
-$assert(str_contains($schema, 'erp_category_mapping'), '集中迁移缺少跨插件分类映射表');
+$assert(str_contains($schema, 'erp_catalog_product_master') && str_contains($schema, 'erp_site_catalog_product'), '集中迁移必须包含标准目录和站点目录');
+$assert(!str_contains($schema, 'erp_category_mapping') && !str_contains($schema, 'erp_goods_category'), '旧分类及映射表已退役，不得继续创建');
 $assert(str_contains($schema, "'balance_after'"), '集中迁移必须补齐账目流水余额字段');
 $assert(str_contains($schema, "'refund_receivable_amount'"), '集中迁移必须补齐退货退款应收审计字段');
 $assert(str_contains($schema, "'policy_json'"), '集中迁移必须保存采购退货策略快照');
@@ -78,8 +79,8 @@ $assert(str_contains($sql, '`balance_after` decimal(14,2)'), '全新安装结构
 $assert(str_contains($sql, '`refund_receivable_amount` decimal(12,2)'), '全新安装结构必须包含退款应收拆分字段');
 $assert(str_contains($sql, '`sale_channel_key` varchar(80)'), '全新安装结构必须包含动态销售渠道编码');
 $assert(str_contains($sql, '`category_key` varchar(80)'), '全新安装结构必须包含动态收支分类编码');
-$assert(str_contains($sql, 'CREATE TABLE IF NOT EXISTS `{{prefix}}erp_category_mapping`'), '全新安装结构必须包含跨插件分类映射表');
-$assert(str_contains($sql, '`uk_site_target_category`'), '分类映射必须约束站点、插件和目标分类唯一');
+$assert(str_contains($sql, 'CREATE TABLE IF NOT EXISTS `{{prefix}}erp_catalog_product_master`') && str_contains($sql, 'CREATE TABLE IF NOT EXISTS `{{prefix}}erp_site_catalog_product`'), '全新安装必须以ERP商品目录为唯一主数据');
+$assert(!str_contains($sql, 'erp_category_mapping') && !str_contains($sql, 'erp_goods_category'), '全新安装不得包含旧分类模块');
 foreach (['origin_plugin', 'origin_type', 'biz_scene', 'category_statement_group', 'channel_code', 'business_reason'] as $field) {
     $assert(str_contains($sql, '`' . $field . '`'), '全新安装结构必须包含财务事实来源字段：' . $field);
 }
@@ -96,6 +97,10 @@ foreach (['retail_price', 'stock_in_at', 'remark_public', 'remark_internal'] as 
     $assert(str_contains($installAssetBlock, '`' . $field . '`'), 'erp_asset新装表必须包含设备流转字段：' . $field);
 }
 $assert(str_contains($sql, 'KEY `idx_action_source_no` (`site_id`,`action`,`source_no`)'), '全新安装结构必须包含整备来源号索引');
+$uninstall = (string)file_get_contents($root . '/sql/uninstall.sql');
+foreach (['erp_catalog_import_task', 'erp_site_catalog_product', 'erp_catalog_product_master', 'erp_goods_category', 'erp_category_mapping'] as $table) {
+    $assert(str_contains($uninstall, 'DROP TABLE IF EXISTS `{{prefix}}' . $table . '`'), '卸载必须清理目录及旧分类残留：' . $table);
+}
 $assert(str_contains($addon, "installAddonSchedule('hsx_erp')") && str_contains($addon, "uninstallAddonSchedule('hsx_erp')"), '插件生命周期必须安装和卸载领域事件重试任务');
 
 $info = json_decode((string)file_get_contents($root . '/info.json'), true);

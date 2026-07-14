@@ -80,17 +80,8 @@
                         <el-option v-for="item in searchLocations" :key="item.id" :label="item.location_name" :value="item.id" />
                     </el-select>
                 </el-form-item>
-                <el-form-item label="分类">
-                    <el-tree-select
-                        v-model="search.category_id"
-                        :data="categoryTree"
-                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
-                        check-strictly
-                        clearable
-                        class="!w-[220px]"
-                        node-key="category_id"
-                        placeholder="全部分类"
-                    />
+                <el-form-item label="商品型号">
+                    <ErpCatalogProductSelect v-model="search.catalog_product_id" class="!w-[280px]" placeholder="搜索品牌、系列或型号" />
                 </el-form-item>
                 <el-form-item label="整备">
                     <el-select v-model="search.refurbish_status" clearable class="!w-[140px]" placeholder="全部">
@@ -111,10 +102,10 @@
                 <el-form-item label="上架">
                     <el-select v-model="search.listing_status" clearable class="!w-[140px]" placeholder="全部">
                         <el-option label="不需要" value="none" />
-                        <el-option label="待拍照" value="need_photo" />
-                        <el-option label="待定价" value="need_price" />
-                        <el-option label="可上架" value="ready" />
-                        <el-option label="已上架" value="listed" />
+                        <el-option label="待补图片" value="need_photo" />
+                        <el-option label="待补售价" value="need_price" />
+                        <el-option label="资料完整" value="ready" />
+                        <el-option label="商城已上架" value="listed" />
                     </el-select>
                 </el-form-item>
                 <el-form-item label="入库时间">
@@ -219,9 +210,7 @@
                                 <el-tag :type="refurbishMeta(row.refurbish_status).type" effect="plain">{{ refurbishMeta(row.refurbish_status).label }}</el-tag>
                                 <el-tag :type="targetMeta(row.sale_target).type" effect="plain">{{ targetMeta(row.sale_target).label }}</el-tag>
                                 <el-tag v-if="row.sale_target === 'mall'" :type="listingMeta(row.listing_status).type" effect="plain">{{ listingMeta(row.listing_status).label }}</el-tag>
-                                <el-tag v-if="row.sale_target === 'mall'" :type="listingSyncMeta(row.listing_sync?.status).type" effect="plain">{{ row.listing_sync?.status_label || '尚未同步' }}</el-tag>
                             </div>
-                            <div v-if="row.listing_sync?.status === 'failed'" class="mt-2 text-xs text-red-500 line-clamp-2" :title="row.listing_sync.last_error">{{ row.listing_sync.last_error || '同步失败，请重试' }}</div>
                             <div v-if="row.quality_remark" class="mt-2 text-xs text-gray-500 line-clamp-1">{{ row.quality_remark }}</div>
                         </template>
                         <div v-else class="stock-exit-state" :class="stockExitToneClass(row.status)">
@@ -266,7 +255,7 @@
                                 <el-dropdown-item command="expense">成本调整</el-dropdown-item>
                                 <el-dropdown-item v-if="row.refurbish_status === 'pending'" command="start_refurbish">开始整备</el-dropdown-item>
                                 <el-dropdown-item v-if="['pending','processing','failed'].includes(row.refurbish_status)" command="complete_refurbish">登记整备结果</el-dropdown-item>
-                                <el-dropdown-item v-if="row.sale_target === 'mall' && !['pending','processing','failed'].includes(row.refurbish_status)" command="sync_listing">{{ row.listing_sync?.status === 'failed' ? '重试同步' : '同步拍照定价' }}</el-dropdown-item>
+                                <el-dropdown-item v-if="row.listing_status === 'ready' && row.warehouse_policy?.marketplace_available" command="publish_listing">上架商城</el-dropdown-item>
                             </el-dropdown-menu></template>
                         </el-dropdown>
                     </template>
@@ -306,17 +295,17 @@
                             <el-option label="上商城" value="mall" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item label="商品分类">
-                        <el-tree-select v-model="flow.form.category_id" :data="categoryTree" :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }" check-strictly clearable class="w-full" node-key="category_id" placeholder="选择商城分类" @change="onFlowCategoryChange" />
+                    <el-form-item label="商品型号">
+                        <ErpCatalogProductSelect v-model="flow.form.catalog_product_id" placeholder="搜索并选择目录型号" @change="onFlowCatalogChange" />
                     </el-form-item>
                     <el-form-item label="设备规格"><el-input v-model.trim="flow.form.spec" placeholder="容量、颜色、成色、电池等" /></el-form-item>
                     <el-form-item label="上架状态">
                         <el-select v-model="flow.form.listing_status" class="w-full" :disabled="flow.form.sale_target !== 'mall'">
                             <el-option label="不需要" value="none" />
-                            <el-option label="待拍照" value="need_photo" />
-                            <el-option label="待定价" value="need_price" />
-                            <el-option label="可上架" value="ready" />
-                            <el-option label="已上架" value="listed" />
+                            <el-option label="待补图片" value="need_photo" />
+                            <el-option label="待补售价" value="need_price" />
+                            <el-option label="资料完整" value="ready" />
+                            <el-option label="商城已上架" value="listed" />
                         </el-select>
                     </el-form-item>
                     <el-form-item label="内部预估价">
@@ -631,7 +620,7 @@ import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { adjustErpStockCost, adjustErpStockRetailPrice, completeErpStockRefurbish, getErpGoodsCategoryTree, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
+import { adjustErpStockCost, adjustErpStockRetailPrice, completeErpStockRefurbish, getErpSerialTraceDetail, getErpSerialTraceList, getErpStockInfo, getErpStockList, getErpStockTurnoverSummary, sendErpStockRefurbish, syncErpStockListing, transferErpStock, updateErpStockFlow } from '@/addon/hsx_erp/api/erp'
 import { getErpFinanceCategories } from '@/addon/hsx_erp/api/config'
 import { getErpWarehouseOptions } from '@/addon/hsx_erp/api/warehouse'
 import ErpDeviceIdentity from '@/addon/hsx_erp/components/ErpDeviceIdentity.vue'
@@ -639,8 +628,9 @@ import ErpRoleFocus from '@/addon/hsx_erp/components/ErpRoleFocus.vue'
 import ErpImageGallery from '@/addon/hsx_erp/components/ErpImageGallery.vue'
 import CounterpartySelect from '@/addon/hsx_erp/components/counterparty-select/index.vue'
 import ErpFinanceVoucherUpload from '@/addon/hsx_erp/components/ErpFinanceVoucherUpload.vue'
+import ErpCatalogProductSelect from '@/addon/hsx_erp/components/ErpCatalogProductSelect.vue'
 
-const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+const search = reactive<any>({ keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
 const route = useRoute()
 const router = useRouter()
 const activeTab = ref('')
@@ -665,7 +655,6 @@ const sendRefurbish = reactive({ visible: false, saving: false, assetIds: [] as 
 const completeRefurbish = reactive({ visible: false, saving: false, row: null as any, form: { result: 'success', refurbish_items: [] as any[], warehouse_id: 0, location_id: 0, voucher_urls: '', remark: '' } })
 const financeCategories = ref<any[]>([])
 const warehouses = ref<any[]>([])
-const categoryTree = ref<any[]>([])
 const activatedOnce = ref(false)
 const searchWarehouse = computed(() => warehouses.value.find(row => Number(row.id) === Number(search.warehouse_id)) || null)
 const searchLocations = computed(() => searchWarehouse.value?.locations || [])
@@ -702,7 +691,6 @@ onMounted(() => {
     if (route.query.turnover_level) search.turnover_level = String(route.query.turnover_level)
     loadList()
     loadWarehouses()
-    loadCategories()
     loadFinanceCategories()
 })
 
@@ -733,7 +721,7 @@ function defaultFlowForm() {
         listing_status: 'none',
         estimate_sale_price: 0,
         retail_price: 0,
-        category_id: 0,
+        catalog_product_id: 0,
         category_name: '',
         category_path: '',
         spec: '',
@@ -744,20 +732,8 @@ function defaultFlowForm() {
     }
 }
 
-function findCategory(nodes: any[], categoryId: number, parents: any[] = []): { node: any, path: any[] } | null {
-    for (const node of nodes || []) {
-        const path = [...parents, node]
-        if (Number(node.category_id) === Number(categoryId)) return { node, path }
-        const found = findCategory(node.child_list || [], categoryId, path)
-        if (found) return found
-    }
-    return null
-}
-
-function onFlowCategoryChange(value: any) {
-    const found = findCategory(categoryTree.value, Number(value || 0))
-    flow.form.category_name = found?.node?.category_name || ''
-    flow.form.category_path = found ? found.path.map(item => item.category_name).filter(Boolean).join(' / ') : ''
+function onFlowCatalogChange(node: any) {
+    flow.form.catalog_product_id = Number(node?.site_product_id || 0)
 }
 
 async function loadList() {
@@ -837,11 +813,6 @@ function signedMoney(value: any): string {
 async function loadWarehouses() {
     const res: any = await getErpWarehouseOptions()
     warehouses.value = Array.isArray(res?.data) ? res.data : []
-}
-
-async function loadCategories() {
-    const res: any = await getErpGoodsCategoryTree()
-    categoryTree.value = Array.isArray(res?.data) ? res.data : []
 }
 
 async function loadFinanceCategories() {
@@ -976,7 +947,7 @@ function applyWarehouseRisk(item: any) {
 }
 
 function handleReset() {
-    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', category_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
+    Object.assign(search, { keyword: '', status: '', refurbish_status: '', sale_target: '', listing_status: '', turnover_level: '', warehouse_id: '', location_id: '', catalog_product_id: '', dateRange: [], stock_age_min: undefined, stock_age_max: undefined, min_cost: undefined, max_cost: undefined, min_price: undefined, max_price: undefined })
     activeTab.value = ''
     handleSearch()
 }
@@ -1005,9 +976,7 @@ function openFlow(row: any) {
         listing_status: row.listing_status || 'none',
         estimate_sale_price: Number(row.estimate_sale_price || 0),
         retail_price: Number(row.retail_price || 0),
-        category_id: Number(row.category_id || 0),
-        category_name: row.category_name || '',
-        category_path: row.category_path || '',
+        catalog_product_id: Number(row.catalog_product_id || 0),
         spec: row.spec || '',
         image_urls: row.image_urls || '',
         quality_remark: row.quality_remark || '',
@@ -1080,7 +1049,7 @@ function handleTurnoverAction(row: any) {
     if (action === 'transfer') return openTransfer(row)
     if (action === 'start_refurbish') return openSendRefurbish(row)
     if (['complete_refurbish', 'resolve_refurbish'].includes(action)) return openCompleteRefurbish(row)
-    if (action === 'sync_listing') return syncListing(row)
+    if (action === 'publish_listing') return publishListing(row)
     if (action === 'complete_listing') return openFlow(row)
     if (action === 'resolve_warehouse') return openTransfer(row)
     return openDetail(row)
@@ -1089,7 +1058,7 @@ function handleTurnoverAction(row: any) {
 function handleRowCommand(command: string, row: any) {
     const actions: Record<string, () => any> = {
         flow: () => openFlow(row), retail: () => openRetailPrice(row), transfer: () => openTransfer(row), expense: () => openExpense(row),
-        start_refurbish: () => openSendRefurbish(row), complete_refurbish: () => openCompleteRefurbish(row), sync_listing: () => syncListing(row),
+        start_refurbish: () => openSendRefurbish(row), complete_refurbish: () => openCompleteRefurbish(row), publish_listing: () => publishListing(row),
     }
     return actions[command]?.()
 }
@@ -1121,17 +1090,17 @@ async function submitFlow() {
     }
 }
 
-async function syncListing(row: any) {
+async function publishListing(row: any) {
     const confirmed = await ElMessageBox.confirm(
-        `确认将设备「${row.model || row.imei || row.asset_no || '-'}」同步到拍照定价？重复同步只更新关联信息，不会重复建档。`,
-        '同步拍照定价',
-        { type: 'warning', confirmButtonText: '确认同步', cancelButtonText: '取消' }
+        `确认将设备「${row.model || row.imei || row.asset_no || '-'}」直接上架商城？系统将使用当前分类、规格、图片和零售价创建一机一品商品。`,
+        '上架商城',
+        { type: 'warning', confirmButtonText: '确认上架', cancelButtonText: '取消' }
     ).then(() => true).catch(() => false)
     if (!confirmed) return
     const res: any = await syncErpStockListing(row.id)
     const syncResult = res?.data || {}
-    if (syncResult.ok === false) return ElMessage.error(syncResult.message || '同步失败，请稍后重试')
-    ElMessage.success('已提交拍照定价同步')
+    if (syncResult.ok === false) return ElMessage.error(syncResult.message || '上架失败，请稍后重试')
+    ElMessage.success(syncResult.message || '已直接上架商城')
     await loadList()
 }
 
@@ -1239,21 +1208,12 @@ function targetMeta(status: string) {
 function listingMeta(status: string) {
     const map: any = {
         none: { label: '不上架', type: 'info' },
-        need_photo: { label: '待拍照', type: 'warning' },
-        need_price: { label: '待定价', type: 'warning' },
-        ready: { label: '可上架', type: 'success' },
-        listed: { label: '已上架', type: 'primary' }
+        need_photo: { label: '待补图片', type: 'warning' },
+        need_price: { label: '待补售价', type: 'warning' },
+        ready: { label: '资料完整', type: 'success' },
+        listed: { label: '商城已上架', type: 'primary' }
     }
     return map[status || 'none'] || { label: status || '-', type: 'info' }
-}
-
-function listingSyncMeta(status: string) {
-    const map: any = {
-        done: { type: 'success' }, processed: { type: 'success' },
-        failed: { type: 'danger' }, processing: { type: 'warning' },
-        pending: { type: 'warning' }, not_synced: { type: 'info' }
-    }
-    return map[status || 'not_synced'] || { type: 'info' }
 }
 
 function financeStatusLabel(status: string) {

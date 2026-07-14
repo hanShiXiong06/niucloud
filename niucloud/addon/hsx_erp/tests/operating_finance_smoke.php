@@ -57,12 +57,12 @@ try {
 foreach (['todayTurnoverMetrics', 'today_sold_count', 'opening_stock_count', 'turnover_rate'] as $needle) {
     $assert(str_contains($finance, $needle), '经营看板缺少今日动销率口径：' . $needle);
 }
-$payable = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/payable/list.vue');
+$payable = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/payable/list.vue');
 foreach (['isNonDevicePay', '费用明细', 'ErpPartySelect', 'ErpOverflowText'] as $needle) {
     $assert(str_contains($payable, $needle), 'PC 应付未兼容经营性无设备付款或公共组件：' . $needle);
 }
 $mobile = (string)file_get_contents($repo . '/site-uniapp/src/addon/hsx_erp/pages/operating_finance/list.vue');
-$pc = (string)file_get_contents($repo . '/admin/src/addon/hsx_erp/views/erp/operating_finance/list.vue');
+$pc = (string)file_get_contents($repo . '/niucloud/addon/hsx_erp/admin/views/erp/operating_finance/list.vue');
 foreach ([$mobile, $pc] as $view) {
     foreach (['经营收支', '转财务结算', '已经现场收付', '经营净额'] as $needle) {
         $assert(str_contains($view, $needle) || ($needle === '经营净额' && str_contains($view, '待收待付')), '经营收支页面缺少商业操作语义：' . $needle);

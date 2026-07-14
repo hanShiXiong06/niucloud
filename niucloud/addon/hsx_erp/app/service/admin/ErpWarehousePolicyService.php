@@ -15,6 +15,8 @@ use core\base\BaseAdminService;
  */
 class ErpWarehousePolicyService extends BaseAdminService
 {
+    private ?array $marketplaceProviders = null;
+
     public function decorate(array $rows): array
     {
         if ($rows === []) return [];
@@ -34,6 +36,10 @@ class ErpWarehousePolicyService extends BaseAdminService
         }
         foreach ($rows as &$row) {
             $policy = $this->evaluate($row, $warehouseMap[(int)($row['warehouse_id'] ?? 0)] ?? null);
+            // 兼容旧数据：历史状态可能仍是 need_photo/need_price，展示与操作必须以当前真实资料为准。
+            if ((int)($policy['can_list_mall'] ?? 0) === 1 && (string)($row['listing_status'] ?? 'none') !== 'listed') {
+                $row['listing_status'] = 'ready';
+            }
             $row['warehouse_policy'] = $policy;
             $row['can_direct_sale'] = $policy['can_direct_sale'];
             $row['can_transfer'] = $policy['can_transfer'];
@@ -60,9 +66,9 @@ class ErpWarehousePolicyService extends BaseAdminService
         $missingFields = [];
         $missingLabels = [];
         if ($allowMall) {
-            if ((int)($asset['category_id'] ?? 0) <= 0) {
-                $missingFields[] = 'category';
-                $missingLabels[] = '分类';
+            if ((int)($asset['catalog_product_id'] ?? 0) <= 0) {
+                $missingFields[] = 'catalog_product';
+                $missingLabels[] = '商品型号';
             }
             if (trim((string)($asset['spec'] ?? '')) === '') {
                 $missingFields[] = 'spec';
@@ -82,6 +88,7 @@ class ErpWarehousePolicyService extends BaseAdminService
         $canTransfer = $inStock && $allowTransfer && !$refurbishBlocking;
         $canPrepareMall = $inStock && $allowMall && !$refurbishBlocking;
         $canListMall = $canPrepareMall && $missingFields === [];
+        $marketplaceAvailable = $this->marketplaceAvailable();
 
         [$actionKey, $actionLabel, $actionReason] = $this->primaryAction(
             $asset,
@@ -91,7 +98,8 @@ class ErpWarehousePolicyService extends BaseAdminService
             $canDirectSale,
             $canTransfer,
             $canPrepareMall,
-            $canListMall
+            $canListMall,
+            $marketplaceAvailable
         );
 
         return [
@@ -108,6 +116,7 @@ class ErpWarehousePolicyService extends BaseAdminService
             'can_transfer' => $canTransfer ? 1 : 0,
             'can_prepare_mall' => $canPrepareMall ? 1 : 0,
             'can_list_mall' => $canListMall ? 1 : 0,
+            'marketplace_available' => $marketplaceAvailable ? 1 : 0,
             'missing_fields' => $missingFields,
             'missing_labels' => $missingLabels,
             'primary_action' => $actionKey,
@@ -124,7 +133,8 @@ class ErpWarehousePolicyService extends BaseAdminService
         bool $canDirectSale,
         bool $canTransfer,
         bool $canPrepareMall,
-        bool $canListMall
+        bool $canListMall,
+        bool $marketplaceAvailable
     ): array {
         if ((string)($asset['status'] ?? '') !== ErpDict::ASSET_IN_STOCK) {
             return ['view', '查看档案', '设备已退出当前库存'];
@@ -144,16 +154,38 @@ class ErpWarehousePolicyService extends BaseAdminService
         if ($canPrepareMall && $missingLabels !== []) {
             return ['complete_listing', '完善商品资料', '缺少' . implode('、', $missingLabels)];
         }
-        if ($canListMall && (string)($asset['listing_status'] ?? 'none') !== 'listed') {
-            return ['sync_listing', '上架准备', '商城资料已完整，可以进入上架流程'];
+        if ($canListMall && (string)($asset['listing_status'] ?? 'none') !== 'listed' && $marketplaceAvailable) {
+            return ['publish_listing', '上架商城', '商品资料已完整，点击后由 ERP 直接上架商城'];
         }
         if ($canDirectSale) {
             return ['direct_sale', '销售出库', '当前设备允许直接销售'];
+        }
+        if ($canListMall && (string)($asset['listing_status'] ?? 'none') === 'listed') {
+            return ['listing_published', '商城已上架', '商品已在商城展示，可查看设备档案'];
+        }
+        if ($canListMall && !$marketplaceAvailable) {
+            return ['listing_ready', '资料完整', '当前未安装商城，ERP 保留完整商品资料，可直接销售或调拨'];
         }
         if ($canTransfer) {
             return ['transfer', '调拨处理', '当前仓库不可直接销售，可调拨至可售仓库'];
         }
         return ['view', '查看原因', '当前仓库规则不允许直接销售或调拨'];
+    }
+
+    private function marketplaceAvailable(): bool
+    {
+        if ($this->marketplaceProviders === null) {
+            $providers = [];
+            foreach ((array)event('HsxErpMarketplaceProviders', ['site_id' => $this->site_id]) as $result) {
+                foreach ((array)($result['providers'] ?? []) as $provider) {
+                    if (!is_array($provider) || empty($provider['key']) || (int)($provider['enabled'] ?? 1) !== 1) continue;
+                    if ((int)($provider['supports_direct_listing'] ?? 0) !== 1) continue;
+                    $providers[(string)$provider['key']] = $provider;
+                }
+            }
+            $this->marketplaceProviders = array_values($providers);
+        }
+        return $this->marketplaceProviders !== [];
     }
 
     private function hasImages(mixed $value): bool

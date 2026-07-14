@@ -3,80 +3,113 @@
         <el-card class="!border-none" shadow="never">
             <div class="flex items-start justify-between gap-4">
                 <div>
-                    <div class="text-page-title">商品资料</div>
-                    <div class="mt-1 text-sm text-gray-500">管理 ERP 自有分类、规格和成色。分类按三级路径展示，录入和查找更直观。</div>
+                    <div class="text-page-title">商品目录</div>
+                    <div class="mt-1 text-sm text-gray-500">统一维护一级品类、可选子品类、品牌、系列和型号；采购、库存与商城共同消费这套目录。</div>
                 </div>
                 <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
             </div>
 
             <el-tabs v-model="activeTab" class="mt-5">
-                <el-tab-pane label="分类" name="category">
-                    <div v-if="categorySync.providers?.length" class="mb-4 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
-                        <div class="flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                                <div class="flex items-center gap-2 font-medium text-gray-900">
-                                    ERP 与 {{ categorySync.providers[0]?.name || '商城' }}分类
-                                    <el-tag :type="categorySync.config?.initialized ? 'success' : 'warning'" effect="plain">
-                                        {{ categorySync.config?.initialized ? '已绑定' : '待初始化' }}
-                                    </el-tag>
-                                </div>
-                                <div class="mt-1 text-sm text-gray-500">
-                                    ERP 与商城保留各自分类 ID，通过映射关联。已绑定 {{ categorySync.mapped_count || 0 }} 项<span v-if="categorySync.failed_count">，{{ categorySync.failed_count }} 项异常</span>。
-                                </div>
-                                <div v-if="!categorySync.config?.initialized" class="mt-2 text-xs text-amber-600">已有商城客户请选择导入；新客户可让 ERP 分类同步到商城。首次操作不会删除任一端分类。</div>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                <template v-if="!categorySync.config?.initialized">
-                                    <el-button :loading="syncLoading" @click="runCategorySync('pull')">已有商城分类，导入并绑定</el-button>
-                                    <el-button type="primary" :loading="syncLoading" @click="runCategorySync('push')">ERP 为主，同步到商城</el-button>
-                                </template>
-                                <el-button v-else type="primary" plain :loading="syncLoading" @click="runCategorySync('reconcile')">双向校准</el-button>
-                            </div>
+                <el-tab-pane label="产品目录" name="catalog">
+                    <div class="catalog-intro">
+                        <div>
+                            <div class="font-medium text-gray-900">标准产品模板 + 本站独立目录</div>
+                            <div class="mt-1 text-sm text-gray-500">相同来源产品ID跨站复用标准模板；名称、分类、显示状态仍由当前站点独立管理。</div>
                         </div>
-                    </div>
-                    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <div class="flex items-center gap-2">
-                            <el-input v-model.trim="categoryQuery.keyword" clearable placeholder="搜索分类名称或路径" class="!w-[280px]" @keyup.enter="loadCategories" />
-                            <el-button @click="loadCategories">查询</el-button>
-                            <el-tag effect="plain">共 {{ categoryRows.length }} 个分类</el-tag>
+                        <div class="flex gap-2">
+                            <input ref="catalogFileInput" class="hidden" type="file" accept=".xlsx,.xls" @change="handleCatalogFile" />
+                            <el-button type="primary" :icon="Plus" @click="openCatalogProduct()">新增型号</el-button>
+                            <el-button :icon="Upload" :loading="catalogImporting" @click="openCatalogImport">异步导入商品目录</el-button>
+                            <el-button @click="openCatalogTaskDialog">导入记录</el-button>
+                            <el-button :icon="Download" :loading="catalogExporting" @click="exportCatalog">导出本站目录</el-button>
                         </div>
-                        <el-button type="primary" :icon="Plus" @click="openCategory()">新增一级分类</el-button>
                     </div>
 
-                    <el-table :data="categoryRows" v-loading="categoryLoading" row-key="category_id" size="large" empty-text="暂无分类">
-                        <el-table-column label="一级分类" min-width="160" show-overflow-tooltip>
-                            <template #default="{ row }">{{ row.level_names[0] || '-' }}</template>
-                        </el-table-column>
-                        <el-table-column label="二级分类" min-width="160" show-overflow-tooltip>
-                            <template #default="{ row }">{{ row.level_names[1] || '-' }}</template>
-                        </el-table-column>
-                        <el-table-column label="三级分类" min-width="180" show-overflow-tooltip>
-                            <template #default="{ row }">{{ row.level_names[2] || '-' }}</template>
-                        </el-table-column>
-                        <el-table-column label="来源" width="120">
-                            <template #default="{ row }">
-                                <el-tag :type="row.source_plugin === 'phone_shop' ? 'success' : 'info'" effect="plain">
-                                    {{ row.source_plugin === 'phone_shop' ? '商城' : 'ERP' }}
-                                </el-tag>
+                    <div v-if="latestCatalogTask" class="mb-4 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3">
+                        <div class="flex items-center justify-between gap-4">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="truncate font-medium text-gray-900">{{ latestCatalogTask.file_name }}</span>
+                                    <el-tag :type="latestCatalogTask.status_type" effect="plain">{{ latestCatalogTask.status_name }}</el-tag>
+                                </div>
+                                <div class="mt-1 text-xs text-gray-500">{{ latestCatalogTask.message || '后台任务已创建' }}</div>
+                            </div>
+                            <div class="w-[280px]">
+                                <el-progress :percentage="Number(latestCatalogTask.progress || 0)" :stroke-width="8" />
+                                <div class="mt-1 text-right text-xs text-gray-400">{{ latestCatalogTask.processed_rows || 0 }} / {{ latestCatalogTask.total_rows || 0 }} 行</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="catalog-summary-grid">
+                        <div><span>产品模板</span><strong>{{ catalogSummary.products || 0 }}</strong></div>
+                        <div><span>启用产品</span><strong>{{ catalogSummary.enabled || 0 }}</strong></div>
+                        <div><span>品牌</span><strong>{{ catalogSummary.brands || 0 }}</strong></div>
+                        <div><span>系列</span><strong>{{ catalogSummary.series || 0 }}</strong></div>
+                    </div>
+
+                    <div class="catalog-filter-bar">
+                        <el-input v-model.trim="catalogQuery.keyword" :prefix-icon="Search" clearable placeholder="搜索型号、品牌、系列或产品ID" class="!w-[300px]" @keyup.enter="loadCatalog(true)" />
+                        <el-select v-model="catalogQuery.brand_name" clearable filterable placeholder="全部品牌" class="!w-[160px]">
+                            <el-option v-for="name in catalogFilters.brands" :key="name" :label="name" :value="name" />
+                        </el-select>
+                        <el-select v-model="catalogQuery.series_name" clearable filterable placeholder="全部系列" class="!w-[180px]">
+                            <el-option v-for="name in catalogFilters.series" :key="name" :label="name" :value="name" />
+                        </el-select>
+                        <el-button type="primary" @click="loadCatalog(true)">查询</el-button>
+                        <el-button @click="resetCatalogFilter">重置</el-button>
+                    </div>
+
+                    <div class="catalog-tree-shell" v-loading="catalogLoading">
+                        <div class="catalog-tree-head">
+                            <div>
+                                <strong>产品目录树</strong>
+                                <span>按“一级品类 → 可选一级子分类 → 品牌 → 系列 → 型号”逐级展开；排序值越大越靠前</span>
+                            </div>
+                            <el-tag effect="plain" type="info">目录唯一，不再维护旧分类表</el-tag>
+                        </div>
+                        <el-empty v-if="!catalogTree.length && !catalogLoading" description="暂无产品目录，可直接导入 Excel" />
+                        <el-tree
+                            v-else
+                            :key="catalogTreeKey"
+                            :data="catalogTree"
+                            :props="catalogTreeProps"
+                            :load="loadCatalogTreeNode"
+                            lazy
+                            node-key="node_key"
+                            :expand-on-click-node="false"
+                            class="catalog-product-tree"
+                        >
+                            <template #default="{ data }">
+                                <div class="catalog-tree-node" :class="`catalog-tree-node--${data.node_type}`">
+                                    <div class="catalog-tree-node__main">
+                                        <span class="catalog-tree-node__icon">{{ catalogNodeIcon(data.node_type) }}</span>
+                                        <div class="min-w-0">
+                                            <div class="catalog-tree-node__title">{{ data.label || '未命名' }}</div>
+                                            <div v-if="data.node_type === 'product'" class="catalog-tree-node__meta">
+                                                <span v-if="data.path_text">{{ data.path_text }}</span>
+                                                <span>产品ID {{ data.source_product_id || '-' }}</span>
+                                                <span>排序 {{ Number(data.sort || 0) }}</span>
+                                            </div>
+                                            <div v-else class="catalog-tree-node__meta">
+                                                <span>{{ catalogNodeHint(data.node_type) }}</span>
+                                                <span>组内最高排序 {{ Number(data.sort || 0) }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="catalog-tree-node__side">
+                                        <el-tag v-if="data.node_type !== 'product'" size="small" effect="plain">{{ data.product_count || 0 }} 个型号</el-tag>
+                                        <el-tag v-else :type="Number(data.is_enabled) === 1 ? 'success' : 'info'" size="small">{{ Number(data.is_enabled) === 1 ? '启用' : '停用' }}</el-tag>
+                                        <el-button link type="primary" @click.stop="openCatalogSort(data)">排序</el-button>
+                                        <template v-if="data.node_type === 'product'">
+                                            <el-button link type="primary" @click.stop="openCatalogProduct(data)">编辑</el-button>
+                                            <el-button link type="danger" @click.stop="removeCatalogProduct(data)">删除</el-button>
+                                        </template>
+                                    </div>
+                                </div>
                             </template>
-                        </el-table-column>
-                        <el-table-column label="当前层级" width="100">
-                            <template #default="{ row }">{{ row.level }}级</template>
-                        </el-table-column>
-                        <el-table-column label="显示" width="90">
-                            <template #default="{ row }">
-                                <el-tag :type="row.is_show === 1 ? 'success' : 'info'">{{ row.is_show === 1 ? '显示' : '隐藏' }}</el-tag>
-                            </template>
-                        </el-table-column>
-                        <el-table-column prop="sort" label="排序" width="90" />
-                        <el-table-column label="操作" width="220" fixed="right" align="center">
-                            <template #default="{ row }">
-                                <el-button type="primary" link @click="openCategory(row)">编辑</el-button>
-                                <el-button v-if="Number(row.level || 1) < 3" type="primary" link @click="openCategory({ pid: row.category_id })">新增下级</el-button>
-                                <el-button type="danger" link @click="removeCategory(row)">删除</el-button>
-                            </template>
-                        </el-table-column>
-                    </el-table>
+                        </el-tree>
+                    </div>
                 </el-tab-pane>
 
                 <el-tab-pane label="规格" name="spec">
@@ -147,30 +180,6 @@
             </el-tabs>
         </el-card>
 
-        <el-dialog v-model="categoryDialog.visible" :title="categoryDialog.form.category_id ? '编辑分类' : '新增分类'" width="560px">
-            <el-form label-width="100px">
-                <el-form-item label="上级分类">
-                    <el-tree-select
-                        v-model="categoryDialog.form.pid"
-                        :data="categoryParentOptions"
-                        :props="{ label: 'category_name', value: 'category_id', children: 'child_list' }"
-                        check-strictly
-                        clearable
-                        class="w-full"
-                        node-key="category_id"
-                        placeholder="不选则为一级分类"
-                    />
-                </el-form-item>
-                <el-form-item label="分类名称" required><el-input v-model.trim="categoryDialog.form.category_name" maxlength="40" /></el-form-item>
-                <el-form-item label="显示"><el-switch v-model="categoryDialog.form.is_show" :active-value="1" :inactive-value="0" /></el-form-item>
-                <el-form-item label="排序"><el-input-number v-model="categoryDialog.form.sort" :min="0" :controls="false" class="!w-[180px]" /></el-form-item>
-            </el-form>
-            <template #footer>
-                <el-button @click="categoryDialog.visible = false">取消</el-button>
-                <el-button type="primary" :loading="categoryDialog.loading" @click="submitCategory">保存</el-button>
-            </template>
-        </el-dialog>
-
         <el-dialog v-model="groupDialog.visible" :title="groupDialog.form.id ? '编辑规格组' : '新增规格组'" width="520px">
             <el-form label-width="100px">
                 <el-form-item label="规格名称" required><el-input v-model.trim="groupDialog.form.label" placeholder="如：苹果内存、安卓内存、颜色" /></el-form-item>
@@ -206,44 +215,158 @@
                 <el-button type="primary" :loading="gradeDialog.loading" @click="submitGrade">保存</el-button>
             </template>
         </el-dialog>
+
+        <el-dialog v-model="catalogProductDialog.visible" :title="catalogProductDialog.form.site_product_id ? '编辑商品型号' : '新增商品型号'" width="620px" append-to-body destroy-on-close>
+            <el-alert type="info" :closable="false" show-icon class="mb-5">
+                <template #title>排序值越大越靠前；品类、品牌和系列节点按其子型号的最高排序值排列。</template>
+            </el-alert>
+            <el-form label-width="104px">
+                <el-form-item label="商品品类" required>
+                    <el-input v-model.trim="catalogProductDialog.form.category_path" maxlength="255" placeholder="一级品类，或 一级品类/子品类" />
+                    <div class="mt-1 text-xs text-gray-400">最多两层，例如：手机 或 智能数码/智能手表</div>
+                </el-form-item>
+                <el-form-item label="品牌"><el-input v-model.trim="catalogProductDialog.form.brand_name" maxlength="100" placeholder="例如：苹果" /></el-form-item>
+                <el-form-item label="系列"><el-input v-model.trim="catalogProductDialog.form.series_name" maxlength="100" placeholder="例如：iPhone 17系列" /></el-form-item>
+                <el-form-item label="商品型号" required><el-input v-model.trim="catalogProductDialog.form.product_name" maxlength="150" placeholder="例如：苹果 iPhone 17 Pro Max" /></el-form-item>
+                <el-form-item label="排序">
+                    <el-input-number v-model="catalogProductDialog.form.sort" :min="-999999" :max="999999" class="!w-[200px]" />
+                </el-form-item>
+                <el-form-item label="状态"><el-switch v-model="catalogProductDialog.form.is_enabled" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="停用" /></el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="catalogProductDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="catalogProductDialog.loading" @click="submitCatalogProduct">保存</el-button>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="catalogSortDialog.visible" title="调整目录排序" width="460px" append-to-body>
+            <div class="mb-4 rounded-md bg-gray-50 px-4 py-3">
+                <div class="text-xs text-gray-400">当前节点</div>
+                <div class="mt-1 font-medium text-gray-900">{{ catalogSortDialog.node.label || '未命名' }}</div>
+                <div v-if="catalogSortDialog.node.node_type !== 'product'" class="mt-1 text-xs text-gray-500">调整分组时会整体平移子型号排序，并保留组内原有顺序。</div>
+            </div>
+            <el-form label-width="92px">
+                <el-form-item label="排序值">
+                    <el-input-number v-model="catalogSortDialog.sort" :min="-999999" :max="999999" class="!w-[220px]" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="catalogSortDialog.visible = false">取消</el-button>
+                <el-button type="primary" :loading="catalogSortDialog.loading" @click="submitCatalogSort">保存排序</el-button>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="catalogTaskDialogVisible" title="商品目录导入记录" width="960px" append-to-body>
+            <div class="mb-3 flex items-center justify-between">
+                <div class="text-sm text-gray-500">Excel 由后台每 500 行分批处理，关闭窗口不会中断。</div>
+                <el-button :loading="catalogTaskLoading" @click="loadCatalogTasks">刷新</el-button>
+            </div>
+            <el-table v-loading="catalogTaskLoading" :data="catalogTasks" height="460" empty-text="暂无商品目录导入任务">
+                <el-table-column label="文件" min-width="190" show-overflow-tooltip>
+                    <template #default="{ row }">
+                        <div class="font-medium text-gray-900">{{ row.file_name }}</div>
+                        <div class="mt-1 text-xs text-gray-400">{{ row.operator_name || '未知操作人' }} · {{ row.create_at_text }}</div>
+                    </template>
+                </el-table-column>
+                <el-table-column label="状态" width="100">
+                    <template #default="{ row }"><el-tag :type="row.status_type" effect="plain">{{ row.status_name }}</el-tag></template>
+                </el-table-column>
+                <el-table-column label="进度" min-width="210">
+                    <template #default="{ row }">
+                        <el-progress :percentage="Number(row.progress || 0)" :stroke-width="8" />
+                        <div class="mt-1 text-xs text-gray-400">{{ row.processed_rows || 0 }} / {{ row.total_rows || 0 }} 行</div>
+                    </template>
+                </el-table-column>
+                <el-table-column label="导入结果" min-width="190">
+                    <template #default="{ row }">
+                        <div>新增 {{ row.created_count || 0 }} · 更新 {{ row.updated_count || 0 }}</div>
+                        <div class="mt-1 text-xs text-gray-400">新增产品 {{ row.created_count || 0 }} · 更新 {{ row.updated_count || 0 }} · 冲突 {{ row.result_json?.master_conflicts || 0 }} · 跳过 {{ row.skipped_count || 0 }}</div>
+                    </template>
+                </el-table-column>
+                <el-table-column label="提示" min-width="220" show-overflow-tooltip>
+                    <template #default="{ row }"><span :class="row.error_message ? 'text-red-500' : 'text-gray-500'">{{ row.error_message || row.message || '-' }}</span></template>
+                </el-table-column>
+                <el-table-column label="操作" width="130" fixed="right">
+                    <template #default="{ row }">
+                        <el-button v-if="['pending', 'failed'].includes(row.status)" link type="primary" @click="retryCatalogTask(row)">重试</el-button>
+                        <el-button v-if="!['queued', 'processing'].includes(row.status)" link type="danger" @click="removeCatalogTask(row)">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+            <div class="mt-4 flex justify-end">
+                <el-pagination
+                    v-model:current-page="catalogTaskPage.page"
+                    :page-size="catalogTaskPage.limit"
+                    :total="catalogTaskPage.total"
+                    layout="total, prev, pager, next"
+                    @current-change="loadCatalogTasks"
+                />
+            </div>
+            <template #footer><el-button @click="catalogTaskDialogVisible = false">关闭</el-button></template>
+        </el-dialog>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Download, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import {
-    deleteErpGoodsCategory,
+    deleteErpGoodsCatalogProduct,
     deleteErpGoodsGrade,
     deleteErpGoodsSpecGroup,
     deleteErpGoodsSpecItem,
-    getErpGoodsCategoryTree,
-    getErpCategorySyncStatus,
+    exportErpGoodsCatalog,
+    deleteErpGoodsCatalogImportTask,
+    getErpGoodsCatalogHierarchy,
+    getErpGoodsCatalogSummary,
+    getErpGoodsCatalogImportTasks,
     getErpGoodsSpecMeta,
-    saveErpGoodsCategory,
+    retryErpGoodsCatalogImportTask,
+    saveErpGoodsCatalogProduct,
     saveErpGoodsGrade,
     saveErpGoodsSpecGroup,
     saveErpGoodsSpecItem,
-    syncErpCategories
+    sortErpGoodsCatalogNode,
+    uploadErpGoodsCatalogImport
 } from '@/addon/hsx_erp/api/erp'
 
-const activeTab = ref('category')
+const activeTab = ref('catalog')
 const loading = ref(false)
-const categoryLoading = ref(false)
 const specLoading = ref(false)
-const categoryTree = ref<any[]>([])
-const categorySync = ref<any>({ providers: [], config: {} })
-const syncLoading = ref(false)
-const specGroups = ref<any[]>([])
-const grades = ref<any[]>([])
-const categoryQuery = reactive({ keyword: '' })
-
-const categoryDialog = reactive<any>({
+const catalogLoading = ref(false)
+const catalogExporting = ref(false)
+const catalogImporting = ref(false)
+const catalogFileInput = ref<HTMLInputElement>()
+const catalogTaskDialogVisible = ref(false)
+const catalogTaskLoading = ref(false)
+const catalogTasks = ref<any[]>([])
+const catalogTaskPage = reactive({ page: 1, limit: 10, total: 0 })
+const catalogTaskHadRunning = ref(false)
+let catalogTaskTimer: ReturnType<typeof window.setInterval> | null = null
+const catalogTree = ref<any[]>([])
+const catalogTreeKey = ref(0)
+const catalogTreeProps = { label: 'label', children: 'child_list', isLeaf: 'is_leaf' }
+const catalogSummary = ref<any>({ products: 0, enabled: 0, brands: 0, series: 0 })
+const catalogFilters = ref<any>({ brands: [], series: [] })
+const catalogQuery = reactive<any>({ keyword: '', brand_name: '', series_name: '' })
+const catalogProductDialog = reactive<any>({
     visible: false,
     loading: false,
-    form: { category_id: 0, category_name: '', pid: 0, is_show: 1, sort: 0 }
+    form: {
+        site_product_id: 0,
+        category_path: '',
+        brand_name: '',
+        series_name: '',
+        product_name: '',
+        sort: 0,
+        is_enabled: 1
+    }
 })
+const catalogSortDialog = reactive<any>({ visible: false, loading: false, sort: 0, node: {} })
+const specGroups = ref<any[]>([])
+const grades = ref<any[]>([])
 const groupDialog = reactive<any>({
     visible: false,
     loading: false,
@@ -261,73 +384,253 @@ const gradeDialog = reactive<any>({
     form: { id: 0, grade_name: '', status: 1, sort: 0 }
 })
 
-const categoryParentOptions = computed(() => {
-    const clone = JSON.parse(JSON.stringify(categoryTree.value || []))
-    const disabledId = Number(categoryDialog.form.category_id || 0)
-    const mark = (rows: any[]) => rows.forEach(row => {
-        if (disabledId > 0 && Number(row.category_id) === disabledId) row.disabled = true
-        if (Number(row.level || 1) >= 3) row.disabled = true
-        if (Array.isArray(row.child_list)) mark(row.child_list)
-    })
-    mark(clone)
-    return clone
-})
-
-const categoryRows = computed(() => flattenCategoryRows(categoryTree.value))
+const latestCatalogTask = computed(() => catalogTasks.value.find(item => ['queued', 'processing', 'pending'].includes(item.status)) || catalogTasks.value[0] || null)
 
 onMounted(loadAll)
+onBeforeUnmount(() => {
+    stopCatalogTaskPolling()
+})
 
 async function loadAll() {
     loading.value = true
     try {
-        await Promise.all([loadCategories(), loadSpecs(), loadCategorySyncStatus()])
+        await Promise.all([loadSpecs(), loadCatalog(), loadCatalogSummary(), loadCatalogTasks()])
     } finally {
         loading.value = false
     }
 }
 
-async function loadCategorySyncStatus() {
-    const res: any = await getErpCategorySyncStatus()
-    categorySync.value = res?.data || { providers: [], config: {} }
+function openCatalogImport() {
+    catalogFileInput.value?.click()
 }
 
-async function runCategorySync(action: 'pull' | 'push' | 'reconcile') {
-    const wording = action === 'pull' ? '从商城导入并绑定分类' : action === 'push' ? '将 ERP 分类同步到商城' : '双向校准 ERP 与商城分类'
-    await ElMessageBox.confirm(`${wording}？系统按分类路径匹配，不会删除任一端已有分类。`, '分类同步确认', {
-        type: 'warning', confirmButtonText: '确认执行'
-    })
-    syncLoading.value = true
+async function handleCatalogFile(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    if (!file) return
     try {
-        const provider = categorySync.value.providers?.[0]?.key || 'phone_shop'
-        const res: any = await syncErpCategories({ action, provider })
+        await submitCatalogFile(file)
+    } finally {
+        input.value = ''
+    }
+}
+
+async function submitCatalogFile(file: File) {
+    await ElMessageBox.confirm(
+        `将“${file.name}”创建为后台导入任务。系统会自动识别表头并每 500 行分批处理，不再限制 10000 条，是否继续？`,
+        '异步导入商品目录',
+        { type: 'info', confirmButtonText: '创建导入任务' }
+    )
+    catalogImporting.value = true
+    try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('source_key', 'excel_product_catalog')
+        const res: any = await uploadErpGoodsCatalogImport(formData)
         const result = res?.data || {}
-        ElMessage.success(`同步完成：导入 ${result.pulled || 0}，推送 ${result.pushed || 0}，异常 ${result.failed || 0}`)
-        await Promise.all([loadCategories(), loadCategorySyncStatus()])
+        if (result.async) ElMessage.success(result.message || '商品目录已进入后台导入队列')
+        else ElMessage.warning(result.message || '任务已创建，请检查后台队列配置')
+        activeTab.value = 'catalog'
+        catalogTaskDialogVisible.value = true
+        catalogTaskPage.page = 1
+        await loadCatalogTasks()
     } finally {
-        syncLoading.value = false
+        catalogImporting.value = false
     }
 }
 
-async function loadCategories() {
-    categoryLoading.value = true
+async function openCatalogTaskDialog() {
+    catalogTaskDialogVisible.value = true
+    catalogTaskPage.page = 1
+    await loadCatalogTasks()
+}
+
+async function loadCatalogTasks() {
+    if (catalogTaskLoading.value) return
+    catalogTaskLoading.value = true
     try {
-        const res: any = await getErpGoodsCategoryTree({ keyword: categoryQuery.keyword })
-        categoryTree.value = Array.isArray(res?.data) ? res.data : []
+        const res: any = await getErpGoodsCatalogImportTasks({ page: catalogTaskPage.page, limit: catalogTaskPage.limit })
+        const data = res?.data || {}
+        catalogTasks.value = data.data || data.list || []
+        catalogTaskPage.total = Number(data.total || catalogTasks.value.length)
+        const hasRunning = catalogTasks.value.some(item => ['queued', 'processing'].includes(item.status))
+        if (catalogTaskHadRunning.value && !hasRunning) await Promise.all([loadCatalog(true), loadCatalogSummary()])
+        catalogTaskHadRunning.value = hasRunning
+        if (hasRunning) startCatalogTaskPolling()
+        else stopCatalogTaskPolling()
     } finally {
-        categoryLoading.value = false
+        catalogTaskLoading.value = false
     }
 }
 
-function flattenCategoryRows(rows: any[], parents: string[] = []): any[] {
-    const list: any[] = []
-    ;(rows || []).forEach(row => {
-        const names = [...parents, row.category_name || '']
-        list.push({ ...row, level_names: names })
-        if (Array.isArray(row.child_list) && row.child_list.length) {
-            list.push(...flattenCategoryRows(row.child_list, names))
-        }
+async function retryCatalogTask(row: any) {
+    const res: any = await retryErpGoodsCatalogImportTask(row.id)
+    const result = res?.data || {}
+    if (result.async) ElMessage.success(result.message || '任务已重新进入队列')
+    else ElMessage.warning(result.message || '任务暂未进入队列')
+    await loadCatalogTasks()
+}
+
+async function removeCatalogTask(row: any) {
+    await ElMessageBox.confirm(`删除“${row.file_name}”的导入记录和原始文件？已导入的目录数据不会删除。`, '删除导入记录', { type: 'warning' })
+    await deleteErpGoodsCatalogImportTask(row.id)
+    await loadCatalogTasks()
+}
+
+function startCatalogTaskPolling() {
+    if (catalogTaskTimer) return
+    catalogTaskTimer = window.setInterval(() => {
+        if (!catalogTaskLoading.value) loadCatalogTasks()
+    }, 2000)
+}
+
+function stopCatalogTaskPolling() {
+    if (!catalogTaskTimer) return
+    window.clearInterval(catalogTaskTimer)
+    catalogTaskTimer = null
+}
+
+async function loadCatalog(_reset = false) {
+    catalogLoading.value = true
+    try {
+        const res: any = await getErpGoodsCatalogHierarchy({
+            node_type: 'root',
+            ...catalogQuery,
+            limit: 300,
+            include_filters: 1,
+            include_disabled: 1
+        })
+        const data = res?.data || {}
+        catalogTree.value = Array.isArray(data.list) ? data.list : []
+        catalogFilters.value = data.filters || { brands: [], series: [] }
+        catalogTreeKey.value++
+    } finally {
+        catalogLoading.value = false
+    }
+}
+
+async function loadCatalogTreeNode(node: any, resolve: (rows: any[]) => void) {
+    if (Number(node.level || 0) === 0) return resolve(catalogTree.value)
+    const data = node.data || {}
+    if (Number(data.is_leaf || 0) === 1) return resolve([])
+    try {
+        const res: any = await getErpGoodsCatalogHierarchy({
+            node_type: data.node_type,
+            category_path: data.category_path || '',
+            brand_name: data.brand_name || '',
+            series_name: data.series_name || '',
+            limit: 500,
+            include_disabled: 1
+        })
+        resolve(Array.isArray(res?.data?.list) ? res.data.list : [])
+    } catch {
+        resolve([])
+    }
+}
+
+async function loadCatalogSummary() {
+    const res: any = await getErpGoodsCatalogSummary()
+    catalogSummary.value = res?.data || { products: 0, enabled: 0, brands: 0, series: 0 }
+}
+
+function resetCatalogFilter() {
+    Object.assign(catalogQuery, { keyword: '', brand_name: '', series_name: '' })
+    loadCatalog(true)
+}
+
+function catalogNodeIcon(nodeType: string) {
+    return ({ category: '类', brand: '牌', series: '系', product: '型' } as Record<string, string>)[nodeType] || '目'
+}
+
+function catalogNodeHint(nodeType: string) {
+    return ({ category: '商品品类', brand: '品牌', series: '产品系列' } as Record<string, string>)[nodeType] || '目录节点'
+}
+
+function openCatalogProduct(row: any = {}) {
+    Object.assign(catalogProductDialog.form, {
+        site_product_id: Number(row.site_product_id || 0),
+        category_path: row.category_path || '',
+        brand_name: row.brand_name || '',
+        series_name: row.series_name || '',
+        product_name: row.product_name || row.label || '',
+        sort: Number(row.sort || 0),
+        is_enabled: Number(row.is_enabled ?? 1) === 0 ? 0 : 1
     })
-    return list
+    catalogProductDialog.visible = true
+}
+
+async function submitCatalogProduct() {
+    const form = catalogProductDialog.form
+    if (!String(form.category_path || '').trim()) return ElMessage.warning('请输入商品品类')
+    if (!String(form.product_name || '').trim()) return ElMessage.warning('请输入商品型号')
+    catalogProductDialog.loading = true
+    try {
+        await saveErpGoodsCatalogProduct(Number(form.site_product_id || 0), {
+            category_path: String(form.category_path || '').trim(),
+            brand_name: String(form.brand_name || '').trim(),
+            series_name: String(form.series_name || '').trim(),
+            product_name: String(form.product_name || '').trim(),
+            sort: Number(form.sort || 0),
+            is_enabled: Number(form.is_enabled) === 0 ? 0 : 1
+        })
+        catalogProductDialog.visible = false
+        await Promise.all([loadCatalog(true), loadCatalogSummary()])
+    } finally {
+        catalogProductDialog.loading = false
+    }
+}
+
+async function removeCatalogProduct(row: any) {
+    await ElMessageBox.confirm(
+        `确认删除型号“${row.label || row.product_name || ''}”？已进入采购或库存业务的型号不能删除，只能停用。`,
+        '删除商品型号',
+        { type: 'warning', confirmButtonText: '确认删除' }
+    )
+    await deleteErpGoodsCatalogProduct(Number(row.site_product_id || 0))
+    await Promise.all([loadCatalog(true), loadCatalogSummary()])
+}
+
+function openCatalogSort(row: any) {
+    catalogSortDialog.node = { ...row }
+    catalogSortDialog.sort = Number(row.sort || 0)
+    catalogSortDialog.visible = true
+}
+
+async function submitCatalogSort() {
+    const node = catalogSortDialog.node || {}
+    catalogSortDialog.loading = true
+    try {
+        await sortErpGoodsCatalogNode({
+            node_type: node.node_type || '',
+            category_path: node.category_path || '',
+            brand_name: node.brand_name || '',
+            series_name: node.series_name || '',
+            site_product_id: Number(node.site_product_id || 0),
+            sort: Number(catalogSortDialog.sort || 0)
+        })
+        catalogSortDialog.visible = false
+        await loadCatalog(true)
+    } finally {
+        catalogSortDialog.loading = false
+    }
+}
+
+async function exportCatalog() {
+    catalogExporting.value = true
+    try {
+        const res: any = await exportErpGoodsCatalog()
+        const rows = (res?.data || []).map((row: any) => ({
+            品类: row.category_path || '', 品类ID: row.category_source_id || '',
+            品牌: row.brand_name || '', 品牌ID: row.brand_source_id || '',
+            系列: row.series_name || '', 型号: row.product_name || '', 产品ID: row.source_product_id || '',
+            数据来源: row.source_key || '', 是否启用: Number(row.is_enabled ?? 1), 排序: Number(row.sort || 0)
+        }))
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), '商品目录')
+        XLSX.writeFile(workbook, `ERP商品目录_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    } finally {
+        catalogExporting.value = false
+    }
 }
 
 async function loadSpecs() {
@@ -339,43 +642,6 @@ async function loadSpecs() {
     } finally {
         specLoading.value = false
     }
-}
-
-function openCategory(row: any = {}) {
-    Object.assign(categoryDialog.form, {
-        category_id: Number(row.category_id || 0),
-        category_name: row.category_name || '',
-        pid: Number(row.pid || 0),
-        is_show: row.is_show ?? 1,
-        sort: row.sort ?? 0
-    })
-    categoryDialog.visible = true
-}
-
-async function submitCategory() {
-    if (!categoryDialog.form.category_name) return ElMessage.warning('请填写分类名称')
-    categoryDialog.loading = true
-    try {
-        await saveErpGoodsCategory(categoryDialog.form.category_id, {
-            category_name: categoryDialog.form.category_name,
-            pid: categoryDialog.form.pid || 0,
-            is_show: categoryDialog.form.is_show,
-            sort: categoryDialog.form.sort,
-            source_plugin: 'erp'
-        })
-        ElMessage.success('分类已保存')
-        categoryDialog.visible = false
-        await loadCategories()
-    } finally {
-        categoryDialog.loading = false
-    }
-}
-
-async function removeCategory(row: any) {
-    await ElMessageBox.confirm(`确认删除分类「${row.category_full_name || row.category_name}」？子分类也会一并删除。`, '删除分类', { type: 'warning' })
-    await deleteErpGoodsCategory(Number(row.category_id))
-    ElMessage.success('分类已删除')
-    await loadCategories()
 }
 
 function openGroup(row: any = {}) {
@@ -469,3 +735,227 @@ async function removeGrade(row: any) {
     await loadSpecs()
 }
 </script>
+
+<style scoped>
+.catalog-intro {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+}
+
+.catalog-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.catalog-summary-grid > div {
+    padding: 16px 18px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.catalog-summary-grid span,
+.catalog-summary-grid strong {
+    display: block;
+}
+
+.catalog-summary-grid span {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.catalog-summary-grid strong {
+    margin-top: 6px;
+    color: #0f172a;
+    font-size: 24px;
+}
+
+.catalog-filter-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 16px 0;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.catalog-tree-shell {
+    min-height: 360px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+}
+
+.catalog-tree-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 15px 18px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.catalog-tree-head strong,
+.catalog-tree-head span {
+    display: block;
+}
+
+.catalog-tree-head strong {
+    color: #0f172a;
+    font-size: 15px;
+}
+
+.catalog-tree-head span {
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.catalog-product-tree {
+    padding: 8px 12px 16px;
+    --el-tree-node-content-height: auto;
+}
+
+.catalog-product-tree :deep(.el-tree-node__content) {
+    min-height: 58px;
+    margin-top: 4px;
+    padding-right: 10px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+}
+
+.catalog-product-tree :deep(.el-tree-node__content:hover) {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+
+.catalog-product-tree :deep(.el-tree-node__expand-icon) {
+    color: #64748b;
+    font-size: 15px;
+}
+
+.catalog-tree-node {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-width: 0;
+    gap: 16px;
+    padding: 8px 0;
+}
+
+.catalog-tree-node__main {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 10px;
+}
+
+.catalog-tree-node__icon {
+    display: inline-flex;
+    flex: 0 0 30px;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    color: #2563eb;
+    font-size: 12px;
+    font-weight: 700;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 7px;
+}
+
+.catalog-tree-node--brand .catalog-tree-node__icon {
+    color: #7c3aed;
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+}
+
+.catalog-tree-node--series .catalog-tree-node__icon {
+    color: #b45309;
+    background: #fffbeb;
+    border-color: #fde68a;
+}
+
+.catalog-tree-node--product .catalog-tree-node__icon {
+    color: #047857;
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+}
+
+.catalog-tree-node__title {
+    overflow: hidden;
+    color: #1e293b;
+    font-size: 14px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.catalog-tree-node__meta {
+    display: flex;
+    overflow: hidden;
+    gap: 12px;
+    margin-top: 4px;
+    color: #94a3b8;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.catalog-tree-node__side {
+    flex: 0 0 auto;
+}
+
+@media (max-width: 1100px) {
+    .category-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .category-detail-panel {
+        position: static;
+        min-height: 0;
+    }
+}
+
+@media (max-width: 760px) {
+    .category-toolbar,
+    .category-panel-head {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .category-node__count,
+    .category-node__quick-actions {
+        display: none;
+    }
+
+    .catalog-intro {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .catalog-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .catalog-tree-head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+</style>
